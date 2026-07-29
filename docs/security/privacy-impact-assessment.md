@@ -1,0 +1,130 @@
+# Phase 0 Privacy Impact Assessment
+
+- Status: Engineering draft; product decisions and accountable privacy/legal approval pending
+- Last updated: 2026-07-28
+- Assessment owner: Security/privacy engineering
+- Accountable approvers: Future external legal/privacy counsel and independent security reviewer;
+  individuals unassigned
+
+This assessment covers the platform foundation and the intended data lifecycle. It does not approve
+future ATS automation, public UGC, outreach, remote browsing, billing, or mobile-store processing.
+Those capabilities require a delta assessment before activation.
+
+## Processing boundary
+
+The currently implemented Phase 0 slice accepts an authenticated user's job preferences, stores
+them in the profile-owned PostgreSQL schema, emits an identifier-only outbox event, processes a
+durable readiness workflow, and returns the result. It does not call ATS, AI, email, calendar,
+billing, extension, mobile, or remote-browser providers.
+
+Shared development, CI, staging, and demos are restricted to synthetic data. Isolated founder-only
+dogfooding with the founder's own data is accepted as product direction. A live founder ATS effect
+is still inactive and requires an exact adapter/variant pilot release record satisfying
+[ADR-011](../adr/011-staged-preproduction-data-and-founder-pilot.md). Production candidate
+processing is not approved.
+
+## Data inventory and purposes
+
+| Data or activity | Class | Purpose | Necessity/minimization | Current state |
+|---|---|---|---|---|
+| OIDC subject, issuer, session metadata | Confidential PII; tokens are Restricted | Authenticate and secure the user's account | Resolve to internal ID; never expose provider subject publicly; short-lived tokens | Auth0 selected; provider-neutral verifier implemented; tenants, conformance, and approval pending |
+| Job preferences | Confidential PII | Candidate-requested job discovery and application readiness | Store declared constraints only; exclude from logs/events/analytics | Local profile slice implemented |
+| Resume and confirmed profile facts | Confidential PII | Tailor truthful applications | Preserve provenance; collect only application-relevant facts | Planned D1/D3 |
+| Voluntary demographic, disability, veteran, sponsorship, or legal answers | Restricted | Complete a specific employer form when explicitly directed | Store only user-supplied values in a dedicated vault; never infer; always show during final application review | Product direction accepted; planned D3 |
+| Saved jobs | Confidential association with Public job data | Let a user organize intended applications | Private by default; no public contribution implication | Planned D1 |
+| Public job contribution and contributor identity | Public content plus Confidential contributor link | Improve and correct the shared catalog | Explicit preview/consent; public identity hidden; minimal tombstone after removal | Planned D2 |
+| Generated resumes, cover letters, and answers | Confidential PII | Prepare a candidate-approved application packet | Ground in confirmed facts; user-controlled lifecycle | Planned D3 |
+| Application packet, approval, attempt, and confirmation | Confidential PII/Internal | Perform and evidence the candidate-authorized action | Immutable packet hash; no post-submission outcome collection | Planned D3/D4 |
+| Browser session, OAuth credentials, sensitive answers | Restricted | Perform narrowly authorized external actions | Just-in-time access; no logs/events/analytics; immediate revocation/destruction | Planned D4/D5 |
+| Outreach content and recipient | Confidential PII | Send one candidate-approved message | No inbox/calendar reading; per-send approval; suppression and limits | Planned D5 |
+| Billing identifiers | Confidential PII | Maintain Free/Pro entitlement | Provider-neutral ID; do not store full payment credentials | Planned D6 |
+| Operational telemetry | Internal | Reliability, security, debugging | Opaque IDs and redacted measurements only | Local baseline implemented |
+| Product analytics | Internal/de-identified where possible | Evaluate product behavior and quality | Phase 0 operational telemetry only; optional analytics later require an explicit preference and no raw candidate values | Planned after review |
+
+## Data subjects and affected people
+
+- Candidates who create accounts or direct application activity
+- Contributors who explicitly submit public job information
+- Outreach recipients, only if the later outreach feature is approved
+- Support/operations personnel whose audited administrative actions are recorded
+- Employer/contact individuals whose public professional details may appear in approved source data
+
+The platform is not designed to profile employers, monitor employee behavior, or make hiring
+decisions.
+
+## Purpose and disclosure boundaries
+
+- Candidate data is used to provide candidate-requested discovery, preparation, submission, and
+  optional outreach—not for employer access or unrelated advertising.
+- A model or external provider receives only the minimum data needed for an approved purpose and
+  only after provider review.
+- Candidate values are prohibited from general events, logs, fixtures, and analytics.
+- Public job information does not make a candidate's save, interest, contribution identity, or
+  application activity public.
+- Product data collection ends at confirmed application submission; no downstream hiring outcome
+  is collected.
+
+## Privacy risks and required mitigations
+
+| ID | Risk to people | Required mitigation | Residual state |
+|---|---|---|---|
+| P-01 | Profile or application data is exposed to another user | Owner predicate on every access, tenant tests, opaque public IDs, audited admin access | Deployment evidence pending |
+| P-02 | Sensitive answers are inferred or reused without meaningful choice | Never infer; dedicated restricted vault; exact-context checks; always-visible final review; immutable packet approval | Implementation and external approval pending |
+| P-03 | A private save becomes a public contribution | Separate commands and immutable consents; field preview; private default | Design documented |
+| P-04 | More browsing/form data is collected than intended | Active-tab/minimum extension permissions; client sanitization; no cookies/history/form values | D2 delta review required |
+| P-05 | AI provider retains or trains on candidate data | Provider contract/configuration review, minimum prompt context, no activation before approval | Provider not selected |
+| P-06 | Candidate cannot correct, export, or delete data | Authenticated rights workflow, portable export, subprocessor ledger, deletion reconciliation | Design documented; implementation pending |
+| P-07 | Backups or providers resurrect deleted data | Immediate active-system denial, backup aging, deletion ledger replay, provider reconciliation | Deployment evidence pending |
+| P-08 | Logs or analytics become a shadow candidate database | Shared redaction, allowlisted telemetry schema, synthetic fixtures, release-blocking tests | Local redaction baseline exists |
+| P-09 | A compromised workflow performs an unintended external action | Immutable packet approval, idempotency, revalidation, kill switch, no blind retry | Later implementation required |
+| P-10 | Users misunderstand automation or privacy behavior | Just-in-time notices, plain-language state, review by exception, accurate public claims | UX/legal review pending |
+| P-11 | Retention exceeds the candidate's expectation or business need | Purpose-bound retention, user controls, documented defaults, periodic deletion verification | Durations require approval |
+| P-12 | A new feature silently changes processing | Mandatory privacy/security delta review and updated data-flow map before activation | Delivery gates documented |
+
+## Individual controls and rights design
+
+Subject to counsel confirming jurisdictional requirements, the product will provide:
+
+- access to and correction of confirmed candidate facts;
+- a portable authenticated export of owned data and relevant audit/consent records;
+- revocation of optional consents without invalidating already completed lawful actions;
+- disconnect and immediate credential revocation;
+- deletion with visible state and subprocessor reconciliation;
+- an appeal/correction path for public UGC moderation and takedown; and
+- human support for failed rights requests and ambiguous identity verification.
+
+The final response periods, identity-verification method, exceptions, and appeal requirements remain
+legal-review items.
+
+## Product decisions required
+
+| Decision | Why it matters | State |
+|---|---|---|
+| Legal entity and precise launch jurisdictions | Determines applicable rights, notices, contracts, and regulator contacts | No entity formed; `Vrix LLC` provisional; nationwide US intended; formation and counsel enumeration pending |
+| Minimum user age | Determines audience controls and whether minors' data is intentionally processed | Product decision: 18+ |
+| Restricted-answer reuse | Persistent reuse reduces clicks but increases sensitivity and stale-answer risk | Product decision: restricted vault plus mandatory final review; implementation/approval pending |
+| Optional analytics choice | Determines consent and preference-center design | Product decision: operational telemetry only in Phase 0; explicit preference for optional analytics later |
+| Deleted-account recovery | Recovery convenience retains data after a deletion request | Product decision: no recovery after confirmed deletion; implementation/approval pending |
+| Default artifact retention until account deletion | Convenience may exceed some candidates' expectations | Product decision: retain until user deletes artifact/account; approval pending |
+| Accountable privacy and security approvers | Required for documented risk acceptance | Founder is product-risk owner; external counsel and independent security reviewer unassigned |
+| Pre-approval founder dogfooding | Enables realistic testing but introduces real PII before foundational approval | Product decision: isolated founder-owned data permitted; live ATS effects require adapter-specific pilot approval; no pilot currently active |
+
+## Review and change triggers
+
+Reassess before any of the following:
+
+- real candidate data enters development, staging, or production;
+- a new data category, purpose, model, subprocessor, source, ATS, client permission, or country is
+  introduced;
+- public UGC, live automation, outreach, remote browsing, billing, or mobile distribution is
+  enabled;
+- a material incident, complaint, legal change, or provider-policy change occurs; or
+- retention, consent, user-rights, or public privacy statements change.
+
+## Approval record
+
+| Role | Reviewer | Result | Date | Scope/version | Conditions |
+|---|---|---|---|---|---|
+| Product owner | Founder/repository owner; legal name pending | Direction recorded | 2026-07-28 | Product decisions in this assessment | All product decisions recorded; external approval not granted |
+| Privacy/legal reviewer | Pending | Not reviewed | — | — | Counsel required |
+| Security reviewer | Pending | Not reviewed | — | — | Independent/accountable reviewer required |

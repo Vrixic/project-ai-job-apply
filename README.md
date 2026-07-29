@@ -1,5 +1,10 @@
 # AI Job Search and Application Platform
 
+**ApplyDash** and `applydash.ai` are the provisional presentation identity. The final public brand
+may be selected in any later phase; stable technical identifiers remain `ai-job-apply` so that
+changing the presentation brand does not require package, database, event, or infrastructure
+renames.
+
 This monorepo will contain the candidate-first job discovery and application Platform described in the [product and system architecture](docs/PRODUCT_AND_SYSTEM_ARCHITECTURE.md).
 
 The repository is currently scaffolded at the responsibility-boundary level. Every directory contains a README explaining what it owns, how it fits into the system, and the implementation subfolders expected inside it.
@@ -13,7 +18,12 @@ The repository is currently scaffolded at the responsibility-boundary level. Eve
 - `infrastructure/` — Cloud resources, deployments, observability, and runbooks.
 - `docs/` — Architecture, product requirements, ADRs, and security/privacy design.
 - `scripts/` — Setup, code generation, fixtures, quality, database, and release tooling.
+- `skills/` — Repository-local agent skills for onboarding, development, operation, deployment,
+  and delivery governance.
 - `.github/` — Repository automation and CI/CD workflows.
+
+Repository-aware coding agents should begin with [`AGENTS.md`](AGENTS.md), which routes common
+requests to the focused skills in [`skills/`](skills/README.md).
 
 ## Architecture principles
 
@@ -35,8 +45,32 @@ The repository is currently scaffolded at the responsibility-boundary level. Eve
 - Infrastructure and operational changes are versioned and reviewed like application code.
 - Empty implementation subfolders should be created when work begins rather than maintained solely as placeholders.
 
+## Phase 0 runtime
+
+The repository now contains a pinned pnpm/Turborepo workspace, OpenAPI and event contracts,
+provider-neutral OIDC verification, a modular NestJS/Fastify API, Drizzle/PostgreSQL persistence,
+a transactional outbox, a Temporal readiness worker, a Next.js foundation page, local containers,
+lean `us-east-2` Terraform with isolated development and on-demand staging accounts, and GitHub
+CI/security workflows.
+
+```powershell
+pnpm install --frozen-lockfile
+pnpm contracts:generate
+.\scripts\start-local.ps1
+pnpm --filter @ai-job-apply/profile-service build
+pnpm --filter @ai-job-apply/profile-service db:migrate
+pnpm check
+```
+
+Auth0 is the selected initial managed identity provider, while the runtime and identity mapping
+remain provider-neutral. The deployed application still fails closed until real environment-specific
+Auth0 configuration exists and passes conformance; test tokens are unavailable outside
+`NODE_ENV=test`.
+
 ## Current status
 
-Architecture and repository responsibilities are defined. No application runtime, dependency workspace, cloud resources, or deployment configuration has been initialized yet.
+The repository-side Phase 0 foundation is implemented. Phase 0 remains in progress because a
+screened public name, representative-user research, accountable legal approval, Auth0 tenant and
+client conformance, AWS credentials/deployment, and staging restore evidence are external gates.
 
 Delivery progress, actual start/completion dates, tasks, evidence, risks, and decisions are maintained in the [delivery tracker](docs/product/delivery/DELIVERY_TRACKER.md).

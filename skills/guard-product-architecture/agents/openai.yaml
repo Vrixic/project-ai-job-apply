@@ -1,0 +1,4 @@
+interface:
+  display_name: "Guard Product Architecture"
+  short_description: "Apply product, security, and system boundaries"
+  default_prompt: "Use $guard-product-architecture to evaluate this design against the platform architecture."

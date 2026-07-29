@@ -17,6 +17,7 @@ coverage/
 # Build output
 dist/
 build/Release
+.turbo/
 
 # TypeScript cache
 *.tsbuildinfo
@@ -25,6 +26,7 @@ build/Release
 .cache
 .parcel-cache
 .next
+.expo/
 out/
 .nuxt
 
@@ -32,6 +34,7 @@ out/
 .env
 .env.local
 .env.*.local
+!.env.example
 
 # npm cache directory
 .npm
@@ -109,3 +112,14 @@ $RECYCLE.BIN/
 
 # Built Visual Studio Code Extensions
 *.vsix
+
+### Infrastructure
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+
+### Test artifacts
+test-results/
+playwright-report/

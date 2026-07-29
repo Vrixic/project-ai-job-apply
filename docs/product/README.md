@@ -13,3 +13,9 @@ Contains candidate journeys, functional requirements, user-facing policies, metr
 - `rollouts/` — Feature readiness and staged-release plans.
 
 Product documents define outcomes and constraints without duplicating implementation details owned by ADRs.
+
+## Foundation evidence
+
+The [Phase 0 product foundation](foundation/README.md) records the approved US tech-professional
+launch focus, research protocol, legal register, naming gate, ATS fixture policy, and quality
+baselines.

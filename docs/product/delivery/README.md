@@ -23,6 +23,13 @@ This folder turns the architecture roadmap into an auditable delivery system.
 5. Never erase important changes in direction. Record them in the decisions/change log.
 6. Evidence should link to code, tests, ADRs, product documents, dashboards, releases, or review records.
 7. The master tracker and phase document must be updated together when status, start, or completion changes.
+8. Foundational legal/privacy and security approval belongs in D0. A source, provider, permission,
+   external action, jurisdiction, or other concrete capability also requires a blocking delta
+   approval in the delivery that implements it.
+9. Every delivery follows [ADR-013](../../adr/013-lean-until-demand-cloud-runtime.md): keep one task
+   per service and avoid an ALB, Redis, dedicated search, Multi-AZ data, per-AZ NAT, or always-on
+   staging until launch review, a security/recovery requirement, or measured demand justifies it.
+   Lean capacity never reduces testing, durability, privacy, safety, backup, or observability.
 
 ## Status vocabulary
 

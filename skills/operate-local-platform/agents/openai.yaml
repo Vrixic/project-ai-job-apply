@@ -1,0 +1,4 @@
+interface:
+  display_name: "Operate Local Platform"
+  short_description: "Run, verify, and debug the platform locally"
+  default_prompt: "Use $operate-local-platform to start and verify the platform on my machine."

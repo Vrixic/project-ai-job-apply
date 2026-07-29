@@ -14,3 +14,8 @@ This directory contains Temporal workflow definitions for multi-step processes t
 - `tests/` — Replay, timeout, cancellation, compensation, and idempotency tests.
 
 Workflow code orchestrates deterministic state transitions; external I/O belongs in retryable activities/workers.
+
+## Phase 0 implementation
+
+The first workflow calculates profile readiness after an idempotent preference update. A durable
+outbox dispatcher starts it with the event ID as its stable workflow identity.

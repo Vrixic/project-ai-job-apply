@@ -11,6 +11,12 @@
 
 Deliver fact-grounded, review-by-exception application preparation and measured assisted submission for supported ATS platforms.
 
+## Deployment posture
+
+Keep document and AI work on bounded queues/workers with concurrency limits inside the lean
+runtime. Add dedicated AI/rendering capacity only from queue, latency, isolation, or model-provider
+evidence; durable workflow, factuality, and approval controls are never scaled down.
+
 ## Task register
 
 | ID | Task | State | Owner | Dependencies | Evidence or notes |
@@ -26,6 +32,7 @@ Deliver fact-grounded, review-by-exception application preparation and measured 
 | D3-009 | Implement conservative unknown/custom-site fallback. | Ready | Unassigned | ATS SDK | Open |
 | D3-010 | Establish per-field correction, factuality, completion, confirmation, latency, and failure metrics. | Ready | Unassigned | D0 metrics | Open |
 | D3-011 | Complete adversarial, duplicate-submit, crash/replay, accessibility, privacy, and security testing. | Ready | Unassigned | D3-001–D3-010 | Open |
+| D3-012 | Obtain ATS-specific legal and accountable security/privacy approval for AI processing, form actions, sensitive fields, signatures, and submission. | Ready | Legal/privacy counsel; security/privacy reviewers | Concrete adapters, model/provider, approval UX, and test evidence | Release gates LR-D3-01 and LR-D3-02; live ATS effects remain disabled until approved. |
 
 ## Exit criteria
 
@@ -43,7 +50,7 @@ Deliver fact-grounded, review-by-exception application preparation and measured 
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
-| — | No delivery work recorded yet. | — | — |
+| 2026-07-28 | Assigned application-preparation and submission delta approval to D3 without starting implementation. | D3-012 | [Legal review register](../foundation/legal-review-register.md), [security/privacy plan](../../security/security-privacy-approval-plan.md) |
 
 ## Decisions and scope changes
 

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ai-job-apply.internal/domain/v1/canonical-job.schema.json",
+  "title": "CanonicalJobV1",
+  "type": "object",
+  "required": [
+    "id",
+    "companyId",
+    "title",
+    "locations",
+    "description",
+    "status",
+    "sources",
+    "freshness"
+  ],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "companyId": { "type": "string", "format": "uuid" },
+    "title": { "type": "string", "minLength": 1, "maxLength": 240 },
+    "locations": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "type": "string", "minLength": 1, "maxLength": 240 }
+    },
+    "workMode": { "type": "string", "enum": ["remote", "hybrid", "on_site", "unknown"] },
+    "employmentType": {
+      "type": "string",
+      "enum": ["full_time", "part_time", "contract", "internship", "unknown"]
+    },
+    "description": { "type": "string", "minLength": 1, "maxLength": 200000 },
+    "status": { "type": "string", "enum": ["pending", "active", "expired", "removed", "blocked"] },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["provider", "externalId", "url", "observedAt", "provenance"],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": ["greenhouse", "lever", "ashby", "workday", "ugc", "other"]
+          },
+          "externalId": { "type": "string", "minLength": 1, "maxLength": 500 },
+          "url": { "type": "string", "format": "uri" },
+          "observedAt": { "type": "string", "format": "date-time" },
+          "provenance": {
+            "type": "string",
+            "enum": ["permitted_api", "authorized_fixture", "explicit_ugc"]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "freshness": {
+      "type": "object",
+      "required": ["lastVerifiedAt", "expiresAt"],
+      "properties": {
+        "lastVerifiedAt": { "type": "string", "format": "date-time" },
+        "expiresAt": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,10 @@
+{
+  "fixtureId": "synthetic-foundation-v1",
+  "providerFamily": "synthetic",
+  "source": "created_for_testing",
+  "containsProductionData": false,
+  "containsRestrictedAnswers": false,
+  "policyVersion": "ats-fixture-policy-2026-07-28",
+  "reviewState": "approved_synthetic",
+  "tags": ["identity", "resume", "work-authorization", "attestation"]
+}

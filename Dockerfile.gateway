@@ -1,0 +1,16 @@
+FROM node:24.12.0-bookworm-slim AS build
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+RUN corepack enable
+WORKDIR /workspace
+COPY . .
+RUN pnpm install --frozen-lockfile
+RUN pnpm contracts:generate && pnpm --filter @ai-job-apply/gateway... build
+
+FROM node:24.12.0-bookworm-slim AS runtime
+ENV NODE_ENV=production
+WORKDIR /workspace
+COPY --from=build /workspace /workspace
+USER node
+EXPOSE 4000
+CMD ["node", "backend/gateway/dist/src/main.js"]

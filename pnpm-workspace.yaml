@@ -1,0 +1,15 @@
+packages:
+  - "frontend/*"
+  - "backend/gateway"
+  - "backend/services/*"
+  - "backend/workflows"
+  - "packages/*"
+
+onlyBuiltDependencies:
+  - "@nestjs/core"
+  - "@scarf/scarf"
+  - "@swc/core"
+  - "@temporalio/core-bridge"
+  - "esbuild"
+  - "protobufjs"
+  - "sharp"

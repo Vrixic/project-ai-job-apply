@@ -1,0 +1,4 @@
+interface:
+  display_name: "Govern Delivery"
+  short_description: "Maintain evidence-gated delivery records"
+  default_prompt: "Use $govern-delivery to update the phase tasks and delivery tracker from verified evidence."

@@ -11,6 +11,12 @@
 
 Deliver a minimum-permission browser extension that lets users save jobs and explicitly contribute public posting data to the shared catalog without collecting unrelated browsing, profile, session, or form data.
 
+## Deployment posture
+
+Run contribution and catalog processing in the existing lean services/workers. Scale ingestion
+concurrency or split a worker only from queue-age, provider isolation, abuse, or measured load; do
+not add idle replicas or always-on staging merely because the extension adds traffic.
+
 ## Task register
 
 | ID | Task | State | Owner | Dependencies | Evidence or notes |
@@ -24,6 +30,7 @@ Deliver a minimum-permission browser extension that lets users save jobs and exp
 | D2-007 | Implement contributor/source trust signals, closed-job reports, takedowns, and appeals. | Ready | Unassigned | D1 trust/admin | Open |
 | D2-008 | Integrate community observations with source-aware freshness and active-index expiry. | Ready | Unassigned | D1 lifecycle | Open |
 | D2-009 | Complete Chrome Web Store disclosure, permission, privacy, security, and release checks. | Ready | Unassigned | D0 policy/legal | Open |
+| D2-010 | Obtain accountable UGC, extension-permission, privacy, security, and store approval before public contribution or distribution. | Ready | Legal/privacy counsel; security/privacy reviewers | Concrete contribution flow and extension manifest | Release gates LR-D2-01 and LR-D2-02; keep contribution/store release disabled until approved. |
 
 ## Exit criteria
 
@@ -40,7 +47,7 @@ Deliver a minimum-permission browser extension that lets users save jobs and exp
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
-| — | No delivery work recorded yet. | — | — |
+| 2026-07-28 | Assigned UGC and extension delta approval to D2 without starting implementation. | D2-010 | [Legal review register](../foundation/legal-review-register.md), [security/privacy plan](../../security/security-privacy-approval-plan.md) |
 
 ## Decisions and scope changes
 

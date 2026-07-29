@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ApplyDash identity conformance</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">Phase 0 conformance</p>
+      <h1>Extension identity</h1>
+      <p id="status" class="status" aria-live="polite">Checking…</p>
+      <p id="detail" class="detail" aria-live="polite"></p>
+      <div class="actions">
+        <button id="login" type="button" hidden>Log in with Auth0</button>
+        <button id="refresh" type="button" hidden>Rotate session</button>
+        <button id="logout" class="secondary" type="button" hidden>Revoke and log out</button>
+      </div>
+      <p class="privacy">Tokens and identity claims are never displayed or logged.</p>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

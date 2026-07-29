@@ -11,6 +11,12 @@
 
 Deliver relevant application notifications and authorized, grounded candidate outreach without reading inboxes/calendars or tracking post-submission hiring outcomes.
 
+## Deployment posture
+
+Use the existing durable worker and provider queues with bounded sending concurrency. Add
+notification replicas or dedicated delivery services only from queue age, provider isolation,
+rate limits, or measured volume; retain the in-app fallback regardless of capacity.
+
 ## Task register
 
 | ID | Task | State | Owner | Dependencies | Evidence or notes |
@@ -24,6 +30,7 @@ Deliver relevant application notifications and authorized, grounded candidate ou
 | D5-007 | Implement delivery reconciliation, bounce/complaint handling, duplicate prevention, and disconnect/deletion. | Ready | Unassigned | D5-001–D5-006 | Open |
 | D5-008 | Enforce and test the absence of inbox-reading, calendar, and post-submission status permissions/data flows. | Ready | Unassigned | D0 privacy/threat model | Open |
 | D5-009 | Complete OAuth, privacy, anti-spam, grounding, provider-failure, accessibility, and product testing. | Ready | Unassigned | D5-001–D5-008 | Open |
+| D5-010 | Obtain contact-source, anti-spam, OAuth-provider, legal, security, and privacy approval before any outreach send. | Ready | Legal/privacy counsel; security/privacy reviewers | Concrete sources, providers, scopes, consent UX and suppression controls | Release gate LR-D5-01; drafts may be tested synthetically but sending remains disabled. |
 
 ## Exit criteria
 
@@ -41,7 +48,7 @@ Deliver relevant application notifications and authorized, grounded candidate ou
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
-| — | No delivery work recorded yet. | — | — |
+| 2026-07-28 | Assigned outreach delta approval to D5 without starting implementation. | D5-010 | [Legal review register](../foundation/legal-review-register.md), [security/privacy plan](../../security/security-privacy-approval-plan.md) |
 
 ## Decisions and scope changes
 

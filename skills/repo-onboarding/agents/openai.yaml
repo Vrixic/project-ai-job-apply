@@ -1,0 +1,4 @@
+interface:
+  display_name: "Repository Onboarding"
+  short_description: "Orient contributors in the job platform repo"
+  default_prompt: "Use $repo-onboarding to help me understand and start working in this repository."

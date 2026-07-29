@@ -12,3 +12,7 @@ This folder will hold CI/CD workflows for validation and controlled delivery.
 - Scheduled: dependency checks, drift detection, restore exercises, and synthetic monitoring.
 
 Workflows must use short-lived cloud identity where possible and must not print secrets or user data.
+
+The private repository uses a full-lockfile pnpm audit and a repository-local Semgrep gate with a
+pinned scanner and pinned upstream rules. GitHub Dependency Review and CodeQL uploads are not
+claimed because GitHub code-security services are not enabled for this repository.

@@ -1,0 +1,24 @@
+{
+  "name": "@ai-job-apply/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "android": "expo run:android",
+    "build": "tsc -p tsconfig.json --noEmit",
+    "clean": "node -e \"require('fs').rmSync('.expo',{recursive:true,force:true})\"",
+    "dev:client": "expo start --dev-client",
+    "ios": "expo run:ios",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "expo": "57.0.8",
+    "react": "19.2.8",
+    "react-native": "0.86.2",
+    "react-native-auth0": "5.10.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.7"
+  }
+}

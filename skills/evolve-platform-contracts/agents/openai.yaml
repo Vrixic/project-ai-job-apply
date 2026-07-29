@@ -1,0 +1,4 @@
+interface:
+  display_name: "Evolve Platform Contracts"
+  short_description: "Change APIs, events, schemas, and migrations"
+  default_prompt: "Use $evolve-platform-contracts to safely design and validate this contract change."

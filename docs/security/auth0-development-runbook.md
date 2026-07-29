@@ -1,0 +1,161 @@
+# Auth0 Development Tenant Runbook
+
+- Status: Web client active; public-client and identity-lifecycle conformance in progress
+- Last updated: 2026-07-28
+- Scope: Isolated development only
+
+This runbook configures the development tenant selected by
+[ADR-012](../adr/012-auth0-initial-managed-identity.md). It deliberately excludes production
+branding, a custom domain, production passkeys, and real candidate accounts.
+
+## Dashboard bootstrap
+
+Use an Auth0 administrator protected by MFA. Do not share dashboard credentials, MFA codes,
+client secrets, or tokens in chat, issues, screenshots, or repository files.
+
+### Platform API
+
+Create **Applications → APIs → Create API** with:
+
+| Setting | Development value |
+|---|---|
+| Name | `ApplyDash Platform API Development` |
+| Identifier | `ai-job-apply-api` |
+| Signing algorithm | `RS256` |
+| Token lifetime | `600` seconds |
+| Allow offline access | Enabled for the server-held web session |
+
+Add the permissions `profile:read` and `profile:write`. Keep RBAC and access-token permission
+claims disabled until roles beyond candidate ownership exist; the gateway enforces the explicit
+OAuth scopes and resolves the exact issuer and subject to an internal UUID.
+
+### Regular Web Application
+
+Use the existing `ApplyDash Web Development` Regular Web Application and set:
+
+| Setting | Exact value |
+|---|---|
+| Allowed callback URLs | `http://localhost:3000/auth/callback` |
+| Allowed logout URLs | `http://localhost:3000` |
+| Allowed web origins | `http://localhost:3000` |
+| Token endpoint authentication | Client secret sent as POST |
+| Grant types | Authorization Code and Refresh Token |
+
+Do not add wildcards. Configure the development web client's refresh tokens as follows:
+
+| Refresh-token setting | Development value |
+|---|---|
+| Rotation | Enabled |
+| Rotation overlap period | `5` seconds |
+| Absolute expiration | Enabled; `2592000` seconds (30 days) |
+| Inactivity expiration | Enabled; `604800` seconds (7 days) |
+
+The five-second overlap tolerates a narrowly concurrent server retry without creating a broad
+replay window. Do not enable Resource Owner Password, Implicit, Device Code, or other unused
+grants.
+
+The application requests:
+
+```text
+openid profile email offline_access profile:read profile:write
+```
+
+Enable only the development database connection for this client. Universal Login remains the
+credential boundary; the platform must never collect an Auth0 password.
+
+## Local secret configuration
+
+From the repository root, run:
+
+```powershell
+.\scripts\configure-auth0-local.ps1 `
+  -Auth0Domain "YOUR_TENANT.us.auth0.com" `
+  -ClientId "YOUR_REGULAR_WEB_APPLICATION_CLIENT_ID"
+```
+
+Enter the client secret only at the secure prompt. The script generates a fresh cookie-encryption
+secret and writes:
+
+- `frontend/web/.env.local` for the server-only Auth0 SDK and BFF; and
+- `.env` for the gateway's exact OIDC issuer and local dependencies.
+
+Both files are gitignored. The script refuses to replace an existing web environment file unless
+`-Force` is explicitly supplied. Never copy these values into `.env.example`.
+
+## Local acceptance
+
+Start local dependencies, migrate, and run the gateway, worker, and web application:
+
+```powershell
+.\scripts\start-local.ps1
+pnpm --filter @ai-job-apply/profile-service build
+pnpm --filter @ai-job-apply/profile-service db:migrate
+pnpm dev
+```
+
+Then verify with a synthetic development account:
+
+1. Open `http://localhost:3000`.
+2. Create the account through Universal Login and complete email verification.
+3. Save job preferences and confirm the readiness operation reaches `succeeded`.
+4. Log out and confirm the platform BFF returns `401` for protected calls.
+5. Log in again and select **Verify session renewal** in the development conformance panel. Record
+   the sanitized success state; the browser must not receive token material.
+6. Revoke the application's authorization from the Auth0 user record, return to the still-open
+   local session, and select **Verify session renewal** again. Record the sanitized
+   reauthentication-required state. This forced server-side renewal avoids waiting for the
+   current access token to expire while proving the revoked grant cannot renew.
+7. Block the Auth0 user, end the Auth0 session through the product logout route, and attempt to log
+   in again. Confirm authentication fails and the application shows only its generic account
+   unavailable/blocked recovery state; provider-controlled callback descriptions must not render.
+8. Unblock only to test recovery, then log in successfully and confirm the owner-scoped saved
+   preferences return. Delete the synthetic account only when beginning the separate deletion and
+   old-session-denial check.
+
+Capture no tokens, cookies, secrets, complete email addresses, or provider subjects. Record only
+timestamps, expected/actual results, sanitized screenshots, and correlation IDs.
+
+## Public-client conformance
+
+Create two separate **Native Applications**, one for Expo and one for the browser extension. Public
+clients have no client secret. Enable Authorization Code and Refresh Token grants, rotating and
+expiring refresh tokens, and only the development database connection.
+
+Provision each application only when its owning delivery begins. Extension conformance belongs to
+D2; mobile Native Application provisioning and device conformance belong to D6 and do not block
+the web-focused D0 exit.
+
+Write the ignored public settings with:
+
+```powershell
+.\scripts\configure-auth0-public-clients.ps1 `
+  -Auth0Domain "YOUR_TENANT.us.auth0.com" `
+  -MobileClientId "YOUR_MOBILE_NATIVE_CLIENT_ID" `
+  -ExtensionClientId "YOUR_EXTENSION_PUBLIC_CLIENT_ID"
+```
+
+During sequential conformance, configure mobile independently with `-MobileOnly`, or the extension
+with `-ExtensionOnly`. Neither mode reads or overwrites the other client's ignored configuration.
+
+The script prints the exact mobile callbacks. Build and load the extension to obtain its exact
+`https://EXTENSION_ID.chromiumapp.org/auth0` callback. Add each URL to only its owning
+application's callback and logout allowlists; never use a wildcard or copy the Regular Web
+Application secret into either client.
+
+Run the mobile shell with a custom Expo development build because the Auth0 native SDK is not
+available in Expo Go. Build and load `frontend/extension/dist` unpacked for the extension flow.
+For each client, record login, cancellation, renewal, logout, and post-revocation behavior in the
+[sanitized evidence index](auth0-development-conformance.md).
+
+## Evidence status
+
+Public discovery, web login/callback/logout, real API audience/scopes, identity mapping, durable
+profile operation, forced web renewal, and web grant revocation passed in isolated development.
+Local verifier coverage also passes algorithm/signature/claim rejection, overlapping signing-key
+rotation, warm-cache JWKS outage behavior, and cold-start failure. Web user
+block/recovery/provider-deletion and old-session denial pass; product-wide deletion reconciliation
+is not claimed. Extension transactions, extension refresh-token replay/device revocation, web
+recovery/MFA/passkeys, deployed outage/log streaming, and on-demand staging replay remain open for
+their owning gates. Real mobile transactions and device-specific lifecycle evidence are deferred
+to D6. See the
+[development conformance evidence](auth0-development-conformance.md) for the exact split.

@@ -4,7 +4,7 @@ Status: Initial architecture and implementation guide
 Last updated: 2026-07-28
 Audience: Founders, product, design, engineering, data/ML, security, and operations
 
-> This is a candidate-first platform inspired by the problem Jobright addresses, not a copy of Jobright's code, branding, visual design, content, or proprietary data. The working product name in this document is **the Platform** until a name is chosen.
+> This is a candidate-first platform inspired by the problem Jobright addresses, not a copy of Jobright's code, branding, visual design, content, or proprietary data. **ApplyDash** and `applydash.ai` are the provisional presentation identity; **the Platform** remains the brand-neutral architectural term, and `ai-job-apply` remains the stable technical identifier until a public name is approved.
 
 ## 1. Recommended repository structure
 
@@ -104,6 +104,26 @@ The folders above define durable ownership boundaries. They do **not** require d
 8. `extension`
 
 Split a module into its own deployment and database only when its load, security boundary, failure rate, or team ownership justifies it. This preserves fault isolation without paying the operational cost of premature microservices.
+
+### Deployment posture: lean until measured demand
+
+Per [ADR-013](adr/013-lean-until-demand-cloud-runtime.md), every delivery uses the smallest robust
+runtime shape through pre-launch and after launch until production evidence requires more
+capacity. The primary AWS region is `us-east-2`.
+
+- Begin with one continuously available development environment; provision isolated staging on
+  demand for release candidates, restore/migration rehearsals, security acceptance, and launch.
+- Start each in-scope ECS service with one task.
+- Use API Gateway, VPC Link, and Cloud Map for stable ingress without an initial Application Load
+  Balancer.
+- Start with encrypted Single-AZ PostgreSQL plus automated backups and tested restore.
+- Do not provision Redis, a search cluster, extra replicas, per-AZ NAT gateways, or dedicated
+  services until an implemented capability or measured signal needs them.
+- Preserve stateless containers, stable contracts, durable workflows, idempotency, health checks,
+  observability, backups, and explicit scaling inputs from the first implementation.
+
+Lean capacity is not permission to weaken security, privacy, correctness, recovery, or safe
+failure behavior.
 
 ## 2. Product thesis
 
@@ -466,7 +486,7 @@ flowchart TB
 
     PG[(PostgreSQL)]
     OBJ[(Encrypted object storage)]
-    CACHE[(Redis)]
+    CACHE[(Optional Redis)]
     SEARCH[(Search index)]
     WH[(Analytics warehouse)]
 
@@ -988,7 +1008,8 @@ ExperimentAssignment
 
 Set policy before launch:
 
-- Account/profile: while active, then deletion workflow with a documented short recovery window
+- Account/profile: while active; confirmed deletion is non-recoverable, active access ends
+  immediately, and inaccessible backup copies age out within the documented window
 - OAuth tokens: revoke and delete immediately on disconnect/account deletion
 - Generated application artifacts: user-controlled retention; default tied to account
 - Raw contributed page snapshots: short operational window, for example 90 days, then delete
@@ -1003,8 +1024,11 @@ Deletion is a durable workflow covering primary DB, objects, search indexes, cac
 
 ### 13.1 Reliability principles
 
-- Multi-AZ for primary transactional infrastructure
-- Stateless API replicas with health-based routing
+- Single-AZ managed transactional infrastructure is acceptable in the lean pre-demand profile only
+  with encryption, automated backups, point-in-time recovery, deletion protection, and restore
+  evidence; enable Multi-AZ when launch review, recovery requirements, or measured demand justifies it
+- Stateless APIs with health checks and configurable replica counts; begin at one replica and add
+  health-based routing/autoscaling from evidence
 - Durable queues and workflows for every external or long-running action
 - Timeouts, bounded exponential backoff, jitter, and circuit breakers
 - Idempotent consumers and transactional outbox for database-to-event publication
@@ -1033,6 +1057,11 @@ Deletion is a durable workflow covering primary DB, objects, search indexes, cac
 
 ### 13.3 Initial service objectives
 
+These are public-service objectives and measurement targets, not a mandate to pre-provision
+redundant capacity before launch. Pre-launch environments report their single-instance posture
+honestly and use failures, recovery exercises, and representative load to decide which
+availability controls to activate.
+
 | Capability | Initial objective |
 |---|---|
 | Authenticated read APIs | 99.9% monthly availability |
@@ -1049,15 +1078,17 @@ Use error budgets to decide whether a team ships features or reliability work. D
 
 Initial target:
 
-- RPO: 5 minutes for transactional data
-- RTO: 60 minutes for core APIs
-- Multi-AZ primary database and point-in-time recovery
-- Cross-region encrypted backup copies
-- Quarterly restore exercises
+- Pre-demand RPO: the configured managed-backup/PITR window; never claim five minutes without
+  deployed evidence
+- Pre-demand RTO: measured restore and redeploy time; never claim 60 minutes without evidence
+- Single-AZ primary database with point-in-time recovery in the lean profile
+- Encrypted backup copies and cross-region copies when the launch risk review requires them
+- Restore exercises before real-user launch and after material storage/migration changes
 - Re-creatable search indexes and caches
 - Workflow/event reconciliation after restore
 
-Do not begin with active-active multi-region writes. Add a warm secondary region when usage and contractual requirements justify the cost.
+Do not begin with active-active multi-region writes. Enable Multi-AZ, then add a warm secondary
+region only when measured usage, recovery evidence, or contractual requirements justify it.
 
 ## 14. Security, privacy, trust, and compliance
 
@@ -1088,6 +1119,11 @@ Do not begin with active-active multi-region writes. Add a warm secondary region
 - Tenant/user scoping in every repository query and cache key
 - Audit trails for profile changes, approvals, sends, submissions, exports, and admin access
 - “Break glass” admin access with reason, time limit, and alerting
+
+Auth0 is the initial managed OIDC provider under
+[ADR-012](adr/012-auth0-initial-managed-identity.md). The provider-neutral `issuer + subject` to
+internal-UUID boundary remains authoritative so identity can be migrated without moving candidate
+or application-domain records.
 - User data export, correction, disconnect, and deletion
 - Subprocessor contracts and AI vendor retention/training settings
 - Regular penetration tests and a vulnerability disclosure program
@@ -1103,7 +1139,8 @@ Store immutable, versioned consent records for:
 - Sending outreach
 - Preparing and submitting an application
 - Optional support recording/screenshots
-- Optional analytics/marketing where required
+- Optional product analytics only after Phase 0, with an explicit preference and applicable review;
+  marketing consent remains separate
 
 Consent must be specific. Clicking `Save job` is not consent to upload unrelated browsing history. Clicking `Prepare` is not submission approval. The approved packet hash defines what the user authorized.
 
@@ -1186,9 +1223,13 @@ Billing architecture:
 
 ### Infrastructure
 
-- Containers on AWS ECS/Fargate initially, multi-AZ
-- RDS PostgreSQL Multi-AZ, ElastiCache, S3, KMS, Secrets Manager
-- CloudFront/WAF and rate limiting
+- Lean containers on AWS ECS/Fargate in `us-east-2`, one task per service by default
+- Regional API Gateway HTTP API, VPC Link, and Cloud Map service discovery; add an ALB only from
+  measured routing/connection/traffic need
+- RDS PostgreSQL Single-AZ initially; Multi-AZ is an explicit launch/risk/usage decision
+- Redis/ElastiCache only after a concrete cache, distributed rate-limit, or lease use case exists
+- S3, SQS/DLQ, KMS, Secrets Manager, and CloudWatch from the first deployed environment
+- CloudFront/WAF and additional rate-limiting capacity at public-launch or measured-abuse gates
 - Dedicated isolated compute pool for browser automation
 - Terraform for all persistent cloud resources
 - GitHub Actions for CI/CD
@@ -1320,6 +1361,13 @@ Useful analysis:
 
 The phases below are ordered by architectural dependency and quality readiness, not calendar estimates. Progress to the next phase only when the current phase's exit criteria are met.
 
+All phases follow the lean-until-demand runtime policy. Adding a feature does not automatically add
+a service replica, load balancer, cache, search cluster, always-on staging environment, or
+Multi-AZ data service. Capacity and availability changes require a launch gate, a security/recovery
+requirement, or measured latency, saturation, queue, failure, or usage evidence. This rule reduces
+idle infrastructure; it does not reduce product-quality, safety, privacy, testing, observability,
+backup, or maintainability requirements.
+
 When making technical decisions within this roadmap, give little weight to predicted development cost or delivery time. Prefer, in order:
 
 1. Quality and correctness
@@ -1333,20 +1381,24 @@ Schedule pressure is not a reason to weaken consent, factuality, security, obser
 ### Phase 0 — Product, data, and legal foundation
 
 - Choose launch geography and target candidate segment
-- Conduct user-research sessions and map the last 20 real applications
-- Validate source/API terms and user-contribution policy
+- Obtain foundational legal/privacy and security approval; assign source-, UGC-, automation-,
+  outreach-, store-, provider-, and jurisdiction-specific questions as blocking gates to the
+  delivery that implements them
 - Define truth profile, job schema, field ontology, event taxonomy, and consent model
-- Build threat model and data-retention map
+- Build the threat model, privacy impact assessment, data map, consent/retention/rights designs,
+  subprocessor gate, and security-control evidence matrix
 - Create monorepo, CI, environments, observability, ADR process
 - Create ATS fixture acquisition/sanitization process
 - Establish application quality, reliability, safety, and efficiency baselines; record operating cost as a guardrail
 
-Exit: approved schemas/policies and a thin authenticated end-to-end skeleton.
+Exit: approved foundational schemas, policies, legal/privacy and security controls; enforceable
+feature-specific release gates; and a thin authenticated end-to-end skeleton.
 
 ### Phase 1 — Useful web product and canonical job catalog
 
 - Auth, onboarding, resume parsing/confirmation, preferences
 - Job ingestion from permitted Greenhouse, Lever, and Ashby public feeds
+- Source-specific legal approval and deployed real-candidate privacy/security approval
 - Canonicalization, dedupe, lifecycle, freshness, reporting
 - Search, filters, saved jobs, basic explainable match
 - Application workflow history and in-app action inbox
@@ -1364,6 +1416,7 @@ Exit: users can find, trust, save, and track fresh jobs.
 - Greenhouse/Lever/Ashby job detection
 - Community trust signals, moderation, removal process
 - Freshness revalidation and automatic active-index expiry
+- UGC license/takedown and extension permission/privacy/store approval
 
 Exit: users expand catalog coverage without sharing private browsing data.
 
@@ -1376,6 +1429,7 @@ Exit: users expand catalog coverage without sharing private browsing data.
 - Extension-based autofill for Greenhouse, Lever, and Ashby
 - Review-by-exception UI and submission confirmation
 - Conservative generic fallback
+- ATS-, AI-, authorization-, signature-, sensitive-field-, and submission-specific approval
 
 Exit: a user can prepare, skim, approve, and submit on supported ATS sites with measured accuracy.
 
@@ -1387,6 +1441,7 @@ Exit: a user can prepare, skim, approve, and submit on supported ATS sites with 
 - Mobile/web review and approval channel
 - Packet-hash revalidation and ambiguous-submit handling
 - Per-ATS canaries, kill switches, and reliability dashboards
+- Workday/tenant, remote-browser, session, legal, privacy, and independent security approval
 
 Exit: remote preparation works safely for supported variants, with active-tab/manual fallback.
 
@@ -1398,17 +1453,23 @@ Exit: remote preparation works safely for supported variants, with active-tab/ma
 - Grounded referral/recruiter emails with user approval
 - Send-only Gmail/Outlook connection with copyable-draft fallback
 - Delivery reconciliation, suppression, disconnect, and restrained follow-up workflow
+- Contact-source, anti-spam, send-only OAuth, legal, privacy, and security approval
 
 Exit: users receive relevant application notifications and can send truthful, approved outreach without inbox/calendar access or post-submission outcome tracking.
 
 ### Phase 6 — Mobile and paid launch
 
 - React Native candidate companion
+- Dedicated mobile OIDC client and device conformance for PKCE, secure credential storage,
+  refresh rotation/replay, logout, revocation, cancellation, recovery, and lost-device behavior
 - Feed, save, review/approve, application history, alerts, and application agent
 - Deep links and desktop handoff
 - Stripe plus StoreKit/Play receipt normalization
 - One Pro product, grace periods, self-service lifecycle
 - Accessibility, store privacy disclosures, support operations
+- Storefront, billing, account-deletion, legal, privacy, and security approval
+- Final public product name/domain ownership, conflict screening, counsel/product approval, and
+  consistent production OAuth/email/store/support configuration
 
 Exit: reliable cross-device experience and simple monetization.
 
@@ -1420,6 +1481,7 @@ Exit: reliable cross-device experience and simple monetization.
 - Permitted company/job context for tailored applications
 - Optional employer posting/matching portal in a separate bounded context
 - SOC 2 readiness, advanced security, warm-region DR
+- Per-country, source, ATS, data-use, and employer-capability legal/privacy/security delta approval
 
 ## 21. Team ownership
 
@@ -1439,6 +1501,15 @@ At small scale, people can cover multiple responsibilities. No launch should lea
 
 ## 22. Cost controls that preserve quality
 
+- Keep one continuously available lean development environment and provision isolated staging on
+  demand until launch acceptance requires it.
+- Default each ECS service to one task; scale replicas only from latency, utilization, queue-age,
+  availability, or recovery evidence.
+- Use API Gateway and Cloud Map before provisioning an ALB.
+- Keep PostgreSQL Single-AZ with backups/PITR until launch risk or measured availability requires
+  Multi-AZ.
+- Do not provision Redis, dedicated search, per-AZ NAT gateways, or always-on browser capacity
+  before their owning workload exists.
 - Use deterministic parsing/rules before models.
 - Route simple structured tasks to cheaper models and difficult writing to stronger models.
 - Cache job-level extraction; do not regenerate the same normalized description per user.
@@ -1463,6 +1534,11 @@ support minutes per confirmed application
 ```
 
 Do not pick artificial numbers before running representative workloads.
+
+The current pre-deployment estimate and its explicit assumptions live in the
+[initial operating-cost baseline](product/foundation/initial-operating-cost-baseline.md). Replace
+planning estimates with Cost and Usage Report, provider invoice, and per-workflow evidence after
+deployment.
 
 ## 23. Launch gates
 

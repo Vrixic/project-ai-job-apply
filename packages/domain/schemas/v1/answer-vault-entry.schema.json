@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ai-job-apply.internal/domain/v1/answer-vault-entry.schema.json",
+  "title": "AnswerVaultEntryV1",
+  "type": "object",
+  "required": ["id", "userId", "fieldKey", "answer", "verification", "sensitivity", "version"],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "userId": { "type": "string", "format": "uuid" },
+    "fieldKey": { "type": "string", "minLength": 1, "maxLength": 160 },
+    "answer": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "number" },
+        { "type": "boolean" },
+        {
+          "type": "array",
+          "items": {
+            "oneOf": [{ "type": "string" }, { "type": "number" }, { "type": "boolean" }]
+          }
+        },
+        { "type": "null" }
+      ]
+    },
+    "verification": { "type": "string", "enum": ["proposed", "confirmed"] },
+    "sensitivity": { "type": "string", "enum": ["standard", "confidential", "restricted"] },
+    "sourceFactIds": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "format": "uuid" }
+    },
+    "version": { "type": "integer", "minimum": 1 },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}
