@@ -40,8 +40,10 @@ state remnants were removed.
 
 ## Remaining acceptance
 
-- Publish and run the manual
-  [AWS OIDC conformance workflow](../../../../.github/workflows/aws-oidc-conformance.yml).
+- Review and merge [draft PR #1](https://github.com/Vrixic/project-ai-job-apply/pull/1), then
+  run the manual
+  [AWS OIDC conformance workflow](../../../../.github/workflows/aws-oidc-conformance.yml) from
+  `main`.
 - Produce and review the saved persistent-platform plan with applications disabled.
 - Deploy and verify logs, metrics, traces, alarms, queues, data services, and secrets.
 - Run migration, application, rollback, and PostgreSQL restore acceptance.

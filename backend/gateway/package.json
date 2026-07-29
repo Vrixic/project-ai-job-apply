@@ -18,17 +18,17 @@
     "@ai-job-apply/config": "workspace:*",
     "@ai-job-apply/observability": "workspace:*",
     "@ai-job-apply/profile-service": "workspace:*",
-    "@nestjs/common": "11.1.9",
-    "@nestjs/core": "11.1.9",
-    "@nestjs/platform-fastify": "11.1.9",
-    "fastify": "5.6.2",
+    "@nestjs/common": "11.1.28",
+    "@nestjs/core": "11.1.28",
+    "@nestjs/platform-fastify": "11.1.28",
+    "fastify": "5.10.0",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2"
   },
   "devDependencies": {
     "@ai-job-apply/domain": "workspace:*",
-    "@nestjs/testing": "11.1.9",
-    "tsx": "4.21.0",
-    "uuid": "13.0.0"
+    "@nestjs/testing": "11.1.28",
+    "tsx": "4.23.1",
+    "uuid": "13.0.1"
   }
 }

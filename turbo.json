@@ -21,6 +21,7 @@
     "test:integration": {
       "dependsOn": ["^build"],
       "cache": false,
+      "passThroughEnv": ["DATABASE_URL"],
       "outputs": []
     },
     "clean": {
