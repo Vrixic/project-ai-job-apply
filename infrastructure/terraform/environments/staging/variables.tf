@@ -58,6 +58,11 @@ variable "database_instance_class" {
   default = "db.t4g.micro"
 }
 
+variable "database_engine_version" {
+  type    = string
+  default = "16.14"
+}
+
 variable "database_performance_insights" {
   type    = bool
   default = false
@@ -87,12 +92,6 @@ variable "temporal_address" {
 variable "temporal_namespace" {
   type    = string
   default = ""
-}
-
-variable "temporal_api_key_secret_arn" {
-  type      = string
-  sensitive = true
-  default   = ""
 }
 
 variable "deploy_applications" {

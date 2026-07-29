@@ -44,12 +44,12 @@ module "platform" {
   private_application_networking = var.private_application_networking
   enable_redis                   = var.enable_redis
   database_instance_class        = var.database_instance_class
+  database_engine_version        = var.database_engine_version
   database_performance_insights  = var.database_performance_insights
   enable_container_insights      = var.enable_container_insights
   oidc_issuer                    = var.oidc_issuer
   oidc_audience                  = var.oidc_audience
   temporal_address               = var.temporal_address
   temporal_namespace             = var.temporal_namespace
-  temporal_api_key_secret_arn    = var.temporal_api_key_secret_arn
   deploy_applications            = var.deploy_applications
 }
