@@ -1,13 +1,13 @@
 # Subprocessor and External-System Register
 
 - Status: Candidate register; procurement, DPA, security, privacy, retention, and counsel review pending
-- Last updated: 2026-07-28
+- Last updated: 2026-07-29
 
 | System | Intended purpose | Candidate data | State |
 |---|---|---|---|
 | AWS | Compute, database, cache, queue, encrypted object storage, logs | Confidential and internal | Selected architecture; accounts unavailable |
 | GitHub | Source control and CI | Source and synthetic tests only | Repository active |
-| Temporal Cloud | Durable workflow orchestration | Opaque workflow IDs and minimal payloads | Provider/account not configured |
+| Temporal Cloud | Durable workflow orchestration | Opaque workflow IDs and minimal payloads | Development account/namespace and secret-safe read conformance configured; contracting, DPA, security/privacy review, deployed workflow, and real-data activation pending |
 | Auth0 by Okta | Authentication and sessions | Minimum identity claims, authentication methods, and session/security metadata | Selected by ADR-012; tenants, contracting entity/region, DPA, security/privacy approval, and activation pending |
 | OpenTelemetry/CloudWatch | Operational telemetry | Redacted identifiers and measurements | Local/config definition present |
 | AI model provider | Later structured extraction/tailoring | Minimum required candidate/job context | Not selected |

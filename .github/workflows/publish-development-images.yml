@@ -1,0 +1,120 @@
+name: Publish development images
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish ${{ matrix.name }}
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: development
+    concurrency:
+      group: publish-development-${{ matrix.name }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: gateway
+            dockerfile: Dockerfile.gateway
+            repository: ai-job-apply/gateway
+          - name: worker
+            dockerfile: Dockerfile.worker
+            repository: ai-job-apply/worker
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Require configured deployment role
+        env:
+          AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+        run: test -n "$AWS_DEPLOY_ROLE_ARN"
+
+      - name: Obtain short-lived AWS credentials
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-2
+          role-session-name: publish-${{ matrix.name }}-${{ github.run_id }}
+          mask-aws-account-id: true
+
+      - name: Verify immutable encrypted repository
+        env:
+          REPOSITORY: ${{ matrix.repository }}
+        run: |
+          set -euo pipefail
+          settings="$(aws ecr describe-repositories \
+            --repository-names "$REPOSITORY" \
+            --query 'repositories[0].[imageTagMutability,imageScanningConfiguration.scanOnPush,encryptionConfiguration.encryptionType]' \
+            --output text)"
+          test "$settings" = $'IMMUTABLE\tTrue\tKMS'
+
+      - name: Sign in to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@d539f0932e70871a027e9d5a9d8fc38589180a64 # v2
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Build and push commit image
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/${{ matrix.repository }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      - name: Wait for ECR scan and enforce severity gate
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          REPOSITORY: ${{ matrix.repository }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          scan_status=""
+          for attempt in $(seq 1 60); do
+            scan_status="$(aws ecr describe-image-scan-findings \
+              --repository-name "$REPOSITORY" \
+              --image-id "imageTag=$SOURCE_SHA" \
+              --query 'imageScanStatus.status' \
+              --output text 2>/dev/null || true)"
+            case "$scan_status" in
+              COMPLETE) break ;;
+              FAILED|UNSUPPORTED_IMAGE)
+                echo "ECR image scan ended with status $scan_status." >&2
+                exit 1
+                ;;
+            esac
+            sleep 10
+          done
+          test "$scan_status" = "COMPLETE"
+
+          findings="$(aws ecr describe-image-scan-findings \
+            --repository-name "$REPOSITORY" \
+            --image-id "imageTag=$SOURCE_SHA" \
+            --output json)"
+          critical="$(jq -r '.imageScanFindings.findingSeverityCounts.CRITICAL // 0' <<<"$findings")"
+          high="$(jq -r '.imageScanFindings.findingSeverityCounts.HIGH // 0' <<<"$findings")"
+
+          {
+            echo "### ${{ matrix.name }} image"
+            echo
+            echo "- Source commit: \`$SOURCE_SHA\`"
+            echo "- Immutable digest: \`$IMAGE_DIGEST\`"
+            echo "- ECR scan: complete"
+            echo "- Critical findings: $critical"
+            echo "- High findings: $high"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          test "$critical" -eq 0
+          test "$high" -eq 0

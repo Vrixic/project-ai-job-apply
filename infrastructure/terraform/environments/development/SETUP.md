@@ -90,8 +90,10 @@ workflows; pull requests run offline Terraform validation only.
 - Create a namespace-scoped Service Account for the worker with `Write` namespace permission,
   not Namespace Admin.
 - Do not generate its API key until platform engineering has created the destination AWS Secrets
-  Manager secret. At that handoff, generate a dedicated expiring API key, paste it directly into
-  the AWS secret, clear the clipboard, and plan regular rotation.
+  Manager secret. At that handoff, follow the
+  [Temporal runtime-secret runbook](../../../runbooks/temporal-cloud-runtime-secret.md) to
+  generate a dedicated 90-day API key, paste it directly into the AWS secret, clear the
+  clipboard, verify namespace access, and plan regular rotation.
 
 The safe handoff to platform engineering contains only:
 
@@ -111,7 +113,8 @@ After the product-owner setup is confirmed, platform engineering:
 4. configures GitHub Environment variables from bootstrap outputs;
 5. applies network, KMS, RDS, S3, SQS/DLQ, ECR, ECS, logs, metrics, alarms, and runtime secret
    containers with `deploy_applications = false`;
-6. stores the Temporal API key directly in AWS Secrets Manager;
+6. stores and verifies the Temporal API key directly in AWS Secrets Manager by following the
+   [runtime-secret runbook](../../../runbooks/temporal-cloud-runtime-secret.md);
 7. builds, tests, scans, and pushes immutable gateway and worker images;
 8. runs the reviewed database migration through a one-off controlled task;
 9. reviews and applies the exact saved application-enablement plan;

@@ -1,0 +1,16 @@
+# Use an allowlist so ignored credentials, Terraform state, Git metadata, local caches, generated
+# output, and unrelated workstation files can never enter a container build context.
+**
+
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!turbo.json
+!tsconfig.base.json
+
+!backend/
+!backend/**
+!frontend/
+!frontend/**
+!packages/
+!packages/**
