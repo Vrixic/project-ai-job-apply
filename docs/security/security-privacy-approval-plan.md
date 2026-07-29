@@ -1,7 +1,7 @@
 # Phase 0 Security and Privacy Approval Plan
 
 - Status: Review package in progress; no approval recorded
-- Last updated: 2026-07-28
+- Last updated: 2026-07-29
 - Accountable security approver: Future independent reviewer; individual unassigned
 - Accountable privacy/legal approver: Future external counsel; individual unassigned
 
@@ -52,11 +52,11 @@ approval.
 | SP-06 | Retention/rights/deletion | Approved schedule, export schema, deletion workflow, backup behavior | [Retention and deletion](retention-and-deletion.md) | Decisions and approval pending |
 | SP-07 | Identity/session security | Managed OIDC configuration, MFA/passkey policy, revocation, client conformance | Auth0 selected; provider-neutral verifier and configuration baseline exist | Tenant/deployed conformance and approval pending |
 | SP-08 | Ownership/authorization | Owner-scoped repository queries and cross-user denial tests | Profile slice tests | Partial local evidence |
-| SP-09 | Secrets/encryption | Secrets-manager/KMS design, TLS, rotation, no plaintext credentials | Terraform/design artifacts | Deployed evidence pending |
-| SP-10 | Logging/observability | Allowlisted telemetry, redaction tests, access/retention, traceability | Observability package and redaction tests | Partial local evidence |
+| SP-09 | Secrets/encryption | Secrets-manager/KMS design, TLS, rotation, no plaintext credentials | [Persistent KMS, encrypted stores, and secret destinations](../product/delivery/evidence/d0-development-persistent-platform-2026-07-29.md) | Partial deployed evidence; application TLS/secret use and secret rotation pending |
+| SP-10 | Logging/observability | Allowlisted telemetry, redaction tests, access/retention, traceability | Local package/redaction tests plus [encrypted log groups and baseline alarms](../product/delivery/evidence/d0-development-persistent-platform-2026-07-29.md) | Partial deployed evidence; populated trace/redaction and alert delivery pending |
 | SP-11 | Durable external effects | Outbox, idempotency, replay safety, cancellation, immutable approval | Foundation outbox/workflow; later packet design | Partial local evidence |
 | SP-12 | Secure development/supply chain | Pinned dependencies, scanning, protected deploy identity, SBOM/artifact provenance | CI, pinned Semgrep SAST, full-lockfile audit, Dependabot, Terraform workflow | Local/repository evidence; policy review pending |
-| SP-13 | Availability/recovery | Isolation, backup, restore, RTO/RPO, restore test | Infrastructure design | AWS restore evidence pending |
+| SP-13 | Availability/recovery | Isolation, backup, restore, RTO/RPO, restore test | [Private RDS with seven-day backups/PITR and a live restore point](../product/delivery/evidence/d0-development-persistent-platform-2026-07-29.md) | Backup configuration deployed; isolated restore and measured RTO/RPO pending |
 | SP-14 | Incident response | Severity, containment, evidence, notification decision, exercises | Baseline below | Exercise and owner pending |
 | SP-15 | Vulnerability management | Intake, severity, remediation ownership, disclosure path | Baseline below | Owner and operating evidence pending |
 | SP-16 | Subprocessor governance | DPA/security/retention/training/region/breach/deletion review | [Subprocessor register](subprocessors.md) | Provider reviews pending |

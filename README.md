@@ -69,8 +69,11 @@ Auth0 configuration exists and passes conformance; test tokens are unavailable o
 
 ## Current status
 
-The repository-side Phase 0 foundation is implemented. Phase 0 remains in progress because a
-screened public name, representative-user research, accountable legal approval, Auth0 tenant and
-client conformance, AWS credentials/deployment, and staging restore evidence are external gates.
+The repository-side foundation, Auth0 web slice, AWS state/OIDC bootstrap, and applications-disabled
+development persistent layer are implemented. Phase 0 remains in progress for application
+deployment, remaining web identity checks, deployed observability and alert delivery, rollback and
+restore evidence, representative permitted ATS fixtures, on-demand staging rehearsal, quality
+baselines, and accountable legal/security/privacy approval. Final public naming is a D6 gate, and
+mandatory pre-product participant research was removed from D0.
 
 Delivery progress, actual start/completion dates, tasks, evidence, risks, and decisions are maintained in the [delivery tracker](docs/product/delivery/DELIVERY_TRACKER.md).

@@ -1,6 +1,6 @@
 # ADR-007: Isolated AWS Environments
 
-Status: Accepted; amended by ADR-013; deployment evidence open
+Status: Accepted; amended by ADR-013; persistent development layer deployed; application and restore evidence open
 Date: 2026-07-28
 
 ## Decision
