@@ -5,13 +5,14 @@ task definitions, API Gateway/Cloud Map ingress, and alarms. Application service
 until a managed OIDC issuer, Temporal, and immutable container images are supplied.
 
 The persistent layer creates encrypted database and empty Temporal API-key secret destinations.
-Terraform owns the database value; an operator writes the Temporal API key directly to its empty
-secret only after the persistent apply succeeds.
+Terraform owns the database value and requires TLS in its managed connection string; an operator
+writes the Temporal API key directly to its empty secret only after the persistent apply succeeds.
 
 A scanned immutable `migration_image` creates only a one-off Fargate task definition. This permits
 the reviewed database migration to run before API Gateway, Cloud Map, gateway, or worker services
 are enabled. The migration task has no public listener and receives the database URL directly from
-Secrets Manager.
+Secrets Manager. RDS rejects unencrypted database sessions, and the managed URL explicitly enables
+TLS for the migration, gateway, and worker clients.
 
 Defaults implement the lean-until-demand profile: one task per service, Single-AZ PostgreSQL,
 optional Redis, restricted public-subnet application egress, and no Application Load Balancer.

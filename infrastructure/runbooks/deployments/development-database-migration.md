@@ -6,13 +6,16 @@ It does not enable the gateway, worker, API Gateway, or Cloud Map.
 
 The task uses a scanned immutable image digest, obtains `DATABASE_URL` directly from AWS Secrets
 Manager, serializes concurrent migration attempts with a PostgreSQL advisory lock, records the
-migration version and checksum, and verifies the expected tables before exiting.
+migration version and checksum, and verifies the expected tables before exiting. Terraform's
+managed connection string must include `sslmode=require` because RDS rejects unencrypted sessions.
 
 ## Preconditions
 
 - Authenticate through the `ai-job-apply-development-admin` AWS SSO profile and verify the caller
   is the dedicated development account in `us-east-2`.
 - Require a drift-free applications-disabled persistent environment.
+- Confirm the Terraform-managed database connection string requires TLS; never print the secret
+  value while verifying it.
 - Use a gateway-compatible `linux/amd64` image whose ECR scan is `COMPLETE` with zero critical and
   zero high findings.
 - Review the migration source and its integration-test result.
