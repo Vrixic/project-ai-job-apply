@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ai-job-apply.internal/domain/v1/consent-record.schema.json",
+  "title": "ConsentRecordV1",
+  "type": "object",
+  "required": ["id", "userId", "purpose", "documentVersion", "action", "client", "recordedAt"],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "userId": { "type": "string", "format": "uuid" },
+    "purpose": {
+      "type": "string",
+      "enum": [
+        "profile",
+        "ugc_contribution",
+        "application_preparation",
+        "application_submission",
+        "sensitive_answer",
+        "browser_takeover",
+        "outreach_send"
+      ]
+    },
+    "documentVersion": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "action": { "type": "string", "enum": ["granted", "revoked", "superseded"] },
+    "resourceId": { "type": "string", "format": "uuid" },
+    "resourceHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "client": { "type": "string", "enum": ["web", "mobile", "extension", "admin"] },
+    "recordedAt": { "type": "string", "format": "date-time" },
+    "expiresAt": { "type": "string", "format": "date-time" },
+    "supersedesConsentId": { "type": "string", "format": "uuid" }
+  },
+  "additionalProperties": false
+}

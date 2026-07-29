@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ai-job-apply.internal/events/profile.readiness.calculated.v1.json",
+  "title": "profile.readiness.calculated.v1",
+  "type": "object",
+  "required": ["preferenceSetId", "operationId", "completionPercent", "missingFields"],
+  "properties": {
+    "preferenceSetId": { "type": "string", "format": "uuid" },
+    "operationId": { "type": "string", "format": "uuid" },
+    "completionPercent": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "missingFields": {
+      "type": "array",
+      "items": { "type": "string", "enum": ["locations", "salary"] }
+    }
+  },
+  "additionalProperties": false
+}

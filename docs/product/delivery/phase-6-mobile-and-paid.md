@@ -11,11 +11,18 @@
 
 Deliver a reliable mobile companion and a simple provider-neutral Free/Pro subscription experience across web, mobile, and extension.
 
+## Deployment posture
+
+Remain on the lean runtime for launch unless representative load, recovery testing, security
+review, or provider limits require additional capacity. Provision isolated staging on demand for
+the launch candidate, measure it, and activate only the replicas, private egress, Multi-AZ data,
+cache, WAF, or ALB controls supported by evidence.
+
 ## Task register
 
 | ID | Task | State | Owner | Dependencies | Evidence or notes |
 |---|---|---|---|---|---|
-| D6-001 | Implement React Native/Expo identity, navigation, API layer, secure storage, and deep links. | Ready | Unassigned | Stable D1–D5 APIs | Open |
+| D6-001 | Provision the dedicated Auth0 Native Application and implement React Native/Expo identity, navigation, API layer, secure storage, and deep links. | Ready | Unassigned | Stable D1–D5 APIs; D0 identity baseline | The Phase 0 shell is locally verified only; real provider/device evidence is intentionally deferred here. |
 | D6-002 | Implement mobile onboarding/profile corrections, job feed, search, save, hide, and report. | Ready | Unassigned | D1 | Open |
 | D6-003 | Implement push notifications, action inbox, application packet review/approval, and technical history through confirmed submission. | Ready | Unassigned | D3, D5 | Open |
 | D6-004 | Implement application-agent controls and desktop/remote-task handoff. | Ready | Unassigned | D3–D5 | Open |
@@ -24,11 +31,17 @@ Deliver a reliable mobile companion and a simple provider-neutral Free/Pro subsc
 | D6-007 | Implement grace periods, cancellation, paid-through access, reconciliation, restore purchase, receipts, and support adjustments. | Ready | Unassigned | D6-005, D6-006 | Open |
 | D6-008 | Implement one Pro product with transparent fair-use visibility and no hidden paid tiers. | Ready | Unassigned | Product/pricing decision | Open |
 | D6-009 | Complete cross-device session/state/deep-link behavior, accessibility, store disclosures, support, and privacy lifecycle. | Ready | Unassigned | D6-001–D6-008 | Open |
-| D6-010 | Complete device, billing replay, provider outage, entitlement, accessibility, security, and store-release tests. | Ready | Unassigned | D6-001–D6-009 | Open |
+| D6-010 | Complete Android/iOS PKCE, refresh rotation/replay, logout, cancellation, current/all-device revocation, recovery/lost-device, billing replay, provider outage, entitlement, accessibility, security, and store-release tests. | Ready | Unassigned | D6-001–D6-009 | Mobile Auth0 conformance must use representative real devices/builds and sanitized evidence; local shell tests alone are insufficient. |
+| D6-011 | Obtain storefront, billing, account-deletion, legal, security, and privacy approval before public mobile or paid release. | Ready | Legal/privacy counsel; security/privacy reviewers | Concrete applications, products, disclosures and test evidence | Release gate LR-D6-01; no public store release until approved. |
+| D6-012 | Finalize the public product name and production domain, complete conflict/domain/store/linguistic screening, and obtain product/counsel approval. | Ready | Product owner; legal counsel | Public-release candidate and production-origin plan | ApplyDash remains swappable and provisional; no production OAuth branding, email, store listing, paid release, or public launch before approval. |
+| D6-013 | Provision on-demand staging for the launch candidate, run representative load/recovery tests, and record an evidence-based launch-capacity decision. | Ready | Platform engineering; product owner | Stable D1–D6 candidate; AWS/provider access | Default remains lean; activate only the availability/capacity controls justified by evidence. |
 
 ## Exit criteria
 
 - [ ] Mobile reliably supports its declared companion scope without pretending to automate arbitrary ATS pages.
+- [ ] The dedicated mobile OIDC client passes PKCE, secure-storage, refresh replay, logout,
+      cancellation, revocation, recovery, and lost-device conformance on representative Android
+      and iOS devices.
 - [ ] Cross-device deep links and resumable tasks preserve identity, intent, and application state.
 - [ ] Application approval on mobile follows the same immutable-packet and revalidation rules.
 - [ ] Mobile contains no coaching, interview preparation, inbox/calendar reading, or post-submission hiring-outcome tracking.
@@ -37,18 +50,25 @@ Deliver a reliable mobile companion and a simple provider-neutral Free/Pro subsc
 - [ ] Cancellation, paid-through access, restore, receipt, refund/support, and account deletion behavior is tested.
 - [ ] There is one understandable Pro product, with monthly/annual intervals and transparent fair-use safeguards.
 - [ ] Accessibility, privacy disclosures, mobile-store policy, security, support, and product acceptance evidence is complete.
+- [ ] The final public product name and production domain are owned, screened, approved, and consistently configured across web, mobile, extension, OAuth, email, stores, and support.
+- [ ] On-demand staging evidence records launch capacity, recovery behavior, provider limits, and every approved deviation from the lean defaults.
 
 ## Work log
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
-| — | No delivery work recorded yet. | — | — |
+| 2026-07-28 | Assigned mobile, billing, and storefront delta approval to D6 without starting implementation. | D6-011 | [Legal review register](../foundation/legal-review-register.md), [security/privacy plan](../../security/security-privacy-approval-plan.md) |
+| 2026-07-28 | Accepted final public naming/domain approval as a D6 release gate without starting D6 implementation. | D6-012 | [Naming brief](../foundation/naming-brief.md), [ADR-009](../../adr/009-swappable-presentation-brand.md) |
+| 2026-07-28 | Assigned on-demand staging and evidence-based launch-capacity review to D6 without starting implementation. | D6-013 | [ADR-013](../../adr/013-lean-until-demand-cloud-runtime.md) |
+| 2026-07-29 | Accepted real mobile Auth0 Native Application provisioning and Android/iOS device conformance from D0 without starting D6. The locally verified Expo shell remains reusable preparation only. | D6-001, D6-010 | [ADR-012 amendment](../../adr/012-auth0-initial-managed-identity.md), [Auth0 conformance matrix](../../security/auth0-development-conformance.md) |
 
 ## Decisions and scope changes
 
 | Date | Decision or change | Reason | Evidence |
 |---|---|---|---|
-| — | None recorded. | — | — |
+| 2026-07-28 | Defer final public naming from D0 to D6 while retaining ApplyDash as the swappable development identity. | Naming is not a foundation dependency but must be settled before production OAuth, email, stores, billing, or public launch. | [Naming brief](../foundation/naming-brief.md) |
+| 2026-07-28 | Keep launch capacity lean unless staging/load/recovery evidence requires a specific control. | Scaling is a measured operational decision, not an automatic consequence of completing product phases. | [ADR-013](../../adr/013-lean-until-demand-cloud-runtime.md) |
+| 2026-07-29 | Perform real mobile identity/provider/device conformance in D6 rather than D0. | Conformance should test the actual mobile application and remains a blocking mobile-release gate, while current delivery stays focused on web. | [ADR-012 amendment](../../adr/012-auth0-initial-managed-identity.md) |
 
 ## Risks and blockers
 
@@ -57,6 +77,7 @@ Deliver a reliable mobile companion and a simple provider-neutral Free/Pro subsc
 | D6-R1 | Open | Store billing/linking rules vary by storefront and change over time. | Unassigned | Revalidate official policies immediately before implementation and release. |
 | D6-R2 | Open | Provider webhook delay/replay can create entitlement mismatch. | Unassigned | Use idempotent webhooks, internal projection, grace, and scheduled reconciliation. |
 | D6-R3 | Open | Mobile scope can expand into unreliable embedded ATS automation. | Unassigned | Keep mobile focused on discovery, review, approval, confirmed-submission history, and secure handoff. |
+| D6-R4 | Open | ApplyDash and `applydash.ai` are provisional and may fail ownership, conflict, trademark, store, or linguistic review. | Product owner | Complete D6-012 before any public-release identity becomes irreversible. |
 
 ## Completion record
 

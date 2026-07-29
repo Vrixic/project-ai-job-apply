@@ -2,10 +2,22 @@
 
 Records important technical decisions, their context, alternatives, consequences, and status so future maintainers understand why the system took a particular shape.
 
-## Planned organization
+## Accepted foundation decisions
 
-- `000-template.md` — Standard ADR template.
-- Numbered decisions such as repository boundaries, identity, data ownership, workflows, UGC, model gateway, and deployments.
-- `superseded/` only if moving old records improves navigation; history should remain intact.
+- [ADR-001: Monorepo and module boundaries](001-monorepo-and-module-boundaries.md)
+- [ADR-002: Provider-neutral OIDC authentication](002-provider-neutral-oidc.md)
+- [ADR-003: PostgreSQL ownership and PII](003-postgresql-ownership-and-pii.md)
+- [ADR-004: Temporal, outbox, and idempotency](004-temporal-outbox-and-idempotency.md)
+- [ADR-005: UGC lifecycle](005-ugc-lifecycle.md)
+- [ADR-006: Contract-first compatibility](006-contract-first-compatibility.md)
+- [ADR-007: Isolated AWS environments](007-isolated-aws-environments.md)
+- [ADR-008: Observability and redaction](008-observability-and-redaction.md)
+- [ADR-009: Swappable presentation brand](009-swappable-presentation-brand.md)
+- [ADR-010: Restricted answer vault and mandatory review](010-restricted-answer-vault-and-mandatory-review.md)
+- [ADR-011: Staged preproduction data and founder pilot](011-staged-preproduction-data-and-founder-pilot.md)
+- [ADR-012: Auth0 as the initial managed identity provider](012-auth0-initial-managed-identity.md)
+- [ADR-013: Lean-until-demand cloud runtime](013-lean-until-demand-cloud-runtime.md)
+
+Use `000-template.md` for future decisions.
 
 ADRs are immutable historical records after acceptance. A new ADR supersedes an old one instead of rewriting history.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Deploy AWS Platform"
+  short_description: "Plan and deploy AWS platform environments"
+  default_prompt: "Use $deploy-aws-platform to prepare and safely execute this environment deployment."

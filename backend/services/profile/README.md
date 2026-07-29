@@ -12,3 +12,9 @@ Owns the reusable candidate truth profile: verified facts, job preferences, answ
 - `tests/` — Parsing confirmation, authorization, and invariant tests.
 
 Generated job-specific artifacts belong to the documents service. Protected-class data is isolated and never exposed to matching.
+
+## Phase 0 implementation
+
+The initial PostgreSQL module owns provider-neutral identities, job preferences, operations,
+idempotency keys, audit events, and an identifier-only transactional outbox. Its SQL migration is
+kept explicit alongside Drizzle types.

@@ -13,3 +13,6 @@ Contains versioned controlled vocabularies and mappings used for job normalizati
 - `tests/` — Integrity, cycle, duplicate, and migration checks.
 
 Taxonomy changes are versioned and evaluated because they can materially change recommendations.
+## Foundation artifacts
+
+- `application-fields.v1.json` — Initial canonical application-field keys and answer policies.

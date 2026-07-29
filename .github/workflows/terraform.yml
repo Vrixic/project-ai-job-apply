@@ -1,0 +1,77 @@
+name: Terraform
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "infrastructure/terraform/**"
+      - ".github/workflows/terraform.yml"
+      - ".github/workflows/aws-oidc-conformance.yml"
+  push:
+    branches: [main]
+    paths:
+      - "infrastructure/terraform/**"
+      - ".github/workflows/terraform.yml"
+      - ".github/workflows/aws-oidc-conformance.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.9.8
+      - run: terraform fmt -check -recursive infrastructure/terraform
+      - name: Validate bootstrap
+        working-directory: infrastructure/terraform/bootstrap
+        run: |
+          terraform init -backend=false
+          terraform validate
+      - name: Validate development
+        working-directory: infrastructure/terraform/environments/development
+        run: |
+          terraform init -backend=false
+          terraform validate
+      - name: Validate staging
+        working-directory: infrastructure/terraform/environments/staging
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+  plan:
+    if: github.event_name == 'workflow_dispatch'
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: development
+    timeout-minutes: 20
+    concurrency:
+      group: terraform-development-plan
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.9.8
+      - name: Require configured deployment role
+        env:
+          AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          TERRAFORM_STATE_BUCKET: ${{ vars.TERRAFORM_STATE_BUCKET }}
+        run: test -n "$AWS_DEPLOY_ROLE_ARN" && test -n "$TERRAFORM_STATE_BUCKET"
+      - uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-2
+          role-session-name: terraform-development-plan-${{ github.run_id }}
+          mask-aws-account-id: true
+      - working-directory: infrastructure/terraform/environments/development
+        run: terraform init -input=false -backend-config="bucket=${{ vars.TERRAFORM_STATE_BUCKET }}" -backend-config="key=platform.tfstate" -backend-config="region=us-east-2"
+      - working-directory: infrastructure/terraform/environments/development
+        run: terraform plan -input=false -lock-timeout=5m -out=phase0.tfplan

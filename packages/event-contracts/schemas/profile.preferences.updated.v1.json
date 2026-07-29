@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ai-job-apply.internal/events/profile.preferences.updated.v1.json",
+  "title": "profile.preferences.updated.v1",
+  "type": "object",
+  "required": ["preferenceSetId", "version", "operationId"],
+  "properties": {
+    "preferenceSetId": { "type": "string", "format": "uuid" },
+    "version": { "type": "integer", "minimum": 1 },
+    "operationId": { "type": "string", "format": "uuid" }
+  },
+  "additionalProperties": false
+}

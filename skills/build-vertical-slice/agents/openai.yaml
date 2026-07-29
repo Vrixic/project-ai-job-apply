@@ -1,0 +1,4 @@
+interface:
+  display_name: "Build Vertical Slice"
+  short_description: "Implement contract-first product capabilities"
+  default_prompt: "Use $build-vertical-slice to implement this capability across the required platform layers."

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ai-job-apply.internal/domain/v1/field-definition.schema.json",
+  "title": "ApplicationFieldDefinitionV1",
+  "type": "object",
+  "required": ["key", "label", "valueType", "sensitivity", "answerPolicy"],
+  "properties": {
+    "key": { "type": "string", "pattern": "^[a-z][a-z0-9_.-]{1,159}$" },
+    "label": { "type": "string", "minLength": 1, "maxLength": 240 },
+    "valueType": {
+      "type": "string",
+      "enum": ["string", "text", "boolean", "integer", "decimal", "date", "enum", "file"]
+    },
+    "sensitivity": { "type": "string", "enum": ["standard", "confidential", "restricted"] },
+    "answerPolicy": {
+      "type": "string",
+      "enum": ["deterministic", "confirmed_fact", "explicit_each_time", "never_infer"]
+    },
+    "allowedValues": { "type": "array", "items": { "type": "string" } },
+    "atsAliases": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string", "maxLength": 240 }
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -11,6 +11,12 @@
 
 Extend the application system to supported Workday variants and isolated remote browser preparation while preserving user control, safe takeover, session security, revalidation, and conservative fallback.
 
+## Deployment posture
+
+Create remote browsers only per approved task and terminate them immediately. Keep concurrency
+capped at the smallest safe value; add browser pools or dedicated ATS capacity only from queue,
+isolation, failure, or demand evidence. Do not keep idle browser fleets running.
+
 ## Task register
 
 | ID | Task | State | Owner | Dependencies | Evidence or notes |
@@ -25,6 +31,7 @@ Extend the application system to supported Workday variants and isolated remote 
 | D4-008 | Implement ambiguous-submit reconciliation and confirmation evidence. | Ready | Unassigned | D3 application state | Open |
 | D4-009 | Implement per-variant canaries, telemetry, kill switches, and active-tab/manual fallback. | Ready | Unassigned | D3 adapter release system | Open |
 | D4-010 | Complete isolation, takeover, session, redirect, cleanup, replay, security, and load testing. | Ready | Unassigned | D4-001–D4-009 | Open |
+| D4-011 | Obtain Workday/tenant-specific legal and independent security/privacy approval for remote-browser and session processing. | Ready | Legal/privacy counsel; independent security reviewer | Concrete variants, runtime, data flow, isolation and test evidence | Release gate LR-D4-01; live tenant/remote execution remains disabled until approved. |
 
 ## Exit criteria
 
@@ -41,7 +48,7 @@ Extend the application system to supported Workday variants and isolated remote 
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
-| — | No delivery work recorded yet. | — | — |
+| 2026-07-28 | Assigned Workday and remote-browser delta approval to D4 without starting implementation. | D4-011 | [Legal review register](../foundation/legal-review-register.md), [security/privacy plan](../../security/security-privacy-approval-plan.md) |
 
 ## Decisions and scope changes
 

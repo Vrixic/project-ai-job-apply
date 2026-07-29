@@ -1,0 +1,17 @@
+{
+  "name": "@ai-job-apply/extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "watch": "node build.mjs --watch"
+  },
+  "devDependencies": {
+    "@types/chrome": "0.2.2",
+    "esbuild": "0.25.12"
+  }
+}

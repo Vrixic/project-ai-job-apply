@@ -1,0 +1,60 @@
+# Legal and Policy Review Register
+
+- Status: Review preparation in progress; accountable counsel is not yet assigned
+- Accountable role: Legal/privacy counsel
+- Last updated: 2026-07-28
+
+Repository documents are engineering inputs, not legal advice. The
+[foundational review brief](foundational-legal-privacy-brief.md) contains the product facts,
+questions, requested conclusions, and sign-off record.
+
+## Phase 0 foundational review
+
+| ID | Area | Required review | State | Release consequence |
+|---|---|---|---|---|
+| LR-F01 | Entity, audience, and launch jurisdiction | Entity/jurisdiction, minimum age, applicable federal/state obligations and exclusions | Product direction recorded; entity formation and counsel blocked | Strict pre-approval gate; no public launch |
+| LR-F02 | Candidate privacy | Notices, sensitive data, rights, subprocessors, retention/deletion, breach and analytics requirements | Prepared; counsel blocked | Synthetic-only; no real candidate processing |
+| LR-F03 | Candidate-directed service | Product role, authorization, terms, disclosures, employment/intermediary and consumer-protection implications | Prepared; counsel blocked | No live form actions or submissions |
+| LR-F04 | Consent and electronic action | Separate preparation/submission/outreach consent, signatures, attestations, immutable approval evidence | Prepared; counsel blocked | Simulated external effects only |
+| LR-F05 | Source/UGC governance model | Rights-evaluation method, contributor license, provenance, takedown/appeal, tombstones | Prepared; counsel blocked | No production ingestion or public UGC |
+| LR-F06 | Truthful automation and fairness | AI disclosures, sensitive-answer boundaries, accessibility and nondiscrimination review requirements | Prepared; counsel blocked | Synthetic evaluation only |
+| LR-F07 | Public terms and representations | Terms, privacy notice, just-in-time notices, security/privacy claims and revalidation | Prepared; counsel blocked | No public compliance claims or launch |
+
+## Feature-specific release reviews
+
+These reviews are intentionally assigned to the delivery that produces concrete behavior. They are
+not part of foundational approval, and deferral does not authorize the capability.
+
+| ID | Delivery | Area | Required review | State | Release consequence |
+|---|---|---|---|---|---|
+| LR-D1-01 | D1 | Greenhouse public Job Board API | Terms, attribution, storage, redistribution, revalidation | Not started | No production ingestion |
+| LR-D1-02 | D1 | Lever Postings API | Terms, attribution, storage, redistribution, revalidation | Not started | No production ingestion |
+| LR-D1-03 | D1 | Ashby public Job Postings API | Terms, attribution, storage, redistribution, revalidation | Not started | No production ingestion |
+| LR-D1-04 | D1 | Real candidate onboarding | Final notice, rights, analytics and deployed privacy controls | Not started | Synthetic accounts only |
+| LR-D2-01 | D2 | User-contributed listings | Contribution license, provenance, takedown, appeal, contributor privacy | Not started | No public UGC |
+| LR-D2-02 | D2 | Chrome/Edge extension | Minimum permissions, browsing-data disclosures, store terms | Not started | No store release |
+| LR-D3-01 | D3 | Application preparation | ATS/source terms, candidate authorization, attestations, AI disclosure | Not started | No live ATS form actions |
+| LR-D3-02 | D3 | Application submission | Approval record, signatures, CAPTCHA/MFA, ambiguous confirmation | Not started | No automated submission |
+| LR-D4-01 | D4 | Workday and remote browser | Access authorization, automation limits, tenant differences, session processing | Not started | Synthetic fixtures and isolated simulation only |
+| LR-D5-01 | D5 | Personalized outreach | Contact-source permissions, anti-spam rules, send-only OAuth, approved sending | Not started | Draft-only prototypes |
+| LR-D6-01 | D6 | iOS/Android and billing | Store privacy, account deletion, subscription/payment and storefront rules | Not started | No store release |
+| LR-D7-01 | D7 | New country/source/ATS/employer capability | Jurisdiction- and capability-specific delta review | Not started | Capability/region disabled |
+
+## Required evidence per row
+
+- Counsel/reviewer name and accountable role
+- Jurisdiction and source-policy version/date reviewed
+- Permitted and prohibited behaviors
+- Required attribution, consent, disclosure, retention, and takedown behavior
+- Revalidation date and owner
+- Written approval or a linked issue describing required changes
+
+No row may be marked `Approved` based solely on an engineering interpretation.
+
+## Review history
+
+| Date | Change | Evidence |
+|---|---|---|
+| 2026-07-28 | Split foundational review from feature-specific release review and prepared a bounded counsel brief. No legal conclusion was made. | [Foundational review brief](foundational-legal-privacy-brief.md) |
+| 2026-07-28 | Recorded nationwide US/18+ direction, provisional unformed `Vrix LLC`, founder risk ownership, restricted-answer review, deletion/artifact defaults, and Phase 0 analytics boundary. LP-D05 remains under discussion. | [Foundational review brief](foundational-legal-privacy-brief.md) |
+| 2026-07-28 | Resolved LP-D05 with synthetic shared environments, isolated founder-owned data, and exact-adapter founder live pilots only after written legal/terms, security, approval, duplicate-safety, confirmation, and kill-switch gates. No pilot is currently authorized. | [ADR-011](../../adr/011-staged-preproduction-data-and-founder-pilot.md) |

@@ -12,3 +12,10 @@ Defines typed, validated, environment-aware configuration shared by applications
 - `testing/` — Safe deterministic test configuration.
 
 Secrets are references loaded from a secrets manager and must never be committed here.
+
+## Presentation brand
+
+`src/brand.ts` owns the provisional presentation identity and its override contract. ApplyDash and
+`applydash.ai` are defaults, not approved public or network identities. New clients must resolve
+presentation branding through this contract while keeping origins, email, OAuth, packages,
+databases, and infrastructure identifiers separate.

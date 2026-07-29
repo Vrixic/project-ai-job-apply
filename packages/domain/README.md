@@ -11,5 +11,6 @@ Contains pure, stable value objects and primitives that have identical meaning a
 - `result/` — Explicit success/failure types.
 - `errors/` — Stable domain error codes.
 - `tests/` — Invariant and serialization tests.
+- `schemas/v1/` — Versioned domain entity schemas and their ownership registry.
 
 Service-specific entities and policies stay with their owning service instead of being centralized here.

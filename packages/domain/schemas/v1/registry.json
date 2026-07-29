@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "schemas": [
+    {
+      "name": "ProfileFact",
+      "file": "profile-fact.schema.json",
+      "owner": "profile",
+      "classification": "confidential"
+    },
+    {
+      "name": "AnswerVaultEntry",
+      "file": "answer-vault-entry.schema.json",
+      "owner": "profile",
+      "classification": "confidential_or_restricted"
+    },
+    {
+      "name": "CanonicalJob",
+      "file": "canonical-job.schema.json",
+      "owner": "jobs",
+      "classification": "public_and_internal"
+    },
+    {
+      "name": "FieldDefinition",
+      "file": "field-definition.schema.json",
+      "owner": "validation",
+      "classification": "internal"
+    },
+    {
+      "name": "ApplicationPacket",
+      "file": "application-packet.schema.json",
+      "owner": "applications",
+      "classification": "confidential_or_restricted"
+    },
+    {
+      "name": "ConsentRecord",
+      "file": "consent-record.schema.json",
+      "owner": "profile",
+      "classification": "confidential"
+    }
+  ]
+}

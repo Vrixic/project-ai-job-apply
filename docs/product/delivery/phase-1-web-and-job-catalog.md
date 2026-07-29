@@ -11,6 +11,12 @@
 
 Deliver a trustworthy candidate web experience and canonical job catalog in which users can onboard, discover, understand, save, report, and track fresh jobs.
 
+## Deployment posture
+
+Add D1 modules to the existing lean runtime. Keep one task per service and PostgreSQL full-text/
+pgvector as appropriate; do not add replicas, Redis, a dedicated search cluster, an ALB, or
+always-on staging without measured workload or a release/recovery requirement.
+
 ## Task register
 
 | ID | Task | State | Owner | Dependencies | Evidence or notes |
@@ -25,6 +31,7 @@ Deliver a trustworthy candidate web experience and canonical job catalog in whic
 | D1-008 | Implement Free/Pro entitlement skeleton without coupling features directly to payment providers. | Ready | Unassigned | D0 billing contract | Open |
 | D1-009 | Implement crawlable job detail pages, canonical URLs, structured data, and expired-job removal. | Ready | Unassigned | D1-004 | Open |
 | D1-010 | Add end-to-end observability, accessibility, security, reliability, and restore tests for the delivery. | Ready | Unassigned | D0 platform foundation | Open |
+| D1-011 | Obtain source-specific legal approval and real-candidate-onboarding privacy/security approval before production activation. | Ready | Legal/privacy counsel; security/privacy reviewers | D0 foundational approvals; concrete sources and deployed data flow | Release gate LR-D1-01 through LR-D1-04; synthetic-only work may precede approval. |
 
 ## Exit criteria
 
@@ -42,7 +49,7 @@ Deliver a trustworthy candidate web experience and canonical job catalog in whic
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
-| — | No delivery work recorded yet. | — | — |
+| 2026-07-28 | Assigned source-specific and real-candidate-data approval to D1 without starting implementation. | D1-011 | [Legal review register](../foundation/legal-review-register.md), [security/privacy plan](../../security/security-privacy-approval-plan.md) |
 
 ## Decisions and scope changes
 

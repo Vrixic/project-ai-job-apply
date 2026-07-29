@@ -1,0 +1,31 @@
+terraform {
+  required_version = "~> 1.9"
+
+  backend "s3" {
+    encrypt      = true
+    use_lockfile = true
+  }
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.80"
+    }
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = var.aws_region
+
+  default_tags {
+    tags = {
+      Project     = "ai-job-apply"
+      Environment = var.environment
+      ManagedBy   = "terraform"
+    }
+  }
+}

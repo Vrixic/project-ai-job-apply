@@ -1,0 +1,66 @@
+name: AWS OIDC Conformance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  development:
+    name: Development identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: development
+    concurrency:
+      group: aws-oidc-development-conformance
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Require environment variables
+        env:
+          AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          TERRAFORM_STATE_BUCKET: ${{ vars.TERRAFORM_STATE_BUCKET }}
+        run: test -n "$AWS_DEPLOY_ROLE_ARN" && test -n "$TERRAFORM_STATE_BUCKET"
+
+      - name: Obtain short-lived AWS credentials
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-2
+          role-session-name: github-oidc-conformance-${{ github.run_id }}
+          mask-aws-account-id: true
+
+      - name: Verify role and remote-state access
+        env:
+          EXPECTED_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          TERRAFORM_STATE_BUCKET: ${{ vars.TERRAFORM_STATE_BUCKET }}
+        run: |
+          set -euo pipefail
+          expected_account="${EXPECTED_ROLE_ARN#arn:aws:iam::}"
+          expected_account="${expected_account%%:*}"
+          expected_role="${EXPECTED_ROLE_ARN##*/}"
+          actual_account="$(aws sts get-caller-identity --query Account --output text)"
+          actual_arn="$(aws sts get-caller-identity --query Arn --output text)"
+
+          test "$actual_account" = "$expected_account"
+          case "$actual_arn" in
+            "arn:aws:sts::${expected_account}:assumed-role/${expected_role}/"*) ;;
+            *) echo "Unexpected assumed-role identity." >&2; exit 1 ;;
+          esac
+
+          aws s3api head-object \
+            --bucket "$TERRAFORM_STATE_BUCKET" \
+            --key bootstrap.tfstate \
+            >/dev/null
+
+          {
+            echo "### AWS OIDC conformance"
+            echo
+            echo "- Environment: development"
+            echo "- Region: us-east-2"
+            echo "- Expected role assumed: yes"
+            echo "- Encrypted bootstrap state reachable: yes"
+          } >> "$GITHUB_STEP_SUMMARY"
