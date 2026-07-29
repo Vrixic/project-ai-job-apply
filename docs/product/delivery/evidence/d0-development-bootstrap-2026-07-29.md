@@ -25,8 +25,10 @@ observability, database restore, staging rehearsal, billing, or Phase 0 completi
 - The customer-managed state key has automatic rotation enabled.
 - Noncurrent state versions expire after 90 days.
 - GitHub's OIDC provider uses audience `sts.amazonaws.com`.
-- The deployment-role trust subject is restricted to
-  `repo:Vrixic/project-ai-job-apply:environment:development`.
+- At bootstrap time, the deployment-role trust subject was restricted to the exact repository
+  name and `development` environment. GitHub subsequently issued the newly created repository's
+  immutable-ID subject; the narrowly corrected trust and successful retry are recorded in the
+  [AWS OIDC conformance evidence](d0-aws-oidc-conformance-2026-07-29.md).
 - The GitHub deployment role has a permissions boundary.
 - ECS workload roles must use the environment-specific runtime permissions boundary.
 
