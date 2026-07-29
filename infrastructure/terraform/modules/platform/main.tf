@@ -4,6 +4,8 @@ data "aws_availability_zones" "available" {
 
 data "aws_region" "current" {}
 
+data "aws_caller_identity" "current" {}
+
 data "aws_iam_policy" "workload_boundary" {
   name = "${var.name}-${var.environment}-workload-boundary"
 }
@@ -15,10 +17,48 @@ locals {
   container_port = 4000
 }
 
+data "aws_iam_policy_document" "platform_kms" {
+  statement {
+    sid       = "EnableAccountIAMPermissions"
+    effect    = "Allow"
+    actions   = ["kms:*"]
+    resources = ["*"]
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+    }
+  }
+
+  statement {
+    sid    = "AllowCloudWatchLogsEncryption"
+    effect = "Allow"
+    actions = [
+      "kms:Decrypt*",
+      "kms:Describe*",
+      "kms:Encrypt*",
+      "kms:GenerateDataKey*",
+      "kms:ReEncrypt*"
+    ]
+    resources = ["*"]
+    principals {
+      type        = "Service"
+      identifiers = ["logs.${data.aws_region.current.name}.amazonaws.com"]
+    }
+    condition {
+      test     = "ArnLike"
+      variable = "kms:EncryptionContext:aws:logs:arn"
+      values = [
+        "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/${var.name}/${var.environment}/application*"
+      ]
+    }
+  }
+}
+
 resource "aws_kms_key" "platform" {
   description             = "${var.name} ${var.environment} data encryption"
   deletion_window_in_days = 30
   enable_key_rotation     = true
+  policy                  = data.aws_iam_policy_document.platform_kms.json
 }
 
 resource "aws_kms_alias" "platform" {
@@ -160,10 +200,11 @@ resource "aws_db_subnet_group" "this" {
 resource "aws_db_instance" "postgres" { # nosemgrep: semgrep-rules.terraform.aws.best-practice.aws-rds-multiaz-not-enabled
   identifier                          = "${var.name}-${var.environment}"
   engine                              = "postgres"
-  engine_version                      = "16.6"
+  engine_version                      = var.database_engine_version
   instance_class                      = var.database_instance_class
   allocated_storage                   = 20
   max_allocated_storage               = 100
+  storage_type                        = "gp3"
   storage_encrypted                   = true
   kms_key_id                          = aws_kms_key.platform.arn
   multi_az                            = var.high_availability
@@ -307,6 +348,11 @@ resource "aws_secretsmanager_secret_version" "database_url" {
   )
 }
 
+resource "aws_secretsmanager_secret" "temporal_api_key" {
+  name       = "${var.name}/${var.environment}/temporal-api-key"
+  kms_key_id = aws_kms_key.platform.arn
+}
+
 data "aws_iam_policy_document" "task_assume" {
   statement {
     actions = ["sts:AssumeRole"]
@@ -334,9 +380,13 @@ resource "aws_iam_role_policy" "execution_secrets" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect   = "Allow"
-      Action   = ["secretsmanager:GetSecretValue", "kms:Decrypt"]
-      Resource = compact([aws_secretsmanager_secret.database_url.arn, var.temporal_api_key_secret_arn, aws_kms_key.platform.arn])
+      Effect = "Allow"
+      Action = ["secretsmanager:GetSecretValue", "kms:Decrypt"]
+      Resource = [
+        aws_secretsmanager_secret.database_url.arn,
+        aws_secretsmanager_secret.temporal_api_key.arn,
+        aws_kms_key.platform.arn
+      ]
     }]
   })
 }
@@ -496,7 +546,7 @@ resource "aws_ecs_task_definition" "worker" {
     ]
     secrets = [
       { name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.database_url.arn },
-      { name = "TEMPORAL_API_KEY", valueFrom = var.temporal_api_key_secret_arn }
+      { name = "TEMPORAL_API_KEY", valueFrom = aws_secretsmanager_secret.temporal_api_key.arn }
     ]
     logConfiguration = {
       logDriver = "awslogs"
@@ -535,5 +585,53 @@ resource "aws_cloudwatch_metric_alarm" "database_cpu" {
   alarm_description   = "Database CPU has remained high."
   dimensions = {
     DBInstanceIdentifier = aws_db_instance.postgres.id
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "database_free_storage" {
+  alarm_name          = "${var.name}-${var.environment}-database-free-storage"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 3
+  metric_name         = "FreeStorageSpace"
+  namespace           = "AWS/RDS"
+  period              = 300
+  statistic           = "Average"
+  threshold           = 5368709120
+  treat_missing_data  = "missing"
+  alarm_description   = "Database free storage has remained below 5 GiB."
+  dimensions = {
+    DBInstanceIdentifier = aws_db_instance.postgres.id
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "dead_letter_messages" {
+  alarm_name          = "${var.name}-${var.environment}-dead-letter-messages"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  namespace           = "AWS/SQS"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_description   = "One or more messages are waiting in the dead-letter queue."
+  dimensions = {
+    QueueName = aws_sqs_queue.dead_letter.name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "event_queue_age" {
+  alarm_name          = "${var.name}-${var.environment}-event-queue-age"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "ApproximateAgeOfOldestMessage"
+  namespace           = "AWS/SQS"
+  period              = 60
+  statistic           = "Maximum"
+  threshold           = 300
+  treat_missing_data  = "notBreaching"
+  alarm_description   = "The oldest event has remained queued for more than five minutes."
+  dimensions = {
+    QueueName = aws_sqs_queue.events.name
   }
 }

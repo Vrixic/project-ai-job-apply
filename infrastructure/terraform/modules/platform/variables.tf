@@ -89,6 +89,17 @@ variable "database_instance_class" {
   default = "db.t4g.micro"
 }
 
+variable "database_engine_version" {
+  description = "Explicit RDS PostgreSQL 16 minor version available in the target region."
+  type        = string
+  default     = "16.14"
+
+  validation {
+    condition     = can(regex("^16\\.[0-9]+$", var.database_engine_version))
+    error_message = "Database engine version must remain on the reviewed PostgreSQL 16 major version."
+  }
+}
+
 variable "database_performance_insights" {
   description = "Enable RDS Performance Insights only on a supported instance class when evidence requires it."
   type        = bool
@@ -132,12 +143,6 @@ variable "temporal_namespace" {
   default = ""
 }
 
-variable "temporal_api_key_secret_arn" {
-  type      = string
-  default   = ""
-  sensitive = true
-}
-
 variable "deploy_applications" {
   description = "Must remain false until identity, images, Temporal, and reviews are ready."
   type        = bool
@@ -149,8 +154,7 @@ variable "deploy_applications" {
       var.worker_image != "" &&
       var.oidc_issuer != "" &&
       var.temporal_address != "" &&
-      var.temporal_namespace != "" &&
-      var.temporal_api_key_secret_arn != ""
+      var.temporal_namespace != ""
     )
     error_message = "Application deployment requires immutable images, OIDC, and Temporal."
   }
