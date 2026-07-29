@@ -156,7 +156,8 @@ resource "aws_db_subnet_group" "this" {
   subnet_ids = aws_subnet.private[*].id
 }
 
-resource "aws_db_instance" "postgres" {
+# ADR-013 keeps prelaunch environments Single-AZ until launch review or measured demand.
+resource "aws_db_instance" "postgres" { # nosemgrep: semgrep-rules.terraform.aws.best-practice.aws-rds-multiaz-not-enabled
   identifier                          = "${var.name}-${var.environment}"
   engine                              = "postgres"
   engine_version                      = "16.6"
@@ -165,7 +166,7 @@ resource "aws_db_instance" "postgres" {
   max_allocated_storage               = 100
   storage_encrypted                   = true
   kms_key_id                          = aws_kms_key.platform.arn
-  multi_az                            = var.high_availability # nosemgrep: semgrep-rules.terraform.aws.best-practice.aws-rds-multiaz-not-enabled -- ADR-013 keeps prelaunch environments Single-AZ until launch or measured demand
+  multi_az                            = var.high_availability
   iam_database_authentication_enabled = true
   enabled_cloudwatch_logs_exports     = ["postgresql"]
   db_name                             = "ai_job_apply"
