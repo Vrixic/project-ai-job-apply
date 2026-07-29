@@ -13,7 +13,7 @@ resource "aws_kms_alias" "state" {
   target_key_id = aws_kms_key.state.key_id
 }
 
-resource "aws_s3_bucket" "state" {
+resource "aws_s3_bucket" "state" { # nosemgrep: semgrep-rules.terraform.aws.best-practice.aws-s3-bucket-versioning-not-enabled -- versioning is managed by aws_s3_bucket_versioning.state
   bucket = var.state_bucket_name
 }
 

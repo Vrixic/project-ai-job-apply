@@ -47,12 +47,12 @@ const ajv = new Ajv2020({ allErrors: true, strict: true });
 const addFormats = addFormatsModule.default as unknown as (instance: Ajv2020) => Ajv2020;
 addFormats(ajv);
 
-const validators: Record<string, ValidateFunction<unknown>> = {
-  [eventTypes.profilePreferencesUpdated]: ajv.compile(preferencesUpdatedSchema),
-  [eventTypes.profileReadinessCalculated]: ajv.compile(readinessCalculatedSchema),
-};
+const validators = new Map<string, ValidateFunction<unknown>>([
+  [eventTypes.profilePreferencesUpdated, ajv.compile(preferencesUpdatedSchema)],
+  [eventTypes.profileReadinessCalculated, ajv.compile(readinessCalculatedSchema)],
+]);
 
 export function validateEventData(type: string, data: unknown): boolean {
-  const validator = validators[type];
+  const validator = validators.get(type);
   return validator ? validator(data) : false;
 }

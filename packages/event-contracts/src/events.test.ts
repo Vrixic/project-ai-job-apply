@@ -22,4 +22,9 @@ describe("event schemas", () => {
       }),
     ).toBe(false);
   });
+
+  it("rejects inherited-object event type names", () => {
+    expect(validateEventData("__proto__", {})).toBe(false);
+    expect(validateEventData("constructor", {})).toBe(false);
+  });
 });

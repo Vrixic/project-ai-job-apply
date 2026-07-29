@@ -157,26 +157,28 @@ resource "aws_db_subnet_group" "this" {
 }
 
 resource "aws_db_instance" "postgres" {
-  identifier                   = "${var.name}-${var.environment}"
-  engine                       = "postgres"
-  engine_version               = "16.6"
-  instance_class               = var.database_instance_class
-  allocated_storage            = 20
-  max_allocated_storage        = 100
-  storage_encrypted            = true
-  kms_key_id                   = aws_kms_key.platform.arn
-  multi_az                     = var.high_availability
-  db_name                      = "ai_job_apply"
-  username                     = "platform"
-  password                     = random_password.database.result
-  db_subnet_group_name         = aws_db_subnet_group.this.name
-  vpc_security_group_ids       = [aws_security_group.data.id]
-  backup_retention_period      = 7
-  copy_tags_to_snapshot        = true
-  deletion_protection          = true
-  performance_insights_enabled = var.database_performance_insights
-  skip_final_snapshot          = false
-  final_snapshot_identifier    = "${var.name}-${var.environment}-final"
+  identifier                          = "${var.name}-${var.environment}"
+  engine                              = "postgres"
+  engine_version                      = "16.6"
+  instance_class                      = var.database_instance_class
+  allocated_storage                   = 20
+  max_allocated_storage               = 100
+  storage_encrypted                   = true
+  kms_key_id                          = aws_kms_key.platform.arn
+  multi_az                            = var.high_availability # nosemgrep: semgrep-rules.terraform.aws.best-practice.aws-rds-multiaz-not-enabled -- ADR-013 keeps prelaunch environments Single-AZ until launch or measured demand
+  iam_database_authentication_enabled = true
+  enabled_cloudwatch_logs_exports     = ["postgresql"]
+  db_name                             = "ai_job_apply"
+  username                            = "platform"
+  password                            = random_password.database.result
+  db_subnet_group_name                = aws_db_subnet_group.this.name
+  vpc_security_group_ids              = [aws_security_group.data.id]
+  backup_retention_period             = 7
+  copy_tags_to_snapshot               = true
+  deletion_protection                 = true
+  performance_insights_enabled        = var.database_performance_insights
+  skip_final_snapshot                 = false
+  final_snapshot_identifier           = "${var.name}-${var.environment}-final"
 }
 
 resource "aws_elasticache_subnet_group" "this" {
@@ -204,8 +206,15 @@ resource "aws_elasticache_replication_group" "redis" {
   snapshot_retention_limit   = 7
 }
 
-resource "aws_s3_bucket" "artifacts" {
+resource "aws_s3_bucket" "artifacts" { # nosemgrep: semgrep-rules.terraform.aws.best-practice.aws-s3-bucket-versioning-not-enabled -- versioning is managed by aws_s3_bucket_versioning.artifacts
   bucket_prefix = "${var.name}-${var.environment}-artifacts-"
+}
+
+resource "aws_s3_bucket_versioning" "artifacts" {
+  bucket = aws_s3_bucket.artifacts.id
+  versioning_configuration {
+    status = "Enabled"
+  }
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "artifacts" {

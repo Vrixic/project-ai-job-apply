@@ -19,8 +19,16 @@ describe("product brand configuration", () => {
     });
   });
 
-  it("rejects an invalid candidate domain", () => {
-    expect(() => resolveProductBrand({ candidateDomain: "not a domain" })).toThrow(
+  it.each([
+    "not a domain",
+    "localhost",
+    "-invalid.example",
+    "invalid-.example",
+    "invalid.123",
+    "inválid.example",
+    `${"a".repeat(64)}.example`,
+  ])("rejects the invalid candidate domain %s", (candidateDomain) => {
+    expect(() => resolveProductBrand({ candidateDomain })).toThrow(
       "Product candidate domain must be a valid DNS name.",
     );
   });

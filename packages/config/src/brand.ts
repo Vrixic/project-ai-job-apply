@@ -15,7 +15,43 @@ export const DEFAULT_PRODUCT_BRAND: Readonly<ProductBrand> = Object.freeze({
   status: "provisional",
 });
 
-const domainPattern = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+function isAsciiLowercaseLetter(character: string): boolean {
+  const code = character.charCodeAt(0);
+  return code >= 97 && code <= 122;
+}
+
+function isAsciiLowercaseAlphanumeric(character: string): boolean {
+  const code = character.charCodeAt(0);
+  return (code >= 48 && code <= 57) || isAsciiLowercaseLetter(character);
+}
+
+function isValidDomainLabel(label: string): boolean {
+  if (
+    label.length < 1 ||
+    label.length > 63 ||
+    !isAsciiLowercaseAlphanumeric(label[0] ?? "") ||
+    !isAsciiLowercaseAlphanumeric(label.at(-1) ?? "")
+  ) {
+    return false;
+  }
+  return [...label].every(
+    (character) => character === "-" || isAsciiLowercaseAlphanumeric(character),
+  );
+}
+
+function isValidCandidateDomain(candidateDomain: string): boolean {
+  if (candidateDomain.length < 1 || candidateDomain.length > 253) {
+    return false;
+  }
+  const labels = candidateDomain.split(".");
+  const topLevelDomain = labels.at(-1) ?? "";
+  return (
+    labels.length >= 2 &&
+    topLevelDomain.length >= 2 &&
+    [...topLevelDomain].every(isAsciiLowercaseLetter) &&
+    labels.every(isValidDomainLabel)
+  );
+}
 
 export function resolveProductBrand(overrides: ProductBrandOverrides = {}): Readonly<ProductBrand> {
   const name = overrides.name?.trim() || DEFAULT_PRODUCT_BRAND.name;
@@ -25,7 +61,7 @@ export function resolveProductBrand(overrides: ProductBrandOverrides = {}): Read
   if (name.length > 80) {
     throw new Error("Product brand name must contain at most 80 characters.");
   }
-  if (!domainPattern.test(candidateDomain)) {
+  if (!isValidCandidateDomain(candidateDomain)) {
     throw new Error("Product candidate domain must be a valid DNS name.");
   }
 
