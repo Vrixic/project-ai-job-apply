@@ -15,7 +15,10 @@ const migrationPath = fileURLToPath(
 const migration = await readFile(migrationPath, "utf8");
 const normalizedMigration = migration.replaceAll("\r\n", "\n");
 const checksum = createHash("sha256").update(normalizedMigration).digest("hex");
-const client = postgres(databaseUrl, { max: 1 });
+const client = postgres(databaseUrl, {
+  max: 1,
+  onnotice: () => undefined,
+});
 try {
   await client.begin(async (transaction) => {
     await transaction.unsafe(`
