@@ -33,7 +33,7 @@
 | Malicious job/form content | Prompt injection, phishing, unsafe redirects | Treat external text as untrusted, sanitize HTML, tool allowlists, URL/domain checks |
 | Extension overreach | Browsing-history collection | Active-tab/minimum permissions, explicit contribution preview and consent |
 | Secret or PII leakage | Privacy/security incident | KMS/Secrets Manager, field-aware redaction, synthetic fixtures, scanning |
-| Compromised CI/dependency | Supply-chain compromise | OIDC deploy roles, immutable images, lockfile, dependency review, CodeQL, SBOM |
+| Compromised CI/dependency | Supply-chain compromise | OIDC deploy roles, immutable images, full-lockfile audit, pinned Semgrep SAST, SBOM |
 | Worker/provider exhaustion | Platform outage | Bulkheads, bounded retries, queues, rate limits, kill switches |
 | Ambiguous submission | Duplicate or incorrect application | Never blind-retry; require manual confirmation path |
 | Privileged support abuse | Confidential data access | Least privilege, redacted views, immutable audited access |

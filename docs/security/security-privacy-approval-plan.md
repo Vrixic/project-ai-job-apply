@@ -55,7 +55,7 @@ approval.
 | SP-09 | Secrets/encryption | Secrets-manager/KMS design, TLS, rotation, no plaintext credentials | Terraform/design artifacts | Deployed evidence pending |
 | SP-10 | Logging/observability | Allowlisted telemetry, redaction tests, access/retention, traceability | Observability package and redaction tests | Partial local evidence |
 | SP-11 | Durable external effects | Outbox, idempotency, replay safety, cancellation, immutable approval | Foundation outbox/workflow; later packet design | Partial local evidence |
-| SP-12 | Secure development/supply chain | Pinned dependencies, scanning, protected deploy identity, SBOM/artifact provenance | CI, CodeQL, Dependabot, Terraform workflow | Local/repository evidence; policy review pending |
+| SP-12 | Secure development/supply chain | Pinned dependencies, scanning, protected deploy identity, SBOM/artifact provenance | CI, pinned Semgrep SAST, full-lockfile audit, Dependabot, Terraform workflow | Local/repository evidence; policy review pending |
 | SP-13 | Availability/recovery | Isolation, backup, restore, RTO/RPO, restore test | Infrastructure design | AWS restore evidence pending |
 | SP-14 | Incident response | Severity, containment, evidence, notification decision, exercises | Baseline below | Exercise and owner pending |
 | SP-15 | Vulnerability management | Intake, severity, remediation ownership, disclosure path | Baseline below | Owner and operating evidence pending |
