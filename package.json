@@ -34,10 +34,10 @@
     "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.3.8",
-    "@types/node": "24.10.1",
+    "@biomejs/biome": "2.5.6",
+    "@types/node": "26.1.2",
     "turbo": "2.10.7",
-    "typescript": "5.9.3",
+    "typescript": "7.0.2",
     "vitest": "4.1.10"
   }
 }
