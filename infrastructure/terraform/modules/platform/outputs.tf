@@ -26,3 +26,19 @@ output "temporal_api_key_secret_arn" {
 output "gateway_url" {
   value = var.deploy_applications ? aws_apigatewayv2_api.gateway[0].api_endpoint : null
 }
+
+output "ecs_cluster_arn" {
+  value = aws_ecs_cluster.this.arn
+}
+
+output "migration_task_definition_arn" {
+  value = var.migration_image == "" ? null : aws_ecs_task_definition.migration[0].arn
+}
+
+output "migration_subnet_ids" {
+  value = aws_subnet.public[*].id
+}
+
+output "application_security_group_id" {
+  value = aws_security_group.application.id
+}

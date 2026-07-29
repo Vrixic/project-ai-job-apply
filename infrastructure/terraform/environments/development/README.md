@@ -12,3 +12,5 @@ Keep replicas at one, `high_availability = false`, `private_application_networki
 change.
 
 Follow the [development cloud setup checklist](SETUP.md) before bootstrap or deployment.
+Use the [development database migration runbook](../../../runbooks/deployments/development-database-migration.md)
+to provision and execute the migration task while applications remain disabled.

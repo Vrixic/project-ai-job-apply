@@ -469,6 +469,10 @@ resource "aws_ecs_task_definition" "gateway" {
   memory                   = var.gateway_memory
   execution_role_arn       = aws_iam_role.execution.arn
   task_role_arn            = aws_iam_role.application.arn
+  runtime_platform {
+    cpu_architecture        = "X86_64"
+    operating_system_family = "LINUX"
+  }
   container_definitions = jsonencode([{
     name      = "gateway"
     image     = var.gateway_image
@@ -533,6 +537,10 @@ resource "aws_ecs_task_definition" "worker" {
   memory                   = var.worker_memory
   execution_role_arn       = aws_iam_role.execution.arn
   task_role_arn            = aws_iam_role.application.arn
+  runtime_platform {
+    cpu_architecture        = "X86_64"
+    operating_system_family = "LINUX"
+  }
   container_definitions = jsonencode([{
     name      = "worker"
     image     = var.worker_image
@@ -571,6 +579,41 @@ resource "aws_ecs_service" "worker" {
     security_groups  = [aws_security_group.application.id]
     assign_public_ip = !var.private_application_networking
   }
+}
+
+resource "aws_ecs_task_definition" "migration" {
+  count                    = var.migration_image == "" ? 0 : 1
+  family                   = "${var.name}-${var.environment}-database-migration"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = 256
+  memory                   = 512
+  execution_role_arn       = aws_iam_role.execution.arn
+  runtime_platform {
+    cpu_architecture        = "X86_64"
+    operating_system_family = "LINUX"
+  }
+  container_definitions = jsonencode([{
+    name                   = "database-migration"
+    image                  = var.migration_image
+    essential              = true
+    command                = ["backend/services/profile/dist/src/migrate.js"]
+    readonlyRootFilesystem = true
+    environment = [
+      { name = "NODE_ENV", value = "production" }
+    ]
+    secrets = [
+      { name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.database_url.arn }
+    ]
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        awslogs-group         = aws_cloudwatch_log_group.application.name
+        awslogs-region        = data.aws_region.current.name
+        awslogs-stream-prefix = "database-migration"
+      }
+    }
+  }])
 }
 
 resource "aws_cloudwatch_metric_alarm" "database_cpu" {

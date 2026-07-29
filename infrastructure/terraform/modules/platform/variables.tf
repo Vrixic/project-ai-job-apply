@@ -13,11 +13,32 @@ variable "vpc_cidr" {
 variable "gateway_image" {
   type    = string
   default = ""
+
+  validation {
+    condition     = var.gateway_image == "" || can(regex("^.+@sha256:[0-9a-f]{64}$", var.gateway_image))
+    error_message = "Gateway image must be empty or an immutable sha256 digest reference."
+  }
 }
 
 variable "worker_image" {
   type    = string
   default = ""
+
+  validation {
+    condition     = var.worker_image == "" || can(regex("^.+@sha256:[0-9a-f]{64}$", var.worker_image))
+    error_message = "Worker image must be empty or an immutable sha256 digest reference."
+  }
+}
+
+variable "migration_image" {
+  description = "Scanned gateway-compatible image used only by the controlled database migration task."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.migration_image == "" || can(regex("^.+@sha256:[0-9a-f]{64}$", var.migration_image))
+    error_message = "Migration image must be empty or an immutable sha256 digest reference."
+  }
 }
 
 variable "gateway_desired_count" {
