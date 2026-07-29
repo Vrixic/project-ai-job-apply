@@ -81,11 +81,29 @@ jobs:
           SOURCE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
+          index_manifest="$(aws ecr batch-get-image \
+            --repository-name "$REPOSITORY" \
+            --image-ids "imageTag=$SOURCE_SHA" \
+            --accepted-media-types application/vnd.oci.image.index.v1+json \
+            --query 'images[0].imageManifest' \
+            --output text)"
+          mapfile -t platform_digests < <(
+            jq -r \
+              '.manifests[]
+                | select(.platform.os == "linux" and .platform.architecture == "amd64")
+                | .digest' <<<"$index_manifest"
+          )
+          if [[ "${#platform_digests[@]}" -ne 1 ]]; then
+            echo "Expected exactly one linux/amd64 image in the published index." >&2
+            exit 1
+          fi
+          platform_digest="${platform_digests[0]}"
+
           scan_status=""
           for attempt in $(seq 1 60); do
             scan_status="$(aws ecr describe-image-scan-findings \
               --repository-name "$REPOSITORY" \
-              --image-id "imageTag=$SOURCE_SHA" \
+              --image-id "imageDigest=$platform_digest" \
               --query 'imageScanStatus.status' \
               --output text 2>/dev/null || true)"
             case "$scan_status" in
@@ -101,7 +119,7 @@ jobs:
 
           findings="$(aws ecr describe-image-scan-findings \
             --repository-name "$REPOSITORY" \
-            --image-id "imageTag=$SOURCE_SHA" \
+            --image-id "imageDigest=$platform_digest" \
             --output json)"
           critical="$(jq -r '.imageScanFindings.findingSeverityCounts.CRITICAL // 0' <<<"$findings")"
           high="$(jq -r '.imageScanFindings.findingSeverityCounts.HIGH // 0' <<<"$findings")"
@@ -110,7 +128,8 @@ jobs:
             echo "### ${{ matrix.name }} image"
             echo
             echo "- Source commit: \`$SOURCE_SHA\`"
-            echo "- Immutable digest: \`$IMAGE_DIGEST\`"
+            echo "- Immutable index digest: \`$IMAGE_DIGEST\`"
+            echo "- Scanned linux/amd64 digest: \`$platform_digest\`"
             echo "- ECR scan: complete"
             echo "- Critical findings: $critical"
             echo "- High findings: $high"
