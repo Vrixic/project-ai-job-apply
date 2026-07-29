@@ -21,3 +21,19 @@ output "temporal_api_key_secret_arn" {
 output "gateway_url" {
   value = module.platform.gateway_url
 }
+
+output "ecs_cluster_arn" {
+  value = module.platform.ecs_cluster_arn
+}
+
+output "migration_task_definition_arn" {
+  value = module.platform.migration_task_definition_arn
+}
+
+output "migration_subnet_ids" {
+  value = module.platform.migration_subnet_ids
+}
+
+output "application_security_group_id" {
+  value = module.platform.application_security_group_id
+}

@@ -8,6 +8,11 @@ variable "worker_image" {
   default = ""
 }
 
+variable "migration_image" {
+  type    = string
+  default = ""
+}
+
 variable "gateway_desired_count" {
   type    = number
   default = 1

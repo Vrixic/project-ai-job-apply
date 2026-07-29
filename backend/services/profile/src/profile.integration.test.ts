@@ -1,4 +1,6 @@
-import { readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import type { PutJobPreferencesRequest } from "@ai-job-apply/api-contracts";
 import type { AuthPrincipal } from "@ai-job-apply/auth";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -6,6 +8,7 @@ import { createDatabase, PostgresProfileStore } from "./index.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
+const execFileAsync = promisify(execFile);
 
 describeWithDatabase("PostgresProfileStore", () => {
   const database = createDatabase(databaseUrl ?? "postgres://invalid");
@@ -19,11 +22,27 @@ describeWithDatabase("PostgresProfileStore", () => {
   };
 
   beforeAll(async () => {
-    const migration = await readFile(
-      new URL("../migrations/0001_foundation.sql", import.meta.url),
-      "utf8",
-    );
-    await database.client.unsafe(migration);
+    const migrationExecutable = fileURLToPath(new URL("../dist/src/migrate.js", import.meta.url));
+    const migrationEnvironment = {
+      ...process.env,
+      DATABASE_URL: databaseUrl,
+    };
+    const first = await execFileAsync(process.execPath, [migrationExecutable], {
+      env: migrationEnvironment,
+    });
+    const replay = await execFileAsync(process.execPath, [migrationExecutable], {
+      env: migrationEnvironment,
+    });
+
+    expect(first.stdout.trim()).toBe("Database migration 0001_foundation applied and verified.");
+    expect(replay.stdout.trim()).toBe("Database migration 0001_foundation applied and verified.");
+    expect(
+      await database.client`
+        SELECT version
+        FROM platform.schema_migrations
+        WHERE version = '0001_foundation'
+      `,
+    ).toHaveLength(1);
   });
 
   afterAll(async () => {

@@ -34,6 +34,7 @@ module "platform" {
   vpc_cidr                       = "10.20.0.0/16"
   gateway_image                  = var.gateway_image
   worker_image                   = var.worker_image
+  migration_image                = var.migration_image
   gateway_desired_count          = var.gateway_desired_count
   gateway_cpu                    = var.gateway_cpu
   gateway_memory                 = var.gateway_memory

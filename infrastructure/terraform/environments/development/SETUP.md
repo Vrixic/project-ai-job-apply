@@ -116,7 +116,8 @@ After the product-owner setup is confirmed, platform engineering:
 6. stores and verifies the Temporal API key directly in AWS Secrets Manager by following the
    [runtime-secret runbook](../../../runbooks/temporal-cloud-runtime-secret.md);
 7. builds, tests, scans, and pushes immutable gateway and worker images;
-8. runs the reviewed database migration through a one-off controlled task;
+8. runs the reviewed database migration through a
+   [one-off controlled task](../../../runbooks/deployments/development-database-migration.md);
 9. reviews and applies the exact saved application-enablement plan;
 10. proves gateway health, Auth0 access-token validation, owner isolation, database persistence,
     outbox dispatch, Temporal completion, structured/redacted logs, correlation identifiers,
