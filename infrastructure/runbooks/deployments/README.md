@@ -8,3 +8,5 @@ saved infrastructure plan, success evidence, and recovery boundary.
 
 - [Development database migration](development-database-migration.md) — Provisions and runs the
   one-off Phase 0 migration task without enabling long-running application services.
+- [Development application rollout](development-application-rollout.md) — Reviews, enables,
+  verifies, and, when necessary, rolls back the lean gateway and worker deployment.

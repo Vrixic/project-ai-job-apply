@@ -4,6 +4,10 @@ Creates the AWS network, encrypted data services, queues, ECS cluster, registrie
 task definitions, API Gateway/Cloud Map ingress, and alarms. Application services remain disabled
 until a managed OIDC issuer, Temporal, and immutable container images are supplied.
 
+API Gateway reaches the gateway through Cloud Map service discovery. The gateway uses an `SRV`
+record so ECS registers both the task IP and container port required by API Gateway's
+`DiscoverInstances` integration.
+
 The persistent layer creates encrypted database and empty Temporal API-key secret destinations.
 Terraform owns the database value and requires TLS in its managed connection string; an operator
 writes the Temporal API key directly to its empty secret only after the persistent apply succeeds.

@@ -411,8 +411,9 @@ resource "aws_service_discovery_service" "gateway" {
     namespace_id   = aws_service_discovery_private_dns_namespace.application[0].id
     routing_policy = "MULTIVALUE"
     dns_records {
-      ttl  = 10
-      type = "A"
+      ttl = 10
+      # API Gateway Cloud Map private integrations require ECS registrations with both IP and port.
+      type = "SRV"
     }
   }
 
