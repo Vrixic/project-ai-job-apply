@@ -68,10 +68,13 @@ argument is a secret, but delivery evidence should still omit the Temporal accou
 ```powershell
 aws sso login --profile ai-job-apply-development-admin
 
-pnpm --filter @ai-job-apply/workflows cloud:verify -- `
+node backend/workflows/cloud-conformance.mjs `
   --address "<namespace>.<account>.tmprl.cloud:7233" `
   --namespace "<namespace>.<account>"
 ```
+
+Call the verifier directly as shown. Do not wrap it in a package-manager command that echoes its
+arguments and exposes the otherwise-redacted Namespace ID or endpoint in captured output.
 
 The verifier:
 
@@ -94,14 +97,27 @@ pass.
 
 ## Rotate
 
-1. Create a new 90-day Service Account API key without disabling the current key.
+1. Create a uniquely named new 90-day Service Account API key without disabling the current key.
 2. Replace the AWS secret's plaintext value with the new key.
 3. Run the verifier and require both conformance lines.
 4. When the application is deployed, force a new worker deployment so the task loads
-   `AWSCURRENT`, then prove worker connectivity and workflow completion.
-5. Disable the prior key, monitor the worker, and delete the prior key only after the new task is
-   healthy.
-6. Record key IDs, dates, and evidence links without values.
+   `AWSCURRENT`. Require the old worker to remain running until the new task starts, then require
+   one completed primary deployment at the intended lean count with zero failed tasks.
+5. Prove at least two real workflow completions through both Temporal visibility and durable
+   database outcomes. Use a harmless temporary preference change followed by a second save that
+   restores the original value; retain no preference, identity, operation, workflow, or event ID.
+6. Disable the prior provider key. Require an in-memory authentication probe using the
+   `AWSPREVIOUS` value to fail while `AWSCURRENT` conformance and worker health still pass.
+7. Delete the prior provider key only after the disabled-key observation remains stable. Prove the
+   deleted value is still rejected, then remove the `AWSPREVIOUS` staging label from its AWS
+   version. Require exactly one staged `AWSCURRENT` and no staged `AWSPREVIOUS`.
+8. Record only sanitized version-stage counts, dates, deployment/health state, aggregate workflow
+   outcomes, log-pattern counts, and evidence links. Never record version IDs or values.
+
+AWS Secrets Manager can continue returning the old value as an unlabeled historical version after
+its staging label is removed. This is not a usable rollback credential after the provider key is
+deleted. Do not recreate or relabel it; require provider rejection and preserve only the current
+provider key as an active credential.
 
 Temporal sends expiry notices before expiration, but the operations owner remains responsible for
 rotation. If verification fails or unexpected use is observed, disable the affected key, restore a

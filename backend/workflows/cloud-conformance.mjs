@@ -9,7 +9,7 @@ const defaults = {
 };
 
 const usage = `Usage:
-  pnpm --filter @ai-job-apply/workflows cloud:verify -- \\
+  node backend/workflows/cloud-conformance.mjs \\
     --address <namespace>.<account>.tmprl.cloud:7233 \\
     --namespace <namespace>.<account>
 
