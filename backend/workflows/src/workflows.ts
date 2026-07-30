@@ -12,6 +12,6 @@ const activities = proxyActivities<ProfileReadinessActivities>({
 });
 
 export async function profileReadinessWorkflow(input: ProfileReadinessInput): Promise<void> {
-  await activities.markRunning(input.operationId);
+  await activities.markRunning(input);
   await activities.calculateAndPersist(input);
 }

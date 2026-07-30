@@ -23,6 +23,7 @@ const backendSchema = baseSchema.extend({
   OIDC_ISSUER: z.string().url(),
   OIDC_AUDIENCE: z.string().min(1).default("ai-job-apply-api"),
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
+  OTEL_TRACE_SAMPLE_RATIO: z.coerce.number().min(0).max(1).default(1),
 });
 
 export type BackendConfig = z.infer<typeof backendSchema>;

@@ -13,4 +13,4 @@ WORKDIR /workspace
 COPY --from=build --chown=65532:65532 /workspace /workspace
 USER 65532:65532
 EXPOSE 4000
-CMD ["backend/gateway/dist/src/main.js"]
+CMD ["backend/gateway/dist/src/start.js"]

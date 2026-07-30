@@ -27,3 +27,8 @@ The module also creates a KMS-encrypted operational SNS topic, alarm/OK actions,
 application-error metric, a dedicated alert-delivery canary, and an operational dashboard. Email
 or other human destinations are subscribed outside Terraform so addresses do not enter source,
 plans, or state. The alert operator script retains only aggregate subscription state.
+
+When tracing is enabled, each gateway/worker task receives one digest-pinned, non-essential ADOT
+sidecar. Applications export OTLP only over task-local loopback; the collector exports traces to
+X-Ray through a two-action bounded task policy. Collector failure does not stop the application,
+and the sidecar restart policy retries it without adding another ECS service or replica.

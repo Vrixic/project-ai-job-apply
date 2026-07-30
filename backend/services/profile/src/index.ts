@@ -39,6 +39,7 @@ export interface ProfileStore {
     input: PutJobPreferencesRequest,
     idempotencyKey: string,
     traceId: string,
+    traceparent?: string,
   ): Promise<PutJobPreferencesResponse>;
   getOperation(userId: string, operationId: string): Promise<Operation | null>;
   getPendingOutboxEvents(limit: number): Promise<PendingOutboxEvent[]>;
@@ -49,7 +50,7 @@ export interface ProfileStore {
     operationId: string,
     preferenceSetId: string,
     readiness: ProfileReadiness,
-    traceId: string,
+    traceparent?: string,
   ): Promise<void>;
   ping(): Promise<void>;
   close(): Promise<void>;
@@ -164,6 +165,7 @@ export class PostgresProfileStore implements ProfileStore {
     input: PutJobPreferencesRequest,
     idempotencyKey: string,
     traceId: string,
+    traceparent?: string,
   ): Promise<PutJobPreferencesResponse> {
     const hash = requestHash(input);
     const scope = "profile.job-preferences.put.v1";
@@ -246,7 +248,7 @@ export class PostgresProfileStore implements ProfileStore {
         dataSchema:
           "https://schemas.ai-job-apply.internal/events/profile.preferences.updated.v1.json",
         data: eventData as unknown as Record<string, unknown>,
-        traceparent: traceId,
+        ...(traceparent ? { traceparent } : {}),
       });
       await tx.insert(idempotencyKeys).values({
         userId,
@@ -320,7 +322,7 @@ export class PostgresProfileStore implements ProfileStore {
     operationId: string,
     preferenceSetId: string,
     readiness: ProfileReadiness,
-    traceId: string,
+    traceparent?: string,
   ): Promise<void> {
     await this.handle.db.transaction(async (tx) => {
       await tx
@@ -345,7 +347,7 @@ export class PostgresProfileStore implements ProfileStore {
           completionPercent: readiness.completionPercent,
           missingFields: readiness.missingFields,
         },
-        traceparent: traceId,
+        ...(traceparent ? { traceparent } : {}),
       });
     });
   }

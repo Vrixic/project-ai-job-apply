@@ -11,6 +11,7 @@ const describeWithDatabase = databaseUrl ? describe : describe.skip;
 const execFileAsync = promisify(execFile);
 
 describeWithDatabase("PostgresProfileStore", () => {
+  const traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
   const database = createDatabase(databaseUrl ?? "postgres://invalid");
   const store = new PostgresProfileStore(database);
   const principal: AuthPrincipal = {
@@ -66,6 +67,7 @@ describeWithDatabase("PostgresProfileStore", () => {
       input,
       `integration-key-${runId}`,
       "integration-trace",
+      traceparent,
     );
     const replay = await store.putPreferences(
       user.id,
@@ -97,6 +99,7 @@ describeWithDatabase("PostgresProfileStore", () => {
       version: 1,
       operationId: first.operationId,
     });
+    expect(event?.traceparent).toBe(traceparent);
     expect(JSON.stringify(event)).not.toContain("Software Engineer");
     expect(JSON.stringify(event)).not.toContain("New York");
   });

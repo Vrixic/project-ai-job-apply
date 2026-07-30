@@ -18,6 +18,52 @@ locals {
   application_metric_namespace = "${var.name}/${var.environment}/application"
   operational_metric_namespace = "${var.name}/${var.environment}/operational"
   observability_runbook_url    = "https://github.com/Vrixic/project-ai-job-apply/blob/main/infrastructure/runbooks/observability/development-alert-delivery.md"
+  otel_collector_config = yamlencode({
+    extensions = {
+      health_check = {
+        endpoint = "0.0.0.0:13133"
+      }
+    }
+    receivers = {
+      otlp = {
+        protocols = {
+          http = {
+            endpoint = "0.0.0.0:4318"
+          }
+        }
+      }
+    }
+    processors = {
+      memory_limiter = {
+        check_interval  = "1s"
+        limit_mib       = 64
+        spike_limit_mib = 16
+      }
+      batch = {
+        timeout = "5s"
+      }
+    }
+    exporters = {
+      awsxray = {
+        region = data.aws_region.current.name
+      }
+    }
+    service = {
+      extensions = ["health_check"]
+      pipelines = {
+        traces = {
+          receivers  = ["otlp"]
+          processors = ["memory_limiter", "batch"]
+          exporters  = ["awsxray"]
+        }
+      }
+      telemetry = {
+        logs = {
+          level = "warn"
+        }
+      }
+    }
+  })
 }
 
 data "aws_iam_policy_document" "platform_kms" {
@@ -481,6 +527,21 @@ resource "aws_iam_role" "application" {
   permissions_boundary = data.aws_iam_policy.workload_boundary.arn
 }
 
+resource "aws_iam_role_policy" "application_tracing" {
+  count = var.deploy_applications && var.enable_tracing ? 1 : 0
+  name  = "write-application-traces"
+  role  = aws_iam_role.application.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid      = "WriteApplicationTraces"
+      Effect   = "Allow"
+      Action   = ["xray:PutTelemetryRecords", "xray:PutTraceSegments"]
+      Resource = "*"
+    }]
+  })
+}
+
 resource "aws_service_discovery_private_dns_namespace" "application" {
   count = var.deploy_applications ? 1 : 0
   name  = "${var.name}-${var.environment}.internal"
@@ -558,39 +619,79 @@ resource "aws_ecs_task_definition" "gateway" {
     cpu_architecture        = "X86_64"
     operating_system_family = "LINUX"
   }
-  container_definitions = jsonencode([{
-    name      = "gateway"
-    image     = var.gateway_image
-    essential = true
-    portMappings = [{
-      containerPort = local.container_port
-      protocol      = "tcp"
-    }]
-    environment = concat(
-      [
-        { name = "NODE_ENV", value = "production" },
-        { name = "PORT", value = tostring(local.container_port) },
-        { name = "OIDC_ISSUER", value = var.oidc_issuer },
-        { name = "OIDC_AUDIENCE", value = var.oidc_audience },
-        { name = "TEMPORAL_ADDRESS", value = var.temporal_address },
-        { name = "TEMPORAL_NAMESPACE", value = var.temporal_namespace }
-      ],
-      var.enable_redis ? [
-        { name = "REDIS_URL", value = "rediss://${aws_elasticache_replication_group.redis[0].primary_endpoint_address}:6379" }
-      ] : []
-    )
-    secrets = [
-      { name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.database_url.arn }
-    ]
-    logConfiguration = {
-      logDriver = "awslogs"
-      options = {
-        awslogs-group         = aws_cloudwatch_log_group.application.name
-        awslogs-region        = data.aws_region.current.name
-        awslogs-stream-prefix = "gateway"
+  container_definitions = jsonencode(concat(
+    [{
+      name      = "gateway"
+      image     = var.gateway_image
+      essential = true
+      cpu       = var.enable_tracing ? var.gateway_cpu - 32 : var.gateway_cpu
+      portMappings = [{
+        containerPort = local.container_port
+        protocol      = "tcp"
+      }]
+      environment = concat(
+        [
+          { name = "NODE_ENV", value = "production" },
+          { name = "PORT", value = tostring(local.container_port) },
+          { name = "RELEASE_SHA", value = try(split("@", var.gateway_image)[1], "unpublished") },
+          { name = "OIDC_ISSUER", value = var.oidc_issuer },
+          { name = "OIDC_AUDIENCE", value = var.oidc_audience },
+          { name = "TEMPORAL_ADDRESS", value = var.temporal_address },
+          { name = "TEMPORAL_NAMESPACE", value = var.temporal_namespace }
+        ],
+        var.enable_tracing ? [
+          { name = "OTEL_EXPORTER_OTLP_ENDPOINT", value = "http://127.0.0.1:4318" },
+          { name = "OTEL_TRACE_SAMPLE_RATIO", value = tostring(var.trace_sample_ratio) }
+        ] : [],
+        var.enable_redis ? [
+          { name = "REDIS_URL", value = "rediss://${aws_elasticache_replication_group.redis[0].primary_endpoint_address}:6379" }
+        ] : []
+      )
+      secrets = [
+        { name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.database_url.arn }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.application.name
+          awslogs-region        = data.aws_region.current.name
+          awslogs-stream-prefix = "gateway"
+        }
       }
-    }
-  }])
+    }],
+    var.enable_tracing ? [{
+      name                   = "otel-collector"
+      image                  = var.otel_collector_image
+      essential              = false
+      cpu                    = 32
+      memory                 = 128
+      memoryReservation      = 64
+      readonlyRootFilesystem = true
+      command                = ["--config=env:OTEL_CONFIG"]
+      environment = [
+        { name = "OTEL_CONFIG", value = local.otel_collector_config }
+      ]
+      restartPolicy = {
+        enabled              = true
+        restartAttemptPeriod = 60
+      }
+      healthCheck = {
+        command     = ["CMD-SHELL", "/healthcheck"]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 10
+      }
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.application.name
+          awslogs-region        = data.aws_region.current.name
+          awslogs-stream-prefix = "otel-gateway"
+        }
+      }
+    }] : []
+  ))
 }
 
 resource "aws_ecs_service" "gateway" {
@@ -626,30 +727,72 @@ resource "aws_ecs_task_definition" "worker" {
     cpu_architecture        = "X86_64"
     operating_system_family = "LINUX"
   }
-  container_definitions = jsonencode([{
-    name      = "worker"
-    image     = var.worker_image
-    essential = true
-    environment = [
-      { name = "NODE_ENV", value = "production" },
-      { name = "TEMPORAL_ADDRESS", value = var.temporal_address },
-      { name = "TEMPORAL_NAMESPACE", value = var.temporal_namespace },
-      { name = "TEMPORAL_TASK_QUEUE", value = "profile-readiness-v1" },
-      { name = "TEMPORAL_TLS", value = "true" }
-    ]
-    secrets = [
-      { name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.database_url.arn },
-      { name = "TEMPORAL_API_KEY", valueFrom = aws_secretsmanager_secret.temporal_api_key.arn }
-    ]
-    logConfiguration = {
-      logDriver = "awslogs"
-      options = {
-        awslogs-group         = aws_cloudwatch_log_group.application.name
-        awslogs-region        = data.aws_region.current.name
-        awslogs-stream-prefix = "worker"
+  container_definitions = jsonencode(concat(
+    [{
+      name      = "worker"
+      image     = var.worker_image
+      essential = true
+      cpu       = var.enable_tracing ? var.worker_cpu - 32 : var.worker_cpu
+      environment = concat(
+        [
+          { name = "NODE_ENV", value = "production" },
+          { name = "RELEASE_SHA", value = try(split("@", var.worker_image)[1], "unpublished") },
+          { name = "TEMPORAL_ADDRESS", value = var.temporal_address },
+          { name = "TEMPORAL_NAMESPACE", value = var.temporal_namespace },
+          { name = "TEMPORAL_TASK_QUEUE", value = "profile-readiness-v1" },
+          { name = "TEMPORAL_TLS", value = "true" }
+        ],
+        var.enable_tracing ? [
+          { name = "OTEL_EXPORTER_OTLP_ENDPOINT", value = "http://127.0.0.1:4318" },
+          { name = "OTEL_TRACE_SAMPLE_RATIO", value = tostring(var.trace_sample_ratio) }
+        ] : []
+      )
+      secrets = [
+        { name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.database_url.arn },
+        { name = "TEMPORAL_API_KEY", valueFrom = aws_secretsmanager_secret.temporal_api_key.arn }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.application.name
+          awslogs-region        = data.aws_region.current.name
+          awslogs-stream-prefix = "worker"
+        }
       }
-    }
-  }])
+    }],
+    var.enable_tracing ? [{
+      name                   = "otel-collector"
+      image                  = var.otel_collector_image
+      essential              = false
+      cpu                    = 32
+      memory                 = 128
+      memoryReservation      = 64
+      readonlyRootFilesystem = true
+      command                = ["--config=env:OTEL_CONFIG"]
+      environment = [
+        { name = "OTEL_CONFIG", value = local.otel_collector_config }
+      ]
+      restartPolicy = {
+        enabled              = true
+        restartAttemptPeriod = 60
+      }
+      healthCheck = {
+        command     = ["CMD-SHELL", "/healthcheck"]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 10
+      }
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.application.name
+          awslogs-region        = data.aws_region.current.name
+          awslogs-stream-prefix = "otel-worker"
+        }
+      }
+    }] : []
+  ))
 }
 
 resource "aws_ecs_service" "worker" {

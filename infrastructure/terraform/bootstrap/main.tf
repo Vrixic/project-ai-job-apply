@@ -248,6 +248,12 @@ resource "aws_iam_policy" "workload_boundary" {
             "aws:ResourceTag/Environment" = var.environment
           }
         }
+      },
+      {
+        Sid      = "WriteApplicationTraces"
+        Effect   = "Allow"
+        Action   = ["xray:PutTelemetryRecords", "xray:PutTraceSegments"]
+        Resource = "*"
       }
     ]
   })

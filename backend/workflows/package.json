@@ -13,8 +13,8 @@
     "build": "tsc -p tsconfig.json",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "cloud:verify": "node cloud-conformance.mjs",
-    "dev": "node --watch --env-file-if-exists=../../.env --import tsx src/worker.ts",
-    "start": "node dist/src/worker.js",
+    "dev": "node --watch --env-file-if-exists=../../.env --import tsx src/start.ts",
+    "start": "node dist/src/start.js",
     "test": "vitest run --passWithNoTests",
     "test:integration": "vitest run --config vitest.integration.config.ts --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit"

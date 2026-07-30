@@ -41,6 +41,9 @@ module "platform" {
   worker_desired_count           = var.worker_desired_count
   worker_cpu                     = var.worker_cpu
   worker_memory                  = var.worker_memory
+  enable_tracing                 = var.enable_tracing
+  otel_collector_image           = var.otel_collector_image
+  trace_sample_ratio             = var.trace_sample_ratio
   high_availability              = var.high_availability
   private_application_networking = var.private_application_networking
   enable_redis                   = var.enable_redis

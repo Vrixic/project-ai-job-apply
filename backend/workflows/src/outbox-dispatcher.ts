@@ -1,4 +1,5 @@
 import { eventTypes, validateEventData } from "@ai-job-apply/event-contracts";
+import { activeTraceparent, withTraceSpan } from "@ai-job-apply/observability";
 import type { Logger } from "pino";
 import type { ProfileStore } from "@ai-job-apply/profile-service";
 import type { Client } from "@temporalio/client";
@@ -47,16 +48,20 @@ export class OutboxDispatcher {
           operationId: string;
         };
         try {
-          await this.temporal.workflow.start(profileReadinessWorkflow, {
-            taskQueue: this.taskQueue,
-            workflowId: `profile-readiness/${event.id}`,
-            args: [
-              {
-                preferenceSetId: data.preferenceSetId,
-                operationId: data.operationId,
-                traceId: event.traceparent ?? event.id,
-              },
-            ],
+          await withTraceSpan("outbox.dispatch", event.traceparent, async () => {
+            const traceparent = activeTraceparent();
+            await this.temporal.workflow.start(profileReadinessWorkflow, {
+              taskQueue: this.taskQueue,
+              workflowId: `profile-readiness/${event.id}`,
+              args: [
+                {
+                  preferenceSetId: data.preferenceSetId,
+                  operationId: data.operationId,
+                  ...(traceparent ? { traceparent } : {}),
+                },
+              ],
+            });
+            await this.store.markOutboxPublished(event.id);
           });
         } catch (error) {
           if (
@@ -65,8 +70,8 @@ export class OutboxDispatcher {
           ) {
             throw error;
           }
+          await this.store.markOutboxPublished(event.id);
         }
-        await this.store.markOutboxPublished(event.id);
       }
     } catch (error) {
       this.logger.error({ err: error }, "outbox dispatch failed");

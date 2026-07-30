@@ -25,7 +25,7 @@ import type {
 } from "@ai-job-apply/api-contracts";
 import { compileComponentValidator, formatValidationErrors } from "@ai-job-apply/api-contracts";
 import { type AccessTokenVerifier, AuthenticationError, bearerToken } from "@ai-job-apply/auth";
-import { correlationId } from "@ai-job-apply/observability";
+import { activeTraceparent, correlationId } from "@ai-job-apply/observability";
 import { IdempotencyConflictError, type ProfileStore } from "@ai-job-apply/profile-service";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
@@ -179,6 +179,7 @@ class CandidateController {
       input as PutJobPreferencesRequest,
       idempotencyKey,
       request.traceId ?? correlationId(undefined),
+      activeTraceparent(),
     );
   }
 
