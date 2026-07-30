@@ -102,9 +102,18 @@ resource "aws_sns_topic" "operational_alerts" {
 
 data "aws_iam_policy_document" "operational_alerts" {
   statement {
-    sid       = "AllowAccountAdministration"
-    effect    = "Allow"
-    actions   = ["SNS:*"]
+    sid    = "AllowAccountAdministration"
+    effect = "Allow"
+    actions = [
+      "SNS:AddPermission",
+      "SNS:DeleteTopic",
+      "SNS:GetTopicAttributes",
+      "SNS:ListSubscriptionsByTopic",
+      "SNS:Publish",
+      "SNS:RemovePermission",
+      "SNS:SetTopicAttributes",
+      "SNS:Subscribe"
+    ]
     resources = [aws_sns_topic.operational_alerts.arn]
     principals {
       type        = "AWS"
