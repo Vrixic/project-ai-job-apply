@@ -95,3 +95,11 @@ The corrected local preview contains exactly four creates, three in-place update
 standalone deletes. Because the correction was not yet merged when that preview was created, it is
 validation evidence only and must not be applied. Regenerate and hash the final plan from clean,
 merged `main`.
+
+## Closure
+
+The preflight gates were subsequently completed without rewriting this historical record. See the
+[deployed provider/log recovery evidence](d0-development-provider-log-recovery-2026-07-30.md) for
+the merged release, exact reviewed apply, runtime verification, controlled Auth0 and gateway-log
+exercises, notification confirmation, corrective development-secret rotation, and final no-drift
+result.
