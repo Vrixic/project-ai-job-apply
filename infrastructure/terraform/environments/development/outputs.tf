@@ -50,3 +50,11 @@ output "observability_dashboard_name" {
 output "alert_delivery_canary_alarm_name" {
   value = module.platform.alert_delivery_canary_alarm_name
 }
+
+output "gateway_log_heartbeat_alarm_name" {
+  value = module.platform.gateway_log_heartbeat_alarm_name
+}
+
+output "worker_log_heartbeat_alarm_name" {
+  value = module.platform.worker_log_heartbeat_alarm_name
+}

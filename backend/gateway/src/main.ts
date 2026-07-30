@@ -1,7 +1,11 @@
 import "reflect-metadata";
 import { createOidcVerifier } from "@ai-job-apply/auth";
 import { loadBackendConfig } from "@ai-job-apply/config";
-import { createLogger, shutdownTelemetry } from "@ai-job-apply/observability";
+import {
+  createLogger,
+  shutdownTelemetry,
+  startLogDeliveryHeartbeat,
+} from "@ai-job-apply/observability";
 import { createDatabase, PostgresProfileStore } from "@ai-job-apply/profile-service";
 import { NestFactory } from "@nestjs/core";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
@@ -33,6 +37,7 @@ app.getHttpAdapter().getInstance().addHook("onRequest", applyRequestContext);
 
 await app.listen({ port: config.PORT, host: "0.0.0.0" });
 logger.info({ port: config.PORT }, "gateway started");
+const stopLogDeliveryHeartbeat = startLogDeliveryHeartbeat(logger);
 
 let shuttingDown = false;
 const shutdown = async () => {
@@ -40,6 +45,7 @@ const shutdown = async () => {
     return;
   }
   shuttingDown = true;
+  stopLogDeliveryHeartbeat();
   await app.close();
   await store.close();
   await shutdownTelemetry();

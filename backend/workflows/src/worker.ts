@@ -1,9 +1,13 @@
+import { fileURLToPath } from "node:url";
 import { loadWorkerConfig } from "@ai-job-apply/config";
-import { createLogger, shutdownTelemetry } from "@ai-job-apply/observability";
+import {
+  createLogger,
+  shutdownTelemetry,
+  startLogDeliveryHeartbeat,
+} from "@ai-job-apply/observability";
 import { createDatabase, PostgresProfileStore } from "@ai-job-apply/profile-service";
 import { Client, Connection } from "@temporalio/client";
 import { NativeConnection, Worker } from "@temporalio/worker";
-import { fileURLToPath } from "node:url";
 import { createProfileReadinessActivities } from "./activities.js";
 import { OutboxDispatcher } from "./outbox-dispatcher.js";
 
@@ -37,8 +41,10 @@ const worker = await Worker.create({
   activities: createProfileReadinessActivities(store),
 });
 const dispatcher = new OutboxDispatcher(store, temporal, config.TEMPORAL_TASK_QUEUE, logger);
+let stopLogDeliveryHeartbeat: (() => void) | undefined;
 
 const shutdown = async () => {
+  stopLogDeliveryHeartbeat?.();
   dispatcher.stop();
   worker.shutdown();
   await store.close();
@@ -52,4 +58,5 @@ process.once("SIGTERM", () => void shutdown());
 
 dispatcher.start();
 logger.info({ task_queue: config.TEMPORAL_TASK_QUEUE }, "workflow worker started");
+stopLogDeliveryHeartbeat = startLogDeliveryHeartbeat(logger);
 await worker.run();

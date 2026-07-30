@@ -11,13 +11,14 @@ data "aws_iam_policy" "workload_boundary" {
 }
 
 locals {
-  azs                          = slice(data.aws_availability_zones.available.names, 0, 2)
-  private_cidrs                = [cidrsubnet(var.vpc_cidr, 4, 0), cidrsubnet(var.vpc_cidr, 4, 1)]
-  public_cidrs                 = [cidrsubnet(var.vpc_cidr, 4, 8), cidrsubnet(var.vpc_cidr, 4, 9)]
-  container_port               = 4000
-  application_metric_namespace = "${var.name}/${var.environment}/application"
-  operational_metric_namespace = "${var.name}/${var.environment}/operational"
-  observability_runbook_url    = "https://github.com/Vrixic/project-ai-job-apply/blob/main/infrastructure/runbooks/observability/development-alert-delivery.md"
+  azs                           = slice(data.aws_availability_zones.available.names, 0, 2)
+  private_cidrs                 = [cidrsubnet(var.vpc_cidr, 4, 0), cidrsubnet(var.vpc_cidr, 4, 1)]
+  public_cidrs                  = [cidrsubnet(var.vpc_cidr, 4, 8), cidrsubnet(var.vpc_cidr, 4, 9)]
+  container_port                = 4000
+  application_metric_namespace  = "${var.name}/${var.environment}/application"
+  operational_metric_namespace  = "${var.name}/${var.environment}/operational"
+  observability_runbook_url     = "https://github.com/Vrixic/project-ai-job-apply/blob/main/infrastructure/runbooks/observability/development-alert-delivery.md"
+  provider_recovery_runbook_url = "https://github.com/Vrixic/project-ai-job-apply/blob/main/infrastructure/runbooks/providers/development-provider-and-log-recovery.md"
   otel_collector_config = yamlencode({
     extensions = {
       health_check = {
@@ -959,6 +960,72 @@ resource "aws_cloudwatch_metric_alarm" "application_errors" {
   depends_on = [aws_cloudwatch_log_metric_filter.application_errors]
 }
 
+resource "aws_cloudwatch_log_metric_filter" "gateway_log_heartbeat" {
+  count          = var.deploy_applications ? 1 : 0
+  name           = "${var.name}-${var.environment}-gateway-log-heartbeat"
+  pattern        = "{ $.event = \"log_delivery_heartbeat\" && $.service = \"gateway\" }"
+  log_group_name = aws_cloudwatch_log_group.application.name
+
+  metric_transformation {
+    name      = "GatewayLogHeartbeat"
+    namespace = local.application_metric_namespace
+    value     = "1"
+    unit      = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "gateway_log_heartbeat_missing" {
+  count               = var.deploy_applications ? 1 : 0
+  alarm_name          = "${var.name}-${var.environment}-gateway-log-heartbeat-missing"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 3
+  datapoints_to_alarm = 3
+  metric_name         = "GatewayLogHeartbeat"
+  namespace           = local.application_metric_namespace
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 1
+  treat_missing_data  = "breaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "The gateway heartbeat has been absent for three minutes; service or log delivery may be impaired. Runbook: ${local.provider_recovery_runbook_url}"
+
+  depends_on = [aws_cloudwatch_log_metric_filter.gateway_log_heartbeat]
+}
+
+resource "aws_cloudwatch_log_metric_filter" "worker_log_heartbeat" {
+  count          = var.deploy_applications ? 1 : 0
+  name           = "${var.name}-${var.environment}-worker-log-heartbeat"
+  pattern        = "{ $.event = \"log_delivery_heartbeat\" && $.service = \"workflow-worker\" }"
+  log_group_name = aws_cloudwatch_log_group.application.name
+
+  metric_transformation {
+    name      = "WorkerLogHeartbeat"
+    namespace = local.application_metric_namespace
+    value     = "1"
+    unit      = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "worker_log_heartbeat_missing" {
+  count               = var.deploy_applications ? 1 : 0
+  alarm_name          = "${var.name}-${var.environment}-worker-log-heartbeat-missing"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 3
+  datapoints_to_alarm = 3
+  metric_name         = "WorkerLogHeartbeat"
+  namespace           = local.application_metric_namespace
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 1
+  treat_missing_data  = "breaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "The workflow-worker heartbeat has been absent for three minutes; service or log delivery may be impaired. Runbook: ${local.provider_recovery_runbook_url}"
+
+  depends_on = [aws_cloudwatch_log_metric_filter.worker_log_heartbeat]
+}
+
 resource "aws_cloudwatch_metric_alarm" "alert_delivery_canary" {
   alarm_name          = "${var.name}-${var.environment}-alert-delivery-canary"
   comparison_operator = "GreaterThanThreshold"
@@ -1000,10 +1067,16 @@ resource "aws_cloudwatch_dashboard" "operations" {
             title  = "Application errors and alert-delivery canary"
             view   = "timeSeries"
             period = 60
-            metrics = [
-              [local.application_metric_namespace, "ErrorEvents", { label = "Error events", stat = "Sum" }],
-              [local.operational_metric_namespace, "AlertDeliveryCanary", { label = "Alert canary", stat = "Maximum" }]
-            ]
+            metrics = concat(
+              [
+                [local.application_metric_namespace, "ErrorEvents", { label = "Error events", stat = "Sum" }],
+                [local.operational_metric_namespace, "AlertDeliveryCanary", { label = "Alert canary", stat = "Maximum" }]
+              ],
+              var.deploy_applications ? [
+                [local.application_metric_namespace, "GatewayLogHeartbeat", { label = "Gateway log heartbeat", stat = "Sum" }],
+                [local.application_metric_namespace, "WorkerLogHeartbeat", { label = "Worker log heartbeat", stat = "Sum" }]
+              ] : []
+            )
           }
         },
         {

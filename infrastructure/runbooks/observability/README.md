@@ -11,3 +11,6 @@ timestamps.
   metric.
 - [Development distributed tracing](development-distributed-tracing.md) — Continues privacy-safe
   W3C context through the deployed gateway, outbox, Temporal worker, and X-Ray.
+- [Development provider and log recovery](../providers/development-provider-and-log-recovery.md) —
+  Uses continuous privacy-safe heartbeats to detect and recover from a gateway log-delivery
+  interruption.

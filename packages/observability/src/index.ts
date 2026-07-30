@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 import {
-  context,
   type Context,
+  context,
   isSpanContextValid,
-  SpanStatusCode,
-  trace,
-  TraceFlags,
   type SpanContext,
+  SpanStatusCode,
+  TraceFlags,
+  trace,
 } from "@opentelemetry/api";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
 import { HttpInstrumentation } from "@opentelemetry/instrumentation-http";
@@ -14,6 +14,9 @@ import { resourceFromAttributes } from "@opentelemetry/resources";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import { ParentBasedSampler, TraceIdRatioBasedSampler } from "@opentelemetry/sdk-trace-base";
 import pino, { type Logger } from "pino";
+
+export const LOG_DELIVERY_HEARTBEAT_EVENT = "log_delivery_heartbeat";
+export const LOG_DELIVERY_HEARTBEAT_INTERVAL_MS = 30_000;
 
 const REDACTED_PATHS = [
   "req.headers.authorization",
@@ -155,6 +158,24 @@ export function createLogger(options: {
       censor: "[REDACTED]",
     },
   });
+}
+
+export function startLogDeliveryHeartbeat(
+  logger: Pick<Logger, "info">,
+  intervalMs = LOG_DELIVERY_HEARTBEAT_INTERVAL_MS,
+): () => void {
+  if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
+    throw new Error("Log delivery heartbeat interval must be positive");
+  }
+
+  const emit = () => {
+    logger.info({ event: LOG_DELIVERY_HEARTBEAT_EVENT }, "privacy-safe log delivery heartbeat");
+  };
+  emit();
+
+  const timer = setInterval(emit, intervalMs);
+  timer.unref();
+  return () => clearInterval(timer);
 }
 
 export function correlationId(headerValue: string | undefined): string {

@@ -35,6 +35,8 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   the sensitive plan after printing only a sanitized summary and SHA-256.
 - `verify-development-tracing.ps1` — Performs read-only aggregate checks of the deployed collector,
   X-Ray permissions, complete gateway/outbox/activity trace, and forbidden-field absence.
+- `exercise-development-log-delivery.ps1` — Reports sanitized heartbeat state and performs or
+  recovers the exact development-only gateway `PutLogEvents` interruption drill.
 - `node backend/workflows/cloud-conformance.mjs` — Verifies the development AWS
   Secrets Manager destination and performs a read-only Temporal Cloud namespace request without
   printing the runtime key or environment identifiers.

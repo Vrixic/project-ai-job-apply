@@ -55,3 +55,11 @@ output "observability_dashboard_name" {
 output "alert_delivery_canary_alarm_name" {
   value = aws_cloudwatch_metric_alarm.alert_delivery_canary.alarm_name
 }
+
+output "gateway_log_heartbeat_alarm_name" {
+  value = var.deploy_applications ? aws_cloudwatch_metric_alarm.gateway_log_heartbeat_missing[0].alarm_name : null
+}
+
+output "worker_log_heartbeat_alarm_name" {
+  value = var.deploy_applications ? aws_cloudwatch_metric_alarm.worker_log_heartbeat_missing[0].alarm_name : null
+}
