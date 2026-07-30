@@ -86,8 +86,10 @@ jobs:
       - name: Wait for ECR scan and enforce severity gate
         env:
           IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE_NAME: ${{ matrix.name }}
           REPOSITORY: ${{ matrix.repository }}
           SOURCE_SHA: ${{ github.sha }}
+          TARGET_ENVIRONMENT: ${{ inputs.environment }}
         run: |
           set -euo pipefail
           index_manifest="$(aws ecr batch-get-image \
@@ -134,9 +136,9 @@ jobs:
           high="$(jq -r '.imageScanFindings.findingSeverityCounts.HIGH // 0' <<<"$findings")"
 
           {
-            echo "### ${{ matrix.name }} image"
+            echo "### $IMAGE_NAME image"
             echo
-            echo "- Environment: \`${{ inputs.environment }}\`"
+            echo "- Environment: \`$TARGET_ENVIRONMENT\`"
             echo "- Source commit: \`$SOURCE_SHA\`"
             echo "- Immutable index digest: \`$IMAGE_DIGEST\`"
             echo "- Scanned linux/amd64 digest: \`$platform_digest\`"
