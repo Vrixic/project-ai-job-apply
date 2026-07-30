@@ -82,3 +82,41 @@ For an unhealthy new image, prefer an immutable image rollback through a reviewe
 revision. If the entire application boundary must be disabled, use the same application-only
 rollback procedure above. Do not destroy or replace RDS, KMS, S3, SQS, secrets, network resources,
 the migration journal, or Terraform state as a release rollback.
+
+### Controlled development rollback drill
+
+Run this drill only in the synthetic development environment. Do not use it in staging,
+production, or an environment processing real candidate data.
+
+1. Require a refresh-backed no-drift baseline, stable `1/1/0` gateway and worker services, healthy
+   gateway/collector checks, healthy Cloud Map registration, and `200` live/readiness responses.
+2. Require the gateway rolling configuration to preserve at least `100%` healthy capacity and
+   permit at least `200%` maximum capacity. This keeps the current gateway serving while the bad
+   revision is evaluated.
+3. Resolve the exact currently deployed gateway and worker image indexes. Require both to be
+   immutable, contain exactly one `linux/amd64` manifest, and have complete zero-finding ECR scans.
+4. Use the already approved worker image as the controlled wrong gateway image. Its immutable
+   runtime cannot satisfy the gateway process/health contract, so no new intentionally vulnerable
+   artifact or mutable tag is required.
+5. Save and inspect the refresh-backed bad-revision plan without printing provider values. Accept
+   only one gateway task-definition replacement and one gateway service task-revision update.
+   The gateway image and derived release marker may change; the worker, desired counts, collector,
+   provider configuration, and every persistent resource must remain unchanged.
+6. Apply only that exact reviewed plan. Require at least one controlled revision task to stop or
+   fail health while the previous gateway remains healthy and live/readiness continue returning
+   `200`. Do not wait for repeated scheduler retries after the failure has been proven.
+7. Reconstruct the approved gateway image from the reviewed plan's before-state. Save and inspect
+   the rollback plan; require exactly the same two gateway-only actions in reverse.
+8. Apply only the exact rollback artifact and require both services to converge to `1/1/0` with
+   completed primary deployments, the approved image digests, healthy gateway/collectors, healthy
+   Cloud Map, `200` live/readiness, and `401` for an unauthenticated protected request.
+9. Inspect controlled-task logs in memory. Record only aggregate event/error counts and require
+   zero credential, candidate, email, or JWT pattern matches. Require managed alarms to return to
+   `OK`.
+10. Run a final refresh-backed plan with the restored exact inputs and require detailed exit code
+    `0`. Record plan hashes, action counts, failure class, endpoint continuity, recovery state, and
+    no-drift evidence; delete the local plan artifacts.
+
+Stop and restore the approved image immediately if healthy capacity, Cloud Map registration, or
+either health endpoint is lost. Never create a drill by weakening the health check, deployment
+minimum, alarm, authorization, or secret boundary.
