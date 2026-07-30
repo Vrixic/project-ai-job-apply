@@ -33,4 +33,6 @@ sidecar. Applications export OTLP only over task-local loopback; the collector e
 X-Ray through a two-action bounded task policy. Collector failure does not stop the application,
 and the sidecar restart policy retries it without adding another ECS service or replica. ECS
 invokes the image's bundled `/healthcheck` binary directly because the minimal collector image
-does not contain a command shell.
+does not contain a command shell. The essential gateway container separately runs a direct Node
+liveness check so ECS task health and Cloud Map registration reflect the application rather than
+the nonessential telemetry sidecar.

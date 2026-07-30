@@ -658,6 +658,18 @@ resource "aws_ecs_task_definition" "gateway" {
           awslogs-stream-prefix = "gateway"
         }
       }
+      healthCheck = {
+        command = [
+          "CMD",
+          "/nodejs/bin/node",
+          "-e",
+          "fetch('http://127.0.0.1:4000/health/live',{signal:AbortSignal.timeout(4000)}).then((response)=>process.exit(response.status===200?0:1)).catch(()=>process.exit(1))"
+        ]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 10
+      }
     }],
     var.enable_tracing ? [{
       name                   = "otel-collector"
