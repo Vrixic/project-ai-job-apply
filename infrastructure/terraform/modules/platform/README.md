@@ -28,6 +28,12 @@ application-error metric, a dedicated alert-delivery canary, and an operational 
 or other human destinations are subscribed outside Terraform so addresses do not enter source,
 plans, or state. The alert operator script retains only aggregate subscription state.
 
+When applications are enabled, separate gateway and workflow-worker metric filters count their
+fixed log-delivery heartbeats. Three consecutive missing one-minute datapoints alarm through the
+same encrypted topic, so a silent service/log path is detectable independently from error logs.
+The development recovery drill can deny only the gateway stream prefix while the worker remains
+unaffected.
+
 When tracing is enabled, each gateway/worker task receives one digest-pinned, non-essential ADOT
 sidecar. Applications export OTLP only over task-local loopback; the collector exports traces to
 X-Ray through a two-action bounded task policy. Collector failure does not stop the application,

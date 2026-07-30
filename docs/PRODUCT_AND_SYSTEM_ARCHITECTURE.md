@@ -1260,6 +1260,8 @@ Never log field values by default.
 Dashboards:
 
 - API latency/error by endpoint and release
+- Continuous privacy-safe log heartbeats for each always-on service, with missing-signal alarms
+  that distinguish the combined service/log path from ordinary application-error events
 - Queue depth/age and Temporal workflow failures
 - ATS preparation/submission/confirmation rate by adapter version
 - Field-fill accuracy and user corrections by ontology field
@@ -1282,7 +1284,9 @@ Admin tools:
 - Grant time-bound entitlement/support adjustments
 - Start account export/deletion workflows
 
-Runbooks must cover provider outage, ATS layout break, double-submit concern, queue backlog, compromised token, bad model release, stale catalog spike, failed billing webhooks, and database restore.
+Runbooks must cover provider outage and recovery, missing log delivery, ATS layout break,
+double-submit concern, queue backlog, compromised token, bad model release, stale catalog spike,
+failed billing webhooks, and database restore.
 
 ## 18. Testing and release strategy
 
