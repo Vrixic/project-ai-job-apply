@@ -7,13 +7,21 @@ permissions:
   contents: read
 
 jobs:
-  development:
-    name: Development identity
+  conformance:
+    name: ${{ matrix.display_name }} identity
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - environment: development
+            display_name: Development
+          - environment: staging
+            display_name: Staging
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    environment: development
+    environment: ${{ matrix.environment }}
     concurrency:
-      group: aws-oidc-development-conformance
+      group: aws-oidc-${{ matrix.environment }}-conformance
       cancel-in-progress: false
     permissions:
       contents: read
@@ -30,7 +38,7 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-2
-          role-session-name: github-oidc-conformance-${{ github.run_id }}
+          role-session-name: github-oidc-${{ matrix.environment }}-${{ github.run_id }}
           mask-aws-account-id: true
 
       - name: Verify role and remote-state access
@@ -59,7 +67,7 @@ jobs:
           {
             echo "### AWS OIDC conformance"
             echo
-            echo "- Environment: development"
+            echo "- Environment: ${{ matrix.environment }}"
             echo "- Region: us-east-2"
             echo "- Expected role assumed: yes"
             echo "- Encrypted bootstrap state reachable: yes"

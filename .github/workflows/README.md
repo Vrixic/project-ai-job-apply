@@ -13,6 +13,11 @@ This folder will hold CI/CD workflows for validation and controlled delivery.
 
 Workflows must use short-lived cloud identity where possible and must not print secrets or user data.
 
+`aws-oidc-conformance.yml` is a manual identity check for both isolated GitHub Environments. Each
+matrix job resolves only that environment's deployment-role and state-bucket variables, exchanges
+GitHub's OIDC token for short-lived AWS credentials, verifies the exact role/account relationship,
+and proves read-only access to its encrypted `bootstrap.tfstate`.
+
 The private repository uses a full-lockfile pnpm audit and a repository-local Semgrep gate with a
 pinned scanner and pinned upstream rules. GitHub Dependency Review and CodeQL uploads are not
 claimed because GitHub code-security services are not enabled for this repository.
