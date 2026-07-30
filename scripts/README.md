@@ -16,6 +16,9 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
 ## Phase 0 commands
 
 - `start-local.ps1` — Starts PostgreSQL, Redis, Temporal, Temporal UI, and the local OTel collector.
+- `prepare-terraform-bootstrap.ps1` — Creates an isolated, local-backend Terraform workspace for
+  the first bootstrap of a development or staging AWS account without reusing another
+  environment's backend metadata or state.
 - `verify-phase0.ps1` — Regenerates contracts and runs repository quality, build, Compose, and
   removed-scope checks.
 - `verify-auth0-tenant.mjs` — Performs read-only exact-issuer, authorization-code, PKCE, RS256,
