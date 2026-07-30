@@ -111,6 +111,12 @@ Then verify with a synthetic development account:
 8. Unblock only to test recovery, then log in successfully and confirm the owner-scoped saved
    preferences return. Delete the synthetic account only when beginning the separate deletion and
    old-session-denial check.
+9. With the local web server routed to the deployed development gateway, complete a readiness
+   workflow as synthetic account A and select **Arm cross-user isolation check**. Log out, sign in
+   as a distinct synthetic account B, and select **Run check as this account** within 15 minutes.
+   The check passes only when the deployed owner-scoped operation route returns `404`. A same-user
+   retry is rejected before calling the gateway; no token, identity, operation identifier, or
+   private response body is returned to the browser or retained as evidence.
 
 Capture no tokens, cookies, secrets, complete email addresses, or provider subjects. Record only
 timestamps, expected/actual results, sanitized screenshots, and correlation IDs.
@@ -154,7 +160,9 @@ profile operation, forced web renewal, and web grant revocation passed in isolat
 Local verifier coverage also passes algorithm/signature/claim rejection, overlapping signing-key
 rotation, warm-cache JWKS outage behavior, and cold-start failure. Web user
 block/recovery/provider-deletion and old-session denial pass; product-wide deletion reconciliation
-is not claimed. Extension transactions, extension refresh-token replay/device revocation, web
+is not claimed. Deployed two-account operation isolation also passes: the second account received
+only the sanitized success state after the owner-scoped route returned `404`. Extension
+transactions, extension refresh-token replay/device revocation, web
 recovery/MFA/passkeys, deployed outage/log streaming, and on-demand staging replay remain open for
 their owning gates. Real mobile transactions and device-specific lifecycle evidence are deferred
 to D6. See the

@@ -25,6 +25,9 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
 - `configure-auth0-public-clients.ps1` — Writes ignored public Auth0 Native Application settings
   for the Expo and extension conformance shells and prints the exact mobile callback URLs. Use
   `-MobileOnly` or `-ExtensionOnly` to configure either client independently.
+- `start-deployed-web-conformance.ps1` — Validates the development AWS/Auth0 prerequisites,
+  resolves the deployed HTTPS gateway from encrypted Terraform state without printing it, and
+  runs only the local web/BFF for authenticated deployed conformance.
 - `pnpm --filter @ai-job-apply/workflows cloud:verify` — Verifies the development AWS
   Secrets Manager destination and performs a read-only Temporal Cloud namespace request without
   printing the runtime key or environment identifiers.
