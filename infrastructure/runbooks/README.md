@@ -23,3 +23,6 @@ Every alert and privileged admin operation should link to a relevant runbook.
   printing the value, and defines safe rotation.
 - [Development database migration](deployments/development-database-migration.md) — Provisions and
   runs the one-off migration task while long-running application services remain disabled.
+- [Development PostgreSQL point-in-time restore](restore/development-postgresql-point-in-time.md) —
+  Creates and validates a private disposable restore, measures recovery, and proves complete
+  cleanup without changing the source database.

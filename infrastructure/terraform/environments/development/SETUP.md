@@ -122,7 +122,9 @@ After the product-owner setup is confirmed, platform engineering:
 10. proves gateway health, Auth0 access-token validation, owner isolation, database persistence,
     outbox dispatch, Temporal completion, structured/redacted logs, correlation identifiers,
     metrics, alarms, and failure recovery;
-11. performs rollback and PostgreSQL snapshot/point-in-time restore testing; and
+11. performs rollback and follows the
+    [PostgreSQL point-in-time restore runbook](../../../runbooks/restore/development-postgresql-point-in-time.md);
+    and
 12. validates the isolated staging composition without leaving staging continuously provisioned.
 
 No application apply proceeds with placeholders, mutable image tags, a local/test token issuer, or
