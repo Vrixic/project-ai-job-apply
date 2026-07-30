@@ -3,13 +3,15 @@
 ## Scope
 
 This record covers the first gateway and worker rollout into the dedicated AWS development
-environment in `us-east-2`. It proves that the lean application topology is deployed, stable,
-drift free, and connected to its managed PostgreSQL and Temporal dependencies. It also records the
-failed first attempt and application-only rollback rather than hiding the failure.
+environment in `us-east-2`, followed by a valid Auth0 web transaction through that deployment. It
+proves that the lean application topology is deployed, stable, drift free, connected to its
+managed PostgreSQL and Temporal dependencies, and capable of completing the authenticated durable
+slice. It also records the failed first attempt and application-only rollback rather than hiding
+the failure.
 
-It does not prove a valid Auth0 user transaction through the deployed gateway, owner isolation and
-durable workflow completion in AWS, alert delivery, image-revision rollback, PostgreSQL restore,
-on-demand staging rehearsal, web recovery/MFA/passkeys, or Phase 0 completion.
+It does not prove a deployed cross-user negative isolation transaction, alert delivery,
+image-revision rollback, PostgreSQL restore, on-demand staging rehearsal, web
+recovery/MFA/passkeys, or Phase 0 completion.
 
 ## Reviewed source and remote checks
 
@@ -91,11 +93,34 @@ Sanitized live inspection established:
 No gateway URL, cloud-account identifier, ARN, network identifier, task identifier, IP address,
 tenant host, raw token, secret, or raw log payload is retained in this record.
 
+## Authenticated deployed vertical slice
+
+The product owner signed into the local web client through the isolated development Auth0 tenant.
+The web server retained the Auth0 session and token, then routed its narrow BFF requests to the
+deployed regional gateway. The browser never received or stored the access token directly.
+
+The product owner saved an ordinary job preference and confirmed that the UI reached
+`Readiness workflow: succeeded`. Sanitized AWS corroboration established:
+
+- the deployed gateway accepted one authenticated preference `PUT` with HTTP `200`;
+- the UI's owner-scoped operation read reached the deployed gateway and returned HTTP `200`;
+- the `succeeded` result could only be returned after the transactional preference/operation/outbox
+  commit, outbox dispatch, Temporal workflow activities, and durable operation-result update;
+- gateway and worker remained `ACTIVE`, each at one desired, one running, and zero pending tasks;
+- the eight application-log events generated during the observed window contained zero error-level
+  events; and
+- structured inspection found zero forbidden sensitive fields and zero token, email, or JWT value
+  patterns.
+
+The transaction validates the positive owner-scoped path. Cross-user denial remains covered by the
+PostgreSQL integration test and must receive a deployed negative test before D0 operational
+acceptance is complete. No identity, preference, operation identifier, request address, or response
+body was inspected or retained.
+
 ## Remaining acceptance
 
-- Send a valid development Auth0 web session through the deployed gateway and prove candidate
-  identity mapping, owner isolation, preference persistence, outbox dispatch, Temporal completion,
-  and the observable result.
+- Run a deployed cross-user negative isolation check without exposing either identity or resource
+  identifier.
 - Prove alert delivery, broader deployed telemetry/tracing, provider/log-stream behavior, and
   runtime-secret rotation.
 - Exercise an approved bad-image revision rollback and an isolated PostgreSQL restore.
