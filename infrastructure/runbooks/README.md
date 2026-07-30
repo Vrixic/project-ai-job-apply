@@ -16,6 +16,8 @@ Every alert and privileged admin operation should link to a relevant runbook.
 
 ## Phase 0 procedures
 
+- [Development alert delivery](observability/development-alert-delivery.md) — Creates encrypted
+  operational routing and proves ALARM/OK delivery with a dedicated synthetic metric.
 - [Temporal Cloud runtime secret](temporal-cloud-runtime-secret.md) — Creates the least-privilege
   worker key, stores it directly in AWS Secrets Manager, verifies namespace access without
   printing the value, and defines safe rotation.

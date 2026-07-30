@@ -11,10 +11,13 @@ data "aws_iam_policy" "workload_boundary" {
 }
 
 locals {
-  azs            = slice(data.aws_availability_zones.available.names, 0, 2)
-  private_cidrs  = [cidrsubnet(var.vpc_cidr, 4, 0), cidrsubnet(var.vpc_cidr, 4, 1)]
-  public_cidrs   = [cidrsubnet(var.vpc_cidr, 4, 8), cidrsubnet(var.vpc_cidr, 4, 9)]
-  container_port = 4000
+  azs                          = slice(data.aws_availability_zones.available.names, 0, 2)
+  private_cidrs                = [cidrsubnet(var.vpc_cidr, 4, 0), cidrsubnet(var.vpc_cidr, 4, 1)]
+  public_cidrs                 = [cidrsubnet(var.vpc_cidr, 4, 8), cidrsubnet(var.vpc_cidr, 4, 9)]
+  container_port               = 4000
+  application_metric_namespace = "${var.name}/${var.environment}/application"
+  operational_metric_namespace = "${var.name}/${var.environment}/operational"
+  observability_runbook_url    = "https://github.com/Vrixic/project-ai-job-apply/blob/main/infrastructure/runbooks/observability/development-alert-delivery.md"
 }
 
 data "aws_iam_policy_document" "platform_kms" {
@@ -52,6 +55,32 @@ data "aws_iam_policy_document" "platform_kms" {
       ]
     }
   }
+
+  statement {
+    sid    = "AllowCloudWatchAlarmNotificationEncryption"
+    effect = "Allow"
+    actions = [
+      "kms:Decrypt",
+      "kms:GenerateDataKey*"
+    ]
+    resources = ["*"]
+    principals {
+      type        = "Service"
+      identifiers = ["cloudwatch.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values = [
+        "arn:aws:cloudwatch:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:alarm:${var.name}-${var.environment}-*"
+      ]
+    }
+  }
 }
 
 resource "aws_kms_key" "platform" {
@@ -64,6 +93,52 @@ resource "aws_kms_key" "platform" {
 resource "aws_kms_alias" "platform" {
   name          = "alias/${var.name}-${var.environment}"
   target_key_id = aws_kms_key.platform.key_id
+}
+
+resource "aws_sns_topic" "operational_alerts" {
+  name              = "${var.name}-${var.environment}-operational-alerts"
+  kms_master_key_id = aws_kms_key.platform.arn
+}
+
+data "aws_iam_policy_document" "operational_alerts" {
+  statement {
+    sid       = "AllowAccountAdministration"
+    effect    = "Allow"
+    actions   = ["SNS:*"]
+    resources = [aws_sns_topic.operational_alerts.arn]
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+    }
+  }
+
+  statement {
+    sid       = "AllowCloudWatchAlarmPublishing"
+    effect    = "Allow"
+    actions   = ["SNS:Publish"]
+    resources = [aws_sns_topic.operational_alerts.arn]
+    principals {
+      type        = "Service"
+      identifiers = ["cloudwatch.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values = [
+        "arn:aws:cloudwatch:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:alarm:${var.name}-${var.environment}-*"
+      ]
+    }
+  }
+}
+
+resource "aws_sns_topic_policy" "operational_alerts" {
+  arn    = aws_sns_topic.operational_alerts.arn
+  policy = data.aws_iam_policy_document.operational_alerts.json
 }
 
 resource "aws_vpc" "this" {
@@ -626,9 +701,12 @@ resource "aws_cloudwatch_metric_alarm" "database_cpu" {
   period              = 300
   statistic           = "Average"
   threshold           = 80
-  alarm_description   = "Database CPU has remained high."
+  treat_missing_data  = "missing"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "Database CPU has remained high. Runbook: ${local.observability_runbook_url}"
   dimensions = {
-    DBInstanceIdentifier = aws_db_instance.postgres.id
+    DBInstanceIdentifier = aws_db_instance.postgres.identifier
   }
 }
 
@@ -642,9 +720,11 @@ resource "aws_cloudwatch_metric_alarm" "database_free_storage" {
   statistic           = "Average"
   threshold           = 5368709120
   treat_missing_data  = "missing"
-  alarm_description   = "Database free storage has remained below 5 GiB."
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "Database free storage has remained below 5 GiB. Runbook: ${local.observability_runbook_url}"
   dimensions = {
-    DBInstanceIdentifier = aws_db_instance.postgres.id
+    DBInstanceIdentifier = aws_db_instance.postgres.identifier
   }
 }
 
@@ -658,7 +738,9 @@ resource "aws_cloudwatch_metric_alarm" "dead_letter_messages" {
   statistic           = "Maximum"
   threshold           = 0
   treat_missing_data  = "notBreaching"
-  alarm_description   = "One or more messages are waiting in the dead-letter queue."
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "One or more messages are waiting in the dead-letter queue. Runbook: ${local.observability_runbook_url}"
   dimensions = {
     QueueName = aws_sqs_queue.dead_letter.name
   }
@@ -674,8 +756,179 @@ resource "aws_cloudwatch_metric_alarm" "event_queue_age" {
   statistic           = "Maximum"
   threshold           = 300
   treat_missing_data  = "notBreaching"
-  alarm_description   = "The oldest event has remained queued for more than five minutes."
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "The oldest event has remained queued for more than five minutes. Runbook: ${local.observability_runbook_url}"
   dimensions = {
     QueueName = aws_sqs_queue.events.name
   }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "application_errors" {
+  name           = "${var.name}-${var.environment}-application-errors"
+  pattern        = "{ $.level >= 50 }"
+  log_group_name = aws_cloudwatch_log_group.application.name
+
+  metric_transformation {
+    name          = "ErrorEvents"
+    namespace     = local.application_metric_namespace
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "application_errors" {
+  alarm_name          = "${var.name}-${var.environment}-application-errors"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ErrorEvents"
+  namespace           = local.application_metric_namespace
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "One or more error-level application events were emitted. Runbook: ${local.observability_runbook_url}"
+
+  depends_on = [aws_cloudwatch_log_metric_filter.application_errors]
+}
+
+resource "aws_cloudwatch_metric_alarm" "alert_delivery_canary" {
+  alarm_name          = "${var.name}-${var.environment}-alert-delivery-canary"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "AlertDeliveryCanary"
+  namespace           = local.operational_metric_namespace
+  period              = 60
+  statistic           = "Maximum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "Synthetic notification-path canary; this is not a service incident. Runbook: ${local.observability_runbook_url}"
+}
+
+resource "aws_cloudwatch_dashboard" "operations" {
+  dashboard_name = "${var.name}-${var.environment}-operations"
+  dashboard_body = jsonencode({
+    widgets = concat(
+      [
+        {
+          type   = "text"
+          x      = 0
+          y      = 0
+          width  = 24
+          height = 2
+          properties = {
+            markdown = "# ${var.name} ${var.environment}\nSynthetic-safe operational signals. Runbook: ${local.observability_runbook_url}"
+          }
+        },
+        {
+          type   = "metric"
+          x      = 0
+          y      = 2
+          width  = 12
+          height = 6
+          properties = {
+            region = data.aws_region.current.name
+            title  = "Application errors and alert-delivery canary"
+            view   = "timeSeries"
+            period = 60
+            metrics = [
+              [local.application_metric_namespace, "ErrorEvents", { label = "Error events", stat = "Sum" }],
+              [local.operational_metric_namespace, "AlertDeliveryCanary", { label = "Alert canary", stat = "Maximum" }]
+            ]
+          }
+        },
+        {
+          type   = "metric"
+          x      = 12
+          y      = 2
+          width  = 12
+          height = 6
+          properties = {
+            region = data.aws_region.current.name
+            title  = "PostgreSQL capacity"
+            view   = "timeSeries"
+            period = 300
+            metrics = [
+              ["AWS/RDS", "CPUUtilization", "DBInstanceIdentifier", aws_db_instance.postgres.identifier, { label = "CPU %", stat = "Average" }],
+              ["AWS/RDS", "FreeStorageSpace", "DBInstanceIdentifier", aws_db_instance.postgres.identifier, { label = "Free storage", stat = "Average", yAxis = "right" }]
+            ]
+          }
+        },
+        {
+          type   = "metric"
+          x      = 0
+          y      = 8
+          width  = 12
+          height = 6
+          properties = {
+            region = data.aws_region.current.name
+            title  = "Queue health"
+            view   = "timeSeries"
+            period = 60
+            metrics = [
+              ["AWS/SQS", "ApproximateAgeOfOldestMessage", "QueueName", aws_sqs_queue.events.name, { label = "Oldest event age", stat = "Maximum" }],
+              ["AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", aws_sqs_queue.dead_letter.name, { label = "DLQ visible", stat = "Maximum" }]
+            ]
+          }
+        },
+        {
+          type   = "metric"
+          x      = 12
+          y      = 8
+          width  = 12
+          height = 6
+          properties = {
+            region = data.aws_region.current.name
+            title  = "ECS service utilization"
+            view   = "timeSeries"
+            period = 300
+            metrics = [
+              ["AWS/ECS", "CPUUtilization", "ClusterName", aws_ecs_cluster.this.name, "ServiceName", "gateway", { label = "Gateway CPU", stat = "Average" }],
+              ["AWS/ECS", "MemoryUtilization", "ClusterName", aws_ecs_cluster.this.name, "ServiceName", "gateway", { label = "Gateway memory", stat = "Average" }],
+              ["AWS/ECS", "CPUUtilization", "ClusterName", aws_ecs_cluster.this.name, "ServiceName", "workflow-worker", { label = "Worker CPU", stat = "Average" }],
+              ["AWS/ECS", "MemoryUtilization", "ClusterName", aws_ecs_cluster.this.name, "ServiceName", "workflow-worker", { label = "Worker memory", stat = "Average" }]
+            ]
+          }
+        },
+        {
+          type   = "log"
+          x      = 0
+          y      = 14
+          width  = 24
+          height = 6
+          properties = {
+            region = data.aws_region.current.name
+            title  = "Warning and error events"
+            view   = "table"
+            query  = "SOURCE '${aws_cloudwatch_log_group.application.name}' | fields @timestamp, service, level, msg | filter level >= 40 | sort @timestamp desc | limit 50"
+          }
+        }
+      ],
+      var.deploy_applications ? [
+        {
+          type   = "metric"
+          x      = 0
+          y      = 20
+          width  = 24
+          height = 6
+          properties = {
+            region = data.aws_region.current.name
+            title  = "Regional API Gateway requests"
+            view   = "timeSeries"
+            period = 60
+            metrics = [
+              ["AWS/ApiGateway", "Count", "ApiId", aws_apigatewayv2_api.gateway[0].id, { label = "Requests", stat = "Sum" }],
+              ["AWS/ApiGateway", "4xx", "ApiId", aws_apigatewayv2_api.gateway[0].id, { label = "4xx", stat = "Sum" }],
+              ["AWS/ApiGateway", "5xx", "ApiId", aws_apigatewayv2_api.gateway[0].id, { label = "5xx", stat = "Sum" }]
+            ]
+          }
+        }
+      ] : []
+    )
+  })
 }

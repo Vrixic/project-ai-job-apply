@@ -28,6 +28,11 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
 - `start-deployed-web-conformance.ps1` — Validates the development AWS/Auth0 prerequisites,
   resolves the deployed HTTPS gateway from encrypted Terraform state without printing it, and
   runs only the local web/BFF for authenticated deployed conformance.
+- `operate-development-alerts.ps1` — Reports sanitized alert state, privately requests an SNS email
+  subscription, and exercises ALARM → OK delivery using only a dedicated synthetic metric.
+- `preview-development-alert-plan.ps1` — Reconstructs the exact live development runtime inputs,
+  produces a refresh-backed preview, rejects changes outside the reviewed alert scope, and removes
+  the sensitive plan after printing only a sanitized summary and SHA-256.
 - `pnpm --filter @ai-job-apply/workflows cloud:verify` — Verifies the development AWS
   Secrets Manager destination and performs a read-only Temporal Cloud namespace request without
   printing the runtime key or environment identifiers.
