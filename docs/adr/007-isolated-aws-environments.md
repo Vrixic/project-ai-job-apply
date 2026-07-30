@@ -1,6 +1,6 @@
 # ADR-007: Isolated AWS Environments
 
-Status: Accepted; amended by ADR-013; lean development applications deployed; authenticated E2E and restore evidence open
+Status: Accepted; amended by ADR-013; lean development applications, authenticated E2E, and isolated restore evidence deployed
 Date: 2026-07-28
 
 ## Decision
