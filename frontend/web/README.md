@@ -31,6 +31,13 @@ session-renewal conformance control. It forces the server-held token set to refr
 only a sanitized pass or reauthentication-required result. The route returns `404` outside the
 local development runtime and rejects cross-origin requests.
 
+The same development panel includes a deployed cross-user isolation probe. The first synthetic
+account arms a completed operation, logs out, and a distinct synthetic account runs the check.
+The server verifies first-account ownership before sealing the operation reference and a keyed
+identity fingerprint into a 15-minute, HTTP-only, same-site cookie. The check passes only when the
+deployed API returns `404` to the second account. Neither token, identity, operation identifier,
+nor response body is returned to browser code or retained as evidence.
+
 Authentication callback failures redirect to an allowlisted local error state. Provider-controlled
 error descriptions are never rendered, while blocked or unavailable accounts receive a generic
 recovery message.

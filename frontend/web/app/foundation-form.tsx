@@ -39,12 +39,14 @@ export function FoundationForm({
   authConformanceEnabled,
   authenticationFailed,
   authenticated,
+  crossUserProbeArmed,
   displayName,
 }: {
   authConfigured: boolean;
   authConformanceEnabled: boolean;
   authenticationFailed: boolean;
   authenticated: boolean;
+  crossUserProbeArmed: boolean;
   displayName?: string;
 }) {
   const [targetRoles, setTargetRoles] = useState("Software Engineer");
@@ -53,6 +55,9 @@ export function FoundationForm({
   const [loadingPreferences, setLoadingPreferences] = useState(authenticated);
   const [saving, setSaving] = useState(false);
   const [renewingSession, setRenewingSession] = useState(false);
+  const [armingIsolation, setArmingIsolation] = useState(false);
+  const [checkingIsolation, setCheckingIsolation] = useState(false);
+  const [isolationArmed, setIsolationArmed] = useState(crossUserProbeArmed);
   const [operationId, setOperationId] = useState<string>();
   const [operation, setOperation] = useState<Operation>();
   const [message, setMessage] = useState<string>();
@@ -177,6 +182,67 @@ export function FoundationForm({
     }
   }
 
+  async function armIsolationProbe() {
+    if (!operationId || operation?.state !== "succeeded") {
+      setMessage("Complete a readiness workflow before arming the isolation check.");
+      return;
+    }
+    setArmingIsolation(true);
+    setMessage(undefined);
+    try {
+      const response = await fetch("/api/auth-conformance/isolation/arm", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ operationId }),
+      });
+      const outcome = (await response.json()) as { message?: string; state?: string };
+      if (!response.ok) {
+        throw new Error(outcome.message ?? "Could not arm the isolation check");
+      }
+      setIsolationArmed(true);
+      setMessage(
+        "Isolation probe armed for 15 minutes. Log out, sign in with a different synthetic account, then run the check.",
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not arm the isolation check");
+    } finally {
+      setArmingIsolation(false);
+    }
+  }
+
+  async function runIsolationProbe() {
+    setCheckingIsolation(true);
+    setMessage(undefined);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 15_000);
+    try {
+      const response = await fetch("/api/auth-conformance/isolation/run", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        signal: controller.signal,
+      });
+      const outcome = (await response.json()) as { message?: string; state?: string };
+      if (!response.ok) {
+        throw new Error(outcome.message ?? "Cross-user isolation check failed");
+      }
+      setIsolationArmed(false);
+      setMessage(
+        "Cross-user isolation passed: this account could not read the first account’s operation.",
+      );
+    } catch (error) {
+      setMessage(
+        controller.signal.aborted
+          ? "Isolation check timed out. Confirm the deployed gateway is healthy, then retry."
+          : error instanceof Error
+            ? error.message
+            : "Cross-user isolation check failed",
+      );
+    } finally {
+      window.clearTimeout(timeout);
+      setCheckingIsolation(false);
+    }
+  }
+
   return (
     <main>
       <section className="eyebrow">Foundation vertical slice</section>
@@ -203,6 +269,26 @@ export function FoundationForm({
           <button type="button" onClick={verifySessionRenewal} disabled={renewingSession}>
             {renewingSession ? "Renewing…" : "Verify session renewal"}
           </button>
+          <hr />
+          <strong>Deployed cross-user isolation</strong>
+          <p>
+            Arm a completed operation, log out, and sign in with a different synthetic account. The
+            server keeps only an encrypted, expiring probe and returns no identity, token, or
+            operation identifier.
+          </p>
+          {!isolationArmed ? (
+            <button
+              type="button"
+              onClick={armIsolationProbe}
+              disabled={armingIsolation || operation?.state !== "succeeded"}
+            >
+              {armingIsolation ? "Arming…" : "Arm cross-user isolation check"}
+            </button>
+          ) : (
+            <button type="button" onClick={runIsolationProbe} disabled={checkingIsolation}>
+              {checkingIsolation ? "Checking…" : "Run check as this account"}
+            </button>
+          )}
         </aside>
       )}
 
