@@ -1,7 +1,7 @@
 # Auth0 Development Tenant Runbook
 
-- Status: Web client active; public-client and identity-lifecycle conformance in progress
-- Last updated: 2026-07-28
+- Status: Web client and web identity lifecycle active; provider/public-client conformance in progress
+- Last updated: 2026-07-30
 - Scope: Isolated development only
 
 This runbook configures the development tenant selected by
@@ -121,6 +121,33 @@ Then verify with a synthetic development account:
 Capture no tokens, cookies, secrets, complete email addresses, or provider subjects. Record only
 timestamps, expected/actual results, sanitized screenshots, and correlation IDs.
 
+## Web passkey, MFA, and recovery conformance
+
+Use a disposable synthetic database user, not a dashboard administrator or social identity.
+Enable New Universal Login, Identifier First, password fallback, and one database connection's
+passkey method. Configure the passkey challenge for both explicit-button and autofill use, with
+progressive and local enrollment enabled.
+
+For the controlled MFA interval:
+
+1. Enable TOTP and recovery-code factors.
+2. Temporarily set the tenant MFA policy to `Always`.
+3. Enroll the synthetic user with password plus TOTP and retain the recovery code outside the
+   repository, terminal history, screenshots, and evidence.
+4. Prove a fresh password-plus-TOTP transaction.
+5. Prove the lost-code path by resetting only that user's MFA registration in **User Management →
+   Users → Actions → Reset Multi-factor**, then re-enroll and securely retain the new code.
+6. Prove a fresh password transaction can use the recovery-code path instead of the authenticator.
+7. Prove the database passkey still authenticates after the MFA reset.
+8. Observe whether `Always` adds TOTP after the passkey, then return the development tenant policy
+   to `Never` and prove a fresh passkey transaction completes without redundant TOTP.
+
+Keep passkey, TOTP, and recovery-code capabilities enabled after the test. The restored `Never`
+policy is for the synthetic-only development tenant; it is not the launch policy. Before real
+users, implement and approve narrowly scoped reauthentication/step-up behavior for sensitive
+actions and elevated-risk sessions. Activation of the final custom authentication domain requires
+fresh passkey enrollment.
+
 ## Public-client conformance
 
 Create two separate **Native Applications**, one for Expo and one for the browser extension. Public
@@ -161,9 +188,10 @@ Local verifier coverage also passes algorithm/signature/claim rejection, overlap
 rotation, warm-cache JWKS outage behavior, and cold-start failure. Web user
 block/recovery/provider-deletion and old-session denial pass; product-wide deletion reconciliation
 is not claimed. Deployed two-account operation isolation also passes: the second account received
-only the sanitized success state after the owner-scoped route returned `404`. Extension
-transactions, extension refresh-token replay/device revocation, web
-recovery/MFA/passkeys, deployed outage/log streaming, and on-demand staging replay remain open for
-their owning gates. Real mobile transactions and device-specific lifecycle evidence are deferred
-to D6. See the
+only the sanitized success state after the owner-scoped route returned `404`. Web passkey
+enrollment/sign-in, password-plus-TOTP reauthentication, MFA reset/re-enrollment, recovery-code
+use, and the restored low-friction development policy pass with a disposable synthetic user.
+Extension transactions, extension refresh-token replay/device revocation, deployed outage/log
+streaming, and on-demand staging replay remain open for their owning gates. Real mobile
+transactions and device-specific lifecycle evidence are deferred to D6. See the
 [development conformance evidence](auth0-development-conformance.md) for the exact split.

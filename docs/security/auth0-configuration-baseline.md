@@ -1,7 +1,7 @@
 # Auth0 Configuration and Migration Baseline
 
 - Status: Development tenant provisioned; conformance in progress; activation approval pending
-- Last updated: 2026-07-28
+- Last updated: 2026-07-30
 - Owners: Platform engineering; security/privacy engineering
 - Accountable approvers: Product owner, independent security reviewer, and legal/privacy counsel
 
@@ -45,6 +45,14 @@ until D6-012 approves the final name and owned domain.
   initial configuration.
 - Never log authorization codes, cookies, access/refresh/ID tokens, secrets, raw claims, or full
   email addresses.
+
+The synthetic-only development tenant has passed passkey enrollment/sign-in, TOTP enrollment and
+reauthentication, administrator-assisted MFA reset/re-enrollment, and recovery-code sign-in. Its
+temporary `Always` test policy demonstrated redundant TOTP after passkey authentication, so the
+tenant returned to `Never` while retaining passkey, TOTP, and recovery-code capabilities. This is
+not a launch-policy approval. Before real users, define and test narrowly scoped reauthentication
+or step-up behavior for sensitive actions and elevated-risk sessions, activate the final custom
+authentication domain, re-enroll passkeys, and obtain accountable review.
 
 ## Data boundary
 

@@ -1,7 +1,7 @@
 # Auth0 Development Conformance Evidence
 
 - Status: In progress
-- Evidence date: 2026-07-29
+- Evidence date: 2026-07-30
 - Environment: Isolated development; synthetic accounts only
 - Scope: D0-010 managed-identity conformance
 
@@ -30,6 +30,8 @@ subjects, full email addresses, IP addresses, and raw Auth0 logs must not be add
 | User block and recovery | Passed in development | The product owner administratively blocked the synthetic user and confirmed login was denied, then deliberately unblocked the same user and confirmed login, owner-scoped preference restoration, and server-held renewal succeeded. |
 | User deletion and old-session denial | Passed in development | The product owner permanently deleted the synthetic Auth0 user profile and confirmed its existing application session expired and could not regain protected API access. A later Google SSO login created a new Auth0 profile/session; continuity of the upstream subject was not inspected. |
 | Reprovisioned identity isolation | Passed in development | Profile persistence resolves the exact issuer and subject, never email. Its PostgreSQL integration proves same-email/different-subject isolation, and an aggregate-only check after Google SSO reprovisioning confirmed the current internal user had no preference row while multiple distinct subjects existed for the same synthetic email. No email or subject value was inspected. |
+| Web passkey enrollment and sign-in | Passed in development | A disposable synthetic database user completed progressive passkey enrollment and a fresh private-browser passkey transaction. The passkey remained valid after the separate MFA registration was reset. The credential is development-only and must be re-enrolled when the final custom authentication domain is activated. See the [sanitized web identity evidence](../product/delivery/evidence/d0-auth0-web-passkey-mfa-recovery-2026-07-30.md). |
+| Web MFA, reauthentication, and recovery | Passed in development | A controlled temporary `Always` policy proved TOTP enrollment, fresh password-plus-TOTP reauthentication, administrator-assisted MFA reset/re-enrollment, and recovery-code sign-in. No factor or recovery secret was retained. The policy then returned to `Never`; a fresh passkey transaction completed without redundant TOTP. Launch step-up policy and accountable approval remain open. |
 | Expo public-client boundary | Passed locally; provider run deferred to D6 | The Native Application shell compiles and its tests prove fail-closed exact-audience configuration and sanitized errors. Auth0's native SDK owns system-browser PKCE and secure OS credential storage. This is preparation, not provider/device evidence. |
 | Extension public-client boundary | Passed locally; provider run open | The MV3 shell compiles, tests the RFC 7636 S256 vector and exact callback/state checks, keeps tokens in trusted-context session storage, and builds without page permissions. An unconfigured build fails closed. |
 
@@ -41,7 +43,6 @@ subjects, full email addresses, IP addresses, and raw Auth0 logs must not be add
 | Extension PKCE, refresh, logout, cancellation | Open | Create a dedicated Native Application, load the built MV3 shell, register its exact `chromiumapp.org` callback/logout URL, and execute the popup flow in Chrome and Edge. |
 | Refresh-token replay detection | Open for extension; mobile deferred to D6 | With a disposable synthetic public-client session, rotate once, replay only the invalidated test token in a controlled harness, and prove the token family requires reauthentication without recording either token. Repeat for mobile in D6. |
 | Current-device/all-device revocation | Open for extension; mobile deferred to D6 | Prove extension client revocation and accountable administrative revocation across the synthetic user's sessions. Repeat the device-specific matrix for mobile in D6. |
-| Passkey, MFA, recovery, lost device | Open for web identity policy; mobile device cases deferred to D6 | Prove web enrollment, sign-in, reauthentication, recovery code use, factor loss, and recovery. Store no authenticator or recovery secret in evidence; repeat mobile recovery and lost-device cases in D6. |
 | Provider/log-stream outage and recovery | Open | The deployed runtime and redacted encrypted application stream now exist; exercise a controlled provider/JWKS or log-delivery interruption and prove fail-closed/recovery behavior without recording tokens or identities. |
 | Staging replay | Deferred until on-demand staging activation | Before staging processes users or becomes a release candidate, create its isolated tenant/clients and replay this matrix. Staging is not continuously provisioned under ADR-013. |
 
@@ -61,6 +62,11 @@ The mobile and extension tests prove implementation boundaries, not successful A
 The extension row remains open for its owning delivery, while real mobile transactions are
 deliberately deferred to D6. Neither client may release until a person performs its
 provider/browser/device flow and records only the sanitized result and timestamp.
+
+Web passkey/MFA/recovery conformance used a disposable database user and development-domain
+credential. The final custom authentication domain, sensitive-action step-up policy, and
+accountable approval must be complete before real users; the web development result does not
+substitute for the D6 mobile recovery and lost-device matrix.
 
 The Auth0 deletion result proves provider-identity deletion and old-session denial only. It does
 not claim that ApplyDash's future user-initiated durable deletion workflow has erased internal
