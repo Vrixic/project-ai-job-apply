@@ -616,6 +616,11 @@ resource "aws_ecs_task_definition" "gateway" {
   memory                   = var.gateway_memory
   execution_role_arn       = aws_iam_role.execution.arn
   task_role_arn            = aws_iam_role.application.arn
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
   runtime_platform {
     cpu_architecture        = "X86_64"
     operating_system_family = "LINUX"
@@ -736,6 +741,11 @@ resource "aws_ecs_task_definition" "worker" {
   memory                   = var.worker_memory
   execution_role_arn       = aws_iam_role.execution.arn
   task_role_arn            = aws_iam_role.application.arn
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
   runtime_platform {
     cpu_architecture        = "X86_64"
     operating_system_family = "LINUX"
@@ -830,6 +840,11 @@ resource "aws_ecs_task_definition" "migration" {
   cpu                      = 256
   memory                   = 512
   execution_role_arn       = aws_iam_role.execution.arn
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
   runtime_platform {
     cpu_architecture        = "X86_64"
     operating_system_family = "LINUX"
