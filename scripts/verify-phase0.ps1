@@ -1,13 +1,25 @@
 $ErrorActionPreference = "Stop"
 
-pnpm contracts:generate
-pnpm skills:validate
-pnpm format:check
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm build
-docker compose config --quiet
+function Invoke-CheckedCommand {
+  param(
+    [string]$Name,
+    [scriptblock]$Command
+  )
+
+  & $Command
+  if ($LASTEXITCODE -ne 0) {
+    throw "$Name failed with exit code $LASTEXITCODE"
+  }
+}
+
+Invoke-CheckedCommand "Contract generation" { pnpm contracts:generate }
+Invoke-CheckedCommand "Repository skill validation" { pnpm skills:validate }
+Invoke-CheckedCommand "Formatting" { pnpm format:check }
+Invoke-CheckedCommand "Lint" { pnpm lint }
+Invoke-CheckedCommand "Type checking" { pnpm typecheck }
+Invoke-CheckedCommand "Tests" { pnpm test }
+Invoke-CheckedCommand "Build" { pnpm build }
+Invoke-CheckedCommand "Compose validation" { docker compose config --quiet }
 
 $legacy = rg -n -i `
   "email\.job_status_detected|EmailObservation|recruiter_screen|→ interviewing|→ offer" `

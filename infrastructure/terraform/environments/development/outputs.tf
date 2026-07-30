@@ -37,3 +37,16 @@ output "migration_subnet_ids" {
 output "application_security_group_id" {
   value = module.platform.application_security_group_id
 }
+
+output "operational_alert_topic_arn" {
+  value     = module.platform.operational_alert_topic_arn
+  sensitive = true
+}
+
+output "observability_dashboard_name" {
+  value = module.platform.observability_dashboard_name
+}
+
+output "alert_delivery_canary_alarm_name" {
+  value = module.platform.alert_delivery_canary_alarm_name
+}

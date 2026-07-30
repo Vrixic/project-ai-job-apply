@@ -22,3 +22,8 @@ Defaults implement the lean-until-demand profile: one task per service, Single-A
 optional Redis, restricted public-subnet application egress, and no Application Load Balancer.
 The same module exposes explicit replica, private-networking, cache, database-class, and
 high-availability inputs so scaling is a reviewed configuration change.
+
+The module also creates a KMS-encrypted operational SNS topic, alarm/OK actions, a log-derived
+application-error metric, a dedicated alert-delivery canary, and an operational dashboard. Email
+or other human destinations are subscribed outside Terraform so addresses do not enter source,
+plans, or state. The alert operator script retains only aggregate subscription state.

@@ -42,3 +42,16 @@ output "migration_subnet_ids" {
 output "application_security_group_id" {
   value = aws_security_group.application.id
 }
+
+output "operational_alert_topic_arn" {
+  value     = aws_sns_topic.operational_alerts.arn
+  sensitive = true
+}
+
+output "observability_dashboard_name" {
+  value = aws_cloudwatch_dashboard.operations.dashboard_name
+}
+
+output "alert_delivery_canary_alarm_name" {
+  value = aws_cloudwatch_metric_alarm.alert_delivery_canary.alarm_name
+}
