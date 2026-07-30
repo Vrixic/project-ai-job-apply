@@ -43,6 +43,21 @@ variable "worker_memory" {
   default = 1024
 }
 
+variable "enable_tracing" {
+  type    = bool
+  default = true
+}
+
+variable "otel_collector_image" {
+  type    = string
+  default = "public.ecr.aws/aws-observability/aws-otel-collector@sha256:9b28046359054b414f4ba76056ba4e8cffda2d53fbcee06171d7eeecd71326c3"
+}
+
+variable "trace_sample_ratio" {
+  type    = number
+  default = 1
+}
+
 variable "high_availability" {
   type    = bool
   default = false

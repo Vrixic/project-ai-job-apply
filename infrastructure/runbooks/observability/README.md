@@ -9,3 +9,5 @@ timestamps.
 - [Development alert delivery](development-alert-delivery.md) — Provisions encrypted routing,
   privately subscribes an operator, and exercises ALARM → OK delivery with a dedicated synthetic
   metric.
+- [Development distributed tracing](development-distributed-tracing.md) — Continues privacy-safe
+  W3C context through the deployed gateway, outbox, Temporal worker, and X-Ray.

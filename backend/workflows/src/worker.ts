@@ -1,5 +1,5 @@
 import { loadWorkerConfig } from "@ai-job-apply/config";
-import { createLogger } from "@ai-job-apply/observability";
+import { createLogger, shutdownTelemetry } from "@ai-job-apply/observability";
 import { createDatabase, PostgresProfileStore } from "@ai-job-apply/profile-service";
 import { Client, Connection } from "@temporalio/client";
 import { NativeConnection, Worker } from "@temporalio/worker";
@@ -44,6 +44,7 @@ const shutdown = async () => {
   await store.close();
   await clientConnection.close();
   await workerConnection.close();
+  await shutdownTelemetry();
 };
 
 process.once("SIGINT", () => void shutdown());

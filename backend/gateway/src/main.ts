@@ -1,7 +1,7 @@
 import "reflect-metadata";
 import { createOidcVerifier } from "@ai-job-apply/auth";
 import { loadBackendConfig } from "@ai-job-apply/config";
-import { createLogger } from "@ai-job-apply/observability";
+import { createLogger, shutdownTelemetry } from "@ai-job-apply/observability";
 import { createDatabase, PostgresProfileStore } from "@ai-job-apply/profile-service";
 import { NestFactory } from "@nestjs/core";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
@@ -30,7 +30,20 @@ app.enableCors({
   methods: ["GET", "PUT"],
 });
 app.getHttpAdapter().getInstance().addHook("onRequest", applyRequestContext);
-app.enableShutdownHooks();
 
 await app.listen({ port: config.PORT, host: "0.0.0.0" });
 logger.info({ port: config.PORT }, "gateway started");
+
+let shuttingDown = false;
+const shutdown = async () => {
+  if (shuttingDown) {
+    return;
+  }
+  shuttingDown = true;
+  await app.close();
+  await store.close();
+  await shutdownTelemetry();
+};
+
+process.once("SIGINT", () => void shutdown());
+process.once("SIGTERM", () => void shutdown());

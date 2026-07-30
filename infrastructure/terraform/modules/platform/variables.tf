@@ -87,6 +87,34 @@ variable "worker_memory" {
   default     = 1024
 }
 
+variable "enable_tracing" {
+  description = "Run one fail-open OpenTelemetry collector sidecar per deployed application task."
+  type        = bool
+  default     = true
+}
+
+variable "otel_collector_image" {
+  description = "AWS-supported ADOT collector pinned to an immutable multi-architecture digest."
+  type        = string
+  default     = "public.ecr.aws/aws-observability/aws-otel-collector@sha256:9b28046359054b414f4ba76056ba4e8cffda2d53fbcee06171d7eeecd71326c3"
+
+  validation {
+    condition     = can(regex("^.+@sha256:[0-9a-f]{64}$", var.otel_collector_image))
+    error_message = "OpenTelemetry collector image must use an immutable sha256 digest reference."
+  }
+}
+
+variable "trace_sample_ratio" {
+  description = "Root trace sampling ratio; development defaults to complete evidence."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.trace_sample_ratio >= 0 && var.trace_sample_ratio <= 1
+    error_message = "Trace sample ratio must be between zero and one."
+  }
+}
+
 variable "high_availability" {
   description = "Enables Multi-AZ data services and per-AZ egress only after a measured need or launch review."
   type        = bool
