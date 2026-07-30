@@ -1,7 +1,7 @@
 # Phase 0 Security and Privacy Approval Plan
 
 - Status: Review package in progress; no approval recorded
-- Last updated: 2026-07-29
+- Last updated: 2026-07-30
 - Accountable security approver: Future independent reviewer; individual unassigned
 - Accountable privacy/legal approver: Future external counsel; individual unassigned
 
@@ -53,7 +53,7 @@ approval.
 | SP-07 | Identity/session security | Managed OIDC configuration, MFA/passkey policy, revocation, client conformance | Auth0 selected; provider-neutral verifier and configuration baseline exist | Tenant/deployed conformance and approval pending |
 | SP-08 | Ownership/authorization | Owner-scoped repository queries and cross-user denial tests | Profile slice tests plus [deployed two-account denial](../product/delivery/evidence/d0-development-cross-user-isolation-2026-07-29.md) | Deployed development evidence; accountable approval pending |
 | SP-09 | Secrets/encryption | Secrets-manager/KMS design, TLS, rotation, no plaintext credentials | [Persistent KMS/stores](../product/delivery/evidence/d0-development-persistent-platform-2026-07-29.md) and [managed Temporal secret conformance](../product/delivery/evidence/d0-development-temporal-secret-2026-07-29.md) | Managed value and provider TLS/read conformance pass; deployed task use, permission review, and rotation pending |
-| SP-10 | Logging/observability | Allowlisted telemetry, redaction tests, access/retention, traceability | Local trace-context/redaction tests, [encrypted log groups and baseline alarms](../product/delivery/evidence/d0-development-persistent-platform-2026-07-29.md), [deployed alert delivery](../product/delivery/evidence/d0-development-alert-delivery-2026-07-29.md), and [trace preflight](../product/delivery/evidence/d0-development-tracing-preflight-2026-07-29.md) | Alert delivery passes; populated deployed trace and trace-redaction evidence pending |
+| SP-10 | Logging/observability | Allowlisted telemetry, redaction tests, access/retention, traceability | Local trace-context/redaction tests, [encrypted log groups and baseline alarms](../product/delivery/evidence/d0-development-persistent-platform-2026-07-29.md), [deployed alert delivery](../product/delivery/evidence/d0-development-alert-delivery-2026-07-29.md), and [deployed distributed tracing](../product/delivery/evidence/d0-development-distributed-tracing-2026-07-30.md) | Development alert delivery and populated cross-service trace/redaction evidence pass; provider/log-stream recovery and accountable approval remain pending |
 | SP-11 | Durable external effects | Outbox, idempotency, replay safety, cancellation, immutable approval | Foundation outbox/workflow; later packet design | Partial local evidence |
 | SP-12 | Secure development/supply chain | Pinned dependencies, scanning, protected deploy identity, SBOM/artifact provenance | CI, pinned Semgrep SAST, full-lockfile audit, Dependabot, Terraform workflow | Local/repository evidence; policy review pending |
 | SP-13 | Availability/recovery | Isolation, backup, restore, RTO/RPO, restore test | [Private RDS with seven-day backups/PITR and a live restore point](../product/delivery/evidence/d0-development-persistent-platform-2026-07-29.md) | Backup configuration deployed; isolated restore and measured RTO/RPO pending |
