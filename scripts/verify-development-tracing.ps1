@@ -167,6 +167,16 @@ foreach ($service in $services) {
   ) {
     throw "A collector sidecar does not match the reviewed immutable fail-open configuration."
   }
+  $collectorHealthCommand = @(
+    $collector.healthCheck.command | ForEach-Object { [string]$_ }
+  )
+  if (
+    $collectorHealthCommand.Count -ne 2 -or
+    $collectorHealthCommand[0] -ne "CMD" -or
+    $collectorHealthCommand[1] -ne "/healthcheck"
+  ) {
+    throw "A collector sidecar does not invoke its bundled health-check binary directly."
+  }
   $collectorEnvironment = Get-ContainerEnvironment $collector
   if (-not ([string]$collectorEnvironment["OTEL_CONFIG"]).Contains("awsxray")) {
     throw "A collector sidecar is not configured for the reviewed X-Ray exporter."

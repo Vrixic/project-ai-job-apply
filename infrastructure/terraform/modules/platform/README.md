@@ -31,4 +31,6 @@ plans, or state. The alert operator script retains only aggregate subscription s
 When tracing is enabled, each gateway/worker task receives one digest-pinned, non-essential ADOT
 sidecar. Applications export OTLP only over task-local loopback; the collector exports traces to
 X-Ray through a two-action bounded task policy. Collector failure does not stop the application,
-and the sidecar restart policy retries it without adding another ECS service or replica.
+and the sidecar restart policy retries it without adding another ECS service or replica. ECS
+invokes the image's bundled `/healthcheck` binary directly because the minimal collector image
+does not contain a command shell.

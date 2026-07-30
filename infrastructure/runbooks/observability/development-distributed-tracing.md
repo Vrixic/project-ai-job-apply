@@ -22,6 +22,8 @@ candidate field values.
 This does not add an ECS service, replica, load balancer, NAT gateway, or public collector
 endpoint. A collector failure does not stop its application container; ECS retries the collector.
 The application continues serving if OTLP or X-Ray is unavailable.
+The ECS health check must execute `["CMD", "/healthcheck"]`: the digest-pinned minimal collector
+image contains the helper binary but no command shell.
 
 The implementation follows the AWS-supported ECS sidecar pattern and the OpenTelemetry Node SDK
 OTLP exporter:

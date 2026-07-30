@@ -676,7 +676,7 @@ resource "aws_ecs_task_definition" "gateway" {
         restartAttemptPeriod = 60
       }
       healthCheck = {
-        command     = ["CMD-SHELL", "/healthcheck"]
+        command     = ["CMD", "/healthcheck"]
         interval    = 30
         timeout     = 5
         retries     = 3
@@ -777,7 +777,7 @@ resource "aws_ecs_task_definition" "worker" {
         restartAttemptPeriod = 60
       }
       healthCheck = {
-        command     = ["CMD-SHELL", "/healthcheck"]
+        command     = ["CMD", "/healthcheck"]
         interval    = 30
         timeout     = 5
         retries     = 3
