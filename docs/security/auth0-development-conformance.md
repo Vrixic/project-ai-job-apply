@@ -1,6 +1,6 @@
 # Auth0 Development Conformance Evidence
 
-- Status: In progress
+- Status: Web-focused D0 scope complete; extension, mobile, staging, and launch gates remain
 - Evidence date: 2026-07-30
 - Environment: Isolated development; synthetic accounts only
 - Scope: D0-010 managed-identity conformance
@@ -32,6 +32,7 @@ subjects, full email addresses, IP addresses, and raw Auth0 logs must not be add
 | Reprovisioned identity isolation | Passed in development | Profile persistence resolves the exact issuer and subject, never email. Its PostgreSQL integration proves same-email/different-subject isolation, and an aggregate-only check after Google SSO reprovisioning confirmed the current internal user had no preference row while multiple distinct subjects existed for the same synthetic email. No email or subject value was inspected. |
 | Web passkey enrollment and sign-in | Passed in development | A disposable synthetic database user completed progressive passkey enrollment and a fresh private-browser passkey transaction. The passkey remained valid after the separate MFA registration was reset. The credential is development-only and must be re-enrolled when the final custom authentication domain is activated. See the [sanitized web identity evidence](../product/delivery/evidence/d0-auth0-web-passkey-mfa-recovery-2026-07-30.md). |
 | Web MFA, reauthentication, and recovery | Passed in development | A controlled temporary `Always` policy proved TOTP enrollment, fresh password-plus-TOTP reauthentication, administrator-assisted MFA reset/re-enrollment, and recovery-code sign-in. No factor or recovery secret was retained. The policy then returned to `Never`; a fresh passkey transaction completed without redundant TOTP. Launch step-up policy and accountable approval remain open. |
+| Provider/log-stream recovery | Passed in deployed development | With only the exact web application's two connections disabled, a fresh private login failed with generic guidance while both AWS services and heartbeat alarms remained healthy. Restoring the same count restored passkey login and a deployed durable operation. A separate exact gateway-log deny produced `OK → ALARM → OK` while the API and worker remained healthy; the product owner received both notifications, the deny was absent afterward, and Terraform reported no drift. See the [sanitized recovery evidence](../product/delivery/evidence/d0-development-provider-log-recovery-2026-07-30.md). |
 | Expo public-client boundary | Passed locally; provider run deferred to D6 | The Native Application shell compiles and its tests prove fail-closed exact-audience configuration and sanitized errors. Auth0's native SDK owns system-browser PKCE and secure OS credential storage. This is preparation, not provider/device evidence. |
 | Extension public-client boundary | Passed locally; provider run open | The MV3 shell compiles, tests the RFC 7636 S256 vector and exact callback/state checks, keeps tokens in trusted-context session storage, and builds without page permissions. An unconfigured build fails closed. |
 
@@ -43,7 +44,6 @@ subjects, full email addresses, IP addresses, and raw Auth0 logs must not be add
 | Extension PKCE, refresh, logout, cancellation | Open | Create a dedicated Native Application, load the built MV3 shell, register its exact `chromiumapp.org` callback/logout URL, and execute the popup flow in Chrome and Edge. |
 | Refresh-token replay detection | Open for extension; mobile deferred to D6 | With a disposable synthetic public-client session, rotate once, replay only the invalidated test token in a controlled harness, and prove the token family requires reauthentication without recording either token. Repeat for mobile in D6. |
 | Current-device/all-device revocation | Open for extension; mobile deferred to D6 | Prove extension client revocation and accountable administrative revocation across the synthetic user's sessions. Repeat the device-specific matrix for mobile in D6. |
-| Provider/log-stream outage and recovery | Implemented locally; deployed exercise open | Privacy-safe gateway/worker heartbeats, missing-signal alarms, an exact gateway-stream deny/recovery operator, and a separate Auth0 fresh-login interruption procedure are implemented. Publish immutable images, apply the reviewed alarm resources, then complete both synthetic development exercises without recording tokens or identities. |
 | Staging replay | Deferred until on-demand staging activation | Before staging processes users or becomes a release candidate, create its isolated tenant/clients and replay this matrix. Staging is not continuously provisioned under ADR-013. |
 
 ## Reproducible repository checks
