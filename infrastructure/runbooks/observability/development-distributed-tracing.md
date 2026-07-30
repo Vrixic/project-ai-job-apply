@@ -76,7 +76,8 @@ policy.
 
 ## 2. Publish immutable application images
 
-After merge, dispatch `Publish development images` from `main`. Require both images to:
+After merge, dispatch `Publish environment images` from `main` with environment `development`.
+Require both images to:
 
 - use the merged commit;
 - publish immutable index digests;
