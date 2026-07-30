@@ -85,8 +85,7 @@ function Get-RecentTraces {
         $start.ToString("yyyy-MM-ddTHH:mm:ssZ"),
         "--end-time",
         $end.ToString("yyyy-MM-ddTHH:mm:ssZ"),
-        "--sampling",
-        "false",
+        "--no-sampling",
         "--output",
         "json"
       )
