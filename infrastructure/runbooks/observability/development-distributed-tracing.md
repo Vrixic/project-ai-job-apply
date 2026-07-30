@@ -24,6 +24,9 @@ endpoint. A collector failure does not stop its application container; ECS retri
 The application continues serving if OTLP or X-Ray is unavailable.
 The ECS health check must execute `["CMD", "/healthcheck"]`: the digest-pinned minimal collector
 image contains the helper binary but no command shell.
+The essential gateway container must also execute its direct Node liveness check. A health check
+on only the nonessential collector leaves ECS task health unknown, which causes Cloud Map to mark
+the gateway instance unhealthy even when both containers are running.
 
 The implementation follows the AWS-supported ECS sidecar pattern and the OpenTelemetry Node SDK
 OTLP exporter:
@@ -109,7 +112,8 @@ require no drift with the same inputs.
 ## 4. Prove the deployed trace
 
 1. Require each service at desired/running/pending `1/1/0`.
-2. Require one `RUNNING` and `HEALTHY` collector in each task.
+2. Require completed primary deployments, one healthy gateway task, one healthy Cloud Map gateway
+   registration with IPv4 and port, and one `RUNNING` and `HEALTHY` collector in each task.
 3. Use the deployed web conformance client and a synthetic account to save preferences once.
 4. Wait until the returned operation reaches `succeeded`.
 5. Run:

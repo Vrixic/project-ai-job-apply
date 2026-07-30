@@ -32,6 +32,12 @@ $env:AWS_PROFILE = $AwsProfile
 $env:AWS_REGION = $Region
 $expectedCollectorImage =
   "public.ecr.aws/aws-observability/aws-otel-collector@sha256:9b28046359054b414f4ba76056ba4e8cffda2d53fbcee06171d7eeecd71326c3"
+$expectedGatewayHealthCommand = @(
+  "CMD",
+  "/nodejs/bin/node",
+  "-e",
+  "fetch('http://127.0.0.1:4000/health/live',{signal:AbortSignal.timeout(4000)}).then((response)=>process.exit(response.status===200?0:1)).catch(()=>process.exit(1))"
+)
 $expectedXrayActions = @("xray:PutTelemetryRecords", "xray:PutTraceSegments")
 $forbiddenPatterns = @(
   "authorization",
@@ -135,10 +141,16 @@ if ($services.Count -ne 2) {
 $taskRoleName = $null
 $collectorCount = 0
 foreach ($service in $services) {
+  $primaryDeployment = @(
+    $service.deployments | Where-Object { $_.status -eq "PRIMARY" }
+  )
   if (
+    [string]$service.status -ne "ACTIVE" -or
     [int]$service.desiredCount -ne 1 -or
     [int]$service.runningCount -ne 1 -or
-    [int]$service.pendingCount -ne 0
+    [int]$service.pendingCount -ne 0 -or
+    $primaryDeployment.Count -ne 1 -or
+    [string]$primaryDeployment[0].rolloutState -ne "COMPLETED"
   ) {
     throw "A development application service is not stable at the lean one-task baseline."
   }
@@ -197,6 +209,17 @@ foreach ($service in $services) {
   ) {
     throw "A development application container does not use the reviewed local OTLP boundary."
   }
+  if ([string]$applicationContainer[0].name -eq "gateway") {
+    $gatewayHealthCommand = @(
+      $applicationContainer[0].healthCheck.command | ForEach-Object { [string]$_ }
+    )
+    if (
+      $gatewayHealthCommand.Count -ne $expectedGatewayHealthCommand.Count -or
+      ($gatewayHealthCommand -join "`0") -ne ($expectedGatewayHealthCommand -join "`0")
+    ) {
+      throw "The gateway does not use the reviewed direct liveness health check."
+    }
+  }
 
   $roleName = ([string]$taskDefinition.taskRoleArn).Split("/")[-1]
   if ($taskRoleName -and $taskRoleName -ne $roleName) {
@@ -244,6 +267,57 @@ foreach ($service in $services) {
     [string]$runningCollector[0].healthStatus -ne "HEALTHY"
   ) {
     throw "A deployed collector sidecar is not running and healthy."
+  }
+  if (
+    [string]$service.serviceName -eq "gateway" -and
+    [string]$runningTask.healthStatus -ne "HEALTHY"
+  ) {
+    throw "The deployed gateway task is not healthy."
+  }
+  if ([string]$service.serviceName -eq "gateway") {
+    $serviceRegistries = @($service.serviceRegistries)
+    if ($serviceRegistries.Count -ne 1) {
+      throw "The gateway does not have exactly one Cloud Map service registry."
+    }
+    $registryArn = [string]$serviceRegistries[0].registryArn
+    $cloudMapServiceId = $registryArn.Split("/")[-1]
+    $cloudMapInstances = @(
+      (
+        Invoke-AwsJson @(
+          "servicediscovery",
+          "list-instances",
+          "--service-id",
+          $cloudMapServiceId,
+          "--output",
+          "json"
+        )
+      ).Instances
+    )
+    $cloudMapHealth = (
+      Invoke-AwsJson @(
+        "servicediscovery",
+        "get-instances-health-status",
+        "--service-id",
+        $cloudMapServiceId,
+        "--output",
+        "json"
+      )
+    ).Status
+    $healthyCloudMapInstances = @(
+      $cloudMapHealth.PSObject.Properties | Where-Object { [string]$_.Value -eq "HEALTHY" }
+    )
+    if (
+      $cloudMapInstances.Count -ne 1 -or
+      $healthyCloudMapInstances.Count -ne 1 -or
+      [string]::IsNullOrWhiteSpace(
+        [string]$cloudMapInstances[0].Attributes.AWS_INSTANCE_IPV4
+      ) -or
+      [string]::IsNullOrWhiteSpace(
+        [string]$cloudMapInstances[0].Attributes.AWS_INSTANCE_PORT
+      )
+    ) {
+      throw "Cloud Map does not contain one healthy gateway instance with IPv4 and port."
+    }
   }
   $collectorCount += 1
 }
