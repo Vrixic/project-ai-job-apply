@@ -23,6 +23,11 @@ optional Redis, restricted public-subnet application egress, and no Application 
 The same module exposes explicit replica, private-networking, cache, database-class, and
 high-availability inputs so scaling is a reviewed configuration change.
 
+Gateway, workflow-worker, and migration task-definition replacements create the new immutable
+revision before deregistering the Terraform-managed prior revision. Long-running services update
+to the new revision between those operations, preserving the running release and its rollback
+target throughout the change.
+
 The module also creates a KMS-encrypted operational SNS topic, alarm/OK actions, a log-derived
 application-error metric, a dedicated alert-delivery canary, and an operational dashboard. Email
 or other human destinations are subscribed outside Terraform so addresses do not enter source,

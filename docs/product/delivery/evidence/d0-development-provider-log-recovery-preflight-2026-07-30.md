@@ -80,3 +80,18 @@ Still open:
 8. create deployed evidence before changing D0-010 to complete.
 
 No deployed outcome is claimed by this preflight.
+
+## Post-merge plan review
+
+The first refresh-backed plan used the exact successfully scanned merge images and contained only
+the expected nine resource addresses. It was rejected without apply because both task-definition
+replacements ordered `delete → create`. The platform now requires `create_before_destroy` for
+gateway, workflow-worker, and migration task definitions so the new immutable revision and service
+update precede deregistration of the Terraform-managed prior revision. A new plan and plan hash are
+required after this correction is merged; the rejected plan is not deployment evidence.
+
+The corrected local preview contains exactly four creates, three in-place updates, and two
+`create → delete` task-definition replacements across the same nine expected addresses, with zero
+standalone deletes. Because the correction was not yet merged when that preview was created, it is
+validation evidence only and must not be applied. Regenerate and hash the final plan from clean,
+merged `main`.

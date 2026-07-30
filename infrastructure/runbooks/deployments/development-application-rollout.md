@@ -41,6 +41,11 @@ Reject persistent-resource changes, replacements, deletions, extra replicas, Red
 Multi-AZ, or unapproved image/provider values. Record the saved-plan SHA-256, then apply only that
 exact artifact.
 
+For every later image revision, require each task-definition replacement to use
+`create_before_destroy`: register the new immutable revision, update the service, and only then
+deregister the Terraform-managed prior revision. Reject a `delete → create` task-definition plan
+even if currently running tasks would ordinarily continue.
+
 ## Verify the live rollout
 
 Require all of the following before calling the rollout successful:
