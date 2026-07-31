@@ -52,9 +52,10 @@ identifier, secret, token, or raw artifact is retained in this record.
 
 - Create or confirm staging-only Auth0 and Temporal configuration and write the dedicated
   namespace-scoped Temporal key directly into the existing empty managed secret.
-- Review and apply the exact migration-task plan using the approved gateway platform digest, then
-  run and verify the controlled database migration.
 - Review and apply the one-gateway/one-worker application plan.
 - Replay identity, ownership isolation, workflow completion, logs/traces/alerts, restart,
   rollback, restore, workload, and cost-attribution evidence.
 - Record no drift and return staging to its reviewed lean posture after acceptance.
+
+Subsequent [staging database-migration evidence](d0-staging-database-migration-2026-07-30.md)
+proves the controlled migration completed while applications remained disabled.
