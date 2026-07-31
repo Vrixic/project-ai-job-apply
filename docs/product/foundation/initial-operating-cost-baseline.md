@@ -121,7 +121,7 @@ Changing workflow infrastructure is an architectural decision, not an informal c
 
 ## Cost controls and evidence
 
-- Set AWS Budgets alerts at $25, $50, $75, and $100 for development.
+- Set one $5 monthly AWS Budget actual-cost alert independently in development and staging.
 - Tag every resource and enable account-local CUR 2.0 Data Exports with private versioned storage.
 - Keep staging unprovisioned except for scheduled evidence work; record its actual daily cost.
 - Scale development ECS tasks down when no shared testing is scheduled, without deleting durable

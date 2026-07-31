@@ -14,5 +14,5 @@ submissions, or release-candidate claim. Dedicated staging and production tenant
 conformance are mandatory before launch.
 
 The account-local cost controls remain persistent when application tasks are disabled. They use a
-$50 monthly reference budget with actual-cost alerts at $10, $25, and $50, plus a
-resource-attributed CUR 2.0 export retained for 400 days. Alerts do not cap spend.
+$5 monthly reference budget with one actual-cost alert at $5, plus a resource-attributed CUR 2.0
+export retained for 400 days. Alerts do not cap spend.
