@@ -36,9 +36,10 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
 - `inspect-staging-workload-and-cost.ps1` — Reports the read-only staging workload/cost baseline
   and corroborates a completed browser workload window with aggregate API Gateway, ECS, RDS,
   queue, alarm, log, and no-drift measurements.
-- `inspect-phase0-cost.ps1` — Reads actual service-attributed Cost Explorer totals plus budget and
-  CUR 2.0 Data Export counts from both isolated Phase 0 accounts without printing account/provider
-  records.
+- `inspect-phase0-cost.ps1` — Reads actual service-attributed Cost Explorer totals, exact monthly
+  `$5 USD` budget/alert controls (including unexpected alert counts), CUR 2.0 export health, and
+  real manifest/Parquet delivery from both isolated Phase 0 accounts without printing account,
+  bucket/object-key, subscriber, or provider records.
 - `operate-platform-alerts.ps1` — Reports sanitized development or staging alert state, privately
   requests an SNS email subscription, and exercises ALARM → OK delivery using only the selected
   environment's dedicated synthetic metric. Select staging with `-Environment staging`.

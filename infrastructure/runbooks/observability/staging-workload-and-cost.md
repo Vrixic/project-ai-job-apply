@@ -49,6 +49,14 @@ Require the staging source and both services healthy, all eight alarms `OK`, zer
 or context, and temporary callers in both accounts. Cost Explorer can lag provider usage by more
 than a day; a zero or estimated current-period value is not evidence of zero cost.
 
+For each environment, require one expected monthly `COST` budget at `$5 USD`,
+`ExpectedAlertCount=1`, `OtherAlertCount=0`, and one expected export with
+`Cur2ExportStatus=HEALTHY`. Review any nonzero `OtherBudgetCount`, `OtherAlertCount`, or
+`OtherExportCount`; a duplicate environment cost control must be retired or explicitly accepted.
+A real first delivery requires `FirstCurDeliveryPresent=true` and at least one Parquet object under
+the configured `cur-2/` prefix. AWS's small bucket-validation object is outside that prefix and
+must not be accepted as CUR evidence.
+
 The initial preflight found no AWS Budget and no CUR 2.0 Data Export in staging. Do not create
 either ad hoc. Apply the environment-isolated Terraform controls only from a reviewed plan, then
 wait for the first export delivery and provider cost data to post. AWS can take up to 24 hours to
@@ -119,3 +127,5 @@ forecast.
 
 Phase 0 workload/cost acceptance closes only after the synthetic workload and AWS corroboration
 pass, billing data is nonzero and attributable, and the reviewed budget/export controls exist.
+The operator's `FirstCurDeliveryPresent` must also be true independently for development and
+staging before the export-delivery gate closes.
