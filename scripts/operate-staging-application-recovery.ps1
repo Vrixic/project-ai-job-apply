@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [ValidateSet("Status", "Restart", "PlanDisable", "ApplyDisable", "PlanEnable", "ApplyEnable", "Cleanup")]
+  [ValidateSet("Status", "NoDrift", "Restart", "PlanDisable", "ApplyDisable", "PlanEnable", "ApplyEnable", "Cleanup")]
   [string]$Action = "Status",
   [string]$ExpectedPlanSha256 = "",
   [string]$AwsProfile = "ai-job-apply-staging-admin",
@@ -15,6 +15,7 @@ if ($Help) {
   @"
 Usage:
   .\scripts\operate-staging-application-recovery.ps1 -Action Status
+  .\scripts\operate-staging-application-recovery.ps1 -Action NoDrift
   .\scripts\operate-staging-application-recovery.ps1 -Action Restart -Execute
   .\scripts\operate-staging-application-recovery.ps1 -Action PlanDisable
   .\scripts\operate-staging-application-recovery.ps1 -Action ApplyDisable `
@@ -24,8 +25,9 @@ Usage:
     -ExpectedPlanSha256 <SHA256> -Execute
   .\scripts\operate-staging-application-recovery.ps1 -Action Cleanup -Execute
 
-Status is read-only. Restart forces a worker rolling deployment followed by a gateway rolling
-deployment while retaining the exact task definitions. PlanDisable captures the exact live
+Status and NoDrift are read-only. NoDrift reconstructs the exact enabled live inputs and requires
+a refresh-backed Terraform plan with no changes. Restart forces a worker rolling deployment
+followed by a gateway rolling deployment while retaining the exact task definitions. PlanDisable captures the exact live
 configuration in the ignored Terraform data directory and creates a refresh-backed, strictly
 allowlisted application-only disable plan. ApplyDisable accepts only the checksum-matched saved
 plan. PlanEnable creates the exact reverse plan from the captured configuration; ApplyEnable
@@ -733,6 +735,17 @@ switch ($Action) {
       RecoveryContext   = Test-Path -LiteralPath $contextPath
       DisablePlan       = Test-Path -LiteralPath $disablePlanPath
       EnablePlan        = Test-Path -LiteralPath $enablePlanPath
+    } | ConvertTo-Json
+  }
+  "NoDrift" {
+    $services = Get-ApplicationServices $clusterArn $true
+    $context = Get-LiveRecoveryContext $clusterArn $services
+    Invoke-TerraformNoDrift $context $true
+    [pscustomobject]@{
+      Environment      = "staging"
+      Applications     = "enabled"
+      StableServices   = 2
+      TerraformDrift   = 0
     } | ConvertTo-Json
   }
   "Restart" {
