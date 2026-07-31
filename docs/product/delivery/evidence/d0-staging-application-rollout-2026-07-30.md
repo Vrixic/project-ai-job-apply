@@ -93,9 +93,12 @@ The controlled authenticated preference/workflow transaction, two-account denial
 PostgreSQL/outbox/Temporal/X-Ray path subsequently passed. See the
 [authenticated staging evidence](d0-staging-authenticated-acceptance-2026-07-30.md).
 
+The controlled staging canary also transitioned `ALARM` then `OK`, and the confirmed operator
+received both notifications. See the
+[staging alert-delivery evidence](d0-staging-alert-delivery-2026-07-31.md).
+
 The following acceptance remains:
 
-- Confirm an alert recipient and prove controlled ALARM then OK delivery.
 - Exercise service restart and an application-only rollback/reenablement path.
 - Complete staging restore, representative workload, and cost-attribution evidence.
 
