@@ -70,8 +70,10 @@ evidence.
 - Create or confirm a staging-only Temporal namespace and dedicated namespace-scoped key, then
   write it directly into the empty managed secret.
 - Create or confirm a staging-only Auth0 tenant/application/API configuration.
-- Publish and scan immutable staging gateway and worker images.
 - Run the controlled database migration and enable the one-gateway/one-worker application.
 - Prove identity, ownership isolation, workflow completion, logs/traces/alerts, restart, rollback,
   restore, workload, and cost attribution.
 - Record no drift and return staging to its reviewed lean posture when acceptance finishes.
+
+Subsequent [staging image evidence](d0-staging-images-2026-07-30.md) proves immutable gateway and
+worker publication plus the required ECR scan gates while applications remained disabled.
