@@ -32,8 +32,9 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   Terraform, exact live/local Auth0 alignment, ECS stability, and gateway health; resolves the
   deployed HTTPS gateway without printing it; and runs only the local web/BFF for authenticated
   deployed conformance. Select staging with `-Environment staging`.
-- `operate-development-alerts.ps1` — Reports sanitized alert state, privately requests an SNS email
-  subscription, and exercises ALARM → OK delivery using only a dedicated synthetic metric.
+- `operate-platform-alerts.ps1` — Reports sanitized development or staging alert state, privately
+  requests an SNS email subscription, and exercises ALARM → OK delivery using only the selected
+  environment's dedicated synthetic metric. Select staging with `-Environment staging`.
 - `preview-development-alert-plan.ps1` — Reconstructs the exact live development runtime inputs,
   produces a refresh-backed preview, rejects changes outside the reviewed alert scope, and removes
   the sensitive plan after printing only a sanitized summary and SHA-256.

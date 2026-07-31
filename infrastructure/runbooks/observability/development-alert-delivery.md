@@ -69,13 +69,13 @@ local saved plan only after recording its hash and sanitized result.
 Read the pre-subscription state:
 
 ```powershell
-.\scripts\operate-development-alerts.ps1 -Action Status
+.\scripts\operate-platform-alerts.ps1 -Action Status
 ```
 
 Request an email subscription:
 
 ```powershell
-.\scripts\operate-development-alerts.ps1 -Action Subscribe -Execute
+.\scripts\operate-platform-alerts.ps1 -Action Subscribe -Execute
 ```
 
 The script prompts with hidden input and never prints or writes the email address. The operator
@@ -94,7 +94,7 @@ or shell history.
 Run:
 
 ```powershell
-.\scripts\operate-development-alerts.ps1 -Action Exercise -Execute
+.\scripts\operate-platform-alerts.ps1 -Action Exercise -Execute
 ```
 
 The script changes only `AlertDeliveryCanary` in the dedicated
