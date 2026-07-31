@@ -36,11 +36,21 @@ export class OutboxDispatcher {
     try {
       const events = await this.store.getPendingOutboxEvents(25);
       for (const event of events) {
-        if (event.type !== eventTypes.profilePreferencesUpdated) {
-          continue;
-        }
         if (!validateEventData(event.type, event.data)) {
           this.logger.error({ event_id: event.id, event_type: event.type }, "invalid outbox event");
+          continue;
+        }
+        if (event.type === eventTypes.profileReadinessCalculated) {
+          // Phase 0 has no downstream subscriber for this terminal result event. Acknowledge it so
+          // terminal events cannot occupy the oldest outbox page and starve new workflow inputs.
+          await this.store.markOutboxPublished(event.id);
+          continue;
+        }
+        if (event.type !== eventTypes.profilePreferencesUpdated) {
+          this.logger.error(
+            { event_id: event.id, event_type: event.type },
+            "unsupported outbox event",
+          );
           continue;
         }
         const data = event.data as {
