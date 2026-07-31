@@ -12,3 +12,7 @@ staging may temporarily trust the exact development Auth0 issuer and stable audi
 not prove identity isolation and permits no real users, invited testers, public access, live ATS
 submissions, or release-candidate claim. Dedicated staging and production tenants plus replayed
 conformance are mandatory before launch.
+
+The account-local cost controls remain persistent when application tasks are disabled. They use a
+$50 monthly reference budget with actual-cost alerts at $10, $25, and $50, plus a
+resource-attributed CUR 2.0 export retained for 400 days. Alerts do not cap spend.

@@ -28,3 +28,7 @@ The GitHub deployment-role trust uses GitHub's immutable OIDC repository subject
 (`repo:owner@owner-id/repository@repository-id`) plus the exact GitHub Environment. Verify the
 prefix through GitHub's repository OIDC customization API before bootstrapping a renamed,
 transferred, or replacement repository; do not weaken the trust to a wildcard subject.
+
+The deployment boundary also permits same-account AWS Budgets and CUR 2.0 Data Export management.
+Apply bootstrap-policy changes from an isolated environment-specific bootstrap workspace before
+expecting the GitHub deployment role to plan or apply new billing controls.

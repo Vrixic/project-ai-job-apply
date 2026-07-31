@@ -37,7 +37,8 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   and corroborates a completed browser workload window with aggregate API Gateway, ECS, RDS,
   queue, alarm, log, and no-drift measurements.
 - `inspect-phase0-cost.ps1` — Reads actual service-attributed Cost Explorer totals plus budget and
-  legacy CUR counts from both isolated Phase 0 accounts without printing account/provider records.
+  CUR 2.0 Data Export counts from both isolated Phase 0 accounts without printing account/provider
+  records.
 - `operate-platform-alerts.ps1` — Reports sanitized development or staging alert state, privately
   requests an SNS email subscription, and exercises ALARM → OK delivery using only the selected
   environment's dedicated synthetic metric. Select staging with `-Environment staging`.

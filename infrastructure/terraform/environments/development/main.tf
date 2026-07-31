@@ -27,6 +27,18 @@ provider "aws" {
   }
 }
 
+provider "aws" {
+  alias  = "billing"
+  region = "us-east-1"
+  default_tags {
+    tags = {
+      Project     = "ai-job-apply"
+      Environment = "development"
+      ManagedBy   = "terraform"
+    }
+  }
+}
+
 module "platform" {
   source                         = "../../modules/platform"
   name                           = "ai-job-apply"
@@ -56,4 +68,19 @@ module "platform" {
   temporal_address               = var.temporal_address
   temporal_namespace             = var.temporal_namespace
   deploy_applications            = var.deploy_applications
+}
+
+module "cost_controls" {
+  source = "../../modules/cost-controls"
+
+  providers = {
+    aws         = aws
+    aws.billing = aws.billing
+  }
+
+  name                        = "ai-job-apply"
+  environment                 = "development"
+  operational_alert_topic_arn = module.platform.operational_alert_topic_arn
+  monthly_budget_amount_usd   = 100
+  actual_cost_alerts_usd      = [25, 50, 75, 100]
 }

@@ -11,6 +11,10 @@ Keep replicas at one, `high_availability = false`, `private_application_networki
 `enable_redis = false` until recorded load, reliability, security, or launch evidence requires a
 change.
 
+The account-local cost controls use a $100 monthly reference budget with actual-cost alerts at
+$25, $50, $75, and $100, plus a resource-attributed CUR 2.0 export retained for 400 days. Alerts
+do not cap spend.
+
 Follow the [development cloud setup checklist](SETUP.md) before bootstrap or deployment.
 Use the [development database migration runbook](../../../runbooks/deployments/development-database-migration.md)
 to provision and execute the migration task while applications remain disabled.

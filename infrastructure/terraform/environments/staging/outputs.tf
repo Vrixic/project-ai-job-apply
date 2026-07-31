@@ -50,3 +50,17 @@ output "observability_dashboard_name" {
 output "alert_delivery_canary_alarm_name" {
   value = module.platform.alert_delivery_canary_alarm_name
 }
+
+output "monthly_budget_name" {
+  value = module.cost_controls.monthly_budget_name
+}
+
+output "cost_export_arn" {
+  value     = module.cost_controls.cost_export_arn
+  sensitive = true
+}
+
+output "cost_export_bucket" {
+  value     = module.cost_controls.cost_export_bucket
+  sensitive = true
+}
