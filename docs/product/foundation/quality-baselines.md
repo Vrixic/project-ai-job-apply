@@ -1,6 +1,6 @@
 # Phase 0 Quality and Reliability Baselines
 
-Status: Definitions and fixed staging workload preflight implemented; execution pending D0-011
+Status: Definitions and fixed staging workload accepted on 2026-07-31
 Accountable roles: Product analytics, QA/automation, and platform engineering
 
 ## Product-quality measurements
@@ -38,8 +38,15 @@ unit tests, builds, Compose validation, and removed-scope checks. Before D0 clos
 also record API/load results, workflow-restart results, backup restoration, trace propagation, and
 cost attribution using only synthetic data.
 
-The fixed `phase0_staging_foundation_v1` profile prepares the remaining API/load evidence without
+The fixed `phase0_staging_foundation_v1` profile provides the API/load evidence without
 claiming production capacity: 200 liveness reads, 200 readiness/database reads, 100 expected
 protected `401` reads, 25 sequential durable preference/outbox/Temporal workflows, and one exact
 idempotent replay. Its browser response and AWS corroboration retain only counts, timestamps,
-booleans, aggregate latency/utilization, and forbidden/error matches. Execution remains pending.
+booleans, aggregate latency/utilization, and forbidden/error matches.
+
+The corrected staging execution on 2026-07-31 completed 500/500 public probes, 25/25 durable
+workflows, and the exact idempotent replay in 31,179 ms. Workflow propagation was 1,000 ms p50,
+1,037 ms p95, and 1,096 ms maximum. Exact-window AWS corroboration found 621 API requests, 100
+expected `4xx`, zero `5xx`, zero queue/DLQ activity, zero error/forbidden log matches, two stable
+services, eight alarms `OK`, and zero drift. See the
+[staging workload acceptance](../delivery/evidence/d0-staging-workload-acceptance-2026-07-31.md).
