@@ -597,6 +597,28 @@ function Assert-TargetBoundary {
   }
 }
 
+function Wait-TargetBoundary {
+  param(
+    [object]$Source,
+    [object]$Context
+  )
+
+  $deadline = (Get-Date).AddMinutes(5)
+  do {
+    $candidate = Get-TargetDatabase ([string]$Context.target_identifier)
+    try {
+      Assert-TargetBoundary $Source $candidate $Context $true
+      return $candidate
+    }
+    catch {
+      if ((Get-Date) -ge $deadline) {
+        throw "The available restore target did not converge to the approved boundary within five minutes."
+      }
+      Start-Sleep -Seconds 10
+    }
+  } while ($true)
+}
+
 function Invoke-StartRestore {
   Assert-ExecutionAuthorized "Restore start"
   if (Test-Path -LiteralPath $contextPath) {
@@ -697,7 +719,7 @@ function Invoke-StartRestore {
   }
   $context.restore_available_seconds = [int]([DateTime]::UtcNow - $requestTime).TotalSeconds
   Save-RestoreContext $context
-  Assert-TargetBoundary $source $target $context $true
+  $target = Wait-TargetBoundary $source $context
 
   return [pscustomobject]@{
     Environment                = "staging"

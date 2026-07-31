@@ -32,3 +32,4 @@ if ($LASTEXITCODE -gt 1) {
 }
 
 Write-Host "Phase 0 repository verification passed."
+exit 0

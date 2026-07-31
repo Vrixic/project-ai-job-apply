@@ -72,7 +72,8 @@ The operator:
 4. records the latest-restorable-point lag;
 5. saves only an ignored local target/context record;
 6. requests `use-latest-restorable-time` into the uniquely tagged target; and
-7. waits up to 60 minutes for the first observed `available` state.
+7. waits up to 60 minutes for the first observed `available` state, then up to five minutes for
+   RDS tags and configuration metadata to converge to the exact approved boundary.
 
 The target must preserve the exact source KMS key, VPC, private subnet group, database security
 group, engine/version, class, storage, database identity, IAM database-authentication state,
