@@ -17,10 +17,12 @@ Each isolated AWS account receives:
 - bucket-owner-enforced objects, public-access blocking, TLS-only access, versioning, SSE-S3,
   90-day noncurrent-version cleanup, and 400-day current-object retention.
 
-Development uses a $100 monthly reference with $25/$50/$75/$100 actual-cost alerts. On-demand
-staging uses a $50 monthly reference with $10/$25/$50 alerts. These alerts do not stop resources or
-cap spending. CUR 2.0 delivery can take up to 24 hours to begin, and its S3 storage is billed at
-standard rates.
+Development and staging each use a $5 monthly reference with one $5 actual-cost alert. These alerts
+do not stop resources or cap spending. CUR 2.0 delivery can take up to 24 hours to begin, and its
+S3 storage is billed at standard rates.
+
+This corrects the higher environment-specific values in the initial merged preflight before any
+budget or export was applied. The product owner selected the same $5 AWS control for both accounts.
 
 The existing customer-managed platform key and SNS policy gain only the same-account AWS Budgets
 producer permissions required for encrypted alert delivery. The GitHub deployment role boundary

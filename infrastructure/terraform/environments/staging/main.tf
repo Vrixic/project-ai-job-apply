@@ -78,6 +78,6 @@ module "cost_controls" {
   name                        = "ai-job-apply"
   environment                 = "staging"
   operational_alert_topic_arn = module.platform.operational_alert_topic_arn
-  monthly_budget_amount_usd   = 50
-  actual_cost_alerts_usd      = [10, 25, 50]
+  monthly_budget_amount_usd   = 5
+  actual_cost_alerts_usd      = [5]
 }
