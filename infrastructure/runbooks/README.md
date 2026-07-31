@@ -18,6 +18,8 @@ Every alert and privileged admin operation should link to a relevant runbook.
 
 - [Development alert delivery](observability/development-alert-delivery.md) — Creates encrypted
   operational routing and proves ALARM/OK delivery with a dedicated synthetic metric.
+- [Staging alert delivery](observability/staging-alert-delivery.md) — Proves the isolated staging
+  ALARM/OK notification path through the environment-scoped synthetic canary.
 - [Development provider and log recovery](providers/development-provider-and-log-recovery.md) —
   Separately proves fresh Auth0 login failure/recovery and gateway log-delivery alarm/recovery.
 - [Temporal Cloud runtime secret](temporal-cloud-runtime-secret.md) — Creates the least-privilege

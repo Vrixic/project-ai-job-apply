@@ -2,7 +2,9 @@
 param(
   [ValidateSet("Status", "Subscribe", "Exercise")]
   [string]$Action = "Status",
-  [string]$AwsProfile = "ai-job-apply-development-admin",
+  [ValidateSet("development", "staging")]
+  [string]$Environment = "development",
+  [string]$AwsProfile = "",
   [string]$Region = "us-east-2",
   [switch]$Execute,
   [switch]$Help
@@ -13,9 +15,10 @@ $ErrorActionPreference = "Stop"
 if ($Help) {
   @"
 Usage:
-  .\scripts\operate-development-alerts.ps1
-  .\scripts\operate-development-alerts.ps1 -Action Subscribe -Execute
-  .\scripts\operate-development-alerts.ps1 -Action Exercise -Execute
+  .\scripts\operate-platform-alerts.ps1
+  .\scripts\operate-platform-alerts.ps1 -Environment staging
+  .\scripts\operate-platform-alerts.ps1 -Environment staging -Action Subscribe -Execute
+  .\scripts\operate-platform-alerts.ps1 -Environment staging -Action Exercise -Execute
 
 Status is read-only and reports only aggregate subscription and alarm state.
 Subscribe securely prompts for an email address, sends an AWS SNS confirmation request, and never
@@ -26,13 +29,18 @@ canary healthy. It does not modify application, queue, database, or user data.
   exit 0
 }
 
-if ($Region -ne "us-east-2") {
-  throw "The Phase 0 development environment is restricted to us-east-2."
+if ([string]::IsNullOrWhiteSpace($AwsProfile)) {
+  $AwsProfile = "ai-job-apply-$Environment-admin"
 }
 
-$topicName = "ai-job-apply-development-operational-alerts"
-$alarmName = "ai-job-apply-development-alert-delivery-canary"
-$metricNamespace = "ai-job-apply/development/operational"
+if ($Region -ne "us-east-2") {
+  throw "The Phase 0 deployed environments are restricted to us-east-2."
+}
+
+$environmentLabel = if ($Environment -eq "staging") { "Staging" } else { "Development" }
+$topicName = "ai-job-apply-$Environment-operational-alerts"
+$alarmName = "ai-job-apply-$Environment-alert-delivery-canary"
+$metricNamespace = "ai-job-apply/$Environment/operational"
 $metricName = "AlertDeliveryCanary"
 
 $env:AWS_PROFILE = $AwsProfile
@@ -43,7 +51,7 @@ function Invoke-AwsJson {
 
   $raw = & aws @CommandArguments 2>$null
   if ($LASTEXITCODE -ne 0) {
-    throw "An AWS command failed. Refresh the development SSO session and retry."
+    throw "An AWS command failed. Refresh the $Environment SSO session and retry."
   }
   if (-not $raw) {
     return $null
@@ -51,15 +59,15 @@ function Invoke-AwsJson {
   return $raw | ConvertFrom-Json
 }
 
-function Assert-DevelopmentContext {
+function Assert-EnvironmentContext {
   $identity = Invoke-AwsJson @("sts", "get-caller-identity", "--output", "json")
   if (-not ([string]$identity.Arn).Contains(":assumed-role/")) {
-    throw "Use the temporary development IAM Identity Center session; long-lived callers are rejected."
+    throw "Use the temporary $Environment IAM Identity Center session; long-lived callers are rejected."
   }
 
   $regionResult = & aws configure get region --profile $AwsProfile 2>$null
   if ($LASTEXITCODE -ne 0 -or $regionResult.Trim() -ne $Region) {
-    throw "The AWS profile region does not match the reviewed development region."
+    throw "The AWS profile region does not match the reviewed $Environment region."
   }
 }
 
@@ -69,7 +77,7 @@ function Get-AlertContext {
     $topics.Topics | Where-Object { ([string]$_.TopicArn).EndsWith(":$topicName") }
   )
   if ($matchingTopics.Count -ne 1) {
-    throw "The exact Terraform-managed development alert topic is not available."
+    throw "The exact Terraform-managed $Environment alert topic is not available."
   }
   $topicArn = [string]$matchingTopics[0].TopicArn
 
@@ -177,7 +185,7 @@ function Wait-ForCanaryState {
   throw "The alert-delivery canary did not reach the expected state within the bounded wait."
 }
 
-Assert-DevelopmentContext
+Assert-EnvironmentContext
 $context = Get-AlertContext
 
 switch ($Action) {
@@ -189,7 +197,7 @@ switch ($Action) {
       throw "Subscribe sends an external confirmation email. Re-run with -Execute after review."
     }
 
-    $secureEmail = Read-Host "Development alert email (input is hidden and never stored)" -AsSecureString
+    $secureEmail = Read-Host "$environmentLabel alert email (input is hidden and never stored)" -AsSecureString
     $email = ConvertFrom-SecureEmail $secureEmail
     try {
       if ($email -notmatch "^[^@\s]+@[^@\s]+\.[^@\s]+$") {

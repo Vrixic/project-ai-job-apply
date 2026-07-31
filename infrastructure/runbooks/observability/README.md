@@ -9,6 +9,8 @@ timestamps.
 - [Development alert delivery](development-alert-delivery.md) — Provisions encrypted routing,
   privately subscribes an operator, and exercises ALARM → OK delivery with a dedicated synthetic
   metric.
+- [Staging alert delivery](staging-alert-delivery.md) — Subscribes and exercises the already
+  provisioned synthetic staging notification path without retaining the destination.
 - [Development distributed tracing](development-distributed-tracing.md) — Continues privacy-safe
   W3C context through the deployed gateway, outbox, Temporal worker, and X-Ray.
 - [Development provider and log recovery](../providers/development-provider-and-log-recovery.md) —
