@@ -158,6 +158,14 @@ resource "aws_budgets_budget" "monthly_cost" {
 resource "aws_bcmdataexports_export" "cost_and_usage" {
   provider = aws.billing
 
+  # AWS injects BILLING_VIEW_ARN into COST_AND_USAGE_REPORT after creation. The AWS provider
+  # currently treats that service-computed map entry as an inconsistent result unless changes to
+  # this map are ignored after the reviewed configuration has created the export.
+  # https://github.com/hashicorp/terraform-provider-aws/issues/48807
+  lifecycle {
+    ignore_changes = [export[0].data_query[0].table_configurations]
+  }
+
   export {
     name        = local.export_name
     description = "Daily resource-attributed CUR 2.0 evidence for ${var.name} ${var.environment}."
