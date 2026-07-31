@@ -38,7 +38,12 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
 - `operate-staging-application-recovery.ps1` — Reports the sanitized staging runtime state,
   performs an explicitly authorized worker-then-gateway rolling restart, and creates/applies
   separately checksum-gated application-only disable and enable plans. Sensitive reconstruction
-  context and plans remain ignored under the staging Terraform data directory.
+  context and plans remain ignored under the staging Terraform data directory. Its read-only
+  `NoDrift` action reconstructs exact live application inputs for other staging recovery gates.
+- `operate-staging-postgresql-restore.ps1` — Reports the sanitized staging PITR baseline and runs
+  a resumable, uniquely tagged restore through source verification, availability measurement,
+  exact aggregate comparison, guarded target/backup deletion, and final application/no-drift
+  acceptance. Only the ignored staging Terraform data directory holds resumable context.
 - `preview-development-alert-plan.ps1` — Reconstructs the exact live development runtime inputs,
   produces a refresh-backed preview, rejects changes outside the reviewed alert scope, and removes
   the sensitive plan after printing only a sanitized summary and SHA-256.

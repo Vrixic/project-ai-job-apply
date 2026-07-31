@@ -36,3 +36,6 @@ Every alert and privileged admin operation should link to a relevant runbook.
 - [Development PostgreSQL point-in-time restore](restore/development-postgresql-point-in-time.md) —
   Creates and validates a private disposable restore, measures recovery, and proves complete
   cleanup without changing the source database.
+- [Staging PostgreSQL point-in-time restore](restore/staging-postgresql-point-in-time.md) —
+  Rehearses isolated staging PITR with resumable state, immutable read-only verification, guarded
+  deletion, and final application/no-drift acceptance.
