@@ -18,6 +18,8 @@ least privilege, lean capacity, recoverable state, and an explicit path to Multi
 - `bootstrap/` creates encrypted remote state and an environment-scoped GitHub OIDC role.
 - `modules/platform/` creates the network, lean data plane, queues, registries, ECS services,
   API Gateway/Cloud Map ingress, encryption, logs, and alarms.
+- `modules/cost-controls/` creates same-account AWS Budgets alerts and CUR 2.0 Data Exports with
+  private, versioned billing-evidence storage.
 - `environments/development/` and `environments/staging/` compose separate AWS accounts.
 
 The primary region is `us-east-2`. Application deployment defaults to disabled and cannot be

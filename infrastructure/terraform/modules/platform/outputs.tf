@@ -46,6 +46,11 @@ output "application_security_group_id" {
 output "operational_alert_topic_arn" {
   value     = aws_sns_topic.operational_alerts.arn
   sensitive = true
+
+  depends_on = [
+    aws_kms_key.platform,
+    aws_sns_topic_policy.operational_alerts
+  ]
 }
 
 output "observability_dashboard_name" {

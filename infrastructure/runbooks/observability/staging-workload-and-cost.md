@@ -49,9 +49,10 @@ Require the staging source and both services healthy, all eight alarms `OK`, zer
 or context, and temporary callers in both accounts. Cost Explorer can lag provider usage by more
 than a day; a zero or estimated current-period value is not evidence of zero cost.
 
-The initial preflight found no AWS Budget and no legacy CUR report in staging. Do not create either
-ad hoc. Select and apply the billing-export/budget controls through a separately reviewed,
-environment-isolated infrastructure change, then wait for provider data to post.
+The initial preflight found no AWS Budget and no CUR 2.0 Data Export in staging. Do not create
+either ad hoc. Apply the environment-isolated Terraform controls only from a reviewed plan, then
+wait for the first export delivery and provider cost data to post. AWS can take up to 24 hours to
+start delivering a new export.
 
 ## Run the fixed workload
 

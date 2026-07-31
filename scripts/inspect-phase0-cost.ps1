@@ -15,7 +15,7 @@ Usage:
   .\scripts\inspect-phase0-cost.ps1
   .\scripts\inspect-phase0-cost.ps1 -StartDate <YYYY-MM-DD> -EndDate <YYYY-MM-DD>
 
-Reads actual unblended Cost Explorer data, budget count, and legacy CUR report count from the
+Reads actual unblended Cost Explorer data, budget count, and CUR 2.0 Data Export count from the
 isolated development and staging accounts. EndDate is exclusive. The default is the current UTC
 calendar month. Both IAM Identity Center sessions must be active.
 
@@ -139,11 +139,13 @@ function Get-EnvironmentCost {
     "--output",
     "json"
   )
-  $reports = Invoke-AwsJson $Profile @(
-    "cur",
-    "describe-report-definitions",
+  $exports = Invoke-AwsJson $Profile @(
+    "bcm-data-exports",
+    "list-exports",
     "--region",
     "us-east-1",
+    "--max-results",
+    "100",
     "--output",
     "json"
   )
@@ -156,7 +158,7 @@ function Get-EnvironmentCost {
     Estimated         = @($periods | Where-Object { [bool]$_.Estimated }).Count -gt 0
     Services          = @($services | Sort-Object AmountUsd -Descending)
     AwsBudgetCount    = (Get-Collection $budgets "Budgets").Count
-    LegacyCurReports  = (Get-Collection $reports "ReportDefinitions").Count
+    Cur2DataExports   = (Get-Collection $exports "Exports").Count
   }
 }
 

@@ -110,7 +110,10 @@ locals {
         Effect = "Allow"
         Action = [
           "apigateway:*",
+          "bcm-data-exports:*",
+          "budgets:*",
           "cloudwatch:*",
+          "cur:PutReportDefinition",
           "ec2:*",
           "ecr:*",
           "ecs:*",

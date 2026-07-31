@@ -19,7 +19,7 @@ Usage:
     -StartTime <ISO-8601> -EndTime <ISO-8601>
 
 Status proves the staging runtime boundary and reports aggregate month-to-date Cost Explorer,
-budget, and legacy CUR availability. Measure accepts only a workload result's ISO timestamps and
+budget, and CUR 2.0 Data Export availability. Measure accepts only a workload result's ISO timestamps and
 returns aggregate API Gateway, ECS, RDS, queue, alarm, log, and no-drift evidence.
 
 Both actions are read-only. No account identifier, endpoint, resource ARN, trace, log message,
@@ -153,17 +153,19 @@ function Get-BillingControlCounts {
     "--output",
     "json"
   )
-  $reports = Invoke-AwsJson @(
-    "cur",
-    "describe-report-definitions",
+  $exports = Invoke-AwsJson @(
+    "bcm-data-exports",
+    "list-exports",
     "--region",
     "us-east-1",
+    "--max-results",
+    "100",
     "--output",
     "json"
   )
   return [pscustomobject]@{
-    Budgets   = (Get-Collection $budgets "Budgets").Count
-    CurReports = (Get-Collection $reports "ReportDefinitions").Count
+    Budgets = (Get-Collection $budgets "Budgets").Count
+    Exports = (Get-Collection $exports "Exports").Count
   }
 }
 
@@ -311,7 +313,7 @@ if ($Action -eq "Status") {
     CostExplorerEstimated         = $cost.Estimated
     NonzeroCostServices           = $cost.NonzeroServices
     AwsBudgetCount                = $billing.Budgets
-    LegacyCurReportCount          = $billing.CurReports
+    Cur2DataExportCount           = $billing.Exports
   } | ConvertTo-Json
   exit 0
 }

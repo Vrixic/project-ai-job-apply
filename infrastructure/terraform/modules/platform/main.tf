@@ -128,6 +128,30 @@ data "aws_iam_policy_document" "platform_kms" {
       ]
     }
   }
+
+  statement {
+    sid    = "AllowAwsBudgetsNotificationEncryption"
+    effect = "Allow"
+    actions = [
+      "kms:Decrypt",
+      "kms:GenerateDataKey*"
+    ]
+    resources = ["*"]
+    principals {
+      type        = "Service"
+      identifiers = ["budgets.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values   = ["arn:aws:budgets::${data.aws_caller_identity.current.account_id}:*"]
+    }
+  }
 }
 
 resource "aws_kms_key" "platform" {
@@ -188,6 +212,27 @@ data "aws_iam_policy_document" "operational_alerts" {
       values = [
         "arn:aws:cloudwatch:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:alarm:${var.name}-${var.environment}-*"
       ]
+    }
+  }
+
+  statement {
+    sid       = "AllowAwsBudgetsPublishing"
+    effect    = "Allow"
+    actions   = ["SNS:Publish"]
+    resources = [aws_sns_topic.operational_alerts.arn]
+    principals {
+      type        = "Service"
+      identifiers = ["budgets.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values   = ["arn:aws:budgets::${data.aws_caller_identity.current.account_id}:*"]
     }
   }
 }

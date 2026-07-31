@@ -122,7 +122,7 @@ Changing workflow infrastructure is an architectural decision, not an informal c
 ## Cost controls and evidence
 
 - Set AWS Budgets alerts at $25, $50, $75, and $100 for development.
-- Tag every resource and enable Cost and Usage Reports before the first apply.
+- Tag every resource and enable account-local CUR 2.0 Data Exports with private versioned storage.
 - Keep staging unprovisioned except for scheduled evidence work; record its actual daily cost.
 - Scale development ECS tasks down when no shared testing is scheduled, without deleting durable
   state.
@@ -131,7 +131,7 @@ Changing workflow infrastructure is an architectural decision, not an informal c
 - Reconcile this estimate against the first complete billing month and update D0-008.
 
 The initial staging read-only preflight on 2026-07-31 found Cost Explorer enabled but its partial
-month still estimated at `$0.00`, with no visible AWS Budget or legacy CUR definition. This is
+month still estimated at `$0.00`, with no visible AWS Budget or CUR 2.0 Data Export. This is
 billing-lag evidence, not a zero-cost claim. Refresh both isolated account sessions, enable reviewed
 budget/export controls, and capture nonzero service-attributed development plus scheduled-staging
 cost before accepting D0-008.
