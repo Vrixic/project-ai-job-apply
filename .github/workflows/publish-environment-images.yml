@@ -1,7 +1,16 @@
-name: Publish development images
+name: Publish environment images
 
 on:
   workflow_dispatch:
+    inputs:
+      environment:
+        description: Isolated AWS/GitHub Environment to publish into
+        required: true
+        default: development
+        type: choice
+        options:
+          - development
+          - staging
 
 permissions:
   contents: read
@@ -12,9 +21,9 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    environment: development
+    environment: ${{ inputs.environment }}
     concurrency:
-      group: publish-development-${{ matrix.name }}
+      group: publish-${{ inputs.environment }}-${{ matrix.name }}
       cancel-in-progress: false
     permissions:
       contents: read
@@ -42,7 +51,7 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-2
-          role-session-name: publish-${{ matrix.name }}-${{ github.run_id }}
+          role-session-name: publish-${{ inputs.environment }}-${{ matrix.name }}-${{ github.run_id }}
           mask-aws-account-id: true
 
       - name: Verify immutable encrypted repository
@@ -71,14 +80,16 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ${{ steps.ecr.outputs.registry }}/${{ matrix.repository }}:${{ github.sha }}
-          cache-from: type=gha,scope=${{ matrix.name }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+          cache-from: type=gha,scope=${{ inputs.environment }}-${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ inputs.environment }}-${{ matrix.name }}
 
       - name: Wait for ECR scan and enforce severity gate
         env:
           IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE_NAME: ${{ matrix.name }}
           REPOSITORY: ${{ matrix.repository }}
           SOURCE_SHA: ${{ github.sha }}
+          TARGET_ENVIRONMENT: ${{ inputs.environment }}
         run: |
           set -euo pipefail
           index_manifest="$(aws ecr batch-get-image \
@@ -125,8 +136,9 @@ jobs:
           high="$(jq -r '.imageScanFindings.findingSeverityCounts.HIGH // 0' <<<"$findings")"
 
           {
-            echo "### ${{ matrix.name }} image"
+            echo "### $IMAGE_NAME image"
             echo
+            echo "- Environment: \`$TARGET_ENVIRONMENT\`"
             echo "- Source commit: \`$SOURCE_SHA\`"
             echo "- Immutable index digest: \`$IMAGE_DIGEST\`"
             echo "- Scanned linux/amd64 digest: \`$platform_digest\`"

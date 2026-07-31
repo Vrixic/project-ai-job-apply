@@ -61,13 +61,14 @@ remains an operator cleanup action after the encrypted recovery object is accept
 
 The GitHub `staging` Environment now contains exactly the non-secret
 `AWS_DEPLOY_ROLE_ARN` and `TERRAFORM_STATE_BUCKET` variables resolved from encrypted staging state.
-Their values were not printed or copied into source or evidence. GitHub-originated role assumption
-and state access remain unproven until the merged conformance workflow succeeds.
+Their values were not printed or copied into source or evidence. The merged
+[staging AWS OIDC conformance](d0-staging-aws-oidc-conformance-2026-07-30.md) subsequently proved
+short-lived role assumption and encrypted state access for both isolated environments.
 
 ## Remaining staging acceptance
 
-- Run GitHub-originated staging OIDC conformance against `bootstrap.tfstate`.
-- Provision the persistent staging platform with applications disabled.
+- The [applications-disabled persistent staging platform](d0-staging-persistent-platform-2026-07-30.md)
+  now passes its exact apply, live-control audit, and no-drift checks.
 - Configure staging-only Auth0 and Temporal, publish immutable images, migrate, and activate the
   application.
 - Replay the applicable identity, ownership, workflow, observability, restart, restore, workload,

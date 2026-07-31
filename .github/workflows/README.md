@@ -22,8 +22,10 @@ The private repository uses a full-lockfile pnpm audit and a repository-local Se
 pinned scanner and pinned upstream rules. GitHub Dependency Review and CodeQL uploads are not
 claimed because GitHub code-security services are not enabled for this repository.
 
-`publish-development-images.yml` is a manual, `main`-only release workflow. It assumes the
-development GitHub Environment through OIDC, verifies the ECR repositories remain immutable,
-KMS-encrypted, and scan-on-push, publishes gateway and worker images under the exact source commit,
-waits for ECR scanning, and blocks use of images with high or critical findings. Its digest-bearing
-job summaries are deployment evidence; publishing an image does not enable an ECS service.
+`publish-environment-images.yml` is a manual, `main`-only release workflow with an explicit
+`development` or `staging` input. Each job assumes only the selected GitHub Environment through
+OIDC, verifies that environment's ECR repositories remain immutable, KMS-encrypted, and
+scan-on-push, publishes gateway and worker images under the exact source commit, waits for ECR
+scanning, and blocks use of images with high or critical findings. Build caches and summaries are
+environment scoped. Its digest-bearing job summaries are deployment evidence; publishing an image
+does not enable an ECS service.
