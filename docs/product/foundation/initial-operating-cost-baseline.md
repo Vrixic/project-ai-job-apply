@@ -1,6 +1,6 @@
 # Initial Operating-Cost Baseline
 
-- Status: Planning estimate; no provider billing evidence exists
+- Status: Planning estimate; deployed Cost Explorer preflight exists, but charges have not posted
 - Pricing checked: 2026-07-28
 - Region: AWS `us-east-2`
 - Currency: USD, before tax
@@ -129,3 +129,9 @@ Changing workflow infrastructure is an architectural decision, not an informal c
 - Record per-application AI tokens, browser minutes, object bytes, Temporal actions, notifications,
   retries, and support time.
 - Reconcile this estimate against the first complete billing month and update D0-008.
+
+The initial staging read-only preflight on 2026-07-31 found Cost Explorer enabled but its partial
+month still estimated at `$0.00`, with no visible AWS Budget or legacy CUR definition. This is
+billing-lag evidence, not a zero-cost claim. Refresh both isolated account sessions, enable reviewed
+budget/export controls, and capture nonzero service-attributed development plus scheduled-staging
+cost before accepting D0-008.

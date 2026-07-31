@@ -1,6 +1,6 @@
 # Phase 0 Quality and Reliability Baselines
 
-Status: Definitions implemented; deployed synthetic baseline pending D0-011
+Status: Definitions and fixed staging workload preflight implemented; execution pending D0-011
 Accountable roles: Product analytics, QA/automation, and platform engineering
 
 ## Product-quality measurements
@@ -37,3 +37,9 @@ The Phase 0 verification command generates contracts and runs formatting, lintin
 unit tests, builds, Compose validation, and removed-scope checks. Before D0 closes, staging must
 also record API/load results, workflow-restart results, backup restoration, trace propagation, and
 cost attribution using only synthetic data.
+
+The fixed `phase0_staging_foundation_v1` profile prepares the remaining API/load evidence without
+claiming production capacity: 200 liveness reads, 200 readiness/database reads, 100 expected
+protected `401` reads, 25 sequential durable preference/outbox/Temporal workflows, and one exact
+idempotent replay. Its browser response and AWS corroboration retain only counts, timestamps,
+booleans, aggregate latency/utilization, and forbidden/error matches. Execution remains pending.
