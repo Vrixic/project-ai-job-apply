@@ -38,6 +38,12 @@ identity fingerprint into a 15-minute, HTTP-only, same-site cookie. The check pa
 deployed API returns `404` to the second account. Neither token, identity, operation identifier,
 nor response body is returned to browser code or retained as evidence.
 
+Use `scripts/start-deployed-web-conformance.ps1` to route this local, server-held BFF to either
+development or synthetic staging. The launcher verifies that the selected live gateway has the
+same issuer and audience as the ignored local Auth0 configuration before it starts. Staging's
+temporary use of the development Auth0 tenant is synthetic-only under ADR-014 and does not prove
+identity-provider isolation or launch readiness.
+
 Authentication callback failures redirect to an allowlisted local error state. Provider-controlled
 error descriptions are never rendered, while blocked or unavailable accounts receive a generic
 recovery message.

@@ -89,8 +89,11 @@ published. No plan or raw output entered source control or shared evidence.
 
 ## Remaining synthetic staging acceptance
 
-- Route a development web session to the staging gateway and complete a controlled synthetic
-  authenticated preference/workflow transaction.
+- Run `.\scripts\start-deployed-web-conformance.ps1 -Environment staging` and use its local web
+  session to complete a controlled synthetic authenticated preference/workflow transaction. The
+  launcher fails closed unless encrypted staging state resolves, ECS is stable, the live
+  issuer/audience exactly match the ignored local Auth0 settings, and gateway live, readiness,
+  and unauthenticated-protection checks return `200`, `200`, and `401`.
 - Prove the second synthetic Auth0 account cannot read the first account's operation.
 - Correlate the successful transaction with durable PostgreSQL/outbox/Temporal completion and a
   sanitized cross-service trace.
