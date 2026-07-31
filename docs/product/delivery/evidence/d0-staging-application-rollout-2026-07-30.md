@@ -87,16 +87,14 @@ They remain ignored and untracked locally because the execution safety layer rej
 non-recursive cleanup command. They must be removed by the operator after this evidence is
 published. No plan or raw output entered source control or shared evidence.
 
-## Remaining synthetic staging acceptance
+## Subsequent and remaining synthetic staging acceptance
 
-- Run `.\scripts\start-deployed-web-conformance.ps1 -Environment staging` and use its local web
-  session to complete a controlled synthetic authenticated preference/workflow transaction. The
-  launcher fails closed unless encrypted staging state resolves, ECS is stable, the live
-  issuer/audience exactly match the ignored local Auth0 settings, and gateway live, readiness,
-  and unauthenticated-protection checks return `200`, `200`, and `401`.
-- Prove the second synthetic Auth0 account cannot read the first account's operation.
-- Correlate the successful transaction with durable PostgreSQL/outbox/Temporal completion and a
-  sanitized cross-service trace.
+The controlled authenticated preference/workflow transaction, two-account denial, and correlated
+PostgreSQL/outbox/Temporal/X-Ray path subsequently passed. See the
+[authenticated staging evidence](d0-staging-authenticated-acceptance-2026-07-30.md).
+
+The following acceptance remains:
+
 - Confirm an alert recipient and prove controlled ALARM then OK delivery.
 - Exercise service restart and an application-only rollback/reenablement path.
 - Complete staging restore, representative workload, and cost-attribution evidence.
