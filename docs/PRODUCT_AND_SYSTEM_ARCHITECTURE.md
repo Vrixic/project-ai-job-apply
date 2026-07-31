@@ -1124,6 +1124,14 @@ Auth0 is the initial managed OIDC provider under
 [ADR-012](adr/012-auth0-initial-managed-identity.md). The provider-neutral `issuer + subject` to
 internal-UUID boundary remains authoritative so identity can be migrated without moving candidate
 or application-domain records.
+
+[ADR-014](adr/014-shared-development-auth0-for-synthetic-staging.md) permits synthetic-only
+pre-launch staging to trust the exact development Auth0 issuer while the current Free subscription
+provides one tenant. This exception does not provide identity-provider isolation and permits no
+real users, public access, or release-candidate claim. Dedicated staging and production tenants
+and replayed environment-specific conformance remain mandatory launch gates; production never
+trusts development identity.
+
 - User data export, correction, disconnect, and deletion
 - Subprocessor contracts and AI vendor retention/training settings
 - Regular penetration tests and a vulnerability disclosure program

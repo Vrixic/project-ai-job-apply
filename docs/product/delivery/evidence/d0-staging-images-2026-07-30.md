@@ -50,8 +50,10 @@ identifier, secret, token, or raw artifact is retained in this record.
 
 ## Remaining staging acceptance
 
-- Create or confirm staging-only Auth0 and Temporal configuration and write the dedicated
-  namespace-scoped Temporal key directly into the existing empty managed secret.
+- Use the isolated staging Temporal namespace/key and the exact development Auth0 issuer only
+  under the temporary synthetic-only
+  [ADR-014](../../../adr/014-shared-development-auth0-for-synthetic-staging.md) exception. This
+  does not authorize real users or prove identity isolation.
 - Review and apply the one-gateway/one-worker application plan.
 - Replay identity, ownership isolation, workflow completion, logs/traces/alerts, restart,
   rollback, restore, workload, and cost-attribution evidence.
@@ -59,3 +61,5 @@ identifier, secret, token, or raw artifact is retained in this record.
 
 Subsequent [staging database-migration evidence](d0-staging-database-migration-2026-07-30.md)
 proves the controlled migration completed while applications remained disabled.
+Subsequent [staging Temporal-secret evidence](d0-staging-temporal-secret-2026-07-30.md) proves the
+isolated namespace and managed key passed secret-safe read conformance.

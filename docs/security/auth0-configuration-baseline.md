@@ -1,6 +1,6 @@
 # Auth0 Configuration and Migration Baseline
 
-- Status: Development tenant provisioned; conformance in progress; activation approval pending
+- Status: Development web conformance complete; synthetic staging exception active; launch isolation pending
 - Last updated: 2026-07-30
 - Owners: Platform engineering; security/privacy engineering
 - Accountable approvers: Product owner, independent security reviewer, and legal/privacy counsel
@@ -13,6 +13,25 @@ user data.
 
 Create independent development, staging, and production Auth0 tenants. Do not share users, signing
 keys, applications, secrets, logs, or Management API credentials across environments.
+
+### Temporary pre-launch staging exception
+
+[ADR-014](../adr/014-shared-development-auth0-for-synthetic-staging.md) permits controlled,
+synthetic-only staging to trust the exact development issuer and `ai-job-apply-api` audience while
+the current Auth0 Free subscription provides one tenant. This is not identity isolation:
+development and staging share provider users, signing keys, logs, administration, availability,
+and failure modes.
+
+The exception permits no real candidates, invited testers, production PII, live ATS submissions,
+public access, or launch-candidate claim. Do not copy development Auth0 client, Management API, or
+session secrets into staging AWS; the staging gateway receives only the public issuer and
+audience. AWS, data, KMS, state, logs, queues, images, and Temporal remain environment isolated.
+
+Dedicated staging and production Auth0 tenants and environment-specific clients/APIs are mandatory
+before staging handles real users or becomes a release candidate. Replay the applicable
+conformance after cutover. Production must never trust the development issuer, and the launch
+gate requires an Auth0 upgrade or approved provider migration if tenant isolation is still
+unavailable.
 
 Each tenant contains:
 
@@ -100,9 +119,10 @@ Store sanitized evidence links in the owning delivery task record. Real identity
 prohibited in shared environments until the applicable approval gates are complete.
 
 Per [ADR-013](../adr/013-lean-until-demand-cloud-runtime.md), staging is isolated but provisioned on
-demand. Before staging processes any user or becomes a release candidate, create its independent
-Auth0 tenant and applicable clients and replay the applicable conformance matrix. Deferral means no
-staging access is allowed; it is not permission to share development identity configuration.
+demand. The only pre-launch exception is the synthetic-only, exact-issuer arrangement in
+[ADR-014](../adr/014-shared-development-auth0-for-synthetic-staging.md). Before staging processes
+any real user or becomes a release candidate, create its independent Auth0 tenant and applicable
+clients, cut over from the development issuer, and replay the applicable conformance matrix.
 
 ## Provider exit and migration
 

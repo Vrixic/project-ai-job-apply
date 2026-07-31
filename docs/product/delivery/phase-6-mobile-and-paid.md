@@ -4,7 +4,7 @@
 - Start: Not started
 - Completion: Not completed
 - Owners: Unassigned
-- Last updated: 2026-07-28
+- Last updated: 2026-07-30
 - Master tracker: [Delivery tracker](DELIVERY_TRACKER.md#d6--mobile-and-paid-launch)
 
 ## Objective
@@ -35,6 +35,7 @@ cache, WAF, or ALB controls supported by evidence.
 | D6-011 | Obtain storefront, billing, account-deletion, legal, security, and privacy approval before public mobile or paid release. | Ready | Legal/privacy counsel; security/privacy reviewers | Concrete applications, products, disclosures and test evidence | Release gate LR-D6-01; no public store release until approved. |
 | D6-012 | Finalize the public product name and production domain, complete conflict/domain/store/linguistic screening, and obtain product/counsel approval. | Ready | Product owner; legal counsel | Public-release candidate and production-origin plan | ApplyDash remains swappable and provisional; no production OAuth branding, email, store listing, paid release, or public launch before approval. |
 | D6-013 | Provision on-demand staging for the launch candidate, run representative load/recovery tests, and record an evidence-based launch-capacity decision. | Ready | Platform engineering; product owner | Stable D1–D6 candidate; AWS/provider access | Default remains lean; activate only the availability/capacity controls justified by evidence. |
+| D6-014 | Provision dedicated staging and production Auth0 tenants and environment-specific clients/APIs, cut staging over from the temporary shared development issuer, and replay applicable conformance before launch. | Ready | Platform engineering; security/privacy engineering | D0 identity baseline; D6-012; launch candidate | The Auth0 Free-plan exception in ADR-014 is synthetic-only. Production never trusts development identity, and no real-user staging or launch proceeds until isolation and replay pass. |
 
 ## Exit criteria
 
@@ -52,6 +53,9 @@ cache, WAF, or ALB controls supported by evidence.
 - [ ] Accessibility, privacy disclosures, mobile-store policy, security, support, and product acceptance evidence is complete.
 - [ ] The final public product name and production domain are owned, screened, approved, and consistently configured across web, mobile, extension, OAuth, email, stores, and support.
 - [ ] On-demand staging evidence records launch capacity, recovery behavior, provider limits, and every approved deviation from the lean defaults.
+- [ ] Dedicated staging and production Auth0 tenants are isolated from development, staging has
+      cut over from the temporary issuer, and applicable client, lifecycle, outage, ownership, and
+      recovery conformance has been replayed before real-user staging or public launch.
 
 ## Work log
 
@@ -61,6 +65,7 @@ cache, WAF, or ALB controls supported by evidence.
 | 2026-07-28 | Accepted final public naming/domain approval as a D6 release gate without starting D6 implementation. | D6-012 | [Naming brief](../foundation/naming-brief.md), [ADR-009](../../adr/009-swappable-presentation-brand.md) |
 | 2026-07-28 | Assigned on-demand staging and evidence-based launch-capacity review to D6 without starting implementation. | D6-013 | [ADR-013](../../adr/013-lean-until-demand-cloud-runtime.md) |
 | 2026-07-29 | Accepted real mobile Auth0 Native Application provisioning and Android/iOS device conformance from D0 without starting D6. The locally verified Expo shell remains reusable preparation only. | D6-001, D6-010 | [ADR-012 amendment](../../adr/012-auth0-initial-managed-identity.md), [Auth0 conformance matrix](../../security/auth0-development-conformance.md) |
+| 2026-07-30 | Accepted dedicated staging/production Auth0 tenant provisioning, cutover, and replay as a blocking launch task without starting D6. Synthetic Phase 0 staging may temporarily trust the development issuer, but cannot claim identity isolation or accept real users. | D6-014 | [ADR-014](../../adr/014-shared-development-auth0-for-synthetic-staging.md), [Auth0 baseline](../../security/auth0-configuration-baseline.md) |
 
 ## Decisions and scope changes
 
@@ -69,6 +74,7 @@ cache, WAF, or ALB controls supported by evidence.
 | 2026-07-28 | Defer final public naming from D0 to D6 while retaining ApplyDash as the swappable development identity. | Naming is not a foundation dependency but must be settled before production OAuth, email, stores, billing, or public launch. | [Naming brief](../foundation/naming-brief.md) |
 | 2026-07-28 | Keep launch capacity lean unless staging/load/recovery evidence requires a specific control. | Scaling is a measured operational decision, not an automatic consequence of completing product phases. | [ADR-013](../../adr/013-lean-until-demand-cloud-runtime.md) |
 | 2026-07-29 | Perform real mobile identity/provider/device conformance in D6 rather than D0. | Conformance should test the actual mobile application and remains a blocking mobile-release gate, while current delivery stays focused on web. | [ADR-012 amendment](../../adr/012-auth0-initial-managed-identity.md) |
+| 2026-07-30 | End the temporary shared-development Auth0 staging exception before real-user staging or launch. | Shared users, keys, logs, administration, availability, and failure modes do not provide environment isolation. | [ADR-014](../../adr/014-shared-development-auth0-for-synthetic-staging.md) |
 
 ## Risks and blockers
 
@@ -78,6 +84,7 @@ cache, WAF, or ALB controls supported by evidence.
 | D6-R2 | Open | Provider webhook delay/replay can create entitlement mismatch. | Unassigned | Use idempotent webhooks, internal projection, grace, and scheduled reconciliation. |
 | D6-R3 | Open | Mobile scope can expand into unreliable embedded ATS automation. | Unassigned | Keep mobile focused on discovery, review, approval, confirmed-submission history, and secure handoff. |
 | D6-R4 | Open | ApplyDash and `applydash.ai` are provisional and may fail ownership, conflict, trademark, store, or linguistic review. | Product owner | Complete D6-012 before any public-release identity becomes irreversible. |
+| D6-R5 | Blocked | The current Auth0 Free subscription provides one tenant, so synthetic staging temporarily shares the development issuer and cannot prove identity-provider isolation. | Product owner; platform engineering | Before real-user staging or launch, upgrade Auth0 or migrate providers, provision dedicated staging/production tenants, cut over, and replay the applicable conformance matrix. |
 
 ## Completion record
 
