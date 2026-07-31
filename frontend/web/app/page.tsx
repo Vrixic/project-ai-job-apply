@@ -5,6 +5,7 @@ import {
   CROSS_USER_PROBE_COOKIE_NAME,
   isCrossUserIsolationConformanceEnabled,
 } from "../lib/cross-user-isolation-conformance";
+import { isStagingWorkloadConformanceEnabled } from "../lib/staging-workload-conformance";
 import { FoundationForm } from "./foundation-form";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +30,7 @@ export default async function FoundationPage({
       authConformanceEnabled={isLocalAuth0ConformanceEnabled()}
       authenticationFailed={parameters.auth_error === "authentication_failed"}
       crossUserProbeArmed={Boolean(cookieStore?.get(CROSS_USER_PROBE_COOKIE_NAME))}
+      workloadConformanceEnabled={isStagingWorkloadConformanceEnabled()}
       {...displayName}
     />
   );

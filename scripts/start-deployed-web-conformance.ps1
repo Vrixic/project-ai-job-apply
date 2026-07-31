@@ -3,6 +3,7 @@ param(
   [string]$Environment = "development",
   [string]$AwsProfile = "",
   [string]$AwsRegion = "us-east-2",
+  [switch]$EnableWorkloadConformance,
   [switch]$ValidateOnly,
   [switch]$Help
 )
@@ -14,6 +15,7 @@ if ($Help) {
 Usage:
   .\scripts\start-deployed-web-conformance.ps1
   .\scripts\start-deployed-web-conformance.ps1 -Environment staging
+  .\scripts\start-deployed-web-conformance.ps1 -Environment staging -EnableWorkloadConformance
   .\scripts\start-deployed-web-conformance.ps1 -Environment staging -ValidateOnly
   .\scripts\start-deployed-web-conformance.ps1 -ValidateOnly
 
@@ -24,6 +26,8 @@ Options:
   -Environment  Deployed environment: development or staging. Default: development
   -AwsProfile   IAM Identity Center profile. Default: ai-job-apply-<environment>-admin
   -AwsRegion    AWS region. Default: us-east-2
+  -EnableWorkloadConformance
+                Expose the fixed local-only staging workload control. Staging only.
   -ValidateOnly Validate prerequisites without starting the web client.
   -Help         Show this help.
 "@
@@ -32,6 +36,9 @@ Options:
 
 if ([string]::IsNullOrWhiteSpace($AwsProfile)) {
   $AwsProfile = "ai-job-apply-$Environment-admin"
+}
+if ($EnableWorkloadConformance -and $Environment -ne "staging") {
+  throw "Workload conformance is restricted to the synthetic staging environment."
 }
 
 $environmentLabel = if ($Environment -eq "staging") { "Staging" } else { "Development" }
@@ -159,6 +166,7 @@ $previousProfile = $env:AWS_PROFILE
 $previousRegion = $env:AWS_REGION
 $previousDefaultRegion = $env:AWS_DEFAULT_REGION
 $previousPlatformBaseUrl = $env:PLATFORM_API_BASE_URL
+$previousWorkloadConformance = $env:ENABLE_STAGING_WORKLOAD_CONFORMANCE
 
 try {
   $env:AWS_PROFILE = $AwsProfile
@@ -270,6 +278,11 @@ try {
   }
 
   $env:PLATFORM_API_BASE_URL = $gatewayUrl
+  if ($EnableWorkloadConformance) {
+    $env:ENABLE_STAGING_WORKLOAD_CONFORMANCE = "1"
+  } else {
+    Remove-Item Env:ENABLE_STAGING_WORKLOAD_CONFORMANCE -ErrorAction SilentlyContinue
+  }
   Write-Host "Starting the local web client at http://localhost:3000."
   Write-Host "Its server-held BFF targets the deployed $Environment gateway. Press Ctrl+C to stop."
   Push-Location $repositoryRoot
@@ -286,4 +299,9 @@ try {
   $env:AWS_REGION = $previousRegion
   $env:AWS_DEFAULT_REGION = $previousDefaultRegion
   $env:PLATFORM_API_BASE_URL = $previousPlatformBaseUrl
+  if ($null -eq $previousWorkloadConformance) {
+    Remove-Item Env:ENABLE_STAGING_WORKLOAD_CONFORMANCE -ErrorAction SilentlyContinue
+  } else {
+    $env:ENABLE_STAGING_WORKLOAD_CONFORMANCE = $previousWorkloadConformance
+  }
 }

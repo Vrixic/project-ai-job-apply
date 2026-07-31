@@ -39,3 +39,6 @@ Every alert and privileged admin operation should link to a relevant runbook.
 - [Staging PostgreSQL point-in-time restore](restore/staging-postgresql-point-in-time.md) —
   Rehearses isolated staging PITR with resumable state, immutable read-only verification, guarded
   deletion, and final application/no-drift acceptance.
+- [Staging workload and initial cost acceptance](observability/staging-workload-and-cost.md) —
+  Measures the fixed authenticated foundation workload, lean runtime signals, and attributable
+  development/staging billing without exposing session or provider data.

@@ -13,6 +13,9 @@ timestamps.
   provisioned synthetic staging notification path without retaining the destination.
 - [Development distributed tracing](development-distributed-tracing.md) — Continues privacy-safe
   W3C context through the deployed gateway, outbox, Temporal worker, and X-Ray.
+- [Staging workload and initial cost acceptance](staging-workload-and-cost.md) — Runs a fixed
+  session-safe synthetic foundation workload and corroborates only aggregate runtime/billing
+  evidence.
 - [Development provider and log recovery](../providers/development-provider-and-log-recovery.md) —
   Uses continuous privacy-safe heartbeats to detect and recover from a gateway log-delivery
   interruption.

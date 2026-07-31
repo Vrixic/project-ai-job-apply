@@ -31,7 +31,13 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
 - `start-deployed-web-conformance.ps1` — Validates development or synthetic-staging AWS,
   Terraform, exact live/local Auth0 alignment, ECS stability, and gateway health; resolves the
   deployed HTTPS gateway without printing it; and runs only the local web/BFF for authenticated
-  deployed conformance. Select staging with `-Environment staging`.
+  deployed conformance. Select staging with `-Environment staging`; add the explicit
+  `-EnableWorkloadConformance` switch only for the reviewed fixed staging workload.
+- `inspect-staging-workload-and-cost.ps1` — Reports the read-only staging workload/cost baseline
+  and corroborates a completed browser workload window with aggregate API Gateway, ECS, RDS,
+  queue, alarm, log, and no-drift measurements.
+- `inspect-phase0-cost.ps1` — Reads actual service-attributed Cost Explorer totals plus budget and
+  legacy CUR counts from both isolated Phase 0 accounts without printing account/provider records.
 - `operate-platform-alerts.ps1` — Reports sanitized development or staging alert state, privately
   requests an SNS email subscription, and exercises ALARM → OK delivery using only the selected
   environment's dedicated synthetic metric. Select staging with `-Environment staging`.

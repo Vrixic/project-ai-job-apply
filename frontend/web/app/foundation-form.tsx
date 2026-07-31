@@ -41,6 +41,7 @@ export function FoundationForm({
   authenticated,
   crossUserProbeArmed,
   displayName,
+  workloadConformanceEnabled,
 }: {
   authConfigured: boolean;
   authConformanceEnabled: boolean;
@@ -48,6 +49,7 @@ export function FoundationForm({
   authenticated: boolean;
   crossUserProbeArmed: boolean;
   displayName?: string;
+  workloadConformanceEnabled: boolean;
 }) {
   const [targetRoles, setTargetRoles] = useState("Software Engineer");
   const [locations, setLocations] = useState("New York, NY");
@@ -57,6 +59,8 @@ export function FoundationForm({
   const [renewingSession, setRenewingSession] = useState(false);
   const [armingIsolation, setArmingIsolation] = useState(false);
   const [checkingIsolation, setCheckingIsolation] = useState(false);
+  const [runningWorkload, setRunningWorkload] = useState(false);
+  const [workloadMetrics, setWorkloadMetrics] = useState<Record<string, unknown>>();
   const [isolationArmed, setIsolationArmed] = useState(crossUserProbeArmed);
   const [operationId, setOperationId] = useState<string>();
   const [operation, setOperation] = useState<Operation>();
@@ -243,6 +247,49 @@ export function FoundationForm({
     }
   }
 
+  async function runStagingWorkload() {
+    if (
+      !window.confirm(
+        "Run the fixed synthetic staging workload: 500 public probes and 25 readiness workflows?",
+      )
+    ) {
+      return;
+    }
+    setRunningWorkload(true);
+    setWorkloadMetrics(undefined);
+    setMessage(undefined);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 180_000);
+    try {
+      const response = await fetch("/api/auth-conformance/workload", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ confirmation: "run-phase0-staging-foundation-workload-v1" }),
+        signal: controller.signal,
+      });
+      const outcome = (await response.json()) as {
+        message?: string;
+        metrics?: Record<string, unknown>;
+      };
+      if (!response.ok || !outcome.metrics) {
+        throw new Error(outcome.message ?? "Staging workload failed");
+      }
+      setWorkloadMetrics(outcome.metrics);
+      setMessage("Phase 0 staging workload passed. Review the aggregate metrics below.");
+    } catch (error) {
+      setMessage(
+        controller.signal.aborted
+          ? "The staging workload timed out. Stop and inspect the deployed environment."
+          : error instanceof Error
+            ? error.message
+            : "Staging workload failed",
+      );
+    } finally {
+      window.clearTimeout(timeout);
+      setRunningWorkload(false);
+    }
+  }
+
   return (
     <main>
       <section className="eyebrow">Foundation vertical slice</section>
@@ -288,6 +335,19 @@ export function FoundationForm({
             <button type="button" onClick={runIsolationProbe} disabled={checkingIsolation}>
               {checkingIsolation ? "Checking…" : "Run check as this account"}
             </button>
+          )}
+          {workloadConformanceEnabled && (
+            <>
+              <hr />
+              <strong>Phase 0 staging workload</strong>
+              <p>
+                Run the fixed synthetic profile only after reviewing its runbook. The server-held
+                token, saved preferences, and operation identifiers never enter the result.
+              </p>
+              <button type="button" onClick={runStagingWorkload} disabled={runningWorkload}>
+                {runningWorkload ? "Running workload…" : "Run staging workload"}
+              </button>
+            </>
           )}
         </aside>
       )}
@@ -360,6 +420,12 @@ export function FoundationForm({
         </aside>
       )}
       {message && <output>{message}</output>}
+      {workloadMetrics && (
+        <section className="result" aria-live="polite">
+          <strong>Aggregate staging workload metrics</strong>
+          <pre>{JSON.stringify(workloadMetrics, null, 2)}</pre>
+        </section>
+      )}
       {operation && (
         <section className="result" aria-live="polite">
           <strong>Readiness workflow: {operation.state.replace("_", " ")}</strong>
