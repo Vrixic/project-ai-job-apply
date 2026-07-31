@@ -35,6 +35,10 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
 - `operate-platform-alerts.ps1` — Reports sanitized development or staging alert state, privately
   requests an SNS email subscription, and exercises ALARM → OK delivery using only the selected
   environment's dedicated synthetic metric. Select staging with `-Environment staging`.
+- `operate-staging-application-recovery.ps1` — Reports the sanitized staging runtime state,
+  performs an explicitly authorized worker-then-gateway rolling restart, and creates/applies
+  separately checksum-gated application-only disable and enable plans. Sensitive reconstruction
+  context and plans remain ignored under the staging Terraform data directory.
 - `preview-development-alert-plan.ps1` — Reconstructs the exact live development runtime inputs,
   produces a refresh-backed preview, rejects changes outside the reviewed alert scope, and removes
   the sensitive plan after printing only a sanitized summary and SHA-256.
