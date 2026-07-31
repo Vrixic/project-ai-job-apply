@@ -10,3 +10,5 @@ saved infrastructure plan, success evidence, and recovery boundary.
   one-off Phase 0 migration task without enabling long-running application services.
 - [Development application rollout](development-application-rollout.md) — Reviews, enables,
   verifies, and, when necessary, rolls back the lean gateway and worker deployment.
+- [Staging application rollout](staging-application-rollout.md) — Reviews, enables, verifies, and
+  returns the synthetic-only staging gateway and worker to their on-demand posture.

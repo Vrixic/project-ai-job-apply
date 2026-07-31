@@ -29,17 +29,21 @@ Resolve repository URLs from Terraform output and append the approved platform-m
 Supply the exact Auth0 and Temporal values through process-scoped Terraform variables. Do not write
 them to a committed variable file.
 
-Save the plan and inspect its JSON without printing sensitive values. The first enablement plan
-must contain only:
+Save the plan and inspect its JSON without printing sensitive values. An enablement plan using the
+current module may contain only:
 
 - the API Gateway HTTP API, default stage/route/integration, and VPC Link;
 - the Cloud Map private namespace and gateway service using an `SRV` record;
 - one immutable gateway task definition and ECS service; and
-- one immutable worker task definition and ECS service.
+- one immutable worker task definition and ECS service;
+- the bounded two-action application tracing policy;
+- the gateway/worker heartbeat metric filters and missing-signal alarms; and
+- an in-place update to the existing operations dashboard that adds only API Gateway and
+  application-heartbeat visibility.
 
 Reject persistent-resource changes, replacements, deletions, extra replicas, Redis, NAT, ALB,
-Multi-AZ, or unapproved image/provider values. Record the saved-plan SHA-256, then apply only that
-exact artifact.
+Multi-AZ, unrelated dashboard changes, or unapproved image/provider values. Record the saved-plan
+SHA-256, then apply only that exact artifact.
 
 For every later image revision, require each task-definition replacement to use
 `create_before_destroy`: register the new immutable revision, update the service, and only then
