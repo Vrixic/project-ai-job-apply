@@ -89,6 +89,30 @@ the provider's initial delivery window. Cost Explorer reported:
 The development amount is initial provider-estimated evidence, not an accepted monthly baseline.
 No alert should be expected while actual cost remains below `$5`.
 
+## Duplicate-budget cleanup
+
+The exact-control inspection subsequently found one additional development budget that was not
+managed by this repository. It was also a `$5` monthly actual-cost budget, but used percentage
+notifications at 50%, 80%, and 100% rather than the accepted single `$5` absolute notification.
+
+Immediately before deletion, the operator revalidated the development caller, account boundary,
+expected Terraform-managed budget, and the exact shape of the additional budget. With explicit
+product-owner authorization, only that stale manual budget was deleted. The deletion did not
+change application resources and is recoverable only by explicitly recreating the manual budget.
+
+The post-delete two-account inspection now confirms independently for development and staging:
+
+- `ExpectedBudgetCount` is `1` and `OtherBudgetCount` is `0`;
+- the monthly `COST` budget is exactly `$5 USD`, with `ExpectedAlertCount` equal to `1` and
+  `OtherAlertCount` equal to `0`;
+- `ExpectedExportCount` is `1` and `OtherExportCount` is `0`; and
+- the matching export reports `HEALTHY`.
+
+The same check still reports no delivered Parquet or manifest object in either `cur-2/` prefix.
+Development remains at an estimated `$2.6802`, while staging remains at an estimated `$0.00`.
+No account identifier, budget name, subscriber destination, or other sensitive identifier is
+retained in this record.
+
 ## Remaining D0-008 acceptance
 
 D0-008 remains in progress until:

@@ -15,12 +15,15 @@ Usage:
   .\scripts\inspect-phase0-cost.ps1
   .\scripts\inspect-phase0-cost.ps1 -StartDate <YYYY-MM-DD> -EndDate <YYYY-MM-DD>
 
-Reads actual unblended Cost Explorer data, budget count, and CUR 2.0 Data Export count from the
-isolated development and staging accounts. EndDate is exclusive. The default is the current UTC
-calendar month. Both IAM Identity Center sessions must be active.
+Reads actual unblended Cost Explorer data, the exact environment budget and alert, CUR 2.0 export
+health, and real export delivery from the isolated development and staging accounts. EndDate is
+exclusive. The default is the current UTC calendar month. Both IAM Identity Center sessions must
+be active.
 
 This operator is read-only and prints no account identifier, caller ARN, budget destination,
-resource identifier, tag value, credit record, invoice, or raw provider response.
+bucket/object key, resource identifier, tag value, credit record, invoice, or raw provider
+response. AWS provider validation objects outside the configured `cur-2/` prefix do not count as
+CUR delivery.
 "@
   exit 0
 }
@@ -149,16 +152,144 @@ function Get-EnvironmentCost {
     "--output",
     "json"
   )
+  $expectedBudgetName = "ai-job-apply-$Environment-monthly-cost"
+  $matchingBudgets = @(
+    (Get-Collection $budgets "Budgets") | Where-Object {
+      [string]$_.BudgetName -eq $expectedBudgetName
+    }
+  )
+  $budgetNotifications = @()
+  $actualAlertThresholds = @()
+  $expectedBudgetAlerts = @()
+  if ($matchingBudgets.Count -eq 1) {
+    $notifications = Invoke-AwsJson $Profile @(
+      "budgets",
+      "describe-notifications-for-budget",
+      "--account-id",
+      [string]$identity.Account,
+      "--budget-name",
+      $expectedBudgetName,
+      "--output",
+      "json"
+    )
+    $budgetNotifications = @(Get-Collection $notifications "Notifications")
+    $actualAlertThresholds = @(
+      $budgetNotifications |
+        Where-Object {
+          [string]$_.NotificationType -eq "ACTUAL" -and
+          [string]$_.ThresholdType -eq "ABSOLUTE_VALUE"
+        } |
+        ForEach-Object { [Math]::Round([decimal]$_.Threshold, 4) } |
+        Sort-Object
+    )
+    $expectedBudgetAlerts = @(
+      $budgetNotifications | Where-Object {
+        [string]$_.ComparisonOperator -eq "GREATER_THAN" -and
+        [string]$_.NotificationType -eq "ACTUAL" -and
+        [string]$_.ThresholdType -eq "ABSOLUTE_VALUE" -and
+        [decimal]$_.Threshold -eq [decimal]5
+      }
+    )
+  }
+
+  $expectedExportName = "ai-job-apply-$Environment-cost-and-usage"
+  $matchingExports = @(
+    (Get-Collection $exports "Exports") | Where-Object {
+      [string]$_.ExportName -eq $expectedExportName
+    }
+  )
+  $deliveryObjects = @()
+  [string]$exportStatus = "missing-or-duplicate"
+  if ($matchingExports.Count -eq 1) {
+    $exportStatus = [string]$matchingExports[0].ExportStatus.StatusCode
+    $exportDetail = Invoke-AwsJson $Profile @(
+      "bcm-data-exports",
+      "get-export",
+      "--region",
+      "us-east-1",
+      "--export-arn",
+      [string]$matchingExports[0].ExportArn,
+      "--output",
+      "json"
+    )
+    $destinations = Get-Collection $exportDetail.Export "DestinationConfigurations"
+    if ($destinations.Count -ne 1 -or -not [string]$destinations[0].S3Destination.S3Bucket) {
+      throw "$Environment CUR 2.0 export does not have one inspectable S3 destination."
+    }
+    $delivery = Invoke-AwsJson $Profile @(
+      "s3api",
+      "list-objects-v2",
+      "--bucket",
+      [string]$destinations[0].S3Destination.S3Bucket,
+      "--prefix",
+      "cur-2/",
+      "--output",
+      "json"
+    )
+    $deliveryObjects = Get-Collection $delivery "Contents"
+  }
+  $parquetObjects = @(
+    $deliveryObjects | Where-Object { ([string]$_.Key).EndsWith(".parquet") }
+  )
+  $manifestObjects = @(
+    $deliveryObjects | Where-Object { [string]$_.Key -match "(?i)manifest" }
+  )
+  [long]$deliveryBytes = 0
+  foreach ($object in $deliveryObjects) {
+    $deliveryBytes += [long]$object.Size
+  }
+  $latestDelivery = @(
+    $deliveryObjects | Sort-Object { [DateTime]$_.LastModified } -Descending
+  ) | Select-Object -First 1
   return [pscustomobject]@{
-    Environment       = $Environment
-    TemporaryCaller   = $true
-    PeriodStart       = $Window.Start.ToString("yyyy-MM-dd")
+    Environment        = $Environment
+    TemporaryCaller    = $true
+    PeriodStart        = $Window.Start.ToString("yyyy-MM-dd")
     PeriodEndExclusive = $Window.End.ToString("yyyy-MM-dd")
-    UnblendedCostUsd  = [Math]::Round($total, 4)
-    Estimated         = @($periods | Where-Object { [bool]$_.Estimated }).Count -gt 0
-    Services          = @($services | Sort-Object AmountUsd -Descending)
-    AwsBudgetCount    = (Get-Collection $budgets "Budgets").Count
-    Cur2DataExports   = (Get-Collection $exports "Exports").Count
+    UnblendedCostUsd   = [Math]::Round($total, 4)
+    Estimated          = @($periods | Where-Object { [bool]$_.Estimated }).Count -gt 0
+    Services           = @($services | Sort-Object AmountUsd -Descending)
+    AwsBudgetCount     = (Get-Collection $budgets "Budgets").Count
+    ExpectedBudgetCount = $matchingBudgets.Count
+    OtherBudgetCount   = (Get-Collection $budgets "Budgets").Count - $matchingBudgets.Count
+    MonthlyBudgetUsd   = if ($matchingBudgets.Count -eq 1) {
+      [Math]::Round([decimal]$matchingBudgets[0].BudgetLimit.Amount, 4)
+    } else {
+      $null
+    }
+    BudgetType         = if ($matchingBudgets.Count -eq 1) {
+      [string]$matchingBudgets[0].BudgetType
+    } else {
+      $null
+    }
+    BudgetTimeUnit     = if ($matchingBudgets.Count -eq 1) {
+      [string]$matchingBudgets[0].TimeUnit
+    } else {
+      $null
+    }
+    BudgetLimitUnit    = if ($matchingBudgets.Count -eq 1) {
+      [string]$matchingBudgets[0].BudgetLimit.Unit
+    } else {
+      $null
+    }
+    BudgetNotificationCount = $budgetNotifications.Count
+    ExpectedAlertCount       = $expectedBudgetAlerts.Count
+    OtherAlertCount          = $budgetNotifications.Count - $expectedBudgetAlerts.Count
+    ActualAlertThresholdsUsd = $actualAlertThresholds
+    Cur2DataExports          = (Get-Collection $exports "Exports").Count
+    ExpectedExportCount      = $matchingExports.Count
+    OtherExportCount         = (Get-Collection $exports "Exports").Count - $matchingExports.Count
+    Cur2ExportStatus         = $exportStatus
+    CurDeliveryObjectCount   = $deliveryObjects.Count
+    CurParquetObjectCount    = $parquetObjects.Count
+    CurManifestObjectCount   = $manifestObjects.Count
+    CurDeliveryBytes         = $deliveryBytes
+    CurLatestDeliveryUtc     = if ($latestDelivery) {
+      ([DateTime]$latestDelivery.LastModified).ToUniversalTime().ToString("o")
+    } else {
+      $null
+    }
+    FirstCurDeliveryPresent = $exportStatus -eq "HEALTHY" -and $parquetObjects.Count -gt 0
   }
 }
 
