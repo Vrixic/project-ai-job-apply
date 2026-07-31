@@ -3,7 +3,8 @@
 ## Scope
 
 This record covers the isolated applications-disabled staging platform in AWS `us-east-2`. It
-does not prove staging application deployment, Auth0 or Temporal configuration, image scanning,
+does not prove staging application deployment, Auth0 or Temporal configuration at the time of
+this execution, image scanning,
 database migration, authenticated workflows, observability delivery, restore, workload baselines,
 cost attribution, or Phase 0 completion.
 
@@ -67,9 +68,11 @@ evidence.
 
 ## Remaining staging acceptance
 
-- Create or confirm a staging-only Temporal namespace and dedicated namespace-scoped key, then
-  write it directly into the empty managed secret.
-- Create or confirm a staging-only Auth0 tenant/application/API configuration.
+- The isolated staging Temporal namespace and managed key subsequently passed secret-safe,
+  read-only conformance; deployed workflow write evidence remains open.
+- Synthetic staging will temporarily trust the exact development Auth0 issuer under
+  [ADR-014](../../../adr/014-shared-development-auth0-for-synthetic-staging.md). This does not
+  prove identity isolation; dedicated staging and production tenants remain a D6 launch gate.
 - Enable the one-gateway/one-worker application.
 - Prove identity, ownership isolation, workflow completion, logs/traces/alerts, restart, rollback,
   restore, workload, and cost attribution.
@@ -79,3 +82,5 @@ Subsequent [staging image evidence](d0-staging-images-2026-07-30.md) proves immu
 worker publication plus the required ECR scan gates while applications remained disabled.
 Subsequent [staging database-migration evidence](d0-staging-database-migration-2026-07-30.md)
 proves the controlled migration completed while applications remained disabled.
+Subsequent [staging Temporal-secret evidence](d0-staging-temporal-secret-2026-07-30.md) proves the
+isolated namespace and managed key passed secret-safe read conformance.

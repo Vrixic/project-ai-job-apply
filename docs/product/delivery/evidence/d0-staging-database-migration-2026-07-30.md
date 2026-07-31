@@ -6,9 +6,10 @@ This record covers provisioning and running the controlled profile-foundation da
 in the isolated staging AWS account in `us-east-2`. It proves migration `0001_foundation` completed
 and verified while all long-running applications remained disabled.
 
-It does not prove staging Auth0 or Temporal configuration, gateway or worker deployment,
-authenticated workflows, observability delivery, restart, rollback, restore, workload baselines,
-cost attribution, or Phase 0 completion.
+It does not prove staging Auth0 or Temporal configuration at the time of this execution, gateway
+or worker deployment, authenticated workflows, observability delivery, restart, rollback,
+restore, workload baselines, cost attribution, or Phase 0 completion. Subsequent evidence records
+the isolated Temporal secret/read conformance.
 
 ## Reviewed source and image
 
@@ -78,9 +79,14 @@ state is retained in this record.
 
 ## Remaining staging acceptance
 
-- Create or confirm staging-only Auth0 and Temporal configuration and write the dedicated
-  namespace-scoped Temporal key directly into the existing empty managed secret.
+- Use the isolated staging Temporal namespace/key and the exact development Auth0 issuer only
+  under the temporary synthetic-only
+  [ADR-014](../../../adr/014-shared-development-auth0-for-synthetic-staging.md) exception. This
+  does not authorize real users or prove identity isolation.
 - Review and apply the one-gateway/one-worker application plan.
 - Replay identity, ownership isolation, workflow completion, logs/traces/alerts, restart,
   rollback, restore, workload, and cost-attribution evidence.
 - Record no drift and return staging to its reviewed lean posture after acceptance.
+
+Subsequent [staging Temporal-secret evidence](d0-staging-temporal-secret-2026-07-30.md) proves the
+isolated namespace and managed key passed secret-safe read conformance.

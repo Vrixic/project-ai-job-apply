@@ -17,6 +17,7 @@ Records important technical decisions, their context, alternatives, consequences
 - [ADR-011: Staged preproduction data and founder pilot](011-staged-preproduction-data-and-founder-pilot.md)
 - [ADR-012: Auth0 as the initial managed identity provider](012-auth0-initial-managed-identity.md)
 - [ADR-013: Lean-until-demand cloud runtime](013-lean-until-demand-cloud-runtime.md)
+- [ADR-014: Temporary shared development Auth0 for synthetic staging](014-shared-development-auth0-for-synthetic-staging.md)
 
 Use `000-template.md` for future decisions.
 
