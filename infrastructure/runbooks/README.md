@@ -30,6 +30,9 @@ Every alert and privileged admin operation should link to a relevant runbook.
 - [Staging application rollout](deployments/staging-application-rollout.md) — Enables and verifies
   the isolated AWS/Temporal staging runtime under the temporary synthetic-only Auth0 exception,
   then defines its application-only rollback boundary.
+- [Staging application recovery](deployments/staging-application-recovery.md) — Executes a
+  controlled service restart and checksum-gated application-only disable/reenable drill while
+  preserving the persistent staging platform.
 - [Development PostgreSQL point-in-time restore](restore/development-postgresql-point-in-time.md) —
   Creates and validates a private disposable restore, measures recovery, and proves complete
   cleanup without changing the source database.

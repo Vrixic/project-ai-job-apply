@@ -12,3 +12,6 @@ saved infrastructure plan, success evidence, and recovery boundary.
   verifies, and, when necessary, rolls back the lean gateway and worker deployment.
 - [Staging application rollout](staging-application-rollout.md) — Reviews, enables, verifies, and
   returns the synthetic-only staging gateway and worker to their on-demand posture.
+- [Staging application recovery](staging-application-recovery.md) — Proves controlled task
+  replacement plus checksum-gated application-only disablement and exact re-enablement without
+  changing persistent infrastructure or migration history.

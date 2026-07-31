@@ -102,3 +102,9 @@ Do not destroy RDS, KMS, S3, SQS/DLQ, ECR, secrets, networking, state, or migrat
 application rollback. If acceptance is continuing, keep the lean one-task services; if the
 on-demand exercise is complete, return staging to the applications-disabled posture unless a
 recorded launch/recovery need justifies continued operation.
+
+Use the reviewed
+[staging application recovery procedure](staging-application-recovery.md) for the Phase 0
+controlled restart and full application-only disable/reenable drill. It separates plan creation
+from checksum-authorized apply and preserves ignored reconstruction inputs until the exact reverse
+plan has restored the enabled no-drift baseline.
