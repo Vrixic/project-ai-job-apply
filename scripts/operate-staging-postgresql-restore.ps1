@@ -246,6 +246,15 @@ function Get-MigrationRuntime {
   ) {
     throw "The staging verifier task definition does not match the reviewed runtime."
   }
+  $logConfiguration = $containers[0].logConfiguration
+  if (
+    [string]$logConfiguration.logDriver -ne "awslogs" -or
+    [string]$logConfiguration.options."awslogs-group" -ne $applicationLogGroup -or
+    [string]$logConfiguration.options."awslogs-region" -ne $Region -or
+    -not [string]$logConfiguration.options."awslogs-stream-prefix"
+  ) {
+    throw "The staging verifier task definition does not match the reviewed log boundary."
+  }
   $image = [string]$containers[0].image
   if ($image -notmatch "^[^@]+@sha256:[a-f0-9]{64}$") {
     throw "The staging verifier image must be digest pinned."
@@ -285,6 +294,8 @@ function Get-MigrationRuntime {
     TaskDefinitionArn = [string]$taskDefinitionArn
     SubnetIds         = $subnetIds
     SecurityGroupId   = [string]$securityGroupId
+    ContainerName     = [string]$containers[0].name
+    LogStreamPrefix   = [string]$logConfiguration.options."awslogs-stream-prefix"
   }
 }
 
@@ -297,7 +308,12 @@ function Invoke-DatabaseVerifier {
 
   $verifierSource = @'
 import { createHash } from "node:crypto";
-import postgres from "postgres";
+import { createRequire } from "node:module";
+
+const requireFromProfileService = createRequire(
+  new URL("./backend/services/profile/package.json", import.meta.url)
+);
+const postgres = requireFromProfileService("postgres");
 
 const sourceUrl = process.env.DATABASE_URL;
 if (!sourceUrl) throw new Error("DATABASE_URL is required");
@@ -418,10 +434,14 @@ try {
   $containers = @($task.containers | Where-Object { $_.name -eq "database-migration" })
   if (
     $containers.Count -ne 1 -or
-    [int]$containers[0].exitCode -ne 0 -or
-    -not [string]$containers[0].logStreamName
+    [int]$containers[0].exitCode -ne 0
   ) {
     throw "The $Mode restore verifier did not complete successfully."
+  }
+  $logStreamName = [string]$containers[0].logStreamName
+  if (-not $logStreamName) {
+    $taskId = ($taskArn -split "/")[-1]
+    $logStreamName = "$($Runtime.LogStreamPrefix)/$($Runtime.ContainerName)/$taskId"
   }
 
   $deadline = (Get-Date).AddMinutes(2)
@@ -435,7 +455,7 @@ try {
           "--log-group-name",
           $applicationLogGroup,
           "--log-stream-name",
-          [string]$containers[0].logStreamName,
+          $logStreamName,
           "--start-from-head",
           "--output",
           "json"
