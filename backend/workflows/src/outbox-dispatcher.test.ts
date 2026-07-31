@@ -12,7 +12,19 @@ const tracing = vi.hoisted(() => ({
 
 vi.mock("@ai-job-apply/observability", () => tracing);
 
+import { eventTypes } from "@ai-job-apply/event-contracts";
 import { OutboxDispatcher } from "./outbox-dispatcher.js";
+
+const preferenceEvent = {
+  id: "018f47a5-7b70-7cc2-a999-c343b7d2fdf6",
+  type: eventTypes.profilePreferencesUpdated,
+  subject: "preference-set/018f47a5-7b70-7cc2-a999-c343b7d2fdf7",
+  data: {
+    preferenceSetId: "018f47a5-7b70-7cc2-a999-c343b7d2fdf7",
+    version: 1,
+    operationId: "018f47a5-7b70-7cc2-a999-c343b7d2fdf8",
+  },
+};
 
 describe("OutboxDispatcher", () => {
   it("continues valid event context into Temporal and publishes after start", async () => {
@@ -21,14 +33,7 @@ describe("OutboxDispatcher", () => {
     const store = {
       getPendingOutboxEvents: vi.fn(async () => [
         {
-          id: "018f47a5-7b70-7cc2-a999-c343b7d2fdf6",
-          type: "profile.preferences.updated.v1",
-          subject: "preference-set/018f47a5-7b70-7cc2-a999-c343b7d2fdf7",
-          data: {
-            preferenceSetId: "018f47a5-7b70-7cc2-a999-c343b7d2fdf7",
-            version: 1,
-            operationId: "018f47a5-7b70-7cc2-a999-c343b7d2fdf8",
-          },
+          ...preferenceEvent,
           traceparent: eventTraceparent,
         },
       ]),
@@ -58,5 +63,45 @@ describe("OutboxDispatcher", () => {
       }),
     );
     expect(markOutboxPublished).toHaveBeenCalledOnce();
+  });
+
+  it("acknowledges terminal result events so they cannot starve newer workflow inputs", async () => {
+    const terminalEvents = Array.from({ length: 25 }, (_, index) => ({
+      id: `018f47a5-7b70-7cc2-a999-${String(index).padStart(12, "0")}`,
+      type: eventTypes.profileReadinessCalculated,
+      subject: `operation/018f47a5-7b70-7cc2-a998-${String(index).padStart(12, "0")}`,
+      data: {
+        preferenceSetId: "018f47a5-7b70-7cc2-a999-c343b7d2fdf7",
+        operationId: "018f47a5-7b70-7cc2-a999-c343b7d2fdf8",
+        completionPercent: 100,
+        missingFields: [],
+      },
+    }));
+    const pendingEvents = [...terminalEvents, preferenceEvent];
+    const published = new Set<string>();
+    const markOutboxPublished = vi.fn(async (eventId: string) => {
+      published.add(eventId);
+    });
+    const store = {
+      getPendingOutboxEvents: vi.fn(async (limit: number) =>
+        pendingEvents.filter((event) => !published.has(event.id)).slice(0, limit),
+      ),
+      markOutboxPublished,
+    } as unknown as ProfileStore;
+    const start = vi.fn(async () => undefined);
+    const temporal = { workflow: { start } } as unknown as Client;
+    const logger = { error: vi.fn() } as unknown as Logger;
+    const dispatcher = new OutboxDispatcher(store, temporal, "profile-readiness-v1", logger);
+
+    await dispatcher.dispatchOnce();
+    await dispatcher.dispatchOnce();
+
+    expect(markOutboxPublished).toHaveBeenCalledTimes(26);
+    expect(start).toHaveBeenCalledOnce();
+    expect(start).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({ workflowId: `profile-readiness/${preferenceEvent.id}` }),
+    );
+    expect(logger.error).not.toHaveBeenCalled();
   });
 });
