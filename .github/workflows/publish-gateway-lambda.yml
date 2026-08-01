@@ -41,6 +41,7 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @ai-job-apply/gateway... build
       - run: pnpm --filter @ai-job-apply/gateway test
       - run: pnpm audit --audit-level high
 
