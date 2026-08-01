@@ -44,19 +44,22 @@ function Convert-DateWindow {
       $StartDate,
       "yyyy-MM-dd",
       [Globalization.CultureInfo]::InvariantCulture,
-      [Globalization.DateTimeStyles]::AssumeUniversal,
+      [Globalization.DateTimeStyles]::None,
       [ref]$start
     ) -or
     -not [DateTime]::TryParseExact(
       $EndDate,
       "yyyy-MM-dd",
       [Globalization.CultureInfo]::InvariantCulture,
-      [Globalization.DateTimeStyles]::AssumeUniversal,
+      [Globalization.DateTimeStyles]::None,
       [ref]$end
     )
   ) {
     throw "Cost dates must use YYYY-MM-DD."
   }
+  # Treat date-only operator input as UTC calendar boundaries without a local-time conversion.
+  $start = [DateTime]::SpecifyKind($start, [DateTimeKind]::Utc)
+  $end = [DateTime]::SpecifyKind($end, [DateTimeKind]::Utc)
   if ($end -le $start -or ($end - $start).TotalDays -gt 93 -or $end -gt $now.Date.AddDays(1)) {
     throw "The cost window must be positive, no more than 93 days, and not beyond tomorrow UTC."
   }
