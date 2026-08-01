@@ -1364,6 +1364,7 @@ resource "aws_lambda_function" "gateway" {
   s3_object_version              = var.gateway_lambda_artifact_s3_object_version
   source_code_hash               = var.gateway_lambda_artifact_base64sha256
   layers                         = [var.gateway_lambda_extension_layer_arn]
+  kms_key_arn                    = aws_kms_key.platform.arn
 
   environment {
     variables = {
