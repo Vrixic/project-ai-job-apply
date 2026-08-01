@@ -89,6 +89,8 @@ function Get-Collection {
   if ($null -eq $Object -or $null -eq $Object.$Property) {
     return @()
   }
+  # PowerShell enumerates function output. Callers use @() so singleton AWS responses retain a
+  # reliable Count and indexer under both Windows PowerShell 5.1 and PowerShell 7.
   return @($Object.$Property)
 }
 
@@ -117,11 +119,11 @@ function Get-EnvironmentCost {
     "--output",
     "json"
   )
-  $periods = Get-Collection $cost "ResultsByTime"
+  $periods = @(Get-Collection $cost "ResultsByTime")
   $services = @()
   [decimal]$total = 0
   foreach ($period in $periods) {
-    foreach ($group in (Get-Collection $period "Groups")) {
+    foreach ($group in @(Get-Collection $period "Groups")) {
       [decimal]$amount = [decimal]$group.Metrics.UnblendedCost.Amount
       $total += $amount
       if ($amount -ne 0) {
@@ -152,9 +154,11 @@ function Get-EnvironmentCost {
     "--output",
     "json"
   )
+  $budgetItems = @(Get-Collection $budgets "Budgets")
+  $exportItems = @(Get-Collection $exports "Exports")
   $expectedBudgetName = "ai-job-apply-$Environment-monthly-cost"
   $matchingBudgets = @(
-    (Get-Collection $budgets "Budgets") | Where-Object {
+    $budgetItems | Where-Object {
       [string]$_.BudgetName -eq $expectedBudgetName
     }
   )
@@ -194,7 +198,7 @@ function Get-EnvironmentCost {
 
   $expectedExportName = "ai-job-apply-$Environment-cost-and-usage"
   $matchingExports = @(
-    (Get-Collection $exports "Exports") | Where-Object {
+    $exportItems | Where-Object {
       [string]$_.ExportName -eq $expectedExportName
     }
   )
@@ -212,7 +216,7 @@ function Get-EnvironmentCost {
       "--output",
       "json"
     )
-    $destinations = Get-Collection $exportDetail.Export "DestinationConfigurations"
+    $destinations = @(Get-Collection $exportDetail.Export "DestinationConfigurations")
     if ($destinations.Count -ne 1 -or -not [string]$destinations[0].S3Destination.S3Bucket) {
       throw "$Environment CUR 2.0 export does not have one inspectable S3 destination."
     }
@@ -226,7 +230,7 @@ function Get-EnvironmentCost {
       "--output",
       "json"
     )
-    $deliveryObjects = Get-Collection $delivery "Contents"
+    $deliveryObjects = @(Get-Collection $delivery "Contents")
   }
   $parquetObjects = @(
     $deliveryObjects | Where-Object { ([string]$_.Key).EndsWith(".parquet") }
@@ -249,9 +253,9 @@ function Get-EnvironmentCost {
     UnblendedCostUsd   = [Math]::Round($total, 4)
     Estimated          = @($periods | Where-Object { [bool]$_.Estimated }).Count -gt 0
     Services           = @($services | Sort-Object AmountUsd -Descending)
-    AwsBudgetCount     = (Get-Collection $budgets "Budgets").Count
+    AwsBudgetCount     = $budgetItems.Count
     ExpectedBudgetCount = $matchingBudgets.Count
-    OtherBudgetCount   = (Get-Collection $budgets "Budgets").Count - $matchingBudgets.Count
+    OtherBudgetCount   = $budgetItems.Count - $matchingBudgets.Count
     MonthlyBudgetUsd   = if ($matchingBudgets.Count -eq 1) {
       [Math]::Round([decimal]$matchingBudgets[0].BudgetLimit.Amount, 4)
     } else {
@@ -276,9 +280,9 @@ function Get-EnvironmentCost {
     ExpectedAlertCount       = $expectedBudgetAlerts.Count
     OtherAlertCount          = $budgetNotifications.Count - $expectedBudgetAlerts.Count
     ActualAlertThresholdsUsd = $actualAlertThresholds
-    Cur2DataExports          = (Get-Collection $exports "Exports").Count
+    Cur2DataExports          = $exportItems.Count
     ExpectedExportCount      = $matchingExports.Count
-    OtherExportCount         = (Get-Collection $exports "Exports").Count - $matchingExports.Count
+    OtherExportCount         = $exportItems.Count - $matchingExports.Count
     Cur2ExportStatus         = $exportStatus
     CurDeliveryObjectCount   = $deliveryObjects.Count
     CurParquetObjectCount    = $parquetObjects.Count
