@@ -47,6 +47,10 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   read-only transaction against development or staging and emit only pending count/age/attempt
   metadata plus an ordered identifier digest. Individual synthetic event IDs require the explicit
   `-IncludeEventIds` switch; AWS execution requires the separate `-Execute` switch.
+- `plan-development-gateway-lambda-dark.ps1` — Reconstructs exact live development inputs, verifies
+  the merged versioned artifact and official regional Secrets extension, creates a refresh-backed
+  sensitive plan under the ignored Terraform data directory, and rejects anything except the
+  reviewed 11 dark-gateway creates. It never applies infrastructure or changes API traffic.
 - `operate-platform-alerts.ps1` — Reports sanitized development or staging alert state, privately
   requests an SNS email subscription, and exercises ALARM → OK delivery using only the selected
   environment's dedicated synthetic metric. Select staging with `-Environment staging`.
