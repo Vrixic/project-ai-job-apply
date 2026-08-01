@@ -610,6 +610,12 @@ resource "aws_service_discovery_service" "gateway" {
 
   health_check_custom_config {
   }
+
+  lifecycle {
+    # Provider 6 removed an AWS-fixed input that provider-5 state still records. Preserve the
+    # unchanged block until this rollback-only service is retired after Lambda cutover.
+    ignore_changes = [health_check_custom_config]
+  }
 }
 
 resource "aws_apigatewayv2_vpc_link" "gateway" {
