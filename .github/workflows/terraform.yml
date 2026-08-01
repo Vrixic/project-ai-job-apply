@@ -71,7 +71,20 @@ jobs:
           aws-region: us-east-2
           role-session-name: terraform-development-plan-${{ github.run_id }}
           mask-aws-account-id: true
-      - working-directory: infrastructure/terraform/environments/development
-        run: terraform init -input=false -backend-config="bucket=${{ vars.TERRAFORM_STATE_BUCKET }}" -backend-config="key=platform.tfstate" -backend-config="region=us-east-2"
+      - name: Initialize customer-managed KMS state backend
+        working-directory: infrastructure/terraform/environments/development
+        env:
+          TERRAFORM_STATE_BUCKET: ${{ vars.TERRAFORM_STATE_BUCKET }}
+        run: |
+          STATE_KMS_KEY_ARN="$(aws s3api get-bucket-encryption \
+            --bucket "$TERRAFORM_STATE_BUCKET" \
+            --query 'ServerSideEncryptionConfiguration.Rules[?ApplyServerSideEncryptionByDefault.SSEAlgorithm==`aws:kms`].ApplyServerSideEncryptionByDefault.KMSMasterKeyID | [0]' \
+            --output text)"
+          test -n "$STATE_KMS_KEY_ARN" && test "$STATE_KMS_KEY_ARN" != "None"
+          terraform init -input=false \
+            -backend-config="bucket=$TERRAFORM_STATE_BUCKET" \
+            -backend-config="key=platform.tfstate" \
+            -backend-config="region=us-east-2" \
+            -backend-config="kms_key_id=$STATE_KMS_KEY_ARN"
       - working-directory: infrastructure/terraform/environments/development
         run: terraform plan -input=false -lock-timeout=5m -out=phase0.tfplan

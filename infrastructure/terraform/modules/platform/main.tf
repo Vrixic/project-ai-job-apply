@@ -1276,6 +1276,7 @@ data "aws_iam_policy_document" "gateway_lambda" {
       "ec2:CreateNetworkInterface",
       "ec2:DeleteNetworkInterface",
       "ec2:DescribeNetworkInterfaces",
+      "ec2:DescribeSubnets",
       "ec2:UnassignPrivateIpAddresses"
     ]
     resources = ["*"]
