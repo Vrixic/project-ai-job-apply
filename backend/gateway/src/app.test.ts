@@ -7,14 +7,13 @@ import type {
   PutJobPreferencesRequest,
   PutJobPreferencesResponse,
 } from "@ai-job-apply/api-contracts";
-import { createTestTokenIssuer } from "@ai-job-apply/auth/testing";
 import type { AuthPrincipal } from "@ai-job-apply/auth";
+import { createTestTokenIssuer } from "@ai-job-apply/auth/testing";
 import type { PendingOutboxEvent, ProfileStore } from "@ai-job-apply/profile-service";
-import { Test } from "@nestjs/testing";
-import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
+import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { AppModule, applyRequestContext } from "./app.module.js";
+import { createGatewayApplication } from "./application.js";
 
 class MemoryProfileStore implements ProfileStore {
   private user: CurrentUser | undefined;
@@ -91,13 +90,11 @@ class MemoryProfileStore implements ProfileStore {
 async function createApp() {
   const issuer = await createTestTokenIssuer();
   const store = new MemoryProfileStore();
-  const module = await Test.createTestingModule({
-    imports: [AppModule.register({ store, verifier: issuer.verifier, releaseSha: "test" })],
-  }).compile();
-  const app = module.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
-  app.getHttpAdapter().getInstance().addHook("onRequest", applyRequestContext);
-  await app.init();
-  await app.getHttpAdapter().getInstance().ready();
+  const app = await createGatewayApplication({
+    store,
+    verifier: issuer.verifier,
+    releaseSha: "test",
+  });
   return { app, issuer };
 }
 

@@ -4,7 +4,7 @@
 - Start: Not started
 - Completion: Not completed
 - Owners: Unassigned
-- Last updated: 2026-07-28
+- Last updated: 2026-07-31
 - Master tracker: [Delivery tracker](DELIVERY_TRACKER.md#d7--quality-optimization-expansion-and-optional-employer-product)
 
 ## Objective
@@ -31,6 +31,7 @@ or ownership boundaries; remove or scale down capacity whose value is not demons
 | D7-008 | If approved, implement verified organizations, employer RBAC, jobs, application receipt, applicant consent/visibility, ATS handoff, and separate billing without candidate outcome tracking. | Ready | Unassigned | D7-007 | Optional; not assumed. |
 | D7-009 | Verify that expansion has no regression in candidate privacy, application quality, fairness, reliability, cost, or support quality. | Ready | Unassigned | Each expansion task | Open |
 | D7-010 | Obtain a legal, security, and privacy delta approval for every new country, source, ATS, data use, or employer-side capability. | Ready | Legal/privacy counsel; security/privacy reviewers | Concrete expansion readiness record | Release gate LR-D7-01; each expansion remains independently disabled until approved. |
+| D7-011 | Operate vulnerability intake/remediation and repeat independent security assessment at least annually and after every material trust-boundary change or serious control failure. | Ready | Security owner; independent security reviewer | D6-015 launch assessment; public operation | Follow [ADR-015](../../adr/015-independent-prelaunch-security-review.md) and retain scoped assessment, remediation, retest, risk-expiry, and exact-release evidence. |
 
 ## Exit criteria
 
@@ -43,12 +44,15 @@ or ownership boundaries; remove or scale down capacity whose value is not demons
 - [ ] Security/operational maturity changes have tested evidence rather than compliance-only documentation.
 - [ ] Any employer product has an approved go/no-go record, separate bounded context, explicit candidate visibility/consent, and no hidden candidate-data subsidy.
 - [ ] Expansion meets application-quality and reliability guardrails without compromising prior deliveries.
+- [ ] Vulnerability intake is staffed, accepted security risks have not expired, and annual plus
+      material-change independent reassessments and retests are current for the deployed surface.
 
 ## Work log
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
 | 2026-07-28 | Assigned per-expansion delta approval to D7 without starting implementation. | D7-010 | [Legal review register](../foundation/legal-review-register.md), [security/privacy plan](../../security/security-privacy-approval-plan.md) |
+| 2026-07-31 | Assigned ongoing vulnerability operations and annual/material-change independent reassessment to D7 without starting implementation. | D7-011 | [API security and final-review baseline](../../security/api-security-and-final-review.md), [ADR-015](../../adr/015-independent-prelaunch-security-review.md) |
 
 ## Decisions and scope changes
 
@@ -56,6 +60,7 @@ or ownership boundaries; remove or scale down capacity whose value is not demons
 |---|---|---|---|
 | 2026-07-28 | Employer product is optional and requires a separate go/no-go decision. | Candidate trust and the candidate-first data boundary must not be implicitly changed. | Architecture scope and privacy principles |
 | 2026-07-28 | Ranking optimization uses only in-product preferences and workflow-quality signals. | The Platform does not track post-submission hiring outcomes. | Updated product architecture |
+| 2026-07-31 | Treat independent security assessment as a recurring control after the D6 launch gate. | New providers, permissions, APIs, incidents, and trust boundaries can invalidate a point-in-time assessment. | [ADR-015](../../adr/015-independent-prelaunch-security-review.md) |
 
 ## Risks and blockers
 
@@ -64,6 +69,7 @@ or ownership boundaries; remove or scale down capacity whose value is not demons
 | D7-R1 | Open | In-product interaction data contains selection and technical-failure bias. | Unassigned | Keep signal definitions explicit, exclude stale/technical failures from fit labels, and use controlled rollout. |
 | D7-R2 | Open | Expansion breadth can outpace adapter, legal, taxonomy, support, or operational quality. | Unassigned | Require a readiness record and exit gate per ATS/region rather than bundling expansion. |
 | D7-R3 | Open | Employer monetization can conflict with candidate privacy and trust. | Unassigned | Keep a separate bounded context and require explicit, reversible candidate visibility. |
+| D7-R4 | Open | A launch assessment can become stale as APIs, clients, providers, cloud boundaries, and attacker techniques change. | Security owner | Track revalidation triggers and assessment age; block material releases when required reassessment, remediation, or retest is incomplete. |
 
 ## Completion record
 

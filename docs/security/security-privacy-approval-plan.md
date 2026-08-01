@@ -1,7 +1,7 @@
 # Phase 0 Security and Privacy Approval Plan
 
 - Status: Review package in progress; no approval recorded
-- Last updated: 2026-07-30
+- Last updated: 2026-07-31
 - Accountable security approver: Future independent reviewer; individual unassigned
 - Accountable privacy/legal approver: Future external counsel; individual unassigned
 
@@ -25,6 +25,10 @@ In scope now:
 Later approvals must verify the concrete implementation and deployed evidence for public ingestion,
 UGC, extension permissions, AI processing, ATS automation, remote browsers, outreach, billing,
 mobile apps, and each new provider or jurisdiction.
+
+Phase 0 approval must accept the blocking final-review policy in
+[ADR-015](../adr/015-independent-prelaunch-security-review.md), but it cannot substitute for the
+independent assessment of the exact D6 launch candidate.
 
 ## Approval roles
 
@@ -61,6 +65,7 @@ approval.
 | SP-15 | Vulnerability management | Intake, severity, remediation ownership, disclosure path | Baseline below | Owner and operating evidence pending |
 | SP-16 | Subprocessor governance | DPA/security/retention/training/region/breach/deletion review | [Subprocessor register](subprocessors.md) | Provider reviews pending |
 | SP-17 | Legal/privacy foundation | Scoped written counsel conclusions and conditions | [Legal/privacy brief](../product/foundation/foundational-legal-privacy-brief.md) | Counsel pending |
+| SP-18 | API and final product assurance | Explicit exposure classes, API control baseline, independent launch-candidate assessment, remediation and retest | [API security and final-review baseline](api-security-and-final-review.md), [ADR-015](../adr/015-independent-prelaunch-security-review.md) | Baseline defined; exact launch-candidate evidence belongs to D6 |
 
 `Engineering baseline` and `Review ready` are not approval states.
 
@@ -123,6 +128,7 @@ corresponding environment or capability does not yet exist. They may not be repr
 | Remote browser | Dedicated threat model, isolation/egress/session destruction, takeover and incident tests |
 | Outreach | Source/anti-spam review, send-only scopes, per-send approval, suppression/complaint controls |
 | Billing/mobile | Provider/store review, entitlement replay, privacy labels, account deletion, secure storage |
+| Public launch candidate | Complete owned attack-surface inventory; independent web/API, mobile, extension, application-agent, cloud, supply-chain, abuse, recovery, and incident assessment; no unresolved Critical/High finding; retest and signed exact-release disposition |
 | New country/provider/ATS | Legal/privacy/security delta plus isolated release and rollback evidence |
 
 Before entity formation, an ATS form action/submission may run only as the narrow founder-only pilot

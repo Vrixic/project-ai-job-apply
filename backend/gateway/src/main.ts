@@ -7,9 +7,8 @@ import {
   startLogDeliveryHeartbeat,
 } from "@ai-job-apply/observability";
 import { createDatabase, PostgresProfileStore } from "@ai-job-apply/profile-service";
-import { NestFactory } from "@nestjs/core";
-import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
-import { AppModule, applyRequestContext } from "./app.module.js";
+import { FastifyAdapter } from "@nestjs/platform-fastify";
+import { createGatewayApplication } from "./application.js";
 
 const config = loadBackendConfig();
 const logger = createLogger({
@@ -24,16 +23,12 @@ const verifier = createOidcVerifier({
   audience: config.OIDC_AUDIENCE,
 });
 
-const app = await NestFactory.create<NestFastifyApplication>(
-  AppModule.register({ store, verifier, releaseSha: config.RELEASE_SHA }),
-  new FastifyAdapter({ loggerInstance: logger }),
-  { bufferLogs: false },
-);
-app.enableCors({
-  origin: false,
-  methods: ["GET", "PUT"],
+const app = await createGatewayApplication({
+  store,
+  verifier,
+  releaseSha: config.RELEASE_SHA,
+  adapter: new FastifyAdapter({ loggerInstance: logger }),
 });
-app.getHttpAdapter().getInstance().addHook("onRequest", applyRequestContext);
 
 await app.listen({ port: config.PORT, host: "0.0.0.0" });
 logger.info({ port: config.PORT }, "gateway started");

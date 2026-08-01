@@ -41,7 +41,7 @@ ai-job-apply/
 │   │   ├── ats-ashby/
 │   │   ├── ats-workday/
 │   │   └── messaging/               # Email, push, webhooks, scheduled digests
-│   └── workflows/                   # Durable Temporal workflow definitions
+│   └── workflows/                   # Durable code-first workflow definitions
 │
 ├── packages/
 │   ├── api-contracts/               # OpenAPI/GraphQL schemas and generated clients
@@ -105,22 +105,29 @@ The folders above define durable ownership boundaries. They do **not** require d
 
 Split a module into its own deployment and database only when its load, security boundary, failure rate, or team ownership justifies it. This preserves fault isolation without paying the operational cost of premature microservices.
 
-### Deployment posture: lean until measured demand
+### Deployment posture: scale to zero until measured demand
 
-Per [ADR-013](adr/013-lean-until-demand-cloud-runtime.md), every delivery uses the smallest robust
-runtime shape through pre-launch and after launch until production evidence requires more
-capacity. The primary AWS region is `us-east-2`.
+Per [ADR-016](adr/016-scale-to-zero-application-runtime.md), default the application control plane
+to scale-to-zero managed compute through pre-launch and after launch until production evidence
+requires reserved capacity. The primary AWS region is `us-east-2`.
 
-- Begin with one continuously available development environment; provision isolated staging on
-  demand for release candidates, restore/migration rehearsals, security acceptance, and launch.
-- Start each in-scope ECS service with one task.
-- Use API Gateway, VPC Link, and Cloud Map for stable ingress without an initial Application Load
-  Balancer.
+- Use API Gateway with a direct versioned Lambda integration for synchronous APIs.
+- Use the transactional outbox, SQS/DLQ, and versioned Lambda durable functions for long-running
+  orchestration. PostgreSQL remains product and audit truth.
+- Reserve ECS/Fargate for explicitly started migrations, isolated browser/ATS runs, or a measured
+  workload that cannot fit Lambda safely; do not run a general gateway or workflow poller 24/7.
+- Provision isolated staging application compute on demand for release candidates,
+  restore/migration rehearsals, security acceptance, and launch.
 - Start with encrypted Single-AZ PostgreSQL plus automated backups and tested restore.
-- Do not provision Redis, a search cluster, extra replicas, per-AZ NAT gateways, or dedicated
-  services until an implemented capability or measured signal needs them.
-- Preserve stateless containers, stable contracts, durable workflows, idempotency, health checks,
-  observability, backups, and explicit scaling inputs from the first implementation.
+- Do not provision provisioned Lambda concurrency, a NAT gateway, RDS Proxy, Redis, a search
+  cluster, extra replicas, or dedicated services until an implemented capability or measured
+  signal needs them.
+- Preserve stable contracts, durable workflows, idempotency, least-privilege execution roles,
+  observability, backups, rollback, and explicit scaling inputs from the first implementation.
+
+[ADR-013](adr/013-lean-until-demand-cloud-runtime.md) remains historical evidence for the proven
+Phase 0 Fargate baseline and continues to govern its non-superseded database, environment,
+recovery, and measured-scaling decisions.
 
 Lean capacity is not permission to weaken security, privacy, correctness, recovery, or safe
 failure behavior.
@@ -473,7 +480,7 @@ flowchart TB
         TRUST[Trust / Moderation]
     end
 
-    TEMP[Durable workflow engine]
+    TEMP[Lambda durable workflow engine]
     BUS[Queues / event bus / DLQs]
 
     subgraph Task Plane
@@ -952,7 +959,9 @@ Start with:
 - **Redis:** short-lived caches, rate limiting, locks/leases, never durable truth
 - **S3-compatible object storage:** encrypted resumes, PDFs, DOCX, sanitized snapshots
 - **Queue/event service:** durable task dispatch, dead-letter queues, and backpressure
-- **Temporal:** durable long-running application, ingestion, and notification workflows
+- **Lambda durable execution state:** encrypted, bounded operational history for long-running
+  application, ingestion, and notification workflows; PostgreSQL remains user-visible status and
+  retained audit truth
 - **Analytics warehouse:** de-identified events and model/product analysis
 
 Move the public job/search workload to OpenSearch or another dedicated index when PostgreSQL latency or scale proves the need. Split public job data from candidate PII into separate databases before catalog traffic becomes large or external employer access is added.
@@ -1119,6 +1128,13 @@ region only when measured usage, recovery evidence, or contractual requirements 
 - Tenant/user scoping in every repository query and cache key
 - Audit trails for profile changes, approvals, sends, submissions, exports, and admin access
 - “Break glass” admin access with reason, time limit, and alerting
+- An owned exposure class for every public, candidate, service, administrative, webhook, and
+  temporary-object interface; intentional public endpoints expose only their declared minimum
+  data and behavior
+- Server-side object, function, and property authorization plus anonymous, cross-user,
+  cross-role, revoked-session, and wrong-environment negative tests for every sensitive API family
+- API inventory, schema/method allowlists, payload/concurrency/cost limits, business-flow abuse
+  controls, safe third-party consumption, and unknown-endpoint denial
 
 Auth0 is the initial managed OIDC provider under
 [ADR-012](adr/012-auth0-initial-managed-identity.md). The provider-neutral `issuer + subject` to
@@ -1135,6 +1151,10 @@ trusts development identity.
 - User data export, correction, disconnect, and deletion
 - Subprocessor contracts and AI vendor retention/training settings
 - Regular penetration tests and a vulnerability disclosure program
+- Independent open-book assessment of the exact launch candidate under
+  [ADR-015](adr/015-independent-prelaunch-security-review.md), with complete surface discovery,
+  API/web/mobile/extension/cloud/business-logic testing, remediation, retest, and signed release
+  disposition; see the [API security and final-review baseline](security/api-security-and-final-review.md)
 
 ### 14.3 Consent design
 
@@ -1224,16 +1244,19 @@ Billing architecture:
 
 - Product APIs: TypeScript with NestJS using the Fastify adapter
 - AI/data workers: Python with FastAPI only where Python libraries add real value
-- Workflow: Temporal Cloud or self-hosted Temporal after scale justifies it
+- Workflow: versioned TypeScript AWS Lambda durable functions in `us-east-2`
 - PostgreSQL, pgvector, Redis, S3-compatible object storage
 - Managed queues/event bus; avoid introducing Kafka until throughput and replay needs justify it
 - OpenAPI plus JSON Schema/Protobuf for versioned events
 
 ### Infrastructure
 
-- Lean containers on AWS ECS/Fargate in `us-east-2`, one task per service by default
-- Regional API Gateway HTTP API, VPC Link, and Cloud Map service discovery; add an ALB only from
-  measured routing/connection/traffic need
+- Regional API Gateway HTTP API with Auth0 JWT authorization and a direct versioned Lambda proxy
+  integration
+- SQS-triggered starters and versioned Lambda durable functions for orchestration; private
+  database activities and non-VPC provider activities remain separate trust boundaries
+- ECS/Fargate only for on-demand migration, isolated browser/ATS, or measured non-Lambda workloads;
+  no continuously running general application service by default
 - RDS PostgreSQL Single-AZ initially; Multi-AZ is an explicit launch/risk/usage decision
 - Redis/ElastiCache only after a concrete cache, distributed rate-limit, or lease use case exists
 - S3, SQS/DLQ, KMS, Secrets Manager, and CloudWatch from the first deployed environment
@@ -1268,9 +1291,9 @@ Never log field values by default.
 Dashboards:
 
 - API latency/error by endpoint and release
-- Continuous privacy-safe log heartbeats for each always-on service, with missing-signal alarms
-  that distinguish the combined service/log path from ordinary application-error events
-- Queue depth/age and Temporal workflow failures
+- Invocation errors, throttles, duration, concurrency, terminal durable-execution events, and
+  privacy-safe synthetic checks; idle scale-to-zero functions do not emit artificial heartbeats
+- Queue depth/age, DLQ messages, outbox reconciliation lag, and durable workflow failures
 - ATS preparation/submission/confirmation rate by adapter version
 - Field-fill accuracy and user corrections by ontology field
 - AI latency/cost/schema failure/factuality results
@@ -1373,12 +1396,13 @@ Useful analysis:
 
 The phases below are ordered by architectural dependency and quality readiness, not calendar estimates. Progress to the next phase only when the current phase's exit criteria are met.
 
-All phases follow the lean-until-demand runtime policy. Adding a feature does not automatically add
-a service replica, load balancer, cache, search cluster, always-on staging environment, or
-Multi-AZ data service. Capacity and availability changes require a launch gate, a security/recovery
-requirement, or measured latency, saturation, queue, failure, or usage evidence. This rule reduces
-idle infrastructure; it does not reduce product-quality, safety, privacy, testing, observability,
-backup, or maintainability requirements.
+All phases follow the scale-to-zero and lean-until-demand runtime policies. Adding a feature does
+not automatically add continuously running Fargate, provisioned Lambda concurrency, a NAT gateway,
+database proxy, service replica, load balancer, cache, search cluster, always-on staging
+environment, or Multi-AZ data service. Capacity and availability changes require a launch gate, a
+security/recovery requirement, or measured latency, saturation, queue, failure, or usage evidence.
+This rule reduces idle infrastructure; it does not reduce product-quality, safety, privacy,
+testing, observability, backup, or maintainability requirements.
 
 When making technical decisions within this roadmap, give little weight to predicted development cost or delivery time. Prefer, in order:
 
@@ -1392,6 +1416,9 @@ Schedule pressure is not a reason to weaken consent, factuality, security, obser
 
 ### Phase 0 — Product, data, and legal foundation
 
+- Replace the proven continuously running Fargate gateway/worker with the scale-to-zero runtime in
+  [D0-016](product/delivery/phase-0-serverless-runtime-migration.md), prove behavioral equivalence,
+  and remove every obsolete deployment and executable code path
 - Choose launch geography and target candidate segment
 - Obtain foundational legal/privacy and security approval; assign source-, UGC-, automation-,
   outreach-, store-, provider-, and jurisdiction-specific questions as blocking gates to the
@@ -1404,7 +1431,8 @@ Schedule pressure is not a reason to weaken consent, factuality, security, obser
 - Establish application quality, reliability, safety, and efficiency baselines; record operating cost as a guardrail
 
 Exit: approved foundational schemas, policies, legal/privacy and security controls; enforceable
-feature-specific release gates; and a thin authenticated end-to-end skeleton.
+feature-specific release gates; and a thin authenticated end-to-end skeleton operating through the
+scale-to-zero runtime with no obsolete always-on gateway/worker path.
 
 ### Phase 1 — Useful web product and canonical job catalog
 
@@ -1482,8 +1510,12 @@ Exit: users receive relevant application notifications and can send truthful, ap
 - Storefront, billing, account-deletion, legal, privacy, and security approval
 - Final public product name/domain ownership, conflict screening, counsel/product approval, and
   consistent production OAuth/email/store/support configuration
+- Complete API and external-surface inventory, independent launch-candidate security assessment
+  and penetration test, zero unresolved Critical/High findings, expiring treatment for remaining
+  risks, independent retest, and staffed incident/vulnerability intake
 
-Exit: reliable cross-device experience and simple monetization.
+Exit: reliable cross-device experience and simple monetization, with the exact public launch
+candidate independently security-tested and approved under the documented finding policy.
 
 ### Phase 7 — Quality optimization, expansion, and optional employer product
 
@@ -1493,6 +1525,8 @@ Exit: reliable cross-device experience and simple monetization.
 - Permitted company/job context for tailored applications
 - Optional employer posting/matching portal in a separate bounded context
 - SOC 2 readiness, advanced security, warm-region DR
+- Staff vulnerability intake and repeat independent security assessment at least annually and
+  after material trust-boundary changes or serious control failure
 - Per-country, source, ATS, data-use, and employer-capability legal/privacy/security delta approval
 
 ## 21. Team ownership
@@ -1513,11 +1547,12 @@ At small scale, people can cover multiple responsibilities. No launch should lea
 
 ## 22. Cost controls that preserve quality
 
-- Keep one continuously available lean development environment and provision isolated staging on
-  demand until launch acceptance requires it.
-- Default each ECS service to one task; scale replicas only from latency, utilization, queue-age,
-  availability, or recovery evidence.
-- Use API Gateway and Cloud Map before provisioning an ALB.
+- Scale synchronous APIs and durable orchestration to zero when idle; use provisioned concurrency
+  only from measured latency and availability evidence.
+- Keep isolated staging application compute disabled outside acceptance work.
+- Start Fargate tasks only for owned on-demand migrations, browser/ATS runs, or measured workloads
+  that cannot safely fit Lambda, and terminate them at completion/timeout.
+- Use direct API Gateway/Lambda integration before provisioning VPC Link, Cloud Map, or an ALB.
 - Keep PostgreSQL Single-AZ with backups/PITR until launch risk or measured availability requires
   Multi-AZ.
 - Do not provision Redis, dedicated search, per-AZ NAT gateways, or always-on browser capacity
@@ -1572,28 +1607,14 @@ Do not launch automated submission broadly until:
 
 ## 24. Immediate implementation backlog
 
-The first concrete work after this architecture:
+The living delivery tracker is authoritative. Current dependency order is:
 
-1. Choose product name, launch persona, geography, and provisional Pro price.
-2. Write ADR-001: monorepo and service boundaries.
-3. Write ADR-002: managed auth and session model across web/mobile/extension.
-4. Write ADR-003: PostgreSQL ownership, PII separation, and encryption.
-5. Write ADR-004: Temporal application workflow and idempotency policy.
-6. Write ADR-005: UGC contribution, moderation, and job expiry.
-7. Define `CanonicalJob`, `ProfileFact`, `AnswerVaultEntry`, and `ApplicationPacket` schemas.
-8. Define the first 100–150 canonical application fields.
-9. Create sanitized Greenhouse, Lever, Ashby, and Workday test fixtures.
-10. Prototype one vertical slice:
-    - upload resume
-    - confirm facts/preferences
-    - save a Greenhouse job from extension
-    - normalize/dedupe it
-    - calculate/explain match
-    - prepare grounded answers
-    - fill in active tab
-    - review and submit
-    - detect confirmation
-    - update confirmed-application history
+1. Complete [D0-016](product/delivery/phase-0-serverless-runtime-migration.md): implement and accept
+   the scale-to-zero gateway/workflow replacement, then remove the obsolete Fargate/Temporal path.
+2. Reconcile delivered two-account billing against the revised runtime cost baseline under D0-008.
+3. Obtain the accountable legal/privacy and security/privacy reviews in D0-014 and D0-015.
+4. Acquire representative sanitized ATS fixtures under the approved D0-007 policy.
+5. Complete the evidence-based D0 exit review before beginning D1 product capability work.
 11. Instrument time, correction rate, factuality, failure reason, and cost.
 12. Test with real consenting users before expanding ATS coverage.
 

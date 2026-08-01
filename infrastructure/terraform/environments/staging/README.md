@@ -16,3 +16,9 @@ conformance are mandatory before launch.
 The account-local cost controls remain persistent when application tasks are disabled. They use a
 $5 monthly reference budget with one actual-cost alert at $5, plus a resource-attributed CUR 2.0
 export retained for 400 days. Alerts do not cap spend.
+
+For the scale-to-zero migration, configure the GitHub `staging` Environment variable
+`ARTIFACT_BUCKET` from this account's nonsensitive Terraform `artifact_bucket` output. Keep
+`deploy_gateway_lambda = false` until the staging artifact and exact provider-upgrade/dark plan are
+reviewed. Dark deployment creates no API route or integration and therefore cannot cut staging
+traffic away from the accepted ECS rollback path.

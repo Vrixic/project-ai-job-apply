@@ -46,7 +46,7 @@ locals {
     }
     exporters = {
       awsxray = {
-        region = data.aws_region.current.name
+        region = data.aws_region.current.region
       }
     }
     service = {
@@ -92,13 +92,13 @@ data "aws_iam_policy_document" "platform_kms" {
     resources = ["*"]
     principals {
       type        = "Service"
-      identifiers = ["logs.${data.aws_region.current.name}.amazonaws.com"]
+      identifiers = ["logs.${data.aws_region.current.region}.amazonaws.com"]
     }
     condition {
       test     = "ArnLike"
       variable = "kms:EncryptionContext:aws:logs:arn"
       values = [
-        "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/${var.name}/${var.environment}/application*"
+        "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/${var.name}/${var.environment}/application*"
       ]
     }
   }
@@ -124,7 +124,7 @@ data "aws_iam_policy_document" "platform_kms" {
       test     = "ArnLike"
       variable = "aws:SourceArn"
       values = [
-        "arn:aws:cloudwatch:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:alarm:${var.name}-${var.environment}-*"
+        "arn:aws:cloudwatch:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:alarm:${var.name}-${var.environment}-*"
       ]
     }
   }
@@ -210,7 +210,7 @@ data "aws_iam_policy_document" "operational_alerts" {
       test     = "ArnLike"
       variable = "aws:SourceArn"
       values = [
-        "arn:aws:cloudwatch:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:alarm:${var.name}-${var.environment}-*"
+        "arn:aws:cloudwatch:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:alarm:${var.name}-${var.environment}-*"
       ]
     }
   }
@@ -609,7 +609,6 @@ resource "aws_service_discovery_service" "gateway" {
   }
 
   health_check_custom_config {
-    failure_threshold = 1
   }
 }
 
@@ -705,7 +704,7 @@ resource "aws_ecs_task_definition" "gateway" {
         logDriver = "awslogs"
         options = {
           awslogs-group         = aws_cloudwatch_log_group.application.name
-          awslogs-region        = data.aws_region.current.name
+          awslogs-region        = data.aws_region.current.region
           awslogs-stream-prefix = "gateway"
         }
       }
@@ -749,7 +748,7 @@ resource "aws_ecs_task_definition" "gateway" {
         logDriver = "awslogs"
         options = {
           awslogs-group         = aws_cloudwatch_log_group.application.name
-          awslogs-region        = data.aws_region.current.name
+          awslogs-region        = data.aws_region.current.region
           awslogs-stream-prefix = "otel-gateway"
         }
       }
@@ -823,7 +822,7 @@ resource "aws_ecs_task_definition" "worker" {
         logDriver = "awslogs"
         options = {
           awslogs-group         = aws_cloudwatch_log_group.application.name
-          awslogs-region        = data.aws_region.current.name
+          awslogs-region        = data.aws_region.current.region
           awslogs-stream-prefix = "worker"
         }
       }
@@ -855,7 +854,7 @@ resource "aws_ecs_task_definition" "worker" {
         logDriver = "awslogs"
         options = {
           awslogs-group         = aws_cloudwatch_log_group.application.name
-          awslogs-region        = data.aws_region.current.name
+          awslogs-region        = data.aws_region.current.region
           awslogs-stream-prefix = "otel-worker"
         }
       }
@@ -910,7 +909,7 @@ resource "aws_ecs_task_definition" "migration" {
       logDriver = "awslogs"
       options = {
         awslogs-group         = aws_cloudwatch_log_group.application.name
-        awslogs-region        = data.aws_region.current.name
+        awslogs-region        = data.aws_region.current.region
         awslogs-stream-prefix = "database-migration"
       }
     }
@@ -1123,7 +1122,7 @@ resource "aws_cloudwatch_dashboard" "operations" {
           width  = 12
           height = 6
           properties = {
-            region = data.aws_region.current.name
+            region = data.aws_region.current.region
             title  = "Application errors and alert-delivery canary"
             view   = "timeSeries"
             period = 60
@@ -1146,7 +1145,7 @@ resource "aws_cloudwatch_dashboard" "operations" {
           width  = 12
           height = 6
           properties = {
-            region = data.aws_region.current.name
+            region = data.aws_region.current.region
             title  = "PostgreSQL capacity"
             view   = "timeSeries"
             period = 300
@@ -1163,7 +1162,7 @@ resource "aws_cloudwatch_dashboard" "operations" {
           width  = 12
           height = 6
           properties = {
-            region = data.aws_region.current.name
+            region = data.aws_region.current.region
             title  = "Queue health"
             view   = "timeSeries"
             period = 60
@@ -1180,7 +1179,7 @@ resource "aws_cloudwatch_dashboard" "operations" {
           width  = 12
           height = 6
           properties = {
-            region = data.aws_region.current.name
+            region = data.aws_region.current.region
             title  = "ECS service utilization"
             view   = "timeSeries"
             period = 300
@@ -1199,7 +1198,7 @@ resource "aws_cloudwatch_dashboard" "operations" {
           width  = 24
           height = 6
           properties = {
-            region = data.aws_region.current.name
+            region = data.aws_region.current.region
             title  = "Warning and error events"
             view   = "table"
             query  = "SOURCE '${aws_cloudwatch_log_group.application.name}' | fields @timestamp, service, level, msg | filter level >= 40 | sort @timestamp desc | limit 50"
@@ -1214,7 +1213,7 @@ resource "aws_cloudwatch_dashboard" "operations" {
           width  = 24
           height = 6
           properties = {
-            region = data.aws_region.current.name
+            region = data.aws_region.current.region
             title  = "Regional API Gateway requests"
             view   = "timeSeries"
             period = 60
@@ -1228,4 +1227,266 @@ resource "aws_cloudwatch_dashboard" "operations" {
       ] : []
     )
   })
+}
+
+data "aws_iam_policy_document" "gateway_lambda_assume" {
+  count = var.deploy_gateway_lambda ? 1 : 0
+
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "gateway_lambda" {
+  count                = var.deploy_gateway_lambda ? 1 : 0
+  name                 = "${var.name}-${var.environment}-gateway-lambda"
+  assume_role_policy   = data.aws_iam_policy_document.gateway_lambda_assume[0].json
+  permissions_boundary = data.aws_iam_policy.workload_boundary.arn
+}
+
+data "aws_iam_policy_document" "gateway_lambda" {
+  count = var.deploy_gateway_lambda ? 1 : 0
+
+  statement {
+    sid    = "WriteOwnedLogs"
+    effect = "Allow"
+    actions = [
+      "logs:CreateLogStream",
+      "logs:PutLogEvents"
+    ]
+    resources = ["${aws_cloudwatch_log_group.application.arn}:*"]
+  }
+
+  statement {
+    sid    = "ManageVpcInterfaces"
+    effect = "Allow"
+    actions = [
+      "ec2:AssignPrivateIpAddresses",
+      "ec2:CreateNetworkInterface",
+      "ec2:DeleteNetworkInterface",
+      "ec2:DescribeNetworkInterfaces",
+      "ec2:UnassignPrivateIpAddresses"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid       = "ReadDatabaseSecret"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [aws_secretsmanager_secret.database_url.arn]
+  }
+
+  statement {
+    sid       = "DecryptDatabaseSecret"
+    effect    = "Allow"
+    actions   = ["kms:Decrypt"]
+    resources = [aws_kms_key.platform.arn]
+  }
+
+  statement {
+    sid    = "WriteNativeTraces"
+    effect = "Allow"
+    actions = [
+      "xray:PutTelemetryRecords",
+      "xray:PutTraceSegments"
+    ]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "gateway_lambda" {
+  count  = var.deploy_gateway_lambda ? 1 : 0
+  name   = "gateway-lambda-runtime"
+  role   = aws_iam_role.gateway_lambda[0].id
+  policy = data.aws_iam_policy_document.gateway_lambda[0].json
+}
+
+resource "aws_security_group" "secrets_endpoint" {
+  count       = var.deploy_gateway_lambda ? 1 : 0
+  name_prefix = "${var.name}-${var.environment}-secrets-endpoint-"
+  description = "TLS from private application functions to the Secrets Manager endpoint"
+  vpc_id      = aws_vpc.this.id
+
+  ingress {
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    security_groups = [aws_security_group.application.id]
+  }
+}
+
+data "aws_iam_policy_document" "secrets_endpoint" {
+  count = var.deploy_gateway_lambda ? 1 : 0
+
+  statement {
+    sid       = "GatewayLambdaDatabaseSecretOnly"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [aws_secretsmanager_secret.database_url.arn]
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_role.gateway_lambda[0].arn]
+    }
+  }
+}
+
+resource "aws_vpc_endpoint" "secretsmanager" {
+  count               = var.deploy_gateway_lambda ? 1 : 0
+  vpc_id              = aws_vpc.this.id
+  service_name        = "com.amazonaws.${data.aws_region.current.region}.secretsmanager"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+  subnet_ids          = [aws_subnet.private[0].id]
+  security_group_ids  = [aws_security_group.secrets_endpoint[0].id]
+  policy              = data.aws_iam_policy_document.secrets_endpoint[0].json
+}
+
+resource "aws_lambda_function" "gateway" {
+  count                          = var.deploy_gateway_lambda ? 1 : 0
+  function_name                  = "${var.name}-${var.environment}-gateway"
+  description                    = "Dark-deployed candidate API; API traffic remains on ECS until reviewed cutover"
+  role                           = aws_iam_role.gateway_lambda[0].arn
+  runtime                        = "nodejs24.x"
+  architectures                  = ["x86_64"]
+  handler                        = "index.handler"
+  memory_size                    = 1024
+  timeout                        = 15
+  reserved_concurrent_executions = var.gateway_lambda_reserved_concurrency
+  publish                        = true
+  s3_bucket                      = aws_s3_bucket.artifacts.bucket
+  s3_key                         = var.gateway_lambda_artifact_s3_key
+  s3_object_version              = var.gateway_lambda_artifact_s3_object_version
+  source_code_hash               = var.gateway_lambda_artifact_base64sha256
+  layers                         = [var.gateway_lambda_extension_layer_arn]
+  kms_key_arn                    = aws_kms_key.platform.arn
+
+  environment {
+    variables = {
+      NODE_ENV           = "production"
+      RELEASE_SHA        = var.gateway_lambda_artifact_sha256
+      LOG_LEVEL          = "info"
+      DATABASE_SECRET_ID = aws_secretsmanager_secret.database_url.arn
+      OIDC_ISSUER        = var.oidc_issuer
+      OIDC_AUDIENCE      = var.oidc_audience
+    }
+  }
+
+  vpc_config {
+    subnet_ids         = aws_subnet.private[*].id
+    security_group_ids = [aws_security_group.application.id]
+  }
+
+  tracing_config {
+    mode = "Active"
+  }
+
+  logging_config {
+    log_format            = "JSON"
+    application_log_level = "INFO"
+    system_log_level      = "WARN"
+    log_group             = aws_cloudwatch_log_group.application.name
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  depends_on = [
+    aws_iam_role_policy.gateway_lambda,
+    aws_vpc_endpoint.secretsmanager
+  ]
+}
+
+resource "aws_lambda_alias" "gateway" {
+  count            = var.deploy_gateway_lambda ? 1 : 0
+  name             = var.environment
+  description      = "Reviewed immutable ${var.environment} gateway release"
+  function_name    = aws_lambda_function.gateway[0].function_name
+  function_version = aws_lambda_function.gateway[0].version
+}
+
+resource "aws_apigatewayv2_authorizer" "gateway" {
+  count            = var.deploy_gateway_lambda ? 1 : 0
+  api_id           = aws_apigatewayv2_api.gateway[0].id
+  name             = "${var.name}-${var.environment}-auth0"
+  authorizer_type  = "JWT"
+  identity_sources = ["$request.header.Authorization"]
+
+  jwt_configuration {
+    audience = [var.oidc_audience]
+    issuer   = var.oidc_issuer
+  }
+}
+
+resource "aws_lambda_permission" "gateway_api" {
+  count         = var.deploy_gateway_lambda ? 1 : 0
+  statement_id  = "AllowExactHttpApiStage"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.gateway[0].function_name
+  qualifier     = aws_lambda_alias.gateway[0].name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.gateway[0].execution_arn}/${aws_apigatewayv2_stage.gateway[0].name}/*"
+}
+
+resource "aws_cloudwatch_metric_alarm" "gateway_lambda_errors" {
+  count               = var.deploy_gateway_lambda ? 1 : 0
+  alarm_name          = "${var.name}-${var.environment}-gateway-lambda-errors"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Errors"
+  namespace           = "AWS/Lambda"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "The dark/released gateway Lambda emitted an error. Runbook: ${local.observability_runbook_url}"
+  dimensions = {
+    FunctionName = aws_lambda_function.gateway[0].function_name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "gateway_lambda_throttles" {
+  count               = var.deploy_gateway_lambda ? 1 : 0
+  alarm_name          = "${var.name}-${var.environment}-gateway-lambda-throttles"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Throttles"
+  namespace           = "AWS/Lambda"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "The gateway Lambda reached its RDS-protecting concurrency ceiling. Runbook: ${local.observability_runbook_url}"
+  dimensions = {
+    FunctionName = aws_lambda_function.gateway[0].function_name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "gateway_lambda_duration" {
+  count               = var.deploy_gateway_lambda ? 1 : 0
+  alarm_name          = "${var.name}-${var.environment}-gateway-lambda-duration"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "Duration"
+  namespace           = "AWS/Lambda"
+  period              = 60
+  extended_statistic  = "p95"
+  threshold           = 10000
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "Gateway Lambda p95 duration exceeded ten seconds. Runbook: ${local.observability_runbook_url}"
+  dimensions = {
+    FunctionName = aws_lambda_function.gateway[0].function_name
+  }
 }

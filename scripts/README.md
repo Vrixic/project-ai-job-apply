@@ -16,6 +16,9 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
 ## Phase 0 commands
 
 - `start-local.ps1` — Starts PostgreSQL, Redis, Temporal, Temporal UI, and the local OTel collector.
+- `build-gateway-lambda.mjs` — Bundles the emitted gateway Lambda code, preserves Nest metadata,
+  creates a fixed-metadata ZIP, and emits SHA-256, manifest, and CycloneDX 1.6 SBOM evidence under
+  the ignored gateway `dist/lambda/` directory.
 - `prepare-terraform-bootstrap.ps1` — Creates an isolated, local-backend Terraform workspace for
   the first bootstrap of a development or staging AWS account without reusing another
   environment's backend metadata or state.
@@ -40,6 +43,10 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   `$5 USD` budget/alert controls (including unexpected alert counts), CUR 2.0 export health, and
   real manifest/Parquet delivery from both isolated Phase 0 accounts without printing account,
   bucket/object-key, subscriber, or provider records.
+- `inspect-deployed-outbox.ps1` — Reuses the immutable on-demand database task to run one bounded
+  read-only transaction against development or staging and emit only pending count/age/attempt
+  metadata plus an ordered identifier digest. Individual synthetic event IDs require the explicit
+  `-IncludeEventIds` switch; AWS execution requires the separate `-Execute` switch.
 - `operate-platform-alerts.ps1` — Reports sanitized development or staging alert state, privately
   requests an SNS email subscription, and exercises ALARM → OK delivery using only the selected
   environment's dedicated synthetic metric. Select staging with `-Environment staging`.

@@ -18,6 +18,8 @@ Records important technical decisions, their context, alternatives, consequences
 - [ADR-012: Auth0 as the initial managed identity provider](012-auth0-initial-managed-identity.md)
 - [ADR-013: Lean-until-demand cloud runtime](013-lean-until-demand-cloud-runtime.md)
 - [ADR-014: Temporary shared development Auth0 for synthetic staging](014-shared-development-auth0-for-synthetic-staging.md)
+- [ADR-015: Independent pre-launch security review](015-independent-prelaunch-security-review.md)
+- [ADR-016: Scale-to-zero application runtime](016-scale-to-zero-application-runtime.md)
 
 Use `000-template.md` for future decisions.
 
