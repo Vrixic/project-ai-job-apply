@@ -131,6 +131,15 @@ locals {
         Resource = "*"
       },
       {
+        Sid    = "ManageEnvironmentLambda"
+        Effect = "Allow"
+        Action = ["lambda:*"]
+        Resource = [
+          "arn:aws:lambda:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:function:ai-job-apply-${var.environment}-*",
+          "arn:aws:lambda:${data.aws_region.current.name}:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:*"
+        ]
+      },
+      {
         Sid      = "CreateBoundedWorkloadRoles"
         Effect   = "Allow"
         Action   = ["iam:CreateRole"]
@@ -181,13 +190,16 @@ locals {
         ]
       },
       {
-        Sid      = "PassWorkloadRolesToEcsTasks"
+        Sid      = "PassWorkloadRolesToApprovedServices"
         Effect   = "Allow"
         Action   = ["iam:PassRole"]
         Resource = local.workload_role_arn
         Condition = {
           StringEquals = {
-            "iam:PassedToService" = "ecs-tasks.amazonaws.com"
+            "iam:PassedToService" = [
+              "ecs-tasks.amazonaws.com",
+              "lambda.amazonaws.com"
+            ]
           }
         }
       },
@@ -211,7 +223,9 @@ locals {
 }
 
 resource "aws_iam_policy" "workload_boundary" {
-  name        = "ai-job-apply-${var.environment}-workload-boundary"
+  name = "ai-job-apply-${var.environment}-workload-boundary"
+  # IAM managed-policy descriptions are immutable. Retain this legacy wording to avoid replacing
+  # the live boundary while extending its policy document to approved Lambda workloads.
   description = "Maximum runtime permissions for ${var.environment} ECS workload roles."
   policy = jsonencode({
     Version = "2012-10-17"
@@ -256,6 +270,19 @@ resource "aws_iam_policy" "workload_boundary" {
         Sid      = "WriteApplicationTraces"
         Effect   = "Allow"
         Action   = ["xray:PutTelemetryRecords", "xray:PutTraceSegments"]
+        Resource = "*"
+      },
+      {
+        Sid    = "ManageLambdaVpcInterfaces"
+        Effect = "Allow"
+        Action = [
+          "ec2:AssignPrivateIpAddresses",
+          "ec2:CreateNetworkInterface",
+          "ec2:DeleteNetworkInterface",
+          "ec2:DescribeNetworkInterfaces",
+          "ec2:DescribeSubnets",
+          "ec2:UnassignPrivateIpAddresses"
+        ]
         Resource = "*"
       }
     ]

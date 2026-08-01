@@ -12,6 +12,10 @@ Defines persistent cloud resources, identity, networking, storage, databases, qu
 
 State and secrets remain in managed backends. Modules expose explicit inputs/outputs and default to
 least privilege, lean capacity, recoverable state, and an explicit path to Multi-AZ resilience.
+Every remote S3 backend initialization must resolve the environment bucket's customer-managed KMS
+key and pass it as `kms_key_id`; `encrypt=true` alone can cause the backend client to write SSE-S3
+objects despite a KMS bucket default. Verify fresh state-object metadata after every apply that
+changes this boundary.
 
 ## Phase 0 implementation
 

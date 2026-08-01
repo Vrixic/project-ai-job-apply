@@ -109,3 +109,5 @@ authorize applying the recovery plan generated from unmerged source.
 Next, merge the recovery correction, regenerate from exact `main`, inspect the seven-create and
 four-existing boundary and new plan hash, and apply only that exact reviewed plan under fresh
 explicit authorization.
+
+Continuation: [2026-08-01 dark-recovery evidence](d0-development-gateway-dark-recovery-2026-08-01.md).

@@ -31,6 +31,8 @@ param(
 
   [switch]$ResumePartialApply,
 
+  [switch]$AllowLambdaVpcPolicyRecovery,
+
   [switch]$Help
 )
 
@@ -47,7 +49,8 @@ Usage:
     -ArtifactSourceSha MERGED_COMMIT_SHA `
     -ArtifactSha256 HEX_SHA256 `
     -ArtifactBase64Sha256 BASE64_SHA256 `
-    [-ResumePartialApply]
+    [-ResumePartialApply] `
+    [-AllowLambdaVpcPolicyRecovery]
 
 Creates a refresh-backed development plan for the dark gateway Lambda only. It reconstructs the
 exact live ECS/RDS inputs, verifies the immutable KMS-encrypted artifact, resolves and pins the
@@ -56,7 +59,11 @@ delete, replacement, or create outside the reviewed 11-resource dark boundary.
 
 Use -ResumePartialApply only after a failed exact-plan apply. In that mode, every dark resource
 must be either an unchanged object already in Terraform state or one of the remaining reviewed
-creates; the script still rejects all updates, deletes, replacements, and unrelated creates.
+creates; by default the script still rejects all updates, deletes, replacements, and unrelated
+creates.
+
+Use -AllowLambdaVpcPolicyRecovery with -ResumePartialApply only for the reviewed correction that
+adds ec2:DescribeSubnets to the existing Lambda VPC role policy. Every other update remains denied.
 
 The sensitive saved plan remains under the ignored Terraform .terraform directory for separate
 review and exact-plan apply. This script never applies infrastructure or changes API traffic.
@@ -78,6 +85,10 @@ if (
 
 if ($Region -ne "us-east-2") {
   throw "The Phase 0 development environment is restricted to us-east-2."
+}
+
+if ($AllowLambdaVpcPolicyRecovery -and -not $ResumePartialApply) {
+  throw "Lambda VPC policy recovery requires -ResumePartialApply."
 }
 
 $keyMatch = [regex]::Match(
@@ -158,6 +169,9 @@ $previousProfile = $env:AWS_PROFILE
 $previousRegion = $env:AWS_REGION
 $previousDefaultRegion = $env:AWS_DEFAULT_REGION
 $previousTerraformDataDirectory = $env:TF_DATA_DIR
+$previousAccessKeyId = $env:AWS_ACCESS_KEY_ID
+$previousSecretAccessKey = $env:AWS_SECRET_ACCESS_KEY
+$previousSessionToken = $env:AWS_SESSION_TOKEN
 $terraformVariables = @(
   "gateway_image",
   "worker_image",
@@ -198,8 +212,51 @@ try {
   $env:AWS_DEFAULT_REGION = $Region
   $env:TF_DATA_DIR = $terraformDataDirectory
 
+  $exportedCredentials = & aws configure export-credentials `
+    --profile $AwsProfile `
+    --format process 2>$null
+  if ($LASTEXITCODE -ne 0) {
+    throw "The short-lived development SSO credentials could not be exported for Terraform."
+  }
+  $processCredentials = $exportedCredentials | ConvertFrom-Json
+  if (
+    -not $processCredentials.AccessKeyId -or
+    -not $processCredentials.SecretAccessKey -or
+    -not $processCredentials.SessionToken
+  ) {
+    throw "The exported development credentials are incomplete."
+  }
+  $env:AWS_ACCESS_KEY_ID = [string]$processCredentials.AccessKeyId
+  $env:AWS_SECRET_ACCESS_KEY = [string]$processCredentials.SecretAccessKey
+  $env:AWS_SESSION_TOKEN = [string]$processCredentials.SessionToken
+
   $null = New-Item -ItemType Directory -Path $terraformDataDirectory -Force
   $null = New-Item -ItemType Directory -Path $planDirectory -Force
+
+  $stateEncryption = Invoke-AwsJson @(
+    "s3api",
+    "get-bucket-encryption",
+    "--bucket",
+    $StateBucket,
+    "--output",
+    "json"
+  )
+  $stateKmsRules = @(
+    $stateEncryption.ServerSideEncryptionConfiguration.Rules | Where-Object {
+      $_.ApplyServerSideEncryptionByDefault.SSEAlgorithm -eq "aws:kms" -and
+      $_.ApplyServerSideEncryptionByDefault.KMSMasterKeyID
+    }
+  )
+  $stateKmsRule = Get-OnlyItem `
+    -Items $stateKmsRules `
+    -FailureMessage "The development state bucket does not expose one KMS default."
+  $stateKmsKeyArn = [string]$stateKmsRule.ApplyServerSideEncryptionByDefault.KMSMasterKeyID
+  if (
+    $stateKmsKeyArn -notmatch
+      "^arn:aws:kms:$([regex]::Escape($Region)):$([regex]::Escape($ExpectedAccountId)):key/"
+  ) {
+    throw "The development state bucket KMS key is outside the expected account or region."
+  }
 
   $initArguments = @(
     "-chdir=$environmentDirectory",
@@ -208,7 +265,8 @@ try {
     "-input=false",
     "-backend-config=bucket=$StateBucket",
     "-backend-config=key=platform.tfstate",
-    "-backend-config=region=$Region"
+    "-backend-config=region=$Region",
+    "-backend-config=kms_key_id=$stateKmsKeyArn"
   )
   $initOutput = & terraform @initArguments 2>&1
   $initSucceeded = $?
@@ -462,6 +520,7 @@ try {
   )
   $changes = @()
   $existing = @()
+  $updates = @()
   foreach ($resourceChange in $plan.resource_changes) {
     $actions = @($resourceChange.change.actions)
     if ($actions -contains "no-op" -or $actions -contains "read") {
@@ -471,6 +530,37 @@ try {
       continue
     }
     $normalizedAction = $actions -join ","
+    if (
+      $AllowLambdaVpcPolicyRecovery -and
+      $normalizedAction -eq "update" -and
+      [string]$resourceChange.address -eq
+        "module.platform.aws_iam_role_policy.gateway_lambda[0]"
+    ) {
+      $beforePolicy = [string]$resourceChange.change.before.policy | ConvertFrom-Json
+      $afterPolicy = [string]$resourceChange.change.after.policy | ConvertFrom-Json
+      $beforeVpc = @($beforePolicy.Statement | Where-Object { $_.Sid -eq "ManageVpcInterfaces" })
+      $afterVpc = @($afterPolicy.Statement | Where-Object { $_.Sid -eq "ManageVpcInterfaces" })
+      if ($beforeVpc.Count -ne 1 -or $afterVpc.Count -ne 1) {
+        throw "The Lambda VPC policy recovery update has an unexpected statement shape."
+      }
+      $beforeActions = @($beforeVpc[0].Action | Sort-Object)
+      $afterActions = @($afterVpc[0].Action | Sort-Object)
+      $expectedAfterActions = @($beforeActions + "ec2:DescribeSubnets" | Sort-Object -Unique)
+      if (
+        $beforeActions -contains "ec2:DescribeSubnets" -or
+        (Compare-Object $afterActions $expectedAfterActions)
+      ) {
+        throw "The Lambda VPC policy recovery update is not the exact DescribeSubnets addition."
+      }
+      $afterVpc[0].Action = $beforeVpc[0].Action
+      $normalizedBefore = $beforePolicy | ConvertTo-Json -Depth 20 -Compress
+      $normalizedAfter = $afterPolicy | ConvertTo-Json -Depth 20 -Compress
+      if ($normalizedBefore -ne $normalizedAfter) {
+        throw "The Lambda VPC policy recovery update changes more than DescribeSubnets."
+      }
+      $updates += [string]$resourceChange.address
+      continue
+    }
     if (
       $normalizedAction -ne "create" -or
       $expectedCreates -notcontains [string]$resourceChange.address
@@ -487,10 +577,17 @@ try {
     foreach ($expectedCreate in $expectedCreates) {
       if (
         $changes -notcontains $expectedCreate -and
+        $updates -notcontains $expectedCreate -and
         $existing -notcontains $expectedCreate
       ) {
         throw "The partial-apply recovery plan does not account for every dark gateway resource."
       }
+    }
+    if ($AllowLambdaVpcPolicyRecovery -and $updates.Count -ne 1) {
+      throw "The recovery plan must contain the exact Lambda VPC role-policy update."
+    }
+    if (-not $AllowLambdaVpcPolicyRecovery -and $updates.Count -ne 0) {
+      throw "The partial-apply recovery plan contains an unapproved update."
     }
   } else {
     if ($changes.Count -ne $expectedCreates.Count) {
@@ -507,6 +604,7 @@ try {
   [pscustomobject]@{
     Environment               = "development"
     AccountVerified           = $true
+    StateKmsKeyVerified       = $true
     Region                    = $Region
     SourceSha                 = $ArtifactSourceSha
     ArtifactSha256            = $ArtifactSha256
@@ -514,9 +612,10 @@ try {
     ExtensionLayerArn         = $extensionLayerArn
     ReservedConcurrency       = $ReservedConcurrency
     ResumePartialApply        = [bool]$ResumePartialApply
+    LambdaVpcPolicyRecovery   = [bool]$AllowLambdaVpcPolicyRecovery
     ExistingReviewedResources = $existing.Count
     Creates                   = $changes.Count
-    Updates                   = 0
+    Updates                   = $updates.Count
     Deletes                   = 0
     Replacements              = 0
     ExistingEcsServicesStable = $true
@@ -524,6 +623,7 @@ try {
     PlanSha256                = $planHash
     SensitivePlanPath         = $planPath
     Changes                   = $changes | Sort-Object
+    UpdatedResources          = $updates | Sort-Object
   } | ConvertTo-Json -Depth 5
 }
 finally {
@@ -549,5 +649,20 @@ finally {
     Remove-Item Env:TF_DATA_DIR -ErrorAction SilentlyContinue
   } else {
     $env:TF_DATA_DIR = $previousTerraformDataDirectory
+  }
+  if ($null -eq $previousAccessKeyId) {
+    Remove-Item Env:AWS_ACCESS_KEY_ID -ErrorAction SilentlyContinue
+  } else {
+    $env:AWS_ACCESS_KEY_ID = $previousAccessKeyId
+  }
+  if ($null -eq $previousSecretAccessKey) {
+    Remove-Item Env:AWS_SECRET_ACCESS_KEY -ErrorAction SilentlyContinue
+  } else {
+    $env:AWS_SECRET_ACCESS_KEY = $previousSecretAccessKey
+  }
+  if ($null -eq $previousSessionToken) {
+    Remove-Item Env:AWS_SESSION_TOKEN -ErrorAction SilentlyContinue
+  } else {
+    $env:AWS_SESSION_TOKEN = $previousSessionToken
   }
 }
