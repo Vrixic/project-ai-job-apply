@@ -6,6 +6,8 @@ This folder turns the architecture roadmap into an auditable delivery system.
 
 - `DELIVERY_TRACKER.md` — Master status, start, completion, dependency, exit gate, and task-document links.
 - `phase-0-foundation.md` — Product, data, legal, security, and engineering foundation.
+- `phase-0-serverless-runtime-migration.md` — Living D0-016 plan for replacing the always-on
+  gateway/worker runtime and retiring its obsolete resources.
 - `phase-1-web-and-job-catalog.md` — Useful candidate web product and canonical job catalog.
 - `phase-2-extension-and-community.md` — Browser extension and UGC job contribution loop.
 - `phase-3-application-preparation.md` — Grounded documents, application packets, and supported ATS autofill.
@@ -26,10 +28,17 @@ This folder turns the architecture roadmap into an auditable delivery system.
 8. Foundational legal/privacy and security approval belongs in D0. A source, provider, permission,
    external action, jurisdiction, or other concrete capability also requires a blocking delta
    approval in the delivery that implements it.
-9. Every delivery follows [ADR-013](../../adr/013-lean-until-demand-cloud-runtime.md): keep one task
-   per service and avoid an ALB, Redis, dedicated search, Multi-AZ data, per-AZ NAT, or always-on
-   staging until launch review, a security/recovery requirement, or measured demand justifies it.
-   Lean capacity never reduces testing, durability, privacy, safety, backup, or observability.
+9. Every delivery follows [ADR-016](../../adr/016-scale-to-zero-application-runtime.md): default
+   APIs and durable orchestration to scale-to-zero Lambda, and use Fargate only for explicit
+   on-demand container/browser workloads. Also preserve [ADR-013](../../adr/013-lean-until-demand-cloud-runtime.md)
+   where it remains applicable: avoid an ALB, Redis, dedicated search, Multi-AZ data, per-AZ NAT,
+   extra replicas, or always-on staging until launch review, a security/recovery requirement, or
+   measured demand justifies it. Lean capacity never reduces testing, durability, privacy, safety,
+   backup, or observability.
+10. Public launch requires the independent exact-candidate assessment, finding treatment, retest,
+    and signed disposition in [ADR-015](../../adr/015-independent-prelaunch-security-review.md).
+    Phase-level design reviews, repository authorship, internal tests, and automated scanners do
+    not replace this final release gate.
 
 ## Status vocabulary
 

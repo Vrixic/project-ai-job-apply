@@ -33,3 +33,28 @@ gateway, one worker, Single-AZ PostgreSQL, no Redis, no NAT gateway, and no Appl
 Balancer. API Gateway reaches ECS through VPC Link and Cloud Map; application tasks use restricted
 public-subnet egress. High availability, private application networking, Redis, extra replicas,
 and continuously provisioned staging are explicit measured-demand or launch-review changes.
+
+## Accepted scale-to-zero migration target
+
+[ADR-016](../../docs/adr/016-scale-to-zero-application-runtime.md) supersedes the continuously
+running gateway/worker and VPC Link/Cloud Map portions of ADR-013. The current module remains the
+deployed baseline until [D0-016](../../docs/product/delivery/phase-0-serverless-runtime-migration.md)
+is implemented and accepted; source configuration is not yet deployed evidence for the target.
+
+The completed composition will retain API Gateway, RDS, SQS/DLQ, S3, KMS, backups, cost controls,
+and an empty/on-demand ECS boundary, while replacing the gateway and general workflow worker with
+versioned Lambda and Lambda durable functions. The migration plan owns the exact create/cutover/
+rollback/delete sequence and requires removal of obsolete VPC Link, Cloud Map, ECS service/task,
+ECR, Temporal-secret, heartbeat, output, script, and runbook paths after acceptance.
+
+The first dark-deployment source is guarded by `deploy_gateway_lambda = false`. Enabling it requires
+the exact immutable S3 key and object version, hexadecimal and base64 artifact digests, the reviewed
+versioned `us-east-2` AWS Parameters and Secrets extension layer ARN, the existing API/OIDC runtime,
+and a reserved-concurrency ceiling. It creates a versioned function and environment alias, dormant
+JWT authorizer, exact-stage invocation permission, private RDS path, single-AZ Secrets Manager
+interface endpoint, and alarms. It intentionally creates no Lambda integration or route, so the
+current ECS API path cannot move during a dark deploy.
+
+The environment roots use AWS provider 6.x because provider 5.100 does not recognize the accepted
+Node.js 24 Lambda runtime. A refresh-backed provider-upgrade/no-drift plan is mandatory before the
+first dark apply; local validation alone is not deployed evidence.

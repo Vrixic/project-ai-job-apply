@@ -61,9 +61,12 @@ export interface DatabaseHandle {
   db: PostgresJsDatabase;
 }
 
-export function createDatabase(databaseUrl: string): DatabaseHandle {
+export function createDatabase(
+  databaseUrl: string,
+  options: { maxConnections?: number } = {},
+): DatabaseHandle {
   const client = postgres(databaseUrl, {
-    max: 10,
+    max: options.maxConnections ?? 10,
     idle_timeout: 20,
     connect_timeout: 10,
     transform: postgres.camel,

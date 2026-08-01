@@ -7,7 +7,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.80"
+      version = "~> 6.0"
     }
     random = {
       source  = "hashicorp/random"
@@ -68,6 +68,15 @@ module "platform" {
   temporal_address               = var.temporal_address
   temporal_namespace             = var.temporal_namespace
   deploy_applications            = var.deploy_applications
+  deploy_gateway_lambda          = var.deploy_gateway_lambda
+  gateway_lambda_artifact_s3_key = var.gateway_lambda_artifact_s3_key
+  gateway_lambda_artifact_s3_object_version = (
+    var.gateway_lambda_artifact_s3_object_version
+  )
+  gateway_lambda_artifact_sha256       = var.gateway_lambda_artifact_sha256
+  gateway_lambda_artifact_base64sha256 = var.gateway_lambda_artifact_base64sha256
+  gateway_lambda_extension_layer_arn   = var.gateway_lambda_extension_layer_arn
+  gateway_lambda_reserved_concurrency  = var.gateway_lambda_reserved_concurrency
 }
 
 module "cost_controls" {

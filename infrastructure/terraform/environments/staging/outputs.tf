@@ -64,3 +64,15 @@ output "cost_export_bucket" {
   value     = module.cost_controls.cost_export_bucket
   sensitive = true
 }
+
+output "gateway_lambda_alias_arn" {
+  value = module.platform.gateway_lambda_alias_arn
+}
+
+output "gateway_lambda_function_name" {
+  value = module.platform.gateway_lambda_function_name
+}
+
+output "gateway_lambda_authorizer_id" {
+  value = module.platform.gateway_lambda_authorizer_id
+}

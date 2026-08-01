@@ -208,3 +208,85 @@ variable "deploy_applications" {
     error_message = "Application deployment requires immutable images, OIDC, and Temporal."
   }
 }
+
+variable "deploy_gateway_lambda" {
+  description = "Dark-deploy the versioned gateway Lambda without moving API Gateway routes."
+  type        = bool
+  default     = false
+
+  validation {
+    condition = !var.deploy_gateway_lambda || (
+      var.deploy_applications &&
+      var.oidc_issuer != "" &&
+      var.gateway_lambda_artifact_s3_key != "" &&
+      var.gateway_lambda_artifact_s3_object_version != "" &&
+      var.gateway_lambda_artifact_sha256 != "" &&
+      var.gateway_lambda_artifact_base64sha256 != "" &&
+      var.gateway_lambda_extension_layer_arn != ""
+    )
+    error_message = "Dark gateway Lambda deployment requires the existing application/API, exact OIDC, an immutable versioned S3 artifact, its SHA-256, and the reviewed Secrets extension layer."
+  }
+}
+
+variable "gateway_lambda_artifact_s3_key" {
+  description = "Immutable environment artifact-bucket key for the gateway Lambda ZIP."
+  type        = string
+  default     = ""
+}
+
+variable "gateway_lambda_artifact_s3_object_version" {
+  description = "Exact S3 object version containing the gateway Lambda ZIP."
+  type        = string
+  default     = ""
+}
+
+variable "gateway_lambda_artifact_sha256" {
+  description = "Lowercase hexadecimal SHA-256 of the exact gateway Lambda ZIP."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.gateway_lambda_artifact_sha256 == "" || can(regex("^[a-f0-9]{64}$", var.gateway_lambda_artifact_sha256))
+    error_message = "Gateway Lambda artifact SHA-256 must be empty or 64 lowercase hexadecimal characters."
+  }
+}
+
+variable "gateway_lambda_artifact_base64sha256" {
+  description = "Base64-encoded SHA-256 of the exact gateway Lambda ZIP for Lambda code integrity."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.gateway_lambda_artifact_base64sha256 == "" || can(regex("^[A-Za-z0-9+/]{43}=$", var.gateway_lambda_artifact_base64sha256))
+    error_message = "Gateway Lambda artifact base64 SHA-256 must be empty or one canonical 44-character digest."
+  }
+}
+
+variable "gateway_lambda_extension_layer_arn" {
+  description = "Reviewed us-east-2 AWS Parameters and Secrets Lambda Extension layer ARN."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = var.gateway_lambda_extension_layer_arn == "" || can(regex(
+      "^arn:aws:lambda:us-east-2:[0-9]{12}:layer:AWS-Parameters-and-Secrets-Lambda-Extension:[0-9]+$",
+      var.gateway_lambda_extension_layer_arn
+    ))
+    error_message = "The extension layer must be an exact versioned AWS Parameters and Secrets layer ARN in us-east-2."
+  }
+}
+
+variable "gateway_lambda_reserved_concurrency" {
+  description = "Hard concurrency ceiling protecting the initial PostgreSQL connection budget."
+  type        = number
+  default     = 2
+
+  validation {
+    condition = (
+      var.gateway_lambda_reserved_concurrency >= 1 &&
+      var.gateway_lambda_reserved_concurrency <= 5 &&
+      floor(var.gateway_lambda_reserved_concurrency) == var.gateway_lambda_reserved_concurrency
+    )
+    error_message = "Gateway Lambda reserved concurrency must be an integer from one through five."
+  }
+}

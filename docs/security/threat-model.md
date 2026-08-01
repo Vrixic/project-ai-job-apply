@@ -52,7 +52,9 @@
 - Extension manifest and store disclosure
 - Remote-browser isolation design
 - Model-provider and outreach-provider contracts
-- Independent penetration test before production automation
+- Independent open-book security assessment and penetration test of the exact launch candidate,
+  including public-surface discovery, API authorization/abuse, cloud configuration, clients,
+  application-agent business logic, remediation, and retest
 
 ## Risk ownership and reassessment
 

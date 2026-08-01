@@ -17,3 +17,9 @@ $5, plus a resource-attributed CUR 2.0 export retained for 400 days. Alerts do n
 Follow the [development cloud setup checklist](SETUP.md) before bootstrap or deployment.
 Use the [development database migration runbook](../../../runbooks/deployments/development-database-migration.md)
 to provision and execute the migration task while applications remain disabled.
+
+For the scale-to-zero migration, configure the GitHub `development` Environment variable
+`ARTIFACT_BUCKET` from the nonsensitive Terraform `artifact_bucket` output. Publishing the gateway
+Lambda artifact does not deploy it. Keep `deploy_gateway_lambda = false` until the source commit,
+artifact/SBOM evidence, exact S3 version/digests, extension layer, provider-upgrade plan, and dark
+deployment plan are independently reviewed.

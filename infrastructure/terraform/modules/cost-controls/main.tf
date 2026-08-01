@@ -186,7 +186,7 @@ resource "aws_bcmdataexports_export" "cost_and_usage" {
       s3_destination {
         s3_bucket = aws_s3_bucket.cost_exports.bucket
         s3_prefix = "cur-2"
-        s3_region = data.aws_region.current.name
+        s3_region = data.aws_region.current.region
 
         s3_output_configurations {
           compression = "PARQUET"

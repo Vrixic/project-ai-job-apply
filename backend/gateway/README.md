@@ -22,3 +22,13 @@ correlation, and structured problem responses.
 The managed verifier accepts only RS256 tokens from the exact configured issuer and stable
 `ai-job-apply-api` audience. It resolves the issuer and subject through profile-owned identity
 mapping; Auth0 identifiers do not cross into public or domain identifiers.
+
+The scale-to-zero migration adds a shared application factory and an API Gateway HTTP API payload
+2.0 Lambda entrypoint. The Lambda path accepts identity only from exact validated authorizer claims,
+keeps the principal invocation-local, retrieves the database URL through the AWS Parameters and
+Secrets extension, and caps each warm environment at two PostgreSQL connections. The existing
+server entrypoint remains only for the bounded migration rollback window.
+
+Run `pnpm --filter @ai-job-apply/gateway build:lambda` to produce the ignored deterministic ZIP,
+manifest, SHA-256, and CycloneDX SBOM under `dist/lambda/`. A local artifact is build evidence, not
+a published or deployed release.

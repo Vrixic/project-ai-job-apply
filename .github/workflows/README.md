@@ -29,3 +29,10 @@ scan-on-push, publishes gateway and worker images under the exact source commit,
 scanning, and blocks use of images with high or critical findings. Build caches and summaries are
 environment scoped. Its digest-bearing job summaries are deployment evidence; publishing an image
 does not enable an ECS service.
+
+`publish-gateway-lambda.yml` is the corresponding manual, `main`-only scale-to-zero artifact
+workflow. It tests and audits the gateway, proves two builds have the same ZIP digest, validates
+the CycloneDX SBOM, verifies the selected environment's artifact bucket remains private,
+versioned, and KMS encrypted, and writes the ZIP plus evidence under a source-and-digest-bound key.
+It refuses to create another object version at an existing release key and prints only the exact
+sanitized Terraform inputs. Publishing does not create a Lambda or change API traffic.

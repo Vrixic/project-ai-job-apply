@@ -118,3 +118,38 @@ variable "deploy_applications" {
   type    = bool
   default = false
 }
+
+variable "deploy_gateway_lambda" {
+  type    = bool
+  default = false
+}
+
+variable "gateway_lambda_artifact_s3_key" {
+  type    = string
+  default = ""
+}
+
+variable "gateway_lambda_artifact_s3_object_version" {
+  type    = string
+  default = ""
+}
+
+variable "gateway_lambda_artifact_sha256" {
+  type    = string
+  default = ""
+}
+
+variable "gateway_lambda_artifact_base64sha256" {
+  type    = string
+  default = ""
+}
+
+variable "gateway_lambda_extension_layer_arn" {
+  type    = string
+  default = ""
+}
+
+variable "gateway_lambda_reserved_concurrency" {
+  type    = number
+  default = 2
+}

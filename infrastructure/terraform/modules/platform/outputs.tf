@@ -68,3 +68,15 @@ output "gateway_log_heartbeat_alarm_name" {
 output "worker_log_heartbeat_alarm_name" {
   value = var.deploy_applications ? aws_cloudwatch_metric_alarm.worker_log_heartbeat_missing[0].alarm_name : null
 }
+
+output "gateway_lambda_alias_arn" {
+  value = var.deploy_gateway_lambda ? aws_lambda_alias.gateway[0].arn : null
+}
+
+output "gateway_lambda_function_name" {
+  value = var.deploy_gateway_lambda ? aws_lambda_function.gateway[0].function_name : null
+}
+
+output "gateway_lambda_authorizer_id" {
+  value = var.deploy_gateway_lambda ? aws_apigatewayv2_authorizer.gateway[0].id : null
+}
