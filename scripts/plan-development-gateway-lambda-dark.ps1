@@ -29,6 +29,8 @@ param(
   [ValidateRange(1, 5)]
   [int]$ReservedConcurrency = 2,
 
+  [switch]$ResumePartialApply,
+
   [switch]$Help
 )
 
@@ -44,12 +46,17 @@ Usage:
     -ArtifactS3ObjectVersion OBJECT_VERSION `
     -ArtifactSourceSha MERGED_COMMIT_SHA `
     -ArtifactSha256 HEX_SHA256 `
-    -ArtifactBase64Sha256 BASE64_SHA256
+    -ArtifactBase64Sha256 BASE64_SHA256 `
+    [-ResumePartialApply]
 
 Creates a refresh-backed development plan for the dark gateway Lambda only. It reconstructs the
 exact live ECS/RDS inputs, verifies the immutable KMS-encrypted artifact, resolves and pins the
 current official x86_64 AWS Parameters and Secrets extension layer, and rejects every update,
 delete, replacement, or create outside the reviewed 11-resource dark boundary.
+
+Use -ResumePartialApply only after a failed exact-plan apply. In that mode, every dark resource
+must be either an unchanged object already in Terraform state or one of the remaining reviewed
+creates; the script still rejects all updates, deletes, replacements, and unrelated creates.
 
 The sensitive saved plan remains under the ignored Terraform .terraform directory for separate
 review and exact-plan apply. This script never applies infrastructure or changes API traffic.
@@ -454,9 +461,13 @@ try {
     "module.platform.aws_vpc_endpoint.secretsmanager[0]"
   )
   $changes = @()
+  $existing = @()
   foreach ($resourceChange in $plan.resource_changes) {
     $actions = @($resourceChange.change.actions)
     if ($actions -contains "no-op" -or $actions -contains "read") {
+      if ($expectedCreates -contains [string]$resourceChange.address) {
+        $existing += [string]$resourceChange.address
+      }
       continue
     }
     $normalizedAction = $actions -join ","
@@ -468,12 +479,27 @@ try {
     }
     $changes += [string]$resourceChange.address
   }
-  if ($changes.Count -ne $expectedCreates.Count) {
-    throw "The plan does not contain the complete reviewed 11-resource dark boundary."
-  }
-  foreach ($expectedCreate in $expectedCreates) {
-    if ($changes -notcontains $expectedCreate) {
-      throw "The plan is missing a required dark gateway resource."
+
+  if ($ResumePartialApply) {
+    if ($changes.Count -lt 1 -or $changes.Count -ge $expectedCreates.Count) {
+      throw "The partial-apply recovery plan must contain between 1 and 10 remaining creates."
+    }
+    foreach ($expectedCreate in $expectedCreates) {
+      if (
+        $changes -notcontains $expectedCreate -and
+        $existing -notcontains $expectedCreate
+      ) {
+        throw "The partial-apply recovery plan does not account for every dark gateway resource."
+      }
+    }
+  } else {
+    if ($changes.Count -ne $expectedCreates.Count) {
+      throw "The plan does not contain the complete reviewed 11-resource dark boundary."
+    }
+    foreach ($expectedCreate in $expectedCreates) {
+      if ($changes -notcontains $expectedCreate) {
+        throw "The plan is missing a required dark gateway resource."
+      }
     }
   }
 
@@ -487,6 +513,8 @@ try {
     ArtifactVersionVerified   = $true
     ExtensionLayerArn         = $extensionLayerArn
     ReservedConcurrency       = $ReservedConcurrency
+    ResumePartialApply        = [bool]$ResumePartialApply
+    ExistingReviewedResources = $existing.Count
     Creates                   = $changes.Count
     Updates                   = 0
     Deletes                   = 0

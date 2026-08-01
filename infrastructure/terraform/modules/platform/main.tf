@@ -1335,9 +1335,18 @@ data "aws_iam_policy_document" "secrets_endpoint" {
     effect    = "Allow"
     actions   = ["secretsmanager:GetSecretValue"]
     resources = [aws_secretsmanager_secret.database_url.arn]
+
+    # Avoid IAM principal-propagation races while retaining an exact-role endpoint boundary.
+    # For an assumed role request, aws:PrincipalArn contains the IAM role ARN, not the session ARN.
     principals {
-      type        = "AWS"
-      identifiers = [aws_iam_role.gateway_lambda[0].arn]
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    condition {
+      test     = "ArnEquals"
+      variable = "aws:PrincipalArn"
+      values   = [aws_iam_role.gateway_lambda[0].arn]
     }
   }
 }

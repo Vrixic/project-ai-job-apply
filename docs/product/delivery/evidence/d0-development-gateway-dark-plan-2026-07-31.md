@@ -6,7 +6,7 @@
 - Artifact source: `92e5b8f17a898c2970a4231c8a8b4e06c988be80`
 - Artifact SHA-256: `f411b840aec7d631565ecab34e34a164680db49ad64cb2e2b691b3051214560d`
 - Plan class: refresh-backed, create-only dark deployment
-- Terraform apply: not performed
+- Terraform apply: first exact apply stopped safely after four creates; recovery plan not applied
 - API traffic change: none
 
 ## Extension resolution
@@ -65,12 +65,47 @@ The operator rejects any other create and every update, delete, or replacement. 
 is ignored under the Terraform data directory and is not committed. The pre-merge diagnostic plan
 SHA-256 was `9b54b861841c447fc6434788cdc449fe47e76d1af502e15fde02ccdc7ee8d667`.
 
+## Exact-main apply and safe stop
+
+After PR #65 merged, the operator ran from exact `main` commit
+`2a12f6bca3f817c1d15ea5485a648b2218afeeb8`. The regenerated plan SHA-256 was
+`ab422a6333a335c3749538588939e6eeda952f11c9cffbe9a94edfa2177b02cc`; it retained the reviewed
+`11/0/0/0` boundary. The product owner explicitly authorized applying that exact saved plan.
+
+AWS created the dormant authorizer, Lambda IAM role, inline policy, and endpoint security group,
+then rejected creation of the Secrets Manager interface endpoint with `InvalidPolicyDocument`.
+Terraform stopped and recorded those four creates in remote state. It did not create the endpoint,
+Lambda function, alias, API invocation permission, or Lambda alarms.
+
+Post-failure live checks proved:
+
+- the gateway and workflow-worker ECS services remained active at desired/running/pending `1/1/0`;
+- the only API route still used the existing `HTTP_PROXY` VPC Link and Cloud Map integration;
+- no gateway Lambda function or Secrets Manager interface endpoint existed; and
+- public API traffic therefore remained on the existing ECS path.
+
+## Recovery correction
+
+The rejected endpoint policy named the newly created execution-role principal directly. The
+correction uses the standard wildcard endpoint principal plus an exact `aws:PrincipalArn`
+condition for that role, while retaining the single `GetSecretValue` action and exact database-
+secret resource. This avoids endpoint creation depending on immediate IAM principal resolution
+without broadening the effective role, action, or resource boundary. See [AWS VPC endpoint policy
+controls](https://docs.aws.amazon.com/vpc/latest/privatelink/vpc-endpoints-access.html).
+
+The operator now has an explicit `-ResumePartialApply` mode. It requires every reviewed dark
+resource to be either an unchanged object already in Terraform state or one of the remaining
+reviewed creates, and it still rejects every unrelated create, update, delete, and replacement.
+The unmerged diagnostic accounted for four existing reviewed resources and exactly seven remaining
+creates with `0/0/0` updates/deletes/replacements. Its SHA-256 was
+`f2f14298e3bc1f263e82e4febf15971ad94d4ed5b4025b55b3aed351ce166d28`; it was not applied.
+
 ## Claims and next gate
 
-This proves that the corrected source can produce a create-only development dark plan without
-changing the existing API integration, ECS services, RDS, queues, buckets, KMS key, backups, cost
-controls, or traffic. It does not authorize applying a plan generated from unmerged source.
+This proves the first exact apply failed closed without changing traffic and that the recovery
+source can account for the partial state with only the seven remaining dark creates. It does not
+authorize applying the recovery plan generated from unmerged source.
 
-Next, merge the plan guard and Cloud Map compatibility source, regenerate the plan from exact
-`main`, inspect the same 11-create/zero-update/delete/replace boundary and new plan hash, and apply
-only that exact reviewed plan under explicit authorization.
+Next, merge the recovery correction, regenerate from exact `main`, inspect the seven-create and
+four-existing boundary and new plan hash, and apply only that exact reviewed plan under fresh
+explicit authorization.
