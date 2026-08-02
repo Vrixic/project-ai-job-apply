@@ -2,10 +2,11 @@
 
 - Environment: development
 - AWS region: `us-east-2`
-- Merged recovery source: `923467a910d6cfccc1b7355e981f9881d27206e2`
+- Initial merged recovery source: `923467a910d6cfccc1b7355e981f9881d27206e2`
+- Merged IAM/KMS correction source: `76e16384355224d8ba6873f8b6c94ab062719690`
 - Artifact source: `92e5b8f17a898c2970a4231c8a8b4e06c988be80`
 - API traffic change: none
-- Gateway Lambda state: not created
+- Gateway Lambda state: active, tracked, dark, and incomplete; no alias or API permission
 
 ## Endpoint-policy recovery
 
@@ -79,10 +80,59 @@ initialization in the guarded local operator and GitHub Terraform workflow. No e
 customer-managed KMS state-object encryption until fresh object metadata proves `aws:kms` after an
 authorized exact-plan apply.
 
+## Merged correction and quota-limited completion
+
+PR #67 merged as `76e16384355224d8ba6873f8b6c94ab062719690`. The exact merged bootstrap
+plan `c01d85a86201fe6416d5fa6882f2cd411ebcb3230e0cc99429ba555a1cb1b055` applied with zero
+creates, three in-place IAM updates, and zero destroys. Live policy inspection and IAM Access
+Analyzer passed with zero findings. `bootstrap.tfstate` was rewritten with the bucket's
+customer-managed KMS key and a refresh-backed post-apply plan returned no drift.
+
+The independently regenerated platform plan
+`b012e05ce86cb476d95369927f326672ebb7d93e4ff31184455bdaefb3afd41f` contained the six
+missing dark creates plus the exact Lambda-role policy update, with no delete, replacement, or API
+traffic change. Its exact apply updated the policy and created an active, tracked `$LATEST` Lambda,
+then AWS rejected reserved concurrency `2`: the new account's effective regional concurrency was
+`10`, and no units could be reserved while retaining AWS's required unreserved pool. Terraform
+stopped before creating the alias, API permission, or three alarms. The function remained dark,
+ECS gateway/worker remained at desired/running/pending `1/1/0`, and the sole API integration
+remained `HTTP_PROXY`. `platform.tfstate` was rewritten with customer-managed KMS encryption.
+
+AWS would not accept the requested value `20` because its Service Quotas API treats `1000` as the
+standard default. The product owner authorized a `1001` request. That request remains
+`CASE_OPENED`, but AWS restored the effective account limit to `1000`, which is sufficient for the
+reviewed function ceiling while retaining the standard unreserved pool. A quota is a capacity
+limit, not provisioned concurrency; no idle Lambda concurrency charge was enabled.
+
+## Taint and pinned-layer recovery
+
+The failed create marked the tracked function tainted. A refresh-backed diagnostic
+`d6c9dbb7594be7f40d3013d96dc3019d6c86bc9878b8c7ddecc7e98f637ab098` proposed replacing
+that function plus five creates, so the operator rejected it. Before state recovery, live checks
+proved the exact artifact checksum, Node.js 24 handler, active/successful function state, no alias,
+no resource policy, no Lambda alarms, no API route, and an effective concurrency limit of `1000`.
+
+The product owner explicitly authorized taint recovery. The current KMS-encrypted, versioned state
+object (`brMTjLdZI90_qRJlD4GPgaG.2v3vHG22`) was retained as the recovery checkpoint. Terraform
+cleared only `module.platform.aws_lambda_function.gateway[0]`'s taint marker, writing a new
+KMS-encrypted state version (`W_y_IaZ6eGClk9LDslXNfFwzwH89b_si`) without changing AWS resources
+or API traffic.
+
+The first post-untaint plan correctly removed replacement, but the operator rejected it because
+AWS's moving extension parameter had advanced from the deployed and reviewed layer `114` to `115`.
+The recovery operator now requires an explicit official pinned layer, proves that layer is already
+attached to the healthy dark function, verifies sufficient effective account concurrency, and
+allows only the exact reserved-concurrency transition from `-1` to `2`.
+
+The unmerged guarded diagnostic has SHA-256
+`8c37cdc54083be3f94da7f7e2c35198b20c418c987175c89de45faa2cf2d14a9`. It pins official
+layer `114` and contains exactly five creates (alias, API permission, and three alarms), one
+in-place function concurrency update, zero deletes, zero replacements, and no API traffic change.
+It is diagnostic evidence only and was not applied.
+
 ## Next gate
 
-Merge the correction, regenerate the independent development bootstrap and platform plans from
-exact `main`, and review their hashes and action allowlists. Apply the bootstrap plan first, verify
-the boundary and GitHub role plus KMS-encrypted bootstrap state object, then regenerate and apply
-the platform plan. Only after the Lambda is active may function-level denial, secret retrieval,
-logging, alarm, no-drift, and unchanged-route conformance begin.
+Merge the pinned-layer/concurrency recovery guard, regenerate the exact-main plan, and separately
+authorize only its reviewed hash. After apply, verify reserved concurrency, immutable alias,
+stage-scoped permission, alarms, function-level denial, secret retrieval, logging, KMS state,
+no-drift, and unchanged ECS/API routing before considering a cutover.

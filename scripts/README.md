@@ -51,8 +51,10 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   the merged versioned artifact, official regional Secrets extension, and customer-managed state
   key; creates a refresh-backed sensitive plan under the ignored Terraform data directory; and
   rejects anything except the reviewed dark-gateway creates. Explicit recovery switches can
-  account for a partial apply and the exact `DescribeSubnets` role-policy correction. It never
-  applies infrastructure or changes API traffic.
+  account for a partial apply, the exact `DescribeSubnets` role-policy correction, or an exact
+  unlimited-to-bounded concurrency correction. Concurrency recovery requires the already deployed
+  official extension layer to be pinned so a moving AWS `latest` parameter cannot enter the plan.
+  It never applies infrastructure or changes API traffic.
 - `operate-platform-alerts.ps1` — Reports sanitized development or staging alert state, privately
   requests an SNS email subscription, and exercises ALARM → OK delivery using only the selected
   environment's dedicated synthetic metric. Select staging with `-Environment staging`.

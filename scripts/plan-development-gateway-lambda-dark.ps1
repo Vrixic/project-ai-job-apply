@@ -29,9 +29,14 @@ param(
   [ValidateRange(1, 5)]
   [int]$ReservedConcurrency = 2,
 
+  [ValidatePattern("^arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:[0-9]+$")]
+  [string]$PinnedExtensionLayerArn,
+
   [switch]$ResumePartialApply,
 
   [switch]$AllowLambdaVpcPolicyRecovery,
+
+  [switch]$AllowLambdaConcurrencyRecovery,
 
   [switch]$Help
 )
@@ -50,7 +55,9 @@ Usage:
     -ArtifactSha256 HEX_SHA256 `
     -ArtifactBase64Sha256 BASE64_SHA256 `
     [-ResumePartialApply] `
-    [-AllowLambdaVpcPolicyRecovery]
+    [-AllowLambdaVpcPolicyRecovery] `
+    [-PinnedExtensionLayerArn REVIEWED_LAYER_ARN] `
+    [-AllowLambdaConcurrencyRecovery]
 
 Creates a refresh-backed development plan for the dark gateway Lambda only. It reconstructs the
 exact live ECS/RDS inputs, verifies the immutable KMS-encrypted artifact, resolves and pins the
@@ -64,6 +71,11 @@ creates.
 
 Use -AllowLambdaVpcPolicyRecovery with -ResumePartialApply only for the reviewed correction that
 adds ec2:DescribeSubnets to the existing Lambda VPC role policy. Every other update remains denied.
+
+Use -PinnedExtensionLayerArn with -AllowLambdaConcurrencyRecovery and -ResumePartialApply only
+after a failed Lambda creation. The pinned official layer must already be attached to the healthy
+dark function, and the plan may change only reserved concurrency from unlimited to the reviewed
+ceiling. This prevents a moving "latest" extension from entering a recovery plan.
 
 The sensitive saved plan remains under the ignored Terraform .terraform directory for separate
 review and exact-plan apply. This script never applies infrastructure or changes API traffic.
@@ -89,6 +101,18 @@ if ($Region -ne "us-east-2") {
 
 if ($AllowLambdaVpcPolicyRecovery -and -not $ResumePartialApply) {
   throw "Lambda VPC policy recovery requires -ResumePartialApply."
+}
+
+if ($AllowLambdaConcurrencyRecovery -and -not $ResumePartialApply) {
+  throw "Lambda concurrency recovery requires -ResumePartialApply."
+}
+
+if ($PinnedExtensionLayerArn -and -not $AllowLambdaConcurrencyRecovery) {
+  throw "A pinned extension layer is allowed only for Lambda concurrency recovery."
+}
+
+if ($AllowLambdaConcurrencyRecovery -and -not $PinnedExtensionLayerArn) {
+  throw "Lambda concurrency recovery requires the already deployed reviewed extension layer ARN."
 }
 
 $keyMatch = [regex]::Match(
@@ -315,7 +339,18 @@ try {
     "--output",
     "json"
   )
-  $extensionLayerArn = [string]$extensionParameterResult.Parameter.Value
+  $latestExtensionLayerArn = [string]$extensionParameterResult.Parameter.Value
+  if (
+    $latestExtensionLayerArn -notmatch
+      "^arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:[0-9]+$"
+  ) {
+    throw "The official extension parameter resolved outside the reviewed regional publisher."
+  }
+  $extensionLayerArn = if ($PinnedExtensionLayerArn) {
+    $PinnedExtensionLayerArn
+  } else {
+    $latestExtensionLayerArn
+  }
   $extensionLayer = Invoke-AwsJson @(
     "lambda",
     "get-layer-version-by-arn",
@@ -325,11 +360,55 @@ try {
     "json"
   )
   if (
-    $extensionLayerArn -notmatch "^arn:aws:lambda:us-east-2:[0-9]{12}:layer:AWS-Parameters-and-Secrets-Lambda-Extension:[0-9]+$" -or
+    $extensionLayerArn -notmatch "^arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:[0-9]+$" -or
     @($extensionLayer.CompatibleArchitectures).Count -ne 1 -or
     [string]$extensionLayer.CompatibleArchitectures[0] -ne "x86_64"
   ) {
     throw "The official extension parameter did not resolve to the reviewed regional x86_64 layer."
+  }
+
+  if ($AllowLambdaConcurrencyRecovery) {
+    $lambdaAccount = Invoke-AwsJson @(
+      "lambda",
+      "get-account-settings",
+      "--output",
+      "json"
+    )
+    if (
+      [int]$lambdaAccount.AccountLimit.ConcurrentExecutions -
+        $ReservedConcurrency -lt 100
+    ) {
+      throw "The effective Lambda quota cannot retain the standard unreserved concurrency pool."
+    }
+    $liveLambda = Invoke-AwsJson @(
+      "lambda",
+      "get-function",
+      "--function-name",
+      "ai-job-apply-development-gateway",
+      "--output",
+      "json"
+    )
+    $liveLayers = @($liveLambda.Configuration.Layers | ForEach-Object { [string]$_.Arn })
+    if (
+      [string]$liveLambda.Configuration.State -ne "Active" -or
+      [string]$liveLambda.Configuration.LastUpdateStatus -ne "Successful" -or
+      [string]$liveLambda.Configuration.CodeSha256 -ne $ArtifactBase64Sha256 -or
+      $liveLayers.Count -ne 1 -or
+      $liveLayers[0] -ne $PinnedExtensionLayerArn
+    ) {
+      throw "The live dark Lambda does not match the reviewed recovery artifact and layer."
+    }
+    $liveConcurrency = Invoke-AwsJson @(
+      "lambda",
+      "get-function-concurrency",
+      "--function-name",
+      "ai-job-apply-development-gateway",
+      "--output",
+      "json"
+    )
+    if ($null -ne $liveConcurrency.ReservedConcurrentExecutions) {
+      throw "The dark Lambda already has a reserved-concurrency configuration."
+    }
   }
 
   $services = @(
@@ -562,6 +641,31 @@ try {
       continue
     }
     if (
+      $AllowLambdaConcurrencyRecovery -and
+      $normalizedAction -eq "update" -and
+      [string]$resourceChange.address -eq
+        "module.platform.aws_lambda_function.gateway[0]"
+    ) {
+      if (
+        [int]$resourceChange.change.before.reserved_concurrent_executions -ne -1 -or
+        [int]$resourceChange.change.after.reserved_concurrent_executions -ne
+          $ReservedConcurrency
+      ) {
+        throw "The Lambda concurrency recovery update has an unexpected ceiling transition."
+      }
+      $beforeFunction = $resourceChange.change.before | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+      $afterFunction = $resourceChange.change.after | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+      $afterFunction.reserved_concurrent_executions =
+        $beforeFunction.reserved_concurrent_executions
+      $normalizedBefore = $beforeFunction | ConvertTo-Json -Depth 30 -Compress
+      $normalizedAfter = $afterFunction | ConvertTo-Json -Depth 30 -Compress
+      if ($normalizedBefore -ne $normalizedAfter) {
+        throw "The Lambda concurrency recovery update changes more than reserved concurrency."
+      }
+      $updates += [string]$resourceChange.address
+      continue
+    }
+    if (
       $normalizedAction -ne "create" -or
       $expectedCreates -notcontains [string]$resourceChange.address
     ) {
@@ -583,10 +687,22 @@ try {
         throw "The partial-apply recovery plan does not account for every dark gateway resource."
       }
     }
-    if ($AllowLambdaVpcPolicyRecovery -and $updates.Count -ne 1) {
+    if (
+      $AllowLambdaVpcPolicyRecovery -and
+      $updates -notcontains "module.platform.aws_iam_role_policy.gateway_lambda[0]"
+    ) {
       throw "The recovery plan must contain the exact Lambda VPC role-policy update."
     }
-    if (-not $AllowLambdaVpcPolicyRecovery -and $updates.Count -ne 0) {
+    if (
+      $AllowLambdaConcurrencyRecovery -and
+      $updates -notcontains "module.platform.aws_lambda_function.gateway[0]"
+    ) {
+      throw "The recovery plan must contain the exact Lambda concurrency update."
+    }
+    $expectedUpdateCount =
+      [int][bool]$AllowLambdaVpcPolicyRecovery +
+      [int][bool]$AllowLambdaConcurrencyRecovery
+    if ($updates.Count -ne $expectedUpdateCount) {
       throw "The partial-apply recovery plan contains an unapproved update."
     }
   } else {
@@ -613,6 +729,8 @@ try {
     ReservedConcurrency       = $ReservedConcurrency
     ResumePartialApply        = [bool]$ResumePartialApply
     LambdaVpcPolicyRecovery   = [bool]$AllowLambdaVpcPolicyRecovery
+    LambdaConcurrencyRecovery = [bool]$AllowLambdaConcurrencyRecovery
+    LatestExtensionLayerArn   = $latestExtensionLayerArn
     ExistingReviewedResources = $existing.Count
     Creates                   = $changes.Count
     Updates                   = $updates.Count
