@@ -15,7 +15,7 @@ import {
   outboxNudgeSchemaVersion,
   type ProfilePreferencesUpdatedData,
 } from "@ai-job-apply/event-contracts";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
@@ -73,13 +73,19 @@ export interface ProfileStore {
   getPendingOutboxEvents(limit: number): Promise<PendingOutboxEvent[]>;
   markOutboxPublished(eventId: string): Promise<void>;
   getPreferencesById(preferenceSetId: string): Promise<JobPreferenceSet | null>;
-  markOperationRunning(operationId: string): Promise<void>;
+  markOperationRunning(operationId: string, preferenceSetId: string): Promise<void>;
   completeReadinessOperation(
     operationId: string,
     preferenceSetId: string,
     readiness: ProfileReadiness,
     traceparent?: string,
   ): Promise<void>;
+  failReadinessOperation(
+    operationId: string,
+    preferenceSetId: string,
+    errorCode: string,
+  ): Promise<void>;
+  failDurableReadinessOperation(executionName: string, errorCode: string): Promise<void>;
   ping(): Promise<void>;
   close(): Promise<void>;
 }
@@ -553,11 +559,39 @@ export class PostgresProfileStore implements ProfileStore {
     return rows[0] ? mapPreferences(rows[0]) : null;
   }
 
-  async markOperationRunning(operationId: string): Promise<void> {
-    await this.handle.db
-      .update(operations)
-      .set({ state: "running", updatedAt: new Date(), errorCode: null })
-      .where(eq(operations.id, operationId));
+  async markOperationRunning(operationId: string, preferenceSetId: string): Promise<void> {
+    await this.handle.db.transaction(async (tx) => {
+      const [preferenceSet] = await tx
+        .select({ userId: jobPreferences.userId })
+        .from(jobPreferences)
+        .where(eq(jobPreferences.id, preferenceSetId))
+        .limit(1);
+      if (!preferenceSet) {
+        throw new Error("ProfileReadinessInputNotFound");
+      }
+      const updated = await tx
+        .update(operations)
+        .set({ state: "running", updatedAt: new Date(), errorCode: null })
+        .where(
+          and(
+            eq(operations.id, operationId),
+            eq(operations.userId, preferenceSet.userId),
+            inArray(operations.state, ["queued", "running"]),
+          ),
+        )
+        .returning({ id: operations.id });
+      if (updated.length > 0) {
+        return;
+      }
+      const [existing] = await tx
+        .select({ state: operations.state })
+        .from(operations)
+        .where(and(eq(operations.id, operationId), eq(operations.userId, preferenceSet.userId)))
+        .limit(1);
+      if (existing?.state !== "succeeded") {
+        throw new Error("ProfileReadinessOperationNotRunnable");
+      }
+    });
   }
 
   async completeReadinessOperation(
@@ -567,7 +601,15 @@ export class PostgresProfileStore implements ProfileStore {
     traceparent?: string,
   ): Promise<void> {
     await this.handle.db.transaction(async (tx) => {
-      await tx
+      const [preferenceSet] = await tx
+        .select({ userId: jobPreferences.userId })
+        .from(jobPreferences)
+        .where(eq(jobPreferences.id, preferenceSetId))
+        .limit(1);
+      if (!preferenceSet) {
+        throw new Error("ProfileReadinessInputNotFound");
+      }
+      const updated = await tx
         .update(operations)
         .set({
           state: "succeeded",
@@ -575,7 +617,25 @@ export class PostgresProfileStore implements ProfileStore {
           updatedAt: new Date(),
           errorCode: null,
         })
-        .where(eq(operations.id, operationId));
+        .where(
+          and(
+            eq(operations.id, operationId),
+            eq(operations.userId, preferenceSet.userId),
+            inArray(operations.state, ["queued", "running"]),
+          ),
+        )
+        .returning({ id: operations.id });
+      if (updated.length === 0) {
+        const [existing] = await tx
+          .select({ state: operations.state })
+          .from(operations)
+          .where(and(eq(operations.id, operationId), eq(operations.userId, preferenceSet.userId)))
+          .limit(1);
+        if (existing?.state === "succeeded") {
+          return;
+        }
+        throw new Error("ProfileReadinessOperationNotCompletable");
+      }
       await tx.insert(outboxEvents).values({
         id: uuidv7(),
         type: eventTypes.profileReadinessCalculated,
@@ -592,6 +652,54 @@ export class PostgresProfileStore implements ProfileStore {
         ...(traceparent ? { traceparent } : {}),
       });
     });
+  }
+
+  async failReadinessOperation(
+    operationId: string,
+    preferenceSetId: string,
+    errorCode: string,
+  ): Promise<void> {
+    const code = sanitizedErrorCode(errorCode);
+    await this.handle.db.transaction(async (tx) => {
+      const [preferenceSet] = await tx
+        .select({ userId: jobPreferences.userId })
+        .from(jobPreferences)
+        .where(eq(jobPreferences.id, preferenceSetId))
+        .limit(1);
+      if (!preferenceSet) {
+        throw new Error("ProfileReadinessInputNotFound");
+      }
+      await tx
+        .update(operations)
+        .set({ state: "failed", updatedAt: new Date(), errorCode: code })
+        .where(
+          and(
+            eq(operations.id, operationId),
+            eq(operations.userId, preferenceSet.userId),
+            inArray(operations.state, ["queued", "running"]),
+          ),
+        );
+    });
+  }
+
+  async failDurableReadinessOperation(executionName: string, errorCode: string): Promise<void> {
+    const code = sanitizedErrorCode(errorCode);
+    await this.handle.client`
+      UPDATE platform.operations AS operation
+      SET
+        state = 'failed',
+        updated_at = now(),
+        error_code = ${code}
+      FROM platform.outbox_events AS event,
+           profile.job_preferences AS preference_set
+      WHERE event.durable_execution_name = ${executionName}
+        AND event.dispatch_target = 'lambda_durable'
+        AND event.type = ${eventTypes.profilePreferencesUpdated}
+        AND operation.id = (event.data ->> 'operationId')::uuid
+        AND preference_set.id = (event.data ->> 'preferenceSetId')::uuid
+        AND preference_set.user_id = operation.user_id
+        AND operation.state IN ('queued', 'running')
+    `;
   }
 
   async ping(): Promise<void> {

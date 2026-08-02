@@ -20,3 +20,7 @@ idempotency keys, audit events, and an identifier-only transactional outbox. Its
 kept explicit alongside Drizzle types. Forward migration `0002_serverless_outbox` adds an immutable
 per-event dispatch target and crash-safe nudge/start metadata while preserving Temporal as the
 default route until a separately reviewed cutover.
+
+Readiness operation transitions are replay-safe: duplicate running/completion/failure calls cannot
+downgrade a succeeded operation or emit a second completion event. The durable terminal reconciler
+maps only an exact recorded execution name back to its owned operation.
