@@ -16,6 +16,26 @@ describe("Lambda gateway configuration", () => {
 
     expect(result.DATABASE_SECRET_ID).toBe("ai-job-apply/development/database-url");
     expect(result.DATABASE_URL).toBeUndefined();
+    expect(result.OUTBOX_DISPATCH_TARGET).toBe("temporal");
+  });
+
+  it("requires an exact queue URL before selecting Lambda durable dispatch", () => {
+    expect(() =>
+      loadLambdaGatewayConfig({
+        ...baseEnvironment,
+        DATABASE_SECRET_ID: "ai-job-apply/development/database-url",
+        OUTBOX_DISPATCH_TARGET: "lambda_durable",
+      }),
+    ).toThrow("Lambda durable dispatch requires OUTBOX_QUEUE_URL");
+
+    expect(
+      loadLambdaGatewayConfig({
+        ...baseEnvironment,
+        DATABASE_SECRET_ID: "ai-job-apply/development/database-url",
+        OUTBOX_DISPATCH_TARGET: "lambda_durable",
+        OUTBOX_QUEUE_URL: "https://sqs.us-east-2.amazonaws.com/000000000000/synthetic",
+      }).OUTBOX_DISPATCH_TARGET,
+    ).toBe("lambda_durable");
   });
 
   it("accepts a direct database URL for local conformance", () => {

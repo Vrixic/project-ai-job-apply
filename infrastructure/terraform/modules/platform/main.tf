@@ -1305,6 +1305,16 @@ data "aws_iam_policy_document" "gateway_lambda" {
     ]
     resources = ["*"]
   }
+
+  dynamic "statement" {
+    for_each = var.deploy_serverless_outbox ? [1] : []
+    content {
+      sid       = "SendIdentifierOnlyOutboxNudges"
+      effect    = "Allow"
+      actions   = ["sqs:SendMessage"]
+      resources = [aws_sqs_queue.events.arn]
+    }
+  }
 }
 
 resource "aws_iam_role_policy" "gateway_lambda" {
@@ -1315,7 +1325,7 @@ resource "aws_iam_role_policy" "gateway_lambda" {
 }
 
 resource "aws_security_group" "secrets_endpoint" {
-  count       = var.deploy_gateway_lambda ? 1 : 0
+  count       = var.deploy_gateway_lambda || var.deploy_serverless_outbox ? 1 : 0
   name_prefix = "${var.name}-${var.environment}-secrets-endpoint-"
   description = "TLS from private application functions to the Secrets Manager endpoint"
   vpc_id      = aws_vpc.this.id
@@ -1329,10 +1339,10 @@ resource "aws_security_group" "secrets_endpoint" {
 }
 
 data "aws_iam_policy_document" "secrets_endpoint" {
-  count = var.deploy_gateway_lambda ? 1 : 0
+  count = var.deploy_gateway_lambda || var.deploy_serverless_outbox ? 1 : 0
 
   statement {
-    sid       = "GatewayLambdaDatabaseSecretOnly"
+    sid       = "ExactLambdaRolesDatabaseSecretOnly"
     effect    = "Allow"
     actions   = ["secretsmanager:GetSecretValue"]
     resources = [aws_secretsmanager_secret.database_url.arn]
@@ -1347,13 +1357,17 @@ data "aws_iam_policy_document" "secrets_endpoint" {
     condition {
       test     = "ArnEquals"
       variable = "aws:PrincipalArn"
-      values   = [aws_iam_role.gateway_lambda[0].arn]
+      values = compact([
+        var.deploy_gateway_lambda ? aws_iam_role.gateway_lambda[0].arn : "",
+        var.deploy_serverless_outbox ? aws_iam_role.outbox_starter[0].arn : "",
+        var.deploy_serverless_outbox ? aws_iam_role.outbox_reconciler[0].arn : ""
+      ])
     }
   }
 }
 
 resource "aws_vpc_endpoint" "secretsmanager" {
-  count               = var.deploy_gateway_lambda ? 1 : 0
+  count               = var.deploy_gateway_lambda || var.deploy_serverless_outbox ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.secretsmanager"
   vpc_endpoint_type   = "Interface"
@@ -1383,14 +1397,20 @@ resource "aws_lambda_function" "gateway" {
   kms_key_arn                    = aws_kms_key.platform.arn
 
   environment {
-    variables = {
-      NODE_ENV           = "production"
-      RELEASE_SHA        = var.gateway_lambda_artifact_sha256
-      LOG_LEVEL          = "info"
-      DATABASE_SECRET_ID = aws_secretsmanager_secret.database_url.arn
-      OIDC_ISSUER        = var.oidc_issuer
-      OIDC_AUDIENCE      = var.oidc_audience
-    }
+    variables = merge(
+      {
+        NODE_ENV           = "production"
+        RELEASE_SHA        = var.gateway_lambda_artifact_sha256
+        LOG_LEVEL          = "info"
+        DATABASE_SECRET_ID = aws_secretsmanager_secret.database_url.arn
+        OIDC_ISSUER        = var.oidc_issuer
+        OIDC_AUDIENCE      = var.oidc_audience
+      },
+      var.deploy_serverless_outbox ? {
+        OUTBOX_DISPATCH_TARGET = var.gateway_outbox_dispatch_target
+        OUTBOX_QUEUE_URL       = aws_sqs_queue.events.url
+      } : {}
+    )
   }
 
   vpc_config {
@@ -1505,4 +1525,410 @@ resource "aws_cloudwatch_metric_alarm" "gateway_lambda_duration" {
   dimensions = {
     FunctionName = aws_lambda_function.gateway[0].function_name
   }
+}
+
+resource "aws_iam_role" "outbox_starter" {
+  count                = var.deploy_serverless_outbox ? 1 : 0
+  name                 = "${var.name}-${var.environment}-outbox-starter"
+  assume_role_policy   = data.aws_iam_policy_document.gateway_lambda_assume[0].json
+  permissions_boundary = data.aws_iam_policy.workload_boundary.arn
+}
+
+resource "aws_iam_role" "outbox_reconciler" {
+  count                = var.deploy_serverless_outbox ? 1 : 0
+  name                 = "${var.name}-${var.environment}-outbox-reconciler"
+  assume_role_policy   = data.aws_iam_policy_document.gateway_lambda_assume[0].json
+  permissions_boundary = data.aws_iam_policy.workload_boundary.arn
+}
+
+data "aws_iam_policy_document" "outbox_starter" {
+  count = var.deploy_serverless_outbox ? 1 : 0
+
+  statement {
+    sid       = "WriteOwnedLogs"
+    effect    = "Allow"
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["${aws_cloudwatch_log_group.application.arn}:*"]
+  }
+
+  statement {
+    sid    = "ManageVpcInterfaces"
+    effect = "Allow"
+    actions = [
+      "ec2:AssignPrivateIpAddresses",
+      "ec2:CreateNetworkInterface",
+      "ec2:DeleteNetworkInterface",
+      "ec2:DescribeNetworkInterfaces",
+      "ec2:DescribeSubnets",
+      "ec2:UnassignPrivateIpAddresses"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid       = "ReadDatabaseSecret"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [aws_secretsmanager_secret.database_url.arn]
+  }
+
+  statement {
+    sid       = "DecryptOwnedData"
+    effect    = "Allow"
+    actions   = ["kms:Decrypt"]
+    resources = [aws_kms_key.platform.arn]
+  }
+
+  statement {
+    sid    = "ConsumeOutboxNudges"
+    effect = "Allow"
+    actions = [
+      "sqs:ChangeMessageVisibility",
+      "sqs:DeleteMessage",
+      "sqs:GetQueueAttributes",
+      "sqs:ReceiveMessage"
+    ]
+    resources = [aws_sqs_queue.events.arn]
+  }
+
+  statement {
+    sid       = "StartExactDurableWorkflowVersion"
+    effect    = "Allow"
+    actions   = ["lambda:InvokeFunction"]
+    resources = [var.durable_workflow_function_arn]
+  }
+}
+
+data "aws_iam_policy_document" "outbox_reconciler" {
+  count = var.deploy_serverless_outbox ? 1 : 0
+
+  statement {
+    sid       = "WriteOwnedLogs"
+    effect    = "Allow"
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["${aws_cloudwatch_log_group.application.arn}:*"]
+  }
+
+  statement {
+    sid    = "ManageVpcInterfaces"
+    effect = "Allow"
+    actions = [
+      "ec2:AssignPrivateIpAddresses",
+      "ec2:CreateNetworkInterface",
+      "ec2:DeleteNetworkInterface",
+      "ec2:DescribeNetworkInterfaces",
+      "ec2:DescribeSubnets",
+      "ec2:UnassignPrivateIpAddresses"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid       = "ReadDatabaseSecret"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [aws_secretsmanager_secret.database_url.arn]
+  }
+
+  statement {
+    sid       = "DecryptOwnedData"
+    effect    = "Allow"
+    actions   = ["kms:Decrypt"]
+    resources = [aws_kms_key.platform.arn]
+  }
+
+  statement {
+    sid       = "SendIdentifierOnlyOutboxNudges"
+    effect    = "Allow"
+    actions   = ["sqs:SendMessage"]
+    resources = [aws_sqs_queue.events.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "outbox_starter" {
+  count  = var.deploy_serverless_outbox ? 1 : 0
+  name   = "outbox-starter-runtime"
+  role   = aws_iam_role.outbox_starter[0].id
+  policy = data.aws_iam_policy_document.outbox_starter[0].json
+}
+
+resource "aws_iam_role_policy" "outbox_reconciler" {
+  count  = var.deploy_serverless_outbox ? 1 : 0
+  name   = "outbox-reconciler-runtime"
+  role   = aws_iam_role.outbox_reconciler[0].id
+  policy = data.aws_iam_policy_document.outbox_reconciler[0].json
+}
+
+data "aws_iam_policy_document" "outbox_sqs_endpoint" {
+  count = var.deploy_serverless_outbox ? 1 : 0
+
+  statement {
+    sid    = "ExactOutboxRolesOnly"
+    effect = "Allow"
+    actions = [
+      "sqs:ChangeMessageVisibility",
+      "sqs:DeleteMessage",
+      "sqs:GetQueueAttributes",
+      "sqs:ReceiveMessage",
+      "sqs:SendMessage"
+    ]
+    resources = [aws_sqs_queue.events.arn]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "ArnEquals"
+      variable = "aws:PrincipalArn"
+      values = compact([
+        aws_iam_role.outbox_starter[0].arn,
+        aws_iam_role.outbox_reconciler[0].arn,
+        var.deploy_gateway_lambda ? aws_iam_role.gateway_lambda[0].arn : ""
+      ])
+    }
+  }
+}
+
+resource "aws_vpc_endpoint" "sqs" {
+  count               = var.deploy_serverless_outbox ? 1 : 0
+  vpc_id              = aws_vpc.this.id
+  service_name        = "com.amazonaws.${data.aws_region.current.region}.sqs"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+  subnet_ids          = [aws_subnet.private[0].id]
+  security_group_ids  = [aws_security_group.secrets_endpoint[0].id]
+  policy              = data.aws_iam_policy_document.outbox_sqs_endpoint[0].json
+}
+
+data "aws_iam_policy_document" "outbox_lambda_endpoint" {
+  count = var.deploy_serverless_outbox ? 1 : 0
+
+  statement {
+    sid       = "StarterInvokesExactDurableVersionOnly"
+    effect    = "Allow"
+    actions   = ["lambda:InvokeFunction"]
+    resources = [var.durable_workflow_function_arn]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "ArnEquals"
+      variable = "aws:PrincipalArn"
+      values   = [aws_iam_role.outbox_starter[0].arn]
+    }
+  }
+}
+
+resource "aws_vpc_endpoint" "lambda" {
+  count               = var.deploy_serverless_outbox ? 1 : 0
+  vpc_id              = aws_vpc.this.id
+  service_name        = "com.amazonaws.${data.aws_region.current.region}.lambda"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+  subnet_ids          = [aws_subnet.private[0].id]
+  security_group_ids  = [aws_security_group.secrets_endpoint[0].id]
+  policy              = data.aws_iam_policy_document.outbox_lambda_endpoint[0].json
+}
+
+resource "aws_lambda_function" "outbox_starter" {
+  count                          = var.deploy_serverless_outbox ? 1 : 0
+  function_name                  = "${var.name}-${var.environment}-outbox-starter"
+  description                    = "Disabled dark SQS boundary for deterministic durable-workflow starts"
+  role                           = aws_iam_role.outbox_starter[0].arn
+  runtime                        = "nodejs24.x"
+  architectures                  = ["x86_64"]
+  handler                        = "index.starter"
+  memory_size                    = 512
+  timeout                        = 20
+  reserved_concurrent_executions = 1
+  publish                        = true
+  s3_bucket                      = aws_s3_bucket.artifacts.bucket
+  s3_key                         = var.workflow_ingress_artifact_s3_key
+  s3_object_version              = var.workflow_ingress_artifact_s3_object_version
+  source_code_hash               = var.workflow_ingress_artifact_base64sha256
+  layers                         = [var.workflow_ingress_lambda_extension_layer_arn]
+  kms_key_arn                    = aws_kms_key.platform.arn
+
+  environment {
+    variables = {
+      NODE_ENV             = "production"
+      RELEASE_SHA          = var.workflow_ingress_artifact_sha256
+      DATABASE_SECRET_ID   = aws_secretsmanager_secret.database_url.arn
+      DURABLE_FUNCTION_ARN = var.durable_workflow_function_arn
+    }
+  }
+
+  vpc_config {
+    subnet_ids         = aws_subnet.private[*].id
+    security_group_ids = [aws_security_group.application.id]
+  }
+
+  tracing_config { mode = "Active" }
+
+  logging_config {
+    log_format            = "JSON"
+    application_log_level = "INFO"
+    system_log_level      = "WARN"
+    log_group             = aws_cloudwatch_log_group.application.name
+  }
+
+  depends_on = [
+    aws_iam_role_policy.outbox_starter,
+    aws_vpc_endpoint.secretsmanager,
+    aws_vpc_endpoint.lambda
+  ]
+}
+
+resource "aws_lambda_alias" "outbox_starter" {
+  count            = var.deploy_serverless_outbox ? 1 : 0
+  name             = var.environment
+  description      = "Reviewed immutable ${var.environment} outbox-starter release"
+  function_name    = aws_lambda_function.outbox_starter[0].function_name
+  function_version = aws_lambda_function.outbox_starter[0].version
+}
+
+resource "aws_lambda_function" "outbox_reconciler" {
+  count                          = var.deploy_serverless_outbox ? 1 : 0
+  function_name                  = "${var.name}-${var.environment}-outbox-reconciler"
+  description                    = "Disabled dark bounded reconciler for missing SQS outbox nudges"
+  role                           = aws_iam_role.outbox_reconciler[0].arn
+  runtime                        = "nodejs24.x"
+  architectures                  = ["x86_64"]
+  handler                        = "index.reconcile"
+  memory_size                    = 512
+  timeout                        = 30
+  reserved_concurrent_executions = 1
+  publish                        = true
+  s3_bucket                      = aws_s3_bucket.artifacts.bucket
+  s3_key                         = var.workflow_ingress_artifact_s3_key
+  s3_object_version              = var.workflow_ingress_artifact_s3_object_version
+  source_code_hash               = var.workflow_ingress_artifact_base64sha256
+  layers                         = [var.workflow_ingress_lambda_extension_layer_arn]
+  kms_key_arn                    = aws_kms_key.platform.arn
+
+  environment {
+    variables = {
+      NODE_ENV           = "production"
+      RELEASE_SHA        = var.workflow_ingress_artifact_sha256
+      DATABASE_SECRET_ID = aws_secretsmanager_secret.database_url.arn
+      OUTBOX_QUEUE_URL   = aws_sqs_queue.events.url
+    }
+  }
+
+  vpc_config {
+    subnet_ids         = aws_subnet.private[*].id
+    security_group_ids = [aws_security_group.application.id]
+  }
+
+  tracing_config { mode = "Active" }
+
+  logging_config {
+    log_format            = "JSON"
+    application_log_level = "INFO"
+    system_log_level      = "WARN"
+    log_group             = aws_cloudwatch_log_group.application.name
+  }
+
+  depends_on = [
+    aws_iam_role_policy.outbox_reconciler,
+    aws_vpc_endpoint.secretsmanager,
+    aws_vpc_endpoint.sqs
+  ]
+}
+
+resource "aws_lambda_alias" "outbox_reconciler" {
+  count            = var.deploy_serverless_outbox ? 1 : 0
+  name             = var.environment
+  description      = "Reviewed immutable ${var.environment} outbox-reconciler release"
+  function_name    = aws_lambda_function.outbox_reconciler[0].function_name
+  function_version = aws_lambda_function.outbox_reconciler[0].version
+}
+
+resource "aws_lambda_event_source_mapping" "outbox_starter" {
+  count                              = var.deploy_serverless_outbox ? 1 : 0
+  event_source_arn                   = aws_sqs_queue.events.arn
+  function_name                      = aws_lambda_alias.outbox_starter[0].arn
+  enabled                            = false
+  batch_size                         = 5
+  maximum_batching_window_in_seconds = 0
+  function_response_types            = ["ReportBatchItemFailures"]
+
+  depends_on = [aws_iam_role_policy.outbox_starter]
+}
+
+resource "aws_cloudwatch_event_rule" "outbox_reconciler" {
+  count               = var.deploy_serverless_outbox ? 1 : 0
+  name                = "${var.name}-${var.environment}-outbox-reconciler"
+  description         = "Disabled until the reviewed Lambda durable cutover"
+  schedule_expression = "rate(1 minute)"
+  state               = "DISABLED"
+}
+
+resource "aws_cloudwatch_event_target" "outbox_reconciler" {
+  count     = var.deploy_serverless_outbox ? 1 : 0
+  rule      = aws_cloudwatch_event_rule.outbox_reconciler[0].name
+  target_id = "outbox-reconciler"
+  arn       = aws_lambda_alias.outbox_reconciler[0].arn
+}
+
+resource "aws_lambda_permission" "outbox_reconciler_schedule" {
+  count         = var.deploy_serverless_outbox ? 1 : 0
+  statement_id  = "AllowExactReconcilerSchedule"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.outbox_reconciler[0].function_name
+  qualifier     = aws_lambda_alias.outbox_reconciler[0].name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.outbox_reconciler[0].arn
+}
+
+resource "aws_cloudwatch_metric_alarm" "outbox_starter_errors" {
+  count               = var.deploy_serverless_outbox ? 1 : 0
+  alarm_name          = "${var.name}-${var.environment}-outbox-starter-errors"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Errors"
+  namespace           = "AWS/Lambda"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "The outbox starter Lambda emitted an invocation error. Runbook: ${local.observability_runbook_url}"
+  dimensions          = { FunctionName = aws_lambda_function.outbox_starter[0].function_name }
+}
+
+resource "aws_cloudwatch_metric_alarm" "outbox_starter_throttles" {
+  count               = var.deploy_serverless_outbox ? 1 : 0
+  alarm_name          = "${var.name}-${var.environment}-outbox-starter-throttles"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Throttles"
+  namespace           = "AWS/Lambda"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "The outbox starter reached its one-connection concurrency ceiling. Runbook: ${local.observability_runbook_url}"
+  dimensions          = { FunctionName = aws_lambda_function.outbox_starter[0].function_name }
+}
+
+resource "aws_cloudwatch_metric_alarm" "outbox_reconciler_errors" {
+  count               = var.deploy_serverless_outbox ? 1 : 0
+  alarm_name          = "${var.name}-${var.environment}-outbox-reconciler-errors"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Errors"
+  namespace           = "AWS/Lambda"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "The scheduled outbox reconciler Lambda emitted an error. Runbook: ${local.observability_runbook_url}"
+  dimensions          = { FunctionName = aws_lambda_function.outbox_reconciler[0].function_name }
 }

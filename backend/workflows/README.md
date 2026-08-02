@@ -18,4 +18,7 @@ Workflow code orchestrates deterministic state transitions; external I/O belongs
 ## Phase 0 implementation
 
 The first workflow calculates profile readiness after an idempotent preference update. A durable
-outbox dispatcher starts it with the event ID as its stable workflow identity.
+outbox dispatcher starts it with the event ID as its stable workflow identity. During D0-016 the
+accepted Temporal implementation remains live while a target-isolated SQS starter and scheduled
+reconciler are built dark. Their event source and schedule remain disabled until the versioned
+Lambda durable replacement passes review.

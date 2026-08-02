@@ -19,6 +19,8 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
 - `build-gateway-lambda.mjs` — Bundles the emitted gateway Lambda code, preserves Nest metadata,
   creates a fixed-metadata ZIP, and emits SHA-256, manifest, and CycloneDX 1.6 SBOM evidence under
   the ignored gateway `dist/lambda/` directory.
+- `build-workflow-ingress-lambda.mjs` — Reproducibly bundles the identifier-only SQS starter and
+  scheduled outbox reconciler handlers into one immutable ZIP with manifest, checksum, and SBOM.
 - `prepare-terraform-bootstrap.ps1` — Creates an isolated, local-backend Terraform workspace for
   the first bootstrap of a development or staging AWS account without reusing another
   environment's backend metadata or state.

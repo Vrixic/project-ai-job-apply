@@ -153,3 +153,43 @@ variable "gateway_lambda_reserved_concurrency" {
   type    = number
   default = 2
 }
+
+variable "gateway_outbox_dispatch_target" {
+  type    = string
+  default = "temporal"
+}
+
+variable "deploy_serverless_outbox" {
+  type    = bool
+  default = false
+}
+
+variable "workflow_ingress_artifact_s3_key" {
+  type    = string
+  default = ""
+}
+
+variable "workflow_ingress_artifact_s3_object_version" {
+  type    = string
+  default = ""
+}
+
+variable "workflow_ingress_artifact_sha256" {
+  type    = string
+  default = ""
+}
+
+variable "workflow_ingress_artifact_base64sha256" {
+  type    = string
+  default = ""
+}
+
+variable "workflow_ingress_lambda_extension_layer_arn" {
+  type    = string
+  default = ""
+}
+
+variable "durable_workflow_function_arn" {
+  type    = string
+  default = ""
+}

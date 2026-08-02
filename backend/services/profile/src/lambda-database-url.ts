@@ -10,6 +10,7 @@ function validateDatabaseUrl(value: string): string {
   return value;
 }
 
+/** Resolves the profile-owned database URL without exposing the secret to logs or configuration. */
 export async function resolveLambdaDatabaseUrl(
   config: {
     DATABASE_URL?: string | undefined;

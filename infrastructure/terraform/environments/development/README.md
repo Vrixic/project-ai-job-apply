@@ -23,3 +23,8 @@ For the scale-to-zero migration, configure the GitHub `development` Environment 
 Lambda artifact does not deploy it. Keep `deploy_gateway_lambda = false` until the source commit,
 artifact/SBOM evidence, exact S3 version/digests, extension layer, provider-upgrade plan, and dark
 deployment plan are independently reviewed.
+
+Keep `deploy_serverless_outbox = false` and `gateway_outbox_dispatch_target = "temporal"` until
+SR-003 source/database evidence, SR-004's exact published durable-function version, immutable
+artifact evidence, and a refresh-backed no-route-change plan receive separate review. Initial dark
+deployment keeps both the SQS event-source mapping and reconciler schedule disabled.

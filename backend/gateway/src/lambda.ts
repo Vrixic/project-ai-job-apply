@@ -7,7 +7,11 @@ import {
 } from "@ai-job-apply/auth";
 import { loadLambdaGatewayConfig } from "@ai-job-apply/config";
 import { createLogger, initializeTelemetry } from "@ai-job-apply/observability";
-import { createDatabase, PostgresProfileStore } from "@ai-job-apply/profile-service";
+import {
+  createDatabase,
+  PostgresProfileStore,
+  resolveLambdaDatabaseUrl,
+} from "@ai-job-apply/profile-service";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { FastifyAdapter } from "@nestjs/platform-fastify";
 import type {
@@ -16,8 +20,8 @@ import type {
   Handler,
 } from "aws-lambda";
 import { createGatewayApplication } from "./application.js";
-import { resolveLambdaDatabaseUrl } from "./database-secret.js";
 import { MAXIMUM_GATEWAY_BODY_BYTES } from "./gateway-boundary.js";
+import { SqsOutboxNudgePublisher } from "./sqs-outbox-nudge-publisher.js";
 
 type JwtClaimValue = string | number | boolean | string[] | undefined;
 
@@ -366,7 +370,12 @@ async function createConfiguredApplication(
   const databaseUrl = await resolveLambdaDatabaseUrl(config, {
     ...(process.env.AWS_SESSION_TOKEN ? { sessionToken: process.env.AWS_SESSION_TOKEN } : {}),
   });
-  const store = new PostgresProfileStore(createDatabase(databaseUrl, { maxConnections: 2 }));
+  const store = new PostgresProfileStore(createDatabase(databaseUrl, { maxConnections: 2 }), {
+    dispatchTarget: config.OUTBOX_DISPATCH_TARGET,
+    ...(config.OUTBOX_QUEUE_URL
+      ? { nudgePublisher: new SqsOutboxNudgePublisher(config.OUTBOX_QUEUE_URL) }
+      : {}),
+  });
   return createGatewayApplication({
     store,
     verifier: principalBridge.verifier,
