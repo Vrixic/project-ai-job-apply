@@ -83,10 +83,12 @@ $requiredSettings = @(
   "APP_BASE_URL",
   "AUTH0_AUDIENCE"
 )
-$configuredSettings = Select-String -LiteralPath $webEnvironment -Pattern "^([A-Z0-9_]+)=.+" |
-  ForEach-Object { ($_.Line -split "=", 2)[0] } |
-  Sort-Object -Unique
-$missingSettings = $requiredSettings | Where-Object { $_ -notin $configuredSettings }
+$configuredSettings = @(
+  Select-String -LiteralPath $webEnvironment -Pattern "^([A-Z0-9_]+)=.+" |
+    ForEach-Object { ($_.Line -split "=", 2)[0] } |
+    Sort-Object -Unique
+)
+$missingSettings = @($requiredSettings | Where-Object { $_ -notin $configuredSettings })
 if ($missingSettings.Count -gt 0) {
   throw "The local Auth0 web configuration is incomplete. Missing: $($missingSettings -join ', ')."
 }
@@ -363,8 +365,9 @@ try {
     throw "The deployed gateway service is unavailable."
   }
   $gatewayService = @($service.services)[0]
-  $primaryDeployments = @($gatewayService.deployments) |
-    Where-Object { $_.status -eq "PRIMARY" }
+  $primaryDeployments = @(
+    @($gatewayService.deployments) | Where-Object { $_.status -eq "PRIMARY" }
+  )
   if (
     $gatewayService.status -ne "ACTIVE" -or
     [int]$gatewayService.desiredCount -ne 1 -or
@@ -386,8 +389,10 @@ try {
       "--output", "json"
     ) `
     -FailureMessage "The deployed gateway task definition could not be inspected."
-  $gatewayContainers = @($taskDefinition.taskDefinition.containerDefinitions) |
-    Where-Object { $_.name -eq "gateway" }
+  $gatewayContainers = @(
+    @($taskDefinition.taskDefinition.containerDefinitions) |
+      Where-Object { $_.name -eq "gateway" }
+  )
   if ($gatewayContainers.Count -ne 1) {
     throw "The deployed gateway container definition is invalid."
   }
