@@ -88,6 +88,8 @@ class MemoryProfileStore implements ProfileStore {
     _preferenceSetId: string,
     _readiness: ProfileReadiness,
   ): Promise<void> {}
+  async failReadinessOperation(): Promise<void> {}
+  async failDurableReadinessOperation(): Promise<void> {}
   async ping(): Promise<void> {}
   async close(): Promise<void> {}
 }

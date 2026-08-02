@@ -13,11 +13,18 @@ export interface ProfileReadinessActivities {
   calculateAndPersist(input: ProfileReadinessInput): Promise<void>;
 }
 
-export function createProfileReadinessActivities(store: ProfileStore): ProfileReadinessActivities {
+type ProfileReadinessActivitiesStore = Pick<
+  ProfileStore,
+  "markOperationRunning" | "getPreferencesById" | "completeReadinessOperation"
+>;
+
+export function createProfileReadinessActivities(
+  store: ProfileReadinessActivitiesStore,
+): ProfileReadinessActivities {
   return {
     async markRunning(input) {
       await withTraceSpan("profile-readiness.mark-running", input.traceparent, async () => {
-        await store.markOperationRunning(input.operationId);
+        await store.markOperationRunning(input.operationId, input.preferenceSetId);
       });
     },
     async calculateAndPersist(input) {

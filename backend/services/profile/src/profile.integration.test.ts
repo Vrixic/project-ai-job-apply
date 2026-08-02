@@ -101,10 +101,14 @@ describeWithDatabase("PostgresProfileStore", () => {
       await store.getOperation("019b4e12-7ea3-7c36-9357-aea35ab542cc", first.operationId),
     ).toBe(null);
 
-    const events = await store.getPendingOutboxEvents(10);
-    const event = events.find(
-      (candidate) => (candidate.data as { operationId?: string }).operationId === first.operationId,
-    );
+    const [event] = await database.client<
+      Array<{ data: Record<string, unknown>; traceparent: string | null }>
+    >`
+      SELECT data, traceparent
+      FROM platform.outbox_events
+      WHERE type = 'profile.preferences.updated.v1'
+        AND data ->> 'operationId' = ${first.operationId}
+    `;
     expect(event?.data).toEqual({
       preferenceSetId: first.preferences.id,
       version: 1,
@@ -113,6 +117,32 @@ describeWithDatabase("PostgresProfileStore", () => {
     expect(event?.traceparent).toBe(traceparent);
     expect(JSON.stringify(event)).not.toContain("Software Engineer");
     expect(JSON.stringify(event)).not.toContain("New York");
+
+    await store.markOperationRunning(first.operationId, first.preferences.id);
+    await store.markOperationRunning(first.operationId, first.preferences.id);
+    const readiness: Parameters<PostgresProfileStore["completeReadinessOperation"]>[2] = {
+      completionPercent: 100,
+      missingFields: [],
+      calculatedAt: "2026-08-02T20:00:00.000Z",
+    };
+    await store.completeReadinessOperation(first.operationId, first.preferences.id, readiness);
+    await store.completeReadinessOperation(first.operationId, first.preferences.id, readiness);
+    await store.markOperationRunning(first.operationId, first.preferences.id);
+    await store.failReadinessOperation(
+      first.operationId,
+      first.preferences.id,
+      "SyntheticLateFailure",
+    );
+    const completedOperation = await store.getOperation(user.id, first.operationId);
+    expect(completedOperation).toMatchObject({ state: "succeeded" });
+    expect(completedOperation).not.toHaveProperty("errorCode");
+    const [completionEvents] = await database.client<Array<{ count: number }>>`
+      SELECT count(*)::integer AS count
+      FROM platform.outbox_events
+      WHERE type = 'profile.readiness.calculated.v1'
+        AND data ->> 'operationId' = ${first.operationId}
+    `;
+    expect(completionEvents?.count).toBe(1);
   });
 
   it("keeps committed work recoverable when the post-commit SQS nudge fails", async () => {
@@ -152,20 +182,25 @@ describeWithDatabase("PostgresProfileStore", () => {
       });
       const [row] = await database.client<
         Array<{
+          eventId: string;
           dispatchTarget: string;
           nudgeAttempts: number;
           nudgeLastErrorCode: string;
           publishedAt: Date | null;
         }>
       >`
-        SELECT
-          dispatch_target AS "dispatchTarget",
-          nudge_attempts AS "nudgeAttempts",
-          nudge_last_error_code AS "nudgeLastErrorCode",
-          published_at AS "publishedAt"
-        FROM platform.outbox_events
-        WHERE data ->> 'operationId' = ${saved.operationId}
+      SELECT
+        id AS "eventId",
+        dispatch_target AS "dispatchTarget",
+        nudge_attempts AS "nudgeAttempts",
+        nudge_last_error_code AS "nudgeLastErrorCode",
+        published_at AS "publishedAt"
+      FROM platform.outbox_events
+      WHERE data ->> 'operationId' = ${saved.operationId}
       `;
+      if (!row) {
+        throw new Error("Synthetic serverless outbox row was not created");
+      }
       expect(row).toMatchObject({
         dispatchTarget: "lambda_durable",
         nudgeAttempts: 1,
@@ -173,6 +208,18 @@ describeWithDatabase("PostgresProfileStore", () => {
         publishedAt: null,
       });
       expect(JSON.stringify(row)).not.toContain("Columbus");
+      const executionName = `outbox-${row.eventId}`;
+      await database.client`
+        UPDATE platform.outbox_events
+        SET durable_execution_name = ${executionName}
+        WHERE id = ${row.eventId}
+      `;
+      await failingStore.failDurableReadinessOperation(executionName, "WorkflowStopped");
+      await failingStore.failDurableReadinessOperation(executionName, "WorkflowStopped");
+      expect(await failingStore.getOperation(user.id, saved.operationId)).toMatchObject({
+        state: "failed",
+        errorCode: "WorkflowStopped",
+      });
     } finally {
       if (operationId) {
         await database.client`

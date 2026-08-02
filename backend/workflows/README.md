@@ -1,6 +1,6 @@
 # Durable Workflows
 
-This directory contains Temporal workflow definitions for multi-step processes that must survive crashes, deploys, provider outages, and long user waits.
+This directory contains durable workflow definitions for multi-step processes that must survive crashes, deploys, provider outages, and long user waits.
 
 ## Planned subfolders
 
@@ -17,8 +17,12 @@ Workflow code orchestrates deterministic state transitions; external I/O belongs
 
 ## Phase 0 implementation
 
-The first workflow calculates profile readiness after an idempotent preference update. A durable
-outbox dispatcher starts it with the event ID as its stable workflow identity. During D0-016 the
-accepted Temporal implementation remains live while a target-isolated SQS starter and scheduled
-reconciler are built dark. Their event source and schedule remain disabled until the versioned
-Lambda durable replacement passes review.
+The first workflow calculates profile readiness after an idempotent preference update. The
+accepted Temporal implementation remains live during D0-016. Its Lambda durable replacement uses
+an immutable definition version, exact numeric function targets, identifier-only inputs, named
+bounded retries, and a private activity Lambda for PostgreSQL access. The SQS source, schedule,
+durable function, and activity resources remain undeployed until SR-005's reviewed dark plan.
+
+The profile-readiness workflow has no human-review callback or reversible external effect. Callback
+success/expiry is therefore tested with a conformance-only fixture; production callback handling
+will be added only with an application final-review workflow.

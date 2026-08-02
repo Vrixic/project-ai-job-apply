@@ -21,6 +21,11 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   the ignored gateway `dist/lambda/` directory.
 - `build-workflow-ingress-lambda.mjs` — Reproducibly bundles the identifier-only SQS starter and
   scheduled outbox reconciler handlers into one immutable ZIP with manifest, checksum, and SBOM.
+- `build-profile-readiness-lambdas.mjs` — Reproducibly bundles the versioned Lambda durable
+  profile-readiness orchestrator and its private activity/terminal handlers into separate immutable
+  ZIPs with manifests, checksums, and SBOMs.
+- `lib/build-lambda-artifact.mjs` — Shared deterministic Node.js 24 ZIP, checksum, manifest, and
+  CycloneDX builder used by the workflow Lambda release scripts.
 - `prepare-terraform-bootstrap.ps1` — Creates an isolated, local-backend Terraform workspace for
   the first bootstrap of a development or staging AWS account without reusing another
   environment's backend metadata or state.
