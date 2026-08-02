@@ -42,7 +42,11 @@ Use `scripts/start-deployed-web-conformance.ps1` to route this local, server-hel
 development or synthetic staging. The launcher verifies that the selected live gateway has the
 same issuer and audience as the ignored local Auth0 configuration before it starts. Staging's
 temporary use of the development Auth0 tenant is synthetic-only under ADR-014 and does not prove
-identity-provider isolation or launch readiness.
+identity-provider isolation or launch readiness. During the scale-to-zero migration,
+`-GatewayRuntime lambda-dark` keeps the public route on ECS while a loopback-only bridge verifies
+the real Auth0 token, forwards only its minimum validated claims to the immutable development
+Lambda alias, and exposes only the existing Phase 0 profile/readiness surface. It never returns a
+token or provider identity to browser code.
 
 Authentication callback failures redirect to an allowlisted local error state. Provider-controlled
 error descriptions are never rendered, while blocked or unavailable accounts receive a generic

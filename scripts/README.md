@@ -34,8 +34,13 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
 - `start-deployed-web-conformance.ps1` — Validates development or synthetic-staging AWS,
   Terraform, exact live/local Auth0 alignment, ECS stability, and gateway health; resolves the
   deployed HTTPS gateway without printing it; and runs only the local web/BFF for authenticated
-  deployed conformance. Select staging with `-Environment staging`; add the explicit
-  `-EnableWorkloadConformance` switch only for the reviewed fixed staging workload.
+  deployed conformance. `-GatewayRuntime lambda-dark` additionally verifies the complete but
+  unrouted development Lambda, immutable alias, concurrency, JWT authorizer, and unchanged ECS
+  public route, then uses a loopback-only token-validating bridge for real two-account conformance.
+  The bridge forwards validated issuer/subject/audience/scopes but never the real token, exposes
+  only the Phase 0 profile routes, and is stopped with the local web process. Select staging with
+  `-Environment staging`; add the explicit `-EnableWorkloadConformance` switch only for the
+  reviewed fixed staging workload.
 - `inspect-staging-workload-and-cost.ps1` — Reports the read-only staging workload/cost baseline
   and corroborates a completed browser workload window with aggregate API Gateway, ECS, RDS,
   queue, alarm, log, and no-drift measurements.
