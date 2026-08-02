@@ -87,6 +87,12 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   plus a successful protected-environment artifact-publication run; then creates a refresh-backed
   sensitive plan and rejects anything except the three reviewed in-place GitHub deployment and
   workload boundary updates needed by the serverless workflow release. It never applies the plan.
+- `plan-development-serverless-workflow-dark.ps1` — Reuses the completed dark-gateway verifier to
+  reconstruct every live development input, independently verifies all three immutable workflow
+  artifacts and the pinned Secrets extension, and creates a refresh-backed sensitive plan for the
+  exact 37-create/5-update workflow boundary. It requires Temporal dispatch, disabled SQS and
+  EventBridge triggers, no API/ECS change, bounded concurrency, and exact resource/update
+  allowlists. It never applies infrastructure or changes traffic.
 - `operate-development-gateway-lambda-alias-rollback.ps1` — Creates a checksum-reviewed,
   read-only recovery context for two accepted immutable development Lambda versions. Explicit
   execution uses optimistic alias revision locking, proves the prior version through the guarded
