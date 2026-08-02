@@ -9,6 +9,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 const identity = pgSchema("identity");
 const profile = pgSchema("profile");
@@ -63,6 +64,7 @@ export const jobPreferences = profile.table(
 );
 
 export type OperationState = "queued" | "running" | "succeeded" | "retryable_failure" | "failed";
+export type OutboxDispatchTarget = "temporal" | "lambda_durable";
 
 export const operations = platform.table(
   "operations",
@@ -91,11 +93,39 @@ export const outboxEvents = platform.table(
     dataSchema: text("data_schema").notNull(),
     data: jsonb("data").$type<Record<string, unknown>>().notNull(),
     traceparent: text("traceparent"),
+    dispatchTarget: text("dispatch_target")
+      .$type<OutboxDispatchTarget>()
+      .notNull()
+      .default("temporal"),
     attempts: integer("attempts").notNull().default(0),
+    nudgeAttempts: integer("nudge_attempts").notNull().default(0),
+    nudgeClaimedAt: timestamp("nudge_claimed_at", { withTimezone: true }),
+    nudgeNextAttemptAt: timestamp("nudge_next_attempt_at", { withTimezone: true }),
+    nudgedAt: timestamp("nudged_at", { withTimezone: true }),
+    nudgeLastErrorCode: text("nudge_last_error_code"),
+    durableStartAttempts: integer("durable_start_attempts").notNull().default(0),
+    durableStartedAt: timestamp("durable_started_at", { withTimezone: true }),
+    durableExecutionName: text("durable_execution_name"),
+    durableExecutionArn: text("durable_execution_arn"),
+    durableLastErrorCode: text("durable_last_error_code"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     publishedAt: timestamp("published_at", { withTimezone: true }),
   },
-  (table) => [index("outbox_events_pending_idx").on(table.publishedAt, table.createdAt)],
+  (table) => [
+    index("outbox_events_pending_idx").on(table.publishedAt, table.createdAt),
+    index("outbox_events_lambda_nudge_idx")
+      .on(
+        table.dispatchTarget,
+        table.publishedAt,
+        table.nudgeNextAttemptAt,
+        table.nudgeClaimedAt,
+        table.createdAt,
+      )
+      .where(sql`${table.dispatchTarget} = 'lambda_durable' AND ${table.publishedAt} IS NULL`),
+    uniqueIndex("outbox_events_durable_execution_name_uq")
+      .on(table.durableExecutionName)
+      .where(sql`${table.durableExecutionName} IS NOT NULL`),
+  ],
 );
 
 export const idempotencyKeys = platform.table(

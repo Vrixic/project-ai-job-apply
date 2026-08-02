@@ -47,3 +47,10 @@ invokes the image's bundled `/healthcheck` binary directly because the minimal c
 does not contain a command shell. The essential gateway container separately runs a direct Node
 liveness check so ECS task health and Cloud Map registration reflect the application rather than
 the nonessential telemetry sidecar.
+
+The D0-016 serverless-outbox resources are disabled by default. When explicitly configured with an
+immutable workflow-ingress artifact and exact numeric-version durable-function ARN, the module can
+dark-deploy separate one-concurrency starter/reconciler Lambdas, private Secrets/SQS/Lambda
+endpoints, a disabled partial-batch event-source mapping, a disabled recovery schedule, and alarms.
+The gateway's new-event route remains `temporal` unless a later reviewed cutover selects
+`lambda_durable`; the module rejects that selection without the replacement boundary.

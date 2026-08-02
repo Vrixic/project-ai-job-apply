@@ -50,12 +50,18 @@ const lambdaGatewaySchema = baseSchema
   .extend({
     DATABASE_URL: z.string().url().optional(),
     DATABASE_SECRET_ID: z.string().min(1).optional(),
+    OUTBOX_DISPATCH_TARGET: z.enum(["temporal", "lambda_durable"]).default("temporal"),
+    OUTBOX_QUEUE_URL: z.string().url().optional(),
     ...oidcSchema,
     ...telemetrySchema,
   })
   .refine(
     (value) => Boolean(value.DATABASE_URL) !== Boolean(value.DATABASE_SECRET_ID),
     "Exactly one of DATABASE_URL or DATABASE_SECRET_ID is required",
+  )
+  .refine(
+    (value) => value.OUTBOX_DISPATCH_TARGET !== "lambda_durable" || Boolean(value.OUTBOX_QUEUE_URL),
+    "Lambda durable dispatch requires OUTBOX_QUEUE_URL",
   );
 
 export type LambdaGatewayConfig = z.infer<typeof lambdaGatewaySchema>;

@@ -17,4 +17,6 @@ Generated job-specific artifacts belong to the documents service. Protected-clas
 
 The initial PostgreSQL module owns provider-neutral identities, job preferences, operations,
 idempotency keys, audit events, and an identifier-only transactional outbox. Its SQL migration is
-kept explicit alongside Drizzle types.
+kept explicit alongside Drizzle types. Forward migration `0002_serverless_outbox` adds an immutable
+per-event dispatch target and crash-safe nudge/start metadata while preserving Temporal as the
+default route until a separately reviewed cutover.

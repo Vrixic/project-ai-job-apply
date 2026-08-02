@@ -77,6 +77,18 @@ module "platform" {
   gateway_lambda_artifact_base64sha256 = var.gateway_lambda_artifact_base64sha256
   gateway_lambda_extension_layer_arn   = var.gateway_lambda_extension_layer_arn
   gateway_lambda_reserved_concurrency  = var.gateway_lambda_reserved_concurrency
+  gateway_outbox_dispatch_target       = var.gateway_outbox_dispatch_target
+  deploy_serverless_outbox             = var.deploy_serverless_outbox
+  workflow_ingress_artifact_s3_key     = var.workflow_ingress_artifact_s3_key
+  workflow_ingress_artifact_s3_object_version = (
+    var.workflow_ingress_artifact_s3_object_version
+  )
+  workflow_ingress_artifact_sha256       = var.workflow_ingress_artifact_sha256
+  workflow_ingress_artifact_base64sha256 = var.workflow_ingress_artifact_base64sha256
+  workflow_ingress_lambda_extension_layer_arn = (
+    var.workflow_ingress_lambda_extension_layer_arn
+  )
+  durable_workflow_function_arn = var.durable_workflow_function_arn
 }
 
 module "cost_controls" {

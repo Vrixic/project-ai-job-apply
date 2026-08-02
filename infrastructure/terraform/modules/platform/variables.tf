@@ -290,3 +290,99 @@ variable "gateway_lambda_reserved_concurrency" {
     error_message = "Gateway Lambda reserved concurrency must be an integer from one through five."
   }
 }
+
+variable "gateway_outbox_dispatch_target" {
+  description = "Explicit new-event workflow route; keep temporal until the reviewed serverless cutover."
+  type        = string
+  default     = "temporal"
+
+  validation {
+    condition = (
+      contains(["temporal", "lambda_durable"], var.gateway_outbox_dispatch_target) &&
+      (var.gateway_outbox_dispatch_target != "lambda_durable" || var.deploy_serverless_outbox)
+    )
+    error_message = "Gateway outbox dispatch must be temporal or an enabled lambda_durable replacement."
+  }
+}
+
+variable "deploy_serverless_outbox" {
+  description = "Dark-deploy the disabled SQS starter and scheduled reconciler without changing normal event routing."
+  type        = bool
+  default     = false
+
+  validation {
+    condition = !var.deploy_serverless_outbox || (
+      var.deploy_applications &&
+      var.deploy_gateway_lambda &&
+      var.workflow_ingress_artifact_s3_key != "" &&
+      var.workflow_ingress_artifact_s3_object_version != "" &&
+      var.workflow_ingress_artifact_sha256 != "" &&
+      var.workflow_ingress_artifact_base64sha256 != "" &&
+      var.workflow_ingress_lambda_extension_layer_arn != "" &&
+      var.durable_workflow_function_arn != ""
+    )
+    error_message = "Dark serverless outbox deployment requires the existing dark gateway, immutable workflow-ingress artifact, reviewed Secrets extension, and exact versioned durable-function ARN."
+  }
+}
+
+variable "workflow_ingress_artifact_s3_key" {
+  description = "Immutable environment artifact-bucket key for the starter/reconciler Lambda ZIP."
+  type        = string
+  default     = ""
+}
+
+variable "workflow_ingress_artifact_s3_object_version" {
+  description = "Exact S3 object version containing the starter/reconciler Lambda ZIP."
+  type        = string
+  default     = ""
+}
+
+variable "workflow_ingress_artifact_sha256" {
+  description = "Lowercase hexadecimal SHA-256 of the exact workflow-ingress Lambda ZIP."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.workflow_ingress_artifact_sha256 == "" || can(regex("^[a-f0-9]{64}$", var.workflow_ingress_artifact_sha256))
+    error_message = "Workflow-ingress artifact SHA-256 must be empty or 64 lowercase hexadecimal characters."
+  }
+}
+
+variable "workflow_ingress_artifact_base64sha256" {
+  description = "Base64-encoded SHA-256 of the exact workflow-ingress Lambda ZIP."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.workflow_ingress_artifact_base64sha256 == "" || can(regex("^[A-Za-z0-9+/]{43}=$", var.workflow_ingress_artifact_base64sha256))
+    error_message = "Workflow-ingress artifact base64 SHA-256 must be empty or one canonical 44-character digest."
+  }
+}
+
+variable "workflow_ingress_lambda_extension_layer_arn" {
+  description = "Reviewed us-east-2 AWS Parameters and Secrets Lambda Extension layer ARN."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = var.workflow_ingress_lambda_extension_layer_arn == "" || can(regex(
+      "^arn:aws:lambda:us-east-2:[0-9]{12}:layer:AWS-Parameters-and-Secrets-Lambda-Extension:[0-9]+$",
+      var.workflow_ingress_lambda_extension_layer_arn
+    ))
+    error_message = "The workflow-ingress extension layer must be an exact versioned AWS Parameters and Secrets layer ARN in us-east-2."
+  }
+}
+
+variable "durable_workflow_function_arn" {
+  description = "Exact numeric-version ARN of the durable workflow function accepted under SR-004."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = var.durable_workflow_function_arn == "" || can(regex(
+      "^arn:aws:lambda:us-east-2:[0-9]{12}:function:[A-Za-z0-9_.-]+:[1-9][0-9]*$",
+      var.durable_workflow_function_arn
+    ))
+    error_message = "The durable workflow target must be an exact numeric-version Lambda ARN in us-east-2."
+  }
+}

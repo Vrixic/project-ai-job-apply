@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { resolveLambdaDatabaseUrl } from "./database-secret.js";
+import { resolveLambdaDatabaseUrl } from "./lambda-database-url.js";
 
 describe("Lambda database secret resolution", () => {
   it("uses a direct PostgreSQL URL only for an explicitly configured local path", async () => {

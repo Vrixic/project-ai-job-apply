@@ -80,3 +80,19 @@ output "gateway_lambda_function_name" {
 output "gateway_lambda_authorizer_id" {
   value = var.deploy_gateway_lambda ? aws_apigatewayv2_authorizer.gateway[0].id : null
 }
+
+output "outbox_starter_alias_arn" {
+  value = var.deploy_serverless_outbox ? aws_lambda_alias.outbox_starter[0].arn : null
+}
+
+output "outbox_reconciler_alias_arn" {
+  value = var.deploy_serverless_outbox ? aws_lambda_alias.outbox_reconciler[0].arn : null
+}
+
+output "outbox_starter_event_source_mapping_uuid" {
+  value = var.deploy_serverless_outbox ? aws_lambda_event_source_mapping.outbox_starter[0].uuid : null
+}
+
+output "outbox_reconciler_rule_arn" {
+  value = var.deploy_serverless_outbox ? aws_cloudwatch_event_rule.outbox_reconciler[0].arn : null
+}

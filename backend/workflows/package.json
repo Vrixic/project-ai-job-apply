@@ -11,15 +11,18 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "build:lambda": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-workflow-ingress-lambda.mjs",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "cloud:verify": "node cloud-conformance.mjs",
     "dev": "node --watch --env-file-if-exists=../../.env --import tsx src/start.ts",
     "start": "node dist/src/start.js",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run --exclude=dist/** --passWithNoTests",
     "test:integration": "vitest run --config vitest.integration.config.ts --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-lambda": "3.1101.0",
+    "@aws-sdk/client-sqs": "3.1101.0",
     "@ai-job-apply/config": "workspace:*",
     "@ai-job-apply/domain": "workspace:*",
     "@ai-job-apply/event-contracts": "workspace:*",
@@ -31,6 +34,7 @@
     "pino": "10.1.0"
   },
   "devDependencies": {
+    "@types/aws-lambda": "8.10.162",
     "tsx": "4.23.1"
   }
 }

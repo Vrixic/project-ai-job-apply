@@ -84,3 +84,19 @@ output "gateway_lambda_function_name" {
 output "gateway_lambda_authorizer_id" {
   value = module.platform.gateway_lambda_authorizer_id
 }
+
+output "outbox_starter_alias_arn" {
+  value = module.platform.outbox_starter_alias_arn
+}
+
+output "outbox_reconciler_alias_arn" {
+  value = module.platform.outbox_reconciler_alias_arn
+}
+
+output "outbox_starter_event_source_mapping_uuid" {
+  value = module.platform.outbox_starter_event_source_mapping_uuid
+}
+
+output "outbox_reconciler_rule_arn" {
+  value = module.platform.outbox_reconciler_rule_arn
+}
