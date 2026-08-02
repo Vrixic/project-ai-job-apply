@@ -28,10 +28,10 @@
     "@ai-job-apply/event-contracts": "workspace:*",
     "@ai-job-apply/observability": "workspace:*",
     "@ai-job-apply/profile-service": "workspace:*",
-    "@temporalio/client": "1.14.0",
-    "@temporalio/worker": "1.14.0",
-    "@temporalio/workflow": "1.14.0",
-    "pino": "10.1.0"
+    "@temporalio/client": "1.21.1",
+    "@temporalio/worker": "1.21.1",
+    "@temporalio/workflow": "1.21.1",
+    "pino": "10.3.1"
   },
   "devDependencies": {
     "@types/aws-lambda": "8.10.162",
