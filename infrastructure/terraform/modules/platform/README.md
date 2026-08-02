@@ -48,9 +48,21 @@ does not contain a command shell. The essential gateway container separately run
 liveness check so ECS task health and Cloud Map registration reflect the application rather than
 the nonessential telemetry sidecar.
 
-The D0-016 serverless-outbox resources are disabled by default. When explicitly configured with an
-immutable workflow-ingress artifact and exact numeric-version durable-function ARN, the module can
-dark-deploy separate one-concurrency starter/reconciler Lambdas, private Secrets/SQS/Lambda
-endpoints, a disabled partial-batch event-source mapping, a disabled recovery schedule, and alarms.
-The gateway's new-event route remains `temporal` unless a later reviewed cutover selects
-`lambda_durable`; the module rejects that selection without the replacement boundary.
+The D0-016 serverless workflow resources are disabled by default. When explicitly configured with
+three immutable, versioned artifacts, the module can dark-deploy one-concurrency starter,
+reconciler, database-activity, and terminal-recovery Lambdas; a two-concurrency durable
+orchestrator; private Secrets/SQS/Lambda endpoints; a dedicated encrypted terminal DLQ; and
+replacement alarms. The durable orchestrator is intentionally outside the VPC and invokes only
+the exact numeric activity version. Database handlers remain private and obtain the database value
+through the pinned regional Secrets extension.
+
+Terraform owns a single nested CloudFormation stack for the durable function, version, and alias
+because the pinned AWS provider does not yet expose `DurableConfig.KMSKeyArn`. That narrow boundary
+keeps checkpoint encryption declarative and drift-visible; superseded durable versions use retain
+policies so in-flight executions remain replayable. All other resources remain native Terraform.
+
+`deploy_profile_readiness_durable` and `deploy_serverless_outbox` create the dark replacement.
+`enable_serverless_workflow_triggers` separately controls the SQS mapping, reconciliation schedule,
+and terminal-event rule and defaults to `false`. The gateway's new-event route remains `temporal`
+unless a later reviewed cutover selects `lambda_durable`; the module rejects that selection without
+the complete replacement boundary.

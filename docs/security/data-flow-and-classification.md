@@ -1,7 +1,9 @@
 # Data Flow and Classification
 
 - Status: Engineering baseline; accountable security/privacy approval pending
-- Last updated: 2026-07-28
+- Last updated: 2026-08-02
+
+The currently deployed Phase 0 runtime still follows this rollback flow:
 
 ```mermaid
 flowchart LR
@@ -17,6 +19,30 @@ flowchart LR
   Worker -->|redacted telemetry| OTel
 ```
 
+The accepted D0-016 replacement is implemented in source but remains dark and undeployed until a
+separately reviewed environment plan is applied:
+
+```mermaid
+flowchart LR
+  User2[Candidate device] -->|OIDC token + contract data| Edge2[API Gateway + Lambda gateway]
+  Edge2 -->|transaction| PG2[(PostgreSQL)]
+  PG2 -->|identifier-only outbox row| Nudge[SQS nudge]
+  Nudge -->|disabled before cutover| Starter[Starter Lambda]
+  Starter -->|exact version + stable execution name| Durable[Lambda durable orchestrator]
+  Durable -->|opaque IDs only| Activity[Private activity Lambda]
+  Activity -->|secret fetched privately + TLS| PG2
+  Durable -->|checkpoint state| KMS[Lambda durable store + CMK]
+  Durable -->|failed identifier-only input| DLQ[Encrypted DLQ]
+  Durable -.->|failed/stopped/timed-out status| Terminal
+  Terminal[Private terminal reconciler] -->|idempotent result| PG2
+```
+
+Only the activity and terminal handlers enter the VPC or read the database secret. The durable
+orchestrator receives opaque identifiers, runs outside the VPC, invokes one immutable numeric
+activity version, and uses a separate CMK boundary for durable checkpoints. SQS, reconciliation,
+and terminal-event triggers remain disabled until the reviewed cutover; no event is routed to both
+Temporal and Lambda durable execution.
+
 The Phase 0 slice does not call ATS, AI, email, calendar, billing, or browser-automation providers.
 
 | Class | Examples | Required controls | Forbidden destinations |
@@ -31,7 +57,8 @@ The Phase 0 slice does not call ATS, AI, email, calendar, billing, or browser-au
 - JWT subject and issuer resolve to an internal UUID; provider subjects never become public IDs.
 - Preference values remain in the profile-owned PostgreSQL schema.
 - The outbox carries only preference-set ID, version, operation ID, and trace correlation.
-- The worker reloads the owned record, calculates deterministic readiness, and persists the result.
+- The active worker—or, after cutover, the private activity Lambda—reloads the owned record,
+  calculates deterministic readiness, and persists the result.
 - Audit events record action, opaque resource ID, version, and trace ID—not candidate values.
 
 ## Ownership and recipient matrix

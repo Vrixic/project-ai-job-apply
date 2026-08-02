@@ -96,3 +96,23 @@ output "outbox_starter_event_source_mapping_uuid" {
 output "outbox_reconciler_rule_arn" {
   value = var.deploy_serverless_outbox ? aws_cloudwatch_event_rule.outbox_reconciler[0].arn : null
 }
+
+output "profile_readiness_durable_version_arn" {
+  value = var.deploy_profile_readiness_durable ? local.profile_readiness_durable_version_arn : null
+}
+
+output "profile_readiness_durable_alias_arn" {
+  value = var.deploy_profile_readiness_durable ? aws_cloudformation_stack.profile_readiness_durable[0].outputs["DurableAliasArn"] : null
+}
+
+output "profile_readiness_activity_alias_arn" {
+  value = var.deploy_profile_readiness_durable ? aws_lambda_alias.profile_readiness_activity[0].arn : null
+}
+
+output "profile_readiness_terminal_alias_arn" {
+  value = var.deploy_profile_readiness_durable ? aws_lambda_alias.profile_readiness_terminal[0].arn : null
+}
+
+output "profile_readiness_terminal_rule_arn" {
+  value = var.deploy_profile_readiness_durable ? aws_cloudwatch_event_rule.profile_readiness_terminal[0].arn : null
+}

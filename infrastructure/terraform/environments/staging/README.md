@@ -22,3 +22,10 @@ For the scale-to-zero migration, configure the GitHub `staging` Environment vari
 `deploy_gateway_lambda = false` until the staging artifact and exact provider-upgrade/dark plan are
 reviewed. Dark deployment creates no API route or integration and therefore cannot cut staging
 traffic away from the accepted ECS rollback path.
+
+The workflow replacement is independently dark by default. Keep
+`deploy_profile_readiness_durable`, `deploy_serverless_outbox`, and
+`enable_serverless_workflow_triggers` false until the staging copies of all three immutable
+artifacts and a refresh-backed plan are reviewed. The first replacement apply may create functions,
+private endpoints, alarms, and an encrypted terminal DLQ, but it must not enable any workflow
+trigger or change `gateway_outbox_dispatch_target` from `temporal`.

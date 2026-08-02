@@ -131,6 +131,44 @@ locals {
         Resource = "*"
       },
       {
+        Sid    = "ManageEnvironmentDurableStack"
+        Effect = "Allow"
+        Action = [
+          "cloudformation:CreateStack",
+          "cloudformation:DeleteStack",
+          "cloudformation:DescribeStackEvents",
+          "cloudformation:DescribeStackResource",
+          "cloudformation:DescribeStackResources",
+          "cloudformation:DescribeStacks",
+          "cloudformation:GetTemplate",
+          "cloudformation:ListStackResources",
+          "cloudformation:UpdateStack"
+        ]
+        Resource = "arn:aws:cloudformation:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:stack/ai-job-apply-${var.environment}-profile-readiness-durable/*"
+      },
+      {
+        Sid      = "ValidateDurableTemplate"
+        Effect   = "Allow"
+        Action   = ["cloudformation:ValidateTemplate"]
+        Resource = "*"
+      },
+      {
+        Sid    = "ManageEnvironmentWorkflowRules"
+        Effect = "Allow"
+        Action = [
+          "events:DeleteRule",
+          "events:DescribeRule",
+          "events:ListTagsForResource",
+          "events:ListTargetsByRule",
+          "events:PutRule",
+          "events:PutTargets",
+          "events:RemoveTargets",
+          "events:TagResource",
+          "events:UntagResource"
+        ]
+        Resource = "arn:aws:events:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:rule/ai-job-apply-${var.environment}-*"
+      },
+      {
         Sid    = "ManageEnvironmentLambda"
         Effect = "Allow"
         Action = ["lambda:*"]
@@ -257,7 +295,7 @@ resource "aws_iam_policy" "workload_boundary" {
       {
         Sid      = "DecryptTaggedRuntimeData"
         Effect   = "Allow"
-        Action   = ["kms:Decrypt", "kms:DescribeKey"]
+        Action   = ["kms:Decrypt", "kms:DescribeKey", "kms:GenerateDataKey"]
         Resource = "*"
         Condition = {
           StringEquals = {
@@ -284,6 +322,28 @@ resource "aws_iam_policy" "workload_boundary" {
           "ec2:UnassignPrivateIpAddresses"
         ]
         Resource = "*"
+      },
+      {
+        Sid    = "OperateOwnedServerlessWorkflows"
+        Effect = "Allow"
+        Action = [
+          "lambda:CheckpointDurableExecution",
+          "lambda:GetDurableExecutionState",
+          "lambda:InvokeFunction"
+        ]
+        Resource = "arn:aws:lambda:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:function:ai-job-apply-${var.environment}-*:*"
+      },
+      {
+        Sid    = "OperateOwnedWorkflowQueues"
+        Effect = "Allow"
+        Action = [
+          "sqs:ChangeMessageVisibility",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes",
+          "sqs:ReceiveMessage",
+          "sqs:SendMessage"
+        ]
+        Resource = "arn:aws:sqs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:ai-job-apply-${var.environment}-*"
       }
     ]
   })

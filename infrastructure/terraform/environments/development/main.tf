@@ -88,7 +88,19 @@ module "platform" {
   workflow_ingress_lambda_extension_layer_arn = (
     var.workflow_ingress_lambda_extension_layer_arn
   )
-  durable_workflow_function_arn = var.durable_workflow_function_arn
+  enable_serverless_workflow_triggers                   = var.enable_serverless_workflow_triggers
+  deploy_profile_readiness_durable                      = var.deploy_profile_readiness_durable
+  profile_readiness_durable_artifact_s3_key             = var.profile_readiness_durable_artifact_s3_key
+  profile_readiness_durable_artifact_s3_object_version  = var.profile_readiness_durable_artifact_s3_object_version
+  profile_readiness_durable_artifact_sha256             = var.profile_readiness_durable_artifact_sha256
+  profile_readiness_durable_artifact_base64sha256       = var.profile_readiness_durable_artifact_base64sha256
+  profile_readiness_activity_artifact_s3_key            = var.profile_readiness_activity_artifact_s3_key
+  profile_readiness_activity_artifact_s3_object_version = var.profile_readiness_activity_artifact_s3_object_version
+  profile_readiness_activity_artifact_sha256            = var.profile_readiness_activity_artifact_sha256
+  profile_readiness_activity_artifact_base64sha256      = var.profile_readiness_activity_artifact_base64sha256
+  profile_readiness_lambda_extension_layer_arn          = var.profile_readiness_lambda_extension_layer_arn
+  profile_readiness_execution_timeout_seconds           = var.profile_readiness_execution_timeout_seconds
+  profile_readiness_retention_days                      = var.profile_readiness_retention_days
 }
 
 module "cost_controls" {
