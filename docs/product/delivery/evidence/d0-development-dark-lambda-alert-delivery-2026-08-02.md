@@ -71,3 +71,9 @@ remains open and no gateway cutover is authorized.
 - Exercise fail-safe alias rollback/recovery between two known-good versions.
 - Implement and accept SQS/outbox recovery and Lambda durable workflows.
 - Repeat the replacement acceptance in isolated synthetic staging before any development cutover.
+
+## Subsequent outcome
+
+Two accepted immutable versions later passed the controlled `3 → 2 → 3` drill, restoration,
+healthy-alarm/error inspection, context cleanup, and zero-drift gates. See the
+[completed rollback evidence](d0-development-gateway-lambda-alias-rollback-2026-08-02.md).
