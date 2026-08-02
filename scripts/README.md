@@ -82,6 +82,11 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   function artifact/version update and alias transition to that new immutable version.
   The same pin supports completed-dark verification, which accepts only a refresh-backed
   zero-change plan. It never applies infrastructure or changes API traffic.
+- `plan-development-serverless-workflow-bootstrap.ps1` — Verifies the exact development account,
+  encrypted and versioned bootstrap state, immutable GitHub identity and effective OIDC trust,
+  plus a successful protected-environment artifact-publication run; then creates a refresh-backed
+  sensitive plan and rejects anything except the three reviewed in-place GitHub deployment and
+  workload boundary updates needed by the serverless workflow release. It never applies the plan.
 - `operate-development-gateway-lambda-alias-rollback.ps1` — Creates a checksum-reviewed,
   read-only recovery context for two accepted immutable development Lambda versions. Explicit
   execution uses optimistic alias revision locking, proves the prior version through the guarded
