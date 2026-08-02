@@ -161,14 +161,25 @@ function Invoke-BoundaryCase {
   }
   if ($ExpectedStatus -ge 400) {
     $problem = [string]$response.body | ConvertFrom-Json
-    if (
-      [int]$problem.status -ne $ExpectedStatus -or
-      [string]$problem.code -cne $ExpectedCode -or
-      [string]::IsNullOrWhiteSpace([string]$problem.traceId) -or
-      [string]$response.headers."content-type" -cne "application/problem+json" -or
-      [string]$response.headers."cache-control" -cne "no-store"
-    ) {
-      throw "The $Name boundary case did not return the stable problem contract."
+    $problemMediaType = ([string]$response.headers."content-type").Split(";", 2)[0].Trim()
+    $contractFailures = @()
+    if ([int]$problem.status -ne $ExpectedStatus) {
+      $contractFailures += "problem status"
+    }
+    if ([string]$problem.code -cne $ExpectedCode) {
+      $contractFailures += "problem code"
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$problem.traceId)) {
+      $contractFailures += "trace identifier"
+    }
+    if ($problemMediaType -ine "application/problem+json") {
+      $contractFailures += "content type"
+    }
+    if ([string]$response.headers."cache-control" -cne "no-store") {
+      $contractFailures += "cache control"
+    }
+    if ($contractFailures.Count -ne 0) {
+      throw "The $Name boundary case failed the stable problem contract checks: $($contractFailures -join ', ')."
     }
   }
 
