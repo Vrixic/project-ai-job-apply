@@ -42,6 +42,11 @@ jobs:
         run: |
           terraform init -backend=false
           terraform validate
+      - name: Test dark durable workflow boundary
+        working-directory: infrastructure/terraform/modules/platform
+        run: |
+          terraform init -backend=false
+          terraform test
 
   plan:
     if: github.event_name == 'workflow_dispatch'

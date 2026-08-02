@@ -14,6 +14,7 @@ function Invoke-CheckedCommand {
 
 Invoke-CheckedCommand "Contract generation" { pnpm contracts:generate }
 Invoke-CheckedCommand "Repository skill validation" { pnpm skills:validate }
+Invoke-CheckedCommand "Serverless workflow infrastructure policy validation" { node scripts/validate-serverless-workflow-infrastructure.mjs }
 Invoke-CheckedCommand "Formatting" { pnpm format:check }
 Invoke-CheckedCommand "Lint" { pnpm lint }
 Invoke-CheckedCommand "Type checking" { pnpm typecheck }

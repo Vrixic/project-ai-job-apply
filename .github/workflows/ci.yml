@@ -31,6 +31,7 @@ jobs:
       - name: Verify generated contracts are current
         run: git diff --exit-code -- packages/api-contracts/generated
       - run: pnpm skills:validate
+      - run: pnpm infrastructure:validate
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck

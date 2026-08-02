@@ -1,0 +1,161 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const read = (relativePath) => fs.readFileSync(path.join(repositoryRoot, relativePath), "utf8");
+
+const durable = read("infrastructure/terraform/modules/platform/durable-workflow.tf");
+const platform = read("infrastructure/terraform/modules/platform/main.tf");
+const variables = read("infrastructure/terraform/modules/platform/variables.tf");
+const bootstrap = read("infrastructure/terraform/bootstrap/main.tf");
+const environments = [
+  read("infrastructure/terraform/environments/development/main.tf"),
+  read("infrastructure/terraform/environments/staging/main.tf"),
+];
+
+const requireText = (source, expected, message) => {
+  assert.ok(source.includes(expected), message);
+};
+
+requireText(
+  durable,
+  "KMSKeyArn             = aws_kms_key.platform.arn",
+  "Durable checkpoints must use the platform CMK.",
+);
+requireText(
+  durable,
+  'DeletionPolicy      = "Retain"',
+  "Superseded durable versions must be retained for replay.",
+);
+requireText(
+  durable,
+  'UpdateReplacePolicy = "Retain"',
+  "Replaced durable versions must be retained for replay.",
+);
+requireText(
+  durable,
+  '"lambda:CheckpointDurableExecution"',
+  "The durable role needs checkpoint permission.",
+);
+requireText(
+  durable,
+  '"lambda:GetDurableExecutionState"',
+  "The durable role needs state-read permission.",
+);
+requireText(
+  durable,
+  '"kms:GenerateDataKey"',
+  "The durable role must be able to write its encrypted identifier-only DLQ.",
+);
+requireText(
+  durable,
+  "resources = [aws_lambda_function.profile_readiness_activity[0].qualified_arn]",
+  "Activity invocation must target one immutable numeric version.",
+);
+requireText(
+  durable,
+  'status      = ["FAILED", "STOPPED", "TIMED_OUT"]',
+  "Terminal recovery must cover every unsuccessful durable state.",
+);
+requireText(
+  durable,
+  'state       = var.enable_serverless_workflow_triggers ? "ENABLED" : "DISABLED"',
+  "Terminal recovery routing must share the explicit cutover switch.",
+);
+requireText(
+  durable,
+  "kms_master_key_id         = aws_kms_key.platform.arn",
+  "The terminal DLQ must use the platform CMK.",
+);
+requireText(
+  platform,
+  "enabled                            = var.enable_serverless_workflow_triggers",
+  "The SQS starter mapping must remain disabled before cutover.",
+);
+requireText(
+  platform,
+  'state               = var.enable_serverless_workflow_triggers ? "ENABLED" : "DISABLED"',
+  "The reconciler must remain disabled before cutover.",
+);
+
+assert.match(
+  variables,
+  /variable "enable_serverless_workflow_triggers"\s*\{[\s\S]*?default\s*=\s*false/,
+  "Workflow triggers must default to dark.",
+);
+assert.match(
+  variables,
+  /variable "deploy_profile_readiness_durable"\s*\{[\s\S]*?default\s*=\s*false/,
+  "Durable infrastructure must be opt-in.",
+);
+assert.ok(
+  !variables.includes('variable "durable_workflow_function_arn"'),
+  "An external mutable durable ARN must not remain configurable.",
+);
+
+requireText(
+  bootstrap,
+  '"lambda:CheckpointDurableExecution"',
+  "The workload boundary must permit durable checkpoints.",
+);
+requireText(
+  bootstrap,
+  '"lambda:GetDurableExecutionState"',
+  "The workload boundary must permit durable state reads.",
+);
+requireText(
+  bootstrap,
+  '"kms:GenerateDataKey"',
+  "The workload boundary must permit encrypted durable DLQ writes.",
+);
+requireText(
+  bootstrap,
+  'Sid    = "ManageEnvironmentDurableStack"',
+  "The deploy role must be able to manage the narrowly owned durable stack.",
+);
+requireText(
+  bootstrap,
+  'Sid    = "ManageEnvironmentWorkflowRules"',
+  "The deploy role must be able to manage terminal status routing.",
+);
+assert.ok(
+  !bootstrap.includes('"cloudformation:*"'),
+  "The deploy role must not receive account-wide CloudFormation administration.",
+);
+assert.ok(
+  !bootstrap.includes('"events:*"'),
+  "The deploy role must not receive account-wide EventBridge administration.",
+);
+
+for (const environment of environments) {
+  requireText(
+    environment,
+    "deploy_profile_readiness_durable",
+    "Every persistent environment must expose the durable deployment switch.",
+  );
+  requireText(
+    environment,
+    "enable_serverless_workflow_triggers",
+    "Every persistent environment must expose the independent cutover switch.",
+  );
+}
+
+const durableStackStart = durable.indexOf(
+  'resource "aws_cloudformation_stack" "profile_readiness_durable"',
+);
+const terminalFunctionStart = durable.indexOf(
+  'resource "aws_lambda_function" "profile_readiness_terminal"',
+);
+assert.ok(
+  durableStackStart >= 0 && terminalFunctionStart > durableStackStart,
+  "The durable stack boundary could not be inspected.",
+);
+const durableStack = durable.slice(durableStackStart, terminalFunctionStart);
+assert.ok(
+  !durableStack.includes("VpcConfig"),
+  "The durable orchestrator must stay outside the VPC; only activities may access the database.",
+);
+
+process.stdout.write("Serverless workflow infrastructure policy validation passed.\n");

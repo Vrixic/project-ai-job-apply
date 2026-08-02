@@ -24,6 +24,9 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
 - `build-profile-readiness-lambdas.mjs` — Reproducibly bundles the versioned Lambda durable
   profile-readiness orchestrator and its private activity/terminal handlers into separate immutable
   ZIPs with manifests, checksums, and SBOMs.
+- `.github/workflows/publish-workflow-lambdas.yml` — Rebuilds all three workflow Lambda artifacts
+  twice, proves byte reproducibility and CycloneDX evidence, then publishes immutable versioned
+  objects through GitHub OIDC without deploying functions or enabling triggers.
 - `lib/build-lambda-artifact.mjs` — Shared deterministic Node.js 24 ZIP, checksum, manifest, and
   CycloneDX builder used by the workflow Lambda release scripts.
 - `prepare-terraform-bootstrap.ps1` — Creates an isolated, local-backend Terraform workspace for
@@ -31,6 +34,9 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   environment's backend metadata or state.
 - `verify-phase0.ps1` — Regenerates contracts and runs repository quality, build, Compose, and
   removed-scope checks.
+- `validate-serverless-workflow-infrastructure.mjs` — Enforces the dark-by-default durable
+  workflow, immutable activity target, checkpoint KMS, replay-retention, terminal recovery,
+  least-privilege permission, and environment-composition boundaries without contacting AWS.
 - `verify-auth0-tenant.mjs` — Performs read-only exact-issuer, authorization-code, PKCE, RS256,
   and JWKS checks against a managed OIDC tenant without reading client secrets or tokens.
 - `configure-auth0-local.ps1` — Securely prompts for the development web client secret, generates

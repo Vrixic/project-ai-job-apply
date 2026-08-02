@@ -79,6 +79,113 @@ data "aws_iam_policy_document" "platform_kms" {
     }
   }
 
+  dynamic "statement" {
+    for_each = var.deploy_profile_readiness_durable ? [1] : []
+    content {
+      sid    = "AllowLambdaDurableStateEncryption"
+      effect = "Allow"
+      actions = [
+        "kms:Decrypt",
+        "kms:GenerateDataKey"
+      ]
+      resources = ["*"]
+      principals {
+        type        = "Service"
+        identifiers = ["lambda.amazonaws.com"]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "aws:SourceAccount"
+        values   = [data.aws_caller_identity.current.account_id]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "aws:SourceArn"
+        values   = [local.profile_readiness_durable_function_arn]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "kms:EncryptionContext:aws:lambda:FunctionArn"
+        values   = [local.profile_readiness_durable_function_arn]
+      }
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.deploy_profile_readiness_durable ? [1] : []
+    content {
+      sid    = "AllowEventBridgeTerminalDlqEncryption"
+      effect = "Allow"
+      actions = [
+        "kms:Decrypt",
+        "kms:GenerateDataKey"
+      ]
+      resources = ["*"]
+      principals {
+        type        = "Service"
+        identifiers = ["events.amazonaws.com"]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "aws:SourceAccount"
+        values   = [data.aws_caller_identity.current.account_id]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:SourceArn"
+        values = [
+          "arn:aws:events:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:rule/${var.name}-${var.environment}-profile-readiness-terminal"
+        ]
+      }
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.deploy_profile_readiness_durable ? [1] : []
+    content {
+      sid       = "AllowDurableRoleStateDecryption"
+      effect    = "Allow"
+      actions   = ["kms:Decrypt"]
+      resources = ["*"]
+      principals {
+        type        = "AWS"
+        identifiers = [aws_iam_role.profile_readiness_durable[0].arn]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "kms:ViaService"
+        values   = ["lambda.${data.aws_region.current.region}.amazonaws.com"]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "kms:EncryptionContext:aws:lambda:FunctionArn"
+        values   = [local.profile_readiness_durable_function_arn]
+      }
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.deploy_profile_readiness_durable ? [1] : []
+    content {
+      sid    = "AllowDurableRoleEncryptedDlqWrites"
+      effect = "Allow"
+      actions = [
+        "kms:Decrypt",
+        "kms:GenerateDataKey"
+      ]
+      resources = ["*"]
+      principals {
+        type        = "AWS"
+        identifiers = [aws_iam_role.profile_readiness_durable[0].arn]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "kms:ViaService"
+        values   = ["sqs.${data.aws_region.current.region}.amazonaws.com"]
+      }
+    }
+  }
+
   statement {
     sid    = "AllowCloudWatchLogsEncryption"
     effect = "Allow"
@@ -1325,7 +1432,7 @@ resource "aws_iam_role_policy" "gateway_lambda" {
 }
 
 resource "aws_security_group" "secrets_endpoint" {
-  count       = var.deploy_gateway_lambda || var.deploy_serverless_outbox ? 1 : 0
+  count       = var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable ? 1 : 0
   name_prefix = "${var.name}-${var.environment}-secrets-endpoint-"
   description = "TLS from private application functions to the Secrets Manager endpoint"
   vpc_id      = aws_vpc.this.id
@@ -1339,7 +1446,7 @@ resource "aws_security_group" "secrets_endpoint" {
 }
 
 data "aws_iam_policy_document" "secrets_endpoint" {
-  count = var.deploy_gateway_lambda || var.deploy_serverless_outbox ? 1 : 0
+  count = var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable ? 1 : 0
 
   statement {
     sid       = "ExactLambdaRolesDatabaseSecretOnly"
@@ -1360,14 +1467,16 @@ data "aws_iam_policy_document" "secrets_endpoint" {
       values = compact([
         var.deploy_gateway_lambda ? aws_iam_role.gateway_lambda[0].arn : "",
         var.deploy_serverless_outbox ? aws_iam_role.outbox_starter[0].arn : "",
-        var.deploy_serverless_outbox ? aws_iam_role.outbox_reconciler[0].arn : ""
+        var.deploy_serverless_outbox ? aws_iam_role.outbox_reconciler[0].arn : "",
+        var.deploy_profile_readiness_durable ? aws_iam_role.profile_readiness_activity[0].arn : "",
+        var.deploy_profile_readiness_durable ? aws_iam_role.profile_readiness_terminal[0].arn : ""
       ])
     }
   }
 }
 
 resource "aws_vpc_endpoint" "secretsmanager" {
-  count               = var.deploy_gateway_lambda || var.deploy_serverless_outbox ? 1 : 0
+  count               = var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.secretsmanager"
   vpc_endpoint_type   = "Interface"
@@ -1595,7 +1704,7 @@ data "aws_iam_policy_document" "outbox_starter" {
     sid       = "StartExactDurableWorkflowVersion"
     effect    = "Allow"
     actions   = ["lambda:InvokeFunction"]
-    resources = [var.durable_workflow_function_arn]
+    resources = [local.profile_readiness_durable_version_arn]
   }
 }
 
@@ -1707,7 +1816,7 @@ data "aws_iam_policy_document" "outbox_lambda_endpoint" {
     sid       = "StarterInvokesExactDurableVersionOnly"
     effect    = "Allow"
     actions   = ["lambda:InvokeFunction"]
-    resources = [var.durable_workflow_function_arn]
+    resources = [local.profile_readiness_durable_version_arn]
     principals {
       type        = "*"
       identifiers = ["*"]
@@ -1755,7 +1864,7 @@ resource "aws_lambda_function" "outbox_starter" {
       NODE_ENV             = "production"
       RELEASE_SHA          = var.workflow_ingress_artifact_sha256
       DATABASE_SECRET_ID   = aws_secretsmanager_secret.database_url.arn
-      DURABLE_FUNCTION_ARN = var.durable_workflow_function_arn
+      DURABLE_FUNCTION_ARN = local.profile_readiness_durable_version_arn
     }
   }
 
@@ -1849,7 +1958,7 @@ resource "aws_lambda_event_source_mapping" "outbox_starter" {
   count                              = var.deploy_serverless_outbox ? 1 : 0
   event_source_arn                   = aws_sqs_queue.events.arn
   function_name                      = aws_lambda_alias.outbox_starter[0].arn
-  enabled                            = false
+  enabled                            = var.enable_serverless_workflow_triggers
   batch_size                         = 5
   maximum_batching_window_in_seconds = 0
   function_response_types            = ["ReportBatchItemFailures"]
@@ -1862,7 +1971,7 @@ resource "aws_cloudwatch_event_rule" "outbox_reconciler" {
   name                = "${var.name}-${var.environment}-outbox-reconciler"
   description         = "Disabled until the reviewed Lambda durable cutover"
   schedule_expression = "rate(1 minute)"
-  state               = "DISABLED"
+  state               = var.enable_serverless_workflow_triggers ? "ENABLED" : "DISABLED"
 }
 
 resource "aws_cloudwatch_event_target" "outbox_reconciler" {

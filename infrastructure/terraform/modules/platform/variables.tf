@@ -319,9 +319,20 @@ variable "deploy_serverless_outbox" {
       var.workflow_ingress_artifact_sha256 != "" &&
       var.workflow_ingress_artifact_base64sha256 != "" &&
       var.workflow_ingress_lambda_extension_layer_arn != "" &&
-      var.durable_workflow_function_arn != ""
+      var.deploy_profile_readiness_durable
     )
-    error_message = "Dark serverless outbox deployment requires the existing dark gateway, immutable workflow-ingress artifact, reviewed Secrets extension, and exact versioned durable-function ARN."
+    error_message = "Dark serverless outbox deployment requires the existing dark gateway, immutable workflow-ingress artifact, reviewed Secrets extension, and Terraform-managed versioned durable function."
+  }
+}
+
+variable "enable_serverless_workflow_triggers" {
+  description = "Enable the SQS starter, reconciliation schedule, and terminal-event recovery only during a reviewed cutover."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.enable_serverless_workflow_triggers || var.deploy_serverless_outbox
+    error_message = "Serverless workflow triggers require the complete dark outbox boundary."
   }
 }
 
@@ -373,16 +384,128 @@ variable "workflow_ingress_lambda_extension_layer_arn" {
   }
 }
 
-variable "durable_workflow_function_arn" {
-  description = "Exact numeric-version ARN of the durable workflow function accepted under SR-004."
+variable "deploy_profile_readiness_durable" {
+  description = "Dark-deploy the CMK-encrypted profile-readiness durable function and private activity/terminal Lambdas."
+  type        = bool
+  default     = false
+
+  validation {
+    condition = !var.deploy_profile_readiness_durable || (
+      var.deploy_applications &&
+      var.profile_readiness_durable_artifact_s3_key != "" &&
+      var.profile_readiness_durable_artifact_s3_object_version != "" &&
+      var.profile_readiness_durable_artifact_sha256 != "" &&
+      var.profile_readiness_durable_artifact_base64sha256 != "" &&
+      var.profile_readiness_activity_artifact_s3_key != "" &&
+      var.profile_readiness_activity_artifact_s3_object_version != "" &&
+      var.profile_readiness_activity_artifact_sha256 != "" &&
+      var.profile_readiness_activity_artifact_base64sha256 != "" &&
+      var.profile_readiness_lambda_extension_layer_arn != ""
+    )
+    error_message = "Dark profile-readiness deployment requires the existing application database, both immutable artifacts with exact S3 versions/digests, and the reviewed Secrets extension."
+  }
+}
+
+variable "profile_readiness_durable_artifact_s3_key" {
+  description = "Immutable environment artifact-bucket key for the profile-readiness durable Lambda ZIP."
+  type        = string
+  default     = ""
+}
+
+variable "profile_readiness_durable_artifact_s3_object_version" {
+  description = "Exact S3 object version containing the profile-readiness durable Lambda ZIP."
+  type        = string
+  default     = ""
+}
+
+variable "profile_readiness_durable_artifact_sha256" {
+  description = "Lowercase hexadecimal SHA-256 of the exact profile-readiness durable Lambda ZIP."
   type        = string
   default     = ""
 
   validation {
-    condition = var.durable_workflow_function_arn == "" || can(regex(
-      "^arn:aws:lambda:us-east-2:[0-9]{12}:function:[A-Za-z0-9_.-]+:[1-9][0-9]*$",
-      var.durable_workflow_function_arn
+    condition     = var.profile_readiness_durable_artifact_sha256 == "" || can(regex("^[a-f0-9]{64}$", var.profile_readiness_durable_artifact_sha256))
+    error_message = "Profile-readiness durable artifact SHA-256 must be empty or 64 lowercase hexadecimal characters."
+  }
+}
+
+variable "profile_readiness_durable_artifact_base64sha256" {
+  description = "Base64-encoded SHA-256 of the exact profile-readiness durable Lambda ZIP."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.profile_readiness_durable_artifact_base64sha256 == "" || can(regex("^[A-Za-z0-9+/]{43}=$", var.profile_readiness_durable_artifact_base64sha256))
+    error_message = "Profile-readiness durable artifact base64 SHA-256 must be empty or one canonical 44-character digest."
+  }
+}
+
+variable "profile_readiness_activity_artifact_s3_key" {
+  description = "Immutable environment artifact-bucket key for the profile-readiness activity/terminal Lambda ZIP."
+  type        = string
+  default     = ""
+}
+
+variable "profile_readiness_activity_artifact_s3_object_version" {
+  description = "Exact S3 object version containing the profile-readiness activity/terminal Lambda ZIP."
+  type        = string
+  default     = ""
+}
+
+variable "profile_readiness_activity_artifact_sha256" {
+  description = "Lowercase hexadecimal SHA-256 of the exact profile-readiness activity/terminal Lambda ZIP."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.profile_readiness_activity_artifact_sha256 == "" || can(regex("^[a-f0-9]{64}$", var.profile_readiness_activity_artifact_sha256))
+    error_message = "Profile-readiness activity artifact SHA-256 must be empty or 64 lowercase hexadecimal characters."
+  }
+}
+
+variable "profile_readiness_activity_artifact_base64sha256" {
+  description = "Base64-encoded SHA-256 of the exact profile-readiness activity/terminal Lambda ZIP."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.profile_readiness_activity_artifact_base64sha256 == "" || can(regex("^[A-Za-z0-9+/]{43}=$", var.profile_readiness_activity_artifact_base64sha256))
+    error_message = "Profile-readiness activity artifact base64 SHA-256 must be empty or one canonical 44-character digest."
+  }
+}
+
+variable "profile_readiness_lambda_extension_layer_arn" {
+  description = "Reviewed us-east-2 AWS Parameters and Secrets Lambda Extension layer ARN for private database handlers."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = var.profile_readiness_lambda_extension_layer_arn == "" || can(regex(
+      "^arn:aws:lambda:us-east-2:[0-9]{12}:layer:AWS-Parameters-and-Secrets-Lambda-Extension:[0-9]+$",
+      var.profile_readiness_lambda_extension_layer_arn
     ))
-    error_message = "The durable workflow target must be an exact numeric-version Lambda ARN in us-east-2."
+    error_message = "The profile-readiness extension layer must be an exact versioned AWS Parameters and Secrets layer ARN in us-east-2."
+  }
+}
+
+variable "profile_readiness_execution_timeout_seconds" {
+  description = "Whole durable-execution timeout; deliberately separate from each Lambda invocation timeout."
+  type        = number
+  default     = 3600
+
+  validation {
+    condition     = var.profile_readiness_execution_timeout_seconds >= 60 && var.profile_readiness_execution_timeout_seconds <= 86400 && floor(var.profile_readiness_execution_timeout_seconds) == var.profile_readiness_execution_timeout_seconds
+    error_message = "Profile-readiness durable timeout must be a whole number from 60 through 86400 seconds."
+  }
+}
+
+variable "profile_readiness_retention_days" {
+  description = "Bounded operational execution-history retention; PostgreSQL remains product and audit truth."
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.profile_readiness_retention_days >= 1 && var.profile_readiness_retention_days <= 30 && floor(var.profile_readiness_retention_days) == var.profile_readiness_retention_days
+    error_message = "Profile-readiness history retention must be a whole number from one through 30 days."
   }
 }

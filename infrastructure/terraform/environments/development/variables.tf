@@ -189,7 +189,67 @@ variable "workflow_ingress_lambda_extension_layer_arn" {
   default = ""
 }
 
-variable "durable_workflow_function_arn" {
+variable "enable_serverless_workflow_triggers" {
+  type    = bool
+  default = false
+}
+
+variable "deploy_profile_readiness_durable" {
+  type    = bool
+  default = false
+}
+
+variable "profile_readiness_durable_artifact_s3_key" {
   type    = string
   default = ""
+}
+
+variable "profile_readiness_durable_artifact_s3_object_version" {
+  type    = string
+  default = ""
+}
+
+variable "profile_readiness_durable_artifact_sha256" {
+  type    = string
+  default = ""
+}
+
+variable "profile_readiness_durable_artifact_base64sha256" {
+  type    = string
+  default = ""
+}
+
+variable "profile_readiness_activity_artifact_s3_key" {
+  type    = string
+  default = ""
+}
+
+variable "profile_readiness_activity_artifact_s3_object_version" {
+  type    = string
+  default = ""
+}
+
+variable "profile_readiness_activity_artifact_sha256" {
+  type    = string
+  default = ""
+}
+
+variable "profile_readiness_activity_artifact_base64sha256" {
+  type    = string
+  default = ""
+}
+
+variable "profile_readiness_lambda_extension_layer_arn" {
+  type    = string
+  default = ""
+}
+
+variable "profile_readiness_execution_timeout_seconds" {
+  type    = number
+  default = 3600
+}
+
+variable "profile_readiness_retention_days" {
+  type    = number
+  default = 30
 }

@@ -100,3 +100,23 @@ output "outbox_starter_event_source_mapping_uuid" {
 output "outbox_reconciler_rule_arn" {
   value = module.platform.outbox_reconciler_rule_arn
 }
+
+output "profile_readiness_durable_version_arn" {
+  value = module.platform.profile_readiness_durable_version_arn
+}
+
+output "profile_readiness_durable_alias_arn" {
+  value = module.platform.profile_readiness_durable_alias_arn
+}
+
+output "profile_readiness_activity_alias_arn" {
+  value = module.platform.profile_readiness_activity_alias_arn
+}
+
+output "profile_readiness_terminal_alias_arn" {
+  value = module.platform.profile_readiness_terminal_alias_arn
+}
+
+output "profile_readiness_terminal_rule_arn" {
+  value = module.platform.profile_readiness_terminal_rule_arn
+}
