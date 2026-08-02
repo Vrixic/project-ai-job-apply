@@ -56,3 +56,8 @@ This evidence does not authorize alias mutation. Merge the operator and runbook,
 that exact regenerated plan may execute the `3 → 2 → 3` drill. Afterward require current-version
 bridge/preflight, completed-dark zero drift, healthy alarms, clean privacy-safe error aggregates,
 and context cleanup before recording rollback readiness.
+
+## Subsequent outcome
+
+The separately reviewed exact-main execution and all post-restore gates subsequently passed. See
+the [completed rollback evidence](d0-development-gateway-lambda-alias-rollback-2026-08-02.md).
