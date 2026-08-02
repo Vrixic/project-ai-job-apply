@@ -164,9 +164,18 @@ plan. That unmerged diagnostic accounted for all 11 reviewed resources with zero
 deletes, or replacements and no traffic change. Its SHA-256 is
 `c81b98b373bb0e24e923a256d0847d052137ebf0a68f085624c0746502c08729` and it was not applied.
 
+## Exact-main completed-dark verification
+
+PR #69 merged as `05ca9ef67c656de867fe834a027edaec4132beb6`. From that exact synchronized
+`main`, the completed-dark verifier revalidated the original immutable artifact version and both
+digests, official extension layer `114`, reserved concurrency `2`, customer-managed-KMS state,
+stable ECS rollback services, and unchanged API routing. The refresh-backed plan accounted for all
+11 reviewed resources with zero creates, updates, deletes, or replacements. Its SHA-256 is
+`f0faf1ab4c3452440d429d0f73e2b392689c34caaf52485bbeaaed4372e34635`; it was retained only
+as ignored diagnostic evidence and was not applied.
+
 ## Next gate
 
-Merge the completed-dark zero-drift verification mode and evidence, then rerun it from exact
-`main`. Continue the remaining development acceptance matrix—authenticated owner-isolated reads
-and writes, alarm delivery drill, rollback proof, and bounded cutover review—without moving public
-traffic or retiring ECS early.
+Prove authenticated owner-isolated reads and writes against the dark alias, then complete the
+alarm delivery drill, rollback proof, and bounded cutover review without moving public traffic or
+retiring ECS early.
