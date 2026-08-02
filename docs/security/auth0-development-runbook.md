@@ -118,6 +118,27 @@ Then verify with a synthetic development account:
    retry is rejected before calling the gateway; no token, identity, operation identifier, or
    private response body is returned to the browser or retained as evidence.
 
+### Dark Lambda ownership conformance
+
+After the versioned development Lambda is complete but before changing public traffic, start the
+same local BFF through the guarded dark-runtime mode:
+
+```powershell
+.\scripts\start-deployed-web-conformance.ps1 -GatewayRuntime lambda-dark
+```
+
+The launcher fails closed unless ECS remains stable and publicly routed, the Lambda is active at
+reserved concurrency `2`, its `development` alias targets an immutable version, and the dormant
+JWT authorizer exactly matches the ignored local issuer and audience. A loopback-only bridge uses
+the shared RS256/JWKS verifier on each server-held access token, replaces the token with a
+non-secret placeholder, and passes only validated issuer, subject, audience, and scopes to the
+alias. It permits only health, current-user preferences, and owner-scoped operation reads.
+
+Repeat step 9 with two distinct synthetic accounts. Account A must save harmless preferences and
+reach a succeeded operation through the dark alias; account B must receive the existing sanitized
+cross-user isolation pass. This proves the Lambda/database ownership path, not API Gateway route
+cutover, because public traffic deliberately remains on ECS.
+
 Capture no tokens, cookies, secrets, complete email addresses, or provider subjects. Record only
 timestamps, expected/actual results, sanitized screenshots, and correlation IDs.
 
