@@ -6,7 +6,7 @@
 - Merged IAM/KMS correction source: `76e16384355224d8ba6873f8b6c94ab062719690`
 - Artifact source: `92e5b8f17a898c2970a4231c8a8b4e06c988be80`
 - API traffic change: none
-- Gateway Lambda state: active, tracked, dark, and incomplete; no alias or API permission
+- Gateway Lambda state: active, tracked, complete dark deployment; still unrouted
 
 ## Endpoint-policy recovery
 
@@ -130,9 +130,43 @@ layer `114` and contains exactly five creates (alias, API permission, and three 
 in-place function concurrency update, zero deletes, zero replacements, and no API traffic change.
 It is diagnostic evidence only and was not applied.
 
+## Completed dark deployment and conformance
+
+PR #68 merged as `42aede2e35494de9e138e82905f70ee0e9ac401f`. The exact regenerated recovery
+plan `a09e5bcfdcc25ada0074ba5c729c02b386a41d901b06a9747424f29a8e4c49d2` passed the same
+five-create/one-update boundary and was explicitly authorized. Its apply completed with five
+creates, one in-place update, and zero destroys.
+
+Live verification proved:
+
+- the function is `Active` with a successful last update and reserved concurrency exactly `2`;
+- alias `development` targets immutable published version `1`, not `$LATEST`;
+- the artifact checksum and already reviewed official extension layer `114` match;
+- the Lambda resource policy permits only API Gateway from the exact development API `$default`
+  stage;
+- the duration, error, and throttle alarms exist with one enabled notification action each and
+  reached `OK` after dark invocations;
+- `platform.tfstate` remains customer-managed-KMS encrypted with bucket keys;
+- both ECS rollback services remain desired/running/pending `1/1/0`;
+- the sole API route remains unauthenticated `$default` on the existing `HTTP_PROXY` integration,
+  so no public traffic reaches Lambda; and
+- JSON application logging, INFO application level, WARN system level, active tracing, and recent
+  CloudWatch log events are present.
+
+Two direct invocations targeted alias `development` and executed immutable version `1`. Public
+`/health/ready` returned `200`, proving managed-secret retrieval and PostgreSQL readiness. A
+protected `/v1/me` event without API Gateway authorizer context returned `401` with
+`authentication_required`, proving fail-closed function-level denial before application dispatch.
+
+The recovery operator was extended locally with completed-dark verification: it requires the
+deployed official layer pin and exact concurrency, then accepts only a refresh-backed zero-change
+plan. That unmerged diagnostic accounted for all 11 reviewed resources with zero creates, updates,
+deletes, or replacements and no traffic change. Its SHA-256 is
+`c81b98b373bb0e24e923a256d0847d052137ebf0a68f085624c0746502c08729` and it was not applied.
+
 ## Next gate
 
-Merge the pinned-layer/concurrency recovery guard, regenerate the exact-main plan, and separately
-authorize only its reviewed hash. After apply, verify reserved concurrency, immutable alias,
-stage-scoped permission, alarms, function-level denial, secret retrieval, logging, KMS state,
-no-drift, and unchanged ECS/API routing before considering a cutover.
+Merge the completed-dark zero-drift verification mode and evidence, then rerun it from exact
+`main`. Continue the remaining development acceptance matrix—authenticated owner-isolated reads
+and writes, alarm delivery drill, rollback proof, and bounded cutover review—without moving public
+traffic or retiring ECS early.
