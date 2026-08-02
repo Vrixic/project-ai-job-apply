@@ -38,6 +38,8 @@ param(
 
   [switch]$AllowLambdaConcurrencyRecovery,
 
+  [switch]$AllowArtifactReleaseUpdate,
+
   [switch]$VerifyCompletedDarkDeployment,
 
   [switch]$Help
@@ -60,6 +62,7 @@ Usage:
     [-AllowLambdaVpcPolicyRecovery] `
     [-PinnedExtensionLayerArn REVIEWED_LAYER_ARN] `
     [-AllowLambdaConcurrencyRecovery] `
+    [-AllowArtifactReleaseUpdate] `
     [-VerifyCompletedDarkDeployment]
 
 Creates a refresh-backed development plan for the dark gateway Lambda only. It reconstructs the
@@ -83,6 +86,12 @@ ceiling. This prevents a moving "latest" extension from entering a recovery plan
 Use -PinnedExtensionLayerArn with -VerifyCompletedDarkDeployment after the dark deployment is
 complete. That mode verifies the healthy live function and reviewed concurrency, requires a
 refresh-backed zero-change plan, and still proves ECS stability and no API traffic change.
+
+Use -PinnedExtensionLayerArn with -AllowArtifactReleaseUpdate for a subsequent immutable dark
+release. That mode verifies the healthy current function, immutable alias, reviewed concurrency,
+and new KMS-encrypted artifact, then permits only the Lambda function artifact/version update and
+the alias transition to that new immutable version. It rejects every other infrastructure or
+traffic change.
 
 The sensitive saved plan remains under the ignored Terraform .terraform directory for separate
 review and exact-plan apply. This script never applies infrastructure or changes API traffic.
@@ -115,18 +124,30 @@ if ($AllowLambdaConcurrencyRecovery -and -not $ResumePartialApply) {
 }
 
 if (
-  $PinnedExtensionLayerArn -and
-  -not $AllowLambdaConcurrencyRecovery -and
-  -not $VerifyCompletedDarkDeployment
+  $AllowArtifactReleaseUpdate -and
+  ($ResumePartialApply -or $VerifyCompletedDarkDeployment)
 ) {
-  throw "A pinned extension layer is allowed only for concurrency recovery or completed verification."
+  throw "Artifact release update cannot be combined with recovery or completed verification."
 }
 
 if (
-  ($AllowLambdaConcurrencyRecovery -or $VerifyCompletedDarkDeployment) -and
+  $PinnedExtensionLayerArn -and
+  -not $AllowLambdaConcurrencyRecovery -and
+  -not $AllowArtifactReleaseUpdate -and
+  -not $VerifyCompletedDarkDeployment
+) {
+  throw "A pinned extension layer is allowed only for concurrency recovery, artifact release, or completed verification."
+}
+
+if (
+  (
+    $AllowLambdaConcurrencyRecovery -or
+    $AllowArtifactReleaseUpdate -or
+    $VerifyCompletedDarkDeployment
+  ) -and
   -not $PinnedExtensionLayerArn
 ) {
-  throw "Lambda recovery and completed verification require the deployed reviewed extension layer ARN."
+  throw "Lambda recovery, artifact release, and completed verification require the deployed reviewed extension layer ARN."
 }
 
 if (
@@ -388,7 +409,11 @@ try {
     throw "The official extension parameter did not resolve to the reviewed regional x86_64 layer."
   }
 
-  if ($AllowLambdaConcurrencyRecovery -or $VerifyCompletedDarkDeployment) {
+  if (
+    $AllowLambdaConcurrencyRecovery -or
+    $AllowArtifactReleaseUpdate -or
+    $VerifyCompletedDarkDeployment
+  ) {
     $lambdaAccount = Invoke-AwsJson @(
       "lambda",
       "get-account-settings",
@@ -413,11 +438,10 @@ try {
     if (
       [string]$liveLambda.Configuration.State -ne "Active" -or
       [string]$liveLambda.Configuration.LastUpdateStatus -ne "Successful" -or
-      [string]$liveLambda.Configuration.CodeSha256 -ne $ArtifactBase64Sha256 -or
       $liveLayers.Count -ne 1 -or
       $liveLayers[0] -ne $PinnedExtensionLayerArn
     ) {
-      throw "The live dark Lambda does not match the reviewed recovery artifact and layer."
+      throw "The live dark Lambda does not match the reviewed healthy layer boundary."
     }
     $liveConcurrency = Invoke-AwsJson @(
       "lambda",
@@ -438,6 +462,54 @@ try {
       [int]$liveConcurrency.ReservedConcurrentExecutions -ne $ReservedConcurrency
     ) {
       throw "The completed dark Lambda does not have the reviewed concurrency ceiling."
+    }
+    if (
+      ($AllowLambdaConcurrencyRecovery -or $VerifyCompletedDarkDeployment) -and
+      [string]$liveLambda.Configuration.CodeSha256 -ne $ArtifactBase64Sha256
+    ) {
+      throw "The live dark Lambda does not match the reviewed recovery artifact."
+    }
+    if ($AllowArtifactReleaseUpdate) {
+      if (
+        [string]$liveLambda.Configuration.CodeSha256 -eq $ArtifactBase64Sha256 -or
+        [int]$liveConcurrency.ReservedConcurrentExecutions -ne $ReservedConcurrency
+      ) {
+        throw "The artifact release requires a different artifact and the existing reviewed concurrency ceiling."
+      }
+      $liveAlias = Invoke-AwsJson @(
+        "lambda",
+        "get-alias",
+        "--function-name",
+        "ai-job-apply-development-gateway",
+        "--name",
+        "development",
+        "--output",
+        "json"
+      )
+      if (
+        [string]$liveAlias.Name -ne "development" -or
+        [string]$liveAlias.FunctionVersion -notmatch "^[1-9][0-9]*$"
+      ) {
+        throw "The dark alias is not pinned to one immutable Lambda version."
+      }
+      $aliasedLambda = Invoke-AwsJson @(
+        "lambda",
+        "get-function",
+        "--function-name",
+        "ai-job-apply-development-gateway",
+        "--qualifier",
+        "development",
+        "--output",
+        "json"
+      )
+      if (
+        [string]$aliasedLambda.Configuration.Version -ne
+          [string]$liveAlias.FunctionVersion -or
+        [string]$aliasedLambda.Configuration.CodeSha256 -ne
+          [string]$liveLambda.Configuration.CodeSha256
+      ) {
+        throw "The dark alias does not resolve to the current healthy Lambda artifact."
+      }
     }
   }
 
@@ -644,6 +716,116 @@ try {
     }
     $normalizedAction = $actions -join ","
     if (
+      $AllowArtifactReleaseUpdate -and
+      $normalizedAction -eq "update" -and
+      [string]$resourceChange.address -eq
+        "module.platform.aws_lambda_function.gateway[0]"
+    ) {
+      $beforeFunction = $resourceChange.change.before | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+      $afterFunction = $resourceChange.change.after | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+      $afterVariables = $afterFunction.environment[0].variables
+      if (
+        [string]$afterFunction.s3_key -ne $ArtifactS3Key -or
+        [string]$afterFunction.s3_object_version -ne $ArtifactS3ObjectVersion -or
+        [string]$afterFunction.source_code_hash -ne $ArtifactBase64Sha256 -or
+        [string]$afterVariables.RELEASE_SHA -ne $ArtifactSha256
+      ) {
+        throw "The Lambda release update does not select the reviewed immutable artifact."
+      }
+      $beforeFunctionProperties = @($beforeFunction.PSObject.Properties.Name)
+      $afterFunctionProperties = @($afterFunction.PSObject.Properties.Name)
+      $functionProperties = @(
+        $beforeFunctionProperties + $afterFunctionProperties | Sort-Object -Unique
+      )
+      $allowedFunctionChanges = @(
+        "environment",
+          "last_modified",
+          "qualified_arn",
+          "qualified_invoke_arn",
+          "s3_key",
+          "s3_object_version",
+          "source_code_hash",
+          "version"
+      )
+      $unexpectedFunctionChanges = @(
+        foreach ($property in $functionProperties) {
+          if ($allowedFunctionChanges -contains $property) {
+            continue
+          }
+          $beforeValue = if ($beforeFunctionProperties -contains $property) {
+            $beforeFunction.$property | ConvertTo-Json -Depth 30 -Compress
+          } else {
+            "<absent>"
+          }
+          $afterValue = if ($afterFunctionProperties -contains $property) {
+            $afterFunction.$property | ConvertTo-Json -Depth 30 -Compress
+          } else {
+            "<absent>"
+          }
+          if ($beforeValue -ne $afterValue) {
+            $property
+          }
+        }
+      )
+      $afterFunction.environment[0].variables.RELEASE_SHA =
+        $beforeFunction.environment[0].variables.RELEASE_SHA
+      $normalizedBeforeEnvironment =
+        $beforeFunction.environment | ConvertTo-Json -Depth 30 -Compress
+      $normalizedAfterEnvironment =
+        $afterFunction.environment | ConvertTo-Json -Depth 30 -Compress
+      if (
+        $unexpectedFunctionChanges.Count -ne 0 -or
+        $normalizedBeforeEnvironment -ne $normalizedAfterEnvironment
+      ) {
+        throw "The Lambda release update changes more than artifact identity and computed version fields."
+      }
+      $updates += [string]$resourceChange.address
+      continue
+    }
+    if (
+      $AllowArtifactReleaseUpdate -and
+      $normalizedAction -eq "update" -and
+      [string]$resourceChange.address -eq
+        "module.platform.aws_lambda_alias.gateway[0]"
+    ) {
+      $beforeAlias = $resourceChange.change.before | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+      $afterAlias = $resourceChange.change.after | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+      $beforeAliasProperties = @($beforeAlias.PSObject.Properties.Name)
+      $afterAliasProperties = @($afterAlias.PSObject.Properties.Name)
+      $aliasProperties = @(
+        $beforeAliasProperties + $afterAliasProperties | Sort-Object -Unique
+      )
+      $unexpectedAliasChanges = @(
+        foreach ($property in $aliasProperties) {
+          if ($property -eq "function_version") {
+            continue
+          }
+          $beforeValue = if ($beforeAliasProperties -contains $property) {
+            $beforeAlias.$property | ConvertTo-Json -Depth 20 -Compress
+          } else {
+            "<absent>"
+          }
+          $afterValue = if ($afterAliasProperties -contains $property) {
+            $afterAlias.$property | ConvertTo-Json -Depth 20 -Compress
+          } else {
+            "<absent>"
+          }
+          if ($beforeValue -ne $afterValue) {
+            $property
+          }
+        }
+      )
+      if (
+        $unexpectedAliasChanges.Count -ne 0 -or
+        $beforeAliasProperties -notcontains "function_version" -or
+        $afterAliasProperties -contains "function_version"
+      ) {
+        throw "The Lambda release alias update changes more than its immutable function version."
+      }
+      $updates += [string]$resourceChange.address
+      continue
+    }
+    if (
       $AllowLambdaVpcPolicyRecovery -and
       $normalizedAction -eq "update" -and
       [string]$resourceChange.address -eq
@@ -717,6 +899,27 @@ try {
         throw "The completed dark deployment does not account for every reviewed resource."
       }
     }
+  } elseif ($AllowArtifactReleaseUpdate) {
+    $expectedReleaseUpdates = @(
+      "module.platform.aws_lambda_alias.gateway[0]",
+      "module.platform.aws_lambda_function.gateway[0]"
+    )
+    if ($changes.Count -ne 0 -or $updates.Count -ne $expectedReleaseUpdates.Count) {
+      throw "The artifact release plan must contain only the function and alias updates."
+    }
+    foreach ($expectedUpdate in $expectedReleaseUpdates) {
+      if ($updates -notcontains $expectedUpdate) {
+        throw "The artifact release plan is missing a required reviewed update."
+      }
+    }
+    foreach ($expectedCreate in $expectedCreates) {
+      if (
+        $existing -notcontains $expectedCreate -and
+        $updates -notcontains $expectedCreate
+      ) {
+        throw "The artifact release plan does not account for every dark gateway resource."
+      }
+    }
   } elseif ($ResumePartialApply) {
     if ($changes.Count -lt 1 -or $changes.Count -ge $expectedCreates.Count) {
       throw "The partial-apply recovery plan must contain between 1 and 10 remaining creates."
@@ -773,6 +976,7 @@ try {
     ResumePartialApply        = [bool]$ResumePartialApply
     LambdaVpcPolicyRecovery   = [bool]$AllowLambdaVpcPolicyRecovery
     LambdaConcurrencyRecovery = [bool]$AllowLambdaConcurrencyRecovery
+    ArtifactReleaseUpdate     = [bool]$AllowArtifactReleaseUpdate
     CompletedDarkVerification = [bool]$VerifyCompletedDarkDeployment
     NoDrift                   = [bool]$VerifyCompletedDarkDeployment
     LatestExtensionLayerArn   = $latestExtensionLayerArn

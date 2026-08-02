@@ -59,6 +59,9 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   account for a partial apply, the exact `DescribeSubnets` role-policy correction, or an exact
   unlimited-to-bounded concurrency correction. Concurrency recovery requires the already deployed
   official extension layer to be pinned so a moving AWS `latest` parameter cannot enter the plan.
+  `-AllowArtifactReleaseUpdate` verifies the healthy current function, immutable alias, pinned
+  layer, bounded concurrency, and new publisher-owned artifact, then permits only the Lambda
+  function artifact/version update and alias transition to that new immutable version.
   The same pin supports completed-dark verification, which accepts only a refresh-backed
   zero-change plan. It never applies infrastructure or changes API traffic.
 - `operate-platform-alerts.ps1` — Reports sanitized development or staging alert state, privately
