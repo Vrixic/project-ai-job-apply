@@ -14,6 +14,11 @@ import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createGatewayApplication } from "./application.js";
+import {
+  type AuthorizedHttpApiEvent,
+  createApiGatewayHandler,
+  createInvocationPrincipalBridge,
+} from "./lambda.js";
 
 class MemoryProfileStore implements ProfileStore {
   private user: CurrentUser | undefined;
@@ -116,6 +121,67 @@ describe("candidate API", () => {
     const response = await app.inject({ method: "GET", url: "/v1/me" });
     expect(response.statusCode).toBe(401);
     expect(response.json().code).toBe("authentication_required");
+  });
+
+  it("preserves an API Gateway principal through the real Fastify injection lifecycle", async () => {
+    const issuerUrl = "https://identity.example.test/";
+    const audience = "ai-job-apply-api";
+    const principalBridge = createInvocationPrincipalBridge();
+    const lambdaApp = await createGatewayApplication({
+      store: new MemoryProfileStore(),
+      verifier: principalBridge.verifier,
+      releaseSha: "lambda-principal-bridge-test",
+    });
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve(lambdaApp),
+      issuer: issuerUrl,
+      audience,
+      principalBridge,
+    });
+    const input = {
+      version: "2.0",
+      routeKey: "GET /v1/me",
+      rawPath: "/v1/me",
+      rawQueryString: "",
+      headers: { authorization: "Bearer caller-token-must-not-reach-fastify" },
+      requestContext: {
+        accountId: "123456789012",
+        apiId: "api-id",
+        domainName: "api.example.test",
+        domainPrefix: "api",
+        http: {
+          method: "GET",
+          path: "/v1/me",
+          protocol: "HTTP/1.1",
+          sourceIp: "203.0.113.1",
+          userAgent: "test",
+        },
+        requestId: "request-id-fastify-bridge",
+        routeKey: "GET /v1/me",
+        stage: "$default",
+        time: "02/Aug/2026:00:00:00 +0000",
+        timeEpoch: 1_775_000_000_000,
+        authorizer: {
+          jwt: {
+            claims: {
+              iss: issuerUrl,
+              sub: "auth0|candidate-fastify",
+              aud: [audience],
+              scope: "profile:read profile:write",
+            },
+          },
+        },
+      },
+      isBase64Encoded: false,
+    } as AuthorizedHttpApiEvent;
+
+    try {
+      const response = await handler(input);
+      expect(response.statusCode).toBe(200);
+      expect(JSON.parse(response.body ?? "{}").id).toBeTypeOf("string");
+    } finally {
+      await lambdaApp.close();
+    }
   });
 
   it("persists preferences idempotently and exposes an owned operation", async () => {
