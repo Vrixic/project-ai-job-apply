@@ -54,7 +54,8 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   account for a partial apply, the exact `DescribeSubnets` role-policy correction, or an exact
   unlimited-to-bounded concurrency correction. Concurrency recovery requires the already deployed
   official extension layer to be pinned so a moving AWS `latest` parameter cannot enter the plan.
-  It never applies infrastructure or changes API traffic.
+  The same pin supports completed-dark verification, which accepts only a refresh-backed
+  zero-change plan. It never applies infrastructure or changes API traffic.
 - `operate-platform-alerts.ps1` — Reports sanitized development or staging alert state, privately
   requests an SNS email subscription, and exercises ALARM → OK delivery using only the selected
   environment's dedicated synthetic metric. Select staging with `-Environment staging`.

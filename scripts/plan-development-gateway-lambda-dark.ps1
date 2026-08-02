@@ -38,6 +38,8 @@ param(
 
   [switch]$AllowLambdaConcurrencyRecovery,
 
+  [switch]$VerifyCompletedDarkDeployment,
+
   [switch]$Help
 )
 
@@ -57,7 +59,8 @@ Usage:
     [-ResumePartialApply] `
     [-AllowLambdaVpcPolicyRecovery] `
     [-PinnedExtensionLayerArn REVIEWED_LAYER_ARN] `
-    [-AllowLambdaConcurrencyRecovery]
+    [-AllowLambdaConcurrencyRecovery] `
+    [-VerifyCompletedDarkDeployment]
 
 Creates a refresh-backed development plan for the dark gateway Lambda only. It reconstructs the
 exact live ECS/RDS inputs, verifies the immutable KMS-encrypted artifact, resolves and pins the
@@ -76,6 +79,10 @@ Use -PinnedExtensionLayerArn with -AllowLambdaConcurrencyRecovery and -ResumePar
 after a failed Lambda creation. The pinned official layer must already be attached to the healthy
 dark function, and the plan may change only reserved concurrency from unlimited to the reviewed
 ceiling. This prevents a moving "latest" extension from entering a recovery plan.
+
+Use -PinnedExtensionLayerArn with -VerifyCompletedDarkDeployment after the dark deployment is
+complete. That mode verifies the healthy live function and reviewed concurrency, requires a
+refresh-backed zero-change plan, and still proves ECS stability and no API traffic change.
 
 The sensitive saved plan remains under the ignored Terraform .terraform directory for separate
 review and exact-plan apply. This script never applies infrastructure or changes API traffic.
@@ -107,12 +114,26 @@ if ($AllowLambdaConcurrencyRecovery -and -not $ResumePartialApply) {
   throw "Lambda concurrency recovery requires -ResumePartialApply."
 }
 
-if ($PinnedExtensionLayerArn -and -not $AllowLambdaConcurrencyRecovery) {
-  throw "A pinned extension layer is allowed only for Lambda concurrency recovery."
+if (
+  $PinnedExtensionLayerArn -and
+  -not $AllowLambdaConcurrencyRecovery -and
+  -not $VerifyCompletedDarkDeployment
+) {
+  throw "A pinned extension layer is allowed only for concurrency recovery or completed verification."
 }
 
-if ($AllowLambdaConcurrencyRecovery -and -not $PinnedExtensionLayerArn) {
-  throw "Lambda concurrency recovery requires the already deployed reviewed extension layer ARN."
+if (
+  ($AllowLambdaConcurrencyRecovery -or $VerifyCompletedDarkDeployment) -and
+  -not $PinnedExtensionLayerArn
+) {
+  throw "Lambda recovery and completed verification require the deployed reviewed extension layer ARN."
+}
+
+if (
+  $VerifyCompletedDarkDeployment -and
+  ($ResumePartialApply -or $AllowLambdaVpcPolicyRecovery -or $AllowLambdaConcurrencyRecovery)
+) {
+  throw "Completed dark-deployment verification cannot be combined with recovery switches."
 }
 
 $keyMatch = [regex]::Match(
@@ -367,7 +388,7 @@ try {
     throw "The official extension parameter did not resolve to the reviewed regional x86_64 layer."
   }
 
-  if ($AllowLambdaConcurrencyRecovery) {
+  if ($AllowLambdaConcurrencyRecovery -or $VerifyCompletedDarkDeployment) {
     $lambdaAccount = Invoke-AwsJson @(
       "lambda",
       "get-account-settings",
@@ -406,8 +427,17 @@ try {
       "--output",
       "json"
     )
-    if ($null -ne $liveConcurrency.ReservedConcurrentExecutions) {
+    if (
+      $AllowLambdaConcurrencyRecovery -and
+      $null -ne $liveConcurrency.ReservedConcurrentExecutions
+    ) {
       throw "The dark Lambda already has a reserved-concurrency configuration."
+    }
+    if (
+      $VerifyCompletedDarkDeployment -and
+      [int]$liveConcurrency.ReservedConcurrentExecutions -ne $ReservedConcurrency
+    ) {
+      throw "The completed dark Lambda does not have the reviewed concurrency ceiling."
     }
   }
 
@@ -574,7 +604,11 @@ try {
     -lock-timeout=5m `
     "-out=$planPath" `
     -detailed-exitcode 2>$null
-  if ($LASTEXITCODE -ne 2) {
+  $planExitCode = $LASTEXITCODE
+  if ($VerifyCompletedDarkDeployment -and $planExitCode -ne 0) {
+    throw "The completed dark-deployment plan is not zero-change."
+  }
+  if (-not $VerifyCompletedDarkDeployment -and $planExitCode -ne 2) {
     throw "The refresh-backed dark plan did not produce the expected change-only result."
   }
 
@@ -674,7 +708,16 @@ try {
     $changes += [string]$resourceChange.address
   }
 
-  if ($ResumePartialApply) {
+  if ($VerifyCompletedDarkDeployment) {
+    if ($changes.Count -ne 0 -or $updates.Count -ne 0) {
+      throw "The completed dark-deployment verification contains a resource change."
+    }
+    foreach ($expectedCreate in $expectedCreates) {
+      if ($existing -notcontains $expectedCreate) {
+        throw "The completed dark deployment does not account for every reviewed resource."
+      }
+    }
+  } elseif ($ResumePartialApply) {
     if ($changes.Count -lt 1 -or $changes.Count -ge $expectedCreates.Count) {
       throw "The partial-apply recovery plan must contain between 1 and 10 remaining creates."
     }
@@ -730,6 +773,8 @@ try {
     ResumePartialApply        = [bool]$ResumePartialApply
     LambdaVpcPolicyRecovery   = [bool]$AllowLambdaVpcPolicyRecovery
     LambdaConcurrencyRecovery = [bool]$AllowLambdaConcurrencyRecovery
+    CompletedDarkVerification = [bool]$VerifyCompletedDarkDeployment
+    NoDrift                   = [bool]$VerifyCompletedDarkDeployment
     LatestExtensionLayerArn   = $latestExtensionLayerArn
     ExistingReviewedResources = $existing.Count
     Creates                   = $changes.Count
