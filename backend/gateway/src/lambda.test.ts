@@ -43,12 +43,31 @@ function event(overrides: Partial<AuthorizedHttpApiEvent> = {}): AuthorizedHttpA
             scope: "profile:read profile:write",
             email: "candidate@example.test",
           },
+          scopes: ["profile:read", "profile:write"],
         },
       },
     },
     isBase64Encoded: false,
     ...overrides,
   } as AuthorizedHttpApiEvent;
+}
+
+function routedEvent(
+  method: string,
+  path: string,
+  overrides: Partial<AuthorizedHttpApiEvent> = {},
+): AuthorizedHttpApiEvent {
+  const base = event();
+  return event({
+    routeKey: `${method} ${path}`,
+    rawPath: path,
+    requestContext: {
+      ...base.requestContext,
+      http: { ...base.requestContext.http, method, path },
+      routeKey: `${method} ${path}`,
+    },
+    ...overrides,
+  });
 }
 
 function invoke(
@@ -104,7 +123,14 @@ describe("API Gateway Lambda boundary", () => {
     const response = await invoke(handler, input);
 
     expect(response.statusCode).toBe(401);
-    expect(JSON.parse(response.body ?? "{}").code).toBe("authentication_required");
+    expect(JSON.parse(response.body ?? "{}")).toEqual({
+      type: "urn:ai-job-apply:problem:authentication_required",
+      title: "Authentication required",
+      status: 401,
+      code: "authentication_required",
+      traceId: "request-id-0001",
+    });
+    expect(response.headers).toMatchObject({ "cache-control": "no-store" });
     expect(inject).not.toHaveBeenCalled();
   });
 
@@ -127,6 +153,123 @@ describe("API Gateway Lambda boundary", () => {
     const response = await invoke(handler, input);
 
     expect(response.statusCode).toBe(401);
+    expect(inject).not.toHaveBeenCalled();
+  });
+
+  it("does not treat an unvalidated scope claim as an API Gateway-validated scope", async () => {
+    const principalBridge = createInvocationPrincipalBridge();
+    let observedPrincipal: AuthPrincipal | undefined;
+    const inject = vi.fn(async (request: { headers: Record<string, string> }) => {
+      const accessToken = request.headers.authorization?.replace(/^Bearer /, "") ?? "";
+      observedPrincipal = await principalBridge.verifier.verify(accessToken);
+      return { statusCode: 200, body: "{}", headers: {} };
+    });
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge,
+    });
+    const input = event();
+    const jwt = input.requestContext.authorizer?.jwt;
+    if (!jwt) {
+      throw new Error("Test authorizer context is missing");
+    }
+    jwt.claims = { ...jwt.claims, scope: "profile:read profile:write" };
+    jwt.scopes = [];
+
+    const response = await invoke(handler, input);
+
+    expect(response.statusCode).toBe(200);
+    expect(observedPrincipal?.scopes).toEqual([]);
+  });
+
+  it.each([
+    ["unknown route", "GET", "/v1/admin"],
+    ["unknown method", "POST", "/v1/me"],
+    ["method on a public path", "PUT", "/health/live"],
+    ["malformed operation identifier", "GET", "/v1/operations/not-a-uuid"],
+  ])("rejects %s before authentication or application dispatch", async (_label, method, path) => {
+    const principalBridge = createInvocationPrincipalBridge();
+    const inject = vi.fn();
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge,
+    });
+
+    const response = await invoke(handler, routedEvent(method, path));
+
+    expect(response.statusCode).toBe(404);
+    expect(JSON.parse(response.body ?? "{}").code).toBe("not_found");
+    expect(inject).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["query parameters", routedEvent("GET", "/v1/me", { rawQueryString: "source=web" }), 400],
+    ["a GET body", routedEvent("GET", "/v1/me", { body: "{}" }), 400],
+    ["a missing PUT body", routedEvent("PUT", "/v1/me/job-preferences"), 400],
+    [
+      "a non-JSON PUT body",
+      routedEvent("PUT", "/v1/me/job-preferences", {
+        body: "targetRoles=Engineer",
+        headers: {
+          authorization: "Bearer opaque-api-gateway-token",
+          "content-type": "application/x-www-form-urlencoded",
+        },
+      }),
+      415,
+    ],
+    [
+      "malformed base64",
+      routedEvent("PUT", "/v1/me/job-preferences", {
+        body: "not-valid-base64***",
+        isBase64Encoded: true,
+        headers: {
+          authorization: "Bearer opaque-api-gateway-token",
+          "content-type": "application/json",
+        },
+      }),
+      400,
+    ],
+    [
+      "an oversized plain body",
+      routedEvent("PUT", "/v1/me/job-preferences", {
+        body: "x".repeat(64 * 1024 + 1),
+        headers: {
+          authorization: "Bearer opaque-api-gateway-token",
+          "content-type": "application/json; charset=utf-8",
+        },
+      }),
+      413,
+    ],
+    [
+      "an oversized encoded body",
+      routedEvent("PUT", "/v1/me/job-preferences", {
+        body: Buffer.alloc(64 * 1024 + 1).toString("base64"),
+        isBase64Encoded: true,
+        headers: {
+          authorization: "Bearer opaque-api-gateway-token",
+          "content-type": "application/json",
+        },
+      }),
+      413,
+    ],
+  ])("rejects %s at the transport boundary", async (_label, input, status) => {
+    const principalBridge = createInvocationPrincipalBridge();
+    const inject = vi.fn();
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge,
+    });
+
+    const response = await invoke(handler, input);
+
+    expect(response.statusCode).toBe(status);
+    expect(response.headers).toMatchObject({ "cache-control": "no-store" });
     expect(inject).not.toHaveBeenCalled();
   });
 
@@ -158,9 +301,12 @@ describe("API Gateway Lambda boundary", () => {
       handler,
       event({
         rawPath: "/v1/me/job-preferences",
-        rawQueryString: "source=web",
         body: Buffer.from(payload).toString("base64"),
         isBase64Encoded: true,
+        headers: {
+          authorization: "Bearer opaque-api-gateway-token",
+          "content-type": "application/json",
+        },
         cookies: ["csrf=one", "device=two"],
         requestContext: {
           ...event().requestContext,
@@ -176,7 +322,7 @@ describe("API Gateway Lambda boundary", () => {
     expect(inject).toHaveBeenCalledWith(
       expect.objectContaining({
         method: "PUT",
-        url: "/v1/me/job-preferences?source=web",
+        url: "/v1/me/job-preferences",
         payload,
         headers: expect.objectContaining({
           authorization: expect.stringMatching(/^Bearer (?!opaque-api-gateway-token$).+/),

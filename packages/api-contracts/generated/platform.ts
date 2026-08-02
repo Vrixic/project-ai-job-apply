@@ -170,6 +170,15 @@ export interface components {
                 "application/problem+json": components["schemas"]["ProblemDetails"];
             };
         };
+        /** @description The authenticated caller lacks the required scope */
+        Forbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["ProblemDetails"];
+            };
+        };
         /** @description Resource was not found */
         NotFound: {
             headers: {
@@ -181,6 +190,24 @@ export interface components {
         };
         /** @description Idempotency key was reused with different content */
         Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["ProblemDetails"];
+            };
+        };
+        /** @description The request body exceeds the endpoint limit */
+        PayloadTooLarge: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["ProblemDetails"];
+            };
+        };
+        /** @description The request body is not JSON */
+        UnsupportedMediaType: {
             headers: {
                 [name: string]: unknown;
             };
@@ -263,7 +290,9 @@ export interface operations {
                     "application/json": components["schemas"]["CurrentUser"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     getJobPreferences: {
@@ -284,7 +313,9 @@ export interface operations {
                     "application/json": components["schemas"]["JobPreferenceSet"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -314,7 +345,10 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
         };
     };
     getOperation: {
@@ -337,7 +371,9 @@ export interface operations {
                     "application/json": components["schemas"]["Operation"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };

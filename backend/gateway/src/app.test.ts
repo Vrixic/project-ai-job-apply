@@ -169,6 +169,7 @@ describe("candidate API", () => {
               aud: [audience],
               scope: "profile:read profile:write",
             },
+            scopes: ["profile:read", "profile:write"],
           },
         },
       },
@@ -226,6 +227,77 @@ describe("candidate API", () => {
     });
     expect(operation.statusCode).toBe(200);
     expect(operation.json().state).toBe("queued");
+  });
+
+  it("enforces read and write scopes at the application boundary", async () => {
+    const readOnlyToken = await issuer.issue("candidate-read-only", { scope: "profile:read" });
+    const writeOnlyToken = await issuer.issue("candidate-write-only", { scope: "profile:write" });
+    const payload = {
+      targetRoles: ["Software Engineer"],
+      locations: [],
+      workModes: ["remote"],
+      employmentTypes: ["full_time"],
+    };
+
+    const write = await app.inject({
+      method: "PUT",
+      url: "/v1/me/job-preferences",
+      headers: {
+        authorization: `Bearer ${readOnlyToken}`,
+        "idempotency-key": "scope-denial-test-0001",
+      },
+      payload,
+    });
+    const read = await app.inject({
+      method: "GET",
+      url: "/v1/me",
+      headers: { authorization: `Bearer ${writeOnlyToken}` },
+    });
+
+    expect(write.statusCode).toBe(403);
+    expect(write.json().code).toBe("forbidden");
+    expect(write.headers["cache-control"]).toBe("no-store");
+    expect(read.statusCode).toBe(403);
+    expect(read.json().code).toBe("forbidden");
+    expect(read.headers["cache-control"]).toBe("no-store");
+  });
+
+  it("rejects conflicting idempotency replays and incomplete command metadata", async () => {
+    const token = await issuer.issue("candidate-idempotency");
+    const headers = {
+      authorization: `Bearer ${token}`,
+      "idempotency-key": "conflict-test-key-0001",
+    };
+    const payload = {
+      targetRoles: ["Software Engineer"],
+      locations: [],
+      workModes: ["remote"],
+      employmentTypes: ["full_time"],
+    };
+    const accepted = await app.inject({
+      method: "PUT",
+      url: "/v1/me/job-preferences",
+      headers,
+      payload,
+    });
+    const conflict = await app.inject({
+      method: "PUT",
+      url: "/v1/me/job-preferences",
+      headers,
+      payload: { ...payload, targetRoles: ["Platform Engineer"] },
+    });
+    const missingKey = await app.inject({
+      method: "PUT",
+      url: "/v1/me/job-preferences",
+      headers: { authorization: `Bearer ${token}` },
+      payload,
+    });
+
+    expect(accepted.statusCode).toBe(200);
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json().code).toBe("idempotency_conflict");
+    expect(missingKey.statusCode).toBe(400);
+    expect(missingKey.json().code).toBe("invalid_request");
   });
 
   it("rejects removed post-submission fields", async () => {

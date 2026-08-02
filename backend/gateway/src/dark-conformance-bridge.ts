@@ -11,11 +11,11 @@ import {
 } from "@ai-job-apply/auth";
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import type { APIGatewayProxyStructuredResultV2 } from "aws-lambda";
+import { MAXIMUM_GATEWAY_BODY_BYTES } from "./gateway-boundary.js";
 import type { AuthorizedHttpApiEvent } from "./lambda.js";
 
 const operationPathPattern =
   /^\/v1\/operations\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const maximumBodyBytes = 64 * 1024;
 const responseHeaderAllowlist = new Set(["content-type", "x-correlation-id"]);
 
 interface BridgeRequest {
@@ -180,6 +180,7 @@ export async function handleDarkConformanceRequest(
             authorizer: {
               jwt: {
                 claims: authorizerClaims(principal),
+                scopes: principal.scopes,
               },
             },
           }
@@ -213,7 +214,7 @@ async function readBody(request: IncomingMessage): Promise<string | undefined> {
   for await (const chunk of request) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     bytes += buffer.length;
-    if (bytes > maximumBodyBytes) {
+    if (bytes > MAXIMUM_GATEWAY_BODY_BYTES) {
       throw new Error("request_too_large");
     }
     chunks.push(buffer);

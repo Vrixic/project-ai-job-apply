@@ -68,6 +68,7 @@ describe("development dark Lambda conformance bridge", () => {
       aud: [audience],
       scope: "profile:read profile:write",
     });
+    expect(event.requestContext.authorizer?.jwt?.scopes).toEqual(["profile:read", "profile:write"]);
     expect(result.statusCode).toBe(200);
   });
 

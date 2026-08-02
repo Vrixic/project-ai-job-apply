@@ -102,7 +102,11 @@ class ProblemDetailsFilter implements ExceptionFilter {
       traceId,
       ...(detail ? { detail } : {}),
     };
-    void response.status(status).type("application/problem+json").send(problem);
+    void response
+      .header("cache-control", "no-store")
+      .status(status)
+      .type("application/problem+json")
+      .send(problem);
   }
 }
 
