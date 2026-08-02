@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import { AsyncLocalStorage } from "node:async_hooks";
+import { randomBytes } from "node:crypto";
 import {
   type AccessTokenVerifier,
   AuthenticationError,
@@ -49,7 +49,15 @@ export interface ApiGatewayHandlerOptions {
   app: Promise<InjectableApplication>;
   issuer: string;
   audience: string;
-  principalContext: AsyncLocalStorage<AuthPrincipal>;
+  principalBridge: InvocationPrincipalBridge;
+}
+
+export interface InvocationPrincipalBridge {
+  verifier: AccessTokenVerifier;
+  run<T>(
+    principal: AuthPrincipal,
+    dispatch: (internalAccessToken: string) => Promise<T>,
+  ): Promise<T>;
 }
 
 export type ApiGatewayHandler = (
@@ -106,16 +114,40 @@ function authorizerPrincipal(
   };
 }
 
-export function createAuthorizerContextVerifier(
-  context: AsyncLocalStorage<AuthPrincipal>,
-): AccessTokenVerifier {
-  return {
-    async verify(): Promise<AuthPrincipal> {
-      const principal = context.getStore();
+/**
+ * Bridges the principal already validated by API Gateway into the normal HTTP authentication
+ * boundary without forwarding the caller's bearer token into the application. Tokens are random,
+ * invocation-scoped capabilities held only in Lambda memory and removed after dispatch.
+ */
+export function createInvocationPrincipalBridge(): InvocationPrincipalBridge {
+  const principals = new Map<string, AuthPrincipal>();
+  const verifier: AccessTokenVerifier = {
+    async verify(accessToken): Promise<AuthPrincipal> {
+      const principal = principals.get(accessToken);
       if (!principal) {
         throw new AuthenticationError("Validated API Gateway identity context is required");
       }
       return principal;
+    },
+  };
+
+  return {
+    verifier,
+    async run<T>(
+      principal: AuthPrincipal,
+      dispatch: (internalAccessToken: string) => Promise<T>,
+    ): Promise<T> {
+      let internalAccessToken: string;
+      do {
+        internalAccessToken = randomBytes(32).toString("base64url");
+      } while (principals.has(internalAccessToken));
+
+      principals.set(internalAccessToken, principal);
+      try {
+        return await dispatch(internalAccessToken);
+      } finally {
+        principals.delete(internalAccessToken);
+      }
     },
   };
 }
@@ -188,22 +220,26 @@ export function createApiGatewayHandler(options: ApiGatewayHandlerOptions): ApiG
     }
 
     const app = await options.app;
-    const headers = requestHeaders(event);
-    headers["x-correlation-id"] ??= event.requestContext.requestId;
     const payload = event.body
       ? event.isBase64Encoded
         ? Buffer.from(event.body, "base64").toString("utf8")
         : event.body
       : undefined;
-    const inject = () =>
-      app.inject({
+    const inject = (internalAccessToken?: string) => {
+      const headers = requestHeaders(event);
+      headers["x-correlation-id"] ??= event.requestContext.requestId;
+      if (internalAccessToken) {
+        headers.authorization = `Bearer ${internalAccessToken}`;
+      }
+      return app.inject({
         method: event.requestContext.http.method,
         url: event.rawQueryString ? `${path}?${event.rawQueryString}` : path,
         headers,
         ...(payload !== undefined ? { payload } : {}),
       });
+    };
     const response = principal
-      ? await options.principalContext.run(principal, inject)
+      ? await options.principalBridge.run(principal, inject)
       : await inject();
     const mappedHeaders = responseHeaders(response.headers);
     return {
@@ -217,7 +253,7 @@ export function createApiGatewayHandler(options: ApiGatewayHandlerOptions): ApiG
 }
 
 async function createConfiguredApplication(
-  principalContext: AsyncLocalStorage<AuthPrincipal>,
+  principalBridge: InvocationPrincipalBridge,
 ): Promise<NestFastifyApplication> {
   const config = loadLambdaGatewayConfig();
   initializeTelemetry({
@@ -238,7 +274,7 @@ async function createConfiguredApplication(
   const store = new PostgresProfileStore(createDatabase(databaseUrl, { maxConnections: 2 }));
   return createGatewayApplication({
     store,
-    verifier: createAuthorizerContextVerifier(principalContext),
+    verifier: principalBridge.verifier,
     releaseSha: config.RELEASE_SHA,
     adapter: new FastifyAdapter({ loggerInstance: logger }),
   });
@@ -251,12 +287,12 @@ export const handler: Handler<AuthorizedHttpApiEvent, APIGatewayProxyStructuredR
 ) => {
   if (!configuredHandler) {
     const config = loadLambdaGatewayConfig();
-    const principalContext = new AsyncLocalStorage<AuthPrincipal>();
+    const principalBridge = createInvocationPrincipalBridge();
     configuredHandler = createApiGatewayHandler({
-      app: createConfiguredApplication(principalContext),
+      app: createConfiguredApplication(principalBridge),
       issuer: config.OIDC_ISSUER,
       audience: config.OIDC_AUDIENCE,
-      principalContext,
+      principalBridge,
     });
   }
   return configuredHandler(event);

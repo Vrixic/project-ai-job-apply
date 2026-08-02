@@ -1,11 +1,10 @@
-import { AsyncLocalStorage } from "node:async_hooks";
 import type { AuthPrincipal } from "@ai-job-apply/auth";
 import type { APIGatewayProxyStructuredResultV2 } from "aws-lambda";
 import { describe, expect, it, vi } from "vitest";
 import {
   type AuthorizedHttpApiEvent,
   createApiGatewayHandler,
-  createAuthorizerContextVerifier,
+  createInvocationPrincipalBridge,
 } from "./lambda.js";
 
 const ISSUER = "https://identity.example.test/";
@@ -61,7 +60,7 @@ function invoke(
 
 describe("API Gateway Lambda boundary", () => {
   it("allows the exact public health route without authorizer context", async () => {
-    const principalContext = new AsyncLocalStorage<AuthPrincipal>();
+    const principalBridge = createInvocationPrincipalBridge();
     const inject = vi.fn().mockResolvedValue({
       statusCode: 200,
       body: '{"status":"ok"}',
@@ -71,7 +70,7 @@ describe("API Gateway Lambda boundary", () => {
       app: Promise.resolve({ inject }),
       issuer: ISSUER,
       audience: AUDIENCE,
-      principalContext,
+      principalBridge,
     });
 
     const input = event({
@@ -91,13 +90,13 @@ describe("API Gateway Lambda boundary", () => {
   });
 
   it("fails closed before application dispatch when authorizer context is absent", async () => {
-    const principalContext = new AsyncLocalStorage<AuthPrincipal>();
+    const principalBridge = createInvocationPrincipalBridge();
     const inject = vi.fn();
     const handler = createApiGatewayHandler({
       app: Promise.resolve({ inject }),
       issuer: ISSUER,
       audience: AUDIENCE,
-      principalContext,
+      principalBridge,
     });
     const input = event();
     delete input.requestContext.authorizer;
@@ -114,13 +113,13 @@ describe("API Gateway Lambda boundary", () => {
     ["wrong audience", { aud: ["different-api"] }],
     ["missing subject", { sub: undefined }],
   ])("rejects %s authorizer claims", async (_label, replacement) => {
-    const principalContext = new AsyncLocalStorage<AuthPrincipal>();
+    const principalBridge = createInvocationPrincipalBridge();
     const inject = vi.fn();
     const handler = createApiGatewayHandler({
       app: Promise.resolve({ inject }),
       issuer: ISSUER,
       audience: AUDIENCE,
-      principalContext,
+      principalBridge,
     });
     const input = event();
     Object.assign(input.requestContext.authorizer?.jwt?.claims ?? {}, replacement);
@@ -132,11 +131,12 @@ describe("API Gateway Lambda boundary", () => {
   });
 
   it("maps the v2 request and exposes only the validated principal during dispatch", async () => {
-    const principalContext = new AsyncLocalStorage<AuthPrincipal>();
-    const verifier = createAuthorizerContextVerifier(principalContext);
+    const principalBridge = createInvocationPrincipalBridge();
+    const verifier = principalBridge.verifier;
     let observedPrincipal: AuthPrincipal | undefined;
-    const inject = vi.fn(async () => {
-      observedPrincipal = await verifier.verify("not-reverified-by-lambda");
+    const inject = vi.fn(async (request: { headers: Record<string, string> }) => {
+      const accessToken = request.headers.authorization?.replace(/^Bearer /, "") ?? "";
+      observedPrincipal = await verifier.verify(accessToken);
       return {
         statusCode: 200,
         body: '{"ok":true}',
@@ -151,7 +151,7 @@ describe("API Gateway Lambda boundary", () => {
       app: Promise.resolve({ inject }),
       issuer: ISSUER,
       audience: AUDIENCE,
-      principalContext,
+      principalBridge,
     });
     const payload = JSON.stringify({ targetRoles: ["Engineer"] });
     const response = await invoke(
@@ -179,6 +179,7 @@ describe("API Gateway Lambda boundary", () => {
         url: "/v1/me/job-preferences?source=web",
         payload,
         headers: expect.objectContaining({
+          authorization: expect.stringMatching(/^Bearer (?!opaque-api-gateway-token$).+/),
           cookie: "csrf=one; device=two",
           "x-correlation-id": "request-id-0001",
         }),
@@ -194,6 +195,47 @@ describe("API Gateway Lambda boundary", () => {
     expect(response.headers).not.toHaveProperty("connection");
     await expect(verifier.verify("outside-dispatch")).rejects.toThrow(
       "Validated API Gateway identity context is required",
+    );
+  });
+
+  it("isolates concurrent principals and removes invocation capabilities after dispatch", async () => {
+    const bridge = createInvocationPrincipalBridge();
+    const observed = new Map<string, AuthPrincipal>();
+    const tokens: string[] = [];
+    const principals: AuthPrincipal[] = [
+      {
+        issuer: ISSUER,
+        subject: "auth0|candidate-1",
+        audience: [AUDIENCE],
+        scopes: ["profile:read"],
+      },
+      {
+        issuer: ISSUER,
+        subject: "auth0|candidate-2",
+        audience: [AUDIENCE],
+        scopes: ["profile:write"],
+      },
+    ];
+
+    await Promise.all(
+      principals.map((principal) =>
+        bridge.run(principal, async (token) => {
+          tokens.push(token);
+          await Promise.resolve();
+          observed.set(principal.subject, await bridge.verifier.verify(token));
+        }),
+      ),
+    );
+
+    expect(tokens[0]).not.toBe(tokens[1]);
+    expect(observed.get("auth0|candidate-1")?.subject).toBe("auth0|candidate-1");
+    expect(observed.get("auth0|candidate-2")?.subject).toBe("auth0|candidate-2");
+    await Promise.all(
+      tokens.map((token) =>
+        expect(bridge.verifier.verify(token)).rejects.toThrow(
+          "Validated API Gateway identity context is required",
+        ),
+      ),
     );
   });
 });
