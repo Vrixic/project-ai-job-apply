@@ -69,6 +69,12 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   function artifact/version update and alias transition to that new immutable version.
   The same pin supports completed-dark verification, which accepts only a refresh-backed
   zero-change plan. It never applies infrastructure or changes API traffic.
+- `operate-development-gateway-lambda-alias-rollback.ps1` — Creates a checksum-reviewed,
+  read-only recovery context for two accepted immutable development Lambda versions. Explicit
+  execution uses optimistic alias revision locking, proves the prior version through the guarded
+  `200/200/401` dark bridge, restores the current version in `finally`, repeats the bridge and full
+  preflight, and removes its ignored context only after success. Version `1`, weighted aliases,
+  configuration drift, unreviewed context, and any public traffic change are rejected.
 - `operate-platform-alerts.ps1` — Reports sanitized development or staging alert state, privately
   requests an SNS email subscription, and exercises ALARM → OK delivery using only the selected
   environment's dedicated synthetic metric. Select staging with `-Environment staging`.

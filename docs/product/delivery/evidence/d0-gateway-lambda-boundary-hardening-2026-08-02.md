@@ -82,6 +82,12 @@ passed, the alias executed one immutable version, no persistent application writ
 public traffic did not change. A final refresh-backed completed-dark check accounted for all 11
 reviewed resources with zero creates, updates, deletes, replacements, or drift.
 
+The product owner then repeated the real browser-based ownership sequence against this exact
+version. Synthetic account A saved harmless preferences and completed its owned operation through
+the dark alias. Distinct account B received only the sanitized result: `Cross-user isolation
+passed: this account could not read the first account's operation.` No token, cookie, provider
+subject, email address, preference body, or operation identifier is retained here.
+
 ## Release and rollback order
 
 1. Merge the reviewed source and contract change.
@@ -95,7 +101,7 @@ reviewed resources with zero creates, updates, deletes, replacements, or drift.
 6. Finish with the alias on the new accepted version, all alarms healthy, Terraform at zero drift,
    and the public ECS integration unchanged.
 
-This record now proves the immutable development apply and the deployed no-write boundary matrix.
-It does not yet claim the authenticated browser owner-isolation replay for this exact version or
-alias rollback readiness; both remain required before the version is accepted as the second
-rollback endpoint.
+This record now proves the immutable development apply, deployed no-write boundary matrix, and
+authenticated owner-isolation replay for the exact version. The version is accepted as the second
+rollback endpoint. Controlled alias rollback to the prior accepted version and restoration remain
+open and are governed by a separately reviewed operator and plan.
