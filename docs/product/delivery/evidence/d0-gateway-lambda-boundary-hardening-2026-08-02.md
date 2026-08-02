@@ -1,9 +1,10 @@
 # D0-016 Gateway Lambda Boundary Hardening — 2026-08-02
 
-- Scope: repository implementation and local verification
+- Scope: repository implementation, immutable release, exact development apply, and deployed
+  no-write boundary conformance
 - Target environment: development dark Lambda
 - Public runtime: unchanged ECS gateway
-- Deployment result: not yet deployed
+- Deployment result: applied to the dark Lambda alias; no public route change
 
 ## Outcome
 
@@ -58,9 +59,28 @@ preflight before and after direct alias invocations, requires one immutable exec
 checks exact stable status/code/problem headers, and uses only cases that cannot create or mutate a
 candidate, preference, operation, outbox, or workflow record.
 
-The operator has passed PowerShell syntax parsing but has not been run against the currently
-deployed older artifact. Running it before the hardened artifact is merged, published, and applied
-would produce an expected failure and is not deployment evidence.
+The exact merged `main` commit was published by
+[workflow run 30735796145](https://github.com/Vrixic/project-ai-job-apply/actions/runs/30735796145).
+Gateway build/tests, the High-severity dependency audit, two-build reproducibility, CycloneDX SBOM,
+private/versioned/customer-managed-KMS bucket checks, and immutable artifact write all passed.
+
+A checksum-matched refresh-backed plan contained zero creates, exactly two updates, zero deletes,
+and zero replacements. The only updates were the Lambda function artifact/version and the
+environment alias. The exact plan applied as reviewed while reserved concurrency remained `2`,
+the reviewed extension layer remained pinned, both ECS services stayed stable, and API Gateway
+continued routing public traffic to ECS.
+
+The first deployed matrix run correctly reached the scope-denial response but exposed a verifier
+assumption: Fastify adds the valid `charset=utf-8` parameter to `application/problem+json`. The
+operator now compares the media type independently of optional parameters and reports the exact
+failed contract field; status, problem code, trace identifier, and `no-store` checks remain strict.
+PowerShell syntax parsing passed after this correction.
+
+The complete deployed matrix then passed all 15 cases with the expected status sequence: one
+`200`, four `401`, one `403`, three `404`, four `400`, one `415`, and one `413`. Both preflights
+passed, the alias executed one immutable version, no persistent application write occurred, and
+public traffic did not change. A final refresh-backed completed-dark check accounted for all 11
+reviewed resources with zero creates, updates, deletes, replacements, or drift.
 
 ## Release and rollback order
 
@@ -75,5 +95,7 @@ would produce an expected failure and is not deployment evidence.
 6. Finish with the alias on the new accepted version, all alarms healthy, Terraform at zero drift,
    and the public ECS integration unchanged.
 
-Until those deployed steps pass, this record proves repository implementation only and does not
-claim a second accepted Lambda release or rollback readiness.
+This record now proves the immutable development apply and the deployed no-write boundary matrix.
+It does not yet claim the authenticated browser owner-isolation replay for this exact version or
+alias rollback readiness; both remain required before the version is accepted as the second
+rollback endpoint.
