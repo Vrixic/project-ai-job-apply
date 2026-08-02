@@ -52,7 +52,9 @@
               "application/json": { "schema": { "$ref": "#/components/schemas/CurrentUser" } }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" }
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
         }
       }
     },
@@ -67,7 +69,9 @@
               "application/json": { "schema": { "$ref": "#/components/schemas/JobPreferenceSet" } }
             }
           },
+          "400": { "$ref": "#/components/responses/BadRequest" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "404": { "$ref": "#/components/responses/NotFound" }
         }
       },
@@ -101,7 +105,10 @@
           },
           "400": { "$ref": "#/components/responses/BadRequest" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
-          "409": { "$ref": "#/components/responses/Conflict" }
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" }
         }
       }
     },
@@ -124,7 +131,9 @@
               "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
             }
           },
+          "400": { "$ref": "#/components/responses/BadRequest" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "404": { "$ref": "#/components/responses/NotFound" }
         }
       }
@@ -154,6 +163,14 @@
           }
         }
       },
+      "Forbidden": {
+        "description": "The authenticated caller lacks the required scope",
+        "content": {
+          "application/problem+json": {
+            "schema": { "$ref": "#/components/schemas/ProblemDetails" }
+          }
+        }
+      },
       "NotFound": {
         "description": "Resource was not found",
         "content": {
@@ -164,6 +181,22 @@
       },
       "Conflict": {
         "description": "Idempotency key was reused with different content",
+        "content": {
+          "application/problem+json": {
+            "schema": { "$ref": "#/components/schemas/ProblemDetails" }
+          }
+        }
+      },
+      "PayloadTooLarge": {
+        "description": "The request body exceeds the endpoint limit",
+        "content": {
+          "application/problem+json": {
+            "schema": { "$ref": "#/components/schemas/ProblemDetails" }
+          }
+        }
+      },
+      "UnsupportedMediaType": {
+        "description": "The request body is not JSON",
         "content": {
           "application/problem+json": {
             "schema": { "$ref": "#/components/schemas/ProblemDetails" }

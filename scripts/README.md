@@ -41,6 +41,11 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   only the Phase 0 profile routes, and is stopped with the local web process. Select staging with
   `-Environment staging`; add the explicit `-EnableWorkloadConformance` switch only for the
   reviewed fixed staging workload.
+- `verify-development-gateway-lambda-boundary.ps1` — Runs the guarded, no-write failure matrix
+  against the immutable dark development alias. It verifies exact route/method denial, missing
+  and wrong-environment authorizer claims, scope denial, query/body/media constraints, malformed
+  encoding, and the shared decoded-body ceiling while proving the public ECS route is unchanged
+  before and after the exercise.
 - `inspect-staging-workload-and-cost.ps1` — Reports the read-only staging workload/cost baseline
   and corroborates a completed browser workload window with aggregate API Gateway, ECS, RDS,
   queue, alarm, log, and no-drift measurements.

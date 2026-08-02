@@ -17,12 +17,14 @@ import type {
 } from "aws-lambda";
 import { createGatewayApplication } from "./application.js";
 import { resolveLambdaDatabaseUrl } from "./database-secret.js";
+import { MAXIMUM_GATEWAY_BODY_BYTES } from "./gateway-boundary.js";
 
 type JwtClaimValue = string | number | boolean | string[] | undefined;
 
 interface JwtAuthorizerContext {
   jwt?: {
     claims?: Record<string, JwtClaimValue>;
+    scopes?: string[];
   };
 }
 
@@ -65,6 +67,13 @@ export type ApiGatewayHandler = (
 ) => Promise<APIGatewayProxyStructuredResultV2>;
 
 const PUBLIC_PATHS = new Set(["/health/live", "/health/ready"]);
+const PROTECTED_EXACT_ROUTES = new Set([
+  "GET /v1/me",
+  "GET /v1/me/job-preferences",
+  "PUT /v1/me/job-preferences",
+]);
+const OPERATION_PATH_PATTERN =
+  /^\/v1\/operations\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
   "content-length",
@@ -76,6 +85,103 @@ const HOP_BY_HOP_HEADERS = new Set([
   "transfer-encoding",
   "upgrade",
 ]);
+
+interface AllowedRoute {
+  acceptsBody: boolean;
+  protected: boolean;
+}
+
+function allowedRoute(method: string, path: string): AllowedRoute | undefined {
+  if (method === "GET" && PUBLIC_PATHS.has(path)) {
+    return { acceptsBody: false, protected: false };
+  }
+  if (PROTECTED_EXACT_ROUTES.has(`${method} ${path}`)) {
+    return { acceptsBody: method === "PUT", protected: true };
+  }
+  if (method === "GET" && OPERATION_PATH_PATTERN.test(path)) {
+    return { acceptsBody: false, protected: true };
+  }
+  return undefined;
+}
+
+function boundaryFailure(
+  event: APIGatewayProxyEventV2,
+  status: number,
+  code: string,
+  title: string,
+): APIGatewayProxyStructuredResultV2 {
+  const traceId = event.requestContext.requestId;
+  return {
+    statusCode: status,
+    headers: {
+      "cache-control": "no-store",
+      "content-type": "application/problem+json",
+      "x-correlation-id": traceId,
+    },
+    body: JSON.stringify({
+      type: `urn:ai-job-apply:problem:${code}`,
+      title,
+      status,
+      code,
+      traceId,
+    }),
+  };
+}
+
+function isJsonContentType(value: string | undefined): boolean {
+  return value?.split(";", 1)[0]?.trim().toLowerCase() === "application/json";
+}
+
+function decodeBase64(value: string): Buffer | undefined {
+  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) {
+    return undefined;
+  }
+  return Buffer.from(value, "base64");
+}
+
+function requestPayload(
+  event: APIGatewayProxyEventV2,
+  route: AllowedRoute,
+): { failure?: APIGatewayProxyStructuredResultV2; payload?: string } {
+  if (event.rawQueryString) {
+    return {
+      failure: boundaryFailure(event, 400, "invalid_request", "Invalid request"),
+    };
+  }
+
+  if (event.body === undefined) {
+    if (route.acceptsBody) {
+      return {
+        failure: boundaryFailure(event, 400, "invalid_request", "Invalid request"),
+      };
+    }
+    return {};
+  }
+
+  if (!route.acceptsBody) {
+    return {
+      failure: boundaryFailure(event, 400, "invalid_request", "Invalid request"),
+    };
+  }
+  if (!isJsonContentType(event.headers?.["content-type"] ?? event.headers?.["Content-Type"])) {
+    return {
+      failure: boundaryFailure(event, 415, "unsupported_media_type", "Unsupported media type"),
+    };
+  }
+
+  const body = event.isBase64Encoded ? decodeBase64(event.body) : Buffer.from(event.body, "utf8");
+  if (!body) {
+    return {
+      failure: boundaryFailure(event, 400, "invalid_request", "Invalid request"),
+    };
+  }
+  if (body.byteLength > MAXIMUM_GATEWAY_BODY_BYTES) {
+    return {
+      failure: boundaryFailure(event, 413, "payload_too_large", "Payload too large"),
+    };
+  }
+  return { payload: body.toString("utf8") };
+}
 
 function claimStrings(value: JwtClaimValue): string[] {
   if (Array.isArray(value)) {
@@ -93,12 +199,10 @@ function authorizerPrincipal(
   const subject = typeof claims?.sub === "string" ? claims.sub : undefined;
   const tokenIssuer = typeof claims?.iss === "string" ? claims.iss : undefined;
   const audiences = claimStrings(claims?.aud);
-  const scopeClaim = claims?.scope;
-  const scopes = Array.isArray(scopeClaim)
-    ? claimStrings(scopeClaim)
-    : typeof scopeClaim === "string"
-      ? scopeClaim.split(" ").filter(Boolean)
-      : [];
+  const validatedScopes = event.requestContext.authorizer?.jwt?.scopes;
+  const scopes = Array.isArray(validatedScopes)
+    ? validatedScopes.filter((scope): scope is string => typeof scope === "string")
+    : [];
 
   if (!claims || !subject || tokenIssuer !== issuer || !audiences.includes(audience)) {
     throw new AuthenticationError("Validated API Gateway identity context is required");
@@ -186,29 +290,25 @@ function responseHeaders(headers: Record<string, string | string[] | number | un
 }
 
 function authenticationFailure(event: APIGatewayProxyEventV2): APIGatewayProxyStructuredResultV2 {
-  const traceId = event.requestContext.requestId;
-  return {
-    statusCode: 401,
-    headers: {
-      "content-type": "application/problem+json",
-      "x-correlation-id": traceId,
-    },
-    body: JSON.stringify({
-      type: "urn:ai-job-apply:problem:authentication_required",
-      title: "Authentication required",
-      status: 401,
-      code: "authentication_required",
-      traceId,
-      detail: "Validated API Gateway identity context is required",
-    }),
-  };
+  return boundaryFailure(event, 401, "authentication_required", "Authentication required");
 }
 
 export function createApiGatewayHandler(options: ApiGatewayHandlerOptions): ApiGatewayHandler {
   return async (event) => {
     const path = event.rawPath || "/";
+    const method = event.requestContext.http.method.toUpperCase();
+    const route = allowedRoute(method, path);
+    if (!route) {
+      return boundaryFailure(event, 404, "not_found", "Not found");
+    }
+
+    const decodedRequest = requestPayload(event, route);
+    if (decodedRequest.failure) {
+      return decodedRequest.failure;
+    }
+
     let principal: AuthPrincipal | undefined;
-    if (!PUBLIC_PATHS.has(path)) {
+    if (route.protected) {
       try {
         principal = authorizerPrincipal(event, options.issuer, options.audience);
       } catch (error) {
@@ -220,11 +320,6 @@ export function createApiGatewayHandler(options: ApiGatewayHandlerOptions): ApiG
     }
 
     const app = await options.app;
-    const payload = event.body
-      ? event.isBase64Encoded
-        ? Buffer.from(event.body, "base64").toString("utf8")
-        : event.body
-      : undefined;
     const inject = (internalAccessToken?: string) => {
       const headers = requestHeaders(event);
       headers["x-correlation-id"] ??= event.requestContext.requestId;
@@ -232,10 +327,10 @@ export function createApiGatewayHandler(options: ApiGatewayHandlerOptions): ApiG
         headers.authorization = `Bearer ${internalAccessToken}`;
       }
       return app.inject({
-        method: event.requestContext.http.method,
-        url: event.rawQueryString ? `${path}?${event.rawQueryString}` : path,
+        method,
+        url: path,
         headers,
-        ...(payload !== undefined ? { payload } : {}),
+        ...(decodedRequest.payload !== undefined ? { payload: decodedRequest.payload } : {}),
       });
     };
     const response = principal
@@ -276,7 +371,10 @@ async function createConfiguredApplication(
     store,
     verifier: principalBridge.verifier,
     releaseSha: config.RELEASE_SHA,
-    adapter: new FastifyAdapter({ loggerInstance: logger }),
+    adapter: new FastifyAdapter({
+      bodyLimit: MAXIMUM_GATEWAY_BODY_BYTES,
+      loggerInstance: logger,
+    }),
   });
 }
 
