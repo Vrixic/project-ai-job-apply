@@ -78,6 +78,14 @@ function Get-Only {
   return $Items[0]
 }
 
+function Get-OptionalPropertyValue {
+  param([object]$Object, [string]$Name)
+  if ($null -eq $Object) { return $null }
+  $property = @($Object.PSObject.Properties | Where-Object { $_.Name -eq $Name })
+  if ($property.Count -ne 1) { return $null }
+  return $property[0].Value
+}
+
 function Get-DlqDepth {
   $queue = Invoke-AwsJson @(
     "sqs", "get-queue-url", "--queue-name",
@@ -332,41 +340,56 @@ function Invoke-Conformance {
   param([object]$Context)
   $activity = Invoke-Sync $functions.Activity $Context.Boundary.Functions.Activity.Version `
     $Context.Payloads.Activity
+  $activityFunctionError = Get-OptionalPropertyValue $activity.Metadata "FunctionError"
+  $activityErrorCode = Get-OptionalPropertyValue $activity.Body "errorCode"
   if (
-    [int]$activity.Metadata.StatusCode -ne 200 -or $activity.Metadata.FunctionError -or
-    [string]$activity.Body.errorCode -ne "ActivityInputRejected"
+    [int](Get-OptionalPropertyValue $activity.Metadata "StatusCode") -ne 200 -or
+    $activityFunctionError -or [string]$activityErrorCode -ne "ActivityInputRejected"
   ) { throw "Activity rejection failed." }
 
   $starter = Invoke-Sync $functions.Starter $Context.Boundary.Functions.Starter.Version `
     $Context.Payloads.Starter
+  $starterFunctionError = Get-OptionalPropertyValue $starter.Metadata "FunctionError"
+  $starterFailures = Get-OptionalPropertyValue $starter.Body "batchItemFailures"
+  $starterFailureItems = @($starterFailures | Where-Object { $null -ne $_ })
   if (
-    [int]$starter.Metadata.StatusCode -ne 200 -or $starter.Metadata.FunctionError -or
-    @($starter.Body.batchItemFailures).Count -ne 1 -or
-    [string]$starter.Body.batchItemFailures[0].itemIdentifier -ne [string]$Context.StarterMessageId
+    [int](Get-OptionalPropertyValue $starter.Metadata "StatusCode") -ne 200 -or
+    $starterFunctionError -or $starterFailureItems.Count -ne 1 -or
+    [string](Get-OptionalPropertyValue $starterFailureItems[0] "itemIdentifier") -ne
+      [string]$Context.StarterMessageId
   ) { throw "Starter partial-batch rejection failed." }
 
   $terminal = Invoke-Sync $functions.Terminal $Context.Boundary.Functions.Terminal.Version `
     $Context.Payloads.Terminal
+  $terminalFunctionError = Get-OptionalPropertyValue $terminal.Metadata "FunctionError"
   if (
-    [int]$terminal.Metadata.StatusCode -ne 200 -or -not $terminal.Metadata.FunctionError -or
-    [string]$terminal.Body.errorMessage -ne "DurableTerminalEventRejected"
+    [int](Get-OptionalPropertyValue $terminal.Metadata "StatusCode") -ne 200 -or
+    -not $terminalFunctionError -or
+    [string](Get-OptionalPropertyValue $terminal.Body "errorMessage") -ne
+      "DurableTerminalEventRejected"
   ) { throw "Terminal rejection failed." }
 
   $durable = Invoke-Sync $functions.Durable $Context.Boundary.Functions.Durable.Version `
     $Context.Payloads.Durable $Context.DurableExecutionName
+  $durableFunctionError = Get-OptionalPropertyValue $durable.Metadata "FunctionError"
+  $durableExecutionArn = Get-OptionalPropertyValue $durable.Metadata "DurableExecutionArn"
   if (
-    [int]$durable.Metadata.StatusCode -ne 200 -or -not $durable.Metadata.FunctionError -or
-    [string]$durable.Metadata.ExecutedVersion -ne [string]$Context.Boundary.Functions.Durable.Version -or
-    -not $durable.Metadata.DurableExecutionArn -or
-    [string]$durable.Body.errorMessage -notmatch "WorkflowInputRejected"
+    [int](Get-OptionalPropertyValue $durable.Metadata "StatusCode") -ne 200 -or
+    -not $durableFunctionError -or
+    [string](Get-OptionalPropertyValue $durable.Metadata "ExecutedVersion") -ne
+      [string]$Context.Boundary.Functions.Durable.Version -or
+    -not $durableExecutionArn -or
+    [string](Get-OptionalPropertyValue $durable.Body "errorMessage") -notmatch
+      "WorkflowInputRejected"
   ) { throw "Durable exact-version rejection failed." }
   $execution = Invoke-AwsJson @(
     "lambda", "get-durable-execution", "--durable-execution-arn",
-    ([string]$durable.Metadata.DurableExecutionArn)
+    ([string]$durableExecutionArn)
   ) "The durable execution status is unavailable."
   if (
-    [string]$execution.Status -ne "FAILED" -or
-    [string]$execution.Version -ne [string]$Context.Boundary.Functions.Durable.Version
+    [string](Get-OptionalPropertyValue $execution "Status") -ne "FAILED" -or
+    [string](Get-OptionalPropertyValue $execution "Version") -ne
+      [string]$Context.Boundary.Functions.Durable.Version
   ) { throw "The durable rejection did not reach FAILED on the exact version." }
 }
 
