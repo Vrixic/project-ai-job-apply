@@ -195,7 +195,19 @@ $stoppedTask = (
 $stoppedContainers = @(
   $stoppedTask.containers | Where-Object { $_.name -eq "database-migration" }
 )
-if ($stoppedContainers.Count -ne 1 -or [int]$stoppedContainers[0].exitCode -ne 0) {
+if ($stoppedContainers.Count -ne 1) {
+  throw "The read-only inspection task did not expose its expected container."
+}
+$exitCodeProperty = $stoppedContainers[0].PSObject.Properties["exitCode"]
+if ($null -eq $exitCodeProperty -or $null -eq $exitCodeProperty.Value) {
+  $stopCode = if ($stoppedTask.PSObject.Properties["stopCode"]) {
+    [string]$stoppedTask.stopCode
+  } else {
+    "unknown"
+  }
+  throw "The read-only inspection task stopped before container execution (ECS stop code: $stopCode)."
+}
+if ([int]$exitCodeProperty.Value -ne 0) {
   throw "The read-only inspection task did not complete successfully. Inspect the sanitized task log."
 }
 

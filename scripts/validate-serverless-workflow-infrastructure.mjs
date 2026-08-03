@@ -122,8 +122,13 @@ requireText(
 );
 requireText(
   platform,
-  "values   = [aws_iam_role.execution.arn]",
-  "The private Secrets endpoint must restrict ECS access to the environment execution role.",
+  'type        = "AWS"',
+  "The private Secrets endpoint must use an AWS principal for ECS secret injection.",
+);
+requireText(
+  platform,
+  "identifiers = [aws_iam_role.execution.arn]",
+  "The private Secrets endpoint must name only the environment execution role for ECS access.",
 );
 requireText(
   platform,
