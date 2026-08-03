@@ -72,4 +72,3 @@ acceptance, Temporal retirement, or D0-016 completion.
   and poorly reversible change.
 - Scale services directly with the AWS CLI and tolerate Terraform drift. Rejected because later
   plans could restart tasks or obscure the authoritative runtime state.
-

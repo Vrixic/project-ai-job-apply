@@ -64,4 +64,3 @@ After merge, refresh the development and staging SSO sessions independently. For
 This source record does not claim an applied environment plan, stopped task, released public IP,
 Lambda cutover, replacement acceptance, Temporal retirement, destructive ECS retirement, cost
 reconciliation, or D0-016 completion.
-
