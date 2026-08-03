@@ -1451,6 +1451,29 @@ data "aws_iam_policy_document" "secrets_endpoint" {
   count = var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable ? 1 : 0
 
   statement {
+    sid     = "ExactEcsExecutionRoleRuntimeSecrets"
+    effect  = "Allow"
+    actions = ["secretsmanager:GetSecretValue"]
+    resources = [
+      aws_secretsmanager_secret.database_url.arn,
+      aws_secretsmanager_secret.temporal_api_key.arn
+    ]
+
+    # ECS resolves task-definition secrets before the application container starts. Private DNS
+    # therefore routes retained services and bounded one-off tasks through this endpoint too.
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    condition {
+      test     = "ArnEquals"
+      variable = "aws:PrincipalArn"
+      values   = [aws_iam_role.execution.arn]
+    }
+  }
+
+  statement {
     sid       = "ExactLambdaRolesDatabaseSecretOnly"
     effect    = "Allow"
     actions   = ["secretsmanager:GetSecretValue"]
