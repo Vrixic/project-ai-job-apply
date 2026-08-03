@@ -517,7 +517,11 @@ try {
       "cloudformation", "describe-stacks", "--stack-name",
       "ai-job-apply-development-profile-readiness-durable", "--output", "json"
     )
-    if ([string]$durableStack.Stacks[0].StackStatus -ne "CREATE_COMPLETE") {
+    if (
+      [string]$durableStack.Stacks[0].StackStatus -notin @(
+        "CREATE_COMPLETE", "UPDATE_COMPLETE"
+      )
+    ) {
       throw "The durable stack is not complete before the dark release."
     }
 

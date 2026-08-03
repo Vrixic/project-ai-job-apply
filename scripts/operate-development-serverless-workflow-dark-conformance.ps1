@@ -191,7 +191,8 @@ function Get-LiveBoundary {
     "cloudformation", "describe-stacks", "--stack-name",
     "ai-job-apply-development-profile-readiness-durable"
   ) "The durable stack is unavailable."
-  if ([string]$stack.Stacks[0].StackStatus -ne "CREATE_COMPLETE") {
+  $stackStatus = [string]$stack.Stacks[0].StackStatus
+  if ($stackStatus -notin @("CREATE_COMPLETE", "UPDATE_COMPLETE")) {
     throw "The durable stack is not complete."
   }
 
@@ -239,7 +240,7 @@ function Get-LiveBoundary {
     Rules = $ruleBoundary
     Alarms = $alarmBoundary
     Dlq = $depth
-    DurableStack = "CREATE_COMPLETE"
+    DurableStack = $stackStatus
     Api = [ordered]@{
       Id = [string]$api.ApiId
       IntegrationId = [string]$integration.IntegrationId
