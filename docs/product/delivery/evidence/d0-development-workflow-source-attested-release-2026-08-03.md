@@ -7,7 +7,7 @@
 - Authorized release-plan SHA-256: `429274216a4a75598c9214360d5acf584b01c69ae79e6322b4b31eb60947b029`
 - Authorized conformance-context SHA-256: `93c90b472cf11414bfd4211679913c998d1144a34a38aa2f2ce5732f0ed91652`
 - Post-conformance zero-drift plan SHA-256: `625a2e406c8b448ef351bf1e07c295f43b0d916715869156582f08ddfa14a8d8`
-- Status: Technical release and dark conformance passed; human notification receipt is pending
+- Status: Release, dark conformance, and end-to-end notification delivery passed
 
 ## Protected publication and independent read-back
 
@@ -67,13 +67,14 @@ The fresh refresh-backed post-run Terraform plan contained zero creates, updates
 replacements. The three artifacts and pinned extension revalidated, triggers stayed disabled, API
 traffic and ECS capacity did not change, and dispatch remained on Temporal.
 
+The product owner confirmed receipt of all four expected operational notifications: durable-failure
+`ALARM`/`OK` and dead-letter `ALARM`/`OK`. No destination or message content is retained.
+
 ## Remaining gate
 
-Human receipt of the durable-failure and dead-letter `ALARM`/`OK` notification pairs is not yet
-recorded. After that confirmation, the next SR-005 action is a separately generated and reviewed
-coordinated reverse Terraform plan between accepted release sets, followed by rollback behavior,
-alarm/log, restoration, and zero-drift evidence. This record does not authorize staging, cutover,
-or old-runtime retirement.
+The next SR-005 action is a separately generated and reviewed coordinated reverse Terraform plan
+between accepted release sets, followed by rollback behavior, alarm/log, restoration, and
+zero-drift evidence. This record does not authorize staging, cutover, or old-runtime retirement.
 
 No account identifier, ARN, bucket/object identifier, KMS identifier, credential, token, OIDC or
 Temporal value, raw payload/error/log, Terraform state/plan, conformance context, notification
