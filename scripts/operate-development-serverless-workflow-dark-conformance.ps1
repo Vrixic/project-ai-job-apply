@@ -343,15 +343,18 @@ function Invoke-Sync {
     [string]$Name,
     [string]$Version,
     [string]$Payload,
-    [string]$ExecutionName = ""
+    [string]$ExecutionName = "",
+    [switch]$QualifiedTarget
   )
   $responsePath = [IO.Path]::GetTempFileName()
   try {
     $encodedPayload = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Payload))
+    $functionTarget = if ($QualifiedTarget) { "${Name}:$Version" } else { $Name }
     $arguments = @(
-      "lambda", "invoke", "--function-name", $Name, "--qualifier", $Version,
-      "--invocation-type", "RequestResponse", "--payload", $encodedPayload
+      "lambda", "invoke", "--function-name", $functionTarget
     )
+    if (-not $QualifiedTarget) { $arguments += @("--qualifier", $Version) }
+    $arguments += @("--invocation-type", "RequestResponse", "--payload", $encodedPayload)
     if ($ExecutionName) { $arguments += @("--durable-execution-name", $ExecutionName) }
     $arguments += $responsePath
     $metadata = Invoke-AwsJson $arguments "The reviewed $Label invocation was not accepted."
@@ -395,7 +398,7 @@ function Invoke-Conformance {
 
   $durable = Invoke-Sync "durable" $functions.Durable `
     $Context.Boundary.Functions.Durable.Version $Context.Payloads.Durable `
-    $Context.DurableExecutionName
+    $Context.DurableExecutionName -QualifiedTarget
   $durableFunctionError = Get-OptionalPropertyValue $durable.Metadata "FunctionError"
   $durableExecutionArn = Get-OptionalPropertyValue $durable.Metadata "DurableExecutionArn"
   if (
