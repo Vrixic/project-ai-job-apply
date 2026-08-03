@@ -167,7 +167,6 @@ $run = Invoke-AwsJson @(
   $override,
   "--started-by",
   "phase0-outbox-inspection",
-  "--no-enable-execute-command",
   "--output",
   "json"
 )
