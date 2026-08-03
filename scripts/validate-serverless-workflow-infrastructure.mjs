@@ -115,6 +115,21 @@ assert.equal(
   2,
   "Exactly the two legacy process-heartbeat alarms must follow the ECS idle switch.",
 );
+requireText(
+  platform,
+  'sid     = "ExactEcsExecutionRoleRuntimeSecrets"',
+  "The private Secrets endpoint must retain the exact ECS runtime path.",
+);
+requireText(
+  platform,
+  "values   = [aws_iam_role.execution.arn]",
+  "The private Secrets endpoint must restrict ECS access to the environment execution role.",
+);
+requireText(
+  platform,
+  "aws_secretsmanager_secret.temporal_api_key.arn",
+  "The retained worker must be able to retrieve its exact Temporal secret through private DNS.",
+);
 
 assert.match(
   variables,

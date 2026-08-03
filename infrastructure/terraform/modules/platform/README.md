@@ -18,6 +18,11 @@ are enabled. The migration task has no public listener and receives the database
 Secrets Manager. RDS rejects unencrypted database sessions, and the managed URL explicitly enables
 TLS for the migration, gateway, and worker clients.
 
+When the private Secrets Manager endpoint is present, its policy admits only the exact Lambda
+database roles and the environment's ECS execution role. The ECS role can retrieve only the
+environment database and Temporal secrets, preserving bounded migration/inspection tasks and the
+retained ECS rollback path after private DNS begins routing secret retrieval through the endpoint.
+
 Defaults implement the lean-until-demand profile: one task per service, Single-AZ PostgreSQL,
 optional Redis, restricted public-subnet application egress, and no Application Load Balancer.
 The same module exposes explicit replica, private-networking, cache, database-class, and
