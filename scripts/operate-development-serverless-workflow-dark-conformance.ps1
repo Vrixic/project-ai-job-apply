@@ -68,7 +68,25 @@ $env:AWS_DEFAULT_REGION = $Region
 function Invoke-AwsJson {
   param([string[]]$Arguments, [string]$Failure)
   $raw = & aws @Arguments --no-cli-pager --output json 2>&1
-  if ($LASTEXITCODE -ne 0) { throw $Failure }
+  if ($LASTEXITCODE -ne 0) {
+    $rawText = $raw -join [Environment]::NewLine
+    $failureClass = if ($rawText -match "An error occurred \(([A-Za-z0-9.]+)\)") {
+      $Matches[1]
+    } elseif ($rawText -match "token.*expired|expired.*token") {
+      "IdentitySessionExpired"
+    } elseif ($rawText -match "Unable to locate credentials") {
+      "CredentialsUnavailable"
+    } elseif ($rawText -match "Error parsing parameter|Invalid base64") {
+      "CliPayloadRejected"
+    } elseif ($rawText -match "Unknown options|usage: aws") {
+      "CliArgumentsRejected"
+    } elseif ($rawText -match "Could not connect|Connection.*timed out") {
+      "NetworkUnavailable"
+    } else {
+      "AwsCliFailure"
+    }
+    throw "$Failure ErrorClass=$failureClass."
+  }
   try { return ($raw -join [Environment]::NewLine) | ConvertFrom-Json } catch { throw $Failure }
 }
 
@@ -320,17 +338,23 @@ function Assert-SameBoundary {
 }
 
 function Invoke-Sync {
-  param([string]$Name, [string]$Version, [string]$Payload, [string]$ExecutionName = "")
+  param(
+    [string]$Label,
+    [string]$Name,
+    [string]$Version,
+    [string]$Payload,
+    [string]$ExecutionName = ""
+  )
   $responsePath = [IO.Path]::GetTempFileName()
   try {
+    $encodedPayload = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Payload))
     $arguments = @(
       "lambda", "invoke", "--function-name", $Name, "--qualifier", $Version,
-      "--invocation-type", "RequestResponse", "--cli-binary-format", "raw-in-base64-out",
-      "--payload", $Payload
+      "--invocation-type", "RequestResponse", "--payload", $encodedPayload
     )
     if ($ExecutionName) { $arguments += @("--durable-execution-name", $ExecutionName) }
     $arguments += $responsePath
-    $metadata = Invoke-AwsJson $arguments "A reviewed invocation was not accepted."
+    $metadata = Invoke-AwsJson $arguments "The reviewed $Label invocation was not accepted."
     $body = Get-Content -LiteralPath $responsePath -Raw | ConvertFrom-Json
     return [ordered]@{ Metadata = $metadata; Body = $body }
   } finally { Remove-Item -LiteralPath $responsePath -Force -ErrorAction SilentlyContinue }
@@ -338,8 +362,8 @@ function Invoke-Sync {
 
 function Invoke-Conformance {
   param([object]$Context)
-  $activity = Invoke-Sync $functions.Activity $Context.Boundary.Functions.Activity.Version `
-    $Context.Payloads.Activity
+  $activity = Invoke-Sync "activity" $functions.Activity `
+    $Context.Boundary.Functions.Activity.Version $Context.Payloads.Activity
   $activityFunctionError = Get-OptionalPropertyValue $activity.Metadata "FunctionError"
   $activityErrorCode = Get-OptionalPropertyValue $activity.Body "errorCode"
   if (
@@ -347,8 +371,8 @@ function Invoke-Conformance {
     $activityFunctionError -or [string]$activityErrorCode -ne "ActivityInputRejected"
   ) { throw "Activity rejection failed." }
 
-  $starter = Invoke-Sync $functions.Starter $Context.Boundary.Functions.Starter.Version `
-    $Context.Payloads.Starter
+  $starter = Invoke-Sync "starter" $functions.Starter `
+    $Context.Boundary.Functions.Starter.Version $Context.Payloads.Starter
   $starterFunctionError = Get-OptionalPropertyValue $starter.Metadata "FunctionError"
   $starterFailures = Get-OptionalPropertyValue $starter.Body "batchItemFailures"
   $starterFailureItems = @($starterFailures | Where-Object { $null -ne $_ })
@@ -359,8 +383,8 @@ function Invoke-Conformance {
       [string]$Context.StarterMessageId
   ) { throw "Starter partial-batch rejection failed." }
 
-  $terminal = Invoke-Sync $functions.Terminal $Context.Boundary.Functions.Terminal.Version `
-    $Context.Payloads.Terminal
+  $terminal = Invoke-Sync "terminal" $functions.Terminal `
+    $Context.Boundary.Functions.Terminal.Version $Context.Payloads.Terminal
   $terminalFunctionError = Get-OptionalPropertyValue $terminal.Metadata "FunctionError"
   if (
     [int](Get-OptionalPropertyValue $terminal.Metadata "StatusCode") -ne 200 -or
@@ -369,8 +393,9 @@ function Invoke-Conformance {
       "DurableTerminalEventRejected"
   ) { throw "Terminal rejection failed." }
 
-  $durable = Invoke-Sync $functions.Durable $Context.Boundary.Functions.Durable.Version `
-    $Context.Payloads.Durable $Context.DurableExecutionName
+  $durable = Invoke-Sync "durable" $functions.Durable `
+    $Context.Boundary.Functions.Durable.Version $Context.Payloads.Durable `
+    $Context.DurableExecutionName
   $durableFunctionError = Get-OptionalPropertyValue $durable.Metadata "FunctionError"
   $durableExecutionArn = Get-OptionalPropertyValue $durable.Metadata "DurableExecutionArn"
   if (
