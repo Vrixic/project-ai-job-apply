@@ -15,3 +15,6 @@ saved infrastructure plan, success evidence, and recovery boundary.
 - [Staging application recovery](staging-application-recovery.md) — Proves controlled task
   replacement plus checksum-gated application-only disablement and exact re-enablement without
   changing persistent infrastructure or migration history.
+- [Development serverless workflow artifact release](development-serverless-workflow-artifact-release.md)
+  — Generates, reviews, applies, and verifies an exact immutable workflow release while every
+  replacement trigger stays disabled and public traffic remains on the ECS rollback path.

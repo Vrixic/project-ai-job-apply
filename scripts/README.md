@@ -93,8 +93,12 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   allowlists, Temporal dispatch, disabled SQS/EventBridge triggers, stable API/ECS capacity, and
   zero deletes/replacements. Recovery additionally requires effective exact durable-DLQ permission
   and the absent rolled-back durable function. Completed-dark verification requires a refresh-backed
-  zero-change result while rechecking the immutable trigger-disabled boundary. The ignored plan is
-  never applied by the script.
+  zero-change result while rechecking the immutable trigger-disabled boundary.
+  `-AllowArtifactReleaseUpdate` additionally verifies the healthy live functions/aliases,
+  concurrency, triggers, alarms, DLQ, durable stack, public API/ECS rollback path, Temporal
+  dispatch, and three new immutable artifacts. It permits only the exact function/version/alias,
+  version-scoped policy, disabled terminal-pattern, durable-stack, and policy-propagation changes
+  required by one internally consistent release. The ignored plan is never applied by the script.
 - `operate-development-serverless-workflow-dark-conformance.ps1` — Creates an ignored,
   checksum-reviewed context from an exact-commit zero-drift plan and stable live boundary. Separate
   execution synchronously exercises four synthetic fail-closed handlers without invoking the
