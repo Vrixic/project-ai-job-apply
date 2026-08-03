@@ -260,14 +260,27 @@ function Get-LiveBoundary {
     "ecs", "describe-services", "--cluster", "ai-job-apply-development", "--services",
     "gateway", "workflow-worker"
   ) "The ECS rollback services are unavailable."
+  $postures = @($serviceResult.services | ForEach-Object {
+    "$([int]$_.desiredCount)/$([int]$_.runningCount)/$([int]$_.pendingCount)"
+  })
+  $uniformCapacity = (
+    @($postures | Where-Object { $_ -eq "1/1/0" }).Count -eq 2 -or
+    @($postures | Where-Object { $_ -eq "0/0/0" }).Count -eq 2
+  )
+  if (-not $uniformCapacity) {
+    throw "The retained ECS rollback services are not uniformly continuous or idle."
+  }
   $services = @(
     $serviceResult.services | Sort-Object serviceName | ForEach-Object {
       if (
-        [string]$_.status -ne "ACTIVE" -or [int]$_.desiredCount -ne 1 -or
-        [int]$_.runningCount -ne 1 -or [int]$_.pendingCount -ne 0 -or
+        [string]$_.status -ne "ACTIVE" -or
         [string]$_.deployments[0].rolloutState -ne "COMPLETED"
       ) { throw "An ECS rollback service is unstable." }
-      [ordered]@{ Name = [string]$_.serviceName; Desired = 1; Running = 1 }
+      [ordered]@{
+        Name = [string]$_.serviceName
+        Desired = [int]$_.desiredCount
+        Running = [int]$_.runningCount
+      }
     }
   )
   if ($services.Count -ne 2) { throw "Both ECS rollback services are required." }

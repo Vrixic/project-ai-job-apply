@@ -874,7 +874,7 @@ resource "aws_ecs_service" "gateway" {
   name            = "gateway"
   cluster         = aws_ecs_cluster.this.id
   task_definition = aws_ecs_task_definition.gateway[0].arn
-  desired_count   = var.gateway_desired_count
+  desired_count   = var.run_continuous_ecs_runtime ? var.gateway_desired_count : 0
   launch_type     = "FARGATE"
   network_configuration {
     subnets          = var.private_application_networking ? aws_subnet.private[*].id : aws_subnet.public[*].id
@@ -980,7 +980,7 @@ resource "aws_ecs_service" "worker" {
   name            = "workflow-worker"
   cluster         = aws_ecs_cluster.this.id
   task_definition = aws_ecs_task_definition.worker[0].arn
-  desired_count   = var.worker_desired_count
+  desired_count   = var.run_continuous_ecs_runtime ? var.worker_desired_count : 0
   launch_type     = "FARGATE"
   network_configuration {
     subnets          = var.private_application_networking ? aws_subnet.private[*].id : aws_subnet.public[*].id
@@ -1157,7 +1157,8 @@ resource "aws_cloudwatch_metric_alarm" "gateway_log_heartbeat_missing" {
   period              = 60
   statistic           = "Sum"
   threshold           = 1
-  treat_missing_data  = "breaching"
+  actions_enabled     = var.run_continuous_ecs_runtime
+  treat_missing_data  = var.run_continuous_ecs_runtime ? "breaching" : "notBreaching"
   alarm_actions       = [aws_sns_topic.operational_alerts.arn]
   ok_actions          = [aws_sns_topic.operational_alerts.arn]
   alarm_description   = "The gateway heartbeat has been absent for three minutes; service or log delivery may be impaired. Runbook: ${local.provider_recovery_runbook_url}"
@@ -1190,7 +1191,8 @@ resource "aws_cloudwatch_metric_alarm" "worker_log_heartbeat_missing" {
   period              = 60
   statistic           = "Sum"
   threshold           = 1
-  treat_missing_data  = "breaching"
+  actions_enabled     = var.run_continuous_ecs_runtime
+  treat_missing_data  = var.run_continuous_ecs_runtime ? "breaching" : "notBreaching"
   alarm_actions       = [aws_sns_topic.operational_alerts.arn]
   ok_actions          = [aws_sns_topic.operational_alerts.arn]
   alarm_description   = "The workflow-worker heartbeat has been absent for three minutes; service or log delivery may be impaired. Runbook: ${local.provider_recovery_runbook_url}"

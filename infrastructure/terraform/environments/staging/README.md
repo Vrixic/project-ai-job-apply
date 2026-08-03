@@ -17,6 +17,11 @@ The account-local cost controls remain persistent when application tasks are dis
 $5 monthly reference budget with one actual-cost alert at $5, plus a resource-attributed CUR 2.0
 export retained for 400 days. Alerts do not cap spend.
 
+Synthetic staging defaults `run_continuous_ecs_runtime = false` under the accepted zero-traffic
+pre-cutover posture. Use the [Phase 0 ECS idle-shutdown runbook](../../../runbooks/deployments/phase0-ecs-idle-shutdown.md)
+to prove no pending outbox or Temporal work and scale only the retained gateway/worker services to
+zero. The ECS API path is intentionally unavailable until Lambda cutover or an approved resume.
+
 For the scale-to-zero migration, configure the GitHub `staging` Environment variable
 `ARTIFACT_BUCKET` from this account's nonsensitive Terraform `artifact_bucket` output. Keep
 `deploy_gateway_lambda = false` until the staging artifact and exact provider-upgrade/dark plan are

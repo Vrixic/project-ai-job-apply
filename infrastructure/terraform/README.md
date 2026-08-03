@@ -51,6 +51,14 @@ versioned Lambda and Lambda durable functions. The migration plan owns the exact
 rollback/delete sequence and requires removal of obsolete VPC Link, Cloud Map, ECS service/task,
 ECR, Temporal-secret, heartbeat, output, script, and runbook paths after acceptance.
 
+[ADR-017](../../docs/adr/017-zero-traffic-precutover-ecs-idle-posture.md) permits the confirmed
+zero-traffic development and synthetic-staging environments to stop continuous ECS compute before
+Lambda cutover. Their environment roots default `run_continuous_ecs_runtime` to false, while the
+reusable platform module defaults it to true. The guarded operator must prove zero outbox/Temporal
+work and apply only the two service desired-count and two heartbeat-alarm updates. ECS services,
+task definitions, images, VPC Link, Cloud Map, and Temporal access remain until the later reviewed
+retirement plan.
+
 The first dark-deployment source is guarded by `deploy_gateway_lambda = false`. Enabling it requires
 the exact immutable S3 key and object version, hexadecimal and base64 artifact digests, the reviewed
 versioned `us-east-2` AWS Parameters and Secrets extension layer ARN, the existing API/OIDC runtime,

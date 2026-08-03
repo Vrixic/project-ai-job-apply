@@ -135,12 +135,12 @@ remain empty because the cluster itself is not a continuously running task.
 | API Gateway HTTP API/stage | Retain; add JWT authorizer and Lambda integration | Exact stage invokes only the versioned environment alias |
 | VPC Link | Delete after gateway cutover/rollback window | No route/integration references it; Terraform and AWS inventory agree |
 | Cloud Map gateway service/private namespace | Delete | No registered instances, consumers, outputs, dashboard widgets, or runbooks remain |
-| Gateway ECS service/task definition and ADOT sidecar | Delete | Lambda gateway passes full conformance and rollback window expires |
-| Temporal worker ECS service/task definition and ADOT sidecar | Delete | All old executions are terminal/disposed and durable replacement passes recovery |
+| Gateway ECS service/task definition and ADOT sidecar | Set desired count to zero under ADR-017, then delete after cutover acceptance | Zero-traffic/outbox/Temporal preflight passes before idle; Lambda gateway later passes full conformance and rollback window expires |
+| Temporal worker ECS service/task definition and ADOT sidecar | Set desired count to zero under ADR-017, then delete after cutover acceptance | Zero-traffic/outbox/Temporal preflight passes before idle; all old executions remain terminal/disposed and durable replacement later passes recovery |
 | Gateway/worker public task IPs | Release with task removal | Cost/inventory proves no continuously assigned application IPv4 address |
 | Gateway/worker ECR repositories | Delete after immutable rollback artifacts expire | No migration/browser consumer or supported rollback references them |
 | Temporal Cloud key and Secrets Manager secret | Revoke provider key, delete secret/version and IAM access | Namespace has no required live execution and sanitized retirement evidence exists |
-| Container heartbeat filters/alarms | Delete | Lambda/API/durable/SQS alarms and notification recovery pass |
+| Container heartbeat filters/alarms | Disable actions and missing-data breach behavior while intentionally idle; delete at retirement | No expected-silence notification during idle; Lambda/API/durable/SQS alarms and notification recovery pass before deletion |
 | Shared application log group/dashboard | Replace ECS widgets/queries with Lambda and durable metrics | Dashboard and runbook contain no nonexistent ECS service dimensions |
 | Event SQS/DLQ, S3, KMS, RDS, backups/PITR | Retain and narrow policies | Existing recovery/security evidence is preserved or replayed after policy change |
 | ECS cluster and migration task | Retain only as owned on-demand capability | Zero running services/tasks at idle; remove if no on-demand owner remains |
@@ -160,26 +160,34 @@ replacement.
 3. **Dark deployment:** deploy versioned Lambdas, aliases, endpoint policies, queues/event rules,
    and replacement alarms without changing the public API integration or normal outbox route.
    Prove direct-invocation denial and synthetic function-level checks.
-4. **Isolated staging cutover:** migrate the synthetic staging slice first. Quiesce writes, drain or
-   explicitly dispose Temporal work, reconcile the outbox, migrate the API integration and new-event
-   route, then run authenticated, cross-user, failure, recovery, restore, and fixed-workload gates.
-5. **Development cutover:** apply the exact reviewed development plan, using a short write freeze
-   around final outbox reconciliation. Move new workflows only; never dual-start one event in both
-   engines. Preserve a time-bounded API integration/outbox routing rollback switch.
-6. **Rollback window:** retain old task definitions/images and disabled service definitions without
-   running tasks. Roll back only if data/schema compatibility and old Temporal credentials are
-   intact; reconcile every event created during the attempted cutover before routing it.
-7. **Retirement plan:** after acceptance and the recorded rollback expiry, create a separate
+4. **Zero-traffic pre-cutover idle shutdown:** under [ADR-017](../../adr/017-zero-traffic-precutover-ecs-idle-posture.md),
+   require explicit product-owner acceptance of environment unavailability, zero undispatched
+   outbox rows, and zero running Temporal workflows. Apply separate checksum-reviewed development
+   and staging plans containing only two ECS desired-count and two heartbeat-alarm updates. Retain
+   the services and every rollback/persistent resource while releasing task public IPs.
+5. **Coordinated replacement rollback:** with ECS retained idle, complete the separately reviewed
+   development workflow release rollback/restoration and zero-drift evidence between the two
+   accepted Lambda release sets. Do not resume ECS merely to exercise dark Lambda rollback.
+6. **Isolated staging cutover:** deploy and migrate the synthetic staging slice first. Recheck the
+   empty outbox/Temporal boundary, migrate the API integration and new-event route, then run
+   authenticated, cross-user, failure, recovery, restore, and fixed-workload gates against Lambda.
+7. **Development cutover:** apply the exact reviewed development plan. Recheck the empty outbox and
+   move new workflows only; never dual-start one event in both engines. Preserve time-bounded API
+   integration/outbox-routing and explicit ECS-resume rollback switches.
+8. **Rollback window:** retain old task definitions/images and ECS service definitions without
+   running tasks. Resume only if data/schema compatibility and old Temporal credentials are intact;
+   reconcile every event created during an attempted cutover before routing it.
+9. **Retirement plan:** after acceptance and the recorded rollback expiry, create a separate
    refresh-backed Terraform plan listing every deletion. Verify databases, buckets, queues, KMS,
    backups, state, budgets, and cost exports are untouched. Apply only that reviewed plan.
-8. **Provider retirement:** verify zero required Temporal executions, revoke/delete Temporal keys,
+10. **Provider retirement:** verify zero required Temporal executions, revoke/delete Temporal keys,
    remove the managed secret and IAM access, and close the namespace/account only when billing and
    retained evidence obligations allow it.
-9. **Repository cleanup:** remove Temporal SDK/config/code/tests/Compose services, ECS gateway/worker
+11. **Repository cleanup:** remove Temporal SDK/config/code/tests/Compose services, ECS gateway/worker
    definitions, Cloud Map/VPC Link variables/outputs, container-only scripts, heartbeat logic,
    obsolete CI, skills, docs/runbooks, and unused dependencies. Repository-wide search must find no
    active reference outside historical evidence and superseded ADRs.
-10. **Final proof:** replay the complete Phase 0 acceptance in both isolated environments, verify
+12. **Final proof:** replay the complete Phase 0 acceptance in both isolated environments, verify
     no drift, prove zero idle ECS tasks, inspect the first billing window, update the cost baseline,
     and only then complete D0-016.
 
@@ -225,6 +233,7 @@ replacement.
 | SR-003 | Implement the SQS nudge, starter, reconciler, and exactly-once-effective outbox protocol. | Complete | Crash/duplicate/reorder/oldest-page source tests and real PostgreSQL migration/failure/claim integration pass. Deployment remains owned by SR-004/SR-005. [Source evidence](evidence/d0-serverless-outbox-source-2026-08-02.md) |
 | SR-004 | Port and verify workflows using versioned Lambda durable functions. | Complete | The profile-readiness workflow, private activity boundary, terminal recovery, exact-version guard, official local-runner durability matrix, repeatable PostgreSQL integration, and reproducible artifacts pass. Callback success/expiry is a conformance-only fixture because this workflow has no product callback. Deployment remains under SR-005. [Source evidence](evidence/d0-profile-readiness-durable-source-2026-08-02.md) |
 | SR-005 | Implement Terraform, IAM, KMS, private secret access, observability, deployment, rollback, and retirement automation. | In progress | Source, artifacts, bootstrap, the complete development dark deployment, and both workflow release conformance drills pass. The second exact-source release was independently read back, deployed through its checksum-authorized 14-update/one-propagation-gate plan, exercised through all four synthetic paths, restored its exact DLQ and alarm boundary, delivered all four operational notifications, and returned to zero drift without route/trigger/ECS/Temporal change. Coordinated known-good release rollback/restoration, staging deployment, cutover support, and retirement remain open. [First conformance acceptance](evidence/d0-development-workflow-dark-conformance-acceptance-2026-08-03.md), [rollback-release preflight](evidence/d0-development-workflow-rollback-release-preflight-2026-08-03.md), [source-attested release evidence](evidence/d0-development-workflow-source-attested-release-2026-08-03.md) |
+| SR-005A | Place confirmed zero-traffic development and staging ECS rollback services into the retained zero-task idle posture before Lambda cutover. | In progress | [ADR-017](../../adr/017-zero-traffic-precutover-ecs-idle-posture.md) and the guarded source/operator are implemented locally. Merge, separate exact-main environment plans, zero-work preflights, applies, public-IP release, retained-resource inventory, and no-drift evidence remain open. [Source evidence](evidence/d0-precutover-ecs-idle-shutdown-source-2026-08-03.md) |
 | SR-006 | Cut over and accept isolated synthetic staging. | Not started | Deployed identity/isolation/workflow/recovery/workload/no-drift evidence |
 | SR-007 | Cut over and accept development. | Not started | Exact-plan apply and equivalent deployed evidence |
 | SR-008 | Apply the separately reviewed old-runtime retirement plan. | Not started | Resource deletion inventory, zero idle tasks, retained persistent resources, no drift |
@@ -290,6 +299,7 @@ replacement.
 | 2026-08-03 | Read-only inventory found every workflow alias on accepted version `2` with only known-bad pre-correction version `1` retained, so rollback was correctly refused and AWS remained unchanged. Added locally verified exact-source manifest/bundle attestation so a clean merged commit can produce a behavior-neutral, byte-distinct second release. Publication, deployment, conformance, reverse-plan authorization, rollback, restoration, and zero drift remain separate gates. | [Rollback-release preflight](evidence/d0-development-workflow-rollback-release-preflight-2026-08-03.md) |
 | 2026-08-03 | Published and independently read back the exact-source second workflow release, applied its checksum-authorized 14-update/one-propagation-gate plan, and returned the complete dark boundary to zero drift. The separately authorized four-probe drill then passed exact-version failure, one reviewed DLQ deletion, four alarm transitions, context cleanup, privacy-safe aggregate logs, and another zero-drift plan without product write, reconciler, trigger, API/ECS, or Temporal change. Human notification receipt remains pending; coordinated rollback/restoration is next. | [Source-attested release evidence](evidence/d0-development-workflow-source-attested-release-2026-08-03.md), [publication run](https://github.com/Vrixic/project-ai-job-apply/actions/runs/30849025581) |
 | 2026-08-03 | Product owner confirmed receipt of all four second-release conformance notifications: durable-failure `ALARM`/`OK` and dead-letter `ALARM`/`OK`. End-to-end alert delivery now passes for the source-attested release without retaining the destination or message content; coordinated rollback/restoration is next. | [Source-attested release evidence](evidence/d0-development-workflow-source-attested-release-2026-08-03.md) |
+| 2026-08-03 | Product owner confirmed development and synthetic staging have zero traffic and accepted deliberate API/workflow unavailability so continuous ECS shutdown moves ahead of Lambda cutover. ADR-017 and locally implemented guarded source retain both services at zero desired tasks, require zero outbox/Temporal work, quiet only expected heartbeat silence, preserve an exact resume boundary, and forbid persistent/routing/trigger deletion. No AWS resource has changed; merge and separate environment plans/applies remain required. | [ADR-017](../../adr/017-zero-traffic-precutover-ecs-idle-posture.md), [source evidence](evidence/d0-precutover-ecs-idle-shutdown-source-2026-08-03.md), [runbook](../../../infrastructure/runbooks/deployments/phase0-ecs-idle-shutdown.md) |
 | 2026-08-02 | Published the exact merged gateway-boundary release, applied a checksum-matched plan containing only the function artifact/version and alias updates, and returned all 11 dark resources to zero drift without changing the ECS public route. The deployed 15-case no-write matrix passed status, trusted-authorizer, scope, route, request-shape, media-type, base64, and body-size boundaries. Its verifier now accepts valid problem-media-type parameters while retaining strict status/code/trace/cache assertions. Authenticated browser isolation replay and controlled alias rollback remain open. | [Gateway boundary-hardening evidence](evidence/d0-gateway-lambda-boundary-hardening-2026-08-02.md), [publication run](https://github.com/Vrixic/project-ai-job-apply/actions/runs/30735796145) |
 | 2026-08-02 | The product owner repeated authenticated two-account isolation against immutable version `3`; account B received only the sanitized non-disclosing pass, so version `3` is accepted as the second rollback endpoint. Added a checksum-gated alias operator and runbook. Its read-only live preflight selected `3 → 2 → 3`, two alias updates, and zero public-traffic changes; missing execution authority, wrong checksum, version `1`, and overwrite were rejected, the alias stayed on `3`, and the ignored context was cleaned. Merge, exact-main replan, explicit execution, restoration, alarm/error inspection, and zero drift remain open. | [Gateway boundary-hardening evidence](evidence/d0-gateway-lambda-boundary-hardening-2026-08-02.md), [rollback preflight](evidence/d0-development-gateway-lambda-alias-rollback-preflight-2026-08-02.md) |
 | 2026-08-02 | Executed the separately reviewed exact-main dark-alias rollback. Accepted versions `3 → 2 → 3` each passed `200/200/401`; optimistic revision locking, restoration in `finally`, full post-restore preflight, three healthy alarms, clean aggregate logs, ignored-context cleanup, and zero drift across all 11 reviewed resources passed. Public traffic remained on ECS. The gateway rollback gate is complete; SR-003 SQS/outbox implementation is the next migration task. | [Completed rollback evidence](evidence/d0-development-gateway-lambda-alias-rollback-2026-08-02.md) |

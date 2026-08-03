@@ -158,6 +158,7 @@ $env:TF_VAR_gateway_desired_count = [string]$gatewayService.desiredCount
 $env:TF_VAR_gateway_cpu = [string]$gatewayTask.cpu
 $env:TF_VAR_gateway_memory = [string]$gatewayTask.memory
 $env:TF_VAR_worker_desired_count = [string]$workerService.desiredCount
+$env:TF_VAR_run_continuous_ecs_runtime = "true"
 $env:TF_VAR_worker_cpu = [string]$workerTask.cpu
 $env:TF_VAR_worker_memory = [string]$workerTask.memory
 $env:TF_VAR_high_availability = ([bool]$database.MultiAZ).ToString().ToLowerInvariant()

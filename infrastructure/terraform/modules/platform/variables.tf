@@ -75,6 +75,12 @@ variable "worker_desired_count" {
   }
 }
 
+variable "run_continuous_ecs_runtime" {
+  description = "Run the rollback-only gateway and workflow-worker ECS services continuously. Set false only for an explicitly accepted zero-traffic idle posture."
+  type        = bool
+  default     = true
+}
+
 variable "worker_cpu" {
   description = "Fargate CPU units for the workflow-worker task."
   type        = number

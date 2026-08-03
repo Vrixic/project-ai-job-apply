@@ -111,6 +111,12 @@ Per [ADR-016](adr/016-scale-to-zero-application-runtime.md), default the applica
 to scale-to-zero managed compute through pre-launch and after launch until production evidence
 requires reserved capacity. The primary AWS region is `us-east-2`.
 
+[ADR-017](adr/017-zero-traffic-precutover-ecs-idle-posture.md) permits confirmed zero-traffic
+development and synthetic-staging environments to stop their retained legacy gateway/worker tasks
+before Lambda cutover, after zero-outbox/Temporal proof. This deliberately sacrifices non-user
+environment availability while preserving Terraform ownership and an exact rollback boundary; it
+does not permit early deletion of persistent or legacy rollback resources.
+
 - Use API Gateway with a direct versioned Lambda integration for synchronous APIs.
 - Use the transactional outbox, SQS/DLQ, and versioned Lambda durable functions for long-running
   orchestration. PostgreSQL remains product and audit truth.

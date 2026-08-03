@@ -73,6 +73,12 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   read-only transaction against development or staging and emit only pending count/age/attempt
   metadata plus an ordered identifier digest. Individual synthetic event IDs require the explicit
   `-IncludeEventIds` switch; AWS execution requires the separate `-Execute` switch.
+- `operate-phase0-ecs-idle-shutdown.ps1` — Requires explicit zero-traffic acknowledgement, zero
+  undispatched outbox rows, and zero running Temporal workflows; then creates and applies separate
+  checksum-reviewed development/staging plans containing only two ECS desired-count and two
+  heartbeat-alarm updates. Verification proves zero running tasks, released task public IPs,
+  quiet expected-heartbeat monitoring, and targeted zero drift while retaining an exact reverse
+  resume-plan boundary.
 - `plan-development-gateway-lambda-dark.ps1` — Reconstructs exact live development inputs, verifies
   the merged versioned artifact, official regional Secrets extension, and customer-managed state
   key; creates a refresh-backed sensitive plan under the ignored Terraform data directory; and
@@ -133,8 +139,9 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   X-Ray permissions, complete gateway/outbox/activity trace, and forbidden-field absence.
 - `exercise-development-log-delivery.ps1` — Reports sanitized heartbeat state and performs or
   recovers the exact development-only gateway `PutLogEvents` interruption drill.
-- `node backend/workflows/cloud-conformance.mjs` — Verifies the development AWS
-  Secrets Manager destination and performs a read-only Temporal Cloud namespace request without
-  printing the runtime key or environment identifiers.
+- `node backend/workflows/cloud-conformance.mjs` — Verifies an environment-scoped AWS Secrets
+  Manager destination and performs a read-only Temporal Cloud namespace request without printing
+  the runtime key or environment identifiers. `--require-zero-open-workflows` additionally fails
+  closed when the namespace contains a running workflow.
 - `validate-skills.mjs` — Validates repository skill structure, trigger metadata, UI metadata,
   routing, catalog coverage, and removal of scaffold placeholders.

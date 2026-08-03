@@ -85,7 +85,8 @@ ceiling. This prevents a moving "latest" extension from entering a recovery plan
 
 Use -PinnedExtensionLayerArn with -VerifyCompletedDarkDeployment after the dark deployment is
 complete. That mode verifies the healthy live function and reviewed concurrency, requires a
-refresh-backed zero-change plan, and still proves ECS stability and no API traffic change.
+refresh-backed zero-change plan, and still proves the retained ECS services are stable at either
+the accepted continuous or zero-traffic idle posture with no API routing change.
 
 Use -PinnedExtensionLayerArn with -AllowArtifactReleaseUpdate for a subsequent immutable dark
 release. That mode verifies the healthy current function, immutable alias, reviewed concurrency,
@@ -246,6 +247,7 @@ $terraformVariables = @(
   "gateway_cpu",
   "gateway_memory",
   "worker_desired_count",
+  "run_continuous_ecs_runtime",
   "worker_cpu",
   "worker_memory",
   "enable_tracing",
@@ -534,9 +536,22 @@ try {
   $workerService = Get-OnlyItem `
     -Items @($services | Where-Object { $_.serviceName -eq "workflow-worker" }) `
     -FailureMessage "The exact live development worker service was not found."
+  $ecsContinuous = (
+    [int]$gatewayService.desiredCount -eq 1 -and
+    [int]$gatewayService.runningCount -eq 1 -and
+    [int]$workerService.desiredCount -eq 1 -and
+    [int]$workerService.runningCount -eq 1
+  )
+  $ecsIdle = (
+    [int]$gatewayService.desiredCount -eq 0 -and
+    [int]$gatewayService.runningCount -eq 0 -and
+    [int]$workerService.desiredCount -eq 0 -and
+    [int]$workerService.runningCount -eq 0
+  )
   if (
-    [int]$gatewayService.runningCount -ne [int]$gatewayService.desiredCount -or
-    [int]$workerService.runningCount -ne [int]$workerService.desiredCount
+    (-not $ecsContinuous -and -not $ecsIdle) -or
+    [int]$gatewayService.pendingCount -ne 0 -or
+    [int]$workerService.pendingCount -ne 0
   ) {
     throw "The existing rollback services must be stable before dark planning."
   }
@@ -634,10 +649,11 @@ try {
   $env:TF_VAR_gateway_image = [string]$gatewayContainer.image
   $env:TF_VAR_worker_image = [string]$workerContainer.image
   $env:TF_VAR_migration_image = [string]$migrationContainer.image
-  $env:TF_VAR_gateway_desired_count = [string]$gatewayService.desiredCount
+  $env:TF_VAR_gateway_desired_count = "1"
   $env:TF_VAR_gateway_cpu = [string]$gatewayTask.cpu
   $env:TF_VAR_gateway_memory = [string]$gatewayTask.memory
-  $env:TF_VAR_worker_desired_count = [string]$workerService.desiredCount
+  $env:TF_VAR_worker_desired_count = "1"
+  $env:TF_VAR_run_continuous_ecs_runtime = (-not $ecsIdle).ToString().ToLowerInvariant()
   $env:TF_VAR_worker_cpu = [string]$workerTask.cpu
   $env:TF_VAR_worker_memory = [string]$workerTask.memory
   $env:TF_VAR_enable_tracing = "true"
@@ -986,6 +1002,7 @@ try {
     Deletes                   = 0
     Replacements              = 0
     ExistingEcsServicesStable = $true
+    EcsRuntimeIdle            = [bool]$ecsIdle
     ApiTrafficChange          = $false
     PlanSha256                = $planHash
     SensitivePlanPath         = $planPath

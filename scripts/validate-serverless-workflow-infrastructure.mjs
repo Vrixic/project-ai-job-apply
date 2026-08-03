@@ -15,6 +15,11 @@ const environments = [
   read("infrastructure/terraform/environments/development/main.tf"),
   read("infrastructure/terraform/environments/staging/main.tf"),
 ];
+const environmentVariables = [
+  read("infrastructure/terraform/environments/development/variables.tf"),
+  read("infrastructure/terraform/environments/staging/variables.tf"),
+];
+const ecsIdleOperator = read("scripts/operate-phase0-ecs-idle-shutdown.ps1");
 
 const requireText = (source, expected, message) => {
   assert.ok(source.includes(expected), message);
@@ -95,6 +100,21 @@ requireText(
   'state               = var.enable_serverless_workflow_triggers ? "ENABLED" : "DISABLED"',
   "The reconciler must remain disabled before cutover.",
 );
+requireText(
+  platform,
+  "desired_count   = var.run_continuous_ecs_runtime ? var.gateway_desired_count : 0",
+  "The retained gateway service must support the explicit zero-traffic idle posture.",
+);
+requireText(
+  platform,
+  "desired_count   = var.run_continuous_ecs_runtime ? var.worker_desired_count : 0",
+  "The retained worker service must support the explicit zero-traffic idle posture.",
+);
+assert.equal(
+  platform.split("actions_enabled     = var.run_continuous_ecs_runtime").length - 1,
+  2,
+  "Exactly the two legacy process-heartbeat alarms must follow the ECS idle switch.",
+);
 
 assert.match(
   variables,
@@ -155,6 +175,36 @@ for (const environment of environments) {
     environment,
     "enable_serverless_workflow_triggers",
     "Every persistent environment must expose the independent cutover switch.",
+  );
+  requireText(
+    environment,
+    "run_continuous_ecs_runtime",
+    "Every persistent environment must pass through the explicit ECS idle switch.",
+  );
+}
+
+for (const environment of environmentVariables) {
+  assert.match(
+    environment,
+    /variable "run_continuous_ecs_runtime"\s*\{[\s\S]*?default\s*=\s*false/,
+    "Zero-traffic development and synthetic staging must default to the accepted idle posture.",
+  );
+}
+
+for (const expected of [
+  "Assert-ZeroPendingWork",
+  "--require-zero-open-workflows",
+  "module.platform.aws_ecs_service.gateway[0]",
+  "module.platform.aws_ecs_service.worker[0]",
+  "module.platform.aws_cloudwatch_metric_alarm.gateway_log_heartbeat_missing[0]",
+  "module.platform.aws_cloudwatch_metric_alarm.worker_log_heartbeat_missing[0]",
+  "Assert-PublicTaskAddressesReleased",
+  "Assert-TargetedNoDrift",
+]) {
+  requireText(
+    ecsIdleOperator,
+    expected,
+    `The guarded ECS idle operator is missing required boundary text: ${expected}`,
   );
 }
 
