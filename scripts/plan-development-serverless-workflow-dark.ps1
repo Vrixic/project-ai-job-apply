@@ -286,7 +286,7 @@ $previousDefaultRegion = $env:AWS_DEFAULT_REGION
 $terraformVariables = @(
   "gateway_image", "worker_image", "migration_image", "gateway_desired_count",
   "gateway_cpu", "gateway_memory", "worker_desired_count", "worker_cpu",
-  "worker_memory", "enable_tracing", "otel_collector_image", "trace_sample_ratio",
+  "worker_memory", "run_continuous_ecs_runtime", "enable_tracing", "otel_collector_image", "trace_sample_ratio",
   "high_availability", "private_application_networking", "enable_redis",
   "database_instance_class", "database_engine_version", "database_performance_insights",
   "enable_container_insights", "oidc_issuer", "oidc_audience", "temporal_address",
@@ -548,15 +548,23 @@ try {
     if (@($serviceResult.failures).Count -ne 0 -or @($serviceResult.services).Count -ne 2) {
       throw "Both development ECS rollback services must exist before the dark release."
     }
+    $servicePostures = @($serviceResult.services | ForEach-Object {
+      "$([int]$_.desiredCount)/$([int]$_.runningCount)/$([int]$_.pendingCount)"
+    })
+    if (
+      -not (
+        @($servicePostures | Where-Object { $_ -eq "1/1/0" }).Count -eq 2 -or
+        @($servicePostures | Where-Object { $_ -eq "0/0/0" }).Count -eq 2
+      )
+    ) {
+      throw "The retained ECS rollback services are not uniformly continuous or idle."
+    }
     foreach ($service in @($serviceResult.services)) {
       $primaryDeployment = Get-OnlyItem @(
         $service.deployments | Where-Object { [string]$_.status -eq "PRIMARY" }
       ) "An ECS rollback service does not have one primary deployment."
       if (
         [string]$service.status -ne "ACTIVE" -or
-        [int]$service.desiredCount -ne 1 -or
-        [int]$service.runningCount -ne 1 -or
-        [int]$service.pendingCount -ne 0 -or
         [string]$primaryDeployment.rolloutState -ne "COMPLETED"
       ) {
         throw "An ECS rollback service is not stable before the dark release."
@@ -574,6 +582,19 @@ try {
 
   $gatewayService = Get-BaselineValue $baselinePlan "module.platform.aws_ecs_service.gateway[0]"
   $workerService = Get-BaselineValue $baselinePlan "module.platform.aws_ecs_service.worker[0]"
+  $ecsRuntimeIdle = (
+    [int]$gatewayService.desired_count -eq 0 -and
+    [int]$workerService.desired_count -eq 0
+  )
+  if (
+    -not $ecsRuntimeIdle -and
+    (
+      [int]$gatewayService.desired_count -ne 1 -or
+      [int]$workerService.desired_count -ne 1
+    )
+  ) {
+    throw "The retained ECS services are outside the accepted continuous or idle capacity boundary."
+  }
   $gatewayTask = Get-BaselineValue $baselinePlan "module.platform.aws_ecs_task_definition.gateway[0]"
   $workerTask = Get-BaselineValue $baselinePlan "module.platform.aws_ecs_task_definition.worker[0]"
   $migrationTask = Get-BaselineValue $baselinePlan "module.platform.aws_ecs_task_definition.migration[0]"
@@ -605,10 +626,11 @@ try {
   $env:TF_VAR_gateway_image = [string]$gatewayContainer.image
   $env:TF_VAR_worker_image = [string]$workerContainer.image
   $env:TF_VAR_migration_image = [string]$migrationContainer.image
-  $env:TF_VAR_gateway_desired_count = [string]$gatewayService.desired_count
+  $env:TF_VAR_gateway_desired_count = "1"
   $env:TF_VAR_gateway_cpu = [string]$gatewayTask.cpu
   $env:TF_VAR_gateway_memory = [string]$gatewayTask.memory
-  $env:TF_VAR_worker_desired_count = [string]$workerService.desired_count
+  $env:TF_VAR_worker_desired_count = "1"
+  $env:TF_VAR_run_continuous_ecs_runtime = (-not $ecsRuntimeIdle).ToString().ToLowerInvariant()
   $env:TF_VAR_worker_cpu = [string]$workerTask.cpu
   $env:TF_VAR_worker_memory = [string]$workerTask.memory
   $env:TF_VAR_enable_tracing = "true"
@@ -1193,6 +1215,7 @@ try {
     CompletedDarkVerification  = [bool]$VerifyCompletedDarkDeployment
     NoDrift                    = [bool]$VerifyCompletedDarkDeployment
     GatewayEcsApiBaselineStable = $true
+    EcsRuntimeIdle             = [bool]$ecsRuntimeIdle
     EndpointSidCorrection      = $acceptedEndpointSidCorrection
     EffectiveDurableDlqPermission = if ($RecoverFailedApply) { $true } else { $null }
     ArtifactsVerified          = 3

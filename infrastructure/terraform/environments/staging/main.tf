@@ -55,6 +55,7 @@ module "platform" {
   gateway_cpu                    = var.gateway_cpu
   gateway_memory                 = var.gateway_memory
   worker_desired_count           = var.worker_desired_count
+  run_continuous_ecs_runtime     = var.run_continuous_ecs_runtime
   worker_cpu                     = var.worker_cpu
   worker_memory                  = var.worker_memory
   high_availability              = var.high_availability

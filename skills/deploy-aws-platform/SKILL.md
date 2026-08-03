@@ -38,6 +38,10 @@ Terraform files as deployed evidence.
 - Keep `deploy_applications=false` until every application prerequisite validates.
 - Preserve the lean defaults until measured demand or launch review justifies replicas, private
   NAT egress, Redis, Multi-AZ data services, an ALB, or continuously provisioned staging.
+- For the ADR-017 pre-cutover idle posture, keep `deploy_applications=true` so the rollback
+  services and API boundary remain managed. Use only `operate-phase0-ecs-idle-shutdown.ps1` after
+  explicit zero-traffic acceptance, zero pending outbox rows, and zero running Temporal workflows;
+  never scale the services directly in the console or CLI.
 
 Do not run against an ambiguous account or reuse development state for staging.
 
@@ -71,6 +75,12 @@ exact reviewed plan. Do not apply a newly regenerated unreviewed plan.
 7. Exercise rollback and restore procedures; retain evidence.
 8. Update delivery records only with links to the actual plan, deployment, health, and restore
    evidence.
+
+When an accepted zero-traffic environment is intentionally idled before cutover, require separate
+development/staging plan checksums, exactly two service desired-count plus two heartbeat-alarm
+updates, zero creates/deletes/replacements, retained rollback resources, zero running tasks,
+released task public IPs, quiet expected-heartbeat monitoring, and refresh-backed scoped zero
+drift. Expected API unavailability is not a reason to resume ECS automatically.
 
 Stop and report a blocker when credentials, provider configuration, certificate, immutable
 images, state, or restore authority is absent. Do not insert placeholder values into live

@@ -11,6 +11,12 @@ Keep replicas at one, `high_availability = false`, `private_application_networki
 `enable_redis = false` until recorded load, reliability, security, or launch evidence requires a
 change.
 
+The zero-traffic pre-cutover posture defaults `run_continuous_ecs_runtime = false`. Apply it only
+through the [Phase 0 ECS idle-shutdown runbook](../../../runbooks/deployments/phase0-ecs-idle-shutdown.md),
+which retains both ECS services and their rollback artifacts at zero desired tasks. The current ECS
+API and Temporal path are intentionally unavailable while idle; do not interpret that expected
+state as authority to restart tasks or delete the retained rollback boundary.
+
 The account-local cost controls use a $5 monthly reference budget with one actual-cost alert at
 $5, plus a resource-attributed CUR 2.0 export retained for 400 days. Alerts do not cap spend.
 

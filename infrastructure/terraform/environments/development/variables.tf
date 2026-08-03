@@ -33,6 +33,12 @@ variable "worker_desired_count" {
   default = 1
 }
 
+variable "run_continuous_ecs_runtime" {
+  description = "Run the legacy gateway and Temporal worker continuously. Development defaults to the accepted zero-traffic idle posture."
+  type        = bool
+  default     = false
+}
+
 variable "worker_cpu" {
   type    = number
   default = 512

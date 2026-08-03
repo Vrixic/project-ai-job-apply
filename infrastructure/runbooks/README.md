@@ -27,6 +27,9 @@ Every alert and privileged admin operation should link to a relevant runbook.
   printing the value, and defines safe rotation.
 - [Development database migration](deployments/development-database-migration.md) — Provisions and
   runs the one-off migration task while long-running application services remain disabled.
+- [Phase 0 ECS idle shutdown](deployments/phase0-ecs-idle-shutdown.md) — Checksum-gates the
+  zero-work development/staging scale-down to zero gateway and worker tasks while retaining the
+  exact rollback services and persistent platform.
 - [Staging application rollout](deployments/staging-application-rollout.md) — Enables and verifies
   the isolated AWS/Temporal staging runtime under the temporary synthetic-only Auth0 exception,
   then defines its application-only rollback boundary.

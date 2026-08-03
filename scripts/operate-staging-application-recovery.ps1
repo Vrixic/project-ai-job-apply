@@ -313,6 +313,7 @@ function Set-TerraformVariables {
   $env:TF_VAR_gateway_cpu = [string]$Context.gateway_cpu
   $env:TF_VAR_gateway_memory = [string]$Context.gateway_memory
   $env:TF_VAR_worker_desired_count = [string]$Context.worker_desired_count
+  $env:TF_VAR_run_continuous_ecs_runtime = "true"
   $env:TF_VAR_worker_cpu = [string]$Context.worker_cpu
   $env:TF_VAR_worker_memory = [string]$Context.worker_memory
   $env:TF_VAR_high_availability = ([bool]$Context.high_availability).ToString().ToLowerInvariant()

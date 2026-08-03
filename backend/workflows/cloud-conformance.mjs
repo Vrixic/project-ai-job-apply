@@ -19,6 +19,8 @@ Options:
   --secret-id <id>       Secrets Manager secret ID (default: ${defaults.secretId})
   --address <endpoint>   Temporal Cloud gRPC endpoint
   --namespace <name>     Full Temporal Cloud namespace ID
+  --require-zero-open-workflows
+                         Fail when the namespace contains a running workflow
   --help                 Show this help
 
 The command never prints the secret value, AWS account ID, secret ARN, or Temporal account suffix.`;
@@ -35,6 +37,10 @@ function parseArguments(argv) {
     const argument = argv[index];
     if (argument === "--help" || argument === "-h") {
       return { help: true };
+    }
+    if (argument === "--require-zero-open-workflows") {
+      options.requireZeroOpenWorkflows = true;
+      continue;
     }
     if (!argument.startsWith("--")) {
       fail(`Unexpected argument: ${argument}`);
@@ -173,6 +179,16 @@ async function verify(options) {
       namespace: options.namespace,
       pageSize: 1,
     });
+    if (options.requireZeroOpenWorkflows) {
+      const running = await connection.workflowService.listWorkflowExecutions({
+        namespace: options.namespace,
+        pageSize: 1,
+        query: 'ExecutionStatus = "Running"',
+      });
+      if ((running.executions?.length ?? 0) !== 0) {
+        fail("The Temporal namespace still contains at least one running workflow.");
+      }
+    }
   } catch {
     fail(
       "Temporal Cloud authentication or namespace read conformance failed. Check the key identity, expiry, namespace permission, address, and namespace.",
@@ -183,6 +199,9 @@ async function verify(options) {
   }
 
   process.stdout.write("Temporal Cloud authentication and namespace read conformance passed.\n");
+  if (options.requireZeroOpenWorkflows) {
+    process.stdout.write("Temporal Cloud reports zero running workflows.\n");
+  }
   process.stdout.write("No secret values or environment identifiers were printed.\n");
 }
 
