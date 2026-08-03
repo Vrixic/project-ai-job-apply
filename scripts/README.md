@@ -92,7 +92,13 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   all immutable workflow artifacts, the pinned official regional extension, exact action
   allowlists, Temporal dispatch, disabled SQS/EventBridge triggers, stable API/ECS capacity, and
   zero deletes/replacements. Recovery additionally requires effective exact durable-DLQ permission
-  and the absent rolled-back durable function. The ignored plan is never applied by the script.
+  and the absent rolled-back durable function. Completed-dark verification requires a refresh-backed
+  zero-change result while rechecking the immutable trigger-disabled boundary. The ignored plan is
+  never applied by the script.
+- `operate-development-serverless-workflow-dark-conformance.ps1` — Creates an ignored,
+  checksum-reviewed context from an exact-commit zero-drift plan and stable live boundary. Separate
+  execution synchronously exercises four synthetic fail-closed handlers without invoking the
+  reconciler, sending SQS, writing product data, enabling triggers, or changing public routing.
 - `operate-development-gateway-lambda-alias-rollback.ps1` — Creates a checksum-reviewed,
   read-only recovery context for two accepted immutable development Lambda versions. Explicit
   execution uses optimistic alias revision locking, proves the prior version through the guarded

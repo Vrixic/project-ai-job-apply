@@ -32,6 +32,7 @@ param(
   [string]$AwsProfile = "ai-job-apply-development-admin",
   [ValidatePattern("^[a-z]{2}-[a-z]+-[0-9]+$")][string]$Region = "us-east-2",
   [switch]$RecoverFailedApply,
+  [switch]$VerifyCompletedDarkDeployment,
   [switch]$Help
 )
 
@@ -43,7 +44,9 @@ Creates a refresh-backed development plan for the complete dark serverless workf
 It verifies immutable artifacts, reconstructs every live platform input, and keeps dispatch on
 Temporal and all replacement triggers disabled. Use -RecoverFailedApply only after the guarded
 initial apply stopped at the documented durable-role IAM propagation race; that mode requires the
-effective DLQ permission and exact partial dark boundary before planning the remainder.
+effective DLQ permission and exact partial dark boundary before planning the remainder. Use
+-VerifyCompletedDarkDeployment after the full apply to require a refresh-backed zero-change plan
+while rechecking the immutable artifacts and complete trigger-disabled workflow boundary.
 
 The sensitive plan remains below the ignored Terraform .terraform directory. This script rejects
 every action outside its exact initial or partial-recovery boundary and never applies
@@ -68,6 +71,9 @@ if (@($required | Where-Object { -not $_ }).Count -ne 0) {
 }
 if ($Region -ne "us-east-2") {
   throw "The Phase 0 development environment is restricted to us-east-2."
+}
+if ($RecoverFailedApply -and $VerifyCompletedDarkDeployment) {
+  throw "Recovery planning and completed-dark verification are mutually exclusive."
 }
 
 function Assert-ArtifactKey {
@@ -95,7 +101,13 @@ $environmentDirectory = Join-Path $repositoryRoot "infrastructure/terraform/envi
 $terraformDataDirectory = Join-Path $environmentDirectory ".terraform/dark-plan-data"
 $planDirectory = Join-Path $environmentDirectory ".terraform/workflow-dark-plans"
 $sourceCommit = (& git -C $repositoryRoot rev-parse HEAD).Trim()
-$planPrefix = if ($RecoverFailedApply) { "workflow-dark-recovery" } else { "workflow-dark" }
+$planPrefix = if ($VerifyCompletedDarkDeployment) {
+  "workflow-dark-verify"
+} elseif ($RecoverFailedApply) {
+  "workflow-dark-recovery"
+} else {
+  "workflow-dark"
+}
 $planPath = Join-Path $planDirectory "$planPrefix-$($sourceCommit.Substring(0, 8)).tfplan"
 
 foreach ($command in @("aws", "git", "terraform")) {
@@ -178,7 +190,7 @@ $baselinePlanPath = Join-Path $environmentDirectory (
 )
 $baseline = $null
 $acceptedEndpointSidCorrection = $false
-if (-not $RecoverFailedApply) {
+if (-not $RecoverFailedApply -and -not $VerifyCompletedDarkDeployment) {
 try {
   $baselineRaw = & (Join-Path $PSScriptRoot "plan-development-gateway-lambda-dark.ps1") `
     -ExpectedAccountId $ExpectedAccountId `
@@ -306,7 +318,7 @@ try {
     throw "The pinned development provider set could not be initialized."
   }
 
-  if ($RecoverFailedApply) {
+  if ($RecoverFailedApply -or $VerifyCompletedDarkDeployment) {
     $baselinePlan = [pscustomobject]@{
       state_resources = @(
         (& terraform "-chdir=$environmentDirectory" state pull 2>$null | ConvertFrom-Json).resources
@@ -457,9 +469,11 @@ try {
 
   $planOutput = & terraform "-chdir=$environmentDirectory" plan -input=false `
     -lock-timeout=5m -detailed-exitcode "-out=$planPath" 2>&1
-  if ($LASTEXITCODE -ne 2) {
+  $expectedPlanExitCode = if ($VerifyCompletedDarkDeployment) { 0 } else { 2 }
+  if ($LASTEXITCODE -ne $expectedPlanExitCode) {
     $diagnostic = (@($planOutput) | Select-Object -Last 12) -join " "
-    throw "The dark workflow plan did not produce a change-only result: $diagnostic"
+    $expectedResult = if ($VerifyCompletedDarkDeployment) { "zero-change" } else { "change-only" }
+    throw "The dark workflow plan did not produce a $expectedResult result: $diagnostic"
   }
   $plan = & terraform "-chdir=$environmentDirectory" show -json $planPath 2>$null |
     ConvertFrom-Json
@@ -469,6 +483,10 @@ try {
       (@($_.change.actions) -join ",") -notin @("no-op", "read")
     }
   )
+
+  if ($VerifyCompletedDarkDeployment -and $changes.Count -ne 0) {
+    throw "The completed workflow dark-deployment plan is not zero-change."
+  }
 
   $initialExpectedCreates = @(
     "module.platform.aws_cloudformation_stack.profile_readiness_durable[0]",
@@ -534,12 +552,18 @@ try {
     "module.platform.aws_vpc_endpoint.lambda[0]",
     "module.platform.time_sleep.profile_readiness_durable_policy_propagation[0]"
   )
-  $expectedCreates = if ($RecoverFailedApply) {
+  $expectedCreates = if ($VerifyCompletedDarkDeployment) {
+    @()
+  } elseif ($RecoverFailedApply) {
     $recoveryExpectedCreates
   } else {
     $initialExpectedCreates
   }
-  $expectedUpdates = if ($RecoverFailedApply) { @() } else { $initialExpectedUpdates }
+  $expectedUpdates = if ($VerifyCompletedDarkDeployment -or $RecoverFailedApply) {
+    @()
+  } else {
+    $initialExpectedUpdates
+  }
   $creates = @($changes | Where-Object { (@($_.change.actions) -join ",") -eq "create" })
   $updates = @($changes | Where-Object { (@($_.change.actions) -join ",") -eq "update" })
   $otherActions = @(
@@ -609,7 +633,7 @@ try {
     }
   }
 
-  if (-not $RecoverFailedApply) {
+  if (-not $RecoverFailedApply -and -not $VerifyCompletedDarkDeployment) {
   $gatewayFunctionChange = Get-PlannedChange "module.platform.aws_lambda_function.gateway[0]"
   Assert-OnlyPropertiesChanged $gatewayFunctionChange @(
     "environment", "last_modified", "qualified_arn", "qualified_invoke_arn", "version"
@@ -694,9 +718,9 @@ try {
     }
   }
 
-  $durableStackChange = Get-PlannedChange `
+  $durableStackChange = $null
+  $durableStack = Get-PlannedValue `
     "module.platform.aws_cloudformation_stack.profile_readiness_durable[0]"
-  $durableStack = $durableStackChange.change.after
   if (
     [string]$durableStack.name -ne "ai-job-apply-development-profile-readiness-durable" -or
     [string]$durableStack.on_failure -ne "DELETE"
@@ -715,12 +739,20 @@ try {
     ) {
       throw "The durable stack does not select the exact artifact, version, or bounded concurrency."
     }
-  } elseif (-not [bool]$durableStackChange.change.after_unknown.template_body) {
-    throw "The durable stack template is neither exact nor role-dependent unknown."
+  } elseif ($VerifyCompletedDarkDeployment) {
+    throw "The completed durable stack template is unavailable for exact verification."
+  } else {
+    $durableStackChange = Get-PlannedChange `
+      "module.platform.aws_cloudformation_stack.profile_readiness_durable[0]"
+    if ([bool]$durableStackChange.change.after_unknown.template_body) {
+      # The initial/recovery create can remain role-dependent until apply.
+    } else {
+      throw "The durable stack template is neither exact nor role-dependent unknown."
+    }
   }
 
-  $propagation = (Get-PlannedChange `
-    "module.platform.time_sleep.profile_readiness_durable_policy_propagation[0]").change.after
+  $propagation = Get-PlannedValue `
+    "module.platform.time_sleep.profile_readiness_durable_policy_propagation[0]"
   if (
     [string]$propagation.create_duration -ne "45s" -or
     -not [string]$propagation.triggers.role_arn -or
@@ -763,6 +795,8 @@ try {
     Environment                 = "development"
     SourceCommit               = $sourceCommit
     RecoveryFromFailedApply    = [bool]$RecoverFailedApply
+    CompletedDarkVerification  = [bool]$VerifyCompletedDarkDeployment
+    NoDrift                    = [bool]$VerifyCompletedDarkDeployment
     GatewayEcsApiBaselineStable = $true
     EndpointSidCorrection      = $acceptedEndpointSidCorrection
     EffectiveDurableDlqPermission = if ($RecoverFailedApply) { $true } else { $null }
