@@ -5,7 +5,8 @@
 - Terraform source commit: `1e97b771cb955b9665ed5f8d96d3d1fa127e8a9c`
 - Terraform version: `1.9.8`
 - Diagnostic plan SHA-256: `85a7920ad51be43cb6ba5d97d8720626b83bf244e0b22e860b7fc11c611916ea`
-- Status: Guarded diagnostic passed; sensitive plan is local, ignored, and unapplied
+- Status: Guarded diagnostic passed, then its exact merged-main regeneration was partially applied
+  and stopped at the documented IAM-propagation race; the saved plan must not be reused
 
 ## Reconstructed inputs
 
@@ -80,9 +81,15 @@ The saved plan passed all of these checks:
 No account number, bucket name, KMS identifier, role ARN, credential, token, OIDC value, Temporal
 value, policy body, state content, plan content, or candidate data is retained in this record.
 
-## Next gate
+## Subsequent result and next gate
 
-Merge the guarded operator and evidence, synchronize exact `main`, then regenerate this plan. A
-changed post-merge checksum requires a new exact authorization. Applying the dark plan remains a
-separate gate and must be followed by live trigger-disabled, function health, alarm, policy,
-artifact, ECS/API/Temporal stability, and refresh-backed zero-drift proof.
+The exact merged-main regeneration was separately authorized and applied. AWS accepted a bounded
+partial boundary, then the durable CloudFormation stack failed while Lambda validated the newly
+created role before its exact DLQ grant propagated. The stack rolled back, Terraform stopped, and
+API/ECS/Temporal routing remained unchanged. See the
+[failure evidence](d0-development-workflow-dark-apply-failure-2026-08-02.md).
+
+Merge the deterministic propagation gate and guarded partial-recovery operator, synchronize exact
+`main`, then regenerate. A recovery checksum requires new explicit authorization. Successful
+recovery must be followed by live trigger-disabled, function health, alarm, policy, artifact,
+ECS/API/Temporal stability, and refresh-backed zero-drift proof.

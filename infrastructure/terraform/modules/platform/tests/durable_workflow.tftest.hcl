@@ -50,6 +50,9 @@ mock_provider "aws" {
 mock_provider "random" {
 }
 
+mock_provider "time" {
+}
+
 run "durable_boundary_is_dark_encrypted_and_replay_safe" {
   command = plan
 
@@ -80,6 +83,14 @@ run "durable_boundary_is_dark_encrypted_and_replay_safe" {
   assert {
     condition     = length(aws_cloudformation_stack.profile_readiness_durable) == 1
     error_message = "The enabled profile-readiness boundary must own exactly one durable stack."
+  }
+
+  assert {
+    condition = (
+      length(time_sleep.profile_readiness_durable_policy_propagation) == 1 &&
+      time_sleep.profile_readiness_durable_policy_propagation[0].create_duration == "45s"
+    )
+    error_message = "Durable creation must wait for its exact IAM policy to propagate."
   }
 
   assert {

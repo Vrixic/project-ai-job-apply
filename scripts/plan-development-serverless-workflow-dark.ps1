@@ -31,6 +31,7 @@ param(
   [string]$PinnedExtensionLayerArn,
   [string]$AwsProfile = "ai-job-apply-development-admin",
   [ValidatePattern("^[a-z]{2}-[a-z]+-[0-9]+$")][string]$Region = "us-east-2",
+  [switch]$RecoverFailedApply,
   [switch]$Help
 )
 
@@ -39,12 +40,14 @@ $ErrorActionPreference = "Stop"
 if ($Help) {
   @"
 Creates a refresh-backed development plan for the complete dark serverless workflow boundary.
-It first runs the existing completed-gateway verifier, verifies all immutable workflow artifacts,
-reconstructs every live platform input, and keeps dispatch on Temporal and all replacement triggers
-disabled. The sensitive plan remains below the ignored Terraform .terraform directory.
+It verifies immutable artifacts, reconstructs every live platform input, and keeps dispatch on
+Temporal and all replacement triggers disabled. Use -RecoverFailedApply only after the guarded
+initial apply stopped at the documented durable-role IAM propagation race; that mode requires the
+effective DLQ permission and exact partial dark boundary before planning the remainder.
 
-This script rejects every action outside the reviewed 37-create/5-update dark boundary and never
-applies infrastructure or changes traffic.
+The sensitive plan remains below the ignored Terraform .terraform directory. This script rejects
+every action outside its exact initial or partial-recovery boundary and never applies
+infrastructure or changes traffic.
 "@
   exit 0
 }
@@ -92,7 +95,8 @@ $environmentDirectory = Join-Path $repositoryRoot "infrastructure/terraform/envi
 $terraformDataDirectory = Join-Path $environmentDirectory ".terraform/dark-plan-data"
 $planDirectory = Join-Path $environmentDirectory ".terraform/workflow-dark-plans"
 $sourceCommit = (& git -C $repositoryRoot rev-parse HEAD).Trim()
-$planPath = Join-Path $planDirectory "workflow-dark-$($sourceCommit.Substring(0, 8)).tfplan"
+$planPrefix = if ($RecoverFailedApply) { "workflow-dark-recovery" } else { "workflow-dark" }
+$planPath = Join-Path $planDirectory "$planPrefix-$($sourceCommit.Substring(0, 8)).tfplan"
 
 foreach ($command in @("aws", "git", "terraform")) {
   if (-not (Get-Command $command -ErrorAction SilentlyContinue)) {
@@ -133,6 +137,25 @@ function Get-ContainerEnvironment {
 
 function Get-BaselineValue {
   param([object]$Plan, [string]$Address)
+  if ($Plan.PSObject.Properties.Name -contains "state_resources") {
+    foreach ($resource in @($Plan.state_resources)) {
+      $baseAddress = @([string]$resource.module, [string]$resource.type, [string]$resource.name) |
+        Where-Object { $_ }
+      $baseAddress = $baseAddress -join "."
+      foreach ($instance in @($resource.instances)) {
+        $instanceAddress = $baseAddress
+        if ($null -ne $instance.index_key) {
+          $instanceAddress += if ($instance.index_key -is [string]) {
+            "[`"$($instance.index_key)`"]"
+          } else {
+            "[$($instance.index_key)]"
+          }
+        }
+        if ($instanceAddress -eq $Address) { return $instance.attributes }
+      }
+    }
+    throw "The partial dark state is missing '$Address'."
+  }
   $change = Get-OnlyItem `
     -Items @($Plan.resource_changes | Where-Object { [string]$_.address -eq $Address }) `
     -FailureMessage "The completed dark baseline is missing '$Address'."
@@ -155,6 +178,7 @@ $baselinePlanPath = Join-Path $environmentDirectory (
 )
 $baseline = $null
 $acceptedEndpointSidCorrection = $false
+if (-not $RecoverFailedApply) {
 try {
   $baselineRaw = & (Join-Path $PSScriptRoot "plan-development-gateway-lambda-dark.ps1") `
     -ExpectedAccountId $ExpectedAccountId `
@@ -228,6 +252,7 @@ catch {
   }
   $acceptedEndpointSidCorrection = $true
 }
+}
 
 $previousTerraformDataDirectory = $env:TF_DATA_DIR
 $previousAccessKeyId = $env:AWS_ACCESS_KEY_ID
@@ -275,9 +300,26 @@ try {
   $env:AWS_SESSION_TOKEN = [string]$credentials.SessionToken
   $null = New-Item -ItemType Directory -Path $planDirectory -Force
 
-  $baselinePlan = & terraform "-chdir=$environmentDirectory" show -json `
-    $baselinePlanPath 2>$null | ConvertFrom-Json
-  if ($LASTEXITCODE -ne 0) { throw "The completed dark baseline plan could not be inspected." }
+  $initOutput = & terraform "-chdir=$environmentDirectory" init -input=false `
+    -lockfile=readonly -no-color 2>&1
+  if ($LASTEXITCODE -ne 0) {
+    throw "The pinned development provider set could not be initialized."
+  }
+
+  if ($RecoverFailedApply) {
+    $baselinePlan = [pscustomobject]@{
+      state_resources = @(
+        (& terraform "-chdir=$environmentDirectory" state pull 2>$null | ConvertFrom-Json).resources
+      )
+    }
+    if ($LASTEXITCODE -ne 0 -or $baselinePlan.state_resources.Count -eq 0) {
+      throw "The partial development state could not be inspected."
+    }
+  } else {
+    $baselinePlan = & terraform "-chdir=$environmentDirectory" show -json `
+      $baselinePlanPath 2>$null | ConvertFrom-Json
+    if ($LASTEXITCODE -ne 0) { throw "The completed dark baseline plan could not be inspected." }
+  }
 
   $artifactBucket = & terraform "-chdir=$environmentDirectory" output -raw artifact_bucket 2>$null
   if ($LASTEXITCODE -ne 0 -or -not $artifactBucket) {
@@ -428,7 +470,7 @@ try {
     }
   )
 
-  $expectedCreates = @(
+  $initialExpectedCreates = @(
     "module.platform.aws_cloudformation_stack.profile_readiness_durable[0]",
     "module.platform.aws_cloudwatch_event_rule.outbox_reconciler[0]",
     "module.platform.aws_cloudwatch_event_rule.profile_readiness_terminal[0]",
@@ -465,15 +507,39 @@ try {
     "module.platform.aws_sqs_queue.profile_readiness_dead_letter[0]",
     "module.platform.aws_sqs_queue_policy.profile_readiness_dead_letter[0]",
     "module.platform.aws_vpc_endpoint.lambda[0]",
-    "module.platform.aws_vpc_endpoint.sqs[0]"
+    "module.platform.aws_vpc_endpoint.sqs[0]",
+    "module.platform.time_sleep.profile_readiness_durable_policy_propagation[0]"
   )
-  $expectedUpdates = @(
+  $initialExpectedUpdates = @(
     "module.platform.aws_iam_role_policy.gateway_lambda[0]",
     "module.platform.aws_kms_key.platform",
     "module.platform.aws_lambda_alias.gateway[0]",
     "module.platform.aws_lambda_function.gateway[0]",
     "module.platform.aws_vpc_endpoint.secretsmanager[0]"
   )
+  $recoveryExpectedCreates = @(
+    "module.platform.aws_cloudformation_stack.profile_readiness_durable[0]",
+    "module.platform.aws_cloudwatch_event_rule.profile_readiness_terminal[0]",
+    "module.platform.aws_cloudwatch_event_target.profile_readiness_terminal[0]",
+    "module.platform.aws_cloudwatch_metric_alarm.outbox_starter_errors[0]",
+    "module.platform.aws_cloudwatch_metric_alarm.outbox_starter_throttles[0]",
+    "module.platform.aws_iam_role_policy.outbox_starter[0]",
+    "module.platform.aws_lambda_alias.outbox_starter[0]",
+    "module.platform.aws_lambda_alias.profile_readiness_terminal[0]",
+    "module.platform.aws_lambda_event_source_mapping.outbox_starter[0]",
+    "module.platform.aws_lambda_function.outbox_starter[0]",
+    "module.platform.aws_lambda_function.profile_readiness_terminal[0]",
+    "module.platform.aws_lambda_permission.profile_readiness_terminal[0]",
+    "module.platform.aws_sqs_queue_policy.profile_readiness_dead_letter[0]",
+    "module.platform.aws_vpc_endpoint.lambda[0]",
+    "module.platform.time_sleep.profile_readiness_durable_policy_propagation[0]"
+  )
+  $expectedCreates = if ($RecoverFailedApply) {
+    $recoveryExpectedCreates
+  } else {
+    $initialExpectedCreates
+  }
+  $expectedUpdates = if ($RecoverFailedApply) { @() } else { $initialExpectedUpdates }
   $creates = @($changes | Where-Object { (@($_.change.actions) -join ",") -eq "create" })
   $updates = @($changes | Where-Object { (@($_.change.actions) -join ",") -eq "update" })
   $otherActions = @(
@@ -502,7 +568,7 @@ try {
     $unexpectedCreates.Count -ne 0 -or $missingCreates.Count -ne 0 -or
     $unexpectedUpdates.Count -ne 0 -or $missingUpdates.Count -ne 0
   ) {
-    throw "The plan contains an action outside the reviewed 37-create/5-update dark boundary."
+    throw "The plan contains an action outside the exact reviewed dark boundary for this mode."
   }
 
   function Get-PlannedChange {
@@ -510,6 +576,17 @@ try {
     return Get-OnlyItem `
       -Items @($changes | Where-Object { [string]$_.address -eq $Address }) `
       -FailureMessage "The reviewed plan change '$Address' is missing."
+  }
+
+  function Get-PlannedValue {
+    param([string]$Address)
+    $resource = Get-OnlyItem `
+      -Items @($plan.resource_changes | Where-Object { [string]$_.address -eq $Address }) `
+      -FailureMessage "The reviewed planned resource '$Address' is missing."
+    if ((@($resource.change.actions) -join ",") -eq "delete") {
+      throw "The reviewed planned resource '$Address' is being deleted."
+    }
+    return $resource.change.after
   }
 
   function Assert-OnlyPropertiesChanged {
@@ -532,6 +609,7 @@ try {
     }
   }
 
+  if (-not $RecoverFailedApply) {
   $gatewayFunctionChange = Get-PlannedChange "module.platform.aws_lambda_function.gateway[0]"
   Assert-OnlyPropertiesChanged $gatewayFunctionChange @(
     "environment", "last_modified", "qualified_arn", "qualified_invoke_arn", "version"
@@ -573,9 +651,10 @@ try {
       throw "A role-dependent policy update unexpectedly resolved before its exact roles exist."
     }
   }
+  }
 
-  $starterMapping = (Get-PlannedChange `
-    "module.platform.aws_lambda_event_source_mapping.outbox_starter[0]").change.after
+  $starterMapping = Get-PlannedValue `
+    "module.platform.aws_lambda_event_source_mapping.outbox_starter[0]"
   if (
     [bool]$starterMapping.enabled -or
     @($starterMapping.function_response_types) -notcontains "ReportBatchItemFailures"
@@ -586,7 +665,7 @@ try {
     "module.platform.aws_cloudwatch_event_rule.outbox_reconciler[0]",
     "module.platform.aws_cloudwatch_event_rule.profile_readiness_terminal[0]"
   )) {
-    if ([string](Get-PlannedChange $ruleAddress).change.after.state -ne "DISABLED") {
+    if ([string](Get-PlannedValue $ruleAddress).state -ne "DISABLED") {
       throw "A serverless workflow EventBridge trigger is enabled in the dark plan."
     }
   }
@@ -602,7 +681,7 @@ try {
       $ActivityArtifactS3ObjectVersion, $ActivityArtifactBase64Sha256)
   )
   foreach ($expectedFunction in $functionArtifacts) {
-    $function = (Get-PlannedChange ([string]$expectedFunction[0])).change.after
+    $function = Get-PlannedValue ([string]$expectedFunction[0])
     if (
       [string]$function.s3_key -ne [string]$expectedFunction[1] -or
       [string]$function.s3_object_version -ne [string]$expectedFunction[2] -or
@@ -640,6 +719,36 @@ try {
     throw "The durable stack template is neither exact nor role-dependent unknown."
   }
 
+  $propagation = (Get-PlannedChange `
+    "module.platform.time_sleep.profile_readiness_durable_policy_propagation[0]").change.after
+  if (
+    [string]$propagation.create_duration -ne "45s" -or
+    -not [string]$propagation.triggers.role_arn -or
+    -not [string]$propagation.triggers.policy_sha256
+  ) {
+    throw "The dark plan does not contain the exact durable IAM propagation gate."
+  }
+
+  if ($RecoverFailedApply) {
+    $durableRole = Get-BaselineValue $baselinePlan `
+      "module.platform.aws_iam_role.profile_readiness_durable[0]"
+    $deadLetterQueue = Get-BaselineValue $baselinePlan `
+      "module.platform.aws_sqs_queue.profile_readiness_dead_letter[0]"
+    $permissionDecision = & aws iam simulate-principal-policy --profile $AwsProfile `
+      --policy-source-arn ([string]$durableRole.arn) --action-names "sqs:SendMessage" `
+      --resource-arns ([string]$deadLetterQueue.arn) `
+      --query "EvaluationResults[0].EvalDecision" --output text 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]$permissionDecision.Trim() -ne "allowed") {
+      throw "The durable role's exact DLQ permission is not yet effective."
+    }
+    $existingDurable = & aws lambda get-function --profile $AwsProfile --region $Region `
+      --function-name "ai-job-apply-development-profile-readiness-durable" `
+      --query "Configuration.FunctionName" --output text 2>$null
+    if ($LASTEXITCODE -eq 0 -or $existingDurable) {
+      throw "The failed durable function unexpectedly exists before recovery."
+    }
+  }
+
   $changedAddresses = @($changes | ForEach-Object { [string]$_.address })
   if (@($changedAddresses | Where-Object {
       $_ -match "aws_apigatewayv2_(api|integration|route|stage)" -or
@@ -653,8 +762,10 @@ try {
   [pscustomobject]@{
     Environment                 = "development"
     SourceCommit               = $sourceCommit
+    RecoveryFromFailedApply    = [bool]$RecoverFailedApply
     GatewayEcsApiBaselineStable = $true
     EndpointSidCorrection      = $acceptedEndpointSidCorrection
+    EffectiveDurableDlqPermission = if ($RecoverFailedApply) { $true } else { $null }
     ArtifactsVerified          = 3
     PinnedExtensionVerified    = $true
     DispatchTarget             = "temporal"
