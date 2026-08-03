@@ -50,7 +50,8 @@ A separate recovery mode reconstructs live inputs from encrypted state, requires
 exact DLQ permission and absent durable function, allows only the known remaining creates, keeps
 all triggers disabled and dispatch on Temporal, and rejects updates, deletes, replacements,
 API-routing changes, and ECS-capacity changes. Recovery requires merge, exact-main regeneration,
-and a new explicit checksum authorization.
+and a new explicit checksum authorization. Its first guarded diagnostic is recorded in the
+[recovery-plan evidence](d0-development-workflow-dark-recovery-plan-2026-08-02.md).
 
 No account identifier, bucket, key ARN, role ARN, queue ARN, credential, token, OIDC value,
 Temporal value, policy body, state content, plan content, or candidate data is retained here.
