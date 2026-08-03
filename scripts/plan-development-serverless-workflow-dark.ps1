@@ -32,6 +32,7 @@ param(
   [string]$AwsProfile = "ai-job-apply-development-admin",
   [ValidatePattern("^[a-z]{2}-[a-z]+-[0-9]+$")][string]$Region = "us-east-2",
   [switch]$RecoverFailedApply,
+  [switch]$AllowArtifactReleaseUpdate,
   [switch]$VerifyCompletedDarkDeployment,
   [switch]$Help
 )
@@ -47,6 +48,9 @@ initial apply stopped at the documented durable-role IAM propagation race; that 
 effective DLQ permission and exact partial dark boundary before planning the remainder. Use
 -VerifyCompletedDarkDeployment after the full apply to require a refresh-backed zero-change plan
 while rechecking the immutable artifacts and complete trigger-disabled workflow boundary.
+Use -AllowArtifactReleaseUpdate after a completed dark deployment to permit only the exact
+workflow function, immutable version/alias, version-scoped policy, disabled terminal-rule, durable
+stack, and policy-propagation updates caused by three new reviewed immutable artifacts.
 
 The sensitive plan remains below the ignored Terraform .terraform directory. This script rejects
 every action outside its exact initial or partial-recovery boundary and never applies
@@ -72,8 +76,9 @@ if (@($required | Where-Object { -not $_ }).Count -ne 0) {
 if ($Region -ne "us-east-2") {
   throw "The Phase 0 development environment is restricted to us-east-2."
 }
-if ($RecoverFailedApply -and $VerifyCompletedDarkDeployment) {
-  throw "Recovery planning and completed-dark verification are mutually exclusive."
+if (@($RecoverFailedApply, $AllowArtifactReleaseUpdate, $VerifyCompletedDarkDeployment |
+    Where-Object { $_ }).Count -gt 1) {
+  throw "Recovery, artifact release, and completed-dark verification are mutually exclusive."
 }
 
 function Assert-ArtifactKey {
@@ -103,6 +108,8 @@ $planDirectory = Join-Path $environmentDirectory ".terraform/workflow-dark-plans
 $sourceCommit = (& git -C $repositoryRoot rev-parse HEAD).Trim()
 $planPrefix = if ($VerifyCompletedDarkDeployment) {
   "workflow-dark-verify"
+} elseif ($AllowArtifactReleaseUpdate) {
+  "workflow-dark-release"
 } elseif ($RecoverFailedApply) {
   "workflow-dark-recovery"
 } else {
@@ -190,7 +197,11 @@ $baselinePlanPath = Join-Path $environmentDirectory (
 )
 $baseline = $null
 $acceptedEndpointSidCorrection = $false
-if (-not $RecoverFailedApply -and -not $VerifyCompletedDarkDeployment) {
+if (
+  -not $RecoverFailedApply -and
+  -not $AllowArtifactReleaseUpdate -and
+  -not $VerifyCompletedDarkDeployment
+) {
 try {
   $baselineRaw = & (Join-Path $PSScriptRoot "plan-development-gateway-lambda-dark.ps1") `
     -ExpectedAccountId $ExpectedAccountId `
@@ -318,7 +329,7 @@ try {
     throw "The pinned development provider set could not be initialized."
   }
 
-  if ($RecoverFailedApply -or $VerifyCompletedDarkDeployment) {
+  if ($RecoverFailedApply -or $AllowArtifactReleaseUpdate -or $VerifyCompletedDarkDeployment) {
     $baselinePlan = [pscustomobject]@{
       state_resources = @(
         (& terraform "-chdir=$environmentDirectory" state pull 2>$null | ConvertFrom-Json).resources
@@ -376,6 +387,185 @@ try {
     [string]$layer.CompatibleArchitectures[0] -ne "x86_64"
   ) {
     throw "The pinned Secrets extension is not the reviewed x86_64 regional layer."
+  }
+
+  if ($AllowArtifactReleaseUpdate) {
+    $releaseFunctions = @(
+      @("ai-job-apply-development-outbox-starter", 1, $WorkflowIngressArtifactBase64Sha256, $true),
+      @("ai-job-apply-development-outbox-reconciler", 1, $WorkflowIngressArtifactBase64Sha256, $true),
+      @("ai-job-apply-development-profile-readiness-activity", 1, $ActivityArtifactBase64Sha256, $true),
+      @("ai-job-apply-development-profile-readiness-terminal", 1, $ActivityArtifactBase64Sha256, $true),
+      @("ai-job-apply-development-profile-readiness-durable", 2, $DurableArtifactBase64Sha256, $false)
+    )
+    foreach ($releaseFunction in $releaseFunctions) {
+      $functionName = [string]$releaseFunction[0]
+      $latest = Invoke-AwsJson @(
+        "lambda", "get-function-configuration", "--function-name", $functionName,
+        "--output", "json"
+      )
+      $alias = Invoke-AwsJson @(
+        "lambda", "get-alias", "--function-name", $functionName,
+        "--name", "development", "--output", "json"
+      )
+      $aliased = Invoke-AwsJson @(
+        "lambda", "get-function-configuration", "--function-name", $functionName,
+        "--qualifier", ([string]$alias.FunctionVersion), "--output", "json"
+      )
+      $reserved = Invoke-AwsJson @(
+        "lambda", "get-function-concurrency", "--function-name", $functionName,
+        "--output", "json"
+      )
+      $weights = if ($alias.RoutingConfig -and $alias.RoutingConfig.AdditionalVersionWeights) {
+        @($alias.RoutingConfig.AdditionalVersionWeights.PSObject.Properties).Count
+      } else { 0 }
+      $layers = @(
+        $latest.Layers | Where-Object { $_ -and $_.Arn } | ForEach-Object { [string]$_.Arn }
+      )
+      $aliasedLayers = @(
+        $aliased.Layers | Where-Object { $_ -and $_.Arn } | ForEach-Object { [string]$_.Arn }
+      )
+      $expectedLayers = if ([bool]$releaseFunction[3]) { 1 } else { 0 }
+      if (
+        [string]$latest.State -ne "Active" -or
+        [string]$latest.LastUpdateStatus -ne "Successful" -or
+        [string]$latest.Runtime -ne "nodejs24.x" -or
+        [string]$latest.CodeSha256 -eq [string]$releaseFunction[2] -or
+        [string]$latest.CodeSha256 -ne [string]$aliased.CodeSha256 -or
+        [string]$alias.FunctionVersion -notmatch "^[1-9][0-9]*$" -or
+        [string]$aliased.Version -ne [string]$alias.FunctionVersion -or
+        $weights -ne 0 -or
+        [int]$reserved.ReservedConcurrentExecutions -ne [int]$releaseFunction[1] -or
+        $layers.Count -ne $expectedLayers -or
+        $aliasedLayers.Count -ne $expectedLayers -or
+        ($expectedLayers -eq 1 -and $layers[0] -ne $PinnedExtensionLayerArn) -or
+        ($expectedLayers -eq 1 -and $aliasedLayers[0] -ne $PinnedExtensionLayerArn) -or
+        [string]$latest.Environment.Variables.RELEASE_SHA -ne
+          [string]$aliased.Environment.Variables.RELEASE_SHA -or
+        [string]$aliased.Environment.Variables.RELEASE_SHA -notmatch "^[a-f0-9]{64}$" -or
+        [string]$latest.KMSKeyArn -ne [string]$aliased.KMSKeyArn -or
+        [string]::IsNullOrWhiteSpace([string]$aliased.KMSKeyArn)
+      ) {
+        throw "The live '$functionName' Lambda is outside the healthy immutable release boundary."
+      }
+    }
+
+    $mappings = Invoke-AwsJson @(
+      "lambda", "list-event-source-mappings", "--function-name",
+      "ai-job-apply-development-outbox-starter:development", "--output", "json"
+    )
+    $mapping = Get-OnlyItem @($mappings.EventSourceMappings) `
+      "The exact starter mapping is not singular."
+    if (
+      [string]$mapping.State -ne "Disabled" -or
+      @($mapping.FunctionResponseTypes) -notcontains "ReportBatchItemFailures"
+    ) {
+      throw "The starter mapping is enabled or lacks partial-batch handling."
+    }
+
+    foreach ($ruleName in @(
+      "ai-job-apply-development-outbox-reconciler",
+      "ai-job-apply-development-profile-readiness-terminal"
+    )) {
+      $rule = Invoke-AwsJson @(
+        "events", "describe-rule", "--name", $ruleName, "--output", "json"
+      )
+      if ([string]$rule.State -ne "DISABLED") {
+        throw "A workflow EventBridge rule is enabled before the dark release."
+      }
+    }
+
+    $alarmNames = @(
+      "ai-job-apply-development-outbox-reconciler-errors",
+      "ai-job-apply-development-outbox-starter-errors",
+      "ai-job-apply-development-outbox-starter-throttles",
+      "ai-job-apply-development-profile-readiness-activity-errors",
+      "ai-job-apply-development-profile-readiness-dead-letter",
+      "ai-job-apply-development-profile-readiness-durable-failed",
+      "ai-job-apply-development-profile-readiness-durable-timed-out"
+    )
+    $alarmResult = Invoke-AwsJson `
+      (@("cloudwatch", "describe-alarms", "--alarm-names") + $alarmNames + @("--output", "json"))
+    $healthyAlarms = @(
+      $alarmResult.MetricAlarms | Where-Object {
+        [string]$_.StateValue -eq "OK" -and [bool]$_.ActionsEnabled -and
+        @($_.AlarmActions).Count -eq 1 -and @($_.OKActions).Count -eq 1
+      }
+    )
+    if ($healthyAlarms.Count -ne 7) {
+      throw "The exact seven workflow alarms are not enabled and OK."
+    }
+
+    $dlq = Invoke-AwsJson @(
+      "sqs", "get-queue-url", "--queue-name",
+      "ai-job-apply-development-profile-readiness-dead-letter", "--output", "json"
+    )
+    $dlqDepth = Invoke-AwsJson @(
+      "sqs", "get-queue-attributes", "--queue-url", ([string]$dlq.QueueUrl),
+      "--attribute-names", "ApproximateNumberOfMessages",
+      "ApproximateNumberOfMessagesNotVisible", "ApproximateNumberOfMessagesDelayed",
+      "--output", "json"
+    )
+    if (
+      [int]$dlqDepth.Attributes.ApproximateNumberOfMessages +
+      [int]$dlqDepth.Attributes.ApproximateNumberOfMessagesNotVisible +
+      [int]$dlqDepth.Attributes.ApproximateNumberOfMessagesDelayed -ne 0
+    ) {
+      throw "The durable DLQ is not empty before the dark release."
+    }
+
+    $durableStack = Invoke-AwsJson @(
+      "cloudformation", "describe-stacks", "--stack-name",
+      "ai-job-apply-development-profile-readiness-durable", "--output", "json"
+    )
+    if ([string]$durableStack.Stacks[0].StackStatus -ne "CREATE_COMPLETE") {
+      throw "The durable stack is not complete before the dark release."
+    }
+
+    $apis = Invoke-AwsJson @("apigatewayv2", "get-apis", "--output", "json")
+    $api = Get-OnlyItem @(
+      $apis.Items | Where-Object { [string]$_.Name -eq "ai-job-apply-development-gateway" }
+    ) "The development API is not singular before the dark release."
+    $integrations = Invoke-AwsJson @(
+      "apigatewayv2", "get-integrations", "--api-id", ([string]$api.ApiId), "--output", "json"
+    )
+    $integration = Get-OnlyItem @($integrations.Items) `
+      "The development API integration is not singular before the dark release."
+    if (
+      [string]$integration.IntegrationType -ne "HTTP_PROXY" -or
+      [string]$integration.IntegrationUri -notmatch "^arn:aws:servicediscovery:"
+    ) {
+      throw "Public API traffic is no longer on the accepted Cloud Map/ECS rollback path."
+    }
+
+    $serviceResult = Invoke-AwsJson @(
+      "ecs", "describe-services", "--cluster", "ai-job-apply-development", "--services",
+      "gateway", "workflow-worker", "--output", "json"
+    )
+    if (@($serviceResult.failures).Count -ne 0 -or @($serviceResult.services).Count -ne 2) {
+      throw "Both development ECS rollback services must exist before the dark release."
+    }
+    foreach ($service in @($serviceResult.services)) {
+      $primaryDeployment = Get-OnlyItem @(
+        $service.deployments | Where-Object { [string]$_.status -eq "PRIMARY" }
+      ) "An ECS rollback service does not have one primary deployment."
+      if (
+        [string]$service.status -ne "ACTIVE" -or
+        [int]$service.desiredCount -ne 1 -or
+        [int]$service.runningCount -ne 1 -or
+        [int]$service.pendingCount -ne 0 -or
+        [string]$primaryDeployment.rolloutState -ne "COMPLETED"
+      ) {
+        throw "An ECS rollback service is not stable before the dark release."
+      }
+    }
+
+    $gatewayAlias = Invoke-AwsJson @(
+      "lambda", "get-function-configuration", "--function-name",
+      "ai-job-apply-development-gateway", "--qualifier", "development", "--output", "json"
+    )
+    if ([string]$gatewayAlias.Environment.Variables.OUTBOX_DISPATCH_TARGET -ne "temporal") {
+      throw "The development gateway no longer dispatches through the accepted Temporal path."
+    }
   }
 
   $gatewayService = Get-BaselineValue $baselinePlan "module.platform.aws_ecs_service.gateway[0]"
@@ -552,22 +742,53 @@ try {
     "module.platform.aws_vpc_endpoint.lambda[0]",
     "module.platform.time_sleep.profile_readiness_durable_policy_propagation[0]"
   )
-  $expectedCreates = if ($VerifyCompletedDarkDeployment) {
+  $releaseExpectedUpdates = @(
+    "module.platform.aws_cloudformation_stack.profile_readiness_durable[0]",
+    "module.platform.aws_cloudwatch_event_rule.profile_readiness_terminal[0]",
+    "module.platform.aws_iam_role_policy.outbox_starter[0]",
+    "module.platform.aws_iam_role_policy.profile_readiness_durable[0]",
+    "module.platform.aws_lambda_alias.outbox_reconciler[0]",
+    "module.platform.aws_lambda_alias.outbox_starter[0]",
+    "module.platform.aws_lambda_alias.profile_readiness_activity[0]",
+    "module.platform.aws_lambda_alias.profile_readiness_terminal[0]",
+    "module.platform.aws_lambda_function.outbox_reconciler[0]",
+    "module.platform.aws_lambda_function.outbox_starter[0]",
+    "module.platform.aws_lambda_function.profile_readiness_activity[0]",
+    "module.platform.aws_lambda_function.profile_readiness_terminal[0]",
+    "module.platform.aws_sqs_queue_policy.profile_readiness_dead_letter[0]",
+    "module.platform.aws_vpc_endpoint.lambda[0]"
+  )
+  $releaseExpectedReplacements = @(
+    "module.platform.time_sleep.profile_readiness_durable_policy_propagation[0]"
+  )
+  $expectedCreates = if ($AllowArtifactReleaseUpdate -or $VerifyCompletedDarkDeployment) {
     @()
   } elseif ($RecoverFailedApply) {
     $recoveryExpectedCreates
   } else {
     $initialExpectedCreates
   }
-  $expectedUpdates = if ($VerifyCompletedDarkDeployment -or $RecoverFailedApply) {
+  $expectedUpdates = if ($AllowArtifactReleaseUpdate) {
+    $releaseExpectedUpdates
+  } elseif ($VerifyCompletedDarkDeployment -or $RecoverFailedApply) {
     @()
   } else {
     $initialExpectedUpdates
   }
+  $expectedReplacements = if ($AllowArtifactReleaseUpdate) {
+    $releaseExpectedReplacements
+  } else {
+    @()
+  }
   $creates = @($changes | Where-Object { (@($_.change.actions) -join ",") -eq "create" })
   $updates = @($changes | Where-Object { (@($_.change.actions) -join ",") -eq "update" })
+  $replacements = @(
+    $changes | Where-Object { (@($_.change.actions) -join ",") -eq "create,delete" }
+  )
   $otherActions = @(
-    $changes | Where-Object { (@($_.change.actions) -join ",") -notin @("create", "update") }
+    $changes | Where-Object {
+      (@($_.change.actions) -join ",") -notin @("create", "update", "create,delete")
+    }
   )
   $unexpectedCreates = @(
     $creates | Where-Object { $expectedCreates -notcontains [string]$_.address }
@@ -585,12 +806,22 @@ try {
       @($updates | ForEach-Object { [string]$_.address }) -notcontains $_
     }
   )
+  $unexpectedReplacements = @(
+    $replacements | Where-Object { $expectedReplacements -notcontains [string]$_.address }
+  )
+  $missingReplacements = @(
+    $expectedReplacements | Where-Object {
+      @($replacements | ForEach-Object { [string]$_.address }) -notcontains $_
+    }
+  )
   if (
     $otherActions.Count -ne 0 -or
     $creates.Count -ne $expectedCreates.Count -or
     $updates.Count -ne $expectedUpdates.Count -or
+    $replacements.Count -ne $expectedReplacements.Count -or
     $unexpectedCreates.Count -ne 0 -or $missingCreates.Count -ne 0 -or
-    $unexpectedUpdates.Count -ne 0 -or $missingUpdates.Count -ne 0
+    $unexpectedUpdates.Count -ne 0 -or $missingUpdates.Count -ne 0 -or
+    $unexpectedReplacements.Count -ne 0 -or $missingReplacements.Count -ne 0
   ) {
     throw "The plan contains an action outside the exact reviewed dark boundary for this mode."
   }
@@ -633,7 +864,11 @@ try {
     }
   }
 
-  if (-not $RecoverFailedApply -and -not $VerifyCompletedDarkDeployment) {
+  if (
+    -not $RecoverFailedApply -and
+    -not $AllowArtifactReleaseUpdate -and
+    -not $VerifyCompletedDarkDeployment
+  ) {
   $gatewayFunctionChange = Get-PlannedChange "module.platform.aws_lambda_function.gateway[0]"
   Assert-OnlyPropertiesChanged $gatewayFunctionChange @(
     "environment", "last_modified", "qualified_arn", "qualified_invoke_arn", "version"
@@ -675,6 +910,154 @@ try {
       throw "A role-dependent policy update unexpectedly resolved before its exact roles exist."
     }
   }
+  }
+
+  if ($AllowArtifactReleaseUpdate) {
+    function Assert-ReleaseFunctionChange {
+      param(
+        [string]$Address,
+        [string]$ArtifactKey,
+        [string]$ArtifactVersion,
+        [string]$ArtifactBase64Sha256,
+        [string]$ArtifactSha256,
+        [bool]$EnvironmentRemainsKnown,
+        [string[]]$ExpectedEnvironmentNames
+      )
+      $change = Get-PlannedChange $Address
+      Assert-OnlyPropertiesChanged $change @(
+        "environment", "last_modified", "qualified_arn", "qualified_invoke_arn",
+        "s3_key", "s3_object_version", "source_code_hash", "version"
+      ) "A workflow Lambda release changes more than artifact identity and computed version fields."
+      $before = $change.change.before
+      $after = $change.change.after
+      if (
+        [string]$after.s3_key -ne $ArtifactKey -or
+        [string]$after.s3_object_version -ne $ArtifactVersion -or
+        [string]$after.source_code_hash -ne $ArtifactBase64Sha256 -or
+        -not [bool]$change.change.after_unknown.version
+      ) {
+        throw "A workflow Lambda release does not select its exact immutable artifact/version."
+      }
+      $beforeVariables = $before.environment[0].variables
+      $beforeNames = @($beforeVariables.PSObject.Properties.Name | Sort-Object)
+      if (Compare-Object $beforeNames @($ExpectedEnvironmentNames | Sort-Object)) {
+        throw "A live workflow Lambda has an unexpected environment boundary before release."
+      }
+      if ($EnvironmentRemainsKnown) {
+        $afterVariables = $after.environment[0].variables
+        if ([string]$afterVariables.RELEASE_SHA -ne $ArtifactSha256) {
+          throw "A workflow Lambda release does not select the exact artifact release digest."
+        }
+        $normalizedAfterEnvironment = $after.environment |
+          ConvertTo-Json -Depth 30 | ConvertFrom-Json
+        $normalizedAfterEnvironment[0].variables.RELEASE_SHA = [string]$beforeVariables.RELEASE_SHA
+        if (
+          ($before.environment | ConvertTo-Json -Depth 30 -Compress) -ne
+          ($normalizedAfterEnvironment | ConvertTo-Json -Depth 30 -Compress)
+        ) {
+          throw "A workflow Lambda release changes more than its artifact release digest."
+        }
+      } elseif (-not [bool]$change.change.after_unknown.environment.variables) {
+        throw "A version-coupled workflow Lambda environment is not explicitly plan-time unknown."
+      }
+    }
+
+    Assert-ReleaseFunctionChange `
+      "module.platform.aws_lambda_function.outbox_reconciler[0]" `
+      $WorkflowIngressArtifactS3Key $WorkflowIngressArtifactS3ObjectVersion `
+      $WorkflowIngressArtifactBase64Sha256 $WorkflowIngressArtifactSha256 $true `
+      @("DATABASE_SECRET_ID", "NODE_ENV", "OUTBOX_QUEUE_URL", "RELEASE_SHA")
+    Assert-ReleaseFunctionChange `
+      "module.platform.aws_lambda_function.outbox_starter[0]" `
+      $WorkflowIngressArtifactS3Key $WorkflowIngressArtifactS3ObjectVersion `
+      $WorkflowIngressArtifactBase64Sha256 $WorkflowIngressArtifactSha256 $false `
+      @("DATABASE_SECRET_ID", "DURABLE_FUNCTION_ARN", "NODE_ENV", "RELEASE_SHA")
+    Assert-ReleaseFunctionChange `
+      "module.platform.aws_lambda_function.profile_readiness_activity[0]" `
+      $ActivityArtifactS3Key $ActivityArtifactS3ObjectVersion `
+      $ActivityArtifactBase64Sha256 $ActivityArtifactSha256 $true `
+      @("DATABASE_SECRET_ID", "NODE_ENV", "RELEASE_SHA")
+    Assert-ReleaseFunctionChange `
+      "module.platform.aws_lambda_function.profile_readiness_terminal[0]" `
+      $ActivityArtifactS3Key $ActivityArtifactS3ObjectVersion `
+      $ActivityArtifactBase64Sha256 $ActivityArtifactSha256 $false `
+      @("DATABASE_SECRET_ID", "DURABLE_FUNCTION_ARN", "NODE_ENV", "RELEASE_SHA")
+
+    foreach ($aliasAddress in @(
+      "module.platform.aws_lambda_alias.outbox_reconciler[0]",
+      "module.platform.aws_lambda_alias.outbox_starter[0]",
+      "module.platform.aws_lambda_alias.profile_readiness_activity[0]",
+      "module.platform.aws_lambda_alias.profile_readiness_terminal[0]"
+    )) {
+      $aliasChange = Get-PlannedChange $aliasAddress
+      Assert-OnlyPropertiesChanged $aliasChange @("function_version") `
+        "A workflow Lambda alias release changes more than its immutable function version."
+      if (-not [bool]$aliasChange.change.after_unknown.function_version) {
+        throw "A workflow Lambda alias is not moving to the version created by this exact plan."
+      }
+    }
+
+    foreach ($policyAddress in @(
+      "module.platform.aws_iam_role_policy.outbox_starter[0]",
+      "module.platform.aws_iam_role_policy.profile_readiness_durable[0]",
+      "module.platform.aws_sqs_queue_policy.profile_readiness_dead_letter[0]",
+      "module.platform.aws_vpc_endpoint.lambda[0]"
+    )) {
+      $policyChange = Get-PlannedChange $policyAddress
+      Assert-OnlyPropertiesChanged $policyChange @("policy") `
+        "A version-scoped workflow release policy changes more than its policy document."
+      if (-not [bool]$policyChange.change.after_unknown.policy) {
+        throw "A version-scoped workflow release policy is not explicitly plan-time unknown."
+      }
+    }
+
+    $terminalRuleChange = Get-PlannedChange `
+      "module.platform.aws_cloudwatch_event_rule.profile_readiness_terminal[0]"
+    Assert-OnlyPropertiesChanged $terminalRuleChange @("event_pattern") `
+      "The terminal rule release changes more than its exact durable-version event pattern."
+    if (
+      [string]$terminalRuleChange.change.before.state -ne "DISABLED" -or
+      [string]$terminalRuleChange.change.after.state -ne "DISABLED" -or
+      -not [bool]$terminalRuleChange.change.after_unknown.event_pattern
+    ) {
+      throw "The terminal rule release is enabled or its version pattern is not plan-time unknown."
+    }
+
+    $durableChange = Get-PlannedChange `
+      "module.platform.aws_cloudformation_stack.profile_readiness_durable[0]"
+    Assert-OnlyPropertiesChanged $durableChange @("outputs", "template_body") `
+      "The durable release changes more than its template and computed outputs."
+    if (-not [bool]$durableChange.change.after_unknown.template_body) {
+      throw "The activity-version-coupled durable template is not explicitly plan-time unknown."
+    }
+    $currentTemplate = [string]$durableChange.change.before.template_body | ConvertFrom-Json
+    $currentDurable = $currentTemplate.Resources.DurableFunction.Properties
+    if (
+      [string]$currentDurable.Runtime -ne "nodejs24.x" -or
+      [int]$currentDurable.ReservedConcurrentExecutions -ne 2 -or
+      [string]$currentTemplate.Resources.DurableVersion.DeletionPolicy -ne "Retain" -or
+      [string]$currentTemplate.Resources.DurableVersion.UpdateReplacePolicy -ne "Retain" -or
+      [string]$currentTemplate.Resources.DurableAlias.Properties.Name -ne "development"
+    ) {
+      throw "The current durable function is outside the retained immutable release boundary."
+    }
+
+    $propagationChange = Get-PlannedChange `
+      "module.platform.time_sleep.profile_readiness_durable_policy_propagation[0]"
+    if ((@($propagationChange.change.actions) -join ",") -ne "create,delete") {
+      throw "The durable policy propagation gate is not a create-before-delete replacement."
+    }
+    Assert-OnlyPropertiesChanged $propagationChange @("id", "triggers") `
+      "The durable policy propagation replacement changes more than its policy hash."
+    if (
+      [string]$propagationChange.change.before.create_duration -ne "45s" -or
+      [string]$propagationChange.change.after.create_duration -ne "45s" -or
+      [string]$propagationChange.change.before.triggers.role_arn -ne
+        [string]$propagationChange.change.after.triggers.role_arn -or
+      -not [bool]$propagationChange.change.after_unknown.triggers.policy_sha256
+    ) {
+      throw "The durable policy propagation replacement is outside its exact 45-second boundary."
+    }
   }
 
   $starterMapping = Get-PlannedValue `
@@ -753,10 +1136,16 @@ try {
 
   $propagation = Get-PlannedValue `
     "module.platform.time_sleep.profile_readiness_durable_policy_propagation[0]"
+  $propagationPolicyHashValid = if ($AllowArtifactReleaseUpdate) {
+    [bool](Get-PlannedChange `
+      "module.platform.time_sleep.profile_readiness_durable_policy_propagation[0]").change.after_unknown.triggers.policy_sha256
+  } else {
+    -not [string]::IsNullOrWhiteSpace([string]$propagation.triggers.policy_sha256)
+  }
   if (
     [string]$propagation.create_duration -ne "45s" -or
     -not [string]$propagation.triggers.role_arn -or
-    -not [string]$propagation.triggers.policy_sha256
+    -not $propagationPolicyHashValid
   ) {
     throw "The dark plan does not contain the exact durable IAM propagation gate."
   }
@@ -794,7 +1183,9 @@ try {
   [pscustomobject]@{
     Environment                 = "development"
     SourceCommit               = $sourceCommit
+    WorkflowArtifactSourceCommit = $WorkflowArtifactSourceSha
     RecoveryFromFailedApply    = [bool]$RecoverFailedApply
+    ArtifactReleaseUpdate      = [bool]$AllowArtifactReleaseUpdate
     CompletedDarkVerification  = [bool]$VerifyCompletedDarkDeployment
     NoDrift                    = [bool]$VerifyCompletedDarkDeployment
     GatewayEcsApiBaselineStable = $true
@@ -809,11 +1200,12 @@ try {
     Creates                    = $creates.Count
     Updates                    = $updates.Count
     Deletes                    = 0
-    Replacements               = 0
+    Replacements               = $replacements.Count
     PlanSha256                 = $planHash
     SensitivePlanPath          = $planPath
-    CreatedResources           = $expectedCreates
-    UpdatedResources           = $expectedUpdates
+    CreatedResources           = [object[]]$expectedCreates
+    UpdatedResources           = [object[]]$expectedUpdates
+    ReplacedResources          = [object[]]$expectedReplacements
   } | ConvertTo-Json -Depth 6
 }
 finally {
