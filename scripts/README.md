@@ -25,10 +25,13 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   profile-readiness orchestrator and its private activity/terminal handlers into separate immutable
   ZIPs with manifests, checksums, and SBOMs.
 - `.github/workflows/publish-workflow-lambdas.yml` — Rebuilds all three workflow Lambda artifacts
-  twice, proves byte reproducibility and CycloneDX evidence, then publishes immutable versioned
-  objects through GitHub OIDC without deploying functions or enabling triggers.
+  twice, proves exact-source bundle/manifest attestation, byte reproducibility, and CycloneDX
+  evidence, then publishes immutable versioned objects through GitHub OIDC without deploying
+  functions or enabling triggers.
 - `lib/build-lambda-artifact.mjs` — Shared deterministic Node.js 24 ZIP, checksum, manifest, and
-  CycloneDX builder used by the workflow Lambda release scripts.
+  CycloneDX builder used by the workflow Lambda release scripts. Protected publication embeds the
+  exact lowercase source commit in the bundle and manifest; local builds use an explicit `local`
+  marker instead of claiming committed provenance.
 - `prepare-terraform-bootstrap.ps1` — Creates an isolated, local-backend Terraform workspace for
   the first bootstrap of a development or staging AWS account without reusing another
   environment's backend metadata or state.

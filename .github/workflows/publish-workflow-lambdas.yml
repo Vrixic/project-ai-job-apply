@@ -48,6 +48,8 @@ jobs:
       - name: Build reproducible artifacts and CycloneDX SBOMs
         id: artifact
         shell: bash
+        env:
+          ARTIFACT_SOURCE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           artifact_dir="backend/workflows/dist/lambda"
@@ -55,6 +57,10 @@ jobs:
 
           pnpm --filter @ai-job-apply/workflows build:lambda
           for name in "${names[@]}"; do
+            test "$(jq -r .schemaVersion "$artifact_dir/$name.manifest.json")" = "2"
+            test "$(jq -r .sourceSha "$artifact_dir/$name.manifest.json")" = "$GITHUB_SHA"
+            unzip -p "$artifact_dir/$name.zip" index.mjs > "/tmp/$name.index.mjs"
+            grep -Fq "/* applydash-artifact-source:$GITHUB_SHA */" "/tmp/$name.index.mjs"
             jq -r .artifactSha256 "$artifact_dir/$name.manifest.json" > "/tmp/$name.first-sha"
           done
 
@@ -63,6 +69,7 @@ jobs:
             first_sha="$(<"/tmp/$name.first-sha")"
             second_sha="$(jq -r .artifactSha256 "$artifact_dir/$name.manifest.json")"
             test "$first_sha" = "$second_sha"
+            test "$(jq -r .sourceSha "$artifact_dir/$name.manifest.json")" = "$GITHUB_SHA"
             test "$(jq -r .bomFormat "$artifact_dir/$name.cdx.json")" = "CycloneDX"
             test "$(jq -r .specVersion "$artifact_dir/$name.cdx.json")" = "1.6"
           done
