@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-08-02
+Last updated: 2026-08-03
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -200,6 +200,7 @@ Append only material cross-delivery events.
 | 2026-08-02 | D0 | Produced the committed refresh-backed partial-recovery diagnostic. Effective exact durable-DLQ permission, artifacts/layer, Temporal dispatch, disabled triggers, and stable API/ECS capacity pass. The ignored plan contains the policy-hash propagation gate plus 14 remaining AWS creates and zero updates/deletes/replacements; it is unapplied pending merge/exact-main regeneration. | [Development dark-recovery plan evidence](evidence/d0-development-workflow-dark-recovery-plan-2026-08-02.md), [Phase 0 migration](phase-0-serverless-runtime-migration.md) |
 | 2026-08-02 | D0 | Applied the explicitly authorized exact-main workflow recovery plan after its policy-hash-keyed 45-second gate. All 15 reviewed creates completed with no update/delete/replacement. Five immutable workflow functions and seven alarms are healthy, replacement triggers remain disabled, the DLQ is empty, private endpoints/durable stack/state protections pass, ECS/API/Temporal are unchanged, and refresh-backed verification reports zero drift. The development dark boundary is complete; conformance/rollback, staging, cutover, and retirement remain open. | [Development dark-recovery apply evidence](evidence/d0-development-workflow-dark-recovery-apply-2026-08-02.md), [Phase 0 migration](phase-0-serverless-runtime-migration.md) |
 | 2026-08-03 | D0 | Added repeatable completed-dark zero-drift verification and a checksum-gated development workflow conformance operator. The read-only live preflight passes and permits only four synchronous synthetic rejection paths; reconciler, product writes, SQS send, trigger enablement, and traffic changes are excluded. Wrong checksum and dirty-source execution fail before invocation. No Lambda was invoked; merge, exact-main replan, and separate checksum authorization remain required. | [Development workflow dark-conformance operator evidence](evidence/d0-development-workflow-dark-conformance-operator-2026-08-03.md), [Phase 0 migration](phase-0-serverless-runtime-migration.md) |
+| 2026-08-03 | D0 | Executed the exact reviewed development workflow dark-conformance context. The operator stopped after the first activity probe exposed a Node.js 24 ESM/CommonJS initialization defect; the other three functions were not invoked, the DLQ stayed empty, and no trigger, route, ECS, product-data, or Terraform change occurred. The shared builder now locally injects the compatibility bridge and imports every bundle to verify declared handlers before publication. Corrected artifacts remain unpublished and undeployed, so a new reviewed release and conformance checksum are required. | [Failed conformance evidence](evidence/d0-development-workflow-dark-conformance-failure-2026-08-03.md), [Phase 0 migration](phase-0-serverless-runtime-migration.md) |
 
 ## Cross-delivery decisions and changes
 
