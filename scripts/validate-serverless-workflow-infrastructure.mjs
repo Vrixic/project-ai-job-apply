@@ -10,6 +10,7 @@ const durable = read("infrastructure/terraform/modules/platform/durable-workflow
 const platform = read("infrastructure/terraform/modules/platform/main.tf");
 const variables = read("infrastructure/terraform/modules/platform/variables.tf");
 const bootstrap = read("infrastructure/terraform/bootstrap/main.tf");
+const publicationWorkflow = read(".github/workflows/publish-workflow-lambdas.yml");
 const environments = [
   read("infrastructure/terraform/environments/development/main.tf"),
   read("infrastructure/terraform/environments/staging/main.tf"),
@@ -156,6 +157,27 @@ for (const environment of environments) {
     "Every persistent environment must expose the independent cutover switch.",
   );
 }
+
+requireText(
+  publicationWorkflow,
+  ["ARTIFACT_SOURCE_SHA: $", "{{ github.sha }}"].join(""),
+  "Protected workflow publication must bind artifacts to the exact workflow source commit.",
+);
+requireText(
+  publicationWorkflow,
+  'test "$(jq -r .schemaVersion "$artifact_dir/$name.manifest.json")" = "2"',
+  "Protected workflow publication must require the source-attested manifest schema.",
+);
+requireText(
+  publicationWorkflow,
+  'test "$(jq -r .sourceSha "$artifact_dir/$name.manifest.json")" = "$GITHUB_SHA"',
+  "Protected workflow publication must verify manifest source provenance.",
+);
+requireText(
+  publicationWorkflow,
+  'grep -Fq "/* applydash-artifact-source:$GITHUB_SHA */" "/tmp/$name.index.mjs"',
+  "Protected workflow publication must verify bundle source provenance.",
+);
 
 const durableStackStart = durable.indexOf(
   'resource "aws_cloudformation_stack" "profile_readiness_durable"',

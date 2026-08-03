@@ -9,7 +9,8 @@ triggers, move API traffic, alter ECS rollback capacity, or change gateway dispa
 - Run only from exact, clean, synchronized `main` with Terraform `1.9.8` and a temporary
   development IAM Identity Center session in `us-east-2`.
 - Select exact current-version S3 objects from a successful protected publication run. Require
-  source/digest metadata, full-object SHA-256, versioning, customer-KMS encryption, and bucket keys.
+  source/digest metadata, a manifest and bundle marker bound to the exact source commit, full-object
+  SHA-256, versioning, customer-KMS encryption, and bucket keys.
 - Require the five current workflow aliases and functions to be healthy and immutable, the four
   database-facing functions to retain the pinned regional Secrets extension, and all reserved
   concurrency limits to remain bounded.

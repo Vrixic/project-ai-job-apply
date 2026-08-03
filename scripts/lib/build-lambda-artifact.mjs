@@ -12,6 +12,18 @@ function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function gitOutput(repositoryRoot, argumentsList) {
+  const executable = process.platform === "win32" ? (process.env.ComSpec ?? "cmd.exe") : "git";
+  const executableArguments =
+    process.platform === "win32"
+      ? ["/d", "/s", "/c", `git ${argumentsList.join(" ")}`]
+      : argumentsList;
+  return execFileSync(executable, executableArguments, {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+  }).trim();
+}
+
 function deterministicUuid(hexDigest) {
   const characters = hexDigest.slice(0, 32).split("");
   characters[12] = "5";
@@ -116,6 +128,19 @@ export async function buildLambdaArtifact({
   handlers,
   packageFilter,
 }) {
+  const sourceSha = process.env.ARTIFACT_SOURCE_SHA ?? "local";
+  if (!/^(?:local|[a-f0-9]{40})$/.test(sourceSha)) {
+    throw new Error("ARTIFACT_SOURCE_SHA must be local or an exact lowercase Git commit SHA");
+  }
+  if (sourceSha !== "local") {
+    const headSha = gitOutput(repositoryRoot, ["rev-parse", "HEAD"]);
+    const checkoutStatus = gitOutput(repositoryRoot, ["status", "--porcelain"]);
+    if (headSha !== sourceSha || checkoutStatus) {
+      throw new Error(
+        "Committed artifact provenance requires the exact clean ARTIFACT_SOURCE_SHA checkout",
+      );
+    }
+  }
   await mkdir(outputDirectory, { recursive: true });
   const result = await build({
     entryPoints: [entryPoint],
@@ -123,7 +148,7 @@ export async function buildLambdaArtifact({
     bundle: true,
     format: "esm",
     banner: {
-      js: 'import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);',
+      js: `/* applydash-artifact-source:${sourceSha} */\nimport { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);`,
     },
     platform: "node",
     target: "node24",
@@ -166,7 +191,8 @@ export async function buildLambdaArtifact({
   const artifactFileName = `${artifactName}.zip`;
   const sbomFileName = `${artifactName}.cdx.json`;
   const manifest = {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    sourceSha,
     runtime: "nodejs24.x",
     architecture: "x86_64",
     handlers,
