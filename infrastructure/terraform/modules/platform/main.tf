@@ -1462,14 +1462,8 @@ data "aws_iam_policy_document" "secrets_endpoint" {
     # ECS resolves task-definition secrets before the application container starts. Private DNS
     # therefore routes retained services and bounded one-off tasks through this endpoint too.
     principals {
-      type        = "*"
-      identifiers = ["*"]
-    }
-
-    condition {
-      test     = "ArnEquals"
-      variable = "aws:PrincipalArn"
-      values   = [aws_iam_role.execution.arn]
+      type        = "AWS"
+      identifiers = [aws_iam_role.execution.arn]
     }
   }
 
