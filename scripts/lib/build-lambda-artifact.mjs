@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import { ZipFile } from "yazl";
 
@@ -85,6 +86,27 @@ async function zipBundle(bundle) {
   return complete;
 }
 
+async function verifyBundleExports(outputDirectory, artifactName, bundle, bundleSha256, handlers) {
+  const verificationPath = path.join(
+    outputDirectory,
+    `.${artifactName}.verify-${process.pid}-${bundleSha256}.mjs`,
+  );
+  await writeFile(verificationPath, bundle);
+  try {
+    const moduleUrl = pathToFileURL(verificationPath);
+    moduleUrl.searchParams.set("sha256", bundleSha256);
+    const bundleModule = await import(moduleUrl.href);
+    for (const handler of handlers) {
+      const exportName = handler.split(".").at(-1);
+      if (!exportName || typeof bundleModule[exportName] !== "function") {
+        throw new Error(`Lambda bundle does not export handler ${handler}`);
+      }
+    }
+  } finally {
+    await rm(verificationPath, { force: true });
+  }
+}
+
 export async function buildLambdaArtifact({
   repositoryRoot,
   entryPoint,
@@ -100,6 +122,9 @@ export async function buildLambdaArtifact({
     absWorkingDir: repositoryRoot,
     bundle: true,
     format: "esm",
+    banner: {
+      js: 'import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);',
+    },
     platform: "node",
     target: "node24",
     write: false,
@@ -114,6 +139,7 @@ export async function buildLambdaArtifact({
 
   const bundle = Buffer.from(result.outputFiles[0].contents);
   const bundleSha256 = sha256(bundle);
+  await verifyBundleExports(outputDirectory, artifactName, bundle, bundleSha256, handlers);
   const archive = await zipBundle(bundle);
   const artifactSha256 = sha256(archive);
   const components = componentInventory(repositoryRoot, packageFilter, result.metafile);
