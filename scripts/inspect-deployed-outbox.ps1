@@ -248,7 +248,8 @@ if (
 ) {
   throw "The inspection result did not match the sanitized version-one contract."
 }
-if (-not $IncludeEventIds -and $null -ne $inspection.eventIds) {
+$eventIdsProperty = $inspection.PSObject.Properties["eventIds"]
+if (-not $IncludeEventIds -and $null -ne $eventIdsProperty -and $null -ne $eventIdsProperty.Value) {
   throw "The inspection emitted event identifiers without explicit authorization."
 }
 
