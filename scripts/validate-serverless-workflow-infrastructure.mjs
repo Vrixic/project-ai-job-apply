@@ -36,6 +36,21 @@ requireText(
 );
 requireText(
   durable,
+  'resource "time_sleep" "profile_readiness_durable_policy_propagation"',
+  "Durable creation must include an explicit IAM propagation gate.",
+);
+requireText(
+  durable,
+  "policy_sha256 = sha256(data.aws_iam_policy_document.profile_readiness_durable[0].json)",
+  "The IAM propagation gate must be replaced when the exact durable policy changes.",
+);
+requireText(
+  durable,
+  "time_sleep.profile_readiness_durable_policy_propagation",
+  "The durable CloudFormation stack must depend on the IAM propagation gate.",
+);
+requireText(
+  durable,
   '"lambda:CheckpointDurableExecution"',
   "The durable role needs checkpoint permission.",
 );

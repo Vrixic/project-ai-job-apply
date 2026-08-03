@@ -225,6 +225,21 @@ resource "aws_iam_role_policy" "profile_readiness_durable" {
   policy = data.aws_iam_policy_document.profile_readiness_durable[0].json
 }
 
+# CloudFormation validates DeadLetterConfig against the role during CreateFunction, but IAM policy
+# propagation is eventually consistent. Key the delay to the exact effective policy so initial
+# creation and any permission change wait before CloudFormation performs that validation.
+resource "time_sleep" "profile_readiness_durable_policy_propagation" {
+  count           = var.deploy_profile_readiness_durable ? 1 : 0
+  create_duration = "45s"
+
+  triggers = {
+    role_arn      = aws_iam_role.profile_readiness_durable[0].arn
+    policy_sha256 = sha256(data.aws_iam_policy_document.profile_readiness_durable[0].json)
+  }
+
+  depends_on = [aws_iam_role_policy.profile_readiness_durable]
+}
+
 # The HashiCorp AWS provider exposes durable timeout/retention but not DurableConfig.KMSKeyArn.
 # Keep the provider gap inside one Terraform-owned CloudFormation stack rather than applying an
 # imperative post-create CLI mutation that Terraform cannot detect or reproduce.
@@ -320,6 +335,7 @@ resource "aws_cloudformation_stack" "profile_readiness_durable" {
 
   depends_on = [
     aws_iam_role_policy.profile_readiness_durable,
+    time_sleep.profile_readiness_durable_policy_propagation,
     aws_lambda_function.profile_readiness_activity
   ]
 }
