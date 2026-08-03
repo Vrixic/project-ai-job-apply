@@ -14,8 +14,13 @@ the gateway continues dispatching development events to Temporal.
 - Invoke only synthetic invalid payloads that reject before any product-data write.
 - Do not invoke the reconciler; it owns bounded outbox writes and belongs to the controlled
   empty-outbox cutover gate.
-- Invoke the durable function synchronously. Failed asynchronous durable invocations can enter the
-  configured DLQ; synchronous rejection tests the exact handler/version without contaminating it.
+- Invoke the activity, starter, and terminal handlers synchronously against exact numeric versions.
+- Invoke the exact numeric durable version asynchronously. Its one-hour execution timeout exceeds
+  Lambda's 15-minute synchronous-invocation limit, so a synchronous probe is invalid even when the
+  payload is designed to fail immediately.
+- Require the uniquely named invalid durable execution to reach `FAILED`, place exactly its compact
+  synthetic payload in the durable DLQ, transition both owned alarms to `ALARM`, delete only that
+  exact message, and require both alarms to recover to `OK`.
 
 AWS documents the synchronous/asynchronous behavior and the failed-asynchronous-execution DLQ
 boundary in [Invoking durable Lambda functions](https://docs.aws.amazon.com/lambda/latest/dg/durable-invoking.html)
@@ -29,9 +34,12 @@ After completed-dark verification, run:
 .\scripts\operate-development-serverless-workflow-dark-conformance.ps1 -Action Plan
 ```
 
-Review the exact context checksum. Require four planned synchronous invocations, no reconciler,
-no product-data write, disabled triggers, no traffic change, and committed source. The ignored
-context contains environment identifiers and must not be copied into source or evidence.
+Review the exact context checksum. Require three synchronous invocations, one durable `Event`
+invocation, expected durable status `FAILED`, one expected DLQ message, one exact DLQ deletion, four
+alarm transitions (`OK → ALARM → OK` for two alarms), no reconciler, no product-data write, disabled
+triggers, no traffic change, and committed source. Execute therefore performs a bounded AWS
+mutation even though it does not change infrastructure or product data. The ignored context
+contains environment identifiers and must not be copied into source or evidence.
 
 ## Execute
 
@@ -45,9 +53,12 @@ After explicit authorization of that exact checksum:
 ```
 
 The operator requires the activity and terminal handlers to reject invalid input, the starter to
-return the exact partial-batch rejection, and the exact durable numeric version to synchronously
-reach `FAILED` with `WorkflowInputRejected`. It then requires the terminal DLQ to remain empty and
-the entire dark boundary to remain unchanged.
+return the exact partial-batch rejection, and the exact durable numeric version to asynchronously
+reach `FAILED` with `WorkflowInputRejected`. It holds the exact synthetic failure in the DLQ long
+enough to prove both `ALARM` notifications, deletes only the byte-identical reviewed payload, then
+requires both `OK` recovery notifications and an empty DLQ. Expect four operational notification
+emails during a successful execution. The complete infrastructure, trigger, ECS/API/Temporal, and
+public-traffic boundary must otherwise remain unchanged.
 
 After execution, inspect aggregate logs without retaining raw messages, verify alarm health, and
 rerun the exact-commit completed-dark verifier. This does not authorize staging, cutover, rollback,
@@ -55,8 +66,10 @@ or retirement.
 
 ## Abandon a reviewed context
 
-If execution is intentionally abandoned, remove only the checksum-matched context after live
-boundary revalidation:
+If a reviewed plan is abandoned or execution stops partway through, run checksum-gated cleanup.
+Cleanup may stop only the uniquely named reviewed execution and delete only its byte-identical DLQ
+message before requiring both alarms and the complete live boundary to recover. It then removes the
+matching local context:
 
 ```powershell
 .\scripts\operate-development-serverless-workflow-dark-conformance.ps1 `

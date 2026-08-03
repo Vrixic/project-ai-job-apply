@@ -36,7 +36,7 @@ post-run plan reported zero creates, updates, deletes, or replacements.
 No reconciler invocation, SQS send, product-data write, trigger enablement, public-route change,
 ECS-capacity change, Terraform apply, or durable execution occurred.
 
-## Root cause and correction
+## Initial diagnosis and correction
 
 AWS requires durable functions to be invoked through a qualified identifier such as
 `function:version`. The operator supplied the unqualified function name and passed the numeric
@@ -50,9 +50,17 @@ qualifier parameter there. Activity, starter, and terminal targeting is unchange
 base64 transport, exact execution naming, strict response checks, sanitized errors, and the
 no-automatic-retry boundary remain unchanged.
 
-Merge the correction and evidence, synchronize exact clean `main`, regenerate completed-dark zero
-drift, and create a fresh reviewed context. A new explicit checksum authorization is required before
-execution. Four-probe development conformance, known-good release rollback, and staging remain open.
+This was the diagnosis supported by the first rejected request. The qualified-target correction was
+subsequently merged because exact numeric-version targeting is required.
+
+## Correction after the qualified retry
+
+The next authorized run used the merged `function:version` target and AWS still rejected the real
+synchronous request before invocation. Both target forms passed `DryRun`. The deployed durable
+execution timeout is one hour, while AWS limits synchronous durable invocation to workflows whose
+configured timeout is no more than 15 minutes. Qualification was necessary but not sufficient; the
+actual remaining incompatibility was invocation mode. The contained retry and corrected async
+design are recorded in the [invocation-mode evidence](d0-development-workflow-dark-conformance-invocation-mode-2026-08-03.md).
 
 No account identifier, bucket/object version, KMS identifier, role/function/queue/service ARN,
 credential, token, OIDC value, Temporal value, raw payload, raw error/log, state/plan/context content,

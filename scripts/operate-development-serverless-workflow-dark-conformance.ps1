@@ -21,9 +21,12 @@ Usage:
     -Action Cleanup -ExpectedPlanSha256 REVIEWED_SHA256 -Execute
 
 Plan performs AWS reads and writes one ignored checksum-reviewed context. Execute requires that
-exact checksum and clean merged source. It synchronously exercises four synthetic fail-closed
-paths without invoking the reconciler, enabling a trigger, sending SQS, writing product data, or
-changing public traffic. Cleanup removes only the exact reviewed local context.
+exact checksum and clean merged source. It exercises three synchronous rejection paths and one
+asynchronous durable rejection because the deployed one-hour workflow cannot be invoked
+synchronously. The reviewed durable failure must enter the exact DLQ, transition its two alarms,
+and be removed by exact payload match. It never invokes the reconciler, enables a trigger, sends a
+product SQS event, writes product data, or changes public traffic. Cleanup contains only the exact
+reviewed synthetic execution/message and removes the matching local context.
 "@
   exit 0
 }
@@ -57,6 +60,8 @@ $alarms = @(
   "ai-job-apply-development-profile-readiness-durable-failed",
   "ai-job-apply-development-profile-readiness-durable-timed-out"
 )
+$durableFailedAlarm = "ai-job-apply-development-profile-readiness-durable-failed"
+$deadLetterAlarm = "ai-job-apply-development-profile-readiness-dead-letter"
 $priorProfile = $env:AWS_PROFILE
 $priorRegion = $env:AWS_REGION
 $priorDefaultRegion = $env:AWS_DEFAULT_REGION
@@ -104,13 +109,19 @@ function Get-OptionalPropertyValue {
   return $property[0].Value
 }
 
-function Get-DlqDepth {
+function Get-DlqQueueUrl {
   $queue = Invoke-AwsJson @(
     "sqs", "get-queue-url", "--queue-name",
     "ai-job-apply-development-profile-readiness-dead-letter"
   ) "The durable DLQ is unavailable."
+  return [string]$queue.QueueUrl
+}
+
+function Get-DlqDepth {
+  param([string]$QueueUrl = "")
+  if (-not $QueueUrl) { $QueueUrl = Get-DlqQueueUrl }
   $value = Invoke-AwsJson @(
-    "sqs", "get-queue-attributes", "--queue-url", ([string]$queue.QueueUrl),
+    "sqs", "get-queue-attributes", "--queue-url", $QueueUrl,
     "--attribute-names", "ApproximateNumberOfMessages",
     "ApproximateNumberOfMessagesNotVisible", "ApproximateNumberOfMessagesDelayed"
   ) "The durable DLQ depth is unavailable."
@@ -119,6 +130,16 @@ function Get-DlqDepth {
     InFlight = [int]$value.Attributes.ApproximateNumberOfMessagesNotVisible
     Delayed = [int]$value.Attributes.ApproximateNumberOfMessagesDelayed
   }
+}
+
+function Wait-DlqEmpty {
+  param([string]$QueueUrl, [int]$Attempts = 18)
+  for ($attempt = 0; $attempt -lt $Attempts; $attempt++) {
+    $depth = Get-DlqDepth $QueueUrl
+    if ($depth.Visible + $depth.InFlight + $depth.Delayed -eq 0) { return }
+    Start-Sleep -Seconds 5
+  }
+  throw "The durable DLQ did not return to empty within the bounded window."
 }
 
 function Get-LiveBoundary {
@@ -310,10 +331,22 @@ function Get-Context {
   $hash = (Get-FileHash -LiteralPath $contextPath -Algorithm SHA256).Hash.ToLowerInvariant()
   if ($hash -ne $ExpectedPlanSha256.ToLowerInvariant()) { throw "The context checksum differs." }
   $context = Get-Content -LiteralPath $contextPath -Raw | ConvertFrom-Json
+  $durablePayload = $context.Payloads.Durable | ConvertFrom-Json
   if (
-    [string]$context.Schema -ne "applydash.development.workflow-dark-conformance.v1" -or
-    [int]$context.InvocationCount -ne 4 -or [bool]$context.ProductDataWrite -or
-    [bool]$context.TriggersEnabled -or [bool]$context.PublicTrafficChange
+    [string]$context.Schema -ne "applydash.development.workflow-dark-conformance.v2" -or
+    [string]$context.Environment -ne "development" -or [string]$context.Region -ne "us-east-2" -or
+    [int]$context.InvocationCount -ne 4 -or $context.ProductDataWrite -isnot [bool] -or
+    [bool]$context.ProductDataWrite -or $context.ReconcilerInvoked -isnot [bool] -or
+    [bool]$context.ReconcilerInvoked -or $context.TriggersEnabled -isnot [bool] -or
+    [bool]$context.TriggersEnabled -or $context.PublicTrafficChange -isnot [bool] -or
+    [bool]$context.PublicTrafficChange -or [string]$context.DurableInvocationType -ne "Event" -or
+    [string]$context.ExpectedDurableStatus -ne "FAILED" -or
+    [int]$context.ExpectedDlqMessages -ne 1 -or [int]$context.ExpectedDlqDeletes -ne 1 -or
+    [int]$context.ExpectedAlarmTransitions -ne 4 -or
+    $context.AwsMutationOnExecute -isnot [bool] -or -not [bool]$context.AwsMutationOnExecute -or
+    [string]$context.DurableExecutionName -notmatch "^dark-conformance-[a-f0-9]{32}$" -or
+    [int]$durablePayload.schemaVersion -ne 2 -or
+    [string]$durablePayload.conformanceExecutionName -cne [string]$context.DurableExecutionName
   ) { throw "The reviewed context safety boundary is invalid." }
   return $context
 }
@@ -342,25 +375,127 @@ function Invoke-Sync {
     [string]$Label,
     [string]$Name,
     [string]$Version,
-    [string]$Payload,
-    [string]$ExecutionName = "",
-    [switch]$QualifiedTarget
+    [string]$Payload
   )
   $responsePath = [IO.Path]::GetTempFileName()
   try {
     $encodedPayload = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Payload))
-    $functionTarget = if ($QualifiedTarget) { "${Name}:$Version" } else { $Name }
     $arguments = @(
-      "lambda", "invoke", "--function-name", $functionTarget
+      "lambda", "invoke", "--function-name", $Name, "--qualifier", $Version
     )
-    if (-not $QualifiedTarget) { $arguments += @("--qualifier", $Version) }
     $arguments += @("--invocation-type", "RequestResponse", "--payload", $encodedPayload)
-    if ($ExecutionName) { $arguments += @("--durable-execution-name", $ExecutionName) }
     $arguments += $responsePath
     $metadata = Invoke-AwsJson $arguments "The reviewed $Label invocation was not accepted."
     $body = Get-Content -LiteralPath $responsePath -Raw | ConvertFrom-Json
     return [ordered]@{ Metadata = $metadata; Body = $body }
   } finally { Remove-Item -LiteralPath $responsePath -Force -ErrorAction SilentlyContinue }
+}
+
+function Invoke-AsyncDurable {
+  param(
+    [string]$Name,
+    [string]$Version,
+    [string]$Payload,
+    [string]$ExecutionName
+  )
+  $responsePath = [IO.Path]::GetTempFileName()
+  try {
+    $encodedPayload = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Payload))
+    $arguments = @(
+      "lambda", "invoke", "--function-name", "${Name}:$Version",
+      "--invocation-type", "Event", "--durable-execution-name", $ExecutionName,
+      "--payload", $encodedPayload, $responsePath
+    )
+    return Invoke-AwsJson $arguments "The reviewed durable invocation was not accepted."
+  } finally { Remove-Item -LiteralPath $responsePath -Force -ErrorAction SilentlyContinue }
+}
+
+function Wait-DurableTerminal {
+  param([string]$DurableExecutionArn)
+  for ($attempt = 0; $attempt -lt 60; $attempt++) {
+    $execution = Invoke-AwsJson @(
+      "lambda", "get-durable-execution", "--durable-execution-arn", $DurableExecutionArn
+    ) "The durable execution status is unavailable."
+    $status = [string](Get-OptionalPropertyValue $execution "Status")
+    if ($status -in @("SUCCEEDED", "FAILED", "TIMED_OUT", "STOPPED")) { return $execution }
+    if ($status -ne "RUNNING") { throw "The durable execution returned an unknown status." }
+    Start-Sleep -Seconds 1
+  }
+  throw "The durable execution did not reach a terminal state within the reviewed bound."
+}
+
+function Get-ReviewedDurableExecution {
+  param([object]$Context)
+  $response = Invoke-AwsJson @(
+    "lambda", "list-durable-executions-by-function", "--function-name", $functions.Durable,
+    "--qualifier", ([string]$Context.Boundary.Functions.Durable.Version),
+    "--durable-execution-name", ([string]$Context.DurableExecutionName),
+    "--max-items", "2", "--no-paginate"
+  ) "The reviewed durable execution inventory is unavailable."
+  $matches = @(
+    @(Get-OptionalPropertyValue $response "DurableExecutions") | Where-Object {
+      [string](Get-OptionalPropertyValue $_ "DurableExecutionName") -eq
+        [string]$Context.DurableExecutionName
+    }
+  )
+  if ($matches.Count -gt 1) { throw "The reviewed durable execution is not singular." }
+  if ($matches.Count -eq 0) { return $null }
+  $execution = Invoke-AwsJson @(
+    "lambda", "get-durable-execution", "--durable-execution-arn",
+    ([string]$matches[0].DurableExecutionArn)
+  ) "The reviewed durable execution status is unavailable."
+  if (
+    [string](Get-OptionalPropertyValue $execution "DurableExecutionName") -cne
+      [string]$Context.DurableExecutionName -or
+    [string](Get-OptionalPropertyValue $execution "Version") -cne
+      [string]$Context.Boundary.Functions.Durable.Version -or
+    [string](Get-OptionalPropertyValue $execution "InputPayload") -cne
+      [string]$Context.Payloads.Durable
+  ) { throw "The durable execution does not match the reviewed cleanup boundary." }
+  return $execution
+}
+
+function Wait-AlarmState {
+  param([string]$AlarmName, [string]$ExpectedState, [int]$Attempts = 36)
+  for ($attempt = 0; $attempt -lt $Attempts; $attempt++) {
+    $response = Invoke-AwsJson @(
+      "cloudwatch", "describe-alarms", "--alarm-names", $AlarmName
+    ) "A reviewed workflow alarm is unavailable."
+    $alarm = @(Get-OptionalPropertyValue $response "MetricAlarms")
+    if ($alarm.Count -ne 1) { throw "A reviewed workflow alarm is not singular." }
+    if ([string]$alarm[0].StateValue -eq $ExpectedState) { return }
+    Start-Sleep -Seconds 10
+  }
+  throw "A reviewed workflow alarm did not reach $ExpectedState within the bounded window."
+}
+
+function Remove-ReviewedDlqMessage {
+  param([string]$ExpectedBody, [switch]$AllowAbsent)
+  $queueUrl = Get-DlqQueueUrl
+  for ($attempt = 0; $attempt -lt 18; $attempt++) {
+    $response = Invoke-AwsJson @(
+      "sqs", "receive-message", "--queue-url", $queueUrl,
+      "--max-number-of-messages", "2", "--wait-time-seconds", "5",
+      "--visibility-timeout", "30", "--attribute-names", "All",
+      "--message-attribute-names", "All"
+    ) "The reviewed durable DLQ message is unavailable."
+    $messages = @(
+      @(Get-OptionalPropertyValue $response "Messages") | Where-Object { $null -ne $_ }
+    )
+    if ($messages.Count -eq 0) { continue }
+    if ($messages.Count -ne 1) { throw "The durable DLQ contains more than the reviewed message." }
+    if ([string]$messages[0].Body -cne $ExpectedBody) {
+      throw "The durable DLQ message does not match the reviewed synthetic payload."
+    }
+    $null = Invoke-AwsJson @(
+      "sqs", "delete-message", "--queue-url", $queueUrl,
+      "--receipt-handle", ([string]$messages[0].ReceiptHandle)
+    ) "The reviewed durable DLQ message could not be removed."
+    Wait-DlqEmpty $queueUrl
+    return $true
+  }
+  if ($AllowAbsent) { return $false }
+  throw "The reviewed durable failure did not reach the DLQ within the bounded window."
 }
 
 function Invoke-Conformance {
@@ -396,29 +531,34 @@ function Invoke-Conformance {
       "DurableTerminalEventRejected"
   ) { throw "Terminal rejection failed." }
 
-  $durable = Invoke-Sync "durable" $functions.Durable `
+  $durable = Invoke-AsyncDurable $functions.Durable `
     $Context.Boundary.Functions.Durable.Version $Context.Payloads.Durable `
-    $Context.DurableExecutionName -QualifiedTarget
-  $durableFunctionError = Get-OptionalPropertyValue $durable.Metadata "FunctionError"
-  $durableExecutionArn = Get-OptionalPropertyValue $durable.Metadata "DurableExecutionArn"
+    $Context.DurableExecutionName
+  $durableExecutionArn = Get-OptionalPropertyValue $durable "DurableExecutionArn"
   if (
-    [int](Get-OptionalPropertyValue $durable.Metadata "StatusCode") -ne 200 -or
-    -not $durableFunctionError -or
-    [string](Get-OptionalPropertyValue $durable.Metadata "ExecutedVersion") -ne
-      [string]$Context.Boundary.Functions.Durable.Version -or
-    -not $durableExecutionArn -or
-    [string](Get-OptionalPropertyValue $durable.Body "errorMessage") -notmatch
-      "WorkflowInputRejected"
-  ) { throw "Durable exact-version rejection failed." }
-  $execution = Invoke-AwsJson @(
-    "lambda", "get-durable-execution", "--durable-execution-arn",
-    ([string]$durableExecutionArn)
-  ) "The durable execution status is unavailable."
+    [int](Get-OptionalPropertyValue $durable "StatusCode") -ne 202 -or
+    -not $durableExecutionArn
+  ) { throw "Durable asynchronous start failed." }
+  $execution = Wait-DurableTerminal ([string]$durableExecutionArn)
+  $executionError = Get-OptionalPropertyValue $execution "Error"
   if (
     [string](Get-OptionalPropertyValue $execution "Status") -ne "FAILED" -or
     [string](Get-OptionalPropertyValue $execution "Version") -ne
-      [string]$Context.Boundary.Functions.Durable.Version
+      [string]$Context.Boundary.Functions.Durable.Version -or
+    [string](Get-OptionalPropertyValue $execution "DurableExecutionName") -ne
+      [string]$Context.DurableExecutionName -or
+    [string](Get-OptionalPropertyValue $execution "InputPayload") -cne
+      [string]$Context.Payloads.Durable -or
+    [string](Get-OptionalPropertyValue $executionError "ErrorMessage") -notmatch
+      "WorkflowInputRejected"
   ) { throw "The durable rejection did not reach FAILED on the exact version." }
+  Wait-AlarmState $durableFailedAlarm "ALARM"
+  Wait-AlarmState $deadLetterAlarm "ALARM"
+  if (-not (Remove-ReviewedDlqMessage ([string]$Context.Payloads.Durable))) {
+    throw "The reviewed durable DLQ cleanup did not run."
+  }
+  Wait-AlarmState $durableFailedAlarm "OK"
+  Wait-AlarmState $deadLetterAlarm "OK"
 }
 
 try {
@@ -434,8 +574,12 @@ try {
       $boundary = Get-LiveBoundary
       $messageId = "dark-conformance-$([Guid]::NewGuid().ToString('N'))"
       $executionName = "dark-conformance-$([Guid]::NewGuid().ToString('N'))"
+      $durablePayload = (@{
+          schemaVersion = 2
+          conformanceExecutionName = $executionName
+        } | ConvertTo-Json -Compress)
       $context = [ordered]@{
-        Schema = "applydash.development.workflow-dark-conformance.v1"
+        Schema = "applydash.development.workflow-dark-conformance.v2"
         Environment = "development"
         Region = $Region
         CreatedAt = [DateTime]::UtcNow.ToString("o")
@@ -450,9 +594,15 @@ try {
           Starter = (@{ Records = @(@{ messageId = $messageId; body = "not-json" }) } |
             ConvertTo-Json -Depth 4 -Compress)
           Terminal = '{"source":"applydash.dark-conformance"}'
-          Durable = '{"schemaVersion":2}'
+          Durable = $durablePayload
         }
         InvocationCount = 4
+        DurableInvocationType = "Event"
+        ExpectedDurableStatus = "FAILED"
+        ExpectedDlqMessages = 1
+        ExpectedDlqDeletes = 1
+        ExpectedAlarmTransitions = 4
+        AwsMutationOnExecute = $true
         ReconcilerInvoked = $false
         ProductDataWrite = $false
         TriggersEnabled = $false
@@ -467,6 +617,11 @@ try {
         PlanSha256 = $hash
         ZeroDriftPlanSha256 = $zeroDriftHash
         InvocationCountOnExecute = 4
+        DurableInvocationType = "Event"
+        ExpectedDlqMessages = 1
+        ExpectedDlqDeletes = 1
+        ExpectedAlarmTransitions = 4
+        AwsMutationOnExecute = $true
         ReconcilerInvoked = $false
         ProductDataWrite = $false
         TriggersEnabled = $false
@@ -485,7 +640,7 @@ try {
       Invoke-Conformance $context
       $depth = Get-DlqDepth
       if ($depth.Visible + $depth.InFlight + $depth.Delayed -ne 0) {
-        throw "Synchronous conformance unexpectedly populated the durable DLQ."
+        throw "Conformance did not restore the durable DLQ to empty."
       }
       Assert-SameBoundary $context.Boundary (Get-LiveBoundary)
       Remove-Item -LiteralPath $contextPath -Force
@@ -495,6 +650,8 @@ try {
         Invocations = 4
         DurableExactVersionFailedClosed = $true
         DeadLetterMessages = 0
+        ReviewedDeadLetterMessagesDeleted = 1
+        AlarmTransitions = 4
         ReconcilerInvoked = $false
         ProductDataWrite = $false
         TriggersEnabled = $false
@@ -505,9 +662,35 @@ try {
     "Cleanup" {
       if (-not $Execute) { throw "Cleanup requires -Execute." }
       $context = Get-Context
+      $awsMutation = $false
+      $reviewedExecution = Get-ReviewedDurableExecution $context
+      if ($null -ne $reviewedExecution) {
+        $status = [string](Get-OptionalPropertyValue $reviewedExecution "Status")
+        if ($status -eq "RUNNING") {
+          $null = Invoke-AwsJson @(
+            "lambda", "stop-durable-execution", "--durable-execution-arn",
+            ([string]$reviewedExecution.DurableExecutionArn)
+          ) "The reviewed durable execution could not be stopped."
+          $reviewedExecution = Wait-DurableTerminal `
+            ([string]$reviewedExecution.DurableExecutionArn)
+          $status = [string](Get-OptionalPropertyValue $reviewedExecution "Status")
+          $awsMutation = $true
+        }
+        if ($status -eq "SUCCEEDED") {
+          throw "The reviewed invalid durable execution unexpectedly succeeded."
+        }
+        if ($status -notin @("FAILED", "TIMED_OUT", "STOPPED")) {
+          throw "The reviewed durable execution has an unknown cleanup state."
+        }
+        if (Remove-ReviewedDlqMessage ([string]$context.Payloads.Durable) -AllowAbsent) {
+          $awsMutation = $true
+        }
+        Wait-AlarmState $durableFailedAlarm "OK"
+        Wait-AlarmState $deadLetterAlarm "OK"
+      }
       Assert-SameBoundary $context.Boundary (Get-LiveBoundary)
       Remove-Item -LiteralPath $contextPath -Force
-      [ordered]@{ Environment = "development"; Action = "cleanup"; AwsMutation = $false } |
+      [ordered]@{ Environment = "development"; Action = "cleanup"; AwsMutation = $awsMutation } |
         ConvertTo-Json
     }
   }

@@ -101,8 +101,10 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   required by one internally consistent release. The ignored plan is never applied by the script.
 - `operate-development-serverless-workflow-dark-conformance.ps1` — Creates an ignored,
   checksum-reviewed context from an exact-commit zero-drift plan and stable live boundary. Separate
-  execution synchronously exercises four synthetic fail-closed handlers without invoking the
-  reconciler, sending SQS, writing product data, enabling triggers, or changing public routing.
+  execution exercises three synchronous synthetic rejections plus one exact-version asynchronous
+  durable rejection. It proves both owned alarms, deletes only the byte-identical synthetic DLQ
+  message, and restores the empty/healthy boundary without invoking the reconciler, sending a
+  product SQS event, writing product data, enabling triggers, or changing public routing.
 - `operate-development-gateway-lambda-alias-rollback.ps1` — Creates a checksum-reviewed,
   read-only recovery context for two accepted immutable development Lambda versions. Explicit
   execution uses optimistic alias revision locking, proves the prior version through the guarded
