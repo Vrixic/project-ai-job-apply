@@ -34,6 +34,8 @@ state bucket, artifact key/version, ARN, credential, secret, payload, log, or ca
   and still rejects any actual additional version weight.
 - Release preflight treats an omitted Lambda `Layers` property as an empty layer collection under
   strict PowerShell while continuing to require the pinned extension layer on functions that use it.
+- Retained-state parsing treats an omitted Terraform `index_key` as an unindexed resource while
+  retaining exact string and numeric address reconstruction for indexed resources.
 - Repository whitespace validation passes.
 - The existing strict planner remains the only component that constructs or semantically accepts
   a Terraform release plan.
