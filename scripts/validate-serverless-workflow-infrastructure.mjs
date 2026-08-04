@@ -29,6 +29,15 @@ const developmentWorkflowConformanceWrapper = read(
 const stagingWorkflowConformanceWrapper = read(
   "scripts/operate-staging-serverless-workflow-dark-conformance.ps1",
 );
+const workflowReleaseRollbackOperator = read(
+  "scripts/operate-serverless-workflow-release-rollback.ps1",
+);
+const developmentWorkflowReleaseRollbackWrapper = read(
+  "scripts/operate-development-serverless-workflow-release-rollback.ps1",
+);
+const stagingWorkflowReleaseRollbackWrapper = read(
+  "scripts/operate-staging-serverless-workflow-release-rollback.ps1",
+);
 
 const requireText = (source, expected, message) => {
   assert.ok(source.includes(expected), message);
@@ -285,6 +294,50 @@ for (const [wrapper, environment] of [
     wrapper,
     `"ai-job-apply-${environment}-admin"`,
     `The ${environment} wrapper must default to its isolated IAM profile.`,
+  );
+}
+
+for (const expected of [
+  '[ValidateSet("development", "staging")]',
+  '"infrastructure\\terraform\\environments\\$Environment"',
+  '"applydash.$Environment.workflow-release-rollback.v1"',
+  '"ai-job-apply-$Environment-admin"',
+  '"plan-serverless-workflow-dark.ps1"',
+  'rev-parse "@{upstream}"',
+  "Environment = $Environment",
+  "PublicTrafficChange = $false",
+  "TriggerChange = $false",
+  "EcsCapacityChange = $false",
+]) {
+  requireText(
+    workflowReleaseRollbackOperator,
+    expected,
+    `The shared workflow rollback operator is missing required boundary text: ${expected}`,
+  );
+}
+assert.ok(
+  !workflowReleaseRollbackOperator.includes("ai-job-apply-development-"),
+  "The shared workflow rollback operator must not retain development-only resource names.",
+);
+
+for (const [wrapper, environment] of [
+  [developmentWorkflowReleaseRollbackWrapper, "development"],
+  [stagingWorkflowReleaseRollbackWrapper, "staging"],
+]) {
+  requireText(
+    wrapper,
+    '"operate-serverless-workflow-release-rollback.ps1"',
+    `The ${environment} rollback wrapper must delegate to the shared operator.`,
+  );
+  requireText(
+    wrapper,
+    `Environment                = "${environment}"`,
+    `The ${environment} rollback wrapper must fix its exact environment.`,
+  );
+  requireText(
+    wrapper,
+    `"ai-job-apply-${environment}-admin"`,
+    `The ${environment} rollback wrapper must default to its isolated IAM profile.`,
   );
 }
 
