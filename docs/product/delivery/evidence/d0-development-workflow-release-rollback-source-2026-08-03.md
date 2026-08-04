@@ -30,7 +30,8 @@ state bucket, artifact key/version, ARN, credential, secret, payload, log, or ca
 - Retained plan input extraction accepts an exact root-variable reference only when the saved
   plan's matching top-level variable value exists; unrelated or missing expressions fail closed.
 - Release preflight treats an omitted alias `RoutingConfig` as the expected unweighted alias
-  posture while still rejecting any actual additional version weight.
+  posture, normalizes the optional collection to an always-array value under strict PowerShell,
+  and still rejects any actual additional version weight.
 - Repository whitespace validation passes.
 - The existing strict planner remains the only component that constructs or semantically accepts
   a Terraform release plan.
