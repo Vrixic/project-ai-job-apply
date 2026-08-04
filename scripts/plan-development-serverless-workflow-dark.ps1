@@ -415,9 +415,25 @@ try {
         "lambda", "get-function-concurrency", "--function-name", $functionName,
         "--output", "json"
       )
-      $weights = if ($alias.RoutingConfig -and $alias.RoutingConfig.AdditionalVersionWeights) {
-        @($alias.RoutingConfig.AdditionalVersionWeights.PSObject.Properties).Count
-      } else { 0 }
+      $routingConfiguration = @(
+        $alias.PSObject.Properties | Where-Object { $_.Name -eq "RoutingConfig" }
+      )
+      $additionalWeights = if (
+        $routingConfiguration.Count -eq 1 -and
+        $null -ne $routingConfiguration[0].Value
+      ) {
+        @(
+          $routingConfiguration[0].Value.PSObject.Properties |
+            Where-Object { $_.Name -eq "AdditionalVersionWeights" }
+        )
+      } else {
+        @()
+      }
+      $weights = if ($additionalWeights.Count -eq 1 -and $null -ne $additionalWeights[0].Value) {
+        @($additionalWeights[0].Value.PSObject.Properties).Count
+      } else {
+        0
+      }
       $layers = @(
         $latest.Layers | Where-Object { $_ -and $_.Arn } | ForEach-Object { [string]$_.Arn }
       )
