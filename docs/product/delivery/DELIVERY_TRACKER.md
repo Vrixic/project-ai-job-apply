@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-08-03
+Last updated: 2026-08-04
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -28,6 +28,7 @@ This is the master record for the delivery phases defined in the [product and sy
 - Depends on: Approved product direction
 - Task document: [Phase 0 tasks](phase-0-foundation.md)
 - Exit gate: Schemas, policies, threat/data maps, engineering foundation, and an authenticated end-to-end skeleton are reviewed and evidenced; the skeleton runs on the accepted scale-to-zero application runtime with no obsolete always-on gateway/worker path.
+- Current engineering status: the accepted development workflow releases now pass checksum-authorized coupled rollback/restoration, conformance, alert delivery, cleanup, and zero drift. D0-016 next moves to isolated staging serverless deployment and acceptance before controlled cutover and obsolete-runtime retirement.
 
 ## D1 — Useful web product and canonical job catalog
 
