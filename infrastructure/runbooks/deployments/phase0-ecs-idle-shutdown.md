@@ -23,7 +23,8 @@ aws sso login --profile ai-job-apply-development-admin
 .\scripts\operate-phase0-ecs-idle-shutdown.ps1 `
   -Environment development `
   -Action PlanIdle `
-  -ConfirmZeroTraffic
+  -ConfirmZeroTraffic `
+  -RetainedTerraformPlanPath .terraform/worker-drain-development.tfplan
 ```
 
 Review the sanitized result. It must report zero pending outbox rows, zero running Temporal
@@ -68,7 +69,9 @@ aws sso login --profile ai-job-apply-staging-admin
 ```
 
 Never reuse one environment's checksum, ignored plan, context, profile, or Terraform state for the
-other environment.
+other environment. A retained plan is mandatory when Terraform state contains any serverless
+gateway, outbox, or durable-workflow resource. It may be omitted only when the operator proves
+those resources are absent and supplies the explicit disabled serverless defaults.
 
 ## Acceptance
 
@@ -89,6 +92,12 @@ All new functional testing proceeds against the Lambda replacement after its con
 ## Explicit resume
 
 Resume only for an approved rollback. Create and review the reverse plan separately:
+
+The commands below require the ignored context produced by a successful operator-managed idle
+apply. If an accepted idle apply was completed through an independently reviewed equivalent plan
+and that context is absent, stop. Reconstruct a refresh-backed reverse plan from the retained live
+task definitions and exact environment inputs under a separate reviewed recovery procedure; do
+not synthesize or copy an operator context.
 
 ```powershell
 .\scripts\operate-phase0-ecs-idle-shutdown.ps1 `
