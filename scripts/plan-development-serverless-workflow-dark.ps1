@@ -163,11 +163,18 @@ function Get-BaselineValue {
       $baseAddress = $baseAddress -join "."
       foreach ($instance in @($resource.instances)) {
         $instanceAddress = $baseAddress
-        if ($null -ne $instance.index_key) {
-          $instanceAddress += if ($instance.index_key -is [string]) {
-            "[`"$($instance.index_key)`"]"
+        $indexKeyProperty = @(
+          $instance.PSObject.Properties | Where-Object { $_.Name -eq "index_key" }
+        )
+        if ($indexKeyProperty.Count -gt 1) {
+          throw "The partial dark state contains an ambiguous resource index."
+        }
+        if ($indexKeyProperty.Count -eq 1 -and $null -ne $indexKeyProperty[0].Value) {
+          $indexKey = $indexKeyProperty[0].Value
+          $instanceAddress += if ($indexKey -is [string]) {
+            "[`"$indexKey`"]"
           } else {
-            "[$($instance.index_key)]"
+            "[$indexKey]"
           }
         }
         if ($instanceAddress -eq $Address) { return $instance.attributes }
