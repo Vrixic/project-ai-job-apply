@@ -93,11 +93,13 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   function artifact/version update and alias transition to that new immutable version.
   The same pin supports completed-dark verification, which accepts only a refresh-backed
   zero-change plan. It never applies infrastructure or changes API traffic.
-- `plan-development-serverless-workflow-bootstrap.ps1` — Verifies the exact development account,
-  encrypted and versioned bootstrap state, immutable GitHub identity and effective OIDC trust,
-  plus a successful protected-environment artifact-publication run; then creates a refresh-backed
-  sensitive plan and rejects anything except the three reviewed in-place GitHub deployment and
-  workload boundary updates needed by the serverless workflow release. It never applies the plan.
+- `plan-serverless-workflow-bootstrap.ps1` — Verifies the exact selected environment account,
+  encrypted bootstrap state, immutable GitHub OIDC trust, and a successful protected-environment
+  workflow-artifact publication before saving an exact three-policy serverless bootstrap plan. Its
+  explicit one-time correction mode accepts only a versioned SSE-S3 state object beneath the
+  reviewed CMK bucket default so the authorized apply can rewrite active state under that CMK.
+- `plan-development-serverless-workflow-bootstrap.ps1` — Compatibility wrapper for the development
+  invocation of the environment-aware bootstrap planner.
 - `plan-development-serverless-workflow-dark.ps1` — Reuses the completed dark-gateway verifier for
   an initial deployment or encrypted live state for the guarded failed-apply recovery. It verifies
   all immutable workflow artifacts, the pinned official regional extension, exact action
