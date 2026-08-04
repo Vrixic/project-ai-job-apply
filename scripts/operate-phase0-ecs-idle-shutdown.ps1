@@ -9,6 +9,7 @@ param(
 
   [string]$ExpectedPlanSha256 = "",
   [string]$AwsProfile = "",
+  [string]$RetainedTerraformPlanPath = "",
 
   [ValidatePattern("^[a-z]{2}-[a-z]+-[0-9]+$")]
   [string]$Region = "us-east-2",
@@ -25,7 +26,8 @@ if ($Help) {
   @"
 Usage:
   .\scripts\operate-phase0-ecs-idle-shutdown.ps1 `
-    -Environment development -Action PlanIdle -ConfirmZeroTraffic
+    -Environment development -Action PlanIdle -ConfirmZeroTraffic `
+    -RetainedTerraformPlanPath .terraform/worker-drain-development.tfplan
 
   .\scripts\operate-phase0-ecs-idle-shutdown.ps1 `
     -Environment development -Action ApplyIdle `
@@ -34,11 +36,13 @@ Usage:
   .\scripts\operate-phase0-ecs-idle-shutdown.ps1 `
     -Environment development -Action VerifyIdle
 
-PlanIdle requires an exact synchronized main commit, a clean infrastructure/operator tree, zero
-undispatched outbox rows, zero running Temporal workflows, and both legacy ECS services at the
-stable 1/1/0 posture. It creates one ignored targeted Terraform plan containing exactly four
-in-place updates: gateway desired count 1 to 0, worker desired count 1 to 0, and both heartbeat
-alarms to the non-notifying idle posture.
+PlanIdle requires an exact synchronized main commit, a clean infrastructure/operator tree, one
+reviewed retained Terraform plan from the selected environment, zero undispatched outbox rows,
+zero running Temporal workflows, and both legacy ECS services at the stable 1/1/0 posture. It
+imports only the non-secret serverless deployment inputs needed to preserve the live KMS/IAM
+boundary, then creates one ignored targeted Terraform plan containing exactly four in-place
+updates: gateway desired count 1 to 0, worker desired count 1 to 0, and both heartbeat alarms to
+the non-notifying idle posture.
 
 ApplyIdle accepts only the saved checksum-matched plan and repeats the zero-work preflight before
 applying. VerifyIdle proves both services remain ACTIVE at 0/0/0, there are no running ECS tasks,
@@ -82,7 +86,46 @@ $terraformVariables = @(
   "high_availability", "private_application_networking", "enable_redis",
   "database_instance_class", "database_engine_version", "database_performance_insights",
   "enable_container_insights", "oidc_issuer", "oidc_audience", "temporal_address",
-  "temporal_namespace", "deploy_applications"
+  "temporal_namespace", "deploy_applications", "deploy_gateway_lambda",
+  "deploy_profile_readiness_durable", "deploy_serverless_outbox",
+  "enable_serverless_workflow_triggers", "gateway_lambda_artifact_base64sha256",
+  "gateway_lambda_artifact_s3_key", "gateway_lambda_artifact_s3_object_version",
+  "gateway_lambda_artifact_sha256", "gateway_lambda_extension_layer_arn",
+  "gateway_lambda_reserved_concurrency", "gateway_outbox_dispatch_target",
+  "profile_readiness_activity_artifact_base64sha256",
+  "profile_readiness_activity_artifact_s3_key",
+  "profile_readiness_activity_artifact_s3_object_version",
+  "profile_readiness_activity_artifact_sha256",
+  "profile_readiness_durable_artifact_base64sha256",
+  "profile_readiness_durable_artifact_s3_key",
+  "profile_readiness_durable_artifact_s3_object_version",
+  "profile_readiness_durable_artifact_sha256",
+  "profile_readiness_execution_timeout_seconds",
+  "profile_readiness_lambda_extension_layer_arn", "profile_readiness_retention_days",
+  "workflow_ingress_artifact_base64sha256", "workflow_ingress_artifact_s3_key",
+  "workflow_ingress_artifact_s3_object_version", "workflow_ingress_artifact_sha256",
+  "workflow_ingress_lambda_extension_layer_arn"
+)
+
+$retainedServerlessVariableNames = @(
+  "deploy_gateway_lambda", "deploy_profile_readiness_durable", "deploy_serverless_outbox",
+  "enable_serverless_workflow_triggers", "gateway_lambda_artifact_base64sha256",
+  "gateway_lambda_artifact_s3_key", "gateway_lambda_artifact_s3_object_version",
+  "gateway_lambda_artifact_sha256", "gateway_lambda_extension_layer_arn",
+  "gateway_lambda_reserved_concurrency", "gateway_outbox_dispatch_target",
+  "profile_readiness_activity_artifact_base64sha256",
+  "profile_readiness_activity_artifact_s3_key",
+  "profile_readiness_activity_artifact_s3_object_version",
+  "profile_readiness_activity_artifact_sha256",
+  "profile_readiness_durable_artifact_base64sha256",
+  "profile_readiness_durable_artifact_s3_key",
+  "profile_readiness_durable_artifact_s3_object_version",
+  "profile_readiness_durable_artifact_sha256",
+  "profile_readiness_execution_timeout_seconds",
+  "profile_readiness_lambda_extension_layer_arn", "profile_readiness_retention_days",
+  "workflow_ingress_artifact_base64sha256", "workflow_ingress_artifact_s3_key",
+  "workflow_ingress_artifact_s3_object_version", "workflow_ingress_artifact_sha256",
+  "workflow_ingress_lambda_extension_layer_arn"
 )
 
 $env:AWS_PROFILE = $AwsProfile
@@ -318,6 +361,51 @@ function Get-LiveConfiguration {
   }
 }
 
+function Get-RetainedServerlessConfiguration {
+  if ([string]::IsNullOrWhiteSpace($RetainedTerraformPlanPath)) {
+    throw "PlanIdle requires -RetainedTerraformPlanPath from the selected environment."
+  }
+
+  $candidatePath = if ([IO.Path]::IsPathRooted($RetainedTerraformPlanPath)) {
+    [IO.Path]::GetFullPath($RetainedTerraformPlanPath)
+  } else {
+    [IO.Path]::GetFullPath((Join-Path $environmentDirectory $RetainedTerraformPlanPath))
+  }
+  $environmentRoot = [IO.Path]::GetFullPath($environmentDirectory).TrimEnd(
+    [IO.Path]::DirectorySeparatorChar,
+    [IO.Path]::AltDirectorySeparatorChar
+  ) + [IO.Path]::DirectorySeparatorChar
+  if (
+    -not $candidatePath.StartsWith($environmentRoot, [StringComparison]::OrdinalIgnoreCase) -or
+    -not (Test-Path -LiteralPath $candidatePath -PathType Leaf)
+  ) {
+    throw "The retained Terraform plan must be an existing file inside the selected environment."
+  }
+
+  $raw = & terraform "-chdir=$environmentDirectory" show -json $candidatePath 2>$null
+  if ($LASTEXITCODE -ne 0 -or -not $raw) {
+    throw "The retained Terraform plan could not be inspected."
+  }
+  try {
+    $plan = ($raw -join [Environment]::NewLine) | ConvertFrom-Json
+  } catch {
+    throw "The retained Terraform plan did not return valid JSON."
+  }
+  if (-not $plan.variables) {
+    throw "The retained Terraform plan does not contain root input variables."
+  }
+
+  $configuration = [ordered]@{}
+  foreach ($name in $retainedServerlessVariableNames) {
+    $property = $plan.variables.PSObject.Properties[$name]
+    if ($null -eq $property -or $null -eq $property.Value.value) {
+      throw "The retained Terraform plan is missing required non-secret input '$name'."
+    }
+    $configuration[$name] = $property.Value.value
+  }
+  return $configuration
+}
+
 function Set-TerraformVariables {
   param([object]$Configuration, [bool]$Idle)
   foreach ($name in @(
@@ -325,15 +413,37 @@ function Set-TerraformVariables {
       "gateway_cpu", "gateway_memory", "worker_desired_count", "worker_cpu", "worker_memory",
       "otel_collector_image", "trace_sample_ratio", "database_instance_class",
       "database_engine_version", "oidc_issuer", "oidc_audience", "temporal_address",
-      "temporal_namespace"
+      "temporal_namespace", "gateway_lambda_artifact_base64sha256",
+      "gateway_lambda_artifact_s3_key", "gateway_lambda_artifact_s3_object_version",
+      "gateway_lambda_artifact_sha256", "gateway_lambda_extension_layer_arn",
+      "gateway_outbox_dispatch_target", "profile_readiness_activity_artifact_base64sha256",
+      "profile_readiness_activity_artifact_s3_key",
+      "profile_readiness_activity_artifact_s3_object_version",
+      "profile_readiness_activity_artifact_sha256",
+      "profile_readiness_durable_artifact_base64sha256",
+      "profile_readiness_durable_artifact_s3_key",
+      "profile_readiness_durable_artifact_s3_object_version",
+      "profile_readiness_durable_artifact_sha256",
+      "profile_readiness_lambda_extension_layer_arn",
+      "workflow_ingress_artifact_base64sha256", "workflow_ingress_artifact_s3_key",
+      "workflow_ingress_artifact_s3_object_version", "workflow_ingress_artifact_sha256",
+      "workflow_ingress_lambda_extension_layer_arn"
     )) {
     Set-Item "Env:TF_VAR_$name" ([string]$Configuration.$name)
   }
   foreach ($name in @(
       "enable_tracing", "high_availability", "private_application_networking", "enable_redis",
-      "database_performance_insights", "enable_container_insights"
+      "database_performance_insights", "enable_container_insights", "deploy_gateway_lambda",
+      "deploy_profile_readiness_durable", "deploy_serverless_outbox",
+      "enable_serverless_workflow_triggers"
     )) {
     Set-Item "Env:TF_VAR_$name" ([bool]$Configuration.$name).ToString().ToLowerInvariant()
+  }
+  foreach ($name in @(
+      "gateway_lambda_reserved_concurrency", "profile_readiness_execution_timeout_seconds",
+      "profile_readiness_retention_days"
+    )) {
+    Set-Item "Env:TF_VAR_$name" ([int]$Configuration.$name).ToString()
   }
   $env:TF_VAR_run_continuous_ecs_runtime = (-not $Idle).ToString().ToLowerInvariant()
   $env:TF_VAR_deploy_applications = "true"
@@ -651,6 +761,10 @@ try {
       $sourceCommit = Assert-ExactMainSource
       Assert-ServicePosture $services $false
       $configuration = Get-LiveConfiguration $services
+      $retainedServerlessConfiguration = Get-RetainedServerlessConfiguration
+      foreach ($name in $retainedServerlessVariableNames) {
+        $configuration[$name] = $retainedServerlessConfiguration[$name]
+      }
       Assert-ZeroPendingWork $configuration
       $networkInterfaceIds = Get-TaskNetworkInterfaces $services
       if ($networkInterfaceIds.Count -ne 2) {

@@ -74,11 +74,12 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   metadata plus an ordered identifier digest. Individual synthetic event IDs require the explicit
   `-IncludeEventIds` switch; AWS execution requires the separate `-Execute` switch.
 - `operate-phase0-ecs-idle-shutdown.ps1` — Requires explicit zero-traffic acknowledgement, zero
-  undispatched outbox rows, and zero running Temporal workflows; then creates and applies separate
-  checksum-reviewed development/staging plans containing only two ECS desired-count and two
-  heartbeat-alarm updates. Verification proves zero running tasks, released task public IPs,
-  quiet expected-heartbeat monitoring, and targeted zero drift while retaining an exact reverse
-  resume-plan boundary.
+  undispatched outbox rows, zero running Temporal workflows, and one reviewed retained Terraform
+  plan from the selected environment. It imports only the non-secret serverless inputs needed to
+  preserve the deployed IAM/KMS boundary, then creates and applies separate checksum-reviewed
+  development/staging plans containing only two ECS desired-count and two heartbeat-alarm updates.
+  Verification proves zero running tasks, released task public IPs, quiet expected-heartbeat
+  monitoring, and targeted zero drift while retaining an exact reverse resume-plan boundary.
 - `plan-development-gateway-lambda-dark.ps1` — Reconstructs exact live development inputs, verifies
   the merged versioned artifact, official regional Secrets extension, and customer-managed state
   key; creates a refresh-backed sensitive plan under the ignored Terraform data directory; and
