@@ -36,6 +36,8 @@ state bucket, artifact key/version, ARN, credential, secret, payload, log, or ca
   strict PowerShell while continuing to require the pinned extension layer on functions that use it.
 - Retained-state parsing treats an omitted Terraform `index_key` as an unindexed resource while
   retaining exact string and numeric address reconstruction for indexed resources.
+- Expected Terraform create, update, and replacement address sets are normalized to arrays in
+  every planner mode, including the valid empty-set cases used by release and verification plans.
 - Repository whitespace validation passes.
 - The existing strict planner remains the only component that constructs or semantically accepts
   a Terraform release plan.
