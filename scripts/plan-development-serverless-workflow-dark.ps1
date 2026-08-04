@@ -816,25 +816,25 @@ try {
   $releaseExpectedReplacements = @(
     "module.platform.time_sleep.profile_readiness_durable_policy_propagation[0]"
   )
-  $expectedCreates = if ($AllowArtifactReleaseUpdate -or $VerifyCompletedDarkDeployment) {
-    @()
-  } elseif ($RecoverFailedApply) {
-    $recoveryExpectedCreates
-  } else {
-    $initialExpectedCreates
-  }
-  $expectedUpdates = if ($AllowArtifactReleaseUpdate) {
-    $releaseExpectedUpdates
-  } elseif ($VerifyCompletedDarkDeployment -or $RecoverFailedApply) {
-    @()
-  } else {
-    $initialExpectedUpdates
-  }
-  $expectedReplacements = if ($AllowArtifactReleaseUpdate) {
-    $releaseExpectedReplacements
-  } else {
-    @()
-  }
+  $expectedCreates = @(
+    if ($RecoverFailedApply) {
+      $recoveryExpectedCreates
+    } elseif (-not ($AllowArtifactReleaseUpdate -or $VerifyCompletedDarkDeployment)) {
+      $initialExpectedCreates
+    }
+  )
+  $expectedUpdates = @(
+    if ($AllowArtifactReleaseUpdate) {
+      $releaseExpectedUpdates
+    } elseif (-not ($VerifyCompletedDarkDeployment -or $RecoverFailedApply)) {
+      $initialExpectedUpdates
+    }
+  )
+  $expectedReplacements = @(
+    if ($AllowArtifactReleaseUpdate) {
+      $releaseExpectedReplacements
+    }
+  )
   $creates = @($changes | Where-Object { (@($_.change.actions) -join ",") -eq "create" })
   $updates = @($changes | Where-Object { (@($_.change.actions) -join ",") -eq "update" })
   $replacements = @(
