@@ -27,6 +27,8 @@ state bucket, artifact key/version, ARN, credential, secret, payload, log, or ca
 
 - PowerShell parser validation passes.
 - `-Help` and read-only empty-context `Status` execute successfully.
+- Retained plan input extraction accepts an exact root-variable reference only when the saved
+  plan's matching top-level variable value exists; unrelated or missing expressions fail closed.
 - Repository whitespace validation passes.
 - The existing strict planner remains the only component that constructs or semantically accepts
   a Terraform release plan.

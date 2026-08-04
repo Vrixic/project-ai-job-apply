@@ -184,12 +184,22 @@ function Get-ConstantExpression {
   $expressions = $Plan.configuration.root_module.module_calls.platform.expressions
   $property = @($expressions.PSObject.Properties | Where-Object { $_.Name -eq $Name })
   if (
-    $property.Count -ne 1 -or
-    $property[0].Value.PSObject.Properties.Name -notcontains "constant_value"
+    $property.Count -eq 1 -and
+    $property[0].Value.PSObject.Properties.Name -contains "constant_value"
   ) {
-    throw "The retained plan does not contain constant platform input '$Name'."
+    return $property[0].Value.constant_value
   }
-  return $property[0].Value.constant_value
+  $variable = @($Plan.variables.PSObject.Properties | Where-Object { $_.Name -eq $Name })
+  if (
+    $property.Count -ne 1 -or
+    @($property[0].Value.references).Count -ne 1 -or
+    [string]$property[0].Value.references[0] -ne "var.$Name" -or
+    $variable.Count -ne 1 -or
+    $variable[0].Value.PSObject.Properties.Name -notcontains "value"
+  ) {
+    throw "The retained plan does not contain exact platform input '$Name'."
+  }
+  return $variable[0].Value.value
 }
 
 function Get-ReleaseInputs {
