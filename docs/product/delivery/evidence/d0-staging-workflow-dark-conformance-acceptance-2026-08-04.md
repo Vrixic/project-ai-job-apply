@@ -2,7 +2,7 @@
 
 - Date: 2026-08-04
 - Environment: Isolated synthetic staging
-- Status: Workflow dark conformance passed; human notification receipt remains pending
+- Status: Workflow dark conformance and end-to-end alert delivery passed
 - Source commit: `ae91e4878cbd5af41024621a51308a499fbb83ec`
 - Reviewed context SHA-256:
   `3cdeb6aca5542677d687ae663606b8c3c5211bd4b3c603972d5ac5d7680c2eff`
@@ -64,11 +64,12 @@ reviewed context remained intact; no automatic or duplicate retry was performed.
 
 ## Acceptance and next gate
 
-Staging workflow dark conformance passes at the AWS state and alarm-transition layers. This record
-does not yet claim human receipt of the expected durable-failure and dead-letter `ALARM`/`OK`
-notification pairs. It also does not claim authenticated gateway acceptance, accepted-release
-rollback/restoration, API/outbox cutover, Temporal retirement, or obsolete-resource removal.
+The product owner confirmed receipt of all four expected staging notifications: the
+durable-failure and dead-letter `ALARM`/`OK` pairs. Alert delivery is accepted without retaining
+the destination, raw message content, or other subscriber data.
 
-After notification receipt is confirmed, continue SR-006 with the staging accepted-release
-rollback/restoration and authenticated gateway/cross-user acceptance before preparing the
-separately reviewed cutover plan.
+Staging workflow dark conformance therefore passes at the AWS state, alarm-transition, and human
+delivery layers. This record does not claim authenticated gateway acceptance, accepted-release
+rollback/restoration, API/outbox cutover, Temporal retirement, or obsolete-resource removal.
+Continue SR-006 with staging accepted-release rollback/restoration and authenticated
+gateway/cross-user acceptance before preparing the separately reviewed cutover plan.
