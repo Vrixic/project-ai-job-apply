@@ -81,8 +81,8 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   two heartbeat-alarm updates. Verification proves zero running tasks, released task public IPs,
   quiet expected-heartbeat monitoring, and targeted zero drift while retaining an exact reverse
   resume-plan boundary.
-- `plan-development-gateway-lambda-dark.ps1` — Reconstructs exact live development inputs, verifies
-  the merged versioned artifact, official regional Secrets extension, and customer-managed state
+- `plan-gateway-lambda-dark.ps1` — Reconstructs exact live inputs for the selected isolated
+  environment, verifies the merged versioned artifact, official regional Secrets extension, and customer-managed state
   key; creates a refresh-backed sensitive plan under the ignored Terraform data directory; and
   rejects anything except the reviewed dark-gateway creates. Explicit recovery switches can
   account for a partial apply, the exact `DescribeSubnets` role-policy correction, or an exact
@@ -93,6 +93,8 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   function artifact/version update and alias transition to that new immutable version.
   The same pin supports completed-dark verification, which accepts only a refresh-backed
   zero-change plan. It never applies infrastructure or changes API traffic.
+- `plan-development-gateway-lambda-dark.ps1` — Compatibility wrapper for the development invocation
+  of the environment-aware gateway planner.
 - `plan-serverless-workflow-bootstrap.ps1` — Verifies the exact selected environment account,
   encrypted bootstrap state, immutable GitHub OIDC trust, and a successful protected-environment
   workflow-artifact publication before saving an exact three-policy serverless bootstrap plan. Its
