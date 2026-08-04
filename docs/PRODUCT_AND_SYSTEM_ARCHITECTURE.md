@@ -117,6 +117,11 @@ before Lambda cutover, after zero-outbox/Temporal proof. This deliberately sacri
 environment availability while preserving Terraform ownership and an exact rollback boundary; it
 does not permit early deletion of persistent or legacy rollback resources.
 
+As of 2026-08-03, both isolated Phase 0 environments have applied and verified that retained-idle
+posture: the gateway and worker services remain available for reviewed rollback with zero desired
+or running tasks, no continuously assigned task public IPs, quiet expected-heartbeat alarms, and
+zero targeted Terraform drift.
+
 - Use API Gateway with a direct versioned Lambda integration for synchronous APIs.
 - Use the transactional outbox, SQS/DLQ, and versioned Lambda durable functions for long-running
   orchestration. PostgreSQL remains product and audit truth.

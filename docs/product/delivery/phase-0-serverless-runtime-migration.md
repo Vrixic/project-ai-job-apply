@@ -6,8 +6,9 @@
 - Owner: Platform engineering
 - Parent delivery: [Phase 0 foundation](phase-0-foundation.md)
 - Decision: [ADR-016](../../adr/016-scale-to-zero-application-runtime.md)
-- Current deployed state: API Gateway → VPC Link/Cloud Map → one gateway Fargate task; one
-  continuously polling Temporal Fargate worker
+- Current deployed state: retained API Gateway → VPC Link/Cloud Map → gateway ECS service at
+  `0/0/0`; retained Temporal-worker ECS service at `0/0/0`; zero running ECS tasks in development
+  and synthetic staging
 - Target state: API Gateway → Lambda; SQS/outbox → Lambda durable functions; Fargate only on demand
 
 ## Outcome
@@ -232,8 +233,8 @@ replacement.
 | SR-002 | Implement and locally verify the versioned API Lambda boundary and JWT-authorizer contract. | Complete | Unit/API tests, direct-invocation denial, build/SBOM/scan, deployed authenticated owner-isolation evidence |
 | SR-003 | Implement the SQS nudge, starter, reconciler, and exactly-once-effective outbox protocol. | Complete | Crash/duplicate/reorder/oldest-page source tests and real PostgreSQL migration/failure/claim integration pass. Deployment remains owned by SR-004/SR-005. [Source evidence](evidence/d0-serverless-outbox-source-2026-08-02.md) |
 | SR-004 | Port and verify workflows using versioned Lambda durable functions. | Complete | The profile-readiness workflow, private activity boundary, terminal recovery, exact-version guard, official local-runner durability matrix, repeatable PostgreSQL integration, and reproducible artifacts pass. Callback success/expiry is a conformance-only fixture because this workflow has no product callback. Deployment remains under SR-005. [Source evidence](evidence/d0-profile-readiness-durable-source-2026-08-02.md) |
-| SR-005 | Implement Terraform, IAM, KMS, private secret access, observability, deployment, rollback, and retirement automation. | In progress | Source, artifacts, bootstrap, the complete development dark deployment, and both workflow release conformance drills pass. The second exact-source release was independently read back, deployed through its checksum-authorized 14-update/one-propagation-gate plan, exercised through all four synthetic paths, restored its exact DLQ and alarm boundary, delivered all four operational notifications, and returned to zero drift without route/trigger/ECS/Temporal change. Coordinated known-good release rollback/restoration, staging deployment, cutover support, and retirement remain open. [First conformance acceptance](evidence/d0-development-workflow-dark-conformance-acceptance-2026-08-03.md), [rollback-release preflight](evidence/d0-development-workflow-rollback-release-preflight-2026-08-03.md), [source-attested release evidence](evidence/d0-development-workflow-source-attested-release-2026-08-03.md) |
-| SR-005A | Place confirmed zero-traffic development and staging ECS rollback services into the retained zero-task idle posture before Lambda cutover. | In progress | [ADR-017](../../adr/017-zero-traffic-precutover-ecs-idle-posture.md) and the guarded source/operator are implemented locally. Merge, separate exact-main environment plans, zero-work preflights, applies, public-IP release, retained-resource inventory, and no-drift evidence remain open. [Source evidence](evidence/d0-precutover-ecs-idle-shutdown-source-2026-08-03.md) |
+| SR-005 | Implement Terraform, IAM, KMS, private secret access, observability, deployment, rollback, and retirement automation. | In progress | Source, artifacts, bootstrap, the complete development dark deployment, both workflow release conformance drills, and development/staging retained-idle acceptance pass. The second exact-source release was independently read back, deployed through its checksum-authorized 14-update/one-propagation-gate plan, exercised through all four synthetic paths, restored its exact DLQ and alarm boundary, delivered all four operational notifications, and returned to zero drift. Coordinated known-good release rollback/restoration, staging deployment, cutover support, and retirement remain open. [Source-attested release evidence](evidence/d0-development-workflow-source-attested-release-2026-08-03.md), [idle-shutdown acceptance](evidence/d0-precutover-ecs-idle-shutdown-acceptance-2026-08-03.md) |
+| SR-005A | Place confirmed zero-traffic development and staging ECS rollback services into the retained zero-task idle posture before Lambda cutover. | Complete | Separate zero-work preflights and exact four-update plans pass. Both environments retain services at `0/0/0`, have zero running ECS tasks or task public IPs, keep quiet `OK` heartbeat alarms, and report targeted zero drift without deleting persistent/rollback resources. [Acceptance evidence](evidence/d0-precutover-ecs-idle-shutdown-acceptance-2026-08-03.md) |
 | SR-006 | Cut over and accept isolated synthetic staging. | Not started | Deployed identity/isolation/workflow/recovery/workload/no-drift evidence |
 | SR-007 | Cut over and accept development. | Not started | Exact-plan apply and equivalent deployed evidence |
 | SR-008 | Apply the separately reviewed old-runtime retirement plan. | Not started | Resource deletion inventory, zero idle tasks, retained persistent resources, no drift |
@@ -244,7 +245,7 @@ replacement.
 
 - [ ] Every SR task is complete with linked evidence.
 - [ ] Both isolated environments pass the replacement acceptance matrix.
-- [ ] No general application service runs continuously on Fargate.
+- [x] No general application service runs continuously on Fargate.
 - [ ] No obsolete gateway/worker/Temporal deployment resource or executable repository path remains.
 - [ ] Persistent data, restore, tenant isolation, audit, workflow durability, and rollback evidence pass.
 - [ ] Post-cutover billing is reconciled and the master Phase 0 tracker is synchronized.

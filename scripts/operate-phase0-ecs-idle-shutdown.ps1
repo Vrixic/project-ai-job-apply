@@ -36,13 +36,13 @@ Usage:
   .\scripts\operate-phase0-ecs-idle-shutdown.ps1 `
     -Environment development -Action VerifyIdle
 
-PlanIdle requires an exact synchronized main commit, a clean infrastructure/operator tree, one
-reviewed retained Terraform plan from the selected environment, zero undispatched outbox rows,
-zero running Temporal workflows, and both legacy ECS services at the stable 1/1/0 posture. It
-imports only the non-secret serverless deployment inputs needed to preserve the live KMS/IAM
-boundary, then creates one ignored targeted Terraform plan containing exactly four in-place
-updates: gateway desired count 1 to 0, worker desired count 1 to 0, and both heartbeat alarms to
-the non-notifying idle posture.
+PlanIdle requires an exact synchronized main commit, a clean infrastructure/operator tree, zero
+undispatched outbox rows, zero running Temporal workflows, and both legacy ECS services at the
+stable 1/1/0 posture. Environments with serverless resources also require one reviewed retained
+Terraform plan. Environments whose state proves no serverless resources exist use the explicit
+disabled defaults. The operator preserves the live KMS/IAM boundary and creates one ignored
+targeted Terraform plan containing exactly four in-place updates: gateway desired count 1 to 0,
+worker desired count 1 to 0, and both heartbeat alarms to the non-notifying idle posture.
 
 ApplyIdle accepts only the saved checksum-matched plan and repeats the zero-work preflight before
 applying. VerifyIdle proves both services remain ACTIVE at 0/0/0, there are no running ECS tasks,
@@ -371,7 +371,50 @@ function Get-LiveConfiguration {
 
 function Get-RetainedServerlessConfiguration {
   if ([string]::IsNullOrWhiteSpace($RetainedTerraformPlanPath)) {
-    throw "PlanIdle requires -RetainedTerraformPlanPath from the selected environment."
+    $stateAddresses = @(& terraform "-chdir=$environmentDirectory" state list 2>$null)
+    if ($LASTEXITCODE -ne 0) {
+      throw "Terraform state could not prove the selected environment's serverless posture."
+    }
+    $serverlessMarkers = @(
+      "module.platform.aws_lambda_function.gateway[0]",
+      "module.platform.aws_lambda_function.outbox_starter[0]",
+      "module.platform.aws_lambda_function.outbox_reconciler[0]",
+      "module.platform.aws_lambda_function.profile_readiness_activity[0]",
+      "module.platform.aws_cloudformation_stack.profile_readiness_durable[0]",
+      "module.platform.aws_lambda_function.profile_readiness_terminal[0]"
+    )
+    if (@($stateAddresses | Where-Object { $serverlessMarkers -contains $_ }).Count -ne 0) {
+      throw "PlanIdle requires -RetainedTerraformPlanPath when serverless resources exist."
+    }
+    return [ordered]@{
+      deploy_gateway_lambda                                  = $false
+      deploy_profile_readiness_durable                       = $false
+      deploy_serverless_outbox                               = $false
+      enable_serverless_workflow_triggers                    = $false
+      gateway_lambda_artifact_base64sha256                   = ""
+      gateway_lambda_artifact_s3_key                         = ""
+      gateway_lambda_artifact_s3_object_version              = ""
+      gateway_lambda_artifact_sha256                         = ""
+      gateway_lambda_extension_layer_arn                     = ""
+      gateway_lambda_reserved_concurrency                    = 2
+      gateway_outbox_dispatch_target                         = "temporal"
+      profile_readiness_activity_artifact_base64sha256       = ""
+      profile_readiness_activity_artifact_s3_key             = ""
+      profile_readiness_activity_artifact_s3_object_version  = ""
+      profile_readiness_activity_artifact_sha256             = ""
+      profile_readiness_durable_artifact_base64sha256        = ""
+      profile_readiness_durable_artifact_s3_key              = ""
+      profile_readiness_durable_artifact_s3_object_version   = ""
+      profile_readiness_durable_artifact_sha256              = ""
+      profile_readiness_execution_timeout_seconds            = 3600
+      profile_readiness_lambda_extension_layer_arn           = ""
+      profile_readiness_retention_days                       = 30
+      workflow_ingress_artifact_base64sha256                 = ""
+      workflow_ingress_artifact_s3_key                       = ""
+      workflow_ingress_artifact_s3_object_version            = ""
+      workflow_ingress_artifact_sha256                       = ""
+      workflow_ingress_lambda_extension_layer_arn            = ""
+    }
   }
 
   $candidatePath = if ([IO.Path]::IsPathRooted($RetainedTerraformPlanPath)) {
@@ -604,7 +647,9 @@ function Test-SavedPlan {
   if (
     $changes.Count -ne 4 -or
     @($changes | Where-Object { (@($_.change.actions) -join ",") -ne "update" }).Count -ne 0 -or
-    (Compare-Object @($changes.address | Sort-Object) @($expectedAddresses | Sort-Object))
+    (Compare-Object `
+      -ReferenceObject @($changes.address | Sort-Object) `
+      -DifferenceObject @($expectedAddresses | Sort-Object))
   ) {
     throw "The plan is outside the exact four-update ECS idle boundary."
   }
