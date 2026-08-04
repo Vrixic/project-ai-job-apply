@@ -127,6 +127,14 @@ $retainedServerlessVariableNames = @(
   "workflow_ingress_artifact_s3_object_version", "workflow_ingress_artifact_sha256",
   "workflow_ingress_lambda_extension_layer_arn"
 )
+$retainedServerlessBooleanVariableNames = @(
+  "deploy_gateway_lambda", "deploy_profile_readiness_durable", "deploy_serverless_outbox",
+  "enable_serverless_workflow_triggers"
+)
+$retainedServerlessIntegerVariableNames = @(
+  "gateway_lambda_reserved_concurrency", "profile_readiness_execution_timeout_seconds",
+  "profile_readiness_retention_days"
+)
 
 $env:AWS_PROFILE = $AwsProfile
 $env:AWS_REGION = $Region
@@ -401,7 +409,25 @@ function Get-RetainedServerlessConfiguration {
     if ($null -eq $property -or $null -eq $property.Value.value) {
       throw "The retained Terraform plan is missing required non-secret input '$name'."
     }
-    $configuration[$name] = $property.Value.value
+    $value = $property.Value.value
+    if ($retainedServerlessBooleanVariableNames -contains $name) {
+      if ($value -is [bool]) {
+        $configuration[$name] = $value
+      } elseif ([string]$value -ceq "true") {
+        $configuration[$name] = $true
+      } elseif ([string]$value -ceq "false") {
+        $configuration[$name] = $false
+      } else {
+        throw "Retained Terraform input '$name' is not a strict boolean."
+      }
+    } elseif ($retainedServerlessIntegerVariableNames -contains $name) {
+      if ([string]$value -notmatch "^[0-9]+$") {
+        throw "Retained Terraform input '$name' is not a non-negative integer."
+      }
+      $configuration[$name] = [int]$value
+    } else {
+      $configuration[$name] = [string]$value
+    }
   }
   return $configuration
 }
