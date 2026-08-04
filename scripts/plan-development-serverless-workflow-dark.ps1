@@ -418,17 +418,15 @@ try {
       $routingConfiguration = @(
         $alias.PSObject.Properties | Where-Object { $_.Name -eq "RoutingConfig" }
       )
-      $additionalWeights = if (
-        $routingConfiguration.Count -eq 1 -and
-        $null -ne $routingConfiguration[0].Value
-      ) {
-        @(
+      $additionalWeights = @(
+        if (
+          $routingConfiguration.Count -eq 1 -and
+          $null -ne $routingConfiguration[0].Value
+        ) {
           $routingConfiguration[0].Value.PSObject.Properties |
             Where-Object { $_.Name -eq "AdditionalVersionWeights" }
-        )
-      } else {
-        @()
-      }
+        }
+      )
       $weights = if ($additionalWeights.Count -eq 1 -and $null -ne $additionalWeights[0].Value) {
         @($additionalWeights[0].Value.PSObject.Properties).Count
       } else {
