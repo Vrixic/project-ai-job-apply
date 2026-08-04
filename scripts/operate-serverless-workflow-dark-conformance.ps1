@@ -461,7 +461,6 @@ function Get-ReviewedDurableExecution {
   param([object]$Context)
   $response = Invoke-AwsJson @(
     "lambda", "list-durable-executions-by-function", "--function-name", $functions.Durable,
-    "--qualifier", ([string]$Context.Boundary.Functions.Durable.Version),
     "--durable-execution-name", ([string]$Context.DurableExecutionName),
     "--max-items", "2", "--no-paginate"
   ) "The reviewed durable execution inventory is unavailable."
