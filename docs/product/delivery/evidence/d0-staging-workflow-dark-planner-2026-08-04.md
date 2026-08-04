@@ -2,8 +2,8 @@
 
 - Date: 2026-08-04
 - Environment: Development and isolated synthetic staging source boundary
-- Status: Initial live plan rejected by a fail-closed verifier mismatch; correction locally verified
-- Runtime change: None
+- Status: Complete; corrected merged-main plan passed and the separately authorized dark deployment is verified
+- Runtime change: Dark workflow resources deployed; replacement triggers and public traffic unchanged
 
 ## Shared planning boundary
 
@@ -71,9 +71,21 @@ correction.
 No account number, bucket, object key/version, role ARN, endpoint, credential, token, saved plan,
 Terraform state, or candidate data is retained in this record.
 
+## Corrected merged-main result
+
+The narrow initial-deployment verifier correction merged and clean upstream-matched `main` at
+commit `018e30ff6150248dd69d03646ae172d06fcd4466` produced a new refresh-backed plan from the
+protected staging inputs. Independent inspection confirmed exactly 38 creates and five bounded
+in-place updates, with zero deletes, replacements, API-routing actions, ECS-capacity actions, or
+enabled workflow triggers. The saved plan was separately authorized by its exact SHA-256 before
+use.
+
+The checksum-authorized deployment and its refresh-backed zero-change verification are recorded
+in the [staging workflow dark-deployment evidence](d0-staging-workflow-dark-deployment-2026-08-04.md).
+
 ## Next gate
 
-Merge the narrow verifier correction and synchronize clean `main`. Resolve the protected staging
-inputs again, generate a fresh refresh-backed staging workflow-dark plan, audit its exact resource
-actions and policy semantics, and request separate authorization for that new plan's SHA-256 before
-applying it. Traffic must remain unrouted and every replacement trigger disabled.
+Generalize and execute the staging workflow dark-conformance boundary, including exact function
+rejection paths, DLQ containment, alarm delivery/recovery, privacy-safe log inspection, cleanup,
+and post-run zero drift. Keep public traffic on the retained HTTP proxy and keep every workflow
+trigger disabled until the separately reviewed staging cutover.
