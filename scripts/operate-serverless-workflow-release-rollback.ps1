@@ -89,6 +89,8 @@ $terraformRoot = [IO.Path]::GetFullPath((Join-Path $environmentDirectory ".terra
 $terraformDataDirectory = Join-Path $terraformRoot "dark-plan-data"
 $artifactDirectory = Join-Path $terraformRoot "workflow-release-rollback"
 $contextPath = Join-Path $artifactDirectory "context.json"
+$currentReleaseSnapshotPath = Join-Path $artifactDirectory "current-release-source.tfplan"
+$rollbackReleaseSnapshotPath = Join-Path $artifactDirectory "rollback-release-source.tfplan"
 $rollbackPlanPath = Join-Path $artifactDirectory "rollback.tfplan"
 $restorePlanPath = Join-Path $artifactDirectory "restore.tfplan"
 $plannerPath = Join-Path $PSScriptRoot "plan-serverless-workflow-dark.ps1"
@@ -163,6 +165,20 @@ function Resolve-RetainedPlanPath {
     throw "A retained release plan must be an existing file below the $Environment .terraform directory."
   }
   return $candidate
+}
+
+function Copy-RetainedPlanSnapshot {
+  param(
+    [Parameter(Mandatory = $true)][string]$SourcePath,
+    [Parameter(Mandatory = $true)][string]$DestinationPath
+  )
+  $sourceSha256 = (Get-FileHash -LiteralPath $SourcePath -Algorithm SHA256).Hash.ToLowerInvariant()
+  Copy-Item -LiteralPath $SourcePath -Destination $DestinationPath -Force
+  $snapshotSha256 = (Get-FileHash -LiteralPath $DestinationPath -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($snapshotSha256 -ne $sourceSha256) {
+    throw "A retained release-plan snapshot did not match its source."
+  }
+  return $DestinationPath
 }
 
 function Get-PlanJson {
@@ -444,8 +460,13 @@ switch ($Action) {
     }
     $sourceCommit = Assert-ExactMain
     Assert-Caller -AccountId $ExpectedAccountId
-    $currentPath = Resolve-RetainedPlanPath -Path $CurrentReleasePlanPath
-    $rollbackPath = Resolve-RetainedPlanPath -Path $RollbackReleasePlanPath
+    $currentSourcePath = Resolve-RetainedPlanPath -Path $CurrentReleasePlanPath
+    $rollbackSourcePath = Resolve-RetainedPlanPath -Path $RollbackReleasePlanPath
+    $null = New-Item -ItemType Directory -Path $artifactDirectory -Force
+    $currentPath = Copy-RetainedPlanSnapshot `
+      -SourcePath $currentSourcePath -DestinationPath $currentReleaseSnapshotPath
+    $rollbackPath = Copy-RetainedPlanSnapshot `
+      -SourcePath $rollbackSourcePath -DestinationPath $rollbackReleaseSnapshotPath
     $current = Get-ReleaseInputs -Plan (Get-PlanJson -Path $currentPath)
     $rollback = Get-ReleaseInputs -Plan (Get-PlanJson -Path $rollbackPath)
     Assert-ReleaseIdentity -Current $current -Rollback $rollback
@@ -472,7 +493,6 @@ switch ($Action) {
       EcsCapacityChange = $false
     }
     $summary = Invoke-ReleasePlanner -Context $context -Release $rollback -Mode Release
-    $null = New-Item -ItemType Directory -Path $artifactDirectory -Force
     Copy-Item -LiteralPath ([string]$summary.SensitivePlanPath) -Destination $rollbackPlanPath -Force
     $context.RollbackPlanPath = $rollbackPlanPath
     $context.RollbackPlanSha256 = (Get-FileHash -LiteralPath $rollbackPlanPath -Algorithm SHA256).Hash.ToLowerInvariant()

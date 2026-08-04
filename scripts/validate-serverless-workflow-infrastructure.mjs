@@ -303,6 +303,9 @@ for (const expected of [
   '"applydash.$Environment.workflow-release-rollback.v1"',
   '"ai-job-apply-$Environment-admin"',
   '"plan-serverless-workflow-dark.ps1"',
+  '"current-release-source.tfplan"',
+  '"rollback-release-source.tfplan"',
+  "Copy-RetainedPlanSnapshot",
   'rev-parse "@{upstream}"',
   "Environment = $Environment",
   "PublicTrafficChange = $false",
@@ -318,6 +321,16 @@ for (const expected of [
 assert.ok(
   !workflowReleaseRollbackOperator.includes("ai-job-apply-development-"),
   "The shared workflow rollback operator must not retain development-only resource names.",
+);
+const rollbackSnapshotIndex = workflowReleaseRollbackOperator.indexOf(
+  "$currentPath = Copy-RetainedPlanSnapshot",
+);
+const rollbackPlanIndex = workflowReleaseRollbackOperator.indexOf(
+  "$summary = Invoke-ReleasePlanner -Context $context -Release $rollback -Mode Release",
+);
+assert.ok(
+  rollbackSnapshotIndex >= 0 && rollbackSnapshotIndex < rollbackPlanIndex,
+  "Both retained endpoint plans must be snapshotted before the strict planner can reuse an input filename.",
 );
 
 for (const [wrapper, environment] of [
