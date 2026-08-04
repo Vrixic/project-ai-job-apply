@@ -2,7 +2,7 @@
 
 - Date: 2026-08-04
 - Environment: Development and isolated synthetic staging source boundary
-- Status: Environment-aware planner source locally verified; no Terraform plan or AWS change
+- Status: Initial live plan rejected by a fail-closed verifier mismatch; correction locally verified
 - Runtime change: None
 
 ## Shared planning boundary
@@ -46,12 +46,34 @@ fixed environment. A staging safety probe with structurally valid synthetic inpu
 dirty worktree before any AWS read. Repository formatting, lint, type checks, unit tests, skill
 validation, and serverless infrastructure-policy validation pass through `pnpm check`.
 
+## First merged-main planning attempt
+
+After the environment-aware source merged, clean upstream-matched `main` resolved the protected
+staging account/state inputs, the singular current gateway artifact, all three singular current
+workflow artifacts, and the pinned live extension layer without printing their identifiers. The
+planner independently passed account, artifact, quota, completed-gateway, idle-ECS, Temporal
+dispatch, and trigger-disabled preconditions.
+
+Terraform produced the expected action shape: 38 creates, five bounded updates, zero deletes, and
+zero replacements. The planner then rejected its own plan before returning a checksum because the
+new durable IAM role made both the propagation gate's role ARN and policy hash plan-time unknown.
+That is expected during a first deployment, but the inherited assertion required a known role ARN.
+No apply occurred, and the rejected saved plan was removed so it cannot be authorized or reused.
+
+The corrected assertion now requires both the durable role ARN and propagation role reference to
+be explicitly unknown during only the initial dark deployment. It likewise requires the
+role-dependent policy hash to be unknown during initial deployment or a coupled artifact release.
+Recovery and completed verification still require the propagation gate's known role ARN to equal
+the exact Terraform-managed durable role and require a non-empty known policy hash. Parser,
+wrapper-parity, dirty-source fail-before-AWS, whitespace, and full repository checks pass after the
+correction.
+
 No account number, bucket, object key/version, role ARN, endpoint, credential, token, saved plan,
 Terraform state, or candidate data is retained in this record.
 
 ## Next gate
 
-Merge this source and synchronize clean `main`. Resolve the protected staging inputs without
-printing them, generate the refresh-backed initial staging workflow-dark plan, audit its exact
-resource actions and policy semantics, and request separate authorization for that plan's SHA-256
-before applying it. Traffic must remain unrouted and every replacement trigger disabled.
+Merge the narrow verifier correction and synchronize clean `main`. Resolve the protected staging
+inputs again, generate a fresh refresh-backed staging workflow-dark plan, audit its exact resource
+actions and policy semantics, and request separate authorization for that new plan's SHA-256 before
+applying it. Traffic must remain unrouted and every replacement trigger disabled.
