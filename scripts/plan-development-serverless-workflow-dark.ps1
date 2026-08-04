@@ -1165,8 +1165,17 @@ try {
   ) {
     throw "The durable CloudFormation stack is outside the reviewed development boundary."
   }
-  if ($durableStack.template_body) {
-    $template = [string]$durableStack.template_body | ConvertFrom-Json
+  $durableTemplateBodyProperty = @(
+    $durableStack.PSObject.Properties | Where-Object { $_.Name -eq "template_body" }
+  )
+  if ($durableTemplateBodyProperty.Count -gt 1) {
+    throw "The durable stack contains an ambiguous template body."
+  }
+  if (
+    $durableTemplateBodyProperty.Count -eq 1 -and
+    -not [string]::IsNullOrWhiteSpace([string]$durableTemplateBodyProperty[0].Value)
+  ) {
+    $template = [string]$durableTemplateBodyProperty[0].Value | ConvertFrom-Json
     $durableProperties = $template.Resources.DurableFunction.Properties
     if (
       [string]$durableProperties.Code.S3Key -ne $DurableArtifactS3Key -or

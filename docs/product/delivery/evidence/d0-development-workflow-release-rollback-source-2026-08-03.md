@@ -38,6 +38,8 @@ state bucket, artifact key/version, ARN, credential, secret, payload, log, or ca
   retaining exact string and numeric address reconstruction for indexed resources.
 - Expected Terraform create, update, and replacement address sets are normalized to arrays in
   every planner mode, including the valid empty-set cases used by release and verification plans.
+- Durable-stack plan validation handles an omitted known `template_body` value as unavailable only
+  when Terraform also carries the explicit reviewed plan-time-unknown marker.
 - Repository whitespace validation passes.
 - The existing strict planner remains the only component that constructs or semantically accepts
   a Terraform release plan.
