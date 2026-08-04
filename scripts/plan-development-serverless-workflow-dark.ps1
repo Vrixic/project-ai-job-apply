@@ -433,10 +433,18 @@ try {
         0
       }
       $layers = @(
-        $latest.Layers | Where-Object { $_ -and $_.Arn } | ForEach-Object { [string]$_.Arn }
+        $latest.PSObject.Properties |
+          Where-Object { $_.Name -eq "Layers" } |
+          ForEach-Object { $_.Value } |
+          Where-Object { $_ -and $_.Arn } |
+          ForEach-Object { [string]$_.Arn }
       )
       $aliasedLayers = @(
-        $aliased.Layers | Where-Object { $_ -and $_.Arn } | ForEach-Object { [string]$_.Arn }
+        $aliased.PSObject.Properties |
+          Where-Object { $_.Name -eq "Layers" } |
+          ForEach-Object { $_.Value } |
+          Where-Object { $_ -and $_.Arn } |
+          ForEach-Object { [string]$_.Arn }
       )
       $expectedLayers = if ([bool]$releaseFunction[3]) { 1 } else { 0 }
       if (
