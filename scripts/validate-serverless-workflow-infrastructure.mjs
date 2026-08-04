@@ -20,6 +20,15 @@ const environmentVariables = [
   read("infrastructure/terraform/environments/staging/variables.tf"),
 ];
 const ecsIdleOperator = read("scripts/operate-phase0-ecs-idle-shutdown.ps1");
+const workflowConformanceOperator = read(
+  "scripts/operate-serverless-workflow-dark-conformance.ps1",
+);
+const developmentWorkflowConformanceWrapper = read(
+  "scripts/operate-development-serverless-workflow-dark-conformance.ps1",
+);
+const stagingWorkflowConformanceWrapper = read(
+  "scripts/operate-staging-serverless-workflow-dark-conformance.ps1",
+);
 
 const requireText = (source, expected, message) => {
   assert.ok(source.includes(expected), message);
@@ -225,6 +234,50 @@ for (const expected of [
     ecsIdleOperator,
     expected,
     `The guarded ECS idle operator is missing required boundary text: ${expected}`,
+  );
+}
+
+for (const expected of [
+  '[ValidateSet("development", "staging")]',
+  '"ai-job-apply-$Environment"',
+  '"infrastructure\\terraform\\environments\\$Environment"',
+  '"applydash.$Environment.workflow-dark-conformance.v2"',
+  '"ai-job-apply-$Environment-admin"',
+  "Get-ReviewableSourceCommit",
+  'rev-parse "@{upstream}"',
+  "Environment = $Environment",
+  "TriggersEnabled = $false",
+  "PublicTrafficChange = $false",
+]) {
+  requireText(
+    workflowConformanceOperator,
+    expected,
+    `The shared workflow conformance operator is missing required boundary text: ${expected}`,
+  );
+}
+assert.ok(
+  !workflowConformanceOperator.includes("ai-job-apply-development-"),
+  "The shared workflow conformance operator must not retain development-only resource names.",
+);
+
+for (const [wrapper, environment] of [
+  [developmentWorkflowConformanceWrapper, "development"],
+  [stagingWorkflowConformanceWrapper, "staging"],
+]) {
+  requireText(
+    wrapper,
+    '"operate-serverless-workflow-dark-conformance.ps1"',
+    `The ${environment} wrapper must delegate to the shared conformance operator.`,
+  );
+  requireText(
+    wrapper,
+    `Environment        = "${environment}"`,
+    `The ${environment} wrapper must fix its exact environment.`,
+  );
+  requireText(
+    wrapper,
+    `"ai-job-apply-${environment}-admin"`,
+    `The ${environment} wrapper must default to its isolated IAM profile.`,
   );
 }
 

@@ -117,12 +117,16 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   required by one internally consistent release. The ignored plan is never applied by the script.
 - `plan-development-serverless-workflow-dark.ps1` — Compatibility wrapper for development calls to
   the environment-aware workflow planner.
-- `operate-development-serverless-workflow-dark-conformance.ps1` — Creates an ignored,
-  checksum-reviewed context from an exact-commit zero-drift plan and stable live boundary. Separate
-  execution exercises three synchronous synthetic rejections plus one exact-version asynchronous
-  durable rejection. It proves both owned alarms, deletes only the byte-identical synthetic DLQ
-  message, and restores the empty/healthy boundary without invoking the reconciler, sending a
-  product SQS event, writing product data, enabling triggers, or changing public routing.
+- `operate-serverless-workflow-dark-conformance.ps1` — Selects development or staging and creates
+  an isolated ignored, checksum-reviewed context from that environment's exact-commit zero-drift
+  plan and stable live boundary. Separate execution exercises three synchronous synthetic
+  rejections plus one exact-version asynchronous durable rejection. It proves both owned alarms,
+  deletes only the byte-identical synthetic DLQ message, and restores the empty/healthy boundary
+  without invoking the reconciler, sending a product SQS event, writing product data, enabling
+  triggers, or changing public routing.
+- `operate-development-serverless-workflow-dark-conformance.ps1` and
+  `operate-staging-serverless-workflow-dark-conformance.ps1` — Compatibility wrappers that fix the
+  shared conformance operator to one environment and its default IAM Identity Center profile.
 - `operate-development-serverless-workflow-release-rollback.ps1` — Coordinates a coupled reverse
   and restoration Terraform release between two accepted workflow artifact sets. It reconstructs
   exact inputs from retained reviewed plans, delegates semantic plan validation to the strict dark

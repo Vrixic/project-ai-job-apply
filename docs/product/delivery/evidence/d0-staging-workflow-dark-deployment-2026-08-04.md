@@ -74,6 +74,8 @@ record does not claim authenticated gateway acceptance, workflow conformance, al
 receipt, accepted-release rollback, API/outbox cutover, Temporal retirement, or obsolete-resource
 removal.
 
-Next, generalize the proven development workflow conformance operator for isolated staging and run
-its separately checksum-authorized synthetic rejection/DLQ/alarm drill. Public routing and normal
-outbox dispatch remain unchanged until that evidence passes and a separate cutover plan is reviewed.
+The shared staging-capable operator is now locally verified in
+[source evidence](d0-staging-workflow-dark-conformance-operator-2026-08-04.md). Merge it, regenerate
+the exact-commit zero-change plan, and create a separately reviewed conformance context before the
+synthetic rejection/DLQ/alarm drill. Public routing and normal outbox dispatch remain unchanged
+until that evidence passes and a separate cutover plan is reviewed.
