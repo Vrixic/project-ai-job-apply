@@ -93,6 +93,13 @@ $currentReleaseSnapshotPath = Join-Path $artifactDirectory "current-release-sour
 $rollbackReleaseSnapshotPath = Join-Path $artifactDirectory "rollback-release-source.tfplan"
 $rollbackPlanPath = Join-Path $artifactDirectory "rollback.tfplan"
 $restorePlanPath = Join-Path $artifactDirectory "restore.tfplan"
+$cleanupPaths = @(
+  $currentReleaseSnapshotPath,
+  $rollbackReleaseSnapshotPath,
+  $rollbackPlanPath,
+  $restorePlanPath,
+  $contextPath
+)
 $plannerPath = Join-Path $PSScriptRoot "plan-serverless-workflow-dark.ps1"
 $utf8WithoutBom = New-Object Text.UTF8Encoding($false)
 
@@ -608,7 +615,7 @@ switch ($Action) {
     }
     $verification = Invoke-ReleasePlanner -Context $context -Release $context.CurrentRelease -Mode Verify
     if (-not [bool]$verification.NoDrift) { throw "Cleanup is blocked because restoration is not zero drift." }
-    foreach ($path in @($rollbackPlanPath, $restorePlanPath, $contextPath)) {
+    foreach ($path in $cleanupPaths) {
       if (Test-Path -LiteralPath $path -PathType Leaf) {
         Remove-Item -LiteralPath $path -Force
       }
