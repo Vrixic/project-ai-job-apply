@@ -45,13 +45,22 @@ validation checks passed before merge.
 No account number, bucket name, role ARN, state content, credential, or token is retained in this
 evidence.
 
+## 2026-08-04 correction
+
+A later direct object-metadata check found that the active `bootstrap.tfstate` version used SSE-S3,
+not the bucket's customer-managed KMS key. The bucket default, recovery object, privacy controls,
+versioning, and account isolation remained intact; only the active-object CMK claim above was
+overstated because the original Terraform backend omitted `kms_key_id`. The exact correction,
+checksum-authorized policy apply, direct post-apply CMK metadata, and zero-drift result are recorded
+in [staging serverless artifacts and bootstrap evidence](d0-staging-serverless-artifacts-and-bootstrap-2026-08-04.md).
+
 ## State migration and recovery
 
 Active bootstrap state was migrated from the isolated local workspace into the private,
-versioned, KMS-encrypted S3 backend under `bootstrap.tfstate`. The active object is reachable,
-uses the expected key, and contains all 12 managed resources. A separately named pre-migration
-recovery object was uploaded with the same KMS key and verified against its SHA-256 checksum and
-content length.
+versioned S3 backend under `bootstrap.tfstate`. At acceptance time it was reported as using the
+expected KMS key; the 2026-08-04 correction above supersedes that active-object claim. The object
+was reachable and contained all 12 managed resources. A separately named pre-migration recovery
+object was uploaded with the KMS key and verified against its SHA-256 checksum and content length.
 
 Terraform left local recovery copies in the isolated, ignored operator workspace. They contain
 cloud metadata but no provider credentials or application secrets. Removal from that workspace
