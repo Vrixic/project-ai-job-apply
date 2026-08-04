@@ -17,7 +17,8 @@ triggers, move API traffic, alter ECS rollback capacity, or change gateway dispa
 - Require the starter mapping and both EventBridge rules to remain disabled, all seven workflow
   alarms to be enabled and `OK`, the durable DLQ to be empty, and the durable stack to be complete.
 - Require API Gateway to remain an HTTP proxy through Cloud Map, both ECS rollback services to be
-  stable at one task, and gateway dispatch to remain `temporal`.
+  retained together at the accepted `0/0/0` idle posture (or together at `1/1/0` only under an
+  explicitly reviewed resume), and gateway dispatch to remain `temporal`.
 - Apply only the exact saved plan whose SHA-256 the product owner explicitly authorizes. Never
   replan inside the apply step.
 

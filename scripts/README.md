@@ -116,6 +116,12 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   durable rejection. It proves both owned alarms, deletes only the byte-identical synthetic DLQ
   message, and restores the empty/healthy boundary without invoking the reconciler, sending a
   product SQS event, writing product data, enabling triggers, or changing public routing.
+- `operate-development-serverless-workflow-release-rollback.ps1` — Coordinates a coupled reverse
+  and restoration Terraform release between two accepted workflow artifact sets. It reconstructs
+  exact inputs from retained reviewed plans, delegates semantic plan validation to the strict dark
+  release planner, checksum-gates each apply separately, requires zero drift before and after each
+  transition, and blocks restoration/cleanup until the corresponding dark-conformance result is
+  explicitly accepted. ECS remains retained idle and all replacement triggers remain disabled.
 - `operate-development-gateway-lambda-alias-rollback.ps1` — Creates a checksum-reviewed,
   read-only recovery context for two accepted immutable development Lambda versions. Explicit
   execution uses optimistic alias revision locking, proves the prior version through the guarded
