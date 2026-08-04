@@ -18,6 +18,9 @@ saved infrastructure plan, success evidence, and recovery boundary.
 - [Development serverless workflow artifact release](development-serverless-workflow-artifact-release.md)
   — Generates, reviews, applies, and verifies an exact immutable workflow release while every
   replacement trigger stays disabled and public traffic remains on the ECS rollback path.
+- [Serverless workflow release rollback](serverless-workflow-release-rollback.md) — Shared
+  checksum-gated rollback/restoration procedure for two accepted workflow releases while ECS
+  remains retained idle and replacement triggers remain disabled.
 - [Development serverless workflow release rollback](development-serverless-workflow-release-rollback.md)
-  — Checksum-gates a coupled rollback and restoration between two accepted workflow releases while
-  ECS remains retained idle and replacement triggers remain disabled.
+  and [staging serverless workflow release rollback](staging-serverless-workflow-release-rollback.md)
+  — Environment-specific wrappers and prerequisites for the shared procedure.

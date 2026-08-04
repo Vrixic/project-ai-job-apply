@@ -1,91 +1,9 @@
 # Development Serverless Workflow Release Rollback
 
-Use this procedure after two development workflow releases have independently passed protected
-publication, coordinated Terraform release, dark conformance, alert delivery, and zero drift. The
-drill reverses the complete coupled release and restores it through separate checksum-reviewed
-plans. It does not route traffic, enable replacement triggers, resume ECS, or write product data.
+Use the shared [serverless workflow release-rollback runbook](serverless-workflow-release-rollback.md)
+through `operate-development-serverless-workflow-release-rollback.ps1`. The wrapper fixes the
+environment to `development` and defaults to the isolated development IAM Identity Center profile.
 
-## Preconditions
-
-- Work from exact clean synchronized `main` with Terraform `1.9.8`.
-- Refresh the `ai-job-apply-development-admin` IAM Identity Center session and verify the exact
-  isolated development account in `us-east-2`.
-- Retain one reviewed Terraform plan containing the currently accepted workflow artifact inputs
-  and one containing the earlier accepted rollback artifact inputs. Keep both below the
-  development `.terraform` directory.
-- Require gateway/outbox dispatch to remain `temporal`, the starter and EventBridge replacement
-  triggers disabled, the durable DLQ empty, all seven workflow alarms `OK`, and both ECS rollback
-  services retained idle at `0/0/0`.
-- Never use the pre-correction workflow artifacts that failed Node.js initialization as a rollback
-  target.
-
-## Plan the reverse release
-
-```powershell
-aws sso login --profile ai-job-apply-development-admin
-
-.\scripts\operate-development-serverless-workflow-release-rollback.ps1 `
-  -Action PlanRollback `
-  -ExpectedAccountId $developmentAccountId `
-  -StateBucket $developmentStateBucket `
-  -CurrentReleasePlanPath .terraform/workflow-dark-plans/CURRENT_ACCEPTED.tfplan `
-  -RollbackReleasePlanPath .terraform/workflow-dark-plans/ROLLBACK_ACCEPTED.tfplan
-```
-
-The sanitized result must report zero creates/deletes, exactly 14 in-place updates, and exactly
-one create-before-delete replacement of the policy-hash propagation gate. It must also report
-disabled triggers, idle ECS, and no public-API traffic change. Review and separately authorize the
-printed rollback-plan SHA-256. The plan and local recovery context are sensitive and ignored.
-
-## Apply and prove the rollback release
-
-```powershell
-.\scripts\operate-development-serverless-workflow-release-rollback.ps1 `
-  -Action ApplyRollback `
-  -ExpectedPlanSha256 "REVIEWED_ROLLBACK_SHA256" `
-  -Execute
-```
-
-The operator proves the current release is zero drift, applies only the checksum-matched saved
-plan, and proves the rollback release is zero drift. A partial failure stops without replanning or
-automatic restoration; retain the context and perform a fresh read-only assessment.
-
-Generate and execute a fresh context through
-`operate-development-serverless-workflow-dark-conformance.ps1`. Require all four synthetic paths,
-exact DLQ cleanup, both `OK → ALARM → OK` pairs, privacy-safe aggregate logs, disabled triggers,
-idle ECS, unchanged routing, context cleanup, and post-run zero drift. Confirm receipt of all four
-notifications before planning restoration.
-
-## Plan and apply restoration
-
-```powershell
-.\scripts\operate-development-serverless-workflow-release-rollback.ps1 `
-  -Action PlanRestore `
-  -ConfirmRollbackConformance
-
-.\scripts\operate-development-serverless-workflow-release-rollback.ps1 `
-  -Action ApplyRestore `
-  -ExpectedPlanSha256 "REVIEWED_RESTORE_SHA256" `
-  -Execute
-```
-
-Review and authorize the restoration checksum separately. It must have the same exact action
-boundary as the rollback plan and restore the original accepted artifact set to zero drift.
-Repeat the complete dark-conformance and notification drill against the restored release.
-
-## Cleanup
-
-Only after restored-release conformance and notification delivery pass:
-
-```powershell
-.\scripts\operate-development-serverless-workflow-release-rollback.ps1 `
-  -Action Cleanup `
-  -ConfirmRestoreConformance `
-  -Execute
-```
-
-Cleanup re-proves restored zero drift and removes only this operator's ignored context and two
-saved plan copies. It makes no AWS change. Retain sanitized evidence containing source commits,
-plan checksums, action counts, conformance results, notification confirmation, and zero-drift
-results—never state, raw plans, object versions, account identifiers, credentials, payloads, raw
-logs, or notification destinations/content.
+Development completed the accepted-release rollback/restoration drill on 2026-08-04. Do not
+repeat it merely to exercise the shared wrapper; require a new release, recovery need, or material
+boundary change and separately review every generated checksum.

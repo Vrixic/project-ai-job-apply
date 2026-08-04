@@ -127,12 +127,16 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
 - `operate-development-serverless-workflow-dark-conformance.ps1` and
   `operate-staging-serverless-workflow-dark-conformance.ps1` — Compatibility wrappers that fix the
   shared conformance operator to one environment and its default IAM Identity Center profile.
-- `operate-development-serverless-workflow-release-rollback.ps1` — Coordinates a coupled reverse
-  and restoration Terraform release between two accepted workflow artifact sets. It reconstructs
-  exact inputs from retained reviewed plans, delegates semantic plan validation to the strict dark
-  release planner, checksum-gates each apply separately, requires zero drift before and after each
-  transition, and blocks restoration/cleanup until the corresponding dark-conformance result is
-  explicitly accepted. ECS remains retained idle and all replacement triggers remain disabled.
+- `operate-serverless-workflow-release-rollback.ps1` — Selects development or staging and
+  coordinates a coupled reverse and restoration Terraform release between two accepted workflow
+  artifact sets. It reconstructs exact inputs from retained reviewed plans, delegates semantic
+  validation to the strict environment-aware dark-release planner, checksum-gates each apply
+  separately, requires zero drift before and after each transition, and blocks restoration/cleanup
+  until the corresponding dark-conformance result is explicitly accepted. ECS remains retained
+  idle and all replacement triggers remain disabled.
+- `operate-development-serverless-workflow-release-rollback.ps1` and
+  `operate-staging-serverless-workflow-release-rollback.ps1` — Compatibility wrappers that fix the
+  shared rollback coordinator to one environment and its default IAM Identity Center profile.
 - `operate-development-gateway-lambda-alias-rollback.ps1` — Creates a checksum-reviewed,
   read-only recovery context for two accepted immutable development Lambda versions. Explicit
   execution uses optimistic alias revision locking, proves the prior version through the guarded
