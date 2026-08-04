@@ -248,6 +248,8 @@ for (const expected of [
   "Environment = $Environment",
   "TriggersEnabled = $false",
   "PublicTrafficChange = $false",
+  "Get-ReviewedDurableExecution",
+  '"--durable-execution-name"',
 ]) {
   requireText(
     workflowConformanceOperator,
@@ -258,6 +260,11 @@ for (const expected of [
 assert.ok(
   !workflowConformanceOperator.includes("ai-job-apply-development-"),
   "The shared workflow conformance operator must not retain development-only resource names.",
+);
+assert.doesNotMatch(
+  workflowConformanceOperator,
+  /"list-durable-executions-by-function"[\s\S]{0,300}"--qualifier"/,
+  "A durable execution name cannot be filtered together with a function qualifier; validate the fetched version instead.",
 );
 
 for (const [wrapper, environment] of [
