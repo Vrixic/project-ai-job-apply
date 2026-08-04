@@ -1245,15 +1245,41 @@ try {
 
   $propagation = Get-PlannedValue `
     "module.platform.time_sleep.profile_readiness_durable_policy_propagation[0]"
-  $propagationPolicyHashValid = if ($AllowArtifactReleaseUpdate) {
-    [bool](Get-PlannedChange `
-      "module.platform.time_sleep.profile_readiness_durable_policy_propagation[0]").change.after_unknown.triggers.policy_sha256
+  $initialDarkDeployment = -not (
+    $RecoverFailedApply -or
+    $AllowArtifactReleaseUpdate -or
+    $VerifyCompletedDarkDeployment
+  )
+  $propagationResourceChange = Get-OnlyItem `
+    -Items @($plan.resource_changes | Where-Object {
+        [string]$_.address -eq
+          "module.platform.time_sleep.profile_readiness_durable_policy_propagation[0]"
+      }) `
+    -FailureMessage "The durable IAM propagation gate is not singular."
+  $durableRoleValue = Get-PlannedValue `
+    "module.platform.aws_iam_role.profile_readiness_durable[0]"
+  $durableRoleResourceChange = Get-OnlyItem `
+    -Items @($plan.resource_changes | Where-Object {
+        [string]$_.address -eq "module.platform.aws_iam_role.profile_readiness_durable[0]"
+      }) `
+    -FailureMessage "The durable execution role is not singular."
+  $propagationRoleValid = if ($initialDarkDeployment) {
+    [bool]$propagationResourceChange.change.after_unknown.triggers.role_arn -and
+    [bool]$durableRoleResourceChange.change.after_unknown.arn
+  } else {
+    -not [string]::IsNullOrWhiteSpace([string]$propagation.triggers.role_arn) -and
+    [string]$propagation.triggers.role_arn -eq [string]$durableRoleValue.arn
+  }
+  $propagationPolicyHashValid = if (
+    $initialDarkDeployment -or $AllowArtifactReleaseUpdate
+  ) {
+    [bool]$propagationResourceChange.change.after_unknown.triggers.policy_sha256
   } else {
     -not [string]::IsNullOrWhiteSpace([string]$propagation.triggers.policy_sha256)
   }
   if (
     [string]$propagation.create_duration -ne "45s" -or
-    -not [string]$propagation.triggers.role_arn -or
+    -not $propagationRoleValid -or
     -not $propagationPolicyHashValid
   ) {
     throw "The dark plan does not contain the exact durable IAM propagation gate."
