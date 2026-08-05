@@ -297,20 +297,6 @@ variable "gateway_lambda_reserved_concurrency" {
   }
 }
 
-variable "gateway_outbox_dispatch_target" {
-  description = "Explicit new-event workflow route; keep temporal until the reviewed serverless cutover."
-  type        = string
-  default     = "temporal"
-
-  validation {
-    condition = (
-      contains(["temporal", "lambda_durable"], var.gateway_outbox_dispatch_target) &&
-      (var.gateway_outbox_dispatch_target != "lambda_durable" || var.deploy_serverless_outbox)
-    )
-    error_message = "Gateway outbox dispatch must be temporal or an enabled lambda_durable replacement."
-  }
-}
-
 variable "deploy_serverless_outbox" {
   description = "Dark-deploy the disabled SQS starter and scheduled reconciler without changing normal event routing."
   type        = bool
@@ -331,14 +317,20 @@ variable "deploy_serverless_outbox" {
   }
 }
 
-variable "enable_serverless_workflow_triggers" {
-  description = "Enable the SQS starter, reconciliation schedule, and terminal-event recovery only during a reviewed cutover."
+variable "serverless_runtime_cutover" {
+  description = "Atomically route API traffic and new outbox work to Lambda and enable the replacement workflow triggers."
   type        = bool
   default     = false
 
   validation {
-    condition     = !var.enable_serverless_workflow_triggers || var.deploy_serverless_outbox
-    error_message = "Serverless workflow triggers require the complete dark outbox boundary."
+    condition = !var.serverless_runtime_cutover || (
+      var.deploy_applications &&
+      var.deploy_gateway_lambda &&
+      var.deploy_serverless_outbox &&
+      var.deploy_profile_readiness_durable &&
+      !var.run_continuous_ecs_runtime
+    )
+    error_message = "Serverless cutover requires the complete Lambda replacement and retained idle ECS rollback boundary."
   }
 }
 

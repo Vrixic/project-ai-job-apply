@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-08-04
+Last updated: 2026-08-05
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -229,6 +229,7 @@ Append only material cross-delivery events.
 | 2026-08-04 | D0 | Generalized the accepted workflow release-rollback coordinator across development and staging with fixed wrappers, isolated state/context, exact retained-release identity, shared strict-plan validation, separate rollback/restoration checksums, and CI policy guards. Local parser, parity, status/help, dirty-source fail-before-AWS, and policy checks pass; no artifact, plan, context, invocation, or AWS mutation occurred. A second accepted staging release is required before rollback planning. | [Staging rollback-operator evidence](evidence/d0-staging-workflow-release-rollback-operator-2026-08-04.md), [Phase 0 migration](phase-0-serverless-runtime-migration.md) |
 | 2026-08-04 | D0 | Completed staging accepted-release rollback/restoration through separate checksum-authorized plans and conformance contexts. Both releases passed exact fail-closed behavior, one-message DLQ cleanup, four alarm transitions, notification receipt, aggregate privacy checks, disabled triggers, idle ECS, unchanged routing, cleanup, and fresh zero drift. A local retained-plan collision was caught before AWS mutation and fixed by checksum-verified isolated snapshots. | [Staging rollback/restoration evidence](evidence/d0-staging-workflow-release-rollback-restoration-2026-08-04.md), [Phase 0 migration](phase-0-serverless-runtime-migration.md) |
 | 2026-08-05 | D0 | Completed staging dark-gateway authenticated acceptance on exact merged source. The 15-case no-write boundary matrix, `200/200/401` bridge smoke, authenticated preference persistence, and two-account non-disclosing operation isolation passed. Public routing remains on retained idle ECS and replacement triggers remain disabled. Read-only inspection found three synthetic queued outbox records with zero attempts; controlled cutover must drain and complete them. | [Staging authenticated acceptance](evidence/d0-staging-dark-lambda-authenticated-acceptance-2026-08-05.md), [Phase 0 migration](phase-0-serverless-runtime-migration.md) |
+| 2026-08-05 | D0 | Added the source-only atomic staging runtime cutover: one default-off control couples direct Lambda API routing, JWT protection, durable dispatch, and all replacement triggers. The staging-fixed planner requires zero legacy outbox/Temporal work and rejects any action outside three exact creates and six bounded updates. Local Terraform/module/policy checks pass; no AWS plan or mutation occurred. | [Staging cutover source](evidence/d0-staging-serverless-cutover-source-2026-08-05.md), [Phase 0 migration](phase-0-serverless-runtime-migration.md) |
 
 ## Cross-delivery decisions and changes
 

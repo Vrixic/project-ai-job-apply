@@ -750,11 +750,35 @@ resource "aws_apigatewayv2_integration" "gateway" {
   timeout_milliseconds   = 30000
 }
 
+resource "aws_apigatewayv2_integration" "gateway_lambda" {
+  count                  = var.serverless_runtime_cutover ? 1 : 0
+  api_id                 = aws_apigatewayv2_api.gateway[0].id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_alias.gateway[0].invoke_arn
+  integration_method     = "POST"
+  payload_format_version = "2.0"
+  timeout_milliseconds   = 15000
+}
+
 resource "aws_apigatewayv2_route" "gateway" {
-  count     = var.deploy_applications ? 1 : 0
-  api_id    = aws_apigatewayv2_api.gateway[0].id
-  route_key = "$default"
-  target    = "integrations/${aws_apigatewayv2_integration.gateway[0].id}"
+  count              = var.deploy_applications ? 1 : 0
+  api_id             = aws_apigatewayv2_api.gateway[0].id
+  route_key          = "$default"
+  target             = "integrations/${var.serverless_runtime_cutover ? aws_apigatewayv2_integration.gateway_lambda[0].id : aws_apigatewayv2_integration.gateway[0].id}"
+  authorization_type = var.serverless_runtime_cutover ? "JWT" : "NONE"
+  authorizer_id      = var.serverless_runtime_cutover ? aws_apigatewayv2_authorizer.gateway[0].id : null
+}
+
+resource "aws_apigatewayv2_route" "gateway_lambda_public" {
+  for_each = var.serverless_runtime_cutover ? toset([
+    "GET /health/live",
+    "GET /health/ready"
+  ]) : toset([])
+
+  api_id             = aws_apigatewayv2_api.gateway[0].id
+  route_key          = each.value
+  target             = "integrations/${aws_apigatewayv2_integration.gateway_lambda[0].id}"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_stage" "gateway" {
@@ -1535,7 +1559,7 @@ resource "aws_lambda_function" "gateway" {
         OIDC_AUDIENCE      = var.oidc_audience
       },
       var.deploy_serverless_outbox ? {
-        OUTBOX_DISPATCH_TARGET = var.gateway_outbox_dispatch_target
+        OUTBOX_DISPATCH_TARGET = var.serverless_runtime_cutover ? "lambda_durable" : "temporal"
         OUTBOX_QUEUE_URL       = aws_sqs_queue.events.url
       } : {}
     )
@@ -1977,7 +2001,7 @@ resource "aws_lambda_event_source_mapping" "outbox_starter" {
   count                              = var.deploy_serverless_outbox ? 1 : 0
   event_source_arn                   = aws_sqs_queue.events.arn
   function_name                      = aws_lambda_alias.outbox_starter[0].arn
-  enabled                            = var.enable_serverless_workflow_triggers
+  enabled                            = var.serverless_runtime_cutover
   batch_size                         = 5
   maximum_batching_window_in_seconds = 0
   function_response_types            = ["ReportBatchItemFailures"]
@@ -1990,7 +2014,7 @@ resource "aws_cloudwatch_event_rule" "outbox_reconciler" {
   name                = "${var.name}-${var.environment}-outbox-reconciler"
   description         = "Disabled until the reviewed Lambda durable cutover"
   schedule_expression = "rate(1 minute)"
-  state               = var.enable_serverless_workflow_triggers ? "ENABLED" : "DISABLED"
+  state               = var.serverless_runtime_cutover ? "ENABLED" : "DISABLED"
 }
 
 resource "aws_cloudwatch_event_target" "outbox_reconciler" {

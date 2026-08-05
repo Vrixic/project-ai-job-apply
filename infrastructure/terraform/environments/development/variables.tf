@@ -160,11 +160,6 @@ variable "gateway_lambda_reserved_concurrency" {
   default = 2
 }
 
-variable "gateway_outbox_dispatch_target" {
-  type    = string
-  default = "temporal"
-}
-
 variable "deploy_serverless_outbox" {
   type    = bool
   default = false
@@ -195,7 +190,7 @@ variable "workflow_ingress_lambda_extension_layer_arn" {
   default = ""
 }
 
-variable "enable_serverless_workflow_triggers" {
+variable "serverless_runtime_cutover" {
   type    = bool
   default = false
 }

@@ -79,7 +79,7 @@ module "platform" {
   gateway_lambda_artifact_base64sha256 = var.gateway_lambda_artifact_base64sha256
   gateway_lambda_extension_layer_arn   = var.gateway_lambda_extension_layer_arn
   gateway_lambda_reserved_concurrency  = var.gateway_lambda_reserved_concurrency
-  gateway_outbox_dispatch_target       = var.gateway_outbox_dispatch_target
+  serverless_runtime_cutover           = var.serverless_runtime_cutover
   deploy_serverless_outbox             = var.deploy_serverless_outbox
   workflow_ingress_artifact_s3_key     = var.workflow_ingress_artifact_s3_key
   workflow_ingress_artifact_s3_object_version = (
@@ -90,7 +90,6 @@ module "platform" {
   workflow_ingress_lambda_extension_layer_arn = (
     var.workflow_ingress_lambda_extension_layer_arn
   )
-  enable_serverless_workflow_triggers                   = var.enable_serverless_workflow_triggers
   deploy_profile_readiness_durable                      = var.deploy_profile_readiness_durable
   profile_readiness_durable_artifact_s3_key             = var.profile_readiness_durable_artifact_s3_key
   profile_readiness_durable_artifact_s3_object_version  = var.profile_readiness_durable_artifact_s3_object_version

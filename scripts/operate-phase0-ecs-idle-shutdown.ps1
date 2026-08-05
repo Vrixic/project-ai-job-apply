@@ -88,10 +88,10 @@ $terraformVariables = @(
   "enable_container_insights", "oidc_issuer", "oidc_audience", "temporal_address",
   "temporal_namespace", "deploy_applications", "deploy_gateway_lambda",
   "deploy_profile_readiness_durable", "deploy_serverless_outbox",
-  "enable_serverless_workflow_triggers", "gateway_lambda_artifact_base64sha256",
+  "serverless_runtime_cutover", "gateway_lambda_artifact_base64sha256",
   "gateway_lambda_artifact_s3_key", "gateway_lambda_artifact_s3_object_version",
   "gateway_lambda_artifact_sha256", "gateway_lambda_extension_layer_arn",
-  "gateway_lambda_reserved_concurrency", "gateway_outbox_dispatch_target",
+  "gateway_lambda_reserved_concurrency",
   "profile_readiness_activity_artifact_base64sha256",
   "profile_readiness_activity_artifact_s3_key",
   "profile_readiness_activity_artifact_s3_object_version",
@@ -109,10 +109,10 @@ $terraformVariables = @(
 
 $retainedServerlessVariableNames = @(
   "deploy_gateway_lambda", "deploy_profile_readiness_durable", "deploy_serverless_outbox",
-  "enable_serverless_workflow_triggers", "gateway_lambda_artifact_base64sha256",
+  "serverless_runtime_cutover", "gateway_lambda_artifact_base64sha256",
   "gateway_lambda_artifact_s3_key", "gateway_lambda_artifact_s3_object_version",
   "gateway_lambda_artifact_sha256", "gateway_lambda_extension_layer_arn",
-  "gateway_lambda_reserved_concurrency", "gateway_outbox_dispatch_target",
+  "gateway_lambda_reserved_concurrency",
   "profile_readiness_activity_artifact_base64sha256",
   "profile_readiness_activity_artifact_s3_key",
   "profile_readiness_activity_artifact_s3_object_version",
@@ -129,7 +129,7 @@ $retainedServerlessVariableNames = @(
 )
 $retainedServerlessBooleanVariableNames = @(
   "deploy_gateway_lambda", "deploy_profile_readiness_durable", "deploy_serverless_outbox",
-  "enable_serverless_workflow_triggers"
+  "serverless_runtime_cutover"
 )
 $retainedServerlessIntegerVariableNames = @(
   "gateway_lambda_reserved_concurrency", "profile_readiness_execution_timeout_seconds",
@@ -390,14 +390,13 @@ function Get-RetainedServerlessConfiguration {
       deploy_gateway_lambda                                  = $false
       deploy_profile_readiness_durable                       = $false
       deploy_serverless_outbox                               = $false
-      enable_serverless_workflow_triggers                    = $false
+      serverless_runtime_cutover                             = $false
       gateway_lambda_artifact_base64sha256                   = ""
       gateway_lambda_artifact_s3_key                         = ""
       gateway_lambda_artifact_s3_object_version              = ""
       gateway_lambda_artifact_sha256                         = ""
       gateway_lambda_extension_layer_arn                     = ""
       gateway_lambda_reserved_concurrency                    = 2
-      gateway_outbox_dispatch_target                         = "temporal"
       profile_readiness_activity_artifact_base64sha256       = ""
       profile_readiness_activity_artifact_s3_key             = ""
       profile_readiness_activity_artifact_s3_object_version  = ""
@@ -485,7 +484,7 @@ function Set-TerraformVariables {
       "temporal_namespace", "gateway_lambda_artifact_base64sha256",
       "gateway_lambda_artifact_s3_key", "gateway_lambda_artifact_s3_object_version",
       "gateway_lambda_artifact_sha256", "gateway_lambda_extension_layer_arn",
-      "gateway_outbox_dispatch_target", "profile_readiness_activity_artifact_base64sha256",
+      "profile_readiness_activity_artifact_base64sha256",
       "profile_readiness_activity_artifact_s3_key",
       "profile_readiness_activity_artifact_s3_object_version",
       "profile_readiness_activity_artifact_sha256",
@@ -504,7 +503,7 @@ function Set-TerraformVariables {
       "enable_tracing", "high_availability", "private_application_networking", "enable_redis",
       "database_performance_insights", "enable_container_insights", "deploy_gateway_lambda",
       "deploy_profile_readiness_durable", "deploy_serverless_outbox",
-      "enable_serverless_workflow_triggers"
+      "serverless_runtime_cutover"
     )) {
     Set-Item "Env:TF_VAR_$name" ([bool]$Configuration.$name).ToString().ToLowerInvariant()
   }

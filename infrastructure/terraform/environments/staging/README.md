@@ -30,7 +30,8 @@ traffic away from the accepted ECS rollback path.
 
 The workflow replacement is independently dark by default. Keep
 `deploy_profile_readiness_durable`, `deploy_serverless_outbox`, and
-`enable_serverless_workflow_triggers` false until the staging copies of all three immutable
-artifacts and a refresh-backed plan are reviewed. The first replacement apply may create functions,
-private endpoints, alarms, and an encrypted terminal DLQ, but it must not enable any workflow
-trigger or change `gateway_outbox_dispatch_target` from `temporal`.
+`serverless_runtime_cutover` false until the staging copies of all three immutable artifacts and a
+refresh-backed plan are reviewed. The first replacement apply may create functions, private
+endpoints, alarms, and an encrypted terminal DLQ, but it cannot create the API Lambda integration,
+move new-event dispatch from Temporal, or enable a workflow trigger. The single cutover switch
+later performs those coupled changes together.
