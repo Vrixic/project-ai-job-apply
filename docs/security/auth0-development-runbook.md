@@ -139,9 +139,11 @@ passes only validated issuer, subject, audience, and scopes to the alias. It per
 current-user preferences, and owner-scoped operation reads.
 
 Repeat step 9 with two distinct synthetic accounts. Account A must save harmless preferences and
-reach a succeeded operation through the dark alias; account B must receive the existing sanitized
+confirm they persist through the dark alias. While replacement workflow triggers remain disabled,
+the explicit loopback dark mode accepts the resulting owner-visible `queued` operation for this
+probe; normal conformance still requires `succeeded`. Account B must receive the existing sanitized
 cross-user isolation pass. This proves the Lambda/database ownership path, not API Gateway route
-cutover, because public traffic deliberately remains on ECS.
+cutover, because public traffic deliberately remains on the idle ECS rollback integration.
 
 Capture no tokens, cookies, secrets, complete email addresses, or provider subjects. Record only
 timestamps, expected/actual results, sanitized screenshots, and correlation IDs.
