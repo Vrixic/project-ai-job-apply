@@ -6,6 +6,7 @@ import {
   randomBytes,
   timingSafeEqual,
 } from "node:crypto";
+import { isIsolationOperationEligible } from "./isolation-operation";
 
 export const CROSS_USER_PROBE_COOKIE_NAME = "applydash_cross_user_probe";
 
@@ -323,9 +324,10 @@ export async function armCrossUserIsolationProbe(
   if (operationResponse.status === 200) {
     try {
       const operation = (await operationResponse.json()) as { state?: unknown };
-      operationEligible =
-        operation.state === "succeeded" ||
-        (dependencies.allowQueuedOperation === true && operation.state === "queued");
+      operationEligible = isIsolationOperationEligible(
+        operation.state,
+        dependencies.allowQueuedOperation === true,
+      );
     } catch {
       operationEligible = false;
     }

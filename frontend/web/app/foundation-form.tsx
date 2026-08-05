@@ -7,6 +7,7 @@ import type {
   PutJobPreferencesResponse,
 } from "@ai-job-apply/api-contracts";
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import { isIsolationOperationEligible } from "../lib/isolation-operation";
 
 function splitValues(value: string): string[] {
   return [
@@ -194,8 +195,11 @@ export function FoundationForm({
   }
 
   async function armIsolationProbe() {
-    if (!operationId || operation?.state !== "succeeded") {
-      setMessage("Complete a readiness workflow before arming the isolation check.");
+    if (
+      !operationId ||
+      !isIsolationOperationEligible(operation?.state, darkLambdaIsolationConformanceEnabled)
+    ) {
+      setMessage("Create an eligible readiness operation before arming the isolation check.");
       return;
     }
     setArmingIsolation(true);
@@ -336,8 +340,10 @@ export function FoundationForm({
               onClick={armIsolationProbe}
               disabled={
                 armingIsolation ||
-                (operation?.state !== "succeeded" &&
-                  !(darkLambdaIsolationConformanceEnabled && operation?.state === "queued"))
+                !isIsolationOperationEligible(
+                  operation?.state,
+                  darkLambdaIsolationConformanceEnabled,
+                )
               }
             >
               {armingIsolation ? "Arming…" : "Arm cross-user isolation check"}
