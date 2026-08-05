@@ -156,6 +156,57 @@ describe("API Gateway Lambda boundary", () => {
     expect(inject).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["a scalar", AUDIENCE],
+    ["an array", [AUDIENCE, "https://identity.example.test/userinfo"]],
+    ["a JSON-encoded array", JSON.stringify([AUDIENCE, "https://identity.example.test/userinfo"])],
+  ])("accepts %s exact audience representation", async (_label, aud) => {
+    const principalBridge = createInvocationPrincipalBridge();
+    const inject = vi.fn().mockResolvedValue({ statusCode: 200, body: "{}", headers: {} });
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge,
+    });
+    const input = event();
+    Object.assign(input.requestContext.authorizer?.jwt?.claims ?? {}, { aud });
+
+    const response = await invoke(handler, input);
+
+    expect(response.statusCode).toBe(200);
+    expect(inject).toHaveBeenCalledOnce();
+  });
+
+  it("emits only privacy-safe claim-shape diagnostics when identity context is rejected", async () => {
+    const principalBridge = createInvocationPrincipalBridge();
+    const onAuthenticationFailure = vi.fn();
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject: vi.fn() }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge,
+      onAuthenticationFailure,
+    });
+    const input = event();
+    Object.assign(input.requestContext.authorizer?.jwt?.claims ?? {}, {
+      aud: JSON.stringify(["different-api"]),
+    });
+
+    const response = await invoke(handler, input);
+
+    expect(response.statusCode).toBe(401);
+    expect(onAuthenticationFailure).toHaveBeenCalledWith({
+      claimsPresent: true,
+      subjectPresent: true,
+      issuerMatches: true,
+      audienceMatches: false,
+      audienceEncoding: "json_array",
+    });
+    expect(JSON.stringify(onAuthenticationFailure.mock.calls)).not.toContain("auth0|candidate-1");
+    expect(JSON.stringify(onAuthenticationFailure.mock.calls)).not.toContain("different-api");
+  });
+
   it("does not treat an unvalidated scope claim as an API Gateway-validated scope", async () => {
     const principalBridge = createInvocationPrincipalBridge();
     let observedPrincipal: AuthPrincipal | undefined;

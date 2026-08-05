@@ -56,6 +56,15 @@ export interface ApiGatewayHandlerOptions {
   issuer: string;
   audience: string;
   principalBridge: InvocationPrincipalBridge;
+  onAuthenticationFailure?: (diagnostic: AuthenticationContextDiagnostic) => void;
+}
+
+export interface AuthenticationContextDiagnostic {
+  claimsPresent: boolean;
+  subjectPresent: boolean;
+  issuerMatches: boolean;
+  audienceMatches: boolean;
+  audienceEncoding: "absent" | "array" | "json_array" | "scalar" | "unsupported";
 }
 
 export interface InvocationPrincipalBridge {
@@ -191,13 +200,56 @@ function claimStrings(value: JwtClaimValue): string[] {
   if (Array.isArray(value)) {
     return value.filter((entry): entry is string => typeof entry === "string");
   }
-  return typeof value === "string" ? [value] : [];
+  if (typeof value !== "string") {
+    return [];
+  }
+
+  // API Gateway's JWT context normally preserves a scalar audience. Some providers issue a
+  // multi-audience claim that API Gateway represents as a JSON-encoded string. Normalize only a
+  // valid string array; never split arbitrary text or weaken exact audience matching.
+  if (value.startsWith("[") && value.endsWith("]")) {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      if (Array.isArray(parsed) && parsed.every((entry) => typeof entry === "string")) {
+        return parsed;
+      }
+    } catch {
+      // Treat malformed serialized data as one non-matching scalar and fail closed below.
+    }
+  }
+  return [value];
+}
+
+function audienceEncoding(
+  value: JwtClaimValue,
+): AuthenticationContextDiagnostic["audienceEncoding"] {
+  if (value === undefined) {
+    return "absent";
+  }
+  if (Array.isArray(value)) {
+    return "array";
+  }
+  if (typeof value !== "string") {
+    return "unsupported";
+  }
+  if (value.startsWith("[") && value.endsWith("]")) {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      if (Array.isArray(parsed) && parsed.every((entry) => typeof entry === "string")) {
+        return "json_array";
+      }
+    } catch {
+      // The invalid value remains a scalar for privacy-safe diagnostics and fails exact matching.
+    }
+  }
+  return "scalar";
 }
 
 function authorizerPrincipal(
   event: AuthorizedHttpApiEvent,
   issuer: string,
   audience: string,
+  onAuthenticationFailure?: (diagnostic: AuthenticationContextDiagnostic) => void,
 ): AuthPrincipal {
   const claims = event.requestContext.authorizer?.jwt?.claims;
   const subject = typeof claims?.sub === "string" ? claims.sub : undefined;
@@ -209,6 +261,13 @@ function authorizerPrincipal(
     : [];
 
   if (!claims || !subject || tokenIssuer !== issuer || !audiences.includes(audience)) {
+    onAuthenticationFailure?.({
+      claimsPresent: Boolean(claims),
+      subjectPresent: Boolean(subject),
+      issuerMatches: tokenIssuer === issuer,
+      audienceMatches: audiences.includes(audience),
+      audienceEncoding: audienceEncoding(claims?.aud),
+    });
     throw new AuthenticationError("Validated API Gateway identity context is required");
   }
 
@@ -314,7 +373,12 @@ export function createApiGatewayHandler(options: ApiGatewayHandlerOptions): ApiG
     let principal: AuthPrincipal | undefined;
     if (route.protected) {
       try {
-        principal = authorizerPrincipal(event, options.issuer, options.audience);
+        principal = authorizerPrincipal(
+          event,
+          options.issuer,
+          options.audience,
+          options.onAuthenticationFailure,
+        );
       } catch (error) {
         if (error instanceof AuthenticationError) {
           return authenticationFailure(event);
@@ -395,11 +459,22 @@ export const handler: Handler<AuthorizedHttpApiEvent, APIGatewayProxyStructuredR
   if (!configuredHandler) {
     const config = loadLambdaGatewayConfig();
     const principalBridge = createInvocationPrincipalBridge();
+    const boundaryLogger = createLogger({
+      service: "gateway",
+      level: config.LOG_LEVEL,
+      releaseSha: config.RELEASE_SHA,
+    });
     configuredHandler = createApiGatewayHandler({
       app: createConfiguredApplication(principalBridge),
       issuer: config.OIDC_ISSUER,
       audience: config.OIDC_AUDIENCE,
       principalBridge,
+      onAuthenticationFailure: (diagnostic) => {
+        boundaryLogger.warn(
+          { event: "api_gateway_identity_context_rejected", ...diagnostic },
+          "API Gateway identity context failed the Lambda defense-in-depth check",
+        );
+      },
     });
   }
   return configuredHandler(event);
