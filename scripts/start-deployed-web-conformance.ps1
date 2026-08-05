@@ -19,21 +19,22 @@ Usage:
   .\scripts\start-deployed-web-conformance.ps1
   .\scripts\start-deployed-web-conformance.ps1 -GatewayRuntime lambda-dark
   .\scripts\start-deployed-web-conformance.ps1 -GatewayRuntime lambda-dark -BridgeSmokeTest
+  .\scripts\start-deployed-web-conformance.ps1 -Environment staging -GatewayRuntime lambda-dark
   .\scripts\start-deployed-web-conformance.ps1 -Environment staging
   .\scripts\start-deployed-web-conformance.ps1 -Environment staging -EnableWorkloadConformance
   .\scripts\start-deployed-web-conformance.ps1 -Environment staging -ValidateOnly
   .\scripts\start-deployed-web-conformance.ps1 -ValidateOnly
 
 Starts only the local Next.js web client and routes its server-held BFF to the selected deployed
-gateway. For development lambda-dark conformance, a loopback-only bridge validates each real
-Auth0 access token with the shared verifier and invokes only the immutable development alias. The
+gateway. For lambda-dark conformance, a loopback-only bridge validates each real Auth0 access
+token with the shared verifier and invokes only the selected environment's immutable alias. The
 resolved gateway URL and tokens remain process-scoped and are never written or printed.
 
 Options:
   -Environment  Deployed environment: development or staging. Default: development
   -GatewayRuntime
-                Gateway under test: ecs or lambda-dark. lambda-dark is development-only and does
-                not change the public API route. Default: ecs
+                Gateway under test: ecs or lambda-dark. lambda-dark supports development and
+                staging and does not change the public API route. Default: ecs
   -AwsProfile   IAM Identity Center profile. Default: ai-job-apply-<environment>-admin
   -AwsRegion    AWS region. Default: us-east-2
   -EnableWorkloadConformance
@@ -53,11 +54,8 @@ if ([string]::IsNullOrWhiteSpace($AwsProfile)) {
 if ($EnableWorkloadConformance -and $Environment -ne "staging") {
   throw "Workload conformance is restricted to the synthetic staging environment."
 }
-if ($GatewayRuntime -eq "lambda-dark" -and $Environment -ne "development") {
-  throw "Dark Lambda conformance is currently restricted to development."
-}
 if ($GatewayRuntime -eq "lambda-dark" -and $EnableWorkloadConformance) {
-  throw "Staging workload conformance cannot be combined with development dark Lambda conformance."
+  throw "Staging workload conformance cannot be combined with dark Lambda conformance."
 }
 if ($BridgeSmokeTest -and $GatewayRuntime -ne "lambda-dark") {
   throw "Bridge smoke testing requires -GatewayRuntime lambda-dark."
@@ -67,6 +65,7 @@ if ($BridgeSmokeTest -and $ValidateOnly) {
 }
 
 $environmentLabel = if ($Environment -eq "staging") { "Staging" } else { "Development" }
+$expectedLambdaFunctionName = "ai-job-apply-$Environment-gateway"
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $webEnvironment = Join-Path $repositoryRoot "frontend\web\.env.local"
 $terraformDirectory = "infrastructure/terraform/environments/$Environment"
@@ -199,6 +198,7 @@ $previousPlatformBaseUrl = $env:PLATFORM_API_BASE_URL
 $previousWorkloadConformance = $env:ENABLE_STAGING_WORKLOAD_CONFORMANCE
 $previousNodeEnvironment = $env:NODE_ENV
 $previousDarkConformance = $env:DARK_LAMBDA_CONFORMANCE
+$previousDarkEnvironment = $env:DARK_LAMBDA_ENVIRONMENT
 $previousDarkFunctionName = $env:DARK_LAMBDA_FUNCTION_NAME
 $previousDarkAlias = $env:DARK_LAMBDA_ALIAS
 $previousDarkExpectedVersion = $env:DARK_LAMBDA_EXPECTED_VERSION
@@ -334,7 +334,7 @@ try {
       $lambdaAuthorizerTerraformExitCode -ne 0
     )
   ) {
-    throw "The dark Lambda outputs could not be resolved from encrypted development state."
+    throw "The dark Lambda outputs could not be resolved from encrypted $Environment state."
   }
   $gatewayUrl = [string]$gatewayOutput
   $clusterArn = [string]$clusterOutput
@@ -368,15 +368,16 @@ try {
   $primaryDeployments = @(
     @($gatewayService.deployments) | Where-Object { $_.status -eq "PRIMARY" }
   )
+  $expectedGatewayTaskCount = if ($GatewayRuntime -eq "lambda-dark") { 0 } else { 1 }
   if (
     $gatewayService.status -ne "ACTIVE" -or
-    [int]$gatewayService.desiredCount -ne 1 -or
-    [int]$gatewayService.runningCount -ne 1 -or
+    [int]$gatewayService.desiredCount -ne $expectedGatewayTaskCount -or
+    [int]$gatewayService.runningCount -ne $expectedGatewayTaskCount -or
     [int]$gatewayService.pendingCount -ne 0 -or
     $primaryDeployments.Count -ne 1 -or
     $primaryDeployments[0].rolloutState -ne "COMPLETED"
   ) {
-    throw "The deployed gateway service is not at the approved lean stable state."
+    throw "The deployed gateway service is not at the approved lean stable or idle state."
   }
 
   $taskDefinition = Invoke-AwsJson `
@@ -413,40 +414,40 @@ try {
     $lambdaAliasArn = ([string]$lambdaAliasOutput).Trim()
     $lambdaAuthorizerId = ([string]$lambdaAuthorizerOutput).Trim()
     if (
-      $lambdaFunctionName -cne "ai-job-apply-development-gateway" -or
-      $lambdaAliasArn -notmatch ":function:ai-job-apply-development-gateway:development$" -or
+      $lambdaFunctionName -cne $expectedLambdaFunctionName -or
+      $lambdaAliasArn -notmatch ":function:$([regex]::Escape($expectedLambdaFunctionName)):$([regex]::Escape($Environment))$" -or
       [string]::IsNullOrWhiteSpace($lambdaAuthorizerId)
     ) {
-      throw "The dark Lambda outputs are outside the exact development boundary."
+      throw "The dark Lambda outputs are outside the exact $Environment boundary."
     }
 
     $lambdaAlias = Invoke-AwsJson `
       -Arguments @(
         "lambda", "get-alias",
         "--function-name", $lambdaFunctionName,
-        "--name", "development",
+        "--name", $Environment,
         "--profile", $AwsProfile,
         "--region", $AwsRegion,
         "--no-cli-pager",
         "--output", "json"
       ) `
-      -FailureMessage "The development dark Lambda alias could not be inspected."
+      -FailureMessage "The $Environment dark Lambda alias could not be inspected."
     $lambdaAliasVersion = [string]$lambdaAlias.FunctionVersion
     if ($lambdaAliasVersion -notmatch "^[1-9][0-9]*$") {
-      throw "The development alias does not target an immutable Lambda version."
+      throw "The $Environment alias does not target an immutable Lambda version."
     }
 
     $lambdaConfiguration = Invoke-AwsJson `
       -Arguments @(
         "lambda", "get-function-configuration",
         "--function-name", $lambdaFunctionName,
-        "--qualifier", "development",
+        "--qualifier", $Environment,
         "--profile", $AwsProfile,
         "--region", $AwsRegion,
         "--no-cli-pager",
         "--output", "json"
       ) `
-      -FailureMessage "The development dark Lambda configuration could not be inspected."
+      -FailureMessage "The $Environment dark Lambda configuration could not be inspected."
     $lambdaEnvironment = $lambdaConfiguration.Environment.Variables
     if (
       $lambdaConfiguration.State -ne "Active" -or
@@ -455,7 +456,7 @@ try {
       [string]$lambdaEnvironment.OIDC_ISSUER -cne $expectedIssuer -or
       [string]$lambdaEnvironment.OIDC_AUDIENCE -cne $auth0Audience
     ) {
-      throw "The development dark Lambda is not active on the reviewed identity boundary."
+      throw "The $Environment dark Lambda is not active on the reviewed identity boundary."
     }
 
     $lambdaConcurrency = Invoke-AwsJson `
@@ -467,14 +468,14 @@ try {
         "--no-cli-pager",
         "--output", "json"
       ) `
-      -FailureMessage "The development dark Lambda concurrency could not be inspected."
+      -FailureMessage "The $Environment dark Lambda concurrency could not be inspected."
     if ([int]$lambdaConcurrency.ReservedConcurrentExecutions -ne 2) {
-      throw "The development dark Lambda is outside the reviewed concurrency ceiling."
+      throw "The $Environment dark Lambda is outside the reviewed concurrency ceiling."
     }
 
     $apiId = $parsedGateway.Host.Split(".")[0]
     if ([string]::IsNullOrWhiteSpace($apiId)) {
-      throw "The development API identifier could not be resolved."
+      throw "The $Environment API identifier could not be resolved."
     }
     $routes = Invoke-AwsJson `
       -Arguments @(
@@ -485,7 +486,7 @@ try {
         "--no-cli-pager",
         "--output", "json"
       ) `
-      -FailureMessage "The development API routes could not be inspected."
+      -FailureMessage "The $Environment API routes could not be inspected."
     $routeItems = @($routes.Items)
     if (
       $routeItems.Count -ne 1 -or
@@ -493,7 +494,7 @@ try {
       [string]$routeItems[0].AuthorizationType -cne "NONE" -or
       [string]$routeItems[0].Target -notmatch "^integrations/(?<integration>[A-Za-z0-9]+)$"
     ) {
-      throw "The development public API route changed from the approved ECS rollback path."
+      throw "The $Environment public API route changed from the approved ECS rollback path."
     }
     $integrationId = $Matches["integration"]
     $integration = Invoke-AwsJson `
@@ -506,9 +507,9 @@ try {
         "--no-cli-pager",
         "--output", "json"
       ) `
-      -FailureMessage "The development public API integration could not be inspected."
+      -FailureMessage "The $Environment public API integration could not be inspected."
     if ([string]$integration.IntegrationType -cne "HTTP_PROXY") {
-      throw "The development public API no longer targets the approved ECS HTTP proxy."
+      throw "The $Environment public API no longer targets the approved ECS HTTP proxy."
     }
 
     $authorizer = Invoke-AwsJson `
@@ -521,7 +522,7 @@ try {
         "--no-cli-pager",
         "--output", "json"
       ) `
-      -FailureMessage "The development dark JWT authorizer could not be inspected."
+      -FailureMessage "The $Environment dark JWT authorizer could not be inspected."
     if (
       [string]$authorizer.AuthorizerType -cne "JWT" -or
       @($authorizer.IdentitySource).Count -ne 1 -or
@@ -530,19 +531,21 @@ try {
       @($authorizer.JwtConfiguration.Audience).Count -ne 1 -or
       [string]@($authorizer.JwtConfiguration.Audience)[0] -cne $auth0Audience
     ) {
-      throw "The development dark JWT authorizer does not match the reviewed Auth0 boundary."
+      throw "The $Environment dark JWT authorizer does not match the reviewed Auth0 boundary."
     }
   }
 
-  $liveStatus = Get-HttpStatus -Uri ([Uri]::new($parsedGateway, "/health/live"))
-  $readyStatus = Get-HttpStatus -Uri ([Uri]::new($parsedGateway, "/health/ready"))
-  $protectedStatus = Get-HttpStatus -Uri ([Uri]::new($parsedGateway, "/v1/me"))
-  if ($liveStatus -ne 200 -or $readyStatus -ne 200 -or $protectedStatus -ne 401) {
-    throw "The deployed gateway did not pass the expected 200/200/401 health and access preflight."
+  if ($GatewayRuntime -eq "ecs") {
+    $liveStatus = Get-HttpStatus -Uri ([Uri]::new($parsedGateway, "/health/live"))
+    $readyStatus = Get-HttpStatus -Uri ([Uri]::new($parsedGateway, "/health/ready"))
+    $protectedStatus = Get-HttpStatus -Uri ([Uri]::new($parsedGateway, "/v1/me"))
+    if ($liveStatus -ne 200 -or $readyStatus -ne 200 -or $protectedStatus -ne 401) {
+      throw "The deployed gateway did not pass the expected 200/200/401 health and access preflight."
+    }
   }
 
   $runtimeLabel = if ($GatewayRuntime -eq "lambda-dark") {
-    "dark Lambda alias, JWT authorizer, unchanged ECS route"
+    "dark Lambda alias, JWT authorizer, and unchanged idle ECS rollback route"
   } else {
     "ECS gateway"
   }
@@ -565,8 +568,9 @@ try {
   if ($GatewayRuntime -eq "lambda-dark") {
     $env:NODE_ENV = "development"
     $env:DARK_LAMBDA_CONFORMANCE = "1"
+    $env:DARK_LAMBDA_ENVIRONMENT = $Environment
     $env:DARK_LAMBDA_FUNCTION_NAME = $lambdaFunctionName
-    $env:DARK_LAMBDA_ALIAS = "development"
+    $env:DARK_LAMBDA_ALIAS = $Environment
     $env:DARK_LAMBDA_EXPECTED_VERSION = $lambdaAliasVersion
     $env:DARK_LAMBDA_BRIDGE_PORT = [string]$bridgePort
     $env:OIDC_ISSUER = $expectedIssuer
@@ -621,7 +625,7 @@ try {
       throw "The loopback dark Lambda bridge did not pass the expected 200/200/401 preflight."
     }
     if ($BridgeSmokeTest) {
-      Write-Host "Development dark Lambda bridge smoke test passed: 200/200/401."
+      Write-Host "$environmentLabel dark Lambda bridge smoke test passed: 200/200/401."
       return
     }
     $env:PLATFORM_API_BASE_URL = $bridgeUrl
@@ -635,8 +639,8 @@ try {
   }
   Write-Host "Starting the local web client at http://localhost:3000."
   if ($GatewayRuntime -eq "lambda-dark") {
-    Write-Host "Its server-held BFF targets the loopback-guarded immutable development Lambda alias."
-    Write-Host "The public API remains on ECS. Press Ctrl+C to stop both local processes."
+    Write-Host "Its server-held BFF targets the loopback-guarded immutable $Environment Lambda alias."
+    Write-Host "The public API remains on the idle ECS rollback route. Press Ctrl+C to stop both local processes."
   } else {
     Write-Host "Its server-held BFF targets the deployed $Environment ECS gateway. Press Ctrl+C to stop."
   }
@@ -671,6 +675,7 @@ try {
   }
   $env:NODE_ENV = $previousNodeEnvironment
   $env:DARK_LAMBDA_CONFORMANCE = $previousDarkConformance
+  $env:DARK_LAMBDA_ENVIRONMENT = $previousDarkEnvironment
   $env:DARK_LAMBDA_FUNCTION_NAME = $previousDarkFunctionName
   $env:DARK_LAMBDA_ALIAS = $previousDarkAlias
   $env:DARK_LAMBDA_EXPECTED_VERSION = $previousDarkExpectedVersion

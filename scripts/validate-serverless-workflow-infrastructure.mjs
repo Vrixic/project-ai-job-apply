@@ -38,10 +38,58 @@ const developmentWorkflowReleaseRollbackWrapper = read(
 const stagingWorkflowReleaseRollbackWrapper = read(
   "scripts/operate-staging-serverless-workflow-release-rollback.ps1",
 );
+const gatewayConformanceLauncher = read("scripts/start-deployed-web-conformance.ps1");
+const gatewayBoundaryOperator = read("scripts/verify-gateway-lambda-boundary.ps1");
+const developmentGatewayBoundaryWrapper = read(
+  "scripts/verify-development-gateway-lambda-boundary.ps1",
+);
+const stagingGatewayBoundaryWrapper = read("scripts/verify-staging-gateway-lambda-boundary.ps1");
+const darkGatewayBridge = read("backend/gateway/src/dark-conformance-bridge.ts");
 
 const requireText = (source, expected, message) => {
   assert.ok(source.includes(expected), message);
 };
+
+requireText(
+  gatewayConformanceLauncher,
+  '$expectedGatewayTaskCount = if ($GatewayRuntime -eq "lambda-dark") { 0 } else { 1 }',
+  "Dark gateway conformance must require the retained ECS service to remain idle.",
+);
+requireText(
+  gatewayConformanceLauncher,
+  "$env:DARK_LAMBDA_ENVIRONMENT = $Environment",
+  "The guarded bridge must receive the explicitly selected environment.",
+);
+requireText(
+  gatewayBoundaryOperator,
+  '[ValidateSet("development", "staging")]',
+  "The shared gateway boundary verifier must restrict environment selection.",
+);
+requireText(
+  gatewayBoundaryOperator,
+  '"ai-job-apply-$Environment-gateway"',
+  "The shared gateway boundary verifier must derive the exact environment function.",
+);
+requireText(
+  developmentGatewayBoundaryWrapper,
+  "-Environment development",
+  "The development gateway boundary wrapper must fix the environment.",
+);
+requireText(
+  stagingGatewayBoundaryWrapper,
+  "-Environment staging",
+  "The staging gateway boundary wrapper must fix the environment.",
+);
+requireText(
+  darkGatewayBridge,
+  '!["development", "staging"].includes(target.environment)',
+  "The loopback gateway bridge must reject unapproved environment names.",
+);
+requireText(
+  darkGatewayBridge,
+  "target.functionName !== `ai-job-apply-$" + "{target.environment}-gateway`",
+  "The loopback gateway bridge must bind function identity to the selected environment.",
+);
 
 requireText(
   durable,
