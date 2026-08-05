@@ -582,6 +582,13 @@ try {
       "$resourcePrefix-profile-readiness-durable-failed",
       "$resourcePrefix-profile-readiness-durable-timed-out"
     )
+    if ($runtimeCutoverActive) {
+      $alarmNames += @(
+        "$resourcePrefix-gateway-lambda-errors",
+        "$resourcePrefix-gateway-lambda-throttles",
+        "$resourcePrefix-gateway-lambda-duration"
+      )
+    }
     $alarmResult = Invoke-AwsJson `
       (@("cloudwatch", "describe-alarms", "--alarm-names") + $alarmNames + @("--output", "json"))
     $healthyAlarms = @(
@@ -590,26 +597,31 @@ try {
         @($_.AlarmActions).Count -eq 1 -and @($_.OKActions).Count -eq 1
       }
     )
-    if ($healthyAlarms.Count -ne 7) {
-      throw "The exact seven workflow alarms are not enabled and OK."
+    if ($healthyAlarms.Count -ne $alarmNames.Count) {
+      throw "The exact runtime alarms are not enabled and OK."
     }
 
-    $dlq = Invoke-AwsJson @(
-      "sqs", "get-queue-url", "--queue-name",
-      "$resourcePrefix-profile-readiness-dead-letter", "--output", "json"
-    )
-    $dlqDepth = Invoke-AwsJson @(
-      "sqs", "get-queue-attributes", "--queue-url", ([string]$dlq.QueueUrl),
-      "--attribute-names", "ApproximateNumberOfMessages",
-      "ApproximateNumberOfMessagesNotVisible", "ApproximateNumberOfMessagesDelayed",
-      "--output", "json"
-    )
-    if (
-      [int]$dlqDepth.Attributes.ApproximateNumberOfMessages +
-      [int]$dlqDepth.Attributes.ApproximateNumberOfMessagesNotVisible +
-      [int]$dlqDepth.Attributes.ApproximateNumberOfMessagesDelayed -ne 0
-    ) {
-      throw "The durable DLQ is not empty before the dark release."
+    $queueNames = @("$resourcePrefix-profile-readiness-dead-letter")
+    if ($runtimeCutoverActive) {
+      $queueNames += @("$resourcePrefix-events", "$resourcePrefix-dead-letter")
+    }
+    foreach ($queueName in $queueNames) {
+      $queue = Invoke-AwsJson @(
+        "sqs", "get-queue-url", "--queue-name", $queueName, "--output", "json"
+      )
+      $queueDepth = Invoke-AwsJson @(
+        "sqs", "get-queue-attributes", "--queue-url", ([string]$queue.QueueUrl),
+        "--attribute-names", "ApproximateNumberOfMessages",
+        "ApproximateNumberOfMessagesNotVisible", "ApproximateNumberOfMessagesDelayed",
+        "--output", "json"
+      )
+      if (
+        [int]$queueDepth.Attributes.ApproximateNumberOfMessages +
+        [int]$queueDepth.Attributes.ApproximateNumberOfMessagesNotVisible +
+        [int]$queueDepth.Attributes.ApproximateNumberOfMessagesDelayed -ne 0
+      ) {
+        throw "A reviewed runtime queue or DLQ is not empty."
+      }
     }
 
     $durableStack = Invoke-AwsJson @(
@@ -788,6 +800,15 @@ try {
       --require-zero-open-workflows 2>&1
     if ($LASTEXITCODE -ne 0) {
       throw "Serverless cutover requires a fresh zero-running-Temporal-workflow check."
+    }
+
+    $durableRunning = Invoke-AwsJson @(
+      "lambda", "list-durable-executions-by-function", "--function-name",
+      "$resourcePrefix-profile-readiness-durable", "--statuses", "RUNNING",
+      "--max-items", "1", "--no-paginate", "--output", "json"
+    )
+    if (@($durableRunning.DurableExecutions).Count -ne 0) {
+      throw "Serverless cutover requires zero running Lambda durable executions."
     }
   }
 
@@ -1520,6 +1541,7 @@ try {
     EcsRuntimeIdle             = [bool]$ecsRuntimeIdle
     LegacyOutboxEmpty          = if ($runtimeCutoverActive) { $true } else { $null }
     TemporalOpenWorkflowsEmpty = if ($runtimeCutoverActive) { $true } else { $null }
+    DurableOpenExecutionsEmpty = if ($runtimeCutoverActive) { $true } else { $null }
     EndpointSidCorrection      = $acceptedEndpointSidCorrection
     EffectiveDurableDlqPermission = if ($RecoverFailedApply) { $true } else { $null }
     ArtifactsVerified          = 3

@@ -377,32 +377,48 @@ try {
     -Arguments @(
       "ecs", "describe-services",
       "--cluster", $clusterArn,
-      "--services", "gateway",
+      "--services", "gateway", "workflow-worker",
       "--profile", $AwsProfile,
       "--region", $AwsRegion,
       "--no-cli-pager",
       "--output", "json"
     ) `
-    -FailureMessage "The deployed gateway service could not be inspected."
-  if (@($service.failures).Count -ne 0 -or @($service.services).Count -ne 1) {
-    throw "The deployed gateway service is unavailable."
+    -FailureMessage "The retained gateway and workflow services could not be inspected."
+  if (@($service.failures).Count -ne 0 -or @($service.services).Count -ne 2) {
+    throw "The retained gateway and workflow services are unavailable."
   }
-  $gatewayService = @($service.services)[0]
-  $primaryDeployments = @(
-    @($gatewayService.deployments) | Where-Object { $_.status -eq "PRIMARY" }
-  )
-  $expectedGatewayTaskCount = if ($GatewayRuntime -in @("lambda-dark", "lambda-cutover")) {
+  $gatewayServices = @(@($service.services) | Where-Object { $_.serviceName -eq "gateway" })
+  $workerServices = @(@($service.services) | Where-Object { $_.serviceName -eq "workflow-worker" })
+  if ($gatewayServices.Count -ne 1 -or $workerServices.Count -ne 1) {
+    throw "The retained gateway and workflow services are not singular."
+  }
+  $gatewayService = $gatewayServices[0]
+  $retainedServices = @($gatewayService, $workerServices[0])
+  $expectedServiceTaskCount = if ($GatewayRuntime -in @("lambda-dark", "lambda-cutover")) {
     0
   } else { 1 }
+  $invalidServices = @($retainedServices | Where-Object {
+    $primary = @($_.deployments | Where-Object { $_.status -eq "PRIMARY" })
+    $_.status -ne "ACTIVE" -or
+    [int]$_.desiredCount -ne $expectedServiceTaskCount -or
+    [int]$_.runningCount -ne $expectedServiceTaskCount -or
+    [int]$_.pendingCount -ne 0 -or
+    $primary.Count -ne 1 -or $primary[0].rolloutState -ne "COMPLETED"
+  })
+  if ($invalidServices.Count -ne 0) {
+    throw "The retained gateway and workflow services are not at the approved stable or idle posture."
+  }
+  $runningTasks = Invoke-AwsJson `
+    -Arguments @(
+      "ecs", "list-tasks", "--cluster", $clusterArn, "--desired-status", "RUNNING",
+      "--profile", $AwsProfile, "--region", $AwsRegion, "--no-cli-pager", "--output", "json"
+    ) `
+    -FailureMessage "The retained ECS running-task inventory could not be inspected."
   if (
-    $gatewayService.status -ne "ACTIVE" -or
-    [int]$gatewayService.desiredCount -ne $expectedGatewayTaskCount -or
-    [int]$gatewayService.runningCount -ne $expectedGatewayTaskCount -or
-    [int]$gatewayService.pendingCount -ne 0 -or
-    $primaryDeployments.Count -ne 1 -or
-    $primaryDeployments[0].rolloutState -ne "COMPLETED"
+    $GatewayRuntime -in @("lambda-dark", "lambda-cutover") -and
+    @($runningTasks.taskArns).Count -ne 0
   ) {
-    throw "The deployed gateway service is not at the approved lean stable or idle state."
+    throw "The retained idle ECS cluster still contains a running task."
   }
 
   $taskDefinition = Invoke-AwsJson `

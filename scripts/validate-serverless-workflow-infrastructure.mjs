@@ -71,6 +71,8 @@ for (const expected of [
   'RouteKey -in @("GET /health/live", "GET /health/ready")',
   'FunctionResponseTypes) -notcontains "ReportBatchItemFailures"',
   '[string]$rule.State -cne "ENABLED"',
+  '"--services", "gateway", "workflow-worker"',
+  '"ecs", "list-tasks"',
 ]) {
   requireText(
     gatewayConformanceLauncher,
@@ -359,6 +361,7 @@ for (const expected of [
   'authorization_type -ne "JWT"',
   "LegacyOutboxEmpty",
   "TemporalOpenWorkflowsEmpty",
+  "DurableOpenExecutionsEmpty",
 ]) {
   requireText(
     workflowPlanner,
@@ -446,7 +449,8 @@ assert.ok(
 );
 
 for (const expected of [
-  '[ValidateSet("Status", "Apply", "Verify")]',
+  '"PlanRollback", "ApplyRollback", "VerifyRollback"',
+  '"PlanRestore", "ApplyRestore", "Cleanup"',
   '"workflow-dark-plans"',
   "ExpectedPlanSha256",
   "Assert-CutoverPlan",
@@ -454,10 +458,19 @@ for (const expected of [
   "Assert-ZeroLegacyWork",
   '"inspect-deployed-outbox.ps1"',
   "--require-zero-open-workflows",
-  'terraform "-chdir=$environmentDirectory" apply -input=false $resolvedPlanPath',
-  "VerifyCompletedRuntimeCutover = $true",
+  'terraform "-chdir=$environmentDirectory" apply -input=false $Path',
+  '$arguments["VerifyCompletedRuntimeCutover"] = $true',
   "Invoke-CompletedVerification",
   "PublicConformanceRequired = $true",
+  "Assert-RollbackPlan",
+  "Assert-ZeroServerlessWork",
+  '"--statuses", "RUNNING"',
+  "New-TransitionPlan",
+  "Assert-ReviewedTransitionPlan",
+  'Schema = "applydash.staging.serverless-runtime-cutover.v1"',
+  "PublicApiAvailableAfterApply = $false",
+  "ConfirmRollbackConformance",
+  "ConfirmRestoreConformance",
 ]) {
   requireText(
     stagingRuntimeCutoverOperator,
