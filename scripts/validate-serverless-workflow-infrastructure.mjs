@@ -40,6 +40,7 @@ const stagingWorkflowReleaseRollbackWrapper = read(
 );
 const workflowPlanner = read("scripts/plan-serverless-workflow-dark.ps1");
 const stagingRuntimeCutoverWrapper = read("scripts/plan-staging-serverless-runtime-cutover.ps1");
+const stagingLegacyTemporalDrain = read("scripts/operate-staging-legacy-temporal-drain.ps1");
 const gatewayConformanceLauncher = read("scripts/start-deployed-web-conformance.ps1");
 const gatewayBoundaryOperator = read("scripts/verify-gateway-lambda-boundary.ps1");
 const developmentGatewayBoundaryWrapper = read(
@@ -375,6 +376,46 @@ requireText(
   stagingRuntimeCutoverWrapper,
   '"ai-job-apply-staging-admin"',
   "The staging cutover wrapper must default to the isolated staging IAM profile.",
+);
+
+for (const expected of [
+  '[ValidateSet("Plan", "Execute", "Cleanup")]',
+  '"applydash.staging.legacy-temporal-drain.v1"',
+  '"staging-legacy-temporal-drain"',
+  '"inspect-deployed-outbox.ps1"',
+  "--require-zero-open-workflows",
+  "ExpectedPendingCount = $expectedPendingCount",
+  "ExpectedOrderedEventIdSha256",
+  "Assert-SameBoundary $context.Boundary $runtime.Boundary",
+  '"ecs", "run-task"',
+  '"ecs", "stop-task"',
+  "Wait-DrainComplete",
+  "Assert-WorkerLogsClean",
+  "Assert-NoClusterTask",
+  "Assert-OnlyReviewedTask $taskArn",
+  "PublicTrafficChange = $false",
+  "TriggerChange = $false",
+  "EcsServiceCapacityChange = $false",
+  "EventTargetRewrite = $false",
+]) {
+  requireText(
+    stagingLegacyTemporalDrain,
+    expected,
+    `The guarded staging legacy-drain operator is missing required boundary text: ${expected}`,
+  );
+}
+assert.ok(
+  !stagingLegacyTemporalDrain.includes("-IncludeEventIds"),
+  "The staging legacy-drain operator must retain only the aggregate outbox digest.",
+);
+requireText(
+  stagingLegacyTemporalDrain,
+  '$null -ne $inspection.PSObject.Properties["eventIds"]',
+  "The staging legacy-drain operator must reject an inspection that emits raw event IDs.",
+);
+assert.ok(
+  !/\b[0-9]{12}\b/.test(stagingLegacyTemporalDrain),
+  "The staging legacy-drain operator must not embed an AWS account ID.",
 );
 
 for (const expected of [

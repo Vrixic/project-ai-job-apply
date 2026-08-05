@@ -130,6 +130,12 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
 - `plan-staging-serverless-runtime-cutover.ps1` — Staging-only wrapper for the atomic runtime-cutover
   planning mode. It fixes the environment and default IAM Identity Center profile and cannot select
   deployment, recovery, release, or completed-dark modes.
+- `operate-staging-legacy-temporal-drain.ps1` — Checksum-gated bridge for the three synthetic
+  staging records created before serverless cutover. Planning binds their identifier-free aggregate
+  digest to the exact idle ECS/API, immutable worker, disabled replacement triggers, empty queues,
+  healthy alarms, and zero-open-Temporal boundary. Execution runs exactly one standalone retained
+  worker, double-checks terminal outbox/Temporal state, stops it, inspects aggregate logs, and proves
+  the surrounding boundary unchanged. Interrupted execution has an exact-task cleanup path.
 - `operate-serverless-workflow-dark-conformance.ps1` — Selects development or staging and creates
   an isolated ignored, checksum-reviewed context from that environment's exact-commit zero-drift
   plan and stable live boundary. Separate execution exercises three synchronous synthetic

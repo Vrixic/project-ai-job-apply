@@ -18,7 +18,8 @@ checksum.
   restarted by the cutover plan.
 - Drain the three legacy synthetic `temporal` outbox records through one bounded retained Temporal
   worker task. Stop that exact task afterward and prove every record terminal. Do not rewrite those
-  records to `lambda_durable`.
+  records to `lambda_durable`. Follow the
+  [staging legacy Temporal drain runbook](staging-legacy-temporal-drain.md).
 - Prove a fresh zero-pending outbox, zero open Temporal workflows, empty SQS/DLQ, seven healthy
   replacement alarms, accepted aliases, and zero drift.
 
