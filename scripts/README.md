@@ -125,11 +125,19 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   `temporal` to `lambda_durable` dispatch version, and coupled enablement of the SQS starter,
   reconciler, and terminal-recovery rule. ECS capacity and retained rollback resources cannot
   change, and the script still only writes an ignored reviewed plan.
+  `-VerifyCompletedRuntimeCutover` is the post-apply zero-drift mode. It requires the exact Lambda
+  API route/auth boundary, `lambda_durable` dispatch, all replacement triggers enabled, empty
+  queues/outbox/Temporal work, seven healthy alarms, and both retained ECS services at `0/0/0`.
 - `plan-development-serverless-workflow-dark.ps1` — Compatibility wrapper for development calls to
   the environment-aware workflow planner.
 - `plan-staging-serverless-runtime-cutover.ps1` — Staging-only wrapper for the atomic runtime-cutover
-  planning mode. It fixes the environment and default IAM Identity Center profile and cannot select
-  deployment, recovery, release, or completed-dark modes.
+  planning and completed-cutover verification modes. It fixes the environment and default IAM
+  Identity Center profile and cannot select deployment, recovery, release, or completed-dark modes.
+- `operate-staging-serverless-runtime-cutover.ps1` — Applies only the exact checksum-reviewed
+  three-create/six-update cutover plan, then delegates to the refresh-backed completed-runtime
+  verifier. It also creates separately reviewed rollback and restoration plans, requires zero
+  legacy/serverless queued or running work, keeps ECS idle and all rollback resources retained,
+  and blocks recovery cleanup until the restored Lambda runtime is accepted.
 - `operate-staging-legacy-temporal-drain.ps1` — Checksum-gated bridge for the three synthetic
   staging records created before serverless cutover. Planning binds their identifier-free aggregate
   digest to the exact idle ECS/API, immutable worker, disabled replacement triggers, empty queues,

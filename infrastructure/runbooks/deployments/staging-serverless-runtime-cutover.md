@@ -20,8 +20,8 @@ checksum.
   worker task. Stop that exact task afterward and prove every record terminal. Do not rewrite those
   records to `lambda_durable`. Follow the
   [staging legacy Temporal drain runbook](staging-legacy-temporal-drain.md).
-- Prove a fresh zero-pending outbox, zero open Temporal workflows, empty SQS/DLQ, seven healthy
-  replacement alarms, accepted aliases, and zero drift.
+- Prove a fresh zero-pending outbox, zero open Temporal and Lambda durable workflows, empty source
+  queue/DLQs, all ten gateway/workflow alarms healthy, accepted aliases, and zero drift.
 
 If any legacy work remains, stop. The guarded planner deliberately refuses to create a plan.
 
@@ -54,6 +54,17 @@ three workflow triggers must become enabled together.
 Review the sanitized summary and the full local plan. Do not share the plan because Terraform
 artifacts can contain sensitive infrastructure values. Authorization must quote its exact SHA-256.
 
+Inspect the independently enforced apply boundary without changing AWS:
+
+```powershell
+.\scripts\operate-staging-serverless-runtime-cutover.ps1 -Help
+```
+
+Use `-Action Status` against the saved plan before requesting authorization. Apply requires the
+exact staging account/state inputs, saved plan path, reviewed checksum, and `-Execute`. The operator
+revalidates the three creates/six updates, rechecks zero legacy work, applies only the saved plan,
+and immediately runs the completed-runtime zero-drift verifier. It never replans during apply.
+
 ## Apply and immediate acceptance
 
 Apply only the retained reviewed plan; never regenerate a plan inside an apply command. Immediately
@@ -72,16 +83,31 @@ verify:
    no new operation.
 7. A refresh-backed plan with the same exact inputs reports zero drift.
 
+Run the web conformance launcher with `-Environment staging -GatewayRuntime lambda-cutover`. This
+mode requires the retained ECS service to stay idle, validates exactly one retained ECS integration
+plus one Lambda proxy integration, enforces the two public health routes and JWT-protected default
+route, checks durable triggers and dispatch, performs public `200/200/401`, and points the local BFF
+directly at the deployed Lambda API. Complete authenticated persistence, cross-user isolation, and
+the fixed synthetic workload before accepting the cutover.
+
 Record plan/apply identifiers, checksum, immutable versions, aggregate test results, alarm/log
 evidence, queue counts, and drift evidence without retaining candidate data or secret values.
 
 ## Rollback boundary
 
-Rollback is another reviewed atomic plan. It must route the API default back to the retained ECS
-integration, disable all three replacement triggers, and restore gateway dispatch to `temporal`
-together. Never run both starters for the same outbox target.
+Rollback is another reviewed coupled plan. Before generating it, stop new writes and require every
+outbox record, source queue, both DLQs, durable execution, and Temporal workflow to be terminal. Use
+`PlanRollback` with `-ConfirmZeroTraffic`; review its separate checksum before `ApplyRollback`.
+The exact rollback deletes only the Lambda integration and two public health routes and performs
+six bounded updates that disable all replacement triggers, restore Temporal dispatch, and point
+the default route at retained ECS. It never deletes Lambda, queues, database, API, Cloud Map, ECS,
+or Temporal resources and never changes ECS capacity.
 
-Before rollback, stop new writes and reconcile every event created after cutover to a known terminal
-state. Resume the retained gateway and worker services only through the Terraform-owned rollback
-procedure, then prove health and task networking. The legacy resources remain until the acceptance
-window expires; deletion and Temporal credential revocation are later, separately reviewed work.
+Because both ECS services deliberately remain `0/0/0`, the public API is unavailable during this
+zero-traffic rollback drill. Run `VerifyRollback`, then perform the accepted direct-alias dark
+conformance. Only after that passes, use `PlanRestore -ConfirmRollbackConformance`, review the new
+restoration checksum, and run `ApplyRestore`. Repeat `lambda-cutover` public/authenticated/workload
+acceptance, then use `Cleanup -ConfirmRestoreConformance -Execute` to remove only ignored local
+plans/context. Resuming ECS would be a separate explicit capacity plan and is not part of this
+cost-preserving drill. Legacy-resource deletion and Temporal credential revocation remain later,
+separately reviewed work after the acceptance window expires.

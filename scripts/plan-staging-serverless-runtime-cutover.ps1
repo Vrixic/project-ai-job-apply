@@ -1,5 +1,7 @@
 [CmdletBinding()]
 param(
+  [ValidateSet("Plan", "Verify")]
+  [string]$Action = "Plan",
   [ValidatePattern("^[0-9]{12}$")][string]$ExpectedAccountId,
   [ValidatePattern("^[a-z0-9.-]+$")][string]$StateBucket,
   [ValidatePattern("^lambda/gateway/[a-f0-9]{40}/[a-f0-9]{64}/gateway-lambda[.]zip$")]
@@ -34,6 +36,7 @@ param(
 $ErrorActionPreference = "Stop"
 $planner = Join-Path $PSScriptRoot "plan-serverless-workflow-dark.ps1"
 if ($Help) {
+  Write-Host "Staging runtime cutover wrapper. Use -Action Plan before apply and -Action Verify after apply."
   & $planner -Help
   exit $LASTEXITCODE
 }
@@ -63,7 +66,12 @@ $arguments = @{
   PinnedExtensionLayerArn                = $PinnedExtensionLayerArn
   AwsProfile                             = $AwsProfile
   Region                                 = $Region
-  PlanRuntimeCutover                     = $true
+}
+
+if ($Action -eq "Plan") {
+  $arguments["PlanRuntimeCutover"] = $true
+} else {
+  $arguments["VerifyCompletedRuntimeCutover"] = $true
 }
 
 & $planner @arguments

@@ -40,6 +40,9 @@ const stagingWorkflowReleaseRollbackWrapper = read(
 );
 const workflowPlanner = read("scripts/plan-serverless-workflow-dark.ps1");
 const stagingRuntimeCutoverWrapper = read("scripts/plan-staging-serverless-runtime-cutover.ps1");
+const stagingRuntimeCutoverOperator = read(
+  "scripts/operate-staging-serverless-runtime-cutover.ps1",
+);
 const stagingLegacyTemporalDrain = read("scripts/operate-staging-legacy-temporal-drain.ps1");
 const gatewayConformanceLauncher = read("scripts/start-deployed-web-conformance.ps1");
 const gatewayBoundaryOperator = read("scripts/verify-gateway-lambda-boundary.ps1");
@@ -55,9 +58,28 @@ const requireText = (source, expected, message) => {
 
 requireText(
   gatewayConformanceLauncher,
-  '$expectedGatewayTaskCount = if ($GatewayRuntime -eq "lambda-dark") { 0 } else { 1 }',
-  "Dark gateway conformance must require the retained ECS service to remain idle.",
+  '$GatewayRuntime -in @("lambda-dark", "lambda-cutover")',
+  "Lambda gateway conformance must require the retained ECS service to remain idle.",
 );
+for (const expected of [
+  '[ValidateSet("ecs", "lambda-dark", "lambda-cutover")]',
+  'OUTBOX_DISPATCH_TARGET -cne "lambda_durable"',
+  'AuthorizationType -cne "JWT"',
+  "AuthorizerId -cne $lambdaAuthorizerId",
+  'IntegrationType -eq "HTTP_PROXY"',
+  'IntegrationType -eq "AWS_PROXY"',
+  'RouteKey -in @("GET /health/live", "GET /health/ready")',
+  'FunctionResponseTypes) -notcontains "ReportBatchItemFailures"',
+  '[string]$rule.State -cne "ENABLED"',
+  '"--services", "gateway", "workflow-worker"',
+  '"ecs", "list-tasks"',
+]) {
+  requireText(
+    gatewayConformanceLauncher,
+    expected,
+    `Deployed web conformance is missing the Lambda-cutover boundary: ${expected}`,
+  );
+}
 requireText(
   gatewayConformanceLauncher,
   '$canonicalBackendMetadataPath = Join-Path $canonicalTerraformDirectory ".terraform\\terraform.tfstate"',
@@ -323,6 +345,8 @@ for (const environment of environmentVariables) {
 
 for (const expected of [
   "PlanRuntimeCutover",
+  "VerifyCompletedRuntimeCutover",
+  "CompletedRuntimeCutoverVerification",
   '"serverless-runtime-cutover"',
   '"inspect-deployed-outbox.ps1"',
   "--require-zero-open-workflows",
@@ -337,6 +361,7 @@ for (const expected of [
   'authorization_type -ne "JWT"',
   "LegacyOutboxEmpty",
   "TemporalOpenWorkflowsEmpty",
+  "DurableOpenExecutionsEmpty",
 ]) {
   requireText(
     workflowPlanner,
@@ -369,8 +394,13 @@ requireText(
 );
 requireText(
   stagingRuntimeCutoverWrapper,
-  "PlanRuntimeCutover                     = $true",
-  "The staging cutover wrapper must select only the atomic cutover mode.",
+  '$arguments["PlanRuntimeCutover"] = $true',
+  "The staging cutover wrapper must expose the atomic cutover planning mode.",
+);
+requireText(
+  stagingRuntimeCutoverWrapper,
+  '$arguments["VerifyCompletedRuntimeCutover"] = $true',
+  "The staging cutover wrapper must expose the completed-cutover verification mode.",
 );
 requireText(
   stagingRuntimeCutoverWrapper,
@@ -416,6 +446,41 @@ requireText(
 assert.ok(
   !/\b[0-9]{12}\b/.test(stagingLegacyTemporalDrain),
   "The staging legacy-drain operator must not embed an AWS account ID.",
+);
+
+for (const expected of [
+  '"PlanRollback", "ApplyRollback", "VerifyRollback"',
+  '"PlanRestore", "ApplyRestore", "Cleanup"',
+  '"workflow-dark-plans"',
+  "ExpectedPlanSha256",
+  "Assert-CutoverPlan",
+  "The saved plan is outside the exact three-create, six-update staging cutover boundary.",
+  "Assert-ZeroLegacyWork",
+  '"inspect-deployed-outbox.ps1"',
+  "--require-zero-open-workflows",
+  'terraform "-chdir=$environmentDirectory" apply -input=false $Path',
+  '$arguments["VerifyCompletedRuntimeCutover"] = $true',
+  "Invoke-CompletedVerification",
+  "PublicConformanceRequired = $true",
+  "Assert-RollbackPlan",
+  "Assert-ZeroServerlessWork",
+  '"--statuses", "RUNNING"',
+  "New-TransitionPlan",
+  "Assert-ReviewedTransitionPlan",
+  'Schema = "applydash.staging.serverless-runtime-cutover.v1"',
+  "PublicApiAvailableAfterApply = $false",
+  "ConfirmRollbackConformance",
+  "ConfirmRestoreConformance",
+]) {
+  requireText(
+    stagingRuntimeCutoverOperator,
+    expected,
+    `The staging runtime-cutover operator is missing required boundary text: ${expected}`,
+  );
+}
+assert.ok(
+  !/\b[0-9]{12}\b/.test(stagingRuntimeCutoverOperator),
+  "The staging runtime-cutover operator must not embed an AWS account ID.",
 );
 
 for (const expected of [

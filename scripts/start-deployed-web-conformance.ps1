@@ -1,7 +1,7 @@
 param(
   [ValidateSet("development", "staging")]
   [string]$Environment = "development",
-  [ValidateSet("ecs", "lambda-dark")]
+  [ValidateSet("ecs", "lambda-dark", "lambda-cutover")]
   [string]$GatewayRuntime = "ecs",
   [string]$AwsProfile = "",
   [string]$AwsRegion = "us-east-2",
@@ -20,6 +20,7 @@ Usage:
   .\scripts\start-deployed-web-conformance.ps1 -GatewayRuntime lambda-dark
   .\scripts\start-deployed-web-conformance.ps1 -GatewayRuntime lambda-dark -BridgeSmokeTest
   .\scripts\start-deployed-web-conformance.ps1 -Environment staging -GatewayRuntime lambda-dark
+  .\scripts\start-deployed-web-conformance.ps1 -Environment staging -GatewayRuntime lambda-cutover
   .\scripts\start-deployed-web-conformance.ps1 -Environment staging
   .\scripts\start-deployed-web-conformance.ps1 -Environment staging -EnableWorkloadConformance
   .\scripts\start-deployed-web-conformance.ps1 -Environment staging -ValidateOnly
@@ -33,8 +34,9 @@ resolved gateway URL and tokens remain process-scoped and are never written or p
 Options:
   -Environment  Deployed environment: development or staging. Default: development
   -GatewayRuntime
-                Gateway under test: ecs or lambda-dark. lambda-dark supports development and
-                staging and does not change the public API route. Default: ecs
+                 Gateway under test: ecs, lambda-dark, or lambda-cutover. lambda-dark invokes the
+                 alias through a loopback bridge without changing traffic; lambda-cutover requires
+                 the public API and durable workflow triggers to be live. Default: ecs
   -AwsProfile   IAM Identity Center profile. Default: ai-job-apply-<environment>-admin
   -AwsRegion    AWS region. Default: us-east-2
   -EnableWorkloadConformance
@@ -321,7 +323,7 @@ try {
       -raw `
       ecs_cluster_arn 2>&1
     $clusterTerraformExitCode = $LASTEXITCODE
-    if ($GatewayRuntime -eq "lambda-dark") {
+    if ($GatewayRuntime -in @("lambda-dark", "lambda-cutover")) {
       $lambdaFunctionOutput = & terraform `
         "-chdir=$terraformDirectory" `
         output `
@@ -348,14 +350,14 @@ try {
     throw "The deployed outputs could not be resolved from encrypted $Environment state."
   }
   if (
-    $GatewayRuntime -eq "lambda-dark" -and
+    $GatewayRuntime -in @("lambda-dark", "lambda-cutover") -and
     (
       $lambdaFunctionTerraformExitCode -ne 0 -or
       $lambdaAliasTerraformExitCode -ne 0 -or
       $lambdaAuthorizerTerraformExitCode -ne 0
     )
   ) {
-    throw "The dark Lambda outputs could not be resolved from encrypted $Environment state."
+    throw "The Lambda outputs could not be resolved from encrypted $Environment state."
   }
   $gatewayUrl = [string]$gatewayOutput
   $clusterArn = [string]$clusterOutput
@@ -375,30 +377,48 @@ try {
     -Arguments @(
       "ecs", "describe-services",
       "--cluster", $clusterArn,
-      "--services", "gateway",
+      "--services", "gateway", "workflow-worker",
       "--profile", $AwsProfile,
       "--region", $AwsRegion,
       "--no-cli-pager",
       "--output", "json"
     ) `
-    -FailureMessage "The deployed gateway service could not be inspected."
-  if (@($service.failures).Count -ne 0 -or @($service.services).Count -ne 1) {
-    throw "The deployed gateway service is unavailable."
+    -FailureMessage "The retained gateway and workflow services could not be inspected."
+  if (@($service.failures).Count -ne 0 -or @($service.services).Count -ne 2) {
+    throw "The retained gateway and workflow services are unavailable."
   }
-  $gatewayService = @($service.services)[0]
-  $primaryDeployments = @(
-    @($gatewayService.deployments) | Where-Object { $_.status -eq "PRIMARY" }
-  )
-  $expectedGatewayTaskCount = if ($GatewayRuntime -eq "lambda-dark") { 0 } else { 1 }
+  $gatewayServices = @(@($service.services) | Where-Object { $_.serviceName -eq "gateway" })
+  $workerServices = @(@($service.services) | Where-Object { $_.serviceName -eq "workflow-worker" })
+  if ($gatewayServices.Count -ne 1 -or $workerServices.Count -ne 1) {
+    throw "The retained gateway and workflow services are not singular."
+  }
+  $gatewayService = $gatewayServices[0]
+  $retainedServices = @($gatewayService, $workerServices[0])
+  $expectedServiceTaskCount = if ($GatewayRuntime -in @("lambda-dark", "lambda-cutover")) {
+    0
+  } else { 1 }
+  $invalidServices = @($retainedServices | Where-Object {
+    $primary = @($_.deployments | Where-Object { $_.status -eq "PRIMARY" })
+    $_.status -ne "ACTIVE" -or
+    [int]$_.desiredCount -ne $expectedServiceTaskCount -or
+    [int]$_.runningCount -ne $expectedServiceTaskCount -or
+    [int]$_.pendingCount -ne 0 -or
+    $primary.Count -ne 1 -or $primary[0].rolloutState -ne "COMPLETED"
+  })
+  if ($invalidServices.Count -ne 0) {
+    throw "The retained gateway and workflow services are not at the approved stable or idle posture."
+  }
+  $runningTasks = Invoke-AwsJson `
+    -Arguments @(
+      "ecs", "list-tasks", "--cluster", $clusterArn, "--desired-status", "RUNNING",
+      "--profile", $AwsProfile, "--region", $AwsRegion, "--no-cli-pager", "--output", "json"
+    ) `
+    -FailureMessage "The retained ECS running-task inventory could not be inspected."
   if (
-    $gatewayService.status -ne "ACTIVE" -or
-    [int]$gatewayService.desiredCount -ne $expectedGatewayTaskCount -or
-    [int]$gatewayService.runningCount -ne $expectedGatewayTaskCount -or
-    [int]$gatewayService.pendingCount -ne 0 -or
-    $primaryDeployments.Count -ne 1 -or
-    $primaryDeployments[0].rolloutState -ne "COMPLETED"
+    $GatewayRuntime -in @("lambda-dark", "lambda-cutover") -and
+    @($runningTasks.taskArns).Count -ne 0
   ) {
-    throw "The deployed gateway service is not at the approved lean stable or idle state."
+    throw "The retained idle ECS cluster still contains a running task."
   }
 
   $taskDefinition = Invoke-AwsJson `
@@ -430,7 +450,7 @@ try {
   }
 
   $lambdaAliasVersion = $null
-  if ($GatewayRuntime -eq "lambda-dark") {
+  if ($GatewayRuntime -in @("lambda-dark", "lambda-cutover")) {
     $lambdaFunctionName = ([string]$lambdaFunctionOutput).Trim()
     $lambdaAliasArn = ([string]$lambdaAliasOutput).Trim()
     $lambdaAuthorizerId = ([string]$lambdaAuthorizerOutput).Trim()
@@ -439,7 +459,7 @@ try {
       $lambdaAliasArn -notmatch ":function:$([regex]::Escape($expectedLambdaFunctionName)):$([regex]::Escape($Environment))$" -or
       [string]::IsNullOrWhiteSpace($lambdaAuthorizerId)
     ) {
-      throw "The dark Lambda outputs are outside the exact $Environment boundary."
+      throw "The Lambda outputs are outside the exact $Environment boundary."
     }
 
     $lambdaAlias = Invoke-AwsJson `
@@ -452,7 +472,7 @@ try {
         "--no-cli-pager",
         "--output", "json"
       ) `
-      -FailureMessage "The $Environment dark Lambda alias could not be inspected."
+      -FailureMessage "The $Environment Lambda alias could not be inspected."
     $lambdaAliasVersion = [string]$lambdaAlias.FunctionVersion
     if ($lambdaAliasVersion -notmatch "^[1-9][0-9]*$") {
       throw "The $Environment alias does not target an immutable Lambda version."
@@ -468,16 +488,24 @@ try {
         "--no-cli-pager",
         "--output", "json"
       ) `
-      -FailureMessage "The $Environment dark Lambda configuration could not be inspected."
+      -FailureMessage "The $Environment Lambda configuration could not be inspected."
     $lambdaEnvironment = $lambdaConfiguration.Environment.Variables
     if (
       $lambdaConfiguration.State -ne "Active" -or
       $lambdaConfiguration.LastUpdateStatus -ne "Successful" -or
       [string]$lambdaConfiguration.Version -cne $lambdaAliasVersion -or
       [string]$lambdaEnvironment.OIDC_ISSUER -cne $expectedIssuer -or
-      [string]$lambdaEnvironment.OIDC_AUDIENCE -cne $auth0Audience
+      [string]$lambdaEnvironment.OIDC_AUDIENCE -cne $auth0Audience -or
+      (
+        $GatewayRuntime -eq "lambda-cutover" -and
+        [string]$lambdaEnvironment.OUTBOX_DISPATCH_TARGET -cne "lambda_durable"
+      ) -or
+      (
+        $GatewayRuntime -eq "lambda-dark" -and
+        [string]$lambdaEnvironment.OUTBOX_DISPATCH_TARGET -cne "temporal"
+      )
     ) {
-      throw "The $Environment dark Lambda is not active on the reviewed identity boundary."
+      throw "The $Environment Lambda is not active on the reviewed identity and dispatch boundary."
     }
 
     $lambdaConcurrency = Invoke-AwsJson `
@@ -489,9 +517,9 @@ try {
         "--no-cli-pager",
         "--output", "json"
       ) `
-      -FailureMessage "The $Environment dark Lambda concurrency could not be inspected."
+      -FailureMessage "The $Environment Lambda concurrency could not be inspected."
     if ([int]$lambdaConcurrency.ReservedConcurrentExecutions -ne 2) {
-      throw "The $Environment dark Lambda is outside the reviewed concurrency ceiling."
+      throw "The $Environment Lambda is outside the reviewed concurrency ceiling."
     }
 
     $apiId = $parsedGateway.Host.Split(".")[0]
@@ -509,28 +537,103 @@ try {
       ) `
       -FailureMessage "The $Environment API routes could not be inspected."
     $routeItems = @($routes.Items)
-    if (
-      $routeItems.Count -ne 1 -or
-      [string]$routeItems[0].RouteKey -cne '$default' -or
-      [string]$routeItems[0].AuthorizationType -cne "NONE" -or
-      [string]$routeItems[0].Target -notmatch "^integrations/(?<integration>[A-Za-z0-9]+)$"
-    ) {
-      throw "The $Environment public API route changed from the approved ECS rollback path."
-    }
-    $integrationId = $Matches["integration"]
-    $integration = Invoke-AwsJson `
+    $integrations = Invoke-AwsJson `
       -Arguments @(
-        "apigatewayv2", "get-integration",
+        "apigatewayv2", "get-integrations",
         "--api-id", $apiId,
-        "--integration-id", $integrationId,
         "--profile", $AwsProfile,
         "--region", $AwsRegion,
         "--no-cli-pager",
         "--output", "json"
       ) `
-      -FailureMessage "The $Environment public API integration could not be inspected."
-    if ([string]$integration.IntegrationType -cne "HTTP_PROXY") {
-      throw "The $Environment public API no longer targets the approved ECS HTTP proxy."
+      -FailureMessage "The $Environment public API integrations could not be inspected."
+    $integrationItems = @($integrations.Items)
+    $ecsIntegrations = @(
+      $integrationItems | Where-Object {
+        [string]$_.IntegrationType -eq "HTTP_PROXY" -and
+        [string]$_.IntegrationUri -match "^arn:aws:servicediscovery:"
+      }
+    )
+    if ($ecsIntegrations.Count -ne 1) {
+      throw "The $Environment retained ECS rollback integration is not singular."
+    }
+    if ($GatewayRuntime -eq "lambda-dark") {
+      if (
+        $routeItems.Count -ne 1 -or $integrationItems.Count -ne 1 -or
+        [string]$routeItems[0].RouteKey -cne '$default' -or
+        [string]$routeItems[0].AuthorizationType -cne "NONE" -or
+        [string]$routeItems[0].Target -cne
+          "integrations/$([string]$ecsIntegrations[0].IntegrationId)"
+      ) {
+        throw "The $Environment public API route changed from the approved ECS rollback path."
+      }
+    } else {
+      $lambdaIntegrations = @(
+        $integrationItems | Where-Object { [string]$_.IntegrationType -eq "AWS_PROXY" }
+      )
+      if ($lambdaIntegrations.Count -ne 1 -or $integrationItems.Count -ne 2) {
+        throw "The $Environment cutover does not retain exactly one ECS and one Lambda integration."
+      }
+      $lambdaIntegration = $lambdaIntegrations[0]
+      $expectedLambdaInvokeArn = "arn:aws:apigateway:$AwsRegion`:lambda:path/2015-03-31/functions/$lambdaAliasArn/invocations"
+      if (
+        [string]$lambdaIntegration.IntegrationMethod -cne "POST" -or
+        [string]$lambdaIntegration.PayloadFormatVersion -cne "2.0" -or
+        [int]$lambdaIntegration.TimeoutInMillis -ne 15000 -or
+        [string]$lambdaIntegration.IntegrationUri -cne $expectedLambdaInvokeArn
+      ) {
+        throw "The $Environment Lambda proxy integration is outside the reviewed alias boundary."
+      }
+      $lambdaTarget = "integrations/$([string]$lambdaIntegration.IntegrationId)"
+      $defaultRoutes = @($routeItems | Where-Object { [string]$_.RouteKey -eq '$default' })
+      $healthRoutes = @($routeItems | Where-Object {
+        [string]$_.RouteKey -in @("GET /health/live", "GET /health/ready")
+      })
+      if (
+        $routeItems.Count -ne 3 -or $defaultRoutes.Count -ne 1 -or
+        $healthRoutes.Count -ne 2 -or
+        [string]$defaultRoutes[0].AuthorizationType -cne "JWT" -or
+        [string]$defaultRoutes[0].AuthorizerId -cne $lambdaAuthorizerId -or
+        [string]$defaultRoutes[0].Target -cne $lambdaTarget -or
+        @($healthRoutes | Where-Object {
+          [string]$_.AuthorizationType -eq "NONE" -and [string]$_.Target -eq $lambdaTarget
+        }).Count -ne 2
+      ) {
+        throw "The $Environment cutover does not have exactly two public health routes and one JWT-protected Lambda default route."
+      }
+
+      $starterMappings = Invoke-AwsJson `
+        -Arguments @(
+          "lambda", "list-event-source-mappings",
+          "--function-name", "ai-job-apply-$Environment-outbox-starter:$Environment",
+          "--profile", $AwsProfile,
+          "--region", $AwsRegion,
+          "--no-cli-pager",
+          "--output", "json"
+        ) `
+        -FailureMessage "The $Environment starter mapping could not be inspected."
+      $mappingItems = @($starterMappings.EventSourceMappings)
+      if (
+        $mappingItems.Count -ne 1 -or [string]$mappingItems[0].State -cne "Enabled" -or
+        @($mappingItems[0].FunctionResponseTypes) -notcontains "ReportBatchItemFailures"
+      ) {
+        throw "The $Environment starter mapping is not enabled with partial-batch handling."
+      }
+      foreach ($ruleName in @(
+        "ai-job-apply-$Environment-outbox-reconciler",
+        "ai-job-apply-$Environment-profile-readiness-terminal"
+      )) {
+        $rule = Invoke-AwsJson `
+          -Arguments @(
+            "events", "describe-rule", "--name", $ruleName,
+            "--profile", $AwsProfile, "--region", $AwsRegion,
+            "--no-cli-pager", "--output", "json"
+          ) `
+          -FailureMessage "A $Environment durable workflow rule could not be inspected."
+        if ([string]$rule.State -cne "ENABLED") {
+          throw "A $Environment durable workflow rule is not enabled after cutover."
+        }
+      }
     }
 
     $authorizer = Invoke-AwsJson `
@@ -543,7 +646,7 @@ try {
         "--no-cli-pager",
         "--output", "json"
       ) `
-      -FailureMessage "The $Environment dark JWT authorizer could not be inspected."
+      -FailureMessage "The $Environment JWT authorizer could not be inspected."
     if (
       [string]$authorizer.AuthorizerType -cne "JWT" -or
       @($authorizer.IdentitySource).Count -ne 1 -or
@@ -552,11 +655,11 @@ try {
       @($authorizer.JwtConfiguration.Audience).Count -ne 1 -or
       [string]@($authorizer.JwtConfiguration.Audience)[0] -cne $auth0Audience
     ) {
-      throw "The $Environment dark JWT authorizer does not match the reviewed Auth0 boundary."
+      throw "The $Environment JWT authorizer does not match the reviewed Auth0 boundary."
     }
   }
 
-  if ($GatewayRuntime -eq "ecs") {
+  if ($GatewayRuntime -in @("ecs", "lambda-cutover")) {
     $liveStatus = Get-HttpStatus -Uri ([Uri]::new($parsedGateway, "/health/live"))
     $readyStatus = Get-HttpStatus -Uri ([Uri]::new($parsedGateway, "/health/ready"))
     $protectedStatus = Get-HttpStatus -Uri ([Uri]::new($parsedGateway, "/v1/me"))
@@ -567,6 +670,8 @@ try {
 
   $runtimeLabel = if ($GatewayRuntime -eq "lambda-dark") {
     "dark Lambda alias, JWT authorizer, and unchanged idle ECS rollback route"
+  } elseif ($GatewayRuntime -eq "lambda-cutover") {
+    "public Lambda alias, JWT-protected default route, durable workflow triggers, and idle ECS rollback resources"
   } else {
     "ECS gateway"
   }
@@ -662,6 +767,8 @@ try {
   if ($GatewayRuntime -eq "lambda-dark") {
     Write-Host "Its server-held BFF targets the loopback-guarded immutable $Environment Lambda alias."
     Write-Host "The public API remains on the idle ECS rollback route. Press Ctrl+C to stop both local processes."
+  } elseif ($GatewayRuntime -eq "lambda-cutover") {
+    Write-Host "Its server-held BFF targets the deployed $Environment Lambda API. Press Ctrl+C to stop."
   } else {
     Write-Host "Its server-held BFF targets the deployed $Environment ECS gateway. Press Ctrl+C to stop."
   }

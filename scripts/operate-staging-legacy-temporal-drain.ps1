@@ -182,7 +182,9 @@ function Get-OutboxInspection {
   }
   return [ordered]@{
     PendingCount = [int]$inspection.pendingCount
-    MaxAttempts = [int]$inspection.maxAttempts
+    MaxAttempts = if ($null -eq $inspection.maximumAttempts) {
+      0
+    } else { [int]$inspection.maximumAttempts }
     OrderedEventIdSha256 = [string]$inspection.orderedEventIdSha256
   }
 }
