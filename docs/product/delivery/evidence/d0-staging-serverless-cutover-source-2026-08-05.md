@@ -33,6 +33,10 @@ this source-only step.
 - Corrected the legacy-drain operator to consume the deployed version-one inspector's
   `maximumAttempts` field. The earlier read-only probe failed before worker execution, context
   creation, or record mutation.
+- Removed a false cutover dependency from the terminal-recovery DLQ policy. The exact terminal-rule
+  ARN is now derived from stable account, region, and owned-name inputs, so enabling that rule does
+  not make its unchanged least-privilege queue policy unknown at plan time. The planner retains its
+  exact three-create/six-update allowlist instead of accepting an unnecessary seventh update.
 
 ## Local verification
 
@@ -44,17 +48,15 @@ this source-only step.
 
 ## Remaining live gates
 
-1. Merge this source boundary and regenerate from exact `main`.
-2. Drain the three accepted synthetic legacy `temporal` outbox records using one bounded retained
-   worker task; stop it and prove zero pending records plus zero open Temporal workflows.
-3. Generate and inspect the fresh staging cutover plan. Explicit product-owner authorization must
+1. Merge the plan-stability correction and regenerate from exact `main`.
+2. Generate and inspect the fresh staging cutover plan. Explicit product-owner authorization must
    quote its exact checksum before apply.
-4. Apply only that plan through the checksum-gated operator and run authenticated persistence,
+3. Apply only that plan through the checksum-gated operator and run authenticated persistence,
    cross-user isolation, durable completion, queue/DLQ, alarm/log privacy,
    idle-ECS/no-new-Temporal, workload, and zero-drift acceptance.
-5. Execute the separately checksum-reviewed rollback and restoration drill while traffic remains
+4. Execute the separately checksum-reviewed rollback and restoration drill while traffic remains
    zero, then repeat replacement acceptance and clean only the ignored local recovery artifacts.
-6. Retain the old integration and ECS/Temporal resources until the rollback window expires.
+5. Retain the old integration and ECS/Temporal resources until the rollback window expires.
 
 SR-005 and SR-006 remain in progress. This evidence is source implementation, not deployment or
 cutover acceptance.
