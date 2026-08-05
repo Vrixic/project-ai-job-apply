@@ -249,6 +249,14 @@ requireText(
 );
 requireText(
   platform,
+  "authorization_scopes = var.serverless_runtime_cutover ? [",
+  "The protected default route must acquire the exact platform scopes during cutover.",
+);
+for (const scope of ['"profile:read"', '"profile:write"']) {
+  requireText(platform, scope, `The API Gateway JWT boundary is missing ${scope}.`);
+}
+requireText(
+  platform,
   'OUTBOX_DISPATCH_TARGET = var.serverless_runtime_cutover ? "lambda_durable" : "temporal"',
   "New-event dispatch must move with the API and trigger cutover.",
 );
@@ -370,6 +378,7 @@ for (const environment of environmentVariables) {
 
 for (const expected of [
   "AllowGatewayArtifactReleaseUpdate",
+  "AllowGatewayScopeBoundaryUpdate",
   "PlanRuntimeCutover",
   "VerifyCompletedRuntimeCutover",
   "CompletedRuntimeCutoverVerification",
@@ -389,6 +398,8 @@ for (const expected of [
   "TemporalOpenWorkflowsEmpty",
   "DurableOpenExecutionsEmpty",
   "GatewayArtifactReleaseUpdate",
+  "GatewayScopeBoundaryUpdate",
+  '"profile:read", "profile:write"',
 ]) {
   requireText(
     workflowPlanner,
@@ -431,6 +442,11 @@ requireText(
 );
 requireText(
   stagingRuntimeCutoverWrapper,
+  '$arguments["AllowGatewayScopeBoundaryUpdate"] = $true',
+  "The staging runtime wrapper must expose the exact JWT route-scope correction mode.",
+);
+requireText(
+  stagingRuntimeCutoverWrapper,
   '$arguments["VerifyCompletedRuntimeCutover"] = $true',
   "The staging cutover wrapper must expose the completed-cutover verification mode.",
 );
@@ -442,7 +458,12 @@ requireText(
 
 for (const expected of [
   '[ValidateSet("Status", "Apply")]',
-  '"gateway-runtime-release-$($sourceCommit.Substring(0, 8))"',
+  '"$expectedPlanPrefix-$($sourceCommit.Substring(0, 8))"',
+  '"gateway-runtime-release"',
+  '"gateway-scope-boundary"',
+  "Assert-GatewayScopeBoundaryPlan",
+  '@("authorization_scopes")',
+  '@("profile:read", "profile:write")',
   '"module.platform.aws_lambda_alias.gateway[0]"',
   '"module.platform.aws_lambda_function.gateway[0]"',
   'OUTBOX_DISPATCH_TARGET -ne "lambda_durable"',
