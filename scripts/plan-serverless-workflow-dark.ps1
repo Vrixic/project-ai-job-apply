@@ -38,6 +38,7 @@ param(
   [switch]$AllowArtifactReleaseUpdate,
   [switch]$VerifyCompletedDarkDeployment,
   [switch]$PlanRuntimeCutover,
+  [switch]$VerifyCompletedRuntimeCutover,
   [switch]$Help
 )
 
@@ -58,6 +59,9 @@ stack, and policy-propagation updates caused by three new reviewed immutable art
 Use -PlanRuntimeCutover only after the accepted dark boundary and legacy outbox are clean. It
 permits the coupled API Lambda integration/routes, gateway Lambda durable-dispatch version, and
 three replacement-trigger transitions while retaining idle ECS and the legacy rollback resources.
+Use -VerifyCompletedRuntimeCutover after applying that exact plan to require a refresh-backed
+zero-change plan while rechecking the live Lambda API, durable dispatch, enabled triggers, empty
+work queues, empty legacy outbox, zero open Temporal workflows, and idle ECS rollback boundary.
 
 The sensitive plan remains below the ignored Terraform .terraform directory. This script rejects
 every action outside its exact initial or partial-recovery boundary and never applies
@@ -87,10 +91,11 @@ if ($Region -ne "us-east-2") {
   throw "The Phase 0 $Environment environment is restricted to us-east-2."
 }
 if (@($RecoverFailedApply, $AllowArtifactReleaseUpdate, $VerifyCompletedDarkDeployment,
-    $PlanRuntimeCutover |
+    $PlanRuntimeCutover, $VerifyCompletedRuntimeCutover |
     Where-Object { $_ }).Count -gt 1) {
-  throw "Recovery, artifact release, completed-dark verification, and cutover planning are mutually exclusive."
+  throw "Recovery, artifact release, completed-dark verification, cutover planning, and completed-cutover verification are mutually exclusive."
 }
+$runtimeCutoverActive = [bool]($PlanRuntimeCutover -or $VerifyCompletedRuntimeCutover)
 
 function Assert-ArtifactKey {
   param(
@@ -119,6 +124,8 @@ $planDirectory = Join-Path $environmentDirectory ".terraform/workflow-dark-plans
 $sourceCommit = (& git -C $repositoryRoot rev-parse HEAD).Trim()
 $planPrefix = if ($PlanRuntimeCutover) {
   "serverless-runtime-cutover"
+} elseif ($VerifyCompletedRuntimeCutover) {
+  "serverless-runtime-cutover-verify"
 } elseif ($VerifyCompletedDarkDeployment) {
   "workflow-dark-verify"
 } elseif ($AllowArtifactReleaseUpdate) {
@@ -238,7 +245,8 @@ if (
   -not $RecoverFailedApply -and
   -not $AllowArtifactReleaseUpdate -and
   -not $VerifyCompletedDarkDeployment -and
-  -not $PlanRuntimeCutover
+  -not $PlanRuntimeCutover -and
+  -not $VerifyCompletedRuntimeCutover
 ) {
 try {
   $baselineRaw = & (Join-Path $PSScriptRoot "plan-gateway-lambda-dark.ps1") `
@@ -391,7 +399,8 @@ try {
 
   if (
     $RecoverFailedApply -or $AllowArtifactReleaseUpdate -or
-    $VerifyCompletedDarkDeployment -or $PlanRuntimeCutover
+    $VerifyCompletedDarkDeployment -or $PlanRuntimeCutover -or
+    $VerifyCompletedRuntimeCutover
   ) {
     $baselinePlan = [pscustomobject]@{
       state_resources = @(
@@ -452,7 +461,7 @@ try {
     throw "The pinned Secrets extension is not the reviewed x86_64 regional layer."
   }
 
-  if ($AllowArtifactReleaseUpdate -or $PlanRuntimeCutover) {
+  if ($AllowArtifactReleaseUpdate -or $runtimeCutoverActive) {
     $releaseFunctions = @(
       @("$resourcePrefix-outbox-starter", 1, $WorkflowIngressArtifactBase64Sha256, $true),
       @("$resourcePrefix-outbox-reconciler", 1, $WorkflowIngressArtifactBase64Sha256, $true),
@@ -516,7 +525,7 @@ try {
         [string]$latest.Runtime -ne "nodejs24.x" -or
         ($AllowArtifactReleaseUpdate -and
           [string]$latest.CodeSha256 -eq [string]$releaseFunction[2]) -or
-        ($PlanRuntimeCutover -and
+        ($runtimeCutoverActive -and
           [string]$latest.CodeSha256 -ne [string]$releaseFunction[2]) -or
         [string]$latest.CodeSha256 -ne [string]$aliased.CodeSha256 -or
         [string]$alias.FunctionVersion -notmatch "^[1-9][0-9]*$" -or
@@ -543,11 +552,12 @@ try {
     )
     $mapping = Get-OnlyItem @($mappings.EventSourceMappings) `
       "The exact starter mapping is not singular."
+    $expectedLiveMappingState = if ($VerifyCompletedRuntimeCutover) { "Enabled" } else { "Disabled" }
     if (
-      [string]$mapping.State -ne "Disabled" -or
+      [string]$mapping.State -ne $expectedLiveMappingState -or
       @($mapping.FunctionResponseTypes) -notcontains "ReportBatchItemFailures"
     ) {
-      throw "The starter mapping is enabled or lacks partial-batch handling."
+      throw "The starter mapping does not match the reviewed live runtime or partial-batch boundary."
     }
 
     foreach ($ruleName in @(
@@ -557,8 +567,9 @@ try {
       $rule = Invoke-AwsJson @(
         "events", "describe-rule", "--name", $ruleName, "--output", "json"
       )
-      if ([string]$rule.State -ne "DISABLED") {
-        throw "A workflow EventBridge rule is enabled before the dark release."
+      $expectedLiveRuleState = if ($VerifyCompletedRuntimeCutover) { "ENABLED" } else { "DISABLED" }
+      if ([string]$rule.State -ne $expectedLiveRuleState) {
+        throw "A workflow EventBridge rule does not match the reviewed live runtime."
       }
     }
 
@@ -620,13 +631,50 @@ try {
     $integrations = Invoke-AwsJson @(
       "apigatewayv2", "get-integrations", "--api-id", ([string]$api.ApiId), "--output", "json"
     )
-    $integration = Get-OnlyItem @($integrations.Items) `
-      "The $Environment API integration is not singular before the dark release."
-    if (
-      [string]$integration.IntegrationType -ne "HTTP_PROXY" -or
-      [string]$integration.IntegrationUri -notmatch "^arn:aws:servicediscovery:"
-    ) {
-      throw "Public API traffic is no longer on the accepted Cloud Map/ECS rollback path."
+    $integrationItems = @($integrations.Items)
+    $ecsIntegration = Get-OnlyItem @(
+      $integrationItems | Where-Object {
+        [string]$_.IntegrationType -eq "HTTP_PROXY" -and
+        [string]$_.IntegrationUri -match "^arn:aws:servicediscovery:"
+      }
+    ) "The retained ECS rollback integration is not singular."
+    if ($VerifyCompletedRuntimeCutover) {
+      $lambdaIntegration = Get-OnlyItem @(
+        $integrationItems | Where-Object { [string]$_.IntegrationType -eq "AWS_PROXY" }
+      ) "The active Lambda integration is not singular after cutover."
+      if (
+        $integrationItems.Count -ne 2 -or
+        [string]$lambdaIntegration.IntegrationMethod -ne "POST" -or
+        [string]$lambdaIntegration.PayloadFormatVersion -ne "2.0" -or
+        [int]$lambdaIntegration.TimeoutInMillis -ne 15000
+      ) {
+        throw "The completed API cutover is outside the exact retained-ECS plus Lambda integration boundary."
+      }
+      $routes = Invoke-AwsJson @(
+        "apigatewayv2", "get-routes", "--api-id", ([string]$api.ApiId), "--output", "json"
+      )
+      $routeItems = @($routes.Items)
+      $defaultRoute = Get-OnlyItem @(
+        $routeItems | Where-Object { [string]$_.RouteKey -eq '$default' }
+      ) "The completed API cutover does not have one default route."
+      $publicRoutes = @(
+        $routeItems | Where-Object {
+          [string]$_.RouteKey -in @("GET /health/live", "GET /health/ready")
+        }
+      )
+      $lambdaTarget = "integrations/$([string]$lambdaIntegration.IntegrationId)"
+      if (
+        $routeItems.Count -ne 3 -or $publicRoutes.Count -ne 2 -or
+        [string]$defaultRoute.AuthorizationType -ne "JWT" -or
+        [string]$defaultRoute.Target -ne $lambdaTarget -or
+        @($publicRoutes | Where-Object {
+          [string]$_.AuthorizationType -eq "NONE" -and [string]$_.Target -eq $lambdaTarget
+        }).Count -ne 2
+      ) {
+        throw "The completed API cutover does not expose exactly two public health routes and one JWT-protected Lambda default route."
+      }
+    } elseif ($integrationItems.Count -ne 1) {
+      throw "The pre-cutover API integration boundary is not singular."
     }
 
     $serviceResult = Invoke-AwsJson @(
@@ -639,12 +687,13 @@ try {
     $servicePostures = @($serviceResult.services | ForEach-Object {
       "$([int]$_.desiredCount)/$([int]$_.runningCount)/$([int]$_.pendingCount)"
     })
-    if (
-      -not (
-        @($servicePostures | Where-Object { $_ -eq "1/1/0" }).Count -eq 2 -or
-        @($servicePostures | Where-Object { $_ -eq "0/0/0" }).Count -eq 2
-      )
-    ) {
+    $servicesAtExpectedCapacity = if ($VerifyCompletedRuntimeCutover) {
+      @($servicePostures | Where-Object { $_ -eq "0/0/0" }).Count -eq 2
+    } else {
+      @($servicePostures | Where-Object { $_ -eq "1/1/0" }).Count -eq 2 -or
+      @($servicePostures | Where-Object { $_ -eq "0/0/0" }).Count -eq 2
+    }
+    if (-not $servicesAtExpectedCapacity) {
       throw "The retained ECS rollback services are not uniformly continuous or idle."
     }
     foreach ($service in @($serviceResult.services)) {
@@ -663,8 +712,9 @@ try {
       "lambda", "get-function-configuration", "--function-name",
       "$resourcePrefix-gateway", "--qualifier", $Environment, "--output", "json"
     )
-    if ([string]$gatewayAlias.Environment.Variables.OUTBOX_DISPATCH_TARGET -ne "temporal") {
-      throw "The $Environment gateway no longer dispatches through the accepted Temporal path."
+    $expectedLiveDispatch = if ($VerifyCompletedRuntimeCutover) { "lambda_durable" } else { "temporal" }
+    if ([string]$gatewayAlias.Environment.Variables.OUTBOX_DISPATCH_TARGET -ne $expectedLiveDispatch) {
+      throw "The $Environment gateway does not use the reviewed live dispatch target."
     }
   }
 
@@ -711,7 +761,7 @@ try {
   $gatewayEnvironment = Get-ContainerEnvironment $gatewayContainer
   $workerEnvironment = Get-ContainerEnvironment $workerContainer
 
-  if ($PlanRuntimeCutover) {
+  if ($runtimeCutoverActive) {
     $inspectionRaw = & (Join-Path $PSScriptRoot "inspect-deployed-outbox.ps1") `
       -Environment $Environment -AwsProfile $AwsProfile -Region $Region -Execute
     if ($LASTEXITCODE -ne 0) {
@@ -782,7 +832,7 @@ try {
   $env:TF_VAR_gateway_lambda_artifact_base64sha256 = [string]$gatewayLambda.source_code_hash
   $env:TF_VAR_gateway_lambda_extension_layer_arn = $PinnedExtensionLayerArn
   $env:TF_VAR_gateway_lambda_reserved_concurrency = [string]$gatewayLambda.reserved_concurrent_executions
-  $env:TF_VAR_serverless_runtime_cutover = $PlanRuntimeCutover.ToString().ToLowerInvariant()
+  $env:TF_VAR_serverless_runtime_cutover = $runtimeCutoverActive.ToString().ToLowerInvariant()
   $env:TF_VAR_deploy_serverless_outbox = "true"
   $env:TF_VAR_workflow_ingress_artifact_s3_key = $WorkflowIngressArtifactS3Key
   $env:TF_VAR_workflow_ingress_artifact_s3_object_version = $WorkflowIngressArtifactS3ObjectVersion
@@ -802,10 +852,13 @@ try {
 
   $planOutput = & terraform "-chdir=$environmentDirectory" plan -input=false `
     -lock-timeout=5m -detailed-exitcode "-out=$planPath" 2>&1
-  $expectedPlanExitCode = if ($VerifyCompletedDarkDeployment) { 0 } else { 2 }
+  $zeroDriftVerification = [bool](
+    $VerifyCompletedDarkDeployment -or $VerifyCompletedRuntimeCutover
+  )
+  $expectedPlanExitCode = if ($zeroDriftVerification) { 0 } else { 2 }
   if ($LASTEXITCODE -ne $expectedPlanExitCode) {
     $diagnostic = (@($planOutput) | Select-Object -Last 12) -join " "
-    $expectedResult = if ($VerifyCompletedDarkDeployment) { "zero-change" } else { "change-only" }
+    $expectedResult = if ($zeroDriftVerification) { "zero-change" } else { "change-only" }
     throw "The dark workflow plan did not produce a $expectedResult result: $diagnostic"
   }
   $plan = & terraform "-chdir=$environmentDirectory" show -json $planPath 2>$null |
@@ -817,8 +870,8 @@ try {
     }
   )
 
-  if ($VerifyCompletedDarkDeployment -and $changes.Count -ne 0) {
-    throw "The completed workflow dark-deployment plan is not zero-change."
+  if ($zeroDriftVerification -and $changes.Count -ne 0) {
+    throw "The completed workflow deployment plan is not zero-change."
   }
 
   $initialExpectedCreates = @(
@@ -922,7 +975,10 @@ try {
       $cutoverExpectedCreates
     } elseif ($RecoverFailedApply) {
       $recoveryExpectedCreates
-    } elseif (-not ($AllowArtifactReleaseUpdate -or $VerifyCompletedDarkDeployment)) {
+    } elseif (-not (
+      $AllowArtifactReleaseUpdate -or $VerifyCompletedDarkDeployment -or
+      $VerifyCompletedRuntimeCutover
+    )) {
       $initialExpectedCreates
     }
   )
@@ -931,7 +987,10 @@ try {
       $cutoverExpectedUpdates
     } elseif ($AllowArtifactReleaseUpdate) {
       $releaseExpectedUpdates
-    } elseif (-not ($VerifyCompletedDarkDeployment -or $RecoverFailedApply)) {
+    } elseif (-not (
+      $VerifyCompletedDarkDeployment -or $VerifyCompletedRuntimeCutover -or
+      $RecoverFailedApply
+    )) {
       $initialExpectedUpdates
     }
   )
@@ -1028,7 +1087,8 @@ try {
     -not $RecoverFailedApply -and
     -not $AllowArtifactReleaseUpdate -and
     -not $VerifyCompletedDarkDeployment -and
-    -not $PlanRuntimeCutover
+    -not $PlanRuntimeCutover -and
+    -not $VerifyCompletedRuntimeCutover
   ) {
   $gatewayFunctionChange = Get-PlannedChange "module.platform.aws_lambda_function.gateway[0]"
   Assert-OnlyPropertiesChanged $gatewayFunctionChange @(
@@ -1285,7 +1345,7 @@ try {
 
   $starterMapping = Get-PlannedValue `
     "module.platform.aws_lambda_event_source_mapping.outbox_starter[0]"
-  $expectedTriggerEnabled = [bool]$PlanRuntimeCutover
+  $expectedTriggerEnabled = $runtimeCutoverActive
   if (
     [bool]$starterMapping.enabled -ne $expectedTriggerEnabled -or
     @($starterMapping.function_response_types) -notcontains "ReportBatchItemFailures"
@@ -1296,7 +1356,7 @@ try {
     "module.platform.aws_cloudwatch_event_rule.outbox_reconciler[0]",
     "module.platform.aws_cloudwatch_event_rule.profile_readiness_terminal[0]"
   )) {
-    $expectedRuleState = if ($PlanRuntimeCutover) { "ENABLED" } else { "DISABLED" }
+    $expectedRuleState = if ($runtimeCutoverActive) { "ENABLED" } else { "DISABLED" }
     if ([string](Get-PlannedValue $ruleAddress).state -ne $expectedRuleState) {
       throw "A serverless workflow EventBridge trigger does not match the reviewed runtime state."
     }
@@ -1356,7 +1416,7 @@ try {
     ) {
       throw "The durable stack does not select the exact artifact, version, or bounded concurrency."
     }
-  } elseif ($VerifyCompletedDarkDeployment -or $PlanRuntimeCutover) {
+  } elseif ($VerifyCompletedDarkDeployment -or $runtimeCutoverActive) {
     throw "The completed durable stack template is unavailable for exact verification."
   } else {
     $durableStackChange = Get-PlannedChange `
@@ -1374,7 +1434,8 @@ try {
     $RecoverFailedApply -or
     $AllowArtifactReleaseUpdate -or
     $VerifyCompletedDarkDeployment -or
-    $PlanRuntimeCutover
+    $PlanRuntimeCutover -or
+    $VerifyCompletedRuntimeCutover
   )
   $propagationResourceChange = Get-OnlyItem `
     -Items @($plan.resource_changes | Where-Object {
@@ -1453,17 +1514,18 @@ try {
     ArtifactReleaseUpdate      = [bool]$AllowArtifactReleaseUpdate
     CompletedDarkVerification  = [bool]$VerifyCompletedDarkDeployment
     RuntimeCutover             = [bool]$PlanRuntimeCutover
-    NoDrift                    = [bool]$VerifyCompletedDarkDeployment
+    CompletedRuntimeCutoverVerification = [bool]$VerifyCompletedRuntimeCutover
+    NoDrift                    = $zeroDriftVerification
     GatewayEcsApiBaselineStable = $true
     EcsRuntimeIdle             = [bool]$ecsRuntimeIdle
-    LegacyOutboxEmpty          = if ($PlanRuntimeCutover) { $true } else { $null }
-    TemporalOpenWorkflowsEmpty = if ($PlanRuntimeCutover) { $true } else { $null }
+    LegacyOutboxEmpty          = if ($runtimeCutoverActive) { $true } else { $null }
+    TemporalOpenWorkflowsEmpty = if ($runtimeCutoverActive) { $true } else { $null }
     EndpointSidCorrection      = $acceptedEndpointSidCorrection
     EffectiveDurableDlqPermission = if ($RecoverFailedApply) { $true } else { $null }
     ArtifactsVerified          = 3
     PinnedExtensionVerified    = $true
-    DispatchTarget             = if ($PlanRuntimeCutover) { "lambda_durable" } else { "temporal" }
-    TriggersEnabled            = [bool]$PlanRuntimeCutover
+    DispatchTarget             = if ($runtimeCutoverActive) { "lambda_durable" } else { "temporal" }
+    TriggersEnabled            = $runtimeCutoverActive
     ApiTrafficChange           = [bool]$PlanRuntimeCutover
     EcsCapacityChange          = $false
     Creates                    = $creates.Count
