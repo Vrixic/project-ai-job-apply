@@ -69,9 +69,31 @@ $expectedLambdaFunctionName = "ai-job-apply-$Environment-gateway"
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $webEnvironment = Join-Path $repositoryRoot "frontend\web\.env.local"
 $terraformDirectory = "infrastructure/terraform/environments/$Environment"
+$canonicalTerraformDirectory = Join-Path `
+  $repositoryRoot `
+  "infrastructure\terraform\environments\$Environment"
+$canonicalBackendMetadataPath = Join-Path $canonicalTerraformDirectory ".terraform\terraform.tfstate"
 
 if (-not (Test-Path -LiteralPath $webEnvironment)) {
   throw "frontend/web/.env.local is missing. Configure the isolated Auth0 web client first."
+}
+if (-not (Test-Path -LiteralPath $canonicalBackendMetadataPath -PathType Leaf)) {
+  throw "The $Environment Terraform backend metadata is missing. Initialize its reviewed remote backend first."
+}
+$canonicalBackendMetadata = try {
+  Get-Content -LiteralPath $canonicalBackendMetadataPath -Raw | ConvertFrom-Json
+} catch {
+  throw "The $Environment Terraform backend metadata is unreadable. Reinitialize its reviewed remote backend."
+}
+$canonicalBackend = $canonicalBackendMetadata.backend
+$stateBucket = [string]$canonicalBackend.config.bucket
+if (
+  [string]$canonicalBackend.type -cne "s3" -or
+  $stateBucket -notmatch "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$" -or
+  [string]$canonicalBackend.config.key -cne "platform.tfstate" -or
+  [string]$canonicalBackend.config.region -cne $AwsRegion
+) {
+  throw "The $Environment Terraform backend metadata is outside the reviewed S3 state boundary."
 }
 
 $requiredSettings = @(
@@ -240,7 +262,6 @@ try {
   $env:AWS_SECRET_ACCESS_KEY = [string]$processCredentials.SecretAccessKey
   $env:AWS_SESSION_TOKEN = [string]$processCredentials.SessionToken
 
-  $stateBucket = "ai-job-apply-$Environment-terraform-state-$($caller.Account)"
   $stateEncryption = Invoke-AwsJson `
     -Arguments @(
       "s3api", "get-bucket-encryption",

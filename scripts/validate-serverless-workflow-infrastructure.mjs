@@ -57,6 +57,17 @@ requireText(
 );
 requireText(
   gatewayConformanceLauncher,
+  '$canonicalBackendMetadataPath = Join-Path $canonicalTerraformDirectory ".terraform\\terraform.tfstate"',
+  "Gateway conformance must use the selected environment's initialized backend metadata.",
+);
+assert.ok(
+  !gatewayConformanceLauncher.includes(
+    '$stateBucket = "ai-job-apply-$Environment-terraform-state-$($caller.Account)"',
+  ),
+  "Gateway conformance must not reconstruct a state bucket from an obsolete naming convention.",
+);
+requireText(
+  gatewayConformanceLauncher,
   "$env:DARK_LAMBDA_ENVIRONMENT = $Environment",
   "The guarded bridge must receive the explicitly selected environment.",
 );
