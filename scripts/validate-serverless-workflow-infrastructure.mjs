@@ -56,6 +56,19 @@ const requireText = (source, expected, message) => {
   assert.ok(source.includes(expected), message);
 };
 
+for (const expected of [
+  "-ReferenceObject @($creates | ForEach-Object { [string]$_.address } | Sort-Object)",
+  "-DifferenceObject @($createsExpected | Sort-Object)",
+  "-ReferenceObject @($updates | ForEach-Object { [string]$_.address } | Sort-Object)",
+  "-DifferenceObject @($updatesExpected | Sort-Object)",
+]) {
+  requireText(
+    stagingRuntimeCutoverOperator,
+    expected,
+    `The staging cutover operator must compare exact action addresses without positional array binding: ${expected}`,
+  );
+}
+
 requireText(
   gatewayConformanceLauncher,
   '$GatewayRuntime -in @("lambda-dark", "lambda-cutover")',
