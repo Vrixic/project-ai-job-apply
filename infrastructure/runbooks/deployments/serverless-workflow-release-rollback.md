@@ -90,8 +90,8 @@ Only after restored-release conformance and notification delivery pass:
   -Execute
 ```
 
-Cleanup re-proves restored zero drift and removes only this operator's ignored context and two
-saved plan copies. It makes no AWS change. Retain sanitized evidence containing source commits,
+Cleanup re-proves restored zero drift and removes only this operator's ignored context, two
+immutable endpoint snapshots, and reverse/forward saved plans. It makes no AWS change. Retain sanitized evidence containing source commits,
 plan checksums, action counts, conformance results, notification confirmation, and zero-drift
 results—never state, raw plans, object versions, account identifiers, credentials, payloads, raw
 logs, or notification destinations/content.

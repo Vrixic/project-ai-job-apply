@@ -306,6 +306,8 @@ for (const expected of [
   '"current-release-source.tfplan"',
   '"rollback-release-source.tfplan"',
   "Copy-RetainedPlanSnapshot",
+  "$cleanupPaths = @(",
+  "foreach ($path in $cleanupPaths)",
   'rev-parse "@{upstream}"',
   "Environment = $Environment",
   "PublicTrafficChange = $false",
