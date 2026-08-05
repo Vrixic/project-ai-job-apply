@@ -46,7 +46,10 @@ identity-provider isolation or launch readiness. During the scale-to-zero migrat
 `-GatewayRuntime lambda-dark` keeps the public route on the idle ECS rollback integration while a
 loopback-only bridge verifies the real Auth0 token, forwards only its minimum validated claims to
 the selected environment's immutable Lambda alias, and exposes only the existing Phase 0
-profile/readiness surface. It never returns a token or provider identity to browser code.
+profile/readiness surface. It never returns a token or provider identity to browser code. Because
+replacement workflow triggers remain disabled before cutover, this explicit local dark mode may
+arm an owner-visible `queued` operation for the two-account isolation probe; normal conformance
+continues to require a `succeeded` operation.
 
 Authentication callback failures redirect to an allowlisted local error state. Provider-controlled
 error descriptions are never rendered, while blocked or unavailable accounts receive a generic

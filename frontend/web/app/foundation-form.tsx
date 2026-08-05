@@ -40,6 +40,7 @@ export function FoundationForm({
   authenticationFailed,
   authenticated,
   crossUserProbeArmed,
+  darkLambdaIsolationConformanceEnabled,
   displayName,
   workloadConformanceEnabled,
 }: {
@@ -48,6 +49,7 @@ export function FoundationForm({
   authenticationFailed: boolean;
   authenticated: boolean;
   crossUserProbeArmed: boolean;
+  darkLambdaIsolationConformanceEnabled: boolean;
   displayName?: string;
   workloadConformanceEnabled: boolean;
 }) {
@@ -108,7 +110,12 @@ export function FoundationForm({
   }, [authenticated]);
 
   useEffect(() => {
-    if (!operationId || operation?.state === "succeeded" || operation?.state === "failed") {
+    if (
+      !operationId ||
+      operation?.state === "succeeded" ||
+      operation?.state === "failed" ||
+      (darkLambdaIsolationConformanceEnabled && operation?.state === "queued")
+    ) {
       return;
     }
     const timer = window.setInterval(async () => {
@@ -122,7 +129,7 @@ export function FoundationForm({
       }
     }, 1_500);
     return () => window.clearInterval(timer);
-  }, [operationId, operation?.state]);
+  }, [darkLambdaIsolationConformanceEnabled, operationId, operation?.state]);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -319,15 +326,19 @@ export function FoundationForm({
           <hr />
           <strong>Deployed cross-user isolation</strong>
           <p>
-            Arm a completed operation, log out, and sign in with a different synthetic account. The
-            server keeps only an encrypted, expiring probe and returns no identity, token, or
+            Arm an owner-visible operation, log out, and sign in with a different synthetic account.
+            The server keeps only an encrypted, expiring probe and returns no identity, token, or
             operation identifier.
           </p>
           {!isolationArmed ? (
             <button
               type="button"
               onClick={armIsolationProbe}
-              disabled={armingIsolation || operation?.state !== "succeeded"}
+              disabled={
+                armingIsolation ||
+                (operation?.state !== "succeeded" &&
+                  !(darkLambdaIsolationConformanceEnabled && operation?.state === "queued"))
+              }
             >
               {armingIsolation ? "Arming…" : "Arm cross-user isolation check"}
             </button>
@@ -429,6 +440,11 @@ export function FoundationForm({
       {operation && (
         <section className="result" aria-live="polite">
           <strong>Readiness workflow: {operation.state.replace("_", " ")}</strong>
+          {darkLambdaIsolationConformanceEnabled && operation.state === "queued" && (
+            <p>
+              Queued is expected while replacement workflow triggers remain dark before cutover.
+            </p>
+          )}
           {operation.result && (
             <p>
               Profile readiness: {operation.result.completionPercent}%.

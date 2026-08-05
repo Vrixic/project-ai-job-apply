@@ -38,6 +38,7 @@ interface ProbeCookieStore {
 }
 
 interface ProbeDependencies {
+  allowQueuedOperation?: boolean;
   appBaseUrl: string;
   auth0: ProbeAuth;
   baseUrl: string;
@@ -275,6 +276,15 @@ export function isCrossUserIsolationConformanceEnabled(
   return environment.NODE_ENV === "development";
 }
 
+export function isDarkLambdaIsolationConformanceEnabled(
+  environment: Record<string, string | undefined> = process.env,
+): boolean {
+  return (
+    isCrossUserIsolationConformanceEnabled(environment) &&
+    environment.DARK_LAMBDA_CONFORMANCE === "1"
+  );
+}
+
 export async function armCrossUserIsolationProbe(
   request: Request,
   dependencies: ProbeDependencies,
@@ -309,19 +319,21 @@ export async function armCrossUserIsolationProbe(
   if (!operationResponse) {
     return result(503, "platform_unavailable", "The platform API is unavailable");
   }
-  let operationSucceeded = false;
+  let operationEligible = false;
   if (operationResponse.status === 200) {
     try {
       const operation = (await operationResponse.json()) as { state?: unknown };
-      operationSucceeded = operation.state === "succeeded";
+      operationEligible =
+        operation.state === "succeeded" ||
+        (dependencies.allowQueuedOperation === true && operation.state === "queued");
     } catch {
-      operationSucceeded = false;
+      operationEligible = false;
     }
   } else {
     discardResponseBody(operationResponse);
   }
-  if (!operationSucceeded) {
-    return result(409, "operation_unavailable", "The completed operation could not be verified");
+  if (!operationEligible) {
+    return result(409, "operation_unavailable", "The eligible operation could not be verified");
   }
 
   const now = dependencies.now?.() ?? Date.now();

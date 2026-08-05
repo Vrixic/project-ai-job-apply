@@ -3,6 +3,7 @@ import {
   armCrossUserIsolationProbe,
   CROSS_USER_PROBE_COOKIE_NAME,
   isCrossUserIsolationConformanceEnabled,
+  isDarkLambdaIsolationConformanceEnabled,
   runCrossUserIsolationProbe,
 } from "./cross-user-isolation-conformance";
 
@@ -58,6 +59,27 @@ describe("deployed cross-user isolation conformance", () => {
     expect(isCrossUserIsolationConformanceEnabled({ NODE_ENV: "development" })).toBe(true);
     expect(isCrossUserIsolationConformanceEnabled({ NODE_ENV: "test" })).toBe(false);
     expect(isCrossUserIsolationConformanceEnabled({ NODE_ENV: "production" })).toBe(false);
+  });
+
+  it("allows queued-operation arming only in explicit local dark Lambda conformance", () => {
+    expect(
+      isDarkLambdaIsolationConformanceEnabled({
+        NODE_ENV: "development",
+        DARK_LAMBDA_CONFORMANCE: "1",
+      }),
+    ).toBe(true);
+    expect(
+      isDarkLambdaIsolationConformanceEnabled({
+        NODE_ENV: "development",
+        DARK_LAMBDA_CONFORMANCE: "0",
+      }),
+    ).toBe(false);
+    expect(
+      isDarkLambdaIsolationConformanceEnabled({
+        NODE_ENV: "production",
+        DARK_LAMBDA_CONFORMANCE: "1",
+      }),
+    ).toBe(false);
   });
 
   it("hides the probe when conformance mode is disabled", async () => {
@@ -140,6 +162,18 @@ describe("deployed cross-user isolation conformance", () => {
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ state: "operation_unavailable" });
     expect(store.set).not.toHaveBeenCalled();
+  });
+
+  it("arms an owner-visible queued operation only when dark conformance explicitly permits it", async () => {
+    const store = cookieStore();
+    const platformFetch = vi.fn(async () => Response.json({ state: "queued" }));
+    const response = await armCrossUserIsolationProbe(request("/arm", { operationId }), {
+      ...dependencies("owner-a", store, platformFetch),
+      allowQueuedOperation: true,
+    });
+
+    expect(response.status).toBe(200);
+    expect(store.set).toHaveBeenCalledOnce();
   });
 
   it("requires a distinct identity before calling the deployed operation", async () => {
