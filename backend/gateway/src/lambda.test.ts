@@ -10,6 +10,11 @@ import {
 const ISSUER = "https://identity.example.test/";
 const AUDIENCE = "ai-job-apply-api";
 
+function bearerToken(claims: Record<string, unknown>): string {
+  const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  return `${encode({ alg: "RS256", typ: "JWT" })}.${encode(claims)}.test-signature`;
+}
+
 function event(overrides: Partial<AuthorizedHttpApiEvent> = {}): AuthorizedHttpApiEvent {
   return {
     version: "2.0",
@@ -176,6 +181,89 @@ describe("API Gateway Lambda boundary", () => {
 
     expect(response.statusCode).toBe(200);
     expect(inject).toHaveBeenCalledOnce();
+  });
+
+  it("recovers an exact multi-valued audience from the API Gateway-validated bearer token", async () => {
+    const principalBridge = createInvocationPrincipalBridge();
+    let observedPrincipal: AuthPrincipal | undefined;
+    const inject = vi.fn(async (request: { headers: Record<string, string> }) => {
+      const accessToken = request.headers.authorization?.replace(/^Bearer /, "") ?? "";
+      observedPrincipal = await principalBridge.verifier.verify(accessToken);
+      return { statusCode: 200, body: "{}", headers: {} };
+    });
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge,
+    });
+    const input = event({
+      headers: {
+        authorization: `Bearer ${bearerToken({
+          iss: ISSUER,
+          sub: "auth0|candidate-1",
+          aud: [AUDIENCE, "https://identity.example.test/userinfo"],
+        })}`,
+      },
+    });
+    Object.assign(input.requestContext.authorizer?.jwt?.claims ?? {}, {
+      aud: `${AUDIENCE},https://identity.example.test/userinfo`,
+    });
+
+    const response = await invoke(handler, input);
+
+    expect(response.statusCode).toBe(200);
+    expect(observedPrincipal?.audience).toEqual([
+      AUDIENCE,
+      "https://identity.example.test/userinfo",
+    ]);
+    expect(inject).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["a malformed token", "not-a-jwt"],
+    [
+      "a different token issuer",
+      bearerToken({
+        iss: "https://attacker.example/",
+        sub: "auth0|candidate-1",
+        aud: [AUDIENCE],
+      }),
+    ],
+    [
+      "a different token subject",
+      bearerToken({
+        iss: ISSUER,
+        sub: "auth0|candidate-2",
+        aud: [AUDIENCE],
+      }),
+    ],
+    [
+      "a different token audience",
+      bearerToken({
+        iss: ISSUER,
+        sub: "auth0|candidate-1",
+        aud: ["different-api"],
+      }),
+    ],
+  ])("rejects a flattened audience backed by %s", async (_label, token) => {
+    const principalBridge = createInvocationPrincipalBridge();
+    const inject = vi.fn();
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge,
+    });
+    const input = event({ headers: { authorization: `Bearer ${token}` } });
+    Object.assign(input.requestContext.authorizer?.jwt?.claims ?? {}, {
+      aud: `${AUDIENCE},https://identity.example.test/userinfo`,
+    });
+
+    const response = await invoke(handler, input);
+
+    expect(response.statusCode).toBe(401);
+    expect(inject).not.toHaveBeenCalled();
   });
 
   it("emits only privacy-safe claim-shape diagnostics when identity context is rejected", async () => {

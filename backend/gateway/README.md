@@ -24,8 +24,12 @@ The managed verifier accepts only RS256 tokens from the exact configured issuer 
 mapping; Auth0 identifiers do not cross into public or domain identifiers.
 
 The scale-to-zero migration adds a shared application factory and an API Gateway HTTP API payload
-2.0 Lambda entrypoint. The Lambda path accepts identity only from exact validated authorizer claims,
-keeps the principal invocation-local, allows only the versioned method/path inventory, rejects
+2.0 Lambda entrypoint. The Lambda path accepts identity only from the exact validated authorizer
+context. When API Gateway's string-only claims map flattens a multi-valued audience, the boundary
+recovers the exact audience array from the same API Gateway-validated bearer token and binds it to
+the trusted context through exact issuer and subject equality; the caller token is never forwarded
+into the application. The entrypoint keeps the principal invocation-local, allows only the
+versioned method/path inventory, rejects
 unsupported query/body/media shapes, and enforces a 64 KiB decoded-body ceiling before framework
 dispatch. It retrieves the database URL through the AWS Parameters and Secrets extension and caps
 each warm environment at two PostgreSQL connections. All application problem responses are
