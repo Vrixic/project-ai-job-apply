@@ -67,7 +67,7 @@ keeps checkpoint encryption declarative and drift-visible; superseded durable ve
 policies so in-flight executions remain replayable. All other resources remain native Terraform.
 
 `deploy_profile_readiness_durable` and `deploy_serverless_outbox` create the dark replacement.
-`enable_serverless_workflow_triggers` separately controls the SQS mapping, reconciliation schedule,
-and terminal-event rule and defaults to `false`. The gateway's new-event route remains `temporal`
-unless a later reviewed cutover selects `lambda_durable`; the module rejects that selection without
-the complete replacement boundary.
+`serverless_runtime_cutover` defaults to `false` and atomically controls the API Gateway Lambda
+integration and routes, the gateway's `lambda_durable` new-event target, the SQS starter mapping,
+the reconciliation schedule, and the terminal-event rule. The module rejects cutover unless the
+complete replacement is deployed and the retained ECS rollback services are configured idle.

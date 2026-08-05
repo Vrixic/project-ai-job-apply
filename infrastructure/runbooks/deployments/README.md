@@ -24,3 +24,5 @@ saved infrastructure plan, success evidence, and recovery boundary.
 - [Development serverless workflow release rollback](development-serverless-workflow-release-rollback.md)
   and [staging serverless workflow release rollback](staging-serverless-workflow-release-rollback.md)
   — Environment-specific wrappers and prerequisites for the shared procedure.
+- [Staging serverless runtime cutover](staging-serverless-runtime-cutover.md) — Atomic API and
+  workflow transition from retained idle ECS/Temporal to the accepted Lambda replacement.

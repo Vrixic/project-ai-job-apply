@@ -119,8 +119,17 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   dispatch, and three new immutable artifacts. It permits only the exact function/version/alias,
   version-scoped policy, disabled terminal-pattern, durable-stack, and policy-propagation changes
   required by one internally consistent release. The ignored plan is never applied by the script.
+  `-PlanRuntimeCutover` is the separate fail-closed transition mode: it first requires a fresh empty
+  deployed outbox and zero open Temporal workflows, then accepts only one direct Lambda integration,
+  two public health routes, JWT protection on the default route, the gateway's immutable
+  `temporal` to `lambda_durable` dispatch version, and coupled enablement of the SQS starter,
+  reconciler, and terminal-recovery rule. ECS capacity and retained rollback resources cannot
+  change, and the script still only writes an ignored reviewed plan.
 - `plan-development-serverless-workflow-dark.ps1` — Compatibility wrapper for development calls to
   the environment-aware workflow planner.
+- `plan-staging-serverless-runtime-cutover.ps1` — Staging-only wrapper for the atomic runtime-cutover
+  planning mode. It fixes the environment and default IAM Identity Center profile and cannot select
+  deployment, recovery, release, or completed-dark modes.
 - `operate-serverless-workflow-dark-conformance.ps1` — Selects development or staging and creates
   an isolated ignored, checksum-reviewed context from that environment's exact-commit zero-drift
   plan and stable live boundary. Separate execution exercises three synchronous synthetic

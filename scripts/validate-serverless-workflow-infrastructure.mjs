@@ -38,6 +38,8 @@ const developmentWorkflowReleaseRollbackWrapper = read(
 const stagingWorkflowReleaseRollbackWrapper = read(
   "scripts/operate-staging-serverless-workflow-release-rollback.ps1",
 );
+const workflowPlanner = read("scripts/plan-serverless-workflow-dark.ps1");
+const stagingRuntimeCutoverWrapper = read("scripts/plan-staging-serverless-runtime-cutover.ps1");
 const gatewayConformanceLauncher = read("scripts/start-deployed-web-conformance.ps1");
 const gatewayBoundaryOperator = read("scripts/verify-gateway-lambda-boundary.ps1");
 const developmentGatewayBoundaryWrapper = read(
@@ -159,7 +161,7 @@ requireText(
 );
 requireText(
   durable,
-  'state       = var.enable_serverless_workflow_triggers ? "ENABLED" : "DISABLED"',
+  'state       = var.serverless_runtime_cutover ? "ENABLED" : "DISABLED"',
   "Terminal recovery routing must share the explicit cutover switch.",
 );
 requireText(
@@ -169,13 +171,38 @@ requireText(
 );
 requireText(
   platform,
-  "enabled                            = var.enable_serverless_workflow_triggers",
+  "enabled                            = var.serverless_runtime_cutover",
   "The SQS starter mapping must remain disabled before cutover.",
 );
 requireText(
   platform,
-  'state               = var.enable_serverless_workflow_triggers ? "ENABLED" : "DISABLED"',
+  'state               = var.serverless_runtime_cutover ? "ENABLED" : "DISABLED"',
   "The reconciler must remain disabled before cutover.",
+);
+requireText(
+  platform,
+  'resource "aws_apigatewayv2_integration" "gateway_lambda"',
+  "The controlled cutover must own a direct API Gateway Lambda integration.",
+);
+requireText(
+  platform,
+  'integration_type       = "AWS_PROXY"',
+  "The gateway replacement must use a direct Lambda proxy integration.",
+);
+requireText(
+  platform,
+  'payload_format_version = "2.0"',
+  "The gateway replacement must receive the reviewed HTTP API v2 event shape.",
+);
+requireText(
+  platform,
+  'authorization_type = var.serverless_runtime_cutover ? "JWT" : "NONE"',
+  "The default route must acquire the exact JWT authorizer during cutover.",
+);
+requireText(
+  platform,
+  'OUTBOX_DISPATCH_TARGET = var.serverless_runtime_cutover ? "lambda_durable" : "temporal"',
+  "New-event dispatch must move with the API and trigger cutover.",
 );
 requireText(
   platform,
@@ -215,8 +242,13 @@ requireText(
 
 assert.match(
   variables,
-  /variable "enable_serverless_workflow_triggers"\s*\{[\s\S]*?default\s*=\s*false/,
-  "Workflow triggers must default to dark.",
+  /variable "serverless_runtime_cutover"\s*\{[\s\S]*?default\s*=\s*false/,
+  "The atomic serverless runtime cutover must default to dark.",
+);
+assert.ok(
+  !variables.includes('variable "gateway_outbox_dispatch_target"') &&
+    !variables.includes('variable "enable_serverless_workflow_triggers"'),
+  "Independent routing and trigger switches must not bypass the atomic cutover boundary.",
 );
 assert.match(
   variables,
@@ -270,8 +302,8 @@ for (const environment of environments) {
   );
   requireText(
     environment,
-    "enable_serverless_workflow_triggers",
-    "Every persistent environment must expose the independent cutover switch.",
+    "serverless_runtime_cutover",
+    "Every persistent environment must expose the atomic cutover switch.",
   );
   requireText(
     environment,
@@ -287,6 +319,63 @@ for (const environment of environmentVariables) {
     "Zero-traffic development and synthetic staging must default to the accepted idle posture.",
   );
 }
+
+for (const expected of [
+  "PlanRuntimeCutover",
+  '"serverless-runtime-cutover"',
+  '"inspect-deployed-outbox.ps1"',
+  "--require-zero-open-workflows",
+  "TF_VAR_serverless_runtime_cutover",
+  "module.platform.aws_apigatewayv2_integration.gateway_lambda[0]",
+  'module.platform.aws_apigatewayv2_route.gateway_lambda_public["GET /health/live"]',
+  'module.platform.aws_apigatewayv2_route.gateway_lambda_public["GET /health/ready"]',
+  "module.platform.aws_apigatewayv2_route.gateway[0]",
+  "module.platform.aws_lambda_event_source_mapping.outbox_starter[0]",
+  'OUTBOX_DISPATCH_TARGET -ne "temporal"',
+  'OUTBOX_DISPATCH_TARGET -ne "lambda_durable"',
+  'authorization_type -ne "JWT"',
+  "LegacyOutboxEmpty",
+  "TemporalOpenWorkflowsEmpty",
+]) {
+  requireText(
+    workflowPlanner,
+    expected,
+    `The guarded runtime cutover planner is missing required boundary text: ${expected}`,
+  );
+}
+assert.ok(
+  workflowPlanner
+    .replaceAll("\r\n", "\n")
+    .includes(
+      "  }\n\n  if ($PlanRuntimeCutover) {\n    $gatewayFunctionChange = Get-PlannedChange",
+    ),
+  "The cutover semantic checks must remain outside the mutually exclusive initial-deployment branch.",
+);
+assert.ok(
+  !workflowPlanner.includes("TF_VAR_gateway_outbox_dispatch_target") &&
+    !workflowPlanner.includes("TF_VAR_enable_serverless_workflow_triggers"),
+  "The planner must not restore independent dispatch and trigger cutover controls.",
+);
+requireText(
+  stagingRuntimeCutoverWrapper,
+  '"plan-serverless-workflow-dark.ps1"',
+  "The staging cutover wrapper must delegate to the shared guarded planner.",
+);
+requireText(
+  stagingRuntimeCutoverWrapper,
+  'Environment                            = "staging"',
+  "The staging cutover wrapper must fix the isolated staging environment.",
+);
+requireText(
+  stagingRuntimeCutoverWrapper,
+  "PlanRuntimeCutover                     = $true",
+  "The staging cutover wrapper must select only the atomic cutover mode.",
+);
+requireText(
+  stagingRuntimeCutoverWrapper,
+  '"ai-job-apply-staging-admin"',
+  "The staging cutover wrapper must default to the isolated staging IAM profile.",
+);
 
 for (const expected of [
   "Assert-ZeroPendingWork",

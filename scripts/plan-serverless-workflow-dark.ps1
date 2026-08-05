@@ -37,6 +37,7 @@ param(
   [switch]$RecoverFailedApply,
   [switch]$AllowArtifactReleaseUpdate,
   [switch]$VerifyCompletedDarkDeployment,
+  [switch]$PlanRuntimeCutover,
   [switch]$Help
 )
 
@@ -54,6 +55,9 @@ while rechecking the immutable artifacts and complete trigger-disabled workflow 
 Use -AllowArtifactReleaseUpdate after a completed dark deployment to permit only the exact
 workflow function, immutable version/alias, version-scoped policy, disabled terminal-rule, durable
 stack, and policy-propagation updates caused by three new reviewed immutable artifacts.
+Use -PlanRuntimeCutover only after the accepted dark boundary and legacy outbox are clean. It
+permits the coupled API Lambda integration/routes, gateway Lambda durable-dispatch version, and
+three replacement-trigger transitions while retaining idle ECS and the legacy rollback resources.
 
 The sensitive plan remains below the ignored Terraform .terraform directory. This script rejects
 every action outside its exact initial or partial-recovery boundary and never applies
@@ -82,9 +86,10 @@ if (-not $AwsProfile) {
 if ($Region -ne "us-east-2") {
   throw "The Phase 0 $Environment environment is restricted to us-east-2."
 }
-if (@($RecoverFailedApply, $AllowArtifactReleaseUpdate, $VerifyCompletedDarkDeployment |
+if (@($RecoverFailedApply, $AllowArtifactReleaseUpdate, $VerifyCompletedDarkDeployment,
+    $PlanRuntimeCutover |
     Where-Object { $_ }).Count -gt 1) {
-  throw "Recovery, artifact release, and completed-dark verification are mutually exclusive."
+  throw "Recovery, artifact release, completed-dark verification, and cutover planning are mutually exclusive."
 }
 
 function Assert-ArtifactKey {
@@ -112,7 +117,9 @@ $environmentDirectory = Join-Path $repositoryRoot "infrastructure/terraform/envi
 $terraformDataDirectory = Join-Path $environmentDirectory ".terraform/dark-plan-data"
 $planDirectory = Join-Path $environmentDirectory ".terraform/workflow-dark-plans"
 $sourceCommit = (& git -C $repositoryRoot rev-parse HEAD).Trim()
-$planPrefix = if ($VerifyCompletedDarkDeployment) {
+$planPrefix = if ($PlanRuntimeCutover) {
+  "serverless-runtime-cutover"
+} elseif ($VerifyCompletedDarkDeployment) {
   "workflow-dark-verify"
 } elseif ($AllowArtifactReleaseUpdate) {
   "workflow-dark-release"
@@ -230,7 +237,8 @@ $acceptedEndpointSidCorrection = $false
 if (
   -not $RecoverFailedApply -and
   -not $AllowArtifactReleaseUpdate -and
-  -not $VerifyCompletedDarkDeployment
+  -not $VerifyCompletedDarkDeployment -and
+  -not $PlanRuntimeCutover
 ) {
 try {
   $baselineRaw = & (Join-Path $PSScriptRoot "plan-gateway-lambda-dark.ps1") `
@@ -325,10 +333,10 @@ $terraformVariables = @(
   "gateway_lambda_artifact_s3_key", "gateway_lambda_artifact_s3_object_version",
   "gateway_lambda_artifact_sha256", "gateway_lambda_artifact_base64sha256",
   "gateway_lambda_extension_layer_arn", "gateway_lambda_reserved_concurrency",
-  "gateway_outbox_dispatch_target", "deploy_serverless_outbox",
+  "serverless_runtime_cutover", "deploy_serverless_outbox",
   "workflow_ingress_artifact_s3_key", "workflow_ingress_artifact_s3_object_version",
   "workflow_ingress_artifact_sha256", "workflow_ingress_artifact_base64sha256",
-  "workflow_ingress_lambda_extension_layer_arn", "enable_serverless_workflow_triggers",
+  "workflow_ingress_lambda_extension_layer_arn",
   "deploy_profile_readiness_durable", "profile_readiness_durable_artifact_s3_key",
   "profile_readiness_durable_artifact_s3_object_version",
   "profile_readiness_durable_artifact_sha256",
@@ -381,7 +389,10 @@ try {
     throw "The pinned $Environment provider set could not be initialized."
   }
 
-  if ($RecoverFailedApply -or $AllowArtifactReleaseUpdate -or $VerifyCompletedDarkDeployment) {
+  if (
+    $RecoverFailedApply -or $AllowArtifactReleaseUpdate -or
+    $VerifyCompletedDarkDeployment -or $PlanRuntimeCutover
+  ) {
     $baselinePlan = [pscustomobject]@{
       state_resources = @(
         (& terraform "-chdir=$environmentDirectory" state pull 2>$null | ConvertFrom-Json).resources
@@ -441,7 +452,7 @@ try {
     throw "The pinned Secrets extension is not the reviewed x86_64 regional layer."
   }
 
-  if ($AllowArtifactReleaseUpdate) {
+  if ($AllowArtifactReleaseUpdate -or $PlanRuntimeCutover) {
     $releaseFunctions = @(
       @("$resourcePrefix-outbox-starter", 1, $WorkflowIngressArtifactBase64Sha256, $true),
       @("$resourcePrefix-outbox-reconciler", 1, $WorkflowIngressArtifactBase64Sha256, $true),
@@ -503,7 +514,10 @@ try {
         [string]$latest.State -ne "Active" -or
         [string]$latest.LastUpdateStatus -ne "Successful" -or
         [string]$latest.Runtime -ne "nodejs24.x" -or
-        [string]$latest.CodeSha256 -eq [string]$releaseFunction[2] -or
+        ($AllowArtifactReleaseUpdate -and
+          [string]$latest.CodeSha256 -eq [string]$releaseFunction[2]) -or
+        ($PlanRuntimeCutover -and
+          [string]$latest.CodeSha256 -ne [string]$releaseFunction[2]) -or
         [string]$latest.CodeSha256 -ne [string]$aliased.CodeSha256 -or
         [string]$alias.FunctionVersion -notmatch "^[1-9][0-9]*$" -or
         [string]$aliased.Version -ne [string]$alias.FunctionVersion -or
@@ -697,6 +711,36 @@ try {
   $gatewayEnvironment = Get-ContainerEnvironment $gatewayContainer
   $workerEnvironment = Get-ContainerEnvironment $workerContainer
 
+  if ($PlanRuntimeCutover) {
+    $inspectionRaw = & (Join-Path $PSScriptRoot "inspect-deployed-outbox.ps1") `
+      -Environment $Environment -AwsProfile $AwsProfile -Region $Region -Execute
+    if ($LASTEXITCODE -ne 0) {
+      throw "The bounded pre-cutover outbox inspection did not complete successfully."
+    }
+    try {
+      $outboxInspection = ($inspectionRaw -join "`n") | ConvertFrom-Json
+    } catch {
+      throw "The bounded pre-cutover outbox inspection did not return one sanitized result."
+    }
+    if (
+      [int]$outboxInspection.version -ne 1 -or
+      [int]$outboxInspection.pendingCount -ne 0 -or
+      [string]$outboxInspection.orderedEventIdSha256 -notmatch "^[a-f0-9]{64}$"
+    ) {
+      throw "Serverless cutover requires a fresh zero-pending-outbox inspection."
+    }
+
+    $temporalOutput = & node (Join-Path $repositoryRoot "backend/workflows/cloud-conformance.mjs") `
+      --profile $AwsProfile --region $Region `
+      --secret-id "ai-job-apply/$Environment/temporal-api-key" `
+      --address ([string]$workerEnvironment["TEMPORAL_ADDRESS"]) `
+      --namespace ([string]$workerEnvironment["TEMPORAL_NAMESPACE"]) `
+      --require-zero-open-workflows 2>&1
+    if ($LASTEXITCODE -ne 0) {
+      throw "Serverless cutover requires a fresh zero-running-Temporal-workflow check."
+    }
+  }
+
   $env:TF_VAR_gateway_image = [string]$gatewayContainer.image
   $env:TF_VAR_worker_image = [string]$workerContainer.image
   $env:TF_VAR_migration_image = [string]$migrationContainer.image
@@ -738,14 +782,13 @@ try {
   $env:TF_VAR_gateway_lambda_artifact_base64sha256 = [string]$gatewayLambda.source_code_hash
   $env:TF_VAR_gateway_lambda_extension_layer_arn = $PinnedExtensionLayerArn
   $env:TF_VAR_gateway_lambda_reserved_concurrency = [string]$gatewayLambda.reserved_concurrent_executions
-  $env:TF_VAR_gateway_outbox_dispatch_target = "temporal"
+  $env:TF_VAR_serverless_runtime_cutover = $PlanRuntimeCutover.ToString().ToLowerInvariant()
   $env:TF_VAR_deploy_serverless_outbox = "true"
   $env:TF_VAR_workflow_ingress_artifact_s3_key = $WorkflowIngressArtifactS3Key
   $env:TF_VAR_workflow_ingress_artifact_s3_object_version = $WorkflowIngressArtifactS3ObjectVersion
   $env:TF_VAR_workflow_ingress_artifact_sha256 = $WorkflowIngressArtifactSha256
   $env:TF_VAR_workflow_ingress_artifact_base64sha256 = $WorkflowIngressArtifactBase64Sha256
   $env:TF_VAR_workflow_ingress_lambda_extension_layer_arn = $PinnedExtensionLayerArn
-  $env:TF_VAR_enable_serverless_workflow_triggers = "false"
   $env:TF_VAR_deploy_profile_readiness_durable = "true"
   $env:TF_VAR_profile_readiness_durable_artifact_s3_key = $DurableArtifactS3Key
   $env:TF_VAR_profile_readiness_durable_artifact_s3_object_version = $DurableArtifactS3ObjectVersion
@@ -861,15 +904,32 @@ try {
   $releaseExpectedReplacements = @(
     "module.platform.time_sleep.profile_readiness_durable_policy_propagation[0]"
   )
+  $cutoverExpectedCreates = @(
+    "module.platform.aws_apigatewayv2_integration.gateway_lambda[0]",
+    'module.platform.aws_apigatewayv2_route.gateway_lambda_public["GET /health/live"]',
+    'module.platform.aws_apigatewayv2_route.gateway_lambda_public["GET /health/ready"]'
+  )
+  $cutoverExpectedUpdates = @(
+    "module.platform.aws_apigatewayv2_route.gateway[0]",
+    "module.platform.aws_cloudwatch_event_rule.outbox_reconciler[0]",
+    "module.platform.aws_cloudwatch_event_rule.profile_readiness_terminal[0]",
+    "module.platform.aws_lambda_alias.gateway[0]",
+    "module.platform.aws_lambda_event_source_mapping.outbox_starter[0]",
+    "module.platform.aws_lambda_function.gateway[0]"
+  )
   $expectedCreates = @(
-    if ($RecoverFailedApply) {
+    if ($PlanRuntimeCutover) {
+      $cutoverExpectedCreates
+    } elseif ($RecoverFailedApply) {
       $recoveryExpectedCreates
     } elseif (-not ($AllowArtifactReleaseUpdate -or $VerifyCompletedDarkDeployment)) {
       $initialExpectedCreates
     }
   )
   $expectedUpdates = @(
-    if ($AllowArtifactReleaseUpdate) {
+    if ($PlanRuntimeCutover) {
+      $cutoverExpectedUpdates
+    } elseif ($AllowArtifactReleaseUpdate) {
       $releaseExpectedUpdates
     } elseif (-not ($VerifyCompletedDarkDeployment -or $RecoverFailedApply)) {
       $initialExpectedUpdates
@@ -967,7 +1027,8 @@ try {
   if (
     -not $RecoverFailedApply -and
     -not $AllowArtifactReleaseUpdate -and
-    -not $VerifyCompletedDarkDeployment
+    -not $VerifyCompletedDarkDeployment -and
+    -not $PlanRuntimeCutover
   ) {
   $gatewayFunctionChange = Get-PlannedChange "module.platform.aws_lambda_function.gateway[0]"
   Assert-OnlyPropertiesChanged $gatewayFunctionChange @(
@@ -985,6 +1046,7 @@ try {
   ) {
     throw "The gateway dark update does not add only the Temporal-routed outbox environment."
   }
+
   foreach ($name in $beforeNames) {
     if ([string]$beforeGatewayVariables.$name -ne [string]$afterGatewayVariables.$name) {
       throw "The gateway dark update changes an existing environment value."
@@ -1010,6 +1072,67 @@ try {
       throw "A role-dependent policy update unexpectedly resolved before its exact roles exist."
     }
   }
+  }
+
+  if ($PlanRuntimeCutover) {
+    $gatewayFunctionChange = Get-PlannedChange "module.platform.aws_lambda_function.gateway[0]"
+    Assert-OnlyPropertiesChanged $gatewayFunctionChange @(
+      "environment", "last_modified", "qualified_arn", "qualified_invoke_arn", "version"
+    ) "The cutover gateway update changes more than dispatch environment and immutable version."
+    $beforeGatewayVariables = $gatewayFunctionChange.change.before.environment[0].variables
+    $afterGatewayVariables = $gatewayFunctionChange.change.after.environment[0].variables
+    if (
+      [string]$beforeGatewayVariables.OUTBOX_DISPATCH_TARGET -ne "temporal" -or
+      [string]$afterGatewayVariables.OUTBOX_DISPATCH_TARGET -ne "lambda_durable" -or
+      (Compare-Object @($beforeGatewayVariables.PSObject.Properties.Name | Sort-Object) `
+        @($afterGatewayVariables.PSObject.Properties.Name | Sort-Object))
+    ) {
+      throw "The cutover gateway version does not change only Temporal dispatch to Lambda durable."
+    }
+    foreach ($name in @($beforeGatewayVariables.PSObject.Properties.Name)) {
+      if (
+        $name -ne "OUTBOX_DISPATCH_TARGET" -and
+        [string]$beforeGatewayVariables.$name -ne [string]$afterGatewayVariables.$name
+      ) {
+        throw "The cutover gateway version changes an unrelated environment value."
+      }
+    }
+
+    $gatewayAliasChange = Get-PlannedChange "module.platform.aws_lambda_alias.gateway[0]"
+    Assert-OnlyPropertiesChanged $gatewayAliasChange @("function_version") `
+      "The cutover gateway alias changes more than its immutable version."
+    if (-not [bool]$gatewayAliasChange.change.after_unknown.function_version) {
+      throw "The cutover alias is not bound to the exact gateway version created by the plan."
+    }
+
+    $lambdaIntegration = Get-PlannedValue `
+      "module.platform.aws_apigatewayv2_integration.gateway_lambda[0]"
+    if (
+      [string]$lambdaIntegration.integration_type -ne "AWS_PROXY" -or
+      [string]$lambdaIntegration.integration_method -ne "POST" -or
+      [string]$lambdaIntegration.payload_format_version -ne "2.0" -or
+      [int]$lambdaIntegration.timeout_milliseconds -ne 15000
+    ) {
+      throw "The cutover Lambda integration is outside the reviewed HTTP API v2 boundary."
+    }
+
+    $defaultRoute = Get-PlannedValue "module.platform.aws_apigatewayv2_route.gateway[0]"
+    if (
+      [string]$defaultRoute.route_key -ne '$default' -or
+      [string]$defaultRoute.authorization_type -ne "JWT"
+    ) {
+      throw "The cutover default route is not protected by the reviewed JWT authorizer."
+    }
+    foreach ($routeKey in @("GET /health/live", "GET /health/ready")) {
+      $route = Get-PlannedValue `
+        "module.platform.aws_apigatewayv2_route.gateway_lambda_public[`"$routeKey`"]"
+      if (
+        [string]$route.route_key -ne $routeKey -or
+        [string]$route.authorization_type -ne "NONE"
+      ) {
+        throw "The cutover exposes a public route outside the exact health boundary."
+      }
+    }
   }
 
   if ($AllowArtifactReleaseUpdate) {
@@ -1162,18 +1285,20 @@ try {
 
   $starterMapping = Get-PlannedValue `
     "module.platform.aws_lambda_event_source_mapping.outbox_starter[0]"
+  $expectedTriggerEnabled = [bool]$PlanRuntimeCutover
   if (
-    [bool]$starterMapping.enabled -or
+    [bool]$starterMapping.enabled -ne $expectedTriggerEnabled -or
     @($starterMapping.function_response_types) -notcontains "ReportBatchItemFailures"
   ) {
-    throw "The dark SQS starter mapping is enabled or lacks partial-batch failure handling."
+    throw "The SQS starter mapping does not match the reviewed runtime state or partial-batch boundary."
   }
   foreach ($ruleAddress in @(
     "module.platform.aws_cloudwatch_event_rule.outbox_reconciler[0]",
     "module.platform.aws_cloudwatch_event_rule.profile_readiness_terminal[0]"
   )) {
-    if ([string](Get-PlannedValue $ruleAddress).state -ne "DISABLED") {
-      throw "A serverless workflow EventBridge trigger is enabled in the dark plan."
+    $expectedRuleState = if ($PlanRuntimeCutover) { "ENABLED" } else { "DISABLED" }
+    if ([string](Get-PlannedValue $ruleAddress).state -ne $expectedRuleState) {
+      throw "A serverless workflow EventBridge trigger does not match the reviewed runtime state."
     }
   }
 
@@ -1231,7 +1356,7 @@ try {
     ) {
       throw "The durable stack does not select the exact artifact, version, or bounded concurrency."
     }
-  } elseif ($VerifyCompletedDarkDeployment) {
+  } elseif ($VerifyCompletedDarkDeployment -or $PlanRuntimeCutover) {
     throw "The completed durable stack template is unavailable for exact verification."
   } else {
     $durableStackChange = Get-PlannedChange `
@@ -1248,7 +1373,8 @@ try {
   $initialDarkDeployment = -not (
     $RecoverFailedApply -or
     $AllowArtifactReleaseUpdate -or
-    $VerifyCompletedDarkDeployment
+    $VerifyCompletedDarkDeployment -or
+    $PlanRuntimeCutover
   )
   $propagationResourceChange = Get-OnlyItem `
     -Items @($plan.resource_changes | Where-Object {
@@ -1306,12 +1432,16 @@ try {
   }
 
   $changedAddresses = @($changes | ForEach-Object { [string]$_.address })
-  if (@($changedAddresses | Where-Object {
-      $_ -match "aws_apigatewayv2_(api|integration|route|stage)" -or
-      $_ -match "aws_ecs_(service|task_definition|cluster)"
-    }).Count -ne 0
-  ) {
-    throw "The dark workflow plan changes API routing or ECS capacity."
+  $unexpectedApiOrEcsChanges = @($changedAddresses | Where-Object {
+      ($_ -match "aws_ecs_(service|task_definition|cluster)") -or
+      (
+        $_ -match "aws_apigatewayv2_(api|integration|route|stage)" -and
+        $expectedCreates -notcontains $_ -and
+        $expectedUpdates -notcontains $_
+      )
+    })
+  if ($unexpectedApiOrEcsChanges.Count -ne 0) {
+    throw "The workflow plan changes API or ECS resources outside the reviewed mode boundary."
   }
 
   $planHash = (Get-FileHash -LiteralPath $planPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -1322,16 +1452,19 @@ try {
     RecoveryFromFailedApply    = [bool]$RecoverFailedApply
     ArtifactReleaseUpdate      = [bool]$AllowArtifactReleaseUpdate
     CompletedDarkVerification  = [bool]$VerifyCompletedDarkDeployment
+    RuntimeCutover             = [bool]$PlanRuntimeCutover
     NoDrift                    = [bool]$VerifyCompletedDarkDeployment
     GatewayEcsApiBaselineStable = $true
     EcsRuntimeIdle             = [bool]$ecsRuntimeIdle
+    LegacyOutboxEmpty          = if ($PlanRuntimeCutover) { $true } else { $null }
+    TemporalOpenWorkflowsEmpty = if ($PlanRuntimeCutover) { $true } else { $null }
     EndpointSidCorrection      = $acceptedEndpointSidCorrection
     EffectiveDurableDlqPermission = if ($RecoverFailedApply) { $true } else { $null }
     ArtifactsVerified          = 3
     PinnedExtensionVerified    = $true
-    DispatchTarget             = "temporal"
-    TriggersEnabled            = $false
-    ApiTrafficChange           = $false
+    DispatchTarget             = if ($PlanRuntimeCutover) { "lambda_durable" } else { "temporal" }
+    TriggersEnabled            = [bool]$PlanRuntimeCutover
+    ApiTrafficChange           = [bool]$PlanRuntimeCutover
     EcsCapacityChange          = $false
     Creates                    = $creates.Count
     Updates                    = $updates.Count
