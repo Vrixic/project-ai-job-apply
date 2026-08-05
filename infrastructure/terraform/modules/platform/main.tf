@@ -767,6 +767,10 @@ resource "aws_apigatewayv2_route" "gateway" {
   target             = "integrations/${var.serverless_runtime_cutover ? aws_apigatewayv2_integration.gateway_lambda[0].id : aws_apigatewayv2_integration.gateway[0].id}"
   authorization_type = var.serverless_runtime_cutover ? "JWT" : "NONE"
   authorizer_id      = var.serverless_runtime_cutover ? aws_apigatewayv2_authorizer.gateway[0].id : null
+  authorization_scopes = var.serverless_runtime_cutover ? [
+    "profile:read",
+    "profile:write"
+  ] : null
 }
 
 resource "aws_apigatewayv2_route" "gateway_lambda_public" {

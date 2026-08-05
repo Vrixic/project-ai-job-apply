@@ -37,11 +37,11 @@ Usage:
     -PlanPath .terraform/workflow-dark-plans/PLAN.tfplan `
     -ExpectedPlanSha256 REVIEWED_SHA256 -Execute
 
-Status performs no AWS mutation. Apply accepts only the exact checksum-reviewed staging plan
-created from the current clean, upstream-matched main commit. The plan must contain exactly two
-in-place updates: the gateway Lambda immutable artifact/version and its public alias. API routes,
-JWT authorization, durable workflow triggers, retained idle ECS, data, and every other resource
-must remain unchanged. Apply immediately runs the completed-runtime zero-drift verifier.
+Status performs no AWS mutation. Apply accepts only an exact checksum-reviewed staging plan
+created from the current clean, upstream-matched main commit. It permits either the two-update
+immutable Lambda release or the one-update default-route scope correction. Both modes preserve
+the JWT authorizer, Lambda integration, durable workflow triggers, retained idle ECS, data, and
+every unrelated resource. Apply immediately runs the completed-runtime zero-drift verifier.
 "@
   exit 0
 }
@@ -264,7 +264,14 @@ function Assert-GatewayReleasePlan {
 
   $route = Get-PlannedValue $Plan "module.platform.aws_apigatewayv2_route.gateway[0]"
   $integration = Get-PlannedValue $Plan "module.platform.aws_apigatewayv2_integration.gateway_lambda[0]"
+  $routeScopes = @($route.authorization_scopes | Sort-Object)
+  $routeScopeDifference = @(
+    Compare-Object `
+      -ReferenceObject $routeScopes `
+      -DifferenceObject @("profile:read", "profile:write")
+  )
   if (
+    $routeScopes.Count -ne 2 -or $routeScopeDifference.Count -ne 0 -or
     [string]$route.authorization_type -ne "JWT" -or
     [string]$route.target -ne "integrations/$([string]$integration.id)" -or
     [string]$integration.integration_type -ne "AWS_PROXY" -or
@@ -286,6 +293,98 @@ function Assert-GatewayReleasePlan {
       throw "The gateway release does not preserve idle retained ECS."
     }
   }
+}
+
+function Assert-GatewayScopeBoundaryPlan {
+  param([Parameter(Mandatory = $true)][object]$Plan)
+  $routeAddress = "module.platform.aws_apigatewayv2_route.gateway[0]"
+  $changes = @($Plan.resource_changes | Where-Object {
+    (@($_.change.actions) -join ",") -notin @("no-op", "read")
+  })
+  $updates = @($changes | Where-Object { (@($_.change.actions) -join ",") -eq "update" })
+  if (
+    $changes.Count -ne 1 -or $updates.Count -ne 1 -or
+    [string]$updates[0].address -ne $routeAddress
+  ) { throw "The plan is outside the exact one-update staging JWT scope boundary." }
+
+  foreach ($name in @(
+    "deploy_applications", "deploy_gateway_lambda", "deploy_serverless_outbox",
+    "deploy_profile_readiness_durable", "serverless_runtime_cutover"
+  )) {
+    if (-not (Get-PlanBoolean -Plan $Plan -Name $name)) {
+      throw "The JWT scope correction does not preserve the complete serverless runtime."
+    }
+  }
+  if (Get-PlanBoolean -Plan $Plan -Name "run_continuous_ecs_runtime") {
+    throw "The JWT scope correction attempts to resume continuous ECS capacity."
+  }
+
+  $routeChange = $updates[0]
+  Assert-OnlyPropertiesChanged $routeChange @("authorization_scopes") `
+    "The JWT scope correction changes more than the default route authorization scopes."
+  $beforeScopes = @($routeChange.change.before.authorization_scopes | Sort-Object)
+  $afterScopes = @($routeChange.change.after.authorization_scopes | Sort-Object)
+  $scopeDifference = @(
+    Compare-Object `
+      -ReferenceObject $afterScopes `
+      -DifferenceObject @("profile:read", "profile:write")
+  )
+  $integration = Get-PlannedValue $Plan `
+    "module.platform.aws_apigatewayv2_integration.gateway_lambda[0]"
+  if (
+    $beforeScopes.Count -ne 0 -or $afterScopes.Count -ne 2 -or
+    $scopeDifference.Count -ne 0 -or
+    [string]$routeChange.change.after.authorization_type -ne "JWT" -or
+    [string]$routeChange.change.after.route_key -ne '$default' -or
+    [string]$routeChange.change.after.target -ne
+      "integrations/$([string]$integration.id)" -or
+    [string]$integration.integration_type -ne "AWS_PROXY" -or
+    [string]$integration.payload_format_version -ne "2.0"
+  ) { throw "The default route is outside the exact reviewed JWT scope correction." }
+
+  if (
+    -not [bool](Get-PlannedValue $Plan `
+      "module.platform.aws_lambda_event_source_mapping.outbox_starter[0]").enabled -or
+    [string](Get-PlannedValue $Plan `
+      "module.platform.aws_cloudwatch_event_rule.outbox_reconciler[0]").state -ne "ENABLED" -or
+    [string](Get-PlannedValue $Plan `
+      "module.platform.aws_cloudwatch_event_rule.profile_readiness_terminal[0]").state -ne "ENABLED"
+  ) { throw "The JWT scope correction does not preserve every live workflow trigger." }
+  foreach ($address in @(
+    "module.platform.aws_ecs_service.gateway[0]",
+    "module.platform.aws_ecs_service.worker[0]"
+  )) {
+    if ([int](Get-PlannedValue $Plan $address).desired_count -ne 0) {
+      throw "The JWT scope correction does not preserve idle retained ECS."
+    }
+  }
+}
+
+function Get-GatewayPlanKind {
+  param([Parameter(Mandatory = $true)][object]$Plan)
+  $addresses = @(
+    $Plan.resource_changes |
+      Where-Object { (@($_.change.actions) -join ",") -notin @("no-op", "read") } |
+      ForEach-Object { [string]$_.address } |
+      Sort-Object
+  )
+  $releaseAddresses = @(
+    "module.platform.aws_lambda_alias.gateway[0]",
+    "module.platform.aws_lambda_function.gateway[0]"
+  ) | Sort-Object
+  $releaseDifference = @(
+    Compare-Object -ReferenceObject $addresses -DifferenceObject $releaseAddresses
+  )
+  if ($addresses.Count -eq 2 -and $releaseDifference.Count -eq 0) {
+    return "artifact_release"
+  }
+  if (
+    $addresses.Count -eq 1 -and
+    $addresses[0] -eq "module.platform.aws_apigatewayv2_route.gateway[0]"
+  ) {
+    return "scope_boundary"
+  }
+  throw "The plan is outside every reviewed staging gateway change boundary."
 }
 
 function Invoke-AwsJson {
@@ -393,13 +492,20 @@ function Invoke-SavedPlan {
 Assert-Tools
 $resolvedPlanPath = Resolve-PlanPath
 $plan = Get-PlanJson $resolvedPlanPath
-Assert-GatewayReleasePlan $plan
+$planKind = Get-GatewayPlanKind $plan
+if ($planKind -eq "artifact_release") { Assert-GatewayReleasePlan $plan }
+else { Assert-GatewayScopeBoundaryPlan $plan }
 $actualPlanSha256 = (Get-FileHash -LiteralPath $resolvedPlanPath -Algorithm SHA256).Hash.ToLowerInvariant()
 
 if ($Action -eq "Status") {
   [ordered]@{
-    Environment = "staging"; Action = "gateway_release_review"; PlanSha256 = $actualPlanSha256
-    Creates = 0; Updates = 2; Deletes = 0; Replacements = 0
+    Environment = "staging"
+    Action = if ($planKind -eq "artifact_release") {
+      "gateway_release_review"
+    } else { "gateway_scope_boundary_review" }
+    PlanSha256 = $actualPlanSha256
+    Creates = 0; Updates = if ($planKind -eq "artifact_release") { 2 } else { 1 }
+    Deletes = 0; Replacements = 0
     ApiTrafficChange = $true; WorkflowTriggerChange = $false; EcsCapacityChange = $false
     AwsMutation = $false
   } | ConvertTo-Json
@@ -407,8 +513,11 @@ if ($Action -eq "Status") {
 }
 
 $sourceCommit = Assert-ExactMain
+$expectedPlanPrefix = if ($planKind -eq "artifact_release") {
+  "gateway-runtime-release"
+} else { "gateway-scope-boundary" }
 if (-not (Split-Path $resolvedPlanPath -Leaf).StartsWith(
-  "gateway-runtime-release-$($sourceCommit.Substring(0, 8))",
+  "$expectedPlanPrefix-$($sourceCommit.Substring(0, 8))",
   [StringComparison]::Ordinal
 )) { throw "The reviewed gateway release plan was not created from current exact main." }
 Assert-Caller
@@ -434,7 +543,11 @@ if (
 ) { throw "The gateway release did not return to the accepted zero-drift runtime boundary." }
 
 [ordered]@{
-  Environment = "staging"; Action = "gateway_release"; AppliedPlanSha256 = $actualPlanSha256
+  Environment = "staging"
+  Action = if ($planKind -eq "artifact_release") {
+    "gateway_release"
+  } else { "gateway_scope_boundary" }
+  AppliedPlanSha256 = $actualPlanSha256
   NoDrift = $true; DispatchTarget = "lambda_durable"; TriggersEnabled = $true
   EcsRuntimeIdle = $true; PublicConformanceRequired = $true
 } | ConvertTo-Json

@@ -130,9 +130,14 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   queues/outbox/Temporal work, seven healthy alarms, and both retained ECS services at `0/0/0`.
 - `plan-development-serverless-workflow-dark.ps1` — Compatibility wrapper for development calls to
   the environment-aware workflow planner.
-- `plan-staging-serverless-runtime-cutover.ps1` — Staging-only wrapper for the atomic runtime-cutover
-  planning and completed-cutover verification modes. It fixes the environment and default IAM
-  Identity Center profile and cannot select deployment, recovery, release, or completed-dark modes.
+- `plan-staging-serverless-runtime-cutover.ps1` — Staging-only wrapper for atomic runtime cutover,
+  post-cutover gateway artifact release, exact JWT route-scope correction, and completed-cutover
+  verification. It fixes the environment and default IAM Identity Center profile and cannot select
+  dark deployment, recovery, workflow release, or completed-dark modes.
+- `operate-staging-gateway-runtime-release.ps1` — Reviews and applies either an exact two-update
+  immutable gateway release or the exact one-route update that adds `profile:read` and
+  `profile:write` to API Gateway's JWT boundary. Both paths are checksum-gated, preserve the
+  authorizer/integration/workflows/data/idle-ECS boundary, and require completed-runtime zero drift.
 - `operate-staging-serverless-runtime-cutover.ps1` — Applies only the exact checksum-reviewed
   three-create/six-update cutover plan, then delegates to the refresh-backed completed-runtime
   verifier. It also creates separately reviewed rollback and restoration plans, requires zero

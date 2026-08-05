@@ -123,6 +123,20 @@ durable readiness operation, clean queues/DLQs, healthy alarms, idle ECS, and no
 Rollback to a prior gateway build is the same process using that prior immutable artifact; it is a
 new separately reviewed two-update plan, never an unversioned code overwrite.
 
+## JWT route-scope boundary
+
+The protected `$default` route requires `profile:read` and `profile:write` as its accepted OAuth
+scope set. API Gateway permits a token containing at least one configured scope, passes the
+validated scope list to Lambda, and Lambda continues to require `profile:read` for reads and
+`profile:write` for writes. Public health routes remain anonymous and outside this default route.
+
+Use `plan-staging-serverless-runtime-cutover.ps1 -Action PlanScopeBoundary` only when live state
+lacks this exact set. The plan must contain one in-place update to the default route's
+`authorization_scopes` and zero other actions. Review it through
+`operate-staging-gateway-runtime-release.ps1 -Action Status`, authorize its exact checksum, and
+apply it through the same operator. Completed-runtime verification must return zero drift before
+authenticated preference load/save, cross-user isolation, and durable readiness are repeated.
+
 ## Rollback boundary
 
 Rollback is another reviewed coupled plan. Before generating it, stop new writes and require every

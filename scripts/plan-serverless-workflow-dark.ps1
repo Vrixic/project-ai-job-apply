@@ -37,6 +37,7 @@ param(
   [switch]$RecoverFailedApply,
   [switch]$AllowArtifactReleaseUpdate,
   [switch]$AllowGatewayArtifactReleaseUpdate,
+  [switch]$AllowGatewayScopeBoundaryUpdate,
   [switch]$VerifyCompletedDarkDeployment,
   [switch]$PlanRuntimeCutover,
   [switch]$VerifyCompletedRuntimeCutover,
@@ -60,6 +61,9 @@ stack, and policy-propagation updates caused by three new reviewed immutable art
 Use -AllowGatewayArtifactReleaseUpdate after runtime cutover to permit only a new immutable
 gateway artifact/version and the public environment alias transition. It preserves durable
 dispatch, enabled workflow triggers, idle ECS rollback resources, and every API route/integration.
+Use -AllowGatewayScopeBoundaryUpdate after runtime cutover to permit only the exact default-route
+authorization-scope correction. It requires profile:read and profile:write at API Gateway while
+preserving the authorizer, integration, Lambda release, workflows, data, and idle ECS boundary.
 Use -PlanRuntimeCutover only after the accepted dark boundary and legacy outbox are clean. It
 permits the coupled API Lambda integration/routes, gateway Lambda durable-dispatch version, and
 three replacement-trigger transitions while retaining idle ECS and the legacy rollback resources.
@@ -95,6 +99,7 @@ if ($Region -ne "us-east-2") {
   throw "The Phase 0 $Environment environment is restricted to us-east-2."
 }
 if (@($RecoverFailedApply, $AllowArtifactReleaseUpdate, $AllowGatewayArtifactReleaseUpdate,
+    $AllowGatewayScopeBoundaryUpdate,
     $VerifyCompletedDarkDeployment,
     $PlanRuntimeCutover, $VerifyCompletedRuntimeCutover |
     Where-Object { $_ }).Count -gt 1) {
@@ -102,11 +107,13 @@ if (@($RecoverFailedApply, $AllowArtifactReleaseUpdate, $AllowGatewayArtifactRel
 }
 $runtimeCutoverActive = [bool](
   $AllowGatewayArtifactReleaseUpdate -or
+  $AllowGatewayScopeBoundaryUpdate -or
   $PlanRuntimeCutover -or
   $VerifyCompletedRuntimeCutover
 )
 $liveRuntimeCutoverExpected = [bool](
-  $AllowGatewayArtifactReleaseUpdate -or $VerifyCompletedRuntimeCutover
+  $AllowGatewayArtifactReleaseUpdate -or $AllowGatewayScopeBoundaryUpdate -or
+  $VerifyCompletedRuntimeCutover
 )
 
 function Assert-ArtifactKey {
@@ -138,6 +145,8 @@ $planPrefix = if ($PlanRuntimeCutover) {
   "serverless-runtime-cutover"
 } elseif ($AllowGatewayArtifactReleaseUpdate) {
   "gateway-runtime-release"
+} elseif ($AllowGatewayScopeBoundaryUpdate) {
+  "gateway-scope-boundary"
 } elseif ($VerifyCompletedRuntimeCutover) {
   "serverless-runtime-cutover-verify"
 } elseif ($VerifyCompletedDarkDeployment) {
@@ -259,6 +268,7 @@ if (
   -not $RecoverFailedApply -and
   -not $AllowArtifactReleaseUpdate -and
   -not $AllowGatewayArtifactReleaseUpdate -and
+  -not $AllowGatewayScopeBoundaryUpdate -and
   -not $VerifyCompletedDarkDeployment -and
   -not $PlanRuntimeCutover -and
   -not $VerifyCompletedRuntimeCutover
@@ -415,6 +425,7 @@ try {
   if (
     $RecoverFailedApply -or $AllowArtifactReleaseUpdate -or
     $AllowGatewayArtifactReleaseUpdate -or
+    $AllowGatewayScopeBoundaryUpdate -or
     $VerifyCompletedDarkDeployment -or $PlanRuntimeCutover -or
     $VerifyCompletedRuntimeCutover
   ) {
@@ -1033,6 +1044,7 @@ try {
     } elseif (-not (
       $AllowArtifactReleaseUpdate -or $VerifyCompletedDarkDeployment -or
       $AllowGatewayArtifactReleaseUpdate -or
+      $AllowGatewayScopeBoundaryUpdate -or
       $VerifyCompletedRuntimeCutover
     )) {
       $initialExpectedCreates
@@ -1043,6 +1055,8 @@ try {
       $cutoverExpectedUpdates
     } elseif ($AllowGatewayArtifactReleaseUpdate) {
       $gatewayReleaseExpectedUpdates
+    } elseif ($AllowGatewayScopeBoundaryUpdate) {
+      @("module.platform.aws_apigatewayv2_route.gateway[0]")
     } elseif ($AllowArtifactReleaseUpdate) {
       $releaseExpectedUpdates
     } elseif (-not (
@@ -1145,6 +1159,7 @@ try {
     -not $RecoverFailedApply -and
     -not $AllowArtifactReleaseUpdate -and
     -not $AllowGatewayArtifactReleaseUpdate -and
+    -not $AllowGatewayScopeBoundaryUpdate -and
     -not $VerifyCompletedDarkDeployment -and
     -not $PlanRuntimeCutover -and
     -not $VerifyCompletedRuntimeCutover
@@ -1316,6 +1331,56 @@ try {
       [string]$lambdaIntegration.payload_format_version -ne "2.0"
     ) {
       throw "The runtime gateway release is outside the existing JWT-protected Lambda route."
+    }
+  }
+
+  if ($AllowGatewayScopeBoundaryUpdate) {
+    $routeChange = Get-PlannedChange "module.platform.aws_apigatewayv2_route.gateway[0]"
+    Assert-OnlyPropertiesChanged $routeChange @("authorization_scopes") `
+      "The JWT scope correction changes more than the default route authorization scopes."
+    $beforeScopes = @($routeChange.change.before.authorization_scopes | Sort-Object)
+    $afterScopes = @($routeChange.change.after.authorization_scopes | Sort-Object)
+    $scopeDifference = @(
+      Compare-Object `
+        -ReferenceObject $afterScopes `
+        -DifferenceObject @("profile:read", "profile:write")
+    )
+    $lambdaIntegration = Get-PlannedValue `
+      "module.platform.aws_apigatewayv2_integration.gateway_lambda[0]"
+    if (
+      $beforeScopes.Count -ne 0 -or $afterScopes.Count -ne 2 -or
+      $scopeDifference.Count -ne 0 -or
+      [string]$routeChange.change.after.authorization_type -ne "JWT" -or
+      [string]$routeChange.change.after.route_key -ne '$default' -or
+      [string]$routeChange.change.after.target -ne
+        "integrations/$([string]$lambdaIntegration.id)" -or
+      [string]$lambdaIntegration.integration_type -ne "AWS_PROXY" -or
+      [string]$lambdaIntegration.payload_format_version -ne "2.0"
+    ) {
+      throw "The default route is outside the exact reviewed JWT scope correction."
+    }
+  }
+
+  if ($runtimeCutoverActive) {
+    $protectedRoute = Get-PlannedValue "module.platform.aws_apigatewayv2_route.gateway[0]"
+    $protectedIntegration = Get-PlannedValue `
+      "module.platform.aws_apigatewayv2_integration.gateway_lambda[0]"
+    $protectedScopes = @($protectedRoute.authorization_scopes | Sort-Object)
+    $protectedScopeDifference = @(
+      Compare-Object `
+        -ReferenceObject $protectedScopes `
+        -DifferenceObject @("profile:read", "profile:write")
+    )
+    if (
+      $protectedScopes.Count -ne 2 -or $protectedScopeDifference.Count -ne 0 -or
+      [string]$protectedRoute.authorization_type -ne "JWT" -or
+      [string]$protectedRoute.route_key -ne '$default' -or
+      [string]$protectedRoute.target -ne
+        "integrations/$([string]$protectedIntegration.id)" -or
+      [string]$protectedIntegration.integration_type -ne "AWS_PROXY" -or
+      [string]$protectedIntegration.payload_format_version -ne "2.0"
+    ) {
+      throw "The live Lambda route does not enforce the exact platform JWT scope boundary."
     }
   }
 
@@ -1558,6 +1623,7 @@ try {
     $RecoverFailedApply -or
     $AllowArtifactReleaseUpdate -or
     $AllowGatewayArtifactReleaseUpdate -or
+    $AllowGatewayScopeBoundaryUpdate -or
     $VerifyCompletedDarkDeployment -or
     $PlanRuntimeCutover -or
     $VerifyCompletedRuntimeCutover
@@ -1638,6 +1704,7 @@ try {
     RecoveryFromFailedApply    = [bool]$RecoverFailedApply
     ArtifactReleaseUpdate      = [bool]$AllowArtifactReleaseUpdate
     GatewayArtifactReleaseUpdate = [bool]$AllowGatewayArtifactReleaseUpdate
+    GatewayScopeBoundaryUpdate   = [bool]$AllowGatewayScopeBoundaryUpdate
     CompletedDarkVerification  = [bool]$VerifyCompletedDarkDeployment
     RuntimeCutover             = [bool]$PlanRuntimeCutover
     CompletedRuntimeCutoverVerification = [bool]$VerifyCompletedRuntimeCutover
@@ -1654,7 +1721,8 @@ try {
     DispatchTarget             = if ($runtimeCutoverActive) { "lambda_durable" } else { "temporal" }
     TriggersEnabled            = $runtimeCutoverActive
     ApiTrafficChange           = [bool](
-      $PlanRuntimeCutover -or $AllowGatewayArtifactReleaseUpdate
+      $PlanRuntimeCutover -or $AllowGatewayArtifactReleaseUpdate -or
+      $AllowGatewayScopeBoundaryUpdate
     )
     EcsCapacityChange          = $false
     Creates                    = $creates.Count

@@ -25,7 +25,9 @@ mapping; Auth0 identifiers do not cross into public or domain identifiers.
 
 The scale-to-zero migration adds a shared application factory and an API Gateway HTTP API payload
 2.0 Lambda entrypoint. The Lambda path accepts identity only from the exact validated authorizer
-context. When API Gateway's string-only claims map flattens a multi-valued audience, the boundary
+context. The protected API Gateway route requires at least one exact platform scope, and Lambda
+retains route-specific `profile:read` or `profile:write` enforcement. When API Gateway's
+string-only claims map flattens a multi-valued audience, the boundary
 recovers the exact audience array from the same API Gateway-validated bearer token and binds it to
 the trusted context through exact issuer and subject equality; the caller token is never forwarded
 into the application. The entrypoint keeps the principal invocation-local, allows only the

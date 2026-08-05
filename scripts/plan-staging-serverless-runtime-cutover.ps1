@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [ValidateSet("Plan", "PlanGatewayRelease", "Verify")]
+  [ValidateSet("Plan", "PlanGatewayRelease", "PlanScopeBoundary", "Verify")]
   [string]$Action = "Plan",
   [ValidatePattern("^[0-9]{12}$")][string]$ExpectedAccountId,
   [ValidatePattern("^[a-z0-9.-]+$")][string]$StateBucket,
@@ -36,7 +36,7 @@ param(
 $ErrorActionPreference = "Stop"
 $planner = Join-Path $PSScriptRoot "plan-serverless-workflow-dark.ps1"
 if ($Help) {
-  Write-Host "Staging runtime wrapper. Use Plan for cutover, PlanGatewayRelease for a post-cutover immutable gateway release, and Verify after apply."
+  Write-Host "Staging runtime wrapper. Use Plan for cutover, PlanGatewayRelease for an immutable gateway release, PlanScopeBoundary for the exact JWT route-scope correction, and Verify after apply."
   & $planner -Help
   exit $LASTEXITCODE
 }
@@ -72,6 +72,8 @@ if ($Action -eq "Plan") {
   $arguments["PlanRuntimeCutover"] = $true
 } elseif ($Action -eq "PlanGatewayRelease") {
   $arguments["AllowGatewayArtifactReleaseUpdate"] = $true
+} elseif ($Action -eq "PlanScopeBoundary") {
+  $arguments["AllowGatewayScopeBoundaryUpdate"] = $true
 } else {
   $arguments["VerifyCompletedRuntimeCutover"] = $true
 }
