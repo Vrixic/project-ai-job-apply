@@ -54,8 +54,10 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   concurrency, JWT authorizer, and unchanged ECS public route, then uses a loopback-only
   token-validating bridge for real two-account conformance. The bridge forwards validated
   issuer/subject/audience/scopes but never the real token, exposes only the Phase 0 profile routes,
-  and is stopped with the local web process. Select staging with `-Environment staging`; add the
-  explicit `-EnableWorkloadConformance` switch only for the reviewed routed staging workload.
+  and is stopped with the local web process. State is resolved only from the selected environment's
+  initialized backend metadata and its KMS ownership is checked against the current caller. Select
+  staging with `-Environment staging`; add the explicit `-EnableWorkloadConformance` switch only
+  for the reviewed routed staging workload.
 - `verify-gateway-lambda-boundary.ps1` — Runs the guarded, no-write failure matrix against the
   selected environment's immutable dark alias. It verifies exact route/method denial, missing and
   wrong-environment authorizer claims, scope denial, query/body/media constraints, malformed
