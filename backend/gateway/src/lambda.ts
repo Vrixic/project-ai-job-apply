@@ -98,6 +98,7 @@ const HOP_BY_HOP_HEADERS = new Set([
   "transfer-encoding",
   "upgrade",
 ]);
+const MAXIMUM_BEARER_TOKEN_BYTES = 16 * 1024;
 
 interface AllowedRoute {
   acceptsBody: boolean;
@@ -220,6 +221,32 @@ function claimStrings(value: JwtClaimValue): string[] {
   return [value];
 }
 
+function bearerTokenClaims(
+  event: AuthorizedHttpApiEvent,
+): Record<string, JwtClaimValue> | undefined {
+  const authorization = Object.entries(event.headers ?? {}).find(
+    ([name, value]) => name.toLowerCase() === "authorization" && typeof value === "string",
+  )?.[1];
+  if (typeof authorization !== "string" || authorization.length > MAXIMUM_BEARER_TOKEN_BYTES) {
+    return undefined;
+  }
+
+  const match = /^Bearer ([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/.exec(authorization);
+  if (!match?.[2]) {
+    return undefined;
+  }
+
+  try {
+    const decoded: unknown = JSON.parse(Buffer.from(match[2], "base64url").toString("utf8"));
+    if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) {
+      return undefined;
+    }
+    return decoded as Record<string, JwtClaimValue>;
+  } catch {
+    return undefined;
+  }
+}
+
 function audienceEncoding(
   value: JwtClaimValue,
 ): AuthenticationContextDiagnostic["audienceEncoding"] {
@@ -254,18 +281,39 @@ function authorizerPrincipal(
   const claims = event.requestContext.authorizer?.jwt?.claims;
   const subject = typeof claims?.sub === "string" ? claims.sub : undefined;
   const tokenIssuer = typeof claims?.iss === "string" ? claims.iss : undefined;
-  const audiences = claimStrings(claims?.aud);
+  const contextAudiences = claimStrings(claims?.aud);
+  const contextAudienceMatches = contextAudiences.includes(audience);
+  const originalClaims = contextAudienceMatches ? undefined : bearerTokenClaims(event);
+  const originalSubject = typeof originalClaims?.sub === "string" ? originalClaims.sub : undefined;
+  const originalIssuer = typeof originalClaims?.iss === "string" ? originalClaims.iss : undefined;
+  const originalAudiences = claimStrings(originalClaims?.aud);
+  // API Gateway has already verified the bearer token's signature, algorithm, time claims,
+  // issuer, and audience before creating this authorizer context. Its string-only claims map can
+  // flatten a standards-compliant multi-valued `aud` claim. In that one case, recover the exact
+  // array from the same bearer token and bind it back to the trusted context through issuer and
+  // subject equality. The caller token is never forwarded into the application.
+  const originalAudienceMatches =
+    Boolean(claims?.aud) &&
+    originalIssuer === tokenIssuer &&
+    originalSubject === subject &&
+    originalAudiences.includes(audience);
+  const audiences = contextAudienceMatches ? contextAudiences : originalAudiences;
   const validatedScopes = event.requestContext.authorizer?.jwt?.scopes;
   const scopes = Array.isArray(validatedScopes)
     ? validatedScopes.filter((scope): scope is string => typeof scope === "string")
     : [];
 
-  if (!claims || !subject || tokenIssuer !== issuer || !audiences.includes(audience)) {
+  if (
+    !claims ||
+    !subject ||
+    tokenIssuer !== issuer ||
+    (!contextAudienceMatches && !originalAudienceMatches)
+  ) {
     onAuthenticationFailure?.({
       claimsPresent: Boolean(claims),
       subjectPresent: Boolean(subject),
       issuerMatches: tokenIssuer === issuer,
-      audienceMatches: audiences.includes(audience),
+      audienceMatches: contextAudienceMatches || originalAudienceMatches,
       audienceEncoding: audienceEncoding(claims?.aud),
     });
     throw new AuthenticationError("Validated API Gateway identity context is required");
