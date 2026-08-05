@@ -1,7 +1,10 @@
 import type { AuthPrincipal } from "@ai-job-apply/auth";
 import { AuthenticationError } from "@ai-job-apply/auth";
 import { describe, expect, it, vi } from "vitest";
-import { handleDarkConformanceRequest } from "./dark-conformance-bridge.js";
+import {
+  handleDarkConformanceRequest,
+  validateDarkConformanceTarget,
+} from "./dark-conformance-bridge.js";
 import type { AuthorizedHttpApiEvent } from "./lambda.js";
 
 const issuer = "https://identity.example.test/";
@@ -39,7 +42,38 @@ function dependencies(overrides: Record<string, unknown> = {}) {
   };
 }
 
-describe("development dark Lambda conformance bridge", () => {
+describe("dark Lambda conformance bridge", () => {
+  it.each([
+    "development",
+    "staging",
+  ])("binds the %s bridge to its exact environment function and alias", (environment) => {
+    expect(() =>
+      validateDarkConformanceTarget({
+        alias: environment,
+        audience,
+        environment,
+        expectedVersion: "1",
+        functionName: `ai-job-apply-${environment}-gateway`,
+        port: 4400,
+        region: "us-east-2",
+      }),
+    ).not.toThrow();
+  });
+
+  it("rejects cross-environment function or alias selection", () => {
+    expect(() =>
+      validateDarkConformanceTarget({
+        alias: "development",
+        audience,
+        environment: "staging",
+        expectedVersion: "1",
+        functionName: "ai-job-apply-development-gateway",
+        port: 4400,
+        region: "us-east-2",
+      }),
+    ).toThrow("outside the selected environment boundary");
+  });
+
   it("validates the real token but forwards only trusted claims and a placeholder bearer", async () => {
     const setup = dependencies();
     const result = await handleDarkConformanceRequest(

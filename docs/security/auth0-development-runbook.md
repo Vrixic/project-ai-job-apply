@@ -120,19 +120,23 @@ Then verify with a synthetic development account:
 
 ### Dark Lambda ownership conformance
 
-After the versioned development Lambda is complete but before changing public traffic, start the
-same local BFF through the guarded dark-runtime mode:
+After the selected environment's versioned Lambda is complete but before changing public traffic,
+start the same local BFF through the guarded dark-runtime mode. Omit `-Environment staging` for
+development:
 
 ```powershell
-.\scripts\start-deployed-web-conformance.ps1 -GatewayRuntime lambda-dark
+  .\scripts\start-deployed-web-conformance.ps1 `
+    -Environment staging `
+    -GatewayRuntime lambda-dark
 ```
 
-The launcher fails closed unless ECS remains stable and publicly routed, the Lambda is active at
-reserved concurrency `2`, its `development` alias targets an immutable version, and the dormant
-JWT authorizer exactly matches the ignored local issuer and audience. A loopback-only bridge uses
-the shared RS256/JWKS verifier on each server-held access token, replaces the token with a
-non-secret placeholder, and passes only validated issuer, subject, audience, and scopes to the
-alias. It permits only health, current-user preferences, and owner-scoped operation reads.
+The launcher fails closed unless the retained ECS service remains idle at `0/0/0`, the public ECS
+rollback integration is unchanged, the Lambda is active at reserved concurrency `2`, its
+environment-named alias targets an immutable version, and the dormant JWT authorizer exactly
+matches the ignored local issuer and audience. A loopback-only bridge uses the shared RS256/JWKS
+verifier on each server-held access token, replaces the token with a non-secret placeholder, and
+passes only validated issuer, subject, audience, and scopes to the alias. It permits only health,
+current-user preferences, and owner-scoped operation reads.
 
 Repeat step 9 with two distinct synthetic accounts. Account A must save harmless preferences and
 reach a succeeded operation through the dark alias; account B must receive the existing sanitized

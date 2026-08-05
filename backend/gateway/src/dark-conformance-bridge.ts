@@ -1,7 +1,7 @@
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
-import { fileURLToPath } from "node:url";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   type AccessTokenVerifier,
   AuthenticationError,
@@ -43,6 +43,16 @@ interface BridgeDependencies {
   now?: () => Date;
   requestId?: () => string;
   verifier: AccessTokenVerifier;
+}
+
+export interface DarkConformanceTarget {
+  alias: string;
+  audience: string;
+  environment: string;
+  expectedVersion: string;
+  functionName: string;
+  port: number;
+  region: string;
 }
 
 interface AllowedRoute {
@@ -262,6 +272,24 @@ function exactHttpsIssuer(value: string): string {
   return issuer.toString();
 }
 
+export function validateDarkConformanceTarget(target: DarkConformanceTarget): void {
+  if (
+    target.region !== "us-east-2" ||
+    !["development", "staging"].includes(target.environment) ||
+    target.functionName !== `ai-job-apply-${target.environment}-gateway` ||
+    target.alias !== target.environment ||
+    !/^[1-9][0-9]*$/.test(target.expectedVersion) ||
+    target.audience !== "ai-job-apply-api" ||
+    !Number.isInteger(target.port) ||
+    target.port < 1024 ||
+    target.port > 65_535
+  ) {
+    throw new Error(
+      "The dark Lambda bridge configuration is outside the selected environment boundary",
+    );
+  }
+}
+
 function isEntrypoint(): boolean {
   const argument = process.argv[1];
   return Boolean(
@@ -272,27 +300,25 @@ function isEntrypoint(): boolean {
 
 async function startBridge(): Promise<void> {
   if (process.env.NODE_ENV !== "development" || process.env.DARK_LAMBDA_CONFORMANCE !== "1") {
-    throw new Error("The dark Lambda bridge is restricted to explicit development conformance");
+    throw new Error("The dark Lambda bridge is restricted to explicit local conformance");
   }
   const region = requiredEnvironment("AWS_REGION");
+  const environment = requiredEnvironment("DARK_LAMBDA_ENVIRONMENT");
   const functionName = requiredEnvironment("DARK_LAMBDA_FUNCTION_NAME");
   const alias = requiredEnvironment("DARK_LAMBDA_ALIAS");
   const expectedVersion = requiredEnvironment("DARK_LAMBDA_EXPECTED_VERSION");
   const issuer = exactHttpsIssuer(requiredEnvironment("OIDC_ISSUER"));
   const audience = requiredEnvironment("OIDC_AUDIENCE");
   const port = Number(process.env.DARK_LAMBDA_BRIDGE_PORT ?? "4400");
-  if (
-    region !== "us-east-2" ||
-    functionName !== "ai-job-apply-development-gateway" ||
-    alias !== "development" ||
-    !/^[1-9][0-9]*$/.test(expectedVersion) ||
-    audience !== "ai-job-apply-api" ||
-    !Number.isInteger(port) ||
-    port < 1024 ||
-    port > 65_535
-  ) {
-    throw new Error("The dark Lambda bridge configuration is outside the development boundary");
-  }
+  validateDarkConformanceTarget({
+    alias,
+    audience,
+    environment,
+    expectedVersion,
+    functionName,
+    port,
+    region,
+  });
 
   const client = new LambdaClient({ region });
   const dependencies: BridgeDependencies = {
@@ -354,7 +380,7 @@ async function startBridge(): Promise<void> {
   server.requestTimeout = 30_000;
   server.headersTimeout = 10_000;
   server.listen(port, "127.0.0.1", () => {
-    process.stdout.write("Development dark Lambda conformance bridge ready on loopback.\n");
+    process.stdout.write(`${environment} dark Lambda conformance bridge ready on loopback.\n`);
   });
 
   const close = () => server.close(() => process.exit(0));
