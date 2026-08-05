@@ -142,6 +142,15 @@ function Get-PlanInput {
   return $variable[0].Value.value
 }
 
+function Get-PlanBoolean {
+  param([Parameter(Mandatory = $true)][object]$Plan, [Parameter(Mandatory = $true)][string]$Name)
+  $value = Get-PlanInput -Plan $Plan -Name $Name
+  if ($value -is [bool]) { return $value }
+  if ([string]$value -ceq "true") { return $true }
+  if ([string]$value -ceq "false") { return $false }
+  throw "The saved plan input '$Name' is not an exact boolean."
+}
+
 function Get-PlannedValue {
   param([object]$Plan, [string]$Address)
   $match = @($Plan.resource_changes | Where-Object { [string]$_.address -eq $Address })
@@ -177,20 +186,27 @@ function Assert-GatewayReleasePlan {
     (@($_.change.actions) -join ",") -notin @("no-op", "read")
   })
   $updates = @($changes | Where-Object { (@($_.change.actions) -join ",") -eq "update" })
+  $updateAddresses = @(
+    $updates | ForEach-Object { [string]$_.address } | Sort-Object
+  )
+  $expectedAddresses = @($expected | Sort-Object)
+  $addressDifference = @(
+    Compare-Object -ReferenceObject $updateAddresses -DifferenceObject $expectedAddresses
+  )
   if (
     $changes.Count -ne 2 -or $updates.Count -ne 2 -or
-    (Compare-Object @($updates.address | Sort-Object) @($expected | Sort-Object))
+    $addressDifference.Count -ne 0
   ) { throw "The plan is outside the exact two-update staging gateway release boundary." }
 
   foreach ($name in @(
     "deploy_applications", "deploy_gateway_lambda", "deploy_serverless_outbox",
     "deploy_profile_readiness_durable", "serverless_runtime_cutover"
   )) {
-    if (-not [bool](Get-PlanInput $Plan $name)) {
+    if (-not (Get-PlanBoolean -Plan $Plan -Name $name)) {
       throw "The gateway release does not preserve the complete serverless runtime."
     }
   }
-  if ([bool](Get-PlanInput $Plan "run_continuous_ecs_runtime")) {
+  if (Get-PlanBoolean -Plan $Plan -Name "run_continuous_ecs_runtime") {
     throw "The gateway release attempts to resume continuous ECS capacity."
   }
 
@@ -217,9 +233,15 @@ function Assert-GatewayReleasePlan {
   ) { throw "The function update does not use the exact reviewed immutable artifact." }
   $beforeVariables = $function.change.before.environment[0].variables
   $afterVariables = $function.change.after.environment[0].variables
+  $beforeVariableNames = @($beforeVariables.PSObject.Properties.Name | Sort-Object)
+  $afterVariableNames = @($afterVariables.PSObject.Properties.Name | Sort-Object)
+  $variableNameDifference = @(
+    Compare-Object `
+      -ReferenceObject $beforeVariableNames `
+      -DifferenceObject $afterVariableNames
+  )
   if (
-    (Compare-Object @($beforeVariables.PSObject.Properties.Name | Sort-Object) `
-      @($afterVariables.PSObject.Properties.Name | Sort-Object)) -or
+    $variableNameDifference.Count -ne 0 -or
     [string]$afterVariables.RELEASE_SHA -ne
       [string](Get-PlanInput $Plan "gateway_lambda_artifact_sha256") -or
     [string]$afterVariables.OUTBOX_DISPATCH_TARGET -ne "lambda_durable"

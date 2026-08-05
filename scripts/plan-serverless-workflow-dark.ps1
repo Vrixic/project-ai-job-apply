@@ -1272,9 +1272,19 @@ try {
     }
     $beforeGatewayVariables = $beforeGateway.environment[0].variables
     $afterGatewayVariables = $afterGateway.environment[0].variables
+    $beforeGatewayVariableNames = @(
+      $beforeGatewayVariables.PSObject.Properties.Name | Sort-Object
+    )
+    $afterGatewayVariableNames = @(
+      $afterGatewayVariables.PSObject.Properties.Name | Sort-Object
+    )
+    $gatewayVariableNameDifference = @(
+      Compare-Object `
+        -ReferenceObject $beforeGatewayVariableNames `
+        -DifferenceObject $afterGatewayVariableNames
+    )
     if (
-      (Compare-Object @($beforeGatewayVariables.PSObject.Properties.Name | Sort-Object) `
-        @($afterGatewayVariables.PSObject.Properties.Name | Sort-Object)) -or
+      $gatewayVariableNameDifference.Count -ne 0 -or
       [string]$afterGatewayVariables.RELEASE_SHA -ne $GatewayArtifactSha256 -or
       [string]$afterGatewayVariables.OUTBOX_DISPATCH_TARGET -ne "lambda_durable"
     ) {
