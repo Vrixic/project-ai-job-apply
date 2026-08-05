@@ -3,6 +3,10 @@ locals {
   profile_readiness_durable_function_arn = (
     "arn:aws:lambda:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:function:${local.profile_readiness_durable_function_name}"
   )
+  profile_readiness_terminal_rule_name = "${var.name}-${var.environment}-profile-readiness-terminal"
+  profile_readiness_terminal_rule_arn = (
+    "arn:aws:events:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:rule/${local.profile_readiness_terminal_rule_name}"
+  )
   profile_readiness_durable_version_arn = var.deploy_profile_readiness_durable ? (
     aws_cloudformation_stack.profile_readiness_durable[0].outputs["DurableVersionArn"]
   ) : ""
@@ -401,7 +405,7 @@ resource "aws_lambda_alias" "profile_readiness_terminal" {
 
 resource "aws_cloudwatch_event_rule" "profile_readiness_terminal" {
   count       = var.deploy_profile_readiness_durable ? 1 : 0
-  name        = "${var.name}-${var.environment}-profile-readiness-terminal"
+  name        = local.profile_readiness_terminal_rule_name
   description = "Exact durable terminal states; disabled until the reviewed serverless cutover"
   state       = var.serverless_runtime_cutover ? "ENABLED" : "DISABLED"
   event_pattern = jsonencode({
@@ -437,7 +441,7 @@ resource "aws_lambda_permission" "profile_readiness_terminal" {
   function_name = aws_lambda_function.profile_readiness_terminal[0].function_name
   qualifier     = aws_lambda_alias.profile_readiness_terminal[0].name
   principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.profile_readiness_terminal[0].arn
+  source_arn    = local.profile_readiness_terminal_rule_arn
 }
 
 data "aws_iam_policy_document" "profile_readiness_dead_letter" {
@@ -455,7 +459,7 @@ data "aws_iam_policy_document" "profile_readiness_dead_letter" {
     condition {
       test     = "ArnEquals"
       variable = "aws:SourceArn"
-      values   = [aws_cloudwatch_event_rule.profile_readiness_terminal[0].arn]
+      values   = [local.profile_readiness_terminal_rule_arn]
     }
   }
 }

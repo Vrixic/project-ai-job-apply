@@ -121,6 +121,16 @@ run "cutover_couples_api_dispatch_and_workflow_triggers" {
 
   assert {
     condition = (
+      aws_cloudwatch_event_rule.profile_readiness_terminal[0].name ==
+      local.profile_readiness_terminal_rule_name &&
+      aws_lambda_permission.profile_readiness_terminal[0].source_arn ==
+      local.profile_readiness_terminal_rule_arn
+    )
+    error_message = "Terminal recovery must use one stable exact-rule ARN across state-only cutover changes."
+  }
+
+  assert {
+    condition = (
       aws_ecs_service.gateway[0].desired_count == 0 &&
       aws_ecs_service.worker[0].desired_count == 0
     )

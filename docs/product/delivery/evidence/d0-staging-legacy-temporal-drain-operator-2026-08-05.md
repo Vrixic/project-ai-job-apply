@@ -2,9 +2,11 @@
 
 ## Outcome
 
-A staging-only, checksum-gated operator now prepares the bounded transition of the three synthetic
-legacy outbox records through the retained Temporal worker. This is source evidence only: no review
-context was created, no standalone task ran, and no product record or AWS runtime changed.
+The staging-only, checksum-gated operator completed the bounded transition of all three synthetic
+legacy outbox records through the retained Temporal worker. The exact reviewed aggregate reached
+zero pending records, Temporal reached zero running workflows, the one temporary worker stopped,
+and the ignored review context was removed. Public routing, replacement triggers, ECS service
+capacity, and event targets did not change.
 
 ## Safety boundary
 
@@ -31,13 +33,24 @@ context was created, no standalone task ran, and no product record or AWS runtim
 - Repository formatting, linting, type checking, tests, and whitespace checks pass.
 - Changed Markdown links resolve locally.
 
+## Deployed execution
+
+- The corrected Plan ran from exact merged source and accepted exactly three records with zero
+  attempts. It wrote one ignored context bound to checksum
+  `04a37349479ee3907dc7c09b88413d98e457fd19d99622893b951ddc1ff2fdef`.
+- The product owner explicitly authorized that checksum. Execute started exactly one standalone
+  retained worker and processed exactly the reviewed aggregate.
+- Final inspection reported three reviewed records, zero remaining outbox records, zero running
+  Temporal workflows, one worker startup record, and zero worker error records.
+- The standalone task stopped, the context was removed, and the operator proved no public-traffic,
+  trigger, ECS-service-capacity, or event-target change.
+
 ## Remaining live gates
 
-1. Merge the operator source.
-2. Run `Plan` from exact merged `main`; review its ignored context and printed checksum.
-3. Obtain explicit authorization quoting that checksum, then execute the one-task drain.
-4. Record zero outbox, zero open Temporal, stopped task, clean aggregate logs, unchanged boundary,
-   and cleanup evidence.
-5. Generate the separately checksum-reviewed atomic staging serverless cutover plan.
+1. Merge the cutover plan-stability correction and regenerate from exact `main`.
+2. Generate and review the separately checksum-bound atomic staging serverless cutover plan.
+3. Apply only the explicitly authorized plan, then complete the replacement acceptance and
+   rollback/restoration gates.
 
-SR-005 and SR-006 remain in progress. This record does not claim a drain or cutover.
+SR-005 and SR-006 remain in progress. This record proves the legacy drain, not the serverless
+cutover.

@@ -187,6 +187,17 @@ requireText(
   'state       = var.serverless_runtime_cutover ? "ENABLED" : "DISABLED"',
   "Terminal recovery routing must share the explicit cutover switch.",
 );
+for (const expected of [
+  "profile_readiness_terminal_rule_arn",
+  "source_arn    = local.profile_readiness_terminal_rule_arn",
+  "values   = [local.profile_readiness_terminal_rule_arn]",
+]) {
+  requireText(
+    durable,
+    expected,
+    `Terminal recovery must keep its exact-rule policy stable across cutover: ${expected}`,
+  );
+}
 requireText(
   durable,
   "kms_master_key_id         = aws_kms_key.platform.arn",
