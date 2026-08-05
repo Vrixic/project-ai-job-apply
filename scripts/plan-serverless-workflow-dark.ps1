@@ -36,6 +36,7 @@ param(
   [ValidatePattern("^[a-z]{2}-[a-z]+-[0-9]+$")][string]$Region = "us-east-2",
   [switch]$RecoverFailedApply,
   [switch]$AllowArtifactReleaseUpdate,
+  [switch]$AllowGatewayArtifactReleaseUpdate,
   [switch]$VerifyCompletedDarkDeployment,
   [switch]$PlanRuntimeCutover,
   [switch]$VerifyCompletedRuntimeCutover,
@@ -56,6 +57,9 @@ while rechecking the immutable artifacts and complete trigger-disabled workflow 
 Use -AllowArtifactReleaseUpdate after a completed dark deployment to permit only the exact
 workflow function, immutable version/alias, version-scoped policy, disabled terminal-rule, durable
 stack, and policy-propagation updates caused by three new reviewed immutable artifacts.
+Use -AllowGatewayArtifactReleaseUpdate after runtime cutover to permit only a new immutable
+gateway artifact/version and the public environment alias transition. It preserves durable
+dispatch, enabled workflow triggers, idle ECS rollback resources, and every API route/integration.
 Use -PlanRuntimeCutover only after the accepted dark boundary and legacy outbox are clean. It
 permits the coupled API Lambda integration/routes, gateway Lambda durable-dispatch version, and
 three replacement-trigger transitions while retaining idle ECS and the legacy rollback resources.
@@ -90,12 +94,20 @@ if (-not $AwsProfile) {
 if ($Region -ne "us-east-2") {
   throw "The Phase 0 $Environment environment is restricted to us-east-2."
 }
-if (@($RecoverFailedApply, $AllowArtifactReleaseUpdate, $VerifyCompletedDarkDeployment,
+if (@($RecoverFailedApply, $AllowArtifactReleaseUpdate, $AllowGatewayArtifactReleaseUpdate,
+    $VerifyCompletedDarkDeployment,
     $PlanRuntimeCutover, $VerifyCompletedRuntimeCutover |
     Where-Object { $_ }).Count -gt 1) {
-  throw "Recovery, artifact release, completed-dark verification, cutover planning, and completed-cutover verification are mutually exclusive."
+  throw "Recovery, workflow/gateway release, completed-dark verification, cutover planning, and completed-cutover verification are mutually exclusive."
 }
-$runtimeCutoverActive = [bool]($PlanRuntimeCutover -or $VerifyCompletedRuntimeCutover)
+$runtimeCutoverActive = [bool](
+  $AllowGatewayArtifactReleaseUpdate -or
+  $PlanRuntimeCutover -or
+  $VerifyCompletedRuntimeCutover
+)
+$liveRuntimeCutoverExpected = [bool](
+  $AllowGatewayArtifactReleaseUpdate -or $VerifyCompletedRuntimeCutover
+)
 
 function Assert-ArtifactKey {
   param(
@@ -124,6 +136,8 @@ $planDirectory = Join-Path $environmentDirectory ".terraform/workflow-dark-plans
 $sourceCommit = (& git -C $repositoryRoot rev-parse HEAD).Trim()
 $planPrefix = if ($PlanRuntimeCutover) {
   "serverless-runtime-cutover"
+} elseif ($AllowGatewayArtifactReleaseUpdate) {
+  "gateway-runtime-release"
 } elseif ($VerifyCompletedRuntimeCutover) {
   "serverless-runtime-cutover-verify"
 } elseif ($VerifyCompletedDarkDeployment) {
@@ -244,6 +258,7 @@ $acceptedEndpointSidCorrection = $false
 if (
   -not $RecoverFailedApply -and
   -not $AllowArtifactReleaseUpdate -and
+  -not $AllowGatewayArtifactReleaseUpdate -and
   -not $VerifyCompletedDarkDeployment -and
   -not $PlanRuntimeCutover -and
   -not $VerifyCompletedRuntimeCutover
@@ -399,6 +414,7 @@ try {
 
   if (
     $RecoverFailedApply -or $AllowArtifactReleaseUpdate -or
+    $AllowGatewayArtifactReleaseUpdate -or
     $VerifyCompletedDarkDeployment -or $PlanRuntimeCutover -or
     $VerifyCompletedRuntimeCutover
   ) {
@@ -421,12 +437,18 @@ try {
     throw "The encrypted $Environment state does not expose the artifact bucket."
   }
   $artifacts = @(
+    @($GatewayArtifactS3Key, $GatewayArtifactS3ObjectVersion,
+      $GatewayArtifactSha256, $GatewayArtifactBase64Sha256,
+      $GatewayArtifactSourceSha),
     @($WorkflowIngressArtifactS3Key, $WorkflowIngressArtifactS3ObjectVersion,
-      $WorkflowIngressArtifactSha256, $WorkflowIngressArtifactBase64Sha256),
+      $WorkflowIngressArtifactSha256, $WorkflowIngressArtifactBase64Sha256,
+      $WorkflowArtifactSourceSha),
     @($DurableArtifactS3Key, $DurableArtifactS3ObjectVersion,
-      $DurableArtifactSha256, $DurableArtifactBase64Sha256),
+      $DurableArtifactSha256, $DurableArtifactBase64Sha256,
+      $WorkflowArtifactSourceSha),
     @($ActivityArtifactS3Key, $ActivityArtifactS3ObjectVersion,
-      $ActivityArtifactSha256, $ActivityArtifactBase64Sha256)
+      $ActivityArtifactSha256, $ActivityArtifactBase64Sha256,
+      $WorkflowArtifactSourceSha)
   )
   foreach ($artifact in $artifacts) {
     $head = Invoke-AwsJson @(
@@ -437,7 +459,7 @@ try {
     if (
       [string]$head.VersionId -ne [string]$artifact[1] -or
       [string]$head.ChecksumSHA256 -ne [string]$artifact[3] -or
-      [string]$head.Metadata."source-sha" -ne $WorkflowArtifactSourceSha -or
+      [string]$head.Metadata."source-sha" -ne [string]$artifact[4] -or
       [string]$head.Metadata."artifact-sha256" -ne [string]$artifact[2] -or
       [string]$head.ServerSideEncryption -ne "aws:kms" -or
       -not [bool]$head.BucketKeyEnabled
@@ -552,7 +574,7 @@ try {
     )
     $mapping = Get-OnlyItem @($mappings.EventSourceMappings) `
       "The exact starter mapping is not singular."
-    $expectedLiveMappingState = if ($VerifyCompletedRuntimeCutover) { "Enabled" } else { "Disabled" }
+    $expectedLiveMappingState = if ($liveRuntimeCutoverExpected) { "Enabled" } else { "Disabled" }
     if (
       [string]$mapping.State -ne $expectedLiveMappingState -or
       @($mapping.FunctionResponseTypes) -notcontains "ReportBatchItemFailures"
@@ -567,7 +589,7 @@ try {
       $rule = Invoke-AwsJson @(
         "events", "describe-rule", "--name", $ruleName, "--output", "json"
       )
-      $expectedLiveRuleState = if ($VerifyCompletedRuntimeCutover) { "ENABLED" } else { "DISABLED" }
+      $expectedLiveRuleState = if ($liveRuntimeCutoverExpected) { "ENABLED" } else { "DISABLED" }
       if ([string]$rule.State -ne $expectedLiveRuleState) {
         throw "A workflow EventBridge rule does not match the reviewed live runtime."
       }
@@ -650,7 +672,7 @@ try {
         [string]$_.IntegrationUri -match "^arn:aws:servicediscovery:"
       }
     ) "The retained ECS rollback integration is not singular."
-    if ($VerifyCompletedRuntimeCutover) {
+    if ($liveRuntimeCutoverExpected) {
       $lambdaIntegration = Get-OnlyItem @(
         $integrationItems | Where-Object { [string]$_.IntegrationType -eq "AWS_PROXY" }
       ) "The active Lambda integration is not singular after cutover."
@@ -699,7 +721,7 @@ try {
     $servicePostures = @($serviceResult.services | ForEach-Object {
       "$([int]$_.desiredCount)/$([int]$_.runningCount)/$([int]$_.pendingCount)"
     })
-    $servicesAtExpectedCapacity = if ($VerifyCompletedRuntimeCutover) {
+    $servicesAtExpectedCapacity = if ($liveRuntimeCutoverExpected) {
       @($servicePostures | Where-Object { $_ -eq "0/0/0" }).Count -eq 2
     } else {
       @($servicePostures | Where-Object { $_ -eq "1/1/0" }).Count -eq 2 -or
@@ -724,7 +746,7 @@ try {
       "lambda", "get-function-configuration", "--function-name",
       "$resourcePrefix-gateway", "--qualifier", $Environment, "--output", "json"
     )
-    $expectedLiveDispatch = if ($VerifyCompletedRuntimeCutover) { "lambda_durable" } else { "temporal" }
+    $expectedLiveDispatch = if ($liveRuntimeCutoverExpected) { "lambda_durable" } else { "temporal" }
     if ([string]$gatewayAlias.Environment.Variables.OUTBOX_DISPATCH_TARGET -ne $expectedLiveDispatch) {
       throw "The $Environment gateway does not use the reviewed live dispatch target."
     }
@@ -847,10 +869,18 @@ try {
   $env:TF_VAR_temporal_namespace = [string]$workerEnvironment["TEMPORAL_NAMESPACE"]
   $env:TF_VAR_deploy_applications = "true"
   $env:TF_VAR_deploy_gateway_lambda = "true"
-  $env:TF_VAR_gateway_lambda_artifact_s3_key = [string]$gatewayLambda.s3_key
-  $env:TF_VAR_gateway_lambda_artifact_s3_object_version = [string]$gatewayLambda.s3_object_version
-  $env:TF_VAR_gateway_lambda_artifact_sha256 = [string]$gatewayLambda.environment[0].variables.RELEASE_SHA
-  $env:TF_VAR_gateway_lambda_artifact_base64sha256 = [string]$gatewayLambda.source_code_hash
+  $env:TF_VAR_gateway_lambda_artifact_s3_key = if ($AllowGatewayArtifactReleaseUpdate) {
+    $GatewayArtifactS3Key
+  } else { [string]$gatewayLambda.s3_key }
+  $env:TF_VAR_gateway_lambda_artifact_s3_object_version = if (
+    $AllowGatewayArtifactReleaseUpdate
+  ) { $GatewayArtifactS3ObjectVersion } else { [string]$gatewayLambda.s3_object_version }
+  $env:TF_VAR_gateway_lambda_artifact_sha256 = if ($AllowGatewayArtifactReleaseUpdate) {
+    $GatewayArtifactSha256
+  } else { [string]$gatewayLambda.environment[0].variables.RELEASE_SHA }
+  $env:TF_VAR_gateway_lambda_artifact_base64sha256 = if (
+    $AllowGatewayArtifactReleaseUpdate
+  ) { $GatewayArtifactBase64Sha256 } else { [string]$gatewayLambda.source_code_hash }
   $env:TF_VAR_gateway_lambda_extension_layer_arn = $PinnedExtensionLayerArn
   $env:TF_VAR_gateway_lambda_reserved_concurrency = [string]$gatewayLambda.reserved_concurrent_executions
   $env:TF_VAR_serverless_runtime_cutover = $runtimeCutoverActive.ToString().ToLowerInvariant()
@@ -978,6 +1008,10 @@ try {
   $releaseExpectedReplacements = @(
     "module.platform.time_sleep.profile_readiness_durable_policy_propagation[0]"
   )
+  $gatewayReleaseExpectedUpdates = @(
+    "module.platform.aws_lambda_alias.gateway[0]",
+    "module.platform.aws_lambda_function.gateway[0]"
+  )
   $cutoverExpectedCreates = @(
     "module.platform.aws_apigatewayv2_integration.gateway_lambda[0]",
     'module.platform.aws_apigatewayv2_route.gateway_lambda_public["GET /health/live"]',
@@ -998,6 +1032,7 @@ try {
       $recoveryExpectedCreates
     } elseif (-not (
       $AllowArtifactReleaseUpdate -or $VerifyCompletedDarkDeployment -or
+      $AllowGatewayArtifactReleaseUpdate -or
       $VerifyCompletedRuntimeCutover
     )) {
       $initialExpectedCreates
@@ -1006,6 +1041,8 @@ try {
   $expectedUpdates = @(
     if ($PlanRuntimeCutover) {
       $cutoverExpectedUpdates
+    } elseif ($AllowGatewayArtifactReleaseUpdate) {
+      $gatewayReleaseExpectedUpdates
     } elseif ($AllowArtifactReleaseUpdate) {
       $releaseExpectedUpdates
     } elseif (-not (
@@ -1107,6 +1144,7 @@ try {
   if (
     -not $RecoverFailedApply -and
     -not $AllowArtifactReleaseUpdate -and
+    -not $AllowGatewayArtifactReleaseUpdate -and
     -not $VerifyCompletedDarkDeployment -and
     -not $PlanRuntimeCutover -and
     -not $VerifyCompletedRuntimeCutover
@@ -1213,6 +1251,61 @@ try {
       ) {
         throw "The cutover exposes a public route outside the exact health boundary."
       }
+    }
+  }
+
+  if ($AllowGatewayArtifactReleaseUpdate) {
+    $gatewayFunctionChange = Get-PlannedChange "module.platform.aws_lambda_function.gateway[0]"
+    Assert-OnlyPropertiesChanged $gatewayFunctionChange @(
+      "environment", "last_modified", "qualified_arn", "qualified_invoke_arn",
+      "s3_key", "s3_object_version", "source_code_hash", "version"
+    ) "The runtime gateway release changes more than artifact identity and computed version fields."
+    $beforeGateway = $gatewayFunctionChange.change.before
+    $afterGateway = $gatewayFunctionChange.change.after
+    if (
+      [string]$afterGateway.s3_key -ne $GatewayArtifactS3Key -or
+      [string]$afterGateway.s3_object_version -ne $GatewayArtifactS3ObjectVersion -or
+      [string]$afterGateway.source_code_hash -ne $GatewayArtifactBase64Sha256 -or
+      -not [bool]$gatewayFunctionChange.change.after_unknown.version
+    ) {
+      throw "The runtime gateway release does not use the exact reviewed immutable artifact."
+    }
+    $beforeGatewayVariables = $beforeGateway.environment[0].variables
+    $afterGatewayVariables = $afterGateway.environment[0].variables
+    if (
+      (Compare-Object @($beforeGatewayVariables.PSObject.Properties.Name | Sort-Object) `
+        @($afterGatewayVariables.PSObject.Properties.Name | Sort-Object)) -or
+      [string]$afterGatewayVariables.RELEASE_SHA -ne $GatewayArtifactSha256 -or
+      [string]$afterGatewayVariables.OUTBOX_DISPATCH_TARGET -ne "lambda_durable"
+    ) {
+      throw "The runtime gateway release changes an environment key outside the reviewed release identity."
+    }
+    foreach ($name in @($beforeGatewayVariables.PSObject.Properties.Name)) {
+      if (
+        $name -ne "RELEASE_SHA" -and
+        [string]$beforeGatewayVariables.$name -ne [string]$afterGatewayVariables.$name
+      ) {
+        throw "The runtime gateway release changes an unrelated environment value."
+      }
+    }
+
+    $gatewayAliasChange = Get-PlannedChange "module.platform.aws_lambda_alias.gateway[0]"
+    Assert-OnlyPropertiesChanged $gatewayAliasChange @("function_version") `
+      "The runtime gateway alias changes more than its immutable version."
+    if (-not [bool]$gatewayAliasChange.change.after_unknown.function_version) {
+      throw "The public runtime alias is not bound to the gateway version created by this plan."
+    }
+
+    $defaultRoute = Get-PlannedValue "module.platform.aws_apigatewayv2_route.gateway[0]"
+    $lambdaIntegration = Get-PlannedValue `
+      "module.platform.aws_apigatewayv2_integration.gateway_lambda[0]"
+    if (
+      [string]$defaultRoute.authorization_type -ne "JWT" -or
+      [string]$defaultRoute.target -ne "integrations/$([string]$lambdaIntegration.id)" -or
+      [string]$lambdaIntegration.integration_type -ne "AWS_PROXY" -or
+      [string]$lambdaIntegration.payload_format_version -ne "2.0"
+    ) {
+      throw "The runtime gateway release is outside the existing JWT-protected Lambda route."
     }
   }
 
@@ -1454,6 +1547,7 @@ try {
   $initialDarkDeployment = -not (
     $RecoverFailedApply -or
     $AllowArtifactReleaseUpdate -or
+    $AllowGatewayArtifactReleaseUpdate -or
     $VerifyCompletedDarkDeployment -or
     $PlanRuntimeCutover -or
     $VerifyCompletedRuntimeCutover
@@ -1533,6 +1627,7 @@ try {
     WorkflowArtifactSourceCommit = $WorkflowArtifactSourceSha
     RecoveryFromFailedApply    = [bool]$RecoverFailedApply
     ArtifactReleaseUpdate      = [bool]$AllowArtifactReleaseUpdate
+    GatewayArtifactReleaseUpdate = [bool]$AllowGatewayArtifactReleaseUpdate
     CompletedDarkVerification  = [bool]$VerifyCompletedDarkDeployment
     RuntimeCutover             = [bool]$PlanRuntimeCutover
     CompletedRuntimeCutoverVerification = [bool]$VerifyCompletedRuntimeCutover
@@ -1544,11 +1639,13 @@ try {
     DurableOpenExecutionsEmpty = if ($runtimeCutoverActive) { $true } else { $null }
     EndpointSidCorrection      = $acceptedEndpointSidCorrection
     EffectiveDurableDlqPermission = if ($RecoverFailedApply) { $true } else { $null }
-    ArtifactsVerified          = 3
+    ArtifactsVerified          = 4
     PinnedExtensionVerified    = $true
     DispatchTarget             = if ($runtimeCutoverActive) { "lambda_durable" } else { "temporal" }
     TriggersEnabled            = $runtimeCutoverActive
-    ApiTrafficChange           = [bool]$PlanRuntimeCutover
+    ApiTrafficChange           = [bool](
+      $PlanRuntimeCutover -or $AllowGatewayArtifactReleaseUpdate
+    )
     EcsCapacityChange          = $false
     Creates                    = $creates.Count
     Updates                    = $updates.Count
