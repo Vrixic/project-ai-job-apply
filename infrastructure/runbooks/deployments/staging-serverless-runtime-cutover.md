@@ -93,6 +93,36 @@ the fixed synthetic workload before accepting the cutover.
 Record plan/apply identifiers, checksum, immutable versions, aggregate test results, alarm/log
 evidence, queue counts, and drift evidence without retaining candidate data or secret values.
 
+## Post-cutover gateway releases
+
+After cutover, never reuse the original dark gateway release planner. A gateway artifact update now
+moves the public staging alias and is therefore a traffic-bearing change, even though API Gateway
+routes remain unchanged. Publish a reviewed immutable gateway artifact first, then use
+`plan-staging-serverless-runtime-cutover.ps1 -Action PlanGatewayRelease` with that artifact and the
+three exact workflow artifacts already deployed.
+
+The accepted plan must contain exactly two in-place updates: the gateway Lambda function and its
+existing environment alias. It must contain zero creates, deletes, replacements, workflow-trigger
+changes, ECS capacity changes, route/authorizer changes, data changes, or secret changes. The
+gateway must retain `OUTBOX_DISPATCH_TARGET=lambda_durable`; only `RELEASE_SHA` may change in its
+environment. The planner verifies all four versioned, KMS-encrypted S3 artifacts before producing
+the ignored saved plan and reports `ApiTrafficChange=true`.
+
+Inspect the independently enforced operator boundary without changing AWS:
+
+```powershell
+.\scripts\operate-staging-gateway-runtime-release.ps1 -Help
+```
+
+Run `-Action Status` against the saved plan, review its local sensitive contents, and authorize the
+exact SHA-256. `-Action Apply` requires that checksum, the isolated staging account/state inputs,
+and `-Execute`. It applies only the saved plan from clean upstream-matched `main`, then runs the
+completed-runtime verifier and requires zero drift. Finally, rerun the `lambda-cutover` web
+conformance: public `200/200/401`, authenticated preference load/save, cross-user isolation, one
+durable readiness operation, clean queues/DLQs, healthy alarms, idle ECS, and no new Temporal work.
+Rollback to a prior gateway build is the same process using that prior immutable artifact; it is a
+new separately reviewed two-update plan, never an unversioned code overwrite.
+
 ## Rollback boundary
 
 Rollback is another reviewed coupled plan. Before generating it, stop new writes and require every

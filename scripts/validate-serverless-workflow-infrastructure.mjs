@@ -43,6 +43,7 @@ const stagingRuntimeCutoverWrapper = read("scripts/plan-staging-serverless-runti
 const stagingRuntimeCutoverOperator = read(
   "scripts/operate-staging-serverless-runtime-cutover.ps1",
 );
+const stagingGatewayReleaseOperator = read("scripts/operate-staging-gateway-runtime-release.ps1");
 const stagingLegacyTemporalDrain = read("scripts/operate-staging-legacy-temporal-drain.ps1");
 const gatewayConformanceLauncher = read("scripts/start-deployed-web-conformance.ps1");
 const gatewayBoundaryOperator = read("scripts/verify-gateway-lambda-boundary.ps1");
@@ -368,6 +369,7 @@ for (const environment of environmentVariables) {
 }
 
 for (const expected of [
+  "AllowGatewayArtifactReleaseUpdate",
   "PlanRuntimeCutover",
   "VerifyCompletedRuntimeCutover",
   "CompletedRuntimeCutoverVerification",
@@ -386,6 +388,7 @@ for (const expected of [
   "LegacyOutboxEmpty",
   "TemporalOpenWorkflowsEmpty",
   "DurableOpenExecutionsEmpty",
+  "GatewayArtifactReleaseUpdate",
 ]) {
   requireText(
     workflowPlanner,
@@ -423,6 +426,11 @@ requireText(
 );
 requireText(
   stagingRuntimeCutoverWrapper,
+  '$arguments["AllowGatewayArtifactReleaseUpdate"] = $true',
+  "The staging runtime wrapper must expose the post-cutover gateway release mode.",
+);
+requireText(
+  stagingRuntimeCutoverWrapper,
   '$arguments["VerifyCompletedRuntimeCutover"] = $true',
   "The staging cutover wrapper must expose the completed-cutover verification mode.",
 );
@@ -431,6 +439,26 @@ requireText(
   '"ai-job-apply-staging-admin"',
   "The staging cutover wrapper must default to the isolated staging IAM profile.",
 );
+
+for (const expected of [
+  '[ValidateSet("Status", "Apply")]',
+  '"gateway-runtime-release-$($sourceCommit.Substring(0, 8))"',
+  '"module.platform.aws_lambda_alias.gateway[0]"',
+  '"module.platform.aws_lambda_function.gateway[0]"',
+  'OUTBOX_DISPATCH_TARGET -ne "lambda_durable"',
+  '"serverless_runtime_cutover"',
+  '"run_continuous_ecs_runtime"',
+  "ExpectedPlanSha256",
+  "Invoke-SavedPlan $resolvedPlanPath",
+  "CompletedRuntimeCutoverVerification",
+  "PublicConformanceRequired = $true",
+]) {
+  requireText(
+    stagingGatewayReleaseOperator,
+    expected,
+    `The guarded staging gateway release operator is missing required boundary text: ${expected}`,
+  );
+}
 
 for (const expected of [
   '[ValidateSet("Plan", "Execute", "Cleanup")]',
