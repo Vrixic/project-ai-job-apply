@@ -76,6 +76,13 @@ baseline identity, and updates only the ignored context's validated operator com
 verification will adopt a newly generated current-commit runtime baseline instead of relabeling the
 historical plan. No AWS mutation is performed by that correction.
 
+The first exact-main continuation attempt failed before AWS verification or context mutation. Its
+Windows Git process removed the `^{commit}` peel suffix used by the source-object precheck, so the
+existing commit was rejected even though the separate ancestry check passed. The portable
+correction requires `git cat-file -t <sha>` to return exactly `commit` and retains the independent
+ancestor gate. Parser, policy, and negative provenance checks cover the corrected boundary; a fresh
+merged-main continuation remains required.
+
 ## Remaining gate
 
 After the context-continuation correction merges:

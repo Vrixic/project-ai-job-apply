@@ -674,6 +674,8 @@ for (const expected of [
   '"applydash.staging.serverless-runtime-cutover.v4"',
   "RuntimeBaselineSourceCommit",
   "ValidatedSourceCommit",
+  "cat-file -t",
+  '$objectType -ne "commit"',
   "merge-base --is-ancestor",
   '"ContinueRollbackContext" {',
   "RuntimeBaselineSourceIsAncestor = $true",
