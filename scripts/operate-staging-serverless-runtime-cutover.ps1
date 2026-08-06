@@ -802,8 +802,11 @@ function Assert-ContextIdentity {
   if (-not $planLeaf.StartsWith($expectedPrefix, [StringComparison]::Ordinal)) {
     throw "The retained runtime baseline filename does not match its recorded source commit."
   }
-  & git -C $repositoryRoot cat-file -e "$runtimeBaselineSourceCommit`^{commit}" 2>$null
-  if ($LASTEXITCODE -ne 0) { throw "The retained runtime baseline source commit is unavailable." }
+  $objectTypeRaw = & git -C $repositoryRoot cat-file -t $runtimeBaselineSourceCommit 2>$null
+  $objectType = if ($null -eq $objectTypeRaw) { "" } else { ([string]$objectTypeRaw).Trim() }
+  if ($LASTEXITCODE -ne 0 -or $objectType -ne "commit") {
+    throw "The retained runtime baseline source commit is unavailable."
+  }
   & git -C $repositoryRoot merge-base --is-ancestor $runtimeBaselineSourceCommit $SourceCommit
   if ($LASTEXITCODE -ne 0) {
     throw "The current exact source does not descend from the retained runtime baseline source."
