@@ -440,10 +440,19 @@ function Assert-RollbackPlan {
   })
   $deletes = @($changes | Where-Object { (@($_.change.actions) -join ",") -eq "delete" })
   $updates = @($changes | Where-Object { (@($_.change.actions) -join ",") -eq "update" })
+  $deleteAddressDifference = @(
+    Compare-Object `
+      -ReferenceObject @($deletes | ForEach-Object { [string]$_.address } | Sort-Object) `
+      -DifferenceObject @($deletesExpected | Sort-Object)
+  )
+  $updateAddressDifference = @(
+    Compare-Object `
+      -ReferenceObject @($updates | ForEach-Object { [string]$_.address } | Sort-Object) `
+      -DifferenceObject @($updatesExpected | Sort-Object)
+  )
   if (
     $changes.Count -ne 9 -or $deletes.Count -ne 3 -or $updates.Count -ne 6 -or
-    (Compare-Object @($deletes.address | Sort-Object) @($deletesExpected | Sort-Object)) -or
-    (Compare-Object @($updates.address | Sort-Object) @($updatesExpected | Sort-Object))
+    $deleteAddressDifference.Count -ne 0 -or $updateAddressDifference.Count -ne 0
   ) {
     throw "The rollback plan is outside the exact three-delete, six-update recovery boundary."
   }
