@@ -62,6 +62,10 @@ for (const expected of [
   "-DifferenceObject @($createsExpected | Sort-Object)",
   "-ReferenceObject @($updates | ForEach-Object { [string]$_.address } | Sort-Object)",
   "-DifferenceObject @($updatesExpected | Sort-Object)",
+  "-ReferenceObject @($deletes | ForEach-Object { [string]$_.address } | Sort-Object)",
+  "-DifferenceObject @($deletesExpected | Sort-Object)",
+  "$deleteAddressDifference.Count -ne 0",
+  "$updateAddressDifference.Count -ne 0",
 ]) {
   requireText(
     stagingRuntimeCutoverOperator,
