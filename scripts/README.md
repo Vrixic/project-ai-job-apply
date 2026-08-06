@@ -148,8 +148,8 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   verifier. It also creates separately reviewed rollback and restoration plans, requires zero
   legacy/serverless queued or running work, keeps ECS idle and all rollback resources retained,
   and blocks recovery cleanup until the restored Lambda runtime is accepted.
-- `operate-staging-legacy-temporal-drain.ps1` — Checksum-gated bridge for the three synthetic
-  staging records created before serverless cutover. Planning binds their identifier-free aggregate
+- `operate-staging-legacy-temporal-drain.ps1` — Checksum-gated bridge for an exact reviewed,
+  bounded synthetic staging batch. Planning binds its identifier-free aggregate
   digest to the exact idle ECS/API, immutable worker, disabled replacement triggers, empty queues,
   healthy alarms, and zero-open-Temporal boundary. Execution runs exactly one standalone retained
   worker, double-checks terminal outbox/Temporal state, stops it, inspects aggregate logs, and proves

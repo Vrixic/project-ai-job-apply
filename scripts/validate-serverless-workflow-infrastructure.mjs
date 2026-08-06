@@ -598,11 +598,15 @@ for (const expected of [
 for (const expected of [
   '[ValidateSet("Plan", "Execute", "Cleanup")]',
   '[ValidateSet("PreCutover", "PostCutover")]',
-  '"applydash.staging.legacy-temporal-drain.v2"',
+  '"applydash.staging.legacy-temporal-drain.v3"',
   '"staging-legacy-temporal-drain"',
   '"inspect-deployed-outbox.ps1"',
   "--require-zero-open-workflows",
+  "$minimumPendingCount = 1",
+  "$maximumPendingCount = 100",
   "ExpectedPendingCount = $expectedPendingCount",
+  "ExpectedPendingCount -lt $minimumPendingCount",
+  "ExpectedPendingCount -gt $maximumPendingCount",
   "ExpectedOrderedEventIdSha256",
   "ConfirmZeroTraffic",
   '"lambda_durable"',
@@ -642,6 +646,14 @@ requireText(
 assert.ok(
   !/\b[0-9]{12}\b/.test(stagingLegacyTemporalDrain),
   "The staging legacy-drain operator must not embed an AWS account ID.",
+);
+assert.ok(
+  !stagingLegacyTemporalDrain.includes("ExpectedPendingCount -ne 3"),
+  "The staging legacy-drain operator must bind the exact reviewed batch instead of a historical fixed count.",
+);
+assert.ok(
+  !stagingLegacyTemporalDrain.includes("exactly three untouched synthetic legacy outbox records"),
+  "The staging legacy-drain operator must not retain the historical three-record-only review gate.",
 );
 
 for (const expected of [
