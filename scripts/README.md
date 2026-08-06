@@ -128,16 +128,21 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   `-VerifyCompletedRuntimeCutover` is the post-apply zero-drift mode. It requires the exact Lambda
   API route/auth boundary, `lambda_durable` dispatch, all replacement triggers enabled, empty
   queues/outbox/Temporal work, seven healthy alarms, and both retained ECS services at `0/0/0`.
+  `-AllowOutboxProducerKmsUpdate` permits only the two inline-policy updates that let the gateway
+  and scheduled reconciler write to the platform-CMK-encrypted outbox queue. The matching
+  completed-update verifier requires zero drift and the live cutover boundary without assuming a
+  previously queued database retry completes inside the Terraform apply window.
 - `plan-development-serverless-workflow-dark.ps1` — Compatibility wrapper for development calls to
   the environment-aware workflow planner.
 - `plan-staging-serverless-runtime-cutover.ps1` — Staging-only wrapper for atomic runtime cutover,
-  post-cutover gateway artifact release, exact JWT route-scope correction, and completed-cutover
-  verification. It fixes the environment and default IAM Identity Center profile and cannot select
-  dark deployment, recovery, workflow release, or completed-dark modes.
-- `operate-staging-gateway-runtime-release.ps1` — Reviews and applies either an exact two-update
-  immutable gateway release or the exact one-route update that adds `profile:read` and
-  `profile:write` to API Gateway's JWT boundary. Both paths are checksum-gated, preserve the
-  authorizer/integration/workflows/data/idle-ECS boundary, and require completed-runtime zero drift.
+  post-cutover gateway artifact release, exact JWT route-scope correction, encrypted-outbox
+  producer correction, and their completed verification. It fixes the environment and default IAM
+  Identity Center profile and cannot select dark deployment, recovery, workflow release, or
+  completed-dark modes.
+- `operate-staging-gateway-runtime-release.ps1` — Reviews and applies an exact two-update immutable
+  gateway release, the exact one-route OAuth-scope update, or the exact two-role encrypted-outbox
+  producer correction. Every path is checksum-gated, preserves the authorizer/integration/
+  workflows/data/idle-ECS boundary, and requires its matching completed-runtime zero drift.
 - `operate-staging-serverless-runtime-cutover.ps1` — Applies only the exact checksum-reviewed
   three-create/six-update cutover plan, then delegates to the refresh-backed completed-runtime
   verifier. It also creates separately reviewed rollback and restoration plans, requires zero

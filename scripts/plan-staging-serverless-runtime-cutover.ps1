@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [ValidateSet("Plan", "PlanGatewayRelease", "PlanScopeBoundary", "Verify")]
+  [ValidateSet("Plan", "PlanGatewayRelease", "PlanScopeBoundary", "PlanOutboxProducerKms", "Verify", "VerifyOutboxProducerKms")]
   [string]$Action = "Plan",
   [ValidatePattern("^[0-9]{12}$")][string]$ExpectedAccountId,
   [ValidatePattern("^[a-z0-9.-]+$")][string]$StateBucket,
@@ -36,7 +36,7 @@ param(
 $ErrorActionPreference = "Stop"
 $planner = Join-Path $PSScriptRoot "plan-serverless-workflow-dark.ps1"
 if ($Help) {
-  Write-Host "Staging runtime wrapper. Use Plan for cutover, PlanGatewayRelease for an immutable gateway release, PlanScopeBoundary for the exact JWT route-scope correction, and Verify after apply."
+  Write-Host "Staging runtime wrapper. Use Plan for cutover, PlanGatewayRelease for an immutable gateway release, PlanScopeBoundary for the exact JWT route-scope correction, PlanOutboxProducerKms for the exact encrypted-queue producer repair, and the matching Verify action after apply."
   & $planner -Help
   exit $LASTEXITCODE
 }
@@ -74,6 +74,10 @@ if ($Action -eq "Plan") {
   $arguments["AllowGatewayArtifactReleaseUpdate"] = $true
 } elseif ($Action -eq "PlanScopeBoundary") {
   $arguments["AllowGatewayScopeBoundaryUpdate"] = $true
+} elseif ($Action -eq "PlanOutboxProducerKms") {
+  $arguments["AllowOutboxProducerKmsUpdate"] = $true
+} elseif ($Action -eq "VerifyOutboxProducerKms") {
+  $arguments["VerifyCompletedOutboxProducerKmsUpdate"] = $true
 } else {
   $arguments["VerifyCompletedRuntimeCutover"] = $true
 }

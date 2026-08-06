@@ -137,6 +137,30 @@ lacks this exact set. The plan must contain one in-place update to the default r
 apply it through the same operator. Completed-runtime verification must return zero drift before
 authenticated preference load/save, cross-user isolation, and durable readiness are repeated.
 
+## Encrypted outbox producer recovery
+
+If preference persistence succeeds but its readiness operation remains `queued`, inspect the
+privacy-safe gateway and reconciler outcomes before replaying or changing product data. A failed
+post-commit SQS nudge does not mean the preference transaction was lost: PostgreSQL commits the
+preference, operation, and identifier-only outbox row atomically, and the scheduled reconciler
+retains a bounded retry.
+
+For a platform-CMK-encrypted SQS queue, [AWS requires producers](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-key-management.html)
+to have `kms:Decrypt` and `kms:GenerateDataKey` on that exact key in addition to
+`sqs:SendMessage` on the exact queue. The starter is a consumer and retains `kms:Decrypt` only. Use
+`plan-staging-serverless-runtime-cutover.ps1 -Action PlanOutboxProducerKms` to generate the repair.
+The accepted plan must contain exactly two in-place updates—the gateway and reconciler inline role
+policies—and zero creates, deletes, replacements, key/queue changes, traffic changes, trigger
+changes, function changes, data changes, secret changes, or ECS capacity changes.
+
+Review the saved plan through `operate-staging-gateway-runtime-release.ps1 -Action Status`, then
+authorize and apply only its exact SHA-256. The operator selects the matching
+`VerifyOutboxProducerKms` zero-drift mode. Allow the existing bounded reconciler retry to recover
+the queued outbox row; do not create a replacement preference operation merely to force progress.
+Acceptance requires the original owner-visible operation to reach `succeeded`, the source queue
+and DLQs to return to zero, clean aggregate logs, healthy alarms, and a subsequent normal save to
+complete once without duplicate effective work.
+
 ## Rollback boundary
 
 Rollback is another reviewed coupled plan. Before generating it, stop new writes and require every

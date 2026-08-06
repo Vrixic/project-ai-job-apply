@@ -260,6 +260,46 @@ requireText(
   'OUTBOX_DISPATCH_TARGET = var.serverless_runtime_cutover ? "lambda_durable" : "temporal"',
   "New-event dispatch must move with the API and trigger cutover.",
 );
+assert.equal(
+  platform.split('sid    = "EncryptIdentifierOnlyOutboxNudges"').length - 1,
+  2,
+  "Exactly the gateway and reconciler producers must own encrypted outbox-write permission.",
+);
+for (const producerBlock of [
+  /data "aws_iam_policy_document" "gateway_lambda"[\s\S]*?resource "aws_iam_role_policy" "gateway_lambda"/,
+  /data "aws_iam_policy_document" "outbox_reconciler"[\s\S]*?resource "aws_iam_role_policy" "outbox_reconciler"/,
+]) {
+  const match = platform.match(producerBlock);
+  assert.ok(match, "An encrypted outbox producer policy block is missing.");
+  requireText(
+    match[0],
+    'sid    = "EncryptIdentifierOnlyOutboxNudges"',
+    "An outbox producer is missing its dedicated KMS write statement.",
+  );
+  requireText(
+    match[0],
+    '"kms:Decrypt"',
+    "An encrypted outbox producer must verify the SQS data key.",
+  );
+  requireText(
+    match[0],
+    '"kms:GenerateDataKey"',
+    "An encrypted outbox producer must generate the SQS data key.",
+  );
+  requireText(
+    match[0],
+    "resources = [aws_kms_key.platform.arn]",
+    "Outbox producer encryption permission must target only the platform CMK.",
+  );
+}
+const starterPolicy = platform.match(
+  /data "aws_iam_policy_document" "outbox_starter"[\s\S]*?data "aws_iam_policy_document" "outbox_reconciler"/,
+);
+assert.ok(starterPolicy, "The outbox starter policy block is missing.");
+assert.ok(
+  !starterPolicy[0].includes('"kms:GenerateDataKey"'),
+  "The outbox starter is a consumer and must not receive data-key generation permission.",
+);
 requireText(
   platform,
   "desired_count   = var.run_continuous_ecs_runtime ? var.gateway_desired_count : 0",
@@ -379,6 +419,8 @@ for (const environment of environmentVariables) {
 for (const expected of [
   "AllowGatewayArtifactReleaseUpdate",
   "AllowGatewayScopeBoundaryUpdate",
+  "AllowOutboxProducerKmsUpdate",
+  "VerifyCompletedOutboxProducerKmsUpdate",
   "PlanRuntimeCutover",
   "VerifyCompletedRuntimeCutover",
   "CompletedRuntimeCutoverVerification",
@@ -400,6 +442,11 @@ for (const expected of [
   "GatewayArtifactReleaseUpdate",
   "GatewayScopeBoundaryUpdate",
   '"profile:read", "profile:write"',
+  '"outbox-producer-kms"',
+  '"module.platform.aws_iam_role_policy.gateway_lambda[0]"',
+  '"module.platform.aws_iam_role_policy.outbox_reconciler[0]"',
+  '"EncryptIdentifierOnlyOutboxNudges"',
+  '"kms:GenerateDataKey"',
 ]) {
   requireText(
     workflowPlanner,
@@ -447,6 +494,16 @@ requireText(
 );
 requireText(
   stagingRuntimeCutoverWrapper,
+  '$arguments["AllowOutboxProducerKmsUpdate"] = $true',
+  "The staging runtime wrapper must expose the encrypted-outbox producer correction mode.",
+);
+requireText(
+  stagingRuntimeCutoverWrapper,
+  '$arguments["VerifyCompletedOutboxProducerKmsUpdate"] = $true',
+  "The staging runtime wrapper must expose completed producer-correction verification.",
+);
+requireText(
+  stagingRuntimeCutoverWrapper,
   '$arguments["VerifyCompletedRuntimeCutover"] = $true',
   "The staging cutover wrapper must expose the completed-cutover verification mode.",
 );
@@ -462,8 +519,12 @@ for (const expected of [
   '"gateway-runtime-release"',
   '"gateway-scope-boundary"',
   "Assert-GatewayScopeBoundaryPlan",
+  "Assert-OutboxProducerKmsPlan",
   '@("authorization_scopes")',
   '@("profile:read", "profile:write")',
+  '"EncryptIdentifierOnlyOutboxNudges"',
+  '"kms:GenerateDataKey"',
+  '"outbox_producer_kms"',
   '"module.platform.aws_lambda_alias.gateway[0]"',
   '"module.platform.aws_lambda_function.gateway[0]"',
   'OUTBOX_DISPATCH_TARGET -ne "lambda_durable"',
