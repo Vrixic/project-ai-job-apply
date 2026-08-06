@@ -69,10 +69,13 @@ Apply accepts only the exact checksum-reviewed staging cutover plan created from
 upstream-matched main commit. It independently proves the exact three creates and six updates,
 requires idle retained ECS, zero pending outbox records, and zero open Temporal workflows, then
 applies that saved plan without regenerating it. Apply and Verify both run the refresh-backed
-completed-cutover verifier. Rollback and restoration are separate checksum-reviewed plans, require
-an empty serverless/legacy work boundary, never change ECS capacity, and retain the Lambda, ECS,
-Cloud Map, API, queue, database, and Temporal resources. Rollback intentionally makes the public
-API unavailable while the retained ECS service remains idle; it is a zero-traffic recovery drill.
+completed-cutover verifier. After cutover, Verify and every rollback/restoration action require a
+fresh zero-change serverless-runtime-cutover-verify plan created from the current exact main commit.
+That runtime baseline preserves accepted maintenance releases instead of reconstructing the stale
+original cutover inputs. Rollback and restoration are separate checksum-reviewed plans, require an
+empty serverless/legacy work boundary, never change ECS capacity, and retain the Lambda, ECS, Cloud
+Map, API, queue, database, and Temporal resources. Rollback intentionally makes the public API
+unavailable while the retained ECS service remains idle; it is a zero-traffic recovery drill.
 "@
   exit 0
 }
@@ -195,6 +198,15 @@ function Get-PlanInput {
   return $variable[0].Value.value
 }
 
+function Get-PlanBooleanInput {
+  param([Parameter(Mandatory = $true)][object]$Plan, [Parameter(Mandatory = $true)][string]$Name)
+  $value = Get-PlanInput -Plan $Plan -Name $Name
+  if ($value -is [bool]) { return $value }
+  if ([string]$value -ceq "true") { return $true }
+  if ([string]$value -ceq "false") { return $false }
+  throw "The saved cutover plan input '$Name' is not an exact boolean."
+}
+
 function Assert-OnlyPropertiesChanged {
   param([object]$Change, [string[]]$Allowed, [string]$FailureMessage)
   $beforeNames = @($Change.change.before.PSObject.Properties.Name)
@@ -263,7 +275,7 @@ function Assert-CutoverPlan {
   ) {
     throw "The saved plan is outside the exact three-create, six-update staging cutover boundary."
   }
-  if (-not [bool](Get-PlanInput -Plan $Plan -Name "serverless_runtime_cutover")) {
+  if (-not (Get-PlanBooleanInput -Plan $Plan -Name "serverless_runtime_cutover")) {
     throw "The saved plan does not select the atomic serverless runtime cutover switch."
   }
 
@@ -337,6 +349,77 @@ function Assert-CutoverPlan {
   return $changes
 }
 
+function Assert-RuntimeBaselinePlan {
+  param([Parameter(Mandatory = $true)][object]$Plan)
+  $changes = @($Plan.resource_changes | Where-Object {
+    (@($_.change.actions) -join ",") -notin @("no-op", "read")
+  })
+  if ($changes.Count -ne 0) {
+    throw "The runtime baseline must be a refresh-backed zero-change plan."
+  }
+  foreach ($name in @(
+    "deploy_applications", "deploy_gateway_lambda", "deploy_serverless_outbox",
+    "deploy_profile_readiness_durable", "serverless_runtime_cutover"
+  )) {
+    if (-not (Get-PlanBooleanInput -Plan $Plan -Name $name)) {
+      throw "The runtime baseline does not retain required input '$name'."
+    }
+  }
+  if (Get-PlanBooleanInput -Plan $Plan -Name "run_continuous_ecs_runtime") {
+    throw "The runtime baseline does not retain idle rollback-only ECS capacity."
+  }
+
+  $gateway = Get-PlannedValue $Plan "module.platform.aws_lambda_function.gateway[0]"
+  if ([string]$gateway.environment[0].variables.OUTBOX_DISPATCH_TARGET -ne "lambda_durable") {
+    throw "The runtime baseline does not retain Lambda durable dispatch."
+  }
+  $integration = Get-PlannedValue $Plan "module.platform.aws_apigatewayv2_integration.gateway_lambda[0]"
+  if (
+    [string]$integration.integration_type -ne "AWS_PROXY" -or
+    [string]$integration.integration_method -ne "POST" -or
+    [string]$integration.payload_format_version -ne "2.0" -or
+    [int]$integration.timeout_milliseconds -ne 15000
+  ) { throw "The runtime baseline does not retain the accepted Lambda HTTP API integration." }
+  $defaultRoute = Get-PlannedValue $Plan "module.platform.aws_apigatewayv2_route.gateway[0]"
+  $authorizer = Get-PlannedValue $Plan "module.platform.aws_apigatewayv2_authorizer.gateway[0]"
+  if (
+    [string]$defaultRoute.route_key -ne '$default' -or
+    [string]$defaultRoute.authorization_type -ne "JWT" -or
+    [string]$defaultRoute.authorizer_id -ne [string]$authorizer.id -or
+    (Compare-Object @($defaultRoute.authorization_scopes | Sort-Object) @(
+      "profile:read", "profile:write"
+    ))
+  ) { throw "The runtime baseline does not retain the accepted JWT route boundary." }
+  foreach ($routeKey in @("GET /health/live", "GET /health/ready")) {
+    $address = 'module.platform.aws_apigatewayv2_route.gateway_lambda_public["' + $routeKey + '"]'
+    $route = Get-PlannedValue $Plan $address
+    if ([string]$route.route_key -ne $routeKey -or [string]$route.authorization_type -ne "NONE") {
+      throw "The runtime baseline exposes a route outside the exact public health boundary."
+    }
+  }
+  $mapping = Get-PlannedValue $Plan "module.platform.aws_lambda_event_source_mapping.outbox_starter[0]"
+  if (-not [bool]$mapping.enabled -or @($mapping.function_response_types) -notcontains "ReportBatchItemFailures") {
+    throw "The runtime baseline does not retain the enabled partial-batch starter mapping."
+  }
+  foreach ($address in @(
+    "module.platform.aws_cloudwatch_event_rule.outbox_reconciler[0]",
+    "module.platform.aws_cloudwatch_event_rule.profile_readiness_terminal[0]"
+  )) {
+    if ([string](Get-PlannedValue $Plan $address).state -ne "ENABLED") {
+      throw "The runtime baseline does not retain both enabled workflow rules."
+    }
+  }
+  foreach ($address in @(
+    "module.platform.aws_ecs_service.gateway[0]",
+    "module.platform.aws_ecs_service.worker[0]"
+  )) {
+    if ([int](Get-PlannedValue $Plan $address).desired_count -ne 0) {
+      throw "The runtime baseline does not retain idle rollback-only ECS services."
+    }
+  }
+  return $changes
+}
+
 function Assert-RollbackPlan {
   param([Parameter(Mandatory = $true)][object]$Plan)
   $deletesExpected = @(
@@ -364,7 +447,7 @@ function Assert-RollbackPlan {
   ) {
     throw "The rollback plan is outside the exact three-delete, six-update recovery boundary."
   }
-  if ([bool](Get-PlanInput -Plan $Plan -Name "serverless_runtime_cutover")) {
+  if (Get-PlanBooleanInput -Plan $Plan -Name "serverless_runtime_cutover") {
     throw "The rollback plan does not select the retained dark runtime boundary."
   }
   $gateway = Get-OnlyChange $changes "module.platform.aws_lambda_function.gateway[0]"
@@ -536,22 +619,22 @@ function Get-Context {
   }
   $context = Get-Content -LiteralPath $contextPath -Raw | ConvertFrom-Json
   if (
-    [string]$context.Schema -ne "applydash.staging.serverless-runtime-cutover.v1" -or
+    [string]$context.Schema -ne "applydash.staging.serverless-runtime-cutover.v2" -or
     [string]$context.SourceCommit -notmatch "^[a-f0-9]{40}$" -or
-    [string]$context.CutoverPlanSha256 -notmatch "^[a-f0-9]{64}$"
+    [string]$context.RuntimeBaselinePlanSha256 -notmatch "^[a-f0-9]{64}$"
   ) { throw "The ignored staging cutover rollback context is invalid." }
   return $context
 }
 
 function Assert-Context {
-  param([object]$Context, [string]$SourceCommit, [string]$CutoverPlanSha256)
+  param([object]$Context, [string]$SourceCommit, [string]$RuntimeBaselinePlanSha256)
   if (
     [string]$Context.SourceCommit -ne $SourceCommit -or
     [string]$Context.ExpectedAccountId -ne $ExpectedAccountId -or
     [string]$Context.StateBucket -ne $StateBucket -or
-    [string]$Context.CutoverPlanPath -ne $resolvedPlanPath -or
-    [string]$Context.CutoverPlanSha256 -ne $CutoverPlanSha256
-  ) { throw "The ignored rollback context does not match the exact source, account, state, and cutover plan." }
+    [string]$Context.RuntimeBaselinePlanPath -ne $resolvedPlanPath -or
+    [string]$Context.RuntimeBaselinePlanSha256 -ne $RuntimeBaselinePlanSha256
+  ) { throw "The ignored rollback context does not match the exact source, account, state, and runtime baseline." }
 }
 
 function Set-RetainedPlanVariables {
@@ -725,13 +808,22 @@ function Invoke-SavedPlan {
 Assert-Tools
 $resolvedPlanPath = Resolve-PlanPath
 $plan = Get-PlanJson $resolvedPlanPath
-$null = Assert-CutoverPlan $plan
+$planLeaf = Split-Path $resolvedPlanPath -Leaf
+$planKind = if ($planLeaf.StartsWith("serverless-runtime-cutover-verify-", [StringComparison]::Ordinal)) {
+  $null = Assert-RuntimeBaselinePlan $plan
+  "runtime_baseline"
+} else {
+  $null = Assert-CutoverPlan $plan
+  "cutover"
+}
 $actualPlanSha256 = (Get-FileHash -LiteralPath $resolvedPlanPath -Algorithm SHA256).Hash.ToLowerInvariant()
 
 if ($Action -eq "Status") {
   [ordered]@{
-    Environment = "staging"; PlanSha256 = $actualPlanSha256
-    Creates = 3; Updates = 6; Deletes = 0; Replacements = 0; AwsMutation = $false
+    Environment = "staging"; PlanKind = $planKind; PlanSha256 = $actualPlanSha256
+    Creates = if ($planKind -eq "cutover") { 3 } else { 0 }
+    Updates = if ($planKind -eq "cutover") { 6 } else { 0 }
+    Deletes = 0; Replacements = 0; AwsMutation = $false
     RollbackContextPresent = Test-Path -LiteralPath $contextPath
     RollbackPlanPresent = Test-Path -LiteralPath $rollbackPlanPath
     RestorePlanPresent = Test-Path -LiteralPath $restorePlanPath
@@ -740,10 +832,19 @@ if ($Action -eq "Status") {
 }
 
 $sourceCommit = Assert-ExactMain
-if (-not (Split-Path $resolvedPlanPath -Leaf).StartsWith(
-  "serverless-runtime-cutover-$($sourceCommit.Substring(0, 8))",
+$requiredPlanPrefix = if ($Action -eq "Apply") {
+  if ($planKind -ne "cutover") { throw "Apply requires the original reviewed cutover plan." }
+  "serverless-runtime-cutover-$($sourceCommit.Substring(0, 8))"
+} else {
+  if ($planKind -ne "runtime_baseline") {
+    throw "$Action requires a fresh zero-change runtime baseline from the current accepted source."
+  }
+  "serverless-runtime-cutover-verify-$($sourceCommit.Substring(0, 8))"
+}
+if (-not $planLeaf.StartsWith(
+  $requiredPlanPrefix,
   [StringComparison]::Ordinal
-)) { throw "The reviewed cutover plan was not created from the current exact main commit." }
+)) { throw "The reviewed plan was not created from the current exact main commit." }
 Assert-Caller
 
 switch ($Action) {
@@ -780,10 +881,10 @@ switch ($Action) {
     Assert-ZeroServerlessWork
     $summary = New-TransitionPlan $plan $false $rollbackPlanPath
     $context = [ordered]@{
-      Schema = "applydash.staging.serverless-runtime-cutover.v1"
+      Schema = "applydash.staging.serverless-runtime-cutover.v2"
       SourceCommit = $sourceCommit; ExpectedAccountId = $ExpectedAccountId
-      StateBucket = $StateBucket; CutoverPlanPath = $resolvedPlanPath
-      CutoverPlanSha256 = $actualPlanSha256; RollbackPlanSha256 = [string]$summary.Sha256
+      StateBucket = $StateBucket; RuntimeBaselinePlanPath = $resolvedPlanPath
+      RuntimeBaselinePlanSha256 = $actualPlanSha256; RollbackPlanSha256 = [string]$summary.Sha256
       RestorePlanSha256 = ""; State = "rollback_planned"
     }
     Save-Context $context
