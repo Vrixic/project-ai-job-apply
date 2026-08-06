@@ -37,6 +37,8 @@ param(
   [switch]$RecoverFailedApply,
   [switch]$AllowArtifactReleaseUpdate,
   [switch]$AllowGatewayArtifactReleaseUpdate,
+  [switch]$AllowGatewayConcurrencyUpdate,
+  [ValidateRange(1, 5)][int]$GatewayReservedConcurrency = 5,
   [switch]$AllowGatewayScopeBoundaryUpdate,
   [switch]$AllowOutboxProducerKmsUpdate,
   [switch]$VerifyCompletedDarkDeployment,
@@ -63,6 +65,9 @@ stack, and policy-propagation updates caused by three new reviewed immutable art
 Use -AllowGatewayArtifactReleaseUpdate after runtime cutover to permit only a new immutable
 gateway artifact/version and the public environment alias transition. It preserves durable
 dispatch, enabled workflow triggers, idle ECS rollback resources, and every API route/integration.
+Use -AllowGatewayConcurrencyUpdate after runtime cutover to permit only the gateway function's
+reserved concurrency change within the reviewed one-through-five PostgreSQL connection budget.
+The Phase 0 accepted workload target is five concurrent public requests.
 Use -AllowGatewayScopeBoundaryUpdate after runtime cutover to permit only the exact default-route
 authorization-scope correction. It requires profile:read and profile:write at API Gateway while
 preserving the authorizer, integration, Lambda release, workflows, data, and idle ECS boundary.
@@ -107,6 +112,7 @@ if ($Region -ne "us-east-2") {
   throw "The Phase 0 $Environment environment is restricted to us-east-2."
 }
 if (@($RecoverFailedApply, $AllowArtifactReleaseUpdate, $AllowGatewayArtifactReleaseUpdate,
+    $AllowGatewayConcurrencyUpdate,
     $AllowGatewayScopeBoundaryUpdate,
     $AllowOutboxProducerKmsUpdate,
     $VerifyCompletedDarkDeployment,
@@ -117,6 +123,7 @@ if (@($RecoverFailedApply, $AllowArtifactReleaseUpdate, $AllowGatewayArtifactRel
 }
 $runtimeCutoverActive = [bool](
   $AllowGatewayArtifactReleaseUpdate -or
+  $AllowGatewayConcurrencyUpdate -or
   $AllowGatewayScopeBoundaryUpdate -or
   $AllowOutboxProducerKmsUpdate -or
   $VerifyCompletedOutboxProducerKmsUpdate -or
@@ -125,6 +132,7 @@ $runtimeCutoverActive = [bool](
 )
 $liveRuntimeCutoverExpected = [bool](
   $AllowGatewayArtifactReleaseUpdate -or $AllowGatewayScopeBoundaryUpdate -or
+  $AllowGatewayConcurrencyUpdate -or
   $AllowOutboxProducerKmsUpdate -or $VerifyCompletedOutboxProducerKmsUpdate -or
   $VerifyCompletedRuntimeCutover
 )
@@ -158,6 +166,8 @@ $planPrefix = if ($PlanRuntimeCutover) {
   "serverless-runtime-cutover"
 } elseif ($AllowGatewayArtifactReleaseUpdate) {
   "gateway-runtime-release"
+} elseif ($AllowGatewayConcurrencyUpdate) {
+  "gateway-concurrency"
 } elseif ($AllowGatewayScopeBoundaryUpdate) {
   "gateway-scope-boundary"
 } elseif ($AllowOutboxProducerKmsUpdate) {
@@ -925,7 +935,9 @@ try {
     $AllowGatewayArtifactReleaseUpdate
   ) { $GatewayArtifactBase64Sha256 } else { [string]$gatewayLambda.source_code_hash }
   $env:TF_VAR_gateway_lambda_extension_layer_arn = $PinnedExtensionLayerArn
-  $env:TF_VAR_gateway_lambda_reserved_concurrency = [string]$gatewayLambda.reserved_concurrent_executions
+  $env:TF_VAR_gateway_lambda_reserved_concurrency = if ($AllowGatewayConcurrencyUpdate) {
+    [string]$GatewayReservedConcurrency
+  } else { [string]$gatewayLambda.reserved_concurrent_executions }
   $env:TF_VAR_serverless_runtime_cutover = $runtimeCutoverActive.ToString().ToLowerInvariant()
   $env:TF_VAR_retain_gateway_lambda_integration_during_rollback = "false"
   $env:TF_VAR_deploy_serverless_outbox = "true"
@@ -1061,6 +1073,9 @@ try {
     "module.platform.aws_iam_role_policy.gateway_lambda[0]",
     "module.platform.aws_iam_role_policy.outbox_reconciler[0]"
   )
+  $gatewayConcurrencyExpectedUpdates = @(
+    "module.platform.aws_lambda_function.gateway[0]"
+  )
   $cutoverExpectedCreates = @(
     "module.platform.aws_apigatewayv2_integration.gateway_lambda[0]",
     'module.platform.aws_apigatewayv2_route.gateway_lambda_public["GET /health/live"]',
@@ -1082,6 +1097,7 @@ try {
     } elseif (-not (
       $AllowArtifactReleaseUpdate -or $VerifyCompletedDarkDeployment -or
       $AllowGatewayArtifactReleaseUpdate -or
+      $AllowGatewayConcurrencyUpdate -or
       $AllowGatewayScopeBoundaryUpdate -or
       $AllowOutboxProducerKmsUpdate -or
       $VerifyCompletedOutboxProducerKmsUpdate -or
@@ -1095,6 +1111,8 @@ try {
       $cutoverExpectedUpdates
     } elseif ($AllowGatewayArtifactReleaseUpdate) {
       $gatewayReleaseExpectedUpdates
+    } elseif ($AllowGatewayConcurrencyUpdate) {
+      $gatewayConcurrencyExpectedUpdates
     } elseif ($AllowGatewayScopeBoundaryUpdate) {
       @("module.platform.aws_apigatewayv2_route.gateway[0]")
     } elseif ($AllowOutboxProducerKmsUpdate) {
@@ -1202,6 +1220,7 @@ try {
     -not $RecoverFailedApply -and
     -not $AllowArtifactReleaseUpdate -and
     -not $AllowGatewayArtifactReleaseUpdate -and
+    -not $AllowGatewayConcurrencyUpdate -and
     -not $AllowGatewayScopeBoundaryUpdate -and
     -not $AllowOutboxProducerKmsUpdate -and
     -not $VerifyCompletedOutboxProducerKmsUpdate -and
@@ -1376,6 +1395,22 @@ try {
       [string]$lambdaIntegration.payload_format_version -ne "2.0"
     ) {
       throw "The runtime gateway release is outside the existing JWT-protected Lambda route."
+    }
+  }
+
+  if ($AllowGatewayConcurrencyUpdate) {
+    $gatewayFunctionChange = Get-PlannedChange `
+      "module.platform.aws_lambda_function.gateway[0]"
+    Assert-OnlyPropertiesChanged $gatewayFunctionChange @(
+      "reserved_concurrent_executions"
+    ) "The gateway capacity plan changes more than reserved concurrency."
+    if (
+      [int]$gatewayFunctionChange.change.before.reserved_concurrent_executions -ge
+        $GatewayReservedConcurrency -or
+      [int]$gatewayFunctionChange.change.after.reserved_concurrent_executions -ne
+        $GatewayReservedConcurrency
+    ) {
+      throw "The gateway capacity plan must increase reserved concurrency to the exact reviewed target."
     }
   }
 
@@ -1718,6 +1753,7 @@ try {
     $RecoverFailedApply -or
     $AllowArtifactReleaseUpdate -or
     $AllowGatewayArtifactReleaseUpdate -or
+    $AllowGatewayConcurrencyUpdate -or
     $AllowGatewayScopeBoundaryUpdate -or
     $AllowOutboxProducerKmsUpdate -or
     $VerifyCompletedOutboxProducerKmsUpdate -or
@@ -1801,6 +1837,7 @@ try {
     RecoveryFromFailedApply    = [bool]$RecoverFailedApply
     ArtifactReleaseUpdate      = [bool]$AllowArtifactReleaseUpdate
     GatewayArtifactReleaseUpdate = [bool]$AllowGatewayArtifactReleaseUpdate
+    GatewayConcurrencyUpdate       = [bool]$AllowGatewayConcurrencyUpdate
     GatewayScopeBoundaryUpdate   = [bool]$AllowGatewayScopeBoundaryUpdate
     OutboxProducerKmsUpdate      = [bool]$AllowOutboxProducerKmsUpdate
     CompletedDarkVerification  = [bool]$VerifyCompletedDarkDeployment
@@ -1833,7 +1870,7 @@ try {
     TriggersEnabled            = $runtimeCutoverActive
     ApiTrafficChange           = [bool](
       $PlanRuntimeCutover -or $AllowGatewayArtifactReleaseUpdate -or
-      $AllowGatewayScopeBoundaryUpdate
+      $AllowGatewayConcurrencyUpdate -or $AllowGatewayScopeBoundaryUpdate
     )
     EcsCapacityChange          = $false
     Creates                    = $creates.Count

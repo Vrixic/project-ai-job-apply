@@ -283,7 +283,7 @@ variable "gateway_lambda_extension_layer_arn" {
 }
 
 variable "gateway_lambda_reserved_concurrency" {
-  description = "Hard concurrency ceiling protecting the initial PostgreSQL connection budget."
+  description = "Hard concurrency ceiling protecting PostgreSQL; each environment selects its accepted workload capacity."
   type        = number
   default     = 2
 

@@ -3,7 +3,8 @@ param(
   [ValidateSet(
     "Status", "Apply", "Verify", "PlanRollback", "ApplyRollback",
     "VerifyRollbackTransition", "PlanRollbackCleanup", "ApplyRollbackCleanup",
-    "VerifyRollback", "ContinueRollbackContext", "PlanRestore", "ApplyRestore", "Cleanup"
+    "VerifyRollback", "ContinueRollbackContext", "PlanRestore", "ApplyRestore",
+    "ContinueRestoreContext", "Cleanup"
   )]
   [string]$Action = "Status",
 
@@ -79,6 +80,11 @@ Usage:
     -PlanPath .terraform/workflow-dark-plans/PLAN.tfplan `
     -ExpectedPlanSha256 REVIEWED_RESTORE_SHA256 -Execute
 
+  .\scripts\operate-staging-serverless-runtime-cutover.ps1 `
+    -Action ContinueRestoreContext -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
+    -PlanPath .terraform/workflow-dark-plans/RETAINED_PLAN.tfplan `
+    -ConfirmRestoreConformance
+
 Apply accepts only the exact checksum-reviewed staging cutover plan created from the current clean,
 upstream-matched main commit. It independently proves the exact three creates and six updates,
 requires idle retained ECS, zero pending outbox records, and zero open Temporal workflows, then
@@ -92,6 +98,9 @@ before a separately checksum-reviewed one-delete cleanup removes that integratio
 also separately reviewed. ContinueRollbackContext safely carries a verified rollback context over
 merged operator or evidence changes: it requires the retained baseline commit to remain an
 ancestor, reproves the current dark boundary and zero work, and updates only the ignored context.
+ContinueRestoreContext performs the corresponding no-mutation handoff after an accepted runtime
+maintenance release: it reproves the restored runtime and empty-work boundary from the retained
+baseline, creates a current-source zero-drift baseline, and updates only the ignored context.
 Every step requires an empty serverless/legacy work boundary, never
 changes ECS capacity, and retains Lambda functions, ECS, Cloud Map, API, queues, database, and
 Temporal. Rollback intentionally makes the public API unavailable while retained ECS stays idle.
@@ -126,8 +135,8 @@ if ($Action -in @(
 if ($Action -in @("ContinueRollbackContext", "PlanRestore") -and -not $ConfirmRollbackConformance) {
   throw "$Action requires -ConfirmRollbackConformance."
 }
-if ($Action -eq "Cleanup" -and -not $ConfirmRestoreConformance) {
-  throw "Cleanup requires -ConfirmRestoreConformance."
+if ($Action -in @("ContinueRestoreContext", "Cleanup") -and -not $ConfirmRestoreConformance) {
+  throw "$Action requires -ConfirmRestoreConformance."
 }
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
@@ -1359,6 +1368,38 @@ switch ($Action) {
       Environment = "staging"; Action = "restore"; NoDrift = [bool]$verification.NoDrift
       DispatchTarget = "lambda_durable"; TriggersEnabled = $true; EcsRuntimeIdle = $true
       PublicConformanceRequired = $true
+      RuntimeBaselinePlan = Split-Path ([string]$restoredBaseline.Path) -Leaf
+    } | ConvertTo-Json
+  }
+  "ContinueRestoreContext" {
+    $context = Get-Context
+    Assert-ContextIdentity $context $sourceCommit $actualPlanSha256
+    if ([string]$context.State -ne "restore_verified") {
+      throw "Restoration context continuation requires the verified restored runtime state."
+    }
+    $verification = Invoke-CompletedVerification $plan Runtime
+    Assert-ZeroLegacyWork $plan
+    Assert-ZeroServerlessWork
+    $restoredBaseline = Get-RestoredRuntimeBaseline $verification $sourceCommit
+    $continuedContext = [ordered]@{
+      Schema = "applydash.staging.serverless-runtime-cutover.v4"
+      RuntimeBaselineSourceCommit = $sourceCommit; ValidatedSourceCommit = $sourceCommit
+      ExpectedAccountId = [string]$context.ExpectedAccountId
+      StateBucket = [string]$context.StateBucket
+      RuntimeBaselinePlanPath = [string]$restoredBaseline.Path
+      RuntimeBaselinePlanSha256 = [string]$restoredBaseline.Sha256
+      RollbackTransitionPlanSha256 = [string]$context.RollbackTransitionPlanSha256
+      RollbackTransitionVerificationSha256 = [string]$context.RollbackTransitionVerificationSha256
+      RollbackCleanupPlanSha256 = [string]$context.RollbackCleanupPlanSha256
+      RestorePlanSha256 = [string]$context.RestorePlanSha256
+      State = "restore_verified"
+    }
+    Save-Context $continuedContext
+    [ordered]@{
+      Environment = "staging"; Action = "continue_restore_context"
+      PreviousRuntimeBaselineSourceIsAncestor = $true
+      CurrentRuntimeNoDrift = [bool]$verification.NoDrift
+      LegacyAndServerlessWorkEmpty = $true; ContextUpdated = $true; AwsMutation = $false
       RuntimeBaselinePlan = Split-Path ([string]$restoredBaseline.Path) -Leaf
     } | ConvertTo-Json
   }

@@ -16,9 +16,9 @@ checksum.
   checksums, and pinned regional extension layer.
 - Keep both retained ECS services at `0/0/0`; they are rollback resources and must not be deleted or
   restarted by the cutover plan.
-- Drain the three legacy synthetic `temporal` outbox records through one bounded retained Temporal
-  worker task. Stop that exact task afterward and prove every record terminal. Do not rewrite those
-  records to `lambda_durable`. Follow the
+- Drain any exact reviewed nonempty batch of legacy synthetic `temporal` outbox records through one
+  bounded retained Temporal worker task. Stop that exact task afterward and prove every record
+  terminal. Do not rewrite those records to `lambda_durable`. Follow the
   [staging legacy Temporal drain runbook](staging-legacy-temporal-drain.md).
 - Prove a fresh zero-pending outbox, zero open Temporal and Lambda durable workflows, empty source
   queue/DLQs, all ten gateway/workflow alarms healthy, accepted aliases, and zero drift.
@@ -123,6 +123,29 @@ durable readiness operation, clean queues/DLQs, healthy alarms, idle ECS, and no
 Rollback to a prior gateway build is the same process using that prior immutable artifact; it is a
 new separately reviewed two-update plan, never an unversioned code overwrite.
 
+## Gateway concurrency boundary
+
+The fixed staging public workload uses five concurrent requests. If aggregate evidence shows API
+Gateway `503` responses from Lambda throttling while request/authentication behavior is otherwise
+correct, do not weaken the workload or add provisioned concurrency. The gateway has a two-connection
+pool per execution environment, and the accepted staging reserved-concurrency ceiling of `5`
+bounds its aggregate gateway pool at ten connections. Development retains its independently proven
+ceiling of `2`.
+
+From clean upstream-matched `main`, run
+`plan-staging-serverless-runtime-cutover.ps1 -Action PlanGatewayConcurrency` with the exact currently
+deployed gateway and workflow artifact arguments. The accepted plan must contain exactly one
+in-place update: `aws_lambda_function.gateway.reserved_concurrent_executions` from `2` to `5`. It
+must not publish a version, move the alias, change routes/scopes, enable or disable triggers, change
+ECS capacity, mutate data, or alter any artifact, key, queue, secret, or database resource.
+
+Review the saved plan with `operate-staging-gateway-runtime-release.ps1 -Action Status`, authorize
+its exact SHA-256, and apply only that checksum through the same operator. Completed-runtime
+verification must return zero drift and the environment-specific deployed conformance must confirm
+reserved concurrency `5`. Then repeat the complete fixed public workload, authenticated workflow
+and replay, two-account isolation, and aggregate Lambda/API/database/queue/DLQ/alarm/privacy checks.
+The restored runtime is not accepted until every one passes.
+
 ## JWT route-scope boundary
 
 The protected `$default` route requires `profile:read` and `profile:write` as its accepted OAuth
@@ -211,8 +234,12 @@ or unverified rollback fails closed.
 
 Only after that passes, use
 `PlanRestore -ConfirmRollbackConformance`, review the new restoration checksum, and run
-`ApplyRestore`. Repeat `lambda-cutover` public/authenticated/workload acceptance, then use
-`Cleanup -ConfirmRestoreConformance -Execute` to remove only ignored local plans/context. Resuming
+`ApplyRestore`. Repeat `lambda-cutover` public/authenticated/workload acceptance. If an accepted
+runtime correction merged after restoration, run `ContinueRestoreContext` against the retained
+pre-maintenance baseline with `-ConfirmRestoreConformance`; it performs no AWS mutation, reproves
+the runtime and empty-work boundary, and returns a new current-source runtime baseline. Then use
+that returned baseline with `Cleanup -ConfirmRestoreConformance -Execute` to remove only ignored
+local plans/context. Resuming
 ECS is a separate explicit capacity plan and is not part of this cost-preserving drill.
 Legacy-resource deletion and Temporal credential revocation remain later, separately reviewed work
 after the acceptance window expires.
@@ -220,3 +247,5 @@ after the acceptance window expires.
 Restoration verification creates a fresh current-commit runtime baseline and records its path in
 the context and sanitized result. Use that returned baseline path for the later cleanup command;
 the historical pre-rollback baseline remains immutable evidence and is never relabeled as current.
+The same rule applies to `ContinueRestoreContext`: use its returned current-source baseline for
+cleanup and retain the earlier baseline as immutable evidence.

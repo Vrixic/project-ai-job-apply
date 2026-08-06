@@ -518,7 +518,11 @@ try {
         "--output", "json"
       ) `
       -FailureMessage "The $Environment Lambda concurrency could not be inspected."
-    if ([int]$lambdaConcurrency.ReservedConcurrentExecutions -ne 2) {
+    $expectedGatewayConcurrency = if ($Environment -eq "staging") { 5 } else { 2 }
+    if (
+      [int]$lambdaConcurrency.ReservedConcurrentExecutions -ne
+        $expectedGatewayConcurrency
+    ) {
       throw "The $Environment Lambda is outside the reviewed concurrency ceiling."
     }
 

@@ -39,10 +39,10 @@ Usage:
 
 Status performs no AWS mutation. Apply accepts only an exact checksum-reviewed staging plan
 created from the current clean, upstream-matched main commit. It permits the two-update immutable
-Lambda release, the one-update default-route scope correction, or the two-policy encrypted-outbox
-producer correction. Every mode preserves the JWT authorizer, Lambda integration, durable workflow
-triggers, retained idle ECS, data, and every unrelated resource. Apply immediately runs the
-matching completed-runtime zero-drift verifier.
+Lambda release, the one-update gateway concurrency correction, the one-update default-route scope
+correction, or the two-policy encrypted-outbox producer correction. Every mode preserves the JWT
+authorizer, Lambda integration, durable workflow triggers, retained idle ECS, data, and every
+unrelated resource. Apply immediately runs the matching completed-runtime zero-drift verifier.
 "@
   exit 0
 }
@@ -361,6 +361,74 @@ function Assert-GatewayScopeBoundaryPlan {
   }
 }
 
+function Assert-GatewayConcurrencyPlan {
+  param([Parameter(Mandatory = $true)][object]$Plan)
+  $functionAddress = "module.platform.aws_lambda_function.gateway[0]"
+  $changes = @($Plan.resource_changes | Where-Object {
+    (@($_.change.actions) -join ",") -notin @("no-op", "read")
+  })
+  $updates = @($changes | Where-Object { (@($_.change.actions) -join ",") -eq "update" })
+  if (
+    $changes.Count -ne 1 -or $updates.Count -ne 1 -or
+    [string]$updates[0].address -ne $functionAddress
+  ) { throw "The plan is outside the exact one-update staging gateway capacity boundary." }
+
+  foreach ($name in @(
+    "deploy_applications", "deploy_gateway_lambda", "deploy_serverless_outbox",
+    "deploy_profile_readiness_durable", "serverless_runtime_cutover"
+  )) {
+    if (-not (Get-PlanBoolean -Plan $Plan -Name $name)) {
+      throw "The gateway capacity correction does not preserve the complete serverless runtime."
+    }
+  }
+  if (Get-PlanBoolean -Plan $Plan -Name "run_continuous_ecs_runtime") {
+    throw "The gateway capacity correction attempts to resume continuous ECS capacity."
+  }
+
+  $functionChange = $updates[0]
+  Assert-OnlyPropertiesChanged $functionChange @("reserved_concurrent_executions") `
+    "The gateway capacity correction changes more than reserved concurrency."
+  if (
+    [int]$functionChange.change.before.reserved_concurrent_executions -ne 2 -or
+    [int]$functionChange.change.after.reserved_concurrent_executions -ne 5 -or
+    [int](Get-PlanInput $Plan "gateway_lambda_reserved_concurrency") -ne 5
+  ) { throw "The gateway capacity correction is not the exact reviewed increase from two to five." }
+
+  $route = Get-PlannedValue $Plan "module.platform.aws_apigatewayv2_route.gateway[0]"
+  $integration = Get-PlannedValue $Plan `
+    "module.platform.aws_apigatewayv2_integration.gateway_lambda[0]"
+  $routeScopes = @($route.authorization_scopes | Sort-Object)
+  $scopeDifference = @(
+    Compare-Object -ReferenceObject $routeScopes `
+      -DifferenceObject @("profile:read", "profile:write")
+  )
+  if (
+    $routeScopes.Count -ne 2 -or $scopeDifference.Count -ne 0 -or
+    [string]$route.authorization_type -ne "JWT" -or
+    [string]$route.route_key -ne '$default' -or
+    [string]$route.target -ne "integrations/$([string]$integration.id)" -or
+    [string]$integration.integration_type -ne "AWS_PROXY" -or
+    [string]$integration.payload_format_version -ne "2.0"
+  ) { throw "The capacity correction is outside the existing JWT-protected Lambda route." }
+
+  if (
+    -not [bool](Get-PlannedValue $Plan `
+      "module.platform.aws_lambda_event_source_mapping.outbox_starter[0]").enabled -or
+    [string](Get-PlannedValue $Plan `
+      "module.platform.aws_cloudwatch_event_rule.outbox_reconciler[0]").state -ne "ENABLED" -or
+    [string](Get-PlannedValue $Plan `
+      "module.platform.aws_cloudwatch_event_rule.profile_readiness_terminal[0]").state -ne "ENABLED"
+  ) { throw "The capacity correction does not preserve every live workflow trigger." }
+  foreach ($address in @(
+    "module.platform.aws_ecs_service.gateway[0]",
+    "module.platform.aws_ecs_service.worker[0]"
+  )) {
+    if ([int](Get-PlannedValue $Plan $address).desired_count -ne 0) {
+      throw "The capacity correction does not preserve idle retained ECS."
+    }
+  }
+}
+
 function Assert-OutboxProducerKmsPlan {
   param([Parameter(Mandatory = $true)][object]$Plan)
   $expected = @(
@@ -469,6 +537,12 @@ function Get-GatewayPlanKind {
     $addresses[0] -eq "module.platform.aws_apigatewayv2_route.gateway[0]"
   ) {
     return "scope_boundary"
+  }
+  if (
+    $addresses.Count -eq 1 -and
+    $addresses[0] -eq "module.platform.aws_lambda_function.gateway[0]"
+  ) {
+    return "gateway_concurrency"
   }
   $producerAddresses = @(
     "module.platform.aws_iam_role_policy.gateway_lambda[0]",
@@ -591,6 +665,7 @@ $plan = Get-PlanJson $resolvedPlanPath
 $planKind = Get-GatewayPlanKind $plan
 if ($planKind -eq "artifact_release") { Assert-GatewayReleasePlan $plan }
 elseif ($planKind -eq "scope_boundary") { Assert-GatewayScopeBoundaryPlan $plan }
+elseif ($planKind -eq "gateway_concurrency") { Assert-GatewayConcurrencyPlan $plan }
 else { Assert-OutboxProducerKmsPlan $plan }
 $actualPlanSha256 = (Get-FileHash -LiteralPath $resolvedPlanPath -Algorithm SHA256).Hash.ToLowerInvariant()
 
@@ -601,9 +676,11 @@ if ($Action -eq "Status") {
       "gateway_release_review"
     } elseif ($planKind -eq "scope_boundary") {
       "gateway_scope_boundary_review"
+    } elseif ($planKind -eq "gateway_concurrency") {
+      "gateway_concurrency_review"
     } else { "outbox_producer_kms_review" }
     PlanSha256 = $actualPlanSha256
-    Creates = 0; Updates = if ($planKind -eq "scope_boundary") { 1 } else { 2 }
+    Creates = 0; Updates = if ($planKind -in @("scope_boundary", "gateway_concurrency")) { 1 } else { 2 }
     Deletes = 0; Replacements = 0
     ApiTrafficChange = $planKind -ne "outbox_producer_kms"
     WorkflowTriggerChange = $false; EcsCapacityChange = $false
@@ -617,6 +694,8 @@ $expectedPlanPrefix = if ($planKind -eq "artifact_release") {
   "gateway-runtime-release"
 } elseif ($planKind -eq "scope_boundary") {
   "gateway-scope-boundary"
+} elseif ($planKind -eq "gateway_concurrency") {
+  "gateway-concurrency"
 } else { "outbox-producer-kms" }
 if (-not (Split-Path $resolvedPlanPath -Leaf).StartsWith(
   "$expectedPlanPrefix-$($sourceCommit.Substring(0, 8))",
@@ -656,6 +735,8 @@ if (
     "gateway_release"
   } elseif ($planKind -eq "scope_boundary") {
     "gateway_scope_boundary"
+  } elseif ($planKind -eq "gateway_concurrency") {
+    "gateway_concurrency"
   } else { "outbox_producer_kms" }
   AppliedPlanSha256 = $actualPlanSha256
   NoDrift = $true; DispatchTarget = "lambda_durable"; TriggersEnabled = $true
