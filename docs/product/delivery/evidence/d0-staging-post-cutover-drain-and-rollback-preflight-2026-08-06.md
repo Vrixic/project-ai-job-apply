@@ -75,9 +75,29 @@ backend initialization output for failure-only diagnostics and explicitly discar
 provider output. Repository policy makes those output-suppression boundaries mandatory so both
 rollback and restoration planning return exactly one review summary. No AWS mutation occurred.
 
+## Authorized apply baseline-binding rejection
+
+After the summary-contract correction merged, another fresh exact-main runtime baseline passed
+with zero drift and the complete accepted runtime boundary. Rollback planning produced and retained
+the exact zero-create, six-update, three-delete, zero-replacement plan, returned its review checksum,
+and created the checksum-bound ignored context. The product owner authorized that exact checksum.
+
+Apply then failed closed before Terraform or AWS mutation because rollback planning's own completed
+runtime verifier had refreshed the same commit-named zero-change baseline file. Terraform plan
+binaries are not byte-stable across equivalent refreshes, so the context retained the checksum from
+before verification while the file correctly contained the newly verified equivalent baseline.
+All other context bindings and the authorized rollback-plan checksum matched. The rejected plan and
+context were quarantined locally and cannot be reused.
+
+Source now requires completed runtime verification to report the exact reviewed baseline path and
+match its post-refresh file checksum. `PlanRollback` records that refreshed checksum, and
+`ApplyRestore` advances the context to the refreshed restored-runtime checksum before cleanup.
+Repository policy and an isolated function-level mismatch rejection guard this lifecycle. No AWS
+resource, route, trigger, capacity, or data changed.
+
 ## Remaining gate
 
-SR-006 and D0-016 remain `In progress`. After the summary-contract correction merges:
+SR-006 and D0-016 remain `In progress`. After the refreshed-baseline binding correction merges:
 
 1. regenerate the rollback plan from clean exact `main` and the fresh runtime baseline;
 2. review and separately authorize its checksum;
