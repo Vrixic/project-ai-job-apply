@@ -120,6 +120,7 @@ for (const expected of [
   'RouteKey -in @("GET /health/live", "GET /health/ready")',
   'FunctionResponseTypes) -notcontains "ReportBatchItemFailures"',
   '[string]$rule.State -cne "ENABLED"',
+  '$expectedGatewayConcurrency = if ($Environment -eq "staging") { 5 } else { 2 }',
   '"--services", "gateway", "workflow-worker"',
   '"ecs", "list-tasks"',
 ]) {
@@ -468,6 +469,8 @@ for (const environment of environmentVariables) {
 
 for (const expected of [
   "AllowGatewayArtifactReleaseUpdate",
+  "AllowGatewayConcurrencyUpdate",
+  "GatewayReservedConcurrency",
   "AllowGatewayScopeBoundaryUpdate",
   "AllowOutboxProducerKmsUpdate",
   "VerifyCompletedOutboxProducerKmsUpdate",
@@ -491,6 +494,7 @@ for (const expected of [
   "TemporalOpenWorkflowsEmpty",
   "DurableOpenExecutionsEmpty",
   "GatewayArtifactReleaseUpdate",
+  "GatewayConcurrencyUpdate",
   "GatewayScopeBoundaryUpdate",
   '"profile:read", "profile:write"',
   '"outbox-producer-kms"',
@@ -540,6 +544,16 @@ requireText(
 );
 requireText(
   stagingRuntimeCutoverWrapper,
+  '$arguments["AllowGatewayConcurrencyUpdate"] = $true',
+  "The staging runtime wrapper must expose the accepted gateway concurrency correction mode.",
+);
+requireText(
+  stagingRuntimeCutoverWrapper,
+  '$arguments["GatewayReservedConcurrency"] = 5',
+  "The staging runtime wrapper must pin the accepted five-request concurrency boundary.",
+);
+requireText(
+  stagingRuntimeCutoverWrapper,
   '$arguments["AllowGatewayScopeBoundaryUpdate"] = $true',
   "The staging runtime wrapper must expose the exact JWT route-scope correction mode.",
 );
@@ -568,7 +582,9 @@ for (const expected of [
   '[ValidateSet("Status", "Apply")]',
   '"$expectedPlanPrefix-$($sourceCommit.Substring(0, 8))"',
   '"gateway-runtime-release"',
+  '"gateway-concurrency"',
   '"gateway-scope-boundary"',
+  "Assert-GatewayConcurrencyPlan",
   "Assert-GatewayScopeBoundaryPlan",
   "Assert-OutboxProducerKmsPlan",
   '@("authorization_scopes")',
@@ -661,7 +677,8 @@ assert.ok(
 for (const expected of [
   '"PlanRollback", "ApplyRollback"',
   '"VerifyRollbackTransition", "PlanRollbackCleanup", "ApplyRollbackCleanup"',
-  '"VerifyRollback", "ContinueRollbackContext", "PlanRestore", "ApplyRestore", "Cleanup"',
+  '"VerifyRollback", "ContinueRollbackContext", "PlanRestore", "ApplyRestore"',
+  '"ContinueRestoreContext", "Cleanup"',
   '"workflow-dark-plans"',
   "ExpectedPlanSha256",
   "Assert-CutoverPlan",
@@ -678,6 +695,8 @@ for (const expected of [
   '$objectType -ne "commit"',
   "merge-base --is-ancestor",
   '"ContinueRollbackContext" {',
+  '"ContinueRestoreContext" {',
+  'Action = "continue_restore_context"',
   "RuntimeBaselineSourceIsAncestor = $true",
   "Get-RestoredRuntimeBaseline",
   "RuntimeBaselinePlanSha256",

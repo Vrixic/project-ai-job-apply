@@ -142,7 +142,7 @@ variable "gateway_lambda_extension_layer_arn" {
 
 variable "gateway_lambda_reserved_concurrency" {
   type    = number
-  default = 2
+  default = 5
 }
 
 variable "deploy_serverless_outbox" {
