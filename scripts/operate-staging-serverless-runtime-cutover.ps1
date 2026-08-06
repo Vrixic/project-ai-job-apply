@@ -698,7 +698,7 @@ function New-TransitionPlan {
     $env:AWS_SECRET_ACCESS_KEY = [string]$credentials.SecretAccessKey
     $env:AWS_SESSION_TOKEN = [string]$credentials.SessionToken
     $env:AWS_REGION = $Region; $env:AWS_DEFAULT_REGION = $Region
-    Initialize-Backend
+    $null = Initialize-Backend
     $priorVariables = Set-RetainedPlanVariables $SourcePlan $RuntimeCutover
     $output = & terraform "-chdir=$environmentDirectory" plan -input=false -lock-timeout=5m `
       -detailed-exitcode "-out=$Destination" 2>&1
@@ -707,10 +707,13 @@ function New-TransitionPlan {
       throw "The staging transition did not produce the required change-only plan: $diagnostic"
     }
   } finally {
-    if ($null -ne $priorVariables) { Restore-EnvironmentVariables $priorVariables }
+    if ($null -ne $priorVariables) { $null = Restore-EnvironmentVariables $priorVariables }
     foreach ($name in $previous.Keys) {
-      if ($null -eq $previous[$name]) { Remove-Item "Env:$name" -ErrorAction SilentlyContinue }
-      else { Set-Item "Env:$name" $previous[$name] }
+      if ($null -eq $previous[$name]) {
+        $null = Remove-Item "Env:$name" -ErrorAction SilentlyContinue
+      } else {
+        $null = Set-Item "Env:$name" $previous[$name]
+      }
     }
   }
   $transition = Get-PlanJson $Destination
@@ -781,10 +784,13 @@ function Initialize-Backend {
     throw "The staging state key is outside the exact account and region."
   }
   $null = New-Item -ItemType Directory -Path $terraformDataDirectory -Force
-  & terraform "-chdir=$environmentDirectory" init -reconfigure -input=false -lockfile=readonly `
-    "-backend-config=bucket=$StateBucket" "-backend-config=key=platform.tfstate" `
-    "-backend-config=region=$Region" "-backend-config=kms_key_id=$keyArn" 2>$null
-  if ($LASTEXITCODE -ne 0) { throw "The pinned staging provider set could not initialize." }
+  $initializationOutput = & terraform "-chdir=$environmentDirectory" init -reconfigure `
+    -input=false -lockfile=readonly "-backend-config=bucket=$StateBucket" `
+    "-backend-config=key=platform.tfstate" "-backend-config=region=$Region" `
+    "-backend-config=kms_key_id=$keyArn" 2>&1
+  if ($LASTEXITCODE -ne 0) {
+    throw "The pinned staging provider set could not initialize."
+  }
 }
 
 function Invoke-SavedPlan {
@@ -803,13 +809,16 @@ function Invoke-SavedPlan {
     $env:AWS_SECRET_ACCESS_KEY = [string]$credentials.SecretAccessKey
     $env:AWS_SESSION_TOKEN = [string]$credentials.SessionToken
     $env:AWS_REGION = $Region; $env:AWS_DEFAULT_REGION = $Region
-    Initialize-Backend
+    $null = Initialize-Backend
     & terraform "-chdir=$environmentDirectory" apply -input=false $Path
     if ($LASTEXITCODE -ne 0) { throw $FailureMessage }
   } finally {
     foreach ($name in $previous.Keys) {
-      if ($null -eq $previous[$name]) { Remove-Item "Env:$name" -ErrorAction SilentlyContinue }
-      else { Set-Item "Env:$name" $previous[$name] }
+      if ($null -eq $previous[$name]) {
+        $null = Remove-Item "Env:$name" -ErrorAction SilentlyContinue
+      } else {
+        $null = Set-Item "Env:$name" $previous[$name]
+      }
     }
   }
 }
