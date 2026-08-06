@@ -174,18 +174,34 @@ dispatch, enabled triggers, idle ECS services, and zero drift, and binds the ent
 context to its path, checksum, commit, account, and state boundary.
 
 Before generating rollback, stop new writes and require every outbox record, source queue, both
-DLQs, durable execution, and Temporal workflow to be terminal. Use `PlanRollback` against that fresh
-runtime baseline with `-ConfirmZeroTraffic`; review its separate checksum before `ApplyRollback`.
-The exact rollback deletes only the Lambda integration and two public health routes and performs
-six bounded updates that disable all replacement triggers, restore Temporal dispatch, and point
-the default route at retained ECS. It never deletes Lambda, queues, database, API, Cloud Map, ECS,
-or Temporal resources and never changes ECS capacity.
+DLQs, durable execution, and Temporal workflow to be terminal. Rollback is deliberately split into
+two checksum-reviewed applies because API Gateway can continue reporting an integration as in use
+while an in-place route update propagates.
 
-Because both ECS services deliberately remain `0/0/0`, the public API is unavailable during this
-zero-traffic rollback drill. Run `VerifyRollback`, then perform the accepted direct-alias dark
-conformance. Only after that passes, use `PlanRestore -ConfirmRollbackConformance`, review the new
-restoration checksum, and run `ApplyRestore`. Repeat `lambda-cutover` public/authenticated/workload
-acceptance, then use `Cleanup -ConfirmRestoreConformance -Execute` to remove only ignored local
-plans/context. Resuming ECS would be a separate explicit capacity plan and is not part of this
-cost-preserving drill. Legacy-resource deletion and Temporal credential revocation remain later,
-separately reviewed work after the acceptance window expires.
+1. Run `PlanRollback` against the fresh runtime baseline with `-ConfirmZeroTraffic`. Its exact
+   transition contains two public-health-route deletes and six bounded route/gateway/trigger
+   updates. It sets `serverless_runtime_cutover=false` and
+   `retain_gateway_lambda_integration_during_rollback=true`; therefore it cannot delete the Lambda
+   integration. Review its checksum before `ApplyRollback`.
+2. `ApplyRollback` records an applied state before verification, then requires a refresh-backed
+   zero-change plan proving the default route points to retained ECS, JWT/public Lambda routes are
+   absent, dispatch is `temporal`, every replacement trigger is disabled, ECS remains `0/0/0`, and
+   the Lambda integration exists but is unreferenced. If execution is interrupted after Terraform,
+   run `VerifyRollbackTransition -ConfirmZeroTraffic` to recover that state without reapplying.
+3. Run `PlanRollbackCleanup -ConfirmZeroTraffic`. It independently repeats the retained-integration
+   zero-drift and zero-work checks, then produces exactly one delete: the unreferenced Lambda
+   integration. Review this second checksum before `ApplyRollbackCleanup`.
+4. `ApplyRollbackCleanup` applies only that one-delete plan and runs the complete dark verifier.
+   If its post-apply verification is interrupted, `VerifyRollback` recovers the verified final
+   rollback state without replaying the deletion.
+
+Neither step deletes Lambda functions, queues, database, API, Cloud Map, ECS, or Temporal resources,
+and neither changes ECS capacity. Because both ECS services deliberately remain `0/0/0`, the public
+API is unavailable throughout this zero-traffic drill. After `VerifyRollback`, perform the accepted
+direct-alias dark conformance. Only after that passes, use
+`PlanRestore -ConfirmRollbackConformance`, review the new restoration checksum, and run
+`ApplyRestore`. Repeat `lambda-cutover` public/authenticated/workload acceptance, then use
+`Cleanup -ConfirmRestoreConformance -Execute` to remove only ignored local plans/context. Resuming
+ECS is a separate explicit capacity plan and is not part of this cost-preserving drill.
+Legacy-resource deletion and Temporal credential revocation remain later, separately reviewed work
+after the acceptance window expires.

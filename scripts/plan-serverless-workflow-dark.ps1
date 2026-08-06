@@ -385,7 +385,8 @@ $terraformVariables = @(
   "gateway_lambda_artifact_s3_key", "gateway_lambda_artifact_s3_object_version",
   "gateway_lambda_artifact_sha256", "gateway_lambda_artifact_base64sha256",
   "gateway_lambda_extension_layer_arn", "gateway_lambda_reserved_concurrency",
-  "serverless_runtime_cutover", "deploy_serverless_outbox",
+  "serverless_runtime_cutover", "retain_gateway_lambda_integration_during_rollback",
+  "deploy_serverless_outbox",
   "workflow_ingress_artifact_s3_key", "workflow_ingress_artifact_s3_object_version",
   "workflow_ingress_artifact_sha256", "workflow_ingress_artifact_base64sha256",
   "workflow_ingress_lambda_extension_layer_arn",
@@ -926,6 +927,7 @@ try {
   $env:TF_VAR_gateway_lambda_extension_layer_arn = $PinnedExtensionLayerArn
   $env:TF_VAR_gateway_lambda_reserved_concurrency = [string]$gatewayLambda.reserved_concurrent_executions
   $env:TF_VAR_serverless_runtime_cutover = $runtimeCutoverActive.ToString().ToLowerInvariant()
+  $env:TF_VAR_retain_gateway_lambda_integration_during_rollback = "false"
   $env:TF_VAR_deploy_serverless_outbox = "true"
   $env:TF_VAR_workflow_ingress_artifact_s3_key = $WorkflowIngressArtifactS3Key
   $env:TF_VAR_workflow_ingress_artifact_s3_object_version = $WorkflowIngressArtifactS3ObjectVersion

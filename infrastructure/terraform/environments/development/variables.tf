@@ -195,6 +195,11 @@ variable "serverless_runtime_cutover" {
   default = false
 }
 
+variable "retain_gateway_lambda_integration_during_rollback" {
+  type    = bool
+  default = false
+}
+
 variable "deploy_profile_readiness_durable" {
   type    = bool
   default = false

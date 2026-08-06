@@ -334,6 +334,24 @@ variable "serverless_runtime_cutover" {
   }
 }
 
+variable "retain_gateway_lambda_integration_during_rollback" {
+  description = "Temporarily retain the unrouted Lambda API integration while rollback moves the default route and disables replacement triggers."
+  type        = bool
+  default     = false
+
+  validation {
+    condition = !var.retain_gateway_lambda_integration_during_rollback || (
+      !var.serverless_runtime_cutover &&
+      var.deploy_applications &&
+      var.deploy_gateway_lambda &&
+      var.deploy_serverless_outbox &&
+      var.deploy_profile_readiness_durable &&
+      !var.run_continuous_ecs_runtime
+    )
+    error_message = "Rollback integration retention requires the complete replacement, dark routing/triggers, and retained idle ECS boundary."
+  }
+}
+
 variable "workflow_ingress_artifact_s3_key" {
   description = "Immutable environment artifact-bucket key for the starter/reconciler Lambda ZIP."
   type        = string
