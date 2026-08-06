@@ -80,7 +80,9 @@ for (const expected of [
   "[string]$Verification.PlanSha256 -ne $actual",
   "$refreshedRuntimeBaselineSha256 = Get-RefreshedRuntimeBaselineSha256 $verification",
   "RuntimeBaselinePlanSha256 = $refreshedRuntimeBaselineSha256",
-  "$context.RuntimeBaselinePlanSha256 = Get-RefreshedRuntimeBaselineSha256 $verification",
+  "$restoredBaseline = Get-RestoredRuntimeBaseline $verification $sourceCommit",
+  "$context.RuntimeBaselinePlanPath = [string]$restoredBaseline.Path",
+  "$context.RuntimeBaselinePlanSha256 = [string]$restoredBaseline.Sha256",
 ]) {
   requireText(
     stagingRuntimeCutoverOperator,
@@ -659,7 +661,7 @@ assert.ok(
 for (const expected of [
   '"PlanRollback", "ApplyRollback"',
   '"VerifyRollbackTransition", "PlanRollbackCleanup", "ApplyRollbackCleanup"',
-  '"VerifyRollback", "PlanRestore", "ApplyRestore", "Cleanup"',
+  '"VerifyRollback", "ContinueRollbackContext", "PlanRestore", "ApplyRestore", "Cleanup"',
   '"workflow-dark-plans"',
   "ExpectedPlanSha256",
   "Assert-CutoverPlan",
@@ -669,6 +671,13 @@ for (const expected of [
   "The runtime baseline must be a refresh-backed zero-change plan.",
   '"serverless-runtime-cutover-verify-"',
   '"applydash.staging.serverless-runtime-cutover.v3"',
+  '"applydash.staging.serverless-runtime-cutover.v4"',
+  "RuntimeBaselineSourceCommit",
+  "ValidatedSourceCommit",
+  "merge-base --is-ancestor",
+  '"ContinueRollbackContext" {',
+  "RuntimeBaselineSourceIsAncestor = $true",
+  "Get-RestoredRuntimeBaseline",
   "RuntimeBaselinePlanSha256",
   "requires a fresh zero-change runtime baseline from the current accepted source",
   "Assert-ZeroLegacyWork",

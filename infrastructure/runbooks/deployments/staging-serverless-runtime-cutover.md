@@ -198,10 +198,25 @@ while an in-place route update propagates.
 Neither step deletes Lambda functions, queues, database, API, Cloud Map, ECS, or Temporal resources,
 and neither changes ECS capacity. Because both ECS services deliberately remain `0/0/0`, the public
 API is unavailable throughout this zero-traffic drill. After `VerifyRollback`, perform the accepted
-direct-alias dark conformance. Only after that passes, use
+direct-alias dark conformance.
+
+If a required drain/operator/evidence correction merges after rollback verification, do not edit
+the ignored context or rename/copy its retained runtime baseline. Run `ContinueRollbackContext`
+from clean synchronized `main`, with the exact retained baseline path, account/state boundary, and
+`-ConfirmRollbackConformance`. It accepts only a verified rollback context, requires the baseline
+source commit to remain an ancestor of current `main`, reproves the current dark runtime at zero
+drift, requires zero legacy/serverless work, and updates only the context's validated operator
+commit. It performs no AWS mutation. Any divergent history, changed live boundary, nonempty work,
+or unverified rollback fails closed.
+
+Only after that passes, use
 `PlanRestore -ConfirmRollbackConformance`, review the new restoration checksum, and run
 `ApplyRestore`. Repeat `lambda-cutover` public/authenticated/workload acceptance, then use
 `Cleanup -ConfirmRestoreConformance -Execute` to remove only ignored local plans/context. Resuming
 ECS is a separate explicit capacity plan and is not part of this cost-preserving drill.
 Legacy-resource deletion and Temporal credential revocation remain later, separately reviewed work
 after the acceptance window expires.
+
+Restoration verification creates a fresh current-commit runtime baseline and records its path in
+the context and sanitized result. Use that returned baseline path for the later cleanup command;
+the historical pre-rollback baseline remains immutable evidence and is never relabeled as current.

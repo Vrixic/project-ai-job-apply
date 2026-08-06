@@ -3,7 +3,7 @@ param(
   [ValidateSet(
     "Status", "Apply", "Verify", "PlanRollback", "ApplyRollback",
     "VerifyRollbackTransition", "PlanRollbackCleanup", "ApplyRollbackCleanup",
-    "VerifyRollback", "PlanRestore", "ApplyRestore", "Cleanup"
+    "VerifyRollback", "ContinueRollbackContext", "PlanRestore", "ApplyRestore", "Cleanup"
   )]
   [string]$Action = "Status",
 
@@ -67,6 +67,10 @@ Usage:
     -ExpectedPlanSha256 REVIEWED_CLEANUP_SHA256 -ConfirmZeroTraffic -Execute
 
   .\scripts\operate-staging-serverless-runtime-cutover.ps1 `
+    -Action ContinueRollbackContext -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
+    -PlanPath .terraform/workflow-dark-plans/PLAN.tfplan -ConfirmRollbackConformance
+
+  .\scripts\operate-staging-serverless-runtime-cutover.ps1 `
     -Action PlanRestore -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
     -PlanPath .terraform/workflow-dark-plans/PLAN.tfplan -ConfirmRollbackConformance
 
@@ -79,13 +83,16 @@ Apply accepts only the exact checksum-reviewed staging cutover plan created from
 upstream-matched main commit. It independently proves the exact three creates and six updates,
 requires idle retained ECS, zero pending outbox records, and zero open Temporal workflows, then
 applies that saved plan without regenerating it. Apply and Verify both run the refresh-backed
-completed-cutover verifier. After cutover, Verify and every rollback/restoration action require a
-fresh zero-change serverless-runtime-cutover-verify plan created from the current exact main commit.
-That runtime baseline preserves accepted maintenance releases instead of reconstructing the stale
-original cutover inputs. Rollback first moves the default route, dispatch, and triggers while
+completed-cutover verifier. Initial rollback requires a fresh zero-change
+serverless-runtime-cutover-verify plan created from the current exact main commit. That runtime
+baseline preserves accepted maintenance releases instead of reconstructing the stale original
+cutover inputs. Rollback first moves the default route, dispatch, and triggers while
 retaining the now-unrouted Lambda integration. A zero-change transition verification must pass
 before a separately checksum-reviewed one-delete cleanup removes that integration. Restoration is
-also separately reviewed. Every step requires an empty serverless/legacy work boundary, never
+also separately reviewed. ContinueRollbackContext safely carries a verified rollback context over
+merged operator or evidence changes: it requires the retained baseline commit to remain an
+ancestor, reproves the current dark boundary and zero work, and updates only the ignored context.
+Every step requires an empty serverless/legacy work boundary, never
 changes ECS capacity, and retains Lambda functions, ECS, Cloud Map, API, queues, database, and
 Temporal. Rollback intentionally makes the public API unavailable while retained ECS stays idle.
 "@
@@ -116,8 +123,8 @@ if ($Action -in @(
 ) -and -not $ConfirmZeroTraffic) {
   throw "$Action requires -ConfirmZeroTraffic because rollback leaves idle ECS unavailable."
 }
-if ($Action -eq "PlanRestore" -and -not $ConfirmRollbackConformance) {
-  throw "PlanRestore requires -ConfirmRollbackConformance."
+if ($Action -in @("ContinueRollbackContext", "PlanRestore") -and -not $ConfirmRollbackConformance) {
+  throw "$Action requires -ConfirmRollbackConformance."
 }
 if ($Action -eq "Cleanup" -and -not $ConfirmRestoreConformance) {
   throw "Cleanup requires -ConfirmRestoreConformance."
@@ -153,9 +160,12 @@ function Assert-Tools {
 }
 
 function Assert-ExactMain {
-  $branch = (& git -C $repositoryRoot branch --show-current).Trim()
-  $head = (& git -C $repositoryRoot rev-parse HEAD).Trim()
-  $upstream = (& git -C $repositoryRoot rev-parse "@{upstream}" 2>$null).Trim()
+  $branchRaw = & git -C $repositoryRoot branch --show-current
+  $headRaw = & git -C $repositoryRoot rev-parse HEAD
+  $upstreamRaw = & git -C $repositoryRoot rev-parse "@{upstream}" 2>$null
+  $branch = if ($null -eq $branchRaw) { "" } else { ([string]$branchRaw).Trim() }
+  $head = if ($null -eq $headRaw) { "" } else { ([string]$headRaw).Trim() }
+  $upstream = if ($null -eq $upstreamRaw) { "" } else { ([string]$upstreamRaw).Trim() }
   $dirty = @(& git -C $repositoryRoot status --porcelain=v1 --untracked-files=all)
   if ($branch -ne "main" -or $head -ne $upstream -or $dirty.Count -ne 0) {
     throw "Use an exact clean upstream-matched main checkout for staging cutover."
@@ -739,9 +749,15 @@ function Get-Context {
     throw "The ignored staging cutover rollback context is absent."
   }
   $context = Get-Content -LiteralPath $contextPath -Raw | ConvertFrom-Json
+  $schema = [string]$context.Schema
+  $sourceBoundaryValid = if ($schema -eq "applydash.staging.serverless-runtime-cutover.v3") {
+    [string]$context.SourceCommit -match "^[a-f0-9]{40}$"
+  } elseif ($schema -eq "applydash.staging.serverless-runtime-cutover.v4") {
+    [string]$context.RuntimeBaselineSourceCommit -match "^[a-f0-9]{40}$" -and
+    [string]$context.ValidatedSourceCommit -match "^[a-f0-9]{40}$"
+  } else { $false }
   if (
-    [string]$context.Schema -ne "applydash.staging.serverless-runtime-cutover.v3" -or
-    [string]$context.SourceCommit -notmatch "^[a-f0-9]{40}$" -or
+    -not $sourceBoundaryValid -or
     [string]$context.RuntimeBaselinePlanSha256 -notmatch "^[a-f0-9]{64}$" -or
     [string]$context.RollbackTransitionPlanSha256 -notmatch "^[a-f0-9]{64}$" -or
     [string]$context.RollbackTransitionVerificationSha256 -notmatch "^$|^[a-f0-9]{64}$" -or
@@ -758,13 +774,40 @@ function Get-Context {
 
 function Assert-Context {
   param([object]$Context, [string]$SourceCommit, [string]$RuntimeBaselinePlanSha256)
+  Assert-ContextIdentity $Context $SourceCommit $RuntimeBaselinePlanSha256
   if (
-    [string]$Context.SourceCommit -ne $SourceCommit -or
+    [string]$Context.Schema -ne "applydash.staging.serverless-runtime-cutover.v4" -or
+    [string]$Context.ValidatedSourceCommit -ne $SourceCommit
+  ) { throw "The ignored rollback context has not been continued onto the current exact source." }
+}
+
+function Get-RuntimeBaselineSourceCommit {
+  param([Parameter(Mandatory = $true)][object]$Context)
+  if ([string]$Context.Schema -eq "applydash.staging.serverless-runtime-cutover.v3") {
+    return [string]$Context.SourceCommit
+  }
+  return [string]$Context.RuntimeBaselineSourceCommit
+}
+
+function Assert-ContextIdentity {
+  param([object]$Context, [string]$SourceCommit, [string]$RuntimeBaselinePlanSha256)
+  $runtimeBaselineSourceCommit = Get-RuntimeBaselineSourceCommit $Context
+  if (
     [string]$Context.ExpectedAccountId -ne $ExpectedAccountId -or
     [string]$Context.StateBucket -ne $StateBucket -or
     [string]$Context.RuntimeBaselinePlanPath -ne $resolvedPlanPath -or
     [string]$Context.RuntimeBaselinePlanSha256 -ne $RuntimeBaselinePlanSha256
   ) { throw "The ignored rollback context does not match the exact source, account, state, and runtime baseline." }
+  $expectedPrefix = "serverless-runtime-cutover-verify-$($runtimeBaselineSourceCommit.Substring(0, 8))"
+  if (-not $planLeaf.StartsWith($expectedPrefix, [StringComparison]::Ordinal)) {
+    throw "The retained runtime baseline filename does not match its recorded source commit."
+  }
+  & git -C $repositoryRoot cat-file -e "$runtimeBaselineSourceCommit`^{commit}" 2>$null
+  if ($LASTEXITCODE -ne 0) { throw "The retained runtime baseline source commit is unavailable." }
+  & git -C $repositoryRoot merge-base --is-ancestor $runtimeBaselineSourceCommit $SourceCommit
+  if ($LASTEXITCODE -ne 0) {
+    throw "The current exact source does not descend from the retained runtime baseline source."
+  }
 }
 
 function Set-RetainedPlanVariables {
@@ -953,6 +996,30 @@ function Get-RefreshedRuntimeBaselineSha256 {
   return $actual
 }
 
+function Get-RestoredRuntimeBaseline {
+  param(
+    [Parameter(Mandatory = $true)][object]$Verification,
+    [Parameter(Mandatory = $true)][string]$SourceCommit
+  )
+  if ([string]::IsNullOrWhiteSpace([string]$Verification.SensitivePlanPath)) {
+    throw "Completed runtime verification did not return its refreshed plan path."
+  }
+  $reportedPath = [IO.Path]::GetFullPath([string]$Verification.SensitivePlanPath)
+  $planPrefix = $planDirectory.TrimEnd([IO.Path]::DirectorySeparatorChar) +
+    [IO.Path]::DirectorySeparatorChar
+  $expectedLeaf = "serverless-runtime-cutover-verify-$($SourceCommit.Substring(0, 8))"
+  if (
+    -not $reportedPath.StartsWith($planPrefix, [StringComparison]::OrdinalIgnoreCase) -or
+    -not (Test-Path -LiteralPath $reportedPath -PathType Leaf) -or
+    -not (Split-Path $reportedPath -Leaf).StartsWith($expectedLeaf, [StringComparison]::Ordinal)
+  ) { throw "Completed runtime verification did not produce the current-source runtime baseline." }
+  $actual = (Get-FileHash -LiteralPath $reportedPath -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ([string]$Verification.PlanSha256 -ne $actual) {
+    throw "The current-source runtime baseline does not match its verification checksum."
+  }
+  return [pscustomobject]@{ Path = $reportedPath; Sha256 = $actual }
+}
+
 function Initialize-Backend {
   $stateEncryption = Invoke-AwsJson `
     @("s3api", "get-bucket-encryption", "--bucket", $StateBucket) `
@@ -1037,11 +1104,18 @@ $sourceCommit = Assert-ExactMain
 $requiredPlanPrefix = if ($Action -eq "Apply") {
   if ($planKind -ne "cutover") { throw "Apply requires the original reviewed cutover plan." }
   "serverless-runtime-cutover-$($sourceCommit.Substring(0, 8))"
-} else {
+} elseif ($Action -in @("Verify", "PlanRollback")) {
   if ($planKind -ne "runtime_baseline") {
     throw "$Action requires a fresh zero-change runtime baseline from the current accepted source."
   }
   "serverless-runtime-cutover-verify-$($sourceCommit.Substring(0, 8))"
+} else {
+  if ($planKind -ne "runtime_baseline") {
+    throw "$Action requires the retained zero-change runtime baseline recorded by its rollback context."
+  }
+  $existingContext = Get-Context
+  $runtimeBaselineSourceCommit = Get-RuntimeBaselineSourceCommit $existingContext
+  "serverless-runtime-cutover-verify-$($runtimeBaselineSourceCommit.Substring(0, 8))"
 }
 if (-not $planLeaf.StartsWith(
   $requiredPlanPrefix,
@@ -1084,8 +1158,9 @@ switch ($Action) {
     $summary = New-TransitionPlan $plan RollbackTransition $rollbackTransitionPlanPath
     $refreshedRuntimeBaselineSha256 = Get-RefreshedRuntimeBaselineSha256 $verification
     $context = [ordered]@{
-      Schema = "applydash.staging.serverless-runtime-cutover.v3"
-      SourceCommit = $sourceCommit; ExpectedAccountId = $ExpectedAccountId
+      Schema = "applydash.staging.serverless-runtime-cutover.v4"
+      RuntimeBaselineSourceCommit = $sourceCommit; ValidatedSourceCommit = $sourceCommit
+      ExpectedAccountId = $ExpectedAccountId
       StateBucket = $StateBucket; RuntimeBaselinePlanPath = $resolvedPlanPath
       RuntimeBaselinePlanSha256 = $refreshedRuntimeBaselineSha256
       RollbackTransitionPlanSha256 = [string]$summary.Sha256
@@ -1211,6 +1286,37 @@ switch ($Action) {
       PublicApiAvailable = $false
     } | ConvertTo-Json
   }
+  "ContinueRollbackContext" {
+    $context = Get-Context
+    Assert-ContextIdentity $context $sourceCommit $actualPlanSha256
+    if ([string]$context.State -ne "rollback_verified") {
+      throw "Context continuation requires the verified rollback state."
+    }
+    $verification = Invoke-CompletedVerification $plan Dark
+    Assert-ZeroLegacyWork $plan
+    Assert-ZeroServerlessWork
+    $runtimeBaselineSourceCommit = Get-RuntimeBaselineSourceCommit $context
+    $continuedContext = [ordered]@{
+      Schema = "applydash.staging.serverless-runtime-cutover.v4"
+      RuntimeBaselineSourceCommit = $runtimeBaselineSourceCommit
+      ValidatedSourceCommit = $sourceCommit
+      ExpectedAccountId = [string]$context.ExpectedAccountId
+      StateBucket = [string]$context.StateBucket
+      RuntimeBaselinePlanPath = [string]$context.RuntimeBaselinePlanPath
+      RuntimeBaselinePlanSha256 = [string]$context.RuntimeBaselinePlanSha256
+      RollbackTransitionPlanSha256 = [string]$context.RollbackTransitionPlanSha256
+      RollbackTransitionVerificationSha256 = [string]$context.RollbackTransitionVerificationSha256
+      RollbackCleanupPlanSha256 = [string]$context.RollbackCleanupPlanSha256
+      RestorePlanSha256 = [string]$context.RestorePlanSha256
+      State = "rollback_verified"
+    }
+    Save-Context $continuedContext
+    [ordered]@{
+      Environment = "staging"; Action = "continue_rollback_context"
+      RuntimeBaselineSourceIsAncestor = $true; CurrentDarkNoDrift = [bool]$verification.NoDrift
+      LegacyAndServerlessWorkEmpty = $true; ContextUpdated = $true; AwsMutation = $false
+    } | ConvertTo-Json
+  }
   "PlanRestore" {
     $context = Get-Context
     Assert-Context $context $sourceCommit $actualPlanSha256
@@ -1239,13 +1345,18 @@ switch ($Action) {
     Assert-ZeroServerlessWork
     Invoke-SavedPlan $restorePlanPath "The exact reviewed staging restoration plan failed to apply."
     $verification = Invoke-CompletedVerification $plan Runtime
-    $context.RuntimeBaselinePlanSha256 = Get-RefreshedRuntimeBaselineSha256 $verification
+    $restoredBaseline = Get-RestoredRuntimeBaseline $verification $sourceCommit
+    $context.RuntimeBaselineSourceCommit = $sourceCommit
+    $context.ValidatedSourceCommit = $sourceCommit
+    $context.RuntimeBaselinePlanPath = [string]$restoredBaseline.Path
+    $context.RuntimeBaselinePlanSha256 = [string]$restoredBaseline.Sha256
     $context.State = "restore_verified"
     Save-Context $context
     [ordered]@{
       Environment = "staging"; Action = "restore"; NoDrift = [bool]$verification.NoDrift
       DispatchTarget = "lambda_durable"; TriggersEnabled = $true; EcsRuntimeIdle = $true
       PublicConformanceRequired = $true
+      RuntimeBaselinePlan = Split-Path ([string]$restoredBaseline.Path) -Leaf
     } | ConvertTo-Json
   }
   "Cleanup" {
