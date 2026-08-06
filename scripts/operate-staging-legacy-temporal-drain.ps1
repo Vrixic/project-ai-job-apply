@@ -3,6 +3,9 @@ param(
   [ValidateSet("Plan", "Execute", "Cleanup")]
   [string]$Action = "Plan",
 
+  [ValidateSet("PreCutover", "PostCutover")]
+  [string]$RuntimeBoundary = "PreCutover",
+
   [string]$ExpectedPlanSha256 = "",
 
   [string]$AwsProfile = "ai-job-apply-staging-admin",
@@ -11,6 +14,8 @@ param(
   [string]$Region = "us-east-2",
 
   [switch]$Execute,
+
+  [switch]$ConfirmZeroTraffic,
 
   [switch]$Help
 )
@@ -26,6 +31,11 @@ Usage:
     -Action Execute -ExpectedPlanSha256 REVIEWED_SHA256 -Execute
   .\scripts\operate-staging-legacy-temporal-drain.ps1 `
     -Action Cleanup -ExpectedPlanSha256 REVIEWED_SHA256 -Execute
+  .\scripts\operate-staging-legacy-temporal-drain.ps1 `
+    -Action Plan -RuntimeBoundary PostCutover -ConfirmZeroTraffic
+  .\scripts\operate-staging-legacy-temporal-drain.ps1 `
+    -Action Execute -RuntimeBoundary PostCutover -ConfirmZeroTraffic `
+    -ExpectedPlanSha256 REVIEWED_SHA256 -Execute
 
 Plan performs bounded AWS reads, starts one read-only outbox inspection task, and writes one ignored
 checksum-reviewed context. Execute requires that exact checksum and clean merged source. It starts
@@ -33,6 +43,10 @@ exactly one retained immutable Temporal worker task, drains exactly the reviewed
 legacy records, proves zero pending outbox and zero running Temporal workflows, then stops the task.
 Cleanup is only for interrupted execution: it stops at most the one reviewed standalone worker,
 records the aggregate remaining count, and removes the local context so a new plan can be reviewed.
+
+PostCutover requires -ConfirmZeroTraffic. It preserves Lambda durable dispatch, the JWT-protected
+Lambda API, public health routes, and all durable triggers while the retained Temporal worker drains
+only the reviewed legacy Temporal-targeted records. It does not pause or redirect the live runtime.
 
 The operator never enables an ECS service, Lambda trigger, or public route; never rewrites an event
 target; and never prints account IDs, ARNs, endpoints, event IDs, credentials, or candidate data.
@@ -42,6 +56,9 @@ target; and never prints account IDs, ARNs, endpoints, event IDs, credentials, o
 
 if ($Region -ne "us-east-2") {
   throw "The staging legacy drain is restricted to us-east-2."
+}
+if ($RuntimeBoundary -eq "PostCutover" -and -not $ConfirmZeroTraffic) {
+  throw "Post-cutover legacy drain requires -ConfirmZeroTraffic."
 }
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
@@ -123,6 +140,14 @@ function Get-Only {
 
   if ($Items.Count -ne 1) { throw $Failure }
   return $Items[0]
+}
+
+function Get-OptionalPropertyValue {
+  param([object]$Object, [string]$Name)
+
+  $property = $Object.PSObject.Properties[$Name]
+  if ($null -eq $property) { return $null }
+  return $property.Value
 }
 
 function Get-ContainerEnvironment {
@@ -345,12 +370,15 @@ function Get-LiveRuntime {
     "lambda", "get-function-configuration", "--function-name", "$resourcePrefix-gateway",
     "--qualifier", ([string]$gatewayAlias.FunctionVersion)
   ) "The accepted staging gateway version is unavailable."
+  $expectedDispatchTarget = if ($RuntimeBoundary -eq "PostCutover") {
+    "lambda_durable"
+  } else { "temporal" }
   if (
     [string]$gateway.State -ne "Active" -or
     [string]$gateway.LastUpdateStatus -ne "Successful" -or
-    [string]$gateway.Environment.Variables.OUTBOX_DISPATCH_TARGET -ne "temporal"
+    [string]$gateway.Environment.Variables.OUTBOX_DISPATCH_TARGET -ne $expectedDispatchTarget
   ) {
-    throw "The accepted staging gateway no longer dispatches to Temporal."
+    throw "The accepted staging gateway dispatch target is outside the selected runtime boundary."
   }
 
   $mappingResult = Invoke-AwsJson @(
@@ -359,12 +387,14 @@ function Get-LiveRuntime {
   ) "The staging starter mapping is unavailable."
   $mapping = Get-Only @($mappingResult.EventSourceMappings) `
     "The staging starter mapping is not singular."
+  $expectedMappingState = if ($RuntimeBoundary -eq "PostCutover") { "Enabled" } else { "Disabled" }
   if (
-    [string]$mapping.State -ne "Disabled" -or
+    [string]$mapping.State -ne $expectedMappingState -or
     @($mapping.FunctionResponseTypes) -notcontains "ReportBatchItemFailures"
   ) {
-    throw "The staging Lambda starter must remain disabled with partial-batch handling."
+    throw "The staging Lambda starter is outside the selected partial-batch runtime boundary."
   }
+  $expectedRuleState = if ($RuntimeBoundary -eq "PostCutover") { "ENABLED" } else { "DISABLED" }
   $ruleStates = [ordered]@{}
   foreach ($name in @(
     "$resourcePrefix-outbox-reconciler",
@@ -372,10 +402,10 @@ function Get-LiveRuntime {
   )) {
     $rule = Invoke-AwsJson @("events", "describe-rule", "--name", $name) `
       "A replacement workflow rule is unavailable."
-    if ([string]$rule.State -ne "DISABLED") {
-      throw "All replacement workflow rules must remain disabled during legacy drain."
+    if ([string]$rule.State -ne $expectedRuleState) {
+      throw "A replacement workflow rule is outside the selected runtime boundary."
     }
-    $ruleStates[$name] = "DISABLED"
+    $ruleStates[$name] = $expectedRuleState
   }
 
   $apis = Invoke-AwsJson @("apigatewayv2", "get-apis") "The staging API is unavailable."
@@ -384,20 +414,86 @@ function Get-LiveRuntime {
   $integrations = Invoke-AwsJson @(
     "apigatewayv2", "get-integrations", "--api-id", ([string]$api.ApiId)
   ) "The staging API integration is unavailable."
-  $integration = Get-Only @($integrations.Items) `
-    "The staging API must have only its retained ECS integration before cutover."
+  $integrationItems = @($integrations.Items)
   $routes = Invoke-AwsJson @(
     "apigatewayv2", "get-routes", "--api-id", ([string]$api.ApiId)
   ) "The staging API route is unavailable."
-  $route = Get-Only @($routes.Items) "The staging API must have only its default route."
-  if (
-    [string]$integration.IntegrationType -ne "HTTP_PROXY" -or
-    [string]$integration.IntegrationUri -notmatch "^arn:aws:servicediscovery:" -or
-    [string]$route.RouteKey -ne '$default' -or
-    [string]$route.Target -ne "integrations/$($integration.IntegrationId)" -or
-    [string]$route.AuthorizationType -ne "NONE"
-  ) {
-    throw "Public staging routing is no longer on the retained ECS integration."
+  $routeItems = @($routes.Items)
+  $ecsIntegration = Get-Only @($integrationItems | Where-Object {
+      [string]$_.IntegrationType -eq "HTTP_PROXY" -and
+      [string]$_.IntegrationUri -match "^arn:aws:servicediscovery:"
+    }) "The retained ECS rollback integration is not singular."
+  $authorizerBoundary = Get-Sha256Text "absent"
+  if ($RuntimeBoundary -eq "PreCutover") {
+    $route = Get-Only $routeItems "The pre-cutover API must have only its default route."
+    if (
+      $integrationItems.Count -ne 1 -or
+      [string]$route.RouteKey -ne '$default' -or
+      [string]$route.Target -ne "integrations/$($ecsIntegration.IntegrationId)" -or
+      [string]$route.AuthorizationType -ne "NONE"
+    ) {
+      throw "Public staging routing is outside the retained pre-cutover ECS boundary."
+    }
+  } else {
+    $lambdaIntegration = Get-Only @($integrationItems | Where-Object {
+        [string]$_.IntegrationType -eq "AWS_PROXY"
+      }) "The post-cutover Lambda integration is not singular."
+    $lambdaAliasArn = [string]$gatewayAlias.AliasArn
+    $expectedInvokeArn = "arn:aws:apigateway:$Region`:lambda:path/2015-03-31/functions/$lambdaAliasArn/invocations"
+    if (
+      $integrationItems.Count -ne 2 -or
+      [string]$lambdaIntegration.IntegrationMethod -ne "POST" -or
+      [string]$lambdaIntegration.PayloadFormatVersion -ne "2.0" -or
+      [int]$lambdaIntegration.TimeoutInMillis -ne 15000 -or
+      [string]$lambdaIntegration.IntegrationUri -ne $expectedInvokeArn
+    ) {
+      throw "The post-cutover API integrations are outside the exact retained ECS and Lambda boundary."
+    }
+    $lambdaTarget = "integrations/$($lambdaIntegration.IntegrationId)"
+    $defaultRoute = Get-Only @($routeItems | Where-Object {
+        [string]$_.RouteKey -eq '$default'
+      }) "The post-cutover default route is not singular."
+    $healthRoutes = @($routeItems | Where-Object {
+        [string]$_.RouteKey -in @("GET /health/live", "GET /health/ready")
+      })
+    $scopes = @($defaultRoute.AuthorizationScopes | Sort-Object)
+    if (
+      $routeItems.Count -ne 3 -or $healthRoutes.Count -ne 2 -or
+      [string]$defaultRoute.AuthorizationType -ne "JWT" -or
+      [string]$defaultRoute.Target -ne $lambdaTarget -or
+      (Compare-Object $scopes @("profile:read", "profile:write")) -or
+      @($healthRoutes | Where-Object {
+          [string]$_.AuthorizationType -eq "NONE" -and
+          [string]$_.Target -eq $lambdaTarget
+        }).Count -ne 2
+    ) {
+      throw "The post-cutover API does not retain one scoped JWT default route and two public Lambda health routes."
+    }
+    $authorizer = Invoke-AwsJson @(
+      "apigatewayv2", "get-authorizer", "--api-id", ([string]$api.ApiId),
+      "--authorizer-id", ([string]$defaultRoute.AuthorizerId)
+    ) "The post-cutover JWT authorizer is unavailable."
+    $gatewayVariables = $gateway.Environment.Variables
+    if (
+      [string]$authorizer.AuthorizerType -ne "JWT" -or
+      @($authorizer.IdentitySource).Count -ne 1 -or
+      [string]@($authorizer.IdentitySource)[0] -ne '$request.header.Authorization' -or
+      [string]$gatewayVariables.OIDC_ISSUER -notmatch '^https://[^/]+/$' -or
+      [string]$gatewayVariables.OIDC_AUDIENCE -eq "" -or
+      [string]$authorizer.JwtConfiguration.Issuer -ne [string]$gatewayVariables.OIDC_ISSUER -or
+      @($authorizer.JwtConfiguration.Audience).Count -ne 1 -or
+      [string]@($authorizer.JwtConfiguration.Audience)[0] -ne
+        [string]$gatewayVariables.OIDC_AUDIENCE
+    ) {
+      throw "The post-cutover JWT authorizer is outside the gateway OIDC boundary."
+    }
+    $authorizerBoundary = Get-CanonicalHash ([ordered]@{
+        Id = [string]$defaultRoute.AuthorizerId
+        Type = [string]$authorizer.AuthorizerType
+        IdentitySource = @($authorizer.IdentitySource)
+        Issuer = [string]$authorizer.JwtConfiguration.Issuer
+        Audience = @($authorizer.JwtConfiguration.Audience)
+      })
   }
 
   $alarmResult = Invoke-AwsJson `
@@ -446,17 +542,24 @@ function Get-LiveRuntime {
   }
   $apiBoundary = [ordered]@{
     ApiSha256 = Get-Sha256Text ([string]$api.ApiId)
-    IntegrationSha256 = Get-CanonicalHash ([ordered]@{
-        Id = [string]$integration.IntegrationId
-        Type = [string]$integration.IntegrationType
-        Uri = [string]$integration.IntegrationUri
+    IntegrationsSha256 = Get-CanonicalHash @($integrationItems | Sort-Object IntegrationId | ForEach-Object {
+        [ordered]@{
+          Id = [string]$_.IntegrationId; Type = [string]$_.IntegrationType
+          Method = [string](Get-OptionalPropertyValue $_ "IntegrationMethod")
+          Format = [string](Get-OptionalPropertyValue $_ "PayloadFormatVersion")
+          Timeout = [int](Get-OptionalPropertyValue $_ "TimeoutInMillis")
+          Uri = [string]$_.IntegrationUri
+        }
       })
-    RouteSha256 = Get-CanonicalHash ([ordered]@{
-        Id = [string]$route.RouteId
-        Key = [string]$route.RouteKey
-        Target = [string]$route.Target
-        Authorization = [string]$route.AuthorizationType
+    RoutesSha256 = Get-CanonicalHash @($routeItems | Sort-Object RouteKey | ForEach-Object {
+        [ordered]@{
+          Id = [string]$_.RouteId; Key = [string]$_.RouteKey; Target = [string]$_.Target
+          Authorization = [string]$_.AuthorizationType
+          AuthorizerId = [string](Get-OptionalPropertyValue $_ "AuthorizerId")
+          Scopes = @((Get-OptionalPropertyValue $_ "AuthorizationScopes") | Sort-Object)
+        }
       })
+    AuthorizerSha256 = $authorizerBoundary
   }
 
   return [ordered]@{
@@ -468,9 +571,10 @@ function Get-LiveRuntime {
         Version = [string]$gateway.Version
         CodeSha256 = [string]$gateway.CodeSha256
         AliasRevisionId = [string]$gatewayAlias.RevisionId
-        DispatchTarget = "temporal"
+        DispatchTarget = $expectedDispatchTarget
       }
-      Mapping = [ordered]@{ Uuid = [string]$mapping.UUID; State = "Disabled" }
+      RuntimeBoundary = $RuntimeBoundary
+      Mapping = [ordered]@{ Uuid = [string]$mapping.UUID; State = $expectedMappingState }
       Rules = $ruleStates
       Api = $apiBoundary
       Alarms = $alarms
@@ -513,8 +617,10 @@ function Get-Context {
   }
   $context = Get-Content -LiteralPath $contextPath -Raw | ConvertFrom-Json
   if (
-    [string]$context.Schema -ne "applydash.staging.legacy-temporal-drain.v1" -or
+    [string]$context.Schema -ne "applydash.staging.legacy-temporal-drain.v2" -or
     [string]$context.Environment -ne "staging" -or [string]$context.Region -ne "us-east-2" -or
+    [string]$context.RuntimeBoundary -ne $RuntimeBoundary -or
+    [string]$context.RuntimeBoundary -notin @("PreCutover", "PostCutover") -or
     [int]$context.ExpectedPendingCount -ne 3 -or
     [string]$context.ExpectedOrderedEventIdSha256 -notmatch "^[a-f0-9]{64}$" -or
     [int]$context.ExpectedMaxAttempts -ne 0 -or
@@ -703,9 +809,10 @@ try {
       $afterRuntime = Get-LiveRuntime
       Assert-SameBoundary $beforeRuntime.Boundary $afterRuntime.Boundary
       $context = [ordered]@{
-        Schema = "applydash.staging.legacy-temporal-drain.v1"
+        Schema = "applydash.staging.legacy-temporal-drain.v2"
         Environment = "staging"
         Region = $Region
+        RuntimeBoundary = $RuntimeBoundary
         CreatedAt = [DateTime]::UtcNow.ToString("o")
         SourceCommit = $commit
         OperatorSha256 = (Get-FileHash -LiteralPath $operatorPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -727,6 +834,7 @@ try {
       [ordered]@{
         Environment = "staging"
         Action = "review"
+        RuntimeBoundary = $RuntimeBoundary
         SourceCommit = $commit
         PlanSha256 = $hash
         PendingRecords = $expectedPendingCount
@@ -787,6 +895,7 @@ try {
       [ordered]@{
         Environment = "staging"
         Result = "passed"
+        RuntimeBoundary = $RuntimeBoundary
         ReviewedLegacyRecords = 3
         RemainingOutboxRecords = 0
         RunningTemporalWorkflows = 0
@@ -833,6 +942,7 @@ try {
       [ordered]@{
         Environment = "staging"
         Action = "cleanup"
+        RuntimeBoundary = $RuntimeBoundary
         ReviewedTasksStopped = $tasks.Count
         RemainingOutboxRecords = [int]$inspection.PendingCount
         RemainingOutboxDigest = [string]$inspection.OrderedEventIdSha256
