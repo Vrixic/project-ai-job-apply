@@ -770,6 +770,22 @@ function Invoke-CompletedVerification {
   return $result
 }
 
+function Get-RefreshedRuntimeBaselineSha256 {
+  param([Parameter(Mandatory = $true)][object]$Verification)
+  if ([string]::IsNullOrWhiteSpace([string]$Verification.SensitivePlanPath)) {
+    throw "Completed runtime verification did not return its refreshed plan path."
+  }
+  $reportedPath = [IO.Path]::GetFullPath([string]$Verification.SensitivePlanPath)
+  if (-not $reportedPath.Equals($resolvedPlanPath, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Completed runtime verification did not refresh the exact reviewed baseline path."
+  }
+  $actual = (Get-FileHash -LiteralPath $resolvedPlanPath -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ([string]$Verification.PlanSha256 -ne $actual) {
+    throw "The refreshed runtime baseline does not match its verification checksum."
+  }
+  return $actual
+}
+
 function Initialize-Backend {
   $stateEncryption = Invoke-AwsJson `
     @("s3api", "get-bucket-encryption", "--bucket", $StateBucket) `
@@ -894,15 +910,17 @@ switch ($Action) {
   }
   "PlanRollback" {
     if (Test-Path -LiteralPath $contextPath) { throw "A staging cutover rollback context already exists." }
-    $null = Invoke-CompletedVerification $plan Runtime
+    $verification = Invoke-CompletedVerification $plan Runtime
     Assert-ZeroLegacyWork $plan
     Assert-ZeroServerlessWork
     $summary = New-TransitionPlan $plan $false $rollbackPlanPath
+    $refreshedRuntimeBaselineSha256 = Get-RefreshedRuntimeBaselineSha256 $verification
     $context = [ordered]@{
       Schema = "applydash.staging.serverless-runtime-cutover.v2"
       SourceCommit = $sourceCommit; ExpectedAccountId = $ExpectedAccountId
       StateBucket = $StateBucket; RuntimeBaselinePlanPath = $resolvedPlanPath
-      RuntimeBaselinePlanSha256 = $actualPlanSha256; RollbackPlanSha256 = [string]$summary.Sha256
+      RuntimeBaselinePlanSha256 = $refreshedRuntimeBaselineSha256
+      RollbackPlanSha256 = [string]$summary.Sha256
       RestorePlanSha256 = ""; State = "rollback_planned"
     }
     Save-Context $context
@@ -969,6 +987,7 @@ switch ($Action) {
     Assert-ZeroServerlessWork
     Invoke-SavedPlan $restorePlanPath "The exact reviewed staging restoration plan failed to apply."
     $verification = Invoke-CompletedVerification $plan Runtime
+    $context.RuntimeBaselinePlanSha256 = Get-RefreshedRuntimeBaselineSha256 $verification
     $context.State = "restore_verified"
     Save-Context $context
     [ordered]@{

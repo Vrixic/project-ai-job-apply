@@ -75,6 +75,21 @@ for (const expected of [
 }
 
 for (const expected of [
+  "function Get-RefreshedRuntimeBaselineSha256",
+  "$reportedPath.Equals($resolvedPlanPath, [StringComparison]::OrdinalIgnoreCase)",
+  "[string]$Verification.PlanSha256 -ne $actual",
+  "$refreshedRuntimeBaselineSha256 = Get-RefreshedRuntimeBaselineSha256 $verification",
+  "RuntimeBaselinePlanSha256 = $refreshedRuntimeBaselineSha256",
+  "$context.RuntimeBaselinePlanSha256 = Get-RefreshedRuntimeBaselineSha256 $verification",
+]) {
+  requireText(
+    stagingRuntimeCutoverOperator,
+    expected,
+    `The staging transition context must follow verifier rewrites of the exact runtime baseline: ${expected}`,
+  );
+}
+
+for (const expected of [
   "$initializationOutput = & terraform",
   "$null = Initialize-Backend",
   "$null = Restore-EnvironmentVariables $priorVariables",
