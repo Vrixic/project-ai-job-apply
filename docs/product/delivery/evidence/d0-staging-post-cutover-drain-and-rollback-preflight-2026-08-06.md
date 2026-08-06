@@ -61,9 +61,23 @@ cutover validator. The repository policy requires these rollback-specific forms.
 function-level replay against the rejected plan passes the complete nine-action semantic validator,
 including dispatch, route, alias, mapping, and EventBridge transitions.
 
+## Exact-main replan and summary-contract rejection
+
+After the address-comparison correction merged, a new exact-current runtime baseline again passed
+with zero drift, zero legacy or durable work, enabled replacement triggers, idle ECS, and complete
+artifact verification. A fresh rollback plan then passed the corrected complete nine-action
+semantic validator. It stopped before checksum/context output because backend-initialization status
+lines and environment-provider cleanup objects leaked into the planner's success pipeline. Strict
+mode therefore received an array instead of the one summary object that owns `Sha256`.
+
+The generated ignored plan remains unapplied and no rollback context exists. Source now captures
+backend initialization output for failure-only diagnostics and explicitly discards restoration
+provider output. Repository policy makes those output-suppression boundaries mandatory so both
+rollback and restoration planning return exactly one review summary. No AWS mutation occurred.
+
 ## Remaining gate
 
-SR-006 and D0-016 remain `In progress`. After this correction merges:
+SR-006 and D0-016 remain `In progress`. After the summary-contract correction merges:
 
 1. regenerate the rollback plan from clean exact `main` and the fresh runtime baseline;
 2. review and separately authorize its checksum;

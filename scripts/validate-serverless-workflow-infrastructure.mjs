@@ -74,6 +74,20 @@ for (const expected of [
   );
 }
 
+for (const expected of [
+  "$initializationOutput = & terraform",
+  "$null = Initialize-Backend",
+  "$null = Restore-EnvironmentVariables $priorVariables",
+  '$null = Remove-Item "Env:$name"',
+  '$null = Set-Item "Env:$name" $previous[$name]',
+]) {
+  requireText(
+    stagingRuntimeCutoverOperator,
+    expected,
+    `The staging transition planner must keep infrastructure command and cleanup output outside its one-object summary contract: ${expected}`,
+  );
+}
+
 requireText(
   gatewayConformanceLauncher,
   '$GatewayRuntime -in @("lambda-dark", "lambda-cutover")',
