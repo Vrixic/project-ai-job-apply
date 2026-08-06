@@ -3,7 +3,7 @@
 - Environment: isolated synthetic staging
 - Region: `us-east-2`
 - Exact deployed source: `63a8c88d9800a9b06b6dcf546bda14de564a66f6`
-- Result: rollback and direct-alias conformance passed; restoration remains open
+- Result: rollback, direct-alias conformance, and the bounded one-record drain passed; restoration remains open
 
 ## Ordered rollback
 
@@ -50,18 +50,40 @@ nonempty batch of at most 100 untouched synthetic rows. Planning binds the obser
 attempts, ordered identifier digest, clean merged source, immutable worker, account boundary,
 runtime topology, empty queues, alarms, and zero open Temporal workflows. Execution remains a
 separately checksum-authorized one-task transition and must finish at zero pending work. Parser,
-help-contract, infrastructure-policy, and whitespace validation pass locally. No worker task or
-product-record transition was performed by this source change.
+help-contract, infrastructure-policy, and whitespace validation passed before merge.
+
+## One-record drain and interrupted-command recovery
+
+From exact merged source `bc1f94bf734b30653aad3195025b978170ac98b3`, the guarded planner
+observed exactly one untouched record, zero attempts, zero running Temporal workflows, the accepted
+pre-cutover dark topology, and one worker task on execution. The product owner authorized exact
+plan checksum `356432fe561ccc5b9a0577e0911fd2d14fd65e7d45434b4ba1664086d08ed475`.
+
+The authorized command host reached its ten-minute limit before returning the operator's final
+summary. The documented checksum-bound cleanup did not start another worker and found no reviewed
+task left to stop. It proved zero remaining outbox records, the empty ordered-record digest, zero
+running Temporal workflows, and removed the stale ignored drain context. A separate read-only
+aggregate check found exactly one owned stopped task, one clean worker-startup record, and zero
+error-level worker records. No raw event, operation, task, workflow, account, endpoint, token,
+secret, or candidate value is retained here.
+
+The now-empty batch cannot be replanned. Restoration preflight then exposed a provenance deadlock:
+the rollback context correctly retained the pre-rollback runtime baseline commit, but the safe
+generalized drain necessarily merged afterward. A source-only correction adds an explicit context
+continuation gate. It requires the retained baseline source to remain an ancestor of current clean
+`main`, reproves current dark zero drift and zero legacy/serverless work, preserves the historical
+baseline identity, and updates only the ignored context's validated operator commit. Restoration
+verification will adopt a newly generated current-commit runtime baseline instead of relabeling the
+historical plan. No AWS mutation is performed by that correction.
 
 ## Remaining gate
 
-After this correction merges:
+After the context-continuation correction merges:
 
-1. Generate and separately authorize the exact one-record drain context.
-2. Execute the bounded retained Temporal worker and prove zero work again.
-3. Plan, authorize, and apply restoration.
-4. Repeat public authenticated save, durable completion, cross-user isolation, workload, queue,
+1. Continue the verified rollback context after reproving the dark/zero-work boundary.
+2. Plan, authorize, and apply restoration.
+3. Repeat public authenticated save, durable completion, cross-user isolation, workload, queue,
    alarm, log, and zero-drift acceptance.
-5. Clean only the ignored rollback context and saved plans.
+4. Clean only the ignored rollback context and saved plans.
 
 SR-006 and D0-016 remain `In progress`.

@@ -147,7 +147,10 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   three-create/six-update cutover plan, then delegates to the refresh-backed completed-runtime
   verifier. It also creates separately reviewed rollback and restoration plans, requires zero
   legacy/serverless queued or running work, keeps ECS idle and all rollback resources retained,
-  and blocks recovery cleanup until the restored Lambda runtime is accepted.
+  and blocks recovery cleanup until the restored Lambda runtime is accepted. A guarded context
+  continuation can carry a verified rollback over later merged operator/evidence commits only when
+  the retained runtime source remains an ancestor and current dark zero drift plus zero work pass;
+  it changes only the ignored local context.
 - `operate-staging-legacy-temporal-drain.ps1` — Checksum-gated bridge for an exact reviewed,
   bounded synthetic staging batch. Planning binds its identifier-free aggregate
   digest to the exact idle ECS/API, immutable worker, disabled replacement triggers, empty queues,
