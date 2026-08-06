@@ -1,12 +1,13 @@
 # Staging legacy Temporal drain
 
-This procedure drains an explicitly reviewed three-record synthetic staging legacy batch through
-one standalone task from the retained immutable Temporal worker task definition. It supports both
-the original pre-cutover boundary and a post-cutover recovery boundary. It does not change either
-ECS service's `0/0/0` posture, API routing, Lambda triggers, event targets, Terraform state, or
-infrastructure resources.
+This procedure drains an explicitly reviewed nonempty synthetic staging legacy batch through one
+standalone task from the retained immutable Temporal worker task definition. The bounded operator
+accepts at most 100 untouched rows and binds the exact observed count, zero-attempt state, and
+ordered identifier digest into the reviewed context. It supports both the original pre-cutover
+boundary and a post-cutover recovery boundary. It does not change either ECS service's `0/0/0`
+posture, API routing, Lambda triggers, event targets, Terraform state, or infrastructure resources.
 
-The data transition is material: the three reviewed outbox rows will be acknowledged, their
+The data transition is material: the exact reviewed outbox rows will be acknowledged, their
 idempotently named Temporal workflows will run, and their operations will reach terminal state.
 Planning does not authorize execution.
 
@@ -30,7 +31,8 @@ For a post-cutover recovery with confirmed zero user traffic, run:
 ```
 
 Planning performs one bounded read-only inspection task and saves an ignored local context. It must
-report exactly three records, zero attempts, and one worker task on execution. The context binds:
+report between one and 100 records, zero attempts, and one worker task on execution. The context
+binds:
 
 - the caller account by hash;
 - the immutable worker task definition, image digest, roles, secrets, logging, and network by
@@ -43,7 +45,7 @@ report exactly three records, zero attempts, and one worker task on execution. T
   health routes, and the accepted OIDC authorizer when post-cutover;
 - all three replacement queues empty and all seven workflow alarms routed and `OK`;
 - zero currently running Temporal workflows; and
-- the three-row count, zero attempts, and ordered identifier digest without retaining event IDs.
+- the exact row count, zero attempts, and ordered identifier digest without retaining event IDs.
 
 Review the context locally. Do not share it. Execution authorization must quote the exact printed
 `PlanSha256`.

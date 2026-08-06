@@ -27,4 +27,5 @@ saved infrastructure plan, success evidence, and recovery boundary.
 - [Staging serverless runtime cutover](staging-serverless-runtime-cutover.md) — Atomic API and
   workflow transition from retained idle ECS/Temporal to the accepted Lambda replacement.
 - [Staging legacy Temporal drain](staging-legacy-temporal-drain.md) — Bounded checksum-gated drain
-  of the three synthetic pre-cutover records through one retained standalone worker task.
+  of an exact checksum-reviewed, nonempty bounded synthetic batch through one retained standalone
+  worker task.

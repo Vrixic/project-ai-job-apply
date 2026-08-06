@@ -39,8 +39,8 @@ Usage:
 
 Plan performs bounded AWS reads, starts one read-only outbox inspection task, and writes one ignored
 checksum-reviewed context. Execute requires that exact checksum and clean merged source. It starts
-exactly one retained immutable Temporal worker task, drains exactly the reviewed three synthetic
-legacy records, proves zero pending outbox and zero running Temporal workflows, then stops the task.
+exactly one retained immutable Temporal worker task, drains only the exact reviewed synthetic
+legacy batch, proves zero pending outbox and zero running Temporal workflows, then stops the task.
 Cleanup is only for interrupted execution: it stops at most the one reviewed standalone worker,
 records the aggregate remaining count, and removes the local context so a new plan can be reviewed.
 
@@ -71,7 +71,8 @@ $clusterName = $resourcePrefix
 $startedBy = "staging-legacy-temporal-drain"
 $temporalSecretId = "ai-job-apply/staging/temporal-api-key"
 $utf8 = New-Object Text.UTF8Encoding($false)
-$expectedPendingCount = 3
+$minimumPendingCount = 1
+$maximumPendingCount = 100
 $alarmNames = @(
   "$resourcePrefix-outbox-reconciler-errors",
   "$resourcePrefix-outbox-starter-errors",
@@ -617,11 +618,12 @@ function Get-Context {
   }
   $context = Get-Content -LiteralPath $contextPath -Raw | ConvertFrom-Json
   if (
-    [string]$context.Schema -ne "applydash.staging.legacy-temporal-drain.v2" -or
+    [string]$context.Schema -ne "applydash.staging.legacy-temporal-drain.v3" -or
     [string]$context.Environment -ne "staging" -or [string]$context.Region -ne "us-east-2" -or
     [string]$context.RuntimeBoundary -ne $RuntimeBoundary -or
     [string]$context.RuntimeBoundary -notin @("PreCutover", "PostCutover") -or
-    [int]$context.ExpectedPendingCount -ne 3 -or
+    [int]$context.ExpectedPendingCount -lt $minimumPendingCount -or
+    [int]$context.ExpectedPendingCount -gt $maximumPendingCount -or
     [string]$context.ExpectedOrderedEventIdSha256 -notmatch "^[a-f0-9]{64}$" -or
     [int]$context.ExpectedMaxAttempts -ne 0 -or
     [int]$context.StandaloneWorkerTasks -ne 1 -or
@@ -801,15 +803,17 @@ try {
       }
       $inspection = Get-OutboxInspection
       if (
-        [int]$inspection.PendingCount -ne $expectedPendingCount -or
+        [int]$inspection.PendingCount -lt $minimumPendingCount -or
+        [int]$inspection.PendingCount -gt $maximumPendingCount -or
         [int]$inspection.MaxAttempts -ne 0
       ) {
-        throw "Review requires exactly three untouched synthetic legacy outbox records."
+        throw "Review requires a nonempty untouched synthetic legacy outbox batch within the bounded drain limit."
       }
+      $expectedPendingCount = [int]$inspection.PendingCount
       $afterRuntime = Get-LiveRuntime
       Assert-SameBoundary $beforeRuntime.Boundary $afterRuntime.Boundary
       $context = [ordered]@{
-        Schema = "applydash.staging.legacy-temporal-drain.v2"
+        Schema = "applydash.staging.legacy-temporal-drain.v3"
         Environment = "staging"
         Region = $Region
         RuntimeBoundary = $RuntimeBoundary
@@ -865,7 +869,7 @@ try {
         [string]$inspection.OrderedEventIdSha256 -cne
           [string]$context.ExpectedOrderedEventIdSha256
       ) {
-        throw "The reviewed three-record aggregate changed before execution."
+        throw "The reviewed synthetic legacy aggregate changed before execution."
       }
       $runtime = Get-LiveRuntime
       Assert-SameBoundary $context.Boundary $runtime.Boundary
@@ -896,7 +900,7 @@ try {
         Environment = "staging"
         Result = "passed"
         RuntimeBoundary = $RuntimeBoundary
-        ReviewedLegacyRecords = 3
+        ReviewedLegacyRecords = [int]$context.ExpectedPendingCount
         RemainingOutboxRecords = 0
         RunningTemporalWorkflows = 0
         StandaloneWorkerTasksStarted = 1
