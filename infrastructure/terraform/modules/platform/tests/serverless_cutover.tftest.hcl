@@ -48,46 +48,49 @@ mock_provider "aws" {
 mock_provider "random" {}
 mock_provider "time" {}
 
+variables {
+  name        = "ai-job-apply"
+  environment = "staging"
+  vpc_cidr    = "10.30.0.0/16"
+
+  gateway_image                             = "example.invalid/gateway@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  worker_image                              = "example.invalid/worker@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  oidc_issuer                               = "https://example.auth0.com/"
+  oidc_audience                             = "https://api.example.invalid"
+  temporal_address                          = "example.tmprl.cloud:7233"
+  temporal_namespace                        = "example.tmprl.cloud"
+  deploy_applications                       = true
+  run_continuous_ecs_runtime                = false
+  deploy_gateway_lambda                     = true
+  gateway_lambda_artifact_s3_key            = "lambda/gateway.zip"
+  gateway_lambda_artifact_s3_object_version = "gateway-version"
+  gateway_lambda_artifact_sha256            = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  gateway_lambda_artifact_base64sha256      = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="
+  gateway_lambda_extension_layer_arn        = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
+
+  deploy_serverless_outbox                              = true
+  workflow_ingress_artifact_s3_key                      = "lambda/workflow-ingress.zip"
+  workflow_ingress_artifact_s3_object_version           = "ingress-version"
+  workflow_ingress_artifact_sha256                      = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  workflow_ingress_artifact_base64sha256                = "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI="
+  workflow_ingress_lambda_extension_layer_arn           = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
+  deploy_profile_readiness_durable                      = true
+  profile_readiness_durable_artifact_s3_key             = "lambda/profile/durable.zip"
+  profile_readiness_durable_artifact_s3_object_version  = "durable-version"
+  profile_readiness_durable_artifact_sha256             = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  profile_readiness_durable_artifact_base64sha256       = "Y2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2M="
+  profile_readiness_activity_artifact_s3_key            = "lambda/profile/activity.zip"
+  profile_readiness_activity_artifact_s3_object_version = "activity-version"
+  profile_readiness_activity_artifact_sha256            = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  profile_readiness_activity_artifact_base64sha256      = "ZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGQ="
+  profile_readiness_lambda_extension_layer_arn          = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
+}
+
 run "cutover_couples_api_dispatch_and_workflow_triggers" {
   command = plan
 
   variables {
-    name        = "ai-job-apply"
-    environment = "staging"
-    vpc_cidr    = "10.30.0.0/16"
-
-    gateway_image                             = "example.invalid/gateway@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    worker_image                              = "example.invalid/worker@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-    oidc_issuer                               = "https://example.auth0.com/"
-    oidc_audience                             = "https://api.example.invalid"
-    temporal_address                          = "example.tmprl.cloud:7233"
-    temporal_namespace                        = "example.tmprl.cloud"
-    deploy_applications                       = true
-    run_continuous_ecs_runtime                = false
-    deploy_gateway_lambda                     = true
-    gateway_lambda_artifact_s3_key            = "lambda/gateway.zip"
-    gateway_lambda_artifact_s3_object_version = "gateway-version"
-    gateway_lambda_artifact_sha256            = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    gateway_lambda_artifact_base64sha256      = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="
-    gateway_lambda_extension_layer_arn        = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
-
-    deploy_serverless_outbox                              = true
-    workflow_ingress_artifact_s3_key                      = "lambda/workflow-ingress.zip"
-    workflow_ingress_artifact_s3_object_version           = "ingress-version"
-    workflow_ingress_artifact_sha256                      = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-    workflow_ingress_artifact_base64sha256                = "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI="
-    workflow_ingress_lambda_extension_layer_arn           = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
-    deploy_profile_readiness_durable                      = true
-    profile_readiness_durable_artifact_s3_key             = "lambda/profile/durable.zip"
-    profile_readiness_durable_artifact_s3_object_version  = "durable-version"
-    profile_readiness_durable_artifact_sha256             = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-    profile_readiness_durable_artifact_base64sha256       = "Y2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2M="
-    profile_readiness_activity_artifact_s3_key            = "lambda/profile/activity.zip"
-    profile_readiness_activity_artifact_s3_object_version = "activity-version"
-    profile_readiness_activity_artifact_sha256            = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
-    profile_readiness_activity_artifact_base64sha256      = "ZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGQ="
-    profile_readiness_lambda_extension_layer_arn          = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
-    serverless_runtime_cutover                            = true
+    serverless_runtime_cutover = true
   }
 
   assert {
@@ -135,5 +138,41 @@ run "cutover_couples_api_dispatch_and_workflow_triggers" {
       aws_ecs_service.worker[0].desired_count == 0
     )
     error_message = "Serverless cutover must preserve the retained ECS rollback services at zero tasks."
+  }
+}
+
+run "rollback_transition_retains_only_the_unrouted_lambda_integration" {
+  command = plan
+
+  variables {
+    serverless_runtime_cutover                        = false
+    retain_gateway_lambda_integration_during_rollback = true
+  }
+
+  assert {
+    condition = (
+      length(aws_apigatewayv2_integration.gateway_lambda) == 1 &&
+      aws_apigatewayv2_route.gateway[0].authorization_type == "NONE" &&
+      length(aws_apigatewayv2_route.gateway_lambda_public) == 0
+    )
+    error_message = "Rollback transition must move the route before the unused Lambda integration is removed."
+  }
+
+  assert {
+    condition = (
+      aws_lambda_function.gateway[0].environment[0].variables.OUTBOX_DISPATCH_TARGET == "temporal" &&
+      !aws_lambda_event_source_mapping.outbox_starter[0].enabled &&
+      aws_cloudwatch_event_rule.outbox_reconciler[0].state == "DISABLED" &&
+      aws_cloudwatch_event_rule.profile_readiness_terminal[0].state == "DISABLED"
+    )
+    error_message = "Rollback transition must disable durable dispatch and every replacement trigger together."
+  }
+
+  assert {
+    condition = (
+      aws_ecs_service.gateway[0].desired_count == 0 &&
+      aws_ecs_service.worker[0].desired_count == 0
+    )
+    error_message = "Rollback transition must not resume retained ECS capacity."
   }
 }

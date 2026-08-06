@@ -76,3 +76,9 @@ policies so in-flight executions remain replayable. All other resources remain n
 integration and routes, the gateway's `lambda_durable` new-event target, the SQS starter mapping,
 the reconciliation schedule, and the terminal-event rule. The module rejects cutover unless the
 complete replacement is deployed and the retained ECS rollback services are configured idle.
+Rollback uses `retain_gateway_lambda_integration_during_rollback=true` only for its first dark
+transition. That state moves the default route to retained ECS, removes the public Lambda health
+routes, restores Temporal dispatch, and disables replacement triggers while keeping the now-unrouted
+Lambda integration. After a refresh-backed zero-change verification, a separate reviewed plan sets
+the retention input back to `false` and deletes only that integration. The switch defaults off and
+cannot be combined with active cutover or continuous ECS capacity.

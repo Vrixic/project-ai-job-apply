@@ -37,3 +37,8 @@ refresh-backed no-route-change plan receive separate review. Initial dark deploy
 replacement functions and alarms but leaves the API Lambda integration, SQS event-source mapping,
 reconciler schedule, and terminal-event rule disabled. The one cutover switch later moves API
 routing, new-event dispatch, and all replacement triggers together.
+
+The rollback-only `retain_gateway_lambda_integration_during_rollback` input defaults to `false`.
+When development cutover is eventually exercised, it may be enabled only for an ordered rollback
+transition that first moves the API route and disables dispatch/triggers. A separate verified plan
+must remove the resulting unreferenced integration; never combine those operations in one apply.

@@ -267,6 +267,11 @@ requireText(
 );
 requireText(
   platform,
+  "var.serverless_runtime_cutover || var.retain_gateway_lambda_integration_during_rollback",
+  "Rollback must retain the Lambda integration until the default route transition is verified.",
+);
+requireText(
+  platform,
   'integration_type       = "AWS_PROXY"',
   "The gateway replacement must use a direct Lambda proxy integration.",
 );
@@ -374,6 +379,11 @@ assert.match(
   /variable "serverless_runtime_cutover"\s*\{[\s\S]*?default\s*=\s*false/,
   "The atomic serverless runtime cutover must default to dark.",
 );
+assert.match(
+  variables,
+  /variable "retain_gateway_lambda_integration_during_rollback"\s*\{[\s\S]*?default\s*=\s*false/,
+  "Rollback-only Lambda integration retention must default off.",
+);
 assert.ok(
   !variables.includes('variable "gateway_outbox_dispatch_target"') &&
     !variables.includes('variable "enable_serverless_workflow_triggers"'),
@@ -436,6 +446,11 @@ for (const environment of environments) {
   );
   requireText(
     environment,
+    "retain_gateway_lambda_integration_during_rollback",
+    "Every persistent environment must expose bounded rollback integration retention.",
+  );
+  requireText(
+    environment,
     "run_continuous_ecs_runtime",
     "Every persistent environment must pass through the explicit ECS idle switch.",
   );
@@ -461,6 +476,7 @@ for (const expected of [
   '"inspect-deployed-outbox.ps1"',
   "--require-zero-open-workflows",
   "TF_VAR_serverless_runtime_cutover",
+  "TF_VAR_retain_gateway_lambda_integration_during_rollback",
   "module.platform.aws_apigatewayv2_integration.gateway_lambda[0]",
   'module.platform.aws_apigatewayv2_route.gateway_lambda_public["GET /health/live"]',
   'module.platform.aws_apigatewayv2_route.gateway_lambda_public["GET /health/ready"]',
@@ -629,8 +645,9 @@ assert.ok(
 );
 
 for (const expected of [
-  '"PlanRollback", "ApplyRollback", "VerifyRollback"',
-  '"PlanRestore", "ApplyRestore", "Cleanup"',
+  '"PlanRollback", "ApplyRollback"',
+  '"VerifyRollbackTransition", "PlanRollbackCleanup", "ApplyRollbackCleanup"',
+  '"VerifyRollback", "PlanRestore", "ApplyRestore", "Cleanup"',
   '"workflow-dark-plans"',
   "ExpectedPlanSha256",
   "Assert-CutoverPlan",
@@ -639,7 +656,7 @@ for (const expected of [
   "Get-PlanBooleanInput",
   "The runtime baseline must be a refresh-backed zero-change plan.",
   '"serverless-runtime-cutover-verify-"',
-  '"applydash.staging.serverless-runtime-cutover.v2"',
+  '"applydash.staging.serverless-runtime-cutover.v3"',
   "RuntimeBaselinePlanSha256",
   "requires a fresh zero-change runtime baseline from the current accepted source",
   "Assert-ZeroLegacyWork",
@@ -649,7 +666,16 @@ for (const expected of [
   '$arguments["VerifyCompletedRuntimeCutover"] = $true',
   "Invoke-CompletedVerification",
   "PublicConformanceRequired = $true",
-  "Assert-RollbackPlan",
+  "Assert-RollbackTransitionPlan",
+  "Assert-RollbackDarkBoundary",
+  "Assert-RollbackCleanupPlan",
+  '"rollback-transition.tfplan"',
+  '"rollback-cleanup.tfplan"',
+  '"RollbackTransitionVerify"',
+  '"rollback_transition_verified"',
+  '"rollback_cleanup_planned"',
+  '"rollback_cleanup_applied"',
+  "RouteReferenceVerifiedAbsent = $true",
   "Assert-ZeroServerlessWork",
   '"--statuses", "RUNNING"',
   "New-TransitionPlan",
@@ -664,6 +690,23 @@ for (const expected of [
     `The staging runtime-cutover operator is missing required boundary text: ${expected}`,
   );
 }
+const rollbackTransitionApplyIndex = stagingRuntimeCutoverOperator.indexOf('"ApplyRollback" {');
+const rollbackTransitionVerifyIndex = stagingRuntimeCutoverOperator.indexOf(
+  '"VerifyRollbackTransition" {',
+);
+const rollbackCleanupPlanIndex = stagingRuntimeCutoverOperator.indexOf('"PlanRollbackCleanup" {');
+const rollbackCleanupApplyIndex = stagingRuntimeCutoverOperator.indexOf('"ApplyRollbackCleanup" {');
+assert.ok(
+  rollbackTransitionApplyIndex >= 0 &&
+    rollbackTransitionApplyIndex < rollbackTransitionVerifyIndex &&
+    rollbackTransitionVerifyIndex < rollbackCleanupPlanIndex &&
+    rollbackCleanupPlanIndex < rollbackCleanupApplyIndex,
+  "Rollback must verify the unrouted retained integration before separately planning and applying its deletion.",
+);
+assert.ok(
+  !stagingRuntimeCutoverOperator.includes("Assert-RollbackPlan"),
+  "The unsafe combined route-update/integration-delete rollback validator must not remain.",
+);
 assert.ok(
   !/\b[0-9]{12}\b/.test(stagingRuntimeCutoverOperator),
   "The staging runtime-cutover operator must not embed an AWS account ID.",

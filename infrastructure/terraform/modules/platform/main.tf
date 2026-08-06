@@ -751,7 +751,9 @@ resource "aws_apigatewayv2_integration" "gateway" {
 }
 
 resource "aws_apigatewayv2_integration" "gateway_lambda" {
-  count                  = var.serverless_runtime_cutover ? 1 : 0
+  count = (
+    var.serverless_runtime_cutover || var.retain_gateway_lambda_integration_during_rollback
+  ) ? 1 : 0
   api_id                 = aws_apigatewayv2_api.gateway[0].id
   integration_type       = "AWS_PROXY"
   integration_uri        = aws_lambda_alias.gateway[0].invoke_arn

@@ -1,8 +1,9 @@
 [CmdletBinding()]
 param(
   [ValidateSet(
-    "Status", "Apply", "Verify", "PlanRollback", "ApplyRollback", "VerifyRollback",
-    "PlanRestore", "ApplyRestore", "Cleanup"
+    "Status", "Apply", "Verify", "PlanRollback", "ApplyRollback",
+    "VerifyRollbackTransition", "PlanRollbackCleanup", "ApplyRollbackCleanup",
+    "VerifyRollback", "PlanRestore", "ApplyRestore", "Cleanup"
   )]
   [string]$Action = "Status",
 
@@ -57,6 +58,15 @@ Usage:
     -ExpectedPlanSha256 REVIEWED_ROLLBACK_SHA256 -ConfirmZeroTraffic -Execute
 
   .\scripts\operate-staging-serverless-runtime-cutover.ps1 `
+    -Action PlanRollbackCleanup -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
+    -PlanPath .terraform/workflow-dark-plans/PLAN.tfplan -ConfirmZeroTraffic
+
+  .\scripts\operate-staging-serverless-runtime-cutover.ps1 `
+    -Action ApplyRollbackCleanup -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
+    -PlanPath .terraform/workflow-dark-plans/PLAN.tfplan `
+    -ExpectedPlanSha256 REVIEWED_CLEANUP_SHA256 -ConfirmZeroTraffic -Execute
+
+  .\scripts\operate-staging-serverless-runtime-cutover.ps1 `
     -Action PlanRestore -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
     -PlanPath .terraform/workflow-dark-plans/PLAN.tfplan -ConfirmRollbackConformance
 
@@ -72,10 +82,12 @@ applies that saved plan without regenerating it. Apply and Verify both run the r
 completed-cutover verifier. After cutover, Verify and every rollback/restoration action require a
 fresh zero-change serverless-runtime-cutover-verify plan created from the current exact main commit.
 That runtime baseline preserves accepted maintenance releases instead of reconstructing the stale
-original cutover inputs. Rollback and restoration are separate checksum-reviewed plans, require an
-empty serverless/legacy work boundary, never change ECS capacity, and retain the Lambda, ECS, Cloud
-Map, API, queue, database, and Temporal resources. Rollback intentionally makes the public API
-unavailable while the retained ECS service remains idle; it is a zero-traffic recovery drill.
+original cutover inputs. Rollback first moves the default route, dispatch, and triggers while
+retaining the now-unrouted Lambda integration. A zero-change transition verification must pass
+before a separately checksum-reviewed one-delete cleanup removes that integration. Restoration is
+also separately reviewed. Every step requires an empty serverless/legacy work boundary, never
+changes ECS capacity, and retains Lambda functions, ECS, Cloud Map, API, queues, database, and
+Temporal. Rollback intentionally makes the public API unavailable while retained ECS stays idle.
 "@
   exit 0
 }
@@ -88,13 +100,20 @@ if ($Action -ne "Status" -and (
 )) {
   throw "$Action requires the exact staging account ID and encrypted state bucket."
 }
-if ($Action -in @("Apply", "ApplyRollback", "ApplyRestore", "Cleanup") -and -not $Execute) {
+if ($Action -in @(
+  "Apply", "ApplyRollback", "ApplyRollbackCleanup", "ApplyRestore", "Cleanup"
+) -and -not $Execute) {
   throw "$Action requires -Execute."
 }
-if ($Action -notin @("Apply", "ApplyRollback", "ApplyRestore", "Cleanup") -and $Execute) {
+if ($Action -notin @(
+  "Apply", "ApplyRollback", "ApplyRollbackCleanup", "ApplyRestore", "Cleanup"
+) -and $Execute) {
   throw "$Action does not accept -Execute."
 }
-if ($Action -in @("PlanRollback", "ApplyRollback") -and -not $ConfirmZeroTraffic) {
+if ($Action -in @(
+  "PlanRollback", "ApplyRollback", "VerifyRollbackTransition",
+  "PlanRollbackCleanup", "ApplyRollbackCleanup"
+) -and -not $ConfirmZeroTraffic) {
   throw "$Action requires -ConfirmZeroTraffic because rollback leaves idle ECS unavailable."
 }
 if ($Action -eq "PlanRestore" -and -not $ConfirmRollbackConformance) {
@@ -111,7 +130,12 @@ $planDirectory = [IO.Path]::GetFullPath((Join-Path $terraformRoot "workflow-dark
 $terraformDataDirectory = Join-Path $terraformRoot "dark-plan-data"
 $transitionDirectory = Join-Path $terraformRoot "serverless-runtime-cutover"
 $contextPath = Join-Path $transitionDirectory "context.json"
-$rollbackPlanPath = Join-Path $transitionDirectory "rollback.tfplan"
+$rollbackTransitionPlanPath = Join-Path $transitionDirectory "rollback-transition.tfplan"
+$rollbackTransitionApplyVerifyPlanPath = Join-Path `
+  $transitionDirectory "rollback-transition-apply-verify.tfplan"
+$rollbackTransitionCleanupVerifyPlanPath = Join-Path `
+  $transitionDirectory "rollback-transition-cleanup-verify.tfplan"
+$rollbackCleanupPlanPath = Join-Path $transitionDirectory "rollback-cleanup.tfplan"
 $restorePlanPath = Join-Path $transitionDirectory "restore.tfplan"
 $planner = Join-Path $PSScriptRoot "plan-serverless-workflow-dark.ps1"
 $utf8WithoutBom = New-Object Text.UTF8Encoding($false)
@@ -278,6 +302,10 @@ function Assert-CutoverPlan {
   if (-not (Get-PlanBooleanInput -Plan $Plan -Name "serverless_runtime_cutover")) {
     throw "The saved plan does not select the atomic serverless runtime cutover switch."
   }
+  if (Get-PlanBooleanInput -Plan $Plan `
+    -Name "retain_gateway_lambda_integration_during_rollback") {
+    throw "The cutover/restoration plan cannot retain the rollback-only integration switch."
+  }
 
   $gateway = Get-OnlyChange $changes "module.platform.aws_lambda_function.gateway[0]"
   Assert-OnlyPropertiesChanged $gateway @(
@@ -368,6 +396,10 @@ function Assert-RuntimeBaselinePlan {
   if (Get-PlanBooleanInput -Plan $Plan -Name "run_continuous_ecs_runtime") {
     throw "The runtime baseline does not retain idle rollback-only ECS capacity."
   }
+  if (Get-PlanBooleanInput -Plan $Plan `
+    -Name "retain_gateway_lambda_integration_during_rollback") {
+    throw "The accepted runtime baseline cannot retain the rollback-only integration switch."
+  }
 
   $gateway = Get-PlannedValue $Plan "module.platform.aws_lambda_function.gateway[0]"
   if ([string]$gateway.environment[0].variables.OUTBOX_DISPATCH_TARGET -ne "lambda_durable") {
@@ -420,10 +452,9 @@ function Assert-RuntimeBaselinePlan {
   return $changes
 }
 
-function Assert-RollbackPlan {
+function Assert-RollbackTransitionPlan {
   param([Parameter(Mandatory = $true)][object]$Plan)
   $deletesExpected = @(
-    "module.platform.aws_apigatewayv2_integration.gateway_lambda[0]",
     'module.platform.aws_apigatewayv2_route.gateway_lambda_public["GET /health/live"]',
     'module.platform.aws_apigatewayv2_route.gateway_lambda_public["GET /health/ready"]'
   )
@@ -451,13 +482,17 @@ function Assert-RollbackPlan {
       -DifferenceObject @($updatesExpected | Sort-Object)
   )
   if (
-    $changes.Count -ne 9 -or $deletes.Count -ne 3 -or $updates.Count -ne 6 -or
+    $changes.Count -ne 8 -or $deletes.Count -ne 2 -or $updates.Count -ne 6 -or
     $deleteAddressDifference.Count -ne 0 -or $updateAddressDifference.Count -ne 0
   ) {
-    throw "The rollback plan is outside the exact three-delete, six-update recovery boundary."
+    throw "The rollback transition is outside the exact two-delete, six-update boundary."
   }
   if (Get-PlanBooleanInput -Plan $Plan -Name "serverless_runtime_cutover") {
     throw "The rollback plan does not select the retained dark runtime boundary."
+  }
+  if (-not (Get-PlanBooleanInput -Plan $Plan `
+    -Name "retain_gateway_lambda_integration_during_rollback")) {
+    throw "The rollback transition must retain the Lambda integration until routing is verified."
   }
   $gateway = Get-OnlyChange $changes "module.platform.aws_lambda_function.gateway[0]"
   Assert-OnlyPropertiesChanged $gateway @(
@@ -502,6 +537,83 @@ function Assert-RollbackPlan {
       throw "The rollback does not disable both serverless workflow rules."
     }
   }
+  Assert-RollbackDarkBoundary $Plan $true
+  return $changes
+}
+
+function Assert-RollbackDarkBoundary {
+  param(
+    [Parameter(Mandatory = $true)][object]$Plan,
+    [Parameter(Mandatory = $true)][bool]$IntegrationRetained
+  )
+  if (
+    (Get-PlanBooleanInput -Plan $Plan -Name "serverless_runtime_cutover") -or
+    (Get-PlanBooleanInput -Plan $Plan `
+      -Name "retain_gateway_lambda_integration_during_rollback") -ne $IntegrationRetained
+  ) { throw "The rollback boundary uses an invalid route/integration switch combination." }
+
+  $ecsIntegration = Get-PlannedValue $Plan "module.platform.aws_apigatewayv2_integration.gateway[0]"
+  $defaultRoute = Get-PlannedValue $Plan "module.platform.aws_apigatewayv2_route.gateway[0]"
+  if (
+    [string]$defaultRoute.route_key -ne '$default' -or
+    [string]$defaultRoute.authorization_type -ne "NONE" -or
+    [string]$defaultRoute.target -ne "integrations/$([string]$ecsIntegration.id)"
+  ) { throw "The rollback boundary does not route the default API path to retained ECS." }
+
+  $publicRoutes = @($Plan.resource_changes | Where-Object {
+    [string]$_.address -like "module.platform.aws_apigatewayv2_route.gateway_lambda_public*" -and
+    $null -ne $_.change.after
+  })
+  if ($publicRoutes.Count -ne 0) {
+    throw "The rollback boundary unexpectedly retains a public Lambda health route."
+  }
+
+  $lambdaIntegrations = @($Plan.resource_changes | Where-Object {
+    [string]$_.address -eq "module.platform.aws_apigatewayv2_integration.gateway_lambda[0]" -and
+    $null -ne $_.change.after
+  })
+  if ($lambdaIntegrations.Count -ne [int]$IntegrationRetained) {
+    throw "The rollback boundary does not have the exact reviewed Lambda integration retention."
+  }
+  if ($IntegrationRetained -and (
+    [string]$lambdaIntegrations[0].change.after.integration_type -ne "AWS_PROXY" -or
+    [string]$lambdaIntegrations[0].change.after.payload_format_version -ne "2.0"
+  )) { throw "The retained rollback Lambda integration is not the accepted proxy integration." }
+
+  $gateway = Get-PlannedValue $Plan "module.platform.aws_lambda_function.gateway[0]"
+  $mapping = Get-PlannedValue $Plan "module.platform.aws_lambda_event_source_mapping.outbox_starter[0]"
+  $reconciler = Get-PlannedValue $Plan "module.platform.aws_cloudwatch_event_rule.outbox_reconciler[0]"
+  $terminal = Get-PlannedValue $Plan `
+    "module.platform.aws_cloudwatch_event_rule.profile_readiness_terminal[0]"
+  if (
+    [string]$gateway.environment[0].variables.OUTBOX_DISPATCH_TARGET -ne "temporal" -or
+    [bool]$mapping.enabled -or
+    [string]$reconciler.state -ne "DISABLED" -or
+    [string]$terminal.state -ne "DISABLED"
+  ) { throw "The rollback boundary does not disable durable dispatch and every trigger together." }
+
+  foreach ($address in @(
+    "module.platform.aws_ecs_service.gateway[0]",
+    "module.platform.aws_ecs_service.worker[0]"
+  )) {
+    if ([int](Get-PlannedValue $Plan $address).desired_count -ne 0) {
+      throw "The rollback boundary unexpectedly resumes retained ECS capacity."
+    }
+  }
+}
+
+function Assert-RollbackCleanupPlan {
+  param([Parameter(Mandatory = $true)][object]$Plan)
+  $changes = @($Plan.resource_changes | Where-Object {
+    (@($_.change.actions) -join ",") -notin @("no-op", "read")
+  })
+  if (
+    $changes.Count -ne 1 -or
+    (@($changes[0].change.actions) -join ",") -ne "delete" -or
+    [string]$changes[0].address -ne
+      "module.platform.aws_apigatewayv2_integration.gateway_lambda[0]"
+  ) { throw "The rollback cleanup is outside the exact one-integration-delete boundary." }
+  Assert-RollbackDarkBoundary $Plan $false
   return $changes
 }
 
@@ -628,9 +740,18 @@ function Get-Context {
   }
   $context = Get-Content -LiteralPath $contextPath -Raw | ConvertFrom-Json
   if (
-    [string]$context.Schema -ne "applydash.staging.serverless-runtime-cutover.v2" -or
+    [string]$context.Schema -ne "applydash.staging.serverless-runtime-cutover.v3" -or
     [string]$context.SourceCommit -notmatch "^[a-f0-9]{40}$" -or
-    [string]$context.RuntimeBaselinePlanSha256 -notmatch "^[a-f0-9]{64}$"
+    [string]$context.RuntimeBaselinePlanSha256 -notmatch "^[a-f0-9]{64}$" -or
+    [string]$context.RollbackTransitionPlanSha256 -notmatch "^[a-f0-9]{64}$" -or
+    [string]$context.RollbackTransitionVerificationSha256 -notmatch "^$|^[a-f0-9]{64}$" -or
+    [string]$context.RollbackCleanupPlanSha256 -notmatch "^$|^[a-f0-9]{64}$" -or
+    [string]$context.RestorePlanSha256 -notmatch "^$|^[a-f0-9]{64}$" -or
+    [string]$context.State -notin @(
+      "rollback_transition_planned", "rollback_transition_applied",
+      "rollback_transition_verified", "rollback_cleanup_planned",
+      "rollback_cleanup_applied", "rollback_verified", "restore_planned", "restore_verified"
+    )
   ) { throw "The ignored staging cutover rollback context is invalid." }
   return $context
 }
@@ -647,7 +768,11 @@ function Assert-Context {
 }
 
 function Set-RetainedPlanVariables {
-  param([object]$SourcePlan, [bool]$RuntimeCutover)
+  param(
+    [object]$SourcePlan,
+    [bool]$RuntimeCutover,
+    [bool]$RetainGatewayLambdaIntegration
+  )
   $prior = [ordered]@{}
   foreach ($property in @($SourcePlan.variables.PSObject.Properties)) {
     $name = "TF_VAR_$([string]$property.Name)"
@@ -667,6 +792,13 @@ function Set-RetainedPlanVariables {
   [Environment]::SetEnvironmentVariable(
     $cutoverName, $RuntimeCutover.ToString().ToLowerInvariant(), "Process"
   )
+  $retentionName = "TF_VAR_retain_gateway_lambda_integration_during_rollback"
+  if (-not $prior.Contains($retentionName)) {
+    $prior[$retentionName] = [Environment]::GetEnvironmentVariable($retentionName, "Process")
+  }
+  [Environment]::SetEnvironmentVariable(
+    $retentionName, $RetainGatewayLambdaIntegration.ToString().ToLowerInvariant(), "Process"
+  )
   return $prior
 }
 
@@ -678,7 +810,12 @@ function Restore-EnvironmentVariables {
 }
 
 function New-TransitionPlan {
-  param([object]$SourcePlan, [bool]$RuntimeCutover, [string]$Destination)
+  param(
+    [object]$SourcePlan,
+    [ValidateSet("RollbackTransition", "RollbackTransitionVerify", "RollbackCleanup", "Restore")]
+    [string]$Mode,
+    [string]$Destination
+  )
   if (Test-Path -LiteralPath $Destination) {
     throw "A saved staging transition plan already exists at the exact ignored path."
   }
@@ -699,12 +836,19 @@ function New-TransitionPlan {
     $env:AWS_SESSION_TOKEN = [string]$credentials.SessionToken
     $env:AWS_REGION = $Region; $env:AWS_DEFAULT_REGION = $Region
     $null = Initialize-Backend
-    $priorVariables = Set-RetainedPlanVariables $SourcePlan $RuntimeCutover
+    $runtimeCutover = $Mode -eq "Restore"
+    $retainGatewayLambdaIntegration = $Mode -in @(
+      "RollbackTransition", "RollbackTransitionVerify"
+    )
+    $priorVariables = Set-RetainedPlanVariables `
+      $SourcePlan $runtimeCutover $retainGatewayLambdaIntegration
     $output = & terraform "-chdir=$environmentDirectory" plan -input=false -lock-timeout=5m `
       -detailed-exitcode "-out=$Destination" 2>&1
-    if ($LASTEXITCODE -ne 2) {
+    $expectedExitCode = if ($Mode -eq "RollbackTransitionVerify") { 0 } else { 2 }
+    if ($LASTEXITCODE -ne $expectedExitCode) {
       $diagnostic = (@($output) | Select-Object -Last 8) -join " "
-      throw "The staging transition did not produce the required change-only plan: $diagnostic"
+      $expectedResult = if ($expectedExitCode -eq 0) { "zero-change" } else { "change-only" }
+      throw "The staging transition did not produce the required $expectedResult plan: $diagnostic"
     }
   } finally {
     if ($null -ne $priorVariables) { $null = Restore-EnvironmentVariables $priorVariables }
@@ -717,20 +861,42 @@ function New-TransitionPlan {
     }
   }
   $transition = Get-PlanJson $Destination
-  if ($RuntimeCutover) { $null = Assert-CutoverPlan $transition }
-  else { $null = Assert-RollbackPlan $transition }
+  switch ($Mode) {
+    "RollbackTransition" { $null = Assert-RollbackTransitionPlan $transition }
+    "RollbackTransitionVerify" {
+      $changes = @($transition.resource_changes | Where-Object {
+        (@($_.change.actions) -join ",") -notin @("no-op", "read")
+      })
+      if ($changes.Count -ne 0) {
+        throw "The retained-integration rollback transition verification is not zero-change."
+      }
+      Assert-RollbackDarkBoundary $transition $true
+    }
+    "RollbackCleanup" { $null = Assert-RollbackCleanupPlan $transition }
+    "Restore" { $null = Assert-CutoverPlan $transition }
+  }
+  $counts = switch ($Mode) {
+    "RollbackTransition" { @{ Creates = 0; Updates = 6; Deletes = 2 } }
+    "RollbackTransitionVerify" { @{ Creates = 0; Updates = 0; Deletes = 0 } }
+    "RollbackCleanup" { @{ Creates = 0; Updates = 0; Deletes = 1 } }
+    "Restore" { @{ Creates = 3; Updates = 6; Deletes = 0 } }
+  }
   return [ordered]@{
     Path = $Destination
     Sha256 = (Get-FileHash -LiteralPath $Destination -Algorithm SHA256).Hash.ToLowerInvariant()
-    Creates = if ($RuntimeCutover) { 3 } else { 0 }
-    Updates = 6
-    Deletes = if ($RuntimeCutover) { 0 } else { 3 }
+    Creates = [int]$counts.Creates
+    Updates = [int]$counts.Updates
+    Deletes = [int]$counts.Deletes
     Replacements = 0
   }
 }
 
 function Assert-ReviewedTransitionPlan {
-  param([string]$Path, [string]$RecordedSha256, [ValidateSet("Rollback", "Restore")][string]$Mode)
+  param(
+    [string]$Path,
+    [string]$RecordedSha256,
+    [ValidateSet("RollbackTransition", "RollbackCleanup", "Restore")][string]$Mode
+  )
   if (
     $ExpectedPlanSha256 -notmatch "^[a-fA-F0-9]{64}$" -or
     -not (Test-Path -LiteralPath $Path -PathType Leaf)
@@ -740,7 +906,8 @@ function Assert-ReviewedTransitionPlan {
     throw "The saved $Mode plan does not match the reviewed checksum and ignored context."
   }
   $plan = Get-PlanJson $Path
-  if ($Mode -eq "Rollback") { $null = Assert-RollbackPlan $plan }
+  if ($Mode -eq "RollbackTransition") { $null = Assert-RollbackTransitionPlan $plan }
+  elseif ($Mode -eq "RollbackCleanup") { $null = Assert-RollbackCleanupPlan $plan }
   else { $null = Assert-CutoverPlan $plan }
 }
 
@@ -859,7 +1026,8 @@ if ($Action -eq "Status") {
     Updates = if ($planKind -eq "cutover") { 6 } else { 0 }
     Deletes = 0; Replacements = 0; AwsMutation = $false
     RollbackContextPresent = Test-Path -LiteralPath $contextPath
-    RollbackPlanPresent = Test-Path -LiteralPath $rollbackPlanPath
+    RollbackTransitionPlanPresent = Test-Path -LiteralPath $rollbackTransitionPlanPath
+    RollbackCleanupPlanPresent = Test-Path -LiteralPath $rollbackCleanupPlanPath
     RestorePlanPresent = Test-Path -LiteralPath $restorePlanPath
   } | ConvertTo-Json
   exit 0
@@ -913,46 +1081,130 @@ switch ($Action) {
     $verification = Invoke-CompletedVerification $plan Runtime
     Assert-ZeroLegacyWork $plan
     Assert-ZeroServerlessWork
-    $summary = New-TransitionPlan $plan $false $rollbackPlanPath
+    $summary = New-TransitionPlan $plan RollbackTransition $rollbackTransitionPlanPath
     $refreshedRuntimeBaselineSha256 = Get-RefreshedRuntimeBaselineSha256 $verification
     $context = [ordered]@{
-      Schema = "applydash.staging.serverless-runtime-cutover.v2"
+      Schema = "applydash.staging.serverless-runtime-cutover.v3"
       SourceCommit = $sourceCommit; ExpectedAccountId = $ExpectedAccountId
       StateBucket = $StateBucket; RuntimeBaselinePlanPath = $resolvedPlanPath
       RuntimeBaselinePlanSha256 = $refreshedRuntimeBaselineSha256
-      RollbackPlanSha256 = [string]$summary.Sha256
-      RestorePlanSha256 = ""; State = "rollback_planned"
+      RollbackTransitionPlanSha256 = [string]$summary.Sha256
+      RollbackTransitionVerificationSha256 = ""; RollbackCleanupPlanSha256 = ""
+      RestorePlanSha256 = ""; State = "rollback_transition_planned"
     }
     Save-Context $context
     [ordered]@{
       Environment = "staging"; Action = "rollback_review"; PlanSha256 = [string]$summary.Sha256
-      Creates = 0; Updates = 6; Deletes = 3; Replacements = 0
+      Creates = 0; Updates = 6; Deletes = 2; Replacements = 0
+      LambdaIntegrationRetainedAfterApply = $true
       PublicApiAvailableAfterApply = $false; EcsCapacityChange = $false; AwsMutation = $false
     } | ConvertTo-Json
   }
   "ApplyRollback" {
     $context = Get-Context
     Assert-Context $context $sourceCommit $actualPlanSha256
-    if ([string]$context.State -ne "rollback_planned") { throw "The rollback context is not ready to apply." }
-    Assert-ReviewedTransitionPlan $rollbackPlanPath ([string]$context.RollbackPlanSha256) Rollback
+    if ([string]$context.State -ne "rollback_transition_planned") {
+      throw "The rollback transition context is not ready to apply."
+    }
+    Assert-ReviewedTransitionPlan $rollbackTransitionPlanPath `
+      ([string]$context.RollbackTransitionPlanSha256) RollbackTransition
     Assert-ZeroLegacyWork $plan
     Assert-ZeroServerlessWork
-    Invoke-SavedPlan $rollbackPlanPath "The exact reviewed staging rollback plan failed to apply."
+    Invoke-SavedPlan $rollbackTransitionPlanPath `
+      "The exact reviewed staging rollback transition failed to apply."
+    $context.State = "rollback_transition_applied"
+    Save-Context $context
+    $verification = New-TransitionPlan `
+      $plan RollbackTransitionVerify $rollbackTransitionApplyVerifyPlanPath
+    $context.RollbackTransitionVerificationSha256 = [string]$verification.Sha256
+    $context.State = "rollback_transition_verified"
+    Save-Context $context
+    [ordered]@{
+      Environment = "staging"; Action = "rollback_transition"; NoDrift = $true
+      DispatchTarget = "temporal"; TriggersEnabled = $false; EcsRuntimeIdle = $true
+      LambdaIntegrationRetained = $true; PublicApiAvailable = $false
+      CleanupPlanRequired = $true
+    } | ConvertTo-Json
+  }
+  "VerifyRollbackTransition" {
+    $context = Get-Context
+    Assert-Context $context $sourceCommit $actualPlanSha256
+    if ([string]$context.State -notin @(
+      "rollback_transition_applied", "rollback_transition_verified"
+    )) { throw "The rollback transition has not reached a verifiable state." }
+    Assert-ZeroLegacyWork $plan
+    Assert-ZeroServerlessWork
+    if (Test-Path -LiteralPath $rollbackTransitionApplyVerifyPlanPath -PathType Leaf) {
+      Remove-Item -LiteralPath $rollbackTransitionApplyVerifyPlanPath -Force
+    }
+    $verification = New-TransitionPlan `
+      $plan RollbackTransitionVerify $rollbackTransitionApplyVerifyPlanPath
+    $context.RollbackTransitionVerificationSha256 = [string]$verification.Sha256
+    $context.State = "rollback_transition_verified"
+    Save-Context $context
+    [ordered]@{
+      Environment = "staging"; Action = "verify_rollback_transition"; NoDrift = $true
+      DispatchTarget = "temporal"; TriggersEnabled = $false; EcsRuntimeIdle = $true
+      LambdaIntegrationRetained = $true; PublicApiAvailable = $false
+    } | ConvertTo-Json
+  }
+  "PlanRollbackCleanup" {
+    $context = Get-Context
+    Assert-Context $context $sourceCommit $actualPlanSha256
+    if ([string]$context.State -ne "rollback_transition_verified") {
+      throw "Rollback cleanup planning requires the verified route/trigger transition."
+    }
+    Assert-ZeroLegacyWork $plan
+    Assert-ZeroServerlessWork
+    $verification = New-TransitionPlan `
+      $plan RollbackTransitionVerify $rollbackTransitionCleanupVerifyPlanPath
+    $summary = New-TransitionPlan $plan RollbackCleanup $rollbackCleanupPlanPath
+    $context.RollbackTransitionVerificationSha256 = [string]$verification.Sha256
+    $context.RollbackCleanupPlanSha256 = [string]$summary.Sha256
+    $context.State = "rollback_cleanup_planned"
+    Save-Context $context
+    [ordered]@{
+      Environment = "staging"; Action = "rollback_cleanup_review"
+      PlanSha256 = [string]$summary.Sha256
+      Creates = 0; Updates = 0; Deletes = 1; Replacements = 0
+      RouteReferenceVerifiedAbsent = $true; EcsCapacityChange = $false; AwsMutation = $false
+    } | ConvertTo-Json
+  }
+  "ApplyRollbackCleanup" {
+    $context = Get-Context
+    Assert-Context $context $sourceCommit $actualPlanSha256
+    if ([string]$context.State -ne "rollback_cleanup_planned") {
+      throw "The rollback integration cleanup is not ready to apply."
+    }
+    Assert-ReviewedTransitionPlan $rollbackCleanupPlanPath `
+      ([string]$context.RollbackCleanupPlanSha256) RollbackCleanup
+    Assert-ZeroLegacyWork $plan
+    Assert-ZeroServerlessWork
+    Invoke-SavedPlan $rollbackCleanupPlanPath `
+      "The exact reviewed staging rollback integration cleanup failed to apply."
+    $context.State = "rollback_cleanup_applied"
+    Save-Context $context
     $verification = Invoke-CompletedVerification $plan Dark
     $context.State = "rollback_verified"
     Save-Context $context
     [ordered]@{
-      Environment = "staging"; Action = "rollback"; NoDrift = [bool]$verification.NoDrift
+      Environment = "staging"; Action = "rollback_cleanup"; NoDrift = [bool]$verification.NoDrift
       DispatchTarget = "temporal"; TriggersEnabled = $false; EcsRuntimeIdle = $true
-      PublicApiAvailable = $false; RollbackConformanceRequired = $true
+      LambdaIntegrationRetained = $false; PublicApiAvailable = $false
+      RollbackConformanceRequired = $true
     } | ConvertTo-Json
   }
   "VerifyRollback" {
     $context = Get-Context
     Assert-Context $context $sourceCommit $actualPlanSha256
+    if ([string]$context.State -notin @("rollback_cleanup_applied", "rollback_verified")) {
+      throw "The rollback integration cleanup has not reached a verifiable state."
+    }
     $verification = Invoke-CompletedVerification $plan Dark
     Assert-ZeroLegacyWork $plan
     Assert-ZeroServerlessWork
+    $context.State = "rollback_verified"
+    Save-Context $context
     [ordered]@{
       Environment = "staging"; Action = "verify_rollback"; NoDrift = [bool]$verification.NoDrift
       DispatchTarget = "temporal"; TriggersEnabled = $false; EcsRuntimeIdle = $true
@@ -968,7 +1220,7 @@ switch ($Action) {
     $null = Invoke-CompletedVerification $plan Dark
     Assert-ZeroLegacyWork $plan
     Assert-ZeroServerlessWork
-    $summary = New-TransitionPlan $plan $true $restorePlanPath
+    $summary = New-TransitionPlan $plan Restore $restorePlanPath
     $context.RestorePlanSha256 = [string]$summary.Sha256
     $context.State = "restore_planned"
     Save-Context $context
@@ -1003,12 +1255,20 @@ switch ($Action) {
       throw "Cleanup requires the verified restored runtime context."
     }
     $null = Invoke-CompletedVerification $plan Runtime
-    foreach ($path in @($rollbackPlanPath, $restorePlanPath, $contextPath)) {
+    $cleanupPaths = @(
+      $rollbackTransitionPlanPath,
+      $rollbackTransitionApplyVerifyPlanPath,
+      $rollbackTransitionCleanupVerifyPlanPath,
+      $rollbackCleanupPlanPath,
+      $restorePlanPath,
+      $contextPath
+    )
+    foreach ($path in $cleanupPaths) {
       if (Test-Path -LiteralPath $path -PathType Leaf) { Remove-Item -LiteralPath $path -Force }
     }
     [ordered]@{
       Environment = "staging"; Action = "cleanup"; RestoredRuntimeVerified = $true
-      RemovedIgnoredArtifacts = 3; AwsMutation = $false
+      RemovedIgnoredArtifacts = $cleanupPaths.Count; AwsMutation = $false
     } | ConvertTo-Json
   }
 }

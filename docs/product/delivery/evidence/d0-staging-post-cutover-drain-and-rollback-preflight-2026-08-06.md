@@ -95,15 +95,65 @@ match its post-refresh file checksum. `PlanRollback` records that refreshed chec
 Repository policy and an isolated function-level mismatch rejection guard this lifecycle. No AWS
 resource, route, trigger, capacity, or data changed.
 
+## Authorized rollback apply and API Gateway conflict
+
+After the checksum-binding correction merged, another exact-main runtime baseline passed with zero
+drift and the complete accepted runtime boundary. A fresh exact nine-action rollback plan passed,
+its post-refresh baseline and transition checksums matched the ignored context, and the product
+owner authorized that exact transition checksum.
+
+Terraform completed five actions before AWS rejected deletion of the Lambda API integration with
+`ConflictException`. Read-back proved the two public health routes were removed and all three
+replacement triggers were disabled, while the JWT-protected default route still referenced the
+Lambda integration. A refresh-backed diagnostic contained exactly four remaining actions: the
+default-route, gateway function, and alias updates plus integration deletion. RDS, queues, Lambda
+functions, retained ECS resources/capacity, and product data were not deleted. The combined plan was
+treated as stale and was not retried.
+
+The causal boundary is ordering rather than authorization or work backlog: API Gateway may still
+report the integration in use while an in-place route update propagates, and the original combined
+Terraform graph did not enforce a service-level propagation barrier before deletion.
+
+## Checksum-authorized recovery
+
+A separate refresh-backed recovery plan reconstructed only the five already committed actions in
+the accepted serverless direction: two public health-route creates and three trigger updates, with
+zero deletes or replacements. Before apply, exact upstream source, the saved checksum, the five
+resource addresses, three empty queues/DLQs, zero running durable executions, and a bounded
+aggregate database inspection reporting zero pending outbox rows all passed.
+
+The product owner authorized that exact recovery checksum. Apply completed, then the full runtime
+verifier reported zero drift, `lambda_durable` dispatch, enabled triggers, idle ECS, zero legacy
+outbox work, and zero open Temporal workflows. Live route inventory again contained the protected
+Lambda default route plus exactly two public health routes; liveness and readiness both returned
+`200`. The failed rollback/context, partial diagnostic, and applied recovery plan are quarantined
+under ignored local filenames and cannot be reused as active plans.
+
+## Ordered rollback correction
+
+Source now separates the rollback into two authorization boundaries. The first plan performs only
+the two health-route deletes and six route/gateway/trigger updates while a default-off,
+rollback-only Terraform input retains the Lambda integration. Its apply persists an intermediate
+state and must pass a fresh zero-change plan proving the default route uses retained ECS, dispatch
+and triggers are dark, ECS capacity remains zero, and the Lambda integration is unreferenced.
+
+Only then may a second plan be generated. Its validator permits exactly one deletion—the
+unreferenced Lambda integration—and requires a separate checksum authorization. Interrupted
+post-apply verification can resume without replaying either saved plan. Restoration remains a third
+separately reviewed direction. Terraform module tests cover the retained-integration dark boundary;
+repository policy rejects the old combined validator and enforces the ordered state machine.
+A read-only live-state diagnostic from the source branch also produced exactly two route deletes and
+six bounded updates, with zero creates, replacements, or Lambda-integration deletion. It is not a
+deployable exact-main plan and changed no AWS resource.
+
 ## Remaining gate
 
-SR-006 and D0-016 remain `In progress`. After the refreshed-baseline binding correction merges:
+SR-006 and D0-016 remain `In progress`. After the ordered rollback correction merges:
 
-1. regenerate the rollback plan from clean exact `main` and the fresh runtime baseline;
-2. review and separately authorize its checksum;
-3. apply the deliberate zero-traffic rollback, which temporarily makes the public API unavailable
-   because retained ECS capacity stays at zero;
-4. pass direct-alias dark conformance;
+1. merge the ordered rollback correction and regenerate a fresh exact-main runtime baseline;
+2. review, authorize, apply, and verify the route/trigger transition checksum;
+3. independently review and authorize the one-integration-delete cleanup checksum;
+4. pass final dark verification and direct-alias conformance;
 5. separately plan and authorize restoration; and
 6. repeat public authenticated, durable-workflow, isolation, queue/alarm/log, and zero-drift
    acceptance before cleanup.

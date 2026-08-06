@@ -35,3 +35,10 @@ refresh-backed plan are reviewed. The first replacement apply may create functio
 endpoints, alarms, and an encrypted terminal DLQ, but it cannot create the API Lambda integration,
 move new-event dispatch from Temporal, or enable a workflow trigger. The single cutover switch
 later performs those coupled changes together.
+
+Runtime rollback is deliberately ordered. The first separately reviewed plan sets
+`serverless_runtime_cutover=false` and
+`retain_gateway_lambda_integration_during_rollback=true`, moving routing/dispatch/triggers while
+leaving the Lambda integration unreferenced. Only after zero-change verification may a second
+checksum-reviewed plan set retention back to `false` and delete that one integration. Never combine
+the route update and integration deletion in one apply.

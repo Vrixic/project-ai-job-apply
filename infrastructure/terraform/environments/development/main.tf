@@ -83,8 +83,11 @@ module "platform" {
   gateway_lambda_extension_layer_arn   = var.gateway_lambda_extension_layer_arn
   gateway_lambda_reserved_concurrency  = var.gateway_lambda_reserved_concurrency
   serverless_runtime_cutover           = var.serverless_runtime_cutover
-  deploy_serverless_outbox             = var.deploy_serverless_outbox
-  workflow_ingress_artifact_s3_key     = var.workflow_ingress_artifact_s3_key
+  retain_gateway_lambda_integration_during_rollback = (
+    var.retain_gateway_lambda_integration_during_rollback
+  )
+  deploy_serverless_outbox         = var.deploy_serverless_outbox
+  workflow_ingress_artifact_s3_key = var.workflow_ingress_artifact_s3_key
   workflow_ingress_artifact_s3_object_version = (
     var.workflow_ingress_artifact_s3_object_version
   )

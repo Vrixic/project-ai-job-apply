@@ -48,7 +48,9 @@ is implemented and accepted; source configuration is not yet deployed evidence f
 The completed composition will retain API Gateway, RDS, SQS/DLQ, S3, KMS, backups, cost controls,
 and an empty/on-demand ECS boundary, while replacing the gateway and general workflow worker with
 versioned Lambda and Lambda durable functions. The migration plan owns the exact create/cutover/
-rollback/delete sequence and requires removal of obsolete VPC Link, Cloud Map, ECS service/task,
+ordered rollback/delete sequence. Rollback moves routing and disables triggers while retaining the
+Lambda integration, verifies that unreferenced state at zero drift, and only then permits a separate
+one-delete integration cleanup. Retirement requires removal of obsolete VPC Link, Cloud Map, ECS service/task,
 ECR, Temporal-secret, heartbeat, output, script, and runbook paths after acceptance.
 
 [ADR-017](../../docs/adr/017-zero-traffic-precutover-ecs-idle-posture.md) permits the confirmed
