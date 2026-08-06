@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-08-05
+Last updated: 2026-08-06
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -28,7 +28,7 @@ This is the master record for the delivery phases defined in the [product and sy
 - Depends on: Approved product direction
 - Task document: [Phase 0 tasks](phase-0-foundation.md)
 - Exit gate: Schemas, policies, threat/data maps, engineering foundation, and an authenticated end-to-end skeleton are reviewed and evidenced; the skeleton runs on the accepted scale-to-zero application runtime with no obsolete always-on gateway/worker path.
-- Current engineering status: both environments pass zero-drift gateway/workflow dark boundaries, workflow conformance, alert delivery, and coupled accepted-release rollback/restoration while ECS remains idle. Staging additionally passes authenticated preference persistence, non-disclosing two-account operation isolation, and the exact three-record legacy Temporal drain. Controlled staging/development cutovers, rollback expiry, obsolete-runtime retirement, and cost reconciliation remain open.
+- Current engineering status: both environments pass dark boundaries, workflow conformance, alert delivery, and coupled accepted-release rollback/restoration while ECS remains idle. Synthetic staging is now cut over to the scale-to-zero runtime and passes authenticated save, recovered durable work, and post-cutover non-disclosing cross-user isolation. Its full runtime rollback/restoration drill, development cutover, rollback expiry, obsolete-runtime retirement, and cost reconciliation remain open.
 
 ## D1 — Useful web product and canonical job catalog
 
@@ -233,6 +233,7 @@ Append only material cross-delivery events.
 | 2026-08-05 | D0 | Added a source-only checksum-gated staging legacy-drain operator. It binds the exact three-row aggregate to clean merged source, the immutable retained Temporal worker, idle services, unchanged routing, disabled replacement triggers, empty queues, healthy alarms, and zero open workflows; execution is limited to one standalone task with terminal-state double checks and guaranteed stop. No review context, AWS task, or product record changed. | [Legacy-drain operator](evidence/d0-staging-legacy-temporal-drain-operator-2026-08-05.md), [Phase 0 migration](phase-0-serverless-runtime-migration.md) |
 | 2026-08-05 | D0 | Batched the remaining staging cutover safety source: fixed legacy inspector compatibility, added completed-cutover zero-drift verification, checksum-only apply with separately reviewed zero-work rollback/restoration, and deployed web conformance for the real public Lambda route/JWT/trigger boundary. Full repository checks pass; no plan, context, AWS mutation, queue record, workflow, or traffic changed. | [Staging cutover source](evidence/d0-staging-serverless-cutover-source-2026-08-05.md), [Phase 0 migration](phase-0-serverless-runtime-migration.md) |
 | 2026-08-05 | D0 | Executed the exact checksum-authorized staging legacy drain: all three reviewed synthetic records completed, outbox and open Temporal work reached zero, the temporary worker stopped cleanly, and routing/triggers/ECS capacity/event targets stayed unchanged. The first post-drain cutover plan then failed closed on a false unknown DLQ-policy update; a stable exact-rule ARN correction preserves the strict three-create/six-update boundary and now awaits merge and exact-main replan. | [Legacy-drain evidence](evidence/d0-staging-legacy-temporal-drain-operator-2026-08-05.md), [staging cutover source](evidence/d0-staging-serverless-cutover-source-2026-08-05.md), [Phase 0 migration](phase-0-serverless-runtime-migration.md) |
+| 2026-08-06 | D0 | Accepted staging's deployed serverless path after bounded identity, scope, and encrypted-producer corrections: the queued operation recovered, a fresh authenticated save completed durably, queues/DLQs returned to zero, alarms/zero drift passed, and the product owner confirmed post-cutover cross-user isolation. Recovery source now requires a fresh exact-current zero-change baseline before rollback/restoration; that drill remains open. | [Staging cutover acceptance](evidence/d0-staging-serverless-cutover-acceptance-2026-08-06.md), [Phase 0 migration](phase-0-serverless-runtime-migration.md) |
 
 ## Cross-delivery decisions and changes
 

@@ -163,9 +163,19 @@ complete once without duplicate effective work.
 
 ## Rollback boundary
 
-Rollback is another reviewed coupled plan. Before generating it, stop new writes and require every
-outbox record, source queue, both DLQs, durable execution, and Temporal workflow to be terminal. Use
-`PlanRollback` with `-ConfirmZeroTraffic`; review its separate checksum before `ApplyRollback`.
+Rollback is another reviewed coupled plan. Do not use the original cutover plan after any accepted
+gateway, authentication, scope, permission, or workflow maintenance release: its variables describe
+the old runtime and could reconstruct superseded artifacts or policy. From clean, upstream-matched
+current `main`, first run `plan-staging-serverless-runtime-cutover.ps1 -Action Verify` with the exact
+currently deployed artifact inputs. Retain its ignored
+`serverless-runtime-cutover-verify-<commit>.tfplan`; it must be a refresh-backed zero-change plan.
+The rollback operator independently validates that baseline's Lambda API, exact JWT scopes, durable
+dispatch, enabled triggers, idle ECS services, and zero drift, and binds the entire rollback/restore
+context to its path, checksum, commit, account, and state boundary.
+
+Before generating rollback, stop new writes and require every outbox record, source queue, both
+DLQs, durable execution, and Temporal workflow to be terminal. Use `PlanRollback` against that fresh
+runtime baseline with `-ConfirmZeroTraffic`; review its separate checksum before `ApplyRollback`.
 The exact rollback deletes only the Lambda integration and two public health routes and performs
 six bounded updates that disable all replacement triggers, restore Temporal dispatch, and point
 the default route at retained ECS. It never deletes Lambda, queues, database, API, Cloud Map, ECS,

@@ -4,7 +4,7 @@
 - Start: 2026-07-27
 - Completion: Not completed
 - Owners: Product owner; legal/privacy counsel; platform, security, QA, and analytics engineering
-- Last updated: 2026-08-04
+- Last updated: 2026-08-06
 - Master tracker: [Delivery tracker](DELIVERY_TRACKER.md#d0--product-data-and-legal-foundation)
 
 ## Objective
@@ -13,12 +13,13 @@ Establish the reviewed product boundaries, canonical data/contracts, legal and p
 
 ## Deployment posture
 
-The proven deployed baseline in `us-east-2` retains the legacy gateway and Temporal-worker ECS
-services at `0/0/0` in both isolated environments after verified zero-outbox/Temporal preflight.
-Their task definitions, API Gateway/Cloud Map rollback path, and Single-AZ PostgreSQL with
-backups/PITR remain. The highest-priority open engineering task is
-[D0-016](phase-0-serverless-runtime-migration.md): complete API Gateway/Lambda, SQS/outbox dispatch,
-and Lambda durable-function cutover and then retire the obsolete rollback path under
+The proven deployed baseline in `us-east-2` routes synthetic staging through API Gateway/Lambda and
+SQS/Lambda durable functions; authenticated save, recovery, and post-cutover cross-user isolation
+pass. Development remains on the accepted dark Lambda boundary. Both environments retain legacy
+gateway and Temporal-worker ECS services at `0/0/0`; their task definitions, Cloud Map rollback
+path, and Single-AZ PostgreSQL with backups/PITR remain. The highest-priority open engineering task
+is [D0-016](phase-0-serverless-runtime-migration.md): complete staging rollback/restoration,
+development cutover, and retirement of the obsolete rollback path under
 [ADR-016](../../adr/016-scale-to-zero-application-runtime.md). Keep Fargate only for explicitly
 on-demand migrations and later browser/ATS workloads.
 
@@ -28,7 +29,7 @@ Add tasks as work is discovered. Do not mark a task complete without linked evid
 
 | ID | Task | State | Owner | Dependencies | Evidence or notes |
 |---|---|---|---|---|---|
-| D0-016 | Replace the continuously running Fargate gateway and Temporal worker with the scale-to-zero application runtime, prove equivalent behavior, and retire every obsolete runtime resource and repository path. | In progress | Platform engineering | D0-004–D0-006, D0-008, D0-010–D0-011 | **Highest-priority open engineering task.** Both environments retain ECS idle at `0/0/0` and pass zero-drift gateway/workflow dark boundaries, workflow conformance, alert delivery, and coupled accepted-release rollback/restoration. Staging additionally passes authenticated dark-gateway persistence and two-account isolation. Both controlled cutovers, exact drain of three synthetic staging outbox records, rollback expiry, obsolete-runtime retirement, and cost reconciliation remain open. [Living migration plan](phase-0-serverless-runtime-migration.md), [staging authenticated acceptance](evidence/d0-staging-dark-lambda-authenticated-acceptance-2026-08-05.md), [ADR-016](../../adr/016-scale-to-zero-application-runtime.md), [ADR-017](../../adr/017-zero-traffic-precutover-ecs-idle-posture.md) |
+| D0-016 | Replace the continuously running Fargate gateway and Temporal worker with the scale-to-zero application runtime, prove equivalent behavior, and retire every obsolete runtime resource and repository path. | In progress | Platform engineering | D0-004–D0-006, D0-008, D0-010–D0-011 | **Highest-priority open engineering task.** Both environments retain ECS idle at `0/0/0` and pass dark boundaries, conformance, alert delivery, and accepted-release rollback/restoration. Staging is cut over and passes authenticated save, recovered durable work, and post-cutover two-account isolation. Its full runtime rollback/restoration drill, development cutover, rollback expiry, obsolete-runtime retirement, and cost reconciliation remain open. [Living migration plan](phase-0-serverless-runtime-migration.md), [staging cutover acceptance](evidence/d0-staging-serverless-cutover-acceptance-2026-08-06.md), [ADR-016](../../adr/016-scale-to-zero-application-runtime.md), [ADR-017](../../adr/017-zero-traffic-precutover-ecs-idle-posture.md) |
 | D0-001 | Choose launch geography, initial candidate segment, and provisional presentation identity. | Complete | Product owner | Product decision | Nationwide US/18+ tech-professional focus and swappable ApplyDash presentation identity are approved for development; [final public naming is a D6 release gate](../foundation/naming-brief.md). |
 | D0-002 | Conduct research sessions with representative job seekers and map at least 20 recent real application journeys. | Removed | Product owner | Product decision | Removed from D0 on 2026-07-29: a mandatory pre-product participant quota is not required to prove the foundation. The [consent-safe protocol](../foundation/research-plan.md) remains optional for later product validation and is not a delivery gate. |
 | D0-003 | Prepare the foundational legal/privacy review brief and assign source, UGC, automation, outreach, and store questions to enforceable release gates. | Complete | Product; security/privacy engineering | Architecture | [Review brief](../foundation/foundational-legal-privacy-brief.md) and [review register](../foundation/legal-review-register.md) separate the Phase 0 foundation from capability-specific approvals without making legal conclusions. |
@@ -205,6 +206,7 @@ Append meaningful activity; do not replace prior entries.
 | 2026-08-05 | Completed staging dark-gateway authenticated acceptance from exact merged source. The deployed 15-case no-write matrix and bridge smoke passed, then the product owner proved authenticated preference persistence and non-disclosing cross-user operation isolation. Routing stayed on retained idle ECS and triggers stayed disabled. Three synthetic outbox records remain queued with zero attempts for exact drain and terminal-state proof during controlled cutover. | D0-016 | [Staging authenticated acceptance](evidence/d0-staging-dark-lambda-authenticated-acceptance-2026-08-05.md) |
 | 2026-08-05 | Implemented a source-only atomic staging cutover boundary: direct Lambda routing, default-route JWT authorization, durable dispatch, and all replacement triggers share one default-off control. The staging-fixed strict planner requires zero legacy outbox and Temporal work and permits only three creates and six bounded updates while retaining idle ECS rollback resources. Local checks pass; no cloud plan or mutation occurred, and the three legacy synthetic records remain for controlled drain. | D0-016 | [Staging cutover source](evidence/d0-staging-serverless-cutover-source-2026-08-05.md), [cutover runbook](../../../infrastructure/runbooks/deployments/staging-serverless-runtime-cutover.md) |
 | 2026-08-05 | Implemented the source-only staging legacy Temporal drain operator. Its ignored review context binds the three untouched synthetic rows by aggregate digest to the immutable worker and unchanged idle/runtime boundary. Exact-checksum execution is limited to one standalone worker, terminal-state double checks, guaranteed task stop, clean aggregate logs, and no service/route/trigger/target change; interrupted cleanup is exact-task scoped and forces replanning. No context, AWS task, or product record changed. | D0-016 | [Legacy-drain operator](evidence/d0-staging-legacy-temporal-drain-operator-2026-08-05.md), [drain runbook](../../../infrastructure/runbooks/deployments/staging-legacy-temporal-drain.md) |
+| 2026-08-06 | Accepted staging's live scale-to-zero path after the exact cutover and bounded maintenance: the retained queued operation recovered, a fresh authenticated save completed through the durable workflow, queues/DLQs returned to zero, alarms/zero drift passed, and the product owner confirmed post-cutover cross-user isolation. A source-only recovery correction now requires a fresh exact-current zero-change baseline before rollback/restoration; the drill itself remains open. | D0-016 | [Staging cutover acceptance](evidence/d0-staging-serverless-cutover-acceptance-2026-08-06.md) |
 
 ## Decisions and scope changes
 
