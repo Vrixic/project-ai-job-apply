@@ -1452,6 +1452,19 @@ data "aws_iam_policy_document" "gateway_lambda" {
       resources = [aws_sqs_queue.events.arn]
     }
   }
+
+  dynamic "statement" {
+    for_each = var.deploy_serverless_outbox ? [1] : []
+    content {
+      sid    = "EncryptIdentifierOnlyOutboxNudges"
+      effect = "Allow"
+      actions = [
+        "kms:Decrypt",
+        "kms:GenerateDataKey"
+      ]
+      resources = [aws_kms_key.platform.arn]
+    }
+  }
 }
 
 resource "aws_iam_role_policy" "gateway_lambda" {
@@ -1798,6 +1811,16 @@ data "aws_iam_policy_document" "outbox_reconciler" {
     effect    = "Allow"
     actions   = ["sqs:SendMessage"]
     resources = [aws_sqs_queue.events.arn]
+  }
+
+  statement {
+    sid    = "EncryptIdentifierOnlyOutboxNudges"
+    effect = "Allow"
+    actions = [
+      "kms:Decrypt",
+      "kms:GenerateDataKey"
+    ]
+    resources = [aws_kms_key.platform.arn]
   }
 }
 

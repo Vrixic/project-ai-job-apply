@@ -38,9 +38,11 @@ param(
   [switch]$AllowArtifactReleaseUpdate,
   [switch]$AllowGatewayArtifactReleaseUpdate,
   [switch]$AllowGatewayScopeBoundaryUpdate,
+  [switch]$AllowOutboxProducerKmsUpdate,
   [switch]$VerifyCompletedDarkDeployment,
   [switch]$PlanRuntimeCutover,
   [switch]$VerifyCompletedRuntimeCutover,
+  [switch]$VerifyCompletedOutboxProducerKmsUpdate,
   [switch]$Help
 )
 
@@ -64,12 +66,18 @@ dispatch, enabled workflow triggers, idle ECS rollback resources, and every API 
 Use -AllowGatewayScopeBoundaryUpdate after runtime cutover to permit only the exact default-route
 authorization-scope correction. It requires profile:read and profile:write at API Gateway while
 preserving the authorizer, integration, Lambda release, workflows, data, and idle ECS boundary.
+Use -AllowOutboxProducerKmsUpdate after runtime cutover to permit only the exact gateway and
+reconciler role-policy corrections required to write to the platform-CMK-encrypted SQS queue. It
+does not change traffic, triggers, functions, queues, keys, data, or ECS capacity.
 Use -PlanRuntimeCutover only after the accepted dark boundary and legacy outbox are clean. It
 permits the coupled API Lambda integration/routes, gateway Lambda durable-dispatch version, and
 three replacement-trigger transitions while retaining idle ECS and the legacy rollback resources.
 Use -VerifyCompletedRuntimeCutover after applying that exact plan to require a refresh-backed
 zero-change plan while rechecking the live Lambda API, durable dispatch, enabled triggers, empty
 work queues, empty legacy outbox, zero open Temporal workflows, and idle ECS rollback boundary.
+Use -VerifyCompletedOutboxProducerKmsUpdate after applying the exact producer-policy plan to require
+a refresh-backed zero-change plan and the complete live runtime boundary without requiring an
+already queued retry to finish inside the Terraform apply window.
 
 The sensitive plan remains below the ignored Terraform .terraform directory. This script rejects
 every action outside its exact initial or partial-recovery boundary and never applies
@@ -100,19 +108,24 @@ if ($Region -ne "us-east-2") {
 }
 if (@($RecoverFailedApply, $AllowArtifactReleaseUpdate, $AllowGatewayArtifactReleaseUpdate,
     $AllowGatewayScopeBoundaryUpdate,
+    $AllowOutboxProducerKmsUpdate,
     $VerifyCompletedDarkDeployment,
-    $PlanRuntimeCutover, $VerifyCompletedRuntimeCutover |
+    $PlanRuntimeCutover, $VerifyCompletedRuntimeCutover,
+    $VerifyCompletedOutboxProducerKmsUpdate |
     Where-Object { $_ }).Count -gt 1) {
   throw "Recovery, workflow/gateway release, completed-dark verification, cutover planning, and completed-cutover verification are mutually exclusive."
 }
 $runtimeCutoverActive = [bool](
   $AllowGatewayArtifactReleaseUpdate -or
   $AllowGatewayScopeBoundaryUpdate -or
+  $AllowOutboxProducerKmsUpdate -or
+  $VerifyCompletedOutboxProducerKmsUpdate -or
   $PlanRuntimeCutover -or
   $VerifyCompletedRuntimeCutover
 )
 $liveRuntimeCutoverExpected = [bool](
   $AllowGatewayArtifactReleaseUpdate -or $AllowGatewayScopeBoundaryUpdate -or
+  $AllowOutboxProducerKmsUpdate -or $VerifyCompletedOutboxProducerKmsUpdate -or
   $VerifyCompletedRuntimeCutover
 )
 
@@ -147,6 +160,10 @@ $planPrefix = if ($PlanRuntimeCutover) {
   "gateway-runtime-release"
 } elseif ($AllowGatewayScopeBoundaryUpdate) {
   "gateway-scope-boundary"
+} elseif ($AllowOutboxProducerKmsUpdate) {
+  "outbox-producer-kms"
+} elseif ($VerifyCompletedOutboxProducerKmsUpdate) {
+  "outbox-producer-kms-verify"
 } elseif ($VerifyCompletedRuntimeCutover) {
   "serverless-runtime-cutover-verify"
 } elseif ($VerifyCompletedDarkDeployment) {
@@ -269,6 +286,8 @@ if (
   -not $AllowArtifactReleaseUpdate -and
   -not $AllowGatewayArtifactReleaseUpdate -and
   -not $AllowGatewayScopeBoundaryUpdate -and
+  -not $AllowOutboxProducerKmsUpdate -and
+  -not $VerifyCompletedOutboxProducerKmsUpdate -and
   -not $VerifyCompletedDarkDeployment -and
   -not $PlanRuntimeCutover -and
   -not $VerifyCompletedRuntimeCutover
@@ -426,6 +445,8 @@ try {
     $RecoverFailedApply -or $AllowArtifactReleaseUpdate -or
     $AllowGatewayArtifactReleaseUpdate -or
     $AllowGatewayScopeBoundaryUpdate -or
+    $AllowOutboxProducerKmsUpdate -or
+    $VerifyCompletedOutboxProducerKmsUpdate -or
     $VerifyCompletedDarkDeployment -or $PlanRuntimeCutover -or
     $VerifyCompletedRuntimeCutover
   ) {
@@ -636,7 +657,13 @@ try {
 
     $queueNames = @("$resourcePrefix-profile-readiness-dead-letter")
     if ($runtimeCutoverActive) {
-      $queueNames += @("$resourcePrefix-events", "$resourcePrefix-dead-letter")
+      $queueNames += @("$resourcePrefix-dead-letter")
+      if (
+        -not $AllowOutboxProducerKmsUpdate -and
+        -not $VerifyCompletedOutboxProducerKmsUpdate
+      ) {
+        $queueNames += @("$resourcePrefix-events")
+      }
     }
     foreach ($queueName in $queueNames) {
       $queue = Invoke-AwsJson @(
@@ -806,7 +833,11 @@ try {
   $gatewayEnvironment = Get-ContainerEnvironment $gatewayContainer
   $workerEnvironment = Get-ContainerEnvironment $workerContainer
 
-  if ($runtimeCutoverActive) {
+  if (
+    $runtimeCutoverActive -and
+    -not $AllowOutboxProducerKmsUpdate -and
+    -not $VerifyCompletedOutboxProducerKmsUpdate
+  ) {
     $inspectionRaw = & (Join-Path $PSScriptRoot "inspect-deployed-outbox.ps1") `
       -Environment $Environment -AwsProfile $AwsProfile -Region $Region -Execute
     if ($LASTEXITCODE -ne 0) {
@@ -915,7 +946,8 @@ try {
   $planOutput = & terraform "-chdir=$environmentDirectory" plan -input=false `
     -lock-timeout=5m -detailed-exitcode "-out=$planPath" 2>&1
   $zeroDriftVerification = [bool](
-    $VerifyCompletedDarkDeployment -or $VerifyCompletedRuntimeCutover
+    $VerifyCompletedDarkDeployment -or $VerifyCompletedRuntimeCutover -or
+    $VerifyCompletedOutboxProducerKmsUpdate
   )
   $expectedPlanExitCode = if ($zeroDriftVerification) { 0 } else { 2 }
   if ($LASTEXITCODE -ne $expectedPlanExitCode) {
@@ -1023,6 +1055,10 @@ try {
     "module.platform.aws_lambda_alias.gateway[0]",
     "module.platform.aws_lambda_function.gateway[0]"
   )
+  $outboxProducerKmsExpectedUpdates = @(
+    "module.platform.aws_iam_role_policy.gateway_lambda[0]",
+    "module.platform.aws_iam_role_policy.outbox_reconciler[0]"
+  )
   $cutoverExpectedCreates = @(
     "module.platform.aws_apigatewayv2_integration.gateway_lambda[0]",
     'module.platform.aws_apigatewayv2_route.gateway_lambda_public["GET /health/live"]',
@@ -1045,6 +1081,8 @@ try {
       $AllowArtifactReleaseUpdate -or $VerifyCompletedDarkDeployment -or
       $AllowGatewayArtifactReleaseUpdate -or
       $AllowGatewayScopeBoundaryUpdate -or
+      $AllowOutboxProducerKmsUpdate -or
+      $VerifyCompletedOutboxProducerKmsUpdate -or
       $VerifyCompletedRuntimeCutover
     )) {
       $initialExpectedCreates
@@ -1057,10 +1095,13 @@ try {
       $gatewayReleaseExpectedUpdates
     } elseif ($AllowGatewayScopeBoundaryUpdate) {
       @("module.platform.aws_apigatewayv2_route.gateway[0]")
+    } elseif ($AllowOutboxProducerKmsUpdate) {
+      $outboxProducerKmsExpectedUpdates
     } elseif ($AllowArtifactReleaseUpdate) {
       $releaseExpectedUpdates
     } elseif (-not (
       $VerifyCompletedDarkDeployment -or $VerifyCompletedRuntimeCutover -or
+      $VerifyCompletedOutboxProducerKmsUpdate -or
       $RecoverFailedApply
     )) {
       $initialExpectedUpdates
@@ -1160,6 +1201,8 @@ try {
     -not $AllowArtifactReleaseUpdate -and
     -not $AllowGatewayArtifactReleaseUpdate -and
     -not $AllowGatewayScopeBoundaryUpdate -and
+    -not $AllowOutboxProducerKmsUpdate -and
+    -not $VerifyCompletedOutboxProducerKmsUpdate -and
     -not $VerifyCompletedDarkDeployment -and
     -not $PlanRuntimeCutover -and
     -not $VerifyCompletedRuntimeCutover
@@ -1358,6 +1401,56 @@ try {
       [string]$lambdaIntegration.payload_format_version -ne "2.0"
     ) {
       throw "The default route is outside the exact reviewed JWT scope correction."
+    }
+  }
+
+  if ($AllowOutboxProducerKmsUpdate) {
+    $platformKey = Get-PlannedValue "module.platform.aws_kms_key.platform"
+    $eventsQueue = Get-PlannedValue "module.platform.aws_sqs_queue.events"
+
+    function Assert-OutboxProducerPolicyChange {
+      param([Parameter(Mandatory = $true)][string]$Address)
+
+      $policyChange = Get-PlannedChange $Address
+      Assert-OnlyPropertiesChanged $policyChange @("policy") `
+        "An outbox producer correction changes more than its inline policy."
+      $beforePolicy = [string]$policyChange.change.before.policy | ConvertFrom-Json
+      $afterPolicy = [string]$policyChange.change.after.policy | ConvertFrom-Json
+      if (@($beforePolicy.Statement | Where-Object {
+          [string]$_.Sid -eq "EncryptIdentifierOnlyOutboxNudges"
+        }).Count -ne 0) {
+        throw "An outbox producer already had the exact encryption statement before correction."
+      }
+      $encryptionStatement = @($afterPolicy.Statement | Where-Object {
+          [string]$_.Sid -eq "EncryptIdentifierOnlyOutboxNudges"
+        })
+      $sendStatement = @($afterPolicy.Statement | Where-Object {
+          [string]$_.Sid -eq "SendIdentifierOnlyOutboxNudges"
+        })
+      $kmsActionDifference = @(
+        Compare-Object `
+          -ReferenceObject @($encryptionStatement[0].Action | Sort-Object) `
+          -DifferenceObject @("kms:Decrypt", "kms:GenerateDataKey")
+      )
+      if (
+        $encryptionStatement.Count -ne 1 -or $sendStatement.Count -ne 1 -or
+        [string]$encryptionStatement[0].Effect -ne "Allow" -or
+        @($encryptionStatement[0].Action).Count -ne 2 -or
+        $kmsActionDifference.Count -ne 0 -or
+        @($encryptionStatement[0].Resource).Count -ne 1 -or
+        [string]$encryptionStatement[0].Resource -ne [string]$platformKey.arn -or
+        [string]$sendStatement[0].Effect -ne "Allow" -or
+        @($sendStatement[0].Action).Count -ne 1 -or
+        [string]$sendStatement[0].Action -ne "sqs:SendMessage" -or
+        @($sendStatement[0].Resource).Count -ne 1 -or
+        [string]$sendStatement[0].Resource -ne [string]$eventsQueue.arn
+      ) {
+        throw "An outbox producer correction is outside the exact encrypted-queue write boundary."
+      }
+    }
+
+    foreach ($address in $outboxProducerKmsExpectedUpdates) {
+      Assert-OutboxProducerPolicyChange $address
     }
   }
 
@@ -1624,6 +1717,8 @@ try {
     $AllowArtifactReleaseUpdate -or
     $AllowGatewayArtifactReleaseUpdate -or
     $AllowGatewayScopeBoundaryUpdate -or
+    $AllowOutboxProducerKmsUpdate -or
+    $VerifyCompletedOutboxProducerKmsUpdate -or
     $VerifyCompletedDarkDeployment -or
     $PlanRuntimeCutover -or
     $VerifyCompletedRuntimeCutover
@@ -1705,15 +1800,29 @@ try {
     ArtifactReleaseUpdate      = [bool]$AllowArtifactReleaseUpdate
     GatewayArtifactReleaseUpdate = [bool]$AllowGatewayArtifactReleaseUpdate
     GatewayScopeBoundaryUpdate   = [bool]$AllowGatewayScopeBoundaryUpdate
+    OutboxProducerKmsUpdate      = [bool]$AllowOutboxProducerKmsUpdate
     CompletedDarkVerification  = [bool]$VerifyCompletedDarkDeployment
     RuntimeCutover             = [bool]$PlanRuntimeCutover
     CompletedRuntimeCutoverVerification = [bool]$VerifyCompletedRuntimeCutover
+    CompletedOutboxProducerKmsVerification = [bool]$VerifyCompletedOutboxProducerKmsUpdate
     NoDrift                    = $zeroDriftVerification
     GatewayEcsApiBaselineStable = $true
     EcsRuntimeIdle             = [bool]$ecsRuntimeIdle
-    LegacyOutboxEmpty          = if ($runtimeCutoverActive) { $true } else { $null }
-    TemporalOpenWorkflowsEmpty = if ($runtimeCutoverActive) { $true } else { $null }
-    DurableOpenExecutionsEmpty = if ($runtimeCutoverActive) { $true } else { $null }
+    LegacyOutboxEmpty          = if (
+      $runtimeCutoverActive -and
+      -not $AllowOutboxProducerKmsUpdate -and
+      -not $VerifyCompletedOutboxProducerKmsUpdate
+    ) { $true } else { $null }
+    TemporalOpenWorkflowsEmpty = if (
+      $runtimeCutoverActive -and
+      -not $AllowOutboxProducerKmsUpdate -and
+      -not $VerifyCompletedOutboxProducerKmsUpdate
+    ) { $true } else { $null }
+    DurableOpenExecutionsEmpty = if (
+      $runtimeCutoverActive -and
+      -not $AllowOutboxProducerKmsUpdate -and
+      -not $VerifyCompletedOutboxProducerKmsUpdate
+    ) { $true } else { $null }
     EndpointSidCorrection      = $acceptedEndpointSidCorrection
     EffectiveDurableDlqPermission = if ($RecoverFailedApply) { $true } else { $null }
     ArtifactsVerified          = 4

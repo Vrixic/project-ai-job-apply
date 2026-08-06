@@ -61,6 +61,11 @@ replacement alarms. The durable orchestrator is intentionally outside the VPC an
 the exact numeric activity version. Database handlers remain private and obtain the database value
 through the pinned regional Secrets extension.
 
+The gateway and reconciler are the only producers for the platform-CMK-encrypted outbox queue.
+Each receives `sqs:SendMessage` on that queue and the producer-required `kms:Decrypt` plus
+`kms:GenerateDataKey` permissions on the exact platform key. The starter remains a consumer and
+receives no data-key generation permission.
+
 Terraform owns a single nested CloudFormation stack for the durable function, version, and alias
 because the pinned AWS provider does not yet expose `DurableConfig.KMSKeyArn`. That narrow boundary
 keeps checkpoint encryption declarative and drift-visible; superseded durable versions use retain

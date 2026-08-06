@@ -38,10 +38,11 @@ Usage:
     -ExpectedPlanSha256 REVIEWED_SHA256 -Execute
 
 Status performs no AWS mutation. Apply accepts only an exact checksum-reviewed staging plan
-created from the current clean, upstream-matched main commit. It permits either the two-update
-immutable Lambda release or the one-update default-route scope correction. Both modes preserve
-the JWT authorizer, Lambda integration, durable workflow triggers, retained idle ECS, data, and
-every unrelated resource. Apply immediately runs the completed-runtime zero-drift verifier.
+created from the current clean, upstream-matched main commit. It permits the two-update immutable
+Lambda release, the one-update default-route scope correction, or the two-policy encrypted-outbox
+producer correction. Every mode preserves the JWT authorizer, Lambda integration, durable workflow
+triggers, retained idle ECS, data, and every unrelated resource. Apply immediately runs the
+matching completed-runtime zero-drift verifier.
 "@
   exit 0
 }
@@ -82,14 +83,14 @@ function Assert-ExactMain {
   $upstream = (& git -C $repositoryRoot rev-parse "@{upstream}" 2>$null).Trim()
   $dirty = @(& git -C $repositoryRoot status --porcelain=v1 --untracked-files=all)
   if ($branch -ne "main" -or $head -ne $upstream -or $dirty.Count -ne 0) {
-    throw "Use an exact clean upstream-matched main checkout for a staging gateway release."
+    throw "Use an exact clean upstream-matched main checkout for staging runtime maintenance."
   }
   return $head
 }
 
 function Resolve-PlanPath {
   if ([string]::IsNullOrWhiteSpace($PlanPath)) {
-    throw "The saved staging gateway release -PlanPath is required."
+    throw "The saved staging runtime-maintenance -PlanPath is required."
   }
   $candidate = if ([IO.Path]::IsPathRooted($PlanPath)) {
     [IO.Path]::GetFullPath($PlanPath)
@@ -114,7 +115,7 @@ function Get-PlanJson {
     $env:TF_DATA_DIR = $terraformDataDirectory
     $raw = & terraform "-chdir=$environmentDirectory" show -json $Path 2>$null
     if ($LASTEXITCODE -ne 0 -or -not $raw) {
-      throw "The saved staging gateway release plan could not be inspected."
+      throw "The saved staging runtime-maintenance plan could not be inspected."
     }
     return ($raw -join [Environment]::NewLine) | ConvertFrom-Json
   } finally {
@@ -360,6 +361,91 @@ function Assert-GatewayScopeBoundaryPlan {
   }
 }
 
+function Assert-OutboxProducerKmsPlan {
+  param([Parameter(Mandatory = $true)][object]$Plan)
+  $expected = @(
+    "module.platform.aws_iam_role_policy.gateway_lambda[0]",
+    "module.platform.aws_iam_role_policy.outbox_reconciler[0]"
+  )
+  $changes = @($Plan.resource_changes | Where-Object {
+    (@($_.change.actions) -join ",") -notin @("no-op", "read")
+  })
+  $updates = @($changes | Where-Object { (@($_.change.actions) -join ",") -eq "update" })
+  $updateAddresses = @($updates | ForEach-Object { [string]$_.address } | Sort-Object)
+  $addressDifference = @(
+    Compare-Object -ReferenceObject $updateAddresses -DifferenceObject @($expected | Sort-Object)
+  )
+  if ($changes.Count -ne 2 -or $updates.Count -ne 2 -or $addressDifference.Count -ne 0) {
+    throw "The plan is outside the exact two-policy staging encrypted-outbox producer boundary."
+  }
+
+  foreach ($name in @(
+    "deploy_applications", "deploy_gateway_lambda", "deploy_serverless_outbox",
+    "deploy_profile_readiness_durable", "serverless_runtime_cutover"
+  )) {
+    if (-not (Get-PlanBoolean -Plan $Plan -Name $name)) {
+      throw "The producer correction does not preserve the complete serverless runtime."
+    }
+  }
+  if (Get-PlanBoolean -Plan $Plan -Name "run_continuous_ecs_runtime") {
+    throw "The producer correction attempts to resume continuous ECS capacity."
+  }
+
+  $platformKeyArn = [string](Get-PlannedValue $Plan "module.platform.aws_kms_key.platform").arn
+  $eventsQueueArn = [string](Get-PlannedValue $Plan "module.platform.aws_sqs_queue.events").arn
+  foreach ($change in $updates) {
+    Assert-OnlyPropertiesChanged $change @("policy") `
+      "An outbox producer correction changes more than its inline policy."
+    $beforePolicy = [string]$change.change.before.policy | ConvertFrom-Json
+    $afterPolicy = [string]$change.change.after.policy | ConvertFrom-Json
+    if (@($beforePolicy.Statement | Where-Object {
+        [string]$_.Sid -eq "EncryptIdentifierOnlyOutboxNudges"
+      }).Count -ne 0) {
+      throw "An outbox producer already had the exact encryption statement before correction."
+    }
+    $encrypt = @($afterPolicy.Statement | Where-Object {
+        [string]$_.Sid -eq "EncryptIdentifierOnlyOutboxNudges"
+      })
+    $send = @($afterPolicy.Statement | Where-Object {
+        [string]$_.Sid -eq "SendIdentifierOnlyOutboxNudges"
+      })
+    $actionDifference = @(
+      Compare-Object `
+        -ReferenceObject @($encrypt[0].Action | Sort-Object) `
+        -DifferenceObject @("kms:Decrypt", "kms:GenerateDataKey")
+    )
+    if (
+      $encrypt.Count -ne 1 -or $send.Count -ne 1 -or
+      [string]$encrypt[0].Effect -ne "Allow" -or
+      @($encrypt[0].Action).Count -ne 2 -or $actionDifference.Count -ne 0 -or
+      @($encrypt[0].Resource).Count -ne 1 -or
+      [string]$encrypt[0].Resource -ne $platformKeyArn -or
+      [string]$send[0].Effect -ne "Allow" -or
+      @($send[0].Action).Count -ne 1 -or [string]$send[0].Action -ne "sqs:SendMessage" -or
+      @($send[0].Resource).Count -ne 1 -or [string]$send[0].Resource -ne $eventsQueueArn
+    ) {
+      throw "An outbox producer correction is outside the exact encrypted-queue write boundary."
+    }
+  }
+
+  if (
+    -not [bool](Get-PlannedValue $Plan `
+      "module.platform.aws_lambda_event_source_mapping.outbox_starter[0]").enabled -or
+    [string](Get-PlannedValue $Plan `
+      "module.platform.aws_cloudwatch_event_rule.outbox_reconciler[0]").state -ne "ENABLED" -or
+    [string](Get-PlannedValue $Plan `
+      "module.platform.aws_cloudwatch_event_rule.profile_readiness_terminal[0]").state -ne "ENABLED"
+  ) { throw "The producer correction does not preserve every live workflow trigger." }
+  foreach ($address in @(
+    "module.platform.aws_ecs_service.gateway[0]",
+    "module.platform.aws_ecs_service.worker[0]"
+  )) {
+    if ([int](Get-PlannedValue $Plan $address).desired_count -ne 0) {
+      throw "The producer correction does not preserve idle retained ECS."
+    }
+  }
+}
+
 function Get-GatewayPlanKind {
   param([Parameter(Mandatory = $true)][object]$Plan)
   $addresses = @(
@@ -383,6 +469,16 @@ function Get-GatewayPlanKind {
     $addresses[0] -eq "module.platform.aws_apigatewayv2_route.gateway[0]"
   ) {
     return "scope_boundary"
+  }
+  $producerAddresses = @(
+    "module.platform.aws_iam_role_policy.gateway_lambda[0]",
+    "module.platform.aws_iam_role_policy.outbox_reconciler[0]"
+  ) | Sort-Object
+  $producerDifference = @(
+    Compare-Object -ReferenceObject $addresses -DifferenceObject $producerAddresses
+  )
+  if ($addresses.Count -eq 2 -and $producerDifference.Count -eq 0) {
+    return "outbox_producer_kms"
   }
   throw "The plan is outside every reviewed staging gateway change boundary."
 }
@@ -480,7 +576,7 @@ function Invoke-SavedPlan {
     $env:AWS_REGION = $Region; $env:AWS_DEFAULT_REGION = $Region
     Initialize-Backend
     & terraform "-chdir=$environmentDirectory" apply -input=false $Path
-    if ($LASTEXITCODE -ne 0) { throw "The exact reviewed staging gateway release failed to apply." }
+    if ($LASTEXITCODE -ne 0) { throw "The exact reviewed staging runtime-maintenance plan failed to apply." }
   } finally {
     foreach ($name in $previous.Keys) {
       if ($null -eq $previous[$name]) { Remove-Item "Env:$name" -ErrorAction SilentlyContinue }
@@ -494,7 +590,8 @@ $resolvedPlanPath = Resolve-PlanPath
 $plan = Get-PlanJson $resolvedPlanPath
 $planKind = Get-GatewayPlanKind $plan
 if ($planKind -eq "artifact_release") { Assert-GatewayReleasePlan $plan }
-else { Assert-GatewayScopeBoundaryPlan $plan }
+elseif ($planKind -eq "scope_boundary") { Assert-GatewayScopeBoundaryPlan $plan }
+else { Assert-OutboxProducerKmsPlan $plan }
 $actualPlanSha256 = (Get-FileHash -LiteralPath $resolvedPlanPath -Algorithm SHA256).Hash.ToLowerInvariant()
 
 if ($Action -eq "Status") {
@@ -502,11 +599,14 @@ if ($Action -eq "Status") {
     Environment = "staging"
     Action = if ($planKind -eq "artifact_release") {
       "gateway_release_review"
-    } else { "gateway_scope_boundary_review" }
+    } elseif ($planKind -eq "scope_boundary") {
+      "gateway_scope_boundary_review"
+    } else { "outbox_producer_kms_review" }
     PlanSha256 = $actualPlanSha256
-    Creates = 0; Updates = if ($planKind -eq "artifact_release") { 2 } else { 1 }
+    Creates = 0; Updates = if ($planKind -eq "scope_boundary") { 1 } else { 2 }
     Deletes = 0; Replacements = 0
-    ApiTrafficChange = $true; WorkflowTriggerChange = $false; EcsCapacityChange = $false
+    ApiTrafficChange = $planKind -ne "outbox_producer_kms"
+    WorkflowTriggerChange = $false; EcsCapacityChange = $false
     AwsMutation = $false
   } | ConvertTo-Json
   exit 0
@@ -515,38 +615,48 @@ if ($Action -eq "Status") {
 $sourceCommit = Assert-ExactMain
 $expectedPlanPrefix = if ($planKind -eq "artifact_release") {
   "gateway-runtime-release"
-} else { "gateway-scope-boundary" }
+} elseif ($planKind -eq "scope_boundary") {
+  "gateway-scope-boundary"
+} else { "outbox-producer-kms" }
 if (-not (Split-Path $resolvedPlanPath -Leaf).StartsWith(
   "$expectedPlanPrefix-$($sourceCommit.Substring(0, 8))",
   [StringComparison]::Ordinal
-)) { throw "The reviewed gateway release plan was not created from current exact main." }
+)) { throw "The reviewed runtime-maintenance plan was not created from current exact main." }
 Assert-Caller
 if (
   $ExpectedPlanSha256 -notmatch "^[a-fA-F0-9]{64}$" -or
   $actualPlanSha256 -ne $ExpectedPlanSha256.ToLowerInvariant()
-) { throw "The saved gateway release plan does not match the exact reviewed checksum." }
+) { throw "The saved runtime-maintenance plan does not match the exact reviewed checksum." }
 
 Invoke-SavedPlan $resolvedPlanPath
 $verificationArguments = Get-VerificationArguments $plan
+$verificationArguments.Action = if ($planKind -eq "outbox_producer_kms") {
+  "VerifyOutboxProducerKms"
+} else { "Verify" }
 $verificationRaw = & $verifier @verificationArguments
 if ($LASTEXITCODE -ne 0 -or -not $verificationRaw) {
-  throw "The completed staging runtime verification failed after the gateway release."
+  throw "The completed staging runtime verification failed after the reviewed maintenance apply."
 }
 $verification = ($verificationRaw -join [Environment]::NewLine) | ConvertFrom-Json
+$completedVerification = if ($planKind -eq "outbox_producer_kms") {
+  [bool]$verification.CompletedOutboxProducerKmsVerification
+} else { [bool]$verification.CompletedRuntimeCutoverVerification }
 if (
-  -not [bool]$verification.CompletedRuntimeCutoverVerification -or
+  -not $completedVerification -or
   -not [bool]$verification.NoDrift -or -not [bool]$verification.EcsRuntimeIdle -or
   [string]$verification.DispatchTarget -ne "lambda_durable" -or
   -not [bool]$verification.TriggersEnabled -or [int]$verification.Creates -ne 0 -or
   [int]$verification.Updates -ne 0 -or [int]$verification.Deletes -ne 0 -or
   [int]$verification.Replacements -ne 0
-) { throw "The gateway release did not return to the accepted zero-drift runtime boundary." }
+) { throw "The runtime maintenance did not return to the accepted zero-drift boundary." }
 
 [ordered]@{
   Environment = "staging"
   Action = if ($planKind -eq "artifact_release") {
     "gateway_release"
-  } else { "gateway_scope_boundary" }
+  } elseif ($planKind -eq "scope_boundary") {
+    "gateway_scope_boundary"
+  } else { "outbox_producer_kms" }
   AppliedPlanSha256 = $actualPlanSha256
   NoDrift = $true; DispatchTarget = "lambda_durable"; TriggersEnabled = $true
   EcsRuntimeIdle = $true; PublicConformanceRequired = $true
