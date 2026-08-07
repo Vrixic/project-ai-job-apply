@@ -69,9 +69,11 @@ $arguments = @{
 }
 
 if ($Action -eq "Plan") { $arguments["PlanRuntimeCutover"] = $true }
-elseif ($Action -eq "PlanOutboxProducerKms") { $arguments["AllowOutboxProducerKmsUpdate"] = $true }
+elseif ($Action -eq "PlanOutboxProducerKms") {
+  $arguments["AllowDarkOutboxProducerKmsUpdate"] = $true
+}
 elseif ($Action -eq "VerifyOutboxProducerKms") {
-  $arguments["VerifyCompletedOutboxProducerKmsUpdate"] = $true
+  $arguments["VerifyCompletedDarkOutboxProducerKmsUpdate"] = $true
 } else { $arguments["VerifyCompletedRuntimeCutover"] = $true }
 
 & $planner @arguments

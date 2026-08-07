@@ -18,8 +18,9 @@ checksum.
 - Prove the gateway and reconciler producer roles can call `kms:GenerateDataKey` on the exact
   platform key before cutover. If the guarded cutover plan exposes only those two missing policy
   updates, stop and apply them as a separate checksum-reviewed prerequisite using
-  `PlanOutboxProducerKms` and the development runtime-maintenance operator; never fold them into
-  the traffic cutover.
+  `PlanOutboxProducerKms` and the development runtime-maintenance operator. This dedicated mode
+  must preserve Temporal dispatch and disabled replacement triggers; never fold the policies into
+  the traffic cutover or reuse the post-cutover maintenance boundary.
 - Require both retained ECS services at `0/0/0`, zero running application tasks/public task IPs,
   zero pending outbox rows, zero open Temporal or Lambda durable executions, empty source
   queue/DLQs, healthy runtime alarms, and zero drift.

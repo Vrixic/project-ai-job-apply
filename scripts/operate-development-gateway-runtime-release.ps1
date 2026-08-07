@@ -15,6 +15,7 @@ $ErrorActionPreference = "Stop"
 $operator = Join-Path $PSScriptRoot "operate-staging-gateway-runtime-release.ps1"
 $arguments = @{
   Environment = "development"
+  OutboxProducerBoundary = "dark"
   Action       = $Action
   AwsProfile   = $AwsProfile
   Region       = $Region

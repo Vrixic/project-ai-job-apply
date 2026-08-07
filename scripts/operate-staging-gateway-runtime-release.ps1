@@ -6,6 +6,9 @@ param(
   [ValidateSet("Status", "Verify", "Apply")]
   [string]$Action = "Status",
 
+  [ValidateSet("dark", "runtime")]
+  [string]$OutboxProducerBoundary = "runtime",
+
   [ValidatePattern("^[0-9]{12}$")]
   [string]$ExpectedAccountId = "",
 
@@ -344,7 +347,7 @@ function Assert-WorkflowReleasePlan {
 
   foreach ($name in @(
     "deploy_applications", "deploy_gateway_lambda", "deploy_serverless_outbox",
-    "deploy_profile_readiness_durable", "serverless_runtime_cutover"
+    "deploy_profile_readiness_durable"
   )) {
     if (-not (Get-PlanBoolean -Plan $Plan -Name $name)) {
       throw "The workflow release does not preserve the complete serverless runtime."
@@ -581,6 +584,10 @@ function Assert-OutboxProducerKmsPlan {
       throw "The producer correction does not preserve the complete serverless runtime."
     }
   }
+  $expectedRuntimeCutover = $OutboxProducerBoundary -eq "runtime"
+  if ((Get-PlanBoolean -Plan $Plan -Name "serverless_runtime_cutover") -ne $expectedRuntimeCutover) {
+    throw "The producer correction does not preserve the reviewed $OutboxProducerBoundary boundary."
+  }
   if (Get-PlanBoolean -Plan $Plan -Name "run_continuous_ecs_runtime") {
     throw "The producer correction attempts to resume continuous ECS capacity."
   }
@@ -622,14 +629,21 @@ function Assert-OutboxProducerKmsPlan {
     }
   }
 
+  $expectedMappingEnabled = $OutboxProducerBoundary -eq "runtime"
+  $expectedRuleState = if ($expectedMappingEnabled) { "ENABLED" } else { "DISABLED" }
   if (
-    -not [bool](Get-PlannedValue $Plan `
-      "module.platform.aws_lambda_event_source_mapping.outbox_starter[0]").enabled -or
+    [bool](Get-PlannedValue $Plan `
+      "module.platform.aws_lambda_event_source_mapping.outbox_starter[0]").enabled -ne
+      $expectedMappingEnabled -or
     [string](Get-PlannedValue $Plan `
-      "module.platform.aws_cloudwatch_event_rule.outbox_reconciler[0]").state -ne "ENABLED" -or
+      "module.platform.aws_cloudwatch_event_rule.outbox_reconciler[0]").state -ne
+      $expectedRuleState -or
     [string](Get-PlannedValue $Plan `
-      "module.platform.aws_cloudwatch_event_rule.profile_readiness_terminal[0]").state -ne "ENABLED"
-  ) { throw "The producer correction does not preserve every live workflow trigger." }
+      "module.platform.aws_cloudwatch_event_rule.profile_readiness_terminal[0]").state -ne
+      $expectedRuleState
+  ) {
+    throw "The producer correction does not preserve the $OutboxProducerBoundary trigger boundary."
+  }
   foreach ($address in @(
     "module.platform.aws_ecs_service.gateway[0]",
     "module.platform.aws_ecs_service.worker[0]"
@@ -793,13 +807,22 @@ function Invoke-CompletedRuntimeVerification {
   }
   $verification = ($verificationRaw -join [Environment]::NewLine) | ConvertFrom-Json
   $completedVerification = if ($PlanKind -eq "outbox_producer_kms") {
-    [bool]$verification.CompletedOutboxProducerKmsVerification
+    if ($OutboxProducerBoundary -eq "dark") {
+      [bool]$verification.CompletedDarkOutboxProducerKmsVerification
+    } else { [bool]$verification.CompletedOutboxProducerKmsVerification }
   } else { [bool]$verification.CompletedRuntimeCutoverVerification }
+  $expectedDispatchTarget = if (
+    $PlanKind -eq "outbox_producer_kms" -and $OutboxProducerBoundary -eq "dark"
+  ) { "temporal" } else { "lambda_durable" }
+  $expectedTriggersEnabled = -not (
+    $PlanKind -eq "outbox_producer_kms" -and $OutboxProducerBoundary -eq "dark"
+  )
   if (
     -not $completedVerification -or
     -not [bool]$verification.NoDrift -or -not [bool]$verification.EcsRuntimeIdle -or
-    [string]$verification.DispatchTarget -ne "lambda_durable" -or
-    -not [bool]$verification.TriggersEnabled -or [int]$verification.Creates -ne 0 -or
+    [string]$verification.DispatchTarget -ne $expectedDispatchTarget -or
+    [bool]$verification.TriggersEnabled -ne $expectedTriggersEnabled -or
+    [int]$verification.Creates -ne 0 -or
     [int]$verification.Updates -ne 0 -or [int]$verification.Deletes -ne 0 -or
     [int]$verification.Replacements -ne 0
   ) { throw "The $Environment runtime is outside the accepted zero-drift boundary." }
@@ -855,6 +878,8 @@ if ($Action -eq "Status") {
       "gateway_scope_boundary_review"
     } elseif ($planKind -eq "gateway_concurrency") {
       "gateway_concurrency_review"
+    } elseif ($OutboxProducerBoundary -eq "dark") {
+      "dark_outbox_producer_kms_review"
     } else { "outbox_producer_kms_review" }
     PlanSha256 = $actualPlanSha256
     Creates = 0
@@ -879,6 +904,8 @@ $expectedPlanPrefix = if ($planKind -eq "artifact_release") {
   "gateway-scope-boundary"
 } elseif ($planKind -eq "gateway_concurrency") {
   "gateway-concurrency"
+} elseif ($OutboxProducerBoundary -eq "dark") {
+  "dark-outbox-producer-kms"
 } else { "outbox-producer-kms" }
 if ($Action -eq "Apply" -and -not (Split-Path $resolvedPlanPath -Leaf).StartsWith(
   "$expectedPlanPrefix-$($sourceCommit.Substring(0, 8))",
@@ -891,7 +918,8 @@ if ($Action -eq "Verify") {
   [ordered]@{
     Environment = $Environment; Action = "runtime_verification"
     PlanSha256 = $actualPlanSha256; NoDrift = [bool]$verification.NoDrift
-    DispatchTarget = "lambda_durable"; TriggersEnabled = $true
+    DispatchTarget = [string]$verification.DispatchTarget
+    TriggersEnabled = [bool]$verification.TriggersEnabled
     EcsRuntimeIdle = $true; AwsMutation = $false
   } | ConvertTo-Json
   exit 0
@@ -915,8 +943,12 @@ $verification = Invoke-CompletedRuntimeVerification $plan $planKind
     "gateway_scope_boundary"
   } elseif ($planKind -eq "gateway_concurrency") {
     "gateway_concurrency"
+  } elseif ($OutboxProducerBoundary -eq "dark") {
+    "dark_outbox_producer_kms"
   } else { "outbox_producer_kms" }
   AppliedPlanSha256 = $actualPlanSha256
-  NoDrift = $true; DispatchTarget = "lambda_durable"; TriggersEnabled = $true
+  NoDrift = $true
+  DispatchTarget = [string]$verification.DispatchTarget
+  TriggersEnabled = [bool]$verification.TriggersEnabled
   EcsRuntimeIdle = $true; PublicConformanceRequired = $true
 } | ConvertTo-Json
