@@ -44,6 +44,7 @@ const stagingRuntimeCutoverOperator = read(
   "scripts/operate-staging-serverless-runtime-cutover.ps1",
 );
 const stagingGatewayReleaseOperator = read("scripts/operate-staging-gateway-runtime-release.ps1");
+const stagingWorkloadInspector = read("scripts/inspect-staging-workload-and-cost.ps1");
 const stagingLegacyTemporalDrain = read("scripts/operate-staging-legacy-temporal-drain.ps1");
 const gatewayConformanceLauncher = read("scripts/start-deployed-web-conformance.ps1");
 const gatewayBoundaryOperator = read("scripts/verify-gateway-lambda-boundary.ps1");
@@ -601,7 +602,7 @@ requireText(
 );
 
 for (const expected of [
-  '[ValidateSet("Status", "Apply")]',
+  '[ValidateSet("Status", "Verify", "Apply")]',
   '"$expectedPlanPrefix-$($sourceCommit.Substring(0, 8))"',
   '"gateway-runtime-release"',
   '"workflow-runtime-release"',
@@ -638,6 +639,38 @@ for (const expected of [
     stagingGatewayReleaseOperator,
     expected,
     `The guarded staging gateway release operator is missing required boundary text: ${expected}`,
+  );
+}
+
+for (const expected of [
+  'Action = "runtime_verification"',
+  "Invoke-CompletedRuntimeVerification $plan $planKind",
+  "AwsMutation = $false",
+  '$Action -eq "Apply" -and -not (Split-Path $resolvedPlanPath -Leaf).StartsWith(',
+]) {
+  requireText(
+    stagingGatewayReleaseOperator,
+    expected,
+    `The staging release verifier is missing its read-only completed-runtime boundary: ${expected}`,
+  );
+}
+
+for (const expected of [
+  '"operate-staging-gateway-runtime-release.ps1"',
+  "-Action Verify -ExpectedAccountId $ExpectedAccountId",
+  '"AWS/Lambda" "Invocations"',
+  '"AWS/Lambda" "Errors"',
+  '"AWS/Lambda" "Throttles"',
+  '"ai-job-apply-staging-profile-readiness-dead-letter"',
+  "$level -ge 40 -or $operationalMessage -match",
+  "$healthyAlarms -ne 10",
+  "$idleServices -ne 2",
+  'throw "The staging serverless workload did not pass aggregate AWS acceptance."',
+]) {
+  requireText(
+    stagingWorkloadInspector,
+    expected,
+    `The staging workload inspector is missing its serverless acceptance boundary: ${expected}`,
   );
 }
 
