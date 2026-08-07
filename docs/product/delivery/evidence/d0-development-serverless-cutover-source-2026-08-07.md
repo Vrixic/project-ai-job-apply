@@ -3,7 +3,7 @@
 Date: 2026-08-07
 Delivery: D0-016 / SR-005 / SR-007
 Environment: isolated development in `us-east-2`
-Status: Exact two-update plan generated; independent operator review failed closed on a corrected guard; no plan authorized or applied
+Status: Exact dark KMS prerequisite applied and zero drift verified; cutover planning now awaits a merged plan-time route-reference validator correction
 
 ## Implemented boundary
 
@@ -86,3 +86,19 @@ the following boundary-specific check could accept the dark state. The saved pla
 authorized or applied. Source now leaves runtime/dark selection exclusively to the exact boundary
 check and restores the completed-runtime requirement accidentally omitted from the workflow-release
 guard; function-scoped policy validation protects both conditions.
+
+After that correction merged, the product owner explicitly authorized checksum
+`2d236550ab4ab7744238b80f2a919871b53fde9b0e2f6273175610db43aff324`. Terraform applied only the
+gateway and reconciler inline-policy updates. Independent refresh-backed verification returned zero
+drift with Temporal dispatch, all replacement triggers disabled, and retained ECS idle. No route,
+traffic, trigger, capacity, application record, queue message, workflow, secret, or persistent-data
+resource changed.
+
+The following cutover plan reached its intended three-create/six-update shape, JWT scopes, and dark
+preconditions but failed closed before returning an authorization checksum. Both the new Lambda
+integration ID and its default-route target are legitimately plan-time unknown; the semantic guard
+incorrectly compared their absent concrete JSON values. The local correction keeps exact equality
+for known live targets and, for this create-time case only, requires both values to be unknown and
+the route expression to reference the exact platform Lambda integration. PowerShell parsing,
+infrastructure policy validation, skill validation, and formatting checks pass. The rejected plan
+is ignored and unauthorized; no additional AWS mutation occurred.

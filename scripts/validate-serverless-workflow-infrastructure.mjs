@@ -520,6 +520,10 @@ for (const expected of [
   '"module.platform.aws_iam_role_policy.outbox_reconciler[0]"',
   '"EncryptIdentifierOnlyOutboxNudges"',
   '"kms:GenerateDataKey"',
+  "function Assert-PlannedRouteTargetsIntegration",
+  "$routeResource.change.after_unknown.target",
+  "$integrationResource.change.after_unknown.id",
+  '$targetReferences -notcontains "$configuredIntegrationAddress[0].id"',
 ]) {
   requireText(
     workflowPlanner,

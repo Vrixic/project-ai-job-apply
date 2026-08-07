@@ -1219,6 +1219,53 @@ try {
     return $resource.change.after
   }
 
+  function Assert-PlannedRouteTargetsIntegration {
+    param([string]$RouteAddress, [string]$IntegrationAddress)
+
+    $routeResource = Get-OnlyItem `
+      -Items @($plan.resource_changes | Where-Object { [string]$_.address -eq $RouteAddress }) `
+      -FailureMessage "The reviewed planned route '$RouteAddress' is missing."
+    $integrationResource = Get-OnlyItem `
+      -Items @($plan.resource_changes | Where-Object { [string]$_.address -eq $IntegrationAddress }) `
+      -FailureMessage "The reviewed planned integration '$IntegrationAddress' is missing."
+    $routeTargetUnknown = [bool]$routeResource.change.after_unknown.target
+    $integrationIdUnknown = [bool]$integrationResource.change.after_unknown.id
+
+    if (-not $routeTargetUnknown -and -not $integrationIdUnknown) {
+      if (
+        [string]$routeResource.change.after.target -ne
+          "integrations/$([string]$integrationResource.change.after.id)"
+      ) {
+        throw "The reviewed route does not target the exact reviewed integration."
+      }
+      return
+    }
+    if ($routeTargetUnknown -ne $integrationIdUnknown) {
+      throw "The reviewed route and integration identity do not share one plan-time boundary."
+    }
+
+    $modulePrefix = "module.platform."
+    if (
+      -not $RouteAddress.StartsWith($modulePrefix, [StringComparison]::Ordinal) -or
+      -not $IntegrationAddress.StartsWith($modulePrefix, [StringComparison]::Ordinal)
+    ) {
+      throw "The reviewed route target is outside the platform module."
+    }
+    $configuredRouteAddress = $RouteAddress.Substring($modulePrefix.Length) -replace '\[0\]$', ''
+    $configuredIntegrationAddress =
+      $IntegrationAddress.Substring($modulePrefix.Length) -replace '\[0\]$', ''
+    $configuredRoute = Get-OnlyItem `
+      -Items @(
+        $plan.configuration.root_module.module_calls.platform.module.resources |
+          Where-Object { [string]$_.address -eq $configuredRouteAddress }
+      ) `
+      -FailureMessage "The reviewed route configuration is missing."
+    $targetReferences = @($configuredRoute.expressions.target.references)
+    if ($targetReferences -notcontains "$configuredIntegrationAddress[0].id") {
+      throw "The plan-time unknown route target does not reference the exact reviewed integration."
+    }
+  }
+
   function Assert-OnlyPropertiesChanged {
     param([object]$Change, [string[]]$Allowed, [string]$FailureMessage)
     $before = $Change.change.before
@@ -1515,9 +1562,15 @@ try {
   }
 
   if ($runtimeCutoverActive) {
+    $protectedRouteAddress = "module.platform.aws_apigatewayv2_route.gateway[0]"
+    $protectedIntegrationAddress =
+      "module.platform.aws_apigatewayv2_integration.gateway_lambda[0]"
     $protectedRoute = Get-PlannedValue "module.platform.aws_apigatewayv2_route.gateway[0]"
     $protectedIntegration = Get-PlannedValue `
       "module.platform.aws_apigatewayv2_integration.gateway_lambda[0]"
+    Assert-PlannedRouteTargetsIntegration `
+      -RouteAddress $protectedRouteAddress `
+      -IntegrationAddress $protectedIntegrationAddress
     $protectedScopes = @($protectedRoute.authorization_scopes | Sort-Object)
     $protectedScopeDifference = @(
       Compare-Object `
@@ -1528,8 +1581,6 @@ try {
       $protectedScopes.Count -ne 2 -or $protectedScopeDifference.Count -ne 0 -or
       [string]$protectedRoute.authorization_type -ne "JWT" -or
       [string]$protectedRoute.route_key -ne '$default' -or
-      [string]$protectedRoute.target -ne
-        "integrations/$([string]$protectedIntegration.id)" -or
       [string]$protectedIntegration.integration_type -ne "AWS_PROXY" -or
       [string]$protectedIntegration.payload_format_version -ne "2.0"
     ) {
