@@ -135,14 +135,15 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
 - `plan-development-serverless-workflow-dark.ps1` — Compatibility wrapper for development calls to
   the environment-aware workflow planner.
 - `plan-staging-serverless-runtime-cutover.ps1` — Staging-only wrapper for atomic runtime cutover,
-  post-cutover gateway artifact release, exact JWT route-scope correction, encrypted-outbox
-  producer correction, and their completed verification. It fixes the environment and default IAM
-  Identity Center profile and cannot select dark deployment, recovery, workflow release, or
-  completed-dark modes.
-- `operate-staging-gateway-runtime-release.ps1` — Reviews and applies an exact two-update immutable
-  gateway release, the exact one-route OAuth-scope update, or the exact two-role encrypted-outbox
-  producer correction. Every path is checksum-gated, preserves the authorizer/integration/
-  workflows/data/idle-ECS boundary, and requires its matching completed-runtime zero drift.
+  post-cutover immutable workflow or gateway artifact release, exact gateway concurrency and JWT
+  route-scope correction, encrypted-outbox producer correction, and completed verification. It
+  fixes the environment and default IAM Identity Center profile and cannot select dark deployment,
+  recovery, or completed-dark modes.
+- `operate-staging-gateway-runtime-release.ps1` — Reviews and applies an exact 14-update/one-gate
+  immutable workflow release, two-update immutable gateway release, one-update concurrency or
+  OAuth-scope correction, or two-role encrypted-outbox producer correction. Every path is
+  checksum-gated, preserves the authorizer/integration/workflows/data/idle-ECS boundary, and
+  requires its matching completed-runtime zero drift.
 - `operate-staging-serverless-runtime-cutover.ps1` — Applies only the exact checksum-reviewed
   three-create/six-update cutover plan, then delegates to the refresh-backed completed-runtime
   verifier. It also creates separately reviewed rollback and restoration plans, requires zero

@@ -601,6 +601,7 @@ export class PostgresProfileStore implements ProfileStore {
     traceparent?: string,
   ): Promise<void> {
     await this.handle.db.transaction(async (tx) => {
+      const completedAt = new Date();
       const [preferenceSet] = await tx
         .select({ userId: jobPreferences.userId })
         .from(jobPreferences)
@@ -614,7 +615,7 @@ export class PostgresProfileStore implements ProfileStore {
         .set({
           state: "succeeded",
           result: readiness as unknown as Record<string, unknown>,
-          updatedAt: new Date(),
+          updatedAt: completedAt,
           errorCode: null,
         })
         .where(
@@ -649,6 +650,10 @@ export class PostgresProfileStore implements ProfileStore {
           completionPercent: readiness.completionPercent,
           missingFields: readiness.missingFields,
         },
+        // Phase 0 has no downstream subscriber for this terminal result event. Retain the
+        // immutable event record, but acknowledge it atomically with operation completion so a
+        // retired runtime is not required merely to clear an otherwise undispatchable row.
+        publishedAt: completedAt,
         ...(traceparent ? { traceparent } : {}),
       });
     });

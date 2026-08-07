@@ -136,13 +136,18 @@ describeWithDatabase("PostgresProfileStore", () => {
     const completedOperation = await store.getOperation(user.id, first.operationId);
     expect(completedOperation).toMatchObject({ state: "succeeded" });
     expect(completedOperation).not.toHaveProperty("errorCode");
-    const [completionEvents] = await database.client<Array<{ count: number }>>`
-      SELECT count(*)::integer AS count
+    const [completionEvents] = await database.client<
+      Array<{ count: number; pending: number; allAcknowledged: boolean }>
+    >`
+      SELECT
+        count(*)::integer AS count,
+        count(*) FILTER (WHERE published_at IS NULL)::integer AS pending,
+        bool_and(published_at IS NOT NULL) AS "allAcknowledged"
       FROM platform.outbox_events
       WHERE type = 'profile.readiness.calculated.v1'
         AND data ->> 'operationId' = ${first.operationId}
     `;
-    expect(completionEvents?.count).toBe(1);
+    expect(completionEvents).toEqual({ count: 1, pending: 0, allAcknowledged: true });
   });
 
   it("keeps committed work recoverable when the post-commit SQS nudge fails", async () => {
