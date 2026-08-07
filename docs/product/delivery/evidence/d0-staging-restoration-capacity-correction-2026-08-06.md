@@ -57,6 +57,16 @@ invalidate comparison with the previously accepted fixed workload. The source co
   artifacts, data, and idle ECS unchanged; and
 - makes deployed conformance enforce the environment-specific reviewed ceiling.
 
+## Planner preflight correction
+
+The first post-merge planning attempt failed before producing a capacity plan or changing AWS. The
+new maintenance mode had not been excluded from the gateway-only initial-deployment baseline. That
+baseline therefore modeled removal of already accepted serverless workflow resources and correctly
+failed its strict boundary. The correction replaces the duplicated maintenance-mode exclusions
+with the planner's shared `runtimeCutoverActive` predicate and adds a source-policy assertion for
+that exact placement. This changes only preflight selection; it does not broaden the capacity
+plan's one-resource, one-property boundary.
+
 ## Verification and remaining gate
 
 Repository verification must pass before publication. No AWS resource has been changed by the

@@ -294,13 +294,8 @@ $acceptedEndpointSidCorrection = $false
 if (
   -not $RecoverFailedApply -and
   -not $AllowArtifactReleaseUpdate -and
-  -not $AllowGatewayArtifactReleaseUpdate -and
-  -not $AllowGatewayScopeBoundaryUpdate -and
-  -not $AllowOutboxProducerKmsUpdate -and
-  -not $VerifyCompletedOutboxProducerKmsUpdate -and
   -not $VerifyCompletedDarkDeployment -and
-  -not $PlanRuntimeCutover -and
-  -not $VerifyCompletedRuntimeCutover
+  -not $runtimeCutoverActive
 ) {
 try {
   $baselineRaw = & (Join-Path $PSScriptRoot "plan-gateway-lambda-dark.ps1") `
