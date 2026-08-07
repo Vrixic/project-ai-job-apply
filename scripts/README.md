@@ -161,7 +161,8 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   the materialized replacement.
 - `operate-development-gateway-runtime-release.ps1` — Development wrapper over the same guarded
   maintenance operator. It fixes the development account/resource boundary for the separately
-  reviewed encrypted-outbox producer prerequisite and later post-cutover releases.
+  reviewed encrypted-outbox producer prerequisite, binds that prerequisite to Temporal dispatch
+  with disabled replacement triggers, and retains the shared operator for later releases.
 - `operate-staging-serverless-runtime-cutover.ps1` — Environment-aware guarded core, with staging
   as its compatibility default. It applies only the exact checksum-reviewed
   three-create/six-update cutover plan, then delegates to the refresh-backed completed-runtime

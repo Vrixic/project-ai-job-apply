@@ -3,7 +3,7 @@
 Date: 2026-08-07
 Delivery: D0-016 / SR-005 / SR-007
 Environment: isolated development in `us-east-2`
-Status: First live plan failed closed on a separately bounded prerequisite; no plan authorized or applied
+Status: Two live planning attempts failed closed; corrected pre-cutover prerequisite boundary is locally verified; no plan authorized or applied
 
 ## Implemented boundary
 
@@ -60,7 +60,14 @@ reconciler producer roles; there were zero deletes or replacements. This is the 
 producer prerequisite previously discovered and accepted in staging, not cutover drift.
 
 No plan was authorized or applied, and no persistent AWS resource, application record, queue
-message, workflow, or traffic route changed. Source now exposes this as a separate development
-`PlanOutboxProducerKms` / `VerifyOutboxProducerKms` path and fixes a development maintenance
-operator wrapper to the isolated account. Merge, regenerate the exact two-policy plan, and request
-explicit authorization for its checksum before retrying the cutover plan.
+message, workflow, or traffic route changed. The first separate prerequisite attempt also failed
+closed before Terraform planning because it reused the post-cutover KMS mode, which correctly
+required enabled triggers while development remains dark. That exposed a boundary-selection defect,
+not live drift.
+
+The corrected source gives development a distinct pre-cutover KMS mode. It permits the same exact
+two IAM policy updates while requiring `serverless_runtime_cutover = false`, Temporal dispatch,
+disabled SQS/EventBridge triggers, idle ECS, and zero unrelated changes. The operator binds the
+saved plan to that dark boundary and runs matching dark zero-drift verification immediately after
+apply. Merge, regenerate the exact two-policy plan, and request explicit authorization for its
+checksum before retrying the cutover plan.

@@ -486,7 +486,9 @@ for (const expected of [
   "GatewayReservedConcurrency",
   "AllowGatewayScopeBoundaryUpdate",
   "AllowOutboxProducerKmsUpdate",
+  "AllowDarkOutboxProducerKmsUpdate",
   "VerifyCompletedOutboxProducerKmsUpdate",
+  "VerifyCompletedDarkOutboxProducerKmsUpdate",
   "PlanRuntimeCutover",
   "VerifyCompletedRuntimeCutover",
   "CompletedRuntimeCutoverVerification",
@@ -629,6 +631,10 @@ for (const expected of [
   '"EncryptIdentifierOnlyOutboxNudges"',
   '"kms:GenerateDataKey"',
   '"outbox_producer_kms"',
+  '"dark-outbox-producer-kms"',
+  "CompletedDarkOutboxProducerKmsVerification",
+  'OutboxProducerBoundary -eq "dark"',
+  'expectedMappingEnabled = $OutboxProducerBoundary -eq "runtime"',
   '"module.platform.aws_lambda_alias.gateway[0]"',
   '"module.platform.aws_lambda_function.gateway[0]"',
   '"module.platform.aws_lambda_function.profile_readiness_activity[0]"',
@@ -881,8 +887,8 @@ for (const [source, environment, label] of [
 for (const expected of [
   '"PlanOutboxProducerKms", "Verify", "VerifyOutboxProducerKms"',
   '"PlanRuntimeCutover"',
-  '"AllowOutboxProducerKmsUpdate"',
-  '"VerifyCompletedOutboxProducerKmsUpdate"',
+  '"AllowDarkOutboxProducerKmsUpdate"',
+  '"VerifyCompletedDarkOutboxProducerKmsUpdate"',
   '"VerifyCompletedRuntimeCutover"',
 ]) {
   requireText(
@@ -899,9 +905,12 @@ requireText(
 
 for (const expected of [
   '[ValidateSet("development", "staging")]',
+  '[ValidateSet("dark", "runtime")]',
   "Environment = $Environment",
   '"plan-$Environment-serverless-runtime-cutover.ps1"',
   '"The plan is outside the exact two-policy $Environment encrypted-outbox producer boundary."',
+  '"dark-outbox-producer-kms"',
+  "CompletedDarkOutboxProducerKmsVerification",
 ]) {
   requireText(
     stagingGatewayReleaseOperator,
@@ -911,6 +920,7 @@ for (const expected of [
 }
 for (const expected of [
   'Environment = "development"',
+  'OutboxProducerBoundary = "dark"',
   '"operate-staging-gateway-runtime-release.ps1"',
 ]) {
   requireText(

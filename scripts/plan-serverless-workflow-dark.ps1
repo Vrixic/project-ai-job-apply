@@ -42,10 +42,12 @@ param(
   [ValidateRange(1, 5)][int]$GatewayReservedConcurrency = 5,
   [switch]$AllowGatewayScopeBoundaryUpdate,
   [switch]$AllowOutboxProducerKmsUpdate,
+  [switch]$AllowDarkOutboxProducerKmsUpdate,
   [switch]$VerifyCompletedDarkDeployment,
   [switch]$PlanRuntimeCutover,
   [switch]$VerifyCompletedRuntimeCutover,
   [switch]$VerifyCompletedOutboxProducerKmsUpdate,
+  [switch]$VerifyCompletedDarkOutboxProducerKmsUpdate,
   [switch]$Help
 )
 
@@ -78,6 +80,8 @@ preserving the authorizer, integration, Lambda release, workflows, data, and idl
 Use -AllowOutboxProducerKmsUpdate after runtime cutover to permit only the exact gateway and
 reconciler role-policy corrections required to write to the platform-CMK-encrypted SQS queue. It
 does not change traffic, triggers, functions, queues, keys, data, or ECS capacity.
+Use -AllowDarkOutboxProducerKmsUpdate before runtime cutover for the same exact two-policy
+correction while requiring Temporal dispatch and every replacement trigger to remain disabled.
 Use -PlanRuntimeCutover only after the accepted dark boundary and legacy outbox are clean. It
 permits the coupled API Lambda integration/routes, gateway Lambda durable-dispatch version, and
 three replacement-trigger transitions while retaining idle ECS and the legacy rollback resources.
@@ -87,6 +91,8 @@ work queues, empty legacy outbox, zero open Temporal workflows, and idle ECS rol
 Use -VerifyCompletedOutboxProducerKmsUpdate after applying the exact producer-policy plan to require
 a refresh-backed zero-change plan and the complete live runtime boundary without requiring an
 already queued retry to finish inside the Terraform apply window.
+Use -VerifyCompletedDarkOutboxProducerKmsUpdate after the pre-cutover correction to require the
+same zero-change policy state while preserving the complete trigger-disabled dark boundary.
 
 The sensitive plan remains below the ignored Terraform .terraform directory. This script rejects
 every action outside its exact initial or partial-recovery boundary and never applies
@@ -120,14 +126,23 @@ if (@($RecoverFailedApply, $AllowArtifactReleaseUpdate, $AllowRuntimeArtifactRel
     $AllowGatewayConcurrencyUpdate,
     $AllowGatewayScopeBoundaryUpdate,
     $AllowOutboxProducerKmsUpdate,
+    $AllowDarkOutboxProducerKmsUpdate,
     $VerifyCompletedDarkDeployment,
     $PlanRuntimeCutover, $VerifyCompletedRuntimeCutover,
-    $VerifyCompletedOutboxProducerKmsUpdate |
+    $VerifyCompletedOutboxProducerKmsUpdate,
+    $VerifyCompletedDarkOutboxProducerKmsUpdate |
     Where-Object { $_ }).Count -gt 1) {
   throw "Recovery, workflow/gateway release, completed-dark verification, cutover planning, and completed-cutover verification are mutually exclusive."
 }
 $workflowArtifactReleaseUpdate = [bool](
   $AllowArtifactReleaseUpdate -or $AllowRuntimeArtifactReleaseUpdate
+)
+$outboxProducerKmsUpdate = [bool](
+  $AllowOutboxProducerKmsUpdate -or $AllowDarkOutboxProducerKmsUpdate
+)
+$outboxProducerKmsVerification = [bool](
+  $VerifyCompletedOutboxProducerKmsUpdate -or
+  $VerifyCompletedDarkOutboxProducerKmsUpdate
 )
 $runtimeCutoverActive = [bool](
   $AllowRuntimeArtifactReleaseUpdate -or
@@ -182,8 +197,12 @@ $planPrefix = if ($PlanRuntimeCutover) {
   "gateway-scope-boundary"
 } elseif ($AllowOutboxProducerKmsUpdate) {
   "outbox-producer-kms"
+} elseif ($AllowDarkOutboxProducerKmsUpdate) {
+  "dark-outbox-producer-kms"
 } elseif ($VerifyCompletedOutboxProducerKmsUpdate) {
   "outbox-producer-kms-verify"
+} elseif ($VerifyCompletedDarkOutboxProducerKmsUpdate) {
+  "dark-outbox-producer-kms-verify"
 } elseif ($VerifyCompletedRuntimeCutover) {
   "serverless-runtime-cutover-verify"
 } elseif ($VerifyCompletedDarkDeployment) {
@@ -963,7 +982,7 @@ try {
     -lock-timeout=5m -detailed-exitcode "-out=$planPath" 2>&1
   $zeroDriftVerification = [bool](
     $VerifyCompletedDarkDeployment -or $VerifyCompletedRuntimeCutover -or
-    $VerifyCompletedOutboxProducerKmsUpdate
+    $outboxProducerKmsVerification
   )
   $expectedPlanExitCode = if ($zeroDriftVerification) { 0 } else { 2 }
   if ($LASTEXITCODE -ne $expectedPlanExitCode) {
@@ -1100,8 +1119,8 @@ try {
       $AllowGatewayArtifactReleaseUpdate -or
       $AllowGatewayConcurrencyUpdate -or
       $AllowGatewayScopeBoundaryUpdate -or
-      $AllowOutboxProducerKmsUpdate -or
-      $VerifyCompletedOutboxProducerKmsUpdate -or
+      $outboxProducerKmsUpdate -or
+      $outboxProducerKmsVerification -or
       $VerifyCompletedRuntimeCutover
     )) {
       $initialExpectedCreates
@@ -1116,13 +1135,13 @@ try {
       $gatewayConcurrencyExpectedUpdates
     } elseif ($AllowGatewayScopeBoundaryUpdate) {
       @("module.platform.aws_apigatewayv2_route.gateway[0]")
-    } elseif ($AllowOutboxProducerKmsUpdate) {
+    } elseif ($outboxProducerKmsUpdate) {
       $outboxProducerKmsExpectedUpdates
     } elseif ($workflowArtifactReleaseUpdate) {
       $releaseExpectedUpdates
     } elseif (-not (
       $VerifyCompletedDarkDeployment -or $VerifyCompletedRuntimeCutover -or
-      $VerifyCompletedOutboxProducerKmsUpdate -or
+      $outboxProducerKmsVerification -or
       $RecoverFailedApply
     )) {
       $initialExpectedUpdates
@@ -1223,8 +1242,8 @@ try {
     -not $AllowGatewayArtifactReleaseUpdate -and
     -not $AllowGatewayConcurrencyUpdate -and
     -not $AllowGatewayScopeBoundaryUpdate -and
-    -not $AllowOutboxProducerKmsUpdate -and
-    -not $VerifyCompletedOutboxProducerKmsUpdate -and
+    -not $outboxProducerKmsUpdate -and
+    -not $outboxProducerKmsVerification -and
     -not $VerifyCompletedDarkDeployment -and
     -not $PlanRuntimeCutover -and
     -not $VerifyCompletedRuntimeCutover
@@ -1442,7 +1461,7 @@ try {
     }
   }
 
-  if ($AllowOutboxProducerKmsUpdate) {
+  if ($outboxProducerKmsUpdate) {
     $platformKey = Get-PlannedValue "module.platform.aws_kms_key.platform"
     $eventsQueue = Get-PlannedValue "module.platform.aws_sqs_queue.events"
 
@@ -1769,8 +1788,8 @@ try {
     $AllowGatewayArtifactReleaseUpdate -or
     $AllowGatewayConcurrencyUpdate -or
     $AllowGatewayScopeBoundaryUpdate -or
-    $AllowOutboxProducerKmsUpdate -or
-    $VerifyCompletedOutboxProducerKmsUpdate -or
+    $outboxProducerKmsUpdate -or
+    $outboxProducerKmsVerification -or
     $VerifyCompletedDarkDeployment -or
     $PlanRuntimeCutover -or
     $VerifyCompletedRuntimeCutover
@@ -1855,10 +1874,13 @@ try {
     GatewayConcurrencyUpdate       = [bool]$AllowGatewayConcurrencyUpdate
     GatewayScopeBoundaryUpdate   = [bool]$AllowGatewayScopeBoundaryUpdate
     OutboxProducerKmsUpdate      = [bool]$AllowOutboxProducerKmsUpdate
+    DarkOutboxProducerKmsUpdate  = [bool]$AllowDarkOutboxProducerKmsUpdate
     CompletedDarkVerification  = [bool]$VerifyCompletedDarkDeployment
     RuntimeCutover             = [bool]$PlanRuntimeCutover
     CompletedRuntimeCutoverVerification = [bool]$VerifyCompletedRuntimeCutover
     CompletedOutboxProducerKmsVerification = [bool]$VerifyCompletedOutboxProducerKmsUpdate
+    CompletedDarkOutboxProducerKmsVerification = `
+      [bool]$VerifyCompletedDarkOutboxProducerKmsUpdate
     NoDrift                    = $zeroDriftVerification
     GatewayEcsApiBaselineStable = $true
     EcsRuntimeIdle             = [bool]$ecsRuntimeIdle
