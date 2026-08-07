@@ -494,6 +494,7 @@ for (const expected of [
   "TemporalOpenWorkflowsEmpty",
   "DurableOpenExecutionsEmpty",
   "GatewayArtifactReleaseUpdate",
+  "RuntimeArtifactReleaseUpdate",
   "GatewayConcurrencyUpdate",
   "GatewayScopeBoundaryUpdate",
   '"profile:read", "profile:write"',
@@ -529,7 +530,7 @@ assert.ok(
   workflowPlanner
     .replaceAll("\r\n", "\n")
     .includes(
-      "    $RecoverFailedApply -or $AllowArtifactReleaseUpdate -or\n    $VerifyCompletedDarkDeployment -or $runtimeCutoverActive\n  ) {\n    $baselinePlan = [pscustomobject]",
+      "    $RecoverFailedApply -or $workflowArtifactReleaseUpdate -or\n    $VerifyCompletedDarkDeployment -or $runtimeCutoverActive\n  ) {\n    $baselinePlan = [pscustomobject]",
     ),
   "Runtime maintenance modes must derive completed values from live Terraform state.",
 );
@@ -552,6 +553,11 @@ requireText(
   stagingRuntimeCutoverWrapper,
   '$arguments["PlanRuntimeCutover"] = $true',
   "The staging cutover wrapper must expose the atomic cutover planning mode.",
+);
+requireText(
+  stagingRuntimeCutoverWrapper,
+  '$arguments["AllowRuntimeArtifactReleaseUpdate"] = $true',
+  "The staging runtime wrapper must expose the post-cutover workflow release mode.",
 );
 requireText(
   stagingRuntimeCutoverWrapper,
@@ -598,9 +604,11 @@ for (const expected of [
   '[ValidateSet("Status", "Apply")]',
   '"$expectedPlanPrefix-$($sourceCommit.Substring(0, 8))"',
   '"gateway-runtime-release"',
+  '"workflow-runtime-release"',
   '"gateway-concurrency"',
   '"gateway-scope-boundary"',
   "Assert-GatewayConcurrencyPlan",
+  "Assert-WorkflowReleasePlan",
   "Assert-GatewayScopeBoundaryPlan",
   "Assert-OutboxProducerKmsPlan",
   '@("authorization_scopes")',
@@ -610,6 +618,8 @@ for (const expected of [
   '"outbox_producer_kms"',
   '"module.platform.aws_lambda_alias.gateway[0]"',
   '"module.platform.aws_lambda_function.gateway[0]"',
+  '"module.platform.aws_lambda_function.profile_readiness_activity[0]"',
+  '"module.platform.time_sleep.profile_readiness_durable_policy_propagation[0]"',
   'OUTBOX_DISPATCH_TARGET -ne "lambda_durable"',
   '"serverless_runtime_cutover"',
   '"run_continuous_ecs_runtime"',

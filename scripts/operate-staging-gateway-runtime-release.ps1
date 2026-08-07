@@ -38,11 +38,12 @@ Usage:
     -ExpectedPlanSha256 REVIEWED_SHA256 -Execute
 
 Status performs no AWS mutation. Apply accepts only an exact checksum-reviewed staging plan
-created from the current clean, upstream-matched main commit. It permits the two-update immutable
-Lambda release, the one-update gateway concurrency correction, the one-update default-route scope
-correction, or the two-policy encrypted-outbox producer correction. Every mode preserves the JWT
-authorizer, Lambda integration, durable workflow triggers, retained idle ECS, data, and every
-unrelated resource. Apply immediately runs the matching completed-runtime zero-drift verifier.
+created from the current clean, upstream-matched main commit. It permits the 14-update/one-gate
+immutable workflow release, two-update immutable gateway release, one-update gateway concurrency
+correction, one-update default-route scope correction, or two-policy encrypted-outbox producer
+correction. Every mode preserves the JWT authorizer, Lambda integration, durable workflow
+triggers, retained idle ECS, data, and every unrelated resource. Apply immediately runs the
+matching completed-runtime zero-drift verifier.
 "@
   exit 0
 }
@@ -296,6 +297,119 @@ function Assert-GatewayReleasePlan {
   }
 }
 
+function Assert-WorkflowReleasePlan {
+  param([Parameter(Mandatory = $true)][object]$Plan)
+  $expectedUpdates = @(
+    "module.platform.aws_cloudformation_stack.profile_readiness_durable[0]",
+    "module.platform.aws_cloudwatch_event_rule.profile_readiness_terminal[0]",
+    "module.platform.aws_iam_role_policy.outbox_starter[0]",
+    "module.platform.aws_iam_role_policy.profile_readiness_durable[0]",
+    "module.platform.aws_lambda_alias.outbox_reconciler[0]",
+    "module.platform.aws_lambda_alias.outbox_starter[0]",
+    "module.platform.aws_lambda_alias.profile_readiness_activity[0]",
+    "module.platform.aws_lambda_alias.profile_readiness_terminal[0]",
+    "module.platform.aws_lambda_function.outbox_reconciler[0]",
+    "module.platform.aws_lambda_function.outbox_starter[0]",
+    "module.platform.aws_lambda_function.profile_readiness_activity[0]",
+    "module.platform.aws_lambda_function.profile_readiness_terminal[0]",
+    "module.platform.aws_sqs_queue_policy.profile_readiness_dead_letter[0]",
+    "module.platform.aws_vpc_endpoint.lambda[0]"
+  ) | Sort-Object
+  $expectedReplacement = "module.platform.time_sleep.profile_readiness_durable_policy_propagation[0]"
+  $changes = @($Plan.resource_changes | Where-Object {
+    (@($_.change.actions) -join ",") -notin @("no-op", "read")
+  })
+  $updates = @($changes | Where-Object { (@($_.change.actions) -join ",") -eq "update" })
+  $replacements = @($changes | Where-Object {
+    (@($_.change.actions) -join ",") -eq "create,delete"
+  })
+  $updateAddresses = @($updates | ForEach-Object { [string]$_.address } | Sort-Object)
+  if (
+    $changes.Count -ne 15 -or $updates.Count -ne 14 -or $replacements.Count -ne 1 -or
+    (Compare-Object -ReferenceObject $updateAddresses -DifferenceObject $expectedUpdates) -or
+    [string]$replacements[0].address -ne $expectedReplacement
+  ) { throw "The plan is outside the exact staging workflow release boundary." }
+
+  foreach ($name in @(
+    "deploy_applications", "deploy_gateway_lambda", "deploy_serverless_outbox",
+    "deploy_profile_readiness_durable", "serverless_runtime_cutover"
+  )) {
+    if (-not (Get-PlanBoolean -Plan $Plan -Name $name)) {
+      throw "The workflow release does not preserve the complete serverless runtime."
+    }
+  }
+  if (Get-PlanBoolean -Plan $Plan -Name "run_continuous_ecs_runtime") {
+    throw "The workflow release attempts to resume continuous ECS capacity."
+  }
+
+  $functionArtifacts = @(
+    @("module.platform.aws_lambda_function.outbox_reconciler[0]", "workflow_ingress"),
+    @("module.platform.aws_lambda_function.outbox_starter[0]", "workflow_ingress"),
+    @("module.platform.aws_lambda_function.profile_readiness_activity[0]", "profile_readiness_activity"),
+    @("module.platform.aws_lambda_function.profile_readiness_terminal[0]", "profile_readiness_activity")
+  )
+  foreach ($item in $functionArtifacts) {
+    $change = @($updates | Where-Object { [string]$_.address -eq [string]$item[0] })[0]
+    Assert-OnlyPropertiesChanged $change @(
+      "environment", "last_modified", "qualified_arn", "qualified_invoke_arn", "s3_key",
+      "s3_object_version", "source_code_hash", "version"
+    ) "A workflow function release changes more than artifact identity and computed version fields."
+    $prefix = [string]$item[1]
+    if (
+      [string]$change.change.after.s3_key -ne
+        [string](Get-PlanInput $Plan "${prefix}_artifact_s3_key") -or
+      [string]$change.change.after.s3_object_version -ne
+        [string](Get-PlanInput $Plan "${prefix}_artifact_s3_object_version") -or
+      [string]$change.change.after.source_code_hash -ne
+        [string](Get-PlanInput $Plan "${prefix}_artifact_base64sha256") -or
+      -not [bool]$change.change.after_unknown.version
+    ) { throw "A workflow function does not select its exact reviewed immutable artifact." }
+  }
+
+  foreach ($address in @(
+    "module.platform.aws_lambda_alias.outbox_reconciler[0]",
+    "module.platform.aws_lambda_alias.outbox_starter[0]",
+    "module.platform.aws_lambda_alias.profile_readiness_activity[0]",
+    "module.platform.aws_lambda_alias.profile_readiness_terminal[0]"
+  )) {
+    $change = @($updates | Where-Object { [string]$_.address -eq $address })[0]
+    Assert-OnlyPropertiesChanged $change @("function_version") `
+      "A workflow alias release changes more than its immutable function version."
+    if (-not [bool]$change.change.after_unknown.function_version) {
+      throw "A workflow alias does not target the version created by this plan."
+    }
+  }
+
+  $route = Get-PlannedValue $Plan "module.platform.aws_apigatewayv2_route.gateway[0]"
+  $integration = Get-PlannedValue $Plan `
+    "module.platform.aws_apigatewayv2_integration.gateway_lambda[0]"
+  $scopes = @($route.authorization_scopes | Sort-Object)
+  if (
+    $scopes.Count -ne 2 -or
+    (Compare-Object -ReferenceObject $scopes -DifferenceObject @("profile:read", "profile:write")) -or
+    [string]$route.authorization_type -ne "JWT" -or
+    [string]$route.target -ne "integrations/$([string]$integration.id)" -or
+    [string]$integration.integration_type -ne "AWS_PROXY" -or
+    [string]$integration.payload_format_version -ne "2.0"
+  ) { throw "The workflow release is outside the existing JWT-protected Lambda route." }
+  if (
+    -not [bool](Get-PlannedValue $Plan `
+      "module.platform.aws_lambda_event_source_mapping.outbox_starter[0]").enabled -or
+    [string](Get-PlannedValue $Plan `
+      "module.platform.aws_cloudwatch_event_rule.outbox_reconciler[0]").state -ne "ENABLED" -or
+    [string](Get-PlannedValue $Plan `
+      "module.platform.aws_cloudwatch_event_rule.profile_readiness_terminal[0]").state -ne "ENABLED"
+  ) { throw "The workflow release does not preserve every live workflow trigger." }
+  foreach ($address in @(
+    "module.platform.aws_ecs_service.gateway[0]",
+    "module.platform.aws_ecs_service.worker[0]"
+  )) {
+    if ([int](Get-PlannedValue $Plan $address).desired_count -ne 0) {
+      throw "The workflow release does not preserve idle retained ECS."
+    }
+  }
+}
+
 function Assert-GatewayScopeBoundaryPlan {
   param([Parameter(Mandatory = $true)][object]$Plan)
   $routeAddress = "module.platform.aws_apigatewayv2_route.gateway[0]"
@@ -532,6 +646,29 @@ function Get-GatewayPlanKind {
   if ($addresses.Count -eq 2 -and $releaseDifference.Count -eq 0) {
     return "artifact_release"
   }
+  $workflowReleaseAddresses = @(
+    "module.platform.aws_cloudformation_stack.profile_readiness_durable[0]",
+    "module.platform.aws_cloudwatch_event_rule.profile_readiness_terminal[0]",
+    "module.platform.aws_iam_role_policy.outbox_starter[0]",
+    "module.platform.aws_iam_role_policy.profile_readiness_durable[0]",
+    "module.platform.aws_lambda_alias.outbox_reconciler[0]",
+    "module.platform.aws_lambda_alias.outbox_starter[0]",
+    "module.platform.aws_lambda_alias.profile_readiness_activity[0]",
+    "module.platform.aws_lambda_alias.profile_readiness_terminal[0]",
+    "module.platform.aws_lambda_function.outbox_reconciler[0]",
+    "module.platform.aws_lambda_function.outbox_starter[0]",
+    "module.platform.aws_lambda_function.profile_readiness_activity[0]",
+    "module.platform.aws_lambda_function.profile_readiness_terminal[0]",
+    "module.platform.aws_sqs_queue_policy.profile_readiness_dead_letter[0]",
+    "module.platform.aws_vpc_endpoint.lambda[0]",
+    "module.platform.time_sleep.profile_readiness_durable_policy_propagation[0]"
+  ) | Sort-Object
+  $workflowReleaseDifference = @(
+    Compare-Object -ReferenceObject $addresses -DifferenceObject $workflowReleaseAddresses
+  )
+  if ($addresses.Count -eq 15 -and $workflowReleaseDifference.Count -eq 0) {
+    return "workflow_artifact_release"
+  }
   if (
     $addresses.Count -eq 1 -and
     $addresses[0] -eq "module.platform.aws_apigatewayv2_route.gateway[0]"
@@ -554,7 +691,7 @@ function Get-GatewayPlanKind {
   if ($addresses.Count -eq 2 -and $producerDifference.Count -eq 0) {
     return "outbox_producer_kms"
   }
-  throw "The plan is outside every reviewed staging gateway change boundary."
+  throw "The plan is outside every reviewed staging runtime-maintenance boundary."
 }
 
 function Invoke-AwsJson {
@@ -664,6 +801,7 @@ $resolvedPlanPath = Resolve-PlanPath
 $plan = Get-PlanJson $resolvedPlanPath
 $planKind = Get-GatewayPlanKind $plan
 if ($planKind -eq "artifact_release") { Assert-GatewayReleasePlan $plan }
+elseif ($planKind -eq "workflow_artifact_release") { Assert-WorkflowReleasePlan $plan }
 elseif ($planKind -eq "scope_boundary") { Assert-GatewayScopeBoundaryPlan $plan }
 elseif ($planKind -eq "gateway_concurrency") { Assert-GatewayConcurrencyPlan $plan }
 else { Assert-OutboxProducerKmsPlan $plan }
@@ -674,15 +812,21 @@ if ($Action -eq "Status") {
     Environment = "staging"
     Action = if ($planKind -eq "artifact_release") {
       "gateway_release_review"
+    } elseif ($planKind -eq "workflow_artifact_release") {
+      "workflow_release_review"
     } elseif ($planKind -eq "scope_boundary") {
       "gateway_scope_boundary_review"
     } elseif ($planKind -eq "gateway_concurrency") {
       "gateway_concurrency_review"
     } else { "outbox_producer_kms_review" }
     PlanSha256 = $actualPlanSha256
-    Creates = 0; Updates = if ($planKind -in @("scope_boundary", "gateway_concurrency")) { 1 } else { 2 }
-    Deletes = 0; Replacements = 0
-    ApiTrafficChange = $planKind -ne "outbox_producer_kms"
+    Creates = 0
+    Updates = if ($planKind -eq "workflow_artifact_release") {
+      14
+    } elseif ($planKind -in @("scope_boundary", "gateway_concurrency")) { 1 } else { 2 }
+    Deletes = 0
+    Replacements = if ($planKind -eq "workflow_artifact_release") { 1 } else { 0 }
+    ApiTrafficChange = $planKind -in @("artifact_release", "scope_boundary", "gateway_concurrency")
     WorkflowTriggerChange = $false; EcsCapacityChange = $false
     AwsMutation = $false
   } | ConvertTo-Json
@@ -692,6 +836,8 @@ if ($Action -eq "Status") {
 $sourceCommit = Assert-ExactMain
 $expectedPlanPrefix = if ($planKind -eq "artifact_release") {
   "gateway-runtime-release"
+} elseif ($planKind -eq "workflow_artifact_release") {
+  "workflow-runtime-release"
 } elseif ($planKind -eq "scope_boundary") {
   "gateway-scope-boundary"
 } elseif ($planKind -eq "gateway_concurrency") {
@@ -733,6 +879,8 @@ if (
   Environment = "staging"
   Action = if ($planKind -eq "artifact_release") {
     "gateway_release"
+  } elseif ($planKind -eq "workflow_artifact_release") {
+    "workflow_release"
   } elseif ($planKind -eq "scope_boundary") {
     "gateway_scope_boundary"
   } elseif ($planKind -eq "gateway_concurrency") {

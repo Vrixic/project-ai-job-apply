@@ -86,3 +86,11 @@ only its checksum, confirm zero drift and reserved concurrency `5`, then rerun:
 4. aggregate Lambda/API/database/queue/DLQ/alarm/privacy corroboration.
 
 Only those results can complete restored staging acceptance.
+
+## 2026-08-07 result
+
+The reviewed concurrency correction is deployed at `5`, and the complete fixed workload passed
+500/500 public requests plus 25/25 durable workflows with matching replay and clean aggregate AWS
+capacity evidence. The capacity defect is closed. The run exposed a separate terminal-outbox
+acknowledgement defect, which is tracked in the
+[terminal-outbox recovery evidence](d0-staging-terminal-outbox-recovery-2026-08-07.md).

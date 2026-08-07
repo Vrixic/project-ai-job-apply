@@ -93,6 +93,31 @@ the fixed synthetic workload before accepting the cutover.
 Record plan/apply identifiers, checksum, immutable versions, aggregate test results, alarm/log
 evidence, queue counts, and drift evidence without retaining candidate data or secret values.
 
+## Post-cutover workflow releases
+
+After cutover, workflow ingress, activity/terminal, and durable artifacts are a live coupled
+release. Publish all three immutable artifacts from the exact merged source, then run
+`plan-staging-serverless-runtime-cutover.ps1 -Action PlanWorkflowRelease` with the currently
+accepted gateway artifact and the new workflow artifact set.
+
+The accepted plan must contain exactly 14 in-place updates plus the policy-hash-keyed 45-second IAM
+propagation-gate replacement already used by dark workflow releases. It must contain zero creates,
+standalone deletes, API-route changes, trigger-state changes, ECS-capacity changes, persistent-data
+changes, secret changes, or gateway changes. The SQS mapping and both EventBridge rules remain
+enabled, gateway dispatch remains `lambda_durable`, the JWT-protected Lambda route remains public,
+and retained ECS remains `0/0/0`.
+
+Review the saved plan with `operate-staging-gateway-runtime-release.ps1 -Action Status`, authorize
+its exact SHA-256, and apply only that checksum through the same operator. Completed-runtime
+verification must return zero drift before authenticated workflow, idempotent replay, two-account
+isolation, queues/DLQs, alarms, logs, and the fixed workload are accepted.
+
+Phase 0 has no downstream subscriber for `profile.readiness.calculated.v1`. New terminal result
+events must therefore be retained and acknowledged atomically with operation completion; they must
+not depend on the retired Temporal worker merely to clear the outbox. If historical unacknowledged
+terminal events exist, drain the exact reviewed batch through the bounded legacy Temporal drain
+before planning a workflow release. Never rewrite their dispatch target or delete them directly.
+
 ## Post-cutover gateway releases
 
 After cutover, never reuse the original dark gateway release planner. A gateway artifact update now

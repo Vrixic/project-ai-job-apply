@@ -36,6 +36,7 @@ param(
   [ValidatePattern("^[a-z]{2}-[a-z]+-[0-9]+$")][string]$Region = "us-east-2",
   [switch]$RecoverFailedApply,
   [switch]$AllowArtifactReleaseUpdate,
+  [switch]$AllowRuntimeArtifactReleaseUpdate,
   [switch]$AllowGatewayArtifactReleaseUpdate,
   [switch]$AllowGatewayConcurrencyUpdate,
   [ValidateRange(1, 5)][int]$GatewayReservedConcurrency = 5,
@@ -62,6 +63,9 @@ while rechecking the immutable artifacts and complete trigger-disabled workflow 
 Use -AllowArtifactReleaseUpdate after a completed dark deployment to permit only the exact
 workflow function, immutable version/alias, version-scoped policy, disabled terminal-rule, durable
 stack, and policy-propagation updates caused by three new reviewed immutable artifacts.
+Use -AllowRuntimeArtifactReleaseUpdate after runtime cutover for the same immutable workflow
+release boundary while preserving Lambda dispatch, every enabled workflow trigger, the public API,
+and idle ECS rollback resources.
 Use -AllowGatewayArtifactReleaseUpdate after runtime cutover to permit only a new immutable
 gateway artifact/version and the public environment alias transition. It preserves durable
 dispatch, enabled workflow triggers, idle ECS rollback resources, and every API route/integration.
@@ -111,7 +115,8 @@ if (-not $AwsProfile) {
 if ($Region -ne "us-east-2") {
   throw "The Phase 0 $Environment environment is restricted to us-east-2."
 }
-if (@($RecoverFailedApply, $AllowArtifactReleaseUpdate, $AllowGatewayArtifactReleaseUpdate,
+if (@($RecoverFailedApply, $AllowArtifactReleaseUpdate, $AllowRuntimeArtifactReleaseUpdate,
+    $AllowGatewayArtifactReleaseUpdate,
     $AllowGatewayConcurrencyUpdate,
     $AllowGatewayScopeBoundaryUpdate,
     $AllowOutboxProducerKmsUpdate,
@@ -121,7 +126,11 @@ if (@($RecoverFailedApply, $AllowArtifactReleaseUpdate, $AllowGatewayArtifactRel
     Where-Object { $_ }).Count -gt 1) {
   throw "Recovery, workflow/gateway release, completed-dark verification, cutover planning, and completed-cutover verification are mutually exclusive."
 }
+$workflowArtifactReleaseUpdate = [bool](
+  $AllowArtifactReleaseUpdate -or $AllowRuntimeArtifactReleaseUpdate
+)
 $runtimeCutoverActive = [bool](
+  $AllowRuntimeArtifactReleaseUpdate -or
   $AllowGatewayArtifactReleaseUpdate -or
   $AllowGatewayConcurrencyUpdate -or
   $AllowGatewayScopeBoundaryUpdate -or
@@ -131,7 +140,8 @@ $runtimeCutoverActive = [bool](
   $VerifyCompletedRuntimeCutover
 )
 $liveRuntimeCutoverExpected = [bool](
-  $AllowGatewayArtifactReleaseUpdate -or $AllowGatewayScopeBoundaryUpdate -or
+  $AllowRuntimeArtifactReleaseUpdate -or $AllowGatewayArtifactReleaseUpdate -or
+  $AllowGatewayScopeBoundaryUpdate -or
   $AllowGatewayConcurrencyUpdate -or
   $AllowOutboxProducerKmsUpdate -or $VerifyCompletedOutboxProducerKmsUpdate -or
   $VerifyCompletedRuntimeCutover
@@ -178,6 +188,8 @@ $planPrefix = if ($PlanRuntimeCutover) {
   "serverless-runtime-cutover-verify"
 } elseif ($VerifyCompletedDarkDeployment) {
   "workflow-dark-verify"
+} elseif ($AllowRuntimeArtifactReleaseUpdate) {
+  "workflow-runtime-release"
 } elseif ($AllowArtifactReleaseUpdate) {
   "workflow-dark-release"
 } elseif ($RecoverFailedApply) {
@@ -293,7 +305,7 @@ $baseline = $null
 $acceptedEndpointSidCorrection = $false
 if (
   -not $RecoverFailedApply -and
-  -not $AllowArtifactReleaseUpdate -and
+  -not $workflowArtifactReleaseUpdate -and
   -not $VerifyCompletedDarkDeployment -and
   -not $runtimeCutoverActive
 ) {
@@ -448,7 +460,7 @@ try {
   }
 
   if (
-    $RecoverFailedApply -or $AllowArtifactReleaseUpdate -or
+    $RecoverFailedApply -or $workflowArtifactReleaseUpdate -or
     $VerifyCompletedDarkDeployment -or $runtimeCutoverActive
   ) {
     $baselinePlan = [pscustomobject]@{
@@ -516,7 +528,7 @@ try {
     throw "The pinned Secrets extension is not the reviewed x86_64 regional layer."
   }
 
-  if ($AllowArtifactReleaseUpdate -or $runtimeCutoverActive) {
+  if ($workflowArtifactReleaseUpdate -or $runtimeCutoverActive) {
     $releaseFunctions = @(
       @("$resourcePrefix-outbox-starter", 1, $WorkflowIngressArtifactBase64Sha256, $true),
       @("$resourcePrefix-outbox-reconciler", 1, $WorkflowIngressArtifactBase64Sha256, $true),
@@ -578,9 +590,9 @@ try {
         [string]$latest.State -ne "Active" -or
         [string]$latest.LastUpdateStatus -ne "Successful" -or
         [string]$latest.Runtime -ne "nodejs24.x" -or
-        ($AllowArtifactReleaseUpdate -and
+        ($workflowArtifactReleaseUpdate -and
           [string]$latest.CodeSha256 -eq [string]$releaseFunction[2]) -or
-        ($runtimeCutoverActive -and
+        ($runtimeCutoverActive -and -not $workflowArtifactReleaseUpdate -and
           [string]$latest.CodeSha256 -ne [string]$releaseFunction[2]) -or
         [string]$latest.CodeSha256 -ne [string]$aliased.CodeSha256 -or
         [string]$alias.FunctionVersion -notmatch "^[1-9][0-9]*$" -or
@@ -1085,7 +1097,7 @@ try {
     } elseif ($RecoverFailedApply) {
       $recoveryExpectedCreates
     } elseif (-not (
-      $AllowArtifactReleaseUpdate -or $VerifyCompletedDarkDeployment -or
+      $workflowArtifactReleaseUpdate -or $VerifyCompletedDarkDeployment -or
       $AllowGatewayArtifactReleaseUpdate -or
       $AllowGatewayConcurrencyUpdate -or
       $AllowGatewayScopeBoundaryUpdate -or
@@ -1107,7 +1119,7 @@ try {
       @("module.platform.aws_apigatewayv2_route.gateway[0]")
     } elseif ($AllowOutboxProducerKmsUpdate) {
       $outboxProducerKmsExpectedUpdates
-    } elseif ($AllowArtifactReleaseUpdate) {
+    } elseif ($workflowArtifactReleaseUpdate) {
       $releaseExpectedUpdates
     } elseif (-not (
       $VerifyCompletedDarkDeployment -or $VerifyCompletedRuntimeCutover -or
@@ -1118,7 +1130,7 @@ try {
     }
   )
   $expectedReplacements = @(
-    if ($AllowArtifactReleaseUpdate) {
+    if ($workflowArtifactReleaseUpdate) {
       $releaseExpectedReplacements
     }
   )
@@ -1208,7 +1220,7 @@ try {
 
   if (
     -not $RecoverFailedApply -and
-    -not $AllowArtifactReleaseUpdate -and
+    -not $workflowArtifactReleaseUpdate -and
     -not $AllowGatewayArtifactReleaseUpdate -and
     -not $AllowGatewayConcurrencyUpdate -and
     -not $AllowGatewayScopeBoundaryUpdate -and
@@ -1504,7 +1516,7 @@ try {
     }
   }
 
-  if ($AllowArtifactReleaseUpdate) {
+  if ($workflowArtifactReleaseUpdate) {
     function Assert-ReleaseFunctionChange {
       param(
         [string]$Address,
@@ -1741,7 +1753,7 @@ try {
     "module.platform.time_sleep.profile_readiness_durable_policy_propagation[0]"
   $initialDarkDeployment = -not (
     $RecoverFailedApply -or
-    $AllowArtifactReleaseUpdate -or
+    $workflowArtifactReleaseUpdate -or
     $AllowGatewayArtifactReleaseUpdate -or
     $AllowGatewayConcurrencyUpdate -or
     $AllowGatewayScopeBoundaryUpdate -or
@@ -1772,7 +1784,7 @@ try {
     [string]$propagation.triggers.role_arn -eq [string]$durableRoleValue.arn
   }
   $propagationPolicyHashValid = if (
-    $initialDarkDeployment -or $AllowArtifactReleaseUpdate
+    $initialDarkDeployment -or $workflowArtifactReleaseUpdate
   ) {
     [bool]$propagationResourceChange.change.after_unknown.triggers.policy_sha256
   } else {
@@ -1826,6 +1838,7 @@ try {
     WorkflowArtifactSourceCommit = $WorkflowArtifactSourceSha
     RecoveryFromFailedApply    = [bool]$RecoverFailedApply
     ArtifactReleaseUpdate      = [bool]$AllowArtifactReleaseUpdate
+    RuntimeArtifactReleaseUpdate = [bool]$AllowRuntimeArtifactReleaseUpdate
     GatewayArtifactReleaseUpdate = [bool]$AllowGatewayArtifactReleaseUpdate
     GatewayConcurrencyUpdate       = [bool]$AllowGatewayConcurrencyUpdate
     GatewayScopeBoundaryUpdate   = [bool]$AllowGatewayScopeBoundaryUpdate
