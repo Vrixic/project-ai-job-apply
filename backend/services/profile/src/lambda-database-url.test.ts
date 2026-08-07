@@ -33,6 +33,75 @@ describe("Lambda database secret resolution", () => {
     });
   });
 
+  it("recovers when the extension is not ready during Lambda cold start", async () => {
+    const fetchImplementation = vi
+      .fn()
+      .mockRejectedValueOnce(new DOMException("timed out", "TimeoutError"))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            SecretString: "postgres://candidate:managed@database.internal:5432/ai_job_apply",
+          }),
+          { status: 200 },
+        ),
+      );
+    const sleepImplementation = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      resolveLambdaDatabaseUrl(
+        { DATABASE_SECRET_ID: "database-secret" },
+        {
+          sessionToken: "runtime-session-token",
+          fetchImplementation,
+          sleepImplementation,
+        },
+      ),
+    ).resolves.toContain("database.internal");
+
+    expect(fetchImplementation).toHaveBeenCalledTimes(2);
+    expect(sleepImplementation).toHaveBeenCalledWith(100);
+  });
+
+  it("retries transient extension responses and then fails with a sanitized error", async () => {
+    const fetchImplementation = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("private upstream failure", { status: 503 }))
+      .mockResolvedValueOnce(new Response("private upstream failure", { status: 500 }))
+      .mockResolvedValueOnce(new Response("private upstream failure", { status: 504 }));
+
+    await expect(
+      resolveLambdaDatabaseUrl(
+        { DATABASE_SECRET_ID: "database-secret" },
+        {
+          sessionToken: "runtime-session-token",
+          fetchImplementation,
+          sleepImplementation: vi.fn().mockResolvedValue(undefined),
+        },
+      ),
+    ).rejects.toThrow("The managed database secret could not be retrieved");
+
+    expect(fetchImplementation).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not retry permanent extension responses", async () => {
+    const fetchImplementation = vi.fn().mockResolvedValue(new Response(null, { status: 403 }));
+    const sleepImplementation = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      resolveLambdaDatabaseUrl(
+        { DATABASE_SECRET_ID: "database-secret" },
+        {
+          sessionToken: "runtime-session-token",
+          fetchImplementation,
+          sleepImplementation,
+        },
+      ),
+    ).rejects.toThrow("The managed database secret could not be retrieved");
+
+    expect(fetchImplementation).toHaveBeenCalledTimes(1);
+    expect(sleepImplementation).not.toHaveBeenCalled();
+  });
+
   it("fails without printing or returning a malformed secret", async () => {
     const fetchImplementation = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ SecretString: "https://not-a-database.example" }), {
