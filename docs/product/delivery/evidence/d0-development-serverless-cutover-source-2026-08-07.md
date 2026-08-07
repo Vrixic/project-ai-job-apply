@@ -3,7 +3,7 @@
 Date: 2026-08-07
 Delivery: D0-016 / SR-005 / SR-007
 Environment: isolated development in `us-east-2`
-Status: Two live planning attempts failed closed; corrected pre-cutover prerequisite boundary is locally verified; no plan authorized or applied
+Status: Three live planning attempts failed closed; corrected full-state dark prerequisite boundary is locally verified; no plan authorized or applied
 
 ## Implemented boundary
 
@@ -65,9 +65,16 @@ closed before Terraform planning because it reused the post-cutover KMS mode, wh
 required enabled triggers while development remains dark. That exposed a boundary-selection defect,
 not live drift.
 
-The corrected source gives development a distinct pre-cutover KMS mode. It permits the same exact
-two IAM policy updates while requiring `serverless_runtime_cutover = false`, Temporal dispatch,
-disabled SQS/EventBridge triggers, idle ECS, and zero unrelated changes. The operator binds the
-saved plan to that dark boundary and runs matching dark zero-drift verification immediately after
-apply. Merge, regenerate the exact two-policy plan, and request explicit authorization for its
-checksum before retrying the cutover plan.
+The distinct pre-cutover mode then reached an older gateway-only baseline path. That helper
+correctly rejected the fully deployed workflow resources because a gateway-only plan would propose
+deleting them. No prerequisite plan or checksum was produced. The mode now reconstructs its
+baseline from the complete tracked remote state, matching every other completed-workflow and
+cutover mode, while retaining the exact artifact, live-resource, trigger, dispatch, action, and
+zero-drift checks.
+
+The corrected source permits only the same two IAM policy updates while requiring
+`serverless_runtime_cutover = false`, Temporal dispatch, disabled SQS/EventBridge triggers, idle
+ECS, and zero unrelated changes. The operator binds the saved plan to that dark boundary and runs
+matching dark zero-drift verification immediately after apply. Merge, regenerate the exact
+two-policy plan, and request explicit authorization for its checksum before retrying the cutover
+plan.

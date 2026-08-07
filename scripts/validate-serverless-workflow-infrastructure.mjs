@@ -489,6 +489,8 @@ for (const expected of [
   "AllowDarkOutboxProducerKmsUpdate",
   "VerifyCompletedOutboxProducerKmsUpdate",
   "VerifyCompletedDarkOutboxProducerKmsUpdate",
+  "-not $outboxProducerKmsUpdate -and",
+  "$VerifyCompletedDarkDeployment -or $outboxProducerKmsUpdate -or",
   "PlanRuntimeCutover",
   "VerifyCompletedRuntimeCutover",
   "CompletedRuntimeCutoverVerification",
@@ -537,7 +539,7 @@ assert.ok(
   workflowPlanner
     .replaceAll("\r\n", "\n")
     .includes(
-      "  -not $VerifyCompletedDarkDeployment -and\n  -not $runtimeCutoverActive\n) {\ntry {\n  $baselineRaw",
+      "  -not $VerifyCompletedDarkDeployment -and\n  -not $outboxProducerKmsUpdate -and\n  -not $outboxProducerKmsVerification -and\n  -not $runtimeCutoverActive\n) {\ntry {\n  $baselineRaw",
     ),
   "Runtime maintenance modes must bypass the gateway-only initial-deployment baseline.",
 );
@@ -545,7 +547,7 @@ assert.ok(
   workflowPlanner
     .replaceAll("\r\n", "\n")
     .includes(
-      "    $RecoverFailedApply -or $workflowArtifactReleaseUpdate -or\n    $VerifyCompletedDarkDeployment -or $runtimeCutoverActive\n  ) {\n    $baselinePlan = [pscustomobject]",
+      "    $RecoverFailedApply -or $workflowArtifactReleaseUpdate -or\n    $VerifyCompletedDarkDeployment -or $outboxProducerKmsUpdate -or\n    $outboxProducerKmsVerification -or $runtimeCutoverActive\n  ) {\n    $baselinePlan = [pscustomobject]",
     ),
   "Runtime maintenance modes must derive completed values from live Terraform state.",
 );
