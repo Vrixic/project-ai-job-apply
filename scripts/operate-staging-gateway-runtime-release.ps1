@@ -347,7 +347,7 @@ function Assert-WorkflowReleasePlan {
 
   foreach ($name in @(
     "deploy_applications", "deploy_gateway_lambda", "deploy_serverless_outbox",
-    "deploy_profile_readiness_durable"
+    "deploy_profile_readiness_durable", "serverless_runtime_cutover"
   )) {
     if (-not (Get-PlanBoolean -Plan $Plan -Name $name)) {
       throw "The workflow release does not preserve the complete serverless runtime."
@@ -578,7 +578,7 @@ function Assert-OutboxProducerKmsPlan {
 
   foreach ($name in @(
     "deploy_applications", "deploy_gateway_lambda", "deploy_serverless_outbox",
-    "deploy_profile_readiness_durable", "serverless_runtime_cutover"
+    "deploy_profile_readiness_durable"
   )) {
     if (-not (Get-PlanBoolean -Plan $Plan -Name $name)) {
       throw "The producer correction does not preserve the complete serverless runtime."

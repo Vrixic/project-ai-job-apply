@@ -3,7 +3,7 @@
 Date: 2026-08-07
 Delivery: D0-016 / SR-005 / SR-007
 Environment: isolated development in `us-east-2`
-Status: Three live planning attempts failed closed; corrected full-state dark prerequisite boundary is locally verified; no plan authorized or applied
+Status: Exact two-update plan generated; independent operator review failed closed on a corrected guard; no plan authorized or applied
 
 ## Implemented boundary
 
@@ -78,3 +78,11 @@ ECS, and zero unrelated changes. The operator binds the saved plan to that dark 
 matching dark zero-drift verification immediately after apply. Merge, regenerate the exact
 two-policy plan, and request explicit authorization for its checksum before retrying the cutover
 plan.
+
+After the full-state correction merged, planning produced exactly those two updates with zero
+creates, deletes, replacements, traffic, trigger, or ECS-capacity changes. Independent operator
+review then failed closed because its generic component loop still required runtime cutover before
+the following boundary-specific check could accept the dark state. The saved plan was not
+authorized or applied. Source now leaves runtime/dark selection exclusively to the exact boundary
+check and restores the completed-runtime requirement accidentally omitted from the workflow-release
+guard; function-scoped policy validation protects both conditions.

@@ -695,6 +695,36 @@ for (const expected of [
     `The staging workload inspector is missing its serverless acceptance boundary: ${expected}`,
   );
 }
+const workflowReleaseOperatorGuard = stagingGatewayReleaseOperator.slice(
+  stagingGatewayReleaseOperator.indexOf("function Assert-WorkflowReleasePlan"),
+  stagingGatewayReleaseOperator.indexOf("function Assert-GatewayScopeBoundaryPlan"),
+);
+requireText(
+  workflowReleaseOperatorGuard,
+  '"deploy_profile_readiness_durable", "serverless_runtime_cutover"',
+  "The workflow release operator must preserve the completed runtime cutover.",
+);
+const outboxProducerOperatorGuard = stagingGatewayReleaseOperator.slice(
+  stagingGatewayReleaseOperator.indexOf("function Assert-OutboxProducerKmsPlan"),
+  stagingGatewayReleaseOperator.indexOf("function Get-GatewayPlanKind"),
+);
+requireText(
+  outboxProducerOperatorGuard,
+  '"deploy_profile_readiness_durable"',
+  "The producer KMS operator must preserve every deployed serverless component.",
+);
+assert.equal(
+  outboxProducerOperatorGuard.includes(
+    '"deploy_profile_readiness_durable", "serverless_runtime_cutover"',
+  ),
+  false,
+  "The producer KMS component loop must leave runtime/dark selection to its exact boundary check.",
+);
+requireText(
+  outboxProducerOperatorGuard,
+  'expectedRuntimeCutover = $OutboxProducerBoundary -eq "runtime"',
+  "The producer KMS operator must validate runtime/dark state separately.",
+);
 for (const expected of [
   'Environment       = "development"',
   '"inspect-staging-workload-and-cost.ps1"',
