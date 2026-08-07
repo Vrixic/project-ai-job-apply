@@ -29,4 +29,3 @@ foreach ($name in @("ExpectedAccountId", "StateBucket", "RuntimePlanPath")) {
 
 & $inspector @arguments
 exit $LASTEXITCODE
-

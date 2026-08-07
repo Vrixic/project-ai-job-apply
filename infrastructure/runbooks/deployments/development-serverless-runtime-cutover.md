@@ -80,4 +80,3 @@ Use the same ordered boundary already accepted in staging. Start from a fresh cu
 Never combine route movement and integration deletion, resume ECS implicitly, reuse a stale plan,
 or delete Lambda/ECS/Cloud Map/Temporal rollback resources during this drill. Obsolete-resource and
 provider retirement remain SR-008/SR-009 after the recorded rollback window expires.
-

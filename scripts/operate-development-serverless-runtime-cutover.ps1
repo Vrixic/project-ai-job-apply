@@ -40,4 +40,3 @@ foreach ($name in @("ExpectedAccountId", "StateBucket", "PlanPath", "ExpectedPla
 
 & $operator @arguments
 exit $LASTEXITCODE
-

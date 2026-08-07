@@ -72,4 +72,3 @@ else { $arguments["VerifyCompletedRuntimeCutover"] = $true }
 
 & $planner @arguments
 exit $LASTEXITCODE
-

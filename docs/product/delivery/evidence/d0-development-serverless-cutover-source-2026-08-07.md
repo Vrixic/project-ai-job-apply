@@ -57,4 +57,3 @@ No plan, context, AWS resource, application record, queue message, workflow, or 
 created or changed. The local development IAM Identity Center session is expired; after this source
 merges, refresh that short-lived session and generate the first exact-main read-only cutover plan.
 The resulting plan checksum is the next explicit authorization gate.
-
