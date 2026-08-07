@@ -151,10 +151,17 @@ replacements with plan SHA-256
 zero pending outbox work, zero open Temporal workflows, zero open Lambda durable executions, four
 immutable artifacts, the pinned extension, enabled triggers, idle ECS, and zero drift.
 
-The legacy workload inspector still assumed the retired `1/1/0` ECS application baseline and
-therefore failed closed before measurement. The accompanying source correction replaces that
-assumption with fresh completed-runtime verification and measures API Gateway, six Lambdas, idle
-ECS rollback services, RDS, the source queue, both DLQs, ten alarms, and structured-severity logs.
-It performs no AWS mutation. Merge and one exact automated replay of this corrected read-only
-inspector remain before the evidence package is final; no additional browser transaction is
+The legacy workload inspector initially assumed the retired `1/1/0` ECS application baseline and
+therefore failed closed before measurement. PR #167 replaced that assumption with fresh
+completed-runtime verification and serverless measurement of API Gateway, six Lambdas, idle ECS
+rollback services, RDS, the source queue, both DLQs, ten alarms, and structured-severity logs.
+
+After PR #167 merged, the corrected inspector replayed the exact accepted workload window from
+`2026-08-07T17:58:07.535Z` through `2026-08-07T17:58:31.852Z`. The read-only run passed with 601 API
+requests, 103 expected `4xx`, zero `5xx`, 667 Lambda invocations, zero Lambda errors or throttles,
+maximum Lambda duration 1,142.2 ms, database CPU at most 5.61% with at most eight connections,
+empty source queue and both DLQs, 1,103 log events with zero structured error or forbidden-pattern
+matches, two idle ECS rollback services, all ten runtime alarms healthy, `lambda_durable` dispatch,
+enabled triggers, and zero Terraform drift. No AWS resource or application record changed. This
+closes the evidence-automation gap and completes SR-006; no additional browser transaction is
 required.

@@ -42,3 +42,5 @@ The rollback-only `retain_gateway_lambda_integration_during_rollback` input defa
 When development cutover is eventually exercised, it may be enabled only for an ordered rollback
 transition that first moves the API route and disables dispatch/triggers. A separate verified plan
 must remove the resulting unreferenced integration; never combine those operations in one apply.
+Use the [development serverless runtime cutover runbook](../../../runbooks/deployments/development-serverless-runtime-cutover.md)
+for the exact planning, checksum authorization, acceptance, rollback, and restoration sequence.

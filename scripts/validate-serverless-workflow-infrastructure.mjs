@@ -40,11 +40,20 @@ const stagingWorkflowReleaseRollbackWrapper = read(
 );
 const workflowPlanner = read("scripts/plan-serverless-workflow-dark.ps1");
 const stagingRuntimeCutoverWrapper = read("scripts/plan-staging-serverless-runtime-cutover.ps1");
+const developmentRuntimeCutoverWrapper = read(
+  "scripts/plan-development-serverless-runtime-cutover.ps1",
+);
 const stagingRuntimeCutoverOperator = read(
   "scripts/operate-staging-serverless-runtime-cutover.ps1",
 );
+const developmentRuntimeCutoverOperatorWrapper = read(
+  "scripts/operate-development-serverless-runtime-cutover.ps1",
+);
 const stagingGatewayReleaseOperator = read("scripts/operate-staging-gateway-runtime-release.ps1");
 const stagingWorkloadInspector = read("scripts/inspect-staging-workload-and-cost.ps1");
+const developmentWorkloadInspectorWrapper = read(
+  "scripts/inspect-development-workload-and-cost.ps1",
+);
 const stagingLegacyTemporalDrain = read("scripts/operate-staging-legacy-temporal-drain.ps1");
 const gatewayConformanceLauncher = read("scripts/start-deployed-web-conformance.ps1");
 const gatewayBoundaryOperator = read("scripts/verify-gateway-lambda-boundary.ps1");
@@ -656,21 +665,33 @@ for (const expected of [
 }
 
 for (const expected of [
+  '[ValidateSet("development", "staging")]',
   '"operate-staging-gateway-runtime-release.ps1"',
+  '"operate-development-serverless-runtime-cutover.ps1"',
   "-Action Verify -ExpectedAccountId $ExpectedAccountId",
   '"AWS/Lambda" "Invocations"',
   '"AWS/Lambda" "Errors"',
   '"AWS/Lambda" "Throttles"',
-  '"ai-job-apply-staging-profile-readiness-dead-letter"',
+  '"ai-job-apply-$Environment-profile-readiness-dead-letter"',
   "$level -ge 40 -or $operationalMessage -match",
   "$healthyAlarms -ne 10",
   "$idleServices -ne 2",
-  'throw "The staging serverless workload did not pass aggregate AWS acceptance."',
+  'throw "The $Environment serverless workload did not pass aggregate AWS acceptance."',
 ]) {
   requireText(
     stagingWorkloadInspector,
     expected,
     `The staging workload inspector is missing its serverless acceptance boundary: ${expected}`,
+  );
+}
+for (const expected of [
+  'Environment       = "development"',
+  '"inspect-staging-workload-and-cost.ps1"',
+]) {
+  requireText(
+    developmentWorkloadInspectorWrapper,
+    expected,
+    `The development workload inspector wrapper is missing: ${expected}`,
   );
 }
 
@@ -757,13 +778,13 @@ for (const expected of [
   '"workflow-dark-plans"',
   "ExpectedPlanSha256",
   "Assert-CutoverPlan",
-  "The saved plan is outside the exact three-create, six-update staging cutover boundary.",
+  "The saved plan is outside the exact three-create, six-update $Environment cutover boundary.",
   "Assert-RuntimeBaselinePlan",
   "Get-PlanBooleanInput",
   "The runtime baseline must be a refresh-backed zero-change plan.",
   '"serverless-runtime-cutover-verify-"',
-  '"applydash.staging.serverless-runtime-cutover.v3"',
-  '"applydash.staging.serverless-runtime-cutover.v4"',
+  '"applydash.$Environment.serverless-runtime-cutover.v3"',
+  '"applydash.$Environment.serverless-runtime-cutover.v4"',
   "RuntimeBaselineSourceCommit",
   "ValidatedSourceCommit",
   "cat-file -t",
@@ -827,6 +848,48 @@ assert.ok(
 assert.ok(
   !/\b[0-9]{12}\b/.test(stagingRuntimeCutoverOperator),
   "The staging runtime-cutover operator must not embed an AWS account ID.",
+);
+
+for (const expected of [
+  '[ValidateSet("development", "staging")]',
+  "Environment = $Environment",
+  '"ai-job-apply-$Environment-events"',
+  '"ai-job-apply/$Environment/temporal-api-key"',
+  '"applydash.$Environment.serverless-runtime-cutover.v4"',
+]) {
+  requireText(
+    stagingRuntimeCutoverOperator,
+    expected,
+    `The shared runtime-cutover operator is missing environment isolation: ${expected}`,
+  );
+}
+
+for (const [source, environment, label] of [
+  [developmentRuntimeCutoverWrapper, "development", "development planner wrapper"],
+  [developmentRuntimeCutoverOperatorWrapper, "development", "development operator wrapper"],
+  [stagingRuntimeCutoverWrapper, "staging", "staging planner wrapper"],
+]) {
+  requireText(
+    source,
+    `Environment${source.includes("Environment                            =") ? "                            " : "                "}= "${environment}"`,
+    `The ${label} must bind its exact environment.`,
+  );
+}
+for (const expected of [
+  '[ValidateSet("Plan", "Verify")]',
+  '"PlanRuntimeCutover"',
+  '"VerifyCompletedRuntimeCutover"',
+]) {
+  requireText(
+    developmentRuntimeCutoverWrapper,
+    expected,
+    `The development runtime-cutover planner wrapper is missing: ${expected}`,
+  );
+}
+requireText(
+  developmentRuntimeCutoverOperatorWrapper,
+  '"operate-staging-serverless-runtime-cutover.ps1"',
+  "The development runtime-cutover operator wrapper must delegate to the shared guarded operator.",
 );
 
 for (const expected of [
