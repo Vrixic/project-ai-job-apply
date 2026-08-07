@@ -108,6 +108,13 @@ enabled, gateway dispatch remains `lambda_durable`, the JWT-protected Lambda rou
 and retained ECS remains `0/0/0`. The terminal DLQ resource policy is release-independent and must
 remain unchanged.
 
+The durable stack template is expected to be plan-time unknown during a workflow release because
+the exact numeric activity Lambda version is assigned only when AWS publishes it during apply. The
+planner must still validate the current materialized template, restrict the stack change to its
+template/computed outputs, bind every immutable desired artifact, and prove that activity-version
+dependency is the expected unknown. Completed-runtime verification must require the exact newly
+materialized template; this exception does not apply to ordinary completed-runtime verification.
+
 Review the saved plan with `operate-staging-gateway-runtime-release.ps1 -Action Status`, authorize
 its exact SHA-256, and apply only that checksum through the same operator. Completed-runtime
 verification must return zero drift before authenticated workflow, idempotent replay, two-account

@@ -143,7 +143,10 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   immutable workflow release, two-update immutable gateway release, one-update concurrency or
   OAuth-scope correction, or two-role encrypted-outbox producer correction. Every path is
   checksum-gated, preserves the authorizer/integration/workflows/data/idle-ECS boundary, and
-  requires its matching completed-runtime zero drift.
+  requires its matching completed-runtime zero drift. A workflow release permits the durable
+  template to be plan-time unknown only while AWS assigns the new activity's numeric version; the
+  exact current template and desired artifacts remain guarded, and completed verification requires
+  the materialized replacement.
 - `operate-staging-serverless-runtime-cutover.ps1` — Applies only the exact checksum-reviewed
   three-create/six-update cutover plan, then delegates to the refresh-backed completed-runtime
   verifier. It also creates separately reviewed rollback and restoration plans, requires zero

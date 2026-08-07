@@ -645,6 +645,8 @@ for (const expected of [
   "$expectedTerminalRuleState = if ($AllowRuntimeArtifactReleaseUpdate)",
   "$terminalRuleChange.change.before.state -ne $expectedTerminalRuleState",
   "$terminalRuleChange.change.after.state -ne $expectedTerminalRuleState",
+  "} elseif ($workflowArtifactReleaseUpdate) {",
+  "The activity-version-coupled durable release template is not plan-time unknown.",
 ]) {
   requireText(
     workflowPlanner,
