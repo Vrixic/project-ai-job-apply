@@ -1,5 +1,8 @@
 [CmdletBinding()]
 param(
+  [ValidateSet("development", "staging")]
+  [string]$Environment = "staging",
+
   [ValidateSet(
     "Status", "Apply", "Verify", "PlanRollback", "ApplyRollback",
     "VerifyRollbackTransition", "PlanRollbackCleanup", "ApplyRollbackCleanup",
@@ -19,7 +22,7 @@ param(
   [ValidatePattern("^[a-fA-F0-9]{64}$")]
   [string]$ExpectedPlanSha256 = "",
 
-  [string]$AwsProfile = "ai-job-apply-staging-admin",
+  [string]$AwsProfile = "",
 
   [ValidatePattern("^[a-z]{2}-[a-z]+-[0-9]+$")]
   [string]$Region = "us-east-2",
@@ -33,6 +36,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+
+if ([string]::IsNullOrWhiteSpace($AwsProfile)) {
+  $AwsProfile = "ai-job-apply-$Environment-admin"
+}
 
 if ($Help) {
   @"
@@ -85,7 +92,7 @@ Usage:
     -PlanPath .terraform/workflow-dark-plans/RETAINED_PLAN.tfplan `
     -ConfirmRestoreConformance
 
-Apply accepts only the exact checksum-reviewed staging cutover plan created from the current clean,
+Apply accepts only the exact checksum-reviewed $Environment cutover plan created from the current clean,
 upstream-matched main commit. It independently proves the exact three creates and six updates,
 requires idle retained ECS, zero pending outbox records, and zero open Temporal workflows, then
 applies that saved plan without regenerating it. Apply and Verify both run the refresh-backed
@@ -109,12 +116,12 @@ Temporal. Rollback intentionally makes the public API unavailable while retained
 }
 
 if ($Region -ne "us-east-2") {
-  throw "The staging runtime cutover is restricted to us-east-2."
+  throw "The $Environment runtime cutover is restricted to us-east-2."
 }
 if ($Action -ne "Status" -and (
   $ExpectedAccountId -notmatch "^[0-9]{12}$" -or [string]::IsNullOrWhiteSpace($StateBucket)
 )) {
-  throw "$Action requires the exact staging account ID and encrypted state bucket."
+  throw "$Action requires the exact $Environment account ID and encrypted state bucket."
 }
 if ($Action -in @(
   "Apply", "ApplyRollback", "ApplyRollbackCleanup", "ApplyRestore", "Cleanup"
@@ -140,7 +147,7 @@ if ($Action -in @("ContinueRestoreContext", "Cleanup") -and -not $ConfirmRestore
 }
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
-$environmentDirectory = Join-Path $repositoryRoot "infrastructure\terraform\environments\staging"
+$environmentDirectory = Join-Path $repositoryRoot "infrastructure\terraform\environments\$Environment"
 $terraformRoot = [IO.Path]::GetFullPath((Join-Path $environmentDirectory ".terraform"))
 $planDirectory = [IO.Path]::GetFullPath((Join-Path $terraformRoot "workflow-dark-plans"))
 $terraformDataDirectory = Join-Path $terraformRoot "dark-plan-data"
@@ -177,14 +184,14 @@ function Assert-ExactMain {
   $upstream = if ($null -eq $upstreamRaw) { "" } else { ([string]$upstreamRaw).Trim() }
   $dirty = @(& git -C $repositoryRoot status --porcelain=v1 --untracked-files=all)
   if ($branch -ne "main" -or $head -ne $upstream -or $dirty.Count -ne 0) {
-    throw "Use an exact clean upstream-matched main checkout for staging cutover."
+    throw "Use an exact clean upstream-matched main checkout for $Environment cutover."
   }
   return $head
 }
 
 function Resolve-PlanPath {
   if ([string]::IsNullOrWhiteSpace($PlanPath)) {
-    throw "The saved staging cutover -PlanPath is required."
+    throw "The saved $Environment cutover -PlanPath is required."
   }
   $candidate = if ([IO.Path]::IsPathRooted($PlanPath)) {
     [IO.Path]::GetFullPath($PlanPath)
@@ -197,7 +204,7 @@ function Resolve-PlanPath {
     -not $candidate.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) -or
     -not (Test-Path -LiteralPath $candidate -PathType Leaf)
   ) {
-    throw "The cutover plan must be an existing file below staging .terraform/workflow-dark-plans."
+    throw "The cutover plan must be an existing file below $Environment .terraform/workflow-dark-plans."
   }
   return $candidate
 }
@@ -209,7 +216,7 @@ function Get-PlanJson {
     $env:TF_DATA_DIR = $terraformDataDirectory
     $raw = & terraform "-chdir=$environmentDirectory" show -json $Path 2>$null
     if ($LASTEXITCODE -ne 0 -or -not $raw) {
-      throw "The saved staging cutover plan could not be inspected with the pinned provider set."
+      throw "The saved $Environment cutover plan could not be inspected with the pinned provider set."
     }
     return ($raw -join [Environment]::NewLine) | ConvertFrom-Json
   } finally {
@@ -316,7 +323,7 @@ function Assert-CutoverPlan {
     $changes.Count -ne 9 -or $creates.Count -ne 3 -or $updates.Count -ne 6 -or
     $createAddressDifference.Count -ne 0 -or $updateAddressDifference.Count -ne 0
   ) {
-    throw "The saved plan is outside the exact three-create, six-update staging cutover boundary."
+    throw "The saved plan is outside the exact three-create, six-update $Environment cutover boundary."
   }
   if (-not (Get-PlanBooleanInput -Plan $Plan -Name "serverless_runtime_cutover")) {
     throw "The saved plan does not select the atomic serverless runtime cutover switch."
@@ -655,7 +662,7 @@ function Get-VerificationArguments {
   $workflowLayer = [string](Get-PlanInput $Plan "profile_readiness_lambda_extension_layer_arn")
   if ($gatewayLayer -ne $workflowLayer) { throw "The saved plan does not use one pinned extension layer." }
   $arguments = @{
-    Environment = "staging"; ExpectedAccountId = $ExpectedAccountId; StateBucket = $StateBucket
+    Environment = $Environment; ExpectedAccountId = $ExpectedAccountId; StateBucket = $StateBucket
     GatewayArtifactS3Key = $gatewayKey
     GatewayArtifactS3ObjectVersion = [string](Get-PlanInput $Plan "gateway_lambda_artifact_s3_object_version")
     GatewayArtifactSourceSha = $gatewaySourceSha
@@ -690,47 +697,47 @@ function Invoke-AwsJson {
 }
 
 function Assert-Caller {
-  $caller = Invoke-AwsJson @("sts", "get-caller-identity") "The staging AWS session is unavailable."
+  $caller = Invoke-AwsJson @("sts", "get-caller-identity") "The $Environment AWS session is unavailable."
   if (
     [string]$caller.Account -ne $ExpectedAccountId -or
     -not ([string]$caller.Arn).Contains(":assumed-role/")
-  ) { throw "Use the temporary IAM Identity Center session for the exact staging account." }
+  ) { throw "Use the temporary IAM Identity Center session for the exact $Environment account." }
 }
 
 function Assert-ZeroLegacyWork {
   param([object]$Plan)
   $inspectionRaw = & (Join-Path $PSScriptRoot "inspect-deployed-outbox.ps1") `
-    -Environment staging -AwsProfile $AwsProfile -Region $Region -Execute
-  if ($LASTEXITCODE -ne 0) { throw "The bounded staging outbox inspection failed." }
+    -Environment $Environment -AwsProfile $AwsProfile -Region $Region -Execute
+  if ($LASTEXITCODE -ne 0) { throw "The bounded $Environment outbox inspection failed." }
   try { $inspection = ($inspectionRaw -join [Environment]::NewLine) | ConvertFrom-Json }
-  catch { throw "The bounded staging outbox inspection returned an invalid result." }
+  catch { throw "The bounded $Environment outbox inspection returned an invalid result." }
   if (
     [int]$inspection.version -ne 1 -or [int]$inspection.pendingCount -ne 0 -or
     [string]$inspection.orderedEventIdSha256 -notmatch "^[a-f0-9]{64}$"
-  ) { throw "Staging cutover requires a fresh zero-pending-outbox inspection." }
+  ) { throw "$Environment cutover requires a fresh zero-pending-outbox inspection." }
   & node (Join-Path $repositoryRoot "backend/workflows/cloud-conformance.mjs") `
     --profile $AwsProfile --region $Region `
-    --secret-id "ai-job-apply/staging/temporal-api-key" `
+    --secret-id "ai-job-apply/$Environment/temporal-api-key" `
     --address ([string](Get-PlanInput $Plan "temporal_address")) `
     --namespace ([string](Get-PlanInput $Plan "temporal_namespace")) `
     --require-zero-open-workflows
-  if ($LASTEXITCODE -ne 0) { throw "Staging cutover requires zero open Temporal workflows." }
+  if ($LASTEXITCODE -ne 0) { throw "$Environment cutover requires zero open Temporal workflows." }
 }
 
 function Assert-ZeroServerlessWork {
   foreach ($queueName in @(
-    "ai-job-apply-staging-events",
-    "ai-job-apply-staging-dead-letter",
-    "ai-job-apply-staging-profile-readiness-dead-letter"
+    "ai-job-apply-$Environment-events",
+    "ai-job-apply-$Environment-dead-letter",
+    "ai-job-apply-$Environment-profile-readiness-dead-letter"
   )) {
     $queue = Invoke-AwsJson `
       @("sqs", "get-queue-url", "--queue-name", $queueName) `
-      "A staging serverless queue could not be resolved."
+      "An $Environment serverless queue could not be resolved."
     $depth = Invoke-AwsJson @(
       "sqs", "get-queue-attributes", "--queue-url", ([string]$queue.QueueUrl),
       "--attribute-names", "ApproximateNumberOfMessages",
       "ApproximateNumberOfMessagesNotVisible", "ApproximateNumberOfMessagesDelayed"
-    ) "A staging serverless queue depth could not be inspected."
+    ) "An $Environment serverless queue depth could not be inspected."
     if (
       [int]$depth.Attributes.ApproximateNumberOfMessages +
       [int]$depth.Attributes.ApproximateNumberOfMessagesNotVisible +
@@ -739,9 +746,9 @@ function Assert-ZeroServerlessWork {
   }
   $running = Invoke-AwsJson @(
     "lambda", "list-durable-executions-by-function", "--function-name",
-    "ai-job-apply-staging-profile-readiness-durable", "--statuses", "RUNNING",
+    "ai-job-apply-$Environment-profile-readiness-durable", "--statuses", "RUNNING",
     "--max-items", "1", "--no-paginate"
-  ) "The staging durable execution inventory could not be inspected."
+  ) "The $Environment durable execution inventory could not be inspected."
   if (@($running.DurableExecutions).Count -ne 0) {
     throw "Rollback requires zero running durable executions."
   }
@@ -755,13 +762,13 @@ function Save-Context {
 
 function Get-Context {
   if (-not (Test-Path -LiteralPath $contextPath -PathType Leaf)) {
-    throw "The ignored staging cutover rollback context is absent."
+    throw "The ignored $Environment cutover rollback context is absent."
   }
   $context = Get-Content -LiteralPath $contextPath -Raw | ConvertFrom-Json
   $schema = [string]$context.Schema
-  $sourceBoundaryValid = if ($schema -eq "applydash.staging.serverless-runtime-cutover.v3") {
+  $sourceBoundaryValid = if ($schema -eq "applydash.$Environment.serverless-runtime-cutover.v3") {
     [string]$context.SourceCommit -match "^[a-f0-9]{40}$"
-  } elseif ($schema -eq "applydash.staging.serverless-runtime-cutover.v4") {
+  } elseif ($schema -eq "applydash.$Environment.serverless-runtime-cutover.v4") {
     [string]$context.RuntimeBaselineSourceCommit -match "^[a-f0-9]{40}$" -and
     [string]$context.ValidatedSourceCommit -match "^[a-f0-9]{40}$"
   } else { $false }
@@ -777,7 +784,7 @@ function Get-Context {
       "rollback_transition_verified", "rollback_cleanup_planned",
       "rollback_cleanup_applied", "rollback_verified", "restore_planned", "restore_verified"
     )
-  ) { throw "The ignored staging cutover rollback context is invalid." }
+  ) { throw "The ignored $Environment cutover rollback context is invalid." }
   return $context
 }
 
@@ -785,14 +792,14 @@ function Assert-Context {
   param([object]$Context, [string]$SourceCommit, [string]$RuntimeBaselinePlanSha256)
   Assert-ContextIdentity $Context $SourceCommit $RuntimeBaselinePlanSha256
   if (
-    [string]$Context.Schema -ne "applydash.staging.serverless-runtime-cutover.v4" -or
+    [string]$Context.Schema -ne "applydash.$Environment.serverless-runtime-cutover.v4" -or
     [string]$Context.ValidatedSourceCommit -ne $SourceCommit
   ) { throw "The ignored rollback context has not been continued onto the current exact source." }
 }
 
 function Get-RuntimeBaselineSourceCommit {
   param([Parameter(Mandatory = $true)][object]$Context)
-  if ([string]$Context.Schema -eq "applydash.staging.serverless-runtime-cutover.v3") {
+  if ([string]$Context.Schema -eq "applydash.$Environment.serverless-runtime-cutover.v3") {
     return [string]$Context.SourceCommit
   }
   return [string]$Context.RuntimeBaselineSourceCommit
@@ -872,7 +879,7 @@ function New-TransitionPlan {
     [string]$Destination
   )
   if (Test-Path -LiteralPath $Destination) {
-    throw "A saved staging transition plan already exists at the exact ignored path."
+    throw "A saved $Environment transition plan already exists at the exact ignored path."
   }
   $null = New-Item -ItemType Directory -Path $transitionDirectory -Force
   $previous = [ordered]@{
@@ -884,7 +891,7 @@ function New-TransitionPlan {
   try {
     $credentials = & aws configure export-credentials --profile $AwsProfile --format process 2>$null |
       ConvertFrom-Json
-    if (-not $credentials.SessionToken) { throw "Short-lived staging credentials are unavailable." }
+    if (-not $credentials.SessionToken) { throw "Short-lived $Environment credentials are unavailable." }
     $env:TF_DATA_DIR = $terraformDataDirectory
     $env:AWS_ACCESS_KEY_ID = [string]$credentials.AccessKeyId
     $env:AWS_SECRET_ACCESS_KEY = [string]$credentials.SecretAccessKey
@@ -903,7 +910,7 @@ function New-TransitionPlan {
     if ($LASTEXITCODE -ne $expectedExitCode) {
       $diagnostic = (@($output) | Select-Object -Last 8) -join " "
       $expectedResult = if ($expectedExitCode -eq 0) { "zero-change" } else { "change-only" }
-      throw "The staging transition did not produce the required $expectedResult plan: $diagnostic"
+      throw "The $Environment transition did not produce the required $expectedResult plan: $diagnostic"
     }
   } finally {
     if ($null -ne $priorVariables) { $null = Restore-EnvironmentVariables $priorVariables }
@@ -973,7 +980,7 @@ function Invoke-CompletedVerification {
   )
   $arguments = Get-VerificationArguments $Plan $Mode
   $raw = & $planner @arguments
-  if ($LASTEXITCODE -ne 0 -or -not $raw) { throw "Completed staging $Mode verification failed." }
+  if ($LASTEXITCODE -ne 0 -or -not $raw) { throw "Completed $Environment $Mode verification failed." }
   $result = ($raw -join [Environment]::NewLine) | ConvertFrom-Json
   $modeValid = if ($Mode -eq "Runtime") {
     [bool]$result.CompletedRuntimeCutoverVerification -and
@@ -988,7 +995,7 @@ function Invoke-CompletedVerification {
     -not $modeValid -or -not [bool]$result.NoDrift -or -not [bool]$result.EcsRuntimeIdle -or
     [int]$result.Creates -ne 0 -or [int]$result.Updates -ne 0 -or
     [int]$result.Deletes -ne 0 -or [int]$result.Replacements -ne 0
-  ) { throw "Completed staging $Mode verification returned an invalid boundary." }
+  ) { throw "Completed $Environment $Mode verification returned an invalid boundary." }
   return $result
 }
 
@@ -1035,15 +1042,15 @@ function Get-RestoredRuntimeBaseline {
 function Initialize-Backend {
   $stateEncryption = Invoke-AwsJson `
     @("s3api", "get-bucket-encryption", "--bucket", $StateBucket) `
-    "The encrypted staging state bucket could not be inspected."
+    "The encrypted $Environment state bucket could not be inspected."
   $rules = @($stateEncryption.ServerSideEncryptionConfiguration.Rules | Where-Object {
     $_.ApplyServerSideEncryptionByDefault.SSEAlgorithm -eq "aws:kms" -and
     $_.ApplyServerSideEncryptionByDefault.KMSMasterKeyID
   })
-  if ($rules.Count -ne 1) { throw "The staging state bucket does not expose one KMS default." }
+  if ($rules.Count -ne 1) { throw "The $Environment state bucket does not expose one KMS default." }
   $keyArn = [string]$rules[0].ApplyServerSideEncryptionByDefault.KMSMasterKeyID
   if ($keyArn -notmatch "^arn:aws:kms:$([regex]::Escape($Region)):$ExpectedAccountId`:key/") {
-    throw "The staging state key is outside the exact account and region."
+    throw "The $Environment state key is outside the exact account and region."
   }
   $null = New-Item -ItemType Directory -Path $terraformDataDirectory -Force
   $initializationOutput = & terraform "-chdir=$environmentDirectory" init -reconfigure `
@@ -1051,7 +1058,7 @@ function Initialize-Backend {
     "-backend-config=key=platform.tfstate" "-backend-config=region=$Region" `
     "-backend-config=kms_key_id=$keyArn" 2>&1
   if ($LASTEXITCODE -ne 0) {
-    throw "The pinned staging provider set could not initialize."
+    throw "The pinned $Environment provider set could not initialize."
   }
 }
 
@@ -1065,7 +1072,7 @@ function Invoke-SavedPlan {
   try {
     $credentials = & aws configure export-credentials --profile $AwsProfile --format process 2>$null |
       ConvertFrom-Json
-    if (-not $credentials.SessionToken) { throw "Short-lived staging credentials are unavailable." }
+    if (-not $credentials.SessionToken) { throw "Short-lived $Environment credentials are unavailable." }
     $env:TF_DATA_DIR = $terraformDataDirectory
     $env:AWS_ACCESS_KEY_ID = [string]$credentials.AccessKeyId
     $env:AWS_SECRET_ACCESS_KEY = [string]$credentials.SecretAccessKey
@@ -1100,7 +1107,7 @@ $actualPlanSha256 = (Get-FileHash -LiteralPath $resolvedPlanPath -Algorithm SHA2
 
 if ($Action -eq "Status") {
   [ordered]@{
-    Environment = "staging"; PlanKind = $planKind; PlanSha256 = $actualPlanSha256
+    Environment = $Environment; PlanKind = $planKind; PlanSha256 = $actualPlanSha256
     Creates = if ($planKind -eq "cutover") { 3 } else { 0 }
     Updates = if ($planKind -eq "cutover") { 6 } else { 0 }
     Deletes = 0; Replacements = 0; AwsMutation = $false
@@ -1143,10 +1150,10 @@ switch ($Action) {
     ) { throw "The saved cutover plan does not match the exact reviewed checksum." }
     Assert-ZeroLegacyWork $plan
     Assert-ZeroServerlessWork
-    Invoke-SavedPlan $resolvedPlanPath "The exact reviewed staging cutover plan failed to apply."
+    Invoke-SavedPlan $resolvedPlanPath "The exact reviewed $Environment cutover plan failed to apply."
     $verification = Invoke-CompletedVerification $plan Runtime
     [ordered]@{
-      Environment = "staging"; Action = "apply"; AppliedPlanSha256 = $actualPlanSha256
+      Environment = $Environment; Action = "apply"; AppliedPlanSha256 = $actualPlanSha256
       NoDrift = [bool]$verification.NoDrift; DispatchTarget = "lambda_durable"
       TriggersEnabled = $true; EcsRuntimeIdle = $true
       LegacyOutboxEmpty = $true; TemporalOpenWorkflowsEmpty = $true
@@ -1156,21 +1163,21 @@ switch ($Action) {
   "Verify" {
     $verification = Invoke-CompletedVerification $plan Runtime
     [ordered]@{
-      Environment = "staging"; Action = "verify"; NoDrift = [bool]$verification.NoDrift
+      Environment = $Environment; Action = "verify"; NoDrift = [bool]$verification.NoDrift
       DispatchTarget = "lambda_durable"; TriggersEnabled = $true; EcsRuntimeIdle = $true
       LegacyOutboxEmpty = $true; TemporalOpenWorkflowsEmpty = $true
       PublicConformanceRequired = $true
     } | ConvertTo-Json
   }
   "PlanRollback" {
-    if (Test-Path -LiteralPath $contextPath) { throw "A staging cutover rollback context already exists." }
+    if (Test-Path -LiteralPath $contextPath) { throw "An $Environment cutover rollback context already exists." }
     $verification = Invoke-CompletedVerification $plan Runtime
     Assert-ZeroLegacyWork $plan
     Assert-ZeroServerlessWork
     $summary = New-TransitionPlan $plan RollbackTransition $rollbackTransitionPlanPath
     $refreshedRuntimeBaselineSha256 = Get-RefreshedRuntimeBaselineSha256 $verification
     $context = [ordered]@{
-      Schema = "applydash.staging.serverless-runtime-cutover.v4"
+      Schema = "applydash.$Environment.serverless-runtime-cutover.v4"
       RuntimeBaselineSourceCommit = $sourceCommit; ValidatedSourceCommit = $sourceCommit
       ExpectedAccountId = $ExpectedAccountId
       StateBucket = $StateBucket; RuntimeBaselinePlanPath = $resolvedPlanPath
@@ -1181,7 +1188,7 @@ switch ($Action) {
     }
     Save-Context $context
     [ordered]@{
-      Environment = "staging"; Action = "rollback_review"; PlanSha256 = [string]$summary.Sha256
+      Environment = $Environment; Action = "rollback_review"; PlanSha256 = [string]$summary.Sha256
       Creates = 0; Updates = 6; Deletes = 2; Replacements = 0
       LambdaIntegrationRetainedAfterApply = $true
       PublicApiAvailableAfterApply = $false; EcsCapacityChange = $false; AwsMutation = $false
@@ -1198,7 +1205,7 @@ switch ($Action) {
     Assert-ZeroLegacyWork $plan
     Assert-ZeroServerlessWork
     Invoke-SavedPlan $rollbackTransitionPlanPath `
-      "The exact reviewed staging rollback transition failed to apply."
+      "The exact reviewed $Environment rollback transition failed to apply."
     $context.State = "rollback_transition_applied"
     Save-Context $context
     $verification = New-TransitionPlan `
@@ -1207,7 +1214,7 @@ switch ($Action) {
     $context.State = "rollback_transition_verified"
     Save-Context $context
     [ordered]@{
-      Environment = "staging"; Action = "rollback_transition"; NoDrift = $true
+      Environment = $Environment; Action = "rollback_transition"; NoDrift = $true
       DispatchTarget = "temporal"; TriggersEnabled = $false; EcsRuntimeIdle = $true
       LambdaIntegrationRetained = $true; PublicApiAvailable = $false
       CleanupPlanRequired = $true
@@ -1230,7 +1237,7 @@ switch ($Action) {
     $context.State = "rollback_transition_verified"
     Save-Context $context
     [ordered]@{
-      Environment = "staging"; Action = "verify_rollback_transition"; NoDrift = $true
+      Environment = $Environment; Action = "verify_rollback_transition"; NoDrift = $true
       DispatchTarget = "temporal"; TriggersEnabled = $false; EcsRuntimeIdle = $true
       LambdaIntegrationRetained = $true; PublicApiAvailable = $false
     } | ConvertTo-Json
@@ -1251,7 +1258,7 @@ switch ($Action) {
     $context.State = "rollback_cleanup_planned"
     Save-Context $context
     [ordered]@{
-      Environment = "staging"; Action = "rollback_cleanup_review"
+      Environment = $Environment; Action = "rollback_cleanup_review"
       PlanSha256 = [string]$summary.Sha256
       Creates = 0; Updates = 0; Deletes = 1; Replacements = 0
       RouteReferenceVerifiedAbsent = $true; EcsCapacityChange = $false; AwsMutation = $false
@@ -1268,14 +1275,14 @@ switch ($Action) {
     Assert-ZeroLegacyWork $plan
     Assert-ZeroServerlessWork
     Invoke-SavedPlan $rollbackCleanupPlanPath `
-      "The exact reviewed staging rollback integration cleanup failed to apply."
+      "The exact reviewed $Environment rollback integration cleanup failed to apply."
     $context.State = "rollback_cleanup_applied"
     Save-Context $context
     $verification = Invoke-CompletedVerification $plan Dark
     $context.State = "rollback_verified"
     Save-Context $context
     [ordered]@{
-      Environment = "staging"; Action = "rollback_cleanup"; NoDrift = [bool]$verification.NoDrift
+      Environment = $Environment; Action = "rollback_cleanup"; NoDrift = [bool]$verification.NoDrift
       DispatchTarget = "temporal"; TriggersEnabled = $false; EcsRuntimeIdle = $true
       LambdaIntegrationRetained = $false; PublicApiAvailable = $false
       RollbackConformanceRequired = $true
@@ -1293,7 +1300,7 @@ switch ($Action) {
     $context.State = "rollback_verified"
     Save-Context $context
     [ordered]@{
-      Environment = "staging"; Action = "verify_rollback"; NoDrift = [bool]$verification.NoDrift
+      Environment = $Environment; Action = "verify_rollback"; NoDrift = [bool]$verification.NoDrift
       DispatchTarget = "temporal"; TriggersEnabled = $false; EcsRuntimeIdle = $true
       PublicApiAvailable = $false
     } | ConvertTo-Json
@@ -1309,7 +1316,7 @@ switch ($Action) {
     Assert-ZeroServerlessWork
     $runtimeBaselineSourceCommit = Get-RuntimeBaselineSourceCommit $context
     $continuedContext = [ordered]@{
-      Schema = "applydash.staging.serverless-runtime-cutover.v4"
+      Schema = "applydash.$Environment.serverless-runtime-cutover.v4"
       RuntimeBaselineSourceCommit = $runtimeBaselineSourceCommit
       ValidatedSourceCommit = $sourceCommit
       ExpectedAccountId = [string]$context.ExpectedAccountId
@@ -1324,7 +1331,7 @@ switch ($Action) {
     }
     Save-Context $continuedContext
     [ordered]@{
-      Environment = "staging"; Action = "continue_rollback_context"
+      Environment = $Environment; Action = "continue_rollback_context"
       RuntimeBaselineSourceIsAncestor = $true; CurrentDarkNoDrift = [bool]$verification.NoDrift
       LegacyAndServerlessWorkEmpty = $true; ContextUpdated = $true; AwsMutation = $false
     } | ConvertTo-Json
@@ -1343,7 +1350,7 @@ switch ($Action) {
     $context.State = "restore_planned"
     Save-Context $context
     [ordered]@{
-      Environment = "staging"; Action = "restore_review"; PlanSha256 = [string]$summary.Sha256
+      Environment = $Environment; Action = "restore_review"; PlanSha256 = [string]$summary.Sha256
       Creates = 3; Updates = 6; Deletes = 0; Replacements = 0
       EcsCapacityChange = $false; AwsMutation = $false
     } | ConvertTo-Json
@@ -1355,7 +1362,7 @@ switch ($Action) {
     Assert-ReviewedTransitionPlan $restorePlanPath ([string]$context.RestorePlanSha256) Restore
     Assert-ZeroLegacyWork $plan
     Assert-ZeroServerlessWork
-    Invoke-SavedPlan $restorePlanPath "The exact reviewed staging restoration plan failed to apply."
+    Invoke-SavedPlan $restorePlanPath "The exact reviewed $Environment restoration plan failed to apply."
     $verification = Invoke-CompletedVerification $plan Runtime
     $restoredBaseline = Get-RestoredRuntimeBaseline $verification $sourceCommit
     $context.RuntimeBaselineSourceCommit = $sourceCommit
@@ -1365,7 +1372,7 @@ switch ($Action) {
     $context.State = "restore_verified"
     Save-Context $context
     [ordered]@{
-      Environment = "staging"; Action = "restore"; NoDrift = [bool]$verification.NoDrift
+      Environment = $Environment; Action = "restore"; NoDrift = [bool]$verification.NoDrift
       DispatchTarget = "lambda_durable"; TriggersEnabled = $true; EcsRuntimeIdle = $true
       PublicConformanceRequired = $true
       RuntimeBaselinePlan = Split-Path ([string]$restoredBaseline.Path) -Leaf
@@ -1382,7 +1389,7 @@ switch ($Action) {
     Assert-ZeroServerlessWork
     $restoredBaseline = Get-RestoredRuntimeBaseline $verification $sourceCommit
     $continuedContext = [ordered]@{
-      Schema = "applydash.staging.serverless-runtime-cutover.v4"
+      Schema = "applydash.$Environment.serverless-runtime-cutover.v4"
       RuntimeBaselineSourceCommit = $sourceCommit; ValidatedSourceCommit = $sourceCommit
       ExpectedAccountId = [string]$context.ExpectedAccountId
       StateBucket = [string]$context.StateBucket
@@ -1396,7 +1403,7 @@ switch ($Action) {
     }
     Save-Context $continuedContext
     [ordered]@{
-      Environment = "staging"; Action = "continue_restore_context"
+      Environment = $Environment; Action = "continue_restore_context"
       PreviousRuntimeBaselineSourceIsAncestor = $true
       CurrentRuntimeNoDrift = [bool]$verification.NoDrift
       LegacyAndServerlessWorkEmpty = $true; ContextUpdated = $true; AwsMutation = $false
@@ -1422,7 +1429,7 @@ switch ($Action) {
       if (Test-Path -LiteralPath $path -PathType Leaf) { Remove-Item -LiteralPath $path -Force }
     }
     [ordered]@{
-      Environment = "staging"; Action = "cleanup"; RestoredRuntimeVerified = $true
+      Environment = $Environment; Action = "cleanup"; RestoredRuntimeVerified = $true
       RemovedIgnoredArtifacts = $cleanupPaths.Count; AwsMutation = $false
     } | ConvertTo-Json
   }

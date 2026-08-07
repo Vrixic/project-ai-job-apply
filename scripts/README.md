@@ -66,12 +66,16 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
 - `verify-development-gateway-lambda-boundary.ps1` and
   `verify-staging-gateway-lambda-boundary.ps1` — Compatibility wrappers that fix the shared
   Lambda boundary verifier to one environment and its default IAM Identity Center profile.
-- `inspect-staging-workload-and-cost.ps1` — Reports the read-only staging workload/cost baseline
-  and corroborates a completed browser workload window against the accepted serverless runtime.
+- `inspect-staging-workload-and-cost.ps1` — Environment-aware serverless workload/cost inspector,
+  with staging as its compatibility default. It corroborates a completed browser workload window
+  against the accepted serverless runtime.
   It recovers exact immutable inputs from an applied guarded maintenance plan, runs fresh
   completed-runtime zero-drift verification, and measures aggregate API Gateway, six Lambda
   functions, idle ECS rollback services, RDS, source queue, both DLQs, ten alarms, and structured
   privacy-safe logs.
+- `inspect-development-workload-and-cost.ps1` — Development wrapper over the same read-only
+  inspector. It fixes the development account/resource namespace and uses the development
+  cutover verifier rather than the staging maintenance-release verifier.
 - `inspect-phase0-cost.ps1` — Reads actual service-attributed Cost Explorer totals, exact monthly
   `$5 USD` budget/alert controls (including unexpected alert counts), CUR 2.0 export health, and
   real manifest/Parquet delivery from both isolated Phase 0 accounts without printing account,
@@ -137,6 +141,10 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   previously queued database retry completes inside the Terraform apply window.
 - `plan-development-serverless-workflow-dark.ps1` — Compatibility wrapper for development calls to
   the environment-aware workflow planner.
+- `plan-development-serverless-runtime-cutover.ps1` — Development-only wrapper for the initial
+  atomic runtime-cutover plan and its post-apply zero-drift verification baseline. It fixes the
+  environment and IAM Identity Center profile while delegating all artifact, action, and
+  empty-work checks to the shared planner.
 - `plan-staging-serverless-runtime-cutover.ps1` — Staging-only wrapper for atomic runtime cutover,
   post-cutover immutable workflow or gateway artifact release, exact gateway concurrency and JWT
   route-scope correction, encrypted-outbox producer correction, and completed verification. It
@@ -150,7 +158,8 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   template to be plan-time unknown only while AWS assigns the new activity's numeric version; the
   exact current template and desired artifacts remain guarded, and completed verification requires
   the materialized replacement.
-- `operate-staging-serverless-runtime-cutover.ps1` — Applies only the exact checksum-reviewed
+- `operate-staging-serverless-runtime-cutover.ps1` — Environment-aware guarded core, with staging
+  as its compatibility default. It applies only the exact checksum-reviewed
   three-create/six-update cutover plan, then delegates to the refresh-backed completed-runtime
   verifier. It also creates separately reviewed rollback and restoration plans, requires zero
   legacy/serverless queued or running work, keeps ECS idle and all rollback resources retained,
@@ -158,6 +167,10 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   continuation can carry a verified rollback over later merged operator/evidence commits only when
   the retained runtime source remains an ancestor and current dark zero drift plus zero work pass;
   it changes only the ignored local context.
+- `operate-development-serverless-runtime-cutover.ps1` — Development wrapper over the same guarded
+  cutover, ordered rollback/cleanup, restoration, and context-continuation core. It fixes the
+  development environment and profile so staging and development state, queues, secrets,
+  functions, plans, and rollback contexts cannot cross.
 - `operate-staging-legacy-temporal-drain.ps1` — Checksum-gated bridge for an exact reviewed,
   bounded synthetic staging batch. Planning binds its identifier-free aggregate
   digest to the exact idle ECS/API, immutable worker, disabled replacement triggers, empty queues,

@@ -1,5 +1,7 @@
 [CmdletBinding()]
 param(
+  [ValidateSet("development", "staging")]
+  [string]$Environment = "staging",
   [ValidateSet("Status", "Measure")]
   [string]$Action = "Status",
   [string]$StartTime = "",
@@ -9,12 +11,16 @@ param(
   [ValidatePattern("^[a-z0-9.-]+$")]
   [string]$StateBucket = "",
   [string]$RuntimePlanPath = "",
-  [string]$AwsProfile = "ai-job-apply-staging-admin",
+  [string]$AwsProfile = "",
   [string]$Region = "us-east-2",
   [switch]$Help
 )
 
 $ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrWhiteSpace($AwsProfile)) {
+  $AwsProfile = "ai-job-apply-$Environment-admin"
+}
 
 if ($Help) {
   @"
@@ -27,7 +33,7 @@ Usage:
     -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
     -RuntimePlanPath .terraform/workflow-dark-plans/APPLIED_PLAN.tfplan
 
-Status proves the staging runtime boundary and reports aggregate month-to-date Cost Explorer,
+Status proves the $Environment runtime boundary and reports aggregate month-to-date Cost Explorer,
 budget, and CUR 2.0 Data Export availability. Measure accepts only a workload result's ISO timestamps and
 returns aggregate API Gateway, Lambda, idle-ECS rollback, RDS, queue, alarm, log, and no-drift
 evidence. RuntimePlanPath is an already applied guarded maintenance plan used only to recover the
@@ -40,11 +46,15 @@ identity, token, preference, operation identifier, or raw provider record is pri
 }
 
 if ($Region -ne "us-east-2") {
-  throw "The Phase 0 staging environment is restricted to us-east-2."
+  throw "The Phase 0 $Environment environment is restricted to us-east-2."
 }
 
-$runtimeOperator = Join-Path $PSScriptRoot "operate-staging-gateway-runtime-release.ps1"
-$applicationLogGroup = "/ai-job-apply/staging/application"
+$runtimeOperator = if ($Environment -eq "staging") {
+  Join-Path $PSScriptRoot "operate-staging-gateway-runtime-release.ps1"
+} else {
+  Join-Path $PSScriptRoot "operate-development-serverless-runtime-cutover.ps1"
+}
+$applicationLogGroup = "/ai-job-apply/$Environment/application"
 
 $env:AWS_PROFILE = $AwsProfile
 $env:AWS_REGION = $Region
@@ -56,7 +66,7 @@ function Invoke-AwsJson {
   $raw = & aws @CommandArguments 2>$null
   if ($LASTEXITCODE -ne 0) {
     $operation = ($CommandArguments | Select-Object -First 2) -join " "
-    throw "The AWS '$operation' operation failed. Refresh the staging SSO session and retry."
+    throw "The AWS '$operation' operation failed. Refresh the $Environment SSO session and retry."
   }
   if (-not $raw) {
     return $null
@@ -67,7 +77,7 @@ function Invoke-AwsJson {
 function Assert-CallerAndTerraform {
   $identity = Invoke-AwsJson @("sts", "get-caller-identity", "--output", "json")
   if (-not ([string]$identity.Arn).Contains(":assumed-role/")) {
-    throw "Use the temporary staging IAM Identity Center session; long-lived callers are rejected."
+    throw "Use the temporary $Environment IAM Identity Center session; long-lived callers are rejected."
   }
   $version = & terraform version -json 2>$null | ConvertFrom-Json
   if ($LASTEXITCODE -ne 0 -or [string]$version.terraform_version -ne "1.9.8") {
@@ -81,17 +91,17 @@ function Get-RuntimeStatus {
     $ExpectedAccountId -notmatch "^[0-9]{12}$" -or
     [string]::IsNullOrWhiteSpace($StateBucket) -or
     [string]::IsNullOrWhiteSpace($RuntimePlanPath)
-  ) { throw "Runtime verification requires the exact staging account, state bucket, and applied plan." }
+  ) { throw "Runtime verification requires the exact $Environment account, state bucket, and applied plan." }
   $raw = & $runtimeOperator -Action Verify -ExpectedAccountId $ExpectedAccountId `
     -StateBucket $StateBucket -PlanPath $RuntimePlanPath -AwsProfile $AwsProfile -Region $Region 2>$null
-  if ($LASTEXITCODE -ne 0 -or -not $raw) { throw "The staging serverless runtime baseline did not pass." }
+  if ($LASTEXITCODE -ne 0 -or -not $raw) { throw "The $Environment serverless runtime baseline did not pass." }
   $runtime = ($raw -join [Environment]::NewLine) | ConvertFrom-Json
   if (
     -not [bool]$runtime.NoDrift -or -not [bool]$runtime.EcsRuntimeIdle -or
     -not [bool]$runtime.TriggersEnabled -or
     [string]$runtime.DispatchTarget -ne "lambda_durable" -or [bool]$runtime.AwsMutation
   ) {
-    throw "The staging runtime is not at the approved serverless workload baseline."
+    throw "The $Environment runtime is not at the approved serverless workload baseline."
   }
   return $runtime
 }
@@ -314,7 +324,7 @@ if ($Action -eq "Status") {
   $cost = Get-MonthToDateCost
   $billing = Get-BillingControlCounts ([string]$identity.Account)
   [pscustomobject]@{
-    Environment                   = "staging"
+    Environment                   = $Environment
     TemporaryCaller               = $true
     NoDrift                       = [bool]$runtime.NoDrift
     DispatchTarget                = [string]$runtime.DispatchTarget
@@ -333,16 +343,16 @@ $window = Convert-WorkloadWindow
 $apis = Get-Collection (
   Invoke-AwsJson @("apigatewayv2", "get-apis", "--max-results", "100", "--output", "json")
 ) "Items"
-$apiMatches = @($apis | Where-Object { [string]$_.Name -eq "ai-job-apply-staging-gateway" })
-if ($apiMatches.Count -ne 1) { throw "The exact staging HTTP API could not be resolved." }
+$apiMatches = @($apis | Where-Object { [string]$_.Name -eq "ai-job-apply-$Environment-gateway" })
+if ($apiMatches.Count -ne 1) { throw "The exact $Environment HTTP API could not be resolved." }
 $apiId = [string]$apiMatches[0].ApiId
 
 $apiDimensions = @("Name=ApiId,Value=$apiId")
-$databaseDimensions = @("Name=DBInstanceIdentifier,Value=ai-job-apply-staging")
-$eventQueueDimensions = @("Name=QueueName,Value=ai-job-apply-staging-events")
-$deadLetterDimensions = @("Name=QueueName,Value=ai-job-apply-staging-dead-letter")
+$databaseDimensions = @("Name=DBInstanceIdentifier,Value=ai-job-apply-$Environment")
+$eventQueueDimensions = @("Name=QueueName,Value=ai-job-apply-$Environment-events")
+$deadLetterDimensions = @("Name=QueueName,Value=ai-job-apply-$Environment-dead-letter")
 $durableDeadLetterDimensions = @(
-  "Name=QueueName,Value=ai-job-apply-staging-profile-readiness-dead-letter"
+  "Name=QueueName,Value=ai-job-apply-$Environment-profile-readiness-dead-letter"
 )
 
 $requestCount = Get-MetricAggregate "AWS/ApiGateway" "Count" $apiDimensions $window.Start $window.End
@@ -350,12 +360,12 @@ $clientErrors = Get-MetricAggregate "AWS/ApiGateway" "4xx" $apiDimensions $windo
 $serverErrors = Get-MetricAggregate "AWS/ApiGateway" "5xx" $apiDimensions $window.Start $window.End
 $latency = Get-MetricAggregate "AWS/ApiGateway" "Latency" $apiDimensions $window.Start $window.End
 $lambdaFunctionNames = @(
-  "ai-job-apply-staging-gateway",
-  "ai-job-apply-staging-outbox-starter",
-  "ai-job-apply-staging-outbox-reconciler",
-  "ai-job-apply-staging-profile-readiness-activity",
-  "ai-job-apply-staging-profile-readiness-terminal",
-  "ai-job-apply-staging-profile-readiness-durable"
+  "ai-job-apply-$Environment-gateway",
+  "ai-job-apply-$Environment-outbox-starter",
+  "ai-job-apply-$Environment-outbox-reconciler",
+  "ai-job-apply-$Environment-profile-readiness-activity",
+  "ai-job-apply-$Environment-profile-readiness-terminal",
+  "ai-job-apply-$Environment-profile-readiness-durable"
 )
 [decimal]$lambdaInvocations = 0
 [decimal]$lambdaErrors = 0
@@ -386,16 +396,16 @@ $durableDeadLetters = Get-MetricAggregate `
   $durableDeadLetterDimensions $window.Start $window.End
 $logs = Get-LogAggregate $window.Start $window.End
 $alarmNames = @(
-  "ai-job-apply-staging-outbox-reconciler-errors",
-  "ai-job-apply-staging-outbox-starter-errors",
-  "ai-job-apply-staging-outbox-starter-throttles",
-  "ai-job-apply-staging-profile-readiness-activity-errors",
-  "ai-job-apply-staging-profile-readiness-dead-letter",
-  "ai-job-apply-staging-profile-readiness-durable-failed",
-  "ai-job-apply-staging-profile-readiness-durable-timed-out",
-  "ai-job-apply-staging-gateway-lambda-errors",
-  "ai-job-apply-staging-gateway-lambda-throttles",
-  "ai-job-apply-staging-gateway-lambda-duration"
+  "ai-job-apply-$Environment-outbox-reconciler-errors",
+  "ai-job-apply-$Environment-outbox-starter-errors",
+  "ai-job-apply-$Environment-outbox-starter-throttles",
+  "ai-job-apply-$Environment-profile-readiness-activity-errors",
+  "ai-job-apply-$Environment-profile-readiness-dead-letter",
+  "ai-job-apply-$Environment-profile-readiness-durable-failed",
+  "ai-job-apply-$Environment-profile-readiness-durable-timed-out",
+  "ai-job-apply-$Environment-gateway-lambda-errors",
+  "ai-job-apply-$Environment-gateway-lambda-throttles",
+  "ai-job-apply-$Environment-gateway-lambda-duration"
 )
 $alarms = Invoke-AwsJson (
   @("cloudwatch", "describe-alarms", "--alarm-names") + $alarmNames + @("--output", "json")
@@ -405,7 +415,7 @@ $healthyAlarms = @($alarms.MetricAlarms | Where-Object {
   @($_.AlarmActions).Count -eq 1 -and @($_.OKActions).Count -eq 1
 }).Count
 $serviceResult = Invoke-AwsJson @(
-  "ecs", "describe-services", "--cluster", "ai-job-apply-staging",
+  "ecs", "describe-services", "--cluster", "ai-job-apply-$Environment",
   "--services", "gateway", "workflow-worker", "--output", "json"
 )
 $idleServices = @(Get-Collection $serviceResult "services" | Where-Object {
@@ -419,10 +429,10 @@ if (
   [decimal]$queueVisible.Maximum -ne 0 -or [decimal]$deadLetters.Maximum -ne 0 -or
   [decimal]$durableDeadLetters.Maximum -ne 0 -or $logs.ErrorMatches -ne 0 -or
   $logs.ForbiddenMatches -ne 0 -or $healthyAlarms -ne 10 -or $idleServices -ne 2
-) { throw "The staging serverless workload did not pass aggregate AWS acceptance." }
+) { throw "The $Environment serverless workload did not pass aggregate AWS acceptance." }
 
 [pscustomobject]@{
-  Environment              = "staging"
+  Environment              = $Environment
   WindowMinutes            = [Math]::Round(($window.End - $window.Start).TotalMinutes, 2)
   ApiRequests              = [int]$requestCount.Sum
   ApiRequestsAtLeast552    = [int]$requestCount.Sum -ge 552
