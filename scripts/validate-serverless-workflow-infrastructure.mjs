@@ -526,6 +526,14 @@ assert.ok(
   "Runtime maintenance modes must bypass the gateway-only initial-deployment baseline.",
 );
 assert.ok(
+  workflowPlanner
+    .replaceAll("\r\n", "\n")
+    .includes(
+      "    $RecoverFailedApply -or $AllowArtifactReleaseUpdate -or\n    $VerifyCompletedDarkDeployment -or $runtimeCutoverActive\n  ) {\n    $baselinePlan = [pscustomobject]",
+    ),
+  "Runtime maintenance modes must derive completed values from live Terraform state.",
+);
+assert.ok(
   !workflowPlanner.includes("TF_VAR_gateway_outbox_dispatch_target") &&
     !workflowPlanner.includes("TF_VAR_enable_serverless_workflow_triggers"),
   "The planner must not restore independent dispatch and trigger cutover controls.",
