@@ -4,6 +4,11 @@ param(
   [string]$Action = "Status",
   [string]$StartTime = "",
   [string]$EndTime = "",
+  [ValidatePattern("^[0-9]{12}$")]
+  [string]$ExpectedAccountId = "",
+  [ValidatePattern("^[a-z0-9.-]+$")]
+  [string]$StateBucket = "",
+  [string]$RuntimePlanPath = "",
   [string]$AwsProfile = "ai-job-apply-staging-admin",
   [string]$Region = "us-east-2",
   [switch]$Help
@@ -14,13 +19,19 @@ $ErrorActionPreference = "Stop"
 if ($Help) {
   @"
 Usage:
-  .\scripts\inspect-staging-workload-and-cost.ps1 -Action Status
+  .\scripts\inspect-staging-workload-and-cost.ps1 -Action Status `
+    -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
+    -RuntimePlanPath .terraform/workflow-dark-plans/APPLIED_PLAN.tfplan
   .\scripts\inspect-staging-workload-and-cost.ps1 -Action Measure `
-    -StartTime <ISO-8601> -EndTime <ISO-8601>
+    -StartTime <ISO-8601> -EndTime <ISO-8601> `
+    -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
+    -RuntimePlanPath .terraform/workflow-dark-plans/APPLIED_PLAN.tfplan
 
 Status proves the staging runtime boundary and reports aggregate month-to-date Cost Explorer,
 budget, and CUR 2.0 Data Export availability. Measure accepts only a workload result's ISO timestamps and
-returns aggregate API Gateway, ECS, RDS, queue, alarm, log, and no-drift evidence.
+returns aggregate API Gateway, Lambda, idle-ECS rollback, RDS, queue, alarm, log, and no-drift
+evidence. RuntimePlanPath is an already applied guarded maintenance plan used only to recover the
+exact immutable artifact inputs for fresh read-only completed-runtime verification.
 
 Both actions are read-only. No account identifier, endpoint, resource ARN, trace, log message,
 identity, token, preference, operation identifier, or raw provider record is printed.
@@ -32,9 +43,7 @@ if ($Region -ne "us-east-2") {
   throw "The Phase 0 staging environment is restricted to us-east-2."
 }
 
-$environmentDirectory = (Resolve-Path "infrastructure/terraform/environments/staging").Path
-$recoveryOperator = Join-Path $PSScriptRoot "operate-staging-application-recovery.ps1"
-$restoreOperator = Join-Path $PSScriptRoot "operate-staging-postgresql-restore.ps1"
+$runtimeOperator = Join-Path $PSScriptRoot "operate-staging-gateway-runtime-release.ps1"
 $applicationLogGroup = "/ai-job-apply/staging/application"
 
 $env:AWS_PROFILE = $AwsProfile
@@ -68,28 +77,23 @@ function Assert-CallerAndTerraform {
 }
 
 function Get-RuntimeStatus {
-  $restore = & $restoreOperator -Action Status 2>$null | ConvertFrom-Json
-  if ($LASTEXITCODE -ne 0) {
-    throw "The staging runtime baseline did not pass."
-  }
   if (
-    -not [bool]$restore.SourceAvailable -or
-    [int]$restore.StableServices -ne 2 -or
-    [int]$restore.ManagedAlarmsOk -ne 8 -or
-    [int]$restore.DisposableRestoreTargets -ne 0 -or
-    [bool]$restore.RestoreContext
+    $ExpectedAccountId -notmatch "^[0-9]{12}$" -or
+    [string]::IsNullOrWhiteSpace($StateBucket) -or
+    [string]::IsNullOrWhiteSpace($RuntimePlanPath)
+  ) { throw "Runtime verification requires the exact staging account, state bucket, and applied plan." }
+  $raw = & $runtimeOperator -Action Verify -ExpectedAccountId $ExpectedAccountId `
+    -StateBucket $StateBucket -PlanPath $RuntimePlanPath -AwsProfile $AwsProfile -Region $Region 2>$null
+  if ($LASTEXITCODE -ne 0 -or -not $raw) { throw "The staging serverless runtime baseline did not pass." }
+  $runtime = ($raw -join [Environment]::NewLine) | ConvertFrom-Json
+  if (
+    -not [bool]$runtime.NoDrift -or -not [bool]$runtime.EcsRuntimeIdle -or
+    -not [bool]$runtime.TriggersEnabled -or
+    [string]$runtime.DispatchTarget -ne "lambda_durable" -or [bool]$runtime.AwsMutation
   ) {
-    throw "The staging runtime is not at the approved workload baseline."
+    throw "The staging runtime is not at the approved serverless workload baseline."
   }
-  return $restore
-}
-
-function Get-NoDrift {
-  $result = & $recoveryOperator -Action NoDrift 2>$null | ConvertFrom-Json
-  if ($LASTEXITCODE -ne 0 -or [int]$result.TerraformDrift -ne 0) {
-    throw "The exact-input staging Terraform no-drift check failed."
-  }
-  return 0
+  return $runtime
 }
 
 function Get-Collection {
@@ -246,7 +250,15 @@ function Get-LogAggregate {
   $forbiddenMatches = 0
   foreach ($event in $events) {
     $message = [string]$event.message
-    if ($message -match "(?i)error|exception|failed") {
+    $structured = $null
+    try { $structured = $message | ConvertFrom-Json } catch { $structured = $null }
+    $level = if ($null -ne $structured -and $structured.PSObject.Properties.Name -contains "level") {
+      [int]$structured.level
+    } else { 0 }
+    $operationalMessage = if (
+      $null -ne $structured -and $structured.PSObject.Properties.Name -contains "msg"
+    ) { [string]$structured.msg } else { $message }
+    if ($level -ge 40 -or $operationalMessage -match "(?i)error|exception|failed") {
       $errorMatches += 1
     }
     if (
@@ -304,11 +316,10 @@ if ($Action -eq "Status") {
   [pscustomobject]@{
     Environment                   = "staging"
     TemporaryCaller               = $true
-    SourceAvailable               = [bool]$runtime.SourceAvailable
-    StableServices                = [int]$runtime.StableServices
-    ManagedAlarmsOk               = [int]$runtime.ManagedAlarmsOk
-    RestoreTargets                = [int]$runtime.DisposableRestoreTargets
-    RestoreContext                = [bool]$runtime.RestoreContext
+    NoDrift                       = [bool]$runtime.NoDrift
+    DispatchTarget                = [string]$runtime.DispatchTarget
+    TriggersEnabled               = [bool]$runtime.TriggersEnabled
+    EcsRuntimeIdle                = [bool]$runtime.EcsRuntimeIdle
     MonthToDateUnblendedCostUsd   = $cost.AmountUsd
     CostExplorerEstimated         = $cost.Estimated
     NonzeroCostServices           = $cost.NonzeroServices
@@ -319,39 +330,96 @@ if ($Action -eq "Status") {
 }
 
 $window = Convert-WorkloadWindow
-$gatewayUrl = & terraform "-chdir=$environmentDirectory" output -raw gateway_url 2>$null
-$clusterArn = & terraform "-chdir=$environmentDirectory" output -raw ecs_cluster_arn 2>$null
-if ($LASTEXITCODE -ne 0 -or -not $gatewayUrl -or -not $clusterArn) {
-  throw "The encrypted staging state did not expose the workload measurement boundary."
-}
-$gateway = [Uri]$gatewayUrl
-$apiId = $gateway.Host.Split(".")[0]
-$clusterName = ([string]$clusterArn -split "/")[-1]
+$apis = Get-Collection (
+  Invoke-AwsJson @("apigatewayv2", "get-apis", "--max-results", "100", "--output", "json")
+) "Items"
+$apiMatches = @($apis | Where-Object { [string]$_.Name -eq "ai-job-apply-staging-gateway" })
+if ($apiMatches.Count -ne 1) { throw "The exact staging HTTP API could not be resolved." }
+$apiId = [string]$apiMatches[0].ApiId
 
 $apiDimensions = @("Name=ApiId,Value=$apiId")
-$gatewayDimensions = @("Name=ClusterName,Value=$clusterName", "Name=ServiceName,Value=gateway")
-$workerDimensions = @(
-  "Name=ClusterName,Value=$clusterName",
-  "Name=ServiceName,Value=workflow-worker"
-)
 $databaseDimensions = @("Name=DBInstanceIdentifier,Value=ai-job-apply-staging")
 $eventQueueDimensions = @("Name=QueueName,Value=ai-job-apply-staging-events")
 $deadLetterDimensions = @("Name=QueueName,Value=ai-job-apply-staging-dead-letter")
+$durableDeadLetterDimensions = @(
+  "Name=QueueName,Value=ai-job-apply-staging-profile-readiness-dead-letter"
+)
 
 $requestCount = Get-MetricAggregate "AWS/ApiGateway" "Count" $apiDimensions $window.Start $window.End
 $clientErrors = Get-MetricAggregate "AWS/ApiGateway" "4xx" $apiDimensions $window.Start $window.End
 $serverErrors = Get-MetricAggregate "AWS/ApiGateway" "5xx" $apiDimensions $window.Start $window.End
 $latency = Get-MetricAggregate "AWS/ApiGateway" "Latency" $apiDimensions $window.Start $window.End
-$gatewayCpu = Get-MetricAggregate "AWS/ECS" "CPUUtilization" $gatewayDimensions $window.Start $window.End
-$gatewayMemory = Get-MetricAggregate "AWS/ECS" "MemoryUtilization" $gatewayDimensions $window.Start $window.End
-$workerCpu = Get-MetricAggregate "AWS/ECS" "CPUUtilization" $workerDimensions $window.Start $window.End
-$workerMemory = Get-MetricAggregate "AWS/ECS" "MemoryUtilization" $workerDimensions $window.Start $window.End
+$lambdaFunctionNames = @(
+  "ai-job-apply-staging-gateway",
+  "ai-job-apply-staging-outbox-starter",
+  "ai-job-apply-staging-outbox-reconciler",
+  "ai-job-apply-staging-profile-readiness-activity",
+  "ai-job-apply-staging-profile-readiness-terminal",
+  "ai-job-apply-staging-profile-readiness-durable"
+)
+[decimal]$lambdaInvocations = 0
+[decimal]$lambdaErrors = 0
+[decimal]$lambdaThrottles = 0
+[decimal]$lambdaDurationMaximum = 0
+foreach ($functionName in $lambdaFunctionNames) {
+  $dimensions = @("Name=FunctionName,Value=$functionName")
+  $lambdaInvocations += (
+    Get-MetricAggregate "AWS/Lambda" "Invocations" $dimensions $window.Start $window.End
+  ).Sum
+  $lambdaErrors += (
+    Get-MetricAggregate "AWS/Lambda" "Errors" $dimensions $window.Start $window.End
+  ).Sum
+  $lambdaThrottles += (
+    Get-MetricAggregate "AWS/Lambda" "Throttles" $dimensions $window.Start $window.End
+  ).Sum
+  $duration = Get-MetricAggregate "AWS/Lambda" "Duration" $dimensions $window.Start $window.End
+  $lambdaDurationMaximum = [Math]::Max($lambdaDurationMaximum, [decimal]$duration.Maximum)
+}
 $databaseCpu = Get-MetricAggregate "AWS/RDS" "CPUUtilization" $databaseDimensions $window.Start $window.End
 $connections = Get-MetricAggregate "AWS/RDS" "DatabaseConnections" $databaseDimensions $window.Start $window.End
 $queueAge = Get-MetricAggregate "AWS/SQS" "ApproximateAgeOfOldestMessage" $eventQueueDimensions $window.Start $window.End
+$queueVisible = Get-MetricAggregate `
+  "AWS/SQS" "ApproximateNumberOfMessagesVisible" $eventQueueDimensions $window.Start $window.End
 $deadLetters = Get-MetricAggregate "AWS/SQS" "ApproximateNumberOfMessagesVisible" $deadLetterDimensions $window.Start $window.End
+$durableDeadLetters = Get-MetricAggregate `
+  "AWS/SQS" "ApproximateNumberOfMessagesVisible" `
+  $durableDeadLetterDimensions $window.Start $window.End
 $logs = Get-LogAggregate $window.Start $window.End
-$drift = Get-NoDrift
+$alarmNames = @(
+  "ai-job-apply-staging-outbox-reconciler-errors",
+  "ai-job-apply-staging-outbox-starter-errors",
+  "ai-job-apply-staging-outbox-starter-throttles",
+  "ai-job-apply-staging-profile-readiness-activity-errors",
+  "ai-job-apply-staging-profile-readiness-dead-letter",
+  "ai-job-apply-staging-profile-readiness-durable-failed",
+  "ai-job-apply-staging-profile-readiness-durable-timed-out",
+  "ai-job-apply-staging-gateway-lambda-errors",
+  "ai-job-apply-staging-gateway-lambda-throttles",
+  "ai-job-apply-staging-gateway-lambda-duration"
+)
+$alarms = Invoke-AwsJson (
+  @("cloudwatch", "describe-alarms", "--alarm-names") + $alarmNames + @("--output", "json")
+)
+$healthyAlarms = @($alarms.MetricAlarms | Where-Object {
+  [string]$_.StateValue -eq "OK" -and [bool]$_.ActionsEnabled -and
+  @($_.AlarmActions).Count -eq 1 -and @($_.OKActions).Count -eq 1
+}).Count
+$serviceResult = Invoke-AwsJson @(
+  "ecs", "describe-services", "--cluster", "ai-job-apply-staging",
+  "--services", "gateway", "workflow-worker", "--output", "json"
+)
+$idleServices = @(Get-Collection $serviceResult "services" | Where-Object {
+  [int]$_.desiredCount -eq 0 -and [int]$_.runningCount -eq 0 -and [int]$_.pendingCount -eq 0
+}).Count
+
+if (
+  [int]$requestCount.Sum -lt 552 -or [int]$clientErrors.Sum -lt 100 -or
+  [int]$serverErrors.Sum -ne 0 -or [int]$lambdaErrors -ne 0 -or
+  [int]$lambdaThrottles -ne 0 -or [decimal]$queueAge.Maximum -ne 0 -or
+  [decimal]$queueVisible.Maximum -ne 0 -or [decimal]$deadLetters.Maximum -ne 0 -or
+  [decimal]$durableDeadLetters.Maximum -ne 0 -or $logs.ErrorMatches -ne 0 -or
+  $logs.ForbiddenMatches -ne 0 -or $healthyAlarms -ne 10 -or $idleServices -ne 2
+) { throw "The staging serverless workload did not pass aggregate AWS acceptance." }
 
 [pscustomobject]@{
   Environment              = "staging"
@@ -363,18 +431,22 @@ $drift = Get-NoDrift
   Api5xx                   = [int]$serverErrors.Sum
   ApiLatencyAverageMs      = $latency.Average
   ApiLatencyMaximumMs      = $latency.Maximum
-  GatewayCpuMaximumPercent = $gatewayCpu.Maximum
-  GatewayMemoryMaxPercent  = $gatewayMemory.Maximum
-  WorkerCpuMaximumPercent  = $workerCpu.Maximum
-  WorkerMemoryMaxPercent   = $workerMemory.Maximum
+  LambdaInvocations        = [int]$lambdaInvocations
+  LambdaErrors             = [int]$lambdaErrors
+  LambdaThrottles          = [int]$lambdaThrottles
+  LambdaDurationMaximumMs  = $lambdaDurationMaximum
   DatabaseCpuMaxPercent    = $databaseCpu.Maximum
   DatabaseConnectionsMax   = $connections.Maximum
   EventQueueAgeMaxSeconds  = $queueAge.Maximum
+  EventQueueVisibleMax     = $queueVisible.Maximum
   DeadLetterMessagesMax    = $deadLetters.Maximum
+  DurableDeadLetterMax     = $durableDeadLetters.Maximum
   LogEvents                = $logs.Events
   LogErrorMatches          = $logs.ErrorMatches
   ForbiddenLogMatches      = $logs.ForbiddenMatches
-  StableServices           = [int]$runtime.StableServices
-  ManagedAlarmsOk          = [int]$runtime.ManagedAlarmsOk
-  TerraformDrift           = $drift
+  IdleEcsServices          = $idleServices
+  RuntimeAlarmsOk          = $healthyAlarms
+  DispatchTarget           = [string]$runtime.DispatchTarget
+  TriggersEnabled          = [bool]$runtime.TriggersEnabled
+  TerraformDrift           = 0
 } | ConvertTo-Json

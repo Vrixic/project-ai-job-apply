@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [ValidateSet("Status", "Apply")]
+  [ValidateSet("Status", "Verify", "Apply")]
   [string]$Action = "Status",
 
   [ValidatePattern("^[0-9]{12}$")]
@@ -33,11 +33,17 @@ Usage:
     -Action Status -PlanPath .terraform/workflow-dark-plans/PLAN.tfplan
 
   .\scripts\operate-staging-gateway-runtime-release.ps1 `
+    -Action Verify -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
+    -PlanPath .terraform/workflow-dark-plans/APPLIED_PLAN.tfplan
+
+  .\scripts\operate-staging-gateway-runtime-release.ps1 `
     -Action Apply -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
     -PlanPath .terraform/workflow-dark-plans/PLAN.tfplan `
     -ExpectedPlanSha256 REVIEWED_SHA256 -Execute
 
-Status performs no AWS mutation. Apply accepts only an exact checksum-reviewed staging plan
+Status and Verify perform no AWS mutation. Verify reuses an already applied, semantically guarded
+maintenance plan only as the exact artifact/input source for a fresh completed-runtime zero-drift
+check from clean upstream-matched main. Apply accepts only an exact checksum-reviewed staging plan
 created from the current clean, upstream-matched main commit. It permits the 13-update/one-gate
 immutable workflow release, two-update immutable gateway release, one-update gateway concurrency
 correction, one-update default-route scope correction, or two-policy encrypted-outbox producer
@@ -51,13 +57,13 @@ matching completed-runtime zero-drift verifier.
 if ($Region -ne "us-east-2") {
   throw "The staging gateway runtime release is restricted to us-east-2."
 }
-if ($Action -eq "Apply" -and (
+if ($Action -in @("Verify", "Apply") -and (
   $ExpectedAccountId -notmatch "^[0-9]{12}$" -or [string]::IsNullOrWhiteSpace($StateBucket)
 )) {
-  throw "Apply requires the exact staging account ID and encrypted state bucket."
+  throw "$Action requires the exact staging account ID and encrypted state bucket."
 }
 if ($Action -eq "Apply" -and -not $Execute) { throw "Apply requires -Execute." }
-if ($Action -eq "Status" -and $Execute) { throw "Status does not accept -Execute." }
+if ($Action -ne "Apply" -and $Execute) { throw "$Action does not accept -Execute." }
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $environmentDirectory = Join-Path $repositoryRoot "infrastructure\terraform\environments\staging"
@@ -767,6 +773,32 @@ function Get-VerificationArguments {
   }
 }
 
+function Invoke-CompletedRuntimeVerification {
+  param([object]$Plan, [string]$PlanKind)
+
+  $verificationArguments = Get-VerificationArguments $Plan
+  $verificationArguments.Action = if ($PlanKind -eq "outbox_producer_kms") {
+    "VerifyOutboxProducerKms"
+  } else { "Verify" }
+  $verificationRaw = & $verifier @verificationArguments
+  if ($LASTEXITCODE -ne 0 -or -not $verificationRaw) {
+    throw "The completed staging runtime verification failed."
+  }
+  $verification = ($verificationRaw -join [Environment]::NewLine) | ConvertFrom-Json
+  $completedVerification = if ($PlanKind -eq "outbox_producer_kms") {
+    [bool]$verification.CompletedOutboxProducerKmsVerification
+  } else { [bool]$verification.CompletedRuntimeCutoverVerification }
+  if (
+    -not $completedVerification -or
+    -not [bool]$verification.NoDrift -or -not [bool]$verification.EcsRuntimeIdle -or
+    [string]$verification.DispatchTarget -ne "lambda_durable" -or
+    -not [bool]$verification.TriggersEnabled -or [int]$verification.Creates -ne 0 -or
+    [int]$verification.Updates -ne 0 -or [int]$verification.Deletes -ne 0 -or
+    [int]$verification.Replacements -ne 0
+  ) { throw "The staging runtime is outside the accepted zero-drift boundary." }
+  return $verification
+}
+
 function Invoke-SavedPlan {
   param([string]$Path)
   $previous = [ordered]@{
@@ -841,37 +873,30 @@ $expectedPlanPrefix = if ($planKind -eq "artifact_release") {
 } elseif ($planKind -eq "gateway_concurrency") {
   "gateway-concurrency"
 } else { "outbox-producer-kms" }
-if (-not (Split-Path $resolvedPlanPath -Leaf).StartsWith(
+if ($Action -eq "Apply" -and -not (Split-Path $resolvedPlanPath -Leaf).StartsWith(
   "$expectedPlanPrefix-$($sourceCommit.Substring(0, 8))",
   [StringComparison]::Ordinal
 )) { throw "The reviewed runtime-maintenance plan was not created from current exact main." }
 Assert-Caller
+
+if ($Action -eq "Verify") {
+  $verification = Invoke-CompletedRuntimeVerification $plan $planKind
+  [ordered]@{
+    Environment = "staging"; Action = "runtime_verification"
+    PlanSha256 = $actualPlanSha256; NoDrift = [bool]$verification.NoDrift
+    DispatchTarget = "lambda_durable"; TriggersEnabled = $true
+    EcsRuntimeIdle = $true; AwsMutation = $false
+  } | ConvertTo-Json
+  exit 0
+}
+
 if (
   $ExpectedPlanSha256 -notmatch "^[a-fA-F0-9]{64}$" -or
   $actualPlanSha256 -ne $ExpectedPlanSha256.ToLowerInvariant()
 ) { throw "The saved runtime-maintenance plan does not match the exact reviewed checksum." }
 
 Invoke-SavedPlan $resolvedPlanPath
-$verificationArguments = Get-VerificationArguments $plan
-$verificationArguments.Action = if ($planKind -eq "outbox_producer_kms") {
-  "VerifyOutboxProducerKms"
-} else { "Verify" }
-$verificationRaw = & $verifier @verificationArguments
-if ($LASTEXITCODE -ne 0 -or -not $verificationRaw) {
-  throw "The completed staging runtime verification failed after the reviewed maintenance apply."
-}
-$verification = ($verificationRaw -join [Environment]::NewLine) | ConvertFrom-Json
-$completedVerification = if ($planKind -eq "outbox_producer_kms") {
-  [bool]$verification.CompletedOutboxProducerKmsVerification
-} else { [bool]$verification.CompletedRuntimeCutoverVerification }
-if (
-  -not $completedVerification -or
-  -not [bool]$verification.NoDrift -or -not [bool]$verification.EcsRuntimeIdle -or
-  [string]$verification.DispatchTarget -ne "lambda_durable" -or
-  -not [bool]$verification.TriggersEnabled -or [int]$verification.Creates -ne 0 -or
-  [int]$verification.Updates -ne 0 -or [int]$verification.Deletes -ne 0 -or
-  [int]$verification.Replacements -ne 0
-) { throw "The runtime maintenance did not return to the accepted zero-drift boundary." }
+$verification = Invoke-CompletedRuntimeVerification $plan $planKind
 
 [ordered]@{
   Environment = "staging"

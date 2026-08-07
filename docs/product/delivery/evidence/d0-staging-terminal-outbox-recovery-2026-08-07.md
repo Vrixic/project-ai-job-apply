@@ -114,16 +114,47 @@ activity-version dependency to be explicitly unknown. After apply, completed-run
 still requires the fully materialized new template and zero drift. Merge and a fresh exact-main
 plan remain required; neither rejected diagnostic checksum is eligible for authorization.
 
-## Remaining acceptance
+## Completed release and re-acceptance
 
-The immutable artifact publication and exact historical drain are complete. Before SR-006 can
-complete:
+The activity-version-aware correction merged at operator commit
+`593f4e7d30a1f97dc026223b6f5546b390507552`. A fresh plan passed the exact live boundary with zero
+creates, 13 in-place workflow updates, zero standalone deletes, and one create-before-delete
+45-second IAM propagation-gate replacement. It reported no API-traffic, trigger-state, ECS-capacity,
+gateway, data, or secret change. The product owner authorized SHA-256
+`fe27d7a10093d2d72132b836bd224bdd89e237a57ddd89a0fa0bb377ec40930a`, and the guarded operator
+applied only that saved plan. The durable alias now targets the newly materialized version, all
+other workflow aliases use the exact published acknowledgement artifacts, and immediate
+completed-runtime verification returned zero drift with `lambda_durable` dispatch, enabled
+triggers, and idle ECS.
 
-1. merge the activity-version-aware release guard, then generate, review, authorize, and apply a fresh
-   exact-main post-cutover workflow release;
-2. rerun the authenticated save, idempotent replay, two-account isolation, fixed workload, aggregate
-   AWS corroboration, zero-work inspection, and zero-drift verification; and
-3. prove that new successful workflows leave zero pending terminal events.
+The product owner then completed the real synthetic browser acceptance:
 
-Until those gates pass, the staging replacement path is not fully re-accepted and the user should
-not submit additional synthetic saves.
+- preference persistence reached `Readiness workflow: succeeded`;
+- the fixed workload completed 500/500 public requests and 25/25 durable workflows in 24,317 ms;
+- idempotent replay matched;
+- liveness/readiness `p95` were 123/74 ms, write `p95` was 132 ms, and durable-result propagation
+  `p95` was 770 ms; and
+- account B received only the sanitized non-disclosing cross-user isolation pass.
+
+Aggregate AWS measurement of the bounded workload window reported 601 API requests, 103 expected
+`4xx`, zero `5xx`, 667 invocations across the six runtime Lambda functions, zero Lambda errors or
+throttles, maximum Lambda duration 1,142.2 ms, database CPU at most 5.61% with at most eight
+connections, zero source-queue age/visible messages, both DLQs empty, both retained ECS services at
+`0/0/0`, and all ten replacement-runtime alarms healthy. The 1,103 aggregate log records contained
+zero forbidden-sensitive-pattern matches. Five initial broad `failed` matches were all level-30
+reconciler summaries whose structured schema contains a numeric `failed` count; severity-aware
+classification produced zero errors.
+
+A fresh exact-artifact verifier after the workload produced zero creates, updates, deletes, or
+replacements with plan SHA-256
+`8f27e890ae588707702fc8c0165076888027d218f87e7256cfbc5ae6b03223ae`. It independently confirmed
+zero pending outbox work, zero open Temporal workflows, zero open Lambda durable executions, four
+immutable artifacts, the pinned extension, enabled triggers, idle ECS, and zero drift.
+
+The legacy workload inspector still assumed the retired `1/1/0` ECS application baseline and
+therefore failed closed before measurement. The accompanying source correction replaces that
+assumption with fresh completed-runtime verification and measures API Gateway, six Lambdas, idle
+ECS rollback services, RDS, the source queue, both DLQs, ten alarms, and structured-severity logs.
+It performs no AWS mutation. Merge and one exact automated replay of this corrected read-only
+inspector remain before the evidence package is final; no additional browser transaction is
+required.

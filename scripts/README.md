@@ -67,8 +67,11 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   `verify-staging-gateway-lambda-boundary.ps1` — Compatibility wrappers that fix the shared
   Lambda boundary verifier to one environment and its default IAM Identity Center profile.
 - `inspect-staging-workload-and-cost.ps1` — Reports the read-only staging workload/cost baseline
-  and corroborates a completed browser workload window with aggregate API Gateway, ECS, RDS,
-  queue, alarm, log, and no-drift measurements.
+  and corroborates a completed browser workload window against the accepted serverless runtime.
+  It recovers exact immutable inputs from an applied guarded maintenance plan, runs fresh
+  completed-runtime zero-drift verification, and measures aggregate API Gateway, six Lambda
+  functions, idle ECS rollback services, RDS, source queue, both DLQs, ten alarms, and structured
+  privacy-safe logs.
 - `inspect-phase0-cost.ps1` — Reads actual service-attributed Cost Explorer totals, exact monthly
   `$5 USD` budget/alert controls (including unexpected alert counts), CUR 2.0 export health, and
   real manifest/Parquet delivery from both isolated Phase 0 accounts without printing account,
