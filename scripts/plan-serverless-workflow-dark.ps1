@@ -326,6 +326,8 @@ if (
   -not $RecoverFailedApply -and
   -not $workflowArtifactReleaseUpdate -and
   -not $VerifyCompletedDarkDeployment -and
+  -not $outboxProducerKmsUpdate -and
+  -not $outboxProducerKmsVerification -and
   -not $runtimeCutoverActive
 ) {
 try {
@@ -480,7 +482,8 @@ try {
 
   if (
     $RecoverFailedApply -or $workflowArtifactReleaseUpdate -or
-    $VerifyCompletedDarkDeployment -or $runtimeCutoverActive
+    $VerifyCompletedDarkDeployment -or $outboxProducerKmsUpdate -or
+    $outboxProducerKmsVerification -or $runtimeCutoverActive
   ) {
     $baselinePlan = [pscustomobject]@{
       state_resources = @(
