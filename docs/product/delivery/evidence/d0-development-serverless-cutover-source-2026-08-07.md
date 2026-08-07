@@ -119,3 +119,12 @@ is `lambda_durable`, all three triggers are enabled, the default route is JWT-pr
 `200/200/401`, and both retained ECS services are `0/0/0`. Source now treats omitted unknown flags
 as false while retaining the exact known-target equality check. Fresh exact-main zero-drift
 verification remains required after merge.
+
+After that correction merged, a fresh exact-main refresh-backed plan returned zero actions and
+proved durable dispatch, enabled triggers, empty legacy/Temporal/durable work, four exact artifacts,
+the pinned extension, and idle ECS. Its independent operator replay then failed before emitting its
+wrapper summary because PowerShell strict mode also rejects `.Name` enumeration on an empty
+`PSPropertyInfo` collection. The saved replay plan again has zero unknown route/integration
+properties and exact materialized target equality. Source now uses keyed property lookup and null
+checks, avoiding collection enumeration while preserving both the known and plan-time-unknown
+security branches. No AWS mutation occurred; merge and a final independent replay remain required.
