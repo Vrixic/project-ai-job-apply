@@ -100,12 +100,13 @@ release. Publish all three immutable artifacts from the exact merged source, the
 `plan-staging-serverless-runtime-cutover.ps1 -Action PlanWorkflowRelease` with the currently
 accepted gateway artifact and the new workflow artifact set.
 
-The accepted plan must contain exactly 14 in-place updates plus the policy-hash-keyed 45-second IAM
+The accepted plan must contain exactly 13 in-place updates plus the policy-hash-keyed 45-second IAM
 propagation-gate replacement already used by dark workflow releases. It must contain zero creates,
 standalone deletes, API-route changes, trigger-state changes, ECS-capacity changes, persistent-data
 changes, secret changes, or gateway changes. The SQS mapping and both EventBridge rules remain
 enabled, gateway dispatch remains `lambda_durable`, the JWT-protected Lambda route remains public,
-and retained ECS remains `0/0/0`.
+and retained ECS remains `0/0/0`. The terminal DLQ resource policy is release-independent and must
+remain unchanged.
 
 Review the saved plan with `operate-staging-gateway-runtime-release.ps1 -Action Status`, authorize
 its exact SHA-256, and apply only that checksum through the same operator. Completed-runtime
