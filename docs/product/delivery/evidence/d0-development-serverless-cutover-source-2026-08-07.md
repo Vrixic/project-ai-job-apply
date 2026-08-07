@@ -102,3 +102,20 @@ for known live targets and, for this create-time case only, requires both values
 the route expression to reference the exact platform Lambda integration. PowerShell parsing,
 infrastructure policy validation, skill validation, and formatting checks pass. The rejected plan
 is ignored and unauthorized; no additional AWS mutation occurred.
+
+After the correction merged, exact-main planning and independent operator review returned three
+creates, six updates, zero deletes/replacements, and checksum
+`482cdeafc1d012c964a756420a5c0405955f2fc743b3b0e3e096a10449fb6e87`. The product owner explicitly
+authorized that checksum. Terraform completed all nine actions: the Lambda proxy integration and
+two public health routes were created; the protected route, gateway function/alias, SQS starter,
+reconciler, and terminal rule were updated; nothing was destroyed.
+
+The built-in post-apply verifier then stopped on a local strict-property exception before returning
+its zero-drift summary. It correctly reached the now-materialized route, whose empty
+`after_unknown` object omits `target`; the validator accessed that absent property directly. The
+apply was not retried. Independent read-only AWS inspection proves the gateway is active, dispatch
+is `lambda_durable`, all three triggers are enabled, the default route is JWT-protected with exact
+`profile:read`/`profile:write` scopes, only the two health routes are anonymous, public behavior is
+`200/200/401`, and both retained ECS services are `0/0/0`. Source now treats omitted unknown flags
+as false while retaining the exact known-target equality check. Fresh exact-main zero-drift
+verification remains required after merge.

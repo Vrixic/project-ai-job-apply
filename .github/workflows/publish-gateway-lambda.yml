@@ -43,7 +43,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @ai-job-apply/gateway... build
       - run: pnpm --filter @ai-job-apply/gateway test
-      - run: pnpm audit --audit-level high
+      - run: pnpm audit:dependencies
 
       - name: Build reproducible artifact and CycloneDX SBOM
         id: artifact
@@ -150,7 +150,7 @@ jobs:
             echo "- S3 object version: \`$OBJECT_VERSION\`"
             echo "- SHA-256: \`$ARTIFACT_SHA256\`"
             echo "- Base64 SHA-256: \`$ARTIFACT_BASE64_SHA256\`"
-            echo "- Dependency audit: passed at High severity"
+            echo "- Dependency audit: passed at High severity with exact documented mobile-build exceptions"
             echo "- CycloneDX SBOM: published beside the artifact"
             echo "- Deployment/traffic change: none"
           } >> "$GITHUB_STEP_SUMMARY"

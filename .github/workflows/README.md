@@ -18,9 +18,13 @@ matrix job resolves only that environment's deployment-role and state-bucket var
 GitHub's OIDC token for short-lived AWS credentials, verifies the exact role/account relationship,
 and proves read-only access to its encrypted `bootstrap.tfstate`.
 
-The private repository uses a full-lockfile pnpm audit and a repository-local Semgrep gate with a
-pinned scanner and pinned upstream rules. GitHub Dependency Review and CodeQL uploads are not
-claimed because GitHub code-security services are not enabled for this repository.
+The private repository uses the centralized `pnpm audit:dependencies` full-lockfile audit and a
+repository-local Semgrep gate with a pinned scanner and pinned upstream rules. The audit fails at
+High severity except for the two exact, expiring, path-constrained Expo/Metro `image-size`
+exceptions recorded in the [dependency exception register](../../docs/security/dependency-vulnerability-exceptions.md).
+It rejects changed paths/versions, stale exceptions, and every unlisted advisory. GitHub Dependency
+Review and CodeQL uploads are not claimed because GitHub code-security services are not enabled for
+this repository.
 
 `publish-environment-images.yml` is a manual, `main`-only release workflow with an explicit
 `development` or `staging` input. Each job assumes only the selected GitHub Environment through

@@ -43,7 +43,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @ai-job-apply/workflows... build
       - run: pnpm --filter @ai-job-apply/workflows test
-      - run: pnpm audit --audit-level high
+      - run: pnpm audit:dependencies
 
       - name: Build reproducible artifacts and CycloneDX SBOMs
         id: artifact
@@ -188,7 +188,7 @@ jobs:
               echo "- ${label,,} SHA-256: \`${!sha_variable}\`"
               echo "- ${label,,} Base64 SHA-256: \`${!base64_variable}\`"
             done
-            echo "- Dependency audit: passed at High severity"
+            echo "- Dependency audit: passed at High severity with exact documented mobile-build exceptions"
             echo "- CycloneDX SBOMs: published beside each artifact"
             echo "- Deployment/trigger change: none"
           } >> "$GITHUB_STEP_SUMMARY"
