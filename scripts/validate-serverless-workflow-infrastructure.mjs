@@ -620,6 +620,8 @@ for (const expected of [
   '"module.platform.aws_lambda_function.gateway[0]"',
   '"module.platform.aws_lambda_function.profile_readiness_activity[0]"',
   '"module.platform.time_sleep.profile_readiness_durable_policy_propagation[0]"',
+  "$changes.Count -ne 14",
+  "$updates.Count -ne 13",
   'OUTBOX_DISPATCH_TARGET -ne "lambda_durable"',
   '"serverless_runtime_cutover"',
   '"run_continuous_ecs_runtime"',
@@ -636,6 +638,18 @@ for (const expected of [
     stagingGatewayReleaseOperator,
     expected,
     `The guarded staging gateway release operator is missing required boundary text: ${expected}`,
+  );
+}
+
+for (const expected of [
+  "$expectedTerminalRuleState = if ($AllowRuntimeArtifactReleaseUpdate)",
+  "$terminalRuleChange.change.before.state -ne $expectedTerminalRuleState",
+  "$terminalRuleChange.change.after.state -ne $expectedTerminalRuleState",
+]) {
+  requireText(
+    workflowPlanner,
+    expected,
+    `The workflow release planner is missing the dark/live terminal-rule state boundary: ${expected}`,
   );
 }
 

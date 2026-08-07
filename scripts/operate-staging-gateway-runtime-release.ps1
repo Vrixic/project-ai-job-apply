@@ -38,7 +38,7 @@ Usage:
     -ExpectedPlanSha256 REVIEWED_SHA256 -Execute
 
 Status performs no AWS mutation. Apply accepts only an exact checksum-reviewed staging plan
-created from the current clean, upstream-matched main commit. It permits the 14-update/one-gate
+created from the current clean, upstream-matched main commit. It permits the 13-update/one-gate
 immutable workflow release, two-update immutable gateway release, one-update gateway concurrency
 correction, one-update default-route scope correction, or two-policy encrypted-outbox producer
 correction. Every mode preserves the JWT authorizer, Lambda integration, durable workflow
@@ -312,7 +312,6 @@ function Assert-WorkflowReleasePlan {
     "module.platform.aws_lambda_function.outbox_starter[0]",
     "module.platform.aws_lambda_function.profile_readiness_activity[0]",
     "module.platform.aws_lambda_function.profile_readiness_terminal[0]",
-    "module.platform.aws_sqs_queue_policy.profile_readiness_dead_letter[0]",
     "module.platform.aws_vpc_endpoint.lambda[0]"
   ) | Sort-Object
   $expectedReplacement = "module.platform.time_sleep.profile_readiness_durable_policy_propagation[0]"
@@ -325,7 +324,7 @@ function Assert-WorkflowReleasePlan {
   })
   $updateAddresses = @($updates | ForEach-Object { [string]$_.address } | Sort-Object)
   if (
-    $changes.Count -ne 15 -or $updates.Count -ne 14 -or $replacements.Count -ne 1 -or
+    $changes.Count -ne 14 -or $updates.Count -ne 13 -or $replacements.Count -ne 1 -or
     (Compare-Object -ReferenceObject $updateAddresses -DifferenceObject $expectedUpdates) -or
     [string]$replacements[0].address -ne $expectedReplacement
   ) { throw "The plan is outside the exact staging workflow release boundary." }
@@ -659,14 +658,13 @@ function Get-GatewayPlanKind {
     "module.platform.aws_lambda_function.outbox_starter[0]",
     "module.platform.aws_lambda_function.profile_readiness_activity[0]",
     "module.platform.aws_lambda_function.profile_readiness_terminal[0]",
-    "module.platform.aws_sqs_queue_policy.profile_readiness_dead_letter[0]",
     "module.platform.aws_vpc_endpoint.lambda[0]",
     "module.platform.time_sleep.profile_readiness_durable_policy_propagation[0]"
   ) | Sort-Object
   $workflowReleaseDifference = @(
     Compare-Object -ReferenceObject $addresses -DifferenceObject $workflowReleaseAddresses
   )
-  if ($addresses.Count -eq 15 -and $workflowReleaseDifference.Count -eq 0) {
+  if ($addresses.Count -eq 14 -and $workflowReleaseDifference.Count -eq 0) {
     return "workflow_artifact_release"
   }
   if (
@@ -822,7 +820,7 @@ if ($Action -eq "Status") {
     PlanSha256 = $actualPlanSha256
     Creates = 0
     Updates = if ($planKind -eq "workflow_artifact_release") {
-      14
+      13
     } elseif ($planKind -in @("scope_boundary", "gateway_concurrency")) { 1 } else { 2 }
     Deletes = 0
     Replacements = if ($planKind -eq "workflow_artifact_release") { 1 } else { 0 }

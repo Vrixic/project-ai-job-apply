@@ -56,10 +56,26 @@ the serverless-infrastructure policy validator pass locally.
 No contract, schema migration, user-data rewrite, dispatch-target rewrite, or AWS mutation is part
 of the source correction.
 
+## Immutable publication and historical drain
+
+The merged correction at source commit `244806cbc5d28a2cb42b80e6b2f070498460b8f8` passed the
+protected staging publication workflow. All three workflow ZIPs passed tests, dependency audit,
+reproducibility, versioned S3 publication, customer-managed KMS encryption, and independent AWS
+read-back of their exact object versions and checksums. Publication changed no Lambda version,
+alias, route, trigger, queue, ECS service, or product record.
+
+The separately reviewed post-cutover legacy drain plan had SHA-256
+`4c5456165043efd78fdbf28097c1e7147a7f5a37018ac3bd69f728c6be25692c`. Its authorized execution
+processed exactly the 26 zero-attempt historical records through one temporary retained worker.
+The outbox and open Temporal workflow counts reached zero, the worker stopped, its aggregate logs
+contained one startup and zero errors, and the review context was removed. The accepted JWT/Lambda
+route, enabled replacement triggers, ECS services at `0/0/0`, dispatch targets, and persistent
+infrastructure remained unchanged. No record was retargeted or deleted.
+
 ## Guarded release and recovery
 
 The staging runtime planner now exposes an explicit post-cutover workflow release mode. It permits
-only the previously proven coupled workflow boundary: 14 bounded in-place updates and the
+only the coupled live workflow boundary: 13 bounded in-place updates and the
 policy-hash-keyed IAM propagation-gate replacement. It preserves the exact JWT/Lambda API route,
 `lambda_durable` dispatch, all enabled workflow triggers, persistent data, secrets, gateway release,
 and retained ECS at `0/0/0`. The existing staging maintenance operator independently validates the
@@ -70,17 +86,29 @@ Rollback is a separately planned release to the previously accepted immutable wo
 set through the same exact boundary and a new checksum. It never moves an alias to `$LATEST` and
 never combines artifact rollback with route, trigger, capacity, data, or legacy-record changes.
 
+The first live-release diagnostic failed closed before returning an authorizable checksum. Its
+Terraform plan correctly contained 13 in-place workflow updates plus the propagation-gate
+replacement: the terminal DLQ policy was already converged and therefore a no-op, while the
+terminal EventBridge rule correctly remained `ENABLED` for the live post-cutover release. The
+original guard had required the release-independent queue policy to change and had reused the
+dark-release `DISABLED` rule-state assertion.
+
+The source guard now distinguishes dark and live trigger state and recognizes only the exact
+13-update/one-gate live boundary. A read-only replay against the rejected diagnostic plan passes
+that corrected semantic boundary with zero creates, standalone deletes, route changes, trigger
+state changes, ECS-capacity changes, or AWS mutation. That diagnostic checksum is not eligible for
+authorization; the correction must merge before a fresh exact-main plan is generated.
+
 ## Remaining acceptance
 
-This record is source/local evidence only for the correction. Before SR-006 can complete:
+The immutable artifact publication and exact historical drain are complete. Before SR-006 can
+complete:
 
-1. merge and publish all three workflow artifacts from exact source;
-2. plan, review, authorize, and apply the exact post-cutover workflow release;
-3. drain the existing 26 historical records through the separately checksum-bound legacy Temporal
-   drain, without retargeting or deleting them;
-4. rerun the authenticated save, idempotent replay, two-account isolation, fixed workload, aggregate
+1. merge the corrected live-release guard, then generate, review, authorize, and apply a fresh
+   exact-main post-cutover workflow release;
+2. rerun the authenticated save, idempotent replay, two-account isolation, fixed workload, aggregate
    AWS corroboration, zero-work inspection, and zero-drift verification; and
-5. prove that new successful workflows leave zero pending terminal events.
+3. prove that new successful workflows leave zero pending terminal events.
 
 Until those gates pass, the staging replacement path is not fully re-accepted and the user should
 not submit additional synthetic saves.

@@ -1061,7 +1061,6 @@ try {
     "module.platform.aws_lambda_function.outbox_starter[0]",
     "module.platform.aws_lambda_function.profile_readiness_activity[0]",
     "module.platform.aws_lambda_function.profile_readiness_terminal[0]",
-    "module.platform.aws_sqs_queue_policy.profile_readiness_dead_letter[0]",
     "module.platform.aws_vpc_endpoint.lambda[0]"
   )
   $releaseExpectedReplacements = @(
@@ -1604,7 +1603,6 @@ try {
     foreach ($policyAddress in @(
       "module.platform.aws_iam_role_policy.outbox_starter[0]",
       "module.platform.aws_iam_role_policy.profile_readiness_durable[0]",
-      "module.platform.aws_sqs_queue_policy.profile_readiness_dead_letter[0]",
       "module.platform.aws_vpc_endpoint.lambda[0]"
     )) {
       $policyChange = Get-PlannedChange $policyAddress
@@ -1619,12 +1617,15 @@ try {
       "module.platform.aws_cloudwatch_event_rule.profile_readiness_terminal[0]"
     Assert-OnlyPropertiesChanged $terminalRuleChange @("event_pattern") `
       "The terminal rule release changes more than its exact durable-version event pattern."
+    $expectedTerminalRuleState = if ($AllowRuntimeArtifactReleaseUpdate) {
+      "ENABLED"
+    } else { "DISABLED" }
     if (
-      [string]$terminalRuleChange.change.before.state -ne "DISABLED" -or
-      [string]$terminalRuleChange.change.after.state -ne "DISABLED" -or
+      [string]$terminalRuleChange.change.before.state -ne $expectedTerminalRuleState -or
+      [string]$terminalRuleChange.change.after.state -ne $expectedTerminalRuleState -or
       -not [bool]$terminalRuleChange.change.after_unknown.event_pattern
     ) {
-      throw "The terminal rule release is enabled or its version pattern is not plan-time unknown."
+      throw "The terminal rule release changes its trigger state or its version pattern is not plan-time unknown."
     }
 
     $durableChange = Get-PlannedChange `
