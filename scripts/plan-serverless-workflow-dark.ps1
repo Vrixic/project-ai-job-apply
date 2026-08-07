@@ -449,12 +449,7 @@ try {
 
   if (
     $RecoverFailedApply -or $AllowArtifactReleaseUpdate -or
-    $AllowGatewayArtifactReleaseUpdate -or
-    $AllowGatewayScopeBoundaryUpdate -or
-    $AllowOutboxProducerKmsUpdate -or
-    $VerifyCompletedOutboxProducerKmsUpdate -or
-    $VerifyCompletedDarkDeployment -or $PlanRuntimeCutover -or
-    $VerifyCompletedRuntimeCutover
+    $VerifyCompletedDarkDeployment -or $runtimeCutoverActive
   ) {
     $baselinePlan = [pscustomobject]@{
       state_resources = @(

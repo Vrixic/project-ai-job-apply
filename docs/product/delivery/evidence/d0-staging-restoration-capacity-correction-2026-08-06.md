@@ -67,6 +67,13 @@ with the planner's shared `runtimeCutoverActive` predicate and adds a source-pol
 that exact placement. This changes only preflight selection; it does not broaden the capacity
 plan's one-resource, one-property boundary.
 
+After that correction merged, the next planning attempt reached the completed-value reader and
+failed before plan output or AWS mutation. A second duplicated mode list selected the historical
+gateway-only plan instead of live Terraform state, so the reader rejected the intended gateway
+function update rather than using its live value as the plan's `before` boundary. The same shared
+`runtimeCutoverActive` predicate now controls live-state selection, with a separate structural
+policy assertion. An audit of every remaining capacity-mode branch found no further omissions.
+
 ## Verification and remaining gate
 
 Repository verification must pass before publication. No AWS resource has been changed by the
