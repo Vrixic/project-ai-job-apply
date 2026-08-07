@@ -1228,8 +1228,12 @@ try {
     $integrationResource = Get-OnlyItem `
       -Items @($plan.resource_changes | Where-Object { [string]$_.address -eq $IntegrationAddress }) `
       -FailureMessage "The reviewed planned integration '$IntegrationAddress' is missing."
-    $routeTargetUnknown = [bool]$routeResource.change.after_unknown.target
-    $integrationIdUnknown = [bool]$integrationResource.change.after_unknown.id
+    $routeTargetUnknown =
+      $routeResource.change.after_unknown.PSObject.Properties.Name -contains "target" -and
+      [bool]$routeResource.change.after_unknown.target
+    $integrationIdUnknown =
+      $integrationResource.change.after_unknown.PSObject.Properties.Name -contains "id" -and
+      [bool]$integrationResource.change.after_unknown.id
 
     if (-not $routeTargetUnknown -and -not $integrationIdUnknown) {
       if (
