@@ -521,10 +521,10 @@ for (const expected of [
   '"EncryptIdentifierOnlyOutboxNudges"',
   '"kms:GenerateDataKey"',
   "function Assert-PlannedRouteTargetsIntegration",
-  '$routeResource.change.after_unknown.PSObject.Properties.Name -contains "target"',
-  "$routeResource.change.after_unknown.target",
-  '$integrationResource.change.after_unknown.PSObject.Properties.Name -contains "id"',
-  "$integrationResource.change.after_unknown.id",
+  '$routeResource.change.after_unknown.PSObject.Properties["target"]',
+  '$integrationResource.change.after_unknown.PSObject.Properties["id"]',
+  "$null -ne $routeTargetProperty",
+  "$null -ne $integrationIdProperty",
   '$targetReferences -notcontains "$configuredIntegrationAddress[0].id"',
 ]) {
   requireText(
