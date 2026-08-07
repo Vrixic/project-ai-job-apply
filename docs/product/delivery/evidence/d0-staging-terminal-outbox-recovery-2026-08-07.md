@@ -97,14 +97,29 @@ The source guard now distinguishes dark and live trigger state and recognizes on
 13-update/one-gate live boundary. A read-only replay against the rejected diagnostic plan passes
 that corrected semantic boundary with zero creates, standalone deletes, route changes, trigger
 state changes, ECS-capacity changes, or AWS mutation. That diagnostic checksum is not eligible for
-authorization; the correction must merge before a fresh exact-main plan is generated.
+authorization.
+
+After that correction merged, a fresh exact-main plan again contained the expected 13 updates and
+one propagation-gate replacement, but the planner failed closed before returning a checksum. The
+release-specific verifier had already required the durable template to be plan-time unknown because
+the new activity Lambda's numeric version is assigned only during apply; a later generic completed-
+runtime check redundantly rejected the same expected unknown. The live CloudFormation stack remains
+`UPDATE_COMPLETE`, its current template is available and exact, the saved plan is unapplied, and no
+AWS resource changed.
+
+The narrow source correction permits an unknown durable template only in the already validated
+workflow-release mode. That mode still proves the exact current template, restricts the stack change
+to its template and computed outputs, binds every immutable desired artifact, and requires the
+activity-version dependency to be explicitly unknown. After apply, completed-runtime verification
+still requires the fully materialized new template and zero drift. Merge and a fresh exact-main
+plan remain required; neither rejected diagnostic checksum is eligible for authorization.
 
 ## Remaining acceptance
 
 The immutable artifact publication and exact historical drain are complete. Before SR-006 can
 complete:
 
-1. merge the corrected live-release guard, then generate, review, authorize, and apply a fresh
+1. merge the activity-version-aware release guard, then generate, review, authorize, and apply a fresh
    exact-main post-cutover workflow release;
 2. rerun the authenticated save, idempotent replay, two-account isolation, fixed workload, aggregate
    AWS corroboration, zero-work inspection, and zero-drift verification; and

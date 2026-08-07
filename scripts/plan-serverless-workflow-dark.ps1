@@ -1738,6 +1738,17 @@ try {
     ) {
       throw "The durable stack does not select the exact artifact, version, or bounded concurrency."
     }
+  } elseif ($workflowArtifactReleaseUpdate) {
+    $durableStackChange = Get-PlannedChange `
+      "module.platform.aws_cloudformation_stack.profile_readiness_durable[0]"
+    if (-not [bool]$durableStackChange.change.after_unknown.template_body) {
+      throw "The activity-version-coupled durable release template is not plan-time unknown."
+    }
+    # The release-specific guard above already validates the exact current template, the only
+    # allowed template/output change, and every immutable desired artifact. The next activity's
+    # numeric version is assigned only during apply, so Terraform cannot serialize the resulting
+    # durable template until that version exists. Completed verification requires the exact new
+    # template after apply.
   } elseif ($VerifyCompletedDarkDeployment -or $runtimeCutoverActive) {
     throw "The completed durable stack template is unavailable for exact verification."
   } else {
