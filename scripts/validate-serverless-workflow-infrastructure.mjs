@@ -50,6 +50,9 @@ const developmentRuntimeCutoverOperatorWrapper = read(
   "scripts/operate-development-serverless-runtime-cutover.ps1",
 );
 const stagingGatewayReleaseOperator = read("scripts/operate-staging-gateway-runtime-release.ps1");
+const developmentGatewayReleaseOperatorWrapper = read(
+  "scripts/operate-development-gateway-runtime-release.ps1",
+);
 const stagingWorkloadInspector = read("scripts/inspect-staging-workload-and-cost.ps1");
 const developmentWorkloadInspectorWrapper = read(
   "scripts/inspect-development-workload-and-cost.ps1",
@@ -876,8 +879,10 @@ for (const [source, environment, label] of [
   );
 }
 for (const expected of [
-  '[ValidateSet("Plan", "Verify")]',
+  '"PlanOutboxProducerKms", "Verify", "VerifyOutboxProducerKms"',
   '"PlanRuntimeCutover"',
+  '"AllowOutboxProducerKmsUpdate"',
+  '"VerifyCompletedOutboxProducerKmsUpdate"',
   '"VerifyCompletedRuntimeCutover"',
 ]) {
   requireText(
@@ -891,6 +896,29 @@ requireText(
   '"operate-staging-serverless-runtime-cutover.ps1"',
   "The development runtime-cutover operator wrapper must delegate to the shared guarded operator.",
 );
+
+for (const expected of [
+  '[ValidateSet("development", "staging")]',
+  "Environment = $Environment",
+  '"plan-$Environment-serverless-runtime-cutover.ps1"',
+  '"The plan is outside the exact two-policy $Environment encrypted-outbox producer boundary."',
+]) {
+  requireText(
+    stagingGatewayReleaseOperator,
+    expected,
+    `The shared runtime-maintenance operator is missing environment isolation: ${expected}`,
+  );
+}
+for (const expected of [
+  'Environment = "development"',
+  '"operate-staging-gateway-runtime-release.ps1"',
+]) {
+  requireText(
+    developmentGatewayReleaseOperatorWrapper,
+    expected,
+    `The development runtime-maintenance wrapper is missing: ${expected}`,
+  );
+}
 
 for (const expected of [
   "Assert-ZeroPendingWork",

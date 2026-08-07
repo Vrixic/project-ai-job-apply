@@ -142,22 +142,26 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
 - `plan-development-serverless-workflow-dark.ps1` — Compatibility wrapper for development calls to
   the environment-aware workflow planner.
 - `plan-development-serverless-runtime-cutover.ps1` — Development-only wrapper for the initial
-  atomic runtime-cutover plan and its post-apply zero-drift verification baseline. It fixes the
-  environment and IAM Identity Center profile while delegating all artifact, action, and
-  empty-work checks to the shared planner.
+  atomic runtime-cutover plan, its post-apply zero-drift verification baseline, and the separately
+  bounded two-policy encrypted-outbox producer prerequisite. It fixes the environment and IAM
+  Identity Center profile while delegating all artifact, action, and empty-work checks to the
+  shared planner.
 - `plan-staging-serverless-runtime-cutover.ps1` — Staging-only wrapper for atomic runtime cutover,
   post-cutover immutable workflow or gateway artifact release, exact gateway concurrency and JWT
   route-scope correction, encrypted-outbox producer correction, and completed verification. It
   fixes the environment and default IAM Identity Center profile and cannot select dark deployment,
   recovery, or completed-dark modes.
 - `operate-staging-gateway-runtime-release.ps1` — Reviews and applies an exact 13-update/one-gate
-  immutable workflow release, two-update immutable gateway release, one-update concurrency or
+  environment-aware immutable workflow release, two-update immutable gateway release, one-update concurrency or
   OAuth-scope correction, or two-role encrypted-outbox producer correction. Every path is
   checksum-gated, preserves the authorizer/integration/workflows/data/idle-ECS boundary, and
   requires its matching completed-runtime zero drift. A workflow release permits the durable
   template to be plan-time unknown only while AWS assigns the new activity's numeric version; the
   exact current template and desired artifacts remain guarded, and completed verification requires
   the materialized replacement.
+- `operate-development-gateway-runtime-release.ps1` — Development wrapper over the same guarded
+  maintenance operator. It fixes the development account/resource boundary for the separately
+  reviewed encrypted-outbox producer prerequisite and later post-cutover releases.
 - `operate-staging-serverless-runtime-cutover.ps1` — Environment-aware guarded core, with staging
   as its compatibility default. It applies only the exact checksum-reviewed
   three-create/six-update cutover plan, then delegates to the refresh-backed completed-runtime

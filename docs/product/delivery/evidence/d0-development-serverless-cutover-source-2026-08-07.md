@@ -3,7 +3,7 @@
 Date: 2026-08-07
 Delivery: D0-016 / SR-005 / SR-007
 Environment: isolated development in `us-east-2`
-Status: Source-only cutover boundary implemented and locally verified; no AWS plan or mutation
+Status: First live plan failed closed on a separately bounded prerequisite; no plan authorized or applied
 
 ## Implemented boundary
 
@@ -53,7 +53,14 @@ ECS or deletes Lambda, ECS, Cloud Map, API, queue, database, or Temporal rollbac
   metrics, both DLQs, ten alarms, idle ECS, and zero-drift verification; and
 - repository verification and Markdown-link checks are required before publication.
 
-No plan, context, AWS resource, application record, queue message, workflow, or traffic route was
-created or changed. The local development IAM Identity Center session is expired; after this source
-merges, refresh that short-lived session and generate the first exact-main read-only cutover plan.
-The resulting plan checksum is the next explicit authorization gate.
+After merge and SSO refresh, the first exact-main plan failed closed before returning a checksum.
+Its sanitized action inventory contained the intended three creates/six updates plus exactly two
+additional in-place IAM policy updates. Both add only `kms:GenerateDataKey` to the gateway and
+reconciler producer roles; there were zero deletes or replacements. This is the same encrypted-SQS
+producer prerequisite previously discovered and accepted in staging, not cutover drift.
+
+No plan was authorized or applied, and no persistent AWS resource, application record, queue
+message, workflow, or traffic route changed. Source now exposes this as a separate development
+`PlanOutboxProducerKms` / `VerifyOutboxProducerKms` path and fixes a development maintenance
+operator wrapper to the isolated account. Merge, regenerate the exact two-policy plan, and request
+explicit authorization for its checksum before retrying the cutover plan.

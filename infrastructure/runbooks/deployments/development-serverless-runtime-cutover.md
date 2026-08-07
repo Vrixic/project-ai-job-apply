@@ -15,6 +15,11 @@ checksum.
   IAM Identity Center profile/account/state bucket.
 - Supply the exact currently deployed gateway and three workflow artifact keys, object versions,
   source/artifact digests, and pinned regional Secrets extension layer.
+- Prove the gateway and reconciler producer roles can call `kms:GenerateDataKey` on the exact
+  platform key before cutover. If the guarded cutover plan exposes only those two missing policy
+  updates, stop and apply them as a separate checksum-reviewed prerequisite using
+  `PlanOutboxProducerKms` and the development runtime-maintenance operator; never fold them into
+  the traffic cutover.
 - Require both retained ECS services at `0/0/0`, zero running application tasks/public task IPs,
   zero pending outbox rows, zero open Temporal or Lambda durable executions, empty source
   queue/DLQs, healthy runtime alarms, and zero drift.
@@ -28,6 +33,7 @@ Inspect the development command boundaries without changing AWS:
 ```powershell
 .\scripts\plan-development-serverless-runtime-cutover.ps1 -Help
 .\scripts\operate-development-serverless-runtime-cutover.ps1 -Help
+.\scripts\operate-development-gateway-runtime-release.ps1 -Help
 ```
 
 Run `plan-development-serverless-runtime-cutover.ps1 -Action Plan` with the exact account, state,

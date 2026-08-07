@@ -1,5 +1,8 @@
 [CmdletBinding()]
 param(
+  [ValidateSet("development", "staging")]
+  [string]$Environment = "staging",
+
   [ValidateSet("Status", "Verify", "Apply")]
   [string]$Action = "Status",
 
@@ -14,7 +17,7 @@ param(
   [ValidatePattern("^[a-fA-F0-9]{64}$")]
   [string]$ExpectedPlanSha256 = "",
 
-  [string]$AwsProfile = "ai-job-apply-staging-admin",
+  [string]$AwsProfile = "",
 
   [ValidatePattern("^[a-z]{2}-[a-z]+-[0-9]+$")]
   [string]$Region = "us-east-2",
@@ -25,6 +28,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+
+if ([string]::IsNullOrWhiteSpace($AwsProfile)) {
+  $AwsProfile = "ai-job-apply-$Environment-admin"
+}
 
 if ($Help) {
   @"
@@ -43,7 +50,7 @@ Usage:
 
 Status and Verify perform no AWS mutation. Verify reuses an already applied, semantically guarded
 maintenance plan only as the exact artifact/input source for a fresh completed-runtime zero-drift
-check from clean upstream-matched main. Apply accepts only an exact checksum-reviewed staging plan
+check from clean upstream-matched main. Apply accepts only an exact checksum-reviewed $Environment plan
 created from the current clean, upstream-matched main commit. It permits the 13-update/one-gate
 immutable workflow release, two-update immutable gateway release, one-update gateway concurrency
 correction, one-update default-route scope correction, or two-policy encrypted-outbox producer
@@ -55,22 +62,22 @@ matching completed-runtime zero-drift verifier.
 }
 
 if ($Region -ne "us-east-2") {
-  throw "The staging gateway runtime release is restricted to us-east-2."
+  throw "The $Environment gateway runtime release is restricted to us-east-2."
 }
 if ($Action -in @("Verify", "Apply") -and (
   $ExpectedAccountId -notmatch "^[0-9]{12}$" -or [string]::IsNullOrWhiteSpace($StateBucket)
 )) {
-  throw "$Action requires the exact staging account ID and encrypted state bucket."
+  throw "$Action requires the exact $Environment account ID and encrypted state bucket."
 }
 if ($Action -eq "Apply" -and -not $Execute) { throw "Apply requires -Execute." }
 if ($Action -ne "Apply" -and $Execute) { throw "$Action does not accept -Execute." }
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
-$environmentDirectory = Join-Path $repositoryRoot "infrastructure\terraform\environments\staging"
+$environmentDirectory = Join-Path $repositoryRoot "infrastructure\terraform\environments\$Environment"
 $terraformRoot = [IO.Path]::GetFullPath((Join-Path $environmentDirectory ".terraform"))
 $planDirectory = [IO.Path]::GetFullPath((Join-Path $terraformRoot "workflow-dark-plans"))
 $terraformDataDirectory = Join-Path $terraformRoot "dark-plan-data"
-$verifier = Join-Path $PSScriptRoot "plan-staging-serverless-runtime-cutover.ps1"
+$verifier = Join-Path $PSScriptRoot "plan-$Environment-serverless-runtime-cutover.ps1"
 
 function Assert-Tools {
   foreach ($command in @("aws", "git", "terraform")) {
@@ -90,14 +97,14 @@ function Assert-ExactMain {
   $upstream = (& git -C $repositoryRoot rev-parse "@{upstream}" 2>$null).Trim()
   $dirty = @(& git -C $repositoryRoot status --porcelain=v1 --untracked-files=all)
   if ($branch -ne "main" -or $head -ne $upstream -or $dirty.Count -ne 0) {
-    throw "Use an exact clean upstream-matched main checkout for staging runtime maintenance."
+    throw "Use an exact clean upstream-matched main checkout for $Environment runtime maintenance."
   }
   return $head
 }
 
 function Resolve-PlanPath {
   if ([string]::IsNullOrWhiteSpace($PlanPath)) {
-    throw "The saved staging runtime-maintenance -PlanPath is required."
+    throw "The saved $Environment runtime-maintenance -PlanPath is required."
   }
   $candidate = if ([IO.Path]::IsPathRooted($PlanPath)) {
     [IO.Path]::GetFullPath($PlanPath)
@@ -110,7 +117,7 @@ function Resolve-PlanPath {
     -not $candidate.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) -or
     -not (Test-Path -LiteralPath $candidate -PathType Leaf)
   ) {
-    throw "The plan must be an existing file below staging .terraform/workflow-dark-plans."
+    throw "The plan must be an existing file below $Environment .terraform/workflow-dark-plans."
   }
   return $candidate
 }
@@ -122,7 +129,7 @@ function Get-PlanJson {
     $env:TF_DATA_DIR = $terraformDataDirectory
     $raw = & terraform "-chdir=$environmentDirectory" show -json $Path 2>$null
     if ($LASTEXITCODE -ne 0 -or -not $raw) {
-      throw "The saved staging runtime-maintenance plan could not be inspected."
+      throw "The saved $Environment runtime-maintenance plan could not be inspected."
     }
     return ($raw -join [Environment]::NewLine) | ConvertFrom-Json
   } finally {
@@ -204,7 +211,7 @@ function Assert-GatewayReleasePlan {
   if (
     $changes.Count -ne 2 -or $updates.Count -ne 2 -or
     $addressDifference.Count -ne 0
-  ) { throw "The plan is outside the exact two-update staging gateway release boundary." }
+  ) { throw "The plan is outside the exact two-update $Environment gateway release boundary." }
 
   foreach ($name in @(
     "deploy_applications", "deploy_gateway_lambda", "deploy_serverless_outbox",
@@ -333,7 +340,7 @@ function Assert-WorkflowReleasePlan {
     $changes.Count -ne 14 -or $updates.Count -ne 13 -or $replacements.Count -ne 1 -or
     (Compare-Object -ReferenceObject $updateAddresses -DifferenceObject $expectedUpdates) -or
     [string]$replacements[0].address -ne $expectedReplacement
-  ) { throw "The plan is outside the exact staging workflow release boundary." }
+  ) { throw "The plan is outside the exact $Environment workflow release boundary." }
 
   foreach ($name in @(
     "deploy_applications", "deploy_gateway_lambda", "deploy_serverless_outbox",
@@ -425,7 +432,7 @@ function Assert-GatewayScopeBoundaryPlan {
   if (
     $changes.Count -ne 1 -or $updates.Count -ne 1 -or
     [string]$updates[0].address -ne $routeAddress
-  ) { throw "The plan is outside the exact one-update staging JWT scope boundary." }
+  ) { throw "The plan is outside the exact one-update $Environment JWT scope boundary." }
 
   foreach ($name in @(
     "deploy_applications", "deploy_gateway_lambda", "deploy_serverless_outbox",
@@ -490,7 +497,7 @@ function Assert-GatewayConcurrencyPlan {
   if (
     $changes.Count -ne 1 -or $updates.Count -ne 1 -or
     [string]$updates[0].address -ne $functionAddress
-  ) { throw "The plan is outside the exact one-update staging gateway capacity boundary." }
+  ) { throw "The plan is outside the exact one-update $Environment gateway capacity boundary." }
 
   foreach ($name in @(
     "deploy_applications", "deploy_gateway_lambda", "deploy_serverless_outbox",
@@ -563,7 +570,7 @@ function Assert-OutboxProducerKmsPlan {
     Compare-Object -ReferenceObject $updateAddresses -DifferenceObject @($expected | Sort-Object)
   )
   if ($changes.Count -ne 2 -or $updates.Count -ne 2 -or $addressDifference.Count -ne 0) {
-    throw "The plan is outside the exact two-policy staging encrypted-outbox producer boundary."
+    throw "The plan is outside the exact two-policy $Environment encrypted-outbox producer boundary."
   }
 
   foreach ($name in @(
@@ -695,7 +702,7 @@ function Get-GatewayPlanKind {
   if ($addresses.Count -eq 2 -and $producerDifference.Count -eq 0) {
     return "outbox_producer_kms"
   }
-  throw "The plan is outside every reviewed staging runtime-maintenance boundary."
+  throw "The plan is outside every reviewed $Environment runtime-maintenance boundary."
 }
 
 function Invoke-AwsJson {
@@ -707,31 +714,31 @@ function Invoke-AwsJson {
 }
 
 function Assert-Caller {
-  $caller = Invoke-AwsJson @("sts", "get-caller-identity") "The staging AWS session is unavailable."
+  $caller = Invoke-AwsJson @("sts", "get-caller-identity") "The $Environment AWS session is unavailable."
   if (
     [string]$caller.Account -ne $ExpectedAccountId -or
     -not ([string]$caller.Arn).Contains(":assumed-role/")
-  ) { throw "Use the temporary IAM Identity Center session for the exact staging account." }
+  ) { throw "Use the temporary IAM Identity Center session for the exact $Environment account." }
 }
 
 function Initialize-Backend {
   $stateEncryption = Invoke-AwsJson `
     @("s3api", "get-bucket-encryption", "--bucket", $StateBucket) `
-    "The encrypted staging state bucket could not be inspected."
+    "The encrypted $Environment state bucket could not be inspected."
   $rules = @($stateEncryption.ServerSideEncryptionConfiguration.Rules | Where-Object {
     $_.ApplyServerSideEncryptionByDefault.SSEAlgorithm -eq "aws:kms" -and
     $_.ApplyServerSideEncryptionByDefault.KMSMasterKeyID
   })
-  if ($rules.Count -ne 1) { throw "The staging state bucket does not expose one KMS default." }
+  if ($rules.Count -ne 1) { throw "The $Environment state bucket does not expose one KMS default." }
   $keyArn = [string]$rules[0].ApplyServerSideEncryptionByDefault.KMSMasterKeyID
   if ($keyArn -notmatch "^arn:aws:kms:$([regex]::Escape($Region)):$ExpectedAccountId`:key/") {
-    throw "The staging state key is outside the exact account and region."
+    throw "The $Environment state key is outside the exact account and region."
   }
   $null = New-Item -ItemType Directory -Path $terraformDataDirectory -Force
   & terraform "-chdir=$environmentDirectory" init -reconfigure -input=false -lockfile=readonly `
     "-backend-config=bucket=$StateBucket" "-backend-config=key=platform.tfstate" `
     "-backend-config=region=$Region" "-backend-config=kms_key_id=$keyArn" 2>$null
-  if ($LASTEXITCODE -ne 0) { throw "The pinned staging provider set could not initialize." }
+  if ($LASTEXITCODE -ne 0) { throw "The pinned $Environment provider set could not initialize." }
 }
 
 function Get-VerificationArguments {
@@ -782,7 +789,7 @@ function Invoke-CompletedRuntimeVerification {
   } else { "Verify" }
   $verificationRaw = & $verifier @verificationArguments
   if ($LASTEXITCODE -ne 0 -or -not $verificationRaw) {
-    throw "The completed staging runtime verification failed."
+    throw "The completed $Environment runtime verification failed."
   }
   $verification = ($verificationRaw -join [Environment]::NewLine) | ConvertFrom-Json
   $completedVerification = if ($PlanKind -eq "outbox_producer_kms") {
@@ -795,7 +802,7 @@ function Invoke-CompletedRuntimeVerification {
     -not [bool]$verification.TriggersEnabled -or [int]$verification.Creates -ne 0 -or
     [int]$verification.Updates -ne 0 -or [int]$verification.Deletes -ne 0 -or
     [int]$verification.Replacements -ne 0
-  ) { throw "The staging runtime is outside the accepted zero-drift boundary." }
+  ) { throw "The $Environment runtime is outside the accepted zero-drift boundary." }
   return $verification
 }
 
@@ -809,7 +816,7 @@ function Invoke-SavedPlan {
   try {
     $credentials = & aws configure export-credentials --profile $AwsProfile --format process 2>$null |
       ConvertFrom-Json
-    if (-not $credentials.SessionToken) { throw "Short-lived staging credentials are unavailable." }
+    if (-not $credentials.SessionToken) { throw "Short-lived $Environment credentials are unavailable." }
     $env:TF_DATA_DIR = $terraformDataDirectory
     $env:AWS_ACCESS_KEY_ID = [string]$credentials.AccessKeyId
     $env:AWS_SECRET_ACCESS_KEY = [string]$credentials.SecretAccessKey
@@ -817,7 +824,7 @@ function Invoke-SavedPlan {
     $env:AWS_REGION = $Region; $env:AWS_DEFAULT_REGION = $Region
     Initialize-Backend
     & terraform "-chdir=$environmentDirectory" apply -input=false $Path
-    if ($LASTEXITCODE -ne 0) { throw "The exact reviewed staging runtime-maintenance plan failed to apply." }
+    if ($LASTEXITCODE -ne 0) { throw "The exact reviewed $Environment runtime-maintenance plan failed to apply." }
   } finally {
     foreach ($name in $previous.Keys) {
       if ($null -eq $previous[$name]) { Remove-Item "Env:$name" -ErrorAction SilentlyContinue }
@@ -839,7 +846,7 @@ $actualPlanSha256 = (Get-FileHash -LiteralPath $resolvedPlanPath -Algorithm SHA2
 
 if ($Action -eq "Status") {
   [ordered]@{
-    Environment = "staging"
+    Environment = $Environment
     Action = if ($planKind -eq "artifact_release") {
       "gateway_release_review"
     } elseif ($planKind -eq "workflow_artifact_release") {
@@ -882,7 +889,7 @@ Assert-Caller
 if ($Action -eq "Verify") {
   $verification = Invoke-CompletedRuntimeVerification $plan $planKind
   [ordered]@{
-    Environment = "staging"; Action = "runtime_verification"
+    Environment = $Environment; Action = "runtime_verification"
     PlanSha256 = $actualPlanSha256; NoDrift = [bool]$verification.NoDrift
     DispatchTarget = "lambda_durable"; TriggersEnabled = $true
     EcsRuntimeIdle = $true; AwsMutation = $false
@@ -899,7 +906,7 @@ Invoke-SavedPlan $resolvedPlanPath
 $verification = Invoke-CompletedRuntimeVerification $plan $planKind
 
 [ordered]@{
-  Environment = "staging"
+  Environment = $Environment
   Action = if ($planKind -eq "artifact_release") {
     "gateway_release"
   } elseif ($planKind -eq "workflow_artifact_release") {
