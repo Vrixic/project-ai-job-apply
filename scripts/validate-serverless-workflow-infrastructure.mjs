@@ -518,6 +518,14 @@ assert.ok(
   "The cutover semantic checks must remain outside the mutually exclusive initial-deployment branch.",
 );
 assert.ok(
+  workflowPlanner
+    .replaceAll("\r\n", "\n")
+    .includes(
+      "  -not $VerifyCompletedDarkDeployment -and\n  -not $runtimeCutoverActive\n) {\ntry {\n  $baselineRaw",
+    ),
+  "Runtime maintenance modes must bypass the gateway-only initial-deployment baseline.",
+);
+assert.ok(
   !workflowPlanner.includes("TF_VAR_gateway_outbox_dispatch_target") &&
     !workflowPlanner.includes("TF_VAR_enable_serverless_workflow_triggers"),
   "The planner must not restore independent dispatch and trigger cutover controls.",
