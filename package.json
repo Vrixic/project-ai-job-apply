@@ -16,12 +16,14 @@
       "js-yaml@>=4.0.0 <4.3.1": "4.3.1",
       "minimatch@10.2.6>brace-expansion": "5.0.9",
       "minimatch@5.1.9>brace-expansion": "5.0.9",
+      "nanoid@<3.3.17": "3.3.17",
       "next@16.2.12>postcss": "8.5.24",
       "next@16.2.12>sharp": "0.35.0",
       "xcode@3.0.1>uuid": "11.1.1"
     }
   },
   "scripts": {
+    "audit:dependencies": "node scripts/audit-dependencies.mjs",
     "build": "turbo run build",
     "auth0:verify": "node scripts/verify-auth0-tenant.mjs",
     "check": "pnpm skills:validate && pnpm infrastructure:validate && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",

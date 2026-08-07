@@ -15,5 +15,6 @@ Contains the security architecture and evidence required to protect candidate id
 - [Auth0 development conformance evidence](auth0-development-conformance.md)
 - [Security and privacy approval plan](security-privacy-approval-plan.md)
 - [API security and independent final review](api-security-and-final-review.md)
+- [Dependency vulnerability exceptions](dependency-vulnerability-exceptions.md)
 
 This directory contains policy and sanitized evidence, never live secrets, tokens, or raw user data.
