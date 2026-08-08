@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory)][ValidateSet("development", "staging")][string]$Environment,
-  [ValidateSet("PlanRepository", "PlanMigration", "RunMigration", "PurgeLegacyImages", "PlanCleanup", "Status", "Apply", "Verify")]
+  [ValidateSet("PlanRepository", "PlanMigration", "RunMigration", "PurgeLegacyImages", "PlanCleanup", "PlanCleanupRecovery", "Status", "Apply", "Verify")]
   [string]$Action = "Status",
   [ValidatePattern("^[0-9]{12}$")][string]$ExpectedAccountId = "",
   [ValidatePattern("^[a-z0-9.-]+$")][string]$StateBucket = "",
@@ -36,7 +36,8 @@ Phase 0 provider-retirement sequence (one isolated environment at a time):
   5. Revoke the exact Temporal Cloud key, then prove it with temporal-retirement-inspect.mjs.
   6. PurgeLegacyImages -ConfirmTemporalKeyRevoked -ConfirmLegacyArtifactsRetired -Execute
   7. PlanCleanup -ConfirmTemporalKeyRevoked -> Status -> Apply
-  8. Verify
+  8. If cleanup partially applies, PlanCleanupRecovery with both retirement confirmations.
+  9. Verify
 
 Every plan action requires the last accepted zero-change -BaselinePlanPath, exact account ID, and
 encrypted state bucket. Apply requires an exact saved plan plus its reviewed SHA-256 and -Execute.
@@ -46,14 +47,14 @@ No action prints a secret, candidate identifier, Terraform plan body, or raw mig
 }
 
 if ($Region -ne "us-east-2") { throw "Provider retirement is restricted to us-east-2." }
-if ($Action -in @("PlanRepository", "PlanMigration", "RunMigration", "PurgeLegacyImages", "PlanCleanup", "Verify") -and (
+if ($Action -in @("PlanRepository", "PlanMigration", "RunMigration", "PurgeLegacyImages", "PlanCleanup", "PlanCleanupRecovery", "Verify") -and (
   $ExpectedAccountId -notmatch "^[0-9]{12}$" -or [string]::IsNullOrWhiteSpace($StateBucket)
 )) { throw "$Action requires the exact $Environment account ID and encrypted state bucket." }
-if ($Action -in @("PlanRepository", "PlanMigration", "PlanCleanup", "Verify") -and
+if ($Action -in @("PlanRepository", "PlanMigration", "PlanCleanup", "PlanCleanupRecovery", "Verify") -and
     [string]::IsNullOrWhiteSpace($BaselinePlanPath)) {
   throw "$Action requires the last accepted zero-change -BaselinePlanPath."
 }
-if ($Action -in @("PlanMigration", "RunMigration", "PlanCleanup", "Verify") -and
+if ($Action -in @("PlanMigration", "RunMigration", "PlanCleanup", "PlanCleanupRecovery", "Verify") -and
     [string]::IsNullOrWhiteSpace($MigrationImage)) {
   throw "$Action requires the exact dedicated migration image digest."
 }
@@ -67,8 +68,11 @@ if ($Action -eq "PurgeLegacyImages" -and (
   -not $Execute -or -not $ConfirmTemporalKeyRevoked -or -not $ConfirmLegacyArtifactsRetired
 )) { throw "PurgeLegacyImages requires both retirement confirmations and -Execute." }
 if ($Action -eq "RunMigration" -and -not $Execute) { throw "RunMigration requires -Execute." }
-if ($Action -eq "PlanCleanup" -and -not $ConfirmTemporalKeyRevoked) {
-  throw "PlanCleanup requires -ConfirmTemporalKeyRevoked after exact-key rejection passed."
+if ($Action -in @("PlanCleanup", "PlanCleanupRecovery") -and -not $ConfirmTemporalKeyRevoked) {
+  throw "$Action requires -ConfirmTemporalKeyRevoked after exact-key rejection passed."
+}
+if ($Action -eq "PlanCleanupRecovery" -and -not $ConfirmLegacyArtifactsRetired) {
+  throw "PlanCleanupRecovery requires -ConfirmLegacyArtifactsRetired after the original cleanup partially applied."
 }
 if ($Execute -and $Action -notin @("Apply", "RunMigration", "PurgeLegacyImages")) {
   throw "$Action does not accept -Execute."
@@ -293,6 +297,35 @@ function Assert-MigrationImage {
   }
 }
 
+function Assert-ApplicationIngressRemoval {
+  param([object]$Change)
+  if ([string]$Change.address -ne "module.platform.aws_security_group.application" -or
+      (@($Change.change.actions) -join ",") -ne "update") {
+    throw "The cleanup recovery does not contain the exact application security-group update."
+  }
+  $beforeIngress = @(Get-OptionalArray $Change.change.before "ingress")
+  $afterIngress = @(Get-OptionalArray $Change.change.after "ingress")
+  if ($beforeIngress.Count -ne 1 -or $afterIngress.Count -ne 0) {
+    throw "The cleanup recovery does not remove exactly one historical ingress rule."
+  }
+  $rule = $beforeIngress[0]
+  if ([string]$rule.protocol -ne "tcp" -or [int]$rule.from_port -ne 4000 -or
+      [int]$rule.to_port -ne 4000 -or @(Get-OptionalArray $rule "security_groups").Count -ne 1 -or
+      @(Get-OptionalArray $rule "cidr_blocks").Count -ne 0 -or
+      @(Get-OptionalArray $rule "ipv6_cidr_blocks").Count -ne 0) {
+    throw "The cleanup recovery changes an unexpected application ingress rule."
+  }
+  foreach ($property in $Change.change.before.PSObject.Properties) {
+    if ($property.Name -eq "ingress") { continue }
+    $afterProperty = $Change.change.after.PSObject.Properties[$property.Name]
+    if ($null -eq $afterProperty -or
+        ($property.Value | ConvertTo-Json -Compress -Depth 50) -ne
+        ($afterProperty.Value | ConvertTo-Json -Compress -Depth 50)) {
+      throw "The cleanup recovery changes the application security group beyond ingress."
+    }
+  }
+}
+
 function New-Plan {
   param([object]$Baseline, [string]$Kind, [string[]]$Targets = @())
   $null = New-Item -ItemType Directory -Path $planDirectory -Force
@@ -321,6 +354,15 @@ function New-Plan {
         ) }).Count -ne 0) {
       throw "The migration-task plan changes resources outside the reviewed boundary."
     }
+  } elseif ($Kind -eq "cleanup-recovery") {
+    if ($changes.Count -ne 2) { throw "The cleanup recovery is outside the exact two-change boundary." }
+    $application = @($changes | Where-Object { [string]$_.address -eq "module.platform.aws_security_group.application" })
+    $legacyIngress = @($changes | Where-Object { [string]$_.address -eq "module.platform.aws_security_group.ingress" })
+    if ($application.Count -ne 1 -or $legacyIngress.Count -ne 1 -or
+        (@($legacyIngress[0].change.actions) -join ",") -ne "delete") {
+      throw "The cleanup recovery is outside the exact retained-rule and legacy-group boundary."
+    }
+    Assert-ApplicationIngressRemoval $application[0]
   } else {
     $forbidden = @($changes | Where-Object {
       [string]$_.address -match "aws_(db_instance|kms_key|s3_bucket|sqs_queue|lambda_function|lambda_alias|cloudformation_stack|apigatewayv2_api)"
@@ -338,6 +380,22 @@ function New-Plan {
     foreach ($address in $requiredDeletes) {
       if ($deletes -notcontains $address) { throw "The cleanup plan does not delete '$address'." }
     }
+    $allowed = @(
+      "module.platform.aws_ecr_repository.gateway",
+      "module.platform.aws_ecr_repository.worker",
+      "module.platform.aws_iam_role.application",
+      "module.platform.aws_iam_role_policy.execution_secrets",
+      "module.platform.aws_secretsmanager_secret.temporal_api_key",
+      "module.platform.aws_security_group.application",
+      "module.platform.aws_security_group.ingress",
+      "module.platform.aws_vpc_endpoint.secretsmanager[0]"
+    )
+    if (@($changes | Where-Object { [string]$_.address -notin $allowed }).Count -ne 0) {
+      throw "The cleanup plan changes a resource outside the exact provider-retirement boundary."
+    }
+    $application = @($changes | Where-Object { [string]$_.address -eq "module.platform.aws_security_group.application" })
+    if ($application.Count -gt 1) { throw "The cleanup plan contains duplicate application security-group changes." }
+    if ($application.Count -eq 1) { Assert-ApplicationIngressRemoval $application[0] }
   }
   $sha = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
   [pscustomobject]@{ Environment = $Environment; Action = "plan_$Kind"; PlanPath = $path; PlanSha256 = $sha; Changes = $changes.Count } |
@@ -416,6 +474,16 @@ function Assert-TemporalSecretRetired {
   }
 }
 
+function Assert-IamRoleAbsent {
+  param([Parameter(Mandatory)][string]$RoleName)
+  $result = @(& aws iam get-role --profile $AwsProfile --region $Region `
+    --role-name $RoleName --no-cli-pager --output json 2>&1)
+  if ($LASTEXITCODE -eq 0) { throw "Legacy IAM role '$RoleName' still exists." }
+  if (($result -join [Environment]::NewLine) -notmatch "NoSuchEntity") {
+    throw "Legacy IAM role '$RoleName' absence could not be proven."
+  }
+}
+
 Assert-Tools
 
 if ($Action -eq "Status") {
@@ -438,7 +506,7 @@ if ($Action -eq "Status") {
 
 Assert-Caller
 
-if ($Action -in @("PlanRepository", "PlanMigration", "PlanCleanup", "Verify")) {
+if ($Action -in @("PlanRepository", "PlanMigration", "PlanCleanup", "PlanCleanupRecovery", "Verify")) {
   $null = Assert-ExactMain
   Initialize-Backend
   $baselinePath = Resolve-ExistingFile $BaselinePlanPath "accepted baseline plan"
@@ -541,6 +609,18 @@ if ($Action -eq "PlanCleanup") {
     }
   }
   New-Plan $baseline "cleanup"
+  exit 0
+}
+
+if ($Action -eq "PlanCleanupRecovery") {
+  Assert-MigrationImage
+  if ((Get-CurrentMigrationImage) -ne $MigrationImage) { throw "The dedicated migration image is not deployed." }
+  foreach ($repositoryName in @("ai-job-apply/gateway", "ai-job-apply/worker")) {
+    Assert-EcrRepositoryAbsent $repositoryName
+  }
+  Assert-TemporalSecretRetired
+  Assert-IamRoleAbsent "ai-job-apply-$Environment-application"
+  New-Plan $baseline "cleanup-recovery"
   exit 0
 }
 

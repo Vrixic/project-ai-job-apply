@@ -54,6 +54,7 @@ for (const required of [
   'OUTBOX_DISPATCH_TARGET = "lambda_durable"',
   "count              = var.serverless_runtime_enabled ? 1 : 0",
   'authorization_type = "JWT"',
+  "ingress = []",
   "enabled                            = var.serverless_runtime_enabled",
   'state               = var.serverless_runtime_enabled ? "ENABLED" : "DISABLED"',
 ]) {
@@ -278,6 +279,7 @@ for (const required of [
 const retirementOperator = "scripts/operate-phase0-provider-retirement.ps1";
 for (const required of [
   "PlanRepository",
+  "PlanCleanupRecovery",
   "RunMigration",
   "ConfirmTemporalKeyRevoked",
   "ConfirmLegacyArtifactsRetired",
@@ -285,6 +287,8 @@ for (const required of [
   "--cli-input-json",
   'Get-OptionalArray $response "failures"',
   "still contains images after purge",
+  "outside the exact two-change boundary",
+  "changes the application security group beyond ingress",
   "RepositoryNotFoundException",
   "ResourceNotFoundException",
 ]) {
