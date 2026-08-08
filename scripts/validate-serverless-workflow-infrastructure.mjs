@@ -41,6 +41,7 @@ const outputs = "infrastructure/terraform/modules/platform/outputs.tf";
 const durable = "infrastructure/terraform/modules/platform/durable-workflow.tf";
 const bootstrap = "infrastructure/terraform/bootstrap/main.tf";
 const workflowPublisher = ".github/workflows/publish-workflow-lambdas.yml";
+const staticAnalysisWorkflow = ".github/workflows/static-analysis.yml";
 
 for (const required of [
   'resource "aws_ecr_repository" "migration"',
@@ -282,7 +283,13 @@ for (const required of [
 for (const retired of ["Dockerfile.gateway", "Dockerfile.worker"]) {
   if (existsSync(resolve(root, retired)))
     failures.push(`${retired}: retired image definition remains`);
+  forbidText(staticAnalysisWorkflow, retired, `static analysis still references ${retired}`);
 }
+requireText(
+  staticAnalysisWorkflow,
+  "Dockerfile.migration",
+  "static analysis does not scan the migration image",
+);
 
 if (failures.length > 0) {
   process.stderr.write(`${failures.join("\n")}\n`);

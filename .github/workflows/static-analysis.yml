@@ -46,6 +46,5 @@ jobs:
             packages \
             infrastructure/terraform \
             .github/workflows \
-            Dockerfile.gateway \
-            Dockerfile.web \
-            Dockerfile.worker
+            Dockerfile.migration \
+            Dockerfile.web
