@@ -12,21 +12,21 @@ describe("Lambda gateway configuration", () => {
     const result = loadLambdaGatewayConfig({
       ...baseEnvironment,
       DATABASE_SECRET_ID: "ai-job-apply/development/database-url",
+      OUTBOX_QUEUE_URL: "https://sqs.us-east-2.amazonaws.com/000000000000/synthetic",
     });
 
     expect(result.DATABASE_SECRET_ID).toBe("ai-job-apply/development/database-url");
     expect(result.DATABASE_URL).toBeUndefined();
-    expect(result.OUTBOX_DISPATCH_TARGET).toBe("temporal");
+    expect(result.OUTBOX_DISPATCH_TARGET).toBe("lambda_durable");
   });
 
-  it("requires an exact queue URL before selecting Lambda durable dispatch", () => {
+  it("requires an exact queue URL for Lambda durable dispatch", () => {
     expect(() =>
       loadLambdaGatewayConfig({
         ...baseEnvironment,
         DATABASE_SECRET_ID: "ai-job-apply/development/database-url",
-        OUTBOX_DISPATCH_TARGET: "lambda_durable",
       }),
-    ).toThrow("Lambda durable dispatch requires OUTBOX_QUEUE_URL");
+    ).toThrow();
 
     expect(
       loadLambdaGatewayConfig({
@@ -42,6 +42,7 @@ describe("Lambda gateway configuration", () => {
     const result = loadLambdaGatewayConfig({
       ...baseEnvironment,
       DATABASE_URL: "postgres://candidate:local@localhost:5432/ai_job_apply",
+      OUTBOX_QUEUE_URL: "https://sqs.us-east-2.amazonaws.com/000000000000/synthetic",
     });
 
     expect(result.DATABASE_URL).toContain("postgres://");
@@ -57,8 +58,12 @@ describe("Lambda gateway configuration", () => {
       },
     ],
   ])("rejects %s", (_label, databaseEnvironment) => {
-    expect(() => loadLambdaGatewayConfig({ ...baseEnvironment, ...databaseEnvironment })).toThrow(
-      "Exactly one of DATABASE_URL or DATABASE_SECRET_ID is required",
-    );
+    expect(() =>
+      loadLambdaGatewayConfig({
+        ...baseEnvironment,
+        ...databaseEnvironment,
+        OUTBOX_QUEUE_URL: "https://sqs.us-east-2.amazonaws.com/000000000000/synthetic",
+      }),
+    ).toThrow("Exactly one of DATABASE_URL or DATABASE_SECRET_ID is required");
   });
 });

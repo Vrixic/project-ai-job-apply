@@ -36,10 +36,10 @@ describeWithDatabase("PostgresProfileStore", () => {
     });
 
     expect(first.stdout.trim()).toBe(
-      "Database migrations through 0002_serverless_outbox applied and verified.",
+      "Database migrations through 0003_retire_legacy_dispatch applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(
-      "Database migrations through 0002_serverless_outbox applied and verified.",
+      "Database migrations through 0003_retire_legacy_dispatch applied and verified.",
     );
     expect(
       await database.client`
@@ -52,9 +52,9 @@ describeWithDatabase("PostgresProfileStore", () => {
       await database.client`
         SELECT version
         FROM platform.schema_migrations
-        WHERE version = '0002_serverless_outbox'
+        WHERE version IN ('0002_serverless_outbox', '0003_retire_legacy_dispatch')
       `,
-    ).toHaveLength(1);
+    ).toHaveLength(2);
   });
 
   afterAll(async () => {
@@ -263,17 +263,19 @@ describeWithDatabase("PostgresProfileStore", () => {
               operationId: crypto.randomUUID(),
             })}::jsonb,
             ${"lambda_durable"},
-            ${new Date(Date.now() + index).toISOString()}::timestamptz
+            ${new Date(index).toISOString()}::timestamptz
           )
         `;
       }
 
       const first = await store.claimOutboxNudges(25, new Date(0));
       const second = await store.claimOutboxNudges(25, new Date(0));
+      const claimedForSource = [...first, ...second].filter((event) => event.source === source);
       expect(first).toHaveLength(25);
-      expect(second).toHaveLength(1);
-      expect(new Set([...first, ...second].map((event) => event.id)).size).toBe(26);
-      expect(JSON.stringify([...first, ...second])).not.toContain("targetRoles");
+      expect(first.every((event) => event.source === source)).toBe(true);
+      expect(claimedForSource).toHaveLength(26);
+      expect(new Set(claimedForSource.map((event) => event.id)).size).toBe(26);
+      expect(JSON.stringify(claimedForSource)).not.toContain("targetRoles");
     } finally {
       await database.client`
         DELETE FROM platform.outbox_events

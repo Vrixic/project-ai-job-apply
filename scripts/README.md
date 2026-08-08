@@ -15,7 +15,13 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
 
 ## Phase 0 commands
 
-- `start-local.ps1` — Starts PostgreSQL, Redis, Temporal, Temporal UI, and the local OTel collector.
+- `start-local.ps1` — Starts PostgreSQL, Redis, and the local OTel collector. Local workflows use
+  the provider-neutral Lambda durable test adapter and do not require Temporal.
+- `operate-phase0-provider-retirement.ps1` — Runs the environment-isolated final SR-009 sequence:
+  dedicated migration repository, scanned digest task revision, fail-closed migration, explicitly
+  confirmed legacy-image purge, checksum-reviewed Terraform cleanup, and zero-drift verification.
+  External Temporal key revocation remains a separate manual provider action proven against the
+  exact managed credential. See the [runbook](../infrastructure/runbooks/deployments/phase0-provider-retirement.md).
 - `build-gateway-lambda.mjs` — Bundles the emitted gateway Lambda code, preserves Nest metadata,
   creates a fixed-metadata ZIP, and emits SHA-256, manifest, and CycloneDX 1.6 SBOM evidence under
   the ignored gateway `dist/lambda/` directory.

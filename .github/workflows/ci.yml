@@ -47,10 +47,8 @@ jobs:
     strategy:
       matrix:
         include:
-          - name: gateway
-            dockerfile: Dockerfile.gateway
-          - name: worker
-            dockerfile: Dockerfile.worker
+          - name: migration
+            dockerfile: Dockerfile.migration
           - name: web
             dockerfile: Dockerfile.web
     steps:

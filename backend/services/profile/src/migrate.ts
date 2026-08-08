@@ -8,7 +8,11 @@ if (!databaseUrl) {
   throw new Error("DATABASE_URL is required");
 }
 
-const migrationVersions = ["0001_foundation", "0002_serverless_outbox"] as const;
+const migrationVersions = [
+  "0001_foundation",
+  "0002_serverless_outbox",
+  "0003_retire_legacy_dispatch",
+] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
     const migrationPath = fileURLToPath(

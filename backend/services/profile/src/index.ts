@@ -15,7 +15,7 @@ import {
   outboxNudgeSchemaVersion,
   type ProfilePreferencesUpdatedData,
 } from "@ai-job-apply/event-contracts";
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
@@ -32,7 +32,7 @@ import {
 
 export { resolveLambdaDatabaseUrl } from "./lambda-database-url.js";
 
-export interface PendingOutboxEvent {
+export interface OutboxEventRecord {
   id: string;
   type: string;
   source: string;
@@ -43,7 +43,7 @@ export interface PendingOutboxEvent {
   createdAt: Date;
 }
 
-export interface DurableOutboxEvent extends PendingOutboxEvent {
+export interface DurableOutboxEvent extends OutboxEventRecord {
   dispatchTarget: "lambda_durable";
   publishedAt?: Date;
   durableExecutionName?: string;
@@ -70,8 +70,6 @@ export interface ProfileStore {
     traceparent?: string,
   ): Promise<PutJobPreferencesResponse>;
   getOperation(userId: string, operationId: string): Promise<Operation | null>;
-  getPendingOutboxEvents(limit: number): Promise<PendingOutboxEvent[]>;
-  markOutboxPublished(eventId: string): Promise<void>;
   getPreferencesById(preferenceSetId: string): Promise<JobPreferenceSet | null>;
   markOperationRunning(operationId: string, preferenceSetId: string): Promise<void>;
   completeReadinessOperation(
@@ -156,7 +154,7 @@ export class PostgresProfileStore implements ProfileStore {
     private readonly handle: DatabaseHandle,
     options: ProfileStoreOptions = {},
   ) {
-    this.dispatchTarget = options.dispatchTarget ?? "temporal";
+    this.dispatchTarget = options.dispatchTarget ?? "lambda_durable";
     this.nudgePublisher = options.nudgePublisher;
     this.nudgeRetryDelaySeconds = options.nudgeRetryDelaySeconds ?? 300;
   }
@@ -353,32 +351,6 @@ export class PostgresProfileStore implements ProfileStore {
       .where(and(eq(operations.id, operationId), eq(operations.userId, userId)))
       .limit(1);
     return rows[0] ? mapOperation(rows[0]) : null;
-  }
-
-  async getPendingOutboxEvents(limit: number): Promise<PendingOutboxEvent[]> {
-    const rows = await this.handle.db
-      .select()
-      .from(outboxEvents)
-      .where(and(isNull(outboxEvents.publishedAt), eq(outboxEvents.dispatchTarget, "temporal")))
-      .orderBy(asc(outboxEvents.createdAt))
-      .limit(limit);
-    return rows.map((row) => ({
-      id: row.id,
-      type: row.type,
-      source: row.source,
-      subject: row.subject,
-      dataSchema: row.dataSchema,
-      data: row.data,
-      ...(row.traceparent ? { traceparent: row.traceparent } : {}),
-      createdAt: row.createdAt,
-    }));
-  }
-
-  async markOutboxPublished(eventId: string): Promise<void> {
-    await this.handle.db
-      .update(outboxEvents)
-      .set({ publishedAt: new Date(), attempts: sql`${outboxEvents.attempts} + 1` })
-      .where(and(eq(outboxEvents.id, eventId), eq(outboxEvents.dispatchTarget, "temporal")));
   }
 
   async claimOutboxNudges(limit: number, staleBefore: Date): Promise<DurableOutboxEvent[]> {

@@ -17,11 +17,14 @@ Workflow code orchestrates deterministic state transitions; external I/O belongs
 
 ## Phase 0 implementation
 
-The first workflow calculates profile readiness after an idempotent preference update. The
-accepted Temporal implementation remains live during D0-016. Its Lambda durable replacement uses
-an immutable definition version, exact numeric function targets, identifier-only inputs, named
-bounded retries, and a private activity Lambda for PostgreSQL access. The SQS source, schedule,
-durable function, and activity resources remain undeployed until SR-005's reviewed dark plan.
+The first workflow calculates profile readiness after an idempotent preference update. Its
+deployed Lambda durable implementation uses an immutable definition version, exact numeric
+function targets, identifier-only inputs, named bounded retries, and a private activity Lambda for
+PostgreSQL access. SQS nudges plus bounded reconciliation recover the transaction-to-dispatch gap.
+
+Local development uses `src/local-runtime.ts`, a development-only adapter around the same outbox,
+durable definition, and activity contracts. It does not add another production workflow engine or
+require a local cloud service.
 
 The profile-readiness workflow has no human-review callback or reversible external effect. Callback
 success/expiry is therefore tested with a conformance-only fixture; production callback handling

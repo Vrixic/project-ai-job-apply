@@ -6,16 +6,8 @@ output "artifact_bucket" {
   value = module.platform.artifact_bucket
 }
 
-output "gateway_repository_url" {
-  value = module.platform.gateway_repository_url
-}
-
-output "worker_repository_url" {
-  value = module.platform.worker_repository_url
-}
-
-output "temporal_api_key_secret_arn" {
-  value = module.platform.temporal_api_key_secret_arn
+output "migration_repository_url" {
+  value = module.platform.migration_repository_url
 }
 
 output "gateway_url" {
@@ -49,14 +41,6 @@ output "observability_dashboard_name" {
 
 output "alert_delivery_canary_alarm_name" {
   value = module.platform.alert_delivery_canary_alarm_name
-}
-
-output "gateway_log_heartbeat_alarm_name" {
-  value = module.platform.gateway_log_heartbeat_alarm_name
-}
-
-output "worker_log_heartbeat_alarm_name" {
-  value = module.platform.worker_log_heartbeat_alarm_name
 }
 
 output "monthly_budget_name" {

@@ -23,55 +23,30 @@ const backendSchema = baseSchema.extend({
   PORT: z.coerce.number().int().min(1).max(65_535).default(4000),
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url().optional(),
-  TEMPORAL_ADDRESS: z.string().min(1).default("localhost:7233"),
-  TEMPORAL_NAMESPACE: z.string().min(1).default("default"),
-  TEMPORAL_TASK_QUEUE: z.string().min(1).default("profile-readiness-v1"),
-  TEMPORAL_API_KEY: z.string().min(1).optional(),
-  TEMPORAL_TLS: z
-    .enum(["true", "false"])
-    .default("false")
-    .transform((value) => value === "true"),
   ...oidcSchema,
   ...telemetrySchema,
 });
 
 export type BackendConfig = z.infer<typeof backendSchema>;
 
-const workerSchema = backendSchema.omit({
-  PORT: true,
-  REDIS_URL: true,
-  OIDC_ISSUER: true,
-  OIDC_AUDIENCE: true,
-});
-
-export type WorkerConfig = z.infer<typeof workerSchema>;
-
 const lambdaGatewaySchema = baseSchema
   .extend({
     DATABASE_URL: z.string().url().optional(),
     DATABASE_SECRET_ID: z.string().min(1).optional(),
-    OUTBOX_DISPATCH_TARGET: z.enum(["temporal", "lambda_durable"]).default("temporal"),
-    OUTBOX_QUEUE_URL: z.string().url().optional(),
+    OUTBOX_DISPATCH_TARGET: z.literal("lambda_durable").default("lambda_durable"),
+    OUTBOX_QUEUE_URL: z.string().url(),
     ...oidcSchema,
     ...telemetrySchema,
   })
   .refine(
     (value) => Boolean(value.DATABASE_URL) !== Boolean(value.DATABASE_SECRET_ID),
     "Exactly one of DATABASE_URL or DATABASE_SECRET_ID is required",
-  )
-  .refine(
-    (value) => value.OUTBOX_DISPATCH_TARGET !== "lambda_durable" || Boolean(value.OUTBOX_QUEUE_URL),
-    "Lambda durable dispatch requires OUTBOX_QUEUE_URL",
   );
 
 export type LambdaGatewayConfig = z.infer<typeof lambdaGatewaySchema>;
 
 export function loadBackendConfig(environment: NodeJS.ProcessEnv = process.env): BackendConfig {
   return backendSchema.parse(environment);
-}
-
-export function loadWorkerConfig(environment: NodeJS.ProcessEnv = process.env): WorkerConfig {
-  return workerSchema.parse(environment);
 }
 
 export function loadLambdaGatewayConfig(

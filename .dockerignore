@@ -14,3 +14,12 @@
 !frontend/**
 !packages/
 !packages/**
+
+# Re-exclude generated, dependency, cache, and environment files below allowlisted source trees.
+**/node_modules/
+**/dist/
+**/.next/
+**/.turbo/
+**/coverage/
+**/.env
+**/.env.*

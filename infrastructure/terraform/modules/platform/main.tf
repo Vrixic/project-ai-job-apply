@@ -14,57 +14,10 @@ locals {
   azs                           = slice(data.aws_availability_zones.available.names, 0, 2)
   private_cidrs                 = [cidrsubnet(var.vpc_cidr, 4, 0), cidrsubnet(var.vpc_cidr, 4, 1)]
   public_cidrs                  = [cidrsubnet(var.vpc_cidr, 4, 8), cidrsubnet(var.vpc_cidr, 4, 9)]
-  container_port                = 4000
   application_metric_namespace  = "${var.name}/${var.environment}/application"
   operational_metric_namespace  = "${var.name}/${var.environment}/operational"
   observability_runbook_url     = "https://github.com/Vrixic/project-ai-job-apply/blob/main/infrastructure/runbooks/observability/development-alert-delivery.md"
   provider_recovery_runbook_url = "https://github.com/Vrixic/project-ai-job-apply/blob/main/infrastructure/runbooks/providers/development-provider-and-log-recovery.md"
-  otel_collector_config = yamlencode({
-    extensions = {
-      health_check = {
-        endpoint = "0.0.0.0:13133"
-      }
-    }
-    receivers = {
-      otlp = {
-        protocols = {
-          http = {
-            endpoint = "0.0.0.0:4318"
-          }
-        }
-      }
-    }
-    processors = {
-      memory_limiter = {
-        check_interval  = "1s"
-        limit_mib       = 64
-        spike_limit_mib = 16
-      }
-      batch = {
-        timeout = "5s"
-      }
-    }
-    exporters = {
-      awsxray = {
-        region = data.aws_region.current.region
-      }
-    }
-    service = {
-      extensions = ["health_check"]
-      pipelines = {
-        traces = {
-          receivers  = ["otlp"]
-          processors = ["memory_limiter", "batch"]
-          exporters  = ["awsxray"]
-        }
-      }
-      telemetry = {
-        logs = {
-          level = "warn"
-        }
-      }
-    }
-  })
 }
 
 data "aws_iam_policy_document" "platform_kms" {
@@ -421,29 +374,9 @@ resource "aws_route_table_association" "private" {
   route_table_id = aws_route_table.private[count.index].id
 }
 
-resource "aws_security_group" "ingress" {
-  name_prefix = "${var.name}-${var.environment}-ingress-"
-  vpc_id      = aws_vpc.this.id
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
 resource "aws_security_group" "application" {
   name_prefix = "${var.name}-${var.environment}-app-"
   vpc_id      = aws_vpc.this.id
-  dynamic "ingress" {
-    for_each = var.retain_legacy_ecs_rollback ? [1] : []
-    content {
-      from_port       = local.container_port
-      to_port         = local.container_port
-      protocol        = "tcp"
-      security_groups = [aws_security_group.ingress.id]
-    }
-  }
   egress {
     from_port   = 0
     to_port     = 0
@@ -581,20 +514,8 @@ resource "aws_sqs_queue" "events" {
   })
 }
 
-resource "aws_ecr_repository" "gateway" {
-  name                 = "${var.name}/gateway"
-  image_tag_mutability = "IMMUTABLE"
-  encryption_configuration {
-    encryption_type = "KMS"
-    kms_key         = aws_kms_key.platform.arn
-  }
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-}
-
-resource "aws_ecr_repository" "worker" {
-  name                 = "${var.name}/worker"
+resource "aws_ecr_repository" "migration" {
+  name                 = "${var.name}/migration"
   image_tag_mutability = "IMMUTABLE"
   encryption_configuration {
     encryption_type = "KMS"
@@ -634,11 +555,6 @@ resource "aws_secretsmanager_secret_version" "database_url" {
   )
 }
 
-resource "aws_secretsmanager_secret" "temporal_api_key" {
-  name       = "${var.name}/${var.environment}/temporal-api-key"
-  kms_key_id = aws_kms_key.platform.arn
-}
-
 data "aws_iam_policy_document" "task_assume" {
   statement {
     actions = ["sts:AssumeRole"]
@@ -670,69 +586,10 @@ resource "aws_iam_role_policy" "execution_secrets" {
       Action = ["secretsmanager:GetSecretValue", "kms:Decrypt"]
       Resource = [
         aws_secretsmanager_secret.database_url.arn,
-        aws_secretsmanager_secret.temporal_api_key.arn,
         aws_kms_key.platform.arn
       ]
     }]
   })
-}
-
-resource "aws_iam_role" "application" {
-  name                 = "${var.name}-${var.environment}-application"
-  assume_role_policy   = data.aws_iam_policy_document.task_assume.json
-  permissions_boundary = data.aws_iam_policy.workload_boundary.arn
-}
-
-resource "aws_iam_role_policy" "application_tracing" {
-  count = var.deploy_applications && var.retain_legacy_ecs_rollback && var.enable_tracing ? 1 : 0
-  name  = "write-application-traces"
-  role  = aws_iam_role.application.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Sid      = "WriteApplicationTraces"
-      Effect   = "Allow"
-      Action   = ["xray:PutTelemetryRecords", "xray:PutTraceSegments"]
-      Resource = "*"
-    }]
-  })
-}
-
-resource "aws_service_discovery_private_dns_namespace" "application" {
-  count = var.deploy_applications && var.retain_legacy_ecs_rollback ? 1 : 0
-  name  = "${var.name}-${var.environment}.internal"
-  vpc   = aws_vpc.this.id
-}
-
-resource "aws_service_discovery_service" "gateway" {
-  count = var.deploy_applications && var.retain_legacy_ecs_rollback ? 1 : 0
-  name  = "gateway"
-
-  dns_config {
-    namespace_id   = aws_service_discovery_private_dns_namespace.application[0].id
-    routing_policy = "MULTIVALUE"
-    dns_records {
-      ttl = 10
-      # API Gateway Cloud Map private integrations require ECS registrations with both IP and port.
-      type = "SRV"
-    }
-  }
-
-  health_check_custom_config {
-  }
-
-  lifecycle {
-    # Provider 6 removed an AWS-fixed input that provider-5 state still records. Preserve the
-    # unchanged block until this rollback-only service is retired after Lambda cutover.
-    ignore_changes = [health_check_custom_config]
-  }
-}
-
-resource "aws_apigatewayv2_vpc_link" "gateway" {
-  count              = var.deploy_applications && var.retain_legacy_ecs_rollback ? 1 : 0
-  name               = "${var.name}-${var.environment}-gateway"
-  security_group_ids = [aws_security_group.ingress.id]
-  subnet_ids         = aws_subnet.private[*].id
 }
 
 resource "aws_apigatewayv2_api" "gateway" {
@@ -741,22 +598,8 @@ resource "aws_apigatewayv2_api" "gateway" {
   protocol_type = "HTTP"
 }
 
-resource "aws_apigatewayv2_integration" "gateway" {
-  count                  = var.deploy_applications && var.retain_legacy_ecs_rollback ? 1 : 0
-  api_id                 = aws_apigatewayv2_api.gateway[0].id
-  integration_type       = "HTTP_PROXY"
-  integration_uri        = aws_service_discovery_service.gateway[0].arn
-  integration_method     = "ANY"
-  connection_type        = "VPC_LINK"
-  connection_id          = aws_apigatewayv2_vpc_link.gateway[0].id
-  payload_format_version = "1.0"
-  timeout_milliseconds   = 30000
-}
-
 resource "aws_apigatewayv2_integration" "gateway_lambda" {
-  count = (
-    var.serverless_runtime_cutover || var.retain_gateway_lambda_integration_during_rollback
-  ) ? 1 : 0
+  count                  = var.deploy_gateway_lambda ? 1 : 0
   api_id                 = aws_apigatewayv2_api.gateway[0].id
   integration_type       = "AWS_PROXY"
   integration_uri        = aws_lambda_alias.gateway[0].invoke_arn
@@ -766,20 +609,20 @@ resource "aws_apigatewayv2_integration" "gateway_lambda" {
 }
 
 resource "aws_apigatewayv2_route" "gateway" {
-  count              = var.deploy_applications ? 1 : 0
+  count              = var.serverless_runtime_enabled ? 1 : 0
   api_id             = aws_apigatewayv2_api.gateway[0].id
   route_key          = "$default"
-  target             = "integrations/${var.serverless_runtime_cutover ? aws_apigatewayv2_integration.gateway_lambda[0].id : aws_apigatewayv2_integration.gateway[0].id}"
-  authorization_type = var.serverless_runtime_cutover ? "JWT" : "NONE"
-  authorizer_id      = var.serverless_runtime_cutover ? aws_apigatewayv2_authorizer.gateway[0].id : null
-  authorization_scopes = var.serverless_runtime_cutover ? [
+  target             = "integrations/${aws_apigatewayv2_integration.gateway_lambda[0].id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.gateway[0].id
+  authorization_scopes = [
     "profile:read",
     "profile:write"
-  ] : null
+  ]
 }
 
 resource "aws_apigatewayv2_route" "gateway_lambda_public" {
-  for_each = var.serverless_runtime_cutover ? toset([
+  for_each = var.serverless_runtime_enabled ? toset([
     "GET /health/live",
     "GET /health/ready"
   ]) : toset([])
@@ -797,231 +640,6 @@ resource "aws_apigatewayv2_stage" "gateway" {
   auto_deploy = true
 }
 
-resource "aws_ecs_task_definition" "gateway" {
-  count                    = var.deploy_applications && var.retain_legacy_ecs_rollback ? 1 : 0
-  family                   = "${var.name}-${var.environment}-gateway"
-  requires_compatibilities = ["FARGATE"]
-  network_mode             = "awsvpc"
-  cpu                      = var.gateway_cpu
-  memory                   = var.gateway_memory
-  execution_role_arn       = aws_iam_role.execution.arn
-  task_role_arn            = aws_iam_role.application.arn
-
-  lifecycle {
-    create_before_destroy = true
-  }
-
-  runtime_platform {
-    cpu_architecture        = "X86_64"
-    operating_system_family = "LINUX"
-  }
-  container_definitions = jsonencode(concat(
-    [{
-      name      = "gateway"
-      image     = var.gateway_image
-      essential = true
-      cpu       = var.enable_tracing ? var.gateway_cpu - 32 : var.gateway_cpu
-      portMappings = [{
-        containerPort = local.container_port
-        protocol      = "tcp"
-      }]
-      environment = concat(
-        [
-          { name = "NODE_ENV", value = "production" },
-          { name = "PORT", value = tostring(local.container_port) },
-          { name = "RELEASE_SHA", value = try(split("@", var.gateway_image)[1], "unpublished") },
-          { name = "OIDC_ISSUER", value = var.oidc_issuer },
-          { name = "OIDC_AUDIENCE", value = var.oidc_audience },
-          { name = "TEMPORAL_ADDRESS", value = var.temporal_address },
-          { name = "TEMPORAL_NAMESPACE", value = var.temporal_namespace }
-        ],
-        var.enable_tracing ? [
-          { name = "OTEL_EXPORTER_OTLP_ENDPOINT", value = "http://127.0.0.1:4318" },
-          { name = "OTEL_TRACE_SAMPLE_RATIO", value = tostring(var.trace_sample_ratio) }
-        ] : [],
-        var.enable_redis ? [
-          { name = "REDIS_URL", value = "rediss://${aws_elasticache_replication_group.redis[0].primary_endpoint_address}:6379" }
-        ] : []
-      )
-      secrets = [
-        { name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.database_url.arn }
-      ]
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          awslogs-group         = aws_cloudwatch_log_group.application.name
-          awslogs-region        = data.aws_region.current.region
-          awslogs-stream-prefix = "gateway"
-        }
-      }
-      healthCheck = {
-        command = [
-          "CMD",
-          "/nodejs/bin/node",
-          "-e",
-          "fetch('http://127.0.0.1:4000/health/live',{signal:AbortSignal.timeout(4000)}).then((response)=>process.exit(response.status===200?0:1)).catch(()=>process.exit(1))"
-        ]
-        interval    = 30
-        timeout     = 5
-        retries     = 3
-        startPeriod = 10
-      }
-    }],
-    var.enable_tracing ? [{
-      name                   = "otel-collector"
-      image                  = var.otel_collector_image
-      essential              = false
-      cpu                    = 32
-      memory                 = 128
-      memoryReservation      = 64
-      readonlyRootFilesystem = true
-      command                = ["--config=env:OTEL_CONFIG"]
-      environment = [
-        { name = "OTEL_CONFIG", value = local.otel_collector_config }
-      ]
-      restartPolicy = {
-        enabled              = true
-        restartAttemptPeriod = 60
-      }
-      healthCheck = {
-        command     = ["CMD", "/healthcheck"]
-        interval    = 30
-        timeout     = 5
-        retries     = 3
-        startPeriod = 10
-      }
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          awslogs-group         = aws_cloudwatch_log_group.application.name
-          awslogs-region        = data.aws_region.current.region
-          awslogs-stream-prefix = "otel-gateway"
-        }
-      }
-    }] : []
-  ))
-}
-
-resource "aws_ecs_service" "gateway" {
-  count           = var.deploy_applications && var.retain_legacy_ecs_rollback ? 1 : 0
-  name            = "gateway"
-  cluster         = aws_ecs_cluster.this.id
-  task_definition = aws_ecs_task_definition.gateway[0].arn
-  desired_count   = var.run_continuous_ecs_runtime ? var.gateway_desired_count : 0
-  launch_type     = "FARGATE"
-  network_configuration {
-    subnets          = var.private_application_networking ? aws_subnet.private[*].id : aws_subnet.public[*].id
-    security_groups  = [aws_security_group.application.id]
-    assign_public_ip = !var.private_application_networking
-  }
-
-  service_registries {
-    registry_arn   = aws_service_discovery_service.gateway[0].arn
-    container_name = "gateway"
-    container_port = local.container_port
-  }
-}
-
-resource "aws_ecs_task_definition" "worker" {
-  count                    = var.deploy_applications && var.retain_legacy_ecs_rollback ? 1 : 0
-  family                   = "${var.name}-${var.environment}-worker"
-  requires_compatibilities = ["FARGATE"]
-  network_mode             = "awsvpc"
-  cpu                      = var.worker_cpu
-  memory                   = var.worker_memory
-  execution_role_arn       = aws_iam_role.execution.arn
-  task_role_arn            = aws_iam_role.application.arn
-
-  lifecycle {
-    create_before_destroy = true
-  }
-
-  runtime_platform {
-    cpu_architecture        = "X86_64"
-    operating_system_family = "LINUX"
-  }
-  container_definitions = jsonencode(concat(
-    [{
-      name      = "worker"
-      image     = var.worker_image
-      essential = true
-      cpu       = var.enable_tracing ? var.worker_cpu - 32 : var.worker_cpu
-      environment = concat(
-        [
-          { name = "NODE_ENV", value = "production" },
-          { name = "RELEASE_SHA", value = try(split("@", var.worker_image)[1], "unpublished") },
-          { name = "TEMPORAL_ADDRESS", value = var.temporal_address },
-          { name = "TEMPORAL_NAMESPACE", value = var.temporal_namespace },
-          { name = "TEMPORAL_TASK_QUEUE", value = "profile-readiness-v1" },
-          { name = "TEMPORAL_TLS", value = "true" }
-        ],
-        var.enable_tracing ? [
-          { name = "OTEL_EXPORTER_OTLP_ENDPOINT", value = "http://127.0.0.1:4318" },
-          { name = "OTEL_TRACE_SAMPLE_RATIO", value = tostring(var.trace_sample_ratio) }
-        ] : []
-      )
-      secrets = [
-        { name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.database_url.arn },
-        { name = "TEMPORAL_API_KEY", valueFrom = aws_secretsmanager_secret.temporal_api_key.arn }
-      ]
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          awslogs-group         = aws_cloudwatch_log_group.application.name
-          awslogs-region        = data.aws_region.current.region
-          awslogs-stream-prefix = "worker"
-        }
-      }
-    }],
-    var.enable_tracing ? [{
-      name                   = "otel-collector"
-      image                  = var.otel_collector_image
-      essential              = false
-      cpu                    = 32
-      memory                 = 128
-      memoryReservation      = 64
-      readonlyRootFilesystem = true
-      command                = ["--config=env:OTEL_CONFIG"]
-      environment = [
-        { name = "OTEL_CONFIG", value = local.otel_collector_config }
-      ]
-      restartPolicy = {
-        enabled              = true
-        restartAttemptPeriod = 60
-      }
-      healthCheck = {
-        command     = ["CMD", "/healthcheck"]
-        interval    = 30
-        timeout     = 5
-        retries     = 3
-        startPeriod = 10
-      }
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          awslogs-group         = aws_cloudwatch_log_group.application.name
-          awslogs-region        = data.aws_region.current.region
-          awslogs-stream-prefix = "otel-worker"
-        }
-      }
-    }] : []
-  ))
-}
-
-resource "aws_ecs_service" "worker" {
-  count           = var.deploy_applications && var.retain_legacy_ecs_rollback ? 1 : 0
-  name            = "workflow-worker"
-  cluster         = aws_ecs_cluster.this.id
-  task_definition = aws_ecs_task_definition.worker[0].arn
-  desired_count   = var.run_continuous_ecs_runtime ? var.worker_desired_count : 0
-  launch_type     = "FARGATE"
-  network_configuration {
-    subnets          = var.private_application_networking ? aws_subnet.private[*].id : aws_subnet.public[*].id
-    security_groups  = [aws_security_group.application.id]
-    assign_public_ip = !var.private_application_networking
-  }
-}
-
 resource "aws_ecs_task_definition" "migration" {
   count                    = var.migration_image == "" ? 0 : 1
   family                   = "${var.name}-${var.environment}-database-migration"
@@ -1033,6 +651,14 @@ resource "aws_ecs_task_definition" "migration" {
 
   lifecycle {
     create_before_destroy = true
+
+    precondition {
+      condition = startswith(
+        var.migration_image,
+        "${aws_ecr_repository.migration.repository_url}@sha256:"
+      )
+      error_message = "The migration task must use an immutable digest from the dedicated migration repository."
+    }
   }
 
   runtime_platform {
@@ -1165,74 +791,6 @@ resource "aws_cloudwatch_metric_alarm" "application_errors" {
   depends_on = [aws_cloudwatch_log_metric_filter.application_errors]
 }
 
-resource "aws_cloudwatch_log_metric_filter" "gateway_log_heartbeat" {
-  count          = var.deploy_applications && var.retain_legacy_ecs_rollback ? 1 : 0
-  name           = "${var.name}-${var.environment}-gateway-log-heartbeat"
-  pattern        = "{ $.event = \"log_delivery_heartbeat\" && $.service = \"gateway\" }"
-  log_group_name = aws_cloudwatch_log_group.application.name
-
-  metric_transformation {
-    name      = "GatewayLogHeartbeat"
-    namespace = local.application_metric_namespace
-    value     = "1"
-    unit      = "Count"
-  }
-}
-
-resource "aws_cloudwatch_metric_alarm" "gateway_log_heartbeat_missing" {
-  count               = var.deploy_applications && var.retain_legacy_ecs_rollback ? 1 : 0
-  alarm_name          = "${var.name}-${var.environment}-gateway-log-heartbeat-missing"
-  comparison_operator = "LessThanThreshold"
-  evaluation_periods  = 3
-  datapoints_to_alarm = 3
-  metric_name         = "GatewayLogHeartbeat"
-  namespace           = local.application_metric_namespace
-  period              = 60
-  statistic           = "Sum"
-  threshold           = 1
-  actions_enabled     = var.run_continuous_ecs_runtime
-  treat_missing_data  = var.run_continuous_ecs_runtime ? "breaching" : "notBreaching"
-  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
-  ok_actions          = [aws_sns_topic.operational_alerts.arn]
-  alarm_description   = "The gateway heartbeat has been absent for three minutes; service or log delivery may be impaired. Runbook: ${local.provider_recovery_runbook_url}"
-
-  depends_on = [aws_cloudwatch_log_metric_filter.gateway_log_heartbeat]
-}
-
-resource "aws_cloudwatch_log_metric_filter" "worker_log_heartbeat" {
-  count          = var.deploy_applications && var.retain_legacy_ecs_rollback ? 1 : 0
-  name           = "${var.name}-${var.environment}-worker-log-heartbeat"
-  pattern        = "{ $.event = \"log_delivery_heartbeat\" && $.service = \"workflow-worker\" }"
-  log_group_name = aws_cloudwatch_log_group.application.name
-
-  metric_transformation {
-    name      = "WorkerLogHeartbeat"
-    namespace = local.application_metric_namespace
-    value     = "1"
-    unit      = "Count"
-  }
-}
-
-resource "aws_cloudwatch_metric_alarm" "worker_log_heartbeat_missing" {
-  count               = var.deploy_applications && var.retain_legacy_ecs_rollback ? 1 : 0
-  alarm_name          = "${var.name}-${var.environment}-worker-log-heartbeat-missing"
-  comparison_operator = "LessThanThreshold"
-  evaluation_periods  = 3
-  datapoints_to_alarm = 3
-  metric_name         = "WorkerLogHeartbeat"
-  namespace           = local.application_metric_namespace
-  period              = 60
-  statistic           = "Sum"
-  threshold           = 1
-  actions_enabled     = var.run_continuous_ecs_runtime
-  treat_missing_data  = var.run_continuous_ecs_runtime ? "breaching" : "notBreaching"
-  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
-  ok_actions          = [aws_sns_topic.operational_alerts.arn]
-  alarm_description   = "The workflow-worker heartbeat has been absent for three minutes; service or log delivery may be impaired. Runbook: ${local.provider_recovery_runbook_url}"
-
-  depends_on = [aws_cloudwatch_log_metric_filter.worker_log_heartbeat]
-}
-
 resource "aws_cloudwatch_metric_alarm" "alert_delivery_canary" {
   alarm_name          = "${var.name}-${var.environment}-alert-delivery-canary"
   comparison_operator = "GreaterThanThreshold"
@@ -1274,16 +832,10 @@ resource "aws_cloudwatch_dashboard" "operations" {
             title  = "Application errors and alert-delivery canary"
             view   = "timeSeries"
             period = 60
-            metrics = concat(
-              [
-                [local.application_metric_namespace, "ErrorEvents", { label = "Error events", stat = "Sum" }],
-                [local.operational_metric_namespace, "AlertDeliveryCanary", { label = "Alert canary", stat = "Maximum" }]
-              ],
-              var.deploy_applications && var.retain_legacy_ecs_rollback ? [
-                [local.application_metric_namespace, "GatewayLogHeartbeat", { label = "Gateway log heartbeat", stat = "Sum" }],
-                [local.application_metric_namespace, "WorkerLogHeartbeat", { label = "Worker log heartbeat", stat = "Sum" }]
-              ] : []
-            )
+            metrics = [
+              [local.application_metric_namespace, "ErrorEvents", { label = "Error events", stat = "Sum" }],
+              [local.operational_metric_namespace, "AlertDeliveryCanary", { label = "Alert canary", stat = "Maximum" }]
+            ]
           }
         },
         {
@@ -1334,27 +886,6 @@ resource "aws_cloudwatch_dashboard" "operations" {
           }
         }
       ],
-      var.deploy_applications && var.retain_legacy_ecs_rollback ? [
-        {
-          type   = "metric"
-          x      = 12
-          y      = 8
-          width  = 12
-          height = 6
-          properties = {
-            region = data.aws_region.current.region
-            title  = "ECS service utilization"
-            view   = "timeSeries"
-            period = 300
-            metrics = [
-              ["AWS/ECS", "CPUUtilization", "ClusterName", aws_ecs_cluster.this.name, "ServiceName", "gateway", { label = "Gateway CPU", stat = "Average" }],
-              ["AWS/ECS", "MemoryUtilization", "ClusterName", aws_ecs_cluster.this.name, "ServiceName", "gateway", { label = "Gateway memory", stat = "Average" }],
-              ["AWS/ECS", "CPUUtilization", "ClusterName", aws_ecs_cluster.this.name, "ServiceName", "workflow-worker", { label = "Worker CPU", stat = "Average" }],
-              ["AWS/ECS", "MemoryUtilization", "ClusterName", aws_ecs_cluster.this.name, "ServiceName", "workflow-worker", { label = "Worker memory", stat = "Average" }]
-            ]
-          }
-        }
-      ] : [],
       var.deploy_gateway_lambda ? [
         {
           type   = "metric"
@@ -1530,16 +1061,12 @@ data "aws_iam_policy_document" "secrets_endpoint" {
   count = var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable ? 1 : 0
 
   statement {
-    sid     = "ExactEcsExecutionRoleRuntimeSecrets"
-    effect  = "Allow"
-    actions = ["secretsmanager:GetSecretValue"]
-    resources = [
-      aws_secretsmanager_secret.database_url.arn,
-      aws_secretsmanager_secret.temporal_api_key.arn
-    ]
+    sid       = "ExactMigrationExecutionRoleDatabaseSecret"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [aws_secretsmanager_secret.database_url.arn]
 
-    # ECS resolves task-definition secrets before the application container starts. Private DNS
-    # therefore routes retained services and bounded one-off tasks through this endpoint too.
+    # ECS resolves the one-off migration task's database secret before its container starts.
     principals {
       type        = "AWS"
       identifiers = [aws_iam_role.execution.arn]
@@ -1614,7 +1141,7 @@ resource "aws_lambda_function" "gateway" {
         OIDC_AUDIENCE      = var.oidc_audience
       },
       var.deploy_serverless_outbox ? {
-        OUTBOX_DISPATCH_TARGET = var.serverless_runtime_cutover ? "lambda_durable" : "temporal"
+        OUTBOX_DISPATCH_TARGET = "lambda_durable"
         OUTBOX_QUEUE_URL       = aws_sqs_queue.events.url
       } : {}
     )
@@ -2066,7 +1593,7 @@ resource "aws_lambda_event_source_mapping" "outbox_starter" {
   count                              = var.deploy_serverless_outbox ? 1 : 0
   event_source_arn                   = aws_sqs_queue.events.arn
   function_name                      = aws_lambda_alias.outbox_starter[0].arn
-  enabled                            = var.serverless_runtime_cutover
+  enabled                            = var.serverless_runtime_enabled
   batch_size                         = 5
   maximum_batching_window_in_seconds = 0
   function_response_types            = ["ReportBatchItemFailures"]
@@ -2079,7 +1606,7 @@ resource "aws_cloudwatch_event_rule" "outbox_reconciler" {
   name                = "${var.name}-${var.environment}-outbox-reconciler"
   description         = "Disabled until the reviewed Lambda durable cutover"
   schedule_expression = "rate(1 minute)"
-  state               = var.serverless_runtime_cutover ? "ENABLED" : "DISABLED"
+  state               = var.serverless_runtime_enabled ? "ENABLED" : "DISABLED"
 }
 
 resource "aws_cloudwatch_event_target" "outbox_reconciler" {

@@ -1,7 +1,7 @@
 import { initializeTelemetry, shutdownTelemetry } from "@ai-job-apply/observability";
 
 initializeTelemetry({
-  service: "workflow-worker",
+  service: "local-durable-runtime",
   environment: process.env.NODE_ENV ?? "development",
   ...(process.env.OTEL_EXPORTER_OTLP_ENDPOINT
     ? { endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT }
@@ -13,7 +13,7 @@ initializeTelemetry({
 });
 
 try {
-  await import("./worker.js");
+  await import("./local-runtime.js");
 } catch (error) {
   await shutdownTelemetry();
   throw error;

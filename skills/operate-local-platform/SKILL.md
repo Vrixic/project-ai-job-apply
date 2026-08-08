@@ -1,6 +1,6 @@
 ---
 name: operate-local-platform
-description: Set up, run, verify, and troubleshoot the AI job application platform locally. Use for dependency installation, environment configuration, Docker Compose services, PostgreSQL migrations, contract generation, development servers, test/build commands, local health checks, or diagnosing local gateway, web, database, Redis, Temporal, and telemetry failures.
+description: Set up, run, verify, and troubleshoot the AI job application platform locally. Use for dependency installation, environment configuration, Docker Compose services, PostgreSQL migrations, contract generation, development servers, test/build commands, local health checks, or diagnosing local gateway, web, database, Redis, Lambda durable adapter, and telemetry failures.
 ---
 
 # Operate the Local Platform
@@ -13,6 +13,10 @@ Read `../../README.md`, `../../scripts/README.md`, `../../.env.example`,
 
 Check Node 24, pnpm 10, Docker Compose, and available ports. The local PostgreSQL host port is
 defined by Compose; do not assume the PostgreSQL default port.
+
+The local dependency stack does not run Temporal. The workflow workspace uses a development-only
+adapter around the same transactional outbox, Lambda durable definition, and activity contracts as
+the deployed runtime.
 
 ## Start the foundation
 

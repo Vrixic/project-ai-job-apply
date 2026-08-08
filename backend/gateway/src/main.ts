@@ -17,7 +17,7 @@ const logger = createLogger({
   releaseSha: config.RELEASE_SHA,
 });
 const database = createDatabase(config.DATABASE_URL);
-const store = new PostgresProfileStore(database);
+const store = new PostgresProfileStore(database, { dispatchTarget: "lambda_durable" });
 const verifier = createOidcVerifier({
   issuer: config.OIDC_ISSUER,
   audience: config.OIDC_AUDIENCE,

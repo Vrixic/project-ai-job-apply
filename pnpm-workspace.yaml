@@ -9,7 +9,6 @@ onlyBuiltDependencies:
   - "@nestjs/core"
   - "@scarf/scarf"
   - "@swc/core"
-  - "@temporalio/core-bridge"
   - "esbuild"
   - "protobufjs"
   - "sharp"
