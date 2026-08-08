@@ -282,6 +282,9 @@ for (const required of [
   "ConfirmTemporalKeyRevoked",
   "ConfirmLegacyArtifactsRetired",
   "Assert-RuntimeHealthy",
+  "--cli-input-json",
+  'Get-OptionalArray $response "failures"',
+  "still contains images after purge",
   "RepositoryNotFoundException",
   "ResourceNotFoundException",
 ]) {
