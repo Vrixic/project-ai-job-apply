@@ -233,6 +233,14 @@ function Invoke-AwsJson {
   catch { throw $FailureMessage }
 }
 
+function Get-OptionalArray {
+  param([object]$Object, [string]$PropertyName)
+  if ($null -eq $Object) { return @() }
+  $property = $Object.PSObject.Properties[$PropertyName]
+  if ($null -eq $property -or $null -eq $property.Value) { return @() }
+  return @($property.Value)
+}
+
 function Assert-Caller {
   $caller = Invoke-AwsJson @("sts", "get-caller-identity") "The $Environment AWS session is unavailable."
   if ([string]$caller.Account -ne $ExpectedAccountId -or -not ([string]$caller.Arn).Contains(":assumed-role/")) {
@@ -311,9 +319,9 @@ function Invoke-WithCredentials {
 }
 
 function Assert-PublicApi {
-  param([object]$Plan)
   $apiName = "ai-job-apply-$Environment-gateway"
-  $apis = @(Invoke-AwsJson @("apigatewayv2", "get-apis") "The retained API endpoint could not be resolved.").Items
+  $apiInventory = Invoke-AwsJson @("apigatewayv2", "get-apis") "The retained API endpoint could not be resolved."
+  $apis = @(Get-OptionalArray $apiInventory "Items")
   $api = @($apis | Where-Object { [string]$_.Name -eq $apiName })
   if ($api.Count -ne 1 -or [string]::IsNullOrWhiteSpace([string]$api[0].ApiEndpoint)) {
     throw "The retained API endpoint could not be resolved."
@@ -336,56 +344,67 @@ function Assert-PublicApi {
 function Assert-RetiredLiveResources {
   $prefix = "ai-job-apply-$Environment"
   $cluster = $prefix
-  $services = @(Invoke-AwsJson @("ecs", "list-services", "--cluster", $cluster) "The ECS cluster could not be inspected.").serviceArns
+  $serviceInventory = Invoke-AwsJson @("ecs", "list-services", "--cluster", $cluster) "The ECS cluster could not be inspected."
+  $services = @(Get-OptionalArray $serviceInventory "serviceArns")
   if (@($services | Where-Object { $_ -match '/(gateway|workflow-worker)$' }).Count -ne 0) {
     throw "A legacy ECS service still exists."
   }
   foreach ($family in @("$prefix-gateway", "$prefix-worker")) {
-    $taskDefinitions = @(Invoke-AwsJson @("ecs", "list-task-definitions", "--family-prefix", $family, "--status", "ACTIVE") `
-      "Legacy task definitions could not be inspected.").taskDefinitionArns
+    $taskInventory = Invoke-AwsJson @("ecs", "list-task-definitions", "--family-prefix", $family, "--status", "ACTIVE") `
+      "Legacy task definitions could not be inspected."
+    $taskDefinitions = @(Get-OptionalArray $taskInventory "taskDefinitionArns")
     if ($taskDefinitions.Count -ne 0) { throw "Active legacy task definitions still exist for $family." }
   }
-  $migrationDefinitions = @(Invoke-AwsJson @(
+  $migrationInventory = Invoke-AwsJson @(
     "ecs", "list-task-definitions", "--family-prefix", "$prefix-database-migration", "--status", "ACTIVE"
-  ) "The retained migration task could not be inspected.").taskDefinitionArns
+  ) "The retained migration task could not be inspected."
+  $migrationDefinitions = @(Get-OptionalArray $migrationInventory "taskDefinitionArns")
   if ($migrationDefinitions.Count -eq 0) { throw "The on-demand database migration task was not retained." }
 
-  $apis = @(Invoke-AwsJson @("apigatewayv2", "get-apis") "API Gateway could not be inspected.").Items
+  $apiInventory = Invoke-AwsJson @("apigatewayv2", "get-apis") "API Gateway could not be inspected."
+  $apis = @(Get-OptionalArray $apiInventory "Items")
   $api = @($apis | Where-Object { [string]$_.Name -eq "$prefix-gateway" })
   if ($api.Count -ne 1) { throw "The retained HTTP API is not singular." }
-  $integrations = @(Invoke-AwsJson @(
+  $integrationInventory = Invoke-AwsJson @(
     "apigatewayv2", "get-integrations", "--api-id", [string]$api[0].ApiId
-  ) "API Gateway integrations could not be inspected.").Items
+  ) "API Gateway integrations could not be inspected."
+  $integrations = @(Get-OptionalArray $integrationInventory "Items")
   if (@($integrations | Where-Object { [string]$_.IntegrationType -eq "HTTP_PROXY" }).Count -ne 0 -or
       @($integrations | Where-Object { [string]$_.IntegrationType -eq "AWS_PROXY" }).Count -ne 1) {
     throw "The retired API integration boundary is not Lambda-only."
   }
-  $vpcLinks = @(Invoke-AwsJson @("apigatewayv2", "get-vpc-links") "API Gateway VPC Links could not be inspected.").Items
+  $vpcLinkInventory = Invoke-AwsJson @("apigatewayv2", "get-vpc-links") "API Gateway VPC Links could not be inspected."
+  $vpcLinks = @(Get-OptionalArray $vpcLinkInventory "Items")
   if (@($vpcLinks | Where-Object { [string]$_.Name -eq "$prefix-gateway" }).Count -ne 0) {
     throw "The legacy gateway VPC Link still exists."
   }
-  $namespaces = @(Invoke-AwsJson @("servicediscovery", "list-namespaces") "Cloud Map could not be inspected.").Namespaces
+  $namespaceInventory = Invoke-AwsJson @("servicediscovery", "list-namespaces") "Cloud Map could not be inspected."
+  $namespaces = @(Get-OptionalArray $namespaceInventory "Namespaces")
   if (@($namespaces | Where-Object { [string]$_.Name -eq "$prefix.internal" }).Count -ne 0) {
     throw "The legacy Cloud Map namespace still exists."
   }
-  $rolePolicies = @(Invoke-AwsJson @(
+  $rolePolicyInventory = Invoke-AwsJson @(
     "iam", "list-role-policies", "--role-name", "$prefix-application"
-  ) "The legacy application role could not be inspected.").PolicyNames
+  ) "The legacy application role could not be inspected."
+  $rolePolicies = @(Get-OptionalArray $rolePolicyInventory "PolicyNames")
   if ($rolePolicies -contains "write-application-traces") {
     throw "The legacy application tracing policy still exists."
   }
-  $alarms = @(Invoke-AwsJson @("cloudwatch", "describe-alarms", "--alarm-name-prefix", $prefix) `
-    "CloudWatch alarms could not be inspected.").MetricAlarms
+  $alarmInventory = Invoke-AwsJson @("cloudwatch", "describe-alarms", "--alarm-name-prefix", $prefix) `
+    "CloudWatch alarms could not be inspected."
+  $alarms = @(Get-OptionalArray $alarmInventory "MetricAlarms")
   if (@($alarms | Where-Object { $_.AlarmName -in @("$prefix-gateway-log-heartbeat-missing", "$prefix-worker-log-heartbeat-missing") }).Count -ne 0) {
     throw "Legacy heartbeat alarms still exist."
   }
   $filters = Invoke-AwsJson @("logs", "describe-metric-filters") "CloudWatch metric filters could not be inspected."
-  if (@($filters.metricFilters | Where-Object { $_.filterName -in @("$prefix-gateway-log-heartbeat", "$prefix-worker-log-heartbeat") }).Count -ne 0) {
+  $metricFilters = @(Get-OptionalArray $filters "metricFilters")
+  if (@($metricFilters | Where-Object { $_.filterName -in @("$prefix-gateway-log-heartbeat", "$prefix-worker-log-heartbeat") }).Count -ne 0) {
     throw "Legacy heartbeat metric filters still exist."
   }
-  $starterMappings = @(Invoke-AwsJson @(
+  $starterInventory = Invoke-AwsJson @(
     "lambda", "list-event-source-mappings", "--function-name", "$prefix-outbox-starter"
-  ) "The durable outbox trigger could not be inspected.").EventSourceMappings
+  ) "The durable outbox trigger could not be inspected."
+  $starterMappings = @(Get-OptionalArray $starterInventory "EventSourceMappings")
   if ($starterMappings.Count -ne 1 -or [string]$starterMappings[0].State -ne "Enabled") {
     throw "The durable outbox trigger is not enabled."
   }
@@ -466,7 +485,7 @@ if ($Action -eq "Apply") {
 
 $null = Invoke-ZeroDriftPlan $plan
 Assert-RetiredLiveResources
-Assert-PublicApi $plan
+Assert-PublicApi
 [ordered]@{
   Environment = $Environment
   Action = if ($Action -eq "Apply") { "legacy_runtime_retired" } else { "legacy_runtime_retirement_verification" }
