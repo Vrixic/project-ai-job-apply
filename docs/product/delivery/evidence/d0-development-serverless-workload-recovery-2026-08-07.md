@@ -74,6 +74,14 @@ PowerShell parsing, wrapper help, serverless-infrastructure policy validation, f
 tests, and web type checking pass. No legacy row was acknowledged, no workflow artifact was
 published, no Lambda alias or route changed, and no drain context was created by this source work.
 
+After PR #177 merged, the first exact-main development drain preflight failed closed during its
+initial live-runtime reads, before starting the outbox-inspection task or writing a review context.
+PowerShell variable names are case-insensitive; the generalized core's local `$environment`
+worker-settings dictionary had overwritten the top-level `$Environment` selector, so the gateway
+alias lookup received a dictionary and AWS rejected it. The local value is now named
+`$workerEnvironment`, and policy validation forbids reintroducing the case-insensitive shadow.
+No inspection task, drain worker, product-record transition, or persistent AWS change occurred.
+
 ## Required recovery sequence
 
 1. Merge the locally verified recovery/conformance source.
