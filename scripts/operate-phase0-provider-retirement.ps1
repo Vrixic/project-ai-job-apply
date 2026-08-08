@@ -206,9 +206,10 @@ function Get-PlanJson {
 
 function Get-PlanChanges {
   param([object]$Plan)
-  return @($Plan.resource_changes | Where-Object {
+  $changes = @($Plan.resource_changes | Where-Object {
     (@($_.change.actions) -join ",") -notin @("no-op", "read")
   })
+  return ,$changes
 }
 
 function Get-OptionalArray {
