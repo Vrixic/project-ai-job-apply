@@ -832,6 +832,15 @@ assert.ok(
   !stagingLegacyTemporalDrain.includes("exactly three untouched synthetic legacy outbox records"),
   "The staging legacy-drain operator must not retain the historical three-record-only review gate.",
 );
+assert.ok(
+  !stagingLegacyTemporalDrain.includes("$environment ="),
+  "The shared legacy-drain operator must not shadow its case-insensitive Environment selector.",
+);
+requireText(
+  stagingLegacyTemporalDrain,
+  "$workerEnvironment = Get-ContainerEnvironment $worker",
+  "The shared legacy-drain operator must keep worker settings separate from its Environment selector.",
+);
 
 for (const expected of [
   '"PlanRollback", "ApplyRollback"',

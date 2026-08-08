@@ -326,7 +326,7 @@ function Get-LiveRuntime {
   $collector = @(
     $taskDefinition.containerDefinitions | Where-Object { $_.name -eq "otel-collector" }
   )
-  $environment = Get-ContainerEnvironment $worker
+  $workerEnvironment = Get-ContainerEnvironment $worker
   $secretNames = @($worker.secrets | ForEach-Object { [string]$_.name } | Sort-Object)
   $workerImage = [string]$worker.image
   if (
@@ -339,14 +339,14 @@ function Get-LiveRuntime {
     $workerImage -notmatch "^[^@]+@sha256:[a-f0-9]{64}$" -or
     -not [bool]$worker.essential -or
     (Compare-Object $secretNames @("DATABASE_URL", "TEMPORAL_API_KEY")) -or
-    [string]$environment.NODE_ENV -ne "production" -or
-    [string]$environment.TEMPORAL_TASK_QUEUE -ne "profile-readiness-v1" -or
-    [string]$environment.TEMPORAL_TLS -ne "true" -or
-    [string]$environment.TEMPORAL_ADDRESS -notmatch "^[a-z0-9-]+\.[a-z0-9]+\.tmprl\.cloud:7233$" -or
-    [string]$environment.TEMPORAL_NAMESPACE -ne
-      ([string]$environment.TEMPORAL_ADDRESS).Substring(
+    [string]$workerEnvironment.NODE_ENV -ne "production" -or
+    [string]$workerEnvironment.TEMPORAL_TASK_QUEUE -ne "profile-readiness-v1" -or
+    [string]$workerEnvironment.TEMPORAL_TLS -ne "true" -or
+    [string]$workerEnvironment.TEMPORAL_ADDRESS -notmatch "^[a-z0-9-]+\.[a-z0-9]+\.tmprl\.cloud:7233$" -or
+    [string]$workerEnvironment.TEMPORAL_NAMESPACE -ne
+      ([string]$workerEnvironment.TEMPORAL_ADDRESS).Substring(
         0,
-        ([string]$environment.TEMPORAL_ADDRESS).Length - ".tmprl.cloud:7233".Length
+        ([string]$workerEnvironment.TEMPORAL_ADDRESS).Length - ".tmprl.cloud:7233".Length
       ) -or
     [string]$worker.logConfiguration.logDriver -ne "awslogs" -or
     [string]$worker.logConfiguration.options."awslogs-group" -ne
@@ -543,7 +543,7 @@ function Get-LiveRuntime {
     ExecutionRoleSha256 = Get-Sha256Text ([string]$taskDefinition.executionRoleArn)
     WorkerImageSha256 = ($workerImage -split "@sha256:")[1]
     WorkerCpu = [int]$worker.cpu
-    WorkerEnvironmentSha256 = Get-CanonicalHash $environment
+    WorkerEnvironmentSha256 = Get-CanonicalHash $workerEnvironment
     WorkerSecretsSha256 = Get-CanonicalHash @($worker.secrets)
     LogConfigurationSha256 = Get-CanonicalHash $worker.logConfiguration
     CollectorSha256 = if ($collector.Count -eq 1) {
@@ -597,8 +597,8 @@ function Get-LiveRuntime {
       EcsServicesIdle = $true
       ReviewedStandaloneTasks = 0
       TemporalIdentitySha256 = Get-CanonicalHash @(
-        [string]$environment.TEMPORAL_ADDRESS,
-        [string]$environment.TEMPORAL_NAMESPACE
+        [string]$workerEnvironment.TEMPORAL_ADDRESS,
+        [string]$workerEnvironment.TEMPORAL_NAMESPACE
       )
     }
     ClusterArn = [string]$workerService.clusterArn
@@ -606,8 +606,8 @@ function Get-LiveRuntime {
     Subnets = $subnets
     SecurityGroups = $securityGroups
     AssignPublicIp = [string]$network.assignPublicIp
-    TemporalAddress = [string]$environment.TEMPORAL_ADDRESS
-    TemporalNamespace = [string]$environment.TEMPORAL_NAMESPACE
+    TemporalAddress = [string]$workerEnvironment.TEMPORAL_ADDRESS
+    TemporalNamespace = [string]$workerEnvironment.TEMPORAL_NAMESPACE
   }
 }
 
