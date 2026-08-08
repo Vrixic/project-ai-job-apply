@@ -259,6 +259,7 @@ for (const required of [
   "infrastructure/terraform/modules/platform/tests/serverless_runtime.tftest.hcl",
   "scripts/operate-phase0-provider-retirement.ps1",
   "infrastructure/runbooks/deployments/phase0-provider-retirement.md",
+  "backend/workflows/temporal-retirement-rejection.test.mjs",
 ]) {
   if (!existsSync(resolve(root, required))) failures.push(`${required}: required file is missing`);
 }

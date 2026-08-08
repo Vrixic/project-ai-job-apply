@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import process from "node:process";
 import { Connection } from "@temporalio/client";
+import { isProviderAccessRejected } from "./temporal-retirement-rejection.mjs";
 
 function fail(message) {
   throw new Error(message);
@@ -69,11 +70,6 @@ function awsJson(args, options, secretBearing = false) {
   }
 }
 
-function isUnauthenticated(error) {
-  if (typeof error !== "object" || error === null) return false;
-  return error.code === 16 || error.code === "UNAUTHENTICATED";
-}
-
 async function inspect(options) {
   const caller = awsJson(["sts", "get-caller-identity"], options);
   const secret = awsJson(
@@ -126,9 +122,9 @@ async function inspect(options) {
       fail("The Temporal namespace still contains running workflows.");
     }
   } catch (error) {
-    if (options.mode === "revoked" && isUnauthenticated(error)) {
+    if (options.mode === "revoked" && isProviderAccessRejected(error)) {
       // Expected proof: the exact provider credential is no longer accepted.
-    } else if (options.mode === "active-zero" && isUnauthenticated(error)) {
+    } else if (options.mode === "active-zero" && isProviderAccessRejected(error)) {
       fail("The managed runtime credential was rejected before retirement.");
     } else {
       fail("The provider namespace did not reach the expected retirement state.");
