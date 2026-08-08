@@ -57,7 +57,9 @@ pnpm --filter @ai-job-apply/workflows temporal:retirement-inspect -- `
   --mode revoked
 ```
 
-The check must return exact-key `UNAUTHENTICATED` without printing the key or identifiers.
+The check must return exact-key `PERMISSION_DENIED` or `UNAUTHENTICATED` without printing the key
+or identifiers. Temporal Cloud can use either gRPC access-rejection code for a deleted key; a
+transport, availability, namespace, or unclassified error does not satisfy retirement.
 
 ## 5. Remove legacy image contents
 
