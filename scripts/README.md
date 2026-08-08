@@ -57,7 +57,7 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   and is stopped with the local web process. State is resolved only from the selected environment's
   initialized backend metadata and its KMS ownership is checked against the current caller. Select
   staging with `-Environment staging`; add the explicit `-EnableWorkloadConformance` switch only
-  for the reviewed routed staging workload.
+  for the reviewed routed Phase 0 workload in the selected isolated environment.
 - `verify-gateway-lambda-boundary.ps1` — Runs the guarded, no-write failure matrix against the
   selected environment's immutable dark alias. It verifies exact route/method denial, missing and
   wrong-environment authorizer claims, scope denial, query/body/media constraints, malformed
@@ -176,12 +176,16 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   cutover, ordered rollback/cleanup, restoration, and context-continuation core. It fixes the
   development environment and profile so staging and development state, queues, secrets,
   functions, plans, and rollback contexts cannot cross.
-- `operate-staging-legacy-temporal-drain.ps1` — Checksum-gated bridge for an exact reviewed,
-  bounded synthetic staging batch. Planning binds its identifier-free aggregate
+- `operate-staging-legacy-temporal-drain.ps1` — Environment-aware checksum-gated bridge, retaining
+  staging as its compatibility default, for an exact reviewed bounded legacy batch. Planning binds its identifier-free aggregate
   digest to the exact idle ECS/API, immutable worker, disabled replacement triggers, empty queues,
   healthy alarms, and zero-open-Temporal boundary. Execution runs exactly one standalone retained
   worker, double-checks terminal outbox/Temporal state, stops it, inspects aggregate logs, and proves
   the surrounding boundary unchanged. Interrupted execution has an exact-task cleanup path.
+- `operate-development-legacy-temporal-drain.ps1` — Development wrapper over the same guarded
+  drain. It fixes the account-local environment, profile, state, cluster, worker, log group,
+  Temporal secret, Lambda alias, and ignored review context so development cannot cross into
+  staging.
 - `operate-serverless-workflow-dark-conformance.ps1` — Selects development or staging and creates
   an isolated ignored, checksum-reviewed context from that environment's exact-commit zero-drift
   plan and stable live boundary. Separate execution exercises three synchronous synthetic

@@ -258,10 +258,10 @@ export function FoundationForm({
     }
   }
 
-  async function runStagingWorkload() {
+  async function runPhase0Workload() {
     if (
       !window.confirm(
-        "Run the fixed synthetic staging workload: 500 public probes and 25 readiness workflows?",
+        "Run the fixed Phase 0 workload: 500 public probes and 25 readiness workflows?",
       )
     ) {
       return;
@@ -283,17 +283,17 @@ export function FoundationForm({
         metrics?: Record<string, unknown>;
       };
       if (!response.ok || !outcome.metrics) {
-        throw new Error(outcome.message ?? "Staging workload failed");
+        throw new Error(outcome.message ?? "Phase 0 workload failed");
       }
       setWorkloadMetrics(outcome.metrics);
-      setMessage("Phase 0 staging workload passed. Review the aggregate metrics below.");
+      setMessage("Phase 0 workload passed. Review the aggregate metrics below.");
     } catch (error) {
       setMessage(
         controller.signal.aborted
-          ? "The staging workload timed out. Stop and inspect the deployed environment."
+          ? "The Phase 0 workload timed out. Stop and inspect the deployed environment."
           : error instanceof Error
             ? error.message
-            : "Staging workload failed",
+            : "Phase 0 workload failed",
       );
     } finally {
       window.clearTimeout(timeout);
@@ -356,13 +356,13 @@ export function FoundationForm({
           {workloadConformanceEnabled && (
             <>
               <hr />
-              <strong>Phase 0 staging workload</strong>
+              <strong>Phase 0 workload</strong>
               <p>
                 Run the fixed synthetic profile only after reviewing its runbook. The server-held
                 token, saved preferences, and operation identifiers never enter the result.
               </p>
-              <button type="button" onClick={runStagingWorkload} disabled={runningWorkload}>
-                {runningWorkload ? "Running workload…" : "Run staging workload"}
+              <button type="button" onClick={runPhase0Workload} disabled={runningWorkload}>
+                {runningWorkload ? "Running workload…" : "Run Phase 0 workload"}
               </button>
             </>
           )}
@@ -439,7 +439,7 @@ export function FoundationForm({
       {message && <output>{message}</output>}
       {workloadMetrics && (
         <section className="result" aria-live="polite">
-          <strong>Aggregate staging workload metrics</strong>
+          <strong>Aggregate Phase 0 workload metrics</strong>
           <pre>{JSON.stringify(workloadMetrics, null, 2)}</pre>
         </section>
       )}

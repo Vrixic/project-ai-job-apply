@@ -23,6 +23,7 @@ Usage:
   .\scripts\start-deployed-web-conformance.ps1 -Environment staging -GatewayRuntime lambda-cutover
   .\scripts\start-deployed-web-conformance.ps1 -Environment staging
   .\scripts\start-deployed-web-conformance.ps1 -Environment staging -EnableWorkloadConformance
+  .\scripts\start-deployed-web-conformance.ps1 -Environment development -GatewayRuntime lambda-cutover -EnableWorkloadConformance
   .\scripts\start-deployed-web-conformance.ps1 -Environment staging -ValidateOnly
   .\scripts\start-deployed-web-conformance.ps1 -ValidateOnly
 
@@ -40,7 +41,8 @@ Options:
   -AwsProfile   IAM Identity Center profile. Default: ai-job-apply-<environment>-admin
   -AwsRegion    AWS region. Default: us-east-2
   -EnableWorkloadConformance
-                Expose the fixed local-only staging workload control. Staging only.
+                Expose the fixed local-only Phase 0 workload control for the selected isolated
+                development or staging environment. Not available with lambda-dark.
   -BridgeSmokeTest
                 Start, verify 200/200/401, and stop the loopback dark Lambda bridge without
                 starting the web client. Requires -GatewayRuntime lambda-dark.
@@ -53,11 +55,8 @@ Options:
 if ([string]::IsNullOrWhiteSpace($AwsProfile)) {
   $AwsProfile = "ai-job-apply-$Environment-admin"
 }
-if ($EnableWorkloadConformance -and $Environment -ne "staging") {
-  throw "Workload conformance is restricted to the synthetic staging environment."
-}
 if ($GatewayRuntime -eq "lambda-dark" -and $EnableWorkloadConformance) {
-  throw "Staging workload conformance cannot be combined with dark Lambda conformance."
+  throw "Phase 0 workload conformance cannot be combined with dark Lambda conformance."
 }
 if ($BridgeSmokeTest -and $GatewayRuntime -ne "lambda-dark") {
   throw "Bridge smoke testing requires -GatewayRuntime lambda-dark."
@@ -219,7 +218,8 @@ $previousProfile = $env:AWS_PROFILE
 $previousRegion = $env:AWS_REGION
 $previousDefaultRegion = $env:AWS_DEFAULT_REGION
 $previousPlatformBaseUrl = $env:PLATFORM_API_BASE_URL
-$previousWorkloadConformance = $env:ENABLE_STAGING_WORKLOAD_CONFORMANCE
+$previousWorkloadConformance = $env:ENABLE_PHASE0_WORKLOAD_CONFORMANCE
+$previousWorkloadEnvironment = $env:PHASE0_WORKLOAD_ENVIRONMENT
 $previousNodeEnvironment = $env:NODE_ENV
 $previousDarkConformance = $env:DARK_LAMBDA_CONFORMANCE
 $previousDarkEnvironment = $env:DARK_LAMBDA_ENVIRONMENT
@@ -763,9 +763,11 @@ try {
     $env:PLATFORM_API_BASE_URL = $gatewayUrl
   }
   if ($EnableWorkloadConformance) {
-    $env:ENABLE_STAGING_WORKLOAD_CONFORMANCE = "1"
+    $env:ENABLE_PHASE0_WORKLOAD_CONFORMANCE = "1"
+    $env:PHASE0_WORKLOAD_ENVIRONMENT = $Environment
   } else {
-    Remove-Item Env:ENABLE_STAGING_WORKLOAD_CONFORMANCE -ErrorAction SilentlyContinue
+    Remove-Item Env:ENABLE_PHASE0_WORKLOAD_CONFORMANCE -ErrorAction SilentlyContinue
+    Remove-Item Env:PHASE0_WORKLOAD_ENVIRONMENT -ErrorAction SilentlyContinue
   }
   Write-Host "Starting the local web client at http://localhost:3000."
   if ($GatewayRuntime -eq "lambda-dark") {
@@ -801,9 +803,14 @@ try {
   $env:AWS_DEFAULT_REGION = $previousDefaultRegion
   $env:PLATFORM_API_BASE_URL = $previousPlatformBaseUrl
   if ($null -eq $previousWorkloadConformance) {
-    Remove-Item Env:ENABLE_STAGING_WORKLOAD_CONFORMANCE -ErrorAction SilentlyContinue
+    Remove-Item Env:ENABLE_PHASE0_WORKLOAD_CONFORMANCE -ErrorAction SilentlyContinue
   } else {
-    $env:ENABLE_STAGING_WORKLOAD_CONFORMANCE = $previousWorkloadConformance
+    $env:ENABLE_PHASE0_WORKLOAD_CONFORMANCE = $previousWorkloadConformance
+  }
+  if ($null -eq $previousWorkloadEnvironment) {
+    Remove-Item Env:PHASE0_WORKLOAD_ENVIRONMENT -ErrorAction SilentlyContinue
+  } else {
+    $env:PHASE0_WORKLOAD_ENVIRONMENT = $previousWorkloadEnvironment
   }
   $env:NODE_ENV = $previousNodeEnvironment
   $env:DARK_LAMBDA_CONFORMANCE = $previousDarkConformance

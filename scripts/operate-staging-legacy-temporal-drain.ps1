@@ -1,5 +1,8 @@
 [CmdletBinding()]
 param(
+  [ValidateSet("development", "staging")]
+  [string]$Environment = "staging",
+
   [ValidateSet("Plan", "Execute", "Cleanup")]
   [string]$Action = "Plan",
 
@@ -8,7 +11,7 @@ param(
 
   [string]$ExpectedPlanSha256 = "",
 
-  [string]$AwsProfile = "ai-job-apply-staging-admin",
+  [string]$AwsProfile = "",
 
   [ValidatePattern("^[a-z]{2}-[a-z]+-[0-9]+$")]
   [string]$Region = "us-east-2",
@@ -23,17 +26,26 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+if ([string]::IsNullOrWhiteSpace($AwsProfile)) {
+  $AwsProfile = "ai-job-apply-$Environment-admin"
+}
+$commandName = if ($Environment -eq "development") {
+  "operate-development-legacy-temporal-drain.ps1"
+} else {
+  "operate-staging-legacy-temporal-drain.ps1"
+}
+
 if ($Help) {
   @"
 Usage:
-  .\scripts\operate-staging-legacy-temporal-drain.ps1 -Action Plan
-  .\scripts\operate-staging-legacy-temporal-drain.ps1 `
+  .\scripts\$commandName -Action Plan
+  .\scripts\$commandName `
     -Action Execute -ExpectedPlanSha256 REVIEWED_SHA256 -Execute
-  .\scripts\operate-staging-legacy-temporal-drain.ps1 `
+  .\scripts\$commandName `
     -Action Cleanup -ExpectedPlanSha256 REVIEWED_SHA256 -Execute
-  .\scripts\operate-staging-legacy-temporal-drain.ps1 `
+  .\scripts\$commandName `
     -Action Plan -RuntimeBoundary PostCutover -ConfirmZeroTraffic
-  .\scripts\operate-staging-legacy-temporal-drain.ps1 `
+  .\scripts\$commandName `
     -Action Execute -RuntimeBoundary PostCutover -ConfirmZeroTraffic `
     -ExpectedPlanSha256 REVIEWED_SHA256 -Execute
 
@@ -55,21 +67,23 @@ target; and never prints account IDs, ARNs, endpoints, event IDs, credentials, o
 }
 
 if ($Region -ne "us-east-2") {
-  throw "The staging legacy drain is restricted to us-east-2."
+  throw "The $Environment legacy drain is restricted to us-east-2."
 }
 if ($RuntimeBoundary -eq "PostCutover" -and -not $ConfirmZeroTraffic) {
   throw "Post-cutover legacy drain requires -ConfirmZeroTraffic."
 }
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
-$environmentDirectory = Join-Path $repositoryRoot "infrastructure\terraform\environments\staging"
+$environmentDirectory = Join-Path $repositoryRoot "infrastructure\terraform\environments\$Environment"
 $contextDirectory = Join-Path $environmentDirectory ".terraform\serverless-cutover"
 $contextPath = Join-Path $contextDirectory "legacy-temporal-drain-context.json"
 $operatorPath = $MyInvocation.MyCommand.Path
-$resourcePrefix = "ai-job-apply-staging"
+$resourcePrefix = "ai-job-apply-$Environment"
 $clusterName = $resourcePrefix
-$startedBy = "staging-legacy-temporal-drain"
-$temporalSecretId = "ai-job-apply/staging/temporal-api-key"
+$startedBy = "$Environment-legacy-temporal-drain"
+$temporalSecretId = "ai-job-apply/$Environment/temporal-api-key"
+$applicationLogGroup = "/ai-job-apply/$Environment/application"
+$expectedContextSchema = "applydash.$Environment.legacy-temporal-drain.v3"
 $utf8 = New-Object Text.UTF8Encoding($false)
 $minimumPendingCount = 1
 $maximumPendingCount = 100
@@ -188,14 +202,14 @@ function Assert-QueueEmpty {
 
 function Get-OutboxInspection {
   $raw = & (Join-Path $PSScriptRoot "inspect-deployed-outbox.ps1") `
-    -Environment staging -AwsProfile $AwsProfile -Region $Region -Execute
+    -Environment $Environment -AwsProfile $AwsProfile -Region $Region -Execute
   if ($LASTEXITCODE -ne 0) {
-    throw "The bounded read-only staging outbox inspection failed."
+    throw "The bounded read-only $Environment outbox inspection failed."
   }
   try {
     $inspection = ($raw -join [Environment]::NewLine) | ConvertFrom-Json
   } catch {
-    throw "The staging outbox inspection did not return its sanitized contract."
+    throw "The $Environment outbox inspection did not return its sanitized contract."
   }
   if (
     [int]$inspection.version -ne 1 -or
@@ -204,7 +218,7 @@ function Get-OutboxInspection {
     [string]$inspection.orderedEventIdSha256 -notmatch "^[a-f0-9]{64}$" -or
     $null -ne $inspection.PSObject.Properties["eventIds"]
   ) {
-    throw "The staging outbox inspection is outside the identifier-free version-one contract."
+    throw "The $Environment outbox inspection is outside the identifier-free version-one contract."
   }
   return [ordered]@{
     PendingCount = [int]$inspection.pendingCount
@@ -239,10 +253,10 @@ function Get-StandaloneTaskArns {
 function Get-ClusterActiveTaskArns {
   $running = Invoke-AwsJson @(
     "ecs", "list-tasks", "--cluster", $clusterName, "--desired-status", "RUNNING"
-  ) "The staging running-task inventory is unavailable."
+  ) "The $Environment running-task inventory is unavailable."
   $pending = Invoke-AwsJson @(
     "ecs", "list-tasks", "--cluster", $clusterName, "--desired-status", "PENDING"
-  ) "The staging pending-task inventory is unavailable."
+  ) "The $Environment pending-task inventory is unavailable."
   return @(@($running.taskArns) + @($pending.taskArns) | Where-Object { $_ } | Sort-Object -Unique)
 }
 
@@ -251,13 +265,13 @@ function Assert-NoReviewedTask {
     @(Get-StandaloneTaskArns "RUNNING").Count -ne 0 -or
     @(Get-StandaloneTaskArns "PENDING").Count -ne 0
   ) {
-    throw "A reviewed standalone staging drain task is already active."
+    throw "A reviewed standalone $Environment drain task is already active."
   }
 }
 
 function Assert-NoClusterTask {
   if (@(Get-ClusterActiveTaskArns).Count -ne 0) {
-    throw "The staging cluster must have zero active tasks before review or execution."
+    throw "The $Environment cluster must have zero active tasks before review or execution."
   }
 }
 
@@ -266,26 +280,26 @@ function Assert-OnlyReviewedTask {
 
   $active = @(Get-ClusterActiveTaskArns)
   if ($active.Count -ne 1 -or [string]$active[0] -ne $TaskArn) {
-    throw "The staging cluster does not contain only the one reviewed standalone worker."
+    throw "The $Environment cluster does not contain only the one reviewed standalone worker."
   }
 }
 
 function Get-LiveRuntime {
   $caller = Invoke-AwsJson @("sts", "get-caller-identity") `
-    "Refresh the staging IAM Identity Center session."
+    "Refresh the $Environment IAM Identity Center session."
   if (
     [string]$caller.Account -notmatch "^[0-9]{12}$" -or
     -not ([string]$caller.Arn).Contains(":assumed-role/")
   ) {
-    throw "Use the temporary staging IAM Identity Center caller."
+    throw "Use the temporary $Environment IAM Identity Center caller."
   }
 
   $serviceResult = Invoke-AwsJson @(
     "ecs", "describe-services", "--cluster", $clusterName, "--services",
     "gateway", "workflow-worker"
-  ) "The retained staging services are unavailable."
+  ) "The retained $Environment services are unavailable."
   if (@($serviceResult.failures).Count -ne 0 -or @($serviceResult.services).Count -ne 2) {
-    throw "Both retained staging rollback services must exist."
+    throw "Both retained $Environment rollback services must exist."
   }
   foreach ($service in @($serviceResult.services)) {
     $primary = Get-Only @($service.deployments | Where-Object { $_.status -eq "PRIMARY" }) `
@@ -295,7 +309,7 @@ function Get-LiveRuntime {
       [int]$service.desiredCount -ne 0 -or [int]$service.runningCount -ne 0 -or
       [int]$service.pendingCount -ne 0 -or [string]$primary.rolloutState -ne "COMPLETED"
     ) {
-      throw "Both retained staging services must remain at the accepted 0/0/0 posture."
+      throw "Both retained $Environment services must remain at the accepted 0/0/0 posture."
     }
   }
   $workerService = Get-Only @(
@@ -336,10 +350,10 @@ function Get-LiveRuntime {
       ) -or
     [string]$worker.logConfiguration.logDriver -ne "awslogs" -or
     [string]$worker.logConfiguration.options."awslogs-group" -ne
-      "/ai-job-apply/staging/application" -or
+      $applicationLogGroup -or
     $collector.Count -gt 1
   ) {
-    throw "The retained worker task is outside the immutable staging boundary."
+    throw "The retained worker task is outside the immutable $Environment boundary."
   }
   if (
     $collector.Count -eq 1 -and
@@ -358,19 +372,19 @@ function Get-LiveRuntime {
     $subnets.Count -ne 2 -or $securityGroups.Count -ne 1 -or
     [string]$network.assignPublicIp -ne "ENABLED"
   ) {
-    throw "The retained worker network is outside the accepted lean staging boundary."
+    throw "The retained worker network is outside the accepted lean $Environment boundary."
   }
 
   Assert-NoReviewedTask
   Assert-NoClusterTask
 
   $gatewayAlias = Invoke-AwsJson @(
-    "lambda", "get-alias", "--function-name", "$resourcePrefix-gateway", "--name", "staging"
-  ) "The accepted staging gateway alias is unavailable."
+    "lambda", "get-alias", "--function-name", "$resourcePrefix-gateway", "--name", $Environment
+  ) "The accepted $Environment gateway alias is unavailable."
   $gateway = Invoke-AwsJson @(
     "lambda", "get-function-configuration", "--function-name", "$resourcePrefix-gateway",
     "--qualifier", ([string]$gatewayAlias.FunctionVersion)
-  ) "The accepted staging gateway version is unavailable."
+  ) "The accepted $Environment gateway version is unavailable."
   $expectedDispatchTarget = if ($RuntimeBoundary -eq "PostCutover") {
     "lambda_durable"
   } else { "temporal" }
@@ -379,21 +393,21 @@ function Get-LiveRuntime {
     [string]$gateway.LastUpdateStatus -ne "Successful" -or
     [string]$gateway.Environment.Variables.OUTBOX_DISPATCH_TARGET -ne $expectedDispatchTarget
   ) {
-    throw "The accepted staging gateway dispatch target is outside the selected runtime boundary."
+    throw "The accepted $Environment gateway dispatch target is outside the selected runtime boundary."
   }
 
   $mappingResult = Invoke-AwsJson @(
     "lambda", "list-event-source-mappings", "--function-name",
-    "$resourcePrefix-outbox-starter:staging"
-  ) "The staging starter mapping is unavailable."
+    "$resourcePrefix-outbox-starter:$Environment"
+  ) "The $Environment starter mapping is unavailable."
   $mapping = Get-Only @($mappingResult.EventSourceMappings) `
-    "The staging starter mapping is not singular."
+    "The $Environment starter mapping is not singular."
   $expectedMappingState = if ($RuntimeBoundary -eq "PostCutover") { "Enabled" } else { "Disabled" }
   if (
     [string]$mapping.State -ne $expectedMappingState -or
     @($mapping.FunctionResponseTypes) -notcontains "ReportBatchItemFailures"
   ) {
-    throw "The staging Lambda starter is outside the selected partial-batch runtime boundary."
+    throw "The $Environment Lambda starter is outside the selected partial-batch runtime boundary."
   }
   $expectedRuleState = if ($RuntimeBoundary -eq "PostCutover") { "ENABLED" } else { "DISABLED" }
   $ruleStates = [ordered]@{}
@@ -409,16 +423,16 @@ function Get-LiveRuntime {
     $ruleStates[$name] = $expectedRuleState
   }
 
-  $apis = Invoke-AwsJson @("apigatewayv2", "get-apis") "The staging API is unavailable."
+  $apis = Invoke-AwsJson @("apigatewayv2", "get-apis") "The $Environment API is unavailable."
   $api = Get-Only @($apis.Items | Where-Object { $_.Name -eq "$resourcePrefix-gateway" }) `
-    "The staging API is not singular."
+    "The $Environment API is not singular."
   $integrations = Invoke-AwsJson @(
     "apigatewayv2", "get-integrations", "--api-id", ([string]$api.ApiId)
-  ) "The staging API integration is unavailable."
+  ) "The $Environment API integration is unavailable."
   $integrationItems = @($integrations.Items)
   $routes = Invoke-AwsJson @(
     "apigatewayv2", "get-routes", "--api-id", ([string]$api.ApiId)
-  ) "The staging API route is unavailable."
+  ) "The $Environment API route is unavailable."
   $routeItems = @($routes.Items)
   $ecsIntegration = Get-Only @($integrationItems | Where-Object {
       [string]$_.IntegrationType -eq "HTTP_PROXY" -and
@@ -433,7 +447,7 @@ function Get-LiveRuntime {
       [string]$route.Target -ne "integrations/$($ecsIntegration.IntegrationId)" -or
       [string]$route.AuthorizationType -ne "NONE"
     ) {
-      throw "Public staging routing is outside the retained pre-cutover ECS boundary."
+      throw "Public $Environment routing is outside the retained pre-cutover ECS boundary."
     }
   } else {
     $lambdaIntegration = Get-Only @($integrationItems | Where-Object {
@@ -499,7 +513,7 @@ function Get-LiveRuntime {
 
   $alarmResult = Invoke-AwsJson `
     (@("cloudwatch", "describe-alarms", "--alarm-names") + $alarmNames) `
-    "The staging replacement alarm inventory is unavailable."
+    "The $Environment replacement alarm inventory is unavailable."
   $alarms = @($alarmResult.MetricAlarms | Sort-Object AlarmName | ForEach-Object {
       if (
         [string]$_.StateValue -ne "OK" -or -not [bool]$_.ActionsEnabled -or
@@ -607,19 +621,19 @@ function Save-Context {
 
 function Get-Context {
   if (-not (Test-Path -LiteralPath $contextPath -PathType Leaf)) {
-    throw "No reviewed staging legacy-drain context exists."
+    throw "No reviewed $Environment legacy-drain context exists."
   }
   if ($ExpectedPlanSha256 -notmatch "^[a-fA-F0-9]{64}$") {
     throw "The exact reviewed context checksum is required."
   }
   $hash = (Get-FileHash -LiteralPath $contextPath -Algorithm SHA256).Hash.ToLowerInvariant()
   if ($hash -ne $ExpectedPlanSha256.ToLowerInvariant()) {
-    throw "The staging legacy-drain context checksum differs from the reviewed checksum."
+    throw "The $Environment legacy-drain context checksum differs from the reviewed checksum."
   }
   $context = Get-Content -LiteralPath $contextPath -Raw | ConvertFrom-Json
   if (
-    [string]$context.Schema -ne "applydash.staging.legacy-temporal-drain.v3" -or
-    [string]$context.Environment -ne "staging" -or [string]$context.Region -ne "us-east-2" -or
+    [string]$context.Schema -ne $expectedContextSchema -or
+    [string]$context.Environment -ne $Environment -or [string]$context.Region -ne "us-east-2" -or
     [string]$context.RuntimeBoundary -ne $RuntimeBoundary -or
     [string]$context.RuntimeBoundary -notin @("PreCutover", "PostCutover") -or
     [int]$context.ExpectedPendingCount -lt $minimumPendingCount -or
@@ -635,7 +649,7 @@ function Get-Context {
     $context.EcsServiceCapacityChange -isnot [bool] -or [bool]$context.EcsServiceCapacityChange -or
     $context.EventTargetRewrite -isnot [bool] -or [bool]$context.EventTargetRewrite
   ) {
-    throw "The reviewed staging legacy-drain context is outside its safety contract."
+    throw "The reviewed $Environment legacy-drain context is outside its safety contract."
   }
   return $context
 }
@@ -675,7 +689,7 @@ function Assert-SameBoundary {
     ($Expected | ConvertTo-Json -Depth 40 -Compress) -cne
     ($Actual | ConvertTo-Json -Depth 40 -Compress)
   ) {
-    throw "The staging legacy runtime boundary changed after review."
+    throw "The $Environment legacy runtime boundary changed after review."
   }
 }
 
@@ -693,7 +707,7 @@ function Stop-ReviewedTask {
   if ([string]$task.lastStatus -ne "STOPPED") {
     $null = Invoke-AwsJson @(
       "ecs", "stop-task", "--cluster", $clusterName, "--task", $TaskArn,
-      "--reason", "Reviewed bounded staging legacy Temporal drain completed or stopped"
+      "--reason", "Reviewed bounded $Environment legacy Temporal drain completed or stopped"
     ) "The reviewed standalone worker could not be stopped."
   }
   & aws ecs wait tasks-stopped --cluster $clusterName --tasks $TaskArn --no-cli-pager 2>$null
@@ -711,7 +725,7 @@ function Assert-WorkerLogsClean {
   for ($attempt = 0; $attempt -lt 12 -and $messages.Count -eq 0; $attempt++) {
     try {
       $events = Invoke-AwsJson @(
-        "logs", "get-log-events", "--log-group-name", "/ai-job-apply/staging/application",
+        "logs", "get-log-events", "--log-group-name", $applicationLogGroup,
         "--log-stream-name", $stream, "--start-from-head"
       ) "The reviewed worker log stream is unavailable."
       $messages = @($events.events | ForEach-Object { [string]$_.message } | Where-Object { $_ })
@@ -794,7 +808,7 @@ try {
     "Plan" {
       if ($Execute) { throw "Plan does not accept -Execute." }
       if (Test-Path -LiteralPath $contextPath) {
-        throw "A reviewed staging legacy-drain context already exists."
+        throw "A reviewed $Environment legacy-drain context already exists."
       }
       $commit = Get-ReviewableSourceCommit
       $beforeRuntime = Get-LiveRuntime
@@ -813,8 +827,8 @@ try {
       $afterRuntime = Get-LiveRuntime
       Assert-SameBoundary $beforeRuntime.Boundary $afterRuntime.Boundary
       $context = [ordered]@{
-        Schema = "applydash.staging.legacy-temporal-drain.v3"
-        Environment = "staging"
+        Schema = $expectedContextSchema
+        Environment = $Environment
         Region = $Region
         RuntimeBoundary = $RuntimeBoundary
         CreatedAt = [DateTime]::UtcNow.ToString("o")
@@ -836,7 +850,7 @@ try {
       }
       $hash = Save-Context $context
       [ordered]@{
-        Environment = "staging"
+        Environment = $Environment
         Action = "review"
         RuntimeBoundary = $RuntimeBoundary
         SourceCommit = $commit
@@ -897,7 +911,7 @@ try {
       Assert-SameBoundary $context.Boundary $finalRuntime.Boundary
       Remove-Item -LiteralPath $contextPath -Force
       [ordered]@{
-        Environment = "staging"
+        Environment = $Environment
         Result = "passed"
         RuntimeBoundary = $RuntimeBoundary
         ReviewedLegacyRecords = [int]$context.ExpectedPendingCount
@@ -919,12 +933,12 @@ try {
       if (-not $Execute) { throw "Cleanup requires -Execute." }
       $context = Get-Context
       $caller = Invoke-AwsJson @("sts", "get-caller-identity") `
-        "Refresh the staging IAM Identity Center session."
+        "Refresh the $Environment IAM Identity Center session."
       if (
         (Get-Sha256Text ([string]$caller.Account)) -ne
           [string]$context.Boundary.AccountSha256
       ) {
-        throw "Cleanup is not running in the reviewed staging account."
+        throw "Cleanup is not running in the reviewed $Environment account."
       }
       $tasks = @(
         @(Get-StandaloneTaskArns "RUNNING") + @(Get-StandaloneTaskArns "PENDING") |
@@ -944,7 +958,7 @@ try {
       }
       Remove-Item -LiteralPath $contextPath -Force
       [ordered]@{
-        Environment = "staging"
+        Environment = $Environment
         Action = "cleanup"
         RuntimeBoundary = $RuntimeBoundary
         ReviewedTasksStopped = $tasks.Count
