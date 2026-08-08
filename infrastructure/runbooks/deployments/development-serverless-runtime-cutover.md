@@ -72,6 +72,26 @@ Then run the development `lambda-cutover` conformance and repeat:
 Record only aggregate evidence; never retain candidate values, tokens, identities, raw responses,
 or infrastructure secrets.
 
+### Corrected workflow release and bounded terminal drain
+
+If the post-workload zero-work gate finds historical unacknowledged
+`profile.readiness.calculated.v1` records from the older development workflow artifact, do not
+delete or retarget them. With public testing paused, use
+`operate-development-legacy-temporal-drain.ps1 -RuntimeBoundary PostCutover` to create an
+identifier-free, checksum-reviewed drain context. After explicit checksum authorization, run one
+bounded retained Temporal worker task to acknowledge only that exact reviewed batch and return the
+cluster to zero tasks.
+
+Publish the current merged workflow artifact set and plan it through
+`plan-development-serverless-runtime-cutover.ps1 -Action PlanWorkflowRelease`. The accepted plan
+must match the staging-proven live workflow boundary: 13 in-place workflow updates plus the
+policy-hash-keyed propagation-gate replacement, with no API route, gateway, trigger-state, ECS
+capacity, secret, persistent-data, or unrelated changes. Apply only its explicitly authorized
+checksum through `operate-development-gateway-runtime-release.ps1`, require immediate completed
+runtime zero drift, then repeat the authenticated workflow, fixed workload, and exact-window AWS
+inspection. New terminal result events must be inserted as already acknowledged because Phase 0
+has no downstream subscriber for them.
+
 ## Rollback and restoration
 
 Use the same ordered boundary already accepted in staging. Start from a fresh current-source

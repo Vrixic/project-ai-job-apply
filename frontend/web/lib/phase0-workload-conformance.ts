@@ -10,7 +10,6 @@ const livenessRequests = 200;
 const readinessRequests = 200;
 const unauthorizedRequests = 100;
 const workflowAttempts = 25;
-const publicConcurrency = 5;
 const requestTimeoutMilliseconds = 15_000;
 const workflowTimeoutMilliseconds = 60_000;
 const operationIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -27,6 +26,7 @@ interface WorkloadDependencies {
   enabled: boolean;
   fetch: typeof globalThis.fetch;
   now?: () => number;
+  publicConcurrency: number;
   sleep?: (milliseconds: number) => Promise<void>;
 }
 
@@ -113,7 +113,7 @@ async function runPublicBatch(
   let failures = 0;
   let nextIndex = 0;
   await Promise.all(
-    Array.from({ length: publicConcurrency }, async () => {
+    Array.from({ length: dependencies.publicConcurrency }, async () => {
       while (true) {
         const index = nextIndex;
         nextIndex += 1;
@@ -216,16 +216,27 @@ async function waitForOperation(
   return false;
 }
 
-export function isStagingWorkloadConformanceEnabled(
+export function isPhase0WorkloadConformanceEnabled(
   environment: Record<string, string | undefined> = process.env,
 ): boolean {
   return (
     environment.NODE_ENV === "development" &&
-    environment.ENABLE_STAGING_WORKLOAD_CONFORMANCE === "1"
+    environment.ENABLE_PHASE0_WORKLOAD_CONFORMANCE === "1" &&
+    ["development", "staging"].includes(environment.PHASE0_WORKLOAD_ENVIRONMENT ?? "")
   );
 }
 
-export async function runStagingFoundationWorkload(
+export function phase0WorkloadPublicConcurrency(environment: string | undefined): number {
+  if (environment === "development") {
+    return 2;
+  }
+  if (environment === "staging") {
+    return 5;
+  }
+  return 0;
+}
+
+export async function runPhase0FoundationWorkload(
   request: Request,
   dependencies: WorkloadDependencies,
 ): Promise<Response> {
@@ -245,7 +256,7 @@ export async function runStagingFoundationWorkload(
     return response(400, "confirmation_required", "Explicit workload confirmation is required");
   }
   if (workloadInProgress) {
-    return response(409, "already_running", "A staging workload is already running");
+    return response(409, "already_running", "The Phase 0 workload is already running");
   }
   const baseUrl = platformBaseUrl(dependencies.baseUrl);
   if (!baseUrl) {
@@ -378,7 +389,7 @@ export async function runStagingFoundationWorkload(
       }
     }
 
-    return response(200, "passed", "The Phase 0 staging workload passed", {
+    return response(200, "passed", "The Phase 0 workload passed", {
       profile: "phase0_staging_foundation_v1",
       startedAt,
       endedAt: new Date().toISOString(),
@@ -395,7 +406,7 @@ export async function runStagingFoundationWorkload(
       workflowPropagation: latencySummary(propagationLatencies),
     });
   } catch {
-    return response(503, "workload_inconclusive", "The staging workload could not be completed");
+    return response(503, "workload_inconclusive", "The Phase 0 workload could not be completed");
   } finally {
     workloadInProgress = false;
   }

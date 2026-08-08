@@ -58,6 +58,9 @@ const developmentWorkloadInspectorWrapper = read(
   "scripts/inspect-development-workload-and-cost.ps1",
 );
 const stagingLegacyTemporalDrain = read("scripts/operate-staging-legacy-temporal-drain.ps1");
+const developmentLegacyTemporalDrainWrapper = read(
+  "scripts/operate-development-legacy-temporal-drain.ps1",
+);
 const gatewayConformanceLauncher = read("scripts/start-deployed-web-conformance.ps1");
 const gatewayBoundaryOperator = read("scripts/verify-gateway-lambda-boundary.ps1");
 const developmentGatewayBoundaryWrapper = read(
@@ -757,10 +760,13 @@ for (const expected of [
 }
 
 for (const expected of [
+  '[ValidateSet("development", "staging")]',
   '[ValidateSet("Plan", "Execute", "Cleanup")]',
   '[ValidateSet("PreCutover", "PostCutover")]',
-  '"applydash.staging.legacy-temporal-drain.v3"',
-  '"staging-legacy-temporal-drain"',
+  '"applydash.$Environment.legacy-temporal-drain.v3"',
+  '"$Environment-legacy-temporal-drain"',
+  '"ai-job-apply/$Environment/temporal-api-key"',
+  '"/ai-job-apply/$Environment/application"',
   '"inspect-deployed-outbox.ps1"',
   "--require-zero-open-workflows",
   "$minimumPendingCount = 1",
@@ -792,7 +798,17 @@ for (const expected of [
   requireText(
     stagingLegacyTemporalDrain,
     expected,
-    `The guarded staging legacy-drain operator is missing required boundary text: ${expected}`,
+    `The guarded environment-aware legacy-drain operator is missing required boundary text: ${expected}`,
+  );
+}
+for (const expected of [
+  'Environment        = "development"',
+  '"operate-staging-legacy-temporal-drain.ps1"',
+]) {
+  requireText(
+    developmentLegacyTemporalDrainWrapper,
+    expected,
+    `The development legacy-drain wrapper is missing: ${expected}`,
   );
 }
 assert.ok(
@@ -923,8 +939,9 @@ for (const [source, environment, label] of [
   );
 }
 for (const expected of [
-  '"PlanOutboxProducerKms", "Verify", "VerifyOutboxProducerKms"',
+  '"PlanWorkflowRelease", "PlanOutboxProducerKms", "Verify", "VerifyOutboxProducerKms"',
   '"PlanRuntimeCutover"',
+  '"AllowRuntimeArtifactReleaseUpdate"',
   '"AllowDarkOutboxProducerKmsUpdate"',
   '"VerifyCompletedDarkOutboxProducerKmsUpdate"',
   '"VerifyCompletedRuntimeCutover"',

@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  isStagingWorkloadConformanceEnabled,
-  runStagingFoundationWorkload,
-} from "./staging-workload-conformance";
+  isPhase0WorkloadConformanceEnabled,
+  phase0WorkloadPublicConcurrency,
+  runPhase0FoundationWorkload,
+} from "./phase0-workload-conformance";
 
 const appBaseUrl = "http://localhost:3000";
 const baseUrl = "https://staging.example.test";
@@ -25,33 +26,57 @@ function dependencies(fetch: typeof globalThis.fetch, enabled = true) {
     baseUrl,
     enabled,
     fetch,
+    publicConcurrency: 5,
     sleep: async () => undefined,
   };
 }
 
-describe("staging workload conformance", () => {
-  it("requires both development mode and the explicit workload switch", () => {
+describe("Phase 0 workload conformance", () => {
+  it("requires development mode, an explicit workload switch, and an isolated environment", () => {
     expect(
-      isStagingWorkloadConformanceEnabled({
-        ENABLE_STAGING_WORKLOAD_CONFORMANCE: "1",
+      isPhase0WorkloadConformanceEnabled({
+        ENABLE_PHASE0_WORKLOAD_CONFORMANCE: "1",
         NODE_ENV: "development",
+        PHASE0_WORKLOAD_ENVIRONMENT: "development",
       }),
     ).toBe(true);
-    expect(isStagingWorkloadConformanceEnabled({ NODE_ENV: "development" })).toBe(false);
     expect(
-      isStagingWorkloadConformanceEnabled({
-        ENABLE_STAGING_WORKLOAD_CONFORMANCE: "1",
+      isPhase0WorkloadConformanceEnabled({
+        ENABLE_PHASE0_WORKLOAD_CONFORMANCE: "1",
+        NODE_ENV: "development",
+        PHASE0_WORKLOAD_ENVIRONMENT: "staging",
+      }),
+    ).toBe(true);
+    expect(isPhase0WorkloadConformanceEnabled({ NODE_ENV: "development" })).toBe(false);
+    expect(
+      isPhase0WorkloadConformanceEnabled({
+        ENABLE_PHASE0_WORKLOAD_CONFORMANCE: "1",
         NODE_ENV: "production",
+        PHASE0_WORKLOAD_ENVIRONMENT: "staging",
+      }),
+    ).toBe(false);
+    expect(
+      isPhase0WorkloadConformanceEnabled({
+        ENABLE_PHASE0_WORKLOAD_CONFORMANCE: "1",
+        NODE_ENV: "development",
+        PHASE0_WORKLOAD_ENVIRONMENT: "production",
       }),
     ).toBe(false);
   });
 
+  it("matches the reviewed gateway concurrency ceiling for each isolated environment", () => {
+    expect(phase0WorkloadPublicConcurrency("development")).toBe(2);
+    expect(phase0WorkloadPublicConcurrency("staging")).toBe(5);
+    expect(phase0WorkloadPublicConcurrency("production")).toBe(0);
+    expect(phase0WorkloadPublicConcurrency(undefined)).toBe(0);
+  });
+
   it("fails closed before traffic when disabled or unconfirmed", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>();
-    const disabled = await runStagingFoundationWorkload(request(), dependencies(fetch, false));
+    const disabled = await runPhase0FoundationWorkload(request(), dependencies(fetch, false));
     expect(disabled.status).toBe(404);
 
-    const unconfirmed = await runStagingFoundationWorkload(
+    const unconfirmed = await runPhase0FoundationWorkload(
       request("wrong-confirmation"),
       dependencies(fetch),
     );
@@ -66,7 +91,7 @@ describe("staging workload conformance", () => {
       headers: { "content-type": "application/json", origin: "https://other.example.test" },
       body: JSON.stringify({ confirmation: "run-phase0-staging-foundation-workload-v1" }),
     });
-    const result = await runStagingFoundationWorkload(invalid, dependencies(fetch));
+    const result = await runPhase0FoundationWorkload(invalid, dependencies(fetch));
     expect(result.status).toBe(403);
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -110,7 +135,7 @@ describe("staging workload conformance", () => {
       return Response.json({ state: "unexpected" }, { status: 500 });
     });
 
-    const result = await runStagingFoundationWorkload(request(), dependencies(fetch));
+    const result = await runPhase0FoundationWorkload(request(), dependencies(fetch));
     expect(result.status).toBe(200);
     const body = await result.json();
     expect(body).toMatchObject({

@@ -6,7 +6,7 @@ import {
   isCrossUserIsolationConformanceEnabled,
   isDarkLambdaIsolationConformanceEnabled,
 } from "../lib/cross-user-isolation-conformance";
-import { isStagingWorkloadConformanceEnabled } from "../lib/staging-workload-conformance";
+import { isPhase0WorkloadConformanceEnabled } from "../lib/phase0-workload-conformance";
 import { FoundationForm } from "./foundation-form";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +33,7 @@ export default async function FoundationPage({
       authenticationFailed={parameters.auth_error === "authentication_failed"}
       crossUserProbeArmed={Boolean(cookieStore?.get(CROSS_USER_PROBE_COOKIE_NAME))}
       darkLambdaIsolationConformanceEnabled={darkLambdaIsolationConformanceEnabled}
-      workloadConformanceEnabled={isStagingWorkloadConformanceEnabled()}
+      workloadConformanceEnabled={isPhase0WorkloadConformanceEnabled()}
       {...displayName}
     />
   );
