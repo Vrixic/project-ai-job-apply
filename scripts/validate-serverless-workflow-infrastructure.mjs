@@ -210,6 +210,8 @@ for (const expected of [
   "The retired environment has Terraform drift.",
   "ProtectedRouteAnonymousStatus = 401",
   "LegacyRuntimeRetired = $true",
+  "$cluster = $prefix",
+  '"apigatewayv2", "get-apis"',
 ]) {
   requireText(
     legacyRetirementOperator,
@@ -220,6 +222,14 @@ for (const expected of [
 assert.ok(
   !legacyRetirementOperator.includes("^{commit}"),
   "The Windows retirement operator must not use caret revision syntax for baseline resolution.",
+);
+assert.ok(
+  !legacyRetirementOperator.includes('$cluster = "$prefix-cluster"'),
+  "Retirement verification must use the exact retained ECS cluster name.",
+);
+assert.ok(
+  !legacyRetirementOperator.includes("output -raw gateway_url"),
+  "Retirement API verification must use the selected SSO profile rather than implicit Terraform credentials.",
 );
 for (const address of [
   "module.platform.aws_apigatewayv2_integration.gateway[0]",

@@ -312,12 +312,13 @@ function Invoke-WithCredentials {
 
 function Assert-PublicApi {
   param([object]$Plan)
-  $api = @($Plan.planned_values.root_module.child_modules.resources | Where-Object { $_.address -eq "" })
-  $output = & terraform "-chdir=$environmentDirectory" output -raw gateway_url 2>$null
-  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace(($output -join ""))) {
+  $apiName = "ai-job-apply-$Environment-gateway"
+  $apis = @(Invoke-AwsJson @("apigatewayv2", "get-apis") "The retained API endpoint could not be resolved.").Items
+  $api = @($apis | Where-Object { [string]$_.Name -eq $apiName })
+  if ($api.Count -ne 1 -or [string]::IsNullOrWhiteSpace([string]$api[0].ApiEndpoint)) {
     throw "The retained API endpoint could not be resolved."
   }
-  $gatewayUrl = ($output -join "").TrimEnd('/')
+  $gatewayUrl = ([string]$api[0].ApiEndpoint).TrimEnd('/')
   foreach ($path in @("/health/live", "/health/ready")) {
     try { $response = Invoke-WebRequest -UseBasicParsing -Uri "$gatewayUrl$path" -TimeoutSec 20 }
     catch { throw "The retained Lambda API failed $path." }
@@ -334,7 +335,7 @@ function Assert-PublicApi {
 
 function Assert-RetiredLiveResources {
   $prefix = "ai-job-apply-$Environment"
-  $cluster = "$prefix-cluster"
+  $cluster = $prefix
   $services = @(Invoke-AwsJson @("ecs", "list-services", "--cluster", $cluster) "The ECS cluster could not be inspected.").serviceArns
   if (@($services | Where-Object { $_ -match '/(gateway|workflow-worker)$' }).Count -ne 0) {
     throw "A legacy ECS service still exists."
