@@ -79,6 +79,13 @@ obsolete ingress security group, while narrowing remaining secret policies.
 Review the full plan independently. Apply only the exact authorized SHA-256. Secrets Manager may
 retain the deleted secret through its configured recovery window; do not force immediate deletion.
 
+If AWS applies part of the plan but an historical application ingress rule blocks deletion of the
+obsolete ingress group, do not replay the consumed plan or remove the rule manually. Merge the
+explicit-empty-ingress source boundary, then run `PlanCleanupRecovery` with both retirement
+confirmations. Its saved plan must contain exactly one application-security-group update that
+removes the historical TCP/4000 source-group rule and one deletion of the obsolete ingress group.
+Review and apply only that recovery plan's exact SHA-256.
+
 ## 7. Verify and finish source cleanup
 
 Run `Verify` with the accepted migration digest. Require zero Terraform drift, healthy public

@@ -377,6 +377,11 @@ resource "aws_route_table_association" "private" {
 resource "aws_security_group" "application" {
   name_prefix = "${var.name}-${var.environment}-app-"
   vpc_id      = aws_vpc.this.id
+
+  # Lambda functions only initiate connections. Keep this explicit so Terraform removes any
+  # historical inline ingress rule instead of treating omitted ingress as unmanaged.
+  ingress = []
+
   egress {
     from_port   = 0
     to_port     = 0
