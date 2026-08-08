@@ -504,14 +504,25 @@ if ($Action -eq "PurgeLegacyImages") {
     if ($ids.Count -gt 0) {
       $temporary = Join-Path ([IO.Path]::GetTempPath()) "applydash-ecr-$([guid]::NewGuid().ToString('N')).json"
       try {
-        $payload = @{ imageIds = $ids } | ConvertTo-Json -Depth 10
+        $payload = @{ repositoryName = $repositoryName; imageIds = $ids } | ConvertTo-Json -Depth 10
         [IO.File]::WriteAllText($temporary, $payload, (New-Object Text.UTF8Encoding($false)))
-        $null = & aws ecr batch-delete-image --profile $AwsProfile --region $Region --repository-name $repositoryName `
-          --image-ids "file://$temporary" --no-cli-pager --output json 2>$null
-        if ($LASTEXITCODE -ne 0) { throw "The exact legacy image purge failed." }
+        $responseRaw = & aws ecr batch-delete-image --profile $AwsProfile --region $Region `
+          --cli-input-json "file://$temporary" --no-cli-pager --output json 2>$null
+        if ($LASTEXITCODE -ne 0 -or -not $responseRaw) { throw "The exact legacy image purge failed." }
+        try { $response = ($responseRaw -join [Environment]::NewLine) | ConvertFrom-Json }
+        catch { throw "The exact legacy image purge response could not be inspected." }
+        if (@(Get-OptionalArray $response "failures").Count -ne 0) {
+          throw "The exact legacy image purge reported a failed manifest deletion."
+        }
       } finally {
         if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
       }
+    }
+    $remaining = Invoke-AwsJson @(
+      "ecr", "list-images", "--repository-name", $repositoryName, "--filter", "tagStatus=ANY"
+    ) "The exact legacy repository could not be verified after purge."
+    if (@(Get-OptionalArray $remaining "imageIds").Count -ne 0) {
+      throw "The exact legacy repository still contains images after purge."
     }
   }
   [pscustomobject]@{ Environment = $Environment; Action = "legacy_images_purged"; Repositories = 2 } | ConvertTo-Json -Compress
