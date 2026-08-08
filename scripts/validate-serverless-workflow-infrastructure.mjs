@@ -50,6 +50,7 @@ for (const required of [
   "scan_on_push = true",
   'resource "aws_ecs_task_definition" "migration"',
   "aws_ecr_repository.migration.repository_url",
+  'command                = ["dist/src/migrate.js"]',
   'OUTBOX_DISPATCH_TARGET = "lambda_durable"',
   "count              = var.serverless_runtime_enabled ? 1 : 0",
   'authorization_type = "JWT"',
@@ -71,6 +72,7 @@ for (const retired of [
   'resource "aws_ecr_repository" "worker"',
   "OUTBOX_DISPATCH_TARGET = var.",
   '"temporal"',
+  'command                = ["backend/services/profile/dist/src/migrate.js"]',
 ]) {
   forbidText(platform, retired, `retired runtime source remains: ${retired}`);
 }
@@ -260,7 +262,11 @@ for (const required of [
 ]) {
   if (!existsSync(resolve(root, required))) failures.push(`${required}: required file is missing`);
 }
-for (const required of ["deploy --prod --legacy /migration", "USER 65532:65532"]) {
+for (const required of [
+  "deploy --prod --legacy /migration",
+  "USER 65532:65532",
+  'CMD ["dist/src/migrate.js"]',
+]) {
   requireText(
     "Dockerfile.migration",
     required,
