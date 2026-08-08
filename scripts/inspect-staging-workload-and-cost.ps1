@@ -52,7 +52,7 @@ if ($Region -ne "us-east-2") {
 $runtimeOperator = if ($Environment -eq "staging") {
   Join-Path $PSScriptRoot "operate-staging-gateway-runtime-release.ps1"
 } else {
-  Join-Path $PSScriptRoot "operate-development-serverless-runtime-cutover.ps1"
+  Join-Path $PSScriptRoot "operate-development-gateway-runtime-release.ps1"
 }
 $applicationLogGroup = "/ai-job-apply/$Environment/application"
 

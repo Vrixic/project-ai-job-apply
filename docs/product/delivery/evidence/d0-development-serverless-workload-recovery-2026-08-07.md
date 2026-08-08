@@ -3,7 +3,7 @@
 Date: 2026-08-07
 Delivery: D0-016 / SR-005 / SR-007
 Environment: isolated development in `us-east-2`
-Status: Public/authenticated workload and ownership isolation pass; terminal-outbox recovery and corrected workflow release remain required
+Status: Drain and corrected workflow release pass; final aggregate AWS corroboration remains required
 
 ## Accepted browser evidence
 
@@ -82,17 +82,44 @@ alias lookup received a dictionary and AWS rejected it. The local value is now n
 `$workerEnvironment`, and policy validation forbids reintroducing the case-insensitive shadow.
 No inspection task, drain worker, product-record transition, or persistent AWS change occurred.
 
+## Reviewed recovery and release execution
+
+The product owner authorized the identifier-free drain plan with checksum
+`10c51c74f14c2fec661b92b8bf57143eee787b4a80150ff95e03e837ecca7679`.
+The bounded execution transitioned exactly 29 reviewed terminal rows, left zero outbox rows and
+zero running Temporal workflows, stopped its one temporary retained worker, emitted one startup
+and zero worker-error records, removed its ignored context, and changed no public traffic, trigger,
+ECS service capacity, or event target.
+
+GitHub Actions then reproducibly built, audited, and published three immutable workflow artifacts
+from merged commit `c4e72526eb6ddd77aa13067438074398899a02f6` with versioned KMS-encrypted
+objects, manifests, checksums, and CycloneDX SBOMs. The independently inspected release plan
+contained only 13 in-place workflow updates and replacement of the Terraform IAM-propagation gate.
+The product owner authorized checksum
+`eae2a092aab030d08dc1da551af4bec5bc74f38366e5f97d51612b990d3ed8f0`; apply and
+the automatic refreshed verifier passed with Lambda durable dispatch, enabled triggers, idle ECS,
+and zero drift. An initial invocation through the historical cutover-only operator failed before
+mutation; the existing runtime-maintenance operator accepted and applied the unchanged reviewed
+plan.
+
+## Corrected-artifact browser replay
+
+The product owner repeated authenticated saving and cross-user isolation against the corrected
+development release. The fixed workload ran from `2026-08-08T02:16:04.990Z` through
+`2026-08-08T02:16:41.000Z`: all 500 public probes passed, all 25 workflows succeeded, and the
+idempotent replay matched. Liveness/readiness `p95` were 81/73 ms, write `p95` was 154 ms, and
+workflow propagation `p95` was 807 ms.
+
+Before aggregate AWS corroboration, the shared inspector failed closed locally because its
+development selector still invoked the initial-cutover operator, which cannot accept a guarded
+post-cutover maintenance plan. The selector now targets the existing development runtime-maintenance
+operator and policy validation rejects regression. No AWS inspection or mutation occurred from
+that failed local selection.
+
 ## Required recovery sequence
 
-1. Merge the locally verified recovery/conformance source.
-2. From exact merged `main`, plan the identifier-free 29-record post-cutover development drain.
-3. Obtain explicit product-owner authorization for that exact context checksum.
-4. Run one bounded retained Temporal worker, prove zero pending/open work, and return ECS to zero
-   tasks without retargeting or deleting records.
-5. Publish the current merged workflow artifacts to development.
-6. Generate and independently review the exact 13-update/one-gate workflow release plan.
-7. Obtain explicit authorization for its checksum and apply only that saved plan.
-8. Repeat persistence, durable completion, the fixed workload, zero-work inspection, aggregate AWS
-   measurement, and refresh-backed zero drift.
+1. Merge the locally verified aggregate-inspector selector correction.
+2. Run the exact-window zero-work, alarm, queue, log, aggregate AWS, and cost measurement.
+3. Preserve its refresh-backed zero-drift evidence and update the Phase 0 delivery records.
 
-Development cutover acceptance remains open until all eight steps pass.
+Development cutover acceptance remains open until all three remaining steps pass.
