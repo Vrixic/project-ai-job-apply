@@ -687,7 +687,7 @@ for (const expected of [
 for (const expected of [
   '[ValidateSet("development", "staging")]',
   '"operate-staging-gateway-runtime-release.ps1"',
-  '"operate-development-serverless-runtime-cutover.ps1"',
+  '"operate-development-gateway-runtime-release.ps1"',
   "-Action Verify -ExpectedAccountId $ExpectedAccountId",
   '"AWS/Lambda" "Invocations"',
   '"AWS/Lambda" "Errors"',
@@ -744,6 +744,16 @@ for (const expected of [
     `The development workload inspector wrapper is missing: ${expected}`,
   );
 }
+requireText(
+  stagingWorkloadInspector,
+  '"operate-development-gateway-runtime-release.ps1"',
+  "The shared workload inspector must verify development maintenance releases with the runtime-maintenance operator.",
+);
+assert.equal(
+  stagingWorkloadInspector.includes('"operate-development-serverless-runtime-cutover.ps1"'),
+  false,
+  "The workload inspector must not send development maintenance plans to the initial-cutover operator.",
+);
 
 for (const expected of [
   "$expectedTerminalRuleState = if ($AllowRuntimeArtifactReleaseUpdate)",
