@@ -1,64 +1,6 @@
-variable "gateway_image" {
-  type    = string
-  default = ""
-}
-
-variable "worker_image" {
-  type    = string
-  default = ""
-}
-
 variable "migration_image" {
   type    = string
   default = ""
-}
-
-variable "gateway_desired_count" {
-  type    = number
-  default = 1
-}
-
-variable "gateway_cpu" {
-  type    = number
-  default = 256
-}
-
-variable "gateway_memory" {
-  type    = number
-  default = 512
-}
-
-variable "worker_desired_count" {
-  type    = number
-  default = 1
-}
-
-variable "run_continuous_ecs_runtime" {
-  description = "Run the legacy gateway and Temporal worker continuously. Synthetic staging defaults to the accepted zero-traffic idle posture."
-  type        = bool
-  default     = false
-}
-
-variable "retain_legacy_ecs_rollback" {
-  description = "Retain the stopped legacy ECS/Cloud Map/VPC Link rollback path. False after the recorded rollback-window expiry."
-  type        = bool
-  default     = false
-}
-
-variable "legacy_ecs_rollback_expired_at" {
-  description = "UTC time at which the staging legacy ECS rollback window was explicitly expired."
-  type        = string
-  default     = "2026-08-08T02:56:32.831Z"
-}
-
-variable "worker_cpu" {
-  type    = number
-  default = 512
-}
-
-variable "worker_memory" {
-  type    = number
-  default = 1024
 }
 
 variable "high_availability" {
@@ -105,16 +47,6 @@ variable "oidc_issuer" {
 variable "oidc_audience" {
   type    = string
   default = "ai-job-apply-api"
-}
-
-variable "temporal_address" {
-  type    = string
-  default = ""
-}
-
-variable "temporal_namespace" {
-  type    = string
-  default = ""
 }
 
 variable "deploy_applications" {
@@ -187,12 +119,7 @@ variable "workflow_ingress_lambda_extension_layer_arn" {
   default = ""
 }
 
-variable "serverless_runtime_cutover" {
-  type    = bool
-  default = false
-}
-
-variable "retain_gateway_lambda_integration_during_rollback" {
+variable "serverless_runtime_enabled" {
   type    = bool
   default = false
 }

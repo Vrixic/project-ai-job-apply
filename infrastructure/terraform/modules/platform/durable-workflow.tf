@@ -407,7 +407,7 @@ resource "aws_cloudwatch_event_rule" "profile_readiness_terminal" {
   count       = var.deploy_profile_readiness_durable ? 1 : 0
   name        = local.profile_readiness_terminal_rule_name
   description = "Exact durable terminal states; disabled until the reviewed serverless cutover"
-  state       = var.serverless_runtime_cutover ? "ENABLED" : "DISABLED"
+  state       = var.serverless_runtime_enabled ? "ENABLED" : "DISABLED"
   event_pattern = jsonencode({
     source      = ["aws.lambda"]
     detail-type = ["Durable Execution Status Change"]

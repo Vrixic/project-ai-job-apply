@@ -61,13 +61,8 @@ run "durable_boundary_is_dark_encrypted_and_replay_safe" {
     environment = "development"
     vpc_cidr    = "10.20.0.0/16"
 
-    gateway_image              = "example.invalid/gateway@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    worker_image               = "example.invalid/worker@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-    oidc_issuer                = "https://example.auth0.com/"
-    temporal_address           = "example.tmprl.cloud:7233"
-    temporal_namespace         = "example.tmprl.cloud"
-    deploy_applications        = true
-    run_continuous_ecs_runtime = false
+    oidc_issuer         = "https://example.auth0.com/"
+    deploy_applications = true
 
     deploy_profile_readiness_durable                      = true
     profile_readiness_durable_artifact_s3_key             = "lambda/profile/durable.zip"
@@ -109,57 +104,4 @@ run "durable_boundary_is_dark_encrypted_and_replay_safe" {
     error_message = "Dark terminal recovery must remain disabled until a separately reviewed cutover."
   }
 
-  assert {
-    condition = (
-      aws_ecs_service.gateway[0].desired_count == 0 &&
-      aws_ecs_service.worker[0].desired_count == 0
-    )
-    error_message = "The accepted zero-traffic posture must retain both ECS services at zero desired tasks."
-  }
-
-  assert {
-    condition = (
-      !aws_cloudwatch_metric_alarm.gateway_log_heartbeat_missing[0].actions_enabled &&
-      aws_cloudwatch_metric_alarm.gateway_log_heartbeat_missing[0].treat_missing_data == "notBreaching" &&
-      !aws_cloudwatch_metric_alarm.worker_log_heartbeat_missing[0].actions_enabled &&
-      aws_cloudwatch_metric_alarm.worker_log_heartbeat_missing[0].treat_missing_data == "notBreaching"
-    )
-    error_message = "Idle ECS heartbeat alarms must be non-notifying and treat expected silence as healthy."
-  }
-
-}
-
-run "continuous_ecs_runtime_remains_the_module_default" {
-  command = plan
-
-  variables {
-    name        = "ai-job-apply"
-    environment = "development"
-    vpc_cidr    = "10.20.0.0/16"
-
-    gateway_image       = "example.invalid/gateway@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    worker_image        = "example.invalid/worker@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-    oidc_issuer         = "https://example.auth0.com/"
-    temporal_address    = "example.tmprl.cloud:7233"
-    temporal_namespace  = "example.tmprl.cloud"
-    deploy_applications = true
-  }
-
-  assert {
-    condition = (
-      aws_ecs_service.gateway[0].desired_count == 1 &&
-      aws_ecs_service.worker[0].desired_count == 1
-    )
-    error_message = "The reusable platform module must still require an explicit environment decision to idle ECS."
-  }
-
-  assert {
-    condition = (
-      aws_cloudwatch_metric_alarm.gateway_log_heartbeat_missing[0].actions_enabled &&
-      aws_cloudwatch_metric_alarm.gateway_log_heartbeat_missing[0].treat_missing_data == "breaching" &&
-      aws_cloudwatch_metric_alarm.worker_log_heartbeat_missing[0].actions_enabled &&
-      aws_cloudwatch_metric_alarm.worker_log_heartbeat_missing[0].treat_missing_data == "breaching"
-    )
-    error_message = "Continuous ECS heartbeat alarms must remain notifying and fail closed on missing data."
-  }
 }

@@ -26,13 +26,12 @@ It rejects changed paths/versions, stale exceptions, and every unlisted advisory
 Review and CodeQL uploads are not claimed because GitHub code-security services are not enabled for
 this repository.
 
-`publish-environment-images.yml` is a manual, `main`-only release workflow with an explicit
-`development` or `staging` input. Each job assumes only the selected GitHub Environment through
-OIDC, verifies that environment's ECR repositories remain immutable, KMS-encrypted, and
-scan-on-push, publishes gateway and worker images under the exact source commit, waits for ECR
-scanning, and blocks use of images with high or critical findings. Build caches and summaries are
-environment scoped. Its digest-bearing job summaries are deployment evidence; publishing an image
-does not enable an ECS service.
+`publish-environment-images.yml` is a manual, `main`-only database-migration artifact workflow with
+an explicit `development` or `staging` input. It assumes only the selected GitHub Environment,
+verifies `ai-job-apply/migration` remains immutable, KMS-encrypted, and scan-on-push, publishes
+`Dockerfile.migration` under the exact source commit, waits for scanning, and rejects High or
+Critical findings. Its digest-bearing summary is deployment evidence; publishing does not create
+or run a Fargate task.
 
 `publish-gateway-lambda.yml` is the corresponding manual, `main`-only scale-to-zero artifact
 workflow. It tests and audits the gateway, proves two builds have the same ZIP digest, validates

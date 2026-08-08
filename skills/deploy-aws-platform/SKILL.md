@@ -1,6 +1,6 @@
 ---
 name: deploy-aws-platform
-description: Explain, plan, validate, deploy, verify, or troubleshoot the platform's AWS and Temporal infrastructure. Use for Terraform bootstrap or environment questions, GitHub OIDC federation, remote state, ECR images, ECS gateway and worker services, RDS, Redis, SQS or DLQ, S3, KMS, ALB or TLS, secrets, development or staging rollout, rollback, restore evidence, drift, or cloud deployment status.
+description: Explain, plan, validate, deploy, verify, or troubleshoot the platform's AWS infrastructure. Use for Terraform bootstrap, GitHub OIDC, remote state, Lambda/API Gateway, durable workflows, the one-off ECS migration task, RDS, queues, S3, KMS, secrets, development or staging rollout, rollback, restore evidence, drift, cost, or cloud status.
 ---
 
 # Deploy the AWS Platform
@@ -30,18 +30,17 @@ Terraform files as deployed evidence.
 - Confirm AWS account ID, region, caller identity, target environment, and state key.
 - Bootstrap encrypted state and the environment-scoped GitHub OIDC role before environment init.
 - Require an approved managed OIDC issuer/audience and scopes; never enable a test-token bypass.
-- Require Temporal endpoint/namespace and a managed API-key secret.
 - Use the regional API Gateway HTTPS endpoint initially; require an ACM certificate only when a
   reviewed custom domain is activated.
-- Build, test, scan, and push every in-scope immutable gateway/worker/web image reference.
+- Publish gateway and workflow Lambdas as immutable versioned S3 artifacts. Build, scan, and push
+  only the one-off database-migration container to its dedicated ECR repository.
 - Keep secrets in managed secret stores and out of Terraform values, CLI output, plans, and source.
 - Keep `deploy_applications=false` until every application prerequisite validates.
 - Preserve the lean defaults until measured demand or launch review justifies replicas, private
   NAT egress, Redis, Multi-AZ data services, an ALB, or continuously provisioned staging.
-- For the ADR-017 pre-cutover idle posture, keep `deploy_applications=true` so the rollback
-  services and API boundary remain managed. Use only `operate-phase0-ecs-idle-shutdown.ps1` after
-  explicit zero-traffic acceptance, zero pending outbox rows, and zero running Temporal workflows;
-  never scale the services directly in the console or CLI.
+- Treat ADR-017 and the Temporal/ECS cutover operators as historical evidence. Do not restore the
+  retired runtime from current source. Use `serverless_runtime_enabled` as the steady-state public
+  route and workflow-trigger kill switch.
 
 Do not run against an ambiguous account or reuse development state for staging.
 
@@ -68,19 +67,18 @@ exact reviewed plan. Do not apply a newly regenerated unreviewed plan.
 1. Apply bootstrap separately and record outputs securely.
 2. Configure GitHub environment variables and OIDC trust with least privilege.
 3. Apply persistent data/network resources with applications disabled.
-4. Build and push immutable images only after repository verification passes.
+4. Publish immutable Lambda artifacts and the scanned migration-only image after verification.
 5. Plan and apply application enablement.
-6. Verify API Gateway/Cloud Map/gateway health, OIDC authentication, owner isolation, database migration, outbox
-   dispatch, Temporal completion, logs/traces, queues/DLQ, and alarms.
+6. Verify API Gateway/Lambda health, OIDC authentication, owner isolation, database migration,
+   outbox dispatch, durable completion, logs/traces, queues/DLQ, and alarms.
 7. Exercise rollback and restore procedures; retain evidence.
 8. Update delivery records only with links to the actual plan, deployment, health, and restore
    evidence.
 
-When an accepted zero-traffic environment is intentionally idled before cutover, require separate
-development/staging plan checksums, exactly two service desired-count plus two heartbeat-alarm
-updates, zero creates/deletes/replacements, retained rollback resources, zero running tasks,
-released task public IPs, quiet expected-heartbeat monitoring, and refresh-backed scoped zero
-drift. Expected API unavailability is not a reason to resume ECS automatically.
+For provider retirement, require zero unpublished legacy outbox rows, zero running provider
+workflows, a successful fail-closed migration, explicit external-key revocation evidence, separate
+development/staging Terraform plan checksums, and no deletion of RDS, backups, KMS, artifact
+storage, queues, Lambda runtime, or the one-off migration capability.
 
 Stop and report a blocker when credentials, provider configuration, certificate, immutable
 images, state, or restore authority is absent. Do not insert placeholder values into live

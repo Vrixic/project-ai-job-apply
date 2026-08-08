@@ -17,27 +17,20 @@ permissions:
 
 jobs:
   publish:
-    name: Publish ${{ matrix.name }}
+    name: Publish migration
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: ${{ inputs.environment }}
     concurrency:
-      group: publish-${{ inputs.environment }}-${{ matrix.name }}
+      group: publish-${{ inputs.environment }}-migration
       cancel-in-progress: false
     permissions:
       contents: read
       id-token: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: gateway
-            dockerfile: Dockerfile.gateway
-            repository: ai-job-apply/gateway
-          - name: worker
-            dockerfile: Dockerfile.worker
-            repository: ai-job-apply/worker
+    env:
+      IMAGE_NAME: migration
+      REPOSITORY: ai-job-apply/migration
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -51,12 +44,10 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-2
-          role-session-name: publish-${{ inputs.environment }}-${{ matrix.name }}-${{ github.run_id }}
+          role-session-name: publish-${{ inputs.environment }}-migration-${{ github.run_id }}
           mask-aws-account-id: true
 
       - name: Verify immutable encrypted repository
-        env:
-          REPOSITORY: ${{ matrix.repository }}
         run: |
           set -euo pipefail
           settings="$(aws ecr describe-repositories \
@@ -76,18 +67,16 @@ jobs:
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
-          file: ${{ matrix.dockerfile }}
+          file: Dockerfile.migration
           platforms: linux/amd64
           push: true
-          tags: ${{ steps.ecr.outputs.registry }}/${{ matrix.repository }}:${{ github.sha }}
-          cache-from: type=gha,scope=${{ inputs.environment }}-${{ matrix.name }}
-          cache-to: type=gha,mode=max,scope=${{ inputs.environment }}-${{ matrix.name }}
+          tags: ${{ steps.ecr.outputs.registry }}/${{ env.REPOSITORY }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ inputs.environment }}-migration
+          cache-to: type=gha,mode=max,scope=${{ inputs.environment }}-migration
 
       - name: Wait for ECR scan and enforce severity gate
         env:
           IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
-          IMAGE_NAME: ${{ matrix.name }}
-          REPOSITORY: ${{ matrix.repository }}
           SOURCE_SHA: ${{ github.sha }}
           TARGET_ENVIRONMENT: ${{ inputs.environment }}
         run: |

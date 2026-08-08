@@ -48,18 +48,7 @@ module "platform" {
   name                           = "ai-job-apply"
   environment                    = "staging"
   vpc_cidr                       = "10.30.0.0/16"
-  gateway_image                  = var.gateway_image
-  worker_image                   = var.worker_image
   migration_image                = var.migration_image
-  gateway_desired_count          = var.gateway_desired_count
-  gateway_cpu                    = var.gateway_cpu
-  gateway_memory                 = var.gateway_memory
-  worker_desired_count           = var.worker_desired_count
-  run_continuous_ecs_runtime     = var.run_continuous_ecs_runtime
-  retain_legacy_ecs_rollback     = var.retain_legacy_ecs_rollback
-  legacy_ecs_rollback_expired_at = var.legacy_ecs_rollback_expired_at
-  worker_cpu                     = var.worker_cpu
-  worker_memory                  = var.worker_memory
   high_availability              = var.high_availability
   private_application_networking = var.private_application_networking
   enable_redis                   = var.enable_redis
@@ -69,8 +58,6 @@ module "platform" {
   enable_container_insights      = var.enable_container_insights
   oidc_issuer                    = var.oidc_issuer
   oidc_audience                  = var.oidc_audience
-  temporal_address               = var.temporal_address
-  temporal_namespace             = var.temporal_namespace
   deploy_applications            = var.deploy_applications
   deploy_gateway_lambda          = var.deploy_gateway_lambda
   gateway_lambda_artifact_s3_key = var.gateway_lambda_artifact_s3_key
@@ -81,12 +68,9 @@ module "platform" {
   gateway_lambda_artifact_base64sha256 = var.gateway_lambda_artifact_base64sha256
   gateway_lambda_extension_layer_arn   = var.gateway_lambda_extension_layer_arn
   gateway_lambda_reserved_concurrency  = var.gateway_lambda_reserved_concurrency
-  serverless_runtime_cutover           = var.serverless_runtime_cutover
-  retain_gateway_lambda_integration_during_rollback = (
-    var.retain_gateway_lambda_integration_during_rollback
-  )
-  deploy_serverless_outbox         = var.deploy_serverless_outbox
-  workflow_ingress_artifact_s3_key = var.workflow_ingress_artifact_s3_key
+  serverless_runtime_enabled           = var.serverless_runtime_enabled
+  deploy_serverless_outbox             = var.deploy_serverless_outbox
+  workflow_ingress_artifact_s3_key     = var.workflow_ingress_artifact_s3_key
   workflow_ingress_artifact_s3_object_version = (
     var.workflow_ingress_artifact_s3_object_version
   )

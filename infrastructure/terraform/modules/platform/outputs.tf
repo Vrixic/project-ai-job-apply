@@ -11,16 +11,8 @@ output "artifact_bucket" {
   value = aws_s3_bucket.artifacts.bucket
 }
 
-output "gateway_repository_url" {
-  value = aws_ecr_repository.gateway.repository_url
-}
-
-output "worker_repository_url" {
-  value = aws_ecr_repository.worker.repository_url
-}
-
-output "temporal_api_key_secret_arn" {
-  value = aws_secretsmanager_secret.temporal_api_key.arn
+output "migration_repository_url" {
+  value = aws_ecr_repository.migration.repository_url
 }
 
 output "gateway_url" {
@@ -59,14 +51,6 @@ output "observability_dashboard_name" {
 
 output "alert_delivery_canary_alarm_name" {
   value = aws_cloudwatch_metric_alarm.alert_delivery_canary.alarm_name
-}
-
-output "gateway_log_heartbeat_alarm_name" {
-  value = var.deploy_applications && var.retain_legacy_ecs_rollback ? aws_cloudwatch_metric_alarm.gateway_log_heartbeat_missing[0].alarm_name : null
-}
-
-output "worker_log_heartbeat_alarm_name" {
-  value = var.deploy_applications && var.retain_legacy_ecs_rollback ? aws_cloudwatch_metric_alarm.worker_log_heartbeat_missing[0].alarm_name : null
 }
 
 output "gateway_lambda_alias_arn" {

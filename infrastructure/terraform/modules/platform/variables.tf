@@ -10,139 +10,14 @@ variable "vpc_cidr" {
   type = string
 }
 
-variable "gateway_image" {
-  type    = string
-  default = ""
-
-  validation {
-    condition     = var.gateway_image == "" || can(regex("^.+@sha256:[0-9a-f]{64}$", var.gateway_image))
-    error_message = "Gateway image must be empty or an immutable sha256 digest reference."
-  }
-}
-
-variable "worker_image" {
-  type    = string
-  default = ""
-
-  validation {
-    condition     = var.worker_image == "" || can(regex("^.+@sha256:[0-9a-f]{64}$", var.worker_image))
-    error_message = "Worker image must be empty or an immutable sha256 digest reference."
-  }
-}
-
 variable "migration_image" {
-  description = "Scanned gateway-compatible image used only by the controlled database migration task."
+  description = "Scanned migration-only image used by the controlled one-off database migration task."
   type        = string
   default     = ""
 
   validation {
     condition     = var.migration_image == "" || can(regex("^.+@sha256:[0-9a-f]{64}$", var.migration_image))
     error_message = "Migration image must be empty or an immutable sha256 digest reference."
-  }
-}
-
-variable "gateway_desired_count" {
-  description = "Gateway tasks to run. Keep at one until measured demand or launch review requires more."
-  type        = number
-  default     = 1
-
-  validation {
-    condition     = var.gateway_desired_count >= 1 && floor(var.gateway_desired_count) == var.gateway_desired_count
-    error_message = "Gateway desired count must be a positive integer."
-  }
-}
-
-variable "gateway_cpu" {
-  description = "Fargate CPU units for the gateway task."
-  type        = number
-  default     = 256
-}
-
-variable "gateway_memory" {
-  description = "Fargate memory in MiB for the gateway task."
-  type        = number
-  default     = 512
-}
-
-variable "worker_desired_count" {
-  description = "Workflow-worker tasks to run. Keep at one until queue evidence requires more."
-  type        = number
-  default     = 1
-
-  validation {
-    condition     = var.worker_desired_count >= 1 && floor(var.worker_desired_count) == var.worker_desired_count
-    error_message = "Worker desired count must be a positive integer."
-  }
-}
-
-variable "run_continuous_ecs_runtime" {
-  description = "Run the rollback-only gateway and workflow-worker ECS services continuously. Set false only for an explicitly accepted zero-traffic idle posture."
-  type        = bool
-  default     = true
-
-  validation {
-    condition     = !var.run_continuous_ecs_runtime || var.retain_legacy_ecs_rollback
-    error_message = "Continuous ECS capacity requires the legacy rollback path to remain retained."
-  }
-}
-
-variable "retain_legacy_ecs_rollback" {
-  description = "Retain stopped ECS services/tasks, Cloud Map, VPC Link, HTTP proxy integration, tracing policy, and heartbeat monitoring during the bounded rollback window."
-  type        = bool
-  default     = true
-}
-
-variable "legacy_ecs_rollback_expired_at" {
-  description = "UTC RFC3339 time at which the accepted legacy ECS rollback window expired. Required by the guarded retirement operator when retention is false."
-  type        = string
-  default     = ""
-
-  validation {
-    condition = (
-      var.legacy_ecs_rollback_expired_at == "" ||
-      can(timecmp(var.legacy_ecs_rollback_expired_at, var.legacy_ecs_rollback_expired_at))
-    )
-    error_message = "Legacy ECS rollback expiry must be empty or a valid RFC3339 timestamp."
-  }
-}
-
-variable "worker_cpu" {
-  description = "Fargate CPU units for the workflow-worker task."
-  type        = number
-  default     = 512
-}
-
-variable "worker_memory" {
-  description = "Fargate memory in MiB for the workflow-worker task."
-  type        = number
-  default     = 1024
-}
-
-variable "enable_tracing" {
-  description = "Run one fail-open OpenTelemetry collector sidecar per deployed application task."
-  type        = bool
-  default     = true
-}
-
-variable "otel_collector_image" {
-  description = "AWS-supported ADOT collector pinned to an immutable multi-architecture digest."
-  type        = string
-  default     = "public.ecr.aws/aws-observability/aws-otel-collector@sha256:9b28046359054b414f4ba76056ba4e8cffda2d53fbcee06171d7eeecd71326c3"
-
-  validation {
-    condition     = can(regex("^.+@sha256:[0-9a-f]{64}$", var.otel_collector_image))
-    error_message = "OpenTelemetry collector image must use an immutable sha256 digest reference."
-  }
-}
-
-variable "trace_sample_ratio" {
-  description = "Root trace sampling ratio; development defaults to complete evidence."
-  type        = number
-  default     = 1
-
-  validation {
-    condition     = var.trace_sample_ratio >= 0 && var.trace_sample_ratio <= 1
-    error_message = "Trace sample ratio must be between zero and one."
   }
 }
 
@@ -213,33 +88,14 @@ variable "oidc_audience" {
   }
 }
 
-variable "temporal_address" {
-  type    = string
-  default = ""
-}
-
-variable "temporal_namespace" {
-  type    = string
-  default = ""
-}
-
 variable "deploy_applications" {
-  description = "Must remain false until identity, images, Temporal, and reviews are ready."
+  description = "Provision the public API boundary. Keep false during persistent-infrastructure bootstrap."
   type        = bool
   default     = false
 
   validation {
-    condition = !var.deploy_applications || (
-      var.oidc_issuer != "" && (
-        !var.retain_legacy_ecs_rollback || (
-          var.gateway_image != "" &&
-          var.worker_image != "" &&
-          var.temporal_address != "" &&
-          var.temporal_namespace != ""
-        )
-      )
-    )
-    error_message = "Application deployment requires OIDC; a retained legacy rollback additionally requires immutable images and Temporal."
+    condition     = !var.deploy_applications || var.oidc_issuer != ""
+    error_message = "Application deployment requires the exact OIDC issuer."
   }
 }
 
@@ -345,38 +201,19 @@ variable "deploy_serverless_outbox" {
   }
 }
 
-variable "serverless_runtime_cutover" {
-  description = "Atomically route API traffic and new outbox work to Lambda and enable the replacement workflow triggers."
+variable "serverless_runtime_enabled" {
+  description = "Route API traffic to Lambda and enable the SQS/EventBridge durable-workflow triggers."
   type        = bool
   default     = false
 
   validation {
-    condition = !var.serverless_runtime_cutover || (
+    condition = !var.serverless_runtime_enabled || (
       var.deploy_applications &&
       var.deploy_gateway_lambda &&
       var.deploy_serverless_outbox &&
-      var.deploy_profile_readiness_durable &&
-      !var.run_continuous_ecs_runtime
+      var.deploy_profile_readiness_durable
     )
-    error_message = "Serverless cutover requires the complete Lambda replacement and retained idle ECS rollback boundary."
-  }
-}
-
-variable "retain_gateway_lambda_integration_during_rollback" {
-  description = "Temporarily retain the unrouted Lambda API integration while rollback moves the default route and disables replacement triggers."
-  type        = bool
-  default     = false
-
-  validation {
-    condition = !var.retain_gateway_lambda_integration_during_rollback || (
-      !var.serverless_runtime_cutover &&
-      var.deploy_applications &&
-      var.deploy_gateway_lambda &&
-      var.deploy_serverless_outbox &&
-      var.deploy_profile_readiness_durable &&
-      !var.run_continuous_ecs_runtime
-    )
-    error_message = "Rollback integration retention requires the complete replacement, dark routing/triggers, and retained idle ECS boundary."
+    error_message = "Serverless runtime activation requires the complete gateway, outbox, and durable-workflow deployment."
   }
 }
 

@@ -42,7 +42,7 @@ jobs:
         run: |
           terraform init -backend=false
           terraform validate
-      - name: Test dark durable workflow boundary
+      - name: Test durable workflow and steady-state runtime boundaries
         working-directory: infrastructure/terraform/modules/platform
         run: |
           terraform init -backend=false

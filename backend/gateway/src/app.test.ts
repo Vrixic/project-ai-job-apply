@@ -9,7 +9,7 @@ import type {
 } from "@ai-job-apply/api-contracts";
 import type { AuthPrincipal } from "@ai-job-apply/auth";
 import { createTestTokenIssuer } from "@ai-job-apply/auth/testing";
-import type { PendingOutboxEvent, ProfileStore } from "@ai-job-apply/profile-service";
+import type { ProfileStore } from "@ai-job-apply/profile-service";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -75,10 +75,6 @@ class MemoryProfileStore implements ProfileStore {
     return this.operations.get(operationId) ?? null;
   }
 
-  async getPendingOutboxEvents(): Promise<PendingOutboxEvent[]> {
-    return [];
-  }
-  async markOutboxPublished(): Promise<void> {}
   async getPreferencesById(): Promise<JobPreferenceSet | null> {
     return this.preferences ?? null;
   }

@@ -64,7 +64,7 @@ export const jobPreferences = profile.table(
 );
 
 export type OperationState = "queued" | "running" | "succeeded" | "retryable_failure" | "failed";
-export type OutboxDispatchTarget = "temporal" | "lambda_durable";
+export type OutboxDispatchTarget = "retired_legacy" | "lambda_durable";
 
 export const operations = platform.table(
   "operations",
@@ -96,7 +96,7 @@ export const outboxEvents = platform.table(
     dispatchTarget: text("dispatch_target")
       .$type<OutboxDispatchTarget>()
       .notNull()
-      .default("temporal"),
+      .default("lambda_durable"),
     attempts: integer("attempts").notNull().default(0),
     nudgeAttempts: integer("nudge_attempts").notNull().default(0),
     nudgeClaimedAt: timestamp("nudge_claimed_at", { withTimezone: true }),

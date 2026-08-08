@@ -41,8 +41,15 @@ The final merged verifier passed:
 No candidate value, identity, token, secret, raw response, or infrastructure identifier is retained
 in this record.
 
-## Remaining acceptance
+## Post-retirement browser acceptance
 
-Run the `lambda-retired` browser launcher and confirm authenticated preference persistence,
-readiness completion, and two-account isolation. Development retirement is otherwise complete.
-Staging remains a separate plan/checksum/apply/verification boundary.
+The merged `lambda-retired` launcher revalidated the exact AWS, Terraform, Auth0, Lambda alias,
+JWT-route, durable-trigger, and retired-inventory boundary before starting the local BFF against
+the deployed development API. Its aggregate request log recorded successful preference load/save,
+successful operation-status reads, an absent preference response for the second account, and
+successful isolation arm/run requests with no stderr output. The product owner confirmed the
+non-disclosing result: the second account could not read the first account's operation.
+
+No candidate value, identity, operation identifier, token, cookie, or response body is retained.
+Development legacy-runtime retirement is accepted. Staging remains a separate
+plan/checksum/apply/verification boundary.
