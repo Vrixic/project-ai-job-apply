@@ -401,11 +401,17 @@ function Assert-RetiredLiveResources {
   if (@($metricFilters | Where-Object { $_.filterName -in @("$prefix-gateway-log-heartbeat", "$prefix-worker-log-heartbeat") }).Count -ne 0) {
     throw "Legacy heartbeat metric filters still exist."
   }
-  $starterInventory = Invoke-AwsJson @(
-    "lambda", "list-event-source-mappings", "--function-name", "$prefix-outbox-starter"
-  ) "The durable outbox trigger could not be inspected."
-  $starterMappings = @(Get-OptionalArray $starterInventory "EventSourceMappings")
-  if ($starterMappings.Count -ne 1 -or [string]$starterMappings[0].State -ne "Enabled") {
+  $starterInventory = Invoke-AwsJson @("lambda", "list-event-source-mappings") `
+    "The durable outbox trigger could not be inspected."
+  $starterFunctionArn = "arn:aws:lambda:$Region`:$ExpectedAccountId`:function:$prefix-outbox-starter`:$Environment"
+  $starterQueueArn = "arn:aws:sqs:$Region`:$ExpectedAccountId`:$prefix-events"
+  $starterMappings = @(Get-OptionalArray $starterInventory "EventSourceMappings" | Where-Object {
+    [string]$_.FunctionArn -eq $starterFunctionArn -and
+    [string]$_.EventSourceArn -eq $starterQueueArn
+  })
+  if ($starterMappings.Count -ne 1 -or
+      [string]$starterMappings[0].State -ne "Enabled" -or
+      @($starterMappings[0].FunctionResponseTypes) -notcontains "ReportBatchItemFailures") {
     throw "The durable outbox trigger is not enabled."
   }
   foreach ($ruleName in @("$prefix-outbox-reconciler", "$prefix-profile-readiness-terminal")) {

@@ -214,6 +214,9 @@ for (const expected of [
   '"apigatewayv2", "get-apis"',
   "function Get-OptionalArray",
   "$Object.PSObject.Properties[$PropertyName]",
+  "$starterFunctionArn =",
+  "$starterQueueArn =",
+  '"ReportBatchItemFailures"',
 ]) {
   requireText(
     legacyRetirementOperator,
