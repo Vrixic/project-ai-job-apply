@@ -212,6 +212,8 @@ for (const expected of [
   "LegacyRuntimeRetired = $true",
   "$cluster = $prefix",
   '"apigatewayv2", "get-apis"',
+  "function Get-OptionalArray",
+  "$Object.PSObject.Properties[$PropertyName]",
 ]) {
   requireText(
     legacyRetirementOperator,
