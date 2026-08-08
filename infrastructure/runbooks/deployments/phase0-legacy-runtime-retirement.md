@@ -56,6 +56,16 @@ fails unless it is zero-change. It also requires public `200/200` health, anonym
 `401`, and absence of the retired AWS inventory. Complete authenticated save/readiness and
 cross-user-isolation checks before accepting each environment.
 
+Start the post-retirement browser boundary with:
+
+```powershell
+.\scripts\start-deployed-web-conformance.ps1 `
+  -Environment development `
+  -GatewayRuntime lambda-retired
+```
+
+Use `staging` only after its separately reviewed retirement apply and automated verification pass.
+
 ## Recovery
 
 Do not recreate the old ECS/Temporal path after retirement. If the Lambda runtime fails, stop

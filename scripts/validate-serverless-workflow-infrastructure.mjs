@@ -130,11 +130,16 @@ for (const expected of [
 
 requireText(
   gatewayConformanceLauncher,
-  '$GatewayRuntime -in @("lambda-dark", "lambda-cutover")',
-  "Lambda gateway conformance must require the retained ECS service to remain idle.",
+  '$lambdaRuntimes = @("lambda-dark", "lambda-cutover", "lambda-retired")',
+  "Lambda gateway conformance must distinguish retained and retired ECS boundaries.",
 );
 for (const expected of [
-  '[ValidateSet("ecs", "lambda-dark", "lambda-cutover")]',
+  '[ValidateSet("ecs", "lambda-dark", "lambda-cutover", "lambda-retired")]',
+  '$routedLambdaRuntimes = @("lambda-cutover", "lambda-retired")',
+  '$GatewayRuntime -eq "lambda-retired"',
+  '"ecs", "list-services", "--cluster", $clusterArn',
+  "An active ECS application service remains after legacy retirement.",
+  '$expectedEcsIntegrations = if ($GatewayRuntime -eq "lambda-retired") { 0 } else { 1 }',
   'OUTBOX_DISPATCH_TARGET -cne "lambda_durable"',
   'AuthorizationType -cne "JWT"',
   "AuthorizerId -cne $lambdaAuthorizerId",
