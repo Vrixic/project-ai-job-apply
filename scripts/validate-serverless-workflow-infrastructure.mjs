@@ -203,6 +203,8 @@ for (const expected of [
   "ConfirmRollbackExpired",
   'TF_VAR_retain_legacy_ecs_rollback = "false"',
   "TF_VAR_legacy_ecs_rollback_expired_at = $RollbackExpiredAt",
+  "rev-parse --verify $Matches[1]",
+  "cat-file -t $baselineCommit",
   "$deletes.Count -ne 13",
   "$updates.Count -ne 1",
   "The retired environment has Terraform drift.",
@@ -215,6 +217,10 @@ for (const expected of [
     `The legacy-runtime retirement operator is missing a required safety boundary: ${expected}`,
   );
 }
+assert.ok(
+  !legacyRetirementOperator.includes("^{commit}"),
+  "The Windows retirement operator must not use caret revision syntax for baseline resolution.",
+);
 for (const address of [
   "module.platform.aws_apigatewayv2_integration.gateway[0]",
   "module.platform.aws_apigatewayv2_vpc_link.gateway[0]",
