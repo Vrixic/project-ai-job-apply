@@ -184,8 +184,10 @@ function Assert-BaselinePlan {
   if ((Split-Path $Path -Leaf) -notmatch '^serverless-runtime-cutover-verify-([a-f0-9]{8})[.]tfplan$') {
     throw "The baseline must be an accepted serverless-runtime-cutover-verify plan."
   }
-  $baselineCommit = (& git -C $repositoryRoot rev-parse "$($Matches[1])^{commit}" 2>$null).Trim()
+  $baselineCommit = (& git -C $repositoryRoot rev-parse --verify $Matches[1] 2>$null).Trim()
   if (-not $baselineCommit) { throw "The baseline plan commit is unavailable." }
+  $baselineObjectType = (& git -C $repositoryRoot cat-file -t $baselineCommit 2>$null).Trim()
+  if ($baselineObjectType -ne "commit") { throw "The baseline plan source is not a commit." }
   & git -C $repositoryRoot merge-base --is-ancestor $baselineCommit HEAD
   $isAncestor = $LASTEXITCODE -eq 0
   if (-not $isAncestor) {
