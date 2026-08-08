@@ -57,7 +57,9 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   and is stopped with the local web process. State is resolved only from the selected environment's
   initialized backend metadata and its KMS ownership is checked against the current caller. Select
   staging with `-Environment staging`; add the explicit `-EnableWorkloadConformance` switch only
-  for the reviewed routed Phase 0 workload in the selected isolated environment.
+  for the reviewed routed Phase 0 workload in the selected isolated environment. After SR-008
+  retirement, use `-GatewayRuntime lambda-retired`; it requires the same immutable Lambda/JWT/
+  durable-trigger boundary while proving no active ECS application service or HTTP proxy remains.
 - `verify-gateway-lambda-boundary.ps1` — Runs the guarded, no-write failure matrix against the
   selected environment's immutable dark alias. It verifies exact route/method denial, missing and
   wrong-environment authorizer claims, scope denial, query/body/media constraints, malformed
