@@ -92,6 +92,14 @@ Scripts should be non-interactive where practical, support `--help` and dry-run 
   two heartbeat-alarm updates. Verification proves zero running tasks, released task public IPs,
   quiet expected-heartbeat monitoring, and targeted zero drift while retaining an exact reverse
   resume-plan boundary.
+- `operate-phase0-legacy-runtime-retirement.ps1` — Shared checksum-gated development/staging
+  retirement operator for the expired ECS rollback boundary. It rehydrates the last accepted
+  serverless runtime plan, permits exactly 13 obsolete-resource deletions plus the operations
+  dashboard cleanup, requires an explicit expiry confirmation to apply, and then proves zero
+  drift, healthy public Lambda endpoints, anonymous JWT denial, and absence of the old ECS,
+  VPC Link, HTTP proxy, Cloud Map, tracing, and heartbeat resources. Environment wrappers fix the
+  SSO profile and namespace. Persistent data, queues, artifacts, migration capability, backups,
+  serverless runtime, alarms, budgets, and cost exports are outside the deletion set.
 - `plan-gateway-lambda-dark.ps1` — Reconstructs exact live inputs for the selected isolated
   environment, verifies the merged versioned artifact, official regional Secrets extension, and customer-managed state
   key; creates a refresh-backed sensitive plan under the ignored Terraform data directory; and

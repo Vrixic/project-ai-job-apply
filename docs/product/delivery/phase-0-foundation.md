@@ -13,19 +13,17 @@ Establish the reviewed product boundaries, canonical data/contracts, legal and p
 
 ## Deployment posture
 
-The proven deployed baseline in `us-east-2` has synthetic staging restored to its scale-to-zero
-JWT/Lambda path with zero drift, enabled durable triggers, and reviewed gateway concurrency `5`.
-The atomic terminal-acknowledgement release is deployed after the exact 26-record drain. Fresh
-preference persistence, two-account isolation, 500/500 public requests, 25/25 durable workflows,
-aggregate Lambda/API/RDS/queue/alarm/privacy checks, empty work boundaries, and zero drift pass.
-The corrected serverless workload inspector replayed the exact accepted window after merge and
-confirmed 601 API requests with zero `5xx`, 667 Lambda invocations with zero errors/throttles,
-empty queues/DLQs, ten healthy alarms, and zero drift. Staging acceptance is complete.
-Development remains on the accepted dark Lambda boundary. Both environments
-retain legacy gateway and Temporal-worker ECS services at `0/0/0`; their task definitions, Cloud Map rollback
-path, and Single-AZ PostgreSQL with backups/PITR remain. The highest-priority open engineering task
-is [D0-016](phase-0-serverless-runtime-migration.md): complete staging rollback/restoration,
-development cutover, and retirement of the obsolete rollback path under
+The proven deployed baseline in `us-east-2` has synthetic staging and development on their
+scale-to-zero JWT/Lambda paths with zero drift, enabled durable triggers, and environment-specific
+reviewed gateway concurrency. Both terminal-acknowledgement releases are deployed after exact
+historical drains. Fresh preference persistence, two-account isolation, 500/500 public requests,
+25/25 durable workflows, aggregate Lambda/API/RDS/queue/alarm/privacy checks, empty work
+boundaries, and zero drift pass in both environments. Staging and development cutover acceptance
+are complete. Both environments retain legacy gateway and Temporal-worker ECS services at
+`0/0/0`; their task definitions, Cloud Map rollback path, and Single-AZ PostgreSQL with backups/PITR
+remain. The highest-priority open engineering task is
+[D0-016](phase-0-serverless-runtime-migration.md): record rollback expiry and retire the obsolete
+rollback path under
 [ADR-016](../../adr/016-scale-to-zero-application-runtime.md). Keep Fargate only for explicitly
 on-demand migrations and later browser/ATS workloads.
 
@@ -35,7 +33,7 @@ Add tasks as work is discovered. Do not mark a task complete without linked evid
 
 | ID | Task | State | Owner | Dependencies | Evidence or notes |
 |---|---|---|---|---|---|
-| D0-016 | Replace the continuously running Fargate gateway and Temporal worker with the scale-to-zero application runtime, prove equivalent behavior, and retire every obsolete runtime resource and repository path. | In progress | Platform engineering | D0-004–D0-006, D0-008, D0-010–D0-011 | **Highest-priority open engineering task.** Staging cutover and full acceptance are complete. Development now produces the exact two-update encrypted-SQS prerequisite plan, but independent operator review found a contradictory runtime assertion before authorization. Its corrected dark-boundary guard is locally green. Merge, regenerate, and explicitly authorize that prerequisite before cutover replanning. Rollback expiry, obsolete-runtime retirement, and cost reconciliation then remain. [Living migration plan](phase-0-serverless-runtime-migration.md), [development cutover source](evidence/d0-development-serverless-cutover-source-2026-08-07.md), [terminal-outbox recovery evidence](evidence/d0-staging-terminal-outbox-recovery-2026-08-07.md), [ADR-016](../../adr/016-scale-to-zero-application-runtime.md) |
+| D0-016 | Replace the continuously running Fargate gateway and Temporal worker with the scale-to-zero application runtime, prove equivalent behavior, and retire every obsolete runtime resource and repository path. | In progress | Platform engineering | D0-004–D0-006, D0-008, D0-010–D0-011 | **Highest-priority open engineering task.** Staging and development cutover acceptance are complete with exact drains, immutable corrected releases, authenticated ownership, workloads, aggregate AWS evidence, and zero drift. Rollback-window expiry, checksum-reviewed obsolete-runtime retirement, Temporal/provider and repository cleanup, final proof, and cost reconciliation remain. [Living migration plan](phase-0-serverless-runtime-migration.md), [development acceptance](evidence/d0-development-serverless-workload-recovery-2026-08-07.md), [terminal-outbox recovery evidence](evidence/d0-staging-terminal-outbox-recovery-2026-08-07.md), [ADR-016](../../adr/016-scale-to-zero-application-runtime.md) |
 | D0-001 | Choose launch geography, initial candidate segment, and provisional presentation identity. | Complete | Product owner | Product decision | Nationwide US/18+ tech-professional focus and swappable ApplyDash presentation identity are approved for development; [final public naming is a D6 release gate](../foundation/naming-brief.md). |
 | D0-002 | Conduct research sessions with representative job seekers and map at least 20 recent real application journeys. | Removed | Product owner | Product decision | Removed from D0 on 2026-07-29: a mandatory pre-product participant quota is not required to prove the foundation. The [consent-safe protocol](../foundation/research-plan.md) remains optional for later product validation and is not a delivery gate. |
 | D0-003 | Prepare the foundational legal/privacy review brief and assign source, UGC, automation, outreach, and store questions to enforceable release gates. | Complete | Product; security/privacy engineering | Architecture | [Review brief](../foundation/foundational-legal-privacy-brief.md) and [review register](../foundation/legal-review-register.md) separate the Phase 0 foundation from capability-specific approvals without making legal conclusions. |
@@ -232,6 +230,7 @@ Append meaningful activity; do not replace prior entries.
 | 2026-08-07 | Applied the explicitly authorized development dark KMS prerequisite with exactly two IAM policy updates. Immediate refresh-backed verification proved zero drift, Temporal dispatch, disabled replacement triggers, and idle ECS. The next cutover plan failed closed on legitimate plan-time-unknown integration/route values; a narrow local validator correction now proves their shared unknown boundary and exact Terraform reference without weakening known live-target equality. No cutover authorization or additional AWS mutation occurred. | D0-016 | [Development cutover source evidence](evidence/d0-development-serverless-cutover-source-2026-08-07.md) |
 | 2026-08-07 | Applied the checksum-authorized development runtime cutover: three creates, six updates, zero deletes/replacements. Direct AWS checks pass exact JWT scopes, health-only anonymous routes, `200/200/401`, durable dispatch, enabled triggers, and retained ECS at `0/0/0`. The post-apply zero-drift verifier hit a local absent-property exception after successful apply; a narrow local correction preserves exact equality and safely handles omitted known-value flags. No apply retry or additional AWS mutation occurred. | D0-016 | [Development cutover source evidence](evidence/d0-development-serverless-cutover-source-2026-08-07.md) |
 | 2026-08-07 | Fresh exact-main verification after PR #174 returned a zero-action development runtime baseline with durable dispatch, enabled triggers, empty work, exact artifacts, and idle ECS. The independent wrapper replay then failed on strict-mode property-name enumeration over an empty Terraform unknown-value collection. The saved plan proves exact materialized target equality; a keyed null-safe correction is local and no AWS mutation occurred. | D0-016 | [Development cutover source evidence](evidence/d0-development-serverless-cutover-source-2026-08-07.md) |
+| 2026-08-07 | Development's corrected exact-window workload inspection passed 603 API requests, zero API `5xx`, 666 Lambda invocations, zero Lambda errors/throttles, 25/25 durable workflows, tenant isolation, empty work boundaries, ten healthy alarms, privacy-safe logs, idle ECS, and refreshed zero drift. The product owner then explicitly expired both rollback windows at `2026-08-08T02:56:32.831Z`. Added a default-off retained-legacy switch, serverless dashboard signals, and a shared checksum-gated retirement operator allowing exactly 13 deletes and one dashboard update. Local semantic replay passes; no AWS resource has been deleted. | D0-016 | [Development workload recovery](evidence/d0-development-serverless-workload-recovery-2026-08-07.md), [retirement source](evidence/d0-legacy-runtime-retirement-source-2026-08-07.md) |
 
 ## Decisions and scope changes
 
@@ -257,6 +256,7 @@ Append meaningful activity; do not replace prior entries.
 | 2026-07-30 | Temporarily permit synthetic-only staging to trust the exact development Auth0 issuer while the Free subscription provides one tenant. | Unblock isolated AWS/Temporal acceptance without pretending shared provider users, keys, logs, administration, or failure modes are identity-isolated; dedicated staging and production tenants remain mandatory before launch. | [ADR-014](../../adr/014-shared-development-auth0-for-synthetic-staging.md) |
 | 2026-07-31 | Replace continuously running gateway and general workflow-worker Fargate tasks with a scale-to-zero Lambda application control plane; reserve Fargate for on-demand migrations and browser/ATS execution. | Actual early billing shows idle application compute is a material operating characteristic, while Lambda durable functions now satisfy the required code-first durability in `us-east-2`. The change preserves quality gates and requires complete retirement rather than parallel legacy paths. | [ADR-016](../../adr/016-scale-to-zero-application-runtime.md), [migration plan](phase-0-serverless-runtime-migration.md) |
 | 2026-08-03 | Move confirmed zero-traffic development and synthetic staging ECS gateway/worker services to a retained zero-task idle posture before Lambda cutover. | No current user requires environment availability; strict zero-work preflight, Terraform ownership, quiet expected-heartbeat monitoring, and an exact resume boundary stop fixed compute without collapsing rollback and destructive retirement. | [ADR-017](../../adr/017-zero-traffic-precutover-ecs-idle-posture.md), [source evidence](evidence/d0-precutover-ecs-idle-shutdown-source-2026-08-03.md) |
+| 2026-08-07 | Expire the development and staging legacy ECS rollback windows immediately at `2026-08-08T02:56:32.831Z`. | Both routed Lambda environments passed rollback/restoration, persistence, durable workflow, fixed workload, tenant-isolation, alarm/log, empty-work, and zero-drift acceptance; retaining the obsolete path no longer provides proportionate recovery value. | [ADR-016](../../adr/016-scale-to-zero-application-runtime.md), [retirement source](evidence/d0-legacy-runtime-retirement-source-2026-08-07.md) |
 
 ## Risks and blockers
 

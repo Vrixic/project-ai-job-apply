@@ -3,7 +3,7 @@
 Date: 2026-08-07
 Delivery: D0-016 / SR-005 / SR-007
 Environment: isolated development in `us-east-2`
-Status: Drain and corrected workflow release pass; final aggregate AWS corroboration remains required
+Status: Development scale-to-zero cutover accepted; obsolete-runtime retirement remains separately gated
 
 ## Accepted browser evidence
 
@@ -116,10 +116,30 @@ post-cutover maintenance plan. The selector now targets the existing development
 operator and policy validation rejects regression. No AWS inspection or mutation occurred from
 that failed local selection.
 
+## Aggregate AWS acceptance
+
+After PR #179 merged, the corrected read-only inspector replayed the exact accepted workload
+window against the applied immutable release. It observed 603 API requests, including at least the
+500 public probes and 100 expected unauthorized probes, with zero API `5xx`. The workflow Lambda
+set recorded 666 invocations with zero errors and zero throttles. Maximum database CPU was 5.14%
+with at most five connections; event-queue age and visible depth, both dead-letter queues, and all
+other accepted work boundaries remained zero.
+
+The inspector found 1,046 aggregate application log events with zero operational-error matches and
+zero forbidden privacy-pattern matches. Both retained ECS services remained idle, all ten runtime
+alarms were `OK`, dispatch remained `lambda_durable`, triggers remained enabled, and the fresh
+Terraform verifier returned zero drift.
+
+The companion read-only cost status also passed the temporary-caller, runtime, budget, and export
+boundaries. Cost Explorer reported an estimated month-to-date unblended total of `$21.1151` across
+13 nonzero services, with one AWS Budget and one CUR 2.0 Data Export. This snapshot is evidence for
+later SR-010 reconciliation; it is not a claim that every charge has posted or that the final
+steady-state cost baseline is complete.
+
 ## Required recovery sequence
 
-1. Merge the locally verified aggregate-inspector selector correction.
-2. Run the exact-window zero-work, alarm, queue, log, aggregate AWS, and cost measurement.
-3. Preserve its refresh-backed zero-drift evidence and update the Phase 0 delivery records.
+All development cutover recovery and acceptance steps are complete. D0-016 continues with a
+separately recorded rollback-window expiry, checksum-reviewed obsolete-runtime retirement,
+Temporal/provider cleanup, repository cleanup, final two-environment proof, and cost reconciliation.
 
-Development cutover acceptance remains open until all three remaining steps pass.
+Development cutover acceptance is complete; this does not authorize destructive retirement.
