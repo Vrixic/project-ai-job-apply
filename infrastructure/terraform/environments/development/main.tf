@@ -56,6 +56,8 @@ module "platform" {
   gateway_memory                 = var.gateway_memory
   worker_desired_count           = var.worker_desired_count
   run_continuous_ecs_runtime     = var.run_continuous_ecs_runtime
+  retain_legacy_ecs_rollback     = var.retain_legacy_ecs_rollback
+  legacy_ecs_rollback_expired_at = var.legacy_ecs_rollback_expired_at
   worker_cpu                     = var.worker_cpu
   worker_memory                  = var.worker_memory
   enable_tracing                 = var.enable_tracing

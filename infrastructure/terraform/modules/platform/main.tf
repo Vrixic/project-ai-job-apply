@@ -435,11 +435,14 @@ resource "aws_security_group" "ingress" {
 resource "aws_security_group" "application" {
   name_prefix = "${var.name}-${var.environment}-app-"
   vpc_id      = aws_vpc.this.id
-  ingress {
-    from_port       = local.container_port
-    to_port         = local.container_port
-    protocol        = "tcp"
-    security_groups = [aws_security_group.ingress.id]
+  dynamic "ingress" {
+    for_each = var.retain_legacy_ecs_rollback ? [1] : []
+    content {
+      from_port       = local.container_port
+      to_port         = local.container_port
+      protocol        = "tcp"
+      security_groups = [aws_security_group.ingress.id]
+    }
   }
   egress {
     from_port   = 0
@@ -681,7 +684,7 @@ resource "aws_iam_role" "application" {
 }
 
 resource "aws_iam_role_policy" "application_tracing" {
-  count = var.deploy_applications && var.enable_tracing ? 1 : 0
+  count = var.deploy_applications && var.retain_legacy_ecs_rollback && var.enable_tracing ? 1 : 0
   name  = "write-application-traces"
   role  = aws_iam_role.application.id
   policy = jsonencode({
@@ -696,13 +699,13 @@ resource "aws_iam_role_policy" "application_tracing" {
 }
 
 resource "aws_service_discovery_private_dns_namespace" "application" {
-  count = var.deploy_applications ? 1 : 0
+  count = var.deploy_applications && var.retain_legacy_ecs_rollback ? 1 : 0
   name  = "${var.name}-${var.environment}.internal"
   vpc   = aws_vpc.this.id
 }
 
 resource "aws_service_discovery_service" "gateway" {
-  count = var.deploy_applications ? 1 : 0
+  count = var.deploy_applications && var.retain_legacy_ecs_rollback ? 1 : 0
   name  = "gateway"
 
   dns_config {
@@ -726,7 +729,7 @@ resource "aws_service_discovery_service" "gateway" {
 }
 
 resource "aws_apigatewayv2_vpc_link" "gateway" {
-  count              = var.deploy_applications ? 1 : 0
+  count              = var.deploy_applications && var.retain_legacy_ecs_rollback ? 1 : 0
   name               = "${var.name}-${var.environment}-gateway"
   security_group_ids = [aws_security_group.ingress.id]
   subnet_ids         = aws_subnet.private[*].id
@@ -739,7 +742,7 @@ resource "aws_apigatewayv2_api" "gateway" {
 }
 
 resource "aws_apigatewayv2_integration" "gateway" {
-  count                  = var.deploy_applications ? 1 : 0
+  count                  = var.deploy_applications && var.retain_legacy_ecs_rollback ? 1 : 0
   api_id                 = aws_apigatewayv2_api.gateway[0].id
   integration_type       = "HTTP_PROXY"
   integration_uri        = aws_service_discovery_service.gateway[0].arn
@@ -795,7 +798,7 @@ resource "aws_apigatewayv2_stage" "gateway" {
 }
 
 resource "aws_ecs_task_definition" "gateway" {
-  count                    = var.deploy_applications ? 1 : 0
+  count                    = var.deploy_applications && var.retain_legacy_ecs_rollback ? 1 : 0
   family                   = "${var.name}-${var.environment}-gateway"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
@@ -900,7 +903,7 @@ resource "aws_ecs_task_definition" "gateway" {
 }
 
 resource "aws_ecs_service" "gateway" {
-  count           = var.deploy_applications ? 1 : 0
+  count           = var.deploy_applications && var.retain_legacy_ecs_rollback ? 1 : 0
   name            = "gateway"
   cluster         = aws_ecs_cluster.this.id
   task_definition = aws_ecs_task_definition.gateway[0].arn
@@ -920,7 +923,7 @@ resource "aws_ecs_service" "gateway" {
 }
 
 resource "aws_ecs_task_definition" "worker" {
-  count                    = var.deploy_applications ? 1 : 0
+  count                    = var.deploy_applications && var.retain_legacy_ecs_rollback ? 1 : 0
   family                   = "${var.name}-${var.environment}-worker"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
@@ -1006,7 +1009,7 @@ resource "aws_ecs_task_definition" "worker" {
 }
 
 resource "aws_ecs_service" "worker" {
-  count           = var.deploy_applications ? 1 : 0
+  count           = var.deploy_applications && var.retain_legacy_ecs_rollback ? 1 : 0
   name            = "workflow-worker"
   cluster         = aws_ecs_cluster.this.id
   task_definition = aws_ecs_task_definition.worker[0].arn
@@ -1163,7 +1166,7 @@ resource "aws_cloudwatch_metric_alarm" "application_errors" {
 }
 
 resource "aws_cloudwatch_log_metric_filter" "gateway_log_heartbeat" {
-  count          = var.deploy_applications ? 1 : 0
+  count          = var.deploy_applications && var.retain_legacy_ecs_rollback ? 1 : 0
   name           = "${var.name}-${var.environment}-gateway-log-heartbeat"
   pattern        = "{ $.event = \"log_delivery_heartbeat\" && $.service = \"gateway\" }"
   log_group_name = aws_cloudwatch_log_group.application.name
@@ -1177,7 +1180,7 @@ resource "aws_cloudwatch_log_metric_filter" "gateway_log_heartbeat" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "gateway_log_heartbeat_missing" {
-  count               = var.deploy_applications ? 1 : 0
+  count               = var.deploy_applications && var.retain_legacy_ecs_rollback ? 1 : 0
   alarm_name          = "${var.name}-${var.environment}-gateway-log-heartbeat-missing"
   comparison_operator = "LessThanThreshold"
   evaluation_periods  = 3
@@ -1197,7 +1200,7 @@ resource "aws_cloudwatch_metric_alarm" "gateway_log_heartbeat_missing" {
 }
 
 resource "aws_cloudwatch_log_metric_filter" "worker_log_heartbeat" {
-  count          = var.deploy_applications ? 1 : 0
+  count          = var.deploy_applications && var.retain_legacy_ecs_rollback ? 1 : 0
   name           = "${var.name}-${var.environment}-worker-log-heartbeat"
   pattern        = "{ $.event = \"log_delivery_heartbeat\" && $.service = \"workflow-worker\" }"
   log_group_name = aws_cloudwatch_log_group.application.name
@@ -1211,7 +1214,7 @@ resource "aws_cloudwatch_log_metric_filter" "worker_log_heartbeat" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "worker_log_heartbeat_missing" {
-  count               = var.deploy_applications ? 1 : 0
+  count               = var.deploy_applications && var.retain_legacy_ecs_rollback ? 1 : 0
   alarm_name          = "${var.name}-${var.environment}-worker-log-heartbeat-missing"
   comparison_operator = "LessThanThreshold"
   evaluation_periods  = 3
@@ -1276,7 +1279,7 @@ resource "aws_cloudwatch_dashboard" "operations" {
                 [local.application_metric_namespace, "ErrorEvents", { label = "Error events", stat = "Sum" }],
                 [local.operational_metric_namespace, "AlertDeliveryCanary", { label = "Alert canary", stat = "Maximum" }]
               ],
-              var.deploy_applications ? [
+              var.deploy_applications && var.retain_legacy_ecs_rollback ? [
                 [local.application_metric_namespace, "GatewayLogHeartbeat", { label = "Gateway log heartbeat", stat = "Sum" }],
                 [local.application_metric_namespace, "WorkerLogHeartbeat", { label = "Worker log heartbeat", stat = "Sum" }]
               ] : []
@@ -1318,6 +1321,21 @@ resource "aws_cloudwatch_dashboard" "operations" {
           }
         },
         {
+          type   = "log"
+          x      = 0
+          y      = 14
+          width  = 24
+          height = 6
+          properties = {
+            region = data.aws_region.current.region
+            title  = "Warning and error events"
+            view   = "table"
+            query  = "SOURCE '${aws_cloudwatch_log_group.application.name}' | fields @timestamp, service, level, msg | filter level >= 40 | sort @timestamp desc | limit 50"
+          }
+        }
+      ],
+      var.deploy_applications && var.retain_legacy_ecs_rollback ? [
+        {
           type   = "metric"
           x      = 12
           y      = 8
@@ -1335,21 +1353,39 @@ resource "aws_cloudwatch_dashboard" "operations" {
               ["AWS/ECS", "MemoryUtilization", "ClusterName", aws_ecs_cluster.this.name, "ServiceName", "workflow-worker", { label = "Worker memory", stat = "Average" }]
             ]
           }
-        },
+        }
+      ] : [],
+      var.deploy_gateway_lambda ? [
         {
-          type   = "log"
-          x      = 0
-          y      = 14
-          width  = 24
+          type   = "metric"
+          x      = 12
+          y      = 8
+          width  = 12
           height = 6
           properties = {
             region = data.aws_region.current.region
-            title  = "Warning and error events"
-            view   = "table"
-            query  = "SOURCE '${aws_cloudwatch_log_group.application.name}' | fields @timestamp, service, level, msg | filter level >= 40 | sort @timestamp desc | limit 50"
+            title  = "Serverless runtime"
+            view   = "timeSeries"
+            period = 60
+            metrics = concat(
+              [
+                ["AWS/Lambda", "Invocations", "FunctionName", aws_lambda_function.gateway[0].function_name, { label = "Gateway invocations", stat = "Sum" }],
+                ["AWS/Lambda", "Errors", "FunctionName", aws_lambda_function.gateway[0].function_name, { label = "Gateway errors", stat = "Sum" }],
+                ["AWS/Lambda", "Throttles", "FunctionName", aws_lambda_function.gateway[0].function_name, { label = "Gateway throttles", stat = "Sum" }]
+              ],
+              var.deploy_serverless_outbox ? [
+                ["AWS/Lambda", "Errors", "FunctionName", aws_lambda_function.outbox_starter[0].function_name, { label = "Outbox starter errors", stat = "Sum" }],
+                ["AWS/Lambda", "Errors", "FunctionName", aws_lambda_function.outbox_reconciler[0].function_name, { label = "Outbox reconciler errors", stat = "Sum" }]
+              ] : [],
+              var.deploy_profile_readiness_durable ? [
+                ["AWS/Lambda", "Errors", "FunctionName", local.profile_readiness_durable_function_name, { label = "Durable workflow errors", stat = "Sum" }],
+                ["AWS/Lambda", "Errors", "FunctionName", aws_lambda_function.profile_readiness_activity[0].function_name, { label = "Workflow activity errors", stat = "Sum" }],
+                ["AWS/Lambda", "Errors", "FunctionName", aws_lambda_function.profile_readiness_terminal[0].function_name, { label = "Workflow terminal errors", stat = "Sum" }]
+              ] : []
+            )
           }
         }
-      ],
+      ] : [],
       var.deploy_applications ? [
         {
           type   = "metric"

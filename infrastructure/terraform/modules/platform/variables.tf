@@ -79,6 +79,31 @@ variable "run_continuous_ecs_runtime" {
   description = "Run the rollback-only gateway and workflow-worker ECS services continuously. Set false only for an explicitly accepted zero-traffic idle posture."
   type        = bool
   default     = true
+
+  validation {
+    condition     = !var.run_continuous_ecs_runtime || var.retain_legacy_ecs_rollback
+    error_message = "Continuous ECS capacity requires the legacy rollback path to remain retained."
+  }
+}
+
+variable "retain_legacy_ecs_rollback" {
+  description = "Retain stopped ECS services/tasks, Cloud Map, VPC Link, HTTP proxy integration, tracing policy, and heartbeat monitoring during the bounded rollback window."
+  type        = bool
+  default     = true
+}
+
+variable "legacy_ecs_rollback_expired_at" {
+  description = "UTC RFC3339 time at which the accepted legacy ECS rollback window expired. Required by the guarded retirement operator when retention is false."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      var.legacy_ecs_rollback_expired_at == "" ||
+      can(timecmp(var.legacy_ecs_rollback_expired_at, var.legacy_ecs_rollback_expired_at))
+    )
+    error_message = "Legacy ECS rollback expiry must be empty or a valid RFC3339 timestamp."
+  }
 }
 
 variable "worker_cpu" {
@@ -205,13 +230,16 @@ variable "deploy_applications" {
 
   validation {
     condition = !var.deploy_applications || (
-      var.gateway_image != "" &&
-      var.worker_image != "" &&
-      var.oidc_issuer != "" &&
-      var.temporal_address != "" &&
-      var.temporal_namespace != ""
+      var.oidc_issuer != "" && (
+        !var.retain_legacy_ecs_rollback || (
+          var.gateway_image != "" &&
+          var.worker_image != "" &&
+          var.temporal_address != "" &&
+          var.temporal_namespace != ""
+        )
+      )
     )
-    error_message = "Application deployment requires immutable images, OIDC, and Temporal."
+    error_message = "Application deployment requires OIDC; a retained legacy rollback additionally requires immutable images and Temporal."
   }
 }
 

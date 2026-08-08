@@ -75,6 +75,13 @@ on-demand consumer remains, public task IP usage, Temporal runtime secret and pr
 outputs/variables/scripts/runbooks, and obsolete cost assumptions. The ECS cluster and migration
 task may remain only while they have an owned on-demand use; an empty cluster has no always-on task.
 
+The product owner explicitly expired the development and staging rollback windows at
+`2026-08-08T02:56:32.831Z` after both environments passed routed Lambda acceptance,
+rollback/restoration, fixed workload, tenant isolation, empty-work, alarm/log, and zero-drift
+evidence. This decision authorizes separate checksum-reviewed retirement planning; it does not
+authorize an unreviewed Terraform apply or combine Temporal/provider cleanup with the legacy AWS
+resource deletion boundary.
+
 ## Compatibility and supersession
 
 This ADR supersedes [ADR-004](004-temporal-outbox-and-idempotency.md) only for the selection of

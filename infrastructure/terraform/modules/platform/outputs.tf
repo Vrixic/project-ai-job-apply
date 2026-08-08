@@ -62,11 +62,11 @@ output "alert_delivery_canary_alarm_name" {
 }
 
 output "gateway_log_heartbeat_alarm_name" {
-  value = var.deploy_applications ? aws_cloudwatch_metric_alarm.gateway_log_heartbeat_missing[0].alarm_name : null
+  value = var.deploy_applications && var.retain_legacy_ecs_rollback ? aws_cloudwatch_metric_alarm.gateway_log_heartbeat_missing[0].alarm_name : null
 }
 
 output "worker_log_heartbeat_alarm_name" {
-  value = var.deploy_applications ? aws_cloudwatch_metric_alarm.worker_log_heartbeat_missing[0].alarm_name : null
+  value = var.deploy_applications && var.retain_legacy_ecs_rollback ? aws_cloudwatch_metric_alarm.worker_log_heartbeat_missing[0].alarm_name : null
 }
 
 output "gateway_lambda_alias_arn" {

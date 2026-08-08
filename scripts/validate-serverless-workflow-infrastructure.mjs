@@ -68,6 +68,13 @@ const developmentGatewayBoundaryWrapper = read(
 );
 const stagingGatewayBoundaryWrapper = read("scripts/verify-staging-gateway-lambda-boundary.ps1");
 const darkGatewayBridge = read("backend/gateway/src/dark-conformance-bridge.ts");
+const legacyRetirementOperator = read("scripts/operate-phase0-legacy-runtime-retirement.ps1");
+const developmentLegacyRetirementWrapper = read(
+  "scripts/operate-development-legacy-runtime-retirement.ps1",
+);
+const stagingLegacyRetirementWrapper = read(
+  "scripts/operate-staging-legacy-runtime-retirement.ps1",
+);
 
 const requireText = (source, expected, message) => {
   assert.ok(source.includes(expected), message);
@@ -187,6 +194,100 @@ requireText(
   '!["development", "staging"].includes(target.environment)',
   "The loopback gateway bridge must reject unapproved environment names.",
 );
+
+for (const expected of [
+  '[ValidateSet("development", "staging")]',
+  '[ValidateSet("Plan", "Status", "Apply", "Verify")]',
+  "legacy-runtime-retirement-$($sourceCommit.Substring(0, 8)).tfplan",
+  "ExpectedPlanSha256",
+  "ConfirmRollbackExpired",
+  'TF_VAR_retain_legacy_ecs_rollback = "false"',
+  "TF_VAR_legacy_ecs_rollback_expired_at = $RollbackExpiredAt",
+  "$deletes.Count -ne 13",
+  "$updates.Count -ne 1",
+  "The retired environment has Terraform drift.",
+  "ProtectedRouteAnonymousStatus = 401",
+  "LegacyRuntimeRetired = $true",
+]) {
+  requireText(
+    legacyRetirementOperator,
+    expected,
+    `The legacy-runtime retirement operator is missing a required safety boundary: ${expected}`,
+  );
+}
+for (const address of [
+  "module.platform.aws_apigatewayv2_integration.gateway[0]",
+  "module.platform.aws_apigatewayv2_vpc_link.gateway[0]",
+  "module.platform.aws_ecs_service.gateway[0]",
+  "module.platform.aws_ecs_service.worker[0]",
+  "module.platform.aws_ecs_task_definition.gateway[0]",
+  "module.platform.aws_ecs_task_definition.worker[0]",
+  "module.platform.aws_service_discovery_private_dns_namespace.application[0]",
+  "module.platform.aws_service_discovery_service.gateway[0]",
+]) {
+  requireText(
+    legacyRetirementOperator,
+    `"${address}"`,
+    `Legacy retirement must bind deletion of ${address}.`,
+  );
+}
+for (const [wrapper, environment] of [
+  [developmentLegacyRetirementWrapper, "development"],
+  [stagingLegacyRetirementWrapper, "staging"],
+]) {
+  requireText(
+    wrapper,
+    '"operate-phase0-legacy-runtime-retirement.ps1"',
+    `The ${environment} retirement wrapper must delegate to the shared operator.`,
+  );
+  requireText(
+    wrapper,
+    `Environment = "${environment}"`,
+    `The ${environment} retirement wrapper must fix its exact environment.`,
+  );
+  requireText(
+    wrapper,
+    `"ai-job-apply-${environment}-admin"`,
+    `The ${environment} retirement wrapper must use its isolated SSO profile.`,
+  );
+}
+
+for (const source of [variables, ...environmentVariables]) {
+  requireText(
+    source,
+    'variable "retain_legacy_ecs_rollback"',
+    "Terraform must expose the explicit legacy rollback retention boundary.",
+  );
+  requireText(
+    source,
+    'variable "legacy_ecs_rollback_expired_at"',
+    "Terraform must preserve the explicit rollback expiry time.",
+  );
+}
+for (const source of environments) {
+  requireText(
+    source,
+    "legacy_ecs_rollback_expired_at = var.legacy_ecs_rollback_expired_at",
+    "Each environment must pass the rollback expiry into the platform module.",
+  );
+}
+for (const resource of [
+  'resource "aws_apigatewayv2_integration" "gateway"',
+  'resource "aws_apigatewayv2_vpc_link" "gateway"',
+  'resource "aws_ecs_service" "gateway"',
+  'resource "aws_ecs_service" "worker"',
+  'resource "aws_ecs_task_definition" "gateway"',
+  'resource "aws_ecs_task_definition" "worker"',
+]) {
+  const start = platform.indexOf(resource);
+  assert.ok(start >= 0, `Missing inspected legacy resource ${resource}.`);
+  const block = platform.slice(start, start + 420);
+  requireText(
+    block,
+    "var.retain_legacy_ecs_rollback",
+    `${resource} must be removed when the rollback boundary expires.`,
+  );
+}
 requireText(
   darkGatewayBridge,
   "target.functionName !== `ai-job-apply-$" + "{target.environment}-gateway`",

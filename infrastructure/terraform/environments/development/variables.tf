@@ -39,6 +39,18 @@ variable "run_continuous_ecs_runtime" {
   default     = false
 }
 
+variable "retain_legacy_ecs_rollback" {
+  description = "Retain the stopped legacy ECS/Cloud Map/VPC Link rollback path. False after the recorded rollback-window expiry."
+  type        = bool
+  default     = false
+}
+
+variable "legacy_ecs_rollback_expired_at" {
+  description = "UTC time at which the development legacy ECS rollback window was explicitly expired."
+  type        = string
+  default     = "2026-08-08T02:56:32.831Z"
+}
+
 variable "worker_cpu" {
   type    = number
   default = 512
