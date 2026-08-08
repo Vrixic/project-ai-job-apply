@@ -669,7 +669,7 @@ resource "aws_ecs_task_definition" "migration" {
     name                   = "database-migration"
     image                  = var.migration_image
     essential              = true
-    command                = ["backend/services/profile/dist/src/migrate.js"]
+    command                = ["dist/src/migrate.js"]
     readonlyRootFilesystem = true
     environment = [
       { name = "NODE_ENV", value = "production" }
