@@ -15,8 +15,9 @@ immutable versioned S3 objects; the only application container is the scanned mi
 `staging_runtime_mode` defaults to `dormant`. Dormant removes the disposable synthetic RDS instance
 and three hourly interface endpoints while retaining encrypted state, artifacts, identity, queues,
 logs, cost controls, and dark serverless definitions. `active -> quiesced -> dormant` is the only
-permitted shutdown path; activation recreates a dark data plane before migration and synthetic
-seeding. See [ADR-018](../../../../docs/adr/018-disposable-prelaunch-staging-data-plane.md) and the
+permitted shutdown path; activation recreates a dark data plane before migration and authenticated
+synthetic conformance-data creation. See
+[ADR-018](../../../../docs/adr/018-disposable-prelaunch-staging-data-plane.md) and the
 [lifecycle runbook](../../../runbooks/deployments/staging-runtime-lifecycle.md).
 
 `serverless_runtime_enabled` controls the JWT API route and all durable-workflow triggers together
