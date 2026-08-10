@@ -3,7 +3,6 @@ import {
   armCrossUserIsolationProbe,
   CROSS_USER_PROBE_COOKIE_NAME,
   isCrossUserIsolationConformanceEnabled,
-  isDarkLambdaIsolationConformanceEnabled,
   runCrossUserIsolationProbe,
 } from "./cross-user-isolation-conformance";
 
@@ -55,29 +54,18 @@ function dependencies(
 }
 
 describe("deployed cross-user isolation conformance", () => {
-  it("is available only in development mode", () => {
-    expect(isCrossUserIsolationConformanceEnabled({ NODE_ENV: "development" })).toBe(true);
-    expect(isCrossUserIsolationConformanceEnabled({ NODE_ENV: "test" })).toBe(false);
-    expect(isCrossUserIsolationConformanceEnabled({ NODE_ENV: "production" })).toBe(false);
-  });
-
-  it("allows queued-operation arming only in explicit local dark Lambda conformance", () => {
+  it("is available only in explicit deployed development conformance", () => {
     expect(
-      isDarkLambdaIsolationConformanceEnabled({
+      isCrossUserIsolationConformanceEnabled({
         NODE_ENV: "development",
-        DARK_LAMBDA_CONFORMANCE: "1",
+        DEPLOYED_PLATFORM_CONFORMANCE: "1",
       }),
     ).toBe(true);
+    expect(isCrossUserIsolationConformanceEnabled({ NODE_ENV: "development" })).toBe(false);
     expect(
-      isDarkLambdaIsolationConformanceEnabled({
-        NODE_ENV: "development",
-        DARK_LAMBDA_CONFORMANCE: "0",
-      }),
-    ).toBe(false);
-    expect(
-      isDarkLambdaIsolationConformanceEnabled({
+      isCrossUserIsolationConformanceEnabled({
         NODE_ENV: "production",
-        DARK_LAMBDA_CONFORMANCE: "1",
+        DEPLOYED_PLATFORM_CONFORMANCE: "1",
       }),
     ).toBe(false);
   });

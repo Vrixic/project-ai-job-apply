@@ -23,7 +23,7 @@ and read each selected `SKILL.md` completely.
 | `guard-product-architecture` | Product scope, service boundaries, security, privacy, data, AI, ATS, and cross-cutting design |
 | `evolve-platform-contracts` | OpenAPI, events, domain schemas, field ontology, generated types, and SQL migrations |
 | `build-vertical-slice` | Implementing a capability through client, gateway, persistence, outbox, workflow, and tests |
-| `deploy-aws-platform` | AWS bootstrap, Terraform plans, images, managed OIDC/Temporal configuration, rollout, and restore evidence |
+| `deploy-aws-platform` | AWS bootstrap, Terraform plans, Lambda durable runtime releases, managed OIDC, migrations, and restore evidence |
 | `govern-delivery` | Phase task registers, evidence, blockers, start/completion records, and roadmap status |
 
 Use multiple skills only when the request crosses their responsibilities. For example, a deployed

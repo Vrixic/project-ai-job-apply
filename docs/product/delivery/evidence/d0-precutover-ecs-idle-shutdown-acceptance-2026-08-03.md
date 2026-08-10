@@ -3,7 +3,7 @@
 - Scope: development and synthetic staging legacy ECS gateway/worker runtime
 - Status: Accepted retained-idle posture in both isolated AWS accounts
 - Decision: [ADR-017](../../../adr/017-zero-traffic-precutover-ecs-idle-posture.md)
-- Runbook: [Phase 0 ECS idle shutdown](../../../../infrastructure/runbooks/deployments/phase0-ecs-idle-shutdown.md)
+- Runbook: [Phase 0 ECS idle shutdown](d0-provider-runtime-repository-cleanup-2026-08-08.md)
 - Product-owner condition: both environments have zero traffic; deliberate API and normal-workflow
   unavailability is accepted until Lambda cutover or an explicitly reviewed ECS resume
 

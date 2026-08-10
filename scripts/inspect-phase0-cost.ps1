@@ -1,5 +1,7 @@
 [CmdletBinding()]
 param(
+  [ValidateSet("all", "development", "staging")]
+  [string]$Environment = "all",
   [string]$DevelopmentProfile = "ai-job-apply-development-admin",
   [string]$StagingProfile = "ai-job-apply-staging-admin",
   [string]$StartDate = "",
@@ -13,12 +15,16 @@ if ($Help) {
   @"
 Usage:
   .\scripts\inspect-phase0-cost.ps1
+  .\scripts\inspect-phase0-cost.ps1 -Environment development
+  .\scripts\inspect-phase0-cost.ps1 -Environment staging
   .\scripts\inspect-phase0-cost.ps1 -StartDate <YYYY-MM-DD> -EndDate <YYYY-MM-DD>
 
 Reads actual unblended Cost Explorer data, the exact environment budget and alert, CUR 2.0 export
-health, and real export delivery from the isolated development and staging accounts. EndDate is
-exclusive. The default is the current UTC calendar month. Both IAM Identity Center sessions must
-be active.
+  health, and real export delivery from the selected isolated account or both accounts. Cost
+  Explorer is constrained to the selected caller account so an AWS Organizations payer cannot
+  silently include linked-account spend. EndDate is exclusive. The default is the current UTC
+  calendar month. Only the selected IAM Identity Center session must be active; selecting all
+  requires both.
 
 This operator is read-only and prints no account identifier, caller ARN, budget destination,
 bucket/object key, resource identifier, tag value, credit record, invoice, or raw provider
@@ -108,6 +114,13 @@ function Get-EnvironmentCost {
   if (-not ([string]$identity.Arn).Contains(":assumed-role/")) {
     throw "$Environment must use a temporary IAM Identity Center caller."
   }
+  $costFilter = @{
+    Dimensions = @{
+      Key          = "LINKED_ACCOUNT"
+      Values       = @([string]$identity.Account)
+      MatchOptions = @("EQUALS")
+    }
+  } | ConvertTo-Json -Compress -Depth 4
   $cost = Invoke-AwsJson $Profile @(
     "ce",
     "get-cost-and-usage",
@@ -119,6 +132,8 @@ function Get-EnvironmentCost {
     "UnblendedCost",
     "--group-by",
     "Type=DIMENSION,Key=SERVICE",
+    "--filter",
+    $costFilter,
     "--output",
     "json"
   )
@@ -251,6 +266,7 @@ function Get-EnvironmentCost {
   return [pscustomobject]@{
     Environment        = $Environment
     TemporaryCaller    = $true
+    CostScope           = "caller-account-only"
     PeriodStart        = $Window.Start.ToString("yyyy-MM-dd")
     PeriodEndExclusive = $Window.End.ToString("yyyy-MM-dd")
     UnblendedCostUsd   = [Math]::Round($total, 4)
@@ -301,7 +317,11 @@ function Get-EnvironmentCost {
 }
 
 $window = Convert-DateWindow
-@(
-  Get-EnvironmentCost "development" $DevelopmentProfile $window
-  Get-EnvironmentCost "staging" $StagingProfile $window
-) | ConvertTo-Json -Depth 7
+$results = @()
+if ($Environment -in @("all", "development")) {
+  $results += Get-EnvironmentCost "development" $DevelopmentProfile $window
+}
+if ($Environment -in @("all", "staging")) {
+  $results += Get-EnvironmentCost "staging" $StagingProfile $window
+}
+$results | ConvertTo-Json -Depth 7

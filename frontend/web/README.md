@@ -40,16 +40,12 @@ nor response body is returned to browser code or retained as evidence.
 
 Use `scripts/start-deployed-web-conformance.ps1` to route this local, server-held BFF to either
 development or synthetic staging. The launcher verifies that the selected live gateway has the
-same issuer and audience as the ignored local Auth0 configuration before it starts. Staging's
-temporary use of the development Auth0 tenant is synthetic-only under ADR-014 and does not prove
-identity-provider isolation or launch readiness. During the scale-to-zero migration,
-`-GatewayRuntime lambda-dark` keeps the public route on the idle ECS rollback integration while a
-loopback-only bridge verifies the real Auth0 token, forwards only its minimum validated claims to
-the selected environment's immutable Lambda alias, and exposes only the existing Phase 0
-profile/readiness surface. It never returns a token or provider identity to browser code. Because
-replacement workflow triggers remain disabled before cutover, this explicit local dark mode may
-arm an owner-visible `queued` operation for the two-account isolation probe; normal conformance
-continues to require a `succeeded` operation.
+same issuer and audience as the ignored local Auth0 configuration, confirms the immutable Lambda
+alias and durable triggers, rejects any continuous ECS application path, and requires
+`200/200/401` before it starts. Staging's temporary use of the development Auth0 tenant is
+synthetic-only under ADR-014 and does not prove identity-provider isolation or launch readiness.
+The isolation probe always requires a terminal `succeeded` operation; retired transition modes
+cannot be selected.
 
 Authentication callback failures redirect to an allowlisted local error state. Provider-controlled
 error descriptions are never rendered, while blocked or unavailable accounts receive a generic

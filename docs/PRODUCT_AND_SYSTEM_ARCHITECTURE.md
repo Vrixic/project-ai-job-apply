@@ -111,24 +111,26 @@ Per [ADR-016](adr/016-scale-to-zero-application-runtime.md), default the applica
 to scale-to-zero managed compute through pre-launch and after launch until production evidence
 requires reserved capacity. The primary AWS region is `us-east-2`.
 
-[ADR-017](adr/017-zero-traffic-precutover-ecs-idle-posture.md) permits confirmed zero-traffic
-development and synthetic-staging environments to stop their retained legacy gateway/worker tasks
-before Lambda cutover, after zero-outbox/Temporal proof. This deliberately sacrifices non-user
-environment availability while preserving Terraform ownership and an exact rollback boundary; it
-does not permit early deletion of persistent or legacy rollback resources.
+[ADR-017](adr/017-zero-traffic-precutover-ecs-idle-posture.md) records the historical zero-traffic
+bridge used before Lambda cutover. That rollback path has expired and been removed from both
+environments; it is not a deployable architecture option.
 
-As of 2026-08-03, both isolated Phase 0 environments have applied and verified that retained-idle
-posture: the gateway and worker services remain available for reviewed rollback with zero desired
-or running tasks, no continuously assigned task public IPs, quiet expected-heartbeat alarms, and
-zero targeted Terraform drift.
+As of 2026-08-10, development and synthetic staging use only the serverless application path.
+Their ECS clusters contain no service and exist solely for reviewed one-off database migrations.
+No continuously assigned application public IP or general workflow provider remains. Development
+is the continuous prelaunch integration environment. Under
+[ADR-018](adr/018-disposable-prelaunch-staging-data-plane.md), synthetic staging is activated only
+for bounded release, migration, restore, or security acceptance and otherwise removes its RDS
+instance and hourly interface endpoints while retaining its isolated reproducible control plane.
 
 - Use API Gateway with a direct versioned Lambda integration for synchronous APIs.
 - Use the transactional outbox, SQS/DLQ, and versioned Lambda durable functions for long-running
   orchestration. PostgreSQL remains product and audit truth.
 - Reserve ECS/Fargate for explicitly started migrations, isolated browser/ATS runs, or a measured
   workload that cannot fit Lambda safely; do not run a general gateway or workflow poller 24/7.
-- Provision isolated staging application compute on demand for release candidates,
-  restore/migration rehearsals, security acceptance, and launch.
+- Activate isolated synthetic staging on demand for release candidates, restore/migration
+  rehearsals, security acceptance, and launch. Recreate its private database data plane dark-first,
+  migrate/seed/verify before routing, and return it through quiesced to dormant afterward.
 - Start with encrypted Single-AZ PostgreSQL plus automated backups and tested restore.
 - Do not provision provisioned Lambda concurrency, a NAT gateway, RDS Proxy, Redis, a search
   cluster, extra replicas, or dedicated services until an implemented capability or measured
@@ -1560,7 +1562,9 @@ At small scale, people can cover multiple responsibilities. No launch should lea
 
 - Scale synchronous APIs and durable orchestration to zero when idle; use provisioned concurrency
   only from measured latency and availability evidence.
-- Keep isolated staging application compute disabled outside acceptance work.
+- Keep isolated synthetic staging dormant outside acceptance work: retain state, encryption,
+  artifacts, trust, evidence, and cost controls while removing its disposable RDS and hourly
+  interface endpoints through checksum-reviewed Terraform transitions.
 - Start Fargate tasks only for owned on-demand migrations, browser/ATS runs, or measured workloads
   that cannot safely fit Lambda, and terminate them at completion/timeout.
 - Use direct API Gateway/Lambda integration before provisioning VPC Link, Cloud Map, or an ALB.
@@ -1620,8 +1624,8 @@ Do not launch automated submission broadly until:
 
 The living delivery tracker is authoritative. Current dependency order is:
 
-1. Complete [D0-016](product/delivery/phase-0-serverless-runtime-migration.md): implement and accept
-   the scale-to-zero gateway/workflow replacement, then remove the obsolete Fargate/Temporal path.
+1. Complete [D0-016](product/delivery/phase-0-serverless-runtime-migration.md) by reconciling the
+   first post-retirement two-account billing window and final repository evidence.
 2. Reconcile delivered two-account billing against the revised runtime cost baseline under D0-008.
 3. Obtain the accountable legal/privacy and security/privacy reviews in D0-014 and D0-015.
 4. Acquire representative sanitized ATS fixtures under the approved D0-007 policy.

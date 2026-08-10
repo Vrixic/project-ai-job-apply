@@ -1,5 +1,9 @@
 # Staging PostgreSQL Point-in-Time Restore
 
+This exercise requires `staging_runtime_mode = "active"`. Finish and remove every disposable
+restore target before staging enters `quiesced`; dormant staging intentionally retains no source
+database or recovery snapshot under ADR-018.
+
 Use this procedure to prove that the dedicated synthetic-only staging PostgreSQL automated-backup
 chain can produce a private, encrypted, functionally valid disposable copy while the source
 database and lean application remain online.
@@ -18,8 +22,8 @@ identity-provider isolation.
   environment, and manager tags.
 - Require the source to be available, private, KMS encrypted, deletion protected, Single-AZ,
   covered by seven-day PITR, and backed by a current latest-restorable point.
-- Require two stable application services, `200/200/401` health/access responses, all eight alarms
-  `OK`, and exact-input Terraform no drift.
+- Require an empty ECS application boundary, `200/200/401` health/access responses, enabled Lambda
+  durable triggers, all current runtime alarms `OK`, and exact-input Terraform no drift.
 - Require the existing migration task definition, its digest-pinned `linux/amd64` image, and a
   complete zero-finding ECR scan.
 - Permit exactly one uniquely named target with `Project=ai-job-apply`, `Environment=staging`,
@@ -36,11 +40,16 @@ it does not leave an idle restored database.
 
 ## Read-only preflight
 
-Run:
+Set the exact environment boundary from the accepted applied plan, then run:
 
 ```powershell
-.\scripts\operate-staging-postgresql-restore.ps1 -Action Status
-.\scripts\operate-staging-application-recovery.ps1 -Action NoDrift
+$restoreBoundary = @{
+  ExpectedAccountId = "STAGING_ACCOUNT_ID"
+  StateBucket = "STAGING_TERRAFORM_STATE_BUCKET"
+  RuntimePlanPath = ".terraform/APPLIED_STEADY_STATE_PLAN.tfplan"
+}
+
+.\scripts\operate-staging-postgresql-restore.ps1 -Action Status @restoreBoundary
 ```
 
 Require:
@@ -48,7 +57,8 @@ Require:
 - one healthy managed source and zero disposable restore targets;
 - a current latest-restorable point and seven-day retention;
 - source private/encrypted/deletion-protected/Single-AZ booleans;
-- two stable services, eight `OK` alarms, and Terraform drift `0`;
+- zero ECS application services/tasks, enabled durable triggers, all managed runtime alarms `OK`,
+  and Terraform drift `0`;
 - a clean immutable verifier image; and
 - no ignored restore context.
 
@@ -59,15 +69,15 @@ Require:
 After merge and explicit authorization, run:
 
 ```powershell
-.\scripts\operate-staging-postgresql-restore.ps1 -Action Start -Execute
+.\scripts\operate-staging-postgresql-restore.ps1 -Action Start -Execute @restoreBoundary
 ```
 
 The operator:
 
 1. repeats all source/application/no-drift guards;
 2. starts the immutable one-off Fargate verifier against the source-managed connection secret;
-3. runs one read-only PostgreSQL transaction that proves eight expected tables and one
-   `0001_foundation` journal entry, hashes only ordered aggregate counts in memory, and emits one
+3. runs one read-only PostgreSQL transaction that proves the expected tables and all three accepted
+   migration journal entries, hashes only ordered aggregate counts in memory, and emits one
    sanitized digest event;
 4. records the latest-restorable-point lag;
 5. saves only an ignored local target/context record;
@@ -88,7 +98,7 @@ run `Status`, inspect the exact target, then continue with `Verify` or the emerg
 After `Start` reports the target available, run:
 
 ```powershell
-.\scripts\operate-staging-postgresql-restore.ps1 -Action Verify -Execute
+.\scripts\operate-staging-postgresql-restore.ps1 -Action Verify -Execute @restoreBoundary
 ```
 
 The operator re-resolves and revalidates source, target, tags, network, encryption, and database
@@ -98,8 +108,8 @@ configuration. It then runs the same immutable read-only verifier while keeping 
 
 Require:
 
-- eight expected tables;
-- one expected migration journal entry;
+- the expected tables;
+- the `0001_foundation`, `0002_serverless_outbox`, and `0003_retire_legacy_dispatch` journal entries;
 - exact aggregate digest equality with the source baseline;
 - verifier exit code `0`;
 - zero forbidden credential/candidate/email/JWT patterns in the two verifier streams; and
@@ -113,7 +123,7 @@ to the restored target.
 For a verified target, run:
 
 ```powershell
-.\scripts\operate-staging-postgresql-restore.ps1 -Action Cleanup -Execute
+.\scripts\operate-staging-postgresql-restore.ps1 -Action Cleanup -Execute @restoreBoundary
 ```
 
 Cleanup revalidates that the target is not the source, is available/private/encrypted,
@@ -131,12 +141,15 @@ with:
 .\scripts\operate-staging-postgresql-restore.ps1 `
   -Action Cleanup `
   -AllowUnverifiedCleanup `
-  -Execute
+  -Execute `
+  @restoreBoundary
 ```
 
 That switch relaxes only the verified-result prerequisite. It does not relax target identifier,
 source inequality, tags, private networking, encryption, availability, or deletion-protection
 guards. Record the failed exercise honestly and investigate before attempting another restore.
 
-For an uninterrupted reviewed exercise, `-Action Exercise -Execute` runs Start, Verify, and Cleanup
-in sequence, stopping at the first failed gate and retaining the context/target for safe recovery.
+For an uninterrupted reviewed exercise,
+`.\scripts\operate-staging-postgresql-restore.ps1 -Action Exercise -Execute @restoreBoundary` runs
+Start, Verify, and Cleanup in sequence, stopping at the first failed gate and retaining the
+context/target for safe recovery.

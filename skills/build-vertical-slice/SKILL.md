@@ -1,6 +1,6 @@
 ---
 name: build-vertical-slice
-description: Implement a product capability end to end through the appropriate client, generated API contract, gateway, owned domain or persistence module, transactional outbox, Temporal workflow or isolated worker, observability, and tests. Use when adding or modifying a user-facing feature, authenticated workflow, durable operation, profile behavior, application pipeline step, notification, UGC flow, or other cross-layer platform capability.
+description: Implement a product capability end to end through the appropriate client, generated API contract, gateway, owned domain or persistence module, transactional outbox, Lambda durable workflow or isolated activity, observability, and tests. Use when adding or modifying a user-facing feature, authenticated workflow, durable operation, profile behavior, application pipeline step, notification, UGC flow, or other cross-layer platform capability.
 ---
 
 # Build a Vertical Slice
@@ -31,8 +31,8 @@ Omit layers that add no value. A folder boundary does not require a new deployme
 6. Make gateway input strict, authorization scoped, resource ownership enforced, and errors
    stable.
 7. Return durable operation identifiers for long-running work instead of holding HTTP requests.
-8. Use deterministic Temporal workflows; put network, database, AI, and browser I/O in retryable
-   activities/workers.
+8. Use deterministic Lambda durable workflows; put network, database, AI, and browser I/O in
+   retryable activities with bounded concurrency and explicit version targets.
 9. Correlate request, event, workflow, and operation IDs without logging sensitive payloads.
 10. Use generated client shapes in frontends and keep mobile limitations explicit.
 

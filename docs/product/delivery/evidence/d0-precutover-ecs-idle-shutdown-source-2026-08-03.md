@@ -3,7 +3,7 @@
 - Scope: development and synthetic staging zero-traffic legacy ECS runtime
 - Status: Source implemented locally; no AWS plan or mutation is claimed
 - Decision: [ADR-017](../../../adr/017-zero-traffic-precutover-ecs-idle-posture.md)
-- Runbook: [Phase 0 ECS idle shutdown](../../../../infrastructure/runbooks/deployments/phase0-ecs-idle-shutdown.md)
+- Runbook: [Phase 0 ECS idle shutdown](d0-provider-runtime-repository-cleanup-2026-08-08.md)
 
 ## Accepted operating condition
 

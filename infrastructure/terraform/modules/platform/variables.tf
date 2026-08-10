@@ -217,6 +217,30 @@ variable "serverless_runtime_enabled" {
   }
 }
 
+variable "persistent_data_plane_enabled" {
+  description = "Provision the persistent database and private AWS service endpoints required by an active runtime. Disable only after the serverless runtime is quiesced."
+  type        = bool
+  default     = true
+}
+
+variable "database_deletion_protection" {
+  description = "Protect the active PostgreSQL instance from deletion. A reviewed quiesce apply must set this false before an on-demand environment is deactivated."
+  type        = bool
+  default     = true
+}
+
+variable "retain_database_snapshot_on_destroy" {
+  description = "Create a final RDS snapshot when the disposable data plane is destroyed. Prelaunch staging uses synthetic data and may explicitly disable this."
+  type        = bool
+  default     = true
+}
+
+variable "runtime_activation_allowed" {
+  description = "Environment-level gate for public routes and workflow triggers. On-demand callers use this to restrict activation to their explicit active lifecycle state."
+  type        = bool
+  default     = true
+}
+
 variable "workflow_ingress_artifact_s3_key" {
   description = "Immutable environment artifact-bucket key for the starter/reconciler Lambda ZIP."
   type        = string

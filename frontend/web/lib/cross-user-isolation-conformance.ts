@@ -274,15 +274,8 @@ async function currentIdentity(
 export function isCrossUserIsolationConformanceEnabled(
   environment: Record<string, string | undefined> = process.env,
 ): boolean {
-  return environment.NODE_ENV === "development";
-}
-
-export function isDarkLambdaIsolationConformanceEnabled(
-  environment: Record<string, string | undefined> = process.env,
-): boolean {
   return (
-    isCrossUserIsolationConformanceEnabled(environment) &&
-    environment.DARK_LAMBDA_CONFORMANCE === "1"
+    environment.NODE_ENV === "development" && environment.DEPLOYED_PLATFORM_CONFORMANCE === "1"
   );
 }
 

@@ -62,5 +62,5 @@ SR-006 and D0-016 remain `In progress`. Acceptance is not complete until the sta
    zero-drift checks; and
 5. removes only the ignored local recovery plans/context after owner confirmation.
 
-See the [staging cutover runbook](../../../../infrastructure/runbooks/deployments/staging-serverless-runtime-cutover.md)
+See the [staging cutover runbook](d0-provider-runtime-repository-cleanup-2026-08-08.md)
 and [living migration plan](../phase-0-serverless-runtime-migration.md).

@@ -76,7 +76,7 @@ the exact reviewed apply, and must be deleted after its hash and apply result ar
 
 The plan is reviewed but not applied. After this runbook/evidence change is merged, an accountable
 operator may explicitly authorize applying only the checksum-matched artifact under the
-[staging application rollout runbook](../../../../infrastructure/runbooks/deployments/staging-application-rollout.md).
+[staging application rollout runbook](d0-provider-runtime-repository-cleanup-2026-08-08.md).
 
 After apply, prove no drift, service/task/digest health, Cloud Map, live/readiness/unauthenticated
 responses, sanitized startup/heartbeat logs, isolated Temporal workflow completion, synthetic

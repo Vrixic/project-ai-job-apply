@@ -25,7 +25,8 @@ and failure modes.
 The exception permits no real candidates, invited testers, production PII, live ATS submissions,
 public access, or launch-candidate claim. Do not copy development Auth0 client, Management API, or
 session secrets into staging AWS; the staging gateway receives only the public issuer and
-audience. AWS, data, KMS, state, logs, queues, images, and Temporal remain environment isolated.
+audience. AWS, data, KMS, state, logs, queues, artifacts, and durable execution remain environment
+isolated.
 
 Dedicated staging and production Auth0 tenants and environment-specific clients/APIs are mandatory
 before staging handles real users or becomes a release candidate. Replay the applicable

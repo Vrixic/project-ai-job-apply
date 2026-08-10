@@ -75,10 +75,10 @@ function New-HttpApiEvent {
     $headers["content-type"] = $ContentType
   }
   $requestContext = [ordered]@{
-    accountId = "dark-boundary"
-    apiId = "dark-boundary"
+    accountId = "synthetic-boundary"
+    apiId = "synthetic-boundary"
     domainName = "127.0.0.1"
-    domainPrefix = "dark-boundary"
+    domainPrefix = "synthetic-boundary"
     http = [ordered]@{
       method = $Method
       path = $Path
@@ -203,12 +203,11 @@ try {
 
   & $preflightScript `
     -Environment $Environment `
-    -GatewayRuntime lambda-dark `
     -AwsProfile $AwsProfile `
     -AwsRegion $AwsRegion `
     -ValidateOnly
   if ($LASTEXITCODE -ne 0) {
-    throw "The dark Lambda preflight failed before the boundary matrix."
+    throw "The steady-state Lambda preflight failed before the boundary matrix."
   }
 
   $alias = Invoke-AwsJson `
@@ -365,12 +364,11 @@ try {
 
   & $preflightScript `
     -Environment $Environment `
-    -GatewayRuntime lambda-dark `
     -AwsProfile $AwsProfile `
     -AwsRegion $AwsRegion `
     -ValidateOnly
   if ($LASTEXITCODE -ne 0) {
-    throw "The dark Lambda preflight failed after the boundary matrix."
+    throw "The steady-state Lambda preflight failed after the boundary matrix."
   }
 
   [ordered]@{

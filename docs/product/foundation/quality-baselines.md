@@ -40,7 +40,7 @@ cost attribution using only synthetic data.
 
 The fixed `phase0_staging_foundation_v1` profile provides the API/load evidence without
 claiming production capacity: 200 liveness reads, 200 readiness/database reads, 100 expected
-protected `401` reads, 25 sequential durable preference/outbox/Temporal workflows, and one exact
+protected `401` reads, 25 sequential preference/outbox/Lambda durable workflows, and one exact
 idempotent replay. Its browser response and AWS corroboration retain only counts, timestamps,
 booleans, aggregate latency/utilization, and forbidden/error matches.
 

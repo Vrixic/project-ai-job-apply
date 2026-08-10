@@ -3,7 +3,6 @@ import { getAuth0Client } from "../../../../../lib/auth0";
 import {
   armCrossUserIsolationProbe,
   isCrossUserIsolationConformanceEnabled,
-  isDarkLambdaIsolationConformanceEnabled,
 } from "../../../../../lib/cross-user-isolation-conformance";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +10,7 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request): Promise<Response> {
   const cookieStore = await cookies();
   return armCrossUserIsolationProbe(request, {
-    allowQueuedOperation: isDarkLambdaIsolationConformanceEnabled(),
+    allowQueuedOperation: false,
     appBaseUrl: process.env.APP_BASE_URL ?? "http://localhost:3000",
     auth0: getAuth0Client(),
     baseUrl: process.env.PLATFORM_API_BASE_URL ?? "http://localhost:4000",

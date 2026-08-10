@@ -6,16 +6,14 @@ timestamps.
 
 ## Current procedures
 
-- [Development alert delivery](development-alert-delivery.md) — Provisions encrypted routing,
-  privately subscribes an operator, and exercises ALARM → OK delivery with a dedicated synthetic
-  metric.
+- [Development alert delivery](development-alert-delivery.md) — Privately subscribes an operator
+  to the provisioned encrypted route and exercises ALARM → OK delivery with a synthetic metric.
 - [Staging alert delivery](staging-alert-delivery.md) — Subscribes and exercises the already
   provisioned synthetic staging notification path without retaining the destination.
-- [Development distributed tracing](development-distributed-tracing.md) — Continues privacy-safe
-  W3C context through the deployed gateway, outbox, Temporal worker, and X-Ray.
+- [Serverless distributed tracing](serverless-distributed-tracing.md) — Verifies privacy-safe W3C
+  correlation through API Gateway/Lambda, outbox/SQS, durable execution, and private activity.
 - [Staging workload and initial cost acceptance](staging-workload-and-cost.md) — Runs a fixed
   session-safe synthetic foundation workload and corroborates only aggregate runtime/billing
   evidence.
-- [Development provider and log recovery](../providers/development-provider-and-log-recovery.md) —
-  Uses continuous privacy-safe heartbeats to detect and recover from a gateway log-delivery
-  interruption.
+- [Development Auth0 recovery](../providers/development-provider-and-log-recovery.md) — Proves fresh-login
+  failure and exact application-connection restoration without weakening the runtime.

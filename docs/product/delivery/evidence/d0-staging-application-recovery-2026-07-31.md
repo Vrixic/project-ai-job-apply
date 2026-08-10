@@ -17,8 +17,8 @@ only synthetic identity and product data. No real candidate data or live ATS act
 ## Authorization and preconditions
 
 - [PR #47](https://github.com/Vrixic/project-ai-job-apply/pull/47) merged the reviewed
-  [recovery operator](../../../../scripts/operate-staging-application-recovery.ps1),
-  [runbook](../../../../infrastructure/runbooks/deployments/staging-application-recovery.md), and
+  [recovery operator](d0-provider-runtime-repository-cleanup-2026-08-08.md),
+  [runbook](d0-provider-runtime-repository-cleanup-2026-08-08.md), and
   [preflight evidence](d0-staging-application-recovery-preflight-2026-07-31.md) as
   `fd1193c22b0c40b1974a4efdec83f6f1d7b4d553`.
 - The merged Terraform source was unchanged from the source that produced the saved disable plan.

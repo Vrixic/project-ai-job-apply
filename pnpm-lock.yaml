@@ -84,9 +84,6 @@ importers:
       '@ai-job-apply/domain':
         specifier: workspace:*
         version: link:../../packages/domain
-      '@aws-sdk/client-lambda':
-        specifier: 3.1101.0
-        version: 3.1101.0
       '@types/aws-lambda':
         specifier: 8.10.162
         version: 8.10.162
@@ -147,9 +144,6 @@ importers:
       '@aws/durable-execution-sdk-js':
         specifier: 2.1.0
         version: 2.1.0
-      '@temporalio/client':
-        specifier: 1.14.0
-        version: 1.14.0
       pino:
         specifier: 10.1.0
         version: 10.1.0
@@ -2052,18 +2046,6 @@ packages:
   '@swc/helpers@0.5.15':
     resolution: {integrity: sha512-JQ5TuMi45Owi4/BIMAJBoSQoOJu12oOk/gADqlcUL9JEdHB8vyjUSsxqeNXnmXHjYKMi2WcYtezGEEhqUI/E2g==}
 
-  '@temporalio/client@1.14.0':
-    resolution: {integrity: sha512-kjzJ+7M2kHj32cTTSQT5WOjEIOxY0TNV5g6Sw9PzWmKWdtIZig+d7qUIA3VjDe/TieNozxjR2wNAX5sKzYFANA==}
-    engines: {node: '>= 18.0.0'}
-
-  '@temporalio/common@1.14.0':
-    resolution: {integrity: sha512-jVmurBdFHdqw/wIehzVJikS8MhavL630p88TJ64P5PH0nP8S5V8R5vhkmHZ7n0sMRO+A0QFyWYyvnccu6MQZvw==}
-    engines: {node: '>= 18.0.0'}
-
-  '@temporalio/proto@1.14.0':
-    resolution: {integrity: sha512-duYVjt3x6SkuFzJr+5NlklEgookPqW065qdcvogmdfVjrgiwz4W/07AN3+fL4ufmqt1//0SyF6nyqv9RNADYNA==}
-    engines: {node: '>= 18.0.0'}
-
   '@tokenizer/inflate@0.4.1':
     resolution: {integrity: sha512-2mAv+8pkG6GIZiF1kNg1jAjh27IDxEPKwdGul3snfztFerfPGI1LjDezZp3i7BElXompqEtPmoPx6c2wgtWsOA==}
     engines: {node: '>=18'}
@@ -3370,10 +3352,6 @@ packages:
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
-  ms@3.0.0-canary.1:
-    resolution: {integrity: sha512-kh8ARjh8rMN7Du2igDRO9QJnqCb2xYTJxyQYK7vJJS4TvLLmsbyhiKpSW+t+y26gyOyMd0riphX0GeWKU3ky5g==}
-    engines: {node: '>=12.13'}
-
   multitars@1.0.0:
     resolution: {integrity: sha512-H/J4fMLedtudftaYMOg7ajzLYgT3/rwbWVJbqr/iUgB8DQztn38ys5HOqI1CzSxx8QhXXwOOnnBvd4v3jG5+Mg==}
 
@@ -3414,10 +3392,6 @@ packages:
         optional: true
       sass:
         optional: true
-
-  nexus-rpc@0.0.1:
-    resolution: {integrity: sha512-hAWn8Hh2eewpB5McXR5EW81R3pR/ziuGhKCF3wFyUVCklanPqrIgMNr7jKCbzXeNVad0nUDfWpFRqh2u+zxQtw==}
-    engines: {node: '>= 18.0.0'}
 
   node-forge@1.4.0:
     resolution: {integrity: sha512-LarFH0+6VfriEhqMMcLX2F7SwSXeWwnEAJEsYm5QKWchiVYVvJyV9v7UDvUv+w5HO23ZpQTXDv/GxdDdMyOuoQ==}
@@ -3583,10 +3557,6 @@ packages:
   prompts@2.4.2:
     resolution: {integrity: sha512-NxNv/kLguCA7p3jE8oL2aEBsrJWgAakBpgmgK6lpPWV+WuOmY6r2/zbAVnP+T8bQlA0nzHXSJSJW0Hq7ylaD2Q==}
     engines: {node: '>= 6'}
-
-  proto3-json-serializer@2.0.2:
-    resolution: {integrity: sha512-SAzp/O4Yh02jGdRc+uIrGoe87dkN/XtwxfZ4ZyafJHymd79ozp5VG5nyZ7ygqPM5+cpLDjjGnYFUkngonyDPOQ==}
-    engines: {node: '>=14.0.0'}
 
   protobufjs@7.6.5:
     resolution: {integrity: sha512-/FPD0nUc9jH6rfFjji9IBqOz4pcSE3CsT1m7Ep6Mdb0LxSUMj8hgl6GomOvZzpNpAqqGaXA0P3VSrZLFzIhQrw==}
@@ -6257,28 +6227,6 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  '@temporalio/client@1.14.0':
-    dependencies:
-      '@grpc/grpc-js': 1.14.4
-      '@temporalio/common': 1.14.0
-      '@temporalio/proto': 1.14.0
-      abort-controller: 3.0.0
-      long: 5.3.2
-      uuid: 11.1.1
-
-  '@temporalio/common@1.14.0':
-    dependencies:
-      '@temporalio/proto': 1.14.0
-      long: 5.3.2
-      ms: 3.0.0-canary.1
-      nexus-rpc: 0.0.1
-      proto3-json-serializer: 2.0.2
-
-  '@temporalio/proto@1.14.0':
-    dependencies:
-      long: 5.3.2
-      protobufjs: 7.6.5
-
   '@tokenizer/inflate@0.4.1':
     dependencies:
       debug: 4.4.3(supports-color@10.2.2)
@@ -7615,8 +7563,6 @@ snapshots:
 
   ms@2.1.3: {}
 
-  ms@3.0.0-canary.1: {}
-
   multitars@1.0.0: {}
 
   nanoid@3.3.17: {}
@@ -7652,8 +7598,6 @@ snapshots:
     transitivePeerDependencies:
       - '@babel/core'
       - babel-plugin-macros
-
-  nexus-rpc@0.0.1: {}
 
   node-forge@1.4.0: {}
 
@@ -7816,10 +7760,6 @@ snapshots:
     dependencies:
       kleur: 3.0.3
       sisteransi: 1.0.5
-
-  proto3-json-serializer@2.0.2:
-    dependencies:
-      protobufjs: 7.6.5
 
   protobufjs@7.6.5:
     dependencies:

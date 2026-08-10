@@ -13,7 +13,7 @@ workload/cost baselines, independent Auth0 tenant isolation, or Phase 0 completi
 ## Authorization and exact apply
 
 - [PR #41](https://github.com/Vrixic/project-ai-job-apply/pull/41) merged the reviewed
-  [staging rollout runbook](../../../../infrastructure/runbooks/deployments/staging-application-rollout.md)
+  [staging rollout runbook](d0-provider-runtime-repository-cleanup-2026-08-08.md)
   and [preflight evidence](d0-staging-application-enablement-preflight-2026-07-30.md) as
   `9a238b03fe7368a2cfb341894859e49f9b99fce5`.
 - All PR checks passed: repository quality, dependency audit, integration, Semgrep, and gateway,
