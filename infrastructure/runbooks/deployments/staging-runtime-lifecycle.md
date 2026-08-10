@@ -85,6 +85,25 @@ After checksum-reviewed apply, keep all routes and triggers disabled. Then:
 7. execute persistence, readiness, workload, tenant-isolation, restore/security tests required by
    that release candidate.
 
+Generate the traffic plan from the applied active plan. It must create exactly the JWT default
+route, two anonymous health routes, and enable the SQS mapping plus two EventBridge rules. It may
+change nothing else.
+
+```powershell
+.\scripts\operate-staging-runtime-lifecycle.ps1 -Action PlanTraffic -TrafficTarget enabled `
+  -ExpectedAccountId "STAGING_ACCOUNT_ID" -StateBucket "STAGING_STATE_BUCKET" `
+  -RuntimePlanPath ".terraform/staging-lifecycle/APPLIED_ACTIVE_PLAN.tfplan"
+```
+
+Apply only the exact reviewed checksum with `-Action ApplyTraffic`. Require `Mode=active`, three
+routes, one enabled mapping, two enabled rules, and empty queues before starting acceptance traffic.
+
+For a bounded recovery that keeps the protected database, create a separate `TrafficTarget=disabled`
+plan from the applied enabled plan. It must delete only the three routes and disable only the three
+triggers. If staging is already dark when shutdown begins, the subsequent quiescence plan contains
+only the database-deletion-protection update; from live traffic it contains that update plus the
+exact six traffic actions. Both forms remain separately checksum reviewed.
+
 When the bounded exercise ends, repeat the two-step shutdown. Never leave staging active merely to
 preserve test records.
 

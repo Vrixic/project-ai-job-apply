@@ -47,10 +47,17 @@ const stagingLifecycleOperator = "scripts/operate-staging-runtime-lifecycle.ps1"
 for (const required of [
   "Quiescence must change database deletion protection from enabled to disabled.",
   "Quiescence must disable the exact mapping and both EventBridge rules.",
+  "Quiescence must update database protection plus either the exact six live traffic actions or no already-dark traffic action.",
   "Dormant mode must contain exactly eight disposable-resource deletes and one dashboard update.",
   "Dark activation must contain exactly eight disposable-resource creates and one dashboard update.",
   "Dark activation must create one encrypted private protected database with seven-day backups.",
   "Dark activation must create exactly three private-DNS interface endpoints.",
+  "Traffic can be enabled only from the exact dark active boundary.",
+  "Traffic can be disabled only from the exact enabled active boundary.",
+  "The traffic plan must contain exactly three route actions and three trigger updates without replacement.",
+  "Traffic enablement must create three routes and enable the exact three workflow triggers.",
+  "Traffic enablement must preserve exact JWT scopes and anonymous health routes only.",
+  "Traffic disablement must delete three routes and disable the exact three workflow triggers.",
 ]) {
   requireText(
     stagingLifecycleOperator,

@@ -130,7 +130,8 @@ instance and hourly interface endpoints while retaining its isolated reproducibl
   workload that cannot fit Lambda safely; do not run a general gateway or workflow poller 24/7.
 - Activate isolated synthetic staging on demand for release candidates, restore/migration
   rehearsals, security acceptance, and launch. Recreate its private database data plane dark-first,
-  migrate/seed/verify before routing, and return it through quiesced to dormant afterward.
+  migrate, create synthetic records only through approved owned boundaries, and verify before
+  routing; return it through quiesced to dormant afterward.
 - Start with encrypted Single-AZ PostgreSQL plus automated backups and tested restore.
 - Do not provision provisioned Lambda concurrency, a NAT gateway, RDS Proxy, Redis, a search
   cluster, extra replicas, or dedicated services until an implemented capability or measured
