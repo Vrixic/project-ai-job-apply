@@ -333,6 +333,46 @@ function Assert-PlanBoundary {
   if ($protectedDeletes.Count -ne 0) {
     throw "The lifecycle plan attempts to delete a retained control-plane resource: $($protectedDeletes.address -join ', ')."
   }
+  $replacements = @($changes | Where-Object {
+      "create" -in @($_.change.actions) -and "delete" -in @($_.change.actions)
+    })
+  if ($replacements.Count -ne 0) {
+    throw "Lifecycle transitions must not replace a managed resource: $($replacements.address -join ', ')."
+  }
+  if ($TargetMode -eq "quiesced") {
+    $allowedAddresses = @(
+      "module.platform.aws_db_instance.postgres[0]",
+      "module.platform.aws_apigatewayv2_route.gateway[0]",
+      'module.platform.aws_apigatewayv2_route.gateway_lambda_public["GET /health/live"]',
+      'module.platform.aws_apigatewayv2_route.gateway_lambda_public["GET /health/ready"]',
+      "module.platform.aws_lambda_event_source_mapping.outbox_starter[0]",
+      "module.platform.aws_cloudwatch_event_rule.outbox_reconciler[0]",
+      "module.platform.aws_cloudwatch_event_rule.profile_readiness_terminal[0]"
+    )
+    $unexpected = @($changes | Where-Object { $_.address -notin $allowedAddresses })
+    if ($unexpected.Count -ne 0) {
+      throw "Quiescence contains an unexpected resource action: $($unexpected.address -join ', ')."
+    }
+    if ($changes.Count -ne 7) {
+      throw "Quiescence must contain exactly one database update, three route deletes, and three trigger updates."
+    }
+    $databaseChange = @($changes | Where-Object {
+        $_.address -eq "module.platform.aws_db_instance.postgres[0]" -and
+        (@($_.change.actions) -join ",") -eq "update"
+      })
+    $routeDeletes = @($changes | Where-Object {
+        $_.address -like "module.platform.aws_apigatewayv2_route.*" -and
+        (@($_.change.actions) -join ",") -eq "delete"
+      })
+    $triggerUpdates = @($changes | Where-Object {
+        ($_.address -like "module.platform.aws_lambda_event_source_mapping.*" -or
+          $_.address -like "module.platform.aws_cloudwatch_event_rule.*") -and
+        (@($_.change.actions) -join ",") -eq "update"
+      })
+    if ($databaseChange.Count -ne 1 -or $routeDeletes.Count -ne 3 -or $triggerUpdates.Count -ne 3) {
+      throw "Quiescence actions do not match the exact database, route, and trigger transition."
+    }
+  }
   if ($TargetMode -eq "dormant") {
     $allowedDeletePattern = "aws_db_instance\.postgres|aws_secretsmanager_secret_version\.database_url|aws_vpc_endpoint\.(secretsmanager|sqs|lambda)|aws_ecs_task_definition\.migration|aws_cloudwatch_metric_alarm\.(database_cpu|database_free_storage)"
     $unexpected = @($deletes | Where-Object { $_.address -notmatch $allowedDeletePattern })
@@ -374,11 +414,27 @@ if ($Action -eq "Plan") {
   $resolvedPlan = Resolve-PlanBelowTerraformData -Candidate $PlanPath
   if (Test-Path -LiteralPath $resolvedPlan) { throw "Refusing to overwrite an existing saved plan." }
 
-  & terraform "-chdir=$terraformDirectory" plan -input=false -lock-timeout=5m `
-    -out=$resolvedPlan
-  if ($LASTEXITCODE -ne 0) { throw "The refresh-backed staging lifecycle plan failed." }
-  $plan = & terraform "-chdir=$terraformDirectory" show -json $resolvedPlan | ConvertFrom-Json
-  $changes = Assert-PlanBoundary -Plan $plan
+  try {
+    & terraform "-chdir=$terraformDirectory" plan -input=false -lock-timeout=5m `
+      "-out=$resolvedPlan" | Out-Null
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $resolvedPlan -PathType Leaf)) {
+      throw "The refresh-backed staging lifecycle plan failed."
+    }
+    $planJson = (& terraform "-chdir=$terraformDirectory" show -json $resolvedPlan)
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($planJson)) {
+      throw "The saved lifecycle plan could not be inspected."
+    }
+    try { $plan = $planJson | ConvertFrom-Json }
+    catch { throw "The saved lifecycle plan JSON is invalid." }
+    if ($null -eq $plan) { throw "The saved lifecycle plan is empty." }
+    $changes = Assert-PlanBoundary -Plan $plan
+  }
+  catch {
+    if (Test-Path -LiteralPath $resolvedPlan -PathType Leaf) {
+      Remove-Item -LiteralPath $resolvedPlan -Force
+    }
+    throw
+  }
   $sha256 = (Get-FileHash -LiteralPath $resolvedPlan -Algorithm SHA256).Hash.ToLowerInvariant()
   $metadataPath = "$resolvedPlan.lifecycle.json"
   [pscustomobject]@{
