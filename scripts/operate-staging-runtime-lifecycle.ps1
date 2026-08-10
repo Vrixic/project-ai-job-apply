@@ -372,19 +372,109 @@ function Assert-PlanBoundary {
     if ($databaseChange.Count -ne 1 -or $routeDeletes.Count -ne 3 -or $triggerUpdates.Count -ne 3) {
       throw "Quiescence actions do not match the exact database, route, and trigger transition."
     }
+    if (
+      -not [bool]$databaseChange[0].change.before.deletion_protection -or
+      [bool]$databaseChange[0].change.after.deletion_protection
+    ) {
+      throw "Quiescence must change database deletion protection from enabled to disabled."
+    }
+    $mappingChange = @($triggerUpdates | Where-Object {
+        $_.address -eq "module.platform.aws_lambda_event_source_mapping.outbox_starter[0]"
+      })
+    $ruleChanges = @($triggerUpdates | Where-Object {
+        $_.address -like "module.platform.aws_cloudwatch_event_rule.*"
+      })
+    if (
+      $mappingChange.Count -ne 1 -or
+      -not [bool]$mappingChange[0].change.before.enabled -or
+      [bool]$mappingChange[0].change.after.enabled -or
+      @($ruleChanges | Where-Object {
+          [string]$_.change.before.state -ne "ENABLED" -or
+          [string]$_.change.after.state -ne "DISABLED"
+        }).Count -ne 0
+    ) {
+      throw "Quiescence must disable the exact mapping and both EventBridge rules."
+    }
   }
   if ($TargetMode -eq "dormant") {
-    $allowedDeletePattern = "aws_db_instance\.postgres|aws_secretsmanager_secret_version\.database_url|aws_vpc_endpoint\.(secretsmanager|sqs|lambda)|aws_ecs_task_definition\.migration|aws_cloudwatch_metric_alarm\.(database_cpu|database_free_storage)"
-    $unexpected = @($deletes | Where-Object { $_.address -notmatch $allowedDeletePattern })
+    $allowedAddresses = @(
+      "module.platform.aws_cloudwatch_dashboard.operations",
+      "module.platform.aws_cloudwatch_metric_alarm.database_cpu[0]",
+      "module.platform.aws_cloudwatch_metric_alarm.database_free_storage[0]",
+      "module.platform.aws_db_instance.postgres[0]",
+      "module.platform.aws_ecs_task_definition.migration[0]",
+      "module.platform.aws_secretsmanager_secret_version.database_url[0]",
+      "module.platform.aws_vpc_endpoint.lambda[0]",
+      "module.platform.aws_vpc_endpoint.secretsmanager[0]",
+      "module.platform.aws_vpc_endpoint.sqs[0]"
+    )
+    $unexpected = @($changes | Where-Object { $_.address -notin $allowedAddresses })
     if ($unexpected.Count -ne 0) {
-      throw "Dormant mode contains an unexpected deletion: $($unexpected.address -join ', ')."
+      throw "Dormant mode contains an unexpected resource action: $($unexpected.address -join ', ')."
     }
-    if (@($deletes | Where-Object { $_.address -match "aws_db_instance\.postgres" }).Count -ne 1) {
-      throw "Dormant mode must delete exactly one Terraform-managed staging database."
+    $dashboardUpdates = @($changes | Where-Object {
+        $_.address -eq "module.platform.aws_cloudwatch_dashboard.operations" -and
+        (@($_.change.actions) -join ",") -eq "update"
+      })
+    $expectedDeletes = @($changes | Where-Object {
+        $_.address -ne "module.platform.aws_cloudwatch_dashboard.operations" -and
+        (@($_.change.actions) -join ",") -eq "delete"
+      })
+    if ($changes.Count -ne 9 -or $dashboardUpdates.Count -ne 1 -or $expectedDeletes.Count -ne 8) {
+      throw "Dormant mode must contain exactly eight disposable-resource deletes and one dashboard update."
     }
   }
-  if ($TargetMode -eq "active" -and $deletes.Count -ne 0) {
-    throw "Dark activation must not delete any managed resource."
+  if ($TargetMode -eq "active") {
+    $allowedAddresses = @(
+      "module.platform.aws_cloudwatch_dashboard.operations",
+      "module.platform.aws_cloudwatch_metric_alarm.database_cpu[0]",
+      "module.platform.aws_cloudwatch_metric_alarm.database_free_storage[0]",
+      "module.platform.aws_db_instance.postgres[0]",
+      "module.platform.aws_ecs_task_definition.migration[0]",
+      "module.platform.aws_secretsmanager_secret_version.database_url[0]",
+      "module.platform.aws_vpc_endpoint.lambda[0]",
+      "module.platform.aws_vpc_endpoint.secretsmanager[0]",
+      "module.platform.aws_vpc_endpoint.sqs[0]"
+    )
+    $unexpected = @($changes | Where-Object { $_.address -notin $allowedAddresses })
+    if ($unexpected.Count -ne 0) {
+      throw "Dark activation contains an unexpected resource action: $($unexpected.address -join ', ')."
+    }
+    $dashboardUpdates = @($changes | Where-Object {
+        $_.address -eq "module.platform.aws_cloudwatch_dashboard.operations" -and
+        (@($_.change.actions) -join ",") -eq "update"
+      })
+    $expectedCreates = @($changes | Where-Object {
+        $_.address -ne "module.platform.aws_cloudwatch_dashboard.operations" -and
+        (@($_.change.actions) -join ",") -eq "create"
+      })
+    if ($changes.Count -ne 9 -or $dashboardUpdates.Count -ne 1 -or $expectedCreates.Count -ne 8) {
+      throw "Dark activation must contain exactly eight disposable-resource creates and one dashboard update."
+    }
+    $databaseCreate = @($expectedCreates | Where-Object {
+        $_.address -eq "module.platform.aws_db_instance.postgres[0]"
+      })
+    if (
+      $databaseCreate.Count -ne 1 -or
+      -not [bool]$databaseCreate[0].change.after.storage_encrypted -or
+      [bool]$databaseCreate[0].change.after.publicly_accessible -or
+      -not [bool]$databaseCreate[0].change.after.deletion_protection -or
+      [int]$databaseCreate[0].change.after.backup_retention_period -lt 7
+    ) {
+      throw "Dark activation must create one encrypted private protected database with seven-day backups."
+    }
+    $endpointCreates = @($expectedCreates | Where-Object {
+        $_.address -like "module.platform.aws_vpc_endpoint.*"
+      })
+    if (
+      $endpointCreates.Count -ne 3 -or
+      @($endpointCreates | Where-Object {
+          [string]$_.change.after.vpc_endpoint_type -ne "Interface" -or
+          -not [bool]$_.change.after.private_dns_enabled
+        }).Count -ne 0
+    ) {
+      throw "Dark activation must create exactly three private-DNS interface endpoints."
+    }
   }
   return $changes
 }

@@ -61,8 +61,12 @@ managed interface endpoints, zero routes/triggers, empty queues, and retained co
 
 ## Activate staging
 
-Create `active` from the last applied dormant plan. The activation plan may create the disposable
-database, endpoint, alarm, secret-value, and migration-task resources but may delete nothing.
+Create `active` from the last applied dormant plan. The activation plan must contain exactly eight
+disposable-resource creates and one operations-dashboard update: the database, three endpoints, two
+database alarms, current secret value, and migration task. It may delete or replace nothing and may
+not create or update a route or workflow trigger. The operator also requires encrypted non-public
+RDS with deletion protection and seven-day backups plus exactly three private-DNS interface
+endpoints.
 
 ```powershell
 .\scripts\operate-staging-runtime-lifecycle.ps1 -Action Plan -TargetMode active `

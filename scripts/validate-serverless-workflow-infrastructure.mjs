@@ -42,6 +42,22 @@ const durable = "infrastructure/terraform/modules/platform/durable-workflow.tf";
 const bootstrap = "infrastructure/terraform/bootstrap/main.tf";
 const workflowPublisher = ".github/workflows/publish-workflow-lambdas.yml";
 const staticAnalysisWorkflow = ".github/workflows/static-analysis.yml";
+const stagingLifecycleOperator = "scripts/operate-staging-runtime-lifecycle.ps1";
+
+for (const required of [
+  "Quiescence must change database deletion protection from enabled to disabled.",
+  "Quiescence must disable the exact mapping and both EventBridge rules.",
+  "Dormant mode must contain exactly eight disposable-resource deletes and one dashboard update.",
+  "Dark activation must contain exactly eight disposable-resource creates and one dashboard update.",
+  "Dark activation must create one encrypted private protected database with seven-day backups.",
+  "Dark activation must create exactly three private-DNS interface endpoints.",
+]) {
+  requireText(
+    stagingLifecycleOperator,
+    required,
+    `staging lifecycle fail-closed boundary is missing: ${required}`,
+  );
+}
 
 for (const required of [
   'resource "aws_ecr_repository" "migration"',
