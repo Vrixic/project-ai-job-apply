@@ -10,6 +10,11 @@ authorized by this record.
 The traffic-transition source is implemented locally but remains unapplied. Merge, fresh exact-main
 planning, checksum review, apply, and acceptance still remain.
 
+Subsequent work completed those boundaries and returned staging to dormancy. See the
+[reactivation acceptance record](d0-staging-on-demand-reactivation-acceptance-2026-08-10.md). This
+record retains the exact earlier dark-recreation and migration disposition rather than rewriting
+the sequence as though traffic had already been released at this point.
+
 ## Dark activation
 
 The lifecycle operator reconfirmed the exact dormant boundary before planning. The hardened

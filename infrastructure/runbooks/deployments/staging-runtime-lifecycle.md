@@ -78,7 +78,8 @@ After checksum-reviewed apply, keep all routes and triggers disabled. Then:
 
 1. publish/select the exact scanned migration image;
 2. run the database migration procedure;
-3. load only approved synthetic fixtures;
+3. create Phase 0 records through the approved disposable Auth0/API conformance boundary; use a
+   fixture loader only for a later capability with an explicit owned seed contract;
 4. verify schema, encrypted storage, private networking, alarms, and empty queues;
 5. release the exact development-approved immutable Lambda artifacts;
 6. enable traffic through a separate checksum-reviewed serverless application release; and

@@ -57,7 +57,7 @@ applied transitions: `active -> quiesced -> dormant`. A direct active-to-dormant
 - Staging no longer accumulates continuous RDS instance or interface-endpoint hourly charges while
   dormant.
 - Staging activation takes longer than a normal application release because database provisioning,
-  migrations, synthetic seeding, and conformance are mandatory.
+  migrations, owned synthetic-data creation, and conformance are mandatory.
 - Persistent staging test records do not survive shutdown. Evidence records only aggregate,
   privacy-safe results in the repository or approved evidence storage.
 - The retained dark Lambda/API control plane is intentionally unreachable in dormant mode. This is a
