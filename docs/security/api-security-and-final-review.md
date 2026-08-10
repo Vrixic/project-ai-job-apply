@@ -100,7 +100,7 @@ be made public merely because they require a token.
 - Encrypt traffic and stored confidential/restricted data; keep secrets in managed stores; rotate
   and revoke keys safely; prevent credentials and production PII from entering source, CI output,
   telemetry, analytics, fixtures, support tools, or security reports.
-- Enforce least privilege for AWS, GitHub, Auth0, Temporal, databases, queues, object storage,
+- Enforce least privilege for AWS, GitHub, Auth0, databases, queues, durable execution, object storage,
   support tooling, and deployments. Use short-lived administrative and deployment credentials.
 - Scan dependencies, lockfiles, secrets, source, infrastructure, containers, licenses, and release
   artifacts; produce provenance/SBOM evidence and remediate supported-component vulnerabilities.

@@ -19,10 +19,11 @@ completion.
   then wrote the key directly into AWS Secrets Manager.
 - The key did not enter chat, Terraform configuration/state, repository files, command arguments,
   screenshots, or evidence.
-- The [runtime-secret runbook](../../../../infrastructure/runbooks/temporal-cloud-runtime-secret.md)
+- The [runtime-secret runbook](d0-provider-runtime-repository-cleanup-2026-08-08.md)
   requires least privilege, expiration, and overlap-safe rotation. Provider-side role assignment
   and expiry remain operator-attested until separately inspectable administrative evidence exists.
-- The [conformance verifier](../../../../backend/workflows/cloud-conformance.mjs) retrieved the
+- The historical conformance verifier, now retired under the
+  [provider/runtime cleanup](d0-provider-runtime-repository-cleanup-2026-08-08.md), retrieved the
   value only into process memory and omitted the value, AWS account ID, secret ARN, Temporal
   account suffix, endpoint, Namespace ID, and provider response payload from output.
 

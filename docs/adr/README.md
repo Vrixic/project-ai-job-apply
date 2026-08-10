@@ -21,6 +21,7 @@ Records important technical decisions, their context, alternatives, consequences
 - [ADR-015: Independent pre-launch security review](015-independent-prelaunch-security-review.md)
 - [ADR-016: Scale-to-zero application runtime](016-scale-to-zero-application-runtime.md)
 - [ADR-017: Zero-traffic pre-cutover ECS idle posture](017-zero-traffic-precutover-ecs-idle-posture.md)
+- [ADR-018: Disposable prelaunch staging data plane](018-disposable-prelaunch-staging-data-plane.md)
 
 Use `000-template.md` for future decisions.
 

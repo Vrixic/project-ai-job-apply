@@ -1,64 +1,57 @@
 # Initial Operating-Cost Baseline
 
-- Status: Planning estimate; deployed Cost Explorer preflight exists, but charges have not posted
-- Pricing checked: 2026-07-28
+- Status: First two-account CUR/cost delivery reconciled; complete post-retirement day pending
+- Pricing basis checked: 2026-07-28; recheck before launch or a material architecture decision
 - Region: AWS `us-east-2`
 - Currency: USD, before tax
 
 ## Purpose and limits
 
-This baseline estimates the lean-until-demand architecture in ADR-013. It is not an invoice,
-quote, cost ceiling, or substitute for a reviewed AWS Pricing Calculator estimate and deployed
-Cost and Usage Report. Data transfer, logs, model tokens, document sizes, support, taxes, discounts,
-credits, and third-party pricing can change the result.
+This baseline estimates the lean-until-demand architecture in ADR-013 and ADR-016. It is not an
+invoice, quote, spending cap, or substitute for Cost and Usage Report evidence. Data transfer,
+logs, durable execution, model tokens, document sizes, support, taxes, discounts, and provider
+pricing can change the result.
 
-The estimate deliberately excludes idle ALB, NAT, Redis, Multi-AZ database, service replicas,
-always-on staging, dedicated search, and browser fleets. Security, backups, encryption, durable
-workflows, and observability remain included.
+The estimate excludes idle ALB, NAT, Redis, Multi-AZ database, application replicas, dedicated
+search, and browser fleets. Security, backups, encryption, durable workflows, and observability
+remain included.
 
-## Current lean AWS development footprint
+## Current lean AWS environment footprint
 
-Assumptions:
+An active isolated environment has:
 
-- 730 hours/month;
-- one gateway task at 0.25 vCPU and 0.5 GB;
-- one worker task at 0.5 vCPU and 1 GB;
-- one public IPv4 address per running Fargate task, with security-group ingress restricted to the
-  API Gateway VPC Link;
+- zero continuously running gateway or workflow containers and no application public IPv4;
+- API Gateway plus bounded versioned Lambda functions and Lambda durable execution;
 - one Single-AZ `db.t4g.micro` PostgreSQL instance with 20 GB GP3;
-- two customer-managed KMS keys and two Secrets Manager secrets;
-- low development traffic, object storage, image storage, logs, queue traffic, Cloud Map lookups,
-  and API requests.
+- customer-managed KMS boundaries, one database secret, encrypted queues/DLQ and artifact storage;
+- Secrets Manager, SQS, and Lambda interface endpoints for private database/workflow Lambdas;
+- an empty ECS cluster and a scanned migration-only repository/task used only on demand; and
+- CloudWatch logs, metrics, alarms, dashboard, AWS Budget, and CUR 2.0 export storage.
 
-| Item | Monthly estimate |
+Approximate low-traffic monthly planning ranges per continuously provisioned account:
+
+| Item | Monthly planning range |
 |---|---:|
-| Gateway Fargate compute | $9.01 |
-| Worker Fargate compute | $18.02 |
-| Two public IPv4 addresses | $7.30 |
-| RDS `db.t4g.micro` compute | $11.68 |
-| RDS 20 GB GP3 storage | $2.30 |
-| Two KMS keys | $2.00 |
-| Two Secrets Manager secrets | $0.80 |
-| Cloud Map/Route 53 private namespace | about $0.60 plus low lookup usage |
-| API Gateway, ECR, S3, SQS, CloudWatch, KMS/API requests and transfer | budget $3–$10 at low use |
-| **Lean Phase 0 AWS estimate** | **about $55–$62/month** |
+| RDS `db.t4g.micro` plus 20 GB GP3 | about $14 |
+| Customer-managed KMS keys and one runtime secret | about $2–$4 |
+| Three interface endpoints in one reviewed subnet | about $22 plus data |
+| API Gateway, Lambda/durable execution, SQS/DLQ, S3/ECR, logs and transfer | about $3–$12 at low use |
+| Idle ECS application compute and application public IPv4 | $0 |
+| **Active lean environment planning range** | **about $39–$52/month before provider/usage growth** |
 
-A separately deployed web task at the same 0.25 vCPU/0.5 GB size plus one IPv4 address adds about
-$12.66/month. A working web/gateway/worker environment therefore starts around **$68–$75/month**
-before workflow/model providers.
+Under ADR-018, development stays active for routine integration. Synthetic staging's target dormant
+state removes RDS and all three interface endpoints while retaining encrypted state, keys, artifacts,
+identity, queues, logs, alarms, budgets, and exports. The retained dormant planning range is about
+`$3–$10/month` at low use. D0-017 must still apply, reactivation-test, and return this source boundary
+to dormant before that range is treated as deployed evidence.
 
-The compute rates use the official AWS `us-east-2` public price list: Linux/x86 Fargate is
-$0.04048 per vCPU-hour and $0.004445 per GB-hour. RDS PostgreSQL `db.t4g.micro` Single-AZ is
-$0.016/hour and GP3 storage is $0.115/GB-month. AWS charges $0.005/hour for each public IPv4
-address.
+Official pricing references:
 
-Sources:
-
-- [AWS Fargate pricing](https://aws.amazon.com/fargate/pricing/)
+- [AWS Lambda pricing](https://aws.amazon.com/lambda/pricing/)
+- [AWS Lambda durable functions pricing](https://aws.amazon.com/lambda/pricing/)
 - [AWS RDS for PostgreSQL pricing](https://aws.amazon.com/rds/postgresql/pricing/)
-- [AWS public IPv4 pricing](https://aws.amazon.com/vpc/pricing/)
+- [AWS PrivateLink pricing](https://aws.amazon.com/privatelink/pricing/)
 - [AWS API Gateway pricing](https://aws.amazon.com/api-gateway/pricing/)
-- [AWS Cloud Map pricing](https://aws.amazon.com/cloud-map/pricing/)
 - [AWS KMS pricing](https://aws.amazon.com/kms/pricing/)
 - [AWS Secrets Manager pricing](https://aws.amazon.com/secrets-manager/pricing/)
 
@@ -66,29 +59,25 @@ Sources:
 
 | Provider/capability | Initial cash cost | Steady-state planning cost | Notes |
 |---|---:|---:|---|
-| Auth0 | $0 | $0 initially; $35/month when Essentials is required | Free currently includes one tenant and up to 25,000 MAU. Essentials currently starts at $35/month and includes three tenants. |
-| Temporal Cloud Essentials | $0 while eligible credits remain | starts at $100/month | Temporal advertises $1,000 starting credits; eligibility and expiration must be confirmed before relying on them. |
+| Auth0 | $0 | $0 initially; paid plan when tenant/feature limits require it | Development currently uses the Free-plan boundary; dedicated staging/production tenant decisions remain a launch gate. |
 | AI/model API | usage based | budget $6–$15 per 100 applications for the example below | Provider/model is not yet selected; enforce hard budgets. |
 | SES transactional email | effectively $0 at initial volume | $0.10 per 1,000 outbound emails plus data | Do not buy dedicated IP or deliverability add-ons initially. |
 | Domain/DNS | provider dependent | roughly $1–$3/month amortized | Final public domain is a D6 decision. |
 | GitHub | $0 under applicable free limits | usage/plan dependent | Re-evaluate Actions usage when CI volume is measurable. |
 
-Official provider pages:
-
-- [Auth0 pricing](https://auth0.com/pricing)
-- [Temporal Cloud pricing](https://temporal.io/pricing)
-- [OpenAI model pricing](https://developers.openai.com/api/docs/models)
-- [Amazon SES pricing](https://aws.amazon.com/ses/pricing/)
+The retired Phase 0 workflow provider has no supported runtime dependency or planned recurring
+product cost. Historical credits and charges remain billing evidence, not part of the target
+architecture.
 
 ## AI example—not a model decision
 
 For a planning example of 30,000 uncached input tokens and 5,000 output tokens per prepared
 application:
 
-| Model class | Published token price | Estimated cost/application | 100 applications |
+| Model class | Planning token price | Estimated cost/application | 100 applications |
 |---|---|---:|---:|
-| Cost-sensitive (`gpt-5.6-luna` example) | $1/M input; $6/M output | about $0.06 | about $6 |
-| Balanced (`gpt-5.6-terra` example) | $2.50/M input; $15/M output | about $0.15 | about $15 |
+| Cost-sensitive example | $1/M input; $6/M output | about $0.06 | about $6 |
+| Balanced example | $2.50/M input; $15/M output | about $0.15 | about $15 |
 
 Actual prompts may be materially larger or smaller. The model gateway must record tokens and cost
 by extraction, matching, document, answer, and application workflow; cache job-level work and use
@@ -99,39 +88,30 @@ deterministic transformations where quality is equal.
 | Scenario | Expected monthly cash need |
 |---|---:|
 | Local-only engineering with small model tests | about $5–$20 |
-| Lean Phase 0 cloud while Temporal credits cover its minimum | about $60–$85 |
-| Lean working web product with 100 AI-prepared applications while Temporal credits remain | about $75–$100 |
-| Same working product after Temporal credits | about $175–$200 |
-| Pre-launch with Auth0 Essentials and one active lean runtime | about $210–$240 plus usage |
+| One active lean AWS environment at low traffic | about $39–$52 |
+| Active development plus dormant synthetic staging | about $42–$62 |
+| Development plus temporarily active synthetic staging | about $78–$104 |
+| One active environment plus 100 AI-prepared applications | about $45–$67 plus browser/document usage |
 
-Do not count AWS, Auth0 startup, or Temporal promotional credits as steady-state economics.
-Eligible credits can reduce early cash expenditure, but the product must still make sense after
-they expire.
-
-## Largest fixed-cost decision
-
-Temporal Cloud's current $100/month Essentials minimum is larger than the lean AWS platform. Use
-the advertised credit only after confirming its terms. Before the credit is exhausted, compare:
-
-1. keeping Temporal Cloud for managed reliability and low operational burden;
-2. an explicitly non-production self-hosted Temporal development profile; or
-3. another durable-workflow implementation that still satisfies ADR-004 semantics.
-
-Changing workflow infrastructure is an architectural decision, not an informal cost toggle.
+Do not count promotional credits as steady-state economics. The largest fixed AWS costs are now
+the persistent database and private service endpoints rather than idle application compute.
+ADR-018 removes those resources from synthetic staging between evidence windows through a guarded
+Terraform state machine while preserving accepted isolation, restore, and reproducibility controls.
 
 ## Cost controls and evidence
 
-- Set one $5 monthly AWS Budget actual-cost alert independently in development and staging.
-- Tag every resource and enable account-local CUR 2.0 Data Exports with private versioned storage.
-- Keep staging unprovisioned except for scheduled evidence work; record its actual daily cost.
-- Scale development ECS tasks down when no shared testing is scheduled, without deleting durable
-  state.
-- Record per-application AI tokens, browser minutes, object bytes, Temporal actions, notifications,
-  retries, and support time.
-- Reconcile this estimate against the first complete billing month and update D0-008.
+- Keep one `$5` monthly AWS Budget actual-cost alert independently in development and staging.
+- Tag every resource and retain account-local CUR 2.0 Data Exports in private versioned storage.
+- Keep staging use scheduled and record actual daily cost; do not claim it has an automatic cap.
+- Record per-application AI tokens, browser minutes, object bytes, Lambda/durable invocations,
+  notifications, retries, and support time.
+- Reconcile the first complete post-retirement billing window against exact service-attributed
+  development and staging charges before completing D0-008.
 
-The initial staging read-only preflight on 2026-07-31 found Cost Explorer enabled but its partial
-month still estimated at `$0.00`, with no visible AWS Budget or CUR 2.0 Data Export. This is
-billing-lag evidence, not a zero-cost claim. Refresh both isolated account sessions, enable reviewed
-budget/export controls, and capture nonzero service-attributed development plus scheduled-staging
-cost before accepting D0-008.
+The August 8 first-delivery read proves one expected `$5` budget/alert, one healthy export, two
+Parquet objects, two manifests, and zero unexpected controls independently in each account.
+Estimated partial-month unblended cost is `$22.6557` in development and `$10.4745` in staging.
+VPC and RDS are the largest persistent categories; `$5.4271` development and `$2.7291` staging ECS
+charges are attributable to the pre-retirement part of the same month. This partial period cannot
+prove the post-retirement steady state. One complete UTC day wholly after retirement must post and
+show no new gateway/worker ECS compute before D0-008/SR-010 cost acceptance closes.

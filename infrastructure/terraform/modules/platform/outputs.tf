@@ -3,7 +3,7 @@ output "vpc_id" {
 }
 
 output "database_endpoint" {
-  value     = aws_db_instance.postgres.endpoint
+  value     = var.persistent_data_plane_enabled ? aws_db_instance.postgres[0].endpoint : null
   sensitive = true
 }
 
@@ -24,7 +24,7 @@ output "ecs_cluster_arn" {
 }
 
 output "migration_task_definition_arn" {
-  value = var.migration_image == "" ? null : aws_ecs_task_definition.migration[0].arn
+  value = var.migration_image != "" && var.persistent_data_plane_enabled ? aws_ecs_task_definition.migration[0].arn : null
 }
 
 output "migration_subnet_ids" {

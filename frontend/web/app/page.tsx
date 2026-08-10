@@ -4,7 +4,6 @@ import { isLocalAuth0ConformanceEnabled } from "../lib/auth0-conformance";
 import {
   CROSS_USER_PROBE_COOKIE_NAME,
   isCrossUserIsolationConformanceEnabled,
-  isDarkLambdaIsolationConformanceEnabled,
 } from "../lib/cross-user-isolation-conformance";
 import { isPhase0WorkloadConformanceEnabled } from "../lib/phase0-workload-conformance";
 import { FoundationForm } from "./foundation-form";
@@ -20,7 +19,6 @@ export default async function FoundationPage({
   const authConfigured = isAuth0Configured();
   const session = authConfigured ? await getAuth0Client().getSession() : null;
   const isolationConformanceEnabled = isCrossUserIsolationConformanceEnabled();
-  const darkLambdaIsolationConformanceEnabled = isDarkLambdaIsolationConformanceEnabled();
   const cookieStore = isolationConformanceEnabled ? await cookies() : undefined;
   const displayName =
     typeof session?.user.name === "string" ? { displayName: session.user.name } : {};
@@ -32,7 +30,6 @@ export default async function FoundationPage({
       authConformanceEnabled={isLocalAuth0ConformanceEnabled()}
       authenticationFailed={parameters.auth_error === "authentication_failed"}
       crossUserProbeArmed={Boolean(cookieStore?.get(CROSS_USER_PROBE_COOKIE_NAME))}
-      darkLambdaIsolationConformanceEnabled={darkLambdaIsolationConformanceEnabled}
       workloadConformanceEnabled={isPhase0WorkloadConformanceEnabled()}
       {...displayName}
     />

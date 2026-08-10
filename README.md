@@ -49,9 +49,9 @@ requests to the focused skills in [`skills/`](skills/README.md).
 
 The repository now contains a pinned pnpm/Turborepo workspace, OpenAPI and event contracts,
 provider-neutral OIDC verification, a modular NestJS/Fastify API, Drizzle/PostgreSQL persistence,
-a transactional outbox, a Temporal readiness worker, a Next.js foundation page, local containers,
-lean `us-east-2` Terraform with isolated development and on-demand staging accounts, and GitHub
-CI/security workflows.
+a transactional outbox, SQS-backed Lambda durable readiness execution, a Next.js foundation page,
+local dependency containers, lean `us-east-2` Terraform with isolated development and synthetic
+staging accounts, and GitHub CI/security workflows.
 
 ```powershell
 pnpm install --frozen-lockfile
@@ -62,18 +62,17 @@ pnpm --filter @ai-job-apply/profile-service db:migrate
 pnpm check
 ```
 
-Auth0 is the selected initial managed identity provider, while the runtime and identity mapping
-remain provider-neutral. The deployed application still fails closed until real environment-specific
-Auth0 configuration exists and passes conformance; test tokens are unavailable outside
-`NODE_ENV=test`.
+Auth0 is the selected initial managed identity provider, while identity mapping remains
+provider-neutral. Deployed APIs fail closed unless the exact environment issuer, audience, and
+scopes validate; test tokens are unavailable outside `NODE_ENV=test`.
 
 ## Current status
 
-The repository-side foundation, Auth0 web slice, AWS state/OIDC bootstrap, and applications-disabled
-development persistent layer are implemented. Phase 0 remains in progress for application
-deployment, remaining web identity checks, deployed observability and alert delivery, rollback and
-restore evidence, representative permitted ATS fixtures, on-demand staging rehearsal, quality
-baselines, and accountable legal/security/privacy approval. Final public naming is a D6 gate, and
-mandatory pre-product participant research was removed from D0.
+The repository foundation, Auth0 web slice, isolated AWS environments, scale-to-zero Lambda
+application runtime, durable workflow path, restore drills, observability, and provider retirement
+are implemented and deployed in development and synthetic staging. Phase 0 remains open for final
+repository/cost reconciliation, representative permitted ATS fixtures, and accountable
+legal/security/privacy review. Final public naming is a D6 gate, and mandatory pre-product
+participant research was removed from D0.
 
 Delivery progress, actual start/completion dates, tasks, evidence, risks, and decisions are maintained in the [delivery tracker](docs/product/delivery/DELIVERY_TRACKER.md).

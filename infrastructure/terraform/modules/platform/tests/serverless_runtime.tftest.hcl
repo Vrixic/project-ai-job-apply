@@ -141,7 +141,7 @@ run "disabled_runtime_is_dark_without_a_legacy_provider" {
       length(aws_apigatewayv2_route.gateway) == 0 &&
       length(aws_apigatewayv2_route.gateway_lambda_public) == 0
     )
-    error_message = "Disabling the runtime must remove public routes while retaining the dark Lambda integration."
+    error_message = "Disabling the runtime must remove public routes while retaining versioned Lambda resources for reviewed recovery."
   }
 
   assert {
@@ -153,6 +153,61 @@ run "disabled_runtime_is_dark_without_a_legacy_provider" {
     )
     error_message = "Dark recovery must disable every trigger without restoring a retired provider."
   }
+}
+
+run "dormant_data_plane_removes_idle_cost_drivers" {
+  command = plan
+
+  variables {
+    serverless_runtime_enabled          = false
+    persistent_data_plane_enabled       = false
+    database_deletion_protection        = false
+    retain_database_snapshot_on_destroy = false
+  }
+
+  assert {
+    condition = (
+      length(aws_db_instance.postgres) == 0 &&
+      length(aws_secretsmanager_secret_version.database_url) == 0 &&
+      length(aws_vpc_endpoint.secretsmanager) == 0 &&
+      length(aws_vpc_endpoint.sqs) == 0 &&
+      length(aws_vpc_endpoint.lambda) == 0
+    )
+    error_message = "Dormant mode must remove RDS, its generated connection value, and every hourly interface endpoint."
+  }
+
+  assert {
+    condition = (
+      length(aws_lambda_function.gateway) == 1 &&
+      aws_s3_bucket.artifacts.bucket_prefix == "ai-job-apply-staging-artifacts-" &&
+      aws_ecr_repository.migration.name == "ai-job-apply/migration" &&
+      aws_kms_key.platform.enable_key_rotation
+    )
+    error_message = "Dormant mode must retain the inexpensive immutable artifacts and control plane needed for reproducible activation."
+  }
+}
+
+run "dormancy_requires_prior_database_unprotection" {
+  command = plan
+
+  variables {
+    serverless_runtime_enabled    = false
+    persistent_data_plane_enabled = false
+    database_deletion_protection  = true
+  }
+
+  expect_failures = [aws_kms_key.platform]
+}
+
+run "environment_lifecycle_can_reject_runtime_activation" {
+  command = plan
+
+  variables {
+    serverless_runtime_enabled = true
+    runtime_activation_allowed = false
+  }
+
+  expect_failures = [aws_kms_key.platform]
 }
 
 run "migration_repository_is_dedicated_and_hardened" {

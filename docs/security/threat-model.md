@@ -2,7 +2,7 @@
 
 - Status: Engineering review ready; product, legal/privacy, and accountable security approval pending
 - Method: STRIDE with explicit trust boundaries
-- Last updated: 2026-08-02
+- Last updated: 2026-08-08
 
 ## Protected assets
 
@@ -16,10 +16,9 @@
 
 1. User device ↔ public web/API edge
 2. Gateway ↔ module-owned PostgreSQL schemas
-3. Transactional database ↔ identifier-only outbox ↔ active workflow engine. Temporal remains the
-   deployed rollback engine; the dark target is SQS starter/reconciler ↔ exact-version Lambda
-   durable orchestrator ↔ private activity/terminal handlers. Cutover must never dual-start an
-   event.
+3. Transactional database ↔ identifier-only outbox/SQS ↔ exact-version Lambda durable
+   orchestrator ↔ private activity/terminal handlers. Stable execution identities, conditional
+   claims, reconciliation, and terminal recovery prevent duplicate effective execution.
 4. Workers ↔ ATS pages, AI providers, messaging providers, and object storage
 5. Browser extension ↔ active tab ↔ Platform
 6. GitHub Actions ↔ isolated AWS accounts

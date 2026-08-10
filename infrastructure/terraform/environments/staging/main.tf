@@ -44,23 +44,27 @@ provider "aws" {
 }
 
 module "platform" {
-  source                         = "../../modules/platform"
-  name                           = "ai-job-apply"
-  environment                    = "staging"
-  vpc_cidr                       = "10.30.0.0/16"
-  migration_image                = var.migration_image
-  high_availability              = var.high_availability
-  private_application_networking = var.private_application_networking
-  enable_redis                   = var.enable_redis
-  database_instance_class        = var.database_instance_class
-  database_engine_version        = var.database_engine_version
-  database_performance_insights  = var.database_performance_insights
-  enable_container_insights      = var.enable_container_insights
-  oidc_issuer                    = var.oidc_issuer
-  oidc_audience                  = var.oidc_audience
-  deploy_applications            = var.deploy_applications
-  deploy_gateway_lambda          = var.deploy_gateway_lambda
-  gateway_lambda_artifact_s3_key = var.gateway_lambda_artifact_s3_key
+  source                              = "../../modules/platform"
+  name                                = "ai-job-apply"
+  environment                         = "staging"
+  vpc_cidr                            = "10.30.0.0/16"
+  migration_image                     = var.migration_image
+  high_availability                   = var.high_availability
+  private_application_networking      = var.private_application_networking
+  enable_redis                        = var.enable_redis
+  database_instance_class             = var.database_instance_class
+  database_engine_version             = var.database_engine_version
+  database_performance_insights       = var.database_performance_insights
+  persistent_data_plane_enabled       = var.staging_runtime_mode != "dormant"
+  database_deletion_protection        = var.staging_runtime_mode == "active"
+  retain_database_snapshot_on_destroy = false
+  runtime_activation_allowed          = var.staging_runtime_mode == "active"
+  enable_container_insights           = var.enable_container_insights
+  oidc_issuer                         = var.oidc_issuer
+  oidc_audience                       = var.oidc_audience
+  deploy_applications                 = var.deploy_applications
+  deploy_gateway_lambda               = var.deploy_gateway_lambda
+  gateway_lambda_artifact_s3_key      = var.gateway_lambda_artifact_s3_key
   gateway_lambda_artifact_s3_object_version = (
     var.gateway_lambda_artifact_s3_object_version
   )

@@ -12,9 +12,16 @@ before launch.
 
 The account-local $5 budget is an alerting reference, not a spending cap. Lambda artifacts are
 immutable versioned S3 objects; the only application container is the scanned migration image.
-`serverless_runtime_enabled` controls the JWT API route and all durable-workflow triggers together.
+`staging_runtime_mode` defaults to `dormant`. Dormant removes the disposable synthetic RDS instance
+and three hourly interface endpoints while retaining encrypted state, artifacts, identity, queues,
+logs, cost controls, and dark serverless definitions. `active -> quiesced -> dormant` is the only
+permitted shutdown path; activation recreates a dark data plane before migration and synthetic
+seeding. See [ADR-018](../../../../docs/adr/018-disposable-prelaunch-staging-data-plane.md) and the
+[lifecycle runbook](../../../runbooks/deployments/staging-runtime-lifecycle.md).
 
-Use the provider-retirement runbook until the historical Temporal secret and gateway/worker ECR
-repositories are removed. After retirement, use saved checksum-reviewed Terraform plans for every
-release, migration, runtime disable/enable, restore, or infrastructure change. There is no
-ECS/Temporal runtime fallback.
+`serverless_runtime_enabled` controls the JWT API route and all durable-workflow triggers together
+and may be true only when `staging_runtime_mode = "active"`.
+
+Use saved checksum-reviewed Terraform plans for every release, migration, runtime disable/enable,
+restore, or infrastructure change. There is no continuously running ECS or external
+workflow-provider fallback.

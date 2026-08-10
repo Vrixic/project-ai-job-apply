@@ -8,6 +8,17 @@ variable "high_availability" {
   default = false
 }
 
+variable "staging_runtime_mode" {
+  description = "Lifecycle state for the prelaunch staging data plane: active, quiesced, or dormant. Dormant is the cost-safe default."
+  type        = string
+  default     = "dormant"
+
+  validation {
+    condition     = contains(["active", "quiesced", "dormant"], var.staging_runtime_mode)
+    error_message = "Staging runtime mode must be active, quiesced, or dormant."
+  }
+}
+
 variable "private_application_networking" {
   type    = bool
   default = false

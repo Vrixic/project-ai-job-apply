@@ -1,7 +1,7 @@
 # Staging Workload and Initial Cost Acceptance
 
 Use this procedure to establish a reproducible synthetic baseline for the Phase 0 gateway,
-PostgreSQL/outbox, Temporal worker, observability, and lean AWS cost model. This is foundation
+PostgreSQL/outbox, Lambda durable workflows, observability, and lean AWS cost model. This is foundation
 measurement, not a production capacity test, launch load claim, public benchmark, or permission to
 process real candidate data.
 
@@ -14,7 +14,7 @@ process real candidate data.
 - Require an authenticated synthetic staging account with existing saved preferences. The runner
   reuses the exact saved preference content so the visible preference choice does not change.
 - The fixed profile performs 200 liveness reads, 200 readiness/database reads, 100 expected
-  unauthenticated protected reads, 25 sequential preference/outbox/Temporal workflows, and one
+  unauthenticated protected reads, 25 sequential preference/outbox/Lambda durable workflows, and one
   same-key/same-body idempotent replay. Counts, paths, concurrency, and payload source are not
   browser configurable.
 - Public probes use concurrency five. Durable writes are sequential so this measures the current
@@ -38,15 +38,23 @@ aws sso login --profile ai-job-apply-development-admin
 aws sso login --profile ai-job-apply-staging-admin
 ```
 
-Run the read-only baselines:
+Set each environment's exact account, encrypted state bucket, and already-applied steady-state plan,
+then run the read-only baselines. The plan must remain below that environment's ignored
+`.terraform` directory.
 
 ```powershell
-.\scripts\inspect-staging-workload-and-cost.ps1 -Action Status
-.\scripts\inspect-phase0-cost.ps1
+$stagingBoundary = @{
+  ExpectedAccountId = "STAGING_ACCOUNT_ID"
+  StateBucket = "STAGING_TERRAFORM_STATE_BUCKET"
+  RuntimePlanPath = ".terraform/APPLIED_STEADY_STATE_PLAN.tfplan"
+}
+
+.\scripts\inspect-staging-workload-and-cost.ps1 -Action Status @stagingBoundary
+.\scripts\inspect-phase0-cost.ps1 -Environment staging
 ```
 
-Require the staging source and both services healthy, all eight alarms `OK`, zero restore targets
-or context, and temporary callers in both accounts. Cost Explorer can lag provider usage by more
+Require the staging API and durable triggers healthy, zero ECS application services/tasks, all ten
+runtime alarms `OK`, zero restore targets or context, and temporary callers in both accounts. Cost Explorer can lag provider usage by more
 than a day; a zero or estimated current-period value is not evidence of zero cost.
 
 For each environment, require one expected monthly `COST` budget at `$5 USD`,
@@ -57,10 +65,9 @@ A real first delivery requires `FirstCurDeliveryPresent=true` and at least one P
 the configured `cur-2/` prefix. AWS's small bucket-validation object is outside that prefix and
 must not be accepted as CUR evidence.
 
-The initial preflight found no AWS Budget and no CUR 2.0 Data Export in staging. Do not create
-either ad hoc. Apply the environment-isolated Terraform controls only from a reviewed plan, then
-wait for the first export delivery and provider cost data to post. AWS can take up to 24 hours to
-start delivering a new export.
+Historical preflight initially found no staging budget/export. The reviewed controls are now
+deployed, and real Parquet/manifest delivery plus nonzero billing pass in both accounts. Do not
+create duplicate controls ad hoc; retain exactly one expected budget/alert and export per account.
 
 ## Run the fixed workload
 
@@ -94,7 +101,8 @@ aggregate result timestamps:
 .\scripts\inspect-staging-workload-and-cost.ps1 `
   -Action Measure `
   -StartTime "<startedAt>" `
-  -EndTime "<endedAt>"
+  -EndTime "<endedAt>" `
+  @stagingBoundary
 ```
 
 Require:
@@ -104,9 +112,9 @@ Require:
 - at least 100 expected `4xx` responses from the protected unauthenticated probes and zero `5xx`;
 - 25/25 successful workflow results and a matched idempotent replay in the browser aggregate;
 - zero DLQ messages, zero application error matches, and zero forbidden log-pattern matches;
-- two stable lean services, all eight alarms `OK`, and Terraform drift `0`.
+- zero ECS application services/tasks, all ten runtime alarms `OK`, and Terraform drift `0`.
 
-Record the observed browser p50/p95/max latency and AWS API/ECS/RDS/queue metrics without imposing
+Record the observed browser p50/p95/max latency and AWS API/Lambda/RDS/queue metrics without imposing
 an invented production threshold. A saturation signal, alarm transition, error, timeout, workflow
 miss, duplicate result, or authorization mismatch fails this baseline and must become explicit
 capacity/reliability work.
@@ -119,6 +127,10 @@ Cost acceptance requires a later read after provider charges post:
 .\scripts\inspect-phase0-cost.ps1 -StartDate "<YYYY-MM-DD>" -EndDate "<YYYY-MM-DD>"
 ```
 
+If the two independently configured IAM Identity Center sessions cannot remain simultaneously
+active, run the same exact window once with `-Environment development` and once with
+`-Environment staging`; retain both sanitized outputs as one reconciliation record.
+
 Reconcile non-credit development and scheduled-staging service costs against
 [the initial estimate](../../../docs/product/foundation/initial-operating-cost-baseline.md). Record
 the actual observation interval, partial-month status, service attribution, credits excluded from
@@ -126,6 +138,6 @@ steady-state economics, and any unexplained service. Do not annualize a partial 
 forecast.
 
 Phase 0 workload/cost acceptance closes only after the synthetic workload and AWS corroboration
-pass, billing data is nonzero and attributable, and the reviewed budget/export controls exist.
-The operator's `FirstCurDeliveryPresent` must also be true independently for development and
-staging before the export-delivery gate closes.
+pass, billing data is nonzero and attributable, reviewed budget/export controls exist, and one
+complete UTC day wholly after runtime retirement shows no new gateway/worker ECS compute. The
+operator's `FirstCurDeliveryPresent` must be true independently for development and staging.

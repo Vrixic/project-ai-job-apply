@@ -30,8 +30,8 @@ retained here.
 ## Recovery operator
 
 The new
-[staging recovery operator](../../../../scripts/operate-staging-application-recovery.ps1) and
-[runbook](../../../../infrastructure/runbooks/deployments/staging-application-recovery.md)
+[staging recovery operator](d0-provider-runtime-repository-cleanup-2026-08-08.md) and
+[runbook](d0-provider-runtime-repository-cleanup-2026-08-08.md)
 separate every state-changing step:
 
 - `Status` is read-only.

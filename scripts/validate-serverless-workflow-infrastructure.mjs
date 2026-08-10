@@ -258,9 +258,6 @@ for (const retired of ["Dockerfile.gateway", "Dockerfile.worker", "ai-job-apply/
 for (const required of [
   "Dockerfile.migration",
   "infrastructure/terraform/modules/platform/tests/serverless_runtime.tftest.hcl",
-  "scripts/operate-phase0-provider-retirement.ps1",
-  "infrastructure/runbooks/deployments/phase0-provider-retirement.md",
-  "backend/workflows/temporal-retirement-rejection.test.mjs",
 ]) {
   if (!existsSync(resolve(root, required))) failures.push(`${required}: required file is missing`);
 }
@@ -276,23 +273,49 @@ for (const required of [
   );
 }
 
-const retirementOperator = "scripts/operate-phase0-provider-retirement.ps1";
-for (const required of [
-  "PlanRepository",
-  "PlanCleanupRecovery",
-  "RunMigration",
-  "ConfirmTemporalKeyRevoked",
-  "ConfirmLegacyArtifactsRetired",
-  "Assert-RuntimeHealthy",
-  "--cli-input-json",
-  'Get-OptionalArray $response "failures"',
-  "still contains images after purge",
-  "outside the exact two-change boundary",
-  "changes the application security group beyond ingress",
-  "RepositoryNotFoundException",
-  "ResourceNotFoundException",
+const retiredExecutablePaths = [
+  "backend/gateway/src/dark-conformance-bridge.ts",
+  "backend/gateway/src/dark-conformance-bridge.test.ts",
+  "backend/workflows/temporal-retirement-inspect.mjs",
+  "backend/workflows/temporal-retirement-rejection.mjs",
+  "backend/workflows/temporal-retirement-rejection.test.mjs",
+  "scripts/operate-phase0-provider-retirement.ps1",
+  "scripts/operate-phase0-legacy-runtime-retirement.ps1",
+  "scripts/operate-phase0-ecs-idle-shutdown.ps1",
+  "scripts/operate-staging-legacy-temporal-drain.ps1",
+  "scripts/operate-staging-serverless-runtime-cutover.ps1",
+  "scripts/plan-gateway-lambda-dark.ps1",
+  "scripts/plan-serverless-workflow-dark.ps1",
+  "scripts/exercise-development-log-delivery.ps1",
+  "infrastructure/runbooks/temporal-cloud-runtime-secret.md",
+  "infrastructure/runbooks/deployments/phase0-provider-retirement.md",
+  "infrastructure/runbooks/deployments/phase0-legacy-runtime-retirement.md",
+  "infrastructure/runbooks/deployments/staging-serverless-runtime-cutover.md",
+];
+for (const retired of retiredExecutablePaths) {
+  if (existsSync(resolve(root, retired))) failures.push(`${retired}: retired path remains`);
+}
+for (const [relativePath, retiredText] of [
+  ["backend/workflows/package.json", "@temporalio/"],
+  ["backend/workflows/package.json", "temporal:retirement-inspect"],
+  ["backend/gateway/package.json", "conformance:lambda-dark"],
+  ["scripts/start-deployed-web-conformance.ps1", "GatewayRuntime"],
+  ["scripts/start-deployed-web-conformance.ps1", "lambda-dark"],
+  ["scripts/start-deployed-web-conformance.ps1", "DARK_LAMBDA"],
 ]) {
-  requireText(retirementOperator, required, `provider-retirement guard is missing: ${required}`);
+  forbidText(relativePath, retiredText, `retired executable reference remains: ${retiredText}`);
+}
+for (const required of [
+  'OUTBOX_DISPATCH_TARGET -cne "lambda_durable"',
+  "JwtConfiguration.Issuer -cne $expectedIssuer",
+  "A retired continuous ECS application path is still active.",
+  "The deployed API did not pass the expected 200/200/401 boundary.",
+]) {
+  requireText(
+    "scripts/start-deployed-web-conformance.ps1",
+    required,
+    `steady-state deployed conformance guard is missing: ${required}`,
+  );
 }
 for (const retired of ["Dockerfile.gateway", "Dockerfile.worker"]) {
   if (existsSync(resolve(root, retired)))

@@ -6,6 +6,6 @@ environment-scoped controls.
 
 ## Current procedures
 
-- [Development provider and log recovery](development-provider-and-log-recovery.md) — Exercises
-  fresh Auth0 login interruption separately from CloudWatch gateway-log delivery and proves
-  bounded recovery without retaining identity or log payloads.
+- [Development Auth0 recovery](development-provider-and-log-recovery.md) — Exercises a fresh Auth0
+  login interruption and proves bounded recovery without retaining identity data. Its stable path
+  is preserved for deployed CloudWatch links; the retired ECS log-heartbeat drill is not restored.

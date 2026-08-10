@@ -23,7 +23,8 @@ security/privacy approval.
 2. Require the merged environment-aware alert operator.
 3. Require the Terraform-managed topic and canary alarm, with at least one ALARM action and one OK
    action.
-4. Keep the gateway and workflow worker at the lean one-task stable baseline.
+4. Require the API to return `200/200/401`, durable triggers enabled, ten runtime alarms healthy,
+   and zero ECS application services or running tasks.
 
 Read the sanitized state:
 
@@ -79,6 +80,6 @@ After the exercise:
 
 - rerun `Status` and require `CanaryState: OK`;
 - require all staging alarms to have both ALARM and OK routing;
-- require gateway and worker desired/running/pending counts to remain `1/1/0`;
+- require the API and durable triggers to remain healthy and the ECS application boundary empty;
 - require zero recent error-level application events and forbidden-field patterns; and
 - record only sanitized aggregate evidence.

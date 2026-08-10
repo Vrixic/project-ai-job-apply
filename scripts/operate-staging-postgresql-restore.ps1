@@ -4,6 +4,11 @@ param(
   [string]$Action = "Status",
   [string]$AwsProfile = "ai-job-apply-staging-admin",
   [string]$Region = "us-east-2",
+  [ValidatePattern("^[0-9]{12}$")]
+  [string]$ExpectedAccountId = "",
+  [ValidatePattern("^[a-z0-9.-]+$")]
+  [string]$StateBucket = "",
+  [string]$RuntimePlanPath = "",
   [switch]$Execute,
   [switch]$AllowUnverifiedCleanup,
   [switch]$Help
@@ -14,13 +19,18 @@ $ErrorActionPreference = "Stop"
 if ($Help) {
   @"
 Usage:
-  .\scripts\operate-staging-postgresql-restore.ps1 -Action Status
-  .\scripts\operate-staging-postgresql-restore.ps1 -Action Start -Execute
-  .\scripts\operate-staging-postgresql-restore.ps1 -Action Verify -Execute
-  .\scripts\operate-staging-postgresql-restore.ps1 -Action Cleanup -Execute
-  .\scripts\operate-staging-postgresql-restore.ps1 -Action Exercise -Execute
+  `$runtimeBoundary = @{
+    ExpectedAccountId = "STAGING_ACCOUNT_ID"
+    StateBucket = "STAGING_TERRAFORM_STATE_BUCKET"
+    RuntimePlanPath = ".terraform/APPLIED_STEADY_STATE_PLAN.tfplan"
+  }
+  .\scripts\operate-staging-postgresql-restore.ps1 -Action Status @runtimeBoundary
+  .\scripts\operate-staging-postgresql-restore.ps1 -Action Start -Execute @runtimeBoundary
+  .\scripts\operate-staging-postgresql-restore.ps1 -Action Verify -Execute @runtimeBoundary
+  .\scripts\operate-staging-postgresql-restore.ps1 -Action Cleanup -Execute @runtimeBoundary
+  .\scripts\operate-staging-postgresql-restore.ps1 -Action Exercise -Execute @runtimeBoundary
   .\scripts\operate-staging-postgresql-restore.ps1 -Action Cleanup `
-    -AllowUnverifiedCleanup -Execute
+    -AllowUnverifiedCleanup -Execute @runtimeBoundary
 
 Status is read-only. Start runs the immutable read-only source verifier, requests one uniquely
 tagged latest-point-in-time restore, and waits for it to become available. Verify runs the same
@@ -30,6 +40,8 @@ then proves source/application health and Terraform no drift. Exercise runs Star
 Cleanup in sequence. State is retained in the ignored staging Terraform data directory so an
 interrupted exercise can resume safely.
 
+Every action requires the exact staging ExpectedAccountId, StateBucket, and an already applied
+RuntimePlanPath below the ignored staging `.terraform` directory for steady-state/no-drift proof.
 All state-changing actions require -Execute. AllowUnverifiedCleanup is an emergency cleanup gate
 for an exact failed disposable target; it never weakens target identity, tag, network, or source
 guards.
@@ -47,7 +59,7 @@ $contextPath = Join-Path $terraformDataDirectory "applydash-staging-restore-cont
 $sourceIdentifier = "ai-job-apply-staging"
 $targetPrefix = "ai-job-apply-staging-restore-"
 $applicationLogGroup = "/ai-job-apply/staging/application"
-$recoveryOperator = Join-Path $PSScriptRoot "operate-staging-application-recovery.ps1"
+$runtimeInspector = Join-Path $PSScriptRoot "inspect-staging-workload-and-cost.ps1"
 
 $env:AWS_PROFILE = $AwsProfile
 $env:AWS_REGION = $Region
@@ -164,17 +176,22 @@ function Get-DisposableTargets {
 }
 
 function Assert-ApplicationBaseline {
-  $statusJson = & $recoveryOperator -Action Status 2>$null
+  if ($ExpectedAccountId -notmatch "^[0-9]{12}$" -or [string]::IsNullOrWhiteSpace($StateBucket) -or
+      [string]::IsNullOrWhiteSpace($RuntimePlanPath)) {
+    throw "The exact staging account, state bucket, and applied runtime plan are required."
+  }
+  $statusJson = & $runtimeInspector -Environment staging -Action Status `
+    -ExpectedAccountId $ExpectedAccountId -StateBucket $StateBucket `
+    -RuntimePlanPath $RuntimePlanPath -AwsProfile $AwsProfile -Region $Region 2>$null
   if ($LASTEXITCODE -ne 0) {
     throw "The staging application baseline did not pass."
   }
   $status = $statusJson | ConvertFrom-Json
   if (
-    [string]$status.Applications -ne "enabled" -or
-    [int]$status.StableServices -ne 2 -or
-    [int]$status.LiveStatus -ne 200 -or
-    [int]$status.ReadyStatus -ne 200 -or
-    [int]$status.ProtectedStatus -ne 401
+    -not [bool]$status.NoDrift -or
+    [string]$status.DispatchTarget -cne "lambda_durable" -or
+    -not [bool]$status.TriggersEnabled -or
+    -not [bool]$status.EcsRuntimeIdle
   ) {
     throw "The staging application baseline is not healthy."
   }
@@ -191,18 +208,21 @@ function Assert-ApplicationBaseline {
       )
     ).MetricAlarms
   )
-  if ($alarms.Count -ne 8 -or @($alarms | Where-Object { $_.StateValue -ne "OK" }).Count -ne 0) {
-    throw "All eight managed staging alarms must be OK."
+  $runtimeAlarms = @($alarms | Where-Object { $_.AlarmName -notlike "*-monthly-cost*" })
+  if ($runtimeAlarms.Count -lt 10 -or @($runtimeAlarms | Where-Object { $_.StateValue -ne "OK" }).Count -ne 0) {
+    throw "All managed staging runtime alarms must be OK."
   }
 }
 
 function Assert-TerraformNoDrift {
-  $resultJson = & $recoveryOperator -Action NoDrift 2>$null
+  $resultJson = & $runtimeInspector -Environment staging -Action Status `
+    -ExpectedAccountId $ExpectedAccountId -StateBucket $StateBucket `
+    -RuntimePlanPath $RuntimePlanPath -AwsProfile $AwsProfile -Region $Region 2>$null
   if ($LASTEXITCODE -ne 0) {
     throw "The exact-input staging Terraform no-drift check failed."
   }
   $result = $resultJson | ConvertFrom-Json
-  if ([int]$result.TerraformDrift -ne 0) {
+  if (-not [bool]$result.NoDrift) {
     throw "The staging Terraform state is not drift free."
   }
 }
@@ -345,9 +365,13 @@ try {
         (to_regclass('platform.schema_migrations') IS NOT NULL)::int
       )::int AS table_count,
       (SELECT count(*)::int FROM platform.schema_migrations
-       WHERE version = '0001_foundation') AS migration_count
+       WHERE version IN (
+         '0001_foundation',
+         '0002_serverless_outbox',
+         '0003_retire_legacy_dispatch'
+       )) AS migration_count
     `);
-    if (shape.table_count !== 8 || shape.migration_count !== 1) {
+    if (shape.table_count !== 8 || shape.migration_count !== 3) {
       throw new Error("Restore schema verification failed");
     }
     const counts = [];
@@ -472,7 +496,7 @@ try {
 
   $forbidden = @(
     $events.message | Where-Object {
-      $_ -match "(?i)authorization|bearer\s+|eyJ[A-Za-z0-9_-]+\.|postgres(ql)?://|temporal-api-key|client_secret|session_secret|@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"
+      $_ -match "(?i)authorization|bearer\s+|eyJ[A-Za-z0-9_-]+\.|postgres(ql)?://|api[_-]?key|client_secret|session_secret|@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"
     }
   )
   if ($forbidden.Count -ne 0) {

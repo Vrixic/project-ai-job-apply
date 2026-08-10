@@ -27,17 +27,17 @@ if ($Help) {
 Usage:
   .\scripts\inspect-staging-workload-and-cost.ps1 -Action Status `
     -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
-    -RuntimePlanPath .terraform/workflow-dark-plans/APPLIED_PLAN.tfplan
+    -RuntimePlanPath .terraform/APPLIED_PLAN.tfplan
   .\scripts\inspect-staging-workload-and-cost.ps1 -Action Measure `
     -StartTime <ISO-8601> -EndTime <ISO-8601> `
     -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
-    -RuntimePlanPath .terraform/workflow-dark-plans/APPLIED_PLAN.tfplan
+    -RuntimePlanPath .terraform/APPLIED_PLAN.tfplan
 
 Status proves the $Environment runtime boundary and reports aggregate month-to-date Cost Explorer,
 budget, and CUR 2.0 Data Export availability. Measure accepts only a workload result's ISO timestamps and
-returns aggregate API Gateway, Lambda, idle-ECS rollback, RDS, queue, alarm, log, and no-drift
-evidence. RuntimePlanPath is an already applied guarded maintenance plan used only to recover the
-exact immutable artifact inputs for fresh read-only completed-runtime verification.
+returns aggregate API Gateway, Lambda, empty ECS application boundary, RDS, queue, alarm, log, and
+no-drift evidence. RuntimePlanPath is an already applied saved plan used only to recover the exact
+non-secret immutable artifact inputs for fresh read-only steady-state verification.
 
 Both actions are read-only. No account identifier, endpoint, resource ARN, trace, log message,
 identity, token, preference, operation identifier, or raw provider record is printed.
@@ -49,11 +49,33 @@ if ($Region -ne "us-east-2") {
   throw "The Phase 0 $Environment environment is restricted to us-east-2."
 }
 
-$runtimeOperator = if ($Environment -eq "staging") {
-  Join-Path $PSScriptRoot "operate-staging-gateway-runtime-release.ps1"
-} else {
-  Join-Path $PSScriptRoot "operate-development-gateway-runtime-release.ps1"
-}
+$repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+$terraformDirectory = Join-Path $repositoryRoot "infrastructure\terraform\environments\$Environment"
+$terraformDataDirectory = Join-Path $terraformDirectory ".terraform\workload-inspection-data"
+$allowedVariableNames = @(
+  "migration_image", "high_availability", "staging_runtime_mode",
+  "private_application_networking", "enable_redis",
+  "database_instance_class", "database_engine_version", "database_performance_insights",
+  "enable_container_insights", "oidc_issuer", "oidc_audience", "deploy_applications",
+  "deploy_gateway_lambda", "gateway_lambda_artifact_s3_key",
+  "gateway_lambda_artifact_s3_object_version", "gateway_lambda_artifact_sha256",
+  "gateway_lambda_artifact_base64sha256", "gateway_lambda_extension_layer_arn",
+  "gateway_lambda_reserved_concurrency", "deploy_serverless_outbox",
+  "workflow_ingress_artifact_s3_key", "workflow_ingress_artifact_s3_object_version",
+  "workflow_ingress_artifact_sha256", "workflow_ingress_artifact_base64sha256",
+  "workflow_ingress_lambda_extension_layer_arn", "deploy_profile_readiness_durable",
+  "profile_readiness_durable_artifact_s3_key",
+  "profile_readiness_durable_artifact_s3_object_version",
+  "profile_readiness_durable_artifact_sha256",
+  "profile_readiness_durable_artifact_base64sha256",
+  "profile_readiness_activity_artifact_s3_key",
+  "profile_readiness_activity_artifact_s3_object_version",
+  "profile_readiness_activity_artifact_sha256",
+  "profile_readiness_activity_artifact_base64sha256",
+  "profile_readiness_lambda_extension_layer_arn",
+  "profile_readiness_execution_timeout_seconds", "profile_readiness_retention_days",
+  "serverless_runtime_enabled"
+)
 $applicationLogGroup = "/ai-job-apply/$Environment/application"
 
 $env:AWS_PROFILE = $AwsProfile
@@ -74,6 +96,15 @@ function Invoke-AwsJson {
   return $raw | ConvertFrom-Json
 }
 
+function Get-HttpStatus {
+  param([Parameter(Mandatory)][string]$Uri)
+  try { return [int](Invoke-WebRequest -UseBasicParsing -Uri $Uri -TimeoutSec 20).StatusCode }
+  catch {
+    if ($_.Exception.Response) { return [int]$_.Exception.Response.StatusCode }
+    throw "The $Environment public API could not be reached."
+  }
+}
+
 function Assert-CallerAndTerraform {
   $identity = Invoke-AwsJson @("sts", "get-caller-identity", "--output", "json")
   if (-not ([string]$identity.Arn).Contains(":assumed-role/")) {
@@ -92,18 +123,113 @@ function Get-RuntimeStatus {
     [string]::IsNullOrWhiteSpace($StateBucket) -or
     [string]::IsNullOrWhiteSpace($RuntimePlanPath)
   ) { throw "Runtime verification requires the exact $Environment account, state bucket, and applied plan." }
-  $raw = & $runtimeOperator -Action Verify -ExpectedAccountId $ExpectedAccountId `
-    -StateBucket $StateBucket -PlanPath $RuntimePlanPath -AwsProfile $AwsProfile -Region $Region 2>$null
-  if ($LASTEXITCODE -ne 0 -or -not $raw) { throw "The $Environment serverless runtime baseline did not pass." }
-  $runtime = ($raw -join [Environment]::NewLine) | ConvertFrom-Json
-  if (
-    -not [bool]$runtime.NoDrift -or -not [bool]$runtime.EcsRuntimeIdle -or
-    -not [bool]$runtime.TriggersEnabled -or
-    [string]$runtime.DispatchTarget -ne "lambda_durable" -or [bool]$runtime.AwsMutation
-  ) {
-    throw "The $Environment runtime is not at the approved serverless workload baseline."
+  $identity = Invoke-AwsJson @("sts", "get-caller-identity", "--output", "json")
+  if ([string]$identity.Account -cne $ExpectedAccountId) {
+    throw "The AWS caller does not match the exact $Environment account."
   }
-  return $runtime
+  $planPath = [IO.Path]::GetFullPath($RuntimePlanPath, $terraformDirectory)
+  $allowedPlanRoot = [IO.Path]::GetFullPath((Join-Path $terraformDirectory ".terraform")) + [IO.Path]::DirectorySeparatorChar
+  if (-not $planPath.StartsWith($allowedPlanRoot, [StringComparison]::OrdinalIgnoreCase) -or
+      -not (Test-Path -LiteralPath $planPath -PathType Leaf)) {
+    throw "RuntimePlanPath must be an existing ignored plan below the selected environment .terraform directory."
+  }
+
+  $encryption = Invoke-AwsJson @("s3api", "get-bucket-encryption", "--bucket", $StateBucket, "--output", "json")
+  $rules = @($encryption.ServerSideEncryptionConfiguration.Rules | Where-Object {
+    $_.ApplyServerSideEncryptionByDefault.SSEAlgorithm -eq "aws:kms" -and
+    $_.ApplyServerSideEncryptionByDefault.KMSMasterKeyID
+  })
+  if ($rules.Count -ne 1) { throw "The state bucket does not expose one KMS default." }
+  $kmsKeyArn = [string]$rules[0].ApplyServerSideEncryptionByDefault.KMSMasterKeyID
+  if ($kmsKeyArn -notmatch "^arn:aws:kms:$([regex]::Escape($Region)):$ExpectedAccountId`:key/") {
+    throw "The state KMS key is outside the selected account and region."
+  }
+
+  $plan = & terraform "-chdir=$terraformDirectory" show -json $planPath 2>$null | ConvertFrom-Json
+  if ($LASTEXITCODE -ne 0 -or $null -eq $plan.variables) { throw "The applied runtime plan could not be inspected." }
+  $variableProperties = @($plan.variables.PSObject.Properties)
+  $unexpected = @($variableProperties | Where-Object { $_.Name -notin $allowedVariableNames })
+  if ($unexpected.Count -ne 0) { throw "The applied plan contains an unapproved runtime input." }
+
+  $saved = @{}
+  $names = New-Object Collections.Generic.List[string]
+  $temporaryPlan = Join-Path $allowedPlanRoot "workload-inspection-$([Guid]::NewGuid().ToString('N')).tfplan"
+  try {
+    $null = New-Item -ItemType Directory -Path $terraformDataDirectory -Force
+    $saved["TF_DATA_DIR"] = $env:TF_DATA_DIR
+    $env:TF_DATA_DIR = $terraformDataDirectory
+    foreach ($property in $variableProperties) {
+      $environmentName = "TF_VAR_$($property.Name)"
+      $saved[$environmentName] = [Environment]::GetEnvironmentVariable($environmentName, "Process")
+      $value = $property.Value.value
+      $serialized = if ($value -is [bool]) { $value.ToString().ToLowerInvariant() }
+        elseif ($value -is [string]) { $value }
+        else { $value | ConvertTo-Json -Compress -Depth 20 }
+      [Environment]::SetEnvironmentVariable($environmentName, [string]$serialized, "Process")
+      $names.Add($environmentName)
+    }
+    $runtimeSetting = @($variableProperties | Where-Object Name -eq "serverless_runtime_enabled")
+    if ($runtimeSetting.Count -ne 1 -or -not [bool]$runtimeSetting[0].Value.value) {
+      throw "The applied plan does not describe the enabled steady-state runtime."
+    }
+
+    & terraform "-chdir=$terraformDirectory" init -reconfigure -input=false -lockfile=readonly `
+      "-backend-config=bucket=$StateBucket" "-backend-config=key=platform.tfstate" `
+      "-backend-config=region=$Region" "-backend-config=kms_key_id=$kmsKeyArn" | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "The encrypted backend could not be initialized." }
+    & terraform "-chdir=$terraformDirectory" plan -input=false -lock-timeout=5m -detailed-exitcode `
+      "-out=$temporaryPlan" | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "The $Environment runtime is not zero drift." }
+
+    $clusterArn = (& terraform "-chdir=$terraformDirectory" output -raw ecs_cluster_arn 2>$null).Trim()
+    $mappingId = (& terraform "-chdir=$terraformDirectory" output -raw outbox_starter_event_source_mapping_uuid 2>$null).Trim()
+    $reconcilerArn = (& terraform "-chdir=$terraformDirectory" output -raw outbox_reconciler_rule_arn 2>$null).Trim()
+    $terminalArn = (& terraform "-chdir=$terraformDirectory" output -raw profile_readiness_terminal_rule_arn 2>$null).Trim()
+    $gatewayName = (& terraform "-chdir=$terraformDirectory" output -raw gateway_lambda_function_name 2>$null).Trim()
+    $gatewayUrl = (& terraform "-chdir=$terraformDirectory" output -raw gateway_url 2>$null).TrimEnd("/")
+    if ($LASTEXITCODE -ne 0 -or -not $clusterArn -or -not $mappingId -or -not $reconcilerArn -or
+        -not $terminalArn -or -not $gatewayName -or -not $gatewayUrl.StartsWith("https://")) {
+      throw "The steady-state outputs are incomplete."
+    }
+
+    $services = Invoke-AwsJson @("ecs", "list-services", "--cluster", $clusterArn, "--output", "json")
+    $tasks = Invoke-AwsJson @("ecs", "list-tasks", "--cluster", $clusterArn, "--desired-status", "RUNNING", "--output", "json")
+    if (@($services.serviceArns).Count -ne 0 -or @($tasks.taskArns).Count -ne 0) {
+      throw "The ECS application boundary is not empty."
+    }
+    $gateway = Invoke-AwsJson @("lambda", "get-function-configuration", "--function-name", $gatewayName, "--qualifier", $Environment, "--output", "json")
+    if ([string]$gateway.Environment.Variables.OUTBOX_DISPATCH_TARGET -cne "lambda_durable") {
+      throw "The gateway dispatch target is not Lambda durable."
+    }
+    $mapping = Invoke-AwsJson @("lambda", "get-event-source-mapping", "--uuid", $mappingId, "--output", "json")
+    $rulesEnabled = $true
+    foreach ($arn in @($reconcilerArn, $terminalArn)) {
+      $name = $arn.Substring($arn.LastIndexOf("/") + 1)
+      $rule = Invoke-AwsJson @("events", "describe-rule", "--name", $name, "--output", "json")
+      if ([string]$rule.State -cne "ENABLED") { $rulesEnabled = $false }
+    }
+    if ([string]$mapping.State -cne "Enabled" -or -not $rulesEnabled) {
+      throw "The durable workflow triggers are not enabled."
+    }
+    if ((Get-HttpStatus "$gatewayUrl/health/live") -ne 200 -or
+        (Get-HttpStatus "$gatewayUrl/health/ready") -ne 200 -or
+        (Get-HttpStatus "$gatewayUrl/v1/me") -ne 401) {
+      throw "The public API did not pass the expected 200/200/401 boundary."
+    }
+    return [pscustomobject]@{
+      NoDrift = $true
+      EcsRuntimeIdle = $true
+      TriggersEnabled = $true
+      DispatchTarget = "lambda_durable"
+      AwsMutation = $false
+    }
+  } finally {
+    if (Test-Path -LiteralPath $temporaryPlan) { Remove-Item -LiteralPath $temporaryPlan -Force }
+    foreach ($name in $names) {
+      [Environment]::SetEnvironmentVariable($name, $saved[$name], "Process")
+    }
+    $env:TF_DATA_DIR = $saved["TF_DATA_DIR"]
+  }
 }
 
 function Get-Collection {
@@ -272,7 +398,7 @@ function Get-LogAggregate {
       $errorMatches += 1
     }
     if (
-      $message -match "(?i)authorization|bearer\s+|eyJ[A-Za-z0-9_-]+\.|postgres(ql)?://|temporal-api-key|client_secret|session_secret|@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"
+      $message -match "(?i)authorization|bearer\s+|eyJ[A-Za-z0-9_-]+\.|postgres(ql)?://|api[_-]?key|client_secret|session_secret|@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"
     ) {
       $forbiddenMatches += 1
     }
@@ -414,13 +540,15 @@ $healthyAlarms = @($alarms.MetricAlarms | Where-Object {
   [string]$_.StateValue -eq "OK" -and [bool]$_.ActionsEnabled -and
   @($_.AlarmActions).Count -eq 1 -and @($_.OKActions).Count -eq 1
 }).Count
-$serviceResult = Invoke-AwsJson @(
-  "ecs", "describe-services", "--cluster", "ai-job-apply-$Environment",
-  "--services", "gateway", "workflow-worker", "--output", "json"
+$serviceInventory = Invoke-AwsJson @(
+  "ecs", "list-services", "--cluster", "ai-job-apply-$Environment", "--output", "json"
 )
-$idleServices = @(Get-Collection $serviceResult "services" | Where-Object {
-  [int]$_.desiredCount -eq 0 -and [int]$_.runningCount -eq 0 -and [int]$_.pendingCount -eq 0
-}).Count
+$taskInventory = Invoke-AwsJson @(
+  "ecs", "list-tasks", "--cluster", "ai-job-apply-$Environment", "--desired-status", "RUNNING",
+  "--output", "json"
+)
+$activeServices = @(Get-Collection $serviceInventory "serviceArns").Count
+$runningTasks = @(Get-Collection $taskInventory "taskArns").Count
 
 if (
   [int]$requestCount.Sum -lt 552 -or [int]$clientErrors.Sum -lt 100 -or
@@ -428,7 +556,8 @@ if (
   [int]$lambdaThrottles -ne 0 -or [decimal]$queueAge.Maximum -ne 0 -or
   [decimal]$queueVisible.Maximum -ne 0 -or [decimal]$deadLetters.Maximum -ne 0 -or
   [decimal]$durableDeadLetters.Maximum -ne 0 -or $logs.ErrorMatches -ne 0 -or
-  $logs.ForbiddenMatches -ne 0 -or $healthyAlarms -ne 10 -or $idleServices -ne 2
+  $logs.ForbiddenMatches -ne 0 -or $healthyAlarms -ne 10 -or $activeServices -ne 0 -or
+  $runningTasks -ne 0
 ) { throw "The $Environment serverless workload did not pass aggregate AWS acceptance." }
 
 [pscustomobject]@{
@@ -454,7 +583,8 @@ if (
   LogEvents                = $logs.Events
   LogErrorMatches          = $logs.ErrorMatches
   ForbiddenLogMatches      = $logs.ForbiddenMatches
-  IdleEcsServices          = $idleServices
+  ActiveEcsServices        = $activeServices
+  RunningEcsTasks          = $runningTasks
   RuntimeAlarmsOk          = $healthyAlarms
   DispatchTarget           = [string]$runtime.DispatchTarget
   TriggersEnabled          = [bool]$runtime.TriggersEnabled

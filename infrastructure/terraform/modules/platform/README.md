@@ -33,3 +33,8 @@ The retired gateway/worker ECS services, task definitions, Cloud Map, VPC Link, 
 heartbeat alarms, gateway/worker ECR repositories, Temporal secret, and application task role are
 not part of this module. Historical cutover evidence remains in delivery records and ADRs; it is
 not an executable recovery path.
+`persistent_data_plane_enabled` separates the hourly private database/endpoint data plane from the
+retained serverless control plane. It defaults on for normal environments. A caller may disable it
+only after traffic is quiesced and database deletion protection has been removed by a separate
+reviewed apply. This generic switch is currently owned by synthetic staging under ADR-018; it is not
+a production retention policy.

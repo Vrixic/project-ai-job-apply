@@ -13,7 +13,6 @@ immutable database-migration image in `ai-job-apply/migration`. Applications can
 dark; `serverless_runtime_enabled` controls the public API routes and all workflow triggers as one
 fail-closed boundary.
 
-Use the provider-retirement runbook while the historical Temporal secret and gateway/worker ECR
-repositories still exist. After retirement, use Terraform saved plans and exact checksums for
-artifact releases, migrations, runtime disable/enable, restore, and infrastructure changes. Never
-restore the removed ECS/Temporal runtime from historical scripts or console changes.
+Use Terraform saved plans and exact checksums for artifact releases, migrations, runtime
+disable/enable, restore, and infrastructure changes. Never reconstruct the removed continuous ECS
+or external workflow-provider runtime from historical evidence or console changes.

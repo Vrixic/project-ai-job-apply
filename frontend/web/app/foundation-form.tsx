@@ -41,7 +41,6 @@ export function FoundationForm({
   authenticationFailed,
   authenticated,
   crossUserProbeArmed,
-  darkLambdaIsolationConformanceEnabled,
   displayName,
   workloadConformanceEnabled,
 }: {
@@ -50,7 +49,6 @@ export function FoundationForm({
   authenticationFailed: boolean;
   authenticated: boolean;
   crossUserProbeArmed: boolean;
-  darkLambdaIsolationConformanceEnabled: boolean;
   displayName?: string;
   workloadConformanceEnabled: boolean;
 }) {
@@ -111,12 +109,7 @@ export function FoundationForm({
   }, [authenticated]);
 
   useEffect(() => {
-    if (
-      !operationId ||
-      operation?.state === "succeeded" ||
-      operation?.state === "failed" ||
-      (darkLambdaIsolationConformanceEnabled && operation?.state === "queued")
-    ) {
+    if (!operationId || operation?.state === "succeeded" || operation?.state === "failed") {
       return;
     }
     const timer = window.setInterval(async () => {
@@ -130,7 +123,7 @@ export function FoundationForm({
       }
     }, 1_500);
     return () => window.clearInterval(timer);
-  }, [darkLambdaIsolationConformanceEnabled, operationId, operation?.state]);
+  }, [operationId, operation?.state]);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -195,10 +188,7 @@ export function FoundationForm({
   }
 
   async function armIsolationProbe() {
-    if (
-      !operationId ||
-      !isIsolationOperationEligible(operation?.state, darkLambdaIsolationConformanceEnabled)
-    ) {
+    if (!operationId || !isIsolationOperationEligible(operation?.state, false)) {
       setMessage("Create an eligible readiness operation before arming the isolation check.");
       return;
     }
@@ -338,13 +328,7 @@ export function FoundationForm({
             <button
               type="button"
               onClick={armIsolationProbe}
-              disabled={
-                armingIsolation ||
-                !isIsolationOperationEligible(
-                  operation?.state,
-                  darkLambdaIsolationConformanceEnabled,
-                )
-              }
+              disabled={armingIsolation || !isIsolationOperationEligible(operation?.state, false)}
             >
               {armingIsolation ? "Arming…" : "Arm cross-user isolation check"}
             </button>
@@ -446,11 +430,6 @@ export function FoundationForm({
       {operation && (
         <section className="result" aria-live="polite">
           <strong>Readiness workflow: {operation.state.replace("_", " ")}</strong>
-          {darkLambdaIsolationConformanceEnabled && operation.state === "queued" && (
-            <p>
-              Queued is expected while replacement workflow triggers remain dark before cutover.
-            </p>
-          )}
           {operation.result && (
             <p>
               Profile readiness: {operation.result.completionPercent}%.

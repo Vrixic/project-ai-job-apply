@@ -18,6 +18,11 @@ locals {
   operational_metric_namespace  = "${var.name}/${var.environment}/operational"
   observability_runbook_url     = "https://github.com/Vrixic/project-ai-job-apply/blob/main/infrastructure/runbooks/observability/development-alert-delivery.md"
   provider_recovery_runbook_url = "https://github.com/Vrixic/project-ai-job-apply/blob/main/infrastructure/runbooks/providers/development-provider-and-log-recovery.md"
+  database_metric_identifier = (
+    var.persistent_data_plane_enabled
+    ? aws_db_instance.postgres[0].identifier
+    : "${var.name}-${var.environment}-dormant"
+  )
 }
 
 data "aws_iam_policy_document" "platform_kms" {
@@ -219,6 +224,23 @@ resource "aws_kms_key" "platform" {
   deletion_window_in_days = 30
   enable_key_rotation     = true
   policy                  = data.aws_iam_policy_document.platform_kms.json
+
+  lifecycle {
+    precondition {
+      condition     = !var.serverless_runtime_enabled || var.persistent_data_plane_enabled
+      error_message = "The serverless runtime must be quiesced before the persistent data plane can be disabled."
+    }
+
+    precondition {
+      condition     = var.persistent_data_plane_enabled || !var.database_deletion_protection
+      error_message = "Database deletion protection must be disabled by a separate reviewed apply before the persistent data plane is removed."
+    }
+
+    precondition {
+      condition     = !var.serverless_runtime_enabled || var.runtime_activation_allowed
+      error_message = "This environment lifecycle state does not permit public runtime activation."
+    }
+  }
 }
 
 resource "aws_kms_alias" "platform" {
@@ -422,6 +444,7 @@ resource "aws_db_subnet_group" "this" {
 
 # ADR-013 keeps prelaunch environments Single-AZ until launch review or measured demand.
 resource "aws_db_instance" "postgres" { # nosemgrep: semgrep-rules.terraform.aws.best-practice.aws-rds-multiaz-not-enabled
+  count                               = var.persistent_data_plane_enabled ? 1 : 0
   identifier                          = "${var.name}-${var.environment}"
   engine                              = "postgres"
   engine_version                      = var.database_engine_version
@@ -441,20 +464,21 @@ resource "aws_db_instance" "postgres" { # nosemgrep: semgrep-rules.terraform.aws
   vpc_security_group_ids              = [aws_security_group.data.id]
   backup_retention_period             = 7
   copy_tags_to_snapshot               = true
-  deletion_protection                 = true
+  deletion_protection                 = var.database_deletion_protection
   performance_insights_enabled        = var.database_performance_insights
-  skip_final_snapshot                 = false
-  final_snapshot_identifier           = "${var.name}-${var.environment}-final"
+  skip_final_snapshot                 = !var.retain_database_snapshot_on_destroy
+  final_snapshot_identifier           = var.retain_database_snapshot_on_destroy ? "${var.name}-${var.environment}-final" : null
+  delete_automated_backups            = !var.retain_database_snapshot_on_destroy
 }
 
 resource "aws_elasticache_subnet_group" "this" {
-  count      = var.enable_redis ? 1 : 0
+  count      = var.enable_redis && var.persistent_data_plane_enabled ? 1 : 0
   name       = "${var.name}-${var.environment}"
   subnet_ids = aws_subnet.private[*].id
 }
 
 resource "aws_elasticache_replication_group" "redis" {
-  count                      = var.enable_redis ? 1 : 0
+  count                      = var.enable_redis && var.persistent_data_plane_enabled ? 1 : 0
   replication_group_id       = "${var.name}-${var.environment}"
   description                = "Ephemeral cache and rate limits"
   node_type                  = "cache.t4g.small"
@@ -551,12 +575,13 @@ resource "aws_secretsmanager_secret" "database_url" {
 }
 
 resource "aws_secretsmanager_secret_version" "database_url" {
+  count     = var.persistent_data_plane_enabled ? 1 : 0
   secret_id = aws_secretsmanager_secret.database_url.id
   secret_string = format(
     "postgres://platform:%s@%s:%s/ai_job_apply?sslmode=require",
     urlencode(random_password.database.result),
-    aws_db_instance.postgres.address,
-    aws_db_instance.postgres.port
+    aws_db_instance.postgres[0].address,
+    aws_db_instance.postgres[0].port
   )
 }
 
@@ -646,7 +671,7 @@ resource "aws_apigatewayv2_stage" "gateway" {
 }
 
 resource "aws_ecs_task_definition" "migration" {
-  count                    = var.migration_image == "" ? 0 : 1
+  count                    = var.migration_image != "" && var.persistent_data_plane_enabled ? 1 : 0
   family                   = "${var.name}-${var.environment}-database-migration"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
@@ -694,6 +719,7 @@ resource "aws_ecs_task_definition" "migration" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "database_cpu" {
+  count               = var.persistent_data_plane_enabled ? 1 : 0
   alarm_name          = "${var.name}-${var.environment}-database-cpu"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 3
@@ -707,11 +733,12 @@ resource "aws_cloudwatch_metric_alarm" "database_cpu" {
   ok_actions          = [aws_sns_topic.operational_alerts.arn]
   alarm_description   = "Database CPU has remained high. Runbook: ${local.observability_runbook_url}"
   dimensions = {
-    DBInstanceIdentifier = aws_db_instance.postgres.identifier
+    DBInstanceIdentifier = aws_db_instance.postgres[0].identifier
   }
 }
 
 resource "aws_cloudwatch_metric_alarm" "database_free_storage" {
+  count               = var.persistent_data_plane_enabled ? 1 : 0
   alarm_name          = "${var.name}-${var.environment}-database-free-storage"
   comparison_operator = "LessThanThreshold"
   evaluation_periods  = 3
@@ -725,7 +752,7 @@ resource "aws_cloudwatch_metric_alarm" "database_free_storage" {
   ok_actions          = [aws_sns_topic.operational_alerts.arn]
   alarm_description   = "Database free storage has remained below 5 GiB. Runbook: ${local.observability_runbook_url}"
   dimensions = {
-    DBInstanceIdentifier = aws_db_instance.postgres.identifier
+    DBInstanceIdentifier = aws_db_instance.postgres[0].identifier
   }
 }
 
@@ -855,8 +882,8 @@ resource "aws_cloudwatch_dashboard" "operations" {
             view   = "timeSeries"
             period = 300
             metrics = [
-              ["AWS/RDS", "CPUUtilization", "DBInstanceIdentifier", aws_db_instance.postgres.identifier, { label = "CPU %", stat = "Average" }],
-              ["AWS/RDS", "FreeStorageSpace", "DBInstanceIdentifier", aws_db_instance.postgres.identifier, { label = "Free storage", stat = "Average", yAxis = "right" }]
+              ["AWS/RDS", "CPUUtilization", "DBInstanceIdentifier", local.database_metric_identifier, { label = "CPU %", stat = "Average" }],
+              ["AWS/RDS", "FreeStorageSpace", "DBInstanceIdentifier", local.database_metric_identifier, { label = "Free storage", stat = "Average", yAxis = "right" }]
             ]
           }
         },
@@ -1106,7 +1133,11 @@ data "aws_iam_policy_document" "secrets_endpoint" {
 }
 
 resource "aws_vpc_endpoint" "secretsmanager" {
-  count               = var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable ? 1 : 0
+  count = (
+    var.persistent_data_plane_enabled && (
+      var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable
+    )
+  ) ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.secretsmanager"
   vpc_endpoint_type   = "Interface"
@@ -1439,7 +1470,7 @@ data "aws_iam_policy_document" "outbox_sqs_endpoint" {
 }
 
 resource "aws_vpc_endpoint" "sqs" {
-  count               = var.deploy_serverless_outbox ? 1 : 0
+  count               = var.deploy_serverless_outbox && var.persistent_data_plane_enabled ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.sqs"
   vpc_endpoint_type   = "Interface"
@@ -1470,7 +1501,7 @@ data "aws_iam_policy_document" "outbox_lambda_endpoint" {
 }
 
 resource "aws_vpc_endpoint" "lambda" {
-  count               = var.deploy_serverless_outbox ? 1 : 0
+  count               = var.deploy_serverless_outbox && var.persistent_data_plane_enabled ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.lambda"
   vpc_endpoint_type   = "Interface"

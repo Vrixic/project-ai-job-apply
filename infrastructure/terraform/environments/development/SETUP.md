@@ -40,8 +40,8 @@ Confirm the command succeeds without pasting its account/user output into reposi
 ### 3. Add cost guardrails
 
 - Create a monthly AWS cost budget scoped to the development account.
-- Start with a USD 75 budget and actual alerts at 50%, 80%, and 100%, plus a forecast alert at
-  100%. Revisit the amount using real billing evidence.
+- Use the Terraform-managed `$5` monthly actual-cost alert as an early warning. Revisit the amount
+  using real billing evidence.
 - Send alerts to an actively monitored owner address.
 
 Budgets notify; they do not guarantee that services stop spending.
@@ -79,29 +79,11 @@ They are identifiers, not secrets. Restrict the environment's deployment branche
 `main` branch. Cloud-authenticated Terraform planning and OIDC conformance are manual-dispatch
 workflows; pull requests run offline Terraform validation only.
 
-### 6. Create Temporal Cloud development identity
+### 6. Confirm the durable runtime boundary
 
-- Create a Temporal Cloud account directly.
-- Create namespace name `ai-job-apply-development`.
-- Select AWS and `us-east-2` if offered; otherwise select the closest available US AWS region and
-  record the choice.
-- Use a seven-day development retention period and API-key authentication.
-- Enable namespace deletion protection when available.
-- Create a namespace-scoped Service Account for the worker with `Write` namespace permission,
-  not Namespace Admin.
-- Do not generate its API key until platform engineering has created the destination AWS Secrets
-  Manager secret. At that handoff, follow the
-  [Temporal runtime-secret runbook](../../../runbooks/temporal-cloud-runtime-secret.md) to
-  generate a dedicated 90-day API key, paste it directly into the AWS secret, clear the
-  clipboard, verify namespace access, and plan regular rotation.
-
-The safe handoff to platform engineering contains only:
-
-- full Namespace ID, such as `ai-job-apply-development.ACCOUNT_SUFFIX`;
-- gRPC Namespace endpoint ending in `.tmprl.cloud:7233`; and
-- selected Temporal Cloud provider region.
-
-The API key is entered directly into the AWS Secrets Manager secret created during deployment.
+No external workflow-provider account, namespace, API key, or runtime secret is required. The
+supported path uses SQS/outbox recovery and versioned Lambda durable functions in the selected AWS
+account. Treat any historical provider setup instruction as evidence only.
 
 ## Platform-engineering execution
 
@@ -111,21 +93,19 @@ After the product-owner setup is confirmed, platform engineering:
 2. validates Terraform 1.9.8 and repository checks;
 3. bootstraps encrypted/versioned state and the GitHub OIDC deployment role;
 4. configures GitHub Environment variables from bootstrap outputs;
-5. applies network, KMS, RDS, S3, SQS/DLQ, ECR, ECS, logs, metrics, alarms, and runtime secret
-   containers with `deploy_applications = false`;
-6. stores and verifies the Temporal API key directly in AWS Secrets Manager by following the
-   [runtime-secret runbook](../../../runbooks/temporal-cloud-runtime-secret.md);
-7. builds, tests, scans, and pushes immutable gateway and worker images;
-8. runs the reviewed database migration through a
-   [one-off controlled task](../../../runbooks/deployments/development-database-migration.md);
-9. reviews and applies the exact saved application-enablement plan;
-10. proves gateway health, Auth0 access-token validation, owner isolation, database persistence,
-    outbox dispatch, Temporal completion, structured/redacted logs, correlation identifiers,
-    metrics, alarms, and failure recovery;
-11. performs rollback and follows the
-    [PostgreSQL point-in-time restore runbook](../../../runbooks/restore/development-postgresql-point-in-time.md);
+5. applies network, KMS, RDS, S3, SQS/DLQ, the migration repository/task, Lambda durable runtime,
+   logs, metrics, alarms, and managed secret destinations with the runtime disabled;
+6. publishes immutable gateway/workflow Lambda artifacts and the scanned migration-only image;
+7. runs the reviewed database migration through a
+   [one-off controlled task](../../../runbooks/deployments/database-migration.md);
+8. reviews and applies the exact saved serverless runtime plan;
+9. proves gateway health, Auth0 access-token validation, owner isolation, database persistence,
+   outbox dispatch, durable completion, structured/redacted logs, correlation identifiers,
+   metrics, alarms, and failure recovery;
+10. performs rollback and follows the
+   [PostgreSQL point-in-time restore runbook](../../../runbooks/restore/development-postgresql-point-in-time.md);
     and
-12. validates the isolated staging composition without leaving staging continuously provisioned.
+11. validates the isolated staging composition without continuous application compute.
 
 No application apply proceeds with placeholders, mutable image tags, a local/test token issuer, or
 an unreviewed Terraform plan.

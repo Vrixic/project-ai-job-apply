@@ -3,7 +3,7 @@
 - Date: 2026-08-03
 - Environment: development preparation only
 - Status: Source and local validation implemented; no rollback plan or AWS mutation performed
-- Runbook: [Development serverless workflow release rollback](../../../../infrastructure/runbooks/deployments/development-serverless-workflow-release-rollback.md)
+- Runbook: [Development serverless workflow release rollback](d0-provider-runtime-repository-cleanup-2026-08-08.md)
 
 ## Implemented boundary
 

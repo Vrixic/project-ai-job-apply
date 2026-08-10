@@ -15,7 +15,6 @@
     "build:lambda:ingress": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-workflow-ingress-lambda.mjs",
     "build:lambda:profile": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-profile-readiness-lambdas.mjs",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
-    "temporal:retirement-inspect": "node temporal-retirement-inspect.mjs",
     "dev": "node --watch --env-file-if-exists=../../.env --import tsx src/start.ts",
     "start": "node dist/src/start.js",
     "test": "vitest run --exclude=dist/** --passWithNoTests",
@@ -31,7 +30,6 @@
     "@aws-sdk/client-lambda": "3.1101.0",
     "@aws-sdk/client-sqs": "3.1101.0",
     "@aws/durable-execution-sdk-js": "2.1.0",
-    "@temporalio/client": "1.14.0",
     "pino": "10.1.0"
   },
   "devDependencies": {
