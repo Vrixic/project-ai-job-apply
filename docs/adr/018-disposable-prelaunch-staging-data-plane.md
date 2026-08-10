@@ -42,8 +42,10 @@ resources either provide reproducibility/control evidence or have negligible idl
 The staging database contains synthetic data only and is destroyed without a final retained snapshot.
 No real candidate, ATS submission, credential, or production artifact is permitted in staging. Every
 activation creates a fresh encrypted Single-AZ PostgreSQL instance, restores private endpoints, runs
-the exact migration image, loads approved synthetic fixtures, verifies schema and application
-boundaries, and only then separately enables serverless traffic.
+the exact migration image, and verifies schema and application boundaries before separately
+enabling serverless traffic. Phase 0 profile/workflow records are created only through approved
+disposable authenticated conformance because ownership derives from OIDC identity; a later
+capability may load approved synthetic fixtures only through its explicit owned seed contract.
 
 Every transition uses temporary staging IAM Identity Center credentials, a clean `main` commit,
 environment-specific KMS-encrypted state, a refresh-backed saved Terraform plan, strict resource

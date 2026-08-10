@@ -130,9 +130,9 @@ an immediate billed-dollar reduction or a complete dormant interval.
 Remaining D0-017 evidence:
 
 1. Generate and apply an independently reviewed dark `dormant -> active` plan with no deletes.
-2. Run migrations, load approved synthetic fixtures, and replay the required persistence,
-   readiness, workflow, idempotency, isolation, workload, observability, restore/security, and
-   zero-drift boundaries before enabling traffic.
+2. Run migrations, create approved synthetic records through the owned authenticated conformance
+   boundary, and replay persistence, readiness, workflow, idempotency, isolation, workload,
+   observability, restore/security, and zero-drift checks before enabling traffic.
 3. Return the exercise through separately reviewed `quiesced` and `dormant` plans.
 4. Reconcile one complete posted dormant interval and confirm no RDS or interface-endpoint hourly
    usage.

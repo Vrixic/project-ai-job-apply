@@ -1,10 +1,13 @@
 [CmdletBinding()]
 param(
-  [ValidateSet("Status", "Plan", "Apply")]
+  [ValidateSet("Status", "Plan", "Apply", "PlanTraffic", "ApplyTraffic")]
   [string]$Action = "Status",
 
   [ValidateSet("active", "quiesced", "dormant")]
   [string]$TargetMode = "dormant",
+
+  [ValidateSet("enabled", "disabled")]
+  [string]$TrafficTarget = "enabled",
 
   [string]$AwsProfile = "ai-job-apply-staging-admin",
   [string]$Region = "us-east-2",
@@ -42,6 +45,15 @@ Usage:
     -PlanPath .terraform/staging-lifecycle/quiesced-....tfplan `
     -ReviewedPlanSha256 64_CHARACTER_SHA256
 
+  .\scripts\operate-staging-runtime-lifecycle.ps1 -Action PlanTraffic `
+    -TrafficTarget enabled -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
+    -RuntimePlanPath .terraform/staging-lifecycle/APPLIED_ACTIVE_PLAN.tfplan
+
+  .\scripts\operate-staging-runtime-lifecycle.ps1 -Action ApplyTraffic `
+    -TrafficTarget enabled -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
+    -PlanPath .terraform/staging-lifecycle/traffic-enabled-....tfplan `
+    -ReviewedPlanSha256 64_CHARACTER_SHA256
+
 The lifecycle is deliberately two-step when turning staging off:
   active -> quiesced -> dormant
 
@@ -53,6 +65,10 @@ IAM, queues/DLQs, logs, alarms, API/Lambda definitions, and cost controls.
 
 Activation is also dark-first:
   dormant -> active -> migrate/verify -> separately enable serverless traffic
+
+Traffic enablement creates exactly three routes and enables exactly three workflow triggers only
+after active data-plane verification. Traffic disablement is the exact inverse and requires empty
+queues. Neither traffic transition may change artifacts, data resources, IAM, or observability.
 
 Plan requires an already-applied saved plan so immutable artifact and non-secret deployment inputs
 can be recovered exactly. Apply accepts only the exact checksum-reviewed saved plan and matching
@@ -177,7 +193,11 @@ function Resolve-PlanBelowTerraformData {
 }
 
 function Set-VariablesFromAppliedPlan {
-  param([Parameter(Mandatory)][string]$SourcePlanPath)
+  param(
+    [Parameter(Mandatory)][string]$SourcePlanPath,
+    [Parameter(Mandatory)][ValidateSet("active", "quiesced", "dormant")][string]$StagingMode,
+    [Parameter(Mandatory)][bool]$RuntimeEnabled
+  )
 
   $source = Resolve-PlanBelowTerraformData -Candidate $SourcePlanPath -MustExist
   $plan = & terraform "-chdir=$terraformDirectory" show -json $source 2>$null | ConvertFrom-Json
@@ -196,8 +216,8 @@ function Set-VariablesFromAppliedPlan {
       else { $value | ConvertTo-Json -Compress -Depth 20 }
     [Environment]::SetEnvironmentVariable("TF_VAR_$($property.Name)", [string]$serialized, "Process")
   }
-  $env:TF_VAR_staging_runtime_mode = $TargetMode
-  $env:TF_VAR_serverless_runtime_enabled = "false"
+  $env:TF_VAR_staging_runtime_mode = $StagingMode
+  $env:TF_VAR_serverless_runtime_enabled = $RuntimeEnabled.ToString().ToLowerInvariant()
 }
 
 function Get-Database {
@@ -353,9 +373,6 @@ function Assert-PlanBoundary {
     if ($unexpected.Count -ne 0) {
       throw "Quiescence contains an unexpected resource action: $($unexpected.address -join ', ')."
     }
-    if ($changes.Count -ne 7) {
-      throw "Quiescence must contain exactly one database update, three route deletes, and three trigger updates."
-    }
     $databaseChange = @($changes | Where-Object {
         $_.address -eq "module.platform.aws_db_instance.postgres[0]" -and
         (@($_.change.actions) -join ",") -eq "update"
@@ -369,8 +386,16 @@ function Assert-PlanBoundary {
           $_.address -like "module.platform.aws_cloudwatch_event_rule.*") -and
         (@($_.change.actions) -join ",") -eq "update"
       })
-    if ($databaseChange.Count -ne 1 -or $routeDeletes.Count -ne 3 -or $triggerUpdates.Count -ne 3) {
-      throw "Quiescence actions do not match the exact database, route, and trigger transition."
+    $liveTransition = (
+      $changes.Count -eq 7 -and $databaseChange.Count -eq 1 -and
+      $routeDeletes.Count -eq 3 -and $triggerUpdates.Count -eq 3
+    )
+    $darkTransition = (
+      $changes.Count -eq 1 -and $databaseChange.Count -eq 1 -and
+      $routeDeletes.Count -eq 0 -and $triggerUpdates.Count -eq 0
+    )
+    if (-not $liveTransition -and -not $darkTransition) {
+      throw "Quiescence must update database protection plus either the exact six live traffic actions or no already-dark traffic action."
     }
     if (
       -not [bool]$databaseChange[0].change.before.deletion_protection -or
@@ -378,22 +403,24 @@ function Assert-PlanBoundary {
     ) {
       throw "Quiescence must change database deletion protection from enabled to disabled."
     }
-    $mappingChange = @($triggerUpdates | Where-Object {
-        $_.address -eq "module.platform.aws_lambda_event_source_mapping.outbox_starter[0]"
-      })
-    $ruleChanges = @($triggerUpdates | Where-Object {
-        $_.address -like "module.platform.aws_cloudwatch_event_rule.*"
-      })
-    if (
-      $mappingChange.Count -ne 1 -or
-      -not [bool]$mappingChange[0].change.before.enabled -or
-      [bool]$mappingChange[0].change.after.enabled -or
-      @($ruleChanges | Where-Object {
-          [string]$_.change.before.state -ne "ENABLED" -or
-          [string]$_.change.after.state -ne "DISABLED"
-        }).Count -ne 0
-    ) {
-      throw "Quiescence must disable the exact mapping and both EventBridge rules."
+    if ($liveTransition) {
+      $mappingChange = @($triggerUpdates | Where-Object {
+          $_.address -eq "module.platform.aws_lambda_event_source_mapping.outbox_starter[0]"
+        })
+      $ruleChanges = @($triggerUpdates | Where-Object {
+          $_.address -like "module.platform.aws_cloudwatch_event_rule.*"
+        })
+      if (
+        $mappingChange.Count -ne 1 -or
+        -not [bool]$mappingChange[0].change.before.enabled -or
+        [bool]$mappingChange[0].change.after.enabled -or
+        @($ruleChanges | Where-Object {
+            [string]$_.change.before.state -ne "ENABLED" -or
+            [string]$_.change.after.state -ne "DISABLED"
+          }).Count -ne 0
+      ) {
+        throw "Quiescence must disable the exact mapping and both EventBridge rules."
+      }
     }
   }
   if ($TargetMode -eq "dormant") {
@@ -479,6 +506,113 @@ function Assert-PlanBoundary {
   return $changes
 }
 
+function Assert-TrafficPreconditions {
+  param([Parameter(Mandatory)][object]$Status)
+
+  if ($Status.Mode -ne "active" -or -not $Status.DatabasePresent -or
+    -not $Status.DatabaseDeletionProtection -or $Status.ManagedInterfaceEndpoints -ne 3) {
+    throw "Traffic transitions require the complete protected active staging data plane."
+  }
+  if ($Status.AggregateQueueDepth -ne 0) {
+    throw "Staging queues must be empty before any traffic transition."
+  }
+  if ($TrafficTarget -eq "enabled") {
+    if ($Status.PublicRuntimeRoutes -ne 0 -or $Status.EnabledEventMappings -ne 0 -or
+      $Status.EnabledEventRules -ne 0) {
+      throw "Traffic can be enabled only from the exact dark active boundary."
+    }
+  }
+  elseif ($Status.PublicRuntimeRoutes -ne 3 -or $Status.EnabledEventMappings -ne 1 -or
+    $Status.EnabledEventRules -ne 2) {
+    throw "Traffic can be disabled only from the exact enabled active boundary."
+  }
+}
+
+function Assert-TrafficPlanBoundary {
+  param([Parameter(Mandatory)][object]$Plan)
+
+  $changes = @($Plan.resource_changes | Where-Object {
+      (@($_.change.actions) -join ",") -ne "no-op"
+    })
+  $allowedAddresses = @(
+    "module.platform.aws_apigatewayv2_route.gateway[0]",
+    'module.platform.aws_apigatewayv2_route.gateway_lambda_public["GET /health/live"]',
+    'module.platform.aws_apigatewayv2_route.gateway_lambda_public["GET /health/ready"]',
+    "module.platform.aws_lambda_event_source_mapping.outbox_starter[0]",
+    "module.platform.aws_cloudwatch_event_rule.outbox_reconciler[0]",
+    "module.platform.aws_cloudwatch_event_rule.profile_readiness_terminal[0]"
+  )
+  $unexpected = @($changes | Where-Object { $_.address -notin $allowedAddresses })
+  if ($unexpected.Count -ne 0) {
+    throw "The traffic plan contains an unexpected resource action: $($unexpected.address -join ', ')."
+  }
+  $replacements = @($changes | Where-Object {
+      "create" -in @($_.change.actions) -and "delete" -in @($_.change.actions)
+    })
+  if ($changes.Count -ne 6 -or $replacements.Count -ne 0) {
+    throw "The traffic plan must contain exactly three route actions and three trigger updates without replacement."
+  }
+
+  $routeChanges = @($changes | Where-Object {
+      $_.address -like "module.platform.aws_apigatewayv2_route.*"
+    })
+  $mappingChanges = @($changes | Where-Object {
+      $_.address -eq "module.platform.aws_lambda_event_source_mapping.outbox_starter[0]"
+    })
+  $ruleChanges = @($changes | Where-Object {
+      $_.address -like "module.platform.aws_cloudwatch_event_rule.*"
+    })
+  if ($routeChanges.Count -ne 3 -or $mappingChanges.Count -ne 1 -or $ruleChanges.Count -ne 2) {
+    throw "The traffic plan does not contain the exact route, mapping, and EventBridge boundary."
+  }
+
+  if ($TrafficTarget -eq "enabled") {
+    if (@($routeChanges | Where-Object { (@($_.change.actions) -join ",") -ne "create" }).Count -ne 0 -or
+      (@($mappingChanges[0].change.actions) -join ",") -ne "update" -or
+      [bool]$mappingChanges[0].change.before.enabled -or
+      -not [bool]$mappingChanges[0].change.after.enabled -or
+      @($ruleChanges | Where-Object {
+          (@($_.change.actions) -join ",") -ne "update" -or
+          [string]$_.change.before.state -ne "DISABLED" -or
+          [string]$_.change.after.state -ne "ENABLED"
+        }).Count -ne 0) {
+      throw "Traffic enablement must create three routes and enable the exact three workflow triggers."
+    }
+    $defaultRoute = @($routeChanges | Where-Object {
+        $_.address -eq "module.platform.aws_apigatewayv2_route.gateway[0]"
+      })
+    $publicRoutes = @($routeChanges | Where-Object {
+        $_.address -like "module.platform.aws_apigatewayv2_route.gateway_lambda_public*"
+      })
+    if ($defaultRoute.Count -ne 1 -or $publicRoutes.Count -ne 2) {
+      throw "Traffic enablement must contain one default route and two public health routes."
+    }
+    $scopes = @($defaultRoute[0].change.after.authorization_scopes | Sort-Object)
+    if (
+      [string]$defaultRoute[0].change.after.authorization_type -ne "JWT" -or
+      (@($scopes) -join ",") -ne "profile:read,profile:write" -or
+      @($publicRoutes | Where-Object {
+          [string]$_.change.after.authorization_type -ne "NONE"
+        }).Count -ne 0) {
+      throw "Traffic enablement must preserve exact JWT scopes and anonymous health routes only."
+    }
+  }
+  else {
+    if (@($routeChanges | Where-Object { (@($_.change.actions) -join ",") -ne "delete" }).Count -ne 0 -or
+      (@($mappingChanges[0].change.actions) -join ",") -ne "update" -or
+      -not [bool]$mappingChanges[0].change.before.enabled -or
+      [bool]$mappingChanges[0].change.after.enabled -or
+      @($ruleChanges | Where-Object {
+          (@($_.change.actions) -join ",") -ne "update" -or
+          [string]$_.change.before.state -ne "ENABLED" -or
+          [string]$_.change.after.state -ne "DISABLED"
+        }).Count -ne 0) {
+      throw "Traffic disablement must delete three routes and disable the exact three workflow triggers."
+    }
+  }
+  return $changes
+}
+
 Assert-CallerAndTools
 Initialize-Backend
 
@@ -489,11 +623,77 @@ if ($Action -eq "Status") {
 
 $commit = Assert-CleanMergedMain
 
+if ($Action -eq "PlanTraffic") {
+  if ([string]::IsNullOrWhiteSpace($RuntimePlanPath)) {
+    throw "Traffic planning requires the exact already-applied active plan."
+  }
+  Set-VariablesFromAppliedPlan -SourcePlanPath $RuntimePlanPath -StagingMode active `
+    -RuntimeEnabled ($TrafficTarget -eq "enabled")
+  $current = Get-LifecycleStatus
+  Assert-TrafficPreconditions -Status $current
+
+  $null = New-Item -ItemType Directory -Path $lifecyclePlanRoot -Force
+  if ([string]::IsNullOrWhiteSpace($PlanPath)) {
+    $PlanPath = Join-Path $lifecyclePlanRoot "traffic-$TrafficTarget-$(Get-Date -Format 'yyyyMMdd-HHmmss').tfplan"
+  }
+  $resolvedPlan = Resolve-PlanBelowTerraformData -Candidate $PlanPath
+  if (Test-Path -LiteralPath $resolvedPlan) { throw "Refusing to overwrite an existing saved plan." }
+
+  try {
+    & terraform "-chdir=$terraformDirectory" plan -input=false -lock-timeout=5m `
+      "-out=$resolvedPlan" | Out-Null
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $resolvedPlan -PathType Leaf)) {
+      throw "The refresh-backed staging traffic plan failed."
+    }
+    $planJson = (& terraform "-chdir=$terraformDirectory" show -json $resolvedPlan)
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($planJson)) {
+      throw "The saved traffic plan could not be inspected."
+    }
+    try { $plan = $planJson | ConvertFrom-Json }
+    catch { throw "The saved traffic plan JSON is invalid." }
+    if ($null -eq $plan) { throw "The saved traffic plan is empty." }
+    $changes = Assert-TrafficPlanBoundary -Plan $plan
+  }
+  catch {
+    if (Test-Path -LiteralPath $resolvedPlan -PathType Leaf) {
+      Remove-Item -LiteralPath $resolvedPlan -Force
+    }
+    throw
+  }
+  $sha256 = (Get-FileHash -LiteralPath $resolvedPlan -Algorithm SHA256).Hash.ToLowerInvariant()
+  $metadataPath = "$resolvedPlan.traffic.json"
+  [pscustomobject]@{
+    SchemaVersion     = 1
+    Environment       = "staging"
+    Operation         = "traffic"
+    TrafficTarget     = $TrafficTarget
+    AccountId         = $ExpectedAccountId
+    StateBucket       = $StateBucket
+    Commit            = $commit
+    PlanPath          = $resolvedPlan
+    PlanSha256        = $sha256
+    SourcePlanSha256  = (Get-FileHash -LiteralPath (Resolve-PlanBelowTerraformData -Candidate $RuntimePlanPath -MustExist) -Algorithm SHA256).Hash.ToLowerInvariant()
+    CreatedAt         = (Get-Date).ToUniversalTime().ToString("o")
+    ChangedResources  = @($changes | ForEach-Object { [string]$_.address })
+  } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $metadataPath -Encoding utf8
+
+  [pscustomobject]@{
+    Result           = "review-required"
+    TrafficTarget    = $TrafficTarget
+    ChangedResources = $changes.Count
+    PlanPath         = $resolvedPlan
+    PlanSha256       = $sha256
+    ApprovalCommand  = "Apply reviewed staging traffic $TrafficTarget plan $sha256"
+  } | ConvertTo-Json -Depth 5
+  exit 0
+}
+
 if ($Action -eq "Plan") {
   if ([string]::IsNullOrWhiteSpace($RuntimePlanPath)) {
     throw "Plan requires the exact already-applied runtime plan."
   }
-  Set-VariablesFromAppliedPlan -SourcePlanPath $RuntimePlanPath
+  Set-VariablesFromAppliedPlan -SourcePlanPath $RuntimePlanPath -StagingMode $TargetMode `
+    -RuntimeEnabled $false
   $current = Get-LifecycleStatus
   Assert-TransitionPreconditions -Status $current
 
@@ -538,7 +738,7 @@ if ($Action -eq "Plan") {
     PlanSha256        = $sha256
     SourcePlanSha256  = (Get-FileHash -LiteralPath (Resolve-PlanBelowTerraformData -Candidate $RuntimePlanPath -MustExist) -Algorithm SHA256).Hash.ToLowerInvariant()
     CreatedAt         = (Get-Date).ToUniversalTime().ToString("o")
-    ChangedResources  = @($changes.address)
+    ChangedResources  = @($changes | ForEach-Object { [string]$_.address })
   } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $metadataPath -Encoding utf8
 
   [pscustomobject]@{
@@ -549,6 +749,47 @@ if ($Action -eq "Plan") {
     PlanSha256       = $sha256
     ApprovalCommand  = "Apply reviewed staging runtime $TargetMode plan $sha256"
   } | ConvertTo-Json -Depth 5
+  exit 0
+}
+
+if ($Action -eq "ApplyTraffic") {
+  if ([string]::IsNullOrWhiteSpace($PlanPath) -or [string]::IsNullOrWhiteSpace($ReviewedPlanSha256)) {
+    throw "Traffic apply requires the exact saved PlanPath and reviewed SHA-256."
+  }
+  $resolvedPlan = Resolve-PlanBelowTerraformData -Candidate $PlanPath -MustExist
+  $actualSha256 = (Get-FileHash -LiteralPath $resolvedPlan -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($actualSha256 -cne $ReviewedPlanSha256) { throw "The saved traffic plan checksum does not match approval." }
+  $metadataPath = "$resolvedPlan.traffic.json"
+  if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) { throw "Saved traffic metadata is missing." }
+  $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+  if (
+    [string]$metadata.Operation -cne "traffic" -or
+    [string]$metadata.TrafficTarget -cne $TrafficTarget -or
+    [string]$metadata.AccountId -cne $ExpectedAccountId -or
+    [string]$metadata.StateBucket -cne $StateBucket -or
+    [string]$metadata.Commit -cne $commit -or
+    [string]$metadata.PlanSha256 -cne $ReviewedPlanSha256
+  ) {
+    throw "The reviewed traffic metadata does not match this exact apply boundary."
+  }
+
+  $current = Get-LifecycleStatus
+  Assert-TrafficPreconditions -Status $current
+  & terraform "-chdir=$terraformDirectory" apply -input=false -lock-timeout=5m $resolvedPlan
+  if ($LASTEXITCODE -ne 0) { throw "The exact reviewed traffic plan did not apply successfully." }
+  $result = Get-LifecycleStatus
+  $expectedRoutes = if ($TrafficTarget -eq "enabled") { 3 } else { 0 }
+  $expectedMappings = if ($TrafficTarget -eq "enabled") { 1 } else { 0 }
+  $expectedRules = if ($TrafficTarget -eq "enabled") { 2 } else { 0 }
+  if (
+    $result.Mode -ne "active" -or $result.AggregateQueueDepth -ne 0 -or
+    $result.PublicRuntimeRoutes -ne $expectedRoutes -or
+    $result.EnabledEventMappings -ne $expectedMappings -or
+    $result.EnabledEventRules -ne $expectedRules
+  ) {
+    throw "The traffic apply completed, but the verified staging traffic boundary does not match $TrafficTarget."
+  }
+  $result | ConvertTo-Json -Depth 5
   exit 0
 }
 
