@@ -98,6 +98,18 @@ describe("canonical job domain", () => {
     expect(canonical.expiresAt).toEqual(validThrough);
   });
 
+  it("rejects display fields that cannot satisfy the public catalog contract", () => {
+    expect(() => canonicalizeObservation(observation({ companyName: "c".repeat(201) }))).toThrow(
+      "canonical contract limit",
+    );
+    expect(() => canonicalizeObservation(observation({ department: "d".repeat(201) }))).toThrow(
+      "canonical contract limit",
+    );
+    expect(() =>
+      canonicalizeObservation(observation({ locations: [` ${"x".repeat(240)}`] })),
+    ).toThrow("non-empty location");
+  });
+
   it("supports suspect recovery and deterministic terminal controls", () => {
     const expiresAt = new Date("2026-09-10T12:00:00.000Z");
     expect(

@@ -61,6 +61,10 @@ Verification completed locally on Node 24 and PostgreSQL 16:
   a separate temporary database; the test database and image were removed afterward;
 - the full repository check and full clean-database integration suite pass.
 
-D1-004 remains in progress for API/read-model contracts, cloud artifact release/migration,
-moderation resolution, and deployed acceptance evidence. The existing cloud migration digest is
-unchanged until a future reviewed release; no deployment is claimed.
+At the time of this repository-local verification, D1-004 remained in progress for API/read-model
+contracts, cloud artifact release/migration, moderation resolution, and deployed acceptance; this
+record made no deployment claim. The subsequent exact development artifact release and
+transactional schema migration are recorded separately in the
+[development job-catalog migration evidence](d1-development-job-catalog-migration-2026-08-11.md).
+D1-004 remains in progress for its API/read model, moderation resolution, and end-to-end catalog
+acceptance.

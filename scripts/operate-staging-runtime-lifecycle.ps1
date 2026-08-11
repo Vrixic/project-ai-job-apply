@@ -590,7 +590,7 @@ function Assert-TrafficPlanBoundary {
     $scopes = @($defaultRoute[0].change.after.authorization_scopes | Sort-Object)
     if (
       [string]$defaultRoute[0].change.after.authorization_type -ne "JWT" -or
-      (@($scopes) -join ",") -ne "profile:read,profile:write" -or
+      (@($scopes) -join ",") -ne "jobs:read,profile:read,profile:write" -or
       @($publicRoutes | Where-Object {
           [string]$_.change.after.authorization_type -ne "NONE"
         }).Count -ne 0) {

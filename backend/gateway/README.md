@@ -23,6 +23,10 @@ The managed verifier accepts only RS256 tokens from the exact configured issuer 
 `ai-job-apply-api` audience. It resolves the issuer and subject through profile-owned identity
 mapping; Auth0 identifiers do not cross into public or domain identifiers.
 
+The D1 catalog read path requires the dedicated `jobs:read` scope and exposes only active,
+unexpired canonical detail plus redacted source summaries. Raw snapshots, source identity keys,
+hashes, pending/suspect records, and terminal tombstones never cross the candidate API boundary.
+
 The scale-to-zero migration adds a shared application factory and an API Gateway HTTP API payload
 2.0 Lambda entrypoint. The Lambda path accepts identity only from the exact validated authorizer
 context. The protected API Gateway route requires at least one exact platform scope, and Lambda

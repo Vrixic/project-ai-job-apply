@@ -28,6 +28,39 @@ export interface CatalogJobRecord {
   expiresAt: Date;
 }
 
+export interface ActiveJobSourceRecord {
+  provider: JobObservation["provider"];
+  provenance: JobProvenance;
+  canonicalUrl: string;
+  firstObservedAt: Date;
+  lastVerifiedAt: Date;
+  validThrough?: Date;
+}
+
+export interface ActiveJobRecord {
+  id: string;
+  company: {
+    id: string;
+    name: string;
+    verifiedDomain?: string;
+  };
+  title: string;
+  locations: string[];
+  department?: string;
+  description: string;
+  status: "active";
+  firstObservedAt: Date;
+  lastVerifiedAt: Date;
+  expiresAt: Date;
+  validThrough?: Date;
+  sources: ActiveJobSourceRecord[];
+}
+
+export interface JobCatalogReader {
+  ping(): Promise<void>;
+  getActiveJob(jobId: string, now?: Date): Promise<ActiveJobRecord | null>;
+}
+
 export interface RecordObservationResult {
   outcome: "created" | "exact_match_updated";
   job: CatalogJobRecord;
@@ -63,6 +96,30 @@ interface CatalogJobRow {
   firstObservedAt: Date;
   lastVerifiedAt: Date;
   expiresAt: Date;
+}
+
+interface ActiveJobRow {
+  id: string;
+  companyId: string;
+  companyName: string;
+  companyVerifiedDomain: string | null;
+  title: string;
+  locations: string[];
+  department: string | null;
+  description: string;
+  status: "active";
+  firstObservedAt: Date;
+  lastVerifiedAt: Date;
+  expiresAt: Date;
+  validThrough: Date | null;
+  sources: Array<{
+    provider: JobObservation["provider"];
+    provenance: JobProvenance;
+    canonicalUrl: string;
+    firstObservedAt: string;
+    lastVerifiedAt: string;
+    validThrough: string | null;
+  }>;
 }
 
 function mapJob(row: CatalogJobRow): CatalogJobRecord {
@@ -460,6 +517,81 @@ export class PostgresJobCatalog {
 
   async getById(jobId: string): Promise<CatalogJobRecord | null> {
     return this.getByIdWithClient(this.client, jobId);
+  }
+
+  async ping(): Promise<void> {
+    const [result] = await this.client<{ catalogPresent: boolean }[]>`
+      SELECT (to_regclass('jobs.canonical_jobs') IS NOT NULL) AS "catalogPresent"
+    `;
+    if (!result?.catalogPresent) {
+      throw new Error("Jobs catalog schema is unavailable");
+    }
+  }
+
+  async getActiveJob(jobId: string, now: Date = new Date()): Promise<ActiveJobRecord | null> {
+    const [row] = await this.client<ActiveJobRow[]>`
+      SELECT
+        job.id,
+        company.id AS "companyId",
+        company.display_name AS "companyName",
+        company.verified_domain AS "companyVerifiedDomain",
+        job.title,
+        job.locations,
+        job.department,
+        job.description,
+        job.status,
+        job.first_observed_at AS "firstObservedAt",
+        job.last_verified_at AS "lastVerifiedAt",
+        job.expires_at AS "expiresAt",
+        job.valid_through AS "validThrough",
+        jsonb_agg(
+          jsonb_build_object(
+            'provider', source.provider,
+            'provenance', source.provenance,
+            'canonicalUrl', source.canonical_url,
+            'firstObservedAt', source.first_observed_at,
+            'lastVerifiedAt', source.last_verified_at,
+            'validThrough', source.valid_through
+          ) ORDER BY source.first_observed_at, source.id
+        ) AS sources
+      FROM jobs.canonical_jobs AS job
+      INNER JOIN jobs.companies AS company ON company.id = job.company_id
+      INNER JOIN jobs.job_sources AS source ON source.job_id = job.id
+      WHERE job.id = ${jobId}
+        AND job.status = 'active'
+        AND job.expires_at > ${now}
+        AND job.description IS NOT NULL
+      GROUP BY job.id, company.id
+      LIMIT 1
+    `;
+    if (!row) {
+      return null;
+    }
+    return {
+      id: row.id,
+      company: {
+        id: row.companyId,
+        name: row.companyName,
+        ...(row.companyVerifiedDomain ? { verifiedDomain: row.companyVerifiedDomain } : {}),
+      },
+      title: row.title,
+      locations: row.locations,
+      ...(row.department ? { department: row.department } : {}),
+      description: row.description,
+      status: "active",
+      firstObservedAt: row.firstObservedAt,
+      lastVerifiedAt: row.lastVerifiedAt,
+      expiresAt: row.expiresAt,
+      ...(row.validThrough ? { validThrough: row.validThrough } : {}),
+      sources: row.sources.map((source) => ({
+        provider: source.provider,
+        provenance: source.provenance,
+        canonicalUrl: source.canonicalUrl,
+        firstObservedAt: new Date(source.firstObservedAt),
+        lastVerifiedAt: new Date(source.lastVerifiedAt),
+        ...(source.validThrough ? { validThrough: new Date(source.validThrough) } : {}),
+      })),
+    };
   }
 
   async close(): Promise<void> {

@@ -9,6 +9,7 @@ import type {
 } from "@ai-job-apply/api-contracts";
 import type { AuthPrincipal } from "@ai-job-apply/auth";
 import { createTestTokenIssuer } from "@ai-job-apply/auth/testing";
+import type { ActiveJobRecord, JobCatalogReader } from "@ai-job-apply/jobs-service";
 import type { ProfileStore } from "@ai-job-apply/profile-service";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { v7 as uuidv7 } from "uuid";
@@ -90,25 +91,63 @@ class MemoryProfileStore implements ProfileStore {
   async close(): Promise<void> {}
 }
 
+class MemoryJobCatalog implements JobCatalogReader {
+  readonly job: ActiveJobRecord = {
+    id: uuidv7(),
+    company: {
+      id: uuidv7(),
+      name: "Synthetic Company",
+      verifiedDomain: "example.test",
+    },
+    title: "Software Engineer",
+    locations: ["Remote - US"],
+    department: "Engineering",
+    description: "A synthetic active job used for gateway verification.",
+    status: "active",
+    firstObservedAt: new Date("2026-08-11T12:00:00.000Z"),
+    lastVerifiedAt: new Date("2026-08-11T12:00:00.000Z"),
+    expiresAt: new Date("2026-09-10T12:00:00.000Z"),
+    sources: [
+      {
+        provider: "greenhouse",
+        provenance: "authorized_fixture",
+        canonicalUrl: "https://jobs.example.test/synthetic/1",
+        firstObservedAt: new Date("2026-08-11T12:00:00.000Z"),
+        lastVerifiedAt: new Date("2026-08-11T12:00:00.000Z"),
+      },
+    ],
+  };
+
+  async getActiveJob(jobId: string): Promise<ActiveJobRecord | null> {
+    return jobId === this.job.id ? this.job : null;
+  }
+
+  async ping(): Promise<void> {}
+}
+
 async function createApp() {
   const issuer = await createTestTokenIssuer();
   const store = new MemoryProfileStore();
+  const catalog = new MemoryJobCatalog();
   const app = await createGatewayApplication({
     store,
+    catalog,
     verifier: issuer.verifier,
     releaseSha: "test",
   });
-  return { app, issuer };
+  return { app, issuer, catalog };
 }
 
 describe("candidate API", () => {
   let app: NestFastifyApplication;
   let issuer: Awaited<ReturnType<typeof createTestTokenIssuer>>;
+  let catalog: MemoryJobCatalog;
 
   beforeAll(async () => {
     const setup = await createApp();
     app = setup.app;
     issuer = setup.issuer;
+    catalog = setup.catalog;
   });
 
   afterAll(async () => {
@@ -127,6 +166,7 @@ describe("candidate API", () => {
     const principalBridge = createInvocationPrincipalBridge();
     const lambdaApp = await createGatewayApplication({
       store: new MemoryProfileStore(),
+      catalog: new MemoryJobCatalog(),
       verifier: principalBridge.verifier,
       releaseSha: "lambda-principal-bridge-test",
     });
@@ -225,6 +265,48 @@ describe("candidate API", () => {
     });
     expect(operation.statusCode).toBe(200);
     expect(operation.json().state).toBe("queued");
+  });
+
+  it("returns an active redacted job only with the dedicated read scope", async () => {
+    const jobToken = await issuer.issue("candidate-job-reader", { scope: "jobs:read" });
+    const profileToken = await issuer.issue("candidate-profile-reader", {
+      scope: "profile:read",
+    });
+
+    const accepted = await app.inject({
+      method: "GET",
+      url: `/v1/jobs/${catalog.job.id}`,
+      headers: { authorization: `Bearer ${jobToken}` },
+    });
+    const forbidden = await app.inject({
+      method: "GET",
+      url: `/v1/jobs/${catalog.job.id}`,
+      headers: { authorization: `Bearer ${profileToken}` },
+    });
+    const missing = await app.inject({
+      method: "GET",
+      url: `/v1/jobs/${uuidv7()}`,
+      headers: { authorization: `Bearer ${jobToken}` },
+    });
+    const invalid = await app.inject({
+      method: "GET",
+      url: "/v1/jobs/not-a-uuid",
+      headers: { authorization: `Bearer ${jobToken}` },
+    });
+
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.json()).toMatchObject({
+      id: catalog.job.id,
+      status: "active",
+      company: { name: "Synthetic Company" },
+      sources: [{ provenance: "authorized_fixture" }],
+    });
+    expect(accepted.json().sources[0]).not.toHaveProperty("rawSnapshot");
+    expect(accepted.json().sources[0]).not.toHaveProperty("externalJobId");
+    expect(forbidden.statusCode).toBe(403);
+    expect(forbidden.json().code).toBe("forbidden");
+    expect(missing.statusCode).toBe(404);
+    expect(invalid.statusCode).toBe(400);
   });
 
   it("enforces read and write scopes at the application boundary", async () => {

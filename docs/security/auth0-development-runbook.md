@@ -25,9 +25,9 @@ Create **Applications → APIs → Create API** with:
 | Token lifetime | `600` seconds |
 | Allow offline access | Enabled for the server-held web session |
 
-Add the permissions `profile:read` and `profile:write`. Keep RBAC and access-token permission
-claims disabled until roles beyond candidate ownership exist; the gateway enforces the explicit
-OAuth scopes and resolves the exact issuer and subject to an internal UUID.
+Add the permissions `jobs:read`, `profile:read`, and `profile:write`. Keep RBAC and access-token
+permission claims disabled until roles beyond candidate ownership exist; the gateway enforces the
+explicit OAuth scopes and resolves the exact issuer and subject to an internal UUID.
 
 ### Regular Web Application
 
@@ -57,7 +57,7 @@ grants.
 The application requests:
 
 ```text
-openid profile email offline_access profile:read profile:write
+openid profile email offline_access jobs:read profile:read profile:write
 ```
 
 Enable only the development database connection for this client. Universal Login remains the

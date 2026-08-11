@@ -53,6 +53,9 @@ importers:
       '@ai-job-apply/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@ai-job-apply/jobs-service':
+        specifier: workspace:*
+        version: link:../services/jobs
       '@ai-job-apply/observability':
         specifier: workspace:*
         version: link:../../packages/observability

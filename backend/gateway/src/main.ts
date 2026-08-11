@@ -1,6 +1,7 @@
 import "reflect-metadata";
 import { createOidcVerifier } from "@ai-job-apply/auth";
 import { loadBackendConfig } from "@ai-job-apply/config";
+import { PostgresJobCatalog } from "@ai-job-apply/jobs-service";
 import {
   createLogger,
   shutdownTelemetry,
@@ -18,6 +19,7 @@ const logger = createLogger({
 });
 const database = createDatabase(config.DATABASE_URL);
 const store = new PostgresProfileStore(database, { dispatchTarget: "lambda_durable" });
+const catalog = new PostgresJobCatalog(database.client);
 const verifier = createOidcVerifier({
   issuer: config.OIDC_ISSUER,
   audience: config.OIDC_AUDIENCE,
@@ -25,6 +27,7 @@ const verifier = createOidcVerifier({
 
 const app = await createGatewayApplication({
   store,
+  catalog,
   verifier,
   releaseSha: config.RELEASE_SHA,
   adapter: new FastifyAdapter({ loggerInstance: logger }),

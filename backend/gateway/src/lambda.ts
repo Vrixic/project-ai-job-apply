@@ -6,6 +6,7 @@ import {
   type AuthPrincipal,
 } from "@ai-job-apply/auth";
 import { loadLambdaGatewayConfig } from "@ai-job-apply/config";
+import { PostgresJobCatalog } from "@ai-job-apply/jobs-service";
 import { createLogger, initializeTelemetry } from "@ai-job-apply/observability";
 import {
   createDatabase,
@@ -87,6 +88,8 @@ const PROTECTED_EXACT_ROUTES = new Set([
 ]);
 const OPERATION_PATH_PATTERN =
   /^\/v1\/operations\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const JOB_PATH_PATTERN =
+  /^\/v1\/jobs\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
   "content-length",
@@ -112,7 +115,7 @@ function allowedRoute(method: string, path: string): AllowedRoute | undefined {
   if (PROTECTED_EXACT_ROUTES.has(`${method} ${path}`)) {
     return { acceptsBody: method === "PUT", protected: true };
   }
-  if (method === "GET" && OPERATION_PATH_PATTERN.test(path)) {
+  if (method === "GET" && (OPERATION_PATH_PATTERN.test(path) || JOB_PATH_PATTERN.test(path))) {
     return { acceptsBody: false, protected: true };
   }
   return undefined;
@@ -482,14 +485,17 @@ async function createConfiguredApplication(
   const databaseUrl = await resolveLambdaDatabaseUrl(config, {
     ...(process.env.AWS_SESSION_TOKEN ? { sessionToken: process.env.AWS_SESSION_TOKEN } : {}),
   });
-  const store = new PostgresProfileStore(createDatabase(databaseUrl, { maxConnections: 2 }), {
+  const database = createDatabase(databaseUrl, { maxConnections: 2 });
+  const store = new PostgresProfileStore(database, {
     dispatchTarget: config.OUTBOX_DISPATCH_TARGET,
     ...(config.OUTBOX_QUEUE_URL
       ? { nudgePublisher: new SqsOutboxNudgePublisher(config.OUTBOX_QUEUE_URL) }
       : {}),
   });
+  const catalog = new PostgresJobCatalog(database.client);
   return createGatewayApplication({
     store,
+    catalog,
     verifier: principalBridge.verifier,
     releaseSha: config.RELEASE_SHA,
     adapter: new FastifyAdapter({

@@ -101,6 +101,9 @@ run "enabled_runtime_couples_api_dispatch_and_workflow_triggers" {
     condition = (
       length(aws_apigatewayv2_route.gateway) == 1 &&
       aws_apigatewayv2_route.gateway[0].authorization_type == "JWT" &&
+      toset(aws_apigatewayv2_route.gateway[0].authorization_scopes) == toset([
+        "jobs:read", "profile:read", "profile:write"
+      ]) &&
       length(aws_apigatewayv2_route.gateway_lambda_public) == 2 &&
       alltrue([for route in aws_apigatewayv2_route.gateway_lambda_public : route.authorization_type == "NONE"])
     )

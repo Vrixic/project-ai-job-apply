@@ -17,6 +17,7 @@ import {
   UseFilters,
 } from "@nestjs/common";
 import type {
+  CanonicalJobDetail,
   CurrentUser,
   Operation,
   ProblemDetails,
@@ -25,11 +26,13 @@ import type {
 } from "@ai-job-apply/api-contracts";
 import { compileComponentValidator, formatValidationErrors } from "@ai-job-apply/api-contracts";
 import { type AccessTokenVerifier, AuthenticationError, bearerToken } from "@ai-job-apply/auth";
+import type { JobCatalogReader } from "@ai-job-apply/jobs-service";
 import { activeTraceparent, correlationId } from "@ai-job-apply/observability";
 import { IdempotencyConflictError, type ProfileStore } from "@ai-job-apply/profile-service";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
 const PROFILE_STORE = Symbol("PROFILE_STORE");
+const JOB_CATALOG = Symbol("JOB_CATALOG");
 const TOKEN_VERIFIER = Symbol("TOKEN_VERIFIER");
 const RELEASE_SHA = Symbol("RELEASE_SHA");
 
@@ -46,7 +49,7 @@ class RequestIdentity {
 
   async resolve(
     request: AuthenticatedRequest,
-    requiredScope: "profile:read" | "profile:write",
+    requiredScope: "jobs:read" | "profile:read" | "profile:write",
   ): Promise<CurrentUser> {
     const token = bearerToken(request.headers.authorization);
     const principal = await this.verifier.verify(token);
@@ -115,6 +118,7 @@ class ProblemDetailsFilter implements ExceptionFilter {
 class HealthController {
   constructor(
     @Inject(PROFILE_STORE) private readonly store: ProfileStore,
+    @Inject(JOB_CATALOG) private readonly catalog: JobCatalogReader,
     @Inject(RELEASE_SHA) private readonly releaseSha: string,
   ) {}
 
@@ -126,7 +130,7 @@ class HealthController {
   @Get("/health/ready")
   async readiness() {
     try {
-      await this.store.ping();
+      await Promise.all([this.store.ping(), this.catalog.ping()]);
       return { status: "ok", service: "gateway", releaseSha: this.releaseSha };
     } catch {
       throw new HttpException("PostgreSQL is unavailable", HttpStatus.SERVICE_UNAVAILABLE);
@@ -142,6 +146,7 @@ class CandidateController {
   constructor(
     @Inject(RequestIdentity) private readonly identity: RequestIdentity,
     @Inject(PROFILE_STORE) private readonly store: ProfileStore,
+    @Inject(JOB_CATALOG) private readonly catalog: JobCatalogReader,
   ) {}
 
   @Get("/me")
@@ -187,6 +192,42 @@ class CandidateController {
     );
   }
 
+  @Get("/jobs/:jobId")
+  async getCanonicalJob(
+    @Req() request: AuthenticatedRequest,
+    @Param("jobId") jobId: string,
+  ): Promise<CanonicalJobDetail> {
+    await this.identity.resolve(request, "jobs:read");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jobId)) {
+      throw new HttpException("Job identifier is invalid", HttpStatus.BAD_REQUEST);
+    }
+    const job = await this.catalog.getActiveJob(jobId);
+    if (!job) {
+      throw new HttpException("Active job was not found", HttpStatus.NOT_FOUND);
+    }
+    return {
+      id: job.id,
+      company: job.company,
+      title: job.title,
+      locations: job.locations,
+      ...(job.department ? { department: job.department } : {}),
+      description: job.description,
+      status: "active",
+      firstObservedAt: job.firstObservedAt.toISOString(),
+      lastVerifiedAt: job.lastVerifiedAt.toISOString(),
+      expiresAt: job.expiresAt.toISOString(),
+      ...(job.validThrough ? { validThrough: job.validThrough.toISOString() } : {}),
+      sources: job.sources.map((source) => ({
+        provider: source.provider,
+        provenance: source.provenance,
+        canonicalUrl: source.canonicalUrl,
+        firstObservedAt: source.firstObservedAt.toISOString(),
+        lastVerifiedAt: source.lastVerifiedAt.toISOString(),
+        ...(source.validThrough ? { validThrough: source.validThrough.toISOString() } : {}),
+      })),
+    };
+  }
+
   @Get("/operations/:operationId")
   async getOperation(
     @Req() request: AuthenticatedRequest,
@@ -203,6 +244,7 @@ class CandidateController {
 
 export interface AppModuleOptions {
   store: ProfileStore;
+  catalog: JobCatalogReader;
   verifier: AccessTokenVerifier;
   releaseSha: string;
 }
@@ -217,6 +259,7 @@ export class AppModule {
       providers: [
         RequestIdentity,
         { provide: PROFILE_STORE, useValue: options.store },
+        { provide: JOB_CATALOG, useValue: options.catalog },
         { provide: TOKEN_VERIFIER, useValue: options.verifier },
         { provide: RELEASE_SHA, useValue: options.releaseSha },
       ],

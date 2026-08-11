@@ -167,8 +167,13 @@ export function canonicalizeObservation(observation: JobObservation): CanonicalO
   if (observation.validThrough && !Number.isFinite(observation.validThrough.getTime())) {
     throw new Error("validThrough must be a valid date");
   }
-  if (observation.title.length > 240 || observation.description.length > 200_000) {
-    throw new Error("Job title or description exceeds the canonical contract limit");
+  if (
+    observation.companyName.length > 200 ||
+    observation.title.length > 240 ||
+    observation.description.length > 200_000 ||
+    (observation.department?.length ?? 0) > 200
+  ) {
+    throw new Error("Job display field exceeds the canonical contract limit");
   }
   if (observation.locations.length === 0 || observation.locations.length > 20) {
     throw new Error("A job must have between one and twenty locations");
@@ -183,11 +188,17 @@ export function canonicalizeObservation(observation: JobObservation): CanonicalO
   if (!normalizedCompanyName || !normalizedTitle || !normalizedDescription) {
     throw new Error("Company, title, and description are required");
   }
-  if (normalizedLocations.some((location) => !location || location.length > 240)) {
+  if (
+    observation.locations.some((location) => !location.trim() || location.length > 240) ||
+    normalizedLocations.some((location) => !location || location.length > 240)
+  ) {
     throw new Error("At least one non-empty location is required");
   }
 
   const canonicalUrl = canonicalizeJobUrl(observation.sourceUrl);
+  if (canonicalUrl.length > 4_096) {
+    throw new Error("Canonical job source URL exceeds the supported limit");
+  }
   const normalizedDepartment = observation.department
     ? normalizeText(observation.department)
     : undefined;
