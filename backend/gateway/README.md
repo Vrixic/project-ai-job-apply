@@ -26,6 +26,9 @@ mapping; Auth0 identifiers do not cross into public or domain identifiers.
 The D1 catalog read path requires the dedicated `jobs:read` scope and exposes only active,
 unexpired canonical detail plus redacted source summaries. Raw snapshots, source identity keys,
 hashes, pending/suspect records, and terminal tombstones never cross the candidate API boundary.
+Because this catalog is shared rather than candidate-owned, the route verifies the managed OIDC
+principal and exact scope without creating or updating a profile identity record. Owner-scoped
+profile and operation routes continue resolving the provider identity to an internal user UUID.
 
 The scale-to-zero migration adds a shared application factory and an API Gateway HTTP API payload
 2.0 Lambda entrypoint. The Lambda path accepts identity only from the exact validated authorizer

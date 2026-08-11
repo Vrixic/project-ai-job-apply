@@ -47,15 +47,23 @@ class RequestIdentity {
     @Inject(PROFILE_STORE) private readonly store: ProfileStore,
   ) {}
 
-  async resolve(
+  async authorize(
     request: AuthenticatedRequest,
     requiredScope: "jobs:read" | "profile:read" | "profile:write",
-  ): Promise<CurrentUser> {
+  ) {
     const token = bearerToken(request.headers.authorization);
     const principal = await this.verifier.verify(token);
     if (!principal.scopes.includes(requiredScope)) {
       throw new HttpException("Required permission is missing", HttpStatus.FORBIDDEN);
     }
+    return principal;
+  }
+
+  async resolve(
+    request: AuthenticatedRequest,
+    requiredScope: "profile:read" | "profile:write",
+  ): Promise<CurrentUser> {
+    const principal = await this.authorize(request, requiredScope);
     return this.store.resolveUser(principal, request.traceId ?? correlationId(undefined));
   }
 }
@@ -197,7 +205,7 @@ class CandidateController {
     @Req() request: AuthenticatedRequest,
     @Param("jobId") jobId: string,
   ): Promise<CanonicalJobDetail> {
-    await this.identity.resolve(request, "jobs:read");
+    await this.identity.authorize(request, "jobs:read");
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jobId)) {
       throw new HttpException("Job identifier is invalid", HttpStatus.BAD_REQUEST);
     }
