@@ -12,7 +12,7 @@ This is the master record for the delivery phases defined in the [product and sy
 | ID | Delivery | Status | Start | Completion | Living task document |
 |---|---|---|---|---|---|
 | D0 | Product, data, and legal foundation | In progress | 2026-07-27 | Not completed | [Phase 0 tasks](phase-0-foundation.md) |
-| D1 | Useful web product and canonical job catalog | Not started | Not started | Not completed | [Phase 1 tasks](phase-1-web-and-job-catalog.md) |
+| D1 | Useful web product and canonical job catalog | In progress | 2026-08-11 | Not completed | [Phase 1 tasks](phase-1-web-and-job-catalog.md) |
 | D2 | Extension and community loop | Not started | Not started | Not completed | [Phase 2 tasks](phase-2-extension-and-community.md) |
 | D3 | High-quality application preparation | Not started | Not started | Not completed | [Phase 3 tasks](phase-3-application-preparation.md) |
 | D4 | Workday and remote preparation | Not started | Not started | Not completed | [Phase 4 tasks](phase-4-workday-and-remote.md) |
@@ -28,16 +28,17 @@ This is the master record for the delivery phases defined in the [product and sy
 - Depends on: Approved product direction
 - Task document: [Phase 0 tasks](phase-0-foundation.md)
 - Exit gate: Schemas, policies, threat/data maps, engineering foundation, and an authenticated end-to-end skeleton are reviewed and evidenced; the skeleton runs on the accepted scale-to-zero application runtime with no obsolete always-on gateway/worker path.
-- Current engineering status: all repository-controlled Phase 0 implementation is complete. Staging and development cutover, legacy/provider retirement, stable two-account post-retirement cost reconciliation, and D0-016 pass with zero ECS/Fargate cost. D0-017's complete dormant-to-active-to-dormant replay passes dark recreation, migration, authenticated acceptance, 500/500 public probes, 25/25 workflows, AWS corroboration, exact shutdown, final live status, and retained inventory. Staging is dormant with zero disposable data-plane resources; only its first complete posted dormant usage interval remains time-dependent. Accountable legal/privacy and security/privacy approval plus approved representative ATS fixtures remain externally blocked. [Updated exit readiness](evidence/d0-exit-review-readiness-2026-08-11.md)
+- Current engineering status: all repository-controlled Phase 0 implementation is complete. Staging and development cutover, legacy/provider retirement, stable two-account post-retirement cost reconciliation, and D0-016 pass with zero ECS/Fargate cost. D0-017's complete dormant-to-active-to-dormant replay passes dark recreation, migration, authenticated acceptance, 500/500 public probes, 25/25 workflows, AWS corroboration, exact shutdown, final live status, and retained inventory. Staging is dormant with zero disposable data-plane resources. The product owner accepted that direct state/lifecycle evidence and removed the redundant posted-dormant-interval observation from the gate. Accountable legal/privacy and security/privacy approval plus approved representative ATS fixtures remain externally blocked. [Direct-state acceptance](evidence/d0-staging-on-demand-direct-state-acceptance-2026-08-11.md)
 
 ## D1 — Useful web product and canonical job catalog
 
-- Status: Not started
-- Start: Not started
+- Status: In progress
+- Start: 2026-08-11
 - Completion: Not completed
 - Depends on: D0 foundation and owned schemas
 - Task document: [Phase 1 tasks](phase-1-web-and-job-catalog.md)
 - Exit gate: Users can reliably find, understand, save, report, and track fresh canonical jobs.
+- Current engineering status: synthetic-only D1 work has started under ADR-011. The canonical job contract, deterministic identity/deduplication rules, job-owned PostgreSQL schema, checksum migration, fail-fast multi-owner migration image, provenance-default-deny repository, lifecycle verification, expiry, and tombstone cleanup are implemented and locally verified. Real provider ingestion, public UGC, real candidate data, and production activation remain disabled behind their legal/security gates.
 
 ## D2 — Extension and community loop
 
@@ -99,6 +100,8 @@ Append only material cross-delivery events.
 
 | Date | Delivery | Update | Evidence |
 |---|---|---|---|
+| 2026-08-11 | D1 | Began synthetic-only D1 implementation under ADR-011. Added the canonical catalog contract correction and the first jobs-service foundation: deterministic URL/identity normalization, exact-versus-review-only deduplication, job/source separation, provenance default-deny, lifecycle verification, automatic expiry, minimal tombstones, a checksum migration, a fail-fast multi-owner migration image, and PostgreSQL-backed tests. No real source, public UGC, candidate PII, external action, or AWS change was enabled. | [D1 canonical catalog foundation](evidence/d1-canonical-job-foundation-2026-08-11.md), [Phase 1 tasks](phase-1-web-and-job-catalog.md) |
+| 2026-08-11 | D0 | Product owner accepted the already proven direct AWS/Terraform resource absence and complete staging lifecycle replay as sufficient for D0-017, removing the redundant billing-lag observation. D0-017 is complete; Phase 0 remains open only for accountable legal/privacy, security/privacy, and representative-fixture outcomes. | [Direct-state acceptance](evidence/d0-staging-on-demand-direct-state-acceptance-2026-08-11.md), [Phase 0 tasks](phase-0-foundation.md) |
 | 2026-08-11 | D0 | Completed D0-008 and D0-016 after independent repeated account-scoped reads of the complete `2026-08-09` UTC day remained stable at `$1.2632` development and `$1.2614` staging with fresh CUR delivery, healthy exact `$5` controls, and no ECS/Fargate service charge. Added and transition-day-tested a fail-closed complete-day staging dormant-usage verifier; the full repository verification passes. All repository-controlled D0 implementation is complete; one posted dormant interval plus accountable legal/privacy, security/privacy, and representative-fixture outcomes remain. | [Post-retirement cost acceptance](evidence/d0-post-retirement-cost-acceptance-2026-08-11.md), [updated exit readiness](evidence/d0-exit-review-readiness-2026-08-11.md) |
 | 2026-07-28 | Program | Delivery tracking system created; D0 remains in progress and D1–D7 remain not started. | This tracker and linked phase documents |
 | 2026-07-28 | Program | Product scope refocused on rapid, tailored applications ending at confirmed submission. | Updated architecture, READMEs, tracker, and phase documents |

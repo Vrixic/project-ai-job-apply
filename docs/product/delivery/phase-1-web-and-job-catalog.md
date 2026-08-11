@@ -1,10 +1,10 @@
 # D1 — Useful Web Product and Canonical Job Catalog
 
-- Status: Not started
-- Start: Not started
+- Status: In progress
+- Start: 2026-08-11
 - Completion: Not completed
-- Owners: Unassigned
-- Last updated: 2026-07-28
+- Owners: Platform engineering; product owner
+- Last updated: 2026-08-11
 - Master tracker: [Delivery tracker](DELIVERY_TRACKER.md#d1--useful-web-product-and-canonical-job-catalog)
 
 ## Objective
@@ -13,9 +13,10 @@ Deliver a trustworthy candidate web experience and canonical job catalog in whic
 
 ## Deployment posture
 
-Add D1 modules to the existing lean runtime. Keep one task per service and PostgreSQL full-text/
-pgvector as appropriate; do not add replicas, Redis, a dedicated search cluster, an ALB, or
-always-on staging without measured workload or a release/recovery requirement.
+Add D1 modules to the accepted scale-to-zero Lambda/durable-workflow runtime. Use PostgreSQL
+full-text/pgvector as appropriate; do not add replicas, Redis, a dedicated search cluster, an ALB,
+continuously provisioned application compute, or always-on staging without measured workload or a
+release/recovery requirement. Keep staging dormant between bounded acceptance windows.
 
 ## Task register
 
@@ -24,7 +25,7 @@ always-on staging without measured workload or a release/recovery requirement.
 | D1-001 | Implement managed authentication, sessions, device controls, and gateway authorization. | Ready | Unassigned | D0 identity ADR | Open |
 | D1-002 | Implement resume import, fact confirmation, preferences, and progressive profile onboarding. | Ready | Unassigned | D0 profile schemas | Open |
 | D1-003 | Ingest permitted Greenhouse, Lever, and Ashby job postings with provenance. | Ready | Unassigned | D0 legal/source review | Open |
-| D1-004 | Implement company/job canonicalization, deduplication, lifecycle, verification, and expiry. | Ready | Unassigned | D0 job schemas | Open |
+| D1-004 | Implement company/job canonicalization, deduplication, lifecycle, verification, and expiry. | In progress | Platform engineering | D0 job schemas | Contract correction, pure rules, job-owned SQL schema/migration, default-deny synthetic repository, concurrent exact merge, review-only probable duplicates, verification failure handling, expiry, tombstone cleanup, and the composed migration image pass locally. API/read model, cloud artifact release/migration, moderation resolution, and deployed evidence remain. [Foundation evidence](evidence/d1-canonical-job-foundation-2026-08-11.md) |
 | D1-005 | Implement search, filters, saved jobs, and explainable baseline matching. | Ready | Unassigned | D1-002, D1-004 | Open |
 | D1-006 | Implement technical application history through confirmed submission and an in-app action inbox. | Ready | Unassigned | D0 application schemas | Open |
 | D1-007 | Implement job reporting, source controls, and admin moderation. | Ready | Unassigned | D1-004 | Open |
@@ -49,13 +50,14 @@ always-on staging without measured workload or a release/recovery requirement.
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-08-11 | Started D1 with a synthetic-only canonical catalog slice. Corrected the pre-release lifecycle contract, implemented deterministic identity precedence and non-automatic fuzzy review, created the job-owned PostgreSQL schema/checksum migration and fail-fast multi-owner migration image, default-denied unapproved provenance, and locally proved exact/concurrent replay, probable separation, repeated-failure transitions, terminal blocking, expiry, and raw-content tombstoning. | D1-004 | [Canonical catalog foundation](evidence/d1-canonical-job-foundation-2026-08-11.md) |
 | 2026-07-28 | Assigned source-specific and real-candidate-data approval to D1 without starting implementation. | D1-011 | [Legal review register](../foundation/legal-review-register.md), [security/privacy plan](../../security/security-privacy-approval-plan.md) |
 
 ## Decisions and scope changes
 
 | Date | Decision or change | Reason | Evidence |
 |---|---|---|---|
-| — | None recorded. | — | — |
+| 2026-08-11 | Begin synthetic-only D1 implementation while D0 external approvals remain open. Real provider ingestion, public UGC, real candidate data, and production activation remain prohibited. | ADR-011 already authorizes reproducible synthetic work; waiting adds no safety to code-only contract and persistence foundations. | [D0 direct-state acceptance](evidence/d0-staging-on-demand-direct-state-acceptance-2026-08-11.md), [ADR-011](../../adr/011-staged-preproduction-data-and-founder-pilot.md) |
 
 ## Risks and blockers
 

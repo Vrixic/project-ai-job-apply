@@ -1,0 +1,204 @@
+import { execFile } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type { CatalogObservation } from "./catalog.js";
+import { createJobCatalogDatabase, PostgresJobCatalog } from "./catalog.js";
+
+const databaseUrl = process.env.DATABASE_URL;
+const describeWithDatabase = databaseUrl ? describe : describe.skip;
+const execFileAsync = promisify(execFile);
+
+describeWithDatabase("PostgresJobCatalog", () => {
+  const client = createJobCatalogDatabase(databaseUrl ?? "postgres://invalid", {
+    maxConnections: 2,
+  });
+  const catalog = new PostgresJobCatalog(client);
+  const runId = crypto.randomUUID();
+  const observedAt = new Date("2026-08-11T12:00:00.000Z");
+
+  function fixture(overrides: Partial<CatalogObservation> = {}): CatalogObservation {
+    return {
+      provider: "greenhouse",
+      provenance: "authorized_fixture",
+      companyName: `Synthetic Company ${runId}`,
+      title: "Software Engineer",
+      locations: ["Remote - US"],
+      description: "A synthetic catalog record used only for integration verification.",
+      sourceUrl: `https://jobs.example.test/${runId}/1?utm_source=fixture`,
+      observedAt,
+      atsTenant: `tenant-${runId}`,
+      externalJobId: "job-1",
+      employerRequisitionId: `req-${runId}-1`,
+      verifiedCompanyDomain: `${runId}.example.test`,
+      adapterVersion: "synthetic-v1",
+      rawSnapshot: { fixture: true },
+      ...overrides,
+    };
+  }
+
+  beforeAll(async () => {
+    const migrationExecutable = fileURLToPath(
+      new URL("../../dist/src/migrate.js", import.meta.url),
+    );
+    const environment = { ...process.env, DATABASE_URL: databaseUrl };
+    const first = await execFileAsync(process.execPath, [migrationExecutable], {
+      env: environment,
+    });
+    const replay = await execFileAsync(process.execPath, [migrationExecutable], {
+      env: environment,
+    });
+    expect(first.stdout.trim()).toBe(
+      "Jobs migrations through 0001_job_catalog applied and verified.",
+    );
+    expect(replay.stdout.trim()).toBe(
+      "Jobs migrations through 0001_job_catalog applied and verified.",
+    );
+  });
+
+  afterAll(async () => {
+    await catalog.close();
+  });
+
+  it("merges only exact identities and retains source provenance", async () => {
+    const created = await catalog.recordObservation(fixture());
+    const replay = await catalog.recordObservation(
+      fixture({ description: "The verified source supplied an updated synthetic description." }),
+    );
+
+    expect(created.outcome).toBe("created");
+    expect(replay.outcome).toBe("exact_match_updated");
+    expect(replay.job.id).toBe(created.job.id);
+    expect(replay.job.description).toContain("updated synthetic description");
+    const [source] = await client<
+      Array<{ provenance: string; adapterVersion: string; rawSnapshot: Record<string, unknown> }>
+    >`
+      SELECT provenance, adapter_version AS "adapterVersion", raw_snapshot AS "rawSnapshot"
+      FROM jobs.job_sources WHERE job_id = ${created.job.id}
+    `;
+    expect(source).toEqual({
+      provenance: "authorized_fixture",
+      adapterVersion: "synthetic-v1",
+      rawSnapshot: { fixture: true },
+    });
+  });
+
+  it("flags a fuzzy match without merging canonical records", async () => {
+    const first = await catalog.recordObservation(
+      fixture({
+        sourceUrl: `https://jobs.example.test/${runId}/probable-a`,
+        externalJobId: "probable-a",
+        employerRequisitionId: `req-${runId}-probable-a`,
+      }),
+    );
+    const second = await catalog.recordObservation(
+      fixture({
+        provider: "other",
+        sourceUrl: `https://mirror.example.test/${runId}/probable-b`,
+        atsTenant: `mirror-${runId}`,
+        externalJobId: "probable-b",
+        employerRequisitionId: `req-${runId}-probable-b`,
+      }),
+    );
+
+    expect(second.outcome).toBe("created");
+    expect(second.job.id).not.toBe(first.job.id);
+    expect(second.probableDuplicateJobIds).toContain(first.job.id);
+    const [candidateCount] = await client<{ count: number }[]>`
+      SELECT count(*)::int AS count FROM jobs.duplicate_candidates
+      WHERE job_id IN (${first.job.id}, ${second.job.id})
+        AND candidate_job_id IN (${first.job.id}, ${second.job.id})
+        AND classification = 'probable'
+    `;
+    expect(candidateCount?.count).toBe(1);
+  });
+
+  it("serializes concurrent exact observations into one canonical job and source", async () => {
+    const concurrentFixture = fixture({
+      sourceUrl: `https://jobs.example.test/${runId}/concurrent`,
+      externalJobId: "concurrent",
+      employerRequisitionId: `req-${runId}-concurrent`,
+    });
+    const [left, right] = await Promise.all([
+      catalog.recordObservation(concurrentFixture),
+      catalog.recordObservation(concurrentFixture),
+    ]);
+    expect(left.job.id).toBe(right.job.id);
+    expect([left.outcome, right.outcome].sort()).toEqual(["created", "exact_match_updated"]);
+    const [counts] = await client<{ jobs: number; sources: number }[]>`
+      SELECT
+        (SELECT count(*)::int FROM jobs.canonical_jobs WHERE id = ${left.job.id}) AS jobs,
+        (SELECT count(*)::int FROM jobs.job_sources WHERE job_id = ${left.job.id}) AS sources
+    `;
+    expect(counts).toEqual({ jobs: 1, sources: 1 });
+  });
+
+  it("fails closed for unapproved real-source provenance", async () => {
+    await expect(
+      catalog.recordObservation(
+        fixture({
+          provenance: "permitted_api",
+          sourceUrl: `https://jobs.example.test/${runId}/not-authorized`,
+        }),
+      ),
+    ).rejects.toThrow("is not enabled for this runtime");
+  });
+
+  it("moves repeated failures through suspect stale and expires to a minimal tombstone", async () => {
+    const created = await catalog.recordObservation(
+      fixture({
+        sourceUrl: `https://jobs.example.test/${runId}/expiry`,
+        externalJobId: "expiry",
+        employerRequisitionId: `req-${runId}-expiry`,
+      }),
+    );
+    expect(await catalog.recordVerificationFailure(created.job.id, observedAt)).toBe("active");
+    expect(await catalog.recordVerificationFailure(created.job.id, observedAt)).toBe("active");
+    expect(await catalog.recordVerificationFailure(created.job.id, observedAt)).toBe(
+      "suspect_stale",
+    );
+
+    const afterExpiry = new Date("2026-09-11T12:00:00.000Z");
+    expect(await catalog.expireStaleJobs(afterExpiry)).toContain(created.job.id);
+    const expired = await catalog.getById(created.job.id);
+    expect(expired).toMatchObject({ id: created.job.id, status: "expired" });
+    expect(expired).not.toHaveProperty("description");
+    const [source] = await client<{ rawSnapshot: Record<string, unknown> | null }[]>`
+      SELECT raw_snapshot AS "rawSnapshot" FROM jobs.job_sources
+      WHERE job_id = ${created.job.id}
+    `;
+    expect(source?.rawSnapshot).toBeNull();
+  });
+
+  it("keeps blocked jobs terminal and prevents later observations from restoring raw content", async () => {
+    const created = await catalog.recordObservation(
+      fixture({
+        sourceUrl: `https://jobs.example.test/${runId}/blocked`,
+        externalJobId: "blocked",
+        employerRequisitionId: `req-${runId}-blocked`,
+      }),
+    );
+    await catalog.setTerminalStatus(
+      created.job.id,
+      "blocked",
+      "synthetic_moderation_decision",
+      observedAt,
+    );
+    const replay = await catalog.recordObservation(
+      fixture({
+        sourceUrl: `https://jobs.example.test/${runId}/blocked`,
+        externalJobId: "blocked",
+        employerRequisitionId: `req-${runId}-blocked`,
+        description: "This content must not revive the blocked record.",
+        rawSnapshot: { shouldNotPersist: true },
+      }),
+    );
+    expect(replay.job.status).toBe("blocked");
+    expect(replay.job).not.toHaveProperty("description");
+    const [source] = await client<{ rawSnapshot: Record<string, unknown> | null }[]>`
+      SELECT raw_snapshot AS "rawSnapshot" FROM jobs.job_sources
+      WHERE job_id = ${created.job.id}
+    `;
+    expect(source?.rawSnapshot).toBeNull();
+  });
+});

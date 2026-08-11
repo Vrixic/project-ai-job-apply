@@ -1,8 +1,8 @@
 # D0-017 — On-Demand Synthetic Staging Runtime
 
-- Status: In progress
+- Status: Complete
 - Start: 2026-08-10
-- Completion: Not completed
+- Completion: 2026-08-11
 - Owner: Platform engineering
 - Parent delivery: [Phase 0 foundation](phase-0-foundation.md)
 - Decision: [ADR-018](../../adr/018-disposable-prelaunch-staging-data-plane.md)
@@ -41,7 +41,7 @@ still completes before traffic is enabled.
 | SD-002 | Implement the Terraform state machine, cross-variable invariants, guarded checksum operator, tests, and runbook. | Complete | Merged [PR #195](https://github.com/Vrixic/project-ai-job-apply/pull/195) and the fail-closed plan-path/action correction in [PR #196](https://github.com/Vrixic/project-ai-job-apply/pull/196). PowerShell parsing/help, `git diff --check`, and full local `pnpm check` pass. [First-shutdown evidence](evidence/d0-staging-on-demand-first-shutdown-2026-08-10.md) |
 | SD-003 | Apply `active -> quiesced -> dormant` through two separately reviewed plans and prove RDS/endpoints are absent while retained controls remain. | Complete | The exact seven-change quiescence and eight-delete/one-dashboard-update dormancy plans were separately checksum-approved and applied. Final status has no RDS, endpoints, routes, triggers, or queued work; retained-state inventory passes. [First-shutdown evidence](evidence/d0-staging-on-demand-first-shutdown-2026-08-10.md) |
 | SD-004 | Recreate dark staging from the dormant plan, migrate, create synthetic conformance data through owned boundaries, release exact artifacts, and replay the required acceptance boundary. | Complete | Dark recreation, migration through `0003_retire_legacy_dispatch`, exact traffic release, persistence, durable readiness, two-account denial, 500/500 public probes, 25/25 workflows, AWS log/alarm/queue corroboration, and zero drift pass. [Reactivation acceptance](evidence/d0-staging-on-demand-reactivation-acceptance-2026-08-10.md) |
-| SD-005 | Return staging to dormant after the activation drill and record the first complete dormant cost window. | In progress | The separately approved traffic-disable, quiescence, and destructive dormancy transitions pass. Final live status and 119-resource retained inventory pass with zero disposable resources. A fail-closed account-scoped inspector is ready; run it after AWS posts the first complete dormant UTC day and require zero RDS instance-hours and VPC endpoint-hours. [Reactivation acceptance](evidence/d0-staging-on-demand-reactivation-acceptance-2026-08-10.md), [updated exit readiness](evidence/d0-exit-review-readiness-2026-08-11.md) |
+| SD-005 | Return staging to dormant after the activation drill and record sufficient cost-removal evidence. | Complete | Separately approved traffic-disable, quiescence, and destructive dormancy transitions pass. Final live status and 119-resource retained inventory prove zero disposable resources. On 2026-08-11 the product owner accepted direct resource absence and the complete lifecycle replay as sufficient, removing the redundant billing-lag observation from the D0 gate. The fail-closed daily usage inspector remains available for optional financial reconciliation. [Direct-state acceptance](evidence/d0-staging-on-demand-direct-state-acceptance-2026-08-11.md) |
 
 ## Acceptance
 
@@ -56,12 +56,14 @@ still completes before traffic is enabled.
 - [x] Migration, synthetic conformance-data creation, persistence/readiness, durable workflow, idempotent replay,
   two-account denial, aggregate workload, logs/alarms, and zero drift pass after activation.
 - [x] Staging returns to dormant after testing.
-- [ ] A posted complete dormant interval corroborates the removed RDS/interface-endpoint costs.
+- [x] Direct AWS/Terraform state and the complete lifecycle replay prove RDS and interface endpoints
+  are absent; the product owner removed the redundant billing-lag observation from the D0 gate.
 
 ## Work log
 
 | Date | Update | Evidence |
 |---|---|---|
+| 2026-08-11 | Product owner accepted direct dormant-state evidence and the completed lifecycle replay as D0-017's completion boundary. The separate posted billing-day observation was formally removed as redundant, while the tested fail-closed inspector remains available for optional financial reconciliation. D0-017 is complete without claiming dormant staging costs exactly zero. | [Direct-state acceptance](evidence/d0-staging-on-demand-direct-state-acceptance-2026-08-11.md) |
 | 2026-08-11 | Added a read-only, explicit complete-day dormant verification mode to the account-scoped cost inspector. It correctly rejected the known transition day after detecting 20.2028 RDS instance-hours and 61 VPC endpoint-hours, proving the usage-type boundary and fail-closed result. Retained control-plane cost may remain nonzero. The first eligible UTC interval is `2026-08-11` through `2026-08-12` after AWS posting. | [Updated exit readiness](evidence/d0-exit-review-readiness-2026-08-11.md), [lifecycle runbook](../../../infrastructure/runbooks/deployments/staging-runtime-lifecycle.md) |
 | 2026-08-10 | Completed the first full on-demand replay. Exact traffic release passed deployed `200/200/401`, persistence, readiness, two-account denial, 500/500 public probes, 25/25 durable workflows, idempotent replay, clean AWS logs/alarms/queues/DLQs, idle ECS, and zero drift. Separately approved traffic-disable, quiescence, and dormancy plans returned staging to no database, endpoint, route, trigger, or queued work while retaining 119 control-plane resources. Only the first complete posted dormant billing interval remains. | [Reactivation acceptance](evidence/d0-staging-on-demand-reactivation-acceptance-2026-08-10.md) |
 | 2026-08-10 | Applied the checksum-approved exact nine-action dark activation, recreating protected encrypted RDS and three endpoints without routes/triggers. The retained zero-finding digest-pinned migration task ran exactly once through `0003_retire_legacy_dispatch`, emitted one sanitized success event, and returned ECS to zero tasks. Added exact checksum-gated traffic enable/disable planning plus dark-failure quiescence recovery locally. Phase 0 synthetic profile data will be created through authenticated conformance rather than invented database identities. | [Reactivation/migration evidence](evidence/d0-staging-reactivation-and-migration-2026-08-10.md) |

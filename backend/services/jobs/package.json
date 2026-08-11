@@ -1,0 +1,25 @@
+{
+  "name": "@ai-job-apply/jobs-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "db:migrate": "node --env-file-if-exists=../../../.env dist/src/migrate.js",
+    "test": "vitest run src --exclude=dist/** --exclude=src/**/*.integration.test.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "drizzle-orm": "0.45.2",
+    "postgres": "3.4.7",
+    "uuid": "13.0.1"
+  }
+}

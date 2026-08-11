@@ -22,7 +22,8 @@ both AWS environments accepted the steady-state serverless runtime.
   artifacts with exact-version metadata.
 
 Artifacts are published by the protected GitHub workflows. The migration-only container is built
-from `Dockerfile.migration`; no gateway or general worker image exists.
+from `Dockerfile.migration` and runs the fail-fast profile/jobs migration orchestrator; no gateway
+or general worker image exists.
 
 ## Deployed verification and evidence
 

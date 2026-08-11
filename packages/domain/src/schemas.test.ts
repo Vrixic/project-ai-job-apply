@@ -17,4 +17,40 @@ describe("domain schema registry", () => {
       expect(() => ajv.compile(schema)).not.toThrow();
     }
   });
+
+  it("enforces live descriptions while permitting minimal canonical-job tombstones", async () => {
+    const schema = JSON.parse(
+      await readFile(new URL("../schemas/v1/canonical-job.schema.json", import.meta.url), "utf8"),
+    ) as object;
+    const ajv = new Ajv2020({ strict: true });
+    const addFormats = addFormatsModule.default as unknown as (instance: Ajv2020) => Ajv2020;
+    addFormats(ajv);
+    const validate = ajv.compile(schema);
+    const base = {
+      id: "019d04cf-1f80-7000-8000-000000000001",
+      companyId: "019d04cf-1f80-7000-8000-000000000002",
+      title: "Synthetic Engineer",
+      locations: ["Remote - US"],
+      sources: [
+        {
+          provider: "other",
+          url: "https://jobs.example.test/synthetic/1",
+          canonicalUrl: "https://jobs.example.test/synthetic/1",
+          observedAt: "2026-08-11T12:00:00.000Z",
+          provenance: "authorized_fixture",
+          contentHash: "a".repeat(64),
+        },
+      ],
+      freshness: {
+        firstObservedAt: "2026-08-11T12:00:00.000Z",
+        lastVerifiedAt: "2026-08-11T12:00:00.000Z",
+        expiresAt: "2026-09-10T12:00:00.000Z",
+      },
+    };
+
+    expect(validate({ ...base, status: "active" })).toBe(false);
+    expect(validate({ ...base, status: "active", description: "Synthetic fixture." })).toBe(true);
+    expect(validate({ ...base, status: "expired" })).toBe(true);
+    expect(validate({ ...base, status: "removed" })).toBe(false);
+  });
 });

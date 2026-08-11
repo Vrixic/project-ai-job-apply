@@ -73,7 +73,7 @@ for (const required of [
   "scan_on_push = true",
   'resource "aws_ecs_task_definition" "migration"',
   "aws_ecr_repository.migration.repository_url",
-  'command                = ["dist/src/migrate.js"]',
+  'command                = ["runner/dist/src/main.js"]',
   'OUTBOX_DISPATCH_TARGET = "lambda_durable"',
   "count              = var.serverless_runtime_enabled ? 1 : 0",
   'authorization_type = "JWT"',
@@ -285,9 +285,11 @@ for (const required of [
   if (!existsSync(resolve(root, required))) failures.push(`${required}: required file is missing`);
 }
 for (const required of [
-  "deploy --prod --legacy /migration",
+  "deploy --prod --legacy /migration/runner",
+  "deploy --prod --legacy /migration/profile",
+  "deploy --prod --legacy /migration/jobs",
   "USER 65532:65532",
-  'CMD ["dist/src/migrate.js"]',
+  'CMD ["runner/dist/src/main.js"]',
 ]) {
   requireText(
     "Dockerfile.migration",
