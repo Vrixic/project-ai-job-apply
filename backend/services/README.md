@@ -4,6 +4,8 @@ This directory contains business-domain modules. Each service owns its rules and
 
 ## Subfolders
 
+- `database-migrations/` — Fail-fast composition of independently owned schema migrations for the
+  one-off migration task.
 - `profile/` — Candidate facts, preferences, consent references, and answer vault.
 - `jobs/` — Canonical jobs, sources, companies, and lifecycle.
 - `matching/` — Retrieval, ranking, recommendations, and explanations.

@@ -3,16 +3,7 @@
   "$id": "https://schemas.ai-job-apply.internal/domain/v1/canonical-job.schema.json",
   "title": "CanonicalJobV1",
   "type": "object",
-  "required": [
-    "id",
-    "companyId",
-    "title",
-    "locations",
-    "description",
-    "status",
-    "sources",
-    "freshness"
-  ],
+  "required": ["id", "companyId", "title", "locations", "status", "sources", "freshness"],
   "properties": {
     "id": { "type": "string", "format": "uuid" },
     "companyId": { "type": "string", "format": "uuid" },
@@ -28,21 +19,34 @@
       "enum": ["full_time", "part_time", "contract", "internship", "unknown"]
     },
     "description": { "type": "string", "minLength": 1, "maxLength": 200000 },
-    "status": { "type": "string", "enum": ["pending", "active", "expired", "removed", "blocked"] },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "active", "suspect_stale", "expired", "withdrawn", "blocked"]
+    },
     "sources": {
       "type": "array",
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["provider", "externalId", "url", "observedAt", "provenance"],
+        "required": ["provider", "url", "canonicalUrl", "observedAt", "provenance", "contentHash"],
         "properties": {
           "provider": {
             "type": "string",
             "enum": ["greenhouse", "lever", "ashby", "workday", "ugc", "other"]
           },
+          "atsTenant": { "type": "string", "minLength": 1, "maxLength": 500 },
           "externalId": { "type": "string", "minLength": 1, "maxLength": 500 },
+          "employerRequisitionId": { "type": "string", "minLength": 1, "maxLength": 500 },
+          "verifiedCompanyDomain": {
+            "type": "string",
+            "pattern": "^[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$"
+          },
           "url": { "type": "string", "format": "uri" },
+          "canonicalUrl": { "type": "string", "format": "uri" },
           "observedAt": { "type": "string", "format": "date-time" },
+          "validThrough": { "type": "string", "format": "date-time" },
+          "contentHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "adapterVersion": { "type": "string", "minLength": 1, "maxLength": 100 },
           "provenance": {
             "type": "string",
             "enum": ["permitted_api", "authorized_fixture", "explicit_ugc"]
@@ -53,13 +57,29 @@
     },
     "freshness": {
       "type": "object",
-      "required": ["lastVerifiedAt", "expiresAt"],
+      "required": ["firstObservedAt", "lastVerifiedAt", "expiresAt"],
       "properties": {
+        "firstObservedAt": { "type": "string", "format": "date-time" },
         "lastVerifiedAt": { "type": "string", "format": "date-time" },
-        "expiresAt": { "type": "string", "format": "date-time" }
+        "expiresAt": { "type": "string", "format": "date-time" },
+        "consecutiveVerificationFailures": { "type": "integer", "minimum": 0 }
       },
       "additionalProperties": false
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": { "enum": ["pending", "active", "suspect_stale"] }
+        },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": { "description": true },
+        "required": ["description"]
+      }
+    }
+  ],
   "additionalProperties": false
 }

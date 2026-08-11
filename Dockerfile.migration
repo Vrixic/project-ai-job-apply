@@ -6,12 +6,16 @@ WORKDIR /workspace
 COPY . .
 RUN pnpm install --frozen-lockfile
 RUN pnpm contracts:generate \
+  && pnpm --filter @ai-job-apply/database-migrations build \
   && pnpm --filter @ai-job-apply/profile-service... build \
-  && pnpm --filter @ai-job-apply/profile-service deploy --prod --legacy /migration
+  && pnpm --filter @ai-job-apply/jobs-service build \
+  && pnpm --filter @ai-job-apply/database-migrations deploy --prod --legacy /migration/runner \
+  && pnpm --filter @ai-job-apply/profile-service deploy --prod --legacy /migration/profile \
+  && pnpm --filter @ai-job-apply/jobs-service deploy --prod --legacy /migration/jobs
 
 FROM gcr.io/distroless/nodejs24-debian13:nonroot-amd64@sha256:b1386d556b478c420927eb212236bfb31be9834a4549850a060a6351f7fff514 AS runtime
 ENV NODE_ENV=production
 WORKDIR /migration
 COPY --from=build --chown=65532:65532 /migration /migration
 USER 65532:65532
-CMD ["dist/src/migrate.js"]
+CMD ["runner/dist/src/main.js"]
