@@ -1,8 +1,8 @@
 # Legal and Policy Review Register
 
-- Status: Review preparation in progress; accountable counsel is not yet assigned
+- Status: Review ready; accountable counsel is not yet assigned
 - Accountable role: Legal/privacy counsel
-- Last updated: 2026-07-28
+- Last updated: 2026-08-11
 
 Repository documents are engineering inputs, not legal advice. The
 [foundational review brief](foundational-legal-privacy-brief.md) contains the product facts,

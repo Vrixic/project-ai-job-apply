@@ -37,7 +37,8 @@ from `Dockerfile.migration`; no gateway or general worker image exists.
   accepted workload windows through serverless metrics, queues, alarms, logs, and drift.
 - `inspect-phase0-cost.ps1` — Reconciles one selected environment or both accounts' budgets, CUR
   2.0 delivery, and account-scoped aggregate costs; its `LINKED_ACCOUNT` filter prevents an AWS
-  Organizations payer from silently including member-account spend.
+  Organizations payer from silently including member-account spend. Its explicit dormant-staging
+  mode verifies one completed UTC day has zero RDS instance-hours and VPC endpoint-hours.
 - `operate-platform-alerts.ps1` — Exercises environment-scoped synthetic alert delivery.
 - `operate-staging-postgresql-restore.ps1` — Runs the guarded, resumable staging PITR exercise.
 - `operate-staging-runtime-lifecycle.ps1` — Creates and applies checksum-reviewed, two-step

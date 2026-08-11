@@ -1,8 +1,8 @@
 # D0-016 — Scale-to-Zero Runtime Migration
 
-- Status: In progress
+- Status: Complete
 - Start: 2026-07-31
-- Completion: Not completed
+- Completion: 2026-08-11
 - Owner: Platform engineering
 - Parent delivery: [Phase 0 foundation](phase-0-foundation.md)
 - Decision: [ADR-016](../../adr/016-scale-to-zero-application-runtime.md)
@@ -21,7 +21,8 @@
   dispatch migration, exact-key revocation, image purge, checksum-reviewed AWS cleanup,
   zero-drift/runtime verification, and retained migration proof. Obsolete executable dependencies,
   operators, modes, and runbooks are removed, and current conformance requires the steady-state
-  Lambda boundary. SR-009 is complete; SR-010 cost reconciliation remains.
+  Lambda boundary. Repeated account-scoped daily cost reads show stable attributable charges and
+  zero ECS/Fargate cost. SR-009 and SR-010 are complete.
 - Target state: API Gateway → Lambda; SQS/outbox → Lambda durable functions; Fargate only on demand
 
 ## Outcome
@@ -252,16 +253,16 @@ replacement.
 | SR-007 | Cut over and accept development. | Complete | The exact 29-record drain, corrected immutable workflow release, persistence, durable completion, two-account isolation, 500/500 public probes, 25/25 workflows, exact replay, empty work boundaries, automated aggregate AWS inspection, healthy alarms/queues/log privacy checks, idle ECS, and refreshed zero drift pass. [Workload recovery and acceptance evidence](evidence/d0-development-serverless-workload-recovery-2026-08-07.md), [cutover source evidence](evidence/d0-development-serverless-cutover-source-2026-08-07.md) |
 | SR-008 | Apply the separately reviewed old-runtime retirement plan. | Complete | Separate checksum-authorized development and staging plans each applied exactly 13 legacy deletes plus one dashboard update with no replacement or persistent/serverless-resource change. Both environments pass zero drift, Lambda health/JWT denial, durable-trigger, retained-migration, authenticated preference/workflow, and two-account isolation checks. [Retirement source](evidence/d0-legacy-runtime-retirement-source-2026-08-07.md), [development acceptance](evidence/d0-development-legacy-runtime-retirement-acceptance-2026-08-07.md), [staging acceptance](evidence/d0-staging-legacy-runtime-retirement-acceptance-2026-08-08.md) |
 | SR-009 | Revoke Temporal access and remove every obsolete code/config/dependency/doc/runbook path. | Complete | Development and staging pass fail-closed migrations, exact-key revocation, legacy image purge, checksum-reviewed AWS cleanup, zero drift, `200/200/401`, durable triggers, absent legacy inventory, empty retained ingress, retained migration capability, post-retirement persistence, and two-account denial. Executable dependencies/operators/modes/runbooks are removed and policy-checked. [Development acceptance](evidence/d0-development-provider-retirement-acceptance-2026-08-08.md), [staging acceptance](evidence/d0-staging-provider-retirement-acceptance-2026-08-08.md), [repository cleanup](evidence/d0-provider-runtime-repository-cleanup-2026-08-08.md) |
-| SR-010 | Reconcile post-cutover cost and complete D0-016. | In progress | Corrected caller-account-scoped preliminary reads for the complete `2026-08-09` UTC day show `$1.2632` development, `$1.2614` staging, explainable services, healthy controls/exports, and zero ECS/Fargate cost. AWS still reports `Estimated=true`; repeat after final posting before acceptance. [Preliminary post-retirement cost evidence](evidence/d0-post-retirement-cost-preliminary-2026-08-10.md), [exit-review readiness](evidence/d0-exit-review-readiness-2026-08-08.md) |
+| SR-010 | Reconcile post-cutover cost and complete D0-016. | Complete | Independent August 10 and August 11 reads of the complete `2026-08-09` UTC day are stable at `$1.2632` development and `$1.2614` staging, with explainable services, healthy controls/exports, fresh CUR delivery, and zero ECS/Fargate cost. AWS documents current-month charges as estimated until billing close, so invoice finalization is monthly financial reconciliation rather than a same-month engineering gate. [Post-retirement cost acceptance](evidence/d0-post-retirement-cost-acceptance-2026-08-11.md) |
 
 ## Completion gate
 
-- [ ] Every SR task is complete with linked evidence.
+- [x] Every SR task is complete with linked evidence.
 - [x] Both isolated environments pass the replacement acceptance matrix.
 - [x] No general application service runs continuously on Fargate.
 - [x] No obsolete gateway/worker/Temporal deployment resource or executable repository path remains.
 - [x] Persistent data, restore, tenant isolation, audit, workflow durability, and rollback evidence pass.
-- [ ] Post-cutover billing is reconciled and the master Phase 0 tracker is synchronized.
+- [x] Post-cutover billing is reconciled and the master Phase 0 tracker is synchronized.
 
 ## External technical basis
 
@@ -278,6 +279,7 @@ replacement.
 
 | Date | Update | Evidence |
 |---|---|---|
+| 2026-08-11 | Completed SR-010 and D0-016. Separately refreshed account sessions returned the same caller-account-scoped `2026-08-09` daily totals observed on August 10, fresh CUR delivery, healthy exact `$5` controls, and no ECS/Fargate service charge. Corrected the impossible same-month invoice-finality interpretation using AWS's documented current-month estimate boundary; monthly invoice reconciliation remains operational finance evidence, not an engineering migration blocker. | [Post-retirement cost acceptance](evidence/d0-post-retirement-cost-acceptance-2026-08-11.md) |
 | 2026-07-31 | Product owner made removal of continuously running Fargate gateway/worker capacity the highest-priority open Phase 0 engineering change. The target architecture, migration sequence, rollback boundary, retirement inventory, and acceptance gates were documented; no application or AWS resource was changed. | [ADR-016](../../adr/016-scale-to-zero-application-runtime.md) |
 | 2026-07-31 | Recorded the read-only development/staging runtime baseline and implemented the shared HTTP/Lambda gateway application boundary with fail-closed JWT-authorizer context mapping and bounded Lambda database pooling. Both environments remain on the existing ECS path; SR-001 and SR-002 remain in progress for the explicitly recorded baseline and deployment gaps. | [Runtime baseline and Lambda boundary evidence](evidence/d0-serverless-runtime-baseline-and-lambda-boundary-2026-07-31.md) |
 | 2026-07-31 | Added the bounded read-only outbox inspector/operator, reproducible gateway ZIP/manifest/SBOM workflow, managed-secret Lambda bootstrap, and disabled-by-default dark Lambda/IAM/VPC/authorizer/alarm Terraform. Fresh provider-6 validation passes, but no artifact was published, no refresh-backed live plan exists, and no AWS resource or route changed. | [Gateway dark-source evidence](evidence/d0-serverless-gateway-dark-source-2026-07-31.md) |

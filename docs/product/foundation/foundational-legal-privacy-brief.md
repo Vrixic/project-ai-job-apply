@@ -1,6 +1,6 @@
 # Foundational Legal and Privacy Review Brief
 
-- Status: Review preparation in progress; no legal conclusion or approval recorded
+- Status: Review ready; no legal conclusion or approval recorded
 - Prepared: 2026-07-28
 - Accountable reviewer: Future external legal/privacy counsel; individual unassigned
 - Product owner: Founder/repository owner; legal name to record before approval

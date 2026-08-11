@@ -6,6 +6,7 @@ param(
   [string]$StagingProfile = "ai-job-apply-staging-admin",
   [string]$StartDate = "",
   [string]$EndDate = "",
+  [switch]$VerifyDormantStaging,
   [switch]$Help
 )
 
@@ -18,6 +19,7 @@ Usage:
   .\scripts\inspect-phase0-cost.ps1 -Environment development
   .\scripts\inspect-phase0-cost.ps1 -Environment staging
   .\scripts\inspect-phase0-cost.ps1 -StartDate <YYYY-MM-DD> -EndDate <YYYY-MM-DD>
+  .\scripts\inspect-phase0-cost.ps1 -Environment staging -StartDate <YYYY-MM-DD> -EndDate <YYYY-MM-DD> -VerifyDormantStaging
 
 Reads actual unblended Cost Explorer data, the exact environment budget and alert, CUR 2.0 export
   health, and real export delivery from the selected isolated account or both accounts. Cost
@@ -29,7 +31,8 @@ Reads actual unblended Cost Explorer data, the exact environment budget and aler
 This operator is read-only and prints no account identifier, caller ARN, budget destination,
 bucket/object key, resource identifier, tag value, credit record, invoice, or raw provider
 response. AWS provider validation objects outside the configured `cur-2/` prefix do not count as
-CUR delivery.
+CUR delivery. VerifyDormantStaging requires one completed UTC day, performs one additional Cost
+Explorer request, and fails unless staging has zero RDS instance-hours and zero VPC endpoint-hours.
 "@
   exit 0
 }
@@ -316,12 +319,111 @@ function Get-EnvironmentCost {
   }
 }
 
+function Get-DormantStagingUsage {
+  param(
+    [string]$Profile,
+    [object]$Window
+  )
+
+  $identity = Invoke-AwsJson $Profile @("sts", "get-caller-identity", "--output", "json")
+  $costFilter = @{
+    Dimensions = @{
+      Key          = "LINKED_ACCOUNT"
+      Values       = @([string]$identity.Account)
+      MatchOptions = @("EQUALS")
+    }
+  } | ConvertTo-Json -Compress -Depth 4
+  $usage = Invoke-AwsJson $Profile @(
+    "ce",
+    "get-cost-and-usage",
+    "--time-period",
+    "Start=$($Window.Start.ToString('yyyy-MM-dd')),End=$($Window.End.ToString('yyyy-MM-dd'))",
+    "--granularity",
+    "DAILY",
+    "--metrics",
+    "UnblendedCost",
+    "UsageQuantity",
+    "--group-by",
+    "Type=DIMENSION,Key=SERVICE",
+    "Type=DIMENSION,Key=USAGE_TYPE",
+    "--filter",
+    $costFilter,
+    "--output",
+    "json"
+  )
+
+  [decimal]$rdsInstanceHours = 0
+  [decimal]$rdsInstanceCost = 0
+  [decimal]$vpcEndpointHours = 0
+  [decimal]$vpcEndpointCost = 0
+  [int]$rdsGroups = 0
+  [int]$vpcGroups = 0
+  foreach ($period in @(Get-Collection $usage "ResultsByTime")) {
+    foreach ($group in @(Get-Collection $period "Groups")) {
+      $service = [string]$group.Keys[0]
+      $usageType = [string]$group.Keys[1]
+      if (
+        $service -eq "Amazon Relational Database Service" -and
+        $usageType -match "(?i)InstanceUsage"
+      ) {
+        $rdsGroups += 1
+        $rdsInstanceHours += [decimal]$group.Metrics.UsageQuantity.Amount
+        $rdsInstanceCost += [decimal]$group.Metrics.UnblendedCost.Amount
+      }
+      if (
+        $service -eq "Amazon Virtual Private Cloud" -and
+        $usageType -match "(?i)VpcEndpoint-Hours"
+      ) {
+        $vpcGroups += 1
+        $vpcEndpointHours += [decimal]$group.Metrics.UsageQuantity.Amount
+        $vpcEndpointCost += [decimal]$group.Metrics.UnblendedCost.Amount
+      }
+    }
+  }
+
+  return [pscustomobject]@{
+    CompleteUtcDay              = $true
+    RdsInstanceUsageGroupCount  = $rdsGroups
+    RdsInstanceHours            = [Math]::Round($rdsInstanceHours, 4)
+    RdsInstanceCostUsd          = [Math]::Round($rdsInstanceCost, 4)
+    VpcEndpointUsageGroupCount  = $vpcGroups
+    VpcEndpointHours            = [Math]::Round($vpcEndpointHours, 4)
+    VpcEndpointCostUsd          = [Math]::Round($vpcEndpointCost, 4)
+    DormantHourlyUsageAbsent    = (
+      $rdsInstanceHours -eq 0 -and
+      $rdsInstanceCost -eq 0 -and
+      $vpcEndpointHours -eq 0 -and
+      $vpcEndpointCost -eq 0
+    )
+  }
+}
+
 $window = Convert-DateWindow
+$dormantVerification = $null
+if ($VerifyDormantStaging) {
+  if ($Environment -ne "staging") {
+    throw "VerifyDormantStaging requires -Environment staging."
+  }
+  if (-not $StartDate -or -not $EndDate -or ($window.End - $window.Start).TotalDays -ne 1) {
+    throw "VerifyDormantStaging requires an explicit one-day UTC StartDate/EndDate window."
+  }
+  if ($window.End -gt [DateTime]::UtcNow.Date) {
+    throw "VerifyDormantStaging requires a completed UTC day."
+  }
+  $dormantVerification = Get-DormantStagingUsage $StagingProfile $window
+}
 $results = @()
 if ($Environment -in @("all", "development")) {
   $results += Get-EnvironmentCost "development" $DevelopmentProfile $window
 }
 if ($Environment -in @("all", "staging")) {
-  $results += Get-EnvironmentCost "staging" $StagingProfile $window
+  $stagingResult = Get-EnvironmentCost "staging" $StagingProfile $window
+  if ($VerifyDormantStaging) {
+    $stagingResult | Add-Member -NotePropertyName DormantStagingVerification -NotePropertyValue $dormantVerification
+  }
+  $results += $stagingResult
 }
 $results | ConvertTo-Json -Depth 7
+if ($VerifyDormantStaging -and -not $dormantVerification.DormantHourlyUsageAbsent) {
+  throw "The completed UTC day contains staging RDS instance-hours or VPC endpoint-hours."
+}
