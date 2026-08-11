@@ -44,7 +44,7 @@
     "/me": {
       "get": {
         "operationId": "getCurrentUser",
-        "security": [{ "oidc": [] }],
+        "security": [{ "oidc": ["profile:read"] }],
         "responses": {
           "200": {
             "description": "Current user",
@@ -61,7 +61,7 @@
     "/me/job-preferences": {
       "get": {
         "operationId": "getJobPreferences",
-        "security": [{ "oidc": [] }],
+        "security": [{ "oidc": ["profile:read"] }],
         "responses": {
           "200": {
             "description": "Current job preferences",
@@ -77,7 +77,7 @@
       },
       "put": {
         "operationId": "putJobPreferences",
-        "security": [{ "oidc": [] }],
+        "security": [{ "oidc": ["profile:write"] }],
         "parameters": [
           {
             "in": "header",
@@ -112,10 +112,38 @@
         }
       }
     },
+    "/jobs/{jobId}": {
+      "get": {
+        "operationId": "getCanonicalJob",
+        "security": [{ "oidc": ["jobs:read"] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "jobId",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Active canonical job detail",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/CanonicalJobDetail" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
     "/operations/{operationId}": {
       "get": {
         "operationId": "getOperation",
-        "security": [{ "oidc": [] }],
+        "security": [{ "oidc": ["profile:read"] }],
         "parameters": [
           {
             "in": "path",
@@ -301,6 +329,74 @@
         "properties": {
           "preferences": { "$ref": "#/components/schemas/JobPreferenceSet" },
           "operationId": { "type": "string", "format": "uuid" }
+        },
+        "additionalProperties": false
+      },
+      "JobCompanySummary": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "verifiedDomain": { "type": "string", "minLength": 1, "maxLength": 253 }
+        },
+        "additionalProperties": false
+      },
+      "JobSourceSummary": {
+        "type": "object",
+        "required": ["provider", "provenance", "canonicalUrl", "firstObservedAt", "lastVerifiedAt"],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": ["greenhouse", "lever", "ashby", "workday", "ugc", "other"]
+          },
+          "provenance": {
+            "type": "string",
+            "enum": ["permitted_api", "authorized_fixture", "explicit_ugc"]
+          },
+          "canonicalUrl": { "type": "string", "format": "uri", "maxLength": 4096 },
+          "firstObservedAt": { "type": "string", "format": "date-time" },
+          "lastVerifiedAt": { "type": "string", "format": "date-time" },
+          "validThrough": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      },
+      "CanonicalJobDetail": {
+        "type": "object",
+        "required": [
+          "id",
+          "company",
+          "title",
+          "locations",
+          "description",
+          "status",
+          "firstObservedAt",
+          "lastVerifiedAt",
+          "expiresAt",
+          "sources"
+        ],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "company": { "$ref": "#/components/schemas/JobCompanySummary" },
+          "title": { "type": "string", "minLength": 1, "maxLength": 240 },
+          "locations": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": { "type": "string", "minLength": 1, "maxLength": 240 }
+          },
+          "department": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "description": { "type": "string", "minLength": 1, "maxLength": 200000 },
+          "status": { "type": "string", "enum": ["active"] },
+          "firstObservedAt": { "type": "string", "format": "date-time" },
+          "lastVerifiedAt": { "type": "string", "format": "date-time" },
+          "expiresAt": { "type": "string", "format": "date-time" },
+          "validThrough": { "type": "string", "format": "date-time" },
+          "sources": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/components/schemas/JobSourceSummary" }
+          }
         },
         "additionalProperties": false
       },

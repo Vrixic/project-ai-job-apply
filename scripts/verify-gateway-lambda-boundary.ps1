@@ -44,7 +44,7 @@ function New-AuthorizerClaims {
     [string]$Issuer,
     [Parameter(Mandatory = $true)]
     [string]$Audience,
-    [string]$Scope = "profile:read profile:write"
+    [string]$Scope = "jobs:read profile:read profile:write"
   )
 
   return [ordered]@{

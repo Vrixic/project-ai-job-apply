@@ -11,6 +11,7 @@ export type PutJobPreferencesResponse = components["schemas"]["PutJobPreferences
 export type ProfileReadiness = components["schemas"]["ProfileReadiness"];
 export type Operation = components["schemas"]["Operation"];
 export type CurrentUser = components["schemas"]["CurrentUser"];
+export type CanonicalJobDetail = components["schemas"]["CanonicalJobDetail"];
 export type ProblemDetails = components["schemas"]["ProblemDetails"];
 
 const ajv = new Ajv2020({ allErrors: true, strict: true });
@@ -18,9 +19,15 @@ const addFormats = addFormatsModule.default as unknown as (instance: Ajv2020) =>
 addFormats(ajv);
 
 const schemas = contract.components.schemas;
+const validationSchemas = JSON.parse(
+  JSON.stringify(schemas).replaceAll("#/components/schemas/", "#/$defs/"),
+) as typeof schemas;
 
 export function compileComponentValidator(name: keyof typeof schemas): ValidateFunction<unknown> {
-  return ajv.compile(schemas[name]);
+  return ajv.compile({
+    $ref: `#/$defs/${name}`,
+    $defs: validationSchemas,
+  });
 }
 
 export function formatValidationErrors(errors: ErrorObject[] | null | undefined): string {

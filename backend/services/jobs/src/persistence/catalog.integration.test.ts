@@ -54,6 +54,7 @@ describeWithDatabase("PostgresJobCatalog", () => {
     expect(replay.stdout.trim()).toBe(
       "Jobs migrations through 0001_job_catalog applied and verified.",
     );
+    await catalog.ping();
   });
 
   afterAll(async () => {
@@ -81,6 +82,43 @@ describeWithDatabase("PostgresJobCatalog", () => {
       adapterVersion: "synthetic-v1",
       rawSnapshot: { fixture: true },
     });
+  });
+
+  it("returns only the active redacted read model", async () => {
+    const created = await catalog.recordObservation(
+      fixture({
+        sourceUrl: `https://jobs.example.test/${runId}/active-read`,
+        externalJobId: "active-read",
+        employerRequisitionId: `req-${runId}-active-read`,
+        department: "Engineering",
+        validThrough: new Date("2026-09-20T12:00:00.000Z"),
+      }),
+    );
+
+    const active = await catalog.getActiveJob(created.job.id, observedAt);
+
+    expect(active).toMatchObject({
+      id: created.job.id,
+      company: {
+        name: `Synthetic Company ${runId}`,
+        verifiedDomain: `${runId}.example.test`,
+      },
+      title: "Software Engineer",
+      locations: ["Remote - US"],
+      department: "Engineering",
+      status: "active",
+      sources: [
+        {
+          provider: "greenhouse",
+          provenance: "authorized_fixture",
+          canonicalUrl: `https://jobs.example.test/${runId}/active-read`,
+        },
+      ],
+    });
+    expect(active?.description).toContain("synthetic catalog record");
+    expect(active?.sources[0]).not.toHaveProperty("rawSnapshot");
+    expect(active?.sources[0]).not.toHaveProperty("externalJobId");
+    expect(active?.sources[0]).not.toHaveProperty("atsTenant");
   });
 
   it("flags a fuzzy match without merging canonical records", async () => {
@@ -163,6 +201,7 @@ describeWithDatabase("PostgresJobCatalog", () => {
     const expired = await catalog.getById(created.job.id);
     expect(expired).toMatchObject({ id: created.job.id, status: "expired" });
     expect(expired).not.toHaveProperty("description");
+    expect(await catalog.getActiveJob(created.job.id, afterExpiry)).toBeNull();
     const [source] = await client<{ rawSnapshot: Record<string, unknown> | null }[]>`
       SELECT raw_snapshot AS "rawSnapshot" FROM jobs.job_sources
       WHERE job_id = ${created.job.id}
@@ -195,6 +234,7 @@ describeWithDatabase("PostgresJobCatalog", () => {
     );
     expect(replay.job.status).toBe("blocked");
     expect(replay.job).not.toHaveProperty("description");
+    expect(await catalog.getActiveJob(created.job.id, observedAt)).toBeNull();
     const [source] = await client<{ rawSnapshot: Record<string, unknown> | null }[]>`
       SELECT raw_snapshot AS "rawSnapshot" FROM jobs.job_sources
       WHERE job_id = ${created.job.id}

@@ -13,6 +13,10 @@ The persistence runtime accepts only `authorized_fixture` provenance by default.
 adapters and explicit public contributions remain disabled until their separate legal and security
 gates pass.
 
+The active-job read model returns only active, unexpired canonical records and redacted source
+summaries. It excludes raw snapshots, exact source identity keys, content hashes, pending or
+suspect records, and terminal tombstones.
+
 ## Planned additions
 
 - `src/api/` — Search-independent job reads and contribution/report commands.

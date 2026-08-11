@@ -18,6 +18,7 @@
     "@ai-job-apply/api-contracts": "workspace:*",
     "@ai-job-apply/auth": "workspace:*",
     "@ai-job-apply/config": "workspace:*",
+    "@ai-job-apply/jobs-service": "workspace:*",
     "@ai-job-apply/observability": "workspace:*",
     "@ai-job-apply/profile-service": "workspace:*",
     "@nestjs/common": "11.1.28",

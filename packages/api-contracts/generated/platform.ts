@@ -68,6 +68,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/jobs/{jobId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getCanonicalJob"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/operations/{operationId}": {
         parameters: {
             query?: never;
@@ -129,6 +145,46 @@ export interface components {
             preferences: components["schemas"]["JobPreferenceSet"];
             /** Format: uuid */
             operationId: string;
+        };
+        JobCompanySummary: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            verifiedDomain?: string;
+        };
+        JobSourceSummary: {
+            /** @enum {string} */
+            provider: "greenhouse" | "lever" | "ashby" | "workday" | "ugc" | "other";
+            /** @enum {string} */
+            provenance: "permitted_api" | "authorized_fixture" | "explicit_ugc";
+            /** Format: uri */
+            canonicalUrl: string;
+            /** Format: date-time */
+            firstObservedAt: string;
+            /** Format: date-time */
+            lastVerifiedAt: string;
+            /** Format: date-time */
+            validThrough?: string;
+        };
+        CanonicalJobDetail: {
+            /** Format: uuid */
+            id: string;
+            company: components["schemas"]["JobCompanySummary"];
+            title: string;
+            locations: string[];
+            department?: string;
+            description: string;
+            /** @enum {string} */
+            status: "active";
+            /** Format: date-time */
+            firstObservedAt: string;
+            /** Format: date-time */
+            lastVerifiedAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /** Format: date-time */
+            validThrough?: string;
+            sources: components["schemas"]["JobSourceSummary"][];
         };
         ProfileReadiness: {
             completionPercent: number;
@@ -349,6 +405,32 @@ export interface operations {
             409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    getCanonicalJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                jobId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Active canonical job detail */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalJobDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     getOperation: {
