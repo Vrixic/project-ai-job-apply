@@ -108,6 +108,22 @@ exact six traffic actions. Both forms remain separately checksum reviewed.
 When the bounded exercise ends, repeat the two-step shutdown. Never leave staging active merely to
 preserve test records.
 
+## Accept the dormant billing interval
+
+After at least one complete UTC day has elapsed in verified dormant mode and AWS has posted that
+day, refresh only the staging IAM Identity Center session and run:
+
+```powershell
+.\scripts\inspect-phase0-cost.ps1 -Environment staging `
+  -StartDate "<DORMANT_UTC_DAY>" -EndDate "<NEXT_UTC_DAY>" `
+  -VerifyDormantStaging
+```
+
+The switch performs one additional Cost Explorer request and fails closed if the completed day has
+any RDS instance-hours or VPC endpoint-hours. Retained KMS, Secrets Manager, S3/ECR, logs, queues,
+budgets, and export controls can keep the total above zero. Preserve only the sanitized aggregate
+output; do not retain account identifiers, object keys, or raw CUR rows.
+
 ## Interrupted transitions
 
 Do not regenerate or replay a partially consumed plan. Inspect status, refresh SSO, return to clean

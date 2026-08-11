@@ -1,6 +1,6 @@
 # Initial Operating-Cost Baseline
 
-- Status: First two-account CUR/cost delivery reconciled; complete post-retirement day pending
+- Status: Initial two-account post-retirement cost baseline accepted
 - Pricing basis checked: 2026-07-28; recheck before launch or a material architecture decision
 - Region: AWS `us-east-2`
 - Currency: USD, before tax
@@ -42,8 +42,8 @@ Approximate low-traffic monthly planning ranges per continuously provisioned acc
 Under ADR-018, development stays active for routine integration. Synthetic staging's target dormant
 state removes RDS and all three interface endpoints while retaining encrypted state, keys, artifacts,
 identity, queues, logs, alarms, budgets, and exports. The retained dormant planning range is about
-`$3–$10/month` at low use. D0-017 must still apply, reactivation-test, and return this source boundary
-to dormant before that range is treated as deployed evidence.
+`$3–$10/month` at low use. The complete activation/reacceptance/return cycle passes; D0-017 still
+requires the first complete posted dormant day before that range is treated as billing evidence.
 
 Official pricing references:
 
@@ -112,6 +112,10 @@ The August 8 first-delivery read proves one expected `$5` budget/alert, one heal
 Parquet objects, two manifests, and zero unexpected controls independently in each account.
 Estimated partial-month unblended cost is `$22.6557` in development and `$10.4745` in staging.
 VPC and RDS are the largest persistent categories; `$5.4271` development and `$2.7291` staging ECS
-charges are attributable to the pre-retirement part of the same month. This partial period cannot
-prove the post-retirement steady state. One complete UTC day wholly after retirement must post and
-show no new gateway/worker ECS compute before D0-008/SR-010 cost acceptance closes.
+charges are attributable to the pre-retirement part of the same month. The complete `2026-08-09`
+UTC day was then read independently on August 10 and August 11 with stable caller-account-scoped
+totals of `$1.2632` development and `$1.2614` staging. Neither result contains an ECS/Fargate
+service charge; budget/export controls and fresh CUR delivery pass. This completes the initial
+D0-008/SR-010 baseline. AWS correctly retains the current-month estimate flag until the billing
+period closes; invoice finalization remains monthly financial reconciliation rather than an
+engineering acceptance gate. [Acceptance evidence](../delivery/evidence/d0-post-retirement-cost-acceptance-2026-08-11.md)
