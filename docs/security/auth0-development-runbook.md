@@ -29,6 +29,13 @@ Add the permissions `jobs:read`, `profile:read`, and `profile:write`. Keep RBAC 
 permission claims disabled until roles beyond candidate ownership exist; the gateway enforces the
 explicit OAuth scopes and resolves the exact issuer and subject to an internal UUID.
 
+Set the API's **Settings → Application Access Policy → User-Delegated Access** to **Per-app
+authorization**. In **Application Access**, add or edit `ApplyDash Web Development`, grant only
+user-delegated access, and allow `jobs:read`, `profile:read`, and `profile:write`. Do not grant
+client access: the web application acts only on behalf of its authenticated user and does not use
+the Client Credentials flow. Update this per-application grant whenever the requested API scope
+set changes; defining a permission on the API does not expand an existing client grant.
+
 ### Regular Web Application
 
 Use the existing `ApplyDash Web Development` Regular Web Application and set:
@@ -117,6 +124,10 @@ Then verify with a synthetic development account:
    The check passes only when the deployed owner-scoped operation route returns `404`. A same-user
    retry is rejected before calling the gateway; no token, identity, operation identifier, or
    private response body is returned to the browser or retained as evidence.
+10. After adding a new API permission, log out and sign in again, then select **Verify job-read
+    authorization**. The check passes only when the server-held access token reaches the deployed
+    job route and receives `404` for the reserved synthetic identifier. A `403` means the fresh
+    session is missing `jobs:read`; no token or upstream body is returned to the browser.
 
 ### Deployed Lambda ownership conformance
 

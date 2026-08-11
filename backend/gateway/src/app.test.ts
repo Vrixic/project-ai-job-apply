@@ -22,6 +22,7 @@ import {
 } from "./lambda.js";
 
 class MemoryProfileStore implements ProfileStore {
+  resolveUserCalls = 0;
   private user: CurrentUser | undefined;
   private preferences: JobPreferenceSet | undefined;
   private readonly operations = new Map<string, Operation>();
@@ -31,6 +32,7 @@ class MemoryProfileStore implements ProfileStore {
   >();
 
   async resolveUser(principal: AuthPrincipal): Promise<CurrentUser> {
+    this.resolveUserCalls += 1;
     this.user ??= { id: uuidv7(), ...(principal.email ? { email: principal.email } : {}) };
     return this.user;
   }
@@ -135,19 +137,21 @@ async function createApp() {
     verifier: issuer.verifier,
     releaseSha: "test",
   });
-  return { app, issuer, catalog };
+  return { app, issuer, catalog, store };
 }
 
 describe("candidate API", () => {
   let app: NestFastifyApplication;
   let issuer: Awaited<ReturnType<typeof createTestTokenIssuer>>;
   let catalog: MemoryJobCatalog;
+  let store: MemoryProfileStore;
 
   beforeAll(async () => {
     const setup = await createApp();
     app = setup.app;
     issuer = setup.issuer;
     catalog = setup.catalog;
+    store = setup.store;
   });
 
   afterAll(async () => {
@@ -273,6 +277,7 @@ describe("candidate API", () => {
       scope: "profile:read",
     });
 
+    const identityWritesBeforeJobReads = store.resolveUserCalls;
     const accepted = await app.inject({
       method: "GET",
       url: `/v1/jobs/${catalog.job.id}`,
@@ -307,6 +312,7 @@ describe("candidate API", () => {
     expect(forbidden.json().code).toBe("forbidden");
     expect(missing.statusCode).toBe(404);
     expect(invalid.statusCode).toBe(400);
+    expect(store.resolveUserCalls).toBe(identityWritesBeforeJobReads);
   });
 
   it("enforces read and write scopes at the application boundary", async () => {

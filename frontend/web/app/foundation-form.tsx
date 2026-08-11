@@ -58,6 +58,7 @@ export function FoundationForm({
   const [loadingPreferences, setLoadingPreferences] = useState(authenticated);
   const [saving, setSaving] = useState(false);
   const [renewingSession, setRenewingSession] = useState(false);
+  const [checkingJobRead, setCheckingJobRead] = useState(false);
   const [armingIsolation, setArmingIsolation] = useState(false);
   const [checkingIsolation, setCheckingIsolation] = useState(false);
   const [runningWorkload, setRunningWorkload] = useState(false);
@@ -184,6 +185,36 @@ export function FoundationForm({
       setMessage(error instanceof Error ? error.message : "Session renewal failed");
     } finally {
       setRenewingSession(false);
+    }
+  }
+
+  async function verifyJobRead() {
+    setCheckingJobRead(true);
+    setMessage(undefined);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 15_000);
+    try {
+      const response = await fetch("/api/auth-conformance/job-read", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        signal: controller.signal,
+      });
+      const outcome = (await response.json()) as { message?: string; state?: string };
+      if (!response.ok) {
+        throw new Error(outcome.message ?? "Job-read authorization check failed");
+      }
+      setMessage("Job-read authorization passed: the server-held session has jobs:read.");
+    } catch (error) {
+      setMessage(
+        controller.signal.aborted
+          ? "Job-read authorization check timed out. Confirm the deployed gateway is healthy, then retry."
+          : error instanceof Error
+            ? error.message
+            : "Job-read authorization check failed",
+      );
+    } finally {
+      window.clearTimeout(timeout);
+      setCheckingJobRead(false);
     }
   }
 
@@ -316,6 +347,9 @@ export function FoundationForm({
           </p>
           <button type="button" onClick={verifySessionRenewal} disabled={renewingSession}>
             {renewingSession ? "Renewing…" : "Verify session renewal"}
+          </button>
+          <button type="button" onClick={verifyJobRead} disabled={checkingJobRead}>
+            {checkingJobRead ? "Checking…" : "Verify job-read authorization"}
           </button>
           <hr />
           <strong>Deployed cross-user isolation</strong>
