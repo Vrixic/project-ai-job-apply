@@ -60,6 +60,12 @@ foreach ($function in $baselineFunctions | Sort-Object { $_.Extent.StartOffset }
   Invoke-Expression $function.Extent.Text
 }
 
+$emptyClaimHistory = [pscustomobject]@{}
+if ($null -ne (Get-OptionalProperty $emptyClaimHistory "Versions") -or
+    $null -ne (Get-OptionalProperty $emptyClaimHistory "DeleteMarkers")) {
+  throw "An omitted S3 claim-history list did not resolve to null for explicit empty handling."
+}
+
 $releaseSource = "a" * 40
 $operatorSource = "b" * 40
 Assert-ReleaseSourceBinding -ReleaseSourceSha $operatorSource -OperatorSourceSha $operatorSource

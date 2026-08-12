@@ -1131,8 +1131,18 @@ function New-DurableExecutionClaim {
     "s3api", "list-object-versions", "--bucket", $StateBucket, "--prefix", $claimKey,
     "--output", "json"
   ) -Operation "Durable migration execution-claim history validation"
-  $existingVersions = @($history.Versions | Where-Object { [string]$_.Key -ceq $claimKey })
-  $existingMarkers = @($history.DeleteMarkers | Where-Object { [string]$_.Key -ceq $claimKey })
+  $historyVersions = Get-OptionalProperty $history "Versions"
+  $historyMarkers = Get-OptionalProperty $history "DeleteMarkers"
+  $existingVersions = if ($null -eq $historyVersions) {
+    @()
+  } else {
+    @($historyVersions | Where-Object { [string]$_.Key -ceq $claimKey })
+  }
+  $existingMarkers = if ($null -eq $historyMarkers) {
+    @()
+  } else {
+    @($historyMarkers | Where-Object { [string]$_.Key -ceq $claimKey })
+  }
   if ($existingVersions.Count -ne 0 -or $existingMarkers.Count -ne 0) {
     throw "The reviewed execution already has durable claim history. Do not replay it."
   }
