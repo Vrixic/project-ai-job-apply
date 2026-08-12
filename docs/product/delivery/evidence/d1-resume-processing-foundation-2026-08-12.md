@@ -2,10 +2,11 @@
 
 ## Outcome
 
-D1-002 now has a locally implemented scan-result-to-proposal release candidate. It extends
+D1-002 now has a locally implemented scan-result-to-proposal release candidate, and its development
+database migrations are deployed through Profile `0005` and Documents `0002`. It extends
 the already accepted development quarantine upload without granting the untrusted parser database
-access or general internet egress. No processing resource or migration from this change is claimed
-as deployed, and real candidate resumes remain prohibited.
+access or general internet egress. No processing runtime is claimed as deployed, and real candidate
+resumes remain prohibited.
 
 ## Implemented boundary
 
@@ -60,7 +61,9 @@ the processing trigger can be enabled; the local disposable run does not replace
    prerequisite is applied.
 2. Publish both immutable Lambda artifacts and verify their exact version, checksum, KMS encryption,
    and non-public artifact-bucket boundary after upload.
-3. Publish the migration image and apply Profile `0005` plus Documents `0002` once.
+3. **Complete in development:** the reviewed migration image applied Profile `0005` plus Documents
+   `0002` exactly once and passed aggregate logs, zero compute, encrypted state, and zero-change
+   verification. See [development migration evidence](d1-development-resume-processing-migration-2026-08-12.md).
 4. Create the coordinator/parser, queues, rules, policies, endpoints, and alarms dark; independently
    review and checksum-bind the plan before applying.
 5. Prove direct generated-synthetic clean, invalid, malware-test, duplicate, contradiction,
