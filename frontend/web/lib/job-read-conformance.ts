@@ -1,6 +1,6 @@
 import { forwardPlatformRequest } from "./platform-api";
 
-const GUARANTEED_MISSING_JOB_ID = "00000000-0000-0000-8000-000000000000";
+const GUARANTEED_MISSING_JOB_ID = "00000000-0000-7000-8000-000000000000";
 const PLATFORM_REQUEST_TIMEOUT_MILLISECONDS = 10_000;
 
 interface JobReadAuthSession {

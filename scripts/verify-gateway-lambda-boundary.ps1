@@ -162,7 +162,7 @@ function Invoke-BoundaryCase {
 
   $response = Get-Content -LiteralPath $outputPath -Raw | ConvertFrom-Json
   if ([int]$response.statusCode -ne $ExpectedStatus) {
-    throw "The $Name boundary case returned an unexpected status."
+    throw "The $Name boundary case returned unexpected status $([int]$response.statusCode)."
   }
   if ($ExpectedStatus -ge 400) {
     $problem = [string]$response.body | ConvertFrom-Json
@@ -295,6 +295,12 @@ try {
       Event = New-HttpApiEvent -Method "GET" -Path "/v1/me" -RequestId "boundary-wrong-scope" -Claims $wrongScopeClaims
       Status = 403
       Code = "forbidden"
+    },
+    @{
+      Name = "missing-job"
+      Event = New-HttpApiEvent -Method "GET" -Path "/v1/jobs/00000000-0000-7000-8000-000000000000" -RequestId "boundary-missing-job" -Claims $validClaims
+      Status = 404
+      Code = "not_found"
     },
     @{
       Name = "unknown-route"
