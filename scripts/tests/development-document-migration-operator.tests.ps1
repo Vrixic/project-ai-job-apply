@@ -52,18 +52,29 @@ $baselineFunctions = @($ast.FindAll({
         "Test-IgnorableRdsRestorableTimeRefresh", "Get-OptionalProperty",
         "Test-EcsFaultInjectionDisabled", "Assert-ReleaseSourceBinding",
         "Assert-OperatorOnlyReleaseDelta", "Assert-ExecutionIdentity",
-        "Assert-DurableClaimPutResult", "Assert-DurableExecutionClaimEvidence"
+        "Assert-DurableClaimPutResult", "Assert-DurableExecutionClaimEvidence",
+        "Test-DurableClaimHistoryExists"
       )
     }, $true))
-if ($baselineFunctions.Count -ne 13) { throw "The input and plan guards must each be defined once." }
+if ($baselineFunctions.Count -ne 14) { throw "The input and plan guards must each be defined once." }
 foreach ($function in $baselineFunctions | Sort-Object { $_.Extent.StartOffset }) {
   Invoke-Expression $function.Extent.Text
 }
 
 $emptyClaimHistory = [pscustomobject]@{}
-if ($null -ne (Get-OptionalProperty $emptyClaimHistory "Versions") -or
-    $null -ne (Get-OptionalProperty $emptyClaimHistory "DeleteMarkers")) {
-  throw "An omitted S3 claim-history list did not resolve to null for explicit empty handling."
+if (Test-DurableClaimHistoryExists -History $emptyClaimHistory -ClaimKey "claim") {
+  throw "An omitted S3 claim-history list was treated as an existing claim."
+}
+if (Test-DurableClaimHistoryExists -History ([pscustomobject]@{ Versions = @() }) -ClaimKey "claim") {
+  throw "An explicit empty S3 version list was treated as an existing claim."
+}
+foreach ($history in @(
+    [pscustomobject]@{ Versions = @([pscustomobject]@{ Key = "claim" }) },
+    [pscustomobject]@{ DeleteMarkers = @([pscustomobject]@{ Key = "claim" }) }
+  )) {
+  if (-not (Test-DurableClaimHistoryExists -History $history -ClaimKey "claim")) {
+    throw "Existing durable claim history was not rejected."
+  }
 }
 
 $releaseSource = "a" * 40
