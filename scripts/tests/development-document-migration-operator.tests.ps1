@@ -242,6 +242,18 @@ $rdsRefresh = [pscustomobject]@{
 if (-not (Test-IgnorableRdsRestorableTimeRefresh -Drift $rdsRefresh)) {
   throw "A forward-only RDS restorable-time refresh was rejected."
 }
+$dateObjectRefresh = $rdsRefresh | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+$dateObjectRefresh.change.before.latest_restorable_time = [datetime]::Parse(
+  "2026-08-12T17:28:57Z", [Globalization.CultureInfo]::InvariantCulture,
+  [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal
+)
+$dateObjectRefresh.change.after.latest_restorable_time = [datetime]::Parse(
+  "2026-08-12T21:28:54Z", [Globalization.CultureInfo]::InvariantCulture,
+  [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal
+)
+if (-not (Test-IgnorableRdsRestorableTimeRefresh -Drift $dateObjectRefresh)) {
+  throw "A PowerShell 7 DateTime-shaped RDS restorable-time refresh was rejected."
+}
 foreach ($mutation in @("backward-time", "protection", "address")) {
   $badRefresh = $rdsRefresh | ConvertTo-Json -Depth 10 | ConvertFrom-Json
   switch ($mutation) {
