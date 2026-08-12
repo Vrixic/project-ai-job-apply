@@ -85,11 +85,15 @@ const PROTECTED_EXACT_ROUTES = new Set([
   "GET /v1/me",
   "GET /v1/me/job-preferences",
   "PUT /v1/me/job-preferences",
+  "GET /v1/profile/facts",
+  "POST /v1/profile/facts",
 ]);
 const OPERATION_PATH_PATTERN =
   /^\/v1\/operations\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const JOB_PATH_PATTERN =
   /^\/v1\/jobs\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const PROFILE_FACT_PATH_PATTERN =
+  /^\/v1\/profile\/facts\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
   "content-length",
@@ -113,7 +117,10 @@ function allowedRoute(method: string, path: string): AllowedRoute | undefined {
     return { acceptsBody: false, protected: false };
   }
   if (PROTECTED_EXACT_ROUTES.has(`${method} ${path}`)) {
-    return { acceptsBody: method === "PUT", protected: true };
+    return { acceptsBody: method === "PUT" || method === "POST", protected: true };
+  }
+  if (method === "PATCH" && PROFILE_FACT_PATH_PATTERN.test(path)) {
+    return { acceptsBody: true, protected: true };
   }
   if (method === "GET" && (OPERATION_PATH_PATTERN.test(path) || JOB_PATH_PATTERN.test(path))) {
     return { acceptsBody: false, protected: true };

@@ -112,6 +112,102 @@
         }
       }
     },
+    "/profile/facts": {
+      "get": {
+        "operationId": "listProfileFacts",
+        "security": [{ "oidc": ["profile:read"] }],
+        "responses": {
+          "200": {
+            "description": "Latest profile-fact versions owned by the current candidate",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ProfileFactCollection" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      },
+      "post": {
+        "operationId": "createProfileFact",
+        "security": [{ "oidc": ["profile:write"] }],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": { "type": "string", "minLength": 16, "maxLength": 128 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateProfileFactRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "A user-entered, confirmed profile fact was created",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProfileFact" } }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" }
+        }
+      }
+    },
+    "/profile/facts/{factId}": {
+      "patch": {
+        "operationId": "updateProfileFact",
+        "security": [{ "oidc": ["profile:write"] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "factId",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": { "type": "string", "minLength": 16, "maxLength": 128 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateProfileFactRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A new immutable version of the owned profile fact was created",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProfileFact" } }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" }
+        }
+      }
+    },
     "/jobs/{jobId}": {
       "get": {
         "operationId": "getCanonicalJob",
@@ -208,7 +304,7 @@
         }
       },
       "Conflict": {
-        "description": "Idempotency key was reused with different content",
+        "description": "The request conflicts with current resource or idempotency state",
         "content": {
           "application/problem+json": {
             "schema": { "$ref": "#/components/schemas/ProblemDetails" }
@@ -329,6 +425,119 @@
         "properties": {
           "preferences": { "$ref": "#/components/schemas/JobPreferenceSet" },
           "operationId": { "type": "string", "format": "uuid" }
+        },
+        "additionalProperties": false
+      },
+      "ProfileFactKind": {
+        "type": "string",
+        "enum": [
+          "identity",
+          "employment",
+          "education",
+          "project",
+          "skill",
+          "certification",
+          "preference"
+        ]
+      },
+      "ProfileFactValue": {
+        "oneOf": [
+          { "type": "string", "minLength": 1, "maxLength": 10000, "pattern": "\\S" },
+          { "type": "number" },
+          { "type": "boolean" },
+          {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "items": { "type": "string", "minLength": 1, "maxLength": 500, "pattern": "\\S" }
+          }
+        ]
+      },
+      "CreateProfileFactRequest": {
+        "type": "object",
+        "required": ["kind", "key", "value", "sensitivity"],
+        "properties": {
+          "kind": { "$ref": "#/components/schemas/ProfileFactKind" },
+          "key": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "\\S" },
+          "value": { "$ref": "#/components/schemas/ProfileFactValue" },
+          "sensitivity": {
+            "type": "string",
+            "enum": ["standard", "confidential", "restricted"]
+          },
+          "effectiveFrom": { "type": "string", "format": "date" },
+          "effectiveTo": { "type": "string", "format": "date" }
+        },
+        "additionalProperties": false
+      },
+      "UpdateProfileFactRequest": {
+        "type": "object",
+        "required": ["expectedVersion"],
+        "minProperties": 2,
+        "properties": {
+          "expectedVersion": { "type": "integer", "minimum": 1 },
+          "value": { "$ref": "#/components/schemas/ProfileFactValue" },
+          "verification": { "type": "string", "enum": ["confirmed", "rejected"] },
+          "sensitivity": {
+            "type": "string",
+            "enum": ["standard", "confidential", "restricted"]
+          },
+          "effectiveFrom": { "type": "string", "format": "date" },
+          "effectiveTo": { "type": "string", "format": "date" }
+        },
+        "additionalProperties": false
+      },
+      "ProfileFactSource": {
+        "type": "object",
+        "required": ["type", "reference"],
+        "properties": {
+          "type": { "type": "string", "enum": ["user", "resume", "import", "derived"] },
+          "reference": { "type": "string", "minLength": 1, "maxLength": 200 }
+        },
+        "additionalProperties": false
+      },
+      "ProfileFact": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "key",
+          "value",
+          "verification",
+          "sensitivity",
+          "source",
+          "version",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "kind": { "$ref": "#/components/schemas/ProfileFactKind" },
+          "key": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "\\S" },
+          "value": { "$ref": "#/components/schemas/ProfileFactValue" },
+          "verification": {
+            "type": "string",
+            "enum": ["proposed", "confirmed", "rejected"]
+          },
+          "sensitivity": {
+            "type": "string",
+            "enum": ["standard", "confidential", "restricted"]
+          },
+          "source": { "$ref": "#/components/schemas/ProfileFactSource" },
+          "effectiveFrom": { "type": "string", "format": "date" },
+          "effectiveTo": { "type": "string", "format": "date" },
+          "version": { "type": "integer", "minimum": 1 },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      },
+      "ProfileFactCollection": {
+        "type": "object",
+        "required": ["facts", "confirmedCount", "proposedCount"],
+        "properties": {
+          "facts": { "type": "array", "items": { "$ref": "#/components/schemas/ProfileFact" } },
+          "confirmedCount": { "type": "integer", "minimum": 0 },
+          "proposedCount": { "type": "integer", "minimum": 0 }
         },
         "additionalProperties": false
       },

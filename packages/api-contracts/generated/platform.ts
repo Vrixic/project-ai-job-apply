@@ -68,6 +68,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/profile/facts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listProfileFacts"];
+        put?: never;
+        post: operations["createProfileFact"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/facts/{factId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateProfileFact"];
+        trace?: never;
+    };
     "/jobs/{jobId}": {
         parameters: {
             query?: never;
@@ -145,6 +177,63 @@ export interface components {
             preferences: components["schemas"]["JobPreferenceSet"];
             /** Format: uuid */
             operationId: string;
+        };
+        /** @enum {string} */
+        ProfileFactKind: "identity" | "employment" | "education" | "project" | "skill" | "certification" | "preference";
+        ProfileFactValue: string | number | boolean | string[];
+        CreateProfileFactRequest: {
+            kind: components["schemas"]["ProfileFactKind"];
+            key: string;
+            value: components["schemas"]["ProfileFactValue"];
+            /** @enum {string} */
+            sensitivity: "standard" | "confidential" | "restricted";
+            /** Format: date */
+            effectiveFrom?: string;
+            /** Format: date */
+            effectiveTo?: string;
+        };
+        UpdateProfileFactRequest: {
+            expectedVersion: number;
+            value?: components["schemas"]["ProfileFactValue"];
+            /** @enum {string} */
+            verification?: "confirmed" | "rejected";
+            /** @enum {string} */
+            sensitivity?: "standard" | "confidential" | "restricted";
+            /** Format: date */
+            effectiveFrom?: string;
+            /** Format: date */
+            effectiveTo?: string;
+        };
+        ProfileFactSource: {
+            /** @enum {string} */
+            type: "user" | "resume" | "import" | "derived";
+            reference: string;
+        };
+        ProfileFact: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["ProfileFactKind"];
+            key: string;
+            value: components["schemas"]["ProfileFactValue"];
+            /** @enum {string} */
+            verification: "proposed" | "confirmed" | "rejected";
+            /** @enum {string} */
+            sensitivity: "standard" | "confidential" | "restricted";
+            source: components["schemas"]["ProfileFactSource"];
+            /** Format: date */
+            effectiveFrom?: string;
+            /** Format: date */
+            effectiveTo?: string;
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        ProfileFactCollection: {
+            facts: components["schemas"]["ProfileFact"][];
+            confirmedCount: number;
+            proposedCount: number;
         };
         JobCompanySummary: {
             /** Format: uuid */
@@ -244,7 +333,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["ProblemDetails"];
             };
         };
-        /** @description Idempotency key was reused with different content */
+        /** @description The request conflicts with current resource or idempotency state */
         Conflict: {
             headers: {
                 [name: string]: unknown;
@@ -402,6 +491,96 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    listProfileFacts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Latest profile-fact versions owned by the current candidate */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileFactCollection"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createProfileFact: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProfileFactRequest"];
+            };
+        };
+        responses: {
+            /** @description A user-entered, confirmed profile fact was created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileFact"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    updateProfileFact: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                factId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProfileFactRequest"];
+            };
+        };
+        responses: {
+            /** @description A new immutable version of the owned profile fact was created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileFact"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];

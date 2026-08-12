@@ -1,4 +1,5 @@
 import {
+  date,
   index,
   integer,
   jsonb,
@@ -61,6 +62,55 @@ export const jobPreferences = profile.table(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [uniqueIndex("job_preferences_user_id_uq").on(table.userId)],
+);
+
+export type StoredProfileFactKind =
+  | "identity"
+  | "employment"
+  | "education"
+  | "project"
+  | "skill"
+  | "certification"
+  | "preference";
+export type StoredProfileFactValue = string | number | boolean | string[];
+export type StoredProfileFactVerification = "proposed" | "confirmed" | "rejected";
+export type StoredProfileFactSensitivity = "standard" | "confidential" | "restricted";
+export type StoredProfileFactSourceType = "user" | "resume" | "import" | "derived";
+
+export const profileFacts = profile.table(
+  "profile_facts",
+  {
+    id: uuid("id").primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("profile_facts_user_created_idx").on(table.userId, table.createdAt, table.id)],
+);
+
+export const profileFactVersions = profile.table(
+  "profile_fact_versions",
+  {
+    factId: uuid("fact_id")
+      .notNull()
+      .references(() => profileFacts.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    kind: text("kind").$type<StoredProfileFactKind>().notNull(),
+    key: text("fact_key").notNull(),
+    value: jsonb("fact_value").$type<StoredProfileFactValue>().notNull(),
+    verification: text("verification").$type<StoredProfileFactVerification>().notNull(),
+    sensitivity: text("sensitivity").$type<StoredProfileFactSensitivity>().notNull(),
+    sourceType: text("source_type").$type<StoredProfileFactSourceType>().notNull(),
+    sourceReference: text("source_reference").notNull(),
+    effectiveFrom: date("effective_from"),
+    effectiveTo: date("effective_to"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.factId, table.version] }),
+    index("profile_fact_versions_latest_idx").on(table.factId, table.version),
+  ],
 );
 
 export type OperationState = "queued" | "running" | "succeeded" | "retryable_failure" | "failed";

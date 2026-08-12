@@ -71,3 +71,33 @@ describe("CanonicalJobDetail", () => {
     ).toBe(false);
   });
 });
+
+describe("profile fact commands", () => {
+  const validateCreate = compileComponentValidator("CreateProfileFactRequest");
+  const validateUpdate = compileComponentValidator("UpdateProfileFactRequest");
+
+  it("accepts a truthful direct-entry fact and an optimistic correction", () => {
+    expect(
+      validateCreate({
+        kind: "skill",
+        key: "programming_language",
+        value: "TypeScript",
+        sensitivity: "standard",
+      }),
+    ).toBe(true);
+    expect(validateUpdate({ expectedVersion: 1, value: "TypeScript and JavaScript" })).toBe(true);
+  });
+
+  it("rejects empty facts, unrecognized fields, and no-op corrections", () => {
+    expect(
+      validateCreate({
+        kind: "skill",
+        key: "programming_language",
+        value: "   ",
+        sensitivity: "standard",
+      }),
+    ).toBe(false);
+    expect(validateUpdate({ expectedVersion: 1 })).toBe(false);
+    expect(validateUpdate({ expectedVersion: 1, interviewOutcome: "offer" })).toBe(false);
+  });
+});

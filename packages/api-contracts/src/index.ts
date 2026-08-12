@@ -11,6 +11,10 @@ export type PutJobPreferencesResponse = components["schemas"]["PutJobPreferences
 export type ProfileReadiness = components["schemas"]["ProfileReadiness"];
 export type Operation = components["schemas"]["Operation"];
 export type CurrentUser = components["schemas"]["CurrentUser"];
+export type ProfileFact = components["schemas"]["ProfileFact"];
+export type ProfileFactCollection = components["schemas"]["ProfileFactCollection"];
+export type CreateProfileFactRequest = components["schemas"]["CreateProfileFactRequest"];
+export type UpdateProfileFactRequest = components["schemas"]["UpdateProfileFactRequest"];
 export type CanonicalJobDetail = components["schemas"]["CanonicalJobDetail"];
 export type ProblemDetails = components["schemas"]["ProblemDetails"];
 

@@ -134,6 +134,39 @@ describe("API Gateway Lambda boundary", () => {
     expect(inject).toHaveBeenCalledWith(expect.objectContaining({ method: "GET", url: path }));
   });
 
+  it.each([
+    ["POST", "/v1/profile/facts"],
+    ["PATCH", "/v1/profile/facts/018f92b0-4ad7-7b1d-8f44-b7ae694c85c1"],
+  ])("allows the protected profile-fact %s boundary", async (method, path) => {
+    const principalBridge = createInvocationPrincipalBridge();
+    const inject = vi.fn().mockResolvedValue({
+      statusCode: 200,
+      body: '{"version":1}',
+      headers: { "content-type": "application/json" },
+    });
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge,
+    });
+    const payload = JSON.stringify({ synthetic: true });
+
+    const response = await invoke(
+      handler,
+      routedEvent(method, path, {
+        body: payload,
+        headers: {
+          authorization: "Bearer opaque-api-gateway-token",
+          "content-type": "application/json",
+        },
+      }),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(inject).toHaveBeenCalledWith(expect.objectContaining({ method, url: path, payload }));
+  });
+
   it("fails closed before application dispatch when authorizer context is absent", async () => {
     const principalBridge = createInvocationPrincipalBridge();
     const inject = vi.fn();
@@ -350,6 +383,7 @@ describe("API Gateway Lambda boundary", () => {
     ["method on a public path", "PUT", "/health/live"],
     ["malformed operation identifier", "GET", "/v1/operations/not-a-uuid"],
     ["malformed job identifier", "GET", "/v1/jobs/not-a-uuid"],
+    ["malformed profile fact identifier", "PATCH", "/v1/profile/facts/not-a-uuid"],
   ])("rejects %s before authentication or application dispatch", async (_label, method, path) => {
     const principalBridge = createInvocationPrincipalBridge();
     const inject = vi.fn();
