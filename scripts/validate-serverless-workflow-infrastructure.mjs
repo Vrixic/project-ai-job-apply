@@ -57,6 +57,7 @@ for (const required of [
   "Restore-TerraformVariables",
   "ConvertTo-Json -InputObject $Value -Compress -Depth 30",
   "Set-VerifiedCurrentGatewayArtifactVariables",
+  "Test-IgnorableRdsRestorableTimeRefresh",
   '"--version-id", ([string]$gateway.s3_object_version)',
   'foreach ($propertyName in @("mountPoints", "portMappings", "systemControls", "volumesFrom"))',
   "document_scan_mapping_enabled                 = $false",

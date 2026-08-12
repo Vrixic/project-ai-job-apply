@@ -48,10 +48,11 @@ $baselineFunctions = @($ast.FindAll({
       $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
       $node.Name -in @(
         "ConvertTo-TerraformEnvironmentValue", "Get-MeaningfulChanges", "Assert-PlanWasApplied",
-        "Assert-ExactTaskPlan", "Assert-CurrentGatewayArtifactEvidence"
+        "Assert-ExactTaskPlan", "Assert-CurrentGatewayArtifactEvidence",
+        "Test-IgnorableRdsRestorableTimeRefresh"
       )
     }, $true))
-if ($baselineFunctions.Count -ne 5) { throw "The input and plan guards must each be defined once." }
+if ($baselineFunctions.Count -ne 6) { throw "The input and plan guards must each be defined once." }
 foreach ($function in $baselineFunctions | Sort-Object { $_.Extent.StartOffset }) {
   Invoke-Expression $function.Extent.Text
 }
@@ -223,6 +224,45 @@ foreach ($case in @(
     $rejected = $true
   }
   if (-not $rejected) { throw "Invalid current gateway $($case.name) evidence was accepted." }
+}
+
+$rdsBefore = [pscustomobject]@{
+  identifier = "ai-job-apply-development"
+  latest_restorable_time = "2026-08-12T17:28:57Z"
+  storage_encrypted = $true
+  deletion_protection = $true
+  backup_retention_period = 7
+}
+$rdsAfter = $rdsBefore | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+$rdsAfter.latest_restorable_time = "2026-08-12T21:28:54Z"
+$rdsRefresh = [pscustomobject]@{
+  address = "module.platform.aws_db_instance.postgres[0]"
+  change = [pscustomobject]@{ actions = @("update"); before = $rdsBefore; after = $rdsAfter }
+}
+if (-not (Test-IgnorableRdsRestorableTimeRefresh -Drift $rdsRefresh)) {
+  throw "A forward-only RDS restorable-time refresh was rejected."
+}
+foreach ($mutation in @("backward-time", "protection", "address")) {
+  $badRefresh = $rdsRefresh | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+  switch ($mutation) {
+    "backward-time" { $badRefresh.change.after.latest_restorable_time = "2026-08-12T16:28:54Z" }
+    "protection" { $badRefresh.change.after.deletion_protection = $false }
+    "address" { $badRefresh.address = "module.platform.aws_db_instance.other[0]" }
+  }
+  if (Test-IgnorableRdsRestorableTimeRefresh -Drift $badRefresh) {
+    throw "Unsafe RDS refresh mutation '$mutation' was ignored."
+  }
+}
+foreach ($invalid in @("malformed-time", "missing-time", "extra-action")) {
+  $badRefresh = $rdsRefresh | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+  switch ($invalid) {
+    "malformed-time" { $badRefresh.change.after.latest_restorable_time = "2026-08-12 21:28:54" }
+    "missing-time" { $badRefresh.change.after.PSObject.Properties.Remove("latest_restorable_time") }
+    "extra-action" { $badRefresh.change.actions = @("update", "delete") }
+  }
+  if (Test-IgnorableRdsRestorableTimeRefresh -Drift $badRefresh) {
+    throw "Invalid RDS refresh shape '$invalid' was ignored."
+  }
 }
 
 Write-Host "Development document migration operator path and baseline tests passed."

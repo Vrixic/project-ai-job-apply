@@ -617,6 +617,38 @@ function Get-MeaningfulChanges {
     })
 }
 
+function Test-IgnorableRdsRestorableTimeRefresh {
+  param([Parameter(Mandatory)][object]$Drift)
+
+  if ([string]$Drift.address -cne "module.platform.aws_db_instance.postgres[0]" -or
+      @($Drift.change.actions).Count -ne 1 -or [string]@($Drift.change.actions)[0] -cne "update") {
+    return $false
+  }
+  $beforeTime = [datetime]::MinValue
+  $afterTime = [datetime]::MinValue
+  if ([string]$Drift.change.before.latest_restorable_time -notmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$' -or
+      [string]$Drift.change.after.latest_restorable_time -notmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$' -or
+      -not [datetime]::TryParse(
+      [string]$Drift.change.before.latest_restorable_time,
+      [Globalization.CultureInfo]::InvariantCulture,
+      [Globalization.DateTimeStyles]::AdjustToUniversal,
+      [ref]$beforeTime
+    ) -or -not [datetime]::TryParse(
+      [string]$Drift.change.after.latest_restorable_time,
+      [Globalization.CultureInfo]::InvariantCulture,
+      [Globalization.DateTimeStyles]::AdjustToUniversal,
+      [ref]$afterTime
+    ) -or $afterTime -lt $beforeTime) {
+    return $false
+  }
+  $before = $Drift.change.before | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+  $after = $Drift.change.after | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+  $before.PSObject.Properties.Remove("latest_restorable_time")
+  $after.PSObject.Properties.Remove("latest_restorable_time")
+  return (($before | ConvertTo-Json -Compress -Depth 50) -ceq
+    ($after | ConvertTo-Json -Compress -Depth 50))
+}
+
 function Assert-ExactTaskPlan {
   param([Parameter(Mandatory)][object]$Plan)
 
@@ -626,7 +658,9 @@ function Assert-ExactTaskPlan {
   if ([string]$Plan.variables.migration_image.value -cne $MigrationImage) {
     throw "The task plan is not bound to the reviewed migration digest."
   }
-  $drift = @(Get-MeaningfulChanges -Changes @($Plan.resource_drift))
+  $drift = @(Get-MeaningfulChanges -Changes @($Plan.resource_drift) | Where-Object {
+      -not (Test-IgnorableRdsRestorableTimeRefresh -Drift $_)
+    })
   if ($drift.Count -ne 0) { throw "The task plan contains resource drift; reconcile it separately before migration." }
   $changes = @(Get-MeaningfulChanges -Changes @($Plan.resource_changes))
   if ($changes.Count -ne 1 -or [string]$changes[0].address -cne $migrationAddress) {
