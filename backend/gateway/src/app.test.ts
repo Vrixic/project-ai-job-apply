@@ -16,15 +16,15 @@ import type {
   UpdateProfileFactRequest,
 } from "@ai-job-apply/api-contracts";
 import type { AuthPrincipal } from "@ai-job-apply/auth";
-import type { DocumentStore } from "@ai-job-apply/documents-service";
 import { createTestTokenIssuer } from "@ai-job-apply/auth/testing";
+import { type DocumentStore, ResumeUploadRegistrationError } from "@ai-job-apply/documents-service";
 import type { ActiveJobRecord, JobCatalogReader } from "@ai-job-apply/jobs-service";
 import type { ProfileStore } from "@ai-job-apply/profile-service";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createGatewayApplication } from "./application.js";
 import { privacySafeRequestFailure } from "./app.module.js";
+import { createGatewayApplication } from "./application.js";
 import {
   type AuthorizedHttpApiEvent,
   createApiGatewayHandler,
@@ -294,6 +294,20 @@ describe("candidate API", () => {
       error_type: "UnknownError",
       error_code: "UNKNOWN",
     });
+
+    const registrationFailure = new ResumeUploadRegistrationError(
+      "GRANT_SIGN",
+      new Error("temporary credential and candidate content must remain private"),
+    );
+    expect(privacySafeRequestFailure(registrationFailure, "/v1/resumes/uploads")).toEqual({
+      event: "unhandled_request_failure",
+      route: "/v1/resumes/uploads",
+      error_type: "ResumeUploadRegistrationError",
+      error_code: "DOCUMENT_GRANT_SIGN",
+    });
+    expect(
+      JSON.stringify(privacySafeRequestFailure(registrationFailure, "/v1/resumes/uploads")),
+    ).not.toContain("candidate content");
   });
 
   it("preserves an API Gateway principal through the real Fastify injection lifecycle", async () => {

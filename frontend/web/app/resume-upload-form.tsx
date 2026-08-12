@@ -6,7 +6,7 @@ import type {
   ResumeDocument,
   ResumeDocumentCollection,
 } from "@ai-job-apply/api-contracts";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 const MAXIMUM_RESUME_BYTES = 5 * 1024 * 1024;
 const PDF = "application/pdf" as const;
@@ -42,6 +42,7 @@ function statusLabel(status: ResumeDocument["status"]): string {
 }
 
 export function ResumeUploadForm({ authenticated }: { authenticated: boolean }) {
+  const fileInput = useRef<HTMLInputElement>(null);
   const [documents, setDocuments] = useState<ResumeDocument[]>([]);
   const [file, setFile] = useState<File>();
   const [loading, setLoading] = useState(authenticated);
@@ -103,6 +104,9 @@ export function ResumeUploadForm({ authenticated }: { authenticated: boolean }) 
         throw new Error("The encrypted upload was not accepted. Retry with a new upload grant.");
       }
       setFile(undefined);
+      if (fileInput.current) {
+        fileInput.current.value = "";
+      }
       setDocuments((current) => [registered.document, ...current]);
       setMessage("Resume uploaded to quarantine. It will be scanned before any text is parsed.");
       window.setTimeout(() => void load(), 2_000);
@@ -153,13 +157,14 @@ export function ResumeUploadForm({ authenticated }: { authenticated: boolean }) 
           Resume file
           <span>PDF or DOCX, up to 5 MiB</span>
           <input
-            key={file ? file.name : "empty"}
+            ref={fileInput}
             type="file"
             accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             onChange={(event) => setFile(event.target.files?.[0])}
             disabled={!authenticated || uploading}
             required
           />
+          {file && <span aria-live="polite">Selected file: {file.name}</span>}
         </label>
         <button type="submit" disabled={!authenticated || !file || uploading}>
           {uploading ? "Encrypting and uploading…" : "Upload resume"}

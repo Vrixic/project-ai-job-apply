@@ -54,6 +54,9 @@ describe("platform BFF", () => {
   });
 
   it("returns a sanitized unavailable response when the platform cannot be reached", async () => {
+    const platformFetch = vi.fn<typeof fetch>(async () => {
+      throw new Error("sensitive upstream failure");
+    });
     const response = await forwardPlatformRequest(
       "/v1/me",
       { method: "GET" },
@@ -63,14 +66,67 @@ describe("platform BFF", () => {
           getAccessToken: async () => ({ token: "synthetic-token" }),
         },
         baseUrl: "http://localhost:4000",
-        fetch: async () => {
-          throw new Error("sensitive upstream failure");
-        },
+        fetch: platformFetch,
+        random: () => 1,
+        retryDelaysMilliseconds: [1, 2, 3],
+        sleep: async () => undefined,
       },
     );
 
     expect(response.status).toBe(503);
+    expect(platformFetch).toHaveBeenCalledTimes(4);
     expect(await response.text()).not.toContain("sensitive upstream failure");
+  });
+
+  it("retries transient authenticated reads before returning the upstream response", async () => {
+    const platformFetch = vi
+      .fn<typeof fetch>()
+      .mockRejectedValueOnce(new Error("transient connection failure"))
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [] }), { status: 200 }));
+    const wait = vi.fn(async () => undefined);
+
+    const response = await forwardPlatformRequest(
+      "/v1/profile/facts",
+      { method: "GET" },
+      {
+        auth0: {
+          getSession: async () => ({ user: { sub: "synthetic-user" } }),
+          getAccessToken: async () => ({ token: "synthetic-token" }),
+        },
+        baseUrl: "http://localhost:4000",
+        fetch: platformFetch,
+        random: () => 1,
+        retryDelaysMilliseconds: [100, 300],
+        sleep: wait,
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(platformFetch).toHaveBeenCalledTimes(3);
+    expect(wait).toHaveBeenNthCalledWith(1, 100);
+    expect(wait).toHaveBeenNthCalledWith(2, 300);
+  });
+
+  it("does not implicitly retry authenticated mutations", async () => {
+    const platformFetch = vi.fn<typeof fetch>(async () => new Response(null, { status: 503 }));
+    const response = await forwardPlatformRequest(
+      "/v1/me/job-preferences",
+      { method: "PUT", body: "{}" },
+      {
+        auth0: {
+          getSession: async () => ({ user: { sub: "synthetic-user" } }),
+          getAccessToken: async () => ({ token: "synthetic-token" }),
+        },
+        baseUrl: "http://localhost:4000",
+        fetch: platformFetch,
+        retryDelaysMilliseconds: [1, 2, 3],
+        sleep: async () => undefined,
+      },
+    );
+
+    expect(response.status).toBe(503);
+    expect(platformFetch).toHaveBeenCalledTimes(1);
   });
 
   it("preserves a preference not-found response without leaking upstream headers", async () => {
