@@ -27,6 +27,10 @@ Records important technical decisions, their context, alternatives, consequences
 - [ADR-021: Own provider fixtures with adapter deliveries](021-own-provider-fixtures-with-adapter-deliveries.md)
 - [ADR-022: Quarantine and scan candidate document uploads](022-quarantine-and-scan-candidate-document-uploads.md)
 
+## Proposed delivery decisions
+
+- [ADR-023: Isolate untrusted document parsing from candidate data](023-isolate-untrusted-document-parsing.md)
+
 Use `000-template.md` for future decisions.
 
 ADRs are immutable historical records after acceptance. A new ADR supersedes an old one instead of rewriting history.

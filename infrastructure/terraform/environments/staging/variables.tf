@@ -110,6 +110,60 @@ variable "candidate_document_cors_allowed_origins" {
   default = []
 }
 
+variable "deploy_document_processing" {
+  type    = bool
+  default = false
+}
+variable "document_scan_mapping_enabled" {
+  type    = bool
+  default = false
+}
+
+variable "document_scan_event_rule_enabled" {
+  type    = bool
+  default = false
+}
+variable "document_processor_artifact_s3_key" {
+  type    = string
+  default = ""
+}
+variable "document_processor_artifact_s3_object_version" {
+  type    = string
+  default = ""
+}
+variable "document_processor_artifact_sha256" {
+  type    = string
+  default = ""
+}
+variable "document_processor_artifact_base64sha256" {
+  type    = string
+  default = ""
+}
+variable "document_parser_artifact_s3_key" {
+  type    = string
+  default = ""
+}
+variable "document_parser_artifact_s3_object_version" {
+  type    = string
+  default = ""
+}
+variable "document_parser_artifact_sha256" {
+  type    = string
+  default = ""
+}
+variable "document_parser_artifact_base64sha256" {
+  type    = string
+  default = ""
+}
+variable "document_processor_extension_layer_arn" {
+  type    = string
+  default = ""
+}
+variable "document_parser_version" {
+  type    = string
+  default = "resume-parser-v1"
+}
+
 variable "deploy_serverless_outbox" {
   type    = bool
   default = false

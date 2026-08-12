@@ -1,5 +1,7 @@
 locals {
-  candidate_document_prefix = "quarantine/"
+  candidate_document_prefix     = "quarantine/"
+  document_reconciler_rule_name = "${var.name}-${var.environment}-document-processing-reconciler"
+  document_reconciler_rule_arn  = "arn:aws:events:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:rule/${local.document_reconciler_rule_name}"
 }
 
 resource "aws_s3_bucket" "candidate_documents" { # nosemgrep: semgrep-rules.terraform.aws.best-practice.aws-s3-bucket-versioning-not-enabled -- versioning is managed separately below
@@ -114,6 +116,30 @@ data "aws_iam_policy_document" "candidate_documents" {
       test     = "ArnNotEquals"
       variable = "aws:PrincipalArn"
       values   = [aws_iam_role.guardduty_malware[0].arn]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.deploy_document_processing ? [1] : []
+    content {
+      sid       = "DenyQuarantineReadsWithoutCleanMalwareTag"
+      effect    = "Deny"
+      actions   = ["s3:GetObject", "s3:GetObjectVersion"]
+      resources = ["${aws_s3_bucket.candidate_documents[0].arn}/${local.candidate_document_prefix}*"]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "StringNotEquals"
+        variable = "s3:ExistingObjectTag/GuardDutyMalwareScanStatus"
+        values   = ["NO_THREATS_FOUND"]
+      }
+      condition {
+        test     = "ArnNotEquals"
+        variable = "aws:PrincipalArn"
+        values   = [aws_iam_role.guardduty_malware[0].arn]
+      }
     }
   }
 }
@@ -239,4 +265,807 @@ resource "aws_guardduty_malware_protection_plan" "candidate_documents" {
     aws_s3_bucket_versioning.candidate_documents,
     time_sleep.guardduty_malware_role_propagation
   ]
+}
+
+resource "aws_sqs_queue" "document_scan_dead_letter" {
+  count                     = var.deploy_document_processing ? 1 : 0
+  name                      = "${var.name}-${var.environment}-document-scan-dlq"
+  message_retention_seconds = 1209600
+  kms_master_key_id         = aws_kms_key.platform.arn
+}
+
+resource "aws_sqs_queue" "document_scan_delivery_dead_letter" {
+  count                     = var.deploy_document_processing ? 1 : 0
+  name                      = "${var.name}-${var.environment}-document-scan-delivery-dlq"
+  message_retention_seconds = 1209600
+  kms_master_key_id         = aws_kms_key.platform.arn
+}
+
+resource "aws_sqs_queue" "document_scan_results" {
+  count                      = var.deploy_document_processing ? 1 : 0
+  name                       = "${var.name}-${var.environment}-document-scan-results"
+  message_retention_seconds  = 345600
+  visibility_timeout_seconds = 360
+  kms_master_key_id          = aws_kms_key.platform.arn
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.document_scan_dead_letter[0].arn
+    maxReceiveCount     = 5
+  })
+}
+
+resource "aws_cloudwatch_event_rule" "document_scan_results" {
+  count       = var.deploy_document_processing ? 1 : 0
+  name        = "${var.name}-${var.environment}-document-scan-results"
+  description = "Exact GuardDuty S3 malware scan results; dark until reviewed activation"
+  state       = var.document_scan_event_rule_enabled ? "ENABLED" : "DISABLED"
+  event_pattern = jsonencode({
+    source      = ["aws.guardduty"]
+    detail-type = ["GuardDuty Malware Protection Object Scan Result"]
+    resources   = [aws_guardduty_malware_protection_plan.candidate_documents[0].arn]
+    detail = {
+      schemaVersion = ["1.0"]
+      resourceType  = ["S3_OBJECT"]
+      s3ObjectDetails = {
+        bucketName = [aws_s3_bucket.candidate_documents[0].id]
+      }
+    }
+  })
+}
+
+resource "aws_cloudwatch_event_target" "document_scan_results" {
+  count     = var.deploy_document_processing ? 1 : 0
+  rule      = aws_cloudwatch_event_rule.document_scan_results[0].name
+  target_id = "document-scan-results"
+  arn       = aws_sqs_queue.document_scan_results[0].arn
+
+  input_transformer {
+    input_paths = {
+      account             = "$.account"
+      bucket              = "$.detail.s3ObjectDetails.bucketName"
+      event_id            = "$.id"
+      object_key          = "$.detail.s3ObjectDetails.objectKey"
+      object_version      = "$.detail.s3ObjectDetails.versionId"
+      observed_at         = "$.time"
+      protection_plan_arn = "$.resources[0]"
+      region              = "$.region"
+      scan_result         = "$.detail.scanResultDetails.scanResultStatus"
+      scan_status         = "$.detail.scanStatus"
+    }
+    input_template = <<-EOT
+      {"schemaVersion":1,"eventId":<event_id>,"accountId":<account>,"region":<region>,"protectionPlanArn":<protection_plan_arn>,"bucketName":<bucket>,"objectKey":<object_key>,"objectVersion":<object_version>,"scanStatus":<scan_status>,"scanResult":<scan_result>,"observedAt":<observed_at>}
+    EOT
+  }
+
+  dead_letter_config { arn = aws_sqs_queue.document_scan_delivery_dead_letter[0].arn }
+  retry_policy {
+    maximum_event_age_in_seconds = 300
+    maximum_retry_attempts       = 2
+  }
+}
+
+data "aws_iam_policy_document" "document_scan_queue" {
+  count = var.deploy_document_processing ? 1 : 0
+  statement {
+    sid       = "ExactGuardDutyResultRuleOnly"
+    effect    = "Allow"
+    actions   = ["sqs:SendMessage"]
+    resources = [aws_sqs_queue.document_scan_results[0].arn]
+    principals {
+      type        = "Service"
+      identifiers = ["events.amazonaws.com"]
+    }
+    condition {
+      test     = "ArnEquals"
+      variable = "aws:SourceArn"
+      values   = [aws_cloudwatch_event_rule.document_scan_results[0].arn]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+  }
+}
+
+resource "aws_sqs_queue_policy" "document_scan_results" {
+  count     = var.deploy_document_processing ? 1 : 0
+  queue_url = aws_sqs_queue.document_scan_results[0].url
+  policy    = data.aws_iam_policy_document.document_scan_queue[0].json
+}
+
+data "aws_iam_policy_document" "document_scan_delivery_dead_letter" {
+  count = var.deploy_document_processing ? 1 : 0
+  statement {
+    sid       = "ExactEventBridgeRuleDeadLettersOnly"
+    effect    = "Allow"
+    actions   = ["sqs:SendMessage"]
+    resources = [aws_sqs_queue.document_scan_delivery_dead_letter[0].arn]
+    principals {
+      type        = "Service"
+      identifiers = ["events.amazonaws.com"]
+    }
+    condition {
+      test     = "ArnEquals"
+      variable = "aws:SourceArn"
+      values = [
+        aws_cloudwatch_event_rule.document_scan_results[0].arn,
+        aws_cloudwatch_event_rule.document_scan_tag_failure[0].arn,
+        aws_cloudwatch_event_rule.document_scan_plan_unhealthy[0].arn,
+        local.document_reconciler_rule_arn
+      ]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+  }
+}
+
+resource "aws_sqs_queue_policy" "document_scan_delivery_dead_letter" {
+  count     = var.deploy_document_processing ? 1 : 0
+  queue_url = aws_sqs_queue.document_scan_delivery_dead_letter[0].url
+  policy    = data.aws_iam_policy_document.document_scan_delivery_dead_letter[0].json
+}
+
+resource "aws_cloudwatch_event_rule" "document_scan_tag_failure" {
+  count       = var.deploy_document_processing ? 1 : 0
+  name        = "${var.name}-${var.environment}-document-scan-tag-failure"
+  description = "Exact GuardDuty post-scan tag failure for the candidate-document plan"
+  event_pattern = jsonencode({
+    source      = ["aws.guardduty"]
+    detail-type = ["GuardDuty Malware Protection Post Scan Action Failed"]
+    resources   = [aws_guardduty_malware_protection_plan.candidate_documents[0].arn]
+    detail = {
+      schemaVersion = ["1.0"]
+      s3ObjectDetails = {
+        bucketName = [aws_s3_bucket.candidate_documents[0].id]
+      }
+    }
+  })
+}
+
+resource "aws_cloudwatch_event_target" "document_scan_tag_failure" {
+  count = var.deploy_document_processing ? 1 : 0
+  rule  = aws_cloudwatch_event_rule.document_scan_tag_failure[0].name
+  arn   = aws_sns_topic.operational_alerts.arn
+  input = jsonencode({
+    event       = "document_scan_tag_failure"
+    environment = var.environment
+  })
+  dead_letter_config { arn = aws_sqs_queue.document_scan_delivery_dead_letter[0].arn }
+  retry_policy {
+    maximum_event_age_in_seconds = 300
+    maximum_retry_attempts       = 2
+  }
+}
+
+resource "aws_cloudwatch_event_rule" "document_scan_plan_unhealthy" {
+  count       = var.deploy_document_processing ? 1 : 0
+  name        = "${var.name}-${var.environment}-document-scan-plan-unhealthy"
+  description = "Exact GuardDuty candidate-document protection-plan warning or error"
+  event_pattern = jsonencode({
+    source = ["aws.guardduty"]
+    detail-type = [
+      "GuardDuty Malware Protection Resource Status Warning",
+      "GuardDuty Malware Protection Resource Status Error"
+    ]
+    resources = [aws_guardduty_malware_protection_plan.candidate_documents[0].arn]
+    detail = {
+      schemaVersion = ["1.0"]
+      s3BucketDetails = {
+        bucketName = [aws_s3_bucket.candidate_documents[0].id]
+      }
+    }
+  })
+}
+
+resource "aws_cloudwatch_event_target" "document_scan_plan_unhealthy" {
+  count = var.deploy_document_processing ? 1 : 0
+  rule  = aws_cloudwatch_event_rule.document_scan_plan_unhealthy[0].name
+  arn   = aws_sns_topic.operational_alerts.arn
+  input = jsonencode({
+    event       = "document_scan_plan_unhealthy"
+    environment = var.environment
+  })
+  dead_letter_config { arn = aws_sqs_queue.document_scan_delivery_dead_letter[0].arn }
+  retry_policy {
+    maximum_event_age_in_seconds = 300
+    maximum_retry_attempts       = 2
+  }
+}
+
+data "aws_iam_policy_document" "document_lambda_assume" {
+  count = var.deploy_document_processing ? 1 : 0
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "document_processor" {
+  count                = var.deploy_document_processing ? 1 : 0
+  name                 = "${var.name}-${var.environment}-document-processor"
+  assume_role_policy   = data.aws_iam_policy_document.document_lambda_assume[0].json
+  permissions_boundary = data.aws_iam_policy.workload_boundary.arn
+}
+
+resource "aws_iam_role" "document_parser" {
+  count                = var.deploy_document_processing ? 1 : 0
+  name                 = "${var.name}-${var.environment}-document-parser"
+  assume_role_policy   = data.aws_iam_policy_document.document_lambda_assume[0].json
+  permissions_boundary = data.aws_iam_policy.workload_boundary.arn
+}
+
+data "aws_iam_policy_document" "document_parser_object_access_assume" {
+  count = var.deploy_document_processing ? 1 : 0
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_role.document_processor[0].arn]
+    }
+  }
+}
+
+resource "aws_iam_role" "document_parser_object_access" {
+  count                = var.deploy_document_processing ? 1 : 0
+  name                 = "${var.name}-${var.environment}-document-object-access"
+  assume_role_policy   = data.aws_iam_policy_document.document_parser_object_access_assume[0].json
+  permissions_boundary = data.aws_iam_policy.workload_boundary.arn
+  max_session_duration = 3600
+}
+
+data "aws_iam_policy_document" "document_processor" {
+  count = var.deploy_document_processing ? 1 : 0
+  statement {
+    sid       = "WriteOwnedLogs"
+    effect    = "Allow"
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["${aws_cloudwatch_log_group.application.arn}:*"]
+  }
+  statement {
+    sid    = "ManageVpcInterfaces"
+    effect = "Allow"
+    actions = [
+      "ec2:AssignPrivateIpAddresses", "ec2:CreateNetworkInterface",
+      "ec2:DeleteNetworkInterface", "ec2:DescribeNetworkInterfaces",
+      "ec2:DescribeSubnets", "ec2:UnassignPrivateIpAddresses"
+    ]
+    resources = ["*"]
+  }
+  statement {
+    sid       = "ReadDatabaseSecret"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [aws_secretsmanager_secret.database_url.arn]
+  }
+  statement {
+    sid       = "ConsumeExactScanQueue"
+    effect    = "Allow"
+    actions   = ["sqs:ChangeMessageVisibility", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ReceiveMessage"]
+    resources = [aws_sqs_queue.document_scan_results[0].arn]
+  }
+  statement {
+    sid       = "InvokeExactParserVersion"
+    effect    = "Allow"
+    actions   = ["lambda:InvokeFunction"]
+    resources = [aws_lambda_function.document_parser[0].qualified_arn]
+  }
+  statement {
+    sid       = "AssumeExactObjectAccessRole"
+    effect    = "Allow"
+    actions   = ["sts:AssumeRole"]
+    resources = [aws_iam_role.document_parser_object_access[0].arn]
+  }
+  statement {
+    sid       = "ReadNormalizedDocumentsOnly"
+    effect    = "Allow"
+    actions   = ["s3:GetObject", "s3:GetObjectVersion"]
+    resources = ["${aws_s3_bucket.candidate_documents[0].arn}/normalized/*"]
+  }
+  statement {
+    sid       = "DecryptOwnedRuntimeData"
+    effect    = "Allow"
+    actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
+    resources = [aws_kms_key.platform.arn]
+  }
+  statement {
+    sid       = "WriteNativeTraces"
+    effect    = "Allow"
+    actions   = ["xray:PutTelemetryRecords", "xray:PutTraceSegments"]
+    resources = ["*"]
+  }
+}
+
+data "aws_iam_policy_document" "document_parser" {
+  count = var.deploy_document_processing ? 1 : 0
+  statement {
+    sid    = "ManageVpcInterfaces"
+    effect = "Allow"
+    actions = [
+      "ec2:AssignPrivateIpAddresses", "ec2:CreateNetworkInterface",
+      "ec2:DeleteNetworkInterface", "ec2:DescribeNetworkInterfaces",
+      "ec2:DescribeSubnets", "ec2:UnassignPrivateIpAddresses"
+    ]
+    resources = ["*"]
+  }
+  statement {
+    sid       = "DecryptLambdaEnvironment"
+    effect    = "Allow"
+    actions   = ["kms:Decrypt"]
+    resources = [aws_kms_key.platform.arn]
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["lambda.${data.aws_region.current.region}.amazonaws.com"]
+    }
+  }
+}
+
+data "aws_iam_policy_document" "document_parser_object_access" {
+  count = var.deploy_document_processing ? 1 : 0
+  statement {
+    sid    = "SessionPolicyMustNarrowObjectAccess"
+    effect = "Allow"
+    actions = [
+      "s3:GetObject", "s3:GetObjectVersion", "s3:GetObjectTagging",
+      "s3:GetObjectVersionTagging", "s3:PutObject"
+    ]
+    resources = [
+      "${aws_s3_bucket.candidate_documents[0].arn}/quarantine/*",
+      "${aws_s3_bucket.candidate_documents[0].arn}/normalized/*"
+    ]
+  }
+  statement {
+    sid       = "EncryptAndDecryptViaS3Only"
+    effect    = "Allow"
+    actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
+    resources = [aws_kms_key.platform.arn]
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["s3.${data.aws_region.current.region}.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "document_processor" {
+  count  = var.deploy_document_processing ? 1 : 0
+  name   = "document-processor-runtime"
+  role   = aws_iam_role.document_processor[0].id
+  policy = data.aws_iam_policy_document.document_processor[0].json
+}
+
+resource "aws_iam_role_policy" "document_parser" {
+  count  = var.deploy_document_processing ? 1 : 0
+  name   = "document-parser-runtime"
+  role   = aws_iam_role.document_parser[0].id
+  policy = data.aws_iam_policy_document.document_parser[0].json
+}
+
+resource "aws_iam_role_policy" "document_parser_object_access" {
+  count  = var.deploy_document_processing ? 1 : 0
+  name   = "document-object-access-runtime"
+  role   = aws_iam_role.document_parser_object_access[0].id
+  policy = data.aws_iam_policy_document.document_parser_object_access[0].json
+}
+
+data "aws_prefix_list" "s3" {
+  count = var.deploy_document_processing ? 1 : 0
+  name  = "com.amazonaws.${data.aws_region.current.region}.s3"
+}
+
+resource "aws_security_group" "document_parser" {
+  count       = var.deploy_document_processing ? 1 : 0
+  name_prefix = "${var.name}-${var.environment}-document-parser-"
+  description = "No database or internet egress; exact DNS and S3 gateway only"
+  vpc_id      = aws_vpc.this.id
+  ingress     = []
+  egress {
+    from_port   = 53
+    to_port     = 53
+    protocol    = "udp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+  egress {
+    from_port   = 53
+    to_port     = 53
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+  egress {
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    prefix_list_ids = [data.aws_prefix_list.s3[0].id]
+  }
+}
+
+data "aws_iam_policy_document" "candidate_documents_s3_endpoint" {
+  count = var.deploy_document_processing ? 1 : 0
+  statement {
+    sid    = "ExactParserQuarantineReadsOnly"
+    effect = "Allow"
+    actions = [
+      "s3:GetObject", "s3:GetObjectVersion", "s3:GetObjectTagging",
+      "s3:GetObjectVersionTagging"
+    ]
+    resources = ["${aws_s3_bucket.candidate_documents[0].arn}/quarantine/*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "ArnEquals"
+      variable = "aws:PrincipalArn"
+      values   = [aws_iam_role.document_parser_object_access[0].arn]
+    }
+  }
+  statement {
+    sid       = "ExactParserNormalizedWritesAndVerification"
+    effect    = "Allow"
+    actions   = ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject"]
+    resources = ["${aws_s3_bucket.candidate_documents[0].arn}/normalized/*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "ArnEquals"
+      variable = "aws:PrincipalArn"
+      values   = [aws_iam_role.document_parser_object_access[0].arn]
+    }
+  }
+  statement {
+    sid       = "ExactCoordinatorNormalizedReadsOnly"
+    effect    = "Allow"
+    actions   = ["s3:GetObject", "s3:GetObjectVersion"]
+    resources = ["${aws_s3_bucket.candidate_documents[0].arn}/normalized/*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "ArnEquals"
+      variable = "aws:PrincipalArn"
+      values   = [aws_iam_role.document_processor[0].arn]
+    }
+  }
+}
+
+resource "aws_vpc_endpoint" "candidate_documents_s3" {
+  count             = var.deploy_document_processing && var.persistent_data_plane_enabled ? 1 : 0
+  vpc_id            = aws_vpc.this.id
+  service_name      = "com.amazonaws.${data.aws_region.current.region}.s3"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids   = aws_route_table.private[*].id
+  policy            = data.aws_iam_policy_document.candidate_documents_s3_endpoint[0].json
+}
+
+resource "aws_lambda_function" "document_parser" {
+  count                          = var.deploy_document_processing ? 1 : 0
+  function_name                  = "${var.name}-${var.environment}-document-parser"
+  description                    = "Isolated no-DB/no-internet bounded PDF and DOCX parser"
+  role                           = aws_iam_role.document_parser[0].arn
+  runtime                        = "nodejs24.x"
+  architectures                  = ["x86_64"]
+  handler                        = "index.handler"
+  memory_size                    = 1536
+  timeout                        = 45
+  reserved_concurrent_executions = 2
+  publish                        = true
+  s3_bucket                      = aws_s3_bucket.artifacts.bucket
+  s3_key                         = var.document_parser_artifact_s3_key
+  s3_object_version              = var.document_parser_artifact_s3_object_version
+  source_code_hash               = var.document_parser_artifact_base64sha256
+  kms_key_arn                    = aws_kms_key.platform.arn
+
+  environment {
+    variables = {
+      NODE_ENV                  = "production"
+      RELEASE_SHA               = var.document_parser_artifact_sha256
+      CANDIDATE_DOCUMENT_BUCKET = aws_s3_bucket.candidate_documents[0].id
+      PLATFORM_KMS_KEY_ARN      = aws_kms_key.platform.arn
+      DOCUMENT_PARSER_VERSION   = var.document_parser_version
+    }
+  }
+  vpc_config {
+    subnet_ids         = aws_subnet.private[*].id
+    security_group_ids = [aws_security_group.document_parser[0].id]
+  }
+  ephemeral_storage { size = 512 }
+  depends_on = [
+    aws_iam_role_policy.document_parser,
+    aws_iam_role_policy.document_parser_object_access,
+    aws_vpc_endpoint.candidate_documents_s3
+  ]
+}
+
+resource "aws_lambda_alias" "document_parser" {
+  count            = var.deploy_document_processing ? 1 : 0
+  name             = var.environment
+  description      = "Reviewed immutable ${var.environment} document parser release"
+  function_name    = aws_lambda_function.document_parser[0].function_name
+  function_version = aws_lambda_function.document_parser[0].version
+}
+
+resource "aws_lambda_function" "document_processor" {
+  count                          = var.deploy_document_processing ? 1 : 0
+  function_name                  = "${var.name}-${var.environment}-document-processor"
+  description                    = "Identifier-only scan coordinator and atomic proposal importer"
+  role                           = aws_iam_role.document_processor[0].arn
+  runtime                        = "nodejs24.x"
+  architectures                  = ["x86_64"]
+  handler                        = "index.handler"
+  memory_size                    = 1024
+  timeout                        = 60
+  reserved_concurrent_executions = 2
+  publish                        = true
+  s3_bucket                      = aws_s3_bucket.artifacts.bucket
+  s3_key                         = var.document_processor_artifact_s3_key
+  s3_object_version              = var.document_processor_artifact_s3_object_version
+  source_code_hash               = var.document_processor_artifact_base64sha256
+  layers                         = [var.document_processor_extension_layer_arn]
+  kms_key_arn                    = aws_kms_key.platform.arn
+
+  environment {
+    variables = {
+      NODE_ENV                        = "production"
+      RELEASE_SHA                     = var.document_processor_artifact_sha256
+      DATABASE_SECRET_ID              = aws_secretsmanager_secret.database_url.arn
+      PLATFORM_AWS_ACCOUNT_ID         = data.aws_caller_identity.current.account_id
+      GUARDDUTY_PROTECTION_PLAN_ARN   = aws_guardduty_malware_protection_plan.candidate_documents[0].arn
+      CANDIDATE_DOCUMENT_BUCKET       = aws_s3_bucket.candidate_documents[0].id
+      PLATFORM_KMS_KEY_ARN            = aws_kms_key.platform.arn
+      DOCUMENT_PARSER_FUNCTION_ARN    = aws_lambda_function.document_parser[0].qualified_arn
+      DOCUMENT_PARSER_VERSION         = var.document_parser_version
+      DOCUMENT_OBJECT_ACCESS_ROLE_ARN = aws_iam_role.document_parser_object_access[0].arn
+      DOCUMENT_RECONCILER_RULE_ARN    = local.document_reconciler_rule_arn
+    }
+  }
+  vpc_config {
+    subnet_ids         = aws_subnet.private[*].id
+    security_group_ids = [aws_security_group.application.id]
+  }
+  tracing_config { mode = "Active" }
+  logging_config {
+    log_format            = "JSON"
+    application_log_level = "INFO"
+    system_log_level      = "WARN"
+    log_group             = aws_cloudwatch_log_group.application.name
+  }
+  depends_on = [
+    aws_iam_role_policy.document_processor,
+    aws_vpc_endpoint.secretsmanager,
+    aws_vpc_endpoint.lambda,
+    aws_vpc_endpoint.sts,
+    aws_vpc_endpoint.sqs,
+    aws_vpc_endpoint.candidate_documents_s3
+  ]
+}
+
+resource "aws_lambda_alias" "document_processor" {
+  count            = var.deploy_document_processing ? 1 : 0
+  name             = var.environment
+  description      = "Reviewed immutable ${var.environment} document processor release"
+  function_name    = aws_lambda_function.document_processor[0].function_name
+  function_version = aws_lambda_function.document_processor[0].version
+}
+
+resource "aws_lambda_event_source_mapping" "document_scan_results" {
+  count                   = var.deploy_document_processing ? 1 : 0
+  event_source_arn        = aws_sqs_queue.document_scan_results[0].arn
+  function_name           = aws_lambda_alias.document_processor[0].arn
+  enabled                 = var.document_scan_mapping_enabled
+  batch_size              = 1
+  function_response_types = ["ReportBatchItemFailures"]
+  scaling_config { maximum_concurrency = 2 }
+  depends_on = [
+    aws_iam_role_policy.document_processor,
+    aws_sqs_queue_policy.document_scan_results
+  ]
+}
+
+resource "aws_cloudwatch_event_rule" "document_processing_reconciler" {
+  count               = var.deploy_document_processing ? 1 : 0
+  name                = local.document_reconciler_rule_name
+  description         = "Terminalize document scan and parse states that exceed bounded processing windows"
+  schedule_expression = "rate(15 minutes)"
+  state               = var.document_scan_mapping_enabled ? "ENABLED" : "DISABLED"
+}
+
+resource "aws_cloudwatch_event_target" "document_processing_reconciler" {
+  count = var.deploy_document_processing ? 1 : 0
+  rule  = aws_cloudwatch_event_rule.document_processing_reconciler[0].name
+  arn   = aws_lambda_alias.document_processor[0].arn
+  dead_letter_config { arn = aws_sqs_queue.document_scan_delivery_dead_letter[0].arn }
+  retry_policy {
+    maximum_event_age_in_seconds = 300
+    maximum_retry_attempts       = 2
+  }
+}
+
+resource "aws_lambda_permission" "document_processing_reconciler" {
+  count         = var.deploy_document_processing ? 1 : 0
+  statement_id  = "AllowExactDocumentReconcilerRule"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.document_processor[0].function_name
+  qualifier     = aws_lambda_alias.document_processor[0].name
+  principal     = "events.amazonaws.com"
+  source_arn    = local.document_reconciler_rule_arn
+}
+
+resource "aws_cloudwatch_log_metric_filter" "document_security_contradiction" {
+  count          = var.deploy_document_processing ? 1 : 0
+  name           = "${var.name}-${var.environment}-document-security-contradiction"
+  pattern        = "{ $.event = \"document_processing_security_contradiction\" }"
+  log_group_name = aws_cloudwatch_log_group.application.name
+  metric_transformation {
+    name      = "DocumentSecurityContradictions"
+    namespace = local.application_metric_namespace
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "document_processing_record_failed" {
+  count          = var.deploy_document_processing ? 1 : 0
+  name           = "${var.name}-${var.environment}-document-processing-record-failed"
+  pattern        = "{ $.event = \"document_processing_record_failed\" }"
+  log_group_name = aws_cloudwatch_log_group.application.name
+  metric_transformation {
+    name      = "DocumentProcessingRecordFailures"
+    namespace = local.application_metric_namespace
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "document_processing_timed_out" {
+  count          = var.deploy_document_processing ? 1 : 0
+  name           = "${var.name}-${var.environment}-document-processing-timed-out"
+  pattern        = "{ $.event = \"document_processing_timed_out\" }"
+  log_group_name = aws_cloudwatch_log_group.application.name
+  metric_transformation {
+    name      = "DocumentProcessingTimeouts"
+    namespace = local.application_metric_namespace
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "document_scan_queue_age" {
+  count               = var.deploy_document_processing ? 1 : 0
+  alarm_name          = "${var.name}-${var.environment}-document-scan-queue-age"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ApproximateAgeOfOldestMessage"
+  namespace           = "AWS/SQS"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = 600
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  dimensions          = { QueueName = aws_sqs_queue.document_scan_results[0].name }
+  alarm_description   = "Document scan processing is stuck. Runbook: ${local.observability_runbook_url}"
+}
+
+resource "aws_cloudwatch_metric_alarm" "document_scan_dead_letter" {
+  count               = var.deploy_document_processing ? 1 : 0
+  alarm_name          = "${var.name}-${var.environment}-document-scan-dlq"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  namespace           = "AWS/SQS"
+  period              = 60
+  statistic           = "Maximum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  dimensions          = { QueueName = aws_sqs_queue.document_scan_dead_letter[0].name }
+  alarm_description   = "A document processing record exhausted bounded retries. Runbook: ${local.observability_runbook_url}"
+}
+
+resource "aws_cloudwatch_metric_alarm" "document_scan_delivery_dead_letter" {
+  count               = var.deploy_document_processing ? 1 : 0
+  alarm_name          = "${var.name}-${var.environment}-document-scan-delivery-dlq"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  namespace           = "AWS/SQS"
+  period              = 60
+  statistic           = "Maximum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  dimensions          = { QueueName = aws_sqs_queue.document_scan_delivery_dead_letter[0].name }
+  alarm_description   = "A document scan, health alert, or reconciler EventBridge target delivery failed. Treat payload as sensitive. Runbook: ${local.observability_runbook_url}"
+}
+
+resource "aws_cloudwatch_metric_alarm" "document_processor_errors" {
+  count               = var.deploy_document_processing ? 1 : 0
+  alarm_name          = "${var.name}-${var.environment}-document-processor-errors"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Errors"
+  namespace           = "AWS/Lambda"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  dimensions          = { FunctionName = aws_lambda_function.document_processor[0].function_name }
+  alarm_description   = "The document coordinator emitted an error. Runbook: ${local.observability_runbook_url}"
+}
+
+resource "aws_cloudwatch_metric_alarm" "document_parser_errors" {
+  count               = var.deploy_document_processing ? 1 : 0
+  alarm_name          = "${var.name}-${var.environment}-document-parser-errors"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Errors"
+  namespace           = "AWS/Lambda"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  dimensions          = { FunctionName = aws_lambda_function.document_parser[0].function_name }
+  alarm_description   = "The isolated document parser emitted an error. Runbook: ${local.observability_runbook_url}"
+}
+
+resource "aws_cloudwatch_metric_alarm" "document_security_contradiction" {
+  count               = var.deploy_document_processing ? 1 : 0
+  alarm_name          = "${var.name}-${var.environment}-document-security-contradiction"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "DocumentSecurityContradictions"
+  namespace           = local.application_metric_namespace
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "Conflicting scan evidence put a document on security hold. Runbook: ${local.observability_runbook_url}"
+}
+
+resource "aws_cloudwatch_metric_alarm" "document_processing_record_failed" {
+  count               = var.deploy_document_processing ? 1 : 0
+  alarm_name          = "${var.name}-${var.environment}-document-processing-record-failed"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "DocumentProcessingRecordFailures"
+  namespace           = local.application_metric_namespace
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "A document record entered bounded retry. Runbook: ${local.observability_runbook_url}"
+}
+
+resource "aws_cloudwatch_metric_alarm" "document_processing_timed_out" {
+  count               = var.deploy_document_processing ? 1 : 0
+  alarm_name          = "${var.name}-${var.environment}-document-processing-timed-out"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "DocumentProcessingTimeouts"
+  namespace           = local.application_metric_namespace
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "The reconciler terminalized a document after its bounded scan or parse window. Runbook: ${local.observability_runbook_url}"
 }

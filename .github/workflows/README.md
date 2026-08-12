@@ -39,3 +39,10 @@ the CycloneDX SBOM, verifies the selected environment's artifact bucket remains 
 versioned, and KMS encrypted, and writes the ZIP plus evidence under a source-and-digest-bound key.
 It refuses to create another object version at an existing release key and prints only the exact
 sanitized Terraform inputs. Publishing does not create a Lambda or change API traffic.
+
+`publish-document-lambdas.yml` publishes the D1 document coordinator and isolated parser as two
+immutable, source-and-digest-bound artifacts. It runs focused tests and dependency audit, proves
+reproducible ZIPs, validates separate SBOMs, and uploads only to the selected private versioned KMS
+artifact bucket. It verifies all four S3 public-access blocks before publication, then reads the
+exact uploaded object version back to prove its KMS mode, checksum, source commit, and artifact
+digest metadata. Publication does not create functions or enable GuardDuty result consumption.

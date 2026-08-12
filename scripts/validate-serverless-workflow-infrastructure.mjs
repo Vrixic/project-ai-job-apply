@@ -48,27 +48,103 @@ const bootstrap = "infrastructure/terraform/bootstrap/main.tf";
 const workflowPublisher = ".github/workflows/publish-workflow-lambdas.yml";
 const staticAnalysisWorkflow = ".github/workflows/static-analysis.yml";
 const stagingLifecycleOperator = "scripts/operate-staging-runtime-lifecycle.ps1";
+const candidateDocuments = "infrastructure/terraform/modules/platform/candidate-documents.tf";
 
 for (const required of [
   "Quiescence must change database deletion protection from enabled to disabled.",
-  "Quiescence must disable the exact mapping and both EventBridge rules.",
-  "Quiescence must update database protection plus either the exact six live traffic actions or no already-dark traffic action.",
-  "Dormant mode must contain exactly eight disposable-resource deletes and one dashboard update.",
-  "Dark activation must contain exactly eight disposable-resource creates and one dashboard update.",
+  "Quiescence must disable every exact managed mapping and EventBridge rule.",
+  "Quiescence must update database protection plus the exact enabled traffic/processing actions or no already-dark action.",
+  "Dormant mode must delete the exact disposable data plane and update one dashboard.",
+  "Dark activation must create the exact disposable data plane and update one dashboard.",
   "Dark activation must create one encrypted private protected database with seven-day backups.",
-  "Dark activation must create exactly three private-DNS interface endpoints.",
+  "Dark activation must create the exact private-DNS interface endpoints for the deployed runtime.",
+  "Document processing activation must create exactly one S3 gateway endpoint.",
   "Traffic can be enabled only from the exact dark active boundary.",
   "Traffic can be disabled only from the exact enabled active boundary.",
-  "The traffic plan must contain exactly three route actions and three trigger updates without replacement.",
-  "Traffic enablement must create three routes and enable the exact three workflow triggers.",
+  "The traffic plan must contain three route actions and the exact base workflow trigger updates without replacement.",
+  "Traffic enablement must create three routes and enable the exact three base workflow triggers.",
   "Traffic enablement must preserve exact JWT scopes and anonymous health routes only.",
-  "Traffic disablement must delete three routes and disable the exact three workflow triggers.",
+  "Traffic disablement must delete three routes and disable the exact three base workflow triggers.",
 ]) {
   requireText(
     stagingLifecycleOperator,
     required,
     `staging lifecycle fail-closed boundary is missing: ${required}`,
   );
+}
+
+for (const required of [
+  'resource "aws_lambda_function" "document_parser"',
+  'resource "aws_lambda_function" "document_processor"',
+  'resource "aws_lambda_event_source_mapping" "document_scan_results"',
+  'resource "aws_cloudwatch_event_rule" "document_scan_results"',
+  'resource "aws_cloudwatch_event_rule" "document_processing_reconciler"',
+  'resource "aws_cloudwatch_log_metric_filter" "document_processing_timed_out"',
+  'resource "aws_cloudwatch_metric_alarm" "document_scan_delivery_dead_letter"',
+  'resource "aws_cloudwatch_metric_alarm" "document_processing_timed_out"',
+  'resource "aws_iam_role" "document_parser_object_access"',
+  "GUARDDUTY_PROTECTION_PLAN_ARN   = aws_guardduty_malware_protection_plan.candidate_documents[0].arn",
+  "DOCUMENT_OBJECT_ACCESS_ROLE_ARN = aws_iam_role.document_parser_object_access[0].arn",
+  'state       = var.document_scan_event_rule_enabled ? "ENABLED" : "DISABLED"',
+  "enabled                 = var.document_scan_mapping_enabled",
+  "dead_letter_config { arn = aws_sqs_queue.document_scan_delivery_dead_letter[0].arn }",
+]) {
+  requireText(
+    candidateDocuments,
+    required,
+    `document processing fail-closed boundary is missing: ${required}`,
+  );
+}
+requireText(platform, 'resource "aws_vpc_endpoint" "sts"', "private STS endpoint is missing");
+
+const parserExecutionPolicy = section(
+  candidateDocuments,
+  'data "aws_iam_policy_document" "document_parser"',
+  'data "aws_iam_policy_document" "document_parser_object_access"',
+);
+for (const forbidden of [
+  "WriteOwnedLogs",
+  "ReadCleanQuarantineAndWriteNormalizedOnly",
+  "WriteAndVerifyNormalizedOnly",
+  "WriteNativeTraces",
+]) {
+  if (parserExecutionPolicy.includes(forbidden)) {
+    failures.push(`${candidateDocuments}: untrusted parser execution role retains ${forbidden}`);
+  }
+}
+
+const documentScanQueuePolicy = section(
+  candidateDocuments,
+  'data "aws_iam_policy_document" "document_scan_queue"',
+  'resource "aws_sqs_queue_policy" "document_scan_results"',
+);
+if (
+  !documentScanQueuePolicy.includes(
+    "values   = [aws_cloudwatch_event_rule.document_scan_results[0].arn]",
+  ) ||
+  documentScanQueuePolicy.includes("document_scan_tag_failure") ||
+  documentScanQueuePolicy.includes("document_scan_plan_unhealthy") ||
+  documentScanQueuePolicy.includes("document_reconciler_rule_arn")
+) {
+  failures.push(
+    `${candidateDocuments}: the processing queue must accept only the exact scan-result rule`,
+  );
+}
+
+const documentDeliveryDlqPolicy = section(
+  candidateDocuments,
+  'data "aws_iam_policy_document" "document_scan_delivery_dead_letter"',
+  'resource "aws_sqs_queue_policy" "document_scan_delivery_dead_letter"',
+);
+for (const required of [
+  "aws_cloudwatch_event_rule.document_scan_results[0].arn",
+  "aws_cloudwatch_event_rule.document_scan_tag_failure[0].arn",
+  "aws_cloudwatch_event_rule.document_scan_plan_unhealthy[0].arn",
+  "local.document_reconciler_rule_arn",
+]) {
+  if (!documentDeliveryDlqPolicy.includes(required)) {
+    failures.push(`${candidateDocuments}: the delivery DLQ policy is missing ${required}`);
+  }
 }
 
 for (const required of [
@@ -158,6 +234,7 @@ for (const required of [
   '"lambda:CheckpointDurableExecution"',
   '"lambda:GetDurableExecutionState"',
   '"kms:GenerateDataKey"',
+  '"sts:AssumeRole"',
 ]) {
   requireText(bootstrap, required, `workload boundary permission is missing: ${required}`);
 }

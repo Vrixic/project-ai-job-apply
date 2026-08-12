@@ -20,6 +20,8 @@ both AWS environments accepted the steady-state serverless runtime.
 - `build-workflow-ingress-lambda.mjs` — Builds the outbox-ingress Lambda artifact.
 - `build-profile-readiness-lambdas.mjs` — Builds durable definition, activity, and terminal
   artifacts with exact-version metadata.
+- `build-document-lambdas.mjs` — Builds separate deterministic document coordinator and isolated
+  parser artifacts, manifests, and CycloneDX SBOMs; the parser artifact has no database runtime.
 
 Artifacts are published by the protected GitHub workflows. The migration-only container is built
 from `Dockerfile.migration` and runs the fail-fast profile/jobs migration orchestrator; no gateway

@@ -19,6 +19,22 @@ output "candidate_document_malware_protection_plan_id" {
   value = var.deploy_document_intake ? aws_guardduty_malware_protection_plan.candidate_documents[0].id : null
 }
 
+output "document_processor_alias_arn" {
+  value = var.deploy_document_processing ? aws_lambda_alias.document_processor[0].arn : null
+}
+
+output "document_parser_version_arn" {
+  value = var.deploy_document_processing ? aws_lambda_function.document_parser[0].qualified_arn : null
+}
+
+output "document_scan_event_source_mapping_uuid" {
+  value = var.deploy_document_processing ? aws_lambda_event_source_mapping.document_scan_results[0].uuid : null
+}
+
+output "document_scan_event_rule_arn" {
+  value = var.deploy_document_processing ? aws_cloudwatch_event_rule.document_scan_results[0].arn : null
+}
+
 output "migration_repository_url" {
   value = aws_ecr_repository.migration.repository_url
 }

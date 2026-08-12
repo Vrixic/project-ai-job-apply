@@ -13,6 +13,7 @@ const migrationVersions = [
   "0002_serverless_outbox",
   "0003_retire_legacy_dispatch",
   "0004_profile_fact_versions",
+  "0005_resume_fact_proposals",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -74,6 +75,8 @@ try {
         (to_regclass('profile.job_preferences') IS NOT NULL)::int +
         (to_regclass('profile.profile_facts') IS NOT NULL)::int +
         (to_regclass('profile.profile_fact_versions') IS NOT NULL)::int +
+        (to_regclass('profile.resume_fact_imports') IS NOT NULL)::int +
+        (to_regclass('profile.profile_fact_evidence') IS NOT NULL)::int +
         (to_regclass('platform.operations') IS NOT NULL)::int +
         (to_regclass('platform.outbox_events') IS NOT NULL)::int +
         (to_regclass('platform.idempotency_keys') IS NOT NULL)::int +
@@ -113,7 +116,7 @@ try {
       ) AS profile_fact_trigger_count
     `;
     if (
-      verification?.table_count !== 10 ||
+      verification?.table_count !== 12 ||
       verification.migration_count !== migrationVersions.length ||
       verification.outbox_column_count !== 11 ||
       verification.profile_fact_trigger_count !== 1

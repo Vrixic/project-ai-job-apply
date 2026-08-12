@@ -46,6 +46,7 @@ import type { JobCatalogReader } from "@ai-job-apply/jobs-service";
 import { activeTraceparent, correlationId } from "@ai-job-apply/observability";
 import {
   IdempotencyConflictError,
+  ProfileFactTransitionConflictError,
   ProfileFactVersionConflictError,
   type ProfileStore,
 } from "@ai-job-apply/profile-service";
@@ -157,6 +158,11 @@ class ProblemDetailsFilter implements ExceptionFilter {
       status = HttpStatus.CONFLICT;
       code = "version_conflict";
       title = "Profile fact version conflict";
+      detail = exception.message;
+    } else if (exception instanceof ProfileFactTransitionConflictError) {
+      status = HttpStatus.CONFLICT;
+      code = "profile_fact_transition_conflict";
+      title = "Profile fact transition conflict";
       detail = exception.message;
     } else if (exception instanceof DocumentIdempotencyConflictError) {
       status = HttpStatus.CONFLICT;

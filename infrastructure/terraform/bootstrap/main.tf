@@ -352,6 +352,12 @@ resource "aws_iam_policy" "workload_boundary" {
         Resource = "arn:aws:lambda:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:function:ai-job-apply-${var.environment}-*:*"
       },
       {
+        Sid      = "AssumeOwnedDocumentObjectAccessRole"
+        Effect   = "Allow"
+        Action   = ["sts:AssumeRole"]
+        Resource = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/ai-job-apply-${var.environment}-document-object-access"
+      },
+      {
         Sid    = "OperateOwnedWorkflowQueues"
         Effect = "Allow"
         Action = [

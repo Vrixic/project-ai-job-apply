@@ -25,16 +25,46 @@ async function factRequest<T>(path: string, init: RequestInit = {}): Promise<T> 
   });
   if (!response.ok) {
     const problem = (await response.json()) as { detail?: string; title?: string };
-    throw new Error(problem.detail ?? problem.title ?? "The profile fact request failed");
+    throw new FactRequestError(
+      problem.detail ?? problem.title ?? "The profile fact request failed",
+      response.status,
+    );
   }
   return (await response.json()) as T;
+}
+
+class FactRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "FactRequestError";
+  }
 }
 
 function displayValue(value: ProfileFact["value"]): string {
   return Array.isArray(value) ? value.join(", ") : String(value);
 }
 
-export function ProfileFactsForm({ authenticated }: { authenticated: boolean }) {
+export function partitionProfileFacts(facts: readonly ProfileFact[]) {
+  const available = facts.filter((fact) => fact.availability?.state !== "invalidated");
+  return {
+    proposed: available.filter((fact) => fact.verification === "proposed"),
+    reviewed: available.filter(
+      (fact) => fact.verification === "confirmed" || fact.verification === "rejected",
+    ),
+    invalidated: facts.filter((fact) => fact.availability?.state === "invalidated"),
+  };
+}
+
+export function ProfileFactsForm({
+  authenticated,
+  refreshVersion = 0,
+}: {
+  authenticated: boolean;
+  refreshVersion?: number;
+}) {
   const [facts, setFacts] = useState<ProfileFact[]>([]);
   const [kind, setKind] = useState<CreateProfileFactRequest["kind"]>("skill");
   const [key, setKey] = useState("");
@@ -43,6 +73,7 @@ export function ProfileFactsForm({ authenticated }: { authenticated: boolean }) 
   const [editedValue, setEditedValue] = useState("");
   const [loading, setLoading] = useState(authenticated);
   const [saving, setSaving] = useState(false);
+  const [savingFactId, setSavingFactId] = useState<string>();
   const [message, setMessage] = useState<string>();
 
   const load = useCallback(async () => {
@@ -63,8 +94,8 @@ export function ProfileFactsForm({ authenticated }: { authenticated: boolean }) 
   }, [authenticated]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (refreshVersion >= 0) void load();
+  }, [load, refreshVersion]);
 
   async function createFact(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -96,7 +127,7 @@ export function ProfileFactsForm({ authenticated }: { authenticated: boolean }) 
     fact: ProfileFact,
     command: Omit<UpdateProfileFactRequest, "expectedVersion">,
   ) {
-    setSaving(true);
+    setSavingFactId(fact.id);
     setMessage(undefined);
     try {
       const updated = await factRequest<ProfileFact>(
@@ -111,15 +142,77 @@ export function ProfileFactsForm({ authenticated }: { authenticated: boolean }) 
       setEditing(undefined);
       setMessage("A new profile fact version was saved. Prior versions remain auditable.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not update profile fact");
+      if (error instanceof FactRequestError && error.status === 409) {
+        await load();
+        setMessage(
+          "This proposal changed after it was loaded. The latest version is shown; review it again.",
+        );
+      } else {
+        setMessage(error instanceof Error ? error.message : "Could not update profile fact");
+      }
     } finally {
-      setSaving(false);
+      setSavingFactId(undefined);
     }
   }
 
   function beginCorrection(fact: ProfileFact) {
     setEditing(fact);
     setEditedValue(displayValue(fact.value));
+  }
+
+  const {
+    proposed: proposedFacts,
+    reviewed: reviewedFacts,
+    invalidated: invalidatedFacts,
+  } = partitionProfileFacts(facts);
+
+  function factCard(fact: ProfileFact, review: boolean, mutable = true) {
+    const source = fact.evidence?.supportingSpans[0];
+    const cardSaving = savingFactId === fact.id;
+    const anyFactSaving = savingFactId !== undefined;
+    return (
+      <li key={fact.id}>
+        <div>
+          <strong>{fact.key}</strong>
+          <span>{displayValue(fact.value)}</span>
+          <small>
+            {fact.kind} · {fact.verification} · version {fact.version}
+            {fact.availability?.state === "invalidated" ? " · unavailable" : ""}
+            {source
+              ? ` · source page ${source.page ?? "unknown"}, block ${source.blockIndex + 1}`
+              : ""}
+          </small>
+        </div>
+        {mutable && (
+          <div className="fact-actions">
+            {review && (
+              <button
+                type="button"
+                onClick={() => void updateFact(fact, { verification: "confirmed" })}
+                disabled={anyFactSaving}
+                aria-label={`Confirm ${fact.key}`}
+              >
+                {cardSaving ? "Saving…" : "Confirm"}
+              </button>
+            )}
+            <button type="button" onClick={() => beginCorrection(fact)} disabled={anyFactSaving}>
+              {review ? "Edit & confirm" : "Correct"}
+            </button>
+            {fact.verification !== "rejected" && (
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void updateFact(fact, { verification: "rejected" })}
+                disabled={anyFactSaving}
+                aria-label={`Reject ${fact.key}`}
+              >
+                Reject
+              </button>
+            )}
+          </div>
+        )}
+      </li>
+    );
   }
 
   return (
@@ -129,7 +222,15 @@ export function ProfileFactsForm({ authenticated }: { authenticated: boolean }) 
           <div className="eyebrow">Truth profile</div>
           <h2 id="profile-facts-heading">Your profile facts</h2>
         </div>
-        <span>{facts.filter((fact) => fact.verification === "confirmed").length} confirmed</span>
+        <span>
+          {
+            facts.filter(
+              (fact) =>
+                fact.verification === "confirmed" && fact.availability?.state !== "invalidated",
+            ).length
+          }{" "}
+          confirmed
+        </span>
       </div>
       <p>
         Add only facts that are true. Corrections create a new version; no extracted or generated
@@ -138,37 +239,30 @@ export function ProfileFactsForm({ authenticated }: { authenticated: boolean }) 
 
       {loading ? (
         <p>Loading profile facts…</p>
-      ) : facts.length === 0 ? (
-        <p>No profile facts saved yet.</p>
       ) : (
-        <ul className="fact-list">
-          {facts.map((fact) => (
-            <li key={fact.id}>
-              <div>
-                <strong>{fact.key}</strong>
-                <span>{displayValue(fact.value)}</span>
-                <small>
-                  {fact.kind} · {fact.verification} · version {fact.version}
-                </small>
-              </div>
-              <div className="fact-actions">
-                <button type="button" onClick={() => beginCorrection(fact)} disabled={saving}>
-                  Correct
-                </button>
-                {fact.verification !== "rejected" && (
-                  <button
-                    className="secondary-button"
-                    type="button"
-                    onClick={() => void updateFact(fact, { verification: "rejected" })}
-                    disabled={saving}
-                  >
-                    Reject
-                  </button>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
+        <>
+          <h3>Review extracted facts</h3>
+          {proposedFacts.length === 0 ? (
+            <p>No extracted facts are waiting for review.</p>
+          ) : (
+            <ul className="fact-list">{proposedFacts.map((fact) => factCard(fact, true))}</ul>
+          )}
+          <h3>Reviewed facts</h3>
+          {reviewedFacts.length === 0 ? (
+            <p>No facts have been confirmed or rejected yet.</p>
+          ) : (
+            <ul className="fact-list">{reviewedFacts.map((fact) => factCard(fact, false))}</ul>
+          )}
+          {invalidatedFacts.length > 0 && (
+            <>
+              <h3>Security-invalidated facts</h3>
+              <p>These facts are unavailable because their source document failed a later check.</p>
+              <ul className="fact-list">
+                {invalidatedFacts.map((fact) => factCard(fact, false, false))}
+              </ul>
+            </>
+          )}
+        </>
       )}
 
       {editing && (
@@ -188,7 +282,7 @@ export function ProfileFactsForm({ authenticated }: { authenticated: boolean }) 
             />
           </label>
           <div className="fact-actions">
-            <button type="submit" disabled={saving}>
+            <button type="submit" disabled={saving || savingFactId !== undefined}>
               Save correction
             </button>
             <button
@@ -222,7 +316,10 @@ export function ProfileFactsForm({ authenticated }: { authenticated: boolean }) 
           Confirmed value
           <input value={value} onChange={(event) => setValue(event.target.value)} required />
         </label>
-        <button type="submit" disabled={!authenticated || loading || saving}>
+        <button
+          type="submit"
+          disabled={!authenticated || loading || saving || savingFactId !== undefined}
+        >
           {saving ? "Saving…" : "Add confirmed fact"}
         </button>
       </form>

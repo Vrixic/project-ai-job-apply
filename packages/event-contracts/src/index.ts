@@ -7,6 +7,9 @@ import readinessCalculatedSchema from "../schemas/profile.readiness.calculated.v
   type: "json",
 };
 import outboxNudgeSchema from "../schemas/platform.outbox.nudge.v1.json" with { type: "json" };
+import documentScanResultSchema from "../schemas/document.scan-result.v1.json" with {
+  type: "json",
+};
 
 export const eventTypes = {
   profilePreferencesUpdated: "profile.preferences.updated.v1",
@@ -14,6 +17,30 @@ export const eventTypes = {
 } as const;
 
 export const outboxNudgeSchemaVersion = 1 as const;
+export const documentScanResultSchemaVersion = 1 as const;
+
+export type DocumentScanStatus = "COMPLETED" | "FAILED" | "SKIPPED";
+export type DocumentScanResult =
+  | "NO_THREATS_FOUND"
+  | "THREATS_FOUND"
+  | "UNSUPPORTED"
+  | "ACCESS_DENIED"
+  | "FAILED";
+
+/** Identifier-only envelope produced by the EventBridge input transformer. */
+export interface DocumentScanResultV1 {
+  schemaVersion: typeof documentScanResultSchemaVersion;
+  eventId: string;
+  accountId: string;
+  region: "us-east-2";
+  protectionPlanArn: string;
+  bucketName: string;
+  objectKey: string;
+  objectVersion: string;
+  scanStatus: DocumentScanStatus;
+  scanResult: DocumentScanResult;
+  observedAt: string;
+}
 
 export interface OutboxNudgeV1 {
   schemaVersion: typeof outboxNudgeSchemaVersion;
@@ -78,6 +105,7 @@ const validators = new Map<string, ValidateFunction<unknown>>([
   [eventTypes.profileReadinessCalculated, ajv.compile(readinessCalculatedSchema)],
 ]);
 const outboxNudgeValidator = ajv.compile<OutboxNudgeV1>(outboxNudgeSchema);
+const documentScanResultValidator = ajv.compile<DocumentScanResultV1>(documentScanResultSchema);
 
 export function validateEventData(type: string, data: unknown): boolean {
   const validator = validators.get(type);
@@ -86,4 +114,8 @@ export function validateEventData(type: string, data: unknown): boolean {
 
 export function validateOutboxNudge(value: unknown): value is OutboxNudgeV1 {
   return outboxNudgeValidator(value);
+}
+
+export function validateDocumentScanResult(value: unknown): value is DocumentScanResultV1 {
+  return documentScanResultValidator(value);
 }

@@ -75,6 +75,7 @@ describe("CanonicalJobDetail", () => {
 describe("profile fact commands", () => {
   const validateCreate = compileComponentValidator("CreateProfileFactRequest");
   const validateUpdate = compileComponentValidator("UpdateProfileFactRequest");
+  const validateFact = compileComponentValidator("ProfileFact");
 
   it("accepts a truthful direct-entry fact and an optimistic correction", () => {
     expect(
@@ -99,6 +100,59 @@ describe("profile fact commands", () => {
     ).toBe(false);
     expect(validateUpdate({ expectedVersion: 1 })).toBe(false);
     expect(validateUpdate({ expectedVersion: 1, interviewOutcome: "offer" })).toBe(false);
+  });
+
+  it("allows bounded resume evidence locators without candidate text or object keys", () => {
+    const fact = {
+      id: "019b4e12-7ea3-7c36-9357-aea35ab542cc",
+      kind: "skill",
+      key: "skill",
+      value: "TypeScript",
+      verification: "proposed",
+      sensitivity: "standard",
+      source: { type: "resume", reference: "resume:opaque" },
+      evidence: {
+        supportingSpans: [
+          {
+            documentId: "019b4e12-7ea3-7c36-9357-aea35ab542ca",
+            documentVersion: 1,
+            parserVersion: "resume-parser-v1",
+            blockIndex: 2,
+            startOffset: 0,
+            endOffset: 10,
+            page: 1,
+          },
+        ],
+      },
+      version: 1,
+      createdAt: "2026-08-12T12:00:00.000Z",
+      updatedAt: "2026-08-12T12:00:00.000Z",
+    };
+    expect(validateFact(fact)).toBe(true);
+    expect(
+      validateFact({
+        ...fact,
+        availability: { state: "invalidated", reasonCode: "source_security_hold" },
+      }),
+    ).toBe(true);
+    expect(validateFact({ ...fact, availability: { state: "invalidated" } })).toBe(false);
+    expect(
+      validateFact({
+        ...fact,
+        availability: { state: "available", reasonCode: "source_security_hold" },
+      }),
+    ).toBe(false);
+    expect(validateFact({ ...fact, verification: "invalidated" })).toBe(false);
+    const { evidence: _evidence, ...withoutEvidence } = fact;
+    expect(validateFact(withoutEvidence)).toBe(false);
+    expect(
+      validateFact({
+        ...fact,
+        evidence: {
+          supportingSpans: [{ ...fact.evidence.supportingSpans[0], excerpt: "TypeScript" }],
+        },
+      }),
+    ).toBe(false);
   });
 });
 

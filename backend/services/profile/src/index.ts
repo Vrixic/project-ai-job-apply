@@ -28,9 +28,9 @@ import {
   externalIdentities,
   idempotencyKeys,
   jobPreferences,
+  type OutboxDispatchTarget,
   operations,
   outboxEvents,
-  type OutboxDispatchTarget,
   users,
 } from "./schema.js";
 
@@ -169,6 +169,8 @@ interface ProfileFactRow {
   key: string;
   value: ProfileFact["value"];
   verification: ProfileFact["verification"];
+  availabilityState: "available" | "invalidated";
+  availabilityReason: "source_security_hold" | null;
   sensitivity: ProfileFact["sensitivity"];
   sourceType: ProfileFact["source"]["type"];
   sourceReference: string;
@@ -177,6 +179,7 @@ interface ProfileFactRow {
   version: number;
   createdAt: Date | string;
   updatedAt: Date | string;
+  evidence: ProfileFact["evidence"] | null;
 }
 
 function timestampIso(value: Date | string): string {
@@ -184,12 +187,26 @@ function timestampIso(value: Date | string): string {
 }
 
 function mapProfileFact(row: ProfileFactRow): ProfileFact {
+  if (
+    row.availabilityState === "invalidated" &&
+    row.availabilityReason !== "source_security_hold"
+  ) {
+    throw new Error("ProfileFactAvailabilityInvariantInvalid");
+  }
   return {
     id: row.id,
     kind: row.kind,
     key: row.key,
     value: row.value,
     verification: row.verification,
+    ...(row.availabilityState === "invalidated"
+      ? {
+          availability: {
+            state: "invalidated" as const,
+            reasonCode: "source_security_hold" as const,
+          },
+        }
+      : {}),
     sensitivity: row.sensitivity,
     source: { type: row.sourceType, reference: row.sourceReference },
     version: row.version,
@@ -197,7 +214,220 @@ function mapProfileFact(row: ProfileFactRow): ProfileFact {
     updatedAt: timestampIso(row.updatedAt),
     ...(row.effectiveFrom ? { effectiveFrom: row.effectiveFrom } : {}),
     ...(row.effectiveTo ? { effectiveTo: row.effectiveTo } : {}),
+    ...(row.evidence ? { evidence: row.evidence } : {}),
   };
+}
+
+export interface ResumeProposalImport {
+  userId: string;
+  documentId: string;
+  documentVersion: number;
+  parserVersion: string;
+  traceId: string;
+  proposals: ReadonlyArray<{
+    kind: ProfileFact["kind"];
+    key: string;
+    value: ProfileFact["value"];
+    sensitivity: ProfileFact["sensitivity"];
+    evidence: NonNullable<ProfileFact["evidence"]>;
+  }>;
+}
+
+export class ResumeProposalConflictError extends Error {
+  constructor() {
+    super("The resume proposal import identity was reused with different content");
+    this.name = "ResumeProposalConflictError";
+  }
+}
+
+export function assertProfileFactTransition(
+  currentVerification: ProfileFact["verification"],
+  requestedVerification: UpdateProfileFactRequest["verification"],
+  valueChanged: boolean,
+  available = true,
+): void {
+  const resultingVerification = requestedVerification ?? currentVerification;
+  if (
+    !available ||
+    (currentVerification === "proposed" &&
+      requestedVerification !== "confirmed" &&
+      requestedVerification !== "rejected") ||
+    (valueChanged && resultingVerification !== "confirmed")
+  ) {
+    throw new ProfileFactTransitionConflictError();
+  }
+}
+
+/** Profile-owned writer invoked inside the document coordinator transaction. */
+export class PostgresResumeProposalWriter {
+  async import(transaction: postgres.TransactionSql, input: ResumeProposalImport): Promise<number> {
+    for (const proposal of input.proposals) {
+      if (
+        proposal.evidence.supportingSpans.length < 1 ||
+        proposal.evidence.supportingSpans.some(
+          (span) =>
+            span.documentId !== input.documentId ||
+            span.documentVersion !== input.documentVersion ||
+            span.parserVersion !== input.parserVersion ||
+            span.endOffset <= span.startOffset,
+        )
+      ) {
+        throw new Error("InvalidResumeProposalEvidence");
+      }
+    }
+    const canonical = JSON.stringify(input.proposals);
+    const digest = createHash("sha256").update(canonical).digest("hex");
+    await transaction`
+      SELECT pg_advisory_xact_lock(
+        hashtext(${`resume-proposals:${input.userId}:${input.documentId}:${input.documentVersion}:${input.parserVersion}`})
+      )
+    `;
+    const prior = await transaction<Array<{ proposalDigest: string; proposalCount: number }>>`
+      SELECT proposal_digest AS "proposalDigest", proposal_count AS "proposalCount"
+      FROM profile.resume_fact_imports
+      WHERE user_id = ${input.userId}
+        AND document_id = ${input.documentId}
+        AND document_version = ${input.documentVersion}
+        AND parser_version = ${input.parserVersion}
+    `;
+    if (prior[0]) {
+      if (prior[0].proposalDigest !== digest) throw new ResumeProposalConflictError();
+      return prior[0].proposalCount;
+    }
+
+    const importId = uuidv7();
+    await transaction`
+      INSERT INTO profile.resume_fact_imports (
+        id, user_id, document_id, document_version, parser_version, proposal_digest, proposal_count
+      ) VALUES (
+        ${importId}, ${input.userId}, ${input.documentId}, ${input.documentVersion},
+        ${input.parserVersion}, ${digest}, ${input.proposals.length}
+      )
+    `;
+    for (const proposal of input.proposals) {
+      const factId = uuidv7();
+      await transaction`
+        INSERT INTO profile.profile_facts (id, user_id)
+        VALUES (${factId}, ${input.userId})
+      `;
+      await transaction`
+        INSERT INTO profile.profile_fact_versions (
+          fact_id, version, kind, fact_key, fact_value, verification, sensitivity,
+          source_type, source_reference
+        ) VALUES (
+          ${factId}, 1, ${proposal.kind}, ${proposal.key}, ${JSON.stringify(proposal.value)}::jsonb,
+          'proposed', ${proposal.sensitivity}, 'resume',
+          ${`resume:${input.documentId}:v${input.documentVersion}:${input.parserVersion}`}
+        )
+      `;
+      for (const [ordinal, span] of proposal.evidence.supportingSpans.entries()) {
+        if (span.endOffset <= span.startOffset) throw new Error("InvalidResumeProposalEvidence");
+        await transaction`
+          INSERT INTO profile.profile_fact_evidence (
+            fact_id, fact_version, ordinal, document_id, document_version, parser_version,
+            block_index, start_offset, end_offset, page
+          ) VALUES (
+            ${factId}, 1, ${ordinal}, ${span.documentId}, ${span.documentVersion},
+            ${span.parserVersion}, ${span.blockIndex}, ${span.startOffset}, ${span.endOffset},
+            ${span.page ?? null}
+          )
+        `;
+      }
+    }
+    await transaction`
+      INSERT INTO platform.audit_events (
+        id, user_id, action, resource_type, resource_id, trace_id, metadata
+      ) VALUES (
+        ${uuidv7()}, ${input.userId}, 'profile.resume.proposals.imported',
+        'resume_document', ${input.documentId}, ${input.traceId},
+        ${JSON.stringify({
+          documentVersion: input.documentVersion,
+          parserVersion: input.parserVersion,
+          proposalCount: input.proposals.length,
+        })}::jsonb
+      )
+    `;
+    return input.proposals.length;
+  }
+
+  async holdDocumentProposals(
+    transaction: postgres.TransactionSql,
+    input: { userId: string; documentId: string; traceId: string },
+  ): Promise<number> {
+    const rows = await transaction<
+      Array<{
+        factId: string;
+        version: number;
+        kind: ProfileFact["kind"];
+        key: string;
+        value: ProfileFact["value"];
+        verification: ProfileFact["verification"];
+        sensitivity: ProfileFact["sensitivity"];
+        sourceType: ProfileFact["source"]["type"];
+        sourceReference: string;
+        effectiveFrom: string | null;
+        effectiveTo: string | null;
+      }>
+    >`
+      SELECT fact.id AS "factId", version.version, version.kind,
+        version.fact_key AS key, version.fact_value AS value, version.verification,
+        version.sensitivity,
+        version.source_type AS "sourceType", version.source_reference AS "sourceReference",
+        version.availability_state AS "availabilityState",
+        version.availability_reason AS "availabilityReason",
+        version.effective_from AS "effectiveFrom", version.effective_to AS "effectiveTo"
+      FROM profile.profile_facts AS fact
+      JOIN LATERAL (
+        SELECT * FROM profile.profile_fact_versions
+        WHERE fact_id = fact.id ORDER BY version DESC LIMIT 1
+      ) AS version ON true
+      WHERE fact.user_id = ${input.userId}
+        AND version.availability_state = 'available'
+        AND EXISTS (
+          SELECT 1 FROM profile.profile_fact_evidence AS evidence
+          WHERE evidence.fact_id = fact.id AND evidence.fact_version = version.version
+            AND evidence.document_id = ${input.documentId}
+        )
+      FOR UPDATE OF fact
+    `;
+    for (const fact of rows) {
+      const nextVersion = fact.version + 1;
+      await transaction`
+        INSERT INTO profile.profile_fact_versions (
+          fact_id, version, kind, fact_key, fact_value, verification, sensitivity,
+          source_type, source_reference, effective_from, effective_to,
+          availability_state, availability_reason
+        ) VALUES (
+          ${fact.factId}, ${nextVersion}, ${fact.kind}, ${fact.key},
+          ${JSON.stringify(fact.value)}::jsonb, ${fact.verification}, ${fact.sensitivity},
+          ${fact.sourceType}, ${fact.sourceReference}, ${fact.effectiveFrom}::date,
+          ${fact.effectiveTo}::date, 'invalidated', 'source_security_hold'
+        )
+      `;
+      await transaction`
+        INSERT INTO profile.profile_fact_evidence (
+          fact_id, fact_version, ordinal, document_id, document_version, parser_version,
+          block_index, start_offset, end_offset, page
+        )
+        SELECT fact_id, ${nextVersion}, ordinal, document_id, document_version, parser_version,
+          block_index, start_offset, end_offset, page
+        FROM profile.profile_fact_evidence
+        WHERE fact_id = ${fact.factId} AND fact_version = ${fact.version}
+      `;
+    }
+    if (rows.length > 0) {
+      await transaction`
+        INSERT INTO platform.audit_events (
+          id, user_id, action, resource_type, resource_id, trace_id, metadata
+        ) VALUES (
+          ${uuidv7()}, ${input.userId}, 'profile.resume.proposals.security-held',
+          'resume_document', ${input.documentId}, ${input.traceId},
+          ${JSON.stringify({ rejectedProposalCount: rows.length })}::jsonb
+        )
+      `;
+    }
+    return rows.length;
+  }
 }
 
 export class PostgresProfileStore implements ProfileStore {
@@ -407,6 +637,8 @@ export class PostgresProfileStore implements ProfileStore {
         version.fact_key AS key,
         version.fact_value AS value,
         version.verification,
+        version.availability_state AS "availabilityState",
+        version.availability_reason AS "availabilityReason",
         version.sensitivity,
         version.source_type AS "sourceType",
         version.source_reference AS "sourceReference",
@@ -415,6 +647,19 @@ export class PostgresProfileStore implements ProfileStore {
         version.version,
         fact.created_at AS "createdAt",
         version.created_at AS "updatedAt"
+        , CASE WHEN count(evidence.ordinal) = 0 THEN NULL ELSE jsonb_build_object(
+            'supportingSpans', jsonb_agg(
+              jsonb_strip_nulls(jsonb_build_object(
+                'documentId', evidence.document_id,
+                'documentVersion', evidence.document_version,
+                'parserVersion', evidence.parser_version,
+                'blockIndex', evidence.block_index,
+                'startOffset', evidence.start_offset,
+                'endOffset', evidence.end_offset,
+                'page', evidence.page
+              )) ORDER BY evidence.ordinal
+            )
+          ) END AS evidence
       FROM profile.profile_facts AS fact
       JOIN LATERAL (
         SELECT *
@@ -423,14 +668,24 @@ export class PostgresProfileStore implements ProfileStore {
         ORDER BY version DESC
         LIMIT 1
       ) AS version ON true
+      LEFT JOIN profile.profile_fact_evidence AS evidence
+        ON evidence.fact_id = version.fact_id AND evidence.fact_version = version.version
       WHERE fact.user_id = ${userId}
+      GROUP BY fact.id, version.fact_id, version.version, version.kind, version.fact_key,
+        version.fact_value, version.verification, version.availability_state,
+        version.availability_reason, version.sensitivity, version.source_type,
+        version.source_reference, version.effective_from, version.effective_to, version.created_at
       ORDER BY fact.created_at, fact.id
     `;
     const facts = rows.map(mapProfileFact);
     return {
       facts,
-      confirmedCount: facts.filter((fact) => fact.verification === "confirmed").length,
-      proposedCount: facts.filter((fact) => fact.verification === "proposed").length,
+      confirmedCount: facts.filter(
+        (fact) => fact.verification === "confirmed" && fact.availability?.state !== "invalidated",
+      ).length,
+      proposedCount: facts.filter(
+        (fact) => fact.verification === "proposed" && fact.availability?.state !== "invalidated",
+      ).length,
     };
   }
 
@@ -563,6 +818,8 @@ export class PostgresProfileStore implements ProfileStore {
           version.fact_key AS key,
           version.fact_value AS value,
           version.verification,
+          version.availability_state AS "availabilityState",
+          version.availability_reason AS "availabilityReason",
           version.sensitivity,
           version.source_type AS "sourceType",
           version.source_reference AS "sourceReference",
@@ -570,7 +827,8 @@ export class PostgresProfileStore implements ProfileStore {
           version.effective_to AS "effectiveTo",
           version.version,
           fact.created_at AS "createdAt",
-          version.created_at AS "updatedAt"
+          version.created_at AS "updatedAt",
+          NULL::jsonb AS evidence
         FROM profile.profile_facts AS fact
         JOIN LATERAL (
           SELECT *
@@ -589,6 +847,18 @@ export class PostgresProfileStore implements ProfileStore {
       if (current.version !== input.expectedVersion) {
         throw new ProfileFactVersionConflictError();
       }
+      const evidenceRows = await transaction<
+        NonNullable<ProfileFact["evidence"]>["supportingSpans"]
+      >`
+        SELECT document_id AS "documentId", document_version AS "documentVersion",
+          parser_version AS "parserVersion", block_index AS "blockIndex",
+          start_offset AS "startOffset", end_offset AS "endOffset", page
+        FROM profile.profile_fact_evidence
+        WHERE fact_id = ${factId} AND fact_version = ${current.version}
+        ORDER BY ordinal
+      `;
+      const currentEvidence: ProfileFact["evidence"] =
+        evidenceRows.length > 0 ? { supportingSpans: evidenceRows } : undefined;
 
       const version = current.version + 1;
       const updatedAt = new Date();
@@ -597,6 +867,24 @@ export class PostgresProfileStore implements ProfileStore {
       const sensitivity = input.sensitivity ?? current.sensitivity;
       const effectiveFrom = input.effectiveFrom ?? current.effectiveFrom;
       const effectiveTo = input.effectiveTo ?? current.effectiveTo;
+      const valueChanged =
+        input.value !== undefined && JSON.stringify(input.value) !== JSON.stringify(current.value);
+      const effectiveDatesChanged =
+        (input.effectiveFrom !== undefined && input.effectiveFrom !== current.effectiveFrom) ||
+        (input.effectiveTo !== undefined && input.effectiveTo !== current.effectiveTo);
+      const contentChanged = valueChanged || effectiveDatesChanged;
+      assertProfileFactTransition(
+        current.verification,
+        input.verification,
+        contentChanged,
+        current.availabilityState === "available",
+      );
+      const sourceType =
+        contentChanged && current.sourceType === "resume" ? "user" : current.sourceType;
+      const sourceReference =
+        contentChanged && current.sourceType === "resume"
+          ? `resume-correction:${factId}`
+          : current.sourceReference;
       await transaction`
         INSERT INTO profile.profile_fact_versions (
           fact_id,
@@ -610,6 +898,8 @@ export class PostgresProfileStore implements ProfileStore {
           source_reference,
           effective_from,
           effective_to,
+          availability_state,
+          availability_reason,
           created_at
         ) VALUES (
           ${factId},
@@ -619,13 +909,27 @@ export class PostgresProfileStore implements ProfileStore {
           ${JSON.stringify(value)}::jsonb,
           ${verification},
           ${sensitivity},
-          ${current.sourceType},
-          ${current.sourceReference},
+          ${sourceType},
+          ${sourceReference},
           ${effectiveFrom}::date,
           ${effectiveTo}::date,
+          ${current.availabilityState},
+          ${current.availabilityReason},
           ${updatedAt.toISOString()}::timestamptz
         )
       `;
+      if (!contentChanged && currentEvidence) {
+        await transaction`
+          INSERT INTO profile.profile_fact_evidence (
+            fact_id, fact_version, ordinal, document_id, document_version, parser_version,
+            block_index, start_offset, end_offset, page
+          )
+          SELECT fact_id, ${version}, ordinal, document_id, document_version, parser_version,
+            block_index, start_offset, end_offset, page
+          FROM profile.profile_fact_evidence
+          WHERE fact_id = ${factId} AND fact_version = ${current.version}
+        `;
+      }
       const response = mapProfileFact({
         ...current,
         value,
@@ -635,6 +939,9 @@ export class PostgresProfileStore implements ProfileStore {
         effectiveTo,
         version,
         updatedAt,
+        sourceType,
+        sourceReference,
+        evidence: contentChanged ? null : (currentEvidence ?? null),
       });
       await transaction`
         INSERT INTO platform.idempotency_keys (
@@ -1069,5 +1376,12 @@ export class ProfileFactVersionConflictError extends Error {
   constructor() {
     super("The profile fact changed after it was loaded");
     this.name = "ProfileFactVersionConflictError";
+  }
+}
+
+export class ProfileFactTransitionConflictError extends Error {
+  constructor() {
+    super("The requested profile fact transition is not allowed");
+    this.name = "ProfileFactTransitionConflictError";
   }
 }

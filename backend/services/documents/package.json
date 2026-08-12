@@ -11,6 +11,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "build:lambda": "pnpm --filter @ai-job-apply/documents-service... build && node ../../../scripts/build-document-lambdas.mjs",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "db:migrate": "node --env-file-if-exists=../../../.env dist/src/migrate.js",
     "test": "vitest run src --exclude=dist/** --exclude=src/**/*.integration.test.ts",
@@ -19,12 +20,23 @@
   },
   "dependencies": {
     "@ai-job-apply/api-contracts": "workspace:*",
+    "@ai-job-apply/event-contracts": "workspace:*",
+    "@ai-job-apply/profile-service": "workspace:*",
+    "@aws-sdk/client-lambda": "3.1108.0",
     "@aws-sdk/client-s3": "3.1106.0",
+    "@aws-sdk/client-sts": "3.1108.0",
     "@aws-sdk/s3-presigned-post": "3.1106.0",
+    "@thednp/dommatrix": "3.1.1",
+    "pdfjs-dist": "6.2.108",
     "postgres": "3.4.9",
-    "uuid": "14.0.1"
+    "saxes": "6.0.0",
+    "uuid": "14.0.1",
+    "yauzl": "3.4.0"
   },
   "devDependencies": {
-    "@ai-job-apply/profile-service": "workspace:*"
+    "@types/aws-lambda": "8.10.162",
+    "@types/yauzl": "3.4.0",
+    "@types/yazl": "3.3.1",
+    "yazl": "3.3.1"
   }
 }

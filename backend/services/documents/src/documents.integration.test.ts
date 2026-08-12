@@ -42,7 +42,7 @@ describeWithDatabase("PostgresDocumentStore", () => {
       env: environment,
     });
     expect(first.stdout.trim()).toBe(
-      "Documents migrations through 0001_resume_intake applied and verified.",
+      "Documents migrations through 0002_resume_processing applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(first.stdout.trim());
   });

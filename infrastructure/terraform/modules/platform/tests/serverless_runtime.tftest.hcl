@@ -17,6 +17,10 @@ mock_provider "aws" {
     }
   }
 
+  mock_data "aws_prefix_list" {
+    defaults = { id = "pl-s3gateway" }
+  }
+
   mock_data "aws_iam_policy_document" {
     defaults = { json = "{\"Version\":\"2012-10-17\",\"Statement\":[]}" }
   }
@@ -164,6 +168,81 @@ run "document_intake_is_private_encrypted_and_malware_scanned" {
     )
     error_message = "The exact quarantine prefix must be scanned and exposed only to the upload-grant issuer."
   }
+}
+
+run "document_processing_is_isolated_scale_to_zero_and_dark_first" {
+  command = plan
+
+  variables {
+    deploy_document_intake                        = true
+    deploy_document_processing                    = true
+    document_scan_mapping_enabled                 = false
+    document_scan_event_rule_enabled              = false
+    serverless_runtime_enabled                    = true
+    document_processor_artifact_s3_key            = "lambda/documents/processor.zip"
+    document_processor_artifact_s3_object_version = "processor-version"
+    document_processor_artifact_sha256            = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    document_processor_artifact_base64sha256      = "ZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWU="
+    document_parser_artifact_s3_key               = "lambda/documents/parser.zip"
+    document_parser_artifact_s3_object_version    = "parser-version"
+    document_parser_artifact_sha256               = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    document_parser_artifact_base64sha256         = "ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY="
+    document_processor_extension_layer_arn        = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
+  }
+
+  assert {
+    condition = (
+      length(aws_lambda_function.document_processor) == 1 &&
+      length(aws_lambda_function.document_parser) == 1 &&
+      aws_lambda_function.document_processor[0].reserved_concurrent_executions == 2 &&
+      aws_lambda_function.document_parser[0].reserved_concurrent_executions == 2 &&
+      aws_lambda_function.document_parser[0].timeout == 45 &&
+      length(aws_lambda_function.document_parser[0].logging_config) == 0 &&
+      length(aws_lambda_function.document_parser[0].tracing_config) == 0 &&
+      length(aws_lambda_function.document_parser[0].vpc_config[0].security_group_ids) == 1 &&
+      length(aws_lambda_function.document_processor[0].vpc_config[0].security_group_ids) == 1 &&
+      aws_security_group.document_parser[0].description == "No database or internet egress; exact DNS and S3 gateway only"
+    )
+    error_message = "Raw parsing must use its own no-database security group and both functions require hard concurrency ceilings."
+  }
+
+  assert {
+    condition = (
+      !aws_lambda_event_source_mapping.document_scan_results[0].enabled &&
+      aws_cloudwatch_event_rule.document_scan_results[0].state == "DISABLED" &&
+      aws_cloudwatch_event_rule.document_processing_reconciler[0].state == "DISABLED" &&
+      aws_lambda_event_source_mapping.document_scan_results[0].batch_size == 1 &&
+      aws_sqs_queue.document_scan_results[0].visibility_timeout_seconds == 360 &&
+      aws_sqs_queue.document_scan_dead_letter[0].message_retention_seconds == 1209600 &&
+      aws_sqs_queue.document_scan_delivery_dead_letter[0].message_retention_seconds == 1209600 &&
+      length(aws_cloudwatch_metric_alarm.document_scan_delivery_dead_letter) == 1 &&
+      length(aws_cloudwatch_metric_alarm.document_processing_timed_out) == 1
+    )
+    error_message = "The processing boundary must deploy dark with one-record partial-batch processing and a retained DLQ."
+  }
+
+  assert {
+    condition = (
+      contains(keys(aws_lambda_function.document_processor[0].environment[0].variables), "DOCUMENT_PARSER_FUNCTION_ARN") &&
+      contains(keys(aws_lambda_function.document_processor[0].environment[0].variables), "DOCUMENT_OBJECT_ACCESS_ROLE_ARN") &&
+      aws_lambda_function.document_parser[0].environment[0].variables.DOCUMENT_PARSER_VERSION == "resume-parser-v1" &&
+      length(aws_iam_role.document_parser_object_access) == 1 &&
+      aws_vpc_endpoint.candidate_documents_s3[0].vpc_endpoint_type == "Gateway" &&
+      aws_vpc_endpoint.sts[0].vpc_endpoint_type == "Interface" &&
+      aws_vpc_endpoint.sts[0].private_dns_enabled
+    )
+    error_message = "The coordinator must mint exact object sessions through private STS and invoke an immutable parser through the S3 gateway boundary."
+  }
+}
+
+run "document_event_rule_requires_mapping_first" {
+  command = plan
+
+  variables {
+    document_scan_event_rule_enabled = true
+  }
+
+  expect_failures = [var.document_scan_event_rule_enabled]
 }
 
 run "disabled_runtime_is_dark_without_a_legacy_provider" {

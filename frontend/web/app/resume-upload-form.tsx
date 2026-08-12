@@ -37,17 +37,127 @@ async function sha256(file: File): Promise<string> {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function statusLabel(status: ResumeDocument["status"]): string {
+function statusLabel(status: string): string {
   return status.replaceAll("_", " ");
 }
 
-export function ResumeUploadForm({ authenticated }: { authenticated: boolean }) {
+export function recoverableResumeIds(
+  documents: readonly ResumeDocument[],
+  now = Date.now(),
+): string[] {
+  return documents
+    .filter(
+      (document) =>
+        ["scanning", "parsing"].includes(document.status) ||
+        (document.status === "awaiting_upload" &&
+          now - Date.parse(document.createdAt) <= 15 * 60 * 1000),
+    )
+    .map((document) => document.id);
+}
+
+export class ResumePollingTargets {
+  readonly #ids = new Set<string>();
+
+  add(documentIds: readonly string[]): void {
+    for (const documentId of documentIds) this.#ids.add(documentId);
+  }
+
+  beginRound(): Set<string> {
+    return new Set(this.#ids);
+  }
+
+  has(documentId: string): boolean {
+    return this.#ids.has(documentId);
+  }
+
+  resolve(documentId: string): void {
+    this.#ids.delete(documentId);
+  }
+
+  roundComplete(round: ReadonlySet<string>): boolean {
+    return [...round].every((documentId) => !this.#ids.has(documentId));
+  }
+
+  expire(round: ReadonlySet<string>): void {
+    for (const documentId of round) this.#ids.delete(documentId);
+  }
+
+  get pending(): boolean {
+    return this.#ids.size > 0;
+  }
+
+  clear(): void {
+    this.#ids.clear();
+  }
+}
+
+export function ResumeUploadForm({
+  authenticated,
+  onDocumentParsed,
+}: {
+  authenticated: boolean;
+  onDocumentParsed?: () => void;
+}) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [documents, setDocuments] = useState<ResumeDocument[]>([]);
   const [file, setFile] = useState<File>();
   const [loading, setLoading] = useState(authenticated);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<string>();
+  const polling = useRef(false);
+  const pollingTargets = useRef(new ResumePollingTargets());
+  const mounted = useRef(true);
+
+  const pollUntilTerminal = useCallback(
+    async (documentIds: readonly string[]) => {
+      if (!authenticated || documentIds.length === 0) return;
+      pollingTargets.current.add(documentIds);
+      if (polling.current) return;
+      polling.current = true;
+      const delays = [2_000, 3_000, 5_000, 8_000, 10_000, 15_000, 20_000, 30_000];
+      try {
+        while (mounted.current && pollingTargets.current.pending) {
+          const round = pollingTargets.current.beginRound();
+          let completed = false;
+          for (const delay of delays) {
+            await new Promise((resolve) => window.setTimeout(resolve, delay));
+            if (!mounted.current) return;
+            const result = await request<ResumeDocumentCollection>("/api/platform/resumes");
+            if (!mounted.current) return;
+            setDocuments(result.documents);
+            let parsed = false;
+            for (const document of result.documents) {
+              if (
+                pollingTargets.current.has(document.id) &&
+                !["awaiting_upload", "scanning", "parsing"].includes(document.status)
+              ) {
+                pollingTargets.current.resolve(document.id);
+                parsed ||= document.status === "parsed";
+              }
+            }
+            if (parsed) onDocumentParsed?.();
+            if (pollingTargets.current.roundComplete(round)) {
+              completed = true;
+              break;
+            }
+          }
+          if (!completed) {
+            pollingTargets.current.expire(round);
+            setMessage(
+              "Processing is taking longer than expected. Refresh later; the upload remains safe in quarantine.",
+            );
+          }
+        }
+      } catch (error) {
+        if (mounted.current) {
+          setMessage(error instanceof Error ? error.message : "Could not refresh resume status");
+        }
+      } finally {
+        polling.current = false;
+      }
+    },
+    [authenticated, onDocumentParsed],
+  );
 
   const load = useCallback(async () => {
     if (!authenticated) {
@@ -59,15 +169,22 @@ export function ResumeUploadForm({ authenticated }: { authenticated: boolean }) 
     try {
       const result = await request<ResumeDocumentCollection>("/api/platform/resumes");
       setDocuments(result.documents);
+      const processingIds = recoverableResumeIds(result.documents);
+      void pollUntilTerminal(processingIds);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not load resumes");
     } finally {
       setLoading(false);
     }
-  }, [authenticated]);
+  }, [authenticated, pollUntilTerminal]);
 
   useEffect(() => {
+    mounted.current = true;
     void load();
+    return () => {
+      mounted.current = false;
+      pollingTargets.current.clear();
+    };
   }, [load]);
 
   async function upload(event: FormEvent<HTMLFormElement>) {
@@ -109,7 +226,7 @@ export function ResumeUploadForm({ authenticated }: { authenticated: boolean }) 
       }
       setDocuments((current) => [registered.document, ...current]);
       setMessage("Resume uploaded to quarantine. It will be scanned before any text is parsed.");
-      window.setTimeout(() => void load(), 2_000);
+      void pollUntilTerminal([registered.document.id]);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not upload the resume");
     } finally {
@@ -141,10 +258,11 @@ export function ResumeUploadForm({ authenticated }: { authenticated: boolean }) 
             <li key={document.id}>
               <div>
                 <strong>{document.fileName}</strong>
-                <span>{statusLabel(document.status)}</span>
+                <span aria-live="polite">{statusLabel(document.status)}</span>
                 <small>
                   {(document.sizeBytes / 1024).toFixed(1)} KiB
                   {document.pageCount ? ` · ${document.pageCount} pages` : ""}
+                  {document.failureCode ? ` · ${statusLabel(document.failureCode)}` : ""}
                 </small>
               </div>
             </li>

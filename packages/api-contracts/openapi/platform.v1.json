@@ -657,6 +657,50 @@
         },
         "additionalProperties": false
       },
+      "ProfileFactSupportingSpan": {
+        "type": "object",
+        "required": [
+          "documentId",
+          "documentVersion",
+          "parserVersion",
+          "blockIndex",
+          "startOffset",
+          "endOffset"
+        ],
+        "properties": {
+          "documentId": { "type": "string", "format": "uuid" },
+          "documentVersion": { "type": "integer", "minimum": 1 },
+          "parserVersion": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "blockIndex": { "type": "integer", "minimum": 0, "maximum": 9999 },
+          "startOffset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 199999,
+            "description": "Zero-based offset within the referenced normalized block"
+          },
+          "endOffset": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200000,
+            "description": "Exclusive offset within the referenced normalized block"
+          },
+          "page": { "type": "integer", "minimum": 1, "maximum": 50 }
+        },
+        "additionalProperties": false
+      },
+      "ProfileFactEvidence": {
+        "type": "object",
+        "required": ["supportingSpans"],
+        "properties": {
+          "supportingSpans": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": { "$ref": "#/components/schemas/ProfileFactSupportingSpan" }
+          }
+        },
+        "additionalProperties": false
+      },
       "ProfileFact": {
         "type": "object",
         "required": [
@@ -680,17 +724,56 @@
             "type": "string",
             "enum": ["proposed", "confirmed", "rejected"]
           },
+          "availability": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": ["state"],
+                "properties": { "state": { "type": "string", "const": "available" } },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["state", "reasonCode"],
+                "properties": {
+                  "state": { "type": "string", "const": "invalidated" },
+                  "reasonCode": { "type": "string", "const": "source_security_hold" }
+                },
+                "additionalProperties": false
+              }
+            ]
+          },
           "sensitivity": {
             "type": "string",
             "enum": ["standard", "confidential", "restricted"]
           },
           "source": { "$ref": "#/components/schemas/ProfileFactSource" },
+          "evidence": { "$ref": "#/components/schemas/ProfileFactEvidence" },
           "effectiveFrom": { "type": "string", "format": "date" },
           "effectiveTo": { "type": "string", "format": "date" },
           "version": { "type": "integer", "minimum": 1 },
           "createdAt": { "type": "string", "format": "date-time" },
           "updatedAt": { "type": "string", "format": "date-time" }
         },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "verification": { "const": "proposed" },
+                "source": {
+                  "type": "object",
+                  "properties": { "type": { "const": "resume" } },
+                  "required": ["type"]
+                }
+              },
+              "required": ["verification", "source"]
+            },
+            "then": {
+              "properties": { "evidence": { "$ref": "#/components/schemas/ProfileFactEvidence" } },
+              "required": ["evidence"]
+            }
+          }
+        ],
         "additionalProperties": false
       },
       "ProfileFactCollection": {
