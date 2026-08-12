@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ai-job-apply.internal/domain/v1/resume-document.schema.json",
+  "title": "ResumeDocumentV1",
+  "type": "object",
+  "required": ["documentId", "version", "mediaType", "sourceSha256", "blocks", "createdAt"],
+  "properties": {
+    "documentId": { "type": "string", "format": "uuid" },
+    "version": { "type": "integer", "minimum": 1 },
+    "mediaType": {
+      "type": "string",
+      "enum": [
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      ]
+    },
+    "sourceSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "blocks": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {
+        "type": "object",
+        "required": ["index", "text", "startOffset", "endOffset"],
+        "properties": {
+          "index": { "type": "integer", "minimum": 0 },
+          "page": { "type": "integer", "minimum": 1, "maximum": 50 },
+          "text": { "type": "string", "minLength": 1, "maxLength": 20000, "pattern": "\\S" },
+          "startOffset": { "type": "integer", "minimum": 0, "maximum": 200000 },
+          "endOffset": { "type": "integer", "minimum": 1, "maximum": 200000 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "createdAt": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

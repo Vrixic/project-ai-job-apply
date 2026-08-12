@@ -243,29 +243,32 @@ describe("profile readiness activity and terminal boundaries", () => {
     ["FAILED", "WorkflowFailed"],
     ["STOPPED", "WorkflowStopped"],
     ["TIMED_OUT", "WorkflowTimedOut"],
-  ] as const)("maps %s terminal state to one idempotent product-state reconciliation", async (status, code) => {
-    const failDurableReadinessOperation = vi.fn(async () => undefined);
-    const handler = createDurableTerminalHandler(
-      { failDurableReadinessOperation },
-      activityArn.replace("profile-readiness-activity", "profile-readiness-workflow"),
-    );
-    const event: DurableTerminalEvent = {
-      source: "aws.lambda",
-      "detail-type": "Durable Execution Status Change",
-      detail: {
-        durableExecutionArn: "arn:synthetic:durable-execution",
-        durableExecutionName: `outbox-${eventId}`,
-        functionArn: activityArn.replace(
-          "profile-readiness-activity",
-          "profile-readiness-workflow",
-        ),
-        status,
-      },
-    };
+  ] as const)(
+    "maps %s terminal state to one idempotent product-state reconciliation",
+    async (status, code) => {
+      const failDurableReadinessOperation = vi.fn(async () => undefined);
+      const handler = createDurableTerminalHandler(
+        { failDurableReadinessOperation },
+        activityArn.replace("profile-readiness-activity", "profile-readiness-workflow"),
+      );
+      const event: DurableTerminalEvent = {
+        source: "aws.lambda",
+        "detail-type": "Durable Execution Status Change",
+        detail: {
+          durableExecutionArn: "arn:synthetic:durable-execution",
+          durableExecutionName: `outbox-${eventId}`,
+          functionArn: activityArn.replace(
+            "profile-readiness-activity",
+            "profile-readiness-workflow",
+          ),
+          status,
+        },
+      };
 
-    await expect(handler(event)).resolves.toEqual({ handled: true });
-    expect(failDurableReadinessOperation).toHaveBeenCalledWith(`outbox-${eventId}`, code);
-  });
+      await expect(handler(event)).resolves.toEqual({ handled: true });
+      expect(failDurableReadinessOperation).toHaveBeenCalledWith(`outbox-${eventId}`, code);
+    },
+  );
 
   it("ignores non-terminal success and rejects a cross-function terminal event", async () => {
     const failDurableReadinessOperation = vi.fn(async () => undefined);

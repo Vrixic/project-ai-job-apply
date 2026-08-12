@@ -68,6 +68,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/resumes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listResumeDocuments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/resumes/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createResumeUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/profile/facts": {
         parameters: {
             query?: never;
@@ -177,6 +209,51 @@ export interface components {
             preferences: components["schemas"]["JobPreferenceSet"];
             /** Format: uuid */
             operationId: string;
+        };
+        /** @enum {string} */
+        ResumeMediaType: "application/pdf" | "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        /** @enum {string} */
+        ResumeDocumentStatus: "awaiting_upload" | "scanning" | "parsing" | "parsed" | "rejected" | "failed";
+        CreateResumeUploadRequest: {
+            fileName: string;
+            mediaType: components["schemas"]["ResumeMediaType"];
+            sizeBytes: number;
+            sha256: string;
+        };
+        ResumeDocument: {
+            /** Format: uuid */
+            id: string;
+            fileName: string;
+            mediaType: components["schemas"]["ResumeMediaType"];
+            sizeBytes: number;
+            sha256: string;
+            status: components["schemas"]["ResumeDocumentStatus"];
+            /** @enum {string} */
+            failureCode?: "malware_detected" | "scan_unsupported" | "scan_failed" | "object_mismatch" | "invalid_document" | "parse_failed";
+            pageCount?: number;
+            characterCount?: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        ResumeDocumentCollection: {
+            documents: components["schemas"]["ResumeDocument"][];
+        };
+        ResumeUploadGrant: {
+            /** Format: uri */
+            url: string;
+            /** @enum {string} */
+            method: "POST";
+            fields: {
+                [key: string]: string;
+            };
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        CreateResumeUploadResponse: {
+            document: components["schemas"]["ResumeDocument"];
+            upload: components["schemas"]["ResumeUploadGrant"];
         };
         /** @enum {string} */
         ProfileFactKind: "identity" | "employment" | "education" | "project" | "skill" | "certification" | "preference";
@@ -486,6 +563,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PutJobPreferencesResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    listResumeDocuments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resume documents owned by the current candidate */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumeDocumentCollection"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createResumeUpload: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateResumeUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Owner-scoped resume metadata and a bounded direct-upload grant */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateResumeUploadResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];

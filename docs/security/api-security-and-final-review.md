@@ -52,9 +52,13 @@ delivery evidence; this section is not approval of Phase 1 or later behavior.
 | `PUT /v1/me/job-preferences` | Candidate | `profile:write`; strict schema/payload boundary; owner-scoped write | Local and deployed persistence/isolation evidence passes |
 | `GET /v1/operations/{operationId}` | Candidate | `profile:read`; operation owner predicate | Deployed two-account denial passes |
 | `GET /v1/jobs/{jobId}` | Candidate | `jobs:read`; active redacted canonical-job response | Implemented and deployed as later D1 work; not approved by D0-015 |
+| `GET /v1/resumes` | Candidate | `documents:read`; candidate-owner predicate; metadata only | Implemented and locally tested as D1 work; not deployed or independently approved |
+| `POST /v1/resumes/uploads` | Candidate | `documents:write`; strict metadata schema; idempotency; candidate owner; no file bytes | Implemented and locally tested as D1 work; not deployed or independently approved |
+| Exact S3 resume-upload POST grant | Temporary object access | Five-minute expiry; one quarantine key/type/size/hash/KMS key; no read or list | Implemented and locally tested as D1 work; dark Terraform plan only |
 
 There is no current public administrator, support, provider-webhook, temporary-object-download,
-WebSocket, extension, mobile, ATS, AI, billing, outreach, or remote-browser API. The direct Lambda
+WebSocket, extension, mobile, ATS, AI, billing, outreach, or remote-browser API. The D1 upload
+grant is write-only and is not currently deployed. The direct Lambda
 boundary verifier rejects missing/invalid/wrong-issuer/wrong-audience/insufficient-scope identity,
 unknown routes and methods, malformed bodies, unsupported media types, and oversized payloads.
 The deployed profile slice additionally proves cross-user denial. These controls are engineering

@@ -70,7 +70,8 @@ export function getAuth0Client(environment: Environment = process.env): Auth0Cli
     appBaseUrl,
     authorizationParameters: {
       audience,
-      scope: "openid profile email offline_access jobs:read profile:read profile:write",
+      scope:
+        "openid profile email offline_access documents:read documents:write jobs:read profile:read profile:write",
     },
     enableAccessTokenEndpoint: false,
     logoutStrategy: "oidc",

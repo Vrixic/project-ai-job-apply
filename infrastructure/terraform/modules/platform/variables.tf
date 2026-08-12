@@ -181,6 +181,33 @@ variable "gateway_lambda_reserved_concurrency" {
   }
 }
 
+variable "deploy_document_intake" {
+  description = "Provision the private candidate-document quarantine bucket and managed malware scanning boundary."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.deploy_document_intake || var.deploy_gateway_lambda
+    error_message = "Document intake requires the versioned gateway Lambda that issues exact upload grants."
+  }
+}
+
+variable "candidate_document_cors_allowed_origins" {
+  description = "Exact browser origins allowed to use short-lived candidate-document upload grants."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for origin in var.candidate_document_cors_allowed_origins : can(regex(
+        "^(https://[^/[:space:]]+|http://(localhost|127\\.0\\.0\\.1)(:[0-9]+)?)$",
+        origin
+      ))
+    ])
+    error_message = "Document upload CORS origins must be exact HTTPS origins or local HTTP development origins without paths."
+  }
+}
+
 variable "deploy_serverless_outbox" {
   description = "Dark-deploy the disabled SQS starter and scheduled reconciler without changing normal event routing."
   type        = bool

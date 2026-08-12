@@ -16,16 +16,15 @@ describe("observability configuration", () => {
     ).toBe(0.25);
   });
 
-  it.each([
-    "-0.1",
-    "1.1",
-    "not-a-number",
-  ])("rejects an invalid trace sampling ratio: %s", (value) => {
-    expect(() =>
-      loadBackendConfig({
-        ...requiredEnvironment,
-        OTEL_TRACE_SAMPLE_RATIO: value,
-      }),
-    ).toThrow();
-  });
+  it.each(["-0.1", "1.1", "not-a-number"])(
+    "rejects an invalid trace sampling ratio: %s",
+    (value) => {
+      expect(() =>
+        loadBackendConfig({
+          ...requiredEnvironment,
+          OTEL_TRACE_SAMPLE_RATIO: value,
+        }),
+      ).toThrow();
+    },
+  );
 });

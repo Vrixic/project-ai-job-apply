@@ -6,6 +6,11 @@ import {
   type AuthPrincipal,
 } from "@ai-job-apply/auth";
 import { loadLambdaGatewayConfig } from "@ai-job-apply/config";
+import {
+  PostgresDocumentStore,
+  S3ResumeUploadSigner,
+  UnavailableDocumentStore,
+} from "@ai-job-apply/documents-service";
 import { PostgresJobCatalog } from "@ai-job-apply/jobs-service";
 import { createLogger, initializeTelemetry } from "@ai-job-apply/observability";
 import {
@@ -87,6 +92,8 @@ const PROTECTED_EXACT_ROUTES = new Set([
   "PUT /v1/me/job-preferences",
   "GET /v1/profile/facts",
   "POST /v1/profile/facts",
+  "GET /v1/resumes",
+  "POST /v1/resumes/uploads",
 ]);
 const OPERATION_PATH_PATTERN =
   /^\/v1\/operations\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -500,9 +507,20 @@ async function createConfiguredApplication(
       : {}),
   });
   const catalog = new PostgresJobCatalog(database.client);
+  const documents =
+    config.DOCUMENT_UPLOAD_BUCKET && config.DOCUMENT_UPLOAD_KMS_KEY_ARN
+      ? new PostgresDocumentStore(
+          database.client,
+          new S3ResumeUploadSigner({
+            bucket: config.DOCUMENT_UPLOAD_BUCKET,
+            kmsKeyArn: config.DOCUMENT_UPLOAD_KMS_KEY_ARN,
+          }),
+        )
+      : new UnavailableDocumentStore();
   return createGatewayApplication({
     store,
     catalog,
+    documents,
     verifier: principalBridge.verifier,
     releaseSha: config.RELEASE_SHA,
     adapter: new FastifyAdapter({

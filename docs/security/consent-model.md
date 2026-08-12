@@ -47,6 +47,7 @@ declare that consent is the legal basis for every processing purpose.
 |---|---|---|---|
 | Accept current terms/privacy notice | Explicit acceptance of identified versions | Material notice/terms change as counsel requires | Does not erase completed lawful actions; may require account closure if essential terms are rejected |
 | Store profile facts/preferences | Explicit onboarding/entry plus visible correction controls | Until corrected, withdrawn, or account deleted | Stop optional processing and apply retention/deletion policy |
+| Upload and parse a private resume | Explicit file selection and upload after visible quarantine/parsing notice | User deletion, account deletion, or material processing-purpose change | Stop new parsing/use and delete owned source/normalized objects under the approved deletion policy |
 | Share data with an AI provider | Just-in-time approval for the declared preparation purpose or an approved persistent setting | Provider/purpose/data-category change or withdrawal | No new disclosure; delete provider-held data when applicable |
 | Save a private job | Explicit save | User removal/account deletion/job tombstone rules | Remove private association |
 | Contribute public job data | Separate preview and explicit contribution | Material payload/source/license change or withdrawal where supported | Remove contributor association and process public-content removal under approved policy |

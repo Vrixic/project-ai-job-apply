@@ -19,13 +19,26 @@ const telemetrySchema = {
   OTEL_TRACE_SAMPLE_RATIO: z.coerce.number().min(0).max(1).default(1),
 };
 
-const backendSchema = baseSchema.extend({
-  PORT: z.coerce.number().int().min(1).max(65_535).default(4000),
-  DATABASE_URL: z.string().url(),
-  REDIS_URL: z.string().url().optional(),
-  ...oidcSchema,
-  ...telemetrySchema,
-});
+const backendSchema = baseSchema
+  .extend({
+    PORT: z.coerce.number().int().min(1).max(65_535).default(4000),
+    DATABASE_URL: z.string().url(),
+    REDIS_URL: z.string().url().optional(),
+    DOCUMENT_UPLOAD_BUCKET: z
+      .string()
+      .regex(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/)
+      .optional(),
+    DOCUMENT_UPLOAD_KMS_KEY_ARN: z
+      .string()
+      .regex(/^arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key\/[0-9a-f-]{36}$/)
+      .optional(),
+    ...oidcSchema,
+    ...telemetrySchema,
+  })
+  .refine(
+    (value) => Boolean(value.DOCUMENT_UPLOAD_BUCKET) === Boolean(value.DOCUMENT_UPLOAD_KMS_KEY_ARN),
+    "DOCUMENT_UPLOAD_BUCKET and DOCUMENT_UPLOAD_KMS_KEY_ARN must be configured together",
+  );
 
 export type BackendConfig = z.infer<typeof backendSchema>;
 
@@ -35,12 +48,24 @@ const lambdaGatewaySchema = baseSchema
     DATABASE_SECRET_ID: z.string().min(1).optional(),
     OUTBOX_DISPATCH_TARGET: z.literal("lambda_durable").default("lambda_durable"),
     OUTBOX_QUEUE_URL: z.string().url(),
+    DOCUMENT_UPLOAD_BUCKET: z
+      .string()
+      .regex(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/)
+      .optional(),
+    DOCUMENT_UPLOAD_KMS_KEY_ARN: z
+      .string()
+      .regex(/^arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key\/[0-9a-f-]{36}$/)
+      .optional(),
     ...oidcSchema,
     ...telemetrySchema,
   })
   .refine(
     (value) => Boolean(value.DATABASE_URL) !== Boolean(value.DATABASE_SECRET_ID),
     "Exactly one of DATABASE_URL or DATABASE_SECRET_ID is required",
+  )
+  .refine(
+    (value) => Boolean(value.DOCUMENT_UPLOAD_BUCKET) === Boolean(value.DOCUMENT_UPLOAD_KMS_KEY_ARN),
+    "DOCUMENT_UPLOAD_BUCKET and DOCUMENT_UPLOAD_KMS_KEY_ARN must be configured together",
   );
 
 export type LambdaGatewayConfig = z.infer<typeof lambdaGatewaySchema>;

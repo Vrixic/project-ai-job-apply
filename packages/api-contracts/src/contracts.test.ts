@@ -101,3 +101,54 @@ describe("profile fact commands", () => {
     expect(validateUpdate({ expectedVersion: 1, interviewOutcome: "offer" })).toBe(false);
   });
 });
+
+describe("resume upload commands", () => {
+  const validate = compileComponentValidator("CreateResumeUploadRequest");
+
+  it("accepts one bounded PDF or DOCX upload declaration", () => {
+    expect(
+      validate({
+        fileName: "synthetic-resume.pdf",
+        mediaType: "application/pdf",
+        sizeBytes: 4096,
+        sha256: "a".repeat(64),
+      }),
+    ).toBe(true);
+    expect(
+      validate({
+        fileName: "synthetic-resume.docx",
+        mediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        sizeBytes: 5242880,
+        sha256: "b".repeat(64),
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects traversal names, unsupported media, oversize objects, and unknown fields", () => {
+    expect(
+      validate({
+        fileName: "../resume.pdf",
+        mediaType: "application/pdf",
+        sizeBytes: 4096,
+        sha256: "a".repeat(64),
+      }),
+    ).toBe(false);
+    expect(
+      validate({
+        fileName: "resume.txt",
+        mediaType: "text/plain",
+        sizeBytes: 4096,
+        sha256: "a".repeat(64),
+      }),
+    ).toBe(false);
+    expect(
+      validate({
+        fileName: "resume.pdf",
+        mediaType: "application/pdf",
+        sizeBytes: 5242881,
+        sha256: "a".repeat(64),
+        extractedText: "must not cross this contract",
+      }),
+    ).toBe(false);
+  });
+});

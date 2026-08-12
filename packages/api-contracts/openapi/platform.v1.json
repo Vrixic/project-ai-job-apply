@@ -112,6 +112,63 @@
         }
       }
     },
+    "/resumes": {
+      "get": {
+        "operationId": "listResumeDocuments",
+        "security": [{ "oidc": ["documents:read"] }],
+        "responses": {
+          "200": {
+            "description": "Resume documents owned by the current candidate",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ResumeDocumentCollection" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/resumes/uploads": {
+      "post": {
+        "operationId": "createResumeUpload",
+        "security": [{ "oidc": ["documents:write"] }],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": { "type": "string", "minLength": 16, "maxLength": 128 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateResumeUploadRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Owner-scoped resume metadata and a bounded direct-upload grant",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/CreateResumeUploadResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" }
+        }
+      }
+    },
     "/profile/facts": {
       "get": {
         "operationId": "listProfileFacts",
@@ -425,6 +482,111 @@
         "properties": {
           "preferences": { "$ref": "#/components/schemas/JobPreferenceSet" },
           "operationId": { "type": "string", "format": "uuid" }
+        },
+        "additionalProperties": false
+      },
+      "ResumeMediaType": {
+        "type": "string",
+        "enum": [
+          "application/pdf",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ]
+      },
+      "ResumeDocumentStatus": {
+        "type": "string",
+        "enum": ["awaiting_upload", "scanning", "parsing", "parsed", "rejected", "failed"]
+      },
+      "CreateResumeUploadRequest": {
+        "type": "object",
+        "required": ["fileName", "mediaType", "sizeBytes", "sha256"],
+        "properties": {
+          "fileName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[^\\u0000-\\u001f\\u007f/\\\\]+$"
+          },
+          "mediaType": { "$ref": "#/components/schemas/ResumeMediaType" },
+          "sizeBytes": { "type": "integer", "minimum": 1, "maximum": 5242880 },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        },
+        "additionalProperties": false
+      },
+      "ResumeDocument": {
+        "type": "object",
+        "required": [
+          "id",
+          "fileName",
+          "mediaType",
+          "sizeBytes",
+          "sha256",
+          "status",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "fileName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[^\\u0000-\\u001f\\u007f/\\\\]+$"
+          },
+          "mediaType": { "$ref": "#/components/schemas/ResumeMediaType" },
+          "sizeBytes": { "type": "integer", "minimum": 1, "maximum": 5242880 },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "status": { "$ref": "#/components/schemas/ResumeDocumentStatus" },
+          "failureCode": {
+            "type": "string",
+            "enum": [
+              "malware_detected",
+              "scan_unsupported",
+              "scan_failed",
+              "object_mismatch",
+              "invalid_document",
+              "parse_failed"
+            ]
+          },
+          "pageCount": { "type": "integer", "minimum": 1, "maximum": 50 },
+          "characterCount": { "type": "integer", "minimum": 1, "maximum": 200000 },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      },
+      "ResumeDocumentCollection": {
+        "type": "object",
+        "required": ["documents"],
+        "properties": {
+          "documents": {
+            "type": "array",
+            "maxItems": 20,
+            "items": { "$ref": "#/components/schemas/ResumeDocument" }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ResumeUploadGrant": {
+        "type": "object",
+        "required": ["url", "method", "fields", "expiresAt"],
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "method": { "type": "string", "enum": ["POST"] },
+          "fields": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 8192 }
+          },
+          "expiresAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      },
+      "CreateResumeUploadResponse": {
+        "type": "object",
+        "required": ["document", "upload"],
+        "properties": {
+          "document": { "$ref": "#/components/schemas/ResumeDocument" },
+          "upload": { "$ref": "#/components/schemas/ResumeUploadGrant" }
         },
         "additionalProperties": false
       },

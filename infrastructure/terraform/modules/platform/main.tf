@@ -646,6 +646,8 @@ resource "aws_apigatewayv2_route" "gateway" {
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.gateway[0].id
   authorization_scopes = [
+    "documents:read",
+    "documents:write",
     "jobs:read",
     "profile:read",
     "profile:write"
@@ -1067,6 +1069,26 @@ data "aws_iam_policy_document" "gateway_lambda" {
       resources = [aws_kms_key.platform.arn]
     }
   }
+
+  dynamic "statement" {
+    for_each = var.deploy_document_intake ? [1] : []
+    content {
+      sid       = "RegisterExactCandidateDocumentUploads"
+      effect    = "Allow"
+      actions   = ["s3:PutObject"]
+      resources = ["${aws_s3_bucket.candidate_documents[0].arn}/${local.candidate_document_prefix}*"]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.deploy_document_intake ? [1] : []
+    content {
+      sid       = "EncryptCandidateDocumentUploads"
+      effect    = "Allow"
+      actions   = ["kms:GenerateDataKey"]
+      resources = [aws_kms_key.platform.arn]
+    }
+  }
 }
 
 resource "aws_iam_role_policy" "gateway_lambda" {
@@ -1180,6 +1202,10 @@ resource "aws_lambda_function" "gateway" {
       var.deploy_serverless_outbox ? {
         OUTBOX_DISPATCH_TARGET = "lambda_durable"
         OUTBOX_QUEUE_URL       = aws_sqs_queue.events.url
+      } : {},
+      var.deploy_document_intake ? {
+        DOCUMENT_UPLOAD_BUCKET      = aws_s3_bucket.candidate_documents[0].id
+        DOCUMENT_UPLOAD_KMS_KEY_ARN = aws_kms_key.platform.arn
       } : {}
     )
   }

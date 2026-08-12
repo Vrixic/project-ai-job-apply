@@ -6,6 +6,14 @@ output "artifact_bucket" {
   value = module.platform.artifact_bucket
 }
 
+output "candidate_document_bucket" {
+  value = module.platform.candidate_document_bucket
+}
+
+output "candidate_document_malware_protection_plan_id" {
+  value = module.platform.candidate_document_malware_protection_plan_id
+}
+
 output "migration_repository_url" {
   value = module.platform.migration_repository_url
 }
