@@ -8,7 +8,9 @@ consent and data-handling protocol in this directory.
 - `launch-decision.md` — Launch market, candidate segment, language, and open brand decision.
 - `research-plan.md` — Optional consent and data-handling protocol for future user research.
 - `foundational-legal-privacy-brief.md` — Bounded Phase 0 questions, product decisions, review
-  evidence, release gates, and sign-off record for accountable counsel.
+  evidence, and release gates for accountable counsel.
+- `foundational-legal-privacy-disposition.md` — Exact-commit package manifest, LR-F01–LR-F07
+  dispositions, findings/conditions, cross-review handoff, and attributable sign-off checklist.
 - `legal-review-register.md` — Source, UGC, automation, outreach, privacy, and store review gates.
 - `naming-brief.md` — Public-name requirements and screening record.
 - `ats-fixture-policy.md` — Acquisition, sanitization, storage, review, and deletion controls.

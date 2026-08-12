@@ -1,7 +1,7 @@
 # Consent Model
 
 - Status: Engineering baseline; product decisions and counsel approval pending
-- Last updated: 2026-07-28
+- Last updated: 2026-08-11
 
 Consent records are immutable and versioned. A correction, revocation, or renewed approval appends
 a new record rather than rewriting history.
@@ -26,6 +26,20 @@ Consent does not cascade:
 - Approving one packet does not approve a materially changed packet.
 - Connecting an email account for sending is not consent to read inbox or calendar data.
 - Product use is not consent to expose a candidate profile to employers.
+
+## Current implementation boundary
+
+The deployed synthetic Phase 0 slice authenticates a user and requires an explicit preference-save
+request, but it does not implement the complete immutable consent ledger, terms/privacy-version
+acceptance, export/deletion rights flow, restricted-answer vault, public contribution, provider
+disclosure, application-packet approval, or any irreversible external action. Authentication and
+an API request are not substitutes for the purpose-specific consent records defined here.
+
+Real candidate onboarding remains blocked until the applicable notice/terms acceptance, consent
+evidence, correction/export/deletion controls, and accountable legal/privacy and security
+conditions are implemented and tested. Later deliveries must distinguish product authorization
+from any legal basis or notice obligation determined by counsel; this engineering model does not
+declare that consent is the legal basis for every processing purpose.
 
 ## Purpose and action matrix
 

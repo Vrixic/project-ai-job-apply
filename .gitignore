@@ -8,6 +8,7 @@ node_modules/
 # Runtime data
 *.pid
 *.pid.lock
+.tmp/
 
 # Coverage
 coverage/

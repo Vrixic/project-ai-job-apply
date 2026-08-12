@@ -1,10 +1,66 @@
 {
+  "schemaVersion": "ats-fixture-metadata.v1",
   "fixtureId": "synthetic-foundation-v1",
-  "providerFamily": "synthetic",
-  "source": "created_for_testing",
-  "containsProductionData": false,
-  "containsRestrictedAnswers": false,
-  "policyVersion": "ats-fixture-policy-2026-07-28",
-  "reviewState": "approved_synthetic",
-  "tags": ["identity", "resume", "work-authorization", "attestation"]
+  "evidenceClass": "synthetic",
+  "provider": {
+    "family": "synthetic",
+    "variant": "foundation-common-form"
+  },
+  "source": {
+    "kind": "created_for_testing",
+    "capturedOn": null,
+    "authorizationEvidenceId": null
+  },
+  "dataSafety": {
+    "containsProductionData": false,
+    "containsCandidateData": false,
+    "containsAuthenticationMaterial": false,
+    "containsActiveContent": false
+  },
+  "sanitization": {
+    "status": "not_applicable_synthetic",
+    "policyVersion": "ats-fixture-policy-2026-08-11",
+    "automatedChecks": [
+      {
+        "category": "repository",
+        "tool": "ats-fixture-validator",
+        "toolVersion": "1",
+        "runOn": "2026-08-11",
+        "result": "passed",
+        "evidenceId": "repo-validator-synthetic-foundation-v1"
+      }
+    ],
+    "humanReview": {
+      "state": "not_applicable_synthetic",
+      "reviewerId": null,
+      "reviewedOn": null,
+      "evidenceId": null
+    }
+  },
+  "retention": {
+    "rawCaptureCreated": false,
+    "rawCaptureDisposition": "not_applicable",
+    "rawCaptureEvidenceId": null,
+    "rawDeletionDueOn": null,
+    "sanitizedFixturePolicy": "retain_until_replaced_or_policy_change"
+  },
+  "representativeness": {
+    "claim": false,
+    "state": "not_applicable",
+    "reviewerId": null,
+    "reviewedOn": null,
+    "evidenceId": null
+  },
+  "behaviorTags": ["identity", "resume", "work-authorization", "attestation"],
+  "integrity": {
+    "algorithm": "sha256",
+    "files": [
+      {
+        "path": "application-form.html",
+        "bytes": 1151,
+        "digest": "47ced2475fe881b9275537cf10386d496f9b9c514e7a6ccf9b905718d6c8893e"
+      }
+    ]
+  },
+  "reviewState": "approved_synthetic"
 }

@@ -1,7 +1,7 @@
 # Phase 0 Privacy Impact Assessment
 
-- Status: Engineering draft; product decisions and accountable privacy/legal approval pending
-- Last updated: 2026-07-28
+- Status: Engineering review ready; accountable privacy/legal and security approval pending
+- Last updated: 2026-08-11
 - Assessment owner: Security/privacy engineering
 - Accountable approvers: Future external legal/privacy counsel and independent security reviewer;
   individuals unassigned
@@ -12,10 +12,15 @@ Those capabilities require a delta assessment before activation.
 
 ## Processing boundary
 
-The currently implemented Phase 0 slice accepts an authenticated user's job preferences, stores
-them in the profile-owned PostgreSQL schema, emits an identifier-only outbox event, processes a
-durable readiness workflow, and returns the result. It does not call ATS, AI, email, calendar,
-billing, extension, mobile, or remote-browser providers.
+The deployed Phase 0 slice accepts an authenticated synthetic user's job preferences, stores them
+in the profile-owned PostgreSQL schema, emits an identifier-only outbox event, processes a durable
+readiness workflow through the scale-to-zero Lambda runtime, and returns the owner-scoped result.
+Development and synthetic staging have passed persistence, two-account denial, durable replay,
+redacted telemetry, rollback, and restore exercises. Staging is normally dormant and temporarily
+shares the development Auth0 issuer under
+[ADR-014](../adr/014-shared-development-auth0-for-synthetic-staging.md); this is not identity
+isolation evidence. The slice does not call ATS, AI, email, calendar, billing, extension, mobile,
+or remote-browser providers.
 
 Shared development, CI, staging, and demos are restricted to synthetic data. Isolated founder-only
 dogfooding with the founder's own data is accepted as product direction. A live founder ATS effect
@@ -27,8 +32,8 @@ processing is not approved.
 
 | Data or activity | Class | Purpose | Necessity/minimization | Current state |
 |---|---|---|---|---|
-| OIDC subject, issuer, session metadata | Confidential PII; tokens are Restricted | Authenticate and secure the user's account | Resolve to internal ID; never expose provider subject publicly; short-lived tokens | Auth0 selected; provider-neutral verifier implemented; tenants, conformance, and approval pending |
-| Job preferences | Confidential PII | Candidate-requested job discovery and application readiness | Store declared constraints only; exclude from logs/events/analytics | Local profile slice implemented |
+| OIDC subject, issuer, session metadata | Confidential PII; tokens are Restricted | Authenticate and secure the user's account | Resolve to internal ID; never expose provider subject publicly; short-lived tokens | Development web conformance and deployed owner isolation pass; dedicated real-user staging/production tenants and accountable approval remain pending |
+| Job preferences | Confidential PII | Candidate-requested job discovery and application readiness | Store declared constraints only; exclude values from logs/events/analytics | Deployed with synthetic data in development and on-demand staging; real candidate processing not approved |
 | Resume and confirmed profile facts | Confidential PII | Tailor truthful applications | Preserve provenance; collect only application-relevant facts | Planned D1/D3 |
 | Voluntary demographic, disability, veteran, sponsorship, or legal answers | Restricted | Complete a specific employer form when explicitly directed | Store only user-supplied values in a dedicated vault; never infer; always show during final application review | Product direction accepted; planned D3 |
 | Saved jobs | Confidential association with Public job data | Let a user organize intended applications | Private by default; no public contribution implication | Planned D1 |
@@ -38,7 +43,7 @@ processing is not approved.
 | Browser session, OAuth credentials, sensitive answers | Restricted | Perform narrowly authorized external actions | Just-in-time access; no logs/events/analytics; immediate revocation/destruction | Planned D4/D5 |
 | Outreach content and recipient | Confidential PII | Send one candidate-approved message | No inbox/calendar reading; per-send approval; suppression and limits | Planned D5 |
 | Billing identifiers | Confidential PII | Maintain Free/Pro entitlement | Provider-neutral ID; do not store full payment credentials | Planned D6 |
-| Operational telemetry | Internal | Reliability, security, debugging | Opaque IDs and redacted measurements only | Local baseline implemented |
+| Operational telemetry | Internal | Reliability, security, debugging | Opaque IDs and redacted measurements only | Deployed redaction, trace, alarm-delivery, and aggregate workload evidence exists for the synthetic foundation |
 | Product analytics | Internal/de-identified where possible | Evaluate product behavior and quality | Phase 0 operational telemetry only; optional analytics later require an explicit preference and no raw candidate values | Planned after review |
 
 ## Data subjects and affected people
@@ -68,17 +73,17 @@ decisions.
 
 | ID | Risk to people | Required mitigation | Residual state |
 |---|---|---|---|
-| P-01 | Profile or application data is exposed to another user | Owner predicate on every access, tenant tests, opaque public IDs, audited admin access | Deployment evidence pending |
+| P-01 | Profile or application data is exposed to another user | Owner predicate on every access, tenant tests, opaque public IDs, audited admin access | Deployed profile-operation two-account denial passes with synthetic identities; later APIs/admin paths require their own tests and approval |
 | P-02 | Sensitive answers are inferred or reused without meaningful choice | Never infer; dedicated restricted vault; exact-context checks; always-visible final review; immutable packet approval | Implementation and external approval pending |
 | P-03 | A private save becomes a public contribution | Separate commands and immutable consents; field preview; private default | Design documented |
 | P-04 | More browsing/form data is collected than intended | Active-tab/minimum extension permissions; client sanitization; no cookies/history/form values | D2 delta review required |
 | P-05 | AI provider retains or trains on candidate data | Provider contract/configuration review, minimum prompt context, no activation before approval | Provider not selected |
-| P-06 | Candidate cannot correct, export, or delete data | Authenticated rights workflow, portable export, subprocessor ledger, deletion reconciliation | Design documented; implementation pending |
-| P-07 | Backups or providers resurrect deleted data | Immediate active-system denial, backup aging, deletion ledger replay, provider reconciliation | Deployment evidence pending |
-| P-08 | Logs or analytics become a shadow candidate database | Shared redaction, allowlisted telemetry schema, synthetic fixtures, release-blocking tests | Local redaction baseline exists |
+| P-06 | Candidate cannot correct, export, or delete data | Authenticated rights workflow, portable export, subprocessor ledger, deletion reconciliation | Preference correction is implemented; complete export/account-deletion rights workflow remains unimplemented and blocks real candidate onboarding |
+| P-07 | Backups or providers resurrect deleted data | Immediate active-system denial, backup aging, deletion ledger replay, provider reconciliation | Isolated synthetic backup restores pass; deletion-ledger replay and subprocessor reconciliation remain unimplemented and block real candidate onboarding |
+| P-08 | Logs or analytics become a shadow candidate database | Shared redaction, allowlisted telemetry schema, synthetic fixtures, release-blocking tests | Local redaction tests and deployed sanitized log/trace/workload inspections pass for the foundation; every new payload/provider needs delta tests |
 | P-09 | A compromised workflow performs an unintended external action | Immutable packet approval, idempotency, revalidation, kill switch, no blind retry | Later implementation required |
 | P-10 | Users misunderstand automation or privacy behavior | Just-in-time notices, plain-language state, review by exception, accurate public claims | UX/legal review pending |
-| P-11 | Retention exceeds the candidate's expectation or business need | Purpose-bound retention, user controls, documented defaults, periodic deletion verification | Durations require approval |
+| P-11 | Retention exceeds the candidate's expectation or business need | Purpose-bound retention, user controls, documented defaults, periodic deletion verification | Synthetic environment settings and provisional product defaults are documented separately; public durations and enforcement require approval |
 | P-12 | A new feature silently changes processing | Mandatory privacy/security delta review and updated data-flow map before activation | Delivery gates documented |
 
 ## Individual controls and rights design
@@ -120,6 +125,24 @@ Reassess before any of the following:
   enabled;
 - a material incident, complaint, legal change, or provider-policy change occurs; or
 - retention, consent, user-rights, or public privacy statements change.
+
+## Evidence and known limitations
+
+The current engineering evidence is indexed in the
+[security/privacy approval plan](security-privacy-approval-plan.md) and the
+[Phase 0 exit-readiness record](../product/delivery/evidence/d0-exit-review-readiness-2026-08-11.md).
+It proves a synthetic foundation at specific revisions and times. It does not prove:
+
+- complete account export/deletion, subprocessor reconciliation, or deletion-ledger replay;
+- real-user staging/production identity isolation or real candidate data handling;
+- provider contracts, data residency, notice/rights operation, or public retention promises;
+- public UGC, AI, ATS automation, outreach, remote-browser, billing, mobile, or extension privacy;
+  or
+- the independent security posture of the eventual launch candidate.
+
+Those limitations are release gates, not implicitly accepted residual risks. Accountable reviewers
+record any approved conditions and expiry in the
+[Phase 0 accountable review record](phase-0-accountable-review-record.md).
 
 ## Approval record
 

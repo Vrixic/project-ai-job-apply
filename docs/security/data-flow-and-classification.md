@@ -71,3 +71,48 @@ approve a diagram for:
 - outreach OAuth and sending;
 - billing/mobile/push; and
 - export, deletion, incident, and backup-restore paths in deployed environments.
+
+## Rights-flow design boundary
+
+Export and account deletion are not implemented by the Phase 0 slice. The following diagrams define
+the minimum trust boundaries that an owning delivery must implement, update with exact deployed
+components, and test before real candidate onboarding. They are not deployed-flow evidence.
+
+### Authenticated export
+
+```mermaid
+flowchart LR
+  Candidate[Candidate] -->|fresh authentication + export request| RightsAPI[Candidate rights API]
+  RightsAPI -->|owner ID + request ID only| ExportFlow[Durable export workflow]
+  ExportFlow --> OwnedStores[(Module-owned records)]
+  ExportFlow --> ProviderLedger[Approved subprocessor ledger]
+  OwnedStores --> Builder[Allowlisted export builder]
+  ProviderLedger --> Builder
+  Builder -->|encrypted, short lived| ExportObject[(Private object)]
+  ExportObject -->|single-user, exact-object access| Candidate
+  ExportFlow --> Audit[Opaque audit event]
+```
+
+The implementation must exclude credentials and restricted secret material, prevent cross-user
+selection, define the portable schema, expire and delete the export object, audit access without
+copying exported values, and fail closed when ownership or provider reconciliation is incomplete.
+
+### Confirmed account deletion
+
+```mermaid
+flowchart LR
+  Candidate2[Candidate] -->|fresh authentication + irreversible confirmation| DeleteAPI[Candidate rights API]
+  DeleteAPI --> Quarantine[Quarantine identity and new effects]
+  Quarantine --> DeleteFlow[Durable deletion workflow]
+  DeleteFlow --> Revoke[Revoke sessions, OAuth, delegated credentials]
+  DeleteFlow --> Modules[Delete or detach module-owned rows and objects]
+  DeleteFlow --> Copies[Remove cache, search, analytics, support copies]
+  DeleteFlow --> Providers[Send and reconcile subprocessor deletion]
+  DeleteFlow --> Ledger[Minimal non-PII completion + backup-aging ledger]
+  Backup[(Encrypted PITR backups)] -->|never serve before ledger replay| Ledger
+```
+
+The implementation must block login and queued external effects before erasure, account for every
+owned store and provider, prevent ordinary recovery after confirmation, replay the deletion ledger
+before a restored database serves traffic, and expose an honest `backup-expired` state. A provider
+acknowledgement or expired backup window cannot be assumed from elapsed time alone.

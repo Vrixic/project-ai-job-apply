@@ -8,8 +8,8 @@
 | AWS | Compute, database, queue, durable execution, encrypted object storage, logs | Confidential and internal | Isolated development and synthetic-staging foundations deployed; accountable approval pending |
 | GitHub | Source control and CI | Source and synthetic tests only | Repository active |
 | Temporal Cloud | Retired Phase 0 workflow provider | Historical opaque synthetic workflow metadata only | Access keys revoked; AWS runtime secrets scheduled for deletion; no active product data flow or executable dependency |
-| Auth0 by Okta | Authentication and sessions | Minimum identity claims, authentication methods, and session/security metadata | Selected by ADR-012; tenants, contracting entity/region, DPA, security/privacy approval, and activation pending |
-| OpenTelemetry/CloudWatch | Operational telemetry | Redacted identifiers and measurements | Local/config definition present |
+| Auth0 by Okta | Authentication and sessions | Minimum identity claims, authentication methods, and session/security metadata | Development tenant and web conformance active for synthetic engineering use; synthetic staging temporarily shares the issuer under ADR-014. Contracting entity/region, DPA, provider review, dedicated real-user tenants, and accountable approval remain pending. |
+| AWS CloudWatch / OpenTelemetry libraries | Operational telemetry | Redacted identifiers and measurements | Encrypted CloudWatch logs, traces, metrics, alarms, and alert exercises are deployed; provider/legal-entity terms, access/retention review, and accountable approval remain pending for real candidate data |
 | AI model provider | Later structured extraction/tailoring | Minimum required candidate/job context | Not selected |
 | Email provider | Later approved delivery/outreach sending | Approved message and recipient | Not selected |
 | Billing provider | Later subscription and entitlement normalization | Customer/billing identifiers | Stripe proposed, not activated |

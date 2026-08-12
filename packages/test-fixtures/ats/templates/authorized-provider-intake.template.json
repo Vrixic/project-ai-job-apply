@@ -1,0 +1,32 @@
+{
+  "templateOnly": true,
+  "instructions": "Complete this in the restricted evidence system; do not commit the completed intake or raw capture.",
+  "providerFamily": "REQUIRED_EXACT_FAMILY",
+  "providerVariant": "REQUIRED_EXACT_VARIANT",
+  "sourceKind": "public_permitted_example | controlled_test_tenant | user_provided_with_consent",
+  "intendedBehaviorTags": ["REQUIRED"],
+  "captureOwnerId": "OPAQUE_OWNER_ID",
+  "capturedOn": "YYYY-MM-DD",
+  "authorization": {
+    "evidenceId": "OPAQUE_EVIDENCE_ID",
+    "termsOrAgreementVersion": "REQUIRED",
+    "permittedActions": ["capture", "sanitize", "store", "test"],
+    "legalPrivacyDispositionId": "OPAQUE_DISPOSITION_ID",
+    "securityPrivacyDispositionId": "OPAQUE_DISPOSITION_ID",
+    "expiresOn": "YYYY-MM-DD_OR_NULL"
+  },
+  "quarantine": {
+    "restrictedLocationId": "OPAQUE_LOCATION_ID",
+    "encrypted": true,
+    "accessLogged": true,
+    "deletionOwnerId": "OPAQUE_OWNER_ID",
+    "deleteBy": "CAPTURE_DATE_PLUS_NO_MORE_THAN_30_DAYS"
+  },
+  "requiredOutputEvidence": {
+    "secretScanEvidenceId": "OPAQUE_EVIDENCE_ID",
+    "piiScanEvidenceId": "OPAQUE_EVIDENCE_ID",
+    "humanSanitizationReviewEvidenceId": "OPAQUE_EVIDENCE_ID",
+    "representativeReviewEvidenceId": "OPAQUE_EVIDENCE_ID",
+    "rawCaptureDispositionEvidenceId": "OPAQUE_EVIDENCE_ID"
+  }
+}

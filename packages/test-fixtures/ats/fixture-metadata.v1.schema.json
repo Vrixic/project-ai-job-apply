@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://applydash.invalid/schemas/ats-fixture-metadata.v1.schema.json",
+  "title": "ATS fixture metadata v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "fixtureId",
+    "evidenceClass",
+    "provider",
+    "source",
+    "dataSafety",
+    "sanitization",
+    "retention",
+    "representativeness",
+    "behaviorTags",
+    "integrity",
+    "reviewState"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "ats-fixture-metadata.v1" },
+    "fixtureId": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*-v[1-9][0-9]*$" },
+    "evidenceClass": { "enum": ["synthetic", "sanitized_authorized_provider"] },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["family", "variant"],
+      "properties": {
+        "family": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "variant": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "capturedOn", "authorizationEvidenceId"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "created_for_testing",
+            "public_permitted_example",
+            "controlled_test_tenant",
+            "user_provided_with_consent"
+          ]
+        },
+        "capturedOn": { "type": ["string", "null"], "format": "date" },
+        "authorizationEvidenceId": { "type": ["string", "null"] }
+      }
+    },
+    "dataSafety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "containsProductionData",
+        "containsCandidateData",
+        "containsAuthenticationMaterial",
+        "containsActiveContent"
+      ],
+      "properties": {
+        "containsProductionData": { "const": false },
+        "containsCandidateData": { "const": false },
+        "containsAuthenticationMaterial": { "const": false },
+        "containsActiveContent": { "const": false }
+      }
+    },
+    "sanitization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "policyVersion", "automatedChecks", "humanReview"],
+      "properties": {
+        "status": { "enum": ["not_applicable_synthetic", "complete"] },
+        "policyVersion": { "const": "ats-fixture-policy-2026-08-11" },
+        "automatedChecks": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/check" }
+        },
+        "humanReview": {
+          "oneOf": [{ "$ref": "#/$defs/syntheticReview" }, { "$ref": "#/$defs/humanReview" }]
+        }
+      }
+    },
+    "retention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rawCaptureCreated",
+        "rawCaptureDisposition",
+        "rawCaptureEvidenceId",
+        "rawDeletionDueOn",
+        "sanitizedFixturePolicy"
+      ],
+      "properties": {
+        "rawCaptureCreated": { "type": "boolean" },
+        "rawCaptureDisposition": { "enum": ["not_applicable", "destroyed", "quarantined"] },
+        "rawCaptureEvidenceId": { "type": ["string", "null"] },
+        "rawDeletionDueOn": { "type": ["string", "null"], "format": "date" },
+        "sanitizedFixturePolicy": {
+          "enum": ["retain_until_replaced_or_policy_change", "retain_until_authorization_expires"]
+        }
+      }
+    },
+    "representativeness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim", "state", "reviewerId", "reviewedOn", "evidenceId"],
+      "properties": {
+        "claim": { "type": "boolean" },
+        "state": { "enum": ["not_applicable", "accepted"] },
+        "reviewerId": { "type": ["string", "null"] },
+        "reviewedOn": { "type": ["string", "null"], "format": "date" },
+        "evidenceId": { "type": ["string", "null"] }
+      }
+    },
+    "behaviorTags": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "files"],
+      "properties": {
+        "algorithm": { "const": "sha256" },
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/integrityFile" }
+        }
+      }
+    },
+    "reviewState": { "enum": ["approved_synthetic", "approved_sanitized_provider"] }
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["category", "tool", "toolVersion", "runOn", "result", "evidenceId"],
+      "properties": {
+        "category": { "enum": ["repository", "secret", "pii"] },
+        "tool": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "toolVersion": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,31}$" },
+        "runOn": { "type": "string", "format": "date" },
+        "result": { "const": "passed" },
+        "evidenceId": { "type": "string", "minLength": 1 }
+      }
+    },
+    "humanReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "reviewerId", "reviewedOn", "evidenceId"],
+      "properties": {
+        "state": { "const": "approved_sanitized" },
+        "reviewerId": { "type": "string", "minLength": 1 },
+        "reviewedOn": { "type": "string", "format": "date" },
+        "evidenceId": { "type": "string", "minLength": 1 }
+      }
+    },
+    "syntheticReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "reviewerId", "reviewedOn", "evidenceId"],
+      "properties": {
+        "state": { "const": "not_applicable_synthetic" },
+        "reviewerId": { "const": null },
+        "reviewedOn": { "const": null },
+        "evidenceId": { "const": null }
+      }
+    },
+    "integrityFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "bytes", "digest"],
+      "properties": {
+        "path": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]*$" },
+        "bytes": { "type": "integer", "minimum": 1, "maximum": 1048576 },
+        "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    }
+  }
+}

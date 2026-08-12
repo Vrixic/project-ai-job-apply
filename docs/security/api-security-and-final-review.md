@@ -1,6 +1,6 @@
 # API Security and Independent Final Review
 
-- Status: Required engineering and release baseline; implementation evidence pending
+- Status: Foundation controls have deployed evidence; exact launch-candidate assessment pending
 - Owner: Platform/security engineering
 - Accountable approver: Independent security reviewer; individual unassigned
 - First required assessment: Exact public-launch candidate in D6
@@ -35,6 +35,36 @@ must appear in an owned inventory and have exactly one exposure class:
 Browser, mobile, and extension applications are public clients. They never receive a trusted
 client secret or an internal service credential. Internal and administrative interfaces must not
 be made public merely because they require a token.
+
+## Current foundation exposure inventory
+
+This is the deployed development gateway inventory at the current foundation baseline. The
+versioned [OpenAPI contract](../../packages/api-contracts/openapi/platform.v1.json) remains the
+executable route source of truth. Later route additions require an updated inventory and their own
+delivery evidence; this section is not approval of Phase 1 or later behavior.
+
+| Method/path | Exposure class | Required boundary | Current evidence state |
+|---|---|---|---|
+| `GET /health/live` | Public anonymous | Fixed minimal health response; method/path allowlist; no candidate state | Deployed `200` probes and direct Lambda boundary tests pass |
+| `GET /health/ready` | Public anonymous | Fixed minimal readiness response; method/path allowlist; no candidate state | Deployed `200` probes and direct Lambda boundary tests pass |
+| `GET /v1/me` | Candidate | Valid Auth0 JWT with `profile:read`; resolved internal owner only | Auth and local gateway tests pass |
+| `GET /v1/me/job-preferences` | Candidate | `profile:read`; owner-scoped query | Local and deployed persistence/isolation evidence passes |
+| `PUT /v1/me/job-preferences` | Candidate | `profile:write`; strict schema/payload boundary; owner-scoped write | Local and deployed persistence/isolation evidence passes |
+| `GET /v1/operations/{operationId}` | Candidate | `profile:read`; operation owner predicate | Deployed two-account denial passes |
+| `GET /v1/jobs/{jobId}` | Candidate | `jobs:read`; active redacted canonical-job response | Implemented and deployed as later D1 work; not approved by D0-015 |
+
+There is no current public administrator, support, provider-webhook, temporary-object-download,
+WebSocket, extension, mobile, ATS, AI, billing, outreach, or remote-browser API. The direct Lambda
+boundary verifier rejects missing/invalid/wrong-issuer/wrong-audience/insufficient-scope identity,
+unknown routes and methods, malformed bodies, unsupported media types, and oversized payloads.
+The deployed profile slice additionally proves cross-user denial. These controls are engineering
+evidence, not an independent assessment.
+
+Current capacity is bounded by API Gateway/Lambda settings and low reserved concurrency. There is
+no claim that account-, route-, or business-flow-aware public abuse controls are complete. Before
+invited users or a broad public surface, the owning delivery must define measured throttles,
+enumeration/automation controls, operational response, and false-positive handling without using
+CAPTCHA or MFA bypasses.
 
 ## Required API and application controls
 

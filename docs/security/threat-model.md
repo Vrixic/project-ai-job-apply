@@ -2,7 +2,7 @@
 
 - Status: Engineering review ready; product, legal/privacy, and accountable security approval pending
 - Method: STRIDE with explicit trust boundaries
-- Last updated: 2026-08-08
+- Last updated: 2026-08-11
 
 ## Protected assets
 
@@ -57,6 +57,27 @@
 - Independent open-book security assessment and penetration test of the exact launch candidate,
   including public-surface discovery, API authorization/abuse, cloud configuration, clients,
   application-agent business logic, remediation, and retest
+
+## Phase 0 treatment status
+
+The following table prevents a design requirement from being mistaken for deployed evidence or an
+accepted risk. `Blocked by policy` means the capability cannot process real data or be activated
+until the named gate passes; it does not mean an accountable reviewer accepted the residual risk.
+
+| ID | Foundation risk or limitation | Current engineering treatment | Evidence state | Required next gate |
+|---|---|---|---|---|
+| TM-R01 | Cross-user profile/operation access | Issuer/subject maps to an internal owner; repository predicates and two-account negative tests fail closed | Local tests and deployed development/synthetic-staging denial evidence pass | Accountable foundation review; repeat for every later sensitive API family |
+| TM-R02 | Development identity compromise also affects synthetic staging | ADR-014 restricts shared Auth0 trust to synthetic engineering acceptance; AWS data/control planes remain isolated | Limitation documented and environment tests pass; identity isolation is not claimed | Dedicated staging/production tenants and conformance before any real user or launch candidate |
+| TM-R03 | Logs or workflow payloads disclose candidate values | Identifier-only events, allowlisted redaction, encrypted logs, sanitized evidence, and synthetic-only shared environments | Local redaction tests and deployed aggregate log/trace inspections pass for the foundation | Repeat payload/provider tests before each real-data capability |
+| TM-R04 | Deleted data is restored or retained by an active system/provider | Immediate-denial, deletion-ledger, backup aging, and reconciliation designs exist; restores are isolated and synthetic | Restore evidence passes; complete deletion/export workflow is unimplemented | Implement and test rights/deletion in the owning delivery before real candidate onboarding |
+| TM-R05 | No staffed incident or vulnerability response during real-data use | Runbooks define severity, containment, evidence, reconciliation, and intake; real-data/public use remains gated | Procedures are review ready; roles/channels and a staffed exercise are pending | Name roles/channels and exercise required scenarios before real data/public launch as applicable |
+| TM-R06 | Deferred mobile build dependency can hang on malicious image formats | Exact expiring dependency exception forbids untrusted ICNS/JXL/HEIF input and all mobile public use | CI enforces the exact path/version/expiry; independent approval not granted | Remove or explicitly re-review before expiry or any mobile build/public test |
+| TM-R07 | Future providers or agents gain excessive data/action authority | Provider activation register, least-data rules, immutable intent, effect safety, kill switches, and per-capability delta review | Architecture only; providers and external effects are inactive | Concrete provider/capability security, privacy, legal, and effect-safety approval |
+| TM-R08 | Foundation review is mistaken for launch assurance | ADR-015 requires an independent open-book exact-candidate assessment, remediation, and retest | Policy accepted; launch-candidate evidence does not yet exist | Blocking D6 exact-candidate assessment and signed disposition |
+
+Accountable reviewers record findings, conditions, and treatment decisions in the
+[Phase 0 review record](phase-0-accountable-review-record.md). This table must not be edited to
+simulate reviewer acceptance.
 
 ## Risk ownership and reassessment
 

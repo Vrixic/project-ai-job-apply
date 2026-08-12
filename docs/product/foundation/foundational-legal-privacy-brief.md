@@ -2,6 +2,7 @@
 
 - Status: Review ready; no legal conclusion or approval recorded
 - Prepared: 2026-07-28
+- Last updated: 2026-08-11
 - Accountable reviewer: Future external legal/privacy counsel; individual unassigned
 - Product owner: Founder/repository owner; legal name to record before approval
 
@@ -48,8 +49,9 @@ Approve, reject, or condition the foundational assumptions that later deliveries
 - Generated application artifacts remain until the user deletes them or deletes the account.
 - Phase 0 uses operational telemetry only. Optional product analytics require a later explicit
   preference and applicable review.
-- Development and staging use synthetic data until the foundational privacy gate permits another
-  class of data.
+- Shared development, CI, staging, and demos use synthetic data until the applicable legal/privacy
+  and security gates permit another class of data. The isolated founder-only modes below do not
+  authorize shared-environment or invited-user processing.
 
 ## Decisions required from the product owner
 
@@ -65,10 +67,12 @@ Approve, reject, or condition the foundational assumptions that later deliveries
 | LP-D08 | Default generated-artifact retention | Until the user deletes the artifact or account |
 | LP-D09 | Optional product analytics consent model | Phase 0 operational telemetry only; optional product analytics later require an explicit preference |
 
-## Approved pre-approval development modes
+## Product-owner-authorized pre-approval development modes
 
-LP-D05 is resolved. The following staged policy allows most of the product to be built before entity
-formation without treating early development as a public service:
+LP-D05 is resolved as product direction, not as a counsel conclusion. The following staged policy
+allows most of the product to be built before entity formation without treating early development
+as a public service. Counsel may narrow or reject these modes; until then, the strictest applicable
+release consequence in the [legal review register](legal-review-register.md) controls:
 
 | Mode | Permitted data and behavior | Prohibited behavior |
 |---|---|---|
@@ -151,7 +155,9 @@ service.
 
 ## Requested written output
 
-For each foundational question, counsel should provide:
+Counsel should complete the
+[foundational disposition worksheet](foundational-legal-privacy-disposition.md) against one exact
+repository commit. For each foundational question, counsel should provide:
 
 - jurisdiction, authority, source-policy version, and review date;
 - permitted, prohibited, and conditional behavior;
@@ -196,6 +202,7 @@ record is approved.
 
 - [Product and system architecture](../../PRODUCT_AND_SYSTEM_ARCHITECTURE.md)
 - [Legal and policy review register](legal-review-register.md)
+- [Counsel disposition worksheet and package manifest](foundational-legal-privacy-disposition.md)
 - [Launch decision](launch-decision.md)
 - [Threat model](../../security/threat-model.md)
 - [Privacy impact assessment](../../security/privacy-impact-assessment.md)
@@ -215,6 +222,10 @@ These sources guide the engineering questions; they do not replace jurisdiction-
 - [NIST Secure Software Development Framework](https://csrc.nist.gov/pubs/sp/800/218/final)
 
 ## Review record
+
+The detailed LR-F01–LR-F07 dispositions, conditions, findings, and artifact manifest belong in the
+[foundational disposition worksheet](foundational-legal-privacy-disposition.md). This summary must
+match that signed record; neither record is complete by itself.
 
 | Field | Value |
 |---|---|
