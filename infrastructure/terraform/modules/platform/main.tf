@@ -762,6 +762,7 @@ resource "aws_ecs_task_definition" "migration" {
   cpu                      = 256
   memory                   = 512
   execution_role_arn       = aws_iam_role.execution.arn
+  enable_fault_injection   = false
 
   lifecycle {
     create_before_destroy = true

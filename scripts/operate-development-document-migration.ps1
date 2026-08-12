@@ -322,6 +322,15 @@ function Get-DeclaredVariableNames {
     })
 }
 
+function ConvertTo-TerraformEnvironmentValue {
+  param([AllowNull()][object]$Value)
+
+  if ($Value -is [bool]) { return $Value.ToString().ToLowerInvariant() }
+  if ($Value -is [string]) { return $Value }
+  if ($null -eq $Value) { return "null" }
+  return ConvertTo-Json -InputObject $Value -Compress -Depth 30
+}
+
 function Set-VariablesFromPlan {
   param(
     [Parameter(Mandatory)][object]$Plan,
@@ -356,15 +365,7 @@ function Set-VariablesFromPlan {
 
   foreach ($property in $properties) {
     $value = $property.Value.value
-    $serialized = if ($value -is [bool]) {
-      $value.ToString().ToLowerInvariant()
-    } elseif ($value -is [string]) {
-      $value
-    } elseif ($null -eq $value) {
-      "null"
-    } else {
-      $value | ConvertTo-Json -Compress -Depth 30
-    }
+    $serialized = ConvertTo-TerraformEnvironmentValue -Value $value
     [Environment]::SetEnvironmentVariable("TF_VAR_$($property.Name)", [string]$serialized, "Process")
   }
   foreach ($name in $missing) {
@@ -569,6 +570,16 @@ function Assert-ExactTaskPlan {
   if (@($beforeContainer).Count -ne 1 -or @($afterContainer).Count -ne 1) {
     throw "The migration task plan must contain exactly one container."
   }
+  foreach ($container in @(@($beforeContainer)[0], @($afterContainer)[0])) {
+    foreach ($propertyName in @("mountPoints", "portMappings", "systemControls", "volumesFrom")) {
+      $property = $container.PSObject.Properties[$propertyName]
+      if ($null -eq $property) { continue }
+      if (@($property.Value).Count -ne 0) {
+        throw "A provider-default migration container collection is not empty."
+      }
+      $container.PSObject.Properties.Remove($propertyName)
+    }
+  }
   @($beforeContainer)[0].image = $MigrationImage
   if (($beforeContainer | ConvertTo-Json -Compress -Depth 30) -cne ($afterContainer | ConvertTo-Json -Compress -Depth 30)) {
     throw "The migration digest must be the only container-definition change."
@@ -578,6 +589,10 @@ function Assert-ExactTaskPlan {
   foreach ($property in @($change.after.PSObject.Properties)) {
     if ($property.Name -in $ignored) { continue }
     $beforeProperty = $change.before.PSObject.Properties[$property.Name]
+    if ($property.Name -ceq "tags" -and $null -eq $property.Value -and
+        $null -ne $beforeProperty -and @($beforeProperty.Value.PSObject.Properties).Count -eq 0) {
+      continue
+    }
     if ($null -eq $beforeProperty -or
         ($beforeProperty.Value | ConvertTo-Json -Compress -Depth 30) -cne
         ($property.Value | ConvertTo-Json -Compress -Depth 30)) {
@@ -633,6 +648,7 @@ function Assert-TaskDefinition {
   $secrets = @($containers[0].secrets)
   $compatibilities = @($task.requiresCompatibilities)
   if ([string]$task.status -cne "ACTIVE" -or [string]$task.family -cne $migrationFamily -or
+      (Get-OptionalProperty $task "enableFaultInjection") -ne $false -or
       $compatibilities.Count -ne 1 -or [string]$compatibilities[0] -cne "FARGATE" -or
       [string]$task.networkMode -cne "awsvpc" -or [string]$task.cpu -cne "256" -or
       [string]$task.memory -cne "512" -or [string]$task.runtimePlatform.cpuArchitecture -cne "X86_64" -or
