@@ -54,10 +54,11 @@ $baselineFunctions = @($ast.FindAll({
         "Assert-OperatorOnlyReleaseDelta", "Assert-ExecutionIdentity",
         "Assert-DurableClaimPutResult", "Assert-DurableExecutionClaimEvidence",
         "Test-DurableClaimHistoryExists", "Assert-RecoveryOperatorBinding",
-        "Resolve-TaskLogStreamName"
+        "Resolve-TaskLogStreamName",
+        "Set-RecoveredReceiptEvidence"
       )
     }, $true))
-if ($baselineFunctions.Count -ne 16) { throw "The input and plan guards must each be defined once." }
+if ($baselineFunctions.Count -ne 17) { throw "The input and plan guards must each be defined once." }
 foreach ($function in $baselineFunctions | Sort-Object { $_.Extent.StartOffset }) {
   Invoke-Expression $function.Extent.Text
 }
@@ -84,6 +85,22 @@ try {
     -TaskDefinition $logDefinition
 } catch { $wrongLogStreamRejected = $true }
 if (-not $wrongLogStreamRejected) { throw "An unexpected ECS log stream was accepted." }
+
+$submittedReceipt = [pscustomobject]@{ phase = "submitted" }
+$finalizedReceipt = Set-RecoveredReceiptEvidence -Receipt $submittedReceipt `
+  -StoppedAt ([datetime]::Parse("2026-08-12T23:00:00Z")) `
+  -RecoveryOperatorSourceSha ("c" * 40)
+if ([string]$finalizedReceipt.phase -cne "verified" -or [int]$finalizedReceipt.exitCode -ne 0 -or
+    [string]$finalizedReceipt.stoppedAt -cne "2026-08-12T23:00:00.0000000Z" -or
+    [string]$finalizedReceipt.recoveredByOperatorSourceSha -cne ("c" * 40)) {
+  throw "The submitted recovery receipt was not finalized exactly."
+}
+$repeatFinalizationRejected = $false
+try {
+  $null = Set-RecoveredReceiptEvidence -Receipt $finalizedReceipt `
+    -StoppedAt ([datetime]::UtcNow) -RecoveryOperatorSourceSha ("c" * 40)
+} catch { $repeatFinalizationRejected = $true }
+if (-not $repeatFinalizationRejected) { throw "A finalized receipt was recoverable twice." }
 
 $emptyClaimHistory = [pscustomobject]@{}
 if (Test-DurableClaimHistoryExists -History $emptyClaimHistory -ClaimKey "claim") {

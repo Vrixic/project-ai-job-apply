@@ -1047,6 +1047,28 @@ function Resolve-TaskLogStreamName {
   return $expected
 }
 
+function Set-RecoveredReceiptEvidence {
+  param(
+    [Parameter(Mandatory)][object]$Receipt,
+    [Parameter(Mandatory)][datetime]$StoppedAt,
+    [Parameter(Mandatory)][string]$RecoveryOperatorSourceSha
+  )
+
+  if ([string]$Receipt.phase -cne "submitted" -or
+      $null -ne (Get-OptionalProperty $Receipt "stoppedAt") -or
+      $null -ne (Get-OptionalProperty $Receipt "exitCode") -or
+      $RecoveryOperatorSourceSha -notmatch '^[a-f0-9]{40}$') {
+    throw "Only an unfinalized submitted receipt can be recovered."
+  }
+  $Receipt.phase = "verified"
+  $Receipt | Add-Member -NotePropertyName stoppedAt `
+    -NotePropertyValue $StoppedAt.ToUniversalTime().ToString("o") -Force
+  $Receipt | Add-Member -NotePropertyName exitCode -NotePropertyValue 0 -Force
+  $Receipt | Add-Member -NotePropertyName recoveredByOperatorSourceSha `
+    -NotePropertyValue $RecoveryOperatorSourceSha -Force
+  return $Receipt
+}
+
 function Assert-TaskResultAndLogs {
   param(
     [Parameter(Mandatory)][string]$ClusterArn,
@@ -1580,11 +1602,8 @@ if ($Action -eq "Recover") {
   $stoppedTask = Assert-TaskResultAndLogs -ClusterArn $clusterArn `
     -TaskArn ([string]$receiptValue.taskArn) -TaskDefinitionArn $taskDefinitionArn
   Assert-ZeroMigrationCompute -ClusterArn $clusterArn
-  $receiptValue.phase = "verified"
-  $receiptValue.stoppedAt = ([datetime]$stoppedTask.stoppedAt).ToUniversalTime().ToString("o")
-  $receiptValue.exitCode = 0
-  $receiptValue | Add-Member -NotePropertyName recoveredByOperatorSourceSha `
-    -NotePropertyValue $operatorSourceSha -Force
+  $receiptValue = Set-RecoveredReceiptEvidence -Receipt $receiptValue `
+    -StoppedAt ([datetime]$stoppedTask.stoppedAt) -RecoveryOperatorSourceSha $operatorSourceSha
   Write-JsonFile -Path $receipt -Value $receiptValue -AllowReplace
   [pscustomobject]@{
     Outcome                   = "recovered"
