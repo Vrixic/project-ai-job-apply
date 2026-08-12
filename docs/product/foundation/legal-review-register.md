@@ -1,8 +1,14 @@
 # Legal and Policy Review Register
 
-- Status: Review ready; accountable counsel is not yet assigned
+- Status: Review ready; deferred to mandatory D6 public-launch review under ADR-019
 - Accountable role: Legal/privacy counsel
-- Last updated: 2026-08-11
+- Last updated: 2026-08-12
+
+The product owner removed the accountable foundational counsel review from Phase 0 on 2026-08-12.
+This is a timing/ownership decision, not approval: every row below remains `Not reviewed`, its
+release consequence remains active, and [D6-016](../delivery/phase-6-mobile-and-paid.md) must review
+the then-current product before public launch. See
+[ADR-019](../../adr/019-defer-foundational-counsel-review-to-public-launch.md).
 
 Repository documents are engineering inputs, not legal advice. The
 [foundational review brief](foundational-legal-privacy-brief.md) contains the product facts,
@@ -76,3 +82,4 @@ approval does not close any feature-specific row below.
 | 2026-07-28 | Recorded nationwide US/18+ direction, provisional unformed `Vrix LLC`, founder risk ownership, restricted-answer review, deletion/artifact defaults, and Phase 0 analytics boundary. LP-D05 remains under discussion. | [Foundational review brief](foundational-legal-privacy-brief.md) |
 | 2026-07-28 | Resolved LP-D05 with synthetic shared environments, isolated founder-owned data, and exact-adapter founder live pilots only after written legal/terms, security, approval, duplicate-safety, confirmation, and kill-switch gates. No pilot is currently authorized. | [ADR-011](../../adr/011-staged-preproduction-data-and-founder-pilot.md) |
 | 2026-08-11 | Added an exact-commit artifact manifest, deterministic disposition vocabulary, row-level conclusion record, condition/closure ledger, cross-review handoff, and attributable sign-off checklist. Clarified that pre-approval modes are product direction rather than counsel approval; all strict gates remain active. | [Foundational disposition worksheet](foundational-legal-privacy-disposition.md) |
+| 2026-08-12 | Product owner transferred foundational counsel review from D0-014 to mandatory D6-016. No row was approved; all strict capability and public-launch consequences remain active. | [ADR-019](../../adr/019-defer-foundational-counsel-review-to-public-launch.md), [D6 task](../delivery/phase-6-mobile-and-paid.md) |

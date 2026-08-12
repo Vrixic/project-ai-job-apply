@@ -70,7 +70,7 @@ test("rejects synthetic material presented as representative provider evidence",
 
 test("rejects active HTML even when its integrity record is current", () => {
   const root = copySyntheticFixture();
-  setPayload(root, "<!doctype html><form><script>alert('unsafe')</script></form>\n");
+  setPayload(root, "<!doctype html><form><script>alert('unsafe')</script></form>\n"); // nosemgrep: semgrep-rules.javascript.lang.security.audit.unknown-value-with-script-tag -- deliberate inert attack string proving rejection
   assert.throws(() => validateTree(root), /contains active, hidden, authentication, or network/);
 });
 
@@ -219,5 +219,22 @@ test("rejects provider evidence after its source authorization expires", () => {
   assert.throws(
     () => validateTree(root, { today: new Date("2026-08-11T00:00:00.000Z") }),
     /source authorization has expired/,
+  );
+});
+
+test("rejects malformed fixture and provider slugs without regex backtracking", () => {
+  const fixtureRoot = copySyntheticFixture();
+  const fixtureManifest = loadMetadata(fixtureRoot);
+  fixtureManifest.metadata.fixtureId = `fixture-${"segment-".repeat(5000)}v0`;
+  writeMetadata(fixtureManifest.metadataPath, fixtureManifest.metadata);
+  assert.throws(() => validateTree(fixtureRoot), /fixtureId must be a versioned lowercase slug/);
+
+  const providerRoot = copySyntheticFixture();
+  const providerManifest = loadMetadata(providerRoot);
+  providerManifest.metadata.provider.variant = "synthetic--variant";
+  writeMetadata(providerManifest.metadataPath, providerManifest.metadata);
+  assert.throws(
+    () => validateTree(providerRoot),
+    /provider family and variant must be lowercase slugs/,
   );
 });

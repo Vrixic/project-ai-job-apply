@@ -1,14 +1,15 @@
 # Phase 0 Security and Privacy Approval Plan
 
-- Status: Review package ready; accountable review not started
-- Last updated: 2026-08-11
-- Accountable security approver: Future independent reviewer; individual unassigned
-- Accountable privacy/legal approver: Future external counsel; individual unassigned
+- Status: Engineering pre-audit passed; accountable review deferred to D6-015 under ADR-020
+- Last updated: 2026-08-12
+- Accountable security/privacy approver: Future independent D6 reviewer; individual unassigned
+- Accountable legal approver: Deferred to D6-016 under ADR-019; individual unassigned
 
 ## Approval boundary
 
-Phase 0 approval establishes the controls and release gates on which later work may rely. It does
-not certify unimplemented features or deployed environments.
+Phase 0 engineering acceptance establishes the control evidence and release gates on which later
+work may rely. It is not accountable security/privacy approval and does not certify unimplemented
+features or future deployed environments.
 
 In scope now:
 
@@ -26,17 +27,18 @@ Later approvals must verify the concrete implementation and deployed evidence fo
 UGC, extension permissions, AI processing, ATS automation, remote browsers, outreach, billing,
 mobile apps, and each new provider or jurisdiction.
 
-Phase 0 approval must accept the blocking final-review policy in
-[ADR-015](../adr/015-independent-prelaunch-security-review.md), but it cannot substitute for the
-independent assessment of the exact D6 launch candidate.
+The product owner transferred accountable foundation disposition into D6-015 under
+[ADR-020](../adr/020-defer-accountable-foundation-security-review-to-launch.md). That review must
+accept the blocking final-review policy in ADR-015 and inspect this foundation package as part of
+the independent assessment of the exact D6 launch candidate.
 
 ## Approval roles
 
 | Role | Accountability | Assignee |
 |---|---|---|
 | Product owner | Confirms product facts, risk tolerance, and residual-risk acceptance | Founder/repository owner; legal name pending |
-| Security reviewer | Reviews threats, control design, test evidence, and deployed residual risk | Future independent reviewer; unassigned |
-| Privacy/legal reviewer | Confirms legal/privacy requirements and review conditions | Future external counsel; unassigned |
+| Security/privacy reviewer | Reviews inherited foundation threats/privacy controls, exact-candidate implementation, adversarial evidence, and deployed residual risk | Future independent D6 reviewer; unassigned |
+| Legal reviewer | Confirms legal requirements and counsel-owned conclusions before public launch | Deferred to D6-016; unassigned |
 | Platform engineering | Implements controls and supplies environment evidence | Platform engineering |
 | Service/data owner | Proves ownership, authorization, minimization, and deletion behavior | Assigned per delivery |
 
@@ -86,9 +88,9 @@ silence is not approval.
 | SP-14 | Incident response | Severity, containment, evidence, notification decision, exercises | Baseline below plus the [Phase 0 incident-response runbook](../../infrastructure/runbooks/incidents/phase-0-incident-response.md) and component recovery/revocation/isolation evidence | Procedure is review ready; named incident/privacy roles, monitored channels, and a staffed exercise remain pending |
 | SP-15 | Vulnerability management | Intake, severity, remediation ownership, disclosure path | Baseline below, the [vulnerability-management runbook](../../infrastructure/runbooks/security/vulnerability-management.md), full-lockfile audit, and exact expiring exception register | Procedure and repository enforcement are review ready; accountable owner/reviewer, monitored external contact, response objectives, and operating-cycle evidence remain pending |
 | SP-16 | Subprocessor governance | DPA/security/retention/training/region/breach/deletion review | [Subprocessor register](subprocessors.md) | Provider reviews pending |
-| SP-17 | Legal/privacy foundation | Scoped written counsel conclusions and conditions | [Legal/privacy brief](../product/foundation/foundational-legal-privacy-brief.md) | Counsel pending |
+| SP-17 | Legal/privacy foundation | Review-ready questions and enforceable deferred gates; scoped written counsel conclusions are a D6 public-launch requirement | [Legal/privacy brief](../product/foundation/foundational-legal-privacy-brief.md), [ADR-019](../adr/019-defer-foundational-counsel-review-to-public-launch.md) | D0 package prepared; counsel deferred to D6-016; no legal approval claimed |
 | SP-18 | API and final product assurance | Explicit exposure classes, API control baseline, independent launch-candidate assessment, remediation and retest | [API security and final-review baseline](api-security-and-final-review.md), [ADR-015](../adr/015-independent-prelaunch-security-review.md) | Baseline defined; exact launch-candidate evidence belongs to D6 |
-| SP-19 | Accountable disposition | Immutable reviewed revision, conflict disclosures, per-document decisions, finding treatment, residual-risk expiry, and signatures | [Phase 0 accountable review record](phase-0-accountable-review-record.md) | Template ready; reviewers and all dispositions pending |
+| SP-19 | Accountable disposition | Immutable reviewed revision, conflict disclosures, per-document decisions, finding treatment, residual-risk expiry, and signatures | [Foundation review record](phase-0-accountable-review-record.md), [2026-08-12 engineering pre-audit](../product/delivery/evidence/d0-security-privacy-engineering-preaudit-2026-08-12.md) | Objective engineering pre-audit passes; accountable disposition is mandatory in D6-015 under ADR-020 |
 
 `Engineering baseline` and `Review ready` are not approval states.
 
@@ -122,13 +124,13 @@ Before real candidate data is processed:
 - Do not claim a vulnerability disclosure program or response objective until it is staffed and
   monitored.
 
-## Phase 0 approval conditions
+## D6-015 inherited-foundation review conditions
 
-Approval requires all of the following:
+The accountable launch review requires all of the following:
 
-- D0-014's accountable legal/privacy conclusions are linked, and every security/privacy dependency
-  from those conclusions is resolved or recorded as a blocking, owned condition.
-- The accountable product, security, and privacy/legal reviewers are named.
+- Every known legal dependency is assigned to an enforceable capability or D6 public-launch gate;
+  the D6 security/privacy reviewer does not make counsel-owned legal conclusions.
+- The accountable product-risk owner and independent security/privacy reviewer are named.
 - Every foundational document has a version/commit and an explicit reviewer disposition.
 - Security/privacy findings have owners and are closed, conditionally accepted, or recorded as
   release-blocking.
@@ -170,7 +172,8 @@ that record is complete and its exact revision is linked here.
 | Commit/artifact versions reviewed | Pending |
 | Product owner and disposition | Pending |
 | Security reviewer and disposition | Pending |
-| Privacy/legal reviewer and disposition | Pending |
+| Privacy reviewer and disposition | Pending |
+| Legal reviewer and disposition | Deferred to D6-016; not approved |
 | Open release-blocking findings | Pending |
 | Accepted residual risks and expiry | None |
 | Approval date | Not approved |

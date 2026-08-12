@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-08-11
+Last updated: 2026-08-12
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -11,7 +11,7 @@ This is the master record for the delivery phases defined in the [product and sy
 
 | ID | Delivery | Status | Start | Completion | Living task document |
 |---|---|---|---|---|---|
-| D0 | Product, data, and legal foundation | In progress | 2026-07-27 | Not completed | [Phase 0 tasks](phase-0-foundation.md) |
+| D0 | Product, data, and legal foundation | Complete | 2026-07-27 | 2026-08-12 | [Phase 0 tasks](phase-0-foundation.md) |
 | D1 | Useful web product and canonical job catalog | In progress | 2026-08-11 | Not completed | [Phase 1 tasks](phase-1-web-and-job-catalog.md) |
 | D2 | Extension and community loop | Not started | Not started | Not completed | [Phase 2 tasks](phase-2-extension-and-community.md) |
 | D3 | High-quality application preparation | Not started | Not started | Not completed | [Phase 3 tasks](phase-3-application-preparation.md) |
@@ -22,13 +22,13 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## D0 — Product, data, and legal foundation
 
-- Status: In progress
+- Status: Complete
 - Start: 2026-07-27
-- Completion: Not completed
+- Completion: 2026-08-12
 - Depends on: Approved product direction
 - Task document: [Phase 0 tasks](phase-0-foundation.md)
 - Exit gate: Schemas, policies, threat/data maps, engineering foundation, and an authenticated end-to-end skeleton are reviewed and evidenced; the skeleton runs on the accepted scale-to-zero application runtime with no obsolete always-on gateway/worker path.
-- Current engineering status: all repository-controlled Phase 0 implementation and review-readiness work is complete. The formal D0-012 review was performed against merged revision `4b6c63b` and did not accept the exit: counsel remains unassigned with LR-F01–LR-F07 not reviewed, security/privacy reviewers remain unassigned with every disposition pending, and only an explicitly non-representative synthetic ATS fixture exists. D0 remains in progress until those accountable outcomes exist. [Final exit review](evidence/d0-final-exit-review-2026-08-11.md)
+- Current engineering status: Phase 0 is complete. D0-012 accepted immutable revision `ee232824208d6a431024d34904144182b036502d` after every revised exit criterion and the full verifier passed. Counsel remains mandatory D6-016, independent security/privacy assessment remains mandatory D6-015, and representative provider fixtures block their owning D2–D4 adapters. No external approval or provider evidence is claimed. [Final acceptance](evidence/d0-final-exit-acceptance-2026-08-12.md)
 
 ## D1 — Useful web product and canonical job catalog
 
@@ -100,6 +100,11 @@ Append only material cross-delivery events.
 
 | Date | Delivery | Update | Evidence |
 |---|---|---|---|
+| 2026-08-12 | D0 | Accepted the final Phase 0 exit against immutable revision `ee232824208d6a431024d34904144182b036502d`. Every revised criterion and repository verifier passes; Phase 0 is complete without weakening or claiming any transferred D2–D6 gate. | [Final acceptance](evidence/d0-final-exit-acceptance-2026-08-12.md), [D0 tasks](phase-0-foundation.md) |
+| 2026-08-12 | D0/D2–D4 | Completed D0-007's repository-controlled fixture process and transferred authorized representative provider evidence to blocking D2-011, D3-013, and D4-012 tasks. No source authorization or provider representativeness is claimed; D0 is ready for its refreshed exit review. | [ADR-021](../../adr/021-own-provider-fixtures-with-adapter-deliveries.md), [fixture policy](../foundation/ats-fixture-policy.md), [D0 tasks](phase-0-foundation.md) |
+| 2026-08-12 | D0/D6 | Product owner removed D0-015 after the security/privacy engineering pre-audit passed and transferred the complete foundation package to mandatory D6-015 independent exact-candidate assessment. No accountable approval was claimed; all capability gates remain active. D0 now waits only on D0-007 and the refreshed exit review. | [ADR-020](../../adr/020-defer-accountable-foundation-security-review-to-launch.md), [engineering pre-audit](evidence/d0-security-privacy-engineering-preaudit-2026-08-12.md), [D6 tasks](phase-6-mobile-and-paid.md) |
+| 2026-08-12 | D0 | Completed the D0-015 repository-controlled engineering pre-audit. Current dependency, auth/gateway/web, infrastructure, credential-pattern, fixture, and incremental pinned-SAST checks pass after replacing flagged fixture slug/version regexes with explicit linear validation. Accountable human dispositions remain pending. | [Engineering pre-audit](evidence/d0-security-privacy-engineering-preaudit-2026-08-12.md), [D0 tasks](phase-0-foundation.md) |
+| 2026-08-12 | D0/D6 | Product owner removed D0-014 from Phase 0 and transferred accountable foundational counsel review to mandatory D6-016. No legal approval was recorded; LR-F01–LR-F07 and all capability-specific release consequences remain active. D0 now waits on D0-015 and D0-007 evidence. | [ADR-019](../../adr/019-defer-foundational-counsel-review-to-public-launch.md), [D0 tasks](phase-0-foundation.md), [D6 tasks](phase-6-mobile-and-paid.md) |
 | 2026-08-11 | D0 | Performed the formal Phase 0 exit review after PR #209 merged. Repository-controlled engineering and the legal/security/fixture review packages pass, but the exit is not accepted because counsel and security/privacy dispositions are absent and no authorized representative ATS fixture set exists. D0 remains in progress; synthetic-only later work may continue behind the existing gates. | [Final exit review](evidence/d0-final-exit-review-2026-08-11.md), [Phase 0 tasks](phase-0-foundation.md) |
 | 2026-08-11 | D1 | Implemented repository-local reversible resolution for probable duplicate jobs. Exact decisions create lossless canonical aliases, canonical reads aggregate redacted provenance, reopen restores independent records, ambiguous topology fails closed, and append-only audit history stores only opaque reviewer IDs plus reason codes. The full verifier and all 9 PostgreSQL 16 integration tests pass. No public moderation API, real source, UGC, AWS migration, or runtime release was enabled; development deployment and synthetic acceptance remain. | [Canonical duplicate resolution](evidence/d1-canonical-duplicate-resolution-2026-08-11.md), [Phase 1 tasks](phase-1-web-and-job-catalog.md) |
 | 2026-08-11 | D1 | Applied exact correction alias version `10` with zero creates/deletes/replacements, matching artifact checksum, no weighted routing, `200/200/401`, all 16 direct cases including missing-job `404`, 16 healthy alarms, zero unhandled failures, and zero drift. Fresh product-owner browser acceptance confirmed the server-held session has `jobs:read`. The development job-read recovery gate is complete; D1-004 continues for moderation and end-to-end catalog acceptance. | [Development release and acceptance recovery](evidence/d1-development-job-read-api-release-2026-08-11.md), [Phase 1 tasks](phase-1-web-and-job-catalog.md) |
@@ -291,7 +296,8 @@ Append only material cross-delivery events.
 |---|---|---|---|---|
 | 2026-07-28 | Track actual start/completion without forecast dates. | Delivery is governed by quality gates rather than schedule predictions. | D0–D7 | Architecture delivery-roadmap principles |
 | 2026-07-28 | Exclude all coaching and post-submission hiring-outcome tracking. | The product is focused on rapid, tailored, confirmed applications. | D0–D7 | Updated product architecture and phase records |
-| 2026-07-28 | Approve foundational legal/privacy and security controls in D0, then require capability-specific delta approval in the delivery that implements the behavior. | Review must begin during design but remain tied to concrete data flows, providers, permissions, and deployed evidence. | D0–D7 | [Legal review register](../foundation/legal-review-register.md), [security/privacy plan](../../security/security-privacy-approval-plan.md) |
+| 2026-07-28 | Prepare foundational legal/privacy and security controls in D0, then require capability-specific delta approval in the delivery that implements the behavior. | Review begins during design but remains tied to concrete data flows, providers, permissions, and deployed evidence. Accountable foundational counsel review was later transferred to D6 by ADR-019. | D0–D7 | [Legal review register](../foundation/legal-review-register.md), [security/privacy plan](../../security/security-privacy-approval-plan.md) |
+| 2026-08-12 | Remove D0-014 and transfer accountable foundational counsel review to mandatory D6-016 without treating it as approved. | Synthetic-only engineering can continue without immediate external counsel, while real capabilities and public launch remain protected by explicit legal/provider gates. | D0, D1–D7 | [ADR-019](../../adr/019-defer-foundational-counsel-review-to-public-launch.md), [D6 task](phase-6-mobile-and-paid.md) |
 | 2026-07-28 | Persist only candidate-supplied restricted answers and always include them in the final application review and immutable packet approval. | Reduce repeated entry without silently deciding or inferring sensitive facts. | D0, D3, D4 | [ADR-010](../../adr/010-restricted-answer-vault-and-mandatory-review.md) |
 | 2026-07-28 | Allow isolated founder-only real-data dogfooding before entity formation; allow live founder ATS submissions only through exact-adapter, expiring pilot approval. | Obtain realistic evidence without exposing invited users or generalizing one approval to other variants. | D0, D3, D4 | [ADR-011](../../adr/011-staged-preproduction-data-and-founder-pilot.md) |
 | 2026-07-28 | Move final public product-name/domain approval from D0 to D6 while retaining configuration-driven ApplyDash branding for development. | Naming is not a foundation dependency; public origins, OAuth branding, email, stores, billing, and launch still require an owned and approved identity. | D0, D6 | [Naming brief](../foundation/naming-brief.md), [D6 task](phase-6-mobile-and-paid.md) |
@@ -310,7 +316,7 @@ Append only material cross-delivery events.
 | ID | State | Risk or blocker | Affected deliveries | Owner | Mitigation or next action |
 |---|---|---|---|---|---|
 | PR-001 | Open | ApplyDash is the provisional development identity; final public name/domain remain a D6 release blocker. | D6 public release | Product owner | Complete D6-012 before production OAuth/email/store/public identity activation. |
-| PR-002 | Blocked | Accountable legal/privacy counsel and accountable security/privacy approvers are unavailable. Participant research is no longer a D0 requirement. | D0 onward | Product owner | Assign counsel and security/privacy reviewers, then complete the prepared evidence workflows. |
+| PR-002 | Closed | D0-014 and D0-015 are removed after their review packages and the security/privacy engineering pre-audit were completed. ADR-019/ADR-020 transfer accountable counsel and independent security/privacy disposition to mandatory D6 gates without claiming approval; capability gates remain active. | D6 public launch; D1–D7 capability activation | Product owner | Complete D6-015/D6-016 before launch and every earlier capability-specific gate before activation. |
 | PR-003 | Closed | D0-006/D0-008/D0-011 and D0-016 pass. Both accounts have exact `$5` budgets, healthy exports, protected evidence, attributable billing, and stable caller-account-scoped `2026-08-09` daily reads with no ECS/Fargate service charge. Current-month invoice finalization remains monthly finance reconciliation rather than an engineering gate. Dedicated staging identity and mobile conformance remain D6 gates. | D0 onward | Product owner; platform engineering | Preserve account-scoped cost inspection and complete dedicated identity/mobile gates in D6. |
 | PR-004 | Open | The independent final security assessor is unassigned. Public launch cannot proceed without complete scope, exact-candidate assessment, remediation, independent retest, and signed disposition under ADR-015. | D6 public launch and material post-launch changes | Product owner; security owner | Select the independent assessor before launch-candidate freeze, agree rules of engagement and complete surface inventory, and reserve remediation/retest capacity. |
 | PR-005 | Closed | Both development and staging accepted workflow releases passed checksum-authorized rollback/restoration, full conformance, alert delivery, cleanup, and zero drift. Each accepted current release is restored with triggers disabled, ECS idle, and routing unchanged. Staging authenticated gateway acceptance and the exact three-record legacy drain also pass. | D0 onward | Platform engineering | Execute and accept the controlled staging cutover; retain ECS/Temporal rollback resources until replacement acceptance and expiry. |

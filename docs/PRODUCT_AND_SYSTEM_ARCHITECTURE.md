@@ -1434,9 +1434,11 @@ Schedule pressure is not a reason to weaken consent, factuality, security, obser
   [D0-016](product/delivery/phase-0-serverless-runtime-migration.md), prove behavioral equivalence,
   and remove every obsolete deployment and executable code path
 - Choose launch geography and target candidate segment
-- Obtain foundational legal/privacy and security approval; assign source-, UGC-, automation-,
-  outreach-, store-, provider-, and jurisdiction-specific questions as blocking gates to the
-  delivery that implements them
+- Prepare the foundational legal/privacy and security/privacy review packages, complete the
+  security/privacy engineering pre-audit, and assign accountable counsel, independent
+  security/privacy, source-, UGC-, automation-, outreach-, store-, provider-, and
+  jurisdiction-specific decisions as blocking gates to the delivery that activates them;
+  accountable foundation review is part of the mandatory D6 exact-candidate gate under ADR-020
 - Define truth profile, job schema, field ontology, event taxonomy, and consent model
 - Build the threat model, privacy impact assessment, data map, consent/retention/rights designs,
   subprocessor gate, and security-control evidence matrix
@@ -1444,8 +1446,9 @@ Schedule pressure is not a reason to weaken consent, factuality, security, obser
 - Create ATS fixture acquisition/sanitization process
 - Establish application quality, reliability, safety, and efficiency baselines; record operating cost as a guardrail
 
-Exit: approved foundational schemas, policies, legal/privacy and security controls; enforceable
-feature-specific release gates; and a thin authenticated end-to-end skeleton operating through the
+Exit: approved foundational schemas and policies; passed security/privacy engineering evidence;
+review-ready legal/privacy and security/privacy packages with enforceable capability and
+public-launch gates; and a thin authenticated end-to-end skeleton operating through the
 scale-to-zero runtime with no obsolete always-on gateway/worker path.
 
 ### Phase 1 — Useful web product and canonical job catalog
@@ -1628,9 +1631,13 @@ The living delivery tracker is authoritative. Current dependency order is:
 1. Complete [D0-016](product/delivery/phase-0-serverless-runtime-migration.md) by reconciling the
    first post-retirement two-account billing window and final repository evidence.
 2. Reconcile delivered two-account billing against the revised runtime cost baseline under D0-008.
-3. Obtain the accountable legal/privacy and security/privacy reviews in D0-014 and D0-015.
-4. Acquire representative sanitized ATS fixtures under the approved D0-007 policy.
-5. Complete the evidence-based D0 exit review before beginning D1 product capability work.
+3. Preserve the passed D0 security/privacy engineering pre-audit; D0-014 and D0-015 are removed
+   under ADR-019/ADR-020 and their accountable reviews are mandatory D6 public-launch inputs.
+4. Acquire authorized representative provider fixtures in D2, D3, and D4 after each owning
+   adapter declares its supported variants; D0-007 owns the approved process and fail-closed gate,
+   not premature provider selection.
+5. Preserve the accepted D0 foundation while keeping all non-synthetic capability work behind its
+   owning source, fixture, legal/privacy, security, and external-action gates.
 11. Instrument time, correction rate, factuality, failure reason, and cost.
 12. Test with real consenting users before expanding ATS coverage.
 

@@ -1,14 +1,20 @@
 # Foundational Legal and Privacy Disposition Worksheet
 
-- Status: Ready for accountable counsel; no legal conclusion or approval recorded
+- Status: Ready for accountable counsel; deferred to mandatory D6-016 public-launch review; no legal conclusion or approval recorded
 - Prepared: 2026-08-11
-- Scope: D0-014 and LR-F01 through LR-F07
+- Scope: D6-016 (transferred from removed D0-014) and LR-F01 through LR-F07
 - Accountable reviewer: External legal/privacy counsel; individual unassigned
 
 This worksheet is the auditable completion record for the foundational review requested in the
 [legal/privacy brief](foundational-legal-privacy-brief.md). It is an engineering-prepared template,
 not legal advice, a legal conclusion, or permission to process real candidate data or perform an
 external action.
+
+The product owner removed this review from D0 on 2026-08-12 and transferred it to mandatory
+[D6-016](../delivery/phase-6-mobile-and-paid.md) under
+[ADR-019](../../adr/019-defer-foundational-counsel-review-to-public-launch.md). The transfer changes
+timing only: every disposition remains `Not reviewed`, and all listed capability restrictions stay
+in force until their owning gate is satisfied.
 
 ## Completion protocol
 
@@ -23,7 +29,7 @@ external action.
 6. Have the product owner acknowledge the conclusions and separately accept only those residual
    risks counsel identifies as eligible for acceptance. Product-owner acceptance cannot override a
    legal prohibition or close a counsel-owned condition.
-7. Synchronize the dispositions into the [legal review register](legal-review-register.md). D0-014
+7. Synchronize the dispositions into the [legal review register](legal-review-register.md). D6-016
    remains blocked until every foundational row meets the closure rule below.
 
 ## Disposition vocabulary and closure rule
@@ -135,7 +141,7 @@ Copy one row per finding:
 ## Cross-review handoff
 
 Legal/privacy approval and security/privacy approval are separate accountable acts. Before closing
-D0-014, counsel and the product owner must identify every conclusion that changes the threat model,
+D6-016, counsel and the product owner must identify every conclusion that changes the threat model,
 data classification, consent, retention/deletion, subprocessor, incident, or security-control
 design. Those items remain open in D0-015 until the accountable security/privacy reviewer accepts
 the implementation and evidence. Likewise, a security control cannot substitute for a prohibited
@@ -168,7 +174,7 @@ or unreviewed legal basis.
 | Strict gates preserved for unreviewed/deferred capabilities | Yes; must be reconfirmed at disposition |
 | Product owner/date/reference | Pending |
 
-## D0-014 closure checklist
+## D6-016 closure checklist
 
 - [ ] One exact repository commit and the complete artifact manifest were reviewed.
 - [ ] Reviewer identity, accountable role, scope, jurisdictions, and attributable record are filled.
@@ -184,6 +190,6 @@ or unreviewed legal basis.
 - [ ] Synthetic-only shared environments, no production ingestion/public UGC, and no unapproved
       external action or public claim remain enforced for every unreviewed capability.
 
-Only after this checklist is evidenced may delivery governance consider D0-014 complete. This
-worksheet does not mark the delivery task or Phase 0 complete; those state changes belong to the
-delivery records after accountable review.
+Only after this checklist is evidenced may delivery governance consider D6-016 complete. This
+worksheet does not mark the delivery or public-launch gate complete; those state changes belong to
+the delivery records after accountable review.
