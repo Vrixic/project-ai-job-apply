@@ -119,13 +119,24 @@ $normalizedTaskPlan = [pscustomobject]@{
           container_definitions = ConvertTo-Json -InputObject @(,$beforeContainer) -Compress -Depth 10
           tags = [pscustomobject]@{}
           enable_fault_injection = $false
+          ipc_mode = ""
+          pid_mode = ""
+          task_role_arn = ""
         }
         after = [pscustomobject]@{
           container_definitions = ConvertTo-Json -InputObject @(,$afterContainer) -Compress -Depth 10
           tags = $null
           enable_fault_injection = $false
+          ipc_mode = $null
+          pid_mode = $null
+          task_role_arn = $null
         }
-        after_unknown = [pscustomobject]@{ enable_fault_injection = $false }
+        after_unknown = [pscustomobject]@{
+          enable_fault_injection = $false
+          ipc_mode = $false
+          pid_mode = $false
+          task_role_arn = $false
+        }
       }
     })
   output_changes = [pscustomobject]@{
@@ -170,6 +181,26 @@ try {
   $unknownFaultRejected = $true
 }
 if (-not $unknownFaultRejected) { throw "Unknown migration fault injection was accepted." }
+
+foreach ($field in @("ipc_mode", "pid_mode", "task_role_arn")) {
+  foreach ($unsafeValue in @("unsafe", "unknown")) {
+    $unsafeEmptyFieldPlan = $normalizedTaskPlan | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+    if ($unsafeValue -ceq "unknown") {
+      $unsafeEmptyFieldPlan.resource_changes[0].change.after_unknown.($field) = $true
+    } else {
+      $unsafeEmptyFieldPlan.resource_changes[0].change.before.($field) = $unsafeValue
+    }
+    $unsafeEmptyFieldRejected = $false
+    try {
+      Assert-ExactTaskPlan -Plan $unsafeEmptyFieldPlan
+    } catch {
+      $unsafeEmptyFieldRejected = $true
+    }
+    if (-not $unsafeEmptyFieldRejected) {
+      throw "Unsafe $field normalization '$unsafeValue' was accepted."
+    }
+  }
+}
 
 $sourceSha = "c" * 40
 $artifactSha = "d" * 64
