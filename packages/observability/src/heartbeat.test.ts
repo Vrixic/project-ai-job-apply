@@ -26,14 +26,12 @@ describe("log delivery heartbeat", () => {
     expect(info).toHaveBeenCalledTimes(3);
   });
 
-  it.each([
-    0,
-    -1,
-    Number.NaN,
-    Number.POSITIVE_INFINITY,
-  ])("rejects an invalid interval: %s", (intervalMs) => {
-    expect(() => startLogDeliveryHeartbeat({ info: vi.fn() }, intervalMs)).toThrow(
-      "Log delivery heartbeat interval must be positive",
-    );
-  });
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    "rejects an invalid interval: %s",
+    (intervalMs) => {
+      expect(() => startLogDeliveryHeartbeat({ info: vi.fn() }, intervalMs)).toThrow(
+        "Log delivery heartbeat interval must be positive",
+      );
+    },
+  );
 });
