@@ -419,8 +419,7 @@ function Assert-PlanWasApplied {
     throw "The source plan does not contain reconstructable inputs and managed values."
   }
   $changes = @(Get-MeaningfulChanges -Changes @($Plan.resource_changes))
-  $drift = @(Get-MeaningfulChanges -Changes @($Plan.resource_drift))
-  if ($changes.Count -ne 0 -or $drift.Count -ne 0) {
+  if ($changes.Count -ne 0) {
     throw "The saved source plan must be an already accepted zero-change input baseline."
   }
 }

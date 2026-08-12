@@ -63,6 +63,12 @@ $zeroChangePlan = [pscustomobject]@{
 }
 Assert-PlanWasApplied -Plan $zeroChangePlan
 
+$refreshOnlyPlan = $zeroChangePlan | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+$refreshOnlyPlan.resource_drift = @(
+  [pscustomobject]@{ change = [pscustomobject]@{ actions = @("update") } }
+)
+Assert-PlanWasApplied -Plan $refreshOnlyPlan
+
 $changeRejected = $false
 $changedPlan = $zeroChangePlan | ConvertTo-Json -Depth 10 | ConvertFrom-Json
 $changedPlan.resource_changes = @([pscustomobject]@{ change = [pscustomobject]@{ actions = @("update") } })
