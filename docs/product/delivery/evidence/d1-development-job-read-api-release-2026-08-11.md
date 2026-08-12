@@ -2,11 +2,12 @@
 
 ## Outcome
 
-The first immutable development gateway release containing `GET /v1/jobs/{jobId}` was applied,
-but authenticated acceptance exposed a protected-path timeout and is not accepted. Development
-remains synthetic-only. The fault is locally remediated and fully repository-verified; a new
-immutable artifact and separately reviewed alias release remain required before acceptance can be
-replayed.
+Two immutable development gateway releases containing `GET /v1/jobs/{jobId}` were applied, but
+the read path is not accepted. The first release performed an unnecessary profile identity write
+and timed out. Version `8` removed that write and passed its reviewed release boundary, but a newly
+added direct missing-job case proved that the bundled application returns `500` after
+authorization. Development remains synthetic-only while privacy-safe exception classification is
+merged and released for exact diagnosis.
 
 ## Applied release evidence
 
@@ -59,16 +60,56 @@ Two consecutive corrected Lambda packages are identical:
 - Size: 1,225,151 bytes
 - CycloneDX components: 139
 
-This corrected package is local evidence only. It has not been published or routed.
+At that checkpoint the corrected package was local evidence only. It was subsequently published
+and routed as version `8` under the exception and reviewed plan below.
+
+## Version 8 recovery release
+
+GitHub Actions run
+[31540953205](https://github.com/Vrixic/project-ai-job-apply/actions/runs/31540953205)
+failed before runner allocation because no Actions capacity remained. With product-owner approval,
+the exact merged artifact was published once through the temporary development IAM Identity Center
+administrator session. This is a documented development-only exception, not a replacement for the
+protected OIDC publisher.
+
+- Source SHA: `787469bf5b1e82b54dc8d10b6a03be371c7dc042`.
+- Artifact SHA-256: `74ed2ba72ad0d627c12236b16a6043bfc34ea617c31399548065b6db3635ebbd`.
+- Four previously unused immutable keys were written to the versioned private artifact bucket.
+- Every object used customer-managed KMS encryption and exact source/artifact metadata. The ZIP's
+  stored checksum and independently downloaded SHA-256 matched.
+- Reviewed release-plan SHA-256:
+  `7bf25e349d2a68dd8215e47f8f831848274383afe4f8e72654bea23a47e240d2`.
+- The exact plan applied `0` creates, `2` in-place updates, `0` deletes, and `0` replacements.
+  Alias version `8` became active without weighted routing.
+- Liveness, readiness, and anonymous denial returned `200/200/401`; the original 15-case direct
+  matrix passed without writes; all 16 alarms were `OK`; post-apply zero-drift plan SHA-256 was
+  `59b7e59b2648fe4bfcd780356f527e612c9560aa13832a46e41e16dd91969af7`.
+
+Browser acceptance still returned the sanitized inconclusive state. The direct verifier previously
+did not exercise the job route. Adding an exact `jobs:read` missing-job case reproduced status
+`500` against version `8`, including with a version-7 UUID, while the Lambda invocation itself
+completed normally.
+
+One short-lived read-only diagnostic used the retained migration task definition and stopped with
+exit code `0`. It proved schema/table permissions, a simple missing-ID query, and the exact active
+catalog query all succeeded with zero rows. The RDS error log contained no corresponding database
+error. This narrows the defect to an unclassified client-side exception in the bundled application
+path rather than Auth0, API Gateway, database permissions, schema state, or the SQL statement.
+
+The repository now adds the missing deployed job-route case and a privacy-safe internal-failure
+classifier. It emits only an allowlisted route template, error type, and constrained error code;
+tests prove messages, stacks, bearer values, email, location, and filesystem content cannot enter
+the diagnostic. Gateway tests pass `40/40`, web tests pass `40/40`, type checks, lint, and formatting
+pass. This diagnostic source is not yet merged or released.
 
 ## Remaining acceptance gate
 
-1. Merge the reviewed source.
-2. Publish and read back the exact corrected artifact through the protected development workflow.
-3. Prepare, review, and apply a refresh-backed Terraform alias release with no unrelated change.
-4. Prove `200/200/401`, the direct boundary matrix, a fresh authenticated `jobs:read` missing-job
-   `404`, all alarms `OK`, and zero Terraform drift.
-5. Record only the sanitized browser success state.
+1. Merge and release the privacy-safe diagnostic and direct job-route verification source.
+2. Reproduce once, inspect only the allowlisted error type/code, and implement the root correction.
+3. Publish and apply a separately reviewed immutable correction release.
+4. Prove `200/200/401`, all direct boundary cases including missing-job `404`, a fresh authenticated
+   browser pass, all alarms `OK`, and zero Terraform drift.
+5. Record only sanitized acceptance evidence and return temporary diagnostic capacity to zero.
 
 D1-004 remains in progress. Moderation resolution and end-to-end catalog acceptance remain after
 this development read-path recovery.

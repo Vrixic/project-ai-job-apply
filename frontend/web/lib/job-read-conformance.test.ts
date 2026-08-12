@@ -16,7 +16,7 @@ function dependencies(status: number) {
     enabled: true,
     fetch: vi.fn<typeof fetch>(async (input, init) => {
       expect(String(input)).toBe(
-        "https://api.example.test/v1/jobs/00000000-0000-0000-8000-000000000000",
+        "https://api.example.test/v1/jobs/00000000-0000-7000-8000-000000000000",
       );
       expect(new Headers(init?.headers).get("authorization")).toBe(
         "Bearer must-remain-server-held",

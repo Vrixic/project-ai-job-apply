@@ -40,6 +40,38 @@ interface AuthenticatedRequest extends FastifyRequest {
   traceId?: string;
 }
 
+const SAFE_ERROR_IDENTIFIER = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
+const SAFE_ERROR_CODE = /^[A-Z0-9_]{2,32}$/;
+const SAFE_ROUTE_TEMPLATES = new Set([
+  "/health/live",
+  "/health/ready",
+  "/v1/me",
+  "/v1/me/job-preferences",
+  "/v1/jobs/:jobId",
+  "/v1/operations/:operationId",
+]);
+
+export function privacySafeRequestFailure(exception: unknown, routeTemplate: string | undefined) {
+  const candidate = exception as { code?: unknown; name?: unknown };
+  const errorType =
+    typeof candidate?.name === "string" && SAFE_ERROR_IDENTIFIER.test(candidate.name)
+      ? candidate.name
+      : "UnknownError";
+  const errorCode =
+    typeof candidate?.code === "string" && SAFE_ERROR_CODE.test(candidate.code)
+      ? candidate.code
+      : "UNKNOWN";
+  return {
+    event: "unhandled_request_failure",
+    route:
+      typeof routeTemplate === "string" && SAFE_ROUTE_TEMPLATES.has(routeTemplate)
+        ? routeTemplate
+        : "unknown",
+    error_type: errorType,
+    error_code: errorCode,
+  } as const;
+}
+
 @Injectable()
 class RequestIdentity {
   constructor(
@@ -103,6 +135,13 @@ class ProblemDetailsFilter implements ExceptionFilter {
               : "request_error";
       title = HttpStatus[status] ?? "Request error";
       detail = exception.message;
+    }
+
+    if (status === HttpStatus.INTERNAL_SERVER_ERROR) {
+      request.log.error(
+        privacySafeRequestFailure(exception, request.routeOptions.url),
+        "Request failed with an unhandled privacy-safe error classification",
+      );
     }
 
     const problem: ProblemDetails = {

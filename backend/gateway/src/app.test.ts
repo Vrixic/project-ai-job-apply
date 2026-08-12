@@ -15,6 +15,7 @@ import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createGatewayApplication } from "./application.js";
+import { privacySafeRequestFailure } from "./app.module.js";
 import {
   type AuthorizedHttpApiEvent,
   createApiGatewayHandler,
@@ -162,6 +163,34 @@ describe("candidate API", () => {
     const response = await app.inject({ method: "GET", url: "/v1/me" });
     expect(response.statusCode).toBe(401);
     expect(response.json().code).toBe("authentication_required");
+  });
+
+  it("classifies internal failures without retaining messages, stacks, or unknown routes", () => {
+    const failure = Object.assign(
+      new Error("Bearer secret-token for candidate@example.test in Atlanta"),
+      {
+        code: "42P01",
+        stack: "sensitive stack and filesystem path",
+      },
+    );
+
+    const diagnostic = privacySafeRequestFailure(failure, "/v1/jobs/:jobId");
+    expect(diagnostic).toEqual({
+      event: "unhandled_request_failure",
+      route: "/v1/jobs/:jobId",
+      error_type: "Error",
+      error_code: "42P01",
+    });
+    expect(JSON.stringify(diagnostic)).not.toContain("secret-token");
+    expect(JSON.stringify(diagnostic)).not.toContain("candidate@example.test");
+    expect(JSON.stringify(diagnostic)).not.toContain("Atlanta");
+    expect(JSON.stringify(diagnostic)).not.toContain("filesystem");
+    expect(privacySafeRequestFailure({ name: "bad value", code: "secret-value" }, "/raw")).toEqual({
+      event: "unhandled_request_failure",
+      route: "unknown",
+      error_type: "UnknownError",
+      error_code: "UNKNOWN",
+    });
   });
 
   it("preserves an API Gateway principal through the real Fastify injection lifecycle", async () => {
