@@ -53,10 +53,10 @@ $baselineFunctions = @($ast.FindAll({
         "Test-EcsFaultInjectionDisabled", "Assert-ReleaseSourceBinding",
         "Assert-OperatorOnlyReleaseDelta", "Assert-ExecutionIdentity",
         "Assert-DurableClaimPutResult", "Assert-DurableExecutionClaimEvidence",
-        "Test-DurableClaimHistoryExists"
+        "Test-DurableClaimHistoryExists", "Assert-RecoveryOperatorBinding"
       )
     }, $true))
-if ($baselineFunctions.Count -ne 14) { throw "The input and plan guards must each be defined once." }
+if ($baselineFunctions.Count -ne 15) { throw "The input and plan guards must each be defined once." }
 foreach ($function in $baselineFunctions | Sort-Object { $_.Extent.StartOffset }) {
   Invoke-Expression $function.Extent.Text
 }
@@ -111,6 +111,24 @@ Assert-OperatorOnlyReleaseDelta -ChangeRecords @(
   "M`tscripts/validate-serverless-workflow-infrastructure.mjs",
   "M`tinfrastructure/runbooks/deployments/database-migration.md"
 )
+Assert-RecoveryOperatorBinding -ExecutionOperatorSourceSha $releaseSource `
+  -CurrentOperatorSourceSha $operatorSource -IsAncestor $true -ChangeRecords @(
+    "M`tscripts/operate-development-document-migration.ps1"
+  )
+Assert-RecoveryOperatorBinding -ExecutionOperatorSourceSha $operatorSource `
+  -CurrentOperatorSourceSha $operatorSource -IsAncestor $true -ChangeRecords @()
+foreach ($unsafeRecovery in @(
+    @{ ancestor = $false; changes = @("M`tscripts/operate-development-document-migration.ps1") },
+    @{ ancestor = $true; changes = @("M`tbackend/services/profile/src/index.ts") }
+  )) {
+  $recoveryRejected = $false
+  try {
+    Assert-RecoveryOperatorBinding -ExecutionOperatorSourceSha $releaseSource `
+      -CurrentOperatorSourceSha $operatorSource -IsAncestor:$unsafeRecovery.ancestor `
+      -ChangeRecords $unsafeRecovery.changes
+  } catch { $recoveryRejected = $true }
+  if (-not $recoveryRejected) { throw "An unsafe recovery operator source was accepted." }
+}
 foreach ($unsafeDelta in @(
     , @("M`tinfrastructure/terraform/environments/development/main.tf"),
     , @("A`tscripts/operate-development-document-migration.ps1"),
@@ -200,6 +218,22 @@ Assert-DurableExecutionClaimEvidence -Head $claimHead -ClaimVersion $claimVersio
   -ExecutionPlanSha256 ("f" * 64) -ExpectedChecksum $claimChecksum `
   -ExpectedKmsKeyArn $claimKmsArn -ReleaseSourceSha $releaseSource `
   -OperatorSourceSha $operatorSource
+$historicalClaimHead = $claimHead | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+$historicalClaimHead.Metadata.'operator-source-sha' = $releaseSource
+Assert-DurableExecutionClaimEvidence -Head $historicalClaimHead -ClaimVersion $claimVersion `
+  -ExecutionPlanSha256 ("f" * 64) -ExpectedChecksum $claimChecksum `
+  -ExpectedKmsKeyArn $claimKmsArn -ReleaseSourceSha $releaseSource `
+  -OperatorSourceSha $releaseSource
+$historicalClaimMismatchRejected = $false
+try {
+  Assert-DurableExecutionClaimEvidence -Head $historicalClaimHead -ClaimVersion $claimVersion `
+    -ExecutionPlanSha256 ("f" * 64) -ExpectedChecksum $claimChecksum `
+    -ExpectedKmsKeyArn $claimKmsArn -ReleaseSourceSha $releaseSource `
+    -OperatorSourceSha $operatorSource
+} catch { $historicalClaimMismatchRejected = $true }
+if (-not $historicalClaimMismatchRejected) {
+  throw "A historical claim was accepted as belonging to the current recovery operator."
+}
 foreach ($case in @(
     @{ property = "ChecksumSHA256"; value = "wrong" },
     @{ property = "SSEKMSKeyId"; value = "$claimKmsArn-wrong" },
