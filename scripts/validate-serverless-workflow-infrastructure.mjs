@@ -57,6 +57,7 @@ for (const required of [
   "Restore-TerraformVariables",
   "document_scan_mapping_enabled                 = $false",
   "document_scan_event_rule_enabled              = $false",
+  "The saved source plan must be an already accepted zero-change input baseline.",
   "The task plan may change only the one-off migration task definition.",
   '"ecs", "run-task", "--cli-input-json"',
   "aws ecs wait tasks-stopped",
@@ -76,6 +77,7 @@ for (const forbidden of [
   "[IO.Path]::GetFullPath($Candidate, $terraformDirectory)",
   "Wait-TaskRunning",
   "Assert-RunningTaskNetwork",
+  "Test-KnownSubset",
 ]) {
   forbidText(
     developmentMigrationOperator,
