@@ -529,6 +529,10 @@ export class PostgresJobCatalog {
   }
 
   async getActiveJob(jobId: string, now: Date = new Date()): Promise<ActiveJobRecord | null> {
+    // Keep the PostgreSQL wire value primitive. The bundled Lambda runtime must not pass a Date
+    // object across the postgres.js serializer boundary; an ISO timestamp remains parameterized
+    // and PostgreSQL infers timestamptz from the comparison target.
+    const activeAt = now.toISOString();
     const [row] = await this.client<ActiveJobRow[]>`
       SELECT
         job.id,
@@ -559,7 +563,7 @@ export class PostgresJobCatalog {
       INNER JOIN jobs.job_sources AS source ON source.job_id = job.id
       WHERE job.id = ${jobId}
         AND job.status = 'active'
-        AND job.expires_at > ${now}
+        AND job.expires_at > ${activeAt}
         AND job.description IS NOT NULL
       GROUP BY job.id, company.id
       LIMIT 1
