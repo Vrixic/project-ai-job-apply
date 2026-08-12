@@ -4,7 +4,7 @@
 - Start: Not started
 - Completion: Not completed
 - Owners: Unassigned
-- Last updated: 2026-07-31
+- Last updated: 2026-08-12
 - Master tracker: [Delivery tracker](DELIVERY_TRACKER.md#d6--mobile-and-paid-launch)
 
 ## Objective
@@ -36,7 +36,8 @@ cache, WAF, or ALB controls supported by evidence.
 | D6-012 | Finalize the public product name and production domain, complete conflict/domain/store/linguistic screening, and obtain product/counsel approval. | Ready | Product owner; legal counsel | Public-release candidate and production-origin plan | ApplyDash remains swappable and provisional; no production OAuth branding, email, store listing, paid release, or public launch before approval. |
 | D6-013 | Provision on-demand staging for the launch candidate, run representative load/recovery tests, and record an evidence-based launch-capacity decision. | Ready | Platform engineering; product owner | Stable D1–D6 candidate; AWS/provider access | Default remains lean; activate only the availability/capacity controls justified by evidence. |
 | D6-014 | Provision dedicated staging and production Auth0 tenants and environment-specific clients/APIs, cut staging over from the temporary shared development issuer, and replay applicable conformance before launch. | Ready | Platform engineering; security/privacy engineering | D0 identity baseline; D6-012; launch candidate | The Auth0 Free-plan exception in ADR-014 is synthetic-only. Production never trusts development identity, and no real-user staging or launch proceeds until isolation and replay pass. |
-| D6-015 | Complete an independent open-book security assessment and penetration test of the exact launch candidate, remediate and independently retest findings, and obtain the signed release disposition. | Ready | Independent security reviewer; platform/security engineering; product owner | D6-001–D6-014; production-equivalent staging; exact release candidate | Follow the [API security and final-review baseline](../../security/api-security-and-final-review.md) and [ADR-015](../../adr/015-independent-prelaunch-security-review.md). Public launch is blocked by incomplete surface coverage, unresolved Critical/High findings, unapproved Medium findings, or missing retest/sign-off. |
+| D6-015 | Complete an independent open-book security/privacy assessment and penetration test of the inherited foundation and exact launch candidate, remediate and independently retest findings, and obtain the signed release disposition. | Ready | Independent security/privacy reviewer; platform/security engineering; product-risk owner | D0 review package and pre-audit; D6-001–D6-014; production-equivalent staging; exact release candidate | Inherits removed D0-015 under [ADR-020](../../adr/020-defer-accountable-foundation-security-review-to-launch.md). Review FR-01–FR-13 and the foundation evidence, then test the complete product under [ADR-015](../../adr/015-independent-prelaunch-security-review.md). Public launch is blocked by incomplete scope, unresolved Critical/High findings, unapproved Medium findings, or missing remediation/retest/sign-off. |
+| D6-016 | Obtain accountable foundational legal/privacy counsel review of the then-current product and public-launch candidate. | Ready | Qualified US legal/privacy counsel; product owner | D0 review package; D1–D6 concrete providers, data flows, terms, notices, jurisdictions, and launch candidate | Transferred from D0-014 under [ADR-019](../../adr/019-defer-foundational-counsel-review-to-public-launch.md). Counsel must disposition LR-F01–LR-F07, reconcile every capability-specific legal gate, record conditions and revalidation, and provide an attributable conclusion before public launch. |
 
 ## Exit criteria
 
@@ -52,6 +53,9 @@ cache, WAF, or ALB controls supported by evidence.
 - [ ] Cancellation, paid-through access, restore, receipt, refund/support, and account deletion behavior is tested.
 - [ ] There is one understandable Pro product, with monthly/annual intervals and transparent fair-use safeguards.
 - [ ] Accessibility, privacy disclosures, mobile-store policy, security, support, and product acceptance evidence is complete.
+- [ ] Qualified counsel has reviewed the then-current nationwide-US product, providers, data
+      flows, terms/notices, external actions, and exact public-launch candidate; every
+      release-blocking condition is closed or the affected capability remains disabled.
 - [ ] The final public product name and production domain are owned, screened, approved, and consistently configured across web, mobile, extension, OAuth, email, stores, and support.
 - [ ] On-demand staging evidence records launch capacity, recovery behavior, provider limits, and every approved deviation from the lean defaults.
 - [ ] Dedicated staging and production Auth0 tenants are isolated from development, staging has
@@ -63,6 +67,9 @@ cache, WAF, or ALB controls supported by evidence.
       use, cross-user/cross-role/property authorization, identity/session lifecycle, abuse and
       resource exhaustion, web/mobile/extension clients, application-agent business logic,
       cloud/IAM/configuration, supply chain, data protection, recovery, and incident readiness.
+- [ ] The independent reviewer has dispositioned FR-01–FR-13 and the inherited Phase 0 evidence,
+      reconciled every material change since the engineering pre-audit, and included resulting
+      findings in the exact-candidate remediation and retest record.
 - [ ] No Critical or High finding remains open; every remaining Medium has expiring accountable
       acceptance and compensating controls; material fixes passed independent retest; the
       independent reviewer and product owner signed the exact-release disposition.
@@ -77,6 +84,8 @@ cache, WAF, or ALB controls supported by evidence.
 | 2026-07-29 | Accepted real mobile Auth0 Native Application provisioning and Android/iOS device conformance from D0 without starting D6. The locally verified Expo shell remains reusable preparation only. | D6-001, D6-010 | [ADR-012 amendment](../../adr/012-auth0-initial-managed-identity.md), [Auth0 conformance matrix](../../security/auth0-development-conformance.md) |
 | 2026-07-30 | Accepted dedicated staging/production Auth0 tenant provisioning, cutover, and replay as a blocking launch task without starting D6. Synthetic Phase 0 staging may temporarily trust the development issuer, but cannot claim identity isolation or accept real users. | D6-014 | [ADR-014](../../adr/014-shared-development-auth0-for-synthetic-staging.md), [Auth0 baseline](../../security/auth0-configuration-baseline.md) |
 | 2026-07-31 | Added the independent final security assessment as a blocking D6 release task without starting D6. The gate tests the exact deployed web/API/mobile/extension/application-agent/cloud candidate, requires explicit API exposure classes and unauthorized-access tests, and governs remediation, retest, residual-risk expiry, and sign-off. | D6-015 | [API security and final-review baseline](../../security/api-security-and-final-review.md), [ADR-015](../../adr/015-independent-prelaunch-security-review.md) |
+| 2026-08-12 | Accepted the product-owner transfer of foundational counsel review from D0 to a mandatory public-launch gate. No legal approval was inferred; the review must cover the then-current product and reconcile the delivery-specific legal/provider decisions before launch. | D6-016 | [ADR-019](../../adr/019-defer-foundational-counsel-review-to-public-launch.md), [legal disposition worksheet](../foundation/foundational-legal-privacy-disposition.md) |
+| 2026-08-12 | Accepted the product-owner transfer of accountable foundation security/privacy review from removed D0-015 into D6-015. The independent exact-candidate assessment must inspect the inherited foundation package and pre-audit in addition to the finished attack surface. | D6-015 | [ADR-020](../../adr/020-defer-accountable-foundation-security-review-to-launch.md), [engineering pre-audit](evidence/d0-security-privacy-engineering-preaudit-2026-08-12.md), [review record](../../security/phase-0-accountable-review-record.md) |
 
 ## Decisions and scope changes
 
@@ -87,6 +96,8 @@ cache, WAF, or ALB controls supported by evidence.
 | 2026-07-29 | Perform real mobile identity/provider/device conformance in D6 rather than D0. | Conformance should test the actual mobile application and remains a blocking mobile-release gate, while current delivery stays focused on web. | [ADR-012 amendment](../../adr/012-auth0-initial-managed-identity.md) |
 | 2026-07-30 | End the temporary shared-development Auth0 staging exception before real-user staging or launch. | Shared users, keys, logs, administration, availability, and failure modes do not provide environment isolation. | [ADR-014](../../adr/014-shared-development-auth0-for-synthetic-staging.md) |
 | 2026-07-31 | Require an independent, open-book assessment and penetration test of the exact launch candidate before public release. | Foundation review, internal tests, and automated scanners cannot independently prove deployed API authorization, complete external-surface coverage, product-specific business-logic safety, cloud posture, or remediation. | [ADR-015](../../adr/015-independent-prelaunch-security-review.md), [final-review baseline](../../security/api-security-and-final-review.md) |
+| 2026-08-12 | Defer foundational counsel review from D0 to D6 without treating it as approved. | Synthetic-only foundation work does not require immediate counsel, while concrete public terms, providers, jurisdictions, data flows, and the launch candidate require attributable review before release. | [ADR-019](../../adr/019-defer-foundational-counsel-review-to-public-launch.md) |
+| 2026-08-12 | Defer accountable foundation security/privacy disposition from D0 to D6-015 after the engineering pre-audit passes, without treating it as approved. | The independent reviewer should assess the inherited foundation together with the complete deployed product and exact release candidate; all earlier capability gates remain enforceable. | [ADR-020](../../adr/020-defer-accountable-foundation-security-review-to-launch.md) |
 
 ## Risks and blockers
 
@@ -98,6 +109,7 @@ cache, WAF, or ALB controls supported by evidence.
 | D6-R4 | Open | ApplyDash and `applydash.ai` are provisional and may fail ownership, conflict, trademark, store, or linguistic review. | Product owner | Complete D6-012 before any public-release identity becomes irreversible. |
 | D6-R5 | Blocked | The current Auth0 Free subscription provides one tenant, so synthetic staging temporarily shares the development issuer and cannot prove identity-provider isolation. | Product owner; platform engineering | Before real-user staging or launch, upgrade Auth0 or migrate providers, provision dedicated staging/production tenants, cut over, and replay the applicable conformance matrix. |
 | D6-R6 | Open | The independent final assessor is unassigned, and incomplete scope or late authorization/business-logic findings can block launch. | Product owner; security owner | Select an independent qualified assessor before launch-candidate freeze, agree scope/rules of engagement, reserve remediation and retest, and keep every public surface in the owned inventory. |
+| D6-R7 | Blocked | Foundational counsel review was deferred from D0 and no attributable legal conclusion exists. | Product owner; future legal/privacy counsel | Retain qualified counsel before launch-candidate freeze, complete D6-016 against the then-current product, and close or disable every affected capability. |
 
 ## Completion record
 

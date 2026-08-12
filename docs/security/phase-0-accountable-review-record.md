@@ -1,18 +1,21 @@
 # Phase 0 Accountable Security and Privacy Review Record
 
-- Status: Not reviewed; template ready for accountable reviewers
+- Status: Engineering pre-audit passed; accountable disposition deferred to D6-015 under ADR-020
 - Record owner: Product owner
 - Security reviewer: Unassigned
 - Privacy reviewer: Unassigned
+- Review policy updated: 2026-08-12 for ADR-019 legal-review deferral
 - Review revision: Pending immutable Git commit
 - Review opened: Not started
 - Review completed: Not completed
+- Engineering pre-audit: Passed 2026-08-12; [objective evidence](../product/delivery/evidence/d0-security-privacy-engineering-preaudit-2026-08-12.md); reviewer disposition still pending
 
 ## Purpose and limits
 
-This is the disposition record for D0-015. It lets named reviewers bind their review to an exact
-repository revision, record findings and residual-risk decisions, and sign the Phase 0 foundation
-without implying that unimplemented capabilities or a future launch candidate were assessed.
+This was prepared as the disposition record for removed D0-015 and is now a mandatory foundation
+input to D6-015 under ADR-020. It lets the independent launch reviewer bind inherited-foundation
+review to the exact candidate revision, record findings and residual-risk decisions, and avoid
+implying that the engineering pre-audit was accountable approval.
 
 Completing this record requires human judgment. Repository authors and agents may prepare evidence
 and correct documentation, but must not enter reviewer identities, independence statements,
@@ -40,17 +43,18 @@ and the linked deployed evidence rather than accepting the evidence matrix as a 
 Minimum competence for the **privacy reviewer** is demonstrated experience assessing data
 inventory and minimization, purpose and consent boundaries, individual-rights flows, retention and
 deletion, subprocessors, telemetry, and privacy risks across product and cloud systems. Legal
-conclusions remain owned by the qualified counsel completing D0-014. A privacy reviewer who is not
-that counsel must identify the counsel conclusions relied on and must not independently declare
-legal compliance.
+conclusions remain owned by the qualified counsel completing D6-016 under ADR-019. Because that
+review is deferred, the D6 privacy reviewer must identify every legal assumption they did not
+assess, preserve its owning capability or launch gate, and must not independently declare legal
+compliance.
 
 The **product-risk owner** must have authority to keep capabilities blocked, fund remediation, and
 accept only the residual risks this record permits. A repository author may hold that role, but
 must provide their legal name and actual role and may not use product-risk acceptance to replace a
 reviewer disposition or a counsel conclusion.
 
-D0-015 is an accountable foundation review, not the independent D6 penetration test. Nevertheless,
-each reviewer must disclose whether they principally designed or implemented a reviewed control,
+D6-015 combines inherited-foundation disposition with the independent exact-candidate assessment
+and penetration test. Each reviewer must disclose whether they principally designed or implemented a reviewed control,
 report to or are paid by a person whose decision they are reviewing, hold a material financial
 interest, or have another relationship that could impair challenge. Such a reviewer must not be
 described as independent. The product-risk owner must appoint an additional competent reviewer
@@ -61,7 +65,8 @@ the D0 reviewer selection.
 Execute the review in this order:
 
 1. Merge every intended review-package correction, then identify one full 40-character commit.
-2. Complete D0-014 and provide its attributable, sanitized conclusions and conditions.
+2. Confirm ADR-019's D6-016 deferral and enumerate every legal assumption that remains assigned to
+   a capability-specific or public-launch gate; do not treat the deferral as approval.
 3. Record reviewer identities, competence, conflicts, dates, exact scope, accessible evidence, and
    exclusions. Repository authors may supply links and factual environment labels but may not
    record that a reviewer inspected them.
@@ -69,16 +74,23 @@ Execute the review in this order:
    result. Silence, a prepared link, or an engineering `Pass` is not reviewer acceptance.
 5. Record sanitized findings, owners, due dates, blocked activities, and restricted evidence
    references. Engineering remediates; the reviewer records any required retest result.
-6. Reconcile D0-014 dependencies and record each time-bounded residual-risk decision. Keep future
-   capability gates explicit rather than treating unimplemented controls as deployed.
-7. The security reviewer, privacy reviewer, and product-risk owner each enter their own traceable
-   disposition bound to the same commit. Delivery governance may close D0-015 only afterward.
+6. Reconcile privacy/security dependencies while preserving deferred legal gates, and record each
+   time-bounded residual-risk decision. Keep future capability gates explicit rather than treating
+   unimplemented controls as deployed.
+7. The independent security/privacy reviewer and product-risk owner each enter their own traceable
+   disposition bound to the same exact-candidate commit. Delivery governance may close D6-015 only afterward.
 
 Repository evidence can pre-populate the review-package manifest, control descriptions, immutable
 artifact links, environment labels, and known engineering states. Reviewer identity and
 competence, conflicts, evidence-inspection results, FR dispositions, findings, retests, residual
 risk acceptance, exclusions, signatures, and completion dates always require the attributable
 human actor named for that field.
+
+The 2026-08-12 [engineering pre-audit](../product/delivery/evidence/d0-security-privacy-engineering-preaudit-2026-08-12.md)
+is a current objective-evidence handoff. It records dependency, authorization, infrastructure,
+credential-pattern, fixture, and incremental pinned-SAST results plus the limitations that remain
+blocked. Reviewers may rely on it only after inspecting its scope and must record their own
+dispositions below.
 
 ## 1. Review identity and immutable scope
 
@@ -238,15 +250,15 @@ approval received informally.
 
 ## 7. Completion check
 
-D0-015 is eligible for completion only when:
+D6-015's inherited-foundation portion is eligible for completion only when:
 
 - the immutable scope and every foundational-review disposition are complete;
-- D0-014's accountable legal/privacy conclusions are linked and any security/privacy dependency
-  is reconciled;
+- ADR-019's legal-review deferral is explicitly accepted for D0, every unreviewed legal assumption
+  remains assigned to an enforceable capability or D6-016 gate, and no legal conclusion is claimed;
 - every finding has an owner and permitted disposition, and all required retests pass;
 - both accountable reviewer dispositions and the product-risk-owner disposition are traceable;
 - the mandatory capability and launch gates are explicitly accepted; and
 - the phase/task records are updated separately through the delivery-governance process.
 
-Until then, this record remains `Not reviewed` or `In review`; preparation of this template does
-not change D0-015 or Phase 0 status.
+Until then, this record remains engineering evidence only; preparation of this template does not
+approve the foundation or change D6-015 status.

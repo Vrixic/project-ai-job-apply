@@ -1,8 +1,8 @@
 # ATS Fixture Acquisition and Sanitization Policy
 
-- Status: Process and automated repository gate implemented; representative acquisition blocked
-  by accountable legal/privacy and security/privacy approval
-- Policy version: `ats-fixture-policy-2026-08-11`
+- Status: Process and automated repository gate implemented; provider evidence is owned by the
+  delivery that activates each adapter under [ADR-021](../../adr/021-own-provider-fixtures-with-adapter-deliveries.md)
+- Policy version: `ats-fixture-policy-2026-08-12`
 - Accountable roles: QA/automation; legal/privacy counsel; security/privacy reviewer
 - Executable metadata contract:
   [`fixture-metadata.v1.schema.json`](../../../packages/test-fixtures/ats/fixture-metadata.v1.schema.json)
@@ -115,13 +115,15 @@ The validator enforces these minimum controls:
 This repository validator is a defense-in-depth structural and lexical gate; it does not replace
 approved secret/PII scanners, counsel, security/privacy approval, or human inspection.
 
-## Minimum Phase 0 representative evidence
+## Minimum owning-delivery representative evidence
 
-D0-007 may move from blocked only when the accountable QA/automation reviewer defines and accepts
-an initial representative fixture set. The acceptance must enumerate the provider families,
-variants, and behaviors required for Phase 0 and justify why the set is representative; repository
-authors and agents must not reduce that coverage decision to an arbitrary fixture count. Every
-fixture package in the accepted set must have all of the following inspected evidence:
+D0-007 establishes this process, its fail-closed repository gate, and executable synthetic proof.
+Actual provider families, variants, and behavior coverage are selected only when the owning
+adapter is concrete: job-page detection in D2, application-form/autofill adapters in D3, and
+Workday tenant/widget/application support in D4. Each owning delivery must justify why its accepted
+set represents the variants it declares supported; repository authors and agents must not reduce
+that coverage decision to an arbitrary fixture count. Every package in an accepted provider set
+must have all of the following inspected evidence before the affected adapter is activated:
 
 - accountable legal/privacy and security/privacy approvals are complete;
 - a permitted exact provider family and variant, source category, capture date, and authorization
@@ -133,8 +135,9 @@ fixture package in the accepted set must have all of the following inspected evi
 - raw-capture destruction evidence or a compliant, unexpired quarantine deletion record; and
 - an approved `sanitized_authorized_provider` manifest committed with the payload.
 
-The existing `synthetic-foundation-v1` fixture is useful executable evidence for this process but
-does not count as that representative fixture.
+The existing `synthetic-foundation-v1` fixture is executable evidence that the Phase 0 process and
+validator work. It does not count as provider evidence or satisfy a D2, D3, or D4 representative
+fixture gate.
 
 ## Change and incident handling
 

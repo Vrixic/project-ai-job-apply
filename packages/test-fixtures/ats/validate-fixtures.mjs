@@ -7,8 +7,6 @@ const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 const ignoredDirectoryNames = new Set(["templates", "schema"]);
 const allowedPayloadExtensions = new Set([".html", ".json", ".txt"]);
 const safeOpaqueId = /^[a-z0-9][a-z0-9._-]{2,127}$/;
-const fixtureIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*-v[1-9][0-9]*$/;
-const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const sha256Pattern = /^[a-f0-9]{64}$/;
 
 function fail(fixture, message) {
@@ -17,6 +15,48 @@ function fail(fixture, message) {
 
 function isObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isLowercaseSlug(value) {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.startsWith("-") ||
+    value.endsWith("-")
+  ) {
+    return false;
+  }
+  let previousWasSeparator = false;
+  for (const character of value) {
+    if (character === "-") {
+      if (previousWasSeparator) return false;
+      previousWasSeparator = true;
+      continue;
+    }
+    const code = character.charCodeAt(0);
+    if (!((code >= 97 && code <= 122) || (code >= 48 && code <= 57))) return false;
+    previousWasSeparator = false;
+  }
+  return true;
+}
+
+function isPositiveIntegerText(value) {
+  if (value.length === 0 || value[0] === "0") return false;
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    if (code < 48 || code > 57) return false;
+  }
+  return true;
+}
+
+function isVersionedFixtureId(value) {
+  if (typeof value !== "string") return false;
+  const marker = value.lastIndexOf("-v");
+  return (
+    marker > 0 &&
+    isLowercaseSlug(value.slice(0, marker)) &&
+    isPositiveIntegerText(value.slice(marker + 2))
+  );
 }
 
 function assertExactKeys(fixture, label, value, requiredKeys) {
@@ -155,7 +195,7 @@ function validateCommon(fixture, metadata) {
   if (metadata.schemaVersion !== "ats-fixture-metadata.v1") {
     fail(fixture, "schemaVersion must be ats-fixture-metadata.v1");
   }
-  if (typeof metadata.fixtureId !== "string" || !fixtureIdPattern.test(metadata.fixtureId)) {
+  if (!isVersionedFixtureId(metadata.fixtureId)) {
     fail(fixture, "fixtureId must be a versioned lowercase slug");
   }
   if (!["synthetic", "sanitized_authorized_provider"].includes(metadata.evidenceClass)) {
@@ -163,7 +203,7 @@ function validateCommon(fixture, metadata) {
   }
 
   assertExactKeys(fixture, "provider", metadata.provider, ["family", "variant"]);
-  if (!slugPattern.test(metadata.provider.family) || !slugPattern.test(metadata.provider.variant)) {
+  if (!isLowercaseSlug(metadata.provider.family) || !isLowercaseSlug(metadata.provider.variant)) {
     fail(fixture, "provider family and variant must be lowercase slugs");
   }
 
@@ -219,7 +259,7 @@ function validateCommon(fixture, metadata) {
     if (typeof check.tool !== "string" || check.tool.length === 0) {
       fail(fixture, `automatedChecks[${index}].tool is required`);
     }
-    if (!slugPattern.test(check.tool)) {
+    if (!isLowercaseSlug(check.tool)) {
       fail(fixture, `automatedChecks[${index}].tool must be a lowercase slug`);
     }
     if (
@@ -256,7 +296,7 @@ function validateCommon(fixture, metadata) {
   if (
     !Array.isArray(metadata.behaviorTags) ||
     metadata.behaviorTags.length === 0 ||
-    metadata.behaviorTags.some((tag) => typeof tag !== "string" || !slugPattern.test(tag)) ||
+    metadata.behaviorTags.some((tag) => !isLowercaseSlug(tag)) ||
     new Set(metadata.behaviorTags).size !== metadata.behaviorTags.length
   ) {
     fail(fixture, "behaviorTags must contain unique lowercase slugs");

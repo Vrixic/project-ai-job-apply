@@ -22,6 +22,9 @@ Records important technical decisions, their context, alternatives, consequences
 - [ADR-016: Scale-to-zero application runtime](016-scale-to-zero-application-runtime.md)
 - [ADR-017: Zero-traffic pre-cutover ECS idle posture](017-zero-traffic-precutover-ecs-idle-posture.md)
 - [ADR-018: Disposable prelaunch staging data plane](018-disposable-prelaunch-staging-data-plane.md)
+- [ADR-019: Defer foundational counsel review to public launch](019-defer-foundational-counsel-review-to-public-launch.md)
+- [ADR-020: Defer accountable foundation security/privacy review to launch](020-defer-accountable-foundation-security-review-to-launch.md)
+- [ADR-021: Own provider fixtures with adapter deliveries](021-own-provider-fixtures-with-adapter-deliveries.md)
 
 Use `000-template.md` for future decisions.
 
