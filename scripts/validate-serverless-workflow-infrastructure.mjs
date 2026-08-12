@@ -48,7 +48,41 @@ const bootstrap = "infrastructure/terraform/bootstrap/main.tf";
 const workflowPublisher = ".github/workflows/publish-workflow-lambdas.yml";
 const staticAnalysisWorkflow = ".github/workflows/static-analysis.yml";
 const stagingLifecycleOperator = "scripts/operate-staging-runtime-lifecycle.ps1";
+const developmentMigrationOperator = "scripts/operate-development-document-migration.ps1";
 const candidateDocuments = "infrastructure/terraform/modules/platform/candidate-documents.tf";
+
+for (const required of [
+  'ValidateSet("Status", "PlanTask", "ApplyTask", "PlanExecution", "Execute", "Verify")',
+  "Save-AndClearTerraformVariables",
+  "Restore-TerraformVariables",
+  "document_scan_mapping_enabled                 = $false",
+  "document_scan_event_rule_enabled              = $false",
+  "The task plan may change only the one-off migration task definition.",
+  '"ecs", "run-task", "--cli-input-json"',
+  "aws ecs wait tasks-stopped",
+  "The exact four aggregate success events did not become visible within the bounded CloudWatch polling window.",
+  "Database migrations through 0005_resume_fact_proposals applied and verified.",
+  "Documents migrations through 0002_resume_processing applied and verified.",
+  "Assert-DatabaseSafety",
+  "Assert-RequestNetwork",
+]) {
+  requireText(
+    developmentMigrationOperator,
+    required,
+    `development migration operator guard is missing: ${required}`,
+  );
+}
+for (const forbidden of [
+  "[IO.Path]::GetFullPath($Candidate, $terraformDirectory)",
+  "Wait-TaskRunning",
+  "Assert-RunningTaskNetwork",
+]) {
+  forbidText(
+    developmentMigrationOperator,
+    forbidden,
+    `development migration operator retains unsafe/racy behavior: ${forbidden}`,
+  );
+}
 
 for (const required of [
   "Quiescence must change database deletion protection from enabled to disabled.",

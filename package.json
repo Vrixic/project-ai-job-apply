@@ -32,7 +32,7 @@
     "dev": "turbo run dev",
     "format": "biome format --write .",
     "format:check": "biome format .",
-    "infrastructure:validate": "node scripts/validate-serverless-workflow-infrastructure.mjs",
+    "infrastructure:validate": "node scripts/validate-serverless-workflow-infrastructure.mjs && pwsh -NoProfile -File scripts/tests/deployment-operator-guards.tests.ps1",
     "lint": "biome lint .",
     "skills:validate": "node scripts/validate-skills.mjs",
     "test": "turbo run test",

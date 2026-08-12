@@ -24,8 +24,8 @@ both AWS environments accepted the steady-state serverless runtime.
   parser artifacts, manifests, and CycloneDX SBOMs; the parser artifact has no database runtime.
 
 Artifacts are published by the protected GitHub workflows. The migration-only container is built
-from `Dockerfile.migration` and runs the fail-fast profile/jobs migration orchestrator; no gateway
-or general worker image exists.
+from `Dockerfile.migration` and runs the fail-fast profile/jobs/documents migration orchestrator;
+no gateway or general worker image exists.
 
 ## Deployed verification and evidence
 
@@ -46,10 +46,17 @@ or general worker image exists.
 - `operate-staging-postgresql-restore.ps1` — Runs the guarded, resumable staging PITR exercise.
 - `operate-staging-runtime-lifecycle.ps1` — Creates and applies checksum-reviewed, two-step
   staging activation/quiescence/dormancy plans while retaining the isolated control plane.
+- `operate-development-document-migration.ps1` — Reconstructs development Terraform inputs from
+  an already-applied saved plan, plans/applies only an immutable migration task-definition
+  replacement, and executes one checksum-reviewed no-override Fargate migration with aggregate-log,
+  zero-task, encrypted-state, and zero-drift postconditions.
 
 ## Repository and infrastructure policy
 
 - `prepare-terraform-bootstrap.ps1` — Prepares the exact isolated AWS bootstrap boundary.
+- `operate-bootstrap-workload-boundary.ps1` — Produces, checksum-gates, applies, and independently
+  verifies the one-statement document-role bootstrap boundary change. See
+  `docs/security/bootstrap-workload-boundary-runbook.md`.
 - `validate-serverless-workflow-infrastructure.mjs` — Enforces the steady-state Lambda durable,
   migration-only container, and retired-path absence policies.
 - `audit-dependencies.mjs` — Applies the centralized lockfile audit policy and exact expiring
