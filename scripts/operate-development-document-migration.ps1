@@ -626,19 +626,29 @@ function Test-IgnorableRdsRestorableTimeRefresh {
   }
   $beforeTime = [datetime]::MinValue
   $afterTime = [datetime]::MinValue
-  if ([string]$Drift.change.before.latest_restorable_time -notmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$' -or
-      [string]$Drift.change.after.latest_restorable_time -notmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$' -or
-      -not [datetime]::TryParse(
-      [string]$Drift.change.before.latest_restorable_time,
-      [Globalization.CultureInfo]::InvariantCulture,
-      [Globalization.DateTimeStyles]::AdjustToUniversal,
+  $beforeValue = $Drift.change.before.latest_restorable_time
+  $afterValue = $Drift.change.after.latest_restorable_time
+  $beforeValid = if ($beforeValue -is [datetime]) {
+    $beforeTime = [datetime]$beforeValue
+    $beforeTime.Kind -eq [DateTimeKind]::Utc -and $beforeTime.Ticks % [TimeSpan]::TicksPerSecond -eq 0
+  } else {
+    [string]$beforeValue -match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$' -and [datetime]::TryParseExact(
+      [string]$beforeValue, "yyyy-MM-dd'T'HH:mm:ss'Z'", [Globalization.CultureInfo]::InvariantCulture,
+      [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal,
       [ref]$beforeTime
-    ) -or -not [datetime]::TryParse(
-      [string]$Drift.change.after.latest_restorable_time,
-      [Globalization.CultureInfo]::InvariantCulture,
-      [Globalization.DateTimeStyles]::AdjustToUniversal,
+    )
+  }
+  $afterValid = if ($afterValue -is [datetime]) {
+    $afterTime = [datetime]$afterValue
+    $afterTime.Kind -eq [DateTimeKind]::Utc -and $afterTime.Ticks % [TimeSpan]::TicksPerSecond -eq 0
+  } else {
+    [string]$afterValue -match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$' -and [datetime]::TryParseExact(
+      [string]$afterValue, "yyyy-MM-dd'T'HH:mm:ss'Z'", [Globalization.CultureInfo]::InvariantCulture,
+      [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal,
       [ref]$afterTime
-    ) -or $afterTime -lt $beforeTime) {
+    )
+  }
+  if (-not $beforeValid -or -not $afterValid -or $afterTime -lt $beforeTime) {
     return $false
   }
   $before = $Drift.change.before | ConvertTo-Json -Depth 50 | ConvertFrom-Json
