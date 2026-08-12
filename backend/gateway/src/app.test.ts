@@ -1,6 +1,8 @@
 import "reflect-metadata";
 import type {
   CreateProfileFactRequest,
+  CreateResumeUploadRequest,
+  CreateResumeUploadResponse,
   CurrentUser,
   JobPreferenceSet,
   Operation,
@@ -9,9 +11,12 @@ import type {
   ProfileReadiness,
   PutJobPreferencesRequest,
   PutJobPreferencesResponse,
+  ResumeDocument,
+  ResumeDocumentCollection,
   UpdateProfileFactRequest,
 } from "@ai-job-apply/api-contracts";
 import type { AuthPrincipal } from "@ai-job-apply/auth";
+import type { DocumentStore } from "@ai-job-apply/documents-service";
 import { createTestTokenIssuer } from "@ai-job-apply/auth/testing";
 import type { ActiveJobRecord, JobCatalogReader } from "@ai-job-apply/jobs-service";
 import type { ProfileStore } from "@ai-job-apply/profile-service";
@@ -184,13 +189,55 @@ class MemoryJobCatalog implements JobCatalogReader {
   async ping(): Promise<void> {}
 }
 
+class MemoryDocumentStore implements DocumentStore {
+  private readonly documents: ResumeDocument[] = [];
+  private readonly responses = new Map<string, CreateResumeUploadResponse>();
+
+  async listResumeDocuments(): Promise<ResumeDocumentCollection> {
+    return { documents: [...this.documents] };
+  }
+
+  async createResumeUpload(
+    _userId: string,
+    input: CreateResumeUploadRequest,
+    idempotencyKey: string,
+  ): Promise<CreateResumeUploadResponse> {
+    const existing = this.responses.get(idempotencyKey);
+    if (existing) return existing;
+    const now = new Date().toISOString();
+    const document: ResumeDocument = {
+      id: uuidv7(),
+      ...input,
+      status: "awaiting_upload",
+      createdAt: now,
+      updatedAt: now,
+    };
+    const response: CreateResumeUploadResponse = {
+      document,
+      upload: {
+        url: "https://candidate-documents.example.test/",
+        method: "POST",
+        fields: { key: `quarantine/${document.id}/source`, policy: "signed-policy" },
+        expiresAt: new Date(Date.now() + 300_000).toISOString(),
+      },
+    };
+    this.documents.unshift(document);
+    this.responses.set(idempotencyKey, response);
+    return response;
+  }
+
+  async close(): Promise<void> {}
+}
+
 async function createApp() {
   const issuer = await createTestTokenIssuer();
   const store = new MemoryProfileStore();
   const catalog = new MemoryJobCatalog();
+  const documents = new MemoryDocumentStore();
   const app = await createGatewayApplication({
     store,
     catalog,
+    documents,
     verifier: issuer.verifier,
     releaseSha: "test",
   });
@@ -256,6 +303,7 @@ describe("candidate API", () => {
     const lambdaApp = await createGatewayApplication({
       store: new MemoryProfileStore(),
       catalog: new MemoryJobCatalog(),
+      documents: new MemoryDocumentStore(),
       verifier: principalBridge.verifier,
       releaseSha: "lambda-principal-bridge-test",
     });
@@ -446,6 +494,49 @@ describe("candidate API", () => {
     expect(missing.statusCode).toBe(404);
     expect(invalid.statusCode).toBe(400);
     expect(store.resolveUserCalls).toBe(identityWritesBeforeJobReads);
+  });
+
+  it("registers and lists resume uploads without proxying candidate bytes", async () => {
+    const token = await issuer.issue("candidate-resume", {
+      scope: "documents:read documents:write",
+    });
+    const authorization = { authorization: `Bearer ${token}` };
+    const payload: CreateResumeUploadRequest = {
+      fileName: "synthetic-resume.pdf",
+      mediaType: "application/pdf",
+      sizeBytes: 1024,
+      sha256: "a".repeat(64),
+    };
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/resumes/uploads",
+      headers: { ...authorization, "idempotency-key": "resume-upload-test-0001" },
+      payload,
+    });
+    const listed = await app.inject({
+      method: "GET",
+      url: "/v1/resumes",
+      headers: authorization,
+    });
+
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({
+      document: { ...payload, status: "awaiting_upload" },
+      upload: { method: "POST" },
+    });
+    expect(created.json().document).not.toHaveProperty("sourceObjectKey");
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json().documents).toHaveLength(1);
+
+    const missingScope = await issuer.issue("candidate-resume-no-scope", {
+      scope: "profile:read",
+    });
+    const forbidden = await app.inject({
+      method: "GET",
+      url: "/v1/resumes",
+      headers: { authorization: `Bearer ${missingScope}` },
+    });
+    expect(forbidden.statusCode).toBe(403);
   });
 
   it("enforces read and write scopes at the application boundary", async () => {

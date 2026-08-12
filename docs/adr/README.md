@@ -25,6 +25,7 @@ Records important technical decisions, their context, alternatives, consequences
 - [ADR-019: Defer foundational counsel review to public launch](019-defer-foundational-counsel-review-to-public-launch.md)
 - [ADR-020: Defer accountable foundation security/privacy review to launch](020-defer-accountable-foundation-security-review-to-launch.md)
 - [ADR-021: Own provider fixtures with adapter deliveries](021-own-provider-fixtures-with-adapter-deliveries.md)
+- [ADR-022: Quarantine and scan candidate document uploads](022-quarantine-and-scan-candidate-document-uploads.md)
 
 Use `000-template.md` for future decisions.
 

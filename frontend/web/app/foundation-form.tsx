@@ -9,6 +9,7 @@ import type {
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { isIsolationOperationEligible } from "../lib/isolation-operation";
 import { ProfileFactsForm } from "./profile-facts-form";
+import { ResumeUploadForm } from "./resume-upload-form";
 
 function splitValues(value: string): string[] {
   return [
@@ -450,6 +451,7 @@ export function FoundationForm({
       </form>
 
       <ProfileFactsForm authenticated={authenticated} />
+      <ResumeUploadForm authenticated={authenticated} />
 
       {!authConfigured && (
         <aside>

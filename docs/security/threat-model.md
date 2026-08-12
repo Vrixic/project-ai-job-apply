@@ -33,6 +33,7 @@
 | Idempotency failure | Duplicate irreversible action | Scoped idempotency keys, unique constraints, stable workflow IDs |
 | Database/event partial failure | Lost or orphaned work | One transaction for state and outbox, durable retries, reconciliation |
 | Malicious job/form content | Prompt injection, phishing, unsafe redirects | Treat external text as untrusted, sanitize HTML, tool allowlists, URL/domain checks |
+| Malicious resume/document | Parser compromise, decompression/resource exhaustion, candidate-data disclosure | Exact type/size/hash upload grants, isolated encrypted quarantine, managed malware scan, bounded parser, no content telemetry, explicit proposed-fact review |
 | Extension overreach | Browsing-history collection | Active-tab/minimum permissions, explicit contribution preview and consent |
 | Secret or PII leakage | Privacy/security incident | KMS/Secrets Manager, field-aware redaction, synthetic fixtures, scanning |
 | Compromised CI/dependency | Supply-chain compromise | OIDC deploy roles, immutable images, full-lockfile audit, pinned Semgrep SAST, SBOM |

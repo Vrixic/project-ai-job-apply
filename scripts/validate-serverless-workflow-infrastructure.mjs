@@ -19,6 +19,11 @@ function requireText(relativePath, text, reason) {
   if (!source.includes(text)) failures.push(`${relativePath}: ${reason}`);
 }
 
+function requirePattern(relativePath, pattern, reason) {
+  const source = read(relativePath);
+  if (!pattern.test(source)) failures.push(`${relativePath}: ${reason}`);
+}
+
 function forbidText(relativePath, text, reason) {
   const source = read(relativePath);
   if (source.includes(text)) failures.push(`${relativePath}: ${reason}`);
@@ -210,9 +215,9 @@ for (const environment of ["development", "staging"]) {
   const main = `infrastructure/terraform/environments/${environment}/main.tf`;
   const environmentVariables = `infrastructure/terraform/environments/${environment}/variables.tf`;
   const environmentOutputs = `infrastructure/terraform/environments/${environment}/outputs.tf`;
-  requireText(
+  requirePattern(
     main,
-    "serverless_runtime_enabled           = var.serverless_runtime_enabled",
+    /serverless_runtime_enabled\s*=\s*var\.serverless_runtime_enabled/,
     "environment does not wire the steady-state runtime boundary",
   );
   requireText(

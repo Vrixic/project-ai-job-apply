@@ -72,9 +72,13 @@ module "platform" {
   gateway_lambda_artifact_base64sha256 = var.gateway_lambda_artifact_base64sha256
   gateway_lambda_extension_layer_arn   = var.gateway_lambda_extension_layer_arn
   gateway_lambda_reserved_concurrency  = var.gateway_lambda_reserved_concurrency
-  serverless_runtime_enabled           = var.serverless_runtime_enabled
-  deploy_serverless_outbox             = var.deploy_serverless_outbox
-  workflow_ingress_artifact_s3_key     = var.workflow_ingress_artifact_s3_key
+  deploy_document_intake               = var.deploy_document_intake
+  candidate_document_cors_allowed_origins = (
+    var.candidate_document_cors_allowed_origins
+  )
+  serverless_runtime_enabled       = var.serverless_runtime_enabled
+  deploy_serverless_outbox         = var.deploy_serverless_outbox
+  workflow_ingress_artifact_s3_key = var.workflow_ingress_artifact_s3_key
   workflow_ingress_artifact_s3_object_version = (
     var.workflow_ingress_artifact_s3_object_version
   )

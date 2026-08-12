@@ -11,6 +11,14 @@ output "artifact_bucket" {
   value = aws_s3_bucket.artifacts.bucket
 }
 
+output "candidate_document_bucket" {
+  value = var.deploy_document_intake ? aws_s3_bucket.candidate_documents[0].bucket : null
+}
+
+output "candidate_document_malware_protection_plan_id" {
+  value = var.deploy_document_intake ? aws_guardduty_malware_protection_plan.candidate_documents[0].id : null
+}
+
 output "migration_repository_url" {
   value = aws_ecr_repository.migration.repository_url
 }

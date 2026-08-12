@@ -89,6 +89,16 @@ variable "gateway_lambda_reserved_concurrency" {
   default = 2
 }
 
+variable "deploy_document_intake" {
+  type    = bool
+  default = false
+}
+
+variable "candidate_document_cors_allowed_origins" {
+  type    = list(string)
+  default = []
+}
+
 variable "deploy_serverless_outbox" {
   type    = bool
   default = false

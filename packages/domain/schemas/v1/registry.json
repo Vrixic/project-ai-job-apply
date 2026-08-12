@@ -36,6 +36,12 @@
       "file": "consent-record.schema.json",
       "owner": "profile",
       "classification": "confidential"
+    },
+    {
+      "name": "ResumeDocument",
+      "file": "resume-document.schema.json",
+      "owner": "documents",
+      "classification": "confidential"
     }
   ]
 }

@@ -1,6 +1,11 @@
 import "reflect-metadata";
 import { createOidcVerifier } from "@ai-job-apply/auth";
 import { loadBackendConfig } from "@ai-job-apply/config";
+import {
+  PostgresDocumentStore,
+  S3ResumeUploadSigner,
+  UnavailableDocumentStore,
+} from "@ai-job-apply/documents-service";
 import { PostgresJobCatalog } from "@ai-job-apply/jobs-service";
 import {
   createLogger,
@@ -20,6 +25,16 @@ const logger = createLogger({
 const database = createDatabase(config.DATABASE_URL);
 const store = new PostgresProfileStore(database, { dispatchTarget: "lambda_durable" });
 const catalog = new PostgresJobCatalog(database.client);
+const documents =
+  config.DOCUMENT_UPLOAD_BUCKET && config.DOCUMENT_UPLOAD_KMS_KEY_ARN
+    ? new PostgresDocumentStore(
+        database.client,
+        new S3ResumeUploadSigner({
+          bucket: config.DOCUMENT_UPLOAD_BUCKET,
+          kmsKeyArn: config.DOCUMENT_UPLOAD_KMS_KEY_ARN,
+        }),
+      )
+    : new UnavailableDocumentStore();
 const verifier = createOidcVerifier({
   issuer: config.OIDC_ISSUER,
   audience: config.OIDC_AUDIENCE,
@@ -28,6 +43,7 @@ const verifier = createOidcVerifier({
 const app = await createGatewayApplication({
   store,
   catalog,
+  documents,
   verifier,
   releaseSha: config.RELEASE_SHA,
   adapter: new FastifyAdapter({ loggerInstance: logger }),
@@ -46,6 +62,7 @@ const shutdown = async () => {
   stopLogDeliveryHeartbeat();
   await app.close();
   await store.close();
+  await documents.close();
   await shutdownTelemetry();
 };
 

@@ -15,6 +15,11 @@ export type ProfileFact = components["schemas"]["ProfileFact"];
 export type ProfileFactCollection = components["schemas"]["ProfileFactCollection"];
 export type CreateProfileFactRequest = components["schemas"]["CreateProfileFactRequest"];
 export type UpdateProfileFactRequest = components["schemas"]["UpdateProfileFactRequest"];
+export type CreateResumeUploadRequest = components["schemas"]["CreateResumeUploadRequest"];
+export type CreateResumeUploadResponse = components["schemas"]["CreateResumeUploadResponse"];
+export type ResumeDocument = components["schemas"]["ResumeDocument"];
+export type ResumeDocumentCollection = components["schemas"]["ResumeDocumentCollection"];
+export type ResumeUploadGrant = components["schemas"]["ResumeUploadGrant"];
 export type CanonicalJobDetail = components["schemas"]["CanonicalJobDetail"];
 export type ProblemDetails = components["schemas"]["ProblemDetails"];
 

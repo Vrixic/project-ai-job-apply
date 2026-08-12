@@ -48,6 +48,30 @@ describe("Lambda gateway configuration", () => {
     expect(result.DATABASE_URL).toContain("postgres://");
   });
 
+  it("accepts a complete candidate-document upload boundary", () => {
+    const result = loadLambdaGatewayConfig({
+      ...baseEnvironment,
+      DATABASE_SECRET_ID: "ai-job-apply/development/database-url",
+      OUTBOX_QUEUE_URL: "https://sqs.us-east-2.amazonaws.com/000000000000/synthetic",
+      DOCUMENT_UPLOAD_BUCKET: "ai-job-apply-development-candidate-documents",
+      DOCUMENT_UPLOAD_KMS_KEY_ARN:
+        "arn:aws:kms:us-east-2:000000000000:key/00000000-0000-4000-8000-000000000000",
+    });
+
+    expect(result.DOCUMENT_UPLOAD_BUCKET).toBe("ai-job-apply-development-candidate-documents");
+  });
+
+  it("rejects a partial candidate-document upload boundary", () => {
+    expect(() =>
+      loadLambdaGatewayConfig({
+        ...baseEnvironment,
+        DATABASE_SECRET_ID: "ai-job-apply/development/database-url",
+        OUTBOX_QUEUE_URL: "https://sqs.us-east-2.amazonaws.com/000000000000/synthetic",
+        DOCUMENT_UPLOAD_BUCKET: "ai-job-apply-development-candidate-documents",
+      }),
+    ).toThrow("DOCUMENT_UPLOAD_BUCKET and DOCUMENT_UPLOAD_KMS_KEY_ARN must be configured together");
+  });
+
   it.each([
     ["neither source", {}],
     [

@@ -72,6 +72,30 @@ approve a diagram for:
 - billing/mobile/push; and
 - export, deletion, incident, and backup-restore paths in deployed environments.
 
+### D1 resume intake and deterministic parsing design
+
+This is a source design until its exact resources and synthetic deployment evidence are recorded.
+
+```mermaid
+flowchart LR
+  Candidate3[Candidate browser] -->|metadata + owner session| ResumeAPI[Candidate resume API]
+  ResumeAPI -->|document ID + exact upload grant| Candidate3
+  ResumeAPI -->|owner-scoped metadata| DocumentsDB[(Documents schema)]
+  Candidate3 -->|bounded presigned POST| Quarantine[(Private KMS S3 quarantine)]
+  Quarantine --> GuardDuty[GuardDuty malware scan]
+  GuardDuty -->|identifier + disposition only| ScanEvents[EventBridge → encrypted SQS]
+  ScanEvents --> Processor[Private document processor]
+  Processor -->|tag + magic/size/archive verification| Quarantine
+  Processor -->|normalized encrypted tree| Normalized[(Private KMS S3 normalized prefix)]
+  Processor -->|status + object refs only| DocumentsDB
+  DocumentsDB -->|proposals + supporting spans| Candidate3
+```
+
+Resume bytes and extracted text exist only in the candidate device, quarantined/normalized object
+storage, and bounded processor memory. Events carry the bucket/object version and opaque document
+identity only. Telemetry records states, counts, byte/page/character totals, error codes, and
+opaque IDs without filenames, candidate values, object contents, or identity-provider subjects.
+
 ## Rights-flow design boundary
 
 Export and account deletion are not implemented by the Phase 0 slice. The following diagrams define

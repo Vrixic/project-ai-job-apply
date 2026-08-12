@@ -22,17 +22,26 @@ import {
 import type {
   CanonicalJobDetail,
   CreateProfileFactRequest,
+  CreateResumeUploadRequest,
+  CreateResumeUploadResponse,
   CurrentUser,
   Operation,
   ProblemDetails,
   ProfileFact,
   ProfileFactCollection,
+  ResumeDocumentCollection,
   PutJobPreferencesRequest,
   PutJobPreferencesResponse,
   UpdateProfileFactRequest,
 } from "@ai-job-apply/api-contracts";
 import { compileComponentValidator, formatValidationErrors } from "@ai-job-apply/api-contracts";
 import { type AccessTokenVerifier, AuthenticationError, bearerToken } from "@ai-job-apply/auth";
+import {
+  DocumentIdempotencyConflictError,
+  DocumentIntakeUnavailableError,
+  type DocumentStore,
+  ResumeDocumentLimitError,
+} from "@ai-job-apply/documents-service";
 import type { JobCatalogReader } from "@ai-job-apply/jobs-service";
 import { activeTraceparent, correlationId } from "@ai-job-apply/observability";
 import {
@@ -44,6 +53,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 
 const PROFILE_STORE = Symbol("PROFILE_STORE");
 const JOB_CATALOG = Symbol("JOB_CATALOG");
+const DOCUMENT_STORE = Symbol("DOCUMENT_STORE");
 const TOKEN_VERIFIER = Symbol("TOKEN_VERIFIER");
 const RELEASE_SHA = Symbol("RELEASE_SHA");
 
@@ -60,6 +70,8 @@ const SAFE_ROUTE_TEMPLATES = new Set([
   "/v1/me/job-preferences",
   "/v1/profile/facts",
   "/v1/profile/facts/:factId",
+  "/v1/resumes",
+  "/v1/resumes/uploads",
   "/v1/jobs/:jobId",
   "/v1/operations/:operationId",
 ]);
@@ -94,7 +106,12 @@ class RequestIdentity {
 
   async authorize(
     request: AuthenticatedRequest,
-    requiredScope: "jobs:read" | "profile:read" | "profile:write",
+    requiredScope:
+      | "documents:read"
+      | "documents:write"
+      | "jobs:read"
+      | "profile:read"
+      | "profile:write",
   ) {
     const token = bearerToken(request.headers.authorization);
     const principal = await this.verifier.verify(token);
@@ -106,7 +123,7 @@ class RequestIdentity {
 
   async resolve(
     request: AuthenticatedRequest,
-    requiredScope: "profile:read" | "profile:write",
+    requiredScope: "documents:read" | "documents:write" | "profile:read" | "profile:write",
   ): Promise<CurrentUser> {
     const principal = await this.authorize(request, requiredScope);
     return this.store.resolveUser(principal, request.traceId ?? correlationId(undefined));
@@ -140,6 +157,21 @@ class ProblemDetailsFilter implements ExceptionFilter {
       status = HttpStatus.CONFLICT;
       code = "version_conflict";
       title = "Profile fact version conflict";
+      detail = exception.message;
+    } else if (exception instanceof DocumentIdempotencyConflictError) {
+      status = HttpStatus.CONFLICT;
+      code = "idempotency_conflict";
+      title = "Idempotency key conflict";
+      detail = exception.message;
+    } else if (exception instanceof ResumeDocumentLimitError) {
+      status = HttpStatus.CONFLICT;
+      code = "resume_document_limit";
+      title = "Resume document limit reached";
+      detail = exception.message;
+    } else if (exception instanceof DocumentIntakeUnavailableError) {
+      status = HttpStatus.SERVICE_UNAVAILABLE;
+      code = "document_intake_unavailable";
+      title = "Resume intake is unavailable";
       detail = exception.message;
     } else if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -206,6 +238,7 @@ class HealthController {
 const validatePreferences = compileComponentValidator("PutJobPreferencesRequest");
 const validateCreateProfileFact = compileComponentValidator("CreateProfileFactRequest");
 const validateUpdateProfileFact = compileComponentValidator("UpdateProfileFactRequest");
+const validateCreateResumeUpload = compileComponentValidator("CreateResumeUploadRequest");
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function requireIdempotencyKey(value: string | undefined): string {
@@ -225,6 +258,7 @@ class CandidateController {
     @Inject(RequestIdentity) private readonly identity: RequestIdentity,
     @Inject(PROFILE_STORE) private readonly store: ProfileStore,
     @Inject(JOB_CATALOG) private readonly catalog: JobCatalogReader,
+    @Inject(DOCUMENT_STORE) private readonly documents: DocumentStore,
   ) {}
 
   @Get("/me")
@@ -359,6 +393,34 @@ class CandidateController {
     };
   }
 
+  @Get("/resumes")
+  async listResumes(@Req() request: AuthenticatedRequest): Promise<ResumeDocumentCollection> {
+    const user = await this.identity.resolve(request, "documents:read");
+    return this.documents.listResumeDocuments(user.id);
+  }
+
+  @Post("/resumes/uploads")
+  @HttpCode(HttpStatus.CREATED)
+  async createResumeUpload(
+    @Req() request: AuthenticatedRequest,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<CreateResumeUploadResponse> {
+    const user = await this.identity.resolve(request, "documents:write");
+    const commandKey = requireIdempotencyKey(idempotencyKey);
+    if (!validateCreateResumeUpload(request.body)) {
+      throw new HttpException(
+        formatValidationErrors(validateCreateResumeUpload.errors),
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return this.documents.createResumeUpload(
+      user.id,
+      request.body as CreateResumeUploadRequest,
+      commandKey,
+      request.traceId ?? correlationId(undefined),
+    );
+  }
+
   @Get("/operations/:operationId")
   async getOperation(
     @Req() request: AuthenticatedRequest,
@@ -376,6 +438,7 @@ class CandidateController {
 export interface AppModuleOptions {
   store: ProfileStore;
   catalog: JobCatalogReader;
+  documents: DocumentStore;
   verifier: AccessTokenVerifier;
   releaseSha: string;
 }
@@ -391,6 +454,7 @@ export class AppModule {
         RequestIdentity,
         { provide: PROFILE_STORE, useValue: options.store },
         { provide: JOB_CATALOG, useValue: options.catalog },
+        { provide: DOCUMENT_STORE, useValue: options.documents },
         { provide: TOKEN_VERIFIER, useValue: options.verifier },
         { provide: RELEASE_SHA, useValue: options.releaseSha },
       ],
