@@ -16,6 +16,8 @@ export type JobSourceProvider = "greenhouse" | "lever" | "ashby" | "workday" | "
 export type JobProvenance = "permitted_api" | "authorized_fixture" | "explicit_ugc";
 export type DuplicateClassification = "exact" | "probable" | "related_repost" | "not_duplicate";
 
+export type DuplicateResolution = Exclude<DuplicateClassification, "probable">;
+
 export interface JobObservation {
   provider: JobSourceProvider;
   provenance: JobProvenance;
