@@ -53,6 +53,12 @@ const candidateDocuments = "infrastructure/terraform/modules/platform/candidate-
 
 for (const required of [
   'ValidateSet("Status", "PlanTask", "ApplyTask", "PlanExecution", "Execute", "Verify")',
+  "Assert-ReleaseSourceBinding",
+  "Assert-OperatorOnlyReleaseDelta",
+  "operatorSourceSha",
+  "--if-none-match '*'",
+  '"s3api", "list-object-versions"',
+  "operator-claims/development-document-migration/",
   "Save-AndClearTerraformVariables",
   "Restore-TerraformVariables",
   "ConvertTo-Json -InputObject $Value -Compress -Depth 30",

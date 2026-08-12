@@ -66,7 +66,7 @@ Usage:
   # Produce a checksum-bound, no-override run-task request for independent review.
   .\scripts\operate-development-document-migration.ps1 -Action PlanExecution `
     -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
-    -SourceSha MERGED_40_CHARACTER_COMMIT `
+    -SourceSha APPLIED_RELEASE_40_CHARACTER_COMMIT `
     -MigrationImage EXACT_ECR_URI_AT_SHA256 `
     -TaskPlanPath .terraform/development-document-migration/task-....tfplan `
     -ReviewedTaskPlanSha256 64_CHARACTER_SHA256
@@ -74,7 +74,7 @@ Usage:
   # Execute the exact reviewed request once. The client token prevents duplicate submission.
   .\scripts\operate-development-document-migration.ps1 -Action Execute `
     -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
-    -SourceSha MERGED_40_CHARACTER_COMMIT `
+    -SourceSha APPLIED_RELEASE_40_CHARACTER_COMMIT `
     -MigrationImage EXACT_ECR_URI_AT_SHA256 `
     -TaskPlanPath .terraform/development-document-migration/task-....tfplan `
     -ReviewedTaskPlanSha256 64_CHARACTER_SHA256 `
@@ -85,7 +85,7 @@ Usage:
   # and save a refresh-backed zero-drift plan.
   .\scripts\operate-development-document-migration.ps1 -Action Verify `
     -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
-    -SourceSha MERGED_40_CHARACTER_COMMIT `
+    -SourceSha APPLIED_RELEASE_40_CHARACTER_COMMIT `
     -MigrationImage EXACT_ECR_URI_AT_SHA256 `
     -TaskPlanPath .terraform/development-document-migration/task-....tfplan `
     -ReviewedTaskPlanSha256 64_CHARACTER_SHA256 `
@@ -95,7 +95,9 @@ Usage:
 
 All plans, metadata, receipts, and local logs stay below the ignored development .terraform
 directory. The operator never accepts an ECS container, command, environment, role, CPU, memory,
-or resource override.
+or resource override. PlanTask and ApplyTask require SourceSha to equal the current merged main.
+Post-apply actions may bind an already-applied ancestor release while recording the exact current
+operator revision in the execution descriptor and receipt.
 "@
   exit 0
 }
@@ -180,6 +182,16 @@ function Get-FileSha256 {
   return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
 }
 
+function Get-FileSha256Base64 {
+  param([Parameter(Mandatory)][string]$Path)
+  $algorithm = [Security.Cryptography.SHA256]::Create()
+  try {
+    return [Convert]::ToBase64String($algorithm.ComputeHash([IO.File]::ReadAllBytes($Path)))
+  } finally {
+    $algorithm.Dispose()
+  }
+}
+
 function Get-TextSha256 {
   param([Parameter(Mandatory)][string]$Value)
   $algorithm = [Security.Cryptography.SHA256]::Create()
@@ -238,8 +250,45 @@ function Resolve-OperatorPath {
   return $resolved
 }
 
+function Assert-ReleaseSourceBinding {
+  param(
+    [Parameter(Mandatory)][string]$ReleaseSourceSha,
+    [Parameter(Mandatory)][string]$OperatorSourceSha,
+    [switch]$AllowAncestor,
+    [bool]$IsAncestor = $false
+  )
+
+  if ($ReleaseSourceSha -notmatch "^[a-f0-9]{40}$" -or
+      $OperatorSourceSha -notmatch "^[a-f0-9]{40}$") {
+    throw "The release and operator source SHAs must be exact merged commits."
+  }
+  if ($ReleaseSourceSha -ceq $OperatorSourceSha) { return }
+  if ($AllowAncestor -and $IsAncestor) { return }
+  throw "The migration release must equal the current operator source or be its verified main ancestor for a post-apply action."
+}
+
+function Assert-OperatorOnlyReleaseDelta {
+  param([Parameter(Mandatory)][string[]]$ChangeRecords)
+
+  $allowed = @(
+    "scripts/operate-development-document-migration.ps1",
+    "scripts/tests/development-document-migration-operator.tests.ps1",
+    "scripts/validate-serverless-workflow-infrastructure.mjs",
+    "infrastructure/runbooks/deployments/database-migration.md"
+  )
+  if ($ChangeRecords.Count -eq 0) { throw "An ancestor release must have an attributable operator-only correction." }
+  foreach ($record in $ChangeRecords) {
+    if ($record -notmatch '^M\t(.+)$' -or $Matches[1] -notin $allowed) {
+      throw "The applied release differs from the current operator by more than the exact verifier-only allowlist."
+    }
+  }
+}
+
 function Assert-CallerToolsAndSource {
-  param([switch]$RequireSource)
+  param(
+    [switch]$RequireSource,
+    [switch]$AllowAncestorSource
+  )
 
   $identity = Invoke-AwsJson -Arguments @("sts", "get-caller-identity", "--output", "json") -Operation "AWS caller validation"
   if ([string]$identity.Account -cne $ExpectedAccountId) {
@@ -255,7 +304,7 @@ function Assert-CallerToolsAndSource {
   }
 
   if ($RequireSource) {
-    if ($SourceSha -notmatch "^[a-f0-9]{40}$") { throw "The exact merged source SHA is required." }
+    if ($SourceSha -notmatch "^[a-f0-9]{40}$") { throw "The exact merged release source SHA is required." }
     $branch = (& git -C $repositoryRoot branch --show-current 2>$null).Trim()
     $head = (& git -C $repositoryRoot rev-parse HEAD 2>$null).Trim()
     $upstream = (& git -C $repositoryRoot rev-parse origin/main 2>$null).Trim()
@@ -263,10 +312,29 @@ function Assert-CallerToolsAndSource {
     if ($branch -cne "main" -or $head -cne $upstream -or $dirty.Count -ne 0) {
       throw "Migration operations require a clean main checkout exactly matching origin/main."
     }
-    if ($head -cne $SourceSha) {
-      throw "The migration source SHA must equal the exact merged main checkout."
+    $isAncestor = $false
+    if ($head -cne $SourceSha -and $AllowAncestorSource) {
+      & git -C $repositoryRoot merge-base --is-ancestor $SourceSha $head 2>$null
+      $isAncestor = $LASTEXITCODE -eq 0
     }
+    Assert-ReleaseSourceBinding -ReleaseSourceSha $SourceSha -OperatorSourceSha $head `
+      -AllowAncestor:$AllowAncestorSource -IsAncestor:$isAncestor
+    if ($head -cne $SourceSha) {
+      $changeRecords = @(& git -C $repositoryRoot diff --name-status --no-renames "$SourceSha..$head" 2>$null)
+      if ($LASTEXITCODE -ne 0) { throw "The release-to-operator delta could not be inspected." }
+      Assert-OperatorOnlyReleaseDelta -ChangeRecords $changeRecords
+      foreach ($path in $changeRecords | ForEach-Object { ($_ -split "`t", 2)[1] }) {
+        foreach ($revision in @($SourceSha, $head)) {
+          $type = (& git -C $repositoryRoot cat-file -t "$revision`:$path" 2>$null).Trim()
+          if ($LASTEXITCODE -ne 0 -or $type -cne "blob") {
+            throw "The verifier-only delta contains a non-blob or missing path."
+          }
+        }
+      }
+    }
+    return $head
   }
+  return ""
 }
 
 function Initialize-EncryptedBackend {
@@ -968,13 +1036,14 @@ function Read-ExecutionPlan {
 
   if ((Get-FileSha256 -Path $Path) -cne $Sha256) { throw "The execution-plan checksum does not match the reviewed value." }
   $plan = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+  Assert-ExecutionIdentity -Value $plan -ExpectedKind "development-document-migration-execution" `
+    -ReleaseSourceSha $SourceSha -OperatorSourceSha $operatorSourceSha
   $request = $plan.runTaskRequest
   $properties = @($request.PSObject.Properties.Name)
   $allowed = @("cluster", "taskDefinition", "count", "launchType", "networkConfiguration", "clientToken", "startedBy")
-  if ([int]$plan.schemaVersion -ne 1 -or [string]$plan.kind -cne "development-document-migration-execution" -or
-      [string]$plan.environment -cne "development" -or [string]$plan.region -cne $Region -or
+  if ([string]$plan.environment -cne "development" -or [string]$plan.region -cne $Region -or
       [string]$plan.accountId -cne $ExpectedAccountId -or [string]$plan.stateBucket -cne $StateBucket -or
-      [string]$plan.sourceSha -cne $SourceSha -or [string]$plan.migrationImage -cne $MigrationImage -or
+      [string]$plan.migrationImage -cne $MigrationImage -or
       [string]$plan.taskPlanSha256 -cne $TaskPlanSha256 -or @($properties | Where-Object { $_ -notin $allowed }).Count -ne 0 -or
       $properties.Count -ne $allowed.Count -or [int]$request.count -ne 1 -or
       [string]$request.launchType -cne "FARGATE" -or
@@ -988,7 +1057,137 @@ function Read-ExecutionPlan {
   return $plan
 }
 
-Assert-CallerToolsAndSource -RequireSource:($Action -ne "Status")
+function Assert-ExecutionIdentity {
+  param(
+    [Parameter(Mandatory)][object]$Value,
+    [Parameter(Mandatory)][string]$ExpectedKind,
+    [Parameter(Mandatory)][string]$ReleaseSourceSha,
+    [Parameter(Mandatory)][string]$OperatorSourceSha
+  )
+
+  if ([int]$Value.schemaVersion -ne 2 -or [string]$Value.kind -cne $ExpectedKind -or
+      [string]$Value.sourceSha -cne $ReleaseSourceSha -or
+      [string]$Value.operatorSourceSha -cne $OperatorSourceSha) {
+    throw "The execution evidence is not bound to the exact applied release and operator revision."
+  }
+}
+
+function Assert-DurableClaimPutResult {
+  param(
+    [Parameter(Mandatory)][int]$ExitCode,
+    [AllowNull()][object]$PutResult,
+    [Parameter(Mandatory)][string]$ExpectedChecksum
+  )
+
+  if ($ExitCode -ne 0) {
+    throw "The reviewed execution is already claimed or its durable one-time claim could not be created. Do not retry blindly."
+  }
+  if ($null -eq $PutResult -or [string]::IsNullOrWhiteSpace([string]$PutResult.VersionId) -or
+      [string]$PutResult.ChecksumSHA256 -cne $ExpectedChecksum) {
+    throw "The durable execution claim did not produce an exact checksummed immutable object version. Do not submit the task."
+  }
+}
+
+function Assert-DurableExecutionClaimEvidence {
+  param(
+    [Parameter(Mandatory)][object]$Head,
+    [Parameter(Mandatory)][string]$ClaimVersion,
+    [Parameter(Mandatory)][string]$ExecutionPlanSha256,
+    [Parameter(Mandatory)][string]$ExpectedChecksum,
+    [Parameter(Mandatory)][string]$ExpectedKmsKeyArn,
+    [Parameter(Mandatory)][string]$ReleaseSourceSha,
+    [Parameter(Mandatory)][string]$OperatorSourceSha
+  )
+
+  if ([string]$Head.ServerSideEncryption -cne "aws:kms" -or
+      [string]$Head.SSEKMSKeyId -cne $ExpectedKmsKeyArn -or -not $Head.BucketKeyEnabled -or
+      [long]$Head.ContentLength -le 0 -or [string]$Head.VersionId -cne $ClaimVersion -or
+      [string]$Head.ChecksumSHA256 -cne $ExpectedChecksum -or
+      [string]$Head.Metadata.'execution-plan-sha256' -cne $ExecutionPlanSha256 -or
+      [string]$Head.Metadata.'source-sha' -cne $ReleaseSourceSha -or
+      [string]$Head.Metadata.'operator-source-sha' -cne $OperatorSourceSha) {
+    throw "The durable execution claim is not protected by the exact immutable KMS and checksum boundary. Do not submit the task."
+  }
+}
+
+function New-DurableExecutionClaim {
+  param(
+    [Parameter(Mandatory)][string]$ExecutionPlanSha256,
+    [Parameter(Mandatory)][string]$ClientToken
+  )
+
+  $claimKey = "operator-claims/development-document-migration/$ExecutionPlanSha256.json"
+  $claim = [ordered]@{
+    schemaVersion       = 1
+    kind                = "development-document-migration-execution-claim"
+    environment         = "development"
+    sourceSha           = $SourceSha
+    operatorSourceSha   = $operatorSourceSha
+    executionPlanSha256 = $ExecutionPlanSha256
+    clientToken         = $ClientToken
+    claimedAt           = (Get-Date).ToUniversalTime().ToString("o")
+  }
+  $history = Invoke-AwsJson -Arguments @(
+    "s3api", "list-object-versions", "--bucket", $StateBucket, "--prefix", $claimKey,
+    "--output", "json"
+  ) -Operation "Durable migration execution-claim history validation"
+  $existingVersions = @($history.Versions | Where-Object { [string]$_.Key -ceq $claimKey })
+  $existingMarkers = @($history.DeleteMarkers | Where-Object { [string]$_.Key -ceq $claimKey })
+  if ($existingVersions.Count -ne 0 -or $existingMarkers.Count -ne 0) {
+    throw "The reviewed execution already has durable claim history. Do not replay it."
+  }
+  $temporaryClaim = [IO.Path]::GetTempFileName()
+  try {
+    Write-JsonFile -Path $temporaryClaim -Value $claim -AllowReplace
+    $claimChecksum = Get-FileSha256Base64 -Path $temporaryClaim
+    $output = & aws s3api put-object --bucket $StateBucket --key $claimKey `
+      --body $temporaryClaim --if-none-match '*' --server-side-encryption aws:kms `
+      --ssekms-key-id $script:stateKmsKeyArn --bucket-key-enabled `
+      --checksum-algorithm SHA256 --metadata `
+      "execution-plan-sha256=$ExecutionPlanSha256,source-sha=$SourceSha,operator-source-sha=$operatorSourceSha" `
+      --output json 2>$null
+    $putExitCode = $LASTEXITCODE
+    $put = if ($putExitCode -eq 0) { $output | ConvertFrom-Json } else { $null }
+    Assert-DurableClaimPutResult -ExitCode $putExitCode -PutResult $put `
+      -ExpectedChecksum $claimChecksum
+  } finally {
+    if (Test-Path -LiteralPath $temporaryClaim) { Remove-Item -LiteralPath $temporaryClaim -Force }
+  }
+  Assert-DurableExecutionClaim -ClaimKey $claimKey -ClaimVersion ([string]$put.VersionId) `
+    -ExecutionPlanSha256 $ExecutionPlanSha256 -ExpectedChecksum $claimChecksum
+  return [pscustomobject]@{
+    Key = $claimKey
+    VersionId = [string]$put.VersionId
+    ChecksumSHA256 = $claimChecksum
+  }
+}
+
+function Assert-DurableExecutionClaim {
+  param(
+    [Parameter(Mandatory)][string]$ClaimKey,
+    [Parameter(Mandatory)][string]$ClaimVersion,
+    [Parameter(Mandatory)][string]$ExecutionPlanSha256,
+    [Parameter(Mandatory)][string]$ExpectedChecksum
+  )
+
+  if ($ClaimKey -cne "operator-claims/development-document-migration/$ExecutionPlanSha256.json" -or
+      [string]::IsNullOrWhiteSpace($ClaimVersion) -or
+      $ExpectedChecksum -notmatch '^[A-Za-z0-9+/]{43}=$') {
+    throw "The execution claim identity does not match the reviewed execution."
+  }
+  $head = Invoke-AwsJson -Arguments @(
+    "s3api", "head-object", "--bucket", $StateBucket, "--key", $claimKey,
+    "--version-id", $ClaimVersion, "--checksum-mode", "ENABLED", "--output", "json"
+  ) -Operation "Durable migration execution-claim verification"
+  Assert-DurableExecutionClaimEvidence -Head $head -ClaimVersion $ClaimVersion `
+    -ExecutionPlanSha256 $ExecutionPlanSha256 -ExpectedChecksum $ExpectedChecksum `
+    -ExpectedKmsKeyArn $script:stateKmsKeyArn -ReleaseSourceSha $SourceSha `
+    -OperatorSourceSha $operatorSourceSha
+}
+
+$postApplyAction = $Action -in @("PlanExecution", "Execute", "Verify")
+$operatorSourceSha = Assert-CallerToolsAndSource -RequireSource:($Action -ne "Status") `
+  -AllowAncestorSource:$postApplyAction
 Initialize-EncryptedBackend
 Assert-StateObjectEncryption
 
@@ -1123,13 +1322,14 @@ if ($Action -eq "PlanExecution") {
   $executionPlan = Resolve-OperatorPath -Candidate $ExecutionPlanPath -RequireOperatorRoot
   $token = "d1-document-$([guid]::NewGuid().ToString("N"))"
   $descriptor = [ordered]@{
-    schemaVersion  = 1
+    schemaVersion  = 2
     kind           = "development-document-migration-execution"
     environment    = "development"
     region         = $Region
     accountId      = $ExpectedAccountId
     stateBucket    = $StateBucket
     sourceSha      = $SourceSha
+    operatorSourceSha = $operatorSourceSha
     migrationImage = $MigrationImage
     taskPlanSha256 = $ReviewedTaskPlanSha256
     createdAt      = (Get-Date).ToUniversalTime().ToString("o")
@@ -1182,6 +1382,8 @@ if ($Action -eq "Execute") {
   $receipt = Resolve-OperatorPath -Candidate $ReceiptPath -RequireOperatorRoot
   if (Test-Path -LiteralPath $receipt) { throw "Refusing to replace an existing migration execution receipt." }
   Assert-DatabaseSafety
+  $claim = New-DurableExecutionClaim -ExecutionPlanSha256 $ReviewedExecutionPlanSha256 `
+    -ClientToken ([string]$request.clientToken)
 
   $temporaryRequest = [IO.Path]::GetTempFileName()
   try {
@@ -1200,15 +1402,19 @@ if ($Action -eq "Execute") {
     throw "ECS returned an effective migration task override."
   }
   $receiptValue = [ordered]@{
-    schemaVersion       = 1
+    schemaVersion       = 2
     kind                = "development-document-migration-receipt"
     environment         = "development"
     accountId           = $ExpectedAccountId
     stateBucket         = $StateBucket
     sourceSha           = $SourceSha
+    operatorSourceSha   = $operatorSourceSha
     migrationImage      = $MigrationImage
     taskPlanSha256      = $ReviewedTaskPlanSha256
     executionPlanSha256 = $ReviewedExecutionPlanSha256
+    executionClaimKey   = $claim.Key
+    executionClaimVersion = $claim.VersionId
+    executionClaimChecksumSHA256 = $claim.ChecksumSHA256
     taskArn             = $taskArn
     phase               = "submitted"
     submittedAt         = (Get-Date).ToUniversalTime().ToString("o")
@@ -1244,12 +1450,20 @@ if ($Action -ne "Verify") { throw "Unsupported migration operator action." }
 if ([string]::IsNullOrWhiteSpace($ReceiptPath)) { throw "Verify requires the execution receipt path." }
 $receipt = Resolve-OperatorPath -Candidate $ReceiptPath -MustExist -RequireOperatorRoot
 $receiptValue = Get-Content -LiteralPath $receipt -Raw | ConvertFrom-Json
-if ([int]$receiptValue.schemaVersion -ne 1 -or [string]$receiptValue.kind -cne "development-document-migration-receipt" -or
-    [string]$receiptValue.environment -cne "development" -or [string]$receiptValue.sourceSha -cne $SourceSha -or
+Assert-ExecutionIdentity -Value $receiptValue -ExpectedKind "development-document-migration-receipt" `
+  -ReleaseSourceSha $SourceSha -OperatorSourceSha $operatorSourceSha
+Assert-DurableExecutionClaim -ClaimKey ([string]$receiptValue.executionClaimKey) `
+  -ClaimVersion ([string]$receiptValue.executionClaimVersion) `
+  -ExecutionPlanSha256 $ReviewedExecutionPlanSha256 `
+  -ExpectedChecksum ([string]$receiptValue.executionClaimChecksumSHA256)
+if ([string]$receiptValue.environment -cne "development" -or
     [string]$receiptValue.accountId -cne $ExpectedAccountId -or [string]$receiptValue.stateBucket -cne $StateBucket -or
     [string]$receiptValue.migrationImage -cne $MigrationImage -or
     [string]$receiptValue.taskPlanSha256 -cne $ReviewedTaskPlanSha256 -or
     [string]$receiptValue.executionPlanSha256 -cne $ReviewedExecutionPlanSha256 -or
+    [string]$receiptValue.executionClaimKey -cne "operator-claims/development-document-migration/$ReviewedExecutionPlanSha256.json" -or
+    [string]::IsNullOrWhiteSpace([string]$receiptValue.executionClaimVersion) -or
+    [string]$receiptValue.executionClaimChecksumSHA256 -notmatch '^[A-Za-z0-9+/]{43}=$' -or
     [string]$receiptValue.phase -cne "verified" -or [int]$receiptValue.exitCode -ne 0 -or
     [string]$receiptValue.taskArn -notmatch "^arn:aws:ecs:$([regex]::Escape($Region)):$ExpectedAccountId`:task/") {
   throw "The migration execution receipt is incomplete or belongs to a different reviewed release."
@@ -1284,6 +1498,7 @@ Assert-StateObjectEncryption
   Outcome                    = "verified"
   Environment                = "development"
   SourceSha                  = $SourceSha
+  OperatorSourceSha          = $operatorSourceSha
   TaskPlanSha256             = $ReviewedTaskPlanSha256
   ExecutionPlanSha256        = $ReviewedExecutionPlanSha256
   ReceiptSha256              = Get-FileSha256 -Path $receipt

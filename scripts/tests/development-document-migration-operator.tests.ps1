@@ -50,12 +50,153 @@ $baselineFunctions = @($ast.FindAll({
         "ConvertTo-TerraformEnvironmentValue", "Get-MeaningfulChanges", "Assert-PlanWasApplied",
         "Assert-ExactTaskPlan", "Assert-CurrentGatewayArtifactEvidence",
         "Test-IgnorableRdsRestorableTimeRefresh", "Get-OptionalProperty",
-        "Test-EcsFaultInjectionDisabled"
+        "Test-EcsFaultInjectionDisabled", "Assert-ReleaseSourceBinding",
+        "Assert-OperatorOnlyReleaseDelta", "Assert-ExecutionIdentity",
+        "Assert-DurableClaimPutResult", "Assert-DurableExecutionClaimEvidence"
       )
     }, $true))
-if ($baselineFunctions.Count -ne 8) { throw "The input and plan guards must each be defined once." }
+if ($baselineFunctions.Count -ne 13) { throw "The input and plan guards must each be defined once." }
 foreach ($function in $baselineFunctions | Sort-Object { $_.Extent.StartOffset }) {
   Invoke-Expression $function.Extent.Text
+}
+
+$releaseSource = "a" * 40
+$operatorSource = "b" * 40
+Assert-ReleaseSourceBinding -ReleaseSourceSha $operatorSource -OperatorSourceSha $operatorSource
+Assert-ReleaseSourceBinding -ReleaseSourceSha $releaseSource -OperatorSourceSha $operatorSource `
+  -AllowAncestor -IsAncestor $true
+
+foreach ($unsafeBinding in @(
+    @{ release = $releaseSource; operator = $operatorSource; allow = $false; ancestor = $true },
+    @{ release = $releaseSource; operator = $operatorSource; allow = $true; ancestor = $false },
+    @{ release = "invalid"; operator = $operatorSource; allow = $true; ancestor = $true }
+  )) {
+  $bindingRejected = $false
+  try {
+    Assert-ReleaseSourceBinding -ReleaseSourceSha $unsafeBinding.release `
+      -OperatorSourceSha $unsafeBinding.operator -AllowAncestor:$unsafeBinding.allow `
+      -IsAncestor:$unsafeBinding.ancestor
+  } catch {
+    $bindingRejected = $true
+  }
+  if (-not $bindingRejected) { throw "An unsafe release/operator source binding was accepted." }
+}
+
+Assert-OperatorOnlyReleaseDelta -ChangeRecords @(
+  "M`tscripts/operate-development-document-migration.ps1",
+  "M`tscripts/tests/development-document-migration-operator.tests.ps1",
+  "M`tscripts/validate-serverless-workflow-infrastructure.mjs",
+  "M`tinfrastructure/runbooks/deployments/database-migration.md"
+)
+foreach ($unsafeDelta in @(
+    , @("M`tinfrastructure/terraform/environments/development/main.tf"),
+    , @("A`tscripts/operate-development-document-migration.ps1"),
+    , @()
+  )) {
+  $deltaRejected = $false
+  try { Assert-OperatorOnlyReleaseDelta -ChangeRecords $unsafeDelta } catch { $deltaRejected = $true }
+  if (-not $deltaRejected) { throw "A non-verifier release delta was accepted." }
+}
+
+$executionIdentity = [pscustomobject]@{
+  schemaVersion = 2
+  kind = "development-document-migration-execution"
+  sourceSha = $releaseSource
+  operatorSourceSha = $operatorSource
+}
+Assert-ExecutionIdentity -Value $executionIdentity `
+  -ExpectedKind "development-document-migration-execution" `
+  -ReleaseSourceSha $releaseSource -OperatorSourceSha $operatorSource
+foreach ($mutation in @(
+    @{ property = "schemaVersion"; value = 1 },
+    @{ property = "operatorSourceSha"; value = $releaseSource },
+    @{ property = "sourceSha"; value = $operatorSource }
+  )) {
+  $invalidIdentity = $executionIdentity | ConvertTo-Json | ConvertFrom-Json
+  $invalidIdentity.($mutation.property) = $mutation.value
+  $identityRejected = $false
+  try {
+    Assert-ExecutionIdentity -Value $invalidIdentity `
+      -ExpectedKind "development-document-migration-execution" `
+      -ReleaseSourceSha $releaseSource -OperatorSourceSha $operatorSource
+  } catch { $identityRejected = $true }
+  if (-not $identityRejected) { throw "Mismatched execution evidence was accepted." }
+}
+
+$receiptIdentity = [pscustomobject]@{
+  schemaVersion = 2
+  kind = "development-document-migration-receipt"
+  sourceSha = $releaseSource
+  operatorSourceSha = $operatorSource
+}
+Assert-ExecutionIdentity -Value $receiptIdentity `
+  -ExpectedKind "development-document-migration-receipt" `
+  -ReleaseSourceSha $releaseSource -OperatorSourceSha $operatorSource
+$receiptIdentity.operatorSourceSha = $releaseSource
+$receiptRejected = $false
+try {
+  Assert-ExecutionIdentity -Value $receiptIdentity `
+    -ExpectedKind "development-document-migration-receipt" `
+    -ReleaseSourceSha $releaseSource -OperatorSourceSha $operatorSource
+} catch { $receiptRejected = $true }
+if (-not $receiptRejected) { throw "A receipt from a different operator revision was accepted." }
+
+$claimChecksum = [Convert]::ToBase64String([byte[]](0..31))
+Assert-DurableClaimPutResult -ExitCode 0 `
+  -PutResult ([pscustomobject]@{ VersionId = "version"; ChecksumSHA256 = $claimChecksum }) `
+  -ExpectedChecksum $claimChecksum
+foreach ($claimResult in @(
+    @{ exitCode = 1; value = $null },
+    @{ exitCode = 0; value = [pscustomobject]@{ VersionId = ""; ChecksumSHA256 = $claimChecksum } },
+    @{ exitCode = 0; value = [pscustomobject]@{ VersionId = "version"; ChecksumSHA256 = "wrong" } }
+  )) {
+  $claimRejected = $false
+  try {
+    Assert-DurableClaimPutResult -ExitCode $claimResult.exitCode -PutResult $claimResult.value `
+      -ExpectedChecksum $claimChecksum
+  } catch { $claimRejected = $true }
+  if (-not $claimRejected) { throw "A replayed or non-versioned execution claim was accepted." }
+}
+
+$claimVersion = "claim-version"
+$claimKmsArn = "arn:aws:kms:us-east-2:111122223333:key/00000000-0000-0000-0000-000000000000"
+$claimHead = [pscustomobject]@{
+  ServerSideEncryption = "aws:kms"
+  SSEKMSKeyId = $claimKmsArn
+  BucketKeyEnabled = $true
+  ContentLength = 10
+  VersionId = $claimVersion
+  ChecksumSHA256 = $claimChecksum
+  Metadata = [pscustomobject]@{
+    'execution-plan-sha256' = "f" * 64
+    'source-sha' = $releaseSource
+    'operator-source-sha' = $operatorSource
+  }
+}
+Assert-DurableExecutionClaimEvidence -Head $claimHead -ClaimVersion $claimVersion `
+  -ExecutionPlanSha256 ("f" * 64) -ExpectedChecksum $claimChecksum `
+  -ExpectedKmsKeyArn $claimKmsArn -ReleaseSourceSha $releaseSource `
+  -OperatorSourceSha $operatorSource
+foreach ($case in @(
+    @{ property = "ChecksumSHA256"; value = "wrong" },
+    @{ property = "SSEKMSKeyId"; value = "$claimKmsArn-wrong" },
+    @{ property = "VersionId"; value = "wrong" },
+    @{ property = "Metadata"; value = [pscustomobject]@{
+        'execution-plan-sha256' = "e" * 64
+        'source-sha' = $releaseSource
+        'operator-source-sha' = $operatorSource
+      } }
+  )) {
+  $badClaimHead = $claimHead | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+  $badClaimHead.($case.property) = $case.value
+  $claimEvidenceRejected = $false
+  try {
+    Assert-DurableExecutionClaimEvidence -Head $badClaimHead -ClaimVersion $claimVersion `
+      -ExecutionPlanSha256 ("f" * 64) -ExpectedChecksum $claimChecksum `
+      -ExpectedKmsKeyArn $claimKmsArn -ReleaseSourceSha $releaseSource `
+      -OperatorSourceSha $operatorSource
+  } catch { $claimEvidenceRejected = $true }
+  if (-not $claimEvidenceRejected) { throw "Invalid durable claim evidence was accepted." }
 }
 
 $zeroChangePlan = [pscustomobject]@{

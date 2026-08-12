@@ -40,18 +40,23 @@ The task release is deliberately review-separated:
    SHA-256 to `ApplyTask`. The apply rechecks the artifact, plan semantics, encrypted state, task
    definition, empty cluster, and zero-service boundary before reporting success.
 3. `PlanExecution` resolves the exact applied task definition, two migration subnets, and one
-   application security group into a JSON `run-task` request. Review its SHA-256. The request has
-   count one, Fargate, public control-plane/image access, an idempotency token, and no `overrides`
-   property.
+   application security group into a JSON `run-task` request. Review its SHA-256. If an operator-
+   only correction was merged after `ApplyTask`, the release SHA may be an ancestor of the clean
+   current `main`; the descriptor binds both the applied release SHA and exact operator SHA. The
+   request has count one, Fargate, public control-plane/image access, an idempotency token, and no
+   `overrides` property.
 4. `Execute` accepts only that checksum-reviewed descriptor, submits it through
-   `--cli-input-json`, writes a local receipt immediately, waits for `STOPPED`, and requires the
-   exact image digest, exit code `0`, no effective override, four aggregate-only success messages,
-   zero active migration tasks, and zero ECS services.
+   `--cli-input-json`, first conditionally creates an immutable customer-KMS execution claim in
+   the versioned state bucket, writes a local receipt immediately, waits for `STOPPED`, and
+   requires the exact image digest, exit code `0`, no effective override, four aggregate-only
+   success messages, zero active migration tasks, and zero ECS services.
 5. `Verify` repeats the task/log/zero-compute checks and saves a refresh-backed zero-drift plan.
 
 Run `Get-Help` through the script's `-Help` switch for exact commands. Never reuse an execution
-descriptor for a different task plan or image. If execution becomes ambiguous, retain the receipt,
-inspect that exact task, and do not generate a second descriptor or retry blindly.
+descriptor for a different task plan or image. The durable claim is never removed automatically,
+so an ambiguous submission cannot become eligible for replay by deleting a local receipt or
+waiting for the ECS client-token window to expire. Retain the receipt, inspect that exact task, and
+do not generate a second descriptor or retry blindly.
 
 ## Execute once
 
