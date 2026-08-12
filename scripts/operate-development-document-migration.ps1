@@ -717,7 +717,7 @@ function Assert-ExactTaskPlan {
     if ($property.Name -in @("ipc_mode", "pid_mode", "task_role_arn") -and
         $null -eq $property.Value -and $null -ne $beforeProperty -and
         $beforeProperty.Value -is [string] -and [string]$beforeProperty.Value -ceq "" -and
-        -not [bool]$change.after_unknown.($property.Name)) {
+        (Get-OptionalProperty -Object $change.after_unknown -Name $property.Name) -ne $true) {
       continue
     }
     if ($null -eq $beforeProperty -or
