@@ -102,7 +102,7 @@ run "enabled_runtime_couples_api_dispatch_and_workflow_triggers" {
       length(aws_apigatewayv2_route.gateway) == 1 &&
       aws_apigatewayv2_route.gateway[0].authorization_type == "JWT" &&
       toset(aws_apigatewayv2_route.gateway[0].authorization_scopes) == toset([
-        "documents:read", "documents:write", "jobs:read", "profile:read", "profile:write"
+        "jobs:read", "profile:read", "profile:write"
       ]) &&
       length(aws_apigatewayv2_route.gateway_lambda_public) == 2 &&
       alltrue([for route in aws_apigatewayv2_route.gateway_lambda_public : route.authorization_type == "NONE"])
@@ -137,6 +137,7 @@ run "document_intake_is_private_encrypted_and_malware_scanned" {
   variables {
     deploy_document_intake                  = true
     candidate_document_cors_allowed_origins = ["http://localhost:3000"]
+    serverless_runtime_enabled              = true
   }
 
   assert {
@@ -154,6 +155,9 @@ run "document_intake_is_private_encrypted_and_malware_scanned" {
     condition = (
       aws_guardduty_malware_protection_plan.candidate_documents[0].protected_resource[0].s3_bucket[0].object_prefixes == toset(["quarantine/"]) &&
       aws_guardduty_malware_protection_plan.candidate_documents[0].actions[0].tagging[0].status == "ENABLED" &&
+      toset(aws_apigatewayv2_route.gateway[0].authorization_scopes) == toset([
+        "documents:read", "documents:write", "jobs:read", "profile:read", "profile:write"
+      ]) &&
       contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "DOCUMENT_UPLOAD_BUCKET") &&
       contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "DOCUMENT_UPLOAD_KMS_KEY_ARN")
     )
