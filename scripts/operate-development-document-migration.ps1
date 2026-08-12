@@ -134,6 +134,14 @@ function Get-OptionalProperty {
   return $property.Value
 }
 
+function Test-EcsFaultInjectionDisabled {
+  param([Parameter(Mandatory)][object]$TaskDefinition)
+
+  $property = $TaskDefinition.PSObject.Properties["enableFaultInjection"]
+  if ($null -eq $property) { return $true }
+  return ($property.Value -is [bool] -and $property.Value -eq $false)
+}
+
 function Invoke-AwsJson {
   param(
     [Parameter(Mandatory)][string[]]$Arguments,
@@ -775,7 +783,7 @@ function Assert-TaskDefinition {
   $secrets = @($containers[0].secrets)
   $compatibilities = @($task.requiresCompatibilities)
   if ([string]$task.status -cne "ACTIVE" -or [string]$task.family -cne $migrationFamily -or
-      (Get-OptionalProperty $task "enableFaultInjection") -ne $false -or
+      -not (Test-EcsFaultInjectionDisabled -TaskDefinition $task) -or
       $compatibilities.Count -ne 1 -or [string]$compatibilities[0] -cne "FARGATE" -or
       [string]$task.networkMode -cne "awsvpc" -or [string]$task.cpu -cne "256" -or
       [string]$task.memory -cne "512" -or [string]$task.runtimePlatform.cpuArchitecture -cne "X86_64" -or

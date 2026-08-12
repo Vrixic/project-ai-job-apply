@@ -49,10 +49,11 @@ $baselineFunctions = @($ast.FindAll({
       $node.Name -in @(
         "ConvertTo-TerraformEnvironmentValue", "Get-MeaningfulChanges", "Assert-PlanWasApplied",
         "Assert-ExactTaskPlan", "Assert-CurrentGatewayArtifactEvidence",
-        "Test-IgnorableRdsRestorableTimeRefresh", "Get-OptionalProperty"
+        "Test-IgnorableRdsRestorableTimeRefresh", "Get-OptionalProperty",
+        "Test-EcsFaultInjectionDisabled"
       )
     }, $true))
-if ($baselineFunctions.Count -ne 7) { throw "The input and plan guards must each be defined once." }
+if ($baselineFunctions.Count -ne 8) { throw "The input and plan guards must each be defined once." }
 foreach ($function in $baselineFunctions | Sort-Object { $_.Extent.StartOffset }) {
   Invoke-Expression $function.Extent.Text
 }
@@ -311,6 +312,17 @@ foreach ($invalid in @("malformed-time", "missing-time", "extra-action")) {
   }
   if (Test-IgnorableRdsRestorableTimeRefresh -Drift $badRefresh) {
     throw "Invalid RDS refresh shape '$invalid' was ignored."
+  }
+}
+
+if (-not (Test-EcsFaultInjectionDisabled -TaskDefinition ([pscustomobject]@{})) -or
+    -not (Test-EcsFaultInjectionDisabled -TaskDefinition ([pscustomobject]@{ enableFaultInjection = $false }))) {
+  throw "An absent or explicitly false ECS fault-injection setting was rejected."
+}
+foreach ($unsafeFaultValue in @($true, $null, "false")) {
+  $unsafeTask = [pscustomobject]@{ enableFaultInjection = $unsafeFaultValue }
+  if (Test-EcsFaultInjectionDisabled -TaskDefinition $unsafeTask) {
+    throw "Unsafe ECS fault-injection value was accepted."
   }
 }
 

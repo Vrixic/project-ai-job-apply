@@ -58,6 +58,7 @@ for (const required of [
   "ConvertTo-Json -InputObject $Value -Compress -Depth 30",
   "Set-VerifiedCurrentGatewayArtifactVariables",
   "Test-IgnorableRdsRestorableTimeRefresh",
+  "Test-EcsFaultInjectionDisabled",
   '"--version-id", ([string]$gateway.s3_object_version)',
   'foreach ($propertyName in @("mountPoints", "portMappings", "systemControls", "volumesFrom"))',
   '$property.Name -in @("ipc_mode", "pid_mode", "task_role_arn")',
