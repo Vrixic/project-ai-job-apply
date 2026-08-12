@@ -7,8 +7,12 @@ merges when a deterministic exact identity matches.
 ## Files
 
 - `schema.ts` — Drizzle table types for the job-owned PostgreSQL schema.
-- `catalog.ts` — Transactional repository, provenance gate, exact merge, and lifecycle maintenance.
-- `catalog.integration.test.ts` — Migration replay, deduplication, isolation, and tombstone evidence.
+- `catalog.ts` — Transactional repository, provenance gate, reversible duplicate resolution,
+  canonical source aggregation, and lifecycle maintenance.
+- `catalog.integration.test.ts` — Migration replay, deduplication, reversible resolution,
+  topology, isolation, and tombstone evidence.
 
 The repository defaults to `authorized_fixture` provenance. Enabling a real API or public UGC
 provenance requires the applicable legal/security approval and an explicit runtime configuration.
+Duplicate resolution is not a public API. D1-007 must add its authenticated authorization and audit
+surface without bypassing this repository boundary.

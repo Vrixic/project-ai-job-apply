@@ -14,7 +14,10 @@ describe("PostgresJobCatalog active read parameters", () => {
     const activeAt = new Date("2026-08-11T20:00:00.000Z");
 
     await expect(catalog.getActiveJob(jobId, activeAt)).resolves.toBeNull();
-    expect(parameters).toEqual([[jobId, activeAt.toISOString()]]);
+    expect(parameters).toEqual([
+      [jobId, jobId],
+      [jobId, jobId, activeAt.toISOString()],
+    ]);
   });
 
   it("rejects an invalid internal freshness boundary before opening a query", async () => {

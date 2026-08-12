@@ -8,7 +8,11 @@ if (!databaseUrl) {
   throw new Error("DATABASE_URL is required");
 }
 
-const migrationVersions = ["0001_job_catalog"] as const;
+const migrationVersions = [
+  "0001_job_catalog",
+  "0002_duplicate_resolution",
+  "0003_duplicate_resolution_audit_guard",
+] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
     const migrationPath = fileURLToPath(
@@ -49,7 +53,12 @@ try {
     }
 
     const [verification] = await transaction<
-      { tableCount: number; migrationCount: number; identityIndexCount: number }[]
+      {
+        tableCount: number;
+        migrationCount: number;
+        identityIndexCount: number;
+        moderationIndexCount: number;
+      }[]
     >`
       SELECT
         (
@@ -57,6 +66,7 @@ try {
           (to_regclass('jobs.canonical_jobs') IS NOT NULL)::int +
           (to_regclass('jobs.job_sources') IS NOT NULL)::int +
           (to_regclass('jobs.duplicate_candidates') IS NOT NULL)::int +
+          (to_regclass('jobs.duplicate_resolution_events') IS NOT NULL)::int +
           (to_regclass('jobs.status_events') IS NOT NULL)::int +
           (to_regclass('jobs.schema_migrations') IS NOT NULL)::int
         )::int AS "tableCount",
@@ -72,12 +82,21 @@ try {
               'job_sources_requisition_identity_uq',
               'job_sources_canonical_url_hash_uq'
             )
-        ) AS "identityIndexCount"
+        ) AS "identityIndexCount",
+        (
+          SELECT count(*)::int FROM pg_indexes
+          WHERE schemaname = 'jobs'
+            AND indexname IN (
+              'duplicate_candidates_exact_loser_uq',
+              'duplicate_resolution_events_pair_occurred_idx'
+            )
+        ) AS "moderationIndexCount"
     `;
     if (
-      verification?.tableCount !== 6 ||
+      verification?.tableCount !== 7 ||
       verification.migrationCount !== migrationVersions.length ||
-      verification.identityIndexCount !== 3
+      verification.identityIndexCount !== 3 ||
+      verification.moderationIndexCount !== 2
     ) {
       throw new Error("Jobs database migration verification failed");
     }

@@ -7,6 +7,7 @@ import {
   exactIdentityKeys,
   suspectStaleFailureThreshold,
   type CanonicalObservation,
+  type DuplicateResolution,
   type JobObservation,
   type JobProvenance,
   type JobStatus,
@@ -67,6 +68,36 @@ export interface RecordObservationResult {
   probableDuplicateJobIds: string[];
 }
 
+export interface DuplicateCandidateRecord {
+  jobId: string;
+  candidateJobId: string;
+  classification: "probable";
+  resolution?: DuplicateResolution;
+  canonicalJobId?: string;
+  reviewedAt?: Date;
+  reviewedBy?: string;
+  reviewReasonCode?: string;
+  resolutionVersion: number;
+}
+
+export interface ReviewDuplicateCandidateInput {
+  jobId: string;
+  candidateJobId: string;
+  resolution: DuplicateResolution;
+  canonicalJobId?: string;
+  reviewedBy: string;
+  reasonCode: string;
+  reviewedAt: Date;
+}
+
+export interface ReopenDuplicateCandidateInput {
+  jobId: string;
+  candidateJobId: string;
+  reviewedBy: string;
+  reasonCode: string;
+  reviewedAt: Date;
+}
+
 export interface JobCatalogOptions {
   acceptedProvenance?: ReadonlySet<JobProvenance>;
   maxConnections?: number;
@@ -120,6 +151,54 @@ interface ActiveJobRow {
     lastVerifiedAt: string;
     validThrough: string | null;
   }>;
+}
+
+interface DuplicateCandidateRow {
+  jobId: string;
+  candidateJobId: string;
+  classification: "probable";
+  resolution: DuplicateResolution | null;
+  canonicalJobId: string | null;
+  reviewedAt: Date | null;
+  reviewedBy: string | null;
+  reviewReasonCode: string | null;
+  resolutionVersion: number;
+}
+
+const opaqueReviewerPattern = /^[A-Za-z0-9:_-]{3,200}$/;
+const reviewReasonCodePattern = /^[a-z0-9][a-z0-9_.:-]{2,99}$/;
+
+function orderedCandidatePair(jobId: string, candidateJobId: string): [string, string] {
+  if (jobId === candidateJobId) {
+    throw new Error("A duplicate candidate must contain two different jobs");
+  }
+  return jobId < candidateJobId ? [jobId, candidateJobId] : [candidateJobId, jobId];
+}
+
+function validateReviewMetadata(reviewedBy: string, reasonCode: string, reviewedAt: Date): void {
+  if (!opaqueReviewerPattern.test(reviewedBy)) {
+    throw new Error("reviewedBy must be a non-PII opaque identifier");
+  }
+  if (!reviewReasonCodePattern.test(reasonCode)) {
+    throw new Error("A non-PII duplicate-review reason code is required");
+  }
+  if (Number.isNaN(reviewedAt.getTime())) {
+    throw new Error("A valid duplicate-review timestamp is required");
+  }
+}
+
+function mapDuplicateCandidate(row: DuplicateCandidateRow): DuplicateCandidateRecord {
+  return {
+    jobId: row.jobId,
+    candidateJobId: row.candidateJobId,
+    classification: row.classification,
+    ...(row.resolution ? { resolution: row.resolution } : {}),
+    ...(row.canonicalJobId ? { canonicalJobId: row.canonicalJobId } : {}),
+    ...(row.reviewedAt ? { reviewedAt: row.reviewedAt } : {}),
+    ...(row.reviewedBy ? { reviewedBy: row.reviewedBy } : {}),
+    ...(row.reviewReasonCode ? { reviewReasonCode: row.reviewReasonCode } : {}),
+    resolutionVersion: row.resolutionVersion,
+  };
 }
 
 function mapJob(row: CatalogJobRow): CatalogJobRecord {
@@ -442,6 +521,45 @@ export class PostgresJobCatalog {
     });
   }
 
+  async reviewDuplicateCandidate(
+    input: ReviewDuplicateCandidateInput,
+  ): Promise<DuplicateCandidateRecord> {
+    const [jobId, candidateJobId] = orderedCandidatePair(input.jobId, input.candidateJobId);
+    validateReviewMetadata(input.reviewedBy, input.reasonCode, input.reviewedAt);
+    if (input.resolution === "exact") {
+      if (input.canonicalJobId !== jobId && input.canonicalJobId !== candidateJobId) {
+        throw new Error("An exact resolution requires one candidate member as canonicalJobId");
+      }
+    } else if (input.canonicalJobId !== undefined) {
+      throw new Error("Only an exact resolution may select a canonical job");
+    }
+    return this.applyDuplicateResolution({
+      jobId,
+      candidateJobId,
+      resolution: input.resolution,
+      canonicalJobId: input.canonicalJobId ?? null,
+      reviewedBy: input.reviewedBy,
+      reasonCode: input.reasonCode,
+      reviewedAt: input.reviewedAt,
+    });
+  }
+
+  async reopenDuplicateCandidate(
+    input: ReopenDuplicateCandidateInput,
+  ): Promise<DuplicateCandidateRecord> {
+    const [jobId, candidateJobId] = orderedCandidatePair(input.jobId, input.candidateJobId);
+    validateReviewMetadata(input.reviewedBy, input.reasonCode, input.reviewedAt);
+    return this.applyDuplicateResolution({
+      jobId,
+      candidateJobId,
+      resolution: null,
+      canonicalJobId: null,
+      reviewedBy: input.reviewedBy,
+      reasonCode: input.reasonCode,
+      reviewedAt: input.reviewedAt,
+    });
+  }
+
   async setTerminalStatus(
     jobId: string,
     status: "withdrawn" | "blocked",
@@ -533,7 +651,19 @@ export class PostgresJobCatalog {
     // object across the postgres.js serializer boundary; an ISO timestamp remains parameterized
     // and PostgreSQL infers timestamptz from the comparison target.
     const activeAt = now.toISOString();
+    const canonicalJobId = await this.resolveCanonicalJobId(jobId);
     const [row] = await this.client<ActiveJobRow[]>`
+      WITH RECURSIVE canonical_members(id) AS (
+        SELECT ${canonicalJobId}::uuid
+        UNION
+        SELECT CASE
+          WHEN duplicate.canonical_job_id = duplicate.job_id THEN duplicate.candidate_job_id
+          ELSE duplicate.job_id
+        END
+        FROM jobs.duplicate_candidates AS duplicate
+        INNER JOIN canonical_members AS member ON duplicate.canonical_job_id = member.id
+        WHERE duplicate.resolution = 'exact'
+      )
       SELECT
         job.id,
         company.id AS "companyId",
@@ -560,8 +690,9 @@ export class PostgresJobCatalog {
         ) AS sources
       FROM jobs.canonical_jobs AS job
       INNER JOIN jobs.companies AS company ON company.id = job.company_id
-      INNER JOIN jobs.job_sources AS source ON source.job_id = job.id
-      WHERE job.id = ${jobId}
+      INNER JOIN jobs.job_sources AS source
+        ON source.job_id IN (SELECT id FROM canonical_members)
+      WHERE job.id = ${canonicalJobId}
         AND job.status = 'active'
         AND job.expires_at > ${activeAt}
         AND job.description IS NOT NULL
@@ -600,6 +731,138 @@ export class PostgresJobCatalog {
 
   async close(): Promise<void> {
     await this.client.end();
+  }
+
+  async resolveCanonicalJobId(jobId: string): Promise<string> {
+    const [resolved] = await this.client<{ id: string }[]>`
+      WITH RECURSIVE resolution(id, path) AS (
+        SELECT ${jobId}::uuid, ARRAY[${jobId}::uuid]
+        UNION ALL
+        SELECT duplicate.canonical_job_id, resolution.path || duplicate.canonical_job_id
+        FROM resolution
+        INNER JOIN jobs.duplicate_candidates AS duplicate
+          ON duplicate.resolution = 'exact'
+          AND CASE
+            WHEN duplicate.canonical_job_id = duplicate.job_id THEN duplicate.candidate_job_id
+            ELSE duplicate.job_id
+          END = resolution.id
+        WHERE NOT duplicate.canonical_job_id = ANY(resolution.path)
+      )
+      SELECT id FROM resolution ORDER BY cardinality(path) DESC LIMIT 1
+    `;
+    return resolved?.id ?? jobId;
+  }
+
+  private async applyDuplicateResolution(input: {
+    jobId: string;
+    candidateJobId: string;
+    resolution: DuplicateResolution | null;
+    canonicalJobId: string | null;
+    reviewedBy: string;
+    reasonCode: string;
+    reviewedAt: Date;
+  }): Promise<DuplicateCandidateRecord> {
+    return this.client.begin(async (transaction) => {
+      for (const id of [input.jobId, input.candidateJobId].sort()) {
+        await transaction`SELECT pg_advisory_xact_lock(hashtext(${`jobs:duplicate-job:${id}`}))`;
+      }
+      const [existing] = await transaction<DuplicateCandidateRow[]>`
+        SELECT
+          job_id AS "jobId",
+          candidate_job_id AS "candidateJobId",
+          classification,
+          resolution,
+          canonical_job_id AS "canonicalJobId",
+          reviewed_at AS "reviewedAt",
+          reviewed_by AS "reviewedBy",
+          review_reason_code AS "reviewReasonCode",
+          resolution_version AS "resolutionVersion"
+        FROM jobs.duplicate_candidates
+        WHERE job_id = ${input.jobId} AND candidate_job_id = ${input.candidateJobId}
+        FOR UPDATE
+      `;
+      if (!existing) {
+        throw new Error("Probable duplicate candidate not found");
+      }
+      if (existing.classification !== "probable") {
+        throw new Error("Only probable duplicate candidates may be reviewed");
+      }
+      if (
+        existing.resolution === input.resolution &&
+        existing.canonicalJobId === input.canonicalJobId
+      ) {
+        return mapDuplicateCandidate(existing);
+      }
+
+      if (input.resolution === "exact" && input.canonicalJobId) {
+        const loserJobId =
+          input.canonicalJobId === input.jobId ? input.candidateJobId : input.jobId;
+        const [topology] = await transaction<{ conflicts: boolean }[]>`
+          SELECT EXISTS (
+            SELECT 1
+            FROM jobs.duplicate_candidates AS duplicate
+            WHERE duplicate.resolution = 'exact'
+              AND NOT (
+                duplicate.job_id = ${input.jobId}
+                AND duplicate.candidate_job_id = ${input.candidateJobId}
+              )
+              AND (
+                duplicate.canonical_job_id = ${loserJobId}
+                OR CASE
+                  WHEN duplicate.canonical_job_id = duplicate.job_id
+                    THEN duplicate.candidate_job_id
+                  ELSE duplicate.job_id
+                END = ${loserJobId}
+                OR CASE
+                  WHEN duplicate.canonical_job_id = duplicate.job_id
+                    THEN duplicate.candidate_job_id
+                  ELSE duplicate.job_id
+                END = ${input.canonicalJobId}
+              )
+          ) AS conflicts
+        `;
+        if (topology?.conflicts) {
+          throw new Error("Exact resolution would create an ambiguous canonical-job topology");
+        }
+      }
+
+      const resolutionVersion = existing.resolutionVersion + 1;
+      const [updated] = await transaction<DuplicateCandidateRow[]>`
+        UPDATE jobs.duplicate_candidates
+        SET resolution = ${input.resolution},
+            canonical_job_id = ${input.canonicalJobId},
+            reviewed_at = ${input.resolution ? input.reviewedAt : null},
+            reviewed_by = ${input.resolution ? input.reviewedBy : null},
+            review_reason_code = ${input.resolution ? input.reasonCode : null},
+            resolution_version = ${resolutionVersion}
+        WHERE job_id = ${input.jobId} AND candidate_job_id = ${input.candidateJobId}
+        RETURNING
+          job_id AS "jobId",
+          candidate_job_id AS "candidateJobId",
+          classification,
+          resolution,
+          canonical_job_id AS "canonicalJobId",
+          reviewed_at AS "reviewedAt",
+          reviewed_by AS "reviewedBy",
+          review_reason_code AS "reviewReasonCode",
+          resolution_version AS "resolutionVersion"
+      `;
+      if (!updated) {
+        throw new Error("Duplicate candidate disappeared during review");
+      }
+      await transaction`
+        INSERT INTO jobs.duplicate_resolution_events (
+          id, job_id, candidate_job_id, previous_resolution,
+          previous_canonical_job_id, resolution, canonical_job_id,
+          reviewed_by, reason_code, occurred_at, resolution_version
+        ) VALUES (
+          ${uuidv7()}, ${input.jobId}, ${input.candidateJobId}, ${existing.resolution},
+          ${existing.canonicalJobId}, ${input.resolution}, ${input.canonicalJobId},
+          ${input.reviewedBy}, ${input.reasonCode}, ${input.reviewedAt}, ${resolutionVersion}
+        )
+      `;
+      return mapDuplicateCandidate(updated);
+    });
   }
 
   private async getByIdWithClient(

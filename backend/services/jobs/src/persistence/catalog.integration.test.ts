@@ -49,10 +49,10 @@ describeWithDatabase("PostgresJobCatalog", () => {
       env: environment,
     });
     expect(first.stdout.trim()).toBe(
-      "Jobs migrations through 0001_job_catalog applied and verified.",
+      "Jobs migrations through 0003_duplicate_resolution_audit_guard applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(
-      "Jobs migrations through 0001_job_catalog applied and verified.",
+      "Jobs migrations through 0003_duplicate_resolution_audit_guard applied and verified.",
     );
     await catalog.ping();
   });
@@ -149,6 +149,169 @@ describeWithDatabase("PostgresJobCatalog", () => {
         AND classification = 'probable'
     `;
     expect(candidateCount?.count).toBe(1);
+  });
+
+  it("resolves probable duplicates reversibly without moving source provenance", async () => {
+    const first = await catalog.recordObservation(
+      fixture({
+        sourceUrl: `https://jobs.example.test/${runId}/review-a`,
+        externalJobId: "review-a",
+        employerRequisitionId: `req-${runId}-review-a`,
+      }),
+    );
+    const second = await catalog.recordObservation(
+      fixture({
+        provider: "other",
+        sourceUrl: `https://mirror.example.test/${runId}/review-b`,
+        atsTenant: `review-mirror-${runId}`,
+        externalJobId: "review-b",
+        employerRequisitionId: `req-${runId}-review-b`,
+      }),
+    );
+    const reviewedAt = new Date("2026-08-11T13:00:00.000Z");
+    const exact = await catalog.reviewDuplicateCandidate({
+      jobId: second.job.id,
+      candidateJobId: first.job.id,
+      resolution: "exact",
+      canonicalJobId: first.job.id,
+      reviewedBy: "operator:synthetic-test",
+      reasonCode: "synthetic.same_opening",
+      reviewedAt,
+    });
+
+    expect(exact).toMatchObject({
+      resolution: "exact",
+      canonicalJobId: first.job.id,
+      reviewedBy: "operator:synthetic-test",
+      resolutionVersion: 1,
+    });
+    expect(await catalog.resolveCanonicalJobId(second.job.id)).toBe(first.job.id);
+    const canonicalFromAlias = await catalog.getActiveJob(second.job.id, reviewedAt);
+    expect(canonicalFromAlias?.id).toBe(first.job.id);
+    expect(canonicalFromAlias?.sources.map((source) => source.provider).sort()).toEqual([
+      "greenhouse",
+      "other",
+    ]);
+
+    const reopened = await catalog.reopenDuplicateCandidate({
+      jobId: first.job.id,
+      candidateJobId: second.job.id,
+      reviewedBy: "operator:synthetic-test",
+      reasonCode: "synthetic.unmerge_test",
+      reviewedAt: new Date("2026-08-11T14:00:00.000Z"),
+    });
+    expect(reopened).toMatchObject({ resolutionVersion: 2 });
+    expect(reopened).not.toHaveProperty("resolution");
+    expect(await catalog.resolveCanonicalJobId(second.job.id)).toBe(second.job.id);
+    expect((await catalog.getActiveJob(first.job.id, reviewedAt))?.sources).toHaveLength(1);
+    expect((await catalog.getActiveJob(second.job.id, reviewedAt))?.sources).toHaveLength(1);
+
+    const related = await catalog.reviewDuplicateCandidate({
+      jobId: first.job.id,
+      candidateJobId: second.job.id,
+      resolution: "related_repost",
+      reviewedBy: "operator:synthetic-test",
+      reasonCode: "synthetic.related_repost",
+      reviewedAt: new Date("2026-08-11T15:00:00.000Z"),
+    });
+    expect(related).toMatchObject({ resolution: "related_repost", resolutionVersion: 3 });
+    expect(await catalog.resolveCanonicalJobId(second.job.id)).toBe(second.job.id);
+
+    const events = await client<
+      Array<{
+        previousResolution: string | null;
+        resolution: string | null;
+        resolutionVersion: number;
+      }>
+    >`
+      SELECT
+        previous_resolution AS "previousResolution",
+        resolution,
+        resolution_version AS "resolutionVersion"
+      FROM jobs.duplicate_resolution_events
+      WHERE job_id = ${exact.jobId} AND candidate_job_id = ${exact.candidateJobId}
+      ORDER BY resolution_version
+    `;
+    expect(events).toEqual([
+      { previousResolution: null, resolution: "exact", resolutionVersion: 1 },
+      { previousResolution: "exact", resolution: null, resolutionVersion: 2 },
+      { previousResolution: null, resolution: "related_repost", resolutionVersion: 3 },
+    ]);
+    await expect(
+      client`
+        UPDATE jobs.duplicate_resolution_events
+        SET reason_code = 'synthetic.forbidden_mutation'
+        WHERE job_id = ${exact.jobId} AND candidate_job_id = ${exact.candidateJobId}
+      `,
+    ).rejects.toMatchObject({ code: "55000" });
+    await expect(
+      client`
+        DELETE FROM jobs.duplicate_resolution_events
+        WHERE job_id = ${exact.jobId} AND candidate_job_id = ${exact.candidateJobId}
+      `,
+    ).rejects.toMatchObject({ code: "55000" });
+  });
+
+  it("rejects invalid review metadata and ambiguous exact-merge topology", async () => {
+    const first = await catalog.recordObservation(
+      fixture({
+        sourceUrl: `https://jobs.example.test/${runId}/topology-a`,
+        externalJobId: "topology-a",
+        employerRequisitionId: `req-${runId}-topology-a`,
+      }),
+    );
+    const second = await catalog.recordObservation(
+      fixture({
+        provider: "other",
+        sourceUrl: `https://mirror.example.test/${runId}/topology-b`,
+        atsTenant: `topology-b-${runId}`,
+        externalJobId: "topology-b",
+        employerRequisitionId: `req-${runId}-topology-b`,
+      }),
+    );
+    const third = await catalog.recordObservation(
+      fixture({
+        provider: "lever",
+        sourceUrl: `https://lever.example.test/${runId}/topology-c`,
+        atsTenant: `topology-c-${runId}`,
+        externalJobId: "topology-c",
+        employerRequisitionId: `req-${runId}-topology-c`,
+      }),
+    );
+    const reviewedAt = new Date("2026-08-11T16:00:00.000Z");
+
+    await expect(
+      catalog.reviewDuplicateCandidate({
+        jobId: first.job.id,
+        candidateJobId: second.job.id,
+        resolution: "exact",
+        canonicalJobId: first.job.id,
+        reviewedBy: "reviewer@example.test",
+        reasonCode: "synthetic.invalid_reviewer",
+        reviewedAt,
+      }),
+    ).rejects.toThrow("non-PII opaque identifier");
+
+    await catalog.reviewDuplicateCandidate({
+      jobId: first.job.id,
+      candidateJobId: second.job.id,
+      resolution: "exact",
+      canonicalJobId: first.job.id,
+      reviewedBy: "operator:synthetic-test",
+      reasonCode: "synthetic.canonical_edge",
+      reviewedAt,
+    });
+    await expect(
+      catalog.reviewDuplicateCandidate({
+        jobId: first.job.id,
+        candidateJobId: third.job.id,
+        resolution: "exact",
+        canonicalJobId: third.job.id,
+        reviewedBy: "operator:synthetic-test",
+        reasonCode: "synthetic.ambiguous_topology",
+        reviewedAt,
+      }),
+    ).rejects.toThrow("ambiguous canonical-job topology");
   });
 
   it("serializes concurrent exact observations into one canonical job and source", async () => {
