@@ -87,8 +87,10 @@ data "aws_iam_policy_document" "github_assume" {
 }
 
 locals {
-  workload_role_arn     = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/ai-job-apply-${var.environment}-*"
-  workload_boundary_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/ai-job-apply-${var.environment}-workload-boundary"
+  workload_role_arn             = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/ai-job-apply-${var.environment}-*"
+  workload_boundary_arn         = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/ai-job-apply-${var.environment}-workload-boundary"
+  candidate_document_bucket_arn = "arn:aws:s3:::ai-job-apply-${var.environment}-candidate-docs-*"
+  guardduty_managed_rule_arn    = "arn:aws:events:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:rule/DO-NOT-DELETE-AmazonGuardDutyMalwareProtectionS3*"
 
   github_deploy_policy = {
     Version = "2012-10-17"
@@ -169,6 +171,21 @@ locals {
         Resource = "arn:aws:events:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:rule/ai-job-apply-${var.environment}-*"
       },
       {
+        Sid    = "ManageCandidateDocumentMalwarePlans"
+        Effect = "Allow"
+        Action = [
+          "guardduty:CreateMalwareProtectionPlan",
+          "guardduty:DeleteMalwareProtectionPlan",
+          "guardduty:GetMalwareProtectionPlan",
+          "guardduty:ListMalwareProtectionPlans",
+          "guardduty:ListTagsForResource",
+          "guardduty:TagResource",
+          "guardduty:UntagResource",
+          "guardduty:UpdateMalwareProtectionPlan"
+        ]
+        Resource = "*"
+      },
+      {
         Sid    = "ManageEnvironmentLambda"
         Effect = "Allow"
         Action = ["lambda:*"]
@@ -236,7 +253,8 @@ locals {
           StringEquals = {
             "iam:PassedToService" = [
               "ecs-tasks.amazonaws.com",
-              "lambda.amazonaws.com"
+              "lambda.amazonaws.com",
+              "malware-protection-plan.guardduty.amazonaws.com"
             ]
           }
         }
@@ -344,6 +362,43 @@ resource "aws_iam_policy" "workload_boundary" {
           "sqs:SendMessage"
         ]
         Resource = "arn:aws:sqs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:ai-job-apply-${var.environment}-*"
+      },
+      {
+        Sid    = "OperateGuardDutyManagedCandidateDocumentRule"
+        Effect = "Allow"
+        Action = [
+          "events:DeleteRule",
+          "events:DescribeRule",
+          "events:ListTargetsByRule",
+          "events:PutRule",
+          "events:PutTargets",
+          "events:RemoveTargets"
+        ]
+        Resource = local.guardduty_managed_rule_arn
+      },
+      {
+        Sid    = "ConfigureCandidateDocumentBucketEvents"
+        Effect = "Allow"
+        Action = [
+          "s3:GetBucketNotification",
+          "s3:ListBucket",
+          "s3:PutBucketNotification"
+        ]
+        Resource = local.candidate_document_bucket_arn
+      },
+      {
+        Sid    = "ScanCandidateDocumentObjects"
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:GetObjectTagging",
+          "s3:GetObjectVersion",
+          "s3:GetObjectVersionTagging",
+          "s3:PutObject",
+          "s3:PutObjectTagging",
+          "s3:PutObjectVersionTagging"
+        ]
+        Resource = "${local.candidate_document_bucket_arn}/*"
       }
     ]
   })
