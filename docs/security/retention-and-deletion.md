@@ -1,7 +1,7 @@
 # Retention and Deletion Specification
 
 - Status: Provisional engineering defaults; product and counsel approval pending
-- Last updated: 2026-07-28
+- Last updated: 2026-08-11
 
 All durations are configuration, not hard-coded policy.
 
@@ -21,6 +21,27 @@ All durations are configuration, not hard-coded policy.
 No provisional duration is an approved public promise. Counsel must confirm applicable legal holds,
 consumer-rights response periods, contractual requirements, and jurisdictional exceptions before
 real candidate data is collected.
+
+## Current synthetic-environment enforcement
+
+The provisional product schedule above is intentionally separate from the deployed Phase 0
+engineering settings. At the reviewed source baseline:
+
+| Foundation store | Enforced setting or state | Approval significance |
+|---|---|---|
+| CloudWatch application logs | 30-day Terraform retention | Matches the provisional detailed-log value for synthetic foundation telemetry only |
+| Lambda durable execution history | 30-day bounded history; PostgreSQL remains product truth | Operational execution history, not candidate audit-retention evidence |
+| RDS automated backups/PITR | Seven days in development; synthetic staging has the same setting only while active | Tested prelaunch recovery setting; not the provisional 35-day public backup policy |
+| SQS work queue / DLQ | 14 days / 4 days | Identifier-only transport retention; not product-record retention |
+| Security/audit record store | No separate 365-day product audit store is implemented | Blocks any claim that the provisional public audit schedule is enforced |
+| Product analytics | Optional product analytics is not active | No Phase 0 analytics-retention approval is implied |
+| Export and account-deletion workflow | Not implemented end to end | Blocks real candidate onboarding until implemented, deployed, and tested |
+
+Shared environments remain synthetic-only, so the seven-day backup setting does not shorten a
+public promise or authorize real-data processing. Before real candidate onboarding, reviewers must
+approve one coherent schedule and engineering must prove that configured stores, restores,
+deletion-ledger replay, audit retention, provider reconciliation, and public disclosures match it.
+Configuration drift from an approved schedule is a release-blocking finding.
 
 The deletion workflow must:
 

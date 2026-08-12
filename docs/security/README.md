@@ -14,6 +14,7 @@ Contains the security architecture and evidence required to protect candidate id
 - [Auth0 development tenant runbook](auth0-development-runbook.md)
 - [Auth0 development conformance evidence](auth0-development-conformance.md)
 - [Security and privacy approval plan](security-privacy-approval-plan.md)
+- [Phase 0 accountable review record](phase-0-accountable-review-record.md)
 - [API security and independent final review](api-security-and-final-review.md)
 - [Dependency vulnerability exceptions](dependency-vulnerability-exceptions.md)
 - [Phase 0 incident-response runbook](../../infrastructure/runbooks/incidents/phase-0-incident-response.md)

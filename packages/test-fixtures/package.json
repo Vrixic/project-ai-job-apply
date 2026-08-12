@@ -1,0 +1,9 @@
+{
+  "name": "@ai-job-apply/test-fixtures",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test ats/validate-fixtures.test.mjs && node ats/validate-fixtures.mjs"
+  }
+}

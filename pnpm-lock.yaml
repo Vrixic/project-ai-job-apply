@@ -305,6 +305,8 @@ importers:
         specifier: 10.1.0
         version: 10.1.0
 
+  packages/test-fixtures: {}
+
 packages:
 
   '@auth0/auth0-auth-js@1.6.0':

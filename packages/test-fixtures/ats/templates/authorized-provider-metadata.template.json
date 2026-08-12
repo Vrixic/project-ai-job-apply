@@ -1,0 +1,75 @@
+{
+  "templateOnly": true,
+  "instructions": "Copy required fields into a fixture metadata.json after all external approvals and reviews pass. Replace every placeholder; this template is not evidence.",
+  "schemaVersion": "ats-fixture-metadata.v1",
+  "fixtureId": "provider-variant-behavior-v1",
+  "evidenceClass": "sanitized_authorized_provider",
+  "provider": { "family": "provider", "variant": "exact-variant" },
+  "source": {
+    "kind": "controlled_test_tenant",
+    "capturedOn": "YYYY-MM-DD",
+    "authorizationEvidenceId": "authorization-opaque-id"
+  },
+  "dataSafety": {
+    "containsProductionData": false,
+    "containsCandidateData": false,
+    "containsAuthenticationMaterial": false,
+    "containsActiveContent": false
+  },
+  "sanitization": {
+    "status": "complete",
+    "policyVersion": "ats-fixture-policy-2026-08-11",
+    "automatedChecks": [
+      {
+        "category": "repository",
+        "tool": "ats-fixture-validator",
+        "toolVersion": "1",
+        "runOn": "YYYY-MM-DD",
+        "result": "passed",
+        "evidenceId": "repository-check-opaque-id"
+      },
+      {
+        "category": "secret",
+        "tool": "APPROVED_TOOL",
+        "toolVersion": "VERSION",
+        "runOn": "YYYY-MM-DD",
+        "result": "passed",
+        "evidenceId": "secret-scan-opaque-id"
+      },
+      {
+        "category": "pii",
+        "tool": "APPROVED_TOOL",
+        "toolVersion": "VERSION",
+        "runOn": "YYYY-MM-DD",
+        "result": "passed",
+        "evidenceId": "pii-scan-opaque-id"
+      }
+    ],
+    "humanReview": {
+      "state": "approved_sanitized",
+      "reviewerId": "reviewer-opaque-id",
+      "reviewedOn": "YYYY-MM-DD",
+      "evidenceId": "sanitization-review-opaque-id"
+    }
+  },
+  "retention": {
+    "rawCaptureCreated": true,
+    "rawCaptureDisposition": "destroyed",
+    "rawCaptureEvidenceId": "raw-disposition-opaque-id",
+    "rawDeletionDueOn": null,
+    "sanitizedFixturePolicy": "retain_until_authorization_expires"
+  },
+  "representativeness": {
+    "claim": true,
+    "state": "accepted",
+    "reviewerId": "reviewer-opaque-id",
+    "reviewedOn": "YYYY-MM-DD",
+    "evidenceId": "representative-review-opaque-id"
+  },
+  "behaviorTags": ["exact-reviewed-behavior"],
+  "integrity": {
+    "algorithm": "sha256",
+    "files": [{ "path": "sanitized-form.html", "bytes": 1, "digest": "SHA256_HEX" }]
+  },
+  "reviewState": "approved_sanitized_provider"
+}
