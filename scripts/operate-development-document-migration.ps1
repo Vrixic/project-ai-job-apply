@@ -714,6 +714,12 @@ function Assert-ExactTaskPlan {
         $null -ne $beforeProperty -and @($beforeProperty.Value.PSObject.Properties).Count -eq 0) {
       continue
     }
+    if ($property.Name -in @("ipc_mode", "pid_mode", "task_role_arn") -and
+        $null -eq $property.Value -and $null -ne $beforeProperty -and
+        $beforeProperty.Value -is [string] -and [string]$beforeProperty.Value -ceq "" -and
+        -not [bool]$change.after_unknown.($property.Name)) {
+      continue
+    }
     if ($null -eq $beforeProperty -or
         ($beforeProperty.Value | ConvertTo-Json -Compress -Depth 30) -cne
         ($property.Value | ConvertTo-Json -Compress -Depth 30)) {
@@ -775,6 +781,8 @@ function Assert-TaskDefinition {
       [string]$task.memory -cne "512" -or [string]$task.runtimePlatform.cpuArchitecture -cne "X86_64" -or
       [string]$task.runtimePlatform.operatingSystemFamily -cne "LINUX" -or
       -not [string]::IsNullOrWhiteSpace([string](Get-OptionalProperty $task "taskRoleArn")) -or
+      -not [string]::IsNullOrWhiteSpace([string](Get-OptionalProperty $task "ipcMode")) -or
+      -not [string]::IsNullOrWhiteSpace([string](Get-OptionalProperty $task "pidMode")) -or
       $containers.Count -ne 1 -or [string]$containers[0].name -cne "database-migration" -or
       [string]$containers[0].image -cne $MigrationImage -or -not $containers[0].essential -or
       -not $containers[0].readonlyRootFilesystem -or @($containers[0].command).Count -ne 1 -or
