@@ -43,4 +43,34 @@ try {
 }
 if (-not $traversalRejected) { throw "The path resolver accepted a traversal outside .terraform." }
 
-Write-Host "Development document migration operator path tests passed."
+$baselineFunctions = @($ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+      $node.Name -in @("Get-MeaningfulChanges", "Assert-PlanWasApplied")
+    }, $true))
+if ($baselineFunctions.Count -ne 2) { throw "The baseline-plan guards must each be defined once." }
+foreach ($function in $baselineFunctions | Sort-Object { $_.Extent.StartOffset }) {
+  Invoke-Expression $function.Extent.Text
+}
+
+$zeroChangePlan = [pscustomobject]@{
+  complete = $true
+  errored = $false
+  variables = [pscustomobject]@{ migration_image = [pscustomobject]@{ value = "example" } }
+  planned_values = [pscustomobject]@{ root_module = [pscustomobject]@{} }
+  resource_changes = @([pscustomobject]@{ change = [pscustomobject]@{ actions = @("no-op") } })
+  resource_drift = @()
+}
+Assert-PlanWasApplied -Plan $zeroChangePlan
+
+$changeRejected = $false
+$changedPlan = $zeroChangePlan | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+$changedPlan.resource_changes = @([pscustomobject]@{ change = [pscustomobject]@{ actions = @("update") } })
+try {
+  Assert-PlanWasApplied -Plan $changedPlan
+} catch {
+  $changeRejected = $true
+}
+if (-not $changeRejected) { throw "The input baseline accepted an unapplied resource change." }
+
+Write-Host "Development document migration operator path and baseline tests passed."

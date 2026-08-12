@@ -411,59 +411,17 @@ function Add-ManagedResources {
   }
 }
 
-function Test-KnownSubset {
-  param([AllowNull()][object]$Expected, [AllowNull()][object]$Actual)
-
-  if ($null -eq $Expected) { return $null -eq $Actual }
-  if ($null -eq $Actual) { return $false }
-
-  if ($Expected -is [Collections.IDictionary]) {
-    if (-not ($Actual -is [Collections.IDictionary])) { return $false }
-    foreach ($key in $Expected.Keys) {
-      if (-not $Actual.Contains($key) -or -not (Test-KnownSubset $Expected[$key] $Actual[$key])) { return $false }
-    }
-    return $true
-  }
-
-  $expectedProperties = @($Expected.PSObject.Properties)
-  if ($expectedProperties.Count -gt 0 -and -not ($Expected -is [string]) -and
-      -not ($Expected -is [ValueType]) -and -not ($Expected -is [Collections.IEnumerable])) {
-    foreach ($property in $expectedProperties) {
-      $actualProperty = $Actual.PSObject.Properties[$property.Name]
-      if ($null -eq $actualProperty -or -not (Test-KnownSubset $property.Value $actualProperty.Value)) { return $false }
-    }
-    return $true
-  }
-
-  if ($Expected -is [Collections.IEnumerable] -and -not ($Expected -is [string])) {
-    if (-not ($Actual -is [Collections.IEnumerable]) -or $Actual -is [string]) { return $false }
-    $expectedItems = @($Expected)
-    $actualItems = @($Actual)
-    if ($expectedItems.Count -ne $actualItems.Count) { return $false }
-    for ($index = 0; $index -lt $expectedItems.Count; $index++) {
-      if (-not (Test-KnownSubset $expectedItems[$index] $actualItems[$index])) { return $false }
-    }
-    return $true
-  }
-
-  return (($Expected | ConvertTo-Json -Compress) -ceq ($Actual | ConvertTo-Json -Compress))
-}
-
 function Assert-PlanWasApplied {
   param([Parameter(Mandatory)][object]$Plan)
 
   if (-not $Plan.complete -or $Plan.errored) { throw "The source plan was not complete and successful." }
-  $state = Invoke-TerraformJson -Arguments @("show", "-json") -Operation "Current-state inspection"
-  $planned = New-Object 'Collections.Generic.Dictionary[string, object]' ([StringComparer]::Ordinal)
-  $current = New-Object 'Collections.Generic.Dictionary[string, object]' ([StringComparer]::Ordinal)
-  Add-ManagedResources -Module $Plan.planned_values.root_module -Destination $planned
-  Add-ManagedResources -Module $state.values.root_module -Destination $current
-  if ($planned.Count -eq 0) { throw "The source plan contains no managed resource values." }
-  foreach ($address in $planned.Keys) {
-    if (-not $current.ContainsKey($address) -or
-        -not (Test-KnownSubset $planned[$address].values $current[$address].values)) {
-      throw "The saved source plan is not the already-applied foundation represented by current state."
-    }
+  if ($null -eq $Plan.variables -or $null -eq $Plan.planned_values.root_module) {
+    throw "The source plan does not contain reconstructable inputs and managed values."
+  }
+  $changes = @(Get-MeaningfulChanges -Changes @($Plan.resource_changes))
+  $drift = @(Get-MeaningfulChanges -Changes @($Plan.resource_drift))
+  if ($changes.Count -ne 0 -or $drift.Count -ne 0) {
+    throw "The saved source plan must be an already accepted zero-change input baseline."
   }
 }
 
