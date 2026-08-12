@@ -3,8 +3,8 @@ locals {
 }
 
 resource "aws_s3_bucket" "candidate_documents" { # nosemgrep: semgrep-rules.terraform.aws.best-practice.aws-s3-bucket-versioning-not-enabled -- versioning is managed separately below
-  count         = var.deploy_document_intake ? 1 : 0
-  bucket_prefix = "${var.name}-${var.environment}-candidate-docs-"
+  count  = var.deploy_document_intake ? 1 : 0
+  bucket = "${var.name}-${var.environment}-candidate-docs-${data.aws_caller_identity.current.account_id}"
 }
 
 resource "aws_s3_bucket_versioning" "candidate_documents" {

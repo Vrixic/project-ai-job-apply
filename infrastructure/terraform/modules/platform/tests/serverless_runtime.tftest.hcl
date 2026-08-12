@@ -143,6 +143,7 @@ run "document_intake_is_private_encrypted_and_malware_scanned" {
   assert {
     condition = (
       length(aws_s3_bucket.candidate_documents) == 1 &&
+      aws_s3_bucket.candidate_documents[0].bucket == "ai-job-apply-staging-candidate-docs-111122223333" &&
       aws_s3_bucket_versioning.candidate_documents[0].versioning_configuration[0].status == "Enabled" &&
       aws_s3_bucket_public_access_block.candidate_documents[0].block_public_acls &&
       aws_s3_bucket_public_access_block.candidate_documents[0].block_public_policy &&
