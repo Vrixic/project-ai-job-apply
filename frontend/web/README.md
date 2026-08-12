@@ -60,3 +60,11 @@ Presentation branding comes from `@ai-job-apply/config/brand` and can be overrid
 with `NEXT_PUBLIC_PRODUCT_BRAND_NAME` and `NEXT_PUBLIC_PRODUCT_BRAND_DOMAIN`. The domain value is
 descriptive only until ownership and public-brand approval are recorded; API and web origins use
 separate configuration.
+
+## Phase 1 implementation
+
+The truth-profile panel uses server-held Auth0 sessions to list, create, correct, and reject
+candidate-owned facts. Direct entries are clearly described as user-confirmed; correction creates
+a new version and the browser supplies no identity or provenance claim. Resume upload and parsing
+are intentionally absent until the encrypted document and proposed-fact review boundary is
+implemented.

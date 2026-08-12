@@ -8,6 +8,7 @@ import type {
 } from "@ai-job-apply/api-contracts";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { isIsolationOperationEligible } from "../lib/isolation-operation";
+import { ProfileFactsForm } from "./profile-facts-form";
 
 function splitValues(value: string): string[] {
   return [
@@ -447,6 +448,8 @@ export function FoundationForm({
           {loadingPreferences ? "Loading…" : saving ? "Saving…" : "Save preferences"}
         </button>
       </form>
+
+      <ProfileFactsForm authenticated={authenticated} />
 
       {!authConfigured && (
         <aside>

@@ -6,3 +6,7 @@ audit state. Migrations must preserve ownership and be tested against representa
 Provider retirement migrations must fail before mutation when undispatched work remains.
 Historical published routing values may be normalized only to a provider-neutral retired label;
 operation, audit, idempotency, and user-owned data remain unchanged.
+
+`0004_profile_fact_versions` adds candidate-owned fact identities and append-only versions.
+Corrections create a new version under a row lock; a database trigger rejects in-place mutation,
+while account deletion can still cascade through both tables under the deletion workflow.

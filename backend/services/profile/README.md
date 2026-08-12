@@ -25,3 +25,12 @@ already-published historical rows, and makes `lambda_durable` the default for ne
 Readiness operation transitions are replay-safe: duplicate running/completion/failure calls cannot
 downgrade a succeeded operation or emit a second completion event. The durable terminal reconciler
 maps only an exact recorded execution name back to its owned operation.
+
+## Phase 1 implementation
+
+Profile facts now have stable candidate-owned identities and append-only PostgreSQL versions.
+Direct user entry is explicitly confirmed and source-labeled by the server; correction and
+rejection require the expected version, are idempotent, and never overwrite prior values. Reads
+return only the authenticated candidate's latest versions, and audit metadata excludes fact
+values. Resume binaries, parsing, supporting spans, and proposed-fact confirmation remain the
+next D1-002 slice and must not be added to events or logs.

@@ -6,29 +6,40 @@ import {
   type ExceptionFilter,
   Get,
   Headers,
+  HttpCode,
   HttpException,
   HttpStatus,
   Inject,
   Injectable,
   Module,
   Param,
+  Patch,
+  Post,
   Put,
   Req,
   UseFilters,
 } from "@nestjs/common";
 import type {
   CanonicalJobDetail,
+  CreateProfileFactRequest,
   CurrentUser,
   Operation,
   ProblemDetails,
+  ProfileFact,
+  ProfileFactCollection,
   PutJobPreferencesRequest,
   PutJobPreferencesResponse,
+  UpdateProfileFactRequest,
 } from "@ai-job-apply/api-contracts";
 import { compileComponentValidator, formatValidationErrors } from "@ai-job-apply/api-contracts";
 import { type AccessTokenVerifier, AuthenticationError, bearerToken } from "@ai-job-apply/auth";
 import type { JobCatalogReader } from "@ai-job-apply/jobs-service";
 import { activeTraceparent, correlationId } from "@ai-job-apply/observability";
-import { IdempotencyConflictError, type ProfileStore } from "@ai-job-apply/profile-service";
+import {
+  IdempotencyConflictError,
+  ProfileFactVersionConflictError,
+  type ProfileStore,
+} from "@ai-job-apply/profile-service";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
 const PROFILE_STORE = Symbol("PROFILE_STORE");
@@ -47,6 +58,8 @@ const SAFE_ROUTE_TEMPLATES = new Set([
   "/health/ready",
   "/v1/me",
   "/v1/me/job-preferences",
+  "/v1/profile/facts",
+  "/v1/profile/facts/:factId",
   "/v1/jobs/:jobId",
   "/v1/operations/:operationId",
 ]);
@@ -123,6 +136,11 @@ class ProblemDetailsFilter implements ExceptionFilter {
       code = "idempotency_conflict";
       title = "Idempotency key conflict";
       detail = exception.message;
+    } else if (exception instanceof ProfileFactVersionConflictError) {
+      status = HttpStatus.CONFLICT;
+      code = "version_conflict";
+      title = "Profile fact version conflict";
+      detail = exception.message;
     } else if (exception instanceof HttpException) {
       status = exception.getStatus();
       code =
@@ -186,6 +204,19 @@ class HealthController {
 }
 
 const validatePreferences = compileComponentValidator("PutJobPreferencesRequest");
+const validateCreateProfileFact = compileComponentValidator("CreateProfileFactRequest");
+const validateUpdateProfileFact = compileComponentValidator("UpdateProfileFactRequest");
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function requireIdempotencyKey(value: string | undefined): string {
+  if (!value || value.length < 16 || value.length > 128) {
+    throw new HttpException(
+      "Idempotency-Key must contain 16 to 128 characters",
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+  return value;
+}
 
 @Controller("/v1")
 @UseFilters(ProblemDetailsFilter)
@@ -217,12 +248,7 @@ class CandidateController {
     @Headers("idempotency-key") idempotencyKey: string | undefined,
   ): Promise<PutJobPreferencesResponse> {
     const user = await this.identity.resolve(request, "profile:write");
-    if (!idempotencyKey || idempotencyKey.length < 16 || idempotencyKey.length > 128) {
-      throw new HttpException(
-        "Idempotency-Key must contain 16 to 128 characters",
-        HttpStatus.BAD_REQUEST,
-      );
-    }
+    const commandKey = requireIdempotencyKey(idempotencyKey);
     const input = request.body;
     if (!validatePreferences(input)) {
       throw new HttpException(
@@ -233,10 +259,68 @@ class CandidateController {
     return this.store.putPreferences(
       user.id,
       input as PutJobPreferencesRequest,
-      idempotencyKey,
+      commandKey,
       request.traceId ?? correlationId(undefined),
       activeTraceparent(),
     );
+  }
+
+  @Get("/profile/facts")
+  async listProfileFacts(@Req() request: AuthenticatedRequest): Promise<ProfileFactCollection> {
+    const user = await this.identity.resolve(request, "profile:read");
+    return this.store.listProfileFacts(user.id);
+  }
+
+  @Post("/profile/facts")
+  @HttpCode(HttpStatus.CREATED)
+  async createProfileFact(
+    @Req() request: AuthenticatedRequest,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<ProfileFact> {
+    const user = await this.identity.resolve(request, "profile:write");
+    const commandKey = requireIdempotencyKey(idempotencyKey);
+    if (!validateCreateProfileFact(request.body)) {
+      throw new HttpException(
+        formatValidationErrors(validateCreateProfileFact.errors),
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return this.store.createProfileFact(
+      user.id,
+      request.body as CreateProfileFactRequest,
+      commandKey,
+      request.traceId ?? correlationId(undefined),
+    );
+  }
+
+  @Patch("/profile/facts/:factId")
+  async updateProfileFact(
+    @Req() request: AuthenticatedRequest,
+    @Param("factId") factId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<ProfileFact> {
+    const user = await this.identity.resolve(request, "profile:write");
+    const commandKey = requireIdempotencyKey(idempotencyKey);
+    if (!UUID_PATTERN.test(factId)) {
+      throw new HttpException("Profile fact identifier is invalid", HttpStatus.BAD_REQUEST);
+    }
+    if (!validateUpdateProfileFact(request.body)) {
+      throw new HttpException(
+        formatValidationErrors(validateUpdateProfileFact.errors),
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const fact = await this.store.updateProfileFact(
+      user.id,
+      factId,
+      request.body as UpdateProfileFactRequest,
+      commandKey,
+      request.traceId ?? correlationId(undefined),
+    );
+    if (!fact) {
+      throw new HttpException("Profile fact was not found", HttpStatus.NOT_FOUND);
+    }
+    return fact;
   }
 
   @Get("/jobs/:jobId")
@@ -245,7 +329,7 @@ class CandidateController {
     @Param("jobId") jobId: string,
   ): Promise<CanonicalJobDetail> {
     await this.identity.authorize(request, "jobs:read");
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jobId)) {
+    if (!UUID_PATTERN.test(jobId)) {
       throw new HttpException("Job identifier is invalid", HttpStatus.BAD_REQUEST);
     }
     const job = await this.catalog.getActiveJob(jobId);

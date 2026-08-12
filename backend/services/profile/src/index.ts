@@ -1,11 +1,15 @@
 import { createHash } from "node:crypto";
 import type {
+  CreateProfileFactRequest,
   CurrentUser,
   JobPreferenceSet,
   Operation,
+  ProfileFact,
+  ProfileFactCollection,
   ProfileReadiness,
   PutJobPreferencesRequest,
   PutJobPreferencesResponse,
+  UpdateProfileFactRequest,
 } from "@ai-job-apply/api-contracts";
 import type { AuthPrincipal } from "@ai-job-apply/auth";
 import {
@@ -69,6 +73,20 @@ export interface ProfileStore {
     traceId: string,
     traceparent?: string,
   ): Promise<PutJobPreferencesResponse>;
+  listProfileFacts(userId: string): Promise<ProfileFactCollection>;
+  createProfileFact(
+    userId: string,
+    input: CreateProfileFactRequest,
+    idempotencyKey: string,
+    traceId: string,
+  ): Promise<ProfileFact>;
+  updateProfileFact(
+    userId: string,
+    factId: string,
+    input: UpdateProfileFactRequest,
+    idempotencyKey: string,
+    traceId: string,
+  ): Promise<ProfileFact | null>;
   getOperation(userId: string, operationId: string): Promise<Operation | null>;
   getPreferencesById(preferenceSetId: string): Promise<JobPreferenceSet | null>;
   markOperationRunning(operationId: string, preferenceSetId: string): Promise<void>;
@@ -141,8 +159,45 @@ function mapOperation(row: typeof operations.$inferSelect): Operation {
   };
 }
 
-function requestHash(input: PutJobPreferencesRequest): string {
+function requestHash(input: unknown): string {
   return createHash("sha256").update(JSON.stringify(input)).digest("hex");
+}
+
+interface ProfileFactRow {
+  id: string;
+  kind: ProfileFact["kind"];
+  key: string;
+  value: ProfileFact["value"];
+  verification: ProfileFact["verification"];
+  sensitivity: ProfileFact["sensitivity"];
+  sourceType: ProfileFact["source"]["type"];
+  sourceReference: string;
+  effectiveFrom: string | null;
+  effectiveTo: string | null;
+  version: number;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+}
+
+function timestampIso(value: Date | string): string {
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
+
+function mapProfileFact(row: ProfileFactRow): ProfileFact {
+  return {
+    id: row.id,
+    kind: row.kind,
+    key: row.key,
+    value: row.value,
+    verification: row.verification,
+    sensitivity: row.sensitivity,
+    source: { type: row.sourceType, reference: row.sourceReference },
+    version: row.version,
+    createdAt: timestampIso(row.createdAt),
+    updatedAt: timestampIso(row.updatedAt),
+    ...(row.effectiveFrom ? { effectiveFrom: row.effectiveFrom } : {}),
+    ...(row.effectiveTo ? { effectiveTo: row.effectiveTo } : {}),
+  };
 }
 
 export class PostgresProfileStore implements ProfileStore {
@@ -342,6 +397,267 @@ export class PostgresProfileStore implements ProfileStore {
       await this.attemptOutboxNudge(outcome.nudge);
     }
     return outcome.response;
+  }
+
+  async listProfileFacts(userId: string): Promise<ProfileFactCollection> {
+    const rows = await this.handle.client<ProfileFactRow[]>`
+      SELECT
+        fact.id,
+        version.kind,
+        version.fact_key AS key,
+        version.fact_value AS value,
+        version.verification,
+        version.sensitivity,
+        version.source_type AS "sourceType",
+        version.source_reference AS "sourceReference",
+        version.effective_from AS "effectiveFrom",
+        version.effective_to AS "effectiveTo",
+        version.version,
+        fact.created_at AS "createdAt",
+        version.created_at AS "updatedAt"
+      FROM profile.profile_facts AS fact
+      JOIN LATERAL (
+        SELECT *
+        FROM profile.profile_fact_versions
+        WHERE fact_id = fact.id
+        ORDER BY version DESC
+        LIMIT 1
+      ) AS version ON true
+      WHERE fact.user_id = ${userId}
+      ORDER BY fact.created_at, fact.id
+    `;
+    const facts = rows.map(mapProfileFact);
+    return {
+      facts,
+      confirmedCount: facts.filter((fact) => fact.verification === "confirmed").length,
+      proposedCount: facts.filter((fact) => fact.verification === "proposed").length,
+    };
+  }
+
+  async createProfileFact(
+    userId: string,
+    input: CreateProfileFactRequest,
+    idempotencyKey: string,
+    traceId: string,
+  ): Promise<ProfileFact> {
+    const hash = requestHash(input);
+    const scope = "profile.fact.create.v1";
+    return this.handle.client.begin(async (transaction) => {
+      await transaction`
+        SELECT pg_advisory_xact_lock(hashtext(${`${userId}:${scope}:${idempotencyKey}`}))
+      `;
+      const prior = await transaction<Array<{ requestHash: string; response: ProfileFact }>>`
+        SELECT request_hash AS "requestHash", response
+        FROM platform.idempotency_keys
+        WHERE user_id = ${userId} AND scope = ${scope} AND key = ${idempotencyKey}
+      `;
+      if (prior[0]) {
+        if (prior[0].requestHash !== hash) {
+          throw new IdempotencyConflictError();
+        }
+        return prior[0].response;
+      }
+
+      const factId = uuidv7();
+      const createdAt = new Date();
+      await transaction`
+        INSERT INTO profile.profile_facts (id, user_id, created_at)
+        VALUES (${factId}, ${userId}, ${createdAt.toISOString()}::timestamptz)
+      `;
+      await transaction`
+        INSERT INTO profile.profile_fact_versions (
+          fact_id,
+          version,
+          kind,
+          fact_key,
+          fact_value,
+          verification,
+          sensitivity,
+          source_type,
+          source_reference,
+          effective_from,
+          effective_to,
+          created_at
+        ) VALUES (
+          ${factId},
+          1,
+          ${input.kind},
+          ${input.key},
+          ${JSON.stringify(input.value)}::jsonb,
+          'confirmed',
+          ${input.sensitivity},
+          'user',
+          'direct-entry',
+          ${input.effectiveFrom ?? null}::date,
+          ${input.effectiveTo ?? null}::date,
+          ${createdAt.toISOString()}::timestamptz
+        )
+      `;
+      const response: ProfileFact = {
+        id: factId,
+        kind: input.kind,
+        key: input.key,
+        value: input.value,
+        verification: "confirmed",
+        sensitivity: input.sensitivity,
+        source: { type: "user", reference: "direct-entry" },
+        version: 1,
+        createdAt: createdAt.toISOString(),
+        updatedAt: createdAt.toISOString(),
+        ...(input.effectiveFrom ? { effectiveFrom: input.effectiveFrom } : {}),
+        ...(input.effectiveTo ? { effectiveTo: input.effectiveTo } : {}),
+      };
+      await transaction`
+        INSERT INTO platform.idempotency_keys (
+          user_id, scope, key, request_hash, response
+        ) VALUES (
+          ${userId}, ${scope}, ${idempotencyKey}, ${hash}, ${JSON.stringify(response)}::jsonb
+        )
+      `;
+      await transaction`
+        INSERT INTO platform.audit_events (
+          id, user_id, action, resource_type, resource_id, trace_id, metadata
+        ) VALUES (
+          ${uuidv7()},
+          ${userId},
+          'profile.fact.created',
+          'profile_fact',
+          ${factId},
+          ${traceId},
+          ${JSON.stringify({ version: 1 })}::jsonb
+        )
+      `;
+      return response;
+    });
+  }
+
+  async updateProfileFact(
+    userId: string,
+    factId: string,
+    input: UpdateProfileFactRequest,
+    idempotencyKey: string,
+    traceId: string,
+  ): Promise<ProfileFact | null> {
+    const hash = requestHash(input);
+    const scope = `profile.fact.update.v1:${factId}`;
+    return this.handle.client.begin(async (transaction) => {
+      await transaction`
+        SELECT pg_advisory_xact_lock(hashtext(${`${userId}:${scope}:${idempotencyKey}`}))
+      `;
+      const prior = await transaction<Array<{ requestHash: string; response: ProfileFact }>>`
+        SELECT request_hash AS "requestHash", response
+        FROM platform.idempotency_keys
+        WHERE user_id = ${userId} AND scope = ${scope} AND key = ${idempotencyKey}
+      `;
+      if (prior[0]) {
+        if (prior[0].requestHash !== hash) {
+          throw new IdempotencyConflictError();
+        }
+        return prior[0].response;
+      }
+
+      const rows = await transaction<ProfileFactRow[]>`
+        SELECT
+          fact.id,
+          version.kind,
+          version.fact_key AS key,
+          version.fact_value AS value,
+          version.verification,
+          version.sensitivity,
+          version.source_type AS "sourceType",
+          version.source_reference AS "sourceReference",
+          version.effective_from AS "effectiveFrom",
+          version.effective_to AS "effectiveTo",
+          version.version,
+          fact.created_at AS "createdAt",
+          version.created_at AS "updatedAt"
+        FROM profile.profile_facts AS fact
+        JOIN LATERAL (
+          SELECT *
+          FROM profile.profile_fact_versions
+          WHERE fact_id = fact.id
+          ORDER BY version DESC
+          LIMIT 1
+        ) AS version ON true
+        WHERE fact.id = ${factId} AND fact.user_id = ${userId}
+        FOR UPDATE OF fact
+      `;
+      const current = rows[0];
+      if (!current) {
+        return null;
+      }
+      if (current.version !== input.expectedVersion) {
+        throw new ProfileFactVersionConflictError();
+      }
+
+      const version = current.version + 1;
+      const updatedAt = new Date();
+      const value = input.value ?? current.value;
+      const verification = input.verification ?? current.verification;
+      const sensitivity = input.sensitivity ?? current.sensitivity;
+      const effectiveFrom = input.effectiveFrom ?? current.effectiveFrom;
+      const effectiveTo = input.effectiveTo ?? current.effectiveTo;
+      await transaction`
+        INSERT INTO profile.profile_fact_versions (
+          fact_id,
+          version,
+          kind,
+          fact_key,
+          fact_value,
+          verification,
+          sensitivity,
+          source_type,
+          source_reference,
+          effective_from,
+          effective_to,
+          created_at
+        ) VALUES (
+          ${factId},
+          ${version},
+          ${current.kind},
+          ${current.key},
+          ${JSON.stringify(value)}::jsonb,
+          ${verification},
+          ${sensitivity},
+          ${current.sourceType},
+          ${current.sourceReference},
+          ${effectiveFrom}::date,
+          ${effectiveTo}::date,
+          ${updatedAt.toISOString()}::timestamptz
+        )
+      `;
+      const response = mapProfileFact({
+        ...current,
+        value,
+        verification,
+        sensitivity,
+        effectiveFrom,
+        effectiveTo,
+        version,
+        updatedAt,
+      });
+      await transaction`
+        INSERT INTO platform.idempotency_keys (
+          user_id, scope, key, request_hash, response
+        ) VALUES (
+          ${userId}, ${scope}, ${idempotencyKey}, ${hash}, ${JSON.stringify(response)}::jsonb
+        )
+      `;
+      await transaction`
+        INSERT INTO platform.audit_events (
+          id, user_id, action, resource_type, resource_id, trace_id, metadata
+        ) VALUES (
+          ${uuidv7()},
+          ${userId},
+          'profile.fact.version.created',
+          'profile_fact',
+          ${factId},
+          ${traceId},
+          ${JSON.stringify({ version })}::jsonb
+        )
+      `;
+      return response;
+    });
   }
 
   async getOperation(userId: string, operationId: string): Promise<Operation | null> {
@@ -746,5 +1062,12 @@ export class IdempotencyConflictError extends Error {
   constructor() {
     super("The idempotency key was already used with a different request");
     this.name = "IdempotencyConflictError";
+  }
+}
+
+export class ProfileFactVersionConflictError extends Error {
+  constructor() {
+    super("The profile fact changed after it was loaded");
+    this.name = "ProfileFactVersionConflictError";
   }
 }

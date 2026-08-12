@@ -3,7 +3,17 @@
   "$id": "https://schemas.ai-job-apply.internal/domain/v1/profile-fact.schema.json",
   "title": "ProfileFactV1",
   "type": "object",
-  "required": ["id", "userId", "kind", "key", "value", "verification", "source", "version"],
+  "required": [
+    "id",
+    "userId",
+    "kind",
+    "key",
+    "value",
+    "verification",
+    "sensitivity",
+    "source",
+    "version"
+  ],
   "properties": {
     "id": { "type": "string", "format": "uuid" },
     "userId": { "type": "string", "format": "uuid" },
@@ -19,13 +29,18 @@
         "preference"
       ]
     },
-    "key": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "key": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "\\S" },
     "value": {
       "oneOf": [
-        { "type": "string", "maxLength": 10000 },
+        { "type": "string", "minLength": 1, "maxLength": 10000, "pattern": "\\S" },
         { "type": "number" },
         { "type": "boolean" },
-        { "type": "array", "maxItems": 100, "items": { "type": "string" } }
+        {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": { "type": "string", "minLength": 1, "maxLength": 500, "pattern": "\\S" }
+        }
       ]
     },
     "verification": { "type": "string", "enum": ["proposed", "confirmed", "rejected"] },

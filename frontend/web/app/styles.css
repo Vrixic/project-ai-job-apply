@@ -44,7 +44,8 @@ h1 {
 
 form,
 .result,
-aside {
+aside,
+.profile-facts {
   margin-top: 32px;
   padding: 24px;
   border: 1px solid #cedbd3;
@@ -138,6 +139,67 @@ aside {
   border-color: #e2cc70;
 }
 
+.profile-facts {
+  background: #f8fbf9;
+}
+
+.section-heading,
+.fact-list li,
+.fact-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.section-heading,
+.fact-list li {
+  justify-content: space-between;
+}
+
+.section-heading h2 {
+  margin: 4px 0;
+}
+
+.fact-list {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.fact-list li {
+  padding: 14px;
+  border: 1px solid #cedbd3;
+  border-radius: 12px;
+  background: white;
+}
+
+.fact-list li > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.fact-list small {
+  color: #6a776f;
+}
+
+.fact-actions button {
+  min-height: 38px;
+  padding: 0 13px;
+}
+
+.secondary-button {
+  border: 1px solid #8aa195;
+  background: transparent;
+  color: #14633e;
+}
+
+.compact-form {
+  margin-top: 18px;
+  padding: 18px;
+  box-shadow: none;
+}
+
 .result {
   background: #eaf7ef;
   border-color: #98c9ad;
@@ -152,5 +214,11 @@ aside {
   .result,
   aside {
     padding: 18px;
+  }
+
+  .fact-list li,
+  .section-heading {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

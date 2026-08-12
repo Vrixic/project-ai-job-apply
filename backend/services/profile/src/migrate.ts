@@ -12,6 +12,7 @@ const migrationVersions = [
   "0001_foundation",
   "0002_serverless_outbox",
   "0003_retire_legacy_dispatch",
+  "0004_profile_fact_versions",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -60,12 +61,19 @@ try {
     }
 
     const [verification] = await transaction<
-      { table_count: number; migration_count: number; outbox_column_count: number }[]
+      {
+        table_count: number;
+        migration_count: number;
+        outbox_column_count: number;
+        profile_fact_trigger_count: number;
+      }[]
     >`
       SELECT (
         (to_regclass('identity.users') IS NOT NULL)::int +
         (to_regclass('identity.external_identities') IS NOT NULL)::int +
         (to_regclass('profile.job_preferences') IS NOT NULL)::int +
+        (to_regclass('profile.profile_facts') IS NOT NULL)::int +
+        (to_regclass('profile.profile_fact_versions') IS NOT NULL)::int +
         (to_regclass('platform.operations') IS NOT NULL)::int +
         (to_regclass('platform.outbox_events') IS NOT NULL)::int +
         (to_regclass('platform.idempotency_keys') IS NOT NULL)::int +
@@ -95,12 +103,20 @@ try {
             'durable_execution_arn',
             'durable_last_error_code'
           )
-      ) AS outbox_column_count
+      ) AS outbox_column_count,
+      (
+        SELECT count(*)::int
+        FROM pg_trigger
+        WHERE tgrelid = 'profile.profile_fact_versions'::regclass
+          AND tgname = 'profile_fact_versions_reject_update'
+          AND NOT tgisinternal
+      ) AS profile_fact_trigger_count
     `;
     if (
-      verification?.table_count !== 8 ||
+      verification?.table_count !== 10 ||
       verification.migration_count !== migrationVersions.length ||
-      verification.outbox_column_count !== 11
+      verification.outbox_column_count !== 11 ||
+      verification.profile_fact_trigger_count !== 1
     ) {
       throw new Error("Database migration verification failed");
     }

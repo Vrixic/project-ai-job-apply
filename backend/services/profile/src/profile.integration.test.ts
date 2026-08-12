@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 import type { PutJobPreferencesRequest } from "@ai-job-apply/api-contracts";
 import type { AuthPrincipal } from "@ai-job-apply/auth";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createDatabase, PostgresProfileStore } from "./index.js";
+import { createDatabase, PostgresProfileStore, ProfileFactVersionConflictError } from "./index.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -36,10 +36,10 @@ describeWithDatabase("PostgresProfileStore", () => {
     });
 
     expect(first.stdout.trim()).toBe(
-      "Database migrations through 0003_retire_legacy_dispatch applied and verified.",
+      "Database migrations through 0004_profile_fact_versions applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(
-      "Database migrations through 0003_retire_legacy_dispatch applied and verified.",
+      "Database migrations through 0004_profile_fact_versions applied and verified.",
     );
     expect(
       await database.client`
@@ -52,9 +52,13 @@ describeWithDatabase("PostgresProfileStore", () => {
       await database.client`
         SELECT version
         FROM platform.schema_migrations
-        WHERE version IN ('0002_serverless_outbox', '0003_retire_legacy_dispatch')
+        WHERE version IN (
+          '0002_serverless_outbox',
+          '0003_retire_legacy_dispatch',
+          '0004_profile_fact_versions'
+        )
       `,
-    ).toHaveLength(2);
+    ).toHaveLength(3);
   });
 
   afterAll(async () => {
@@ -148,6 +152,164 @@ describeWithDatabase("PostgresProfileStore", () => {
         AND data ->> 'operationId' = ${first.operationId}
     `;
     expect(completionEvents).toEqual({ count: 1, pending: 0, allAcknowledged: true });
+  });
+
+  it("keeps profile facts owner-scoped, versioned, idempotent, and immutable in place", async () => {
+    const runId = crypto.randomUUID();
+    const owner = await store.resolveUser(
+      { ...principal, subject: `fact-owner-${runId}` },
+      "integration-trace",
+    );
+    const other = await store.resolveUser(
+      { ...principal, subject: `fact-other-${runId}` },
+      "integration-trace",
+    );
+    let factId: string | undefined;
+    try {
+      const input = {
+        kind: "skill" as const,
+        key: "programming_language",
+        value: "TypeScript",
+        sensitivity: "standard" as const,
+      };
+      const first = await store.createProfileFact(
+        owner.id,
+        input,
+        `fact-create-${runId}`,
+        "integration-trace",
+      );
+      factId = first.id;
+      const replay = await store.createProfileFact(
+        owner.id,
+        input,
+        `fact-create-${runId}`,
+        "integration-trace",
+      );
+      expect(replay).toEqual(first);
+      expect(await store.listProfileFacts(owner.id)).toMatchObject({
+        facts: [{ id: first.id, value: "TypeScript", version: 1 }],
+        confirmedCount: 1,
+        proposedCount: 0,
+      });
+      expect(await store.listProfileFacts(other.id)).toEqual({
+        facts: [],
+        confirmedCount: 0,
+        proposedCount: 0,
+      });
+      expect(
+        await store.updateProfileFact(
+          other.id,
+          first.id,
+          { expectedVersion: 1, value: "Unauthorized" },
+          `fact-other-update-${runId}`,
+          "integration-trace",
+        ),
+      ).toBe(null);
+
+      const corrected = await store.updateProfileFact(
+        owner.id,
+        first.id,
+        { expectedVersion: 1, value: "TypeScript and JavaScript" },
+        `fact-update-${runId}`,
+        "integration-trace",
+      );
+      expect(corrected).toMatchObject({
+        id: first.id,
+        value: "TypeScript and JavaScript",
+        version: 2,
+      });
+      await expect(
+        store.updateProfileFact(
+          owner.id,
+          first.id,
+          { expectedVersion: 1, verification: "rejected" },
+          `fact-stale-${runId}`,
+          "integration-trace",
+        ),
+      ).rejects.toBeInstanceOf(ProfileFactVersionConflictError);
+
+      const concurrent = await Promise.allSettled([
+        store.updateProfileFact(
+          owner.id,
+          first.id,
+          { expectedVersion: 2, value: "TypeScript, JavaScript, and SQL" },
+          `fact-concurrent-a-${runId}`,
+          "integration-trace",
+        ),
+        store.updateProfileFact(
+          owner.id,
+          first.id,
+          { expectedVersion: 2, value: "TypeScript, JavaScript, and Python" },
+          `fact-concurrent-b-${runId}`,
+          "integration-trace",
+        ),
+      ]);
+      expect(concurrent.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
+      const rejected = concurrent.filter(
+        (outcome): outcome is PromiseRejectedResult => outcome.status === "rejected",
+      );
+      expect(rejected).toHaveLength(1);
+      expect(rejected[0]?.reason).toBeInstanceOf(ProfileFactVersionConflictError);
+
+      let invalidValueCode: string | undefined;
+      try {
+        await database.client`
+          INSERT INTO profile.profile_fact_versions (
+            fact_id,
+            version,
+            kind,
+            fact_key,
+            fact_value,
+            verification,
+            sensitivity,
+            source_type,
+            source_reference
+          ) VALUES (
+            ${first.id},
+            4,
+            'skill',
+            'programming_language',
+            ${JSON.stringify(["valid", 42])}::jsonb,
+            'confirmed',
+            'standard',
+            'user',
+            'direct-entry'
+          )
+        `;
+      } catch (error) {
+        invalidValueCode = (error as { code?: string }).code;
+      }
+      expect(invalidValueCode).toBe("23514");
+
+      let mutationCode: string | undefined;
+      try {
+        await database.client`
+          UPDATE profile.profile_fact_versions
+          SET fact_key = 'mutated'
+          WHERE fact_id = ${first.id} AND version = 1
+        `;
+      } catch (error) {
+        mutationCode = (error as { code?: string }).code;
+      }
+      expect(mutationCode).toBe("55000");
+
+      const versions = await database.client<Array<{ version: number }>>`
+        SELECT version
+        FROM profile.profile_fact_versions
+        WHERE fact_id = ${first.id}
+        ORDER BY version
+      `;
+      expect(versions.map((row) => row.version)).toEqual([1, 2, 3]);
+    } finally {
+      if (factId) {
+        await database.client`
+          DELETE FROM platform.audit_events WHERE resource_id = ${factId}
+        `;
+      }
+      await database.client`
+        DELETE FROM identity.users WHERE id IN (${owner.id}, ${other.id})
+      `;
+    }
   });
 
   it("keeps committed work recoverable when the post-commit SQS nudge fails", async () => {

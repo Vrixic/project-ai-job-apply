@@ -1,11 +1,15 @@
 import "reflect-metadata";
 import type {
+  CreateProfileFactRequest,
   CurrentUser,
   JobPreferenceSet,
   Operation,
+  ProfileFact,
+  ProfileFactCollection,
   ProfileReadiness,
   PutJobPreferencesRequest,
   PutJobPreferencesResponse,
+  UpdateProfileFactRequest,
 } from "@ai-job-apply/api-contracts";
 import type { AuthPrincipal } from "@ai-job-apply/auth";
 import { createTestTokenIssuer } from "@ai-job-apply/auth/testing";
@@ -27,6 +31,7 @@ class MemoryProfileStore implements ProfileStore {
   private user: CurrentUser | undefined;
   private preferences: JobPreferenceSet | undefined;
   private readonly operations = new Map<string, Operation>();
+  private readonly facts = new Map<string, ProfileFact>();
   private readonly idempotency = new Map<
     string,
     { hash: string; response: PutJobPreferencesResponse }
@@ -77,6 +82,57 @@ class MemoryProfileStore implements ProfileStore {
 
   async getOperation(_userId: string, operationId: string): Promise<Operation | null> {
     return this.operations.get(operationId) ?? null;
+  }
+
+  async listProfileFacts(): Promise<ProfileFactCollection> {
+    const facts = [...this.facts.values()];
+    return {
+      facts,
+      confirmedCount: facts.filter((fact) => fact.verification === "confirmed").length,
+      proposedCount: facts.filter((fact) => fact.verification === "proposed").length,
+    };
+  }
+
+  async createProfileFact(_userId: string, input: CreateProfileFactRequest): Promise<ProfileFact> {
+    const timestamp = new Date().toISOString();
+    const fact: ProfileFact = {
+      id: uuidv7(),
+      ...input,
+      verification: "confirmed",
+      source: { type: "user", reference: "direct-entry" },
+      version: 1,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    this.facts.set(fact.id, fact);
+    return fact;
+  }
+
+  async updateProfileFact(
+    _userId: string,
+    factId: string,
+    input: UpdateProfileFactRequest,
+  ): Promise<ProfileFact | null> {
+    const current = this.facts.get(factId);
+    if (!current) {
+      return null;
+    }
+    if (current.version !== input.expectedVersion) {
+      const { ProfileFactVersionConflictError } = await import("@ai-job-apply/profile-service");
+      throw new ProfileFactVersionConflictError();
+    }
+    const next: ProfileFact = {
+      ...current,
+      ...(input.value !== undefined ? { value: input.value } : {}),
+      ...(input.verification ? { verification: input.verification } : {}),
+      ...(input.sensitivity ? { sensitivity: input.sensitivity } : {}),
+      ...(input.effectiveFrom ? { effectiveFrom: input.effectiveFrom } : {}),
+      ...(input.effectiveTo ? { effectiveTo: input.effectiveTo } : {}),
+      version: current.version + 1,
+      updatedAt: new Date().toISOString(),
+    };
+    this.facts.set(factId, next);
+    return next;
   }
 
   async getPreferencesById(): Promise<JobPreferenceSet | null> {
@@ -298,6 +354,54 @@ describe("candidate API", () => {
     });
     expect(operation.statusCode).toBe(200);
     expect(operation.json().state).toBe("queued");
+  });
+
+  it("creates, lists, and corrects owned profile facts through explicit versions", async () => {
+    const token = await issuer.issue("candidate-profile-facts");
+    const authorization = { authorization: `Bearer ${token}` };
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/profile/facts",
+      headers: { ...authorization, "idempotency-key": "profile-fact-create-0001" },
+      payload: {
+        kind: "skill",
+        key: "programming_language",
+        value: "TypeScript",
+        sensitivity: "standard",
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({
+      verification: "confirmed",
+      source: { type: "user", reference: "direct-entry" },
+      version: 1,
+    });
+
+    const listed = await app.inject({
+      method: "GET",
+      url: "/v1/profile/facts",
+      headers: authorization,
+    });
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json()).toMatchObject({ confirmedCount: 1, proposedCount: 0 });
+
+    const corrected = await app.inject({
+      method: "PATCH",
+      url: `/v1/profile/facts/${created.json().id}`,
+      headers: { ...authorization, "idempotency-key": "profile-fact-update-0001" },
+      payload: { expectedVersion: 1, value: "TypeScript and JavaScript" },
+    });
+    expect(corrected.statusCode).toBe(200);
+    expect(corrected.json()).toMatchObject({ version: 2, value: "TypeScript and JavaScript" });
+
+    const stale = await app.inject({
+      method: "PATCH",
+      url: `/v1/profile/facts/${created.json().id}`,
+      headers: { ...authorization, "idempotency-key": "profile-fact-update-0002" },
+      payload: { expectedVersion: 1, value: "stale correction" },
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json().code).toBe("version_conflict");
   });
 
   it("returns an active redacted job only with the dedicated read scope", async () => {
