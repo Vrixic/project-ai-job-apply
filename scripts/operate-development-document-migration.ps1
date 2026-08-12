@@ -1116,10 +1116,13 @@ function Test-DurableClaimHistoryExists {
     [Parameter(Mandatory)][string]$ClaimKey
   )
 
-  $versions = @(Get-OptionalProperty $History "Versions")
-  $markers = @(Get-OptionalProperty $History "DeleteMarkers")
-  return @($versions | Where-Object { [string]$_.Key -ceq $ClaimKey }).Count -gt 0 -or
-    @($markers | Where-Object { [string]$_.Key -ceq $ClaimKey }).Count -gt 0
+  foreach ($entry in (Get-OptionalProperty $History "Versions")) {
+    if ([string](Get-OptionalProperty $entry "Key") -ceq $ClaimKey) { return $true }
+  }
+  foreach ($entry in (Get-OptionalProperty $History "DeleteMarkers")) {
+    if ([string](Get-OptionalProperty $entry "Key") -ceq $ClaimKey) { return $true }
+  }
+  return $false
 }
 
 function New-DurableExecutionClaim {

@@ -68,6 +68,12 @@ if (Test-DurableClaimHistoryExists -History $emptyClaimHistory -ClaimKey "claim"
 if (Test-DurableClaimHistoryExists -History ([pscustomobject]@{ Versions = @() }) -ClaimKey "claim") {
   throw "An explicit empty S3 version list was treated as an existing claim."
 }
+if (Test-DurableClaimHistoryExists -History ([pscustomobject]@{
+      Versions = @($null)
+      DeleteMarkers = @($null)
+    }) -ClaimKey "claim") {
+  throw "A null S3 history entry was treated as an existing claim."
+}
 foreach ($history in @(
     [pscustomobject]@{ Versions = @([pscustomobject]@{ Key = "claim" }) },
     [pscustomobject]@{ DeleteMarkers = @([pscustomobject]@{ Key = "claim" }) }
