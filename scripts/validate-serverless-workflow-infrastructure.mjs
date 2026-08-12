@@ -66,6 +66,8 @@ for (const required of [
   "ConvertTo-Json -InputObject $Value -Compress -Depth 30",
   "Set-VerifiedCurrentGatewayArtifactVariables",
   "Test-IgnorableRdsRestorableTimeRefresh",
+  "Test-IgnorableMigrationTaskTagsRefresh",
+  "Get-UnacceptedVerificationDrift",
   "Test-EcsFaultInjectionDisabled",
   '"--version-id", ([string]$gateway.s3_object_version)',
   'foreach ($propertyName in @("mountPoints", "portMappings", "systemControls", "volumesFrom"))',
