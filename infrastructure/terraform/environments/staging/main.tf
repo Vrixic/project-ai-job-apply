@@ -76,9 +76,22 @@ module "platform" {
   candidate_document_cors_allowed_origins = (
     var.candidate_document_cors_allowed_origins
   )
-  serverless_runtime_enabled       = var.serverless_runtime_enabled
-  deploy_serverless_outbox         = var.deploy_serverless_outbox
-  workflow_ingress_artifact_s3_key = var.workflow_ingress_artifact_s3_key
+  deploy_document_processing                    = var.deploy_document_processing
+  document_scan_mapping_enabled                 = var.document_scan_mapping_enabled
+  document_scan_event_rule_enabled              = var.document_scan_event_rule_enabled
+  document_processor_artifact_s3_key            = var.document_processor_artifact_s3_key
+  document_processor_artifact_s3_object_version = var.document_processor_artifact_s3_object_version
+  document_processor_artifact_sha256            = var.document_processor_artifact_sha256
+  document_processor_artifact_base64sha256      = var.document_processor_artifact_base64sha256
+  document_parser_artifact_s3_key               = var.document_parser_artifact_s3_key
+  document_parser_artifact_s3_object_version    = var.document_parser_artifact_s3_object_version
+  document_parser_artifact_sha256               = var.document_parser_artifact_sha256
+  document_parser_artifact_base64sha256         = var.document_parser_artifact_base64sha256
+  document_processor_extension_layer_arn        = var.document_processor_extension_layer_arn
+  document_parser_version                       = var.document_parser_version
+  serverless_runtime_enabled                    = var.serverless_runtime_enabled
+  deploy_serverless_outbox                      = var.deploy_serverless_outbox
+  workflow_ingress_artifact_s3_key              = var.workflow_ingress_artifact_s3_key
   workflow_ingress_artifact_s3_object_version = (
     var.workflow_ingress_artifact_s3_object_version
   )

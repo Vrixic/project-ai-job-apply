@@ -74,6 +74,7 @@ export type StoredProfileFactKind =
   | "preference";
 export type StoredProfileFactValue = string | number | boolean | string[];
 export type StoredProfileFactVerification = "proposed" | "confirmed" | "rejected";
+export type StoredProfileFactAvailability = "available" | "invalidated";
 export type StoredProfileFactSensitivity = "standard" | "confidential" | "restricted";
 export type StoredProfileFactSourceType = "user" | "resume" | "import" | "derived";
 
@@ -100,6 +101,11 @@ export const profileFactVersions = profile.table(
     key: text("fact_key").notNull(),
     value: jsonb("fact_value").$type<StoredProfileFactValue>().notNull(),
     verification: text("verification").$type<StoredProfileFactVerification>().notNull(),
+    availabilityState: text("availability_state")
+      .$type<StoredProfileFactAvailability>()
+      .notNull()
+      .default("available"),
+    availabilityReason: text("availability_reason").$type<"source_security_hold">(),
     sensitivity: text("sensitivity").$type<StoredProfileFactSensitivity>().notNull(),
     sourceType: text("source_type").$type<StoredProfileFactSourceType>().notNull(),
     sourceReference: text("source_reference").notNull(),
@@ -111,6 +117,47 @@ export const profileFactVersions = profile.table(
     primaryKey({ columns: [table.factId, table.version] }),
     index("profile_fact_versions_latest_idx").on(table.factId, table.version),
   ],
+);
+
+export const resumeFactImports = profile.table(
+  "resume_fact_imports",
+  {
+    id: uuid("id").primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    documentId: uuid("document_id").notNull(),
+    documentVersion: integer("document_version").notNull(),
+    parserVersion: text("parser_version").notNull(),
+    proposalDigest: text("proposal_digest").notNull(),
+    proposalCount: integer("proposal_count").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("resume_fact_import_identity_uq").on(
+      table.userId,
+      table.documentId,
+      table.documentVersion,
+      table.parserVersion,
+    ),
+  ],
+);
+
+export const profileFactEvidence = profile.table(
+  "profile_fact_evidence",
+  {
+    factId: uuid("fact_id").notNull(),
+    factVersion: integer("fact_version").notNull(),
+    ordinal: integer("ordinal").notNull(),
+    documentId: uuid("document_id").notNull(),
+    documentVersion: integer("document_version").notNull(),
+    parserVersion: text("parser_version").notNull(),
+    blockIndex: integer("block_index").notNull(),
+    startOffset: integer("start_offset").notNull(),
+    endOffset: integer("end_offset").notNull(),
+    page: integer("page"),
+  },
+  (table) => [primaryKey({ columns: [table.factId, table.factVersion, table.ordinal] })],
 );
 
 export type OperationState = "queued" | "running" | "succeeded" | "retryable_failure" | "failed";

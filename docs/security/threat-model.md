@@ -33,7 +33,8 @@
 | Idempotency failure | Duplicate irreversible action | Scoped idempotency keys, unique constraints, stable workflow IDs |
 | Database/event partial failure | Lost or orphaned work | One transaction for state and outbox, durable retries, reconciliation |
 | Malicious job/form content | Prompt injection, phishing, unsafe redirects | Treat external text as untrusted, sanitize HTML, tool allowlists, URL/domain checks |
-| Malicious resume/document | Parser compromise, decompression/resource exhaustion, candidate-data disclosure | Exact type/size/hash upload grants, isolated encrypted quarantine, managed malware scan, bounded parser, no content telemetry, explicit proposed-fact review |
+| Malicious resume/document | Parser compromise, decompression/resource exhaustion, candidate-data disclosure | Exact type/size/hash upload grants, isolated encrypted quarantine, managed malware scan, no-DB/no-egress parser Lambda, bounded PDF/DOCX parsing, deterministic output, no content telemetry, explicit proposed-fact review |
+| Forged or contradictory scan result | Unscanned bytes parsed, wrong-environment event accepted, duplicate/contradictory proposals | Exact account/region/protection-plan/bucket/key/version contract, independent clean-tag and metadata check, canonical disposition receipt, security hold, value-free alarm |
 | Extension overreach | Browsing-history collection | Active-tab/minimum permissions, explicit contribution preview and consent |
 | Secret or PII leakage | Privacy/security incident | KMS/Secrets Manager, field-aware redaction, synthetic fixtures, scanning |
 | Compromised CI/dependency | Supply-chain compromise | OIDC deploy roles, immutable images, full-lockfile audit, pinned Semgrep SAST, SBOM |
@@ -75,6 +76,7 @@ until the named gate passes; it does not mean an accountable reviewer accepted t
 | TM-R06 | Deferred mobile build dependency can hang on malicious image formats | Exact expiring dependency exception forbids untrusted ICNS/JXL/HEIF input and all mobile public use | CI enforces the exact path/version/expiry; independent approval not granted | Remove or explicitly re-review before expiry or any mobile build/public test |
 | TM-R07 | Future providers or agents gain excessive data/action authority | Provider activation register, least-data rules, immutable intent, effect safety, kill switches, and per-capability delta review | Architecture only; providers and external effects are inactive | Concrete provider/capability security, privacy, legal, and effect-safety approval |
 | TM-R08 | Foundation review is mistaken for launch assurance | ADR-015 requires an independent open-book exact-candidate assessment, remediation, and retest | Policy accepted; launch-candidate evidence does not yet exist | Blocking D6 exact-candidate assessment and signed disposition |
+| TM-R09 | A parser exploit exfiltrates resume data or survives retry | Separate no-DB parser, per-invocation exact-object credentials, no parser application logs/traces, no routed internet, deterministic output verification, strict parser limits, and stuck-state reconciliation | Implemented locally; AWS-managed DNS remains a covert-channel residual and no deployed adversarial/IAM proof exists | Keep triggers synthetic-only; independently review DNS treatment, adversarial corpus, effective IAM, rollback, and deletion/export before real resumes |
 
 Accountable reviewers record findings, conditions, and treatment decisions in the
 [Phase 0 review record](phase-0-accountable-review-record.md). This table must not be edited to

@@ -286,6 +286,21 @@ export interface components {
             type: "user" | "resume" | "import" | "derived";
             reference: string;
         };
+        ProfileFactSupportingSpan: {
+            /** Format: uuid */
+            documentId: string;
+            documentVersion: number;
+            parserVersion: string;
+            blockIndex: number;
+            /** @description Zero-based offset within the referenced normalized block */
+            startOffset: number;
+            /** @description Exclusive offset within the referenced normalized block */
+            endOffset: number;
+            page?: number;
+        };
+        ProfileFactEvidence: {
+            supportingSpans: components["schemas"]["ProfileFactSupportingSpan"][];
+        };
         ProfileFact: {
             /** Format: uuid */
             id: string;
@@ -294,9 +309,19 @@ export interface components {
             value: components["schemas"]["ProfileFactValue"];
             /** @enum {string} */
             verification: "proposed" | "confirmed" | "rejected";
+            availability?: {
+                /** @constant */
+                state: "available";
+            } | {
+                /** @constant */
+                state: "invalidated";
+                /** @constant */
+                reasonCode: "source_security_hold";
+            };
             /** @enum {string} */
             sensitivity: "standard" | "confidential" | "restricted";
             source: components["schemas"]["ProfileFactSource"];
+            evidence?: components["schemas"]["ProfileFactEvidence"];
             /** Format: date */
             effectiveFrom?: string;
             /** Format: date */
@@ -306,7 +331,7 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
-        };
+        } & unknown;
         ProfileFactCollection: {
             facts: components["schemas"]["ProfileFact"][];
             confirmedCount: number;

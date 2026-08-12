@@ -37,7 +37,7 @@ engineering settings. At the reviewed source baseline:
 | Security/audit record store | No separate 365-day product audit store is implemented | Blocks any claim that the provisional public audit schedule is enforced |
 | Product analytics | Optional product analytics is not active | No Phase 0 analytics-retention approval is implied |
 | Export and account-deletion workflow | Not implemented end to end | Blocks real candidate onboarding until implemented, deployed, and tested |
-| Candidate-document quarantine | Separate KMS bucket and scan plan are locally defined but not deployed; deletion/reconciliation is unimplemented | Blocks real resume upload and any retention-enforcement claim |
+| Candidate-document source and normalized objects | Separate KMS bucket/scan plan are deployed in development; deterministic normalized storage is locally implemented; full version-aware deletion/reconciliation remains unimplemented | Blocks real resume upload and any retention-enforcement claim |
 
 Shared environments remain synthetic-only, so the seven-day backup setting does not shorten a
 public promise or authorize real-data processing. Before real candidate onboarding, reviewers must

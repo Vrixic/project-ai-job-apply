@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ai-job-apply.internal/events/document.scan-result.v1.json",
+  "title": "DocumentScanResultV1",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "eventId",
+    "accountId",
+    "region",
+    "protectionPlanArn",
+    "bucketName",
+    "objectKey",
+    "objectVersion",
+    "scanStatus",
+    "scanResult",
+    "observedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "eventId": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "accountId": { "type": "string", "pattern": "^[0-9]{12}$" },
+    "region": { "const": "us-east-2" },
+    "protectionPlanArn": {
+      "type": "string",
+      "pattern": "^arn:aws:guardduty:us-east-2:[0-9]{12}:malware-protection-plan/[A-Za-z0-9]+$",
+      "maxLength": 256
+    },
+    "bucketName": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 63,
+      "pattern": "^[a-z0-9][a-z0-9.-]+[a-z0-9]$"
+    },
+    "objectKey": {
+      "type": "string",
+      "pattern": "^quarantine/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/source$",
+      "maxLength": 128
+    },
+    "objectVersion": { "type": "string", "minLength": 1, "maxLength": 1024 },
+    "scanStatus": { "enum": ["COMPLETED", "FAILED", "SKIPPED"] },
+    "scanResult": {
+      "enum": ["NO_THREATS_FOUND", "THREATS_FOUND", "UNSUPPORTED", "ACCESS_DENIED", "FAILED"]
+    },
+    "observedAt": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "scanResult": { "enum": ["NO_THREATS_FOUND", "THREATS_FOUND"] }
+        }
+      },
+      "then": { "properties": { "scanStatus": { "const": "COMPLETED" } } }
+    },
+    {
+      "if": {
+        "properties": { "scanResult": { "enum": ["UNSUPPORTED", "ACCESS_DENIED"] } }
+      },
+      "then": { "properties": { "scanStatus": { "const": "SKIPPED" } } }
+    },
+    {
+      "if": { "properties": { "scanResult": { "const": "FAILED" } } },
+      "then": { "properties": { "scanStatus": { "const": "FAILED" } } }
+    }
+  ],
+  "additionalProperties": false
+}

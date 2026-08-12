@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   eventTypes,
   outboxNudgeIntegrityInput,
+  validateDocumentScanResult,
   validateEventData,
   validateOutboxNudge,
 } from "./index.js";
@@ -57,6 +58,89 @@ describe("event schemas", () => {
         integrity: { algorithm: "sha256", digest: "a".repeat(64) },
         locations: ["New York, NY"],
       }),
+    ).toBe(false);
+  });
+
+  it("accepts an identifier-only clean document scan result", () => {
+    expect(
+      validateDocumentScanResult({
+        schemaVersion: 1,
+        eventId: "7f6e7ed8-287c-49e1-a3df-0c789ffbb1f8",
+        accountId: "362544434697",
+        region: "us-east-2",
+        protectionPlanArn:
+          "arn:aws:guardduty:us-east-2:362544434697:malware-protection-plan/plan123",
+        bucketName: "applydash-development-candidate-documents",
+        objectKey: "quarantine/019b4e12-7ea3-7c36-9357-aea35ab542ca/source",
+        objectVersion: "version-1",
+        scanStatus: "COMPLETED",
+        scanResult: "NO_THREATS_FOUND",
+        observedAt: "2026-08-12T12:00:00.000Z",
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects content, unknown fields, and contradictory clean results", () => {
+    const base = {
+      schemaVersion: 1,
+      eventId: "7f6e7ed8-287c-49e1-a3df-0c789ffbb1f8",
+      accountId: "362544434697",
+      region: "us-east-2",
+      protectionPlanArn: "arn:aws:guardduty:us-east-2:362544434697:malware-protection-plan/plan123",
+      bucketName: "applydash-development-candidate-documents",
+      objectKey: "quarantine/019b4e12-7ea3-7c36-9357-aea35ab542ca/source",
+      objectVersion: "version-1",
+      scanStatus: "FAILED",
+      scanResult: "NO_THREATS_FOUND",
+      observedAt: "2026-08-12T12:00:00.000Z",
+    };
+    expect(validateDocumentScanResult(base)).toBe(false);
+    expect(validateDocumentScanResult({ ...base, resumeText: "secret" })).toBe(false);
+  });
+
+  it.each([
+    ["SKIPPED", "UNSUPPORTED"],
+    ["SKIPPED", "ACCESS_DENIED"],
+    ["FAILED", "FAILED"],
+  ] as const)("accepts the GuardDuty %s/%s terminal pair", (scanStatus, scanResult) => {
+    expect(
+      validateDocumentScanResult({
+        schemaVersion: 1,
+        eventId: "7f6e7ed8-287c-49e1-a3df-0c789ffbb1f8",
+        accountId: "362544434697",
+        region: "us-east-2",
+        protectionPlanArn:
+          "arn:aws:guardduty:us-east-2:362544434697:malware-protection-plan/plan123",
+        bucketName: "applydash-development-candidate-documents",
+        objectKey: "quarantine/019b4e12-7ea3-7c36-9357-aea35ab542ca/source",
+        objectVersion: "version-1",
+        scanStatus,
+        scanResult,
+        observedAt: "2026-08-12T12:00:00.000Z",
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects every mismatched terminal status/result pair", () => {
+    const base = {
+      schemaVersion: 1,
+      eventId: "7f6e7ed8-287c-49e1-a3df-0c789ffbb1f8",
+      accountId: "362544434697",
+      region: "us-east-2",
+      protectionPlanArn: "arn:aws:guardduty:us-east-2:362544434697:malware-protection-plan/plan123",
+      bucketName: "applydash-development-candidate-documents",
+      objectKey: "quarantine/019b4e12-7ea3-7c36-9357-aea35ab542ca/source",
+      objectVersion: "version-1",
+      observedAt: "2026-08-12T12:00:00.000Z",
+    };
+    expect(
+      validateDocumentScanResult({ ...base, scanStatus: "COMPLETED", scanResult: "UNSUPPORTED" }),
+    ).toBe(false);
+    expect(
+      validateDocumentScanResult({ ...base, scanStatus: "SKIPPED", scanResult: "FAILED" }),
+    ).toBe(false);
+    expect(
+      validateDocumentScanResult({ ...base, scanStatus: "FAILED", scanResult: "ACCESS_DENIED" }),
     ).toBe(false);
   });
 });

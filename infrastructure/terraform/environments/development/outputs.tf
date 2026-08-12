@@ -112,3 +112,19 @@ output "profile_readiness_terminal_alias_arn" {
 output "profile_readiness_terminal_rule_arn" {
   value = module.platform.profile_readiness_terminal_rule_arn
 }
+
+output "document_processor_alias_arn" {
+  value = module.platform.document_processor_alias_arn
+}
+
+output "document_parser_version_arn" {
+  value = module.platform.document_parser_version_arn
+}
+
+output "document_scan_event_source_mapping_uuid" {
+  value = module.platform.document_scan_event_source_mapping_uuid
+}
+
+output "document_scan_event_rule_arn" {
+  value = module.platform.document_scan_event_rule_arn
+}

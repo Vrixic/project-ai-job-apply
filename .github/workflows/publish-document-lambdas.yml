@@ -1,0 +1,158 @@
+name: Publish document Lambda artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Isolated AWS/GitHub Environment receiving the immutable artifacts
+        required: true
+        default: development
+        type: choice
+        options: [development, staging]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: publish-${{ inputs.environment }}-document-lambdas
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.24.0
+          run_install: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.12.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @ai-job-apply/documents-service test
+      - run: pnpm audit:dependencies
+
+      - name: Build reproducible artifacts and CycloneDX SBOMs
+        shell: bash
+        env:
+          ARTIFACT_SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          artifact_dir="backend/services/documents/dist/lambda"
+          names=(document-processor-lambda document-parser-lambda)
+          pnpm --filter @ai-job-apply/documents-service build:lambda
+          for name in "${names[@]}"; do
+            test "$(jq -r .schemaVersion "$artifact_dir/$name.manifest.json")" = "2"
+            test "$(jq -r .sourceSha "$artifact_dir/$name.manifest.json")" = "$GITHUB_SHA"
+            unzip -p "$artifact_dir/$name.zip" index.mjs > "/tmp/$name.index.mjs"
+            grep -Fq "/* applydash-artifact-source:$GITHUB_SHA */" "/tmp/$name.index.mjs"
+            jq -r .artifactSha256 "$artifact_dir/$name.manifest.json" > "/tmp/$name.first-sha"
+          done
+          pnpm --filter @ai-job-apply/documents-service build:lambda
+          for name in "${names[@]}"; do
+            test "$(<"/tmp/$name.first-sha")" = "$(jq -r .artifactSha256 "$artifact_dir/$name.manifest.json")"
+            test "$(jq -r .bomFormat "$artifact_dir/$name.cdx.json")" = "CycloneDX"
+            test "$(jq -r .specVersion "$artifact_dir/$name.cdx.json")" = "1.6"
+          done
+
+      - name: Require configured environment publishing boundary
+        env:
+          ARTIFACT_BUCKET: ${{ vars.ARTIFACT_BUCKET }}
+          AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+        run: test -n "$ARTIFACT_BUCKET" && test -n "$AWS_DEPLOY_ROLE_ARN"
+
+      - name: Obtain short-lived AWS credentials
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-2
+          role-session-name: publish-${{ inputs.environment }}-document-lambdas-${{ github.run_id }}
+          mask-aws-account-id: true
+
+      - name: Verify private versioned artifact bucket
+        env:
+          ARTIFACT_BUCKET: ${{ vars.ARTIFACT_BUCKET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(aws s3api get-bucket-versioning --bucket "$ARTIFACT_BUCKET" --query Status --output text)" = "Enabled"
+          test "$(aws s3api get-bucket-encryption --bucket "$ARTIFACT_BUCKET" --query 'ServerSideEncryptionConfiguration.Rules[0].ApplyServerSideEncryptionByDefault.SSEAlgorithm' --output text)" = "aws:kms"
+          public_access="$(aws s3api get-public-access-block --bucket "$ARTIFACT_BUCKET" --output json)"
+          test "$(jq -r '[.PublicAccessBlockConfiguration.BlockPublicAcls,.PublicAccessBlockConfiguration.IgnorePublicAcls,.PublicAccessBlockConfiguration.BlockPublicPolicy,.PublicAccessBlockConfiguration.RestrictPublicBuckets] | all' <<<"$public_access")" = "true"
+
+      - name: Publish immutable release evidence
+        id: publish
+        env:
+          ARTIFACT_BUCKET: ${{ vars.ARTIFACT_BUCKET }}
+          SOURCE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_dir="backend/services/documents/dist/lambda"
+          names=(document-processor-lambda document-parser-lambda)
+          outputs=(processor parser)
+          for index in "${!names[@]}"; do
+            name="${names[$index]}"
+            output="${outputs[$index]}"
+            sha256="$(jq -r .artifactSha256 "$artifact_dir/$name.manifest.json")"
+            base64_sha256="$(jq -r .artifactBase64Sha256 "$artifact_dir/$name.manifest.json")"
+            prefix="lambda/documents/$SOURCE_SHA/$sha256"
+            artifact_key="$prefix/$name.zip"
+            for suffix in zip cdx.json manifest.json sha256; do
+              key="$prefix/$name.$suffix"
+              if aws s3api head-object --bucket "$ARTIFACT_BUCKET" --key "$key" >/dev/null 2>&1; then
+                echo "Immutable release key already exists: $key" >&2
+                exit 1
+              fi
+            done
+            result="$(aws s3api put-object --bucket "$ARTIFACT_BUCKET" --key "$artifact_key" \
+              --body "$artifact_dir/$name.zip" --checksum-algorithm SHA256 \
+              --checksum-sha256 "$base64_sha256" \
+              --metadata "source-sha=$SOURCE_SHA,artifact-sha256=$sha256" --output json)"
+            version_id="$(jq -r .VersionId <<<"$result")"
+            test -n "$version_id" && test "$version_id" != "null"
+            stored="$(aws s3api head-object --bucket "$ARTIFACT_BUCKET" --key "$artifact_key" \
+              --version-id "$version_id" --checksum-mode ENABLED --output json)"
+            test "$(jq -r .ServerSideEncryption <<<"$stored")" = "aws:kms"
+            test -n "$(jq -r .SSEKMSKeyId <<<"$stored")"
+            test "$(jq -r .ChecksumSHA256 <<<"$stored")" = "$base64_sha256"
+            test "$(jq -r '.Metadata["source-sha"]' <<<"$stored")" = "$SOURCE_SHA"
+            test "$(jq -r '.Metadata["artifact-sha256"]' <<<"$stored")" = "$sha256"
+            for suffix in cdx.json manifest.json sha256; do
+              aws s3api put-object --bucket "$ARTIFACT_BUCKET" --key "$prefix/$name.$suffix" \
+                --body "$artifact_dir/$name.$suffix" \
+                --metadata "source-sha=$SOURCE_SHA,artifact-sha256=$sha256" >/dev/null
+            done
+            echo "${output}_key=$artifact_key" >> "$GITHUB_OUTPUT"
+            echo "${output}_object_version=$version_id" >> "$GITHUB_OUTPUT"
+            echo "${output}_sha256=$sha256" >> "$GITHUB_OUTPUT"
+            echo "${output}_base64_sha256=$base64_sha256" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Publish sanitized deployment inputs
+        env:
+          PROCESSOR_KEY: ${{ steps.publish.outputs.processor_key }}
+          PROCESSOR_VERSION: ${{ steps.publish.outputs.processor_object_version }}
+          PROCESSOR_SHA: ${{ steps.publish.outputs.processor_sha256 }}
+          PROCESSOR_BASE64: ${{ steps.publish.outputs.processor_base64_sha256 }}
+          PARSER_KEY: ${{ steps.publish.outputs.parser_key }}
+          PARSER_VERSION: ${{ steps.publish.outputs.parser_object_version }}
+          PARSER_SHA: ${{ steps.publish.outputs.parser_sha256 }}
+          PARSER_BASE64: ${{ steps.publish.outputs.parser_base64_sha256 }}
+        shell: bash
+        run: |
+          {
+            echo "### Document Lambda artifacts"
+            echo
+            echo "- Source commit: \`$GITHUB_SHA\`"
+            echo "- Processor: \`$PROCESSOR_KEY\` / \`$PROCESSOR_VERSION\` / \`$PROCESSOR_SHA\` / \`$PROCESSOR_BASE64\`"
+            echo "- Parser: \`$PARSER_KEY\` / \`$PARSER_VERSION\` / \`$PARSER_SHA\` / \`$PARSER_BASE64\`"
+            echo "- Deployment and trigger change: none"
+          } >> "$GITHUB_STEP_SUMMARY"

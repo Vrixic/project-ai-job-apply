@@ -1,9 +1,63 @@
+import { createHash } from "node:crypto";
 import type postgres from "postgres";
 import { describe, expect, it } from "vitest";
 import { PostgresDocumentStore, type ResumeUploadSigner } from "./index.js";
 
 describe("PostgresDocumentStore", () => {
-  it("binds JSONB writes as explicit JSON text without the driver JSON wrapper", async () => {
+  it("decodes a JSON-text idempotency replay returned by PostgreSQL", async () => {
+    const input = {
+      fileName: "synthetic-resume.pdf",
+      mediaType: "application/pdf" as const,
+      sizeBytes: 2048,
+      sha256: "a".repeat(64),
+    };
+    const response = {
+      document: {
+        id: "019bf123-4567-789a-8bcd-ef0123456789",
+        ...input,
+        status: "awaiting_upload" as const,
+        createdAt: "2026-08-12T12:00:00.000Z",
+        updatedAt: "2026-08-12T12:00:00.000Z",
+      },
+      upload: {
+        url: "https://synthetic-candidate-documents.example.test/",
+        method: "POST" as const,
+        fields: { policy: "synthetic-signed-policy" },
+        expiresAt: "2026-08-12T12:05:00.000Z",
+      },
+    };
+    const transaction = async (strings: TemplateStringsArray) =>
+      strings.join("?").includes("SELECT request_hash")
+        ? [
+            {
+              requestHash: createHash("sha256")
+                .update(
+                  JSON.stringify([input.fileName, input.mediaType, input.sizeBytes, input.sha256]),
+                )
+                .digest("hex"),
+              response: JSON.stringify(response),
+            },
+          ]
+        : [];
+    const client = {
+      begin: async <T>(callback: (sql: typeof transaction) => Promise<T>) => callback(transaction),
+    } as unknown as postgres.Sql;
+    const store = new PostgresDocumentStore(client, {
+      createGrant: async () => {
+        throw new Error("a replay must not mint another grant");
+      },
+    });
+    await expect(
+      store.createResumeUpload(
+        "019bf123-4567-789a-8bcd-ef0123456788",
+        input,
+        "synthetic-idempotency-key-0001",
+        "synthetic-trace-0001",
+      ),
+    ).resolves.toEqual(response);
+  });
+
+  it("binds JSONB writes as structured values without the driver JSON wrapper", async () => {
     const statements: Array<{ sql: string; values: unknown[] }> = [];
     const transaction = Object.assign(
       async (strings: TemplateStringsArray, ...values: unknown[]) => {
@@ -18,9 +72,7 @@ describe("PostgresDocumentStore", () => {
         return [];
       },
       {
-        json: () => {
-          throw new Error("the driver JSON wrapper must not be used");
-        },
+        json: <T>(value: T) => value,
       },
     );
     const client = {
@@ -62,10 +114,8 @@ describe("PostgresDocumentStore", () => {
     );
     expect(idempotencyInsert?.sql).toContain("?::jsonb");
     expect(auditInsert?.sql).toContain("?::jsonb");
-    expect(typeof idempotencyInsert?.values.at(-1)).toBe("string");
-    expect(typeof auditInsert?.values.at(-1)).toBe("string");
-    expect(JSON.parse(String(idempotencyInsert?.values.at(-1)))).toEqual(response);
-    expect(JSON.parse(String(auditInsert?.values.at(-1)))).toEqual({
+    expect(idempotencyInsert?.values.at(-1)).toEqual(response);
+    expect(auditInsert?.values.at(-1)).toEqual({
       version: 1,
       sizeBytes: 2048,
     });

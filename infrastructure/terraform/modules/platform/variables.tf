@@ -208,6 +208,131 @@ variable "candidate_document_cors_allowed_origins" {
   }
 }
 
+variable "deploy_document_processing" {
+  description = "Dark-deploy the isolated document coordinator/parser boundary and encrypted queues."
+  type        = bool
+  default     = false
+
+  validation {
+    condition = !var.deploy_document_processing || (
+      var.deploy_document_intake &&
+      var.document_processor_artifact_s3_key != "" &&
+      var.document_processor_artifact_s3_object_version != "" &&
+      var.document_processor_artifact_sha256 != "" &&
+      var.document_processor_artifact_base64sha256 != "" &&
+      var.document_parser_artifact_s3_key != "" &&
+      var.document_parser_artifact_s3_object_version != "" &&
+      var.document_parser_artifact_sha256 != "" &&
+      var.document_parser_artifact_base64sha256 != "" &&
+      var.document_processor_extension_layer_arn != ""
+    )
+    error_message = "Document processing requires intake, both immutable versioned artifacts with exact digests, and the reviewed Secrets extension."
+  }
+}
+
+variable "document_scan_mapping_enabled" {
+  description = "Enable the SQS processor mapping after direct dark conformance."
+  type        = bool
+  default     = false
+
+  validation {
+    condition = !var.document_scan_mapping_enabled || (
+      var.deploy_document_processing && var.serverless_runtime_enabled
+    )
+    error_message = "Document scan mapping activation requires the deployed processing boundary and active serverless runtime."
+  }
+}
+
+variable "document_scan_event_rule_enabled" {
+  description = "Enable the exact GuardDuty rule only after the queue mapping has passed dark conformance."
+  type        = bool
+  default     = false
+
+  validation {
+    condition = !var.document_scan_event_rule_enabled || (
+      var.document_scan_mapping_enabled && var.deploy_document_processing && var.serverless_runtime_enabled
+    )
+    error_message = "The GuardDuty scan rule requires an already-enabled processor mapping and active reviewed runtime."
+  }
+}
+
+variable "document_processor_artifact_s3_key" {
+  type    = string
+  default = ""
+}
+
+variable "document_processor_artifact_s3_object_version" {
+  type    = string
+  default = ""
+}
+
+variable "document_processor_artifact_sha256" {
+  type    = string
+  default = ""
+  validation {
+    condition     = var.document_processor_artifact_sha256 == "" || can(regex("^[a-f0-9]{64}$", var.document_processor_artifact_sha256))
+    error_message = "Document processor artifact SHA-256 must be empty or 64 lowercase hexadecimal characters."
+  }
+}
+
+variable "document_processor_artifact_base64sha256" {
+  type    = string
+  default = ""
+  validation {
+    condition     = var.document_processor_artifact_base64sha256 == "" || can(regex("^[A-Za-z0-9+/]{43}=$", var.document_processor_artifact_base64sha256))
+    error_message = "Document processor artifact base64 SHA-256 must be empty or canonical."
+  }
+}
+
+variable "document_parser_artifact_s3_key" {
+  type    = string
+  default = ""
+}
+
+variable "document_parser_artifact_s3_object_version" {
+  type    = string
+  default = ""
+}
+
+variable "document_parser_artifact_sha256" {
+  type    = string
+  default = ""
+  validation {
+    condition     = var.document_parser_artifact_sha256 == "" || can(regex("^[a-f0-9]{64}$", var.document_parser_artifact_sha256))
+    error_message = "Document parser artifact SHA-256 must be empty or 64 lowercase hexadecimal characters."
+  }
+}
+
+variable "document_parser_artifact_base64sha256" {
+  type    = string
+  default = ""
+  validation {
+    condition     = var.document_parser_artifact_base64sha256 == "" || can(regex("^[A-Za-z0-9+/]{43}=$", var.document_parser_artifact_base64sha256))
+    error_message = "Document parser artifact base64 SHA-256 must be empty or canonical."
+  }
+}
+
+variable "document_processor_extension_layer_arn" {
+  type    = string
+  default = ""
+  validation {
+    condition = var.document_processor_extension_layer_arn == "" || can(regex(
+      "^arn:aws:lambda:us-east-2:[0-9]{12}:layer:AWS-Parameters-and-Secrets-Lambda-Extension:[0-9]+$",
+      var.document_processor_extension_layer_arn
+    ))
+    error_message = "The document processor extension must be an exact versioned AWS layer ARN in us-east-2."
+  }
+}
+
+variable "document_parser_version" {
+  type    = string
+  default = "resume-parser-v1"
+  validation {
+    condition     = can(regex("^[A-Za-z0-9._-]{1,64}$", var.document_parser_version))
+    error_message = "Document parser version must be a stable one-to-64-character identifier."
+  }
+}
+
 variable "deploy_serverless_outbox" {
   description = "Dark-deploy the disabled SQS starter and scheduled reconciler without changing normal event routing."
   type        = bool

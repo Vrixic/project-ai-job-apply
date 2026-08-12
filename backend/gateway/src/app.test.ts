@@ -42,6 +42,10 @@ class MemoryProfileStore implements ProfileStore {
     { hash: string; response: PutJobPreferencesResponse }
   >();
 
+  seedFact(fact: ProfileFact): void {
+    this.facts.set(fact.id, fact);
+  }
+
   async resolveUser(principal: AuthPrincipal): Promise<CurrentUser> {
     this.resolveUserCalls += 1;
     this.user ??= { id: uuidv7(), ...(principal.email ? { email: principal.email } : {}) };
@@ -93,8 +97,12 @@ class MemoryProfileStore implements ProfileStore {
     const facts = [...this.facts.values()];
     return {
       facts,
-      confirmedCount: facts.filter((fact) => fact.verification === "confirmed").length,
-      proposedCount: facts.filter((fact) => fact.verification === "proposed").length,
+      confirmedCount: facts.filter(
+        (fact) => fact.verification === "confirmed" && fact.availability?.state !== "invalidated",
+      ).length,
+      proposedCount: facts.filter(
+        (fact) => fact.verification === "proposed" && fact.availability?.state !== "invalidated",
+      ).length,
     };
   }
 
@@ -464,6 +472,57 @@ describe("candidate API", () => {
     });
     expect(stale.statusCode).toBe(409);
     expect(stale.json().code).toBe("version_conflict");
+  });
+
+  it("returns proposal evidence and additive system availability without sensitive source data", async () => {
+    const token = await issuer.issue("candidate-profile-proposal");
+    const factId = uuidv7();
+    const documentId = uuidv7();
+    store.seedFact({
+      id: factId,
+      kind: "skill",
+      key: "skill",
+      value: "TypeScript",
+      verification: "confirmed",
+      availability: { state: "invalidated", reasonCode: "source_security_hold" },
+      sensitivity: "standard",
+      source: { type: "resume", reference: `resume:${documentId}:v1:resume-parser-v1` },
+      evidence: {
+        supportingSpans: [
+          {
+            documentId,
+            documentVersion: 1,
+            parserVersion: "resume-parser-v1",
+            blockIndex: 0,
+            startOffset: 8,
+            endOffset: 18,
+            page: 1,
+          },
+        ],
+      },
+      version: 2,
+      createdAt: "2026-08-12T12:00:00.000Z",
+      updatedAt: "2026-08-12T12:05:00.000Z",
+    });
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/profile/facts",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      facts: expect.arrayContaining([
+        expect.objectContaining({
+          id: factId,
+          verification: "confirmed",
+          availability: { state: "invalidated", reasonCode: "source_security_hold" },
+          evidence: { supportingSpans: [expect.objectContaining({ documentId, blockIndex: 0 })] },
+        }),
+      ]),
+    });
+    expect(response.body).not.toContain("objectKey");
+    expect(response.body).not.toContain("sha256");
+    expect(response.body).not.toContain("excerpt");
   });
 
   it("returns an active redacted job only with the dedicated read scope", async () => {

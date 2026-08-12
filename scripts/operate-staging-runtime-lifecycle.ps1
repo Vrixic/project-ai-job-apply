@@ -60,13 +60,15 @@ The lifecycle is deliberately two-step when turning staging off:
 Quiesced disables every public route and workflow trigger, verifies empty queues, and removes RDS
 deletion protection while retaining the database. Dormant then destroys the disposable synthetic
 RDS instance, its Terraform-managed current connection value, database alarms/migration task, and
-the three hourly interface endpoints. It retains encrypted Terraform state, KMS, artifacts, ECR,
+the hourly interface endpoints plus the document processor's S3 gateway endpoint when that
+capability is deployed. It retains encrypted Terraform state, KMS, artifacts, ECR,
 IAM, queues/DLQs, logs, alarms, API/Lambda definitions, and cost controls.
 
 Activation is also dark-first:
   dormant -> active -> migrate/verify -> separately enable serverless traffic
 
-Traffic enablement creates exactly three routes and enables exactly three workflow triggers only
+Base traffic enablement creates exactly three routes and enables the outbox mapping plus its two
+EventBridge rules only
 after active data-plane verification. Traffic disablement is the exact inverse and requires empty
 queues. Neither traffic transition may change artifacts, data resources, IAM, or observability.
 
@@ -110,6 +112,13 @@ $allowedVariableNames = @(
   "profile_readiness_activity_artifact_base64sha256",
   "profile_readiness_lambda_extension_layer_arn",
   "profile_readiness_execution_timeout_seconds", "profile_readiness_retention_days",
+  "deploy_document_processing", "document_scan_mapping_enabled",
+  "document_scan_event_rule_enabled",
+  "document_processor_artifact_s3_key", "document_processor_artifact_s3_object_version",
+  "document_processor_artifact_sha256", "document_processor_artifact_base64sha256",
+  "document_processor_extension_layer_arn", "document_parser_artifact_s3_key",
+  "document_parser_artifact_s3_object_version", "document_parser_artifact_sha256",
+  "document_parser_artifact_base64sha256", "document_parser_version",
   "serverless_runtime_enabled"
 )
 
@@ -218,6 +227,10 @@ function Set-VariablesFromAppliedPlan {
   }
   $env:TF_VAR_staging_runtime_mode = $StagingMode
   $env:TF_VAR_serverless_runtime_enabled = $RuntimeEnabled.ToString().ToLowerInvariant()
+  # General staging lifecycle changes never activate untrusted document processing. The mapping
+  # and exact GuardDuty rule require their own reviewed, sequential activation plans.
+  $env:TF_VAR_document_scan_mapping_enabled = "false"
+  $env:TF_VAR_document_scan_event_rule_enabled = "false"
 }
 
 function Get-Database {
@@ -234,7 +247,7 @@ function Get-ManagedEndpointCount {
   if (-not $vpcId) { throw "The staging VPC output is unavailable." }
   $result = Invoke-AwsJson @(
     "ec2", "describe-vpc-endpoints", "--filters", "Name=vpc-id,Values=$vpcId",
-    "Name=service-name,Values=com.amazonaws.$Region.secretsmanager,com.amazonaws.$Region.sqs,com.amazonaws.$Region.lambda",
+    "Name=service-name,Values=com.amazonaws.$Region.secretsmanager,com.amazonaws.$Region.sqs,com.amazonaws.$Region.lambda,com.amazonaws.$Region.sts",
     "--output", "json"
   )
   return @($result.VpcEndpoints | Where-Object { $_.State -notin @("deleted", "deleting") }).Count
@@ -245,9 +258,14 @@ function Get-QueueDepth {
   foreach ($queueName in @(
       "ai-job-apply-staging-events",
       "ai-job-apply-staging-dead-letter",
-      "ai-job-apply-staging-profile-readiness-dead-letter"
+      "ai-job-apply-staging-profile-readiness-dead-letter",
+      "ai-job-apply-staging-document-scan-results",
+      "ai-job-apply-staging-document-scan-dlq",
+      "ai-job-apply-staging-document-scan-delivery-dlq"
     )) {
-    $urlResult = Invoke-AwsJson @("sqs", "get-queue-url", "--queue-name", $queueName, "--output", "json")
+    $rawUrl = & aws sqs get-queue-url --queue-name $queueName --output json 2>$null
+    if ($LASTEXITCODE -ne 0) { continue }
+    $urlResult = $rawUrl | ConvertFrom-Json
     $attributes = Invoke-AwsJson @(
       "sqs", "get-queue-attributes", "--queue-url", [string]$urlResult.QueueUrl,
       "--attribute-names", "ApproximateNumberOfMessages", "ApproximateNumberOfMessagesNotVisible",
@@ -280,6 +298,16 @@ function Get-TriggerState {
         "ai-job-apply-staging-outbox-starter:staging", "--output", "json"
       )).EventSourceMappings)
   $enabledMappings = @($mapping | Where-Object { $_.State -in @("Enabled", "Enabling") }).Count
+  $documentProcessorPresent = $false
+  $documentMappingRaw = & aws lambda list-event-source-mappings --function-name `
+    "ai-job-apply-staging-document-processor:staging" --output json 2>$null
+  if ($LASTEXITCODE -eq 0) {
+    $documentProcessorPresent = $true
+    $documentMappings = @(($documentMappingRaw | ConvertFrom-Json).EventSourceMappings)
+    $enabledMappings += @($documentMappings | Where-Object {
+        $_.State -in @("Enabled", "Enabling")
+      }).Count
+  }
   $enabledRules = 0
   foreach ($ruleName in @(
       "ai-job-apply-staging-outbox-reconciler",
@@ -288,7 +316,21 @@ function Get-TriggerState {
     $rule = Invoke-AwsJson @("events", "describe-rule", "--name", $ruleName, "--output", "json")
     if ([string]$rule.State -eq "ENABLED") { $enabledRules++ }
   }
-  return [pscustomobject]@{ EnabledMappings = $enabledMappings; EnabledRules = $enabledRules }
+  if ($documentProcessorPresent) {
+    foreach ($documentRuleName in @(
+        "ai-job-apply-staging-document-scan-results",
+        "ai-job-apply-staging-document-processing-reconciler"
+      )) {
+      $documentRuleRaw = & aws events describe-rule --name $documentRuleName --output json 2>$null
+      if ($LASTEXITCODE -ne 0) { throw "A deployed document-processing rule is unavailable." }
+      if ([string](($documentRuleRaw | ConvertFrom-Json).State) -eq "ENABLED") { $enabledRules++ }
+    }
+  }
+  return [pscustomobject]@{
+    EnabledMappings          = $enabledMappings
+    EnabledRules             = $enabledRules
+    DocumentProcessorPresent = $documentProcessorPresent
+  }
 }
 
 function Get-LifecycleStatus {
@@ -297,14 +339,16 @@ function Get-LifecycleStatus {
   $routeCount = Get-PublicRouteCount
   $triggerState = Get-TriggerState
   $queueDepth = Get-QueueDepth
+  $activeEndpointCount = if ($triggerState.DocumentProcessorPresent) { 4 } else { 3 }
   $mode = if (
     $null -eq $database -and $endpoints -eq 0 -and $routeCount -eq 0 -and
     $triggerState.EnabledMappings -eq 0 -and $triggerState.EnabledRules -eq 0
   ) { "dormant" }
     elseif ($null -ne $database -and -not [bool]$database.DeletionProtection -and
-      $endpoints -eq 3 -and $routeCount -eq 0 -and $triggerState.EnabledMappings -eq 0 -and
+      $endpoints -eq $activeEndpointCount -and $routeCount -eq 0 -and $triggerState.EnabledMappings -eq 0 -and
       $triggerState.EnabledRules -eq 0) { "quiesced" }
-    elseif ($null -ne $database -and [bool]$database.DeletionProtection -and $endpoints -eq 3) { "active" }
+    elseif ($null -ne $database -and [bool]$database.DeletionProtection -and
+      $endpoints -eq $activeEndpointCount) { "active" }
     else { "transition-or-drift" }
 
   return [pscustomobject]@{
@@ -316,6 +360,7 @@ function Get-LifecycleStatus {
     PublicRuntimeRoutes        = $routeCount
     EnabledEventMappings       = $triggerState.EnabledMappings
     EnabledEventRules          = $triggerState.EnabledRules
+    DocumentProcessorPresent   = $triggerState.DocumentProcessorPresent
     AggregateQueueDepth        = $queueDepth
   }
 }
@@ -344,6 +389,7 @@ function Assert-TransitionPreconditions {
 function Assert-PlanBoundary {
   param([Parameter(Mandatory)][object]$Plan)
 
+  $documentProcessingDeployed = [bool]$Plan.variables.deploy_document_processing.value
   $changes = @($Plan.resource_changes | Where-Object {
       (@($_.change.actions) -join ",") -ne "no-op"
     })
@@ -366,8 +412,11 @@ function Assert-PlanBoundary {
       'module.platform.aws_apigatewayv2_route.gateway_lambda_public["GET /health/live"]',
       'module.platform.aws_apigatewayv2_route.gateway_lambda_public["GET /health/ready"]',
       "module.platform.aws_lambda_event_source_mapping.outbox_starter[0]",
+      "module.platform.aws_lambda_event_source_mapping.document_scan_results[0]",
       "module.platform.aws_cloudwatch_event_rule.outbox_reconciler[0]",
-      "module.platform.aws_cloudwatch_event_rule.profile_readiness_terminal[0]"
+      "module.platform.aws_cloudwatch_event_rule.profile_readiness_terminal[0]",
+      "module.platform.aws_cloudwatch_event_rule.document_scan_results[0]",
+      "module.platform.aws_cloudwatch_event_rule.document_processing_reconciler[0]"
     )
     $unexpected = @($changes | Where-Object { $_.address -notin $allowedAddresses })
     if ($unexpected.Count -ne 0) {
@@ -386,16 +435,17 @@ function Assert-PlanBoundary {
           $_.address -like "module.platform.aws_cloudwatch_event_rule.*") -and
         (@($_.change.actions) -join ",") -eq "update"
       })
+    $expectedTriggerUpdates = if ($triggerUpdates.Count -eq 6) { 6 } else { 3 }
     $liveTransition = (
-      $changes.Count -eq 7 -and $databaseChange.Count -eq 1 -and
-      $routeDeletes.Count -eq 3 -and $triggerUpdates.Count -eq 3
+      $changes.Count -eq (4 + $expectedTriggerUpdates) -and $databaseChange.Count -eq 1 -and
+      $routeDeletes.Count -eq 3 -and $triggerUpdates.Count -eq $expectedTriggerUpdates
     )
     $darkTransition = (
       $changes.Count -eq 1 -and $databaseChange.Count -eq 1 -and
       $routeDeletes.Count -eq 0 -and $triggerUpdates.Count -eq 0
     )
     if (-not $liveTransition -and -not $darkTransition) {
-      throw "Quiescence must update database protection plus either the exact six live traffic actions or no already-dark traffic action."
+      throw "Quiescence must update database protection plus the exact enabled traffic/processing actions or no already-dark action."
     }
     if (
       -not [bool]$databaseChange[0].change.before.deletion_protection -or
@@ -412,14 +462,16 @@ function Assert-PlanBoundary {
         })
       if (
         $mappingChange.Count -ne 1 -or
-        -not [bool]$mappingChange[0].change.before.enabled -or
-        [bool]$mappingChange[0].change.after.enabled -or
+        @($triggerUpdates | Where-Object {
+            $_.address -like "module.platform.aws_lambda_event_source_mapping.*" -and
+            (-not [bool]$_.change.before.enabled -or [bool]$_.change.after.enabled)
+          }).Count -ne 0 -or
         @($ruleChanges | Where-Object {
             [string]$_.change.before.state -ne "ENABLED" -or
             [string]$_.change.after.state -ne "DISABLED"
           }).Count -ne 0
       ) {
-        throw "Quiescence must disable the exact mapping and both EventBridge rules."
+        throw "Quiescence must disable every exact managed mapping and EventBridge rule."
       }
     }
   }
@@ -433,7 +485,9 @@ function Assert-PlanBoundary {
       "module.platform.aws_secretsmanager_secret_version.database_url[0]",
       "module.platform.aws_vpc_endpoint.lambda[0]",
       "module.platform.aws_vpc_endpoint.secretsmanager[0]",
-      "module.platform.aws_vpc_endpoint.sqs[0]"
+      "module.platform.aws_vpc_endpoint.sqs[0]",
+      "module.platform.aws_vpc_endpoint.sts[0]",
+      "module.platform.aws_vpc_endpoint.candidate_documents_s3[0]"
     )
     $unexpected = @($changes | Where-Object { $_.address -notin $allowedAddresses })
     if ($unexpected.Count -ne 0) {
@@ -447,8 +501,10 @@ function Assert-PlanBoundary {
         $_.address -ne "module.platform.aws_cloudwatch_dashboard.operations" -and
         (@($_.change.actions) -join ",") -eq "delete"
       })
-    if ($changes.Count -ne 9 -or $dashboardUpdates.Count -ne 1 -or $expectedDeletes.Count -ne 8) {
-      throw "Dormant mode must contain exactly eight disposable-resource deletes and one dashboard update."
+    $expectedDisposableCount = if ($documentProcessingDeployed) { 10 } else { 8 }
+    if ($changes.Count -ne (1 + $expectedDisposableCount) -or $dashboardUpdates.Count -ne 1 -or
+      $expectedDeletes.Count -ne $expectedDisposableCount) {
+      throw "Dormant mode must delete the exact disposable data plane and update one dashboard."
     }
   }
   if ($TargetMode -eq "active") {
@@ -461,7 +517,9 @@ function Assert-PlanBoundary {
       "module.platform.aws_secretsmanager_secret_version.database_url[0]",
       "module.platform.aws_vpc_endpoint.lambda[0]",
       "module.platform.aws_vpc_endpoint.secretsmanager[0]",
-      "module.platform.aws_vpc_endpoint.sqs[0]"
+      "module.platform.aws_vpc_endpoint.sqs[0]",
+      "module.platform.aws_vpc_endpoint.sts[0]",
+      "module.platform.aws_vpc_endpoint.candidate_documents_s3[0]"
     )
     $unexpected = @($changes | Where-Object { $_.address -notin $allowedAddresses })
     if ($unexpected.Count -ne 0) {
@@ -475,8 +533,10 @@ function Assert-PlanBoundary {
         $_.address -ne "module.platform.aws_cloudwatch_dashboard.operations" -and
         (@($_.change.actions) -join ",") -eq "create"
       })
-    if ($changes.Count -ne 9 -or $dashboardUpdates.Count -ne 1 -or $expectedCreates.Count -ne 8) {
-      throw "Dark activation must contain exactly eight disposable-resource creates and one dashboard update."
+    $expectedDisposableCount = if ($documentProcessingDeployed) { 10 } else { 8 }
+    if ($changes.Count -ne (1 + $expectedDisposableCount) -or $dashboardUpdates.Count -ne 1 -or
+      $expectedCreates.Count -ne $expectedDisposableCount) {
+      throw "Dark activation must create the exact disposable data plane and update one dashboard."
     }
     $databaseCreate = @($expectedCreates | Where-Object {
         $_.address -eq "module.platform.aws_db_instance.postgres[0]"
@@ -490,17 +550,32 @@ function Assert-PlanBoundary {
     ) {
       throw "Dark activation must create one encrypted private protected database with seven-day backups."
     }
-    $endpointCreates = @($expectedCreates | Where-Object {
-        $_.address -like "module.platform.aws_vpc_endpoint.*"
+    $interfaceEndpointCreates = @($expectedCreates | Where-Object {
+        $_.address -in @(
+          "module.platform.aws_vpc_endpoint.lambda[0]",
+          "module.platform.aws_vpc_endpoint.secretsmanager[0]",
+          "module.platform.aws_vpc_endpoint.sqs[0]",
+          "module.platform.aws_vpc_endpoint.sts[0]"
+        )
       })
+    $expectedInterfaceEndpointCount = if ($documentProcessingDeployed) { 4 } else { 3 }
     if (
-      $endpointCreates.Count -ne 3 -or
-      @($endpointCreates | Where-Object {
+      $interfaceEndpointCreates.Count -ne $expectedInterfaceEndpointCount -or
+      @($interfaceEndpointCreates | Where-Object {
           [string]$_.change.after.vpc_endpoint_type -ne "Interface" -or
           -not [bool]$_.change.after.private_dns_enabled
         }).Count -ne 0
     ) {
-      throw "Dark activation must create exactly three private-DNS interface endpoints."
+      throw "Dark activation must create the exact private-DNS interface endpoints for the deployed runtime."
+    }
+    $s3GatewayCreates = @($expectedCreates | Where-Object {
+        $_.address -eq "module.platform.aws_vpc_endpoint.candidate_documents_s3[0]"
+      })
+    if (($documentProcessingDeployed -and
+        ($s3GatewayCreates.Count -ne 1 -or
+          [string]$s3GatewayCreates[0].change.after.vpc_endpoint_type -ne "Gateway")) -or
+      (-not $documentProcessingDeployed -and $s3GatewayCreates.Count -ne 0)) {
+      throw "Document processing activation must create exactly one S3 gateway endpoint."
     }
   }
   return $changes
@@ -510,7 +585,8 @@ function Assert-TrafficPreconditions {
   param([Parameter(Mandatory)][object]$Status)
 
   if ($Status.Mode -ne "active" -or -not $Status.DatabasePresent -or
-    -not $Status.DatabaseDeletionProtection -or $Status.ManagedInterfaceEndpoints -ne 3) {
+    -not $Status.DatabaseDeletionProtection -or
+    $Status.ManagedInterfaceEndpoints -ne $(if ($Status.DocumentProcessorPresent) { 4 } else { 3 })) {
     throw "Traffic transitions require the complete protected active staging data plane."
   }
   if ($Status.AggregateQueueDepth -ne 0) {
@@ -522,8 +598,11 @@ function Assert-TrafficPreconditions {
       throw "Traffic can be enabled only from the exact dark active boundary."
     }
   }
-  elseif ($Status.PublicRuntimeRoutes -ne 3 -or $Status.EnabledEventMappings -ne 1 -or
-    $Status.EnabledEventRules -ne 2) {
+  elseif ($Status.PublicRuntimeRoutes -ne 3 -or
+    ($Status.EnabledEventMappings -ne 1 -and $Status.EnabledEventMappings -ne 2) -or
+    ($Status.EnabledEventRules -ne 2 -and $Status.EnabledEventRules -ne 4) -or
+    ($Status.EnabledEventMappings -eq 2 -and $Status.EnabledEventRules -ne 4) -or
+    ($Status.EnabledEventMappings -eq 1 -and $Status.EnabledEventRules -ne 2)) {
     throw "Traffic can be disabled only from the exact enabled active boundary."
   }
 }
@@ -531,6 +610,7 @@ function Assert-TrafficPreconditions {
 function Assert-TrafficPlanBoundary {
   param([Parameter(Mandatory)][object]$Plan)
 
+  $documentIntakeDeployed = [bool]$Plan.variables.deploy_document_intake.value
   $changes = @($Plan.resource_changes | Where-Object {
       (@($_.change.actions) -join ",") -ne "no-op"
     })
@@ -539,8 +619,11 @@ function Assert-TrafficPlanBoundary {
     'module.platform.aws_apigatewayv2_route.gateway_lambda_public["GET /health/live"]',
     'module.platform.aws_apigatewayv2_route.gateway_lambda_public["GET /health/ready"]',
     "module.platform.aws_lambda_event_source_mapping.outbox_starter[0]",
+    "module.platform.aws_lambda_event_source_mapping.document_scan_results[0]",
     "module.platform.aws_cloudwatch_event_rule.outbox_reconciler[0]",
-    "module.platform.aws_cloudwatch_event_rule.profile_readiness_terminal[0]"
+    "module.platform.aws_cloudwatch_event_rule.profile_readiness_terminal[0]",
+    "module.platform.aws_cloudwatch_event_rule.document_scan_results[0]",
+    "module.platform.aws_cloudwatch_event_rule.document_processing_reconciler[0]"
   )
   $unexpected = @($changes | Where-Object { $_.address -notin $allowedAddresses })
   if ($unexpected.Count -ne 0) {
@@ -549,34 +632,39 @@ function Assert-TrafficPlanBoundary {
   $replacements = @($changes | Where-Object {
       "create" -in @($_.change.actions) -and "delete" -in @($_.change.actions)
     })
-  if ($changes.Count -ne 6 -or $replacements.Count -ne 0) {
-    throw "The traffic plan must contain exactly three route actions and three trigger updates without replacement."
+  $expectedChangeCounts = if ($TrafficTarget -eq "enabled") { @(6) } else { @(6, 9) }
+  if ($changes.Count -notin $expectedChangeCounts -or $replacements.Count -ne 0) {
+    throw "The traffic plan must contain three route actions and the exact base workflow trigger updates without replacement."
   }
 
   $routeChanges = @($changes | Where-Object {
       $_.address -like "module.platform.aws_apigatewayv2_route.*"
     })
   $mappingChanges = @($changes | Where-Object {
-      $_.address -eq "module.platform.aws_lambda_event_source_mapping.outbox_starter[0]"
+      $_.address -like "module.platform.aws_lambda_event_source_mapping.*"
     })
   $ruleChanges = @($changes | Where-Object {
       $_.address -like "module.platform.aws_cloudwatch_event_rule.*"
     })
-  if ($routeChanges.Count -ne 3 -or $mappingChanges.Count -ne 1 -or $ruleChanges.Count -ne 2) {
+  $expectedTriggerCounts = if ($TrafficTarget -eq "enabled") { @(3) } else { @(3, 6) }
+  if ($routeChanges.Count -ne 3 -or $mappingChanges.Count -notin @(1, 2) -or
+    $ruleChanges.Count -notin @(2, 4) -or
+    $mappingChanges.Count + $ruleChanges.Count -notin $expectedTriggerCounts) {
     throw "The traffic plan does not contain the exact route, mapping, and EventBridge boundary."
   }
 
   if ($TrafficTarget -eq "enabled") {
     if (@($routeChanges | Where-Object { (@($_.change.actions) -join ",") -ne "create" }).Count -ne 0 -or
-      (@($mappingChanges[0].change.actions) -join ",") -ne "update" -or
-      [bool]$mappingChanges[0].change.before.enabled -or
-      -not [bool]$mappingChanges[0].change.after.enabled -or
+      @($mappingChanges | Where-Object {
+          (@($_.change.actions) -join ",") -ne "update" -or
+          [bool]$_.change.before.enabled -or -not [bool]$_.change.after.enabled
+        }).Count -ne 0 -or
       @($ruleChanges | Where-Object {
           (@($_.change.actions) -join ",") -ne "update" -or
           [string]$_.change.before.state -ne "DISABLED" -or
           [string]$_.change.after.state -ne "ENABLED"
         }).Count -ne 0) {
-      throw "Traffic enablement must create three routes and enable the exact three workflow triggers."
+      throw "Traffic enablement must create three routes and enable the exact three base workflow triggers."
     }
     $defaultRoute = @($routeChanges | Where-Object {
         $_.address -eq "module.platform.aws_apigatewayv2_route.gateway[0]"
@@ -588,9 +676,11 @@ function Assert-TrafficPlanBoundary {
       throw "Traffic enablement must contain one default route and two public health routes."
     }
     $scopes = @($defaultRoute[0].change.after.authorization_scopes | Sort-Object)
+    $expectedScopes = @("jobs:read", "profile:read", "profile:write")
+    if ($documentIntakeDeployed) { $expectedScopes += @("documents:read", "documents:write") }
     if (
       [string]$defaultRoute[0].change.after.authorization_type -ne "JWT" -or
-      (@($scopes) -join ",") -ne "jobs:read,profile:read,profile:write" -or
+      (@($scopes) -join ",") -ne (@($expectedScopes | Sort-Object) -join ",") -or
       @($publicRoutes | Where-Object {
           [string]$_.change.after.authorization_type -ne "NONE"
         }).Count -ne 0) {
@@ -599,15 +689,16 @@ function Assert-TrafficPlanBoundary {
   }
   else {
     if (@($routeChanges | Where-Object { (@($_.change.actions) -join ",") -ne "delete" }).Count -ne 0 -or
-      (@($mappingChanges[0].change.actions) -join ",") -ne "update" -or
-      -not [bool]$mappingChanges[0].change.before.enabled -or
-      [bool]$mappingChanges[0].change.after.enabled -or
+      @($mappingChanges | Where-Object {
+          (@($_.change.actions) -join ",") -ne "update" -or
+          -not [bool]$_.change.before.enabled -or [bool]$_.change.after.enabled
+        }).Count -ne 0 -or
       @($ruleChanges | Where-Object {
           (@($_.change.actions) -join ",") -ne "update" -or
           [string]$_.change.before.state -ne "ENABLED" -or
           [string]$_.change.after.state -ne "DISABLED"
         }).Count -ne 0) {
-      throw "Traffic disablement must delete three routes and disable the exact three workflow triggers."
+      throw "Traffic disablement must delete three routes and disable the exact three base workflow triggers."
     }
   }
   return $changes

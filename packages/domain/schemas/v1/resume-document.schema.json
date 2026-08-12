@@ -3,10 +3,19 @@
   "$id": "https://schemas.ai-job-apply.internal/domain/v1/resume-document.schema.json",
   "title": "ResumeDocumentV1",
   "type": "object",
-  "required": ["documentId", "version", "mediaType", "sourceSha256", "blocks", "createdAt"],
+  "required": [
+    "documentId",
+    "version",
+    "parserVersion",
+    "mediaType",
+    "sourceSha256",
+    "blocks",
+    "createdAt"
+  ],
   "properties": {
     "documentId": { "type": "string", "format": "uuid" },
     "version": { "type": "integer", "minimum": 1 },
+    "parserVersion": { "type": "string", "minLength": 1, "maxLength": 64 },
     "mediaType": {
       "type": "string",
       "enum": [

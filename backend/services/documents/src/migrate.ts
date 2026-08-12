@@ -8,7 +8,7 @@ if (!databaseUrl) {
   throw new Error("DATABASE_URL is required");
 }
 
-const migrationVersions = ["0001_resume_intake"] as const;
+const migrationVersions = ["0001_resume_intake", "0002_resume_processing"] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
     const path = fileURLToPath(new URL(`../../migrations/${version}.sql`, import.meta.url));
@@ -55,6 +55,7 @@ try {
           (to_regclass('documents.idempotency_keys') IS NOT NULL)::int +
           (to_regclass('documents.processing_receipts') IS NOT NULL)::int +
           (to_regclass('documents.audit_events') IS NOT NULL)::int +
+          (to_regclass('documents.processing_dispositions') IS NOT NULL)::int +
           (to_regclass('documents.schema_migrations') IS NOT NULL)::int
         )::int AS "tableCount",
         (
@@ -64,14 +65,14 @@ try {
         (
           SELECT count(*)::int FROM pg_trigger
           WHERE tgrelid = 'documents.resume_documents'::regclass
-            AND tgname = 'resume_documents_protect_identity'
+            AND tgname IN ('resume_documents_protect_identity', 'resume_documents_enforce_transition')
             AND NOT tgisinternal
         ) AS "triggerCount"
     `;
     if (
-      verification?.tableCount !== 5 ||
+      verification?.tableCount !== 6 ||
       verification.migrationCount !== migrationVersions.length ||
-      verification.triggerCount !== 1
+      verification.triggerCount !== 2
     ) {
       throw new Error("Documents migration verification failed");
     }

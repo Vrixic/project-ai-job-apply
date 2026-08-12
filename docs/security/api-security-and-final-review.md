@@ -55,6 +55,8 @@ delivery evidence; this section is not approval of Phase 1 or later behavior.
 | `GET /v1/resumes` | Candidate | `documents:read`; candidate-owner predicate; metadata only | Implemented and locally tested as D1 work; not deployed or independently approved |
 | `POST /v1/resumes/uploads` | Candidate | `documents:write`; strict metadata schema; idempotency; candidate owner; no file bytes | Implemented and locally tested as D1 work; not deployed or independently approved |
 | Exact S3 resume-upload POST grant | Temporary object access | Five-minute expiry; one quarantine key/type/size/hash/KMS key; no read or list | Implemented and locally tested as D1 work; dark Terraform plan only |
+| GuardDuty scan-result consumer | AWS service event | Exact account/region/protection-plan/bucket/key/version; identifier-only transform; encrypted queue; at-least-once receipt | Implemented and locally verified; dark deployment pending |
+| Document parser invocation | Coordinator service | Exact numeric Lambda version; parser has no DB secret or general egress; exact clean S3 version only | Implemented and locally verified; dark deployment pending |
 
 There is no current public administrator, support, provider-webhook, temporary-object-download,
 WebSocket, extension, mobile, ATS, AI, billing, outreach, or remote-browser API. The D1 upload

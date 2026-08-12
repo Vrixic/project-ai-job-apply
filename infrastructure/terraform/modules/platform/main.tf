@@ -70,6 +70,63 @@ data "aws_iam_policy_document" "platform_kms" {
   }
 
   dynamic "statement" {
+    for_each = var.deploy_document_processing ? [1] : []
+    content {
+      sid    = "AllowEventBridgeDocumentScanQueueEncryption"
+      effect = "Allow"
+      actions = [
+        "kms:Decrypt",
+        "kms:GenerateDataKey"
+      ]
+      resources = ["*"]
+      principals {
+        type        = "Service"
+        identifiers = ["events.amazonaws.com"]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "aws:SourceAccount"
+        values   = [data.aws_caller_identity.current.account_id]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:SourceArn"
+        values = [
+          "arn:aws:events:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:rule/${var.name}-${var.environment}-document-scan-results",
+          "arn:aws:events:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:rule/${var.name}-${var.environment}-document-processing-reconciler"
+        ]
+      }
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.deploy_document_processing ? [1] : []
+    content {
+      sid       = "AllowEventBridgeDocumentOperationalAlertEncryption"
+      effect    = "Allow"
+      actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
+      resources = ["*"]
+      principals {
+        type        = "Service"
+        identifiers = ["events.amazonaws.com"]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "aws:SourceAccount"
+        values   = [data.aws_caller_identity.current.account_id]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:SourceArn"
+        values = [
+          "arn:aws:events:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:rule/${var.name}-${var.environment}-document-scan-tag-failure",
+          "arn:aws:events:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:rule/${var.name}-${var.environment}-document-scan-plan-unhealthy"
+        ]
+      }
+    }
+  }
+
+  dynamic "statement" {
     for_each = var.deploy_profile_readiness_durable ? [1] : []
     content {
       sid    = "AllowEventBridgeTerminalDlqEncryption"
@@ -271,6 +328,33 @@ data "aws_iam_policy_document" "operational_alerts" {
     principals {
       type        = "AWS"
       identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.deploy_document_processing ? [1] : []
+    content {
+      sid       = "AllowExactDocumentOperationalRules"
+      effect    = "Allow"
+      actions   = ["SNS:Publish"]
+      resources = [aws_sns_topic.operational_alerts.arn]
+      principals {
+        type        = "Service"
+        identifiers = ["events.amazonaws.com"]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "aws:SourceAccount"
+        values   = [data.aws_caller_identity.current.account_id]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:SourceArn"
+        values = [
+          "arn:aws:events:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:rule/${var.name}-${var.environment}-document-scan-tag-failure",
+          "arn:aws:events:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:rule/${var.name}-${var.environment}-document-scan-plan-unhealthy"
+        ]
+      }
     }
   }
 
@@ -1096,7 +1180,7 @@ resource "aws_iam_role_policy" "gateway_lambda" {
 }
 
 resource "aws_security_group" "secrets_endpoint" {
-  count       = var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable ? 1 : 0
+  count       = var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || var.deploy_document_processing ? 1 : 0
   name_prefix = "${var.name}-${var.environment}-secrets-endpoint-"
   description = "TLS from private application functions to the Secrets Manager endpoint"
   vpc_id      = aws_vpc.this.id
@@ -1110,7 +1194,7 @@ resource "aws_security_group" "secrets_endpoint" {
 }
 
 data "aws_iam_policy_document" "secrets_endpoint" {
-  count = var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable ? 1 : 0
+  count = var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || var.deploy_document_processing ? 1 : 0
 
   statement {
     sid       = "ExactMigrationExecutionRoleDatabaseSecret"
@@ -1146,7 +1230,8 @@ data "aws_iam_policy_document" "secrets_endpoint" {
         var.deploy_serverless_outbox ? aws_iam_role.outbox_starter[0].arn : "",
         var.deploy_serverless_outbox ? aws_iam_role.outbox_reconciler[0].arn : "",
         var.deploy_profile_readiness_durable ? aws_iam_role.profile_readiness_activity[0].arn : "",
-        var.deploy_profile_readiness_durable ? aws_iam_role.profile_readiness_terminal[0].arn : ""
+        var.deploy_profile_readiness_durable ? aws_iam_role.profile_readiness_terminal[0].arn : "",
+        var.deploy_document_processing ? aws_iam_role.document_processor[0].arn : ""
       ])
     }
   }
@@ -1155,7 +1240,7 @@ data "aws_iam_policy_document" "secrets_endpoint" {
 resource "aws_vpc_endpoint" "secretsmanager" {
   count = (
     var.persistent_data_plane_enabled && (
-      var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable
+      var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || var.deploy_document_processing
     )
   ) ? 1 : 0
   vpc_id              = aws_vpc.this.id
@@ -1464,37 +1549,54 @@ resource "aws_iam_role_policy" "outbox_reconciler" {
 }
 
 data "aws_iam_policy_document" "outbox_sqs_endpoint" {
-  count = var.deploy_serverless_outbox ? 1 : 0
+  count = var.deploy_serverless_outbox || var.deploy_document_processing ? 1 : 0
 
-  statement {
-    sid    = "ExactOutboxRolesOnly"
-    effect = "Allow"
-    actions = [
-      "sqs:ChangeMessageVisibility",
-      "sqs:DeleteMessage",
-      "sqs:GetQueueAttributes",
-      "sqs:ReceiveMessage",
-      "sqs:SendMessage"
-    ]
-    resources = [aws_sqs_queue.events.arn]
-    principals {
-      type        = "*"
-      identifiers = ["*"]
+  dynamic "statement" {
+    for_each = var.deploy_serverless_outbox ? [1] : []
+    content {
+      sid    = "ExactOutboxRolesOnly"
+      effect = "Allow"
+      actions = [
+        "sqs:ChangeMessageVisibility",
+        "sqs:DeleteMessage",
+        "sqs:GetQueueAttributes",
+        "sqs:ReceiveMessage",
+        "sqs:SendMessage"
+      ]
+      resources = [aws_sqs_queue.events.arn]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values = compact([
+          aws_iam_role.outbox_starter[0].arn,
+          aws_iam_role.outbox_reconciler[0].arn,
+          var.deploy_gateway_lambda ? aws_iam_role.gateway_lambda[0].arn : ""
+        ])
+      }
     }
-    condition {
-      test     = "ArnEquals"
-      variable = "aws:PrincipalArn"
-      values = compact([
-        aws_iam_role.outbox_starter[0].arn,
-        aws_iam_role.outbox_reconciler[0].arn,
-        var.deploy_gateway_lambda ? aws_iam_role.gateway_lambda[0].arn : ""
-      ])
+  }
+
+  dynamic "statement" {
+    for_each = var.deploy_document_processing ? [1] : []
+    content {
+      sid       = "ExactDocumentProcessorQueueOnly"
+      effect    = "Allow"
+      actions   = ["sqs:ChangeMessageVisibility", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ReceiveMessage"]
+      resources = [aws_sqs_queue.document_scan_results[0].arn]
+      principals {
+        type        = "AWS"
+        identifiers = [aws_iam_role.document_processor[0].arn]
+      }
     }
   }
 }
 
 resource "aws_vpc_endpoint" "sqs" {
-  count               = var.deploy_serverless_outbox && var.persistent_data_plane_enabled ? 1 : 0
+  count               = (var.deploy_serverless_outbox || var.deploy_document_processing) && var.persistent_data_plane_enabled ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.sqs"
   vpc_endpoint_type   = "Interface"
@@ -1505,27 +1607,44 @@ resource "aws_vpc_endpoint" "sqs" {
 }
 
 data "aws_iam_policy_document" "outbox_lambda_endpoint" {
-  count = var.deploy_serverless_outbox ? 1 : 0
+  count = var.deploy_serverless_outbox || var.deploy_document_processing ? 1 : 0
 
-  statement {
-    sid       = "StarterInvokesExactDurableVersionOnly"
-    effect    = "Allow"
-    actions   = ["lambda:InvokeFunction"]
-    resources = [local.profile_readiness_durable_version_arn]
-    principals {
-      type        = "*"
-      identifiers = ["*"]
+  dynamic "statement" {
+    for_each = var.deploy_serverless_outbox ? [1] : []
+    content {
+      sid       = "StarterInvokesExactDurableVersionOnly"
+      effect    = "Allow"
+      actions   = ["lambda:InvokeFunction"]
+      resources = [local.profile_readiness_durable_version_arn]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = [aws_iam_role.outbox_starter[0].arn]
+      }
     }
-    condition {
-      test     = "ArnEquals"
-      variable = "aws:PrincipalArn"
-      values   = [aws_iam_role.outbox_starter[0].arn]
+  }
+
+  dynamic "statement" {
+    for_each = var.deploy_document_processing ? [1] : []
+    content {
+      sid       = "CoordinatorInvokesExactParserVersionOnly"
+      effect    = "Allow"
+      actions   = ["lambda:InvokeFunction"]
+      resources = [aws_lambda_function.document_parser[0].qualified_arn]
+      principals {
+        type        = "AWS"
+        identifiers = [aws_iam_role.document_processor[0].arn]
+      }
     }
   }
 }
 
 resource "aws_vpc_endpoint" "lambda" {
-  count               = var.deploy_serverless_outbox && var.persistent_data_plane_enabled ? 1 : 0
+  count               = (var.deploy_serverless_outbox || var.deploy_document_processing) && var.persistent_data_plane_enabled ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.lambda"
   vpc_endpoint_type   = "Interface"
@@ -1533,6 +1652,37 @@ resource "aws_vpc_endpoint" "lambda" {
   subnet_ids          = [aws_subnet.private[0].id]
   security_group_ids  = [aws_security_group.secrets_endpoint[0].id]
   policy              = data.aws_iam_policy_document.outbox_lambda_endpoint[0].json
+}
+
+data "aws_iam_policy_document" "document_sts_endpoint" {
+  count = var.deploy_document_processing ? 1 : 0
+
+  statement {
+    sid       = "CoordinatorAssumesExactDocumentObjectRoleOnly"
+    effect    = "Allow"
+    actions   = ["sts:AssumeRole"]
+    resources = [aws_iam_role.document_parser_object_access[0].arn]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "ArnEquals"
+      variable = "aws:PrincipalArn"
+      values   = [aws_iam_role.document_processor[0].arn]
+    }
+  }
+}
+
+resource "aws_vpc_endpoint" "sts" {
+  count               = var.deploy_document_processing && var.persistent_data_plane_enabled ? 1 : 0
+  vpc_id              = aws_vpc.this.id
+  service_name        = "com.amazonaws.${data.aws_region.current.region}.sts"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+  subnet_ids          = [aws_subnet.private[0].id]
+  security_group_ids  = [aws_security_group.secrets_endpoint[0].id]
+  policy              = data.aws_iam_policy_document.document_sts_endpoint[0].json
 }
 
 resource "aws_lambda_function" "outbox_starter" {

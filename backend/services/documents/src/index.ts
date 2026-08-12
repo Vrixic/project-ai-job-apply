@@ -121,6 +121,14 @@ function requestHash(input: CreateResumeUploadRequest): string {
     .digest("hex");
 }
 
+function storedUploadResponse(
+  response: CreateResumeUploadResponse | string,
+): CreateResumeUploadResponse {
+  return typeof response === "string"
+    ? (JSON.parse(response) as CreateResumeUploadResponse)
+    : response;
+}
+
 export class PostgresDocumentStore implements DocumentStore {
   constructor(
     private readonly client: postgres.Sql,
@@ -166,7 +174,7 @@ export class PostgresDocumentStore implements DocumentStore {
       `;
         stage = "IDEMPOTENCY_READ";
         const prior = await transaction<
-          Array<{ requestHash: string; response: CreateResumeUploadResponse }>
+          Array<{ requestHash: string; response: CreateResumeUploadResponse | string }>
         >`
         SELECT request_hash AS "requestHash", response
         FROM documents.idempotency_keys
@@ -177,7 +185,7 @@ export class PostgresDocumentStore implements DocumentStore {
             throw new DocumentIdempotencyConflictError();
           }
           stage = "TRANSACTION_COMMIT";
-          return prior[0].response;
+          return storedUploadResponse(prior[0].response);
         }
 
         stage = "LIMIT_READ";
@@ -225,19 +233,18 @@ export class PostgresDocumentStore implements DocumentStore {
         )
       `;
         stage = "IDEMPOTENCY_INSERT";
-        const idempotencyResponse = JSON.stringify(response);
         await transaction`
         INSERT INTO documents.idempotency_keys (user_id, scope, key, request_hash, response)
-        VALUES (${userId}, ${scope}, ${idempotencyKey}, ${hash}, ${idempotencyResponse}::jsonb)
+        VALUES (${userId}, ${scope}, ${idempotencyKey}, ${hash}, ${transaction.json(response)}::jsonb)
       `;
         stage = "AUDIT_INSERT";
-        const auditMetadata = JSON.stringify({ version: 1, sizeBytes: input.sizeBytes });
+        const auditMetadata = { version: 1, sizeBytes: input.sizeBytes };
         await transaction`
         INSERT INTO documents.audit_events (
           id, user_id, action, document_id, trace_id, metadata
         ) VALUES (
           ${uuidv7()}, ${userId}, 'resume.upload.registered', ${documentId}, ${traceId},
-          ${auditMetadata}::jsonb
+          ${transaction.json(auditMetadata)}::jsonb
         )
       `;
         stage = "TRANSACTION_COMMIT";

@@ -6,7 +6,7 @@ import type {
   PutJobPreferencesRequest,
   PutJobPreferencesResponse,
 } from "@ai-job-apply/api-contracts";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { isIsolationOperationEligible } from "../lib/isolation-operation";
 import { ProfileFactsForm } from "./profile-facts-form";
 import { ResumeUploadForm } from "./resume-upload-form";
@@ -54,6 +54,11 @@ export function FoundationForm({
   displayName?: string;
   workloadConformanceEnabled: boolean;
 }) {
+  const [profileRefreshVersion, setProfileRefreshVersion] = useState(0);
+  const handleDocumentParsed = useCallback(
+    () => setProfileRefreshVersion((version) => version + 1),
+    [],
+  );
   const [targetRoles, setTargetRoles] = useState("Software Engineer");
   const [locations, setLocations] = useState("New York, NY");
   const [workMode, setWorkMode] = useState<"remote" | "hybrid" | "on_site">("remote");
@@ -450,8 +455,8 @@ export function FoundationForm({
         </button>
       </form>
 
-      <ProfileFactsForm authenticated={authenticated} />
-      <ResumeUploadForm authenticated={authenticated} />
+      <ProfileFactsForm authenticated={authenticated} refreshVersion={profileRefreshVersion} />
+      <ResumeUploadForm authenticated={authenticated} onDocumentParsed={handleDocumentParsed} />
 
       {!authConfigured && (
         <aside>

@@ -74,7 +74,9 @@ approve a diagram for:
 
 ### D1 resume intake and deterministic parsing design
 
-This is a source design until its exact resources and synthetic deployment evidence are recorded.
+The intake boundary is deployed in development. The processing boundary below is locally verified
+and remains dark until its exact artifacts, migration, infrastructure, and synthetic deployment
+evidence are recorded.
 
 ```mermaid
 flowchart LR
@@ -84,17 +86,28 @@ flowchart LR
   Candidate3 -->|bounded presigned POST| Quarantine[(Private KMS S3 quarantine)]
   Quarantine --> GuardDuty[GuardDuty malware scan]
   GuardDuty -->|identifier + disposition only| ScanEvents[EventBridge → encrypted SQS]
-  ScanEvents --> Processor[Private document processor]
-  Processor -->|tag + magic/size/archive verification| Quarantine
-  Processor -->|normalized encrypted tree| Normalized[(Private KMS S3 normalized prefix)]
-  Processor -->|status + object refs only| DocumentsDB
-  DocumentsDB -->|proposals + supporting spans| Candidate3
+  ScanEvents --> Coordinator[Private coordinator Lambda]
+  Coordinator -->|15-minute exact-object capability| STS[Private STS endpoint]
+  Coordinator -->|exact numeric invocation; identifiers + scoped capability| Parser[No-DB parser Lambda]
+  Parser -->|exact tag + metadata + magic/size/archive verification| Quarantine
+  Parser -->|deterministic encrypted tree| Normalized[(Private KMS S3 normalized prefix)]
+  Coordinator -->|verify exact normalized version| Normalized
+  Coordinator -->|status + object refs only| DocumentsDB
+  Coordinator -->|atomic import port| ProfileDB[(Profile proposed facts + immutable spans)]
+  ProfileDB -->|owner-scoped explicit review| Candidate3
 ```
 
 Resume bytes and extracted text exist only in the candidate device, quarantined/normalized object
 storage, and bounded processor memory. Events carry the bucket/object version and opaque document
 identity only. Telemetry records states, counts, byte/page/character totals, error codes, and
 opaque IDs without filenames, candidate values, object contents, or identity-provider subjects.
+The parser has no database secret, direct S3 role permission, application-log permission, trace
+permission, or routed internet path. Its temporary session is the intersection of a bounded base
+role and an inline exact-version/exact-output policy. AWS-managed DNS remains reachable and is a
+documented covert-channel risk, so the processing triggers remain synthetic-only until the exact
+deployed boundary and DNS treatment receive accountable review. The coordinator has database
+access but never receives or parses source bytes. Event validation binds the exact AWS account,
+region, GuardDuty protection-plan ARN, bucket, key pattern, and object version.
 
 ## Rights-flow design boundary
 

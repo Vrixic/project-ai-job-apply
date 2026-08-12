@@ -9,7 +9,8 @@ environment. This procedure never applies to production.
 Dormant staging retains encrypted Terraform state, KMS, S3 artifacts, ECR migration images, IAM,
 SQS/DLQs, API/Lambda definitions, logs/alarms, budgets, and CUR export. It removes PostgreSQL, the
 current generated database connection value, RDS alarms/current migration task definition, and the
-three hourly interface endpoints.
+hourly endpoints: three interface endpoints for the base runtime, plus the private STS interface and
+S3 gateway endpoints when document processing is deployed.
 
 Staging permits synthetic data only. Shutdown intentionally retains no database snapshot.
 
@@ -55,18 +56,19 @@ Then create the separate destructive `dormant` plan using the applied quiesce pl
 ```
 
 Review every delete and approve the exact checksum. The operator permits deletion only of the
-staging RDS instance, current Terraform secret value, three interface endpoints, two RDS alarms,
-and current migration task definition. After apply, require `Mode=dormant`, no database, zero
+staging RDS instance, current Terraform secret value, the applicable base/document-processing
+endpoints, two RDS alarms, and current migration task definition. After apply, require `Mode=dormant`, no database, zero
 managed interface endpoints, zero routes/triggers, empty queues, and retained control resources.
 
 ## Activate staging
 
-Create `active` from the last applied dormant plan. The activation plan must contain exactly eight
-disposable-resource creates and one operations-dashboard update: the database, three endpoints, two
-database alarms, current secret value, and migration task. It may delete or replace nothing and may
-not create or update a route or workflow trigger. The operator also requires encrypted non-public
-RDS with deletion protection and seven-day backups plus exactly three private-DNS interface
-endpoints.
+Create `active` from the last applied dormant plan. Without document processing, activation creates
+the eight base disposable resources: database, three interface endpoints, two database alarms,
+current secret value, and migration task. With document processing deployed, it additionally creates
+the private STS interface and S3 gateway endpoints, for ten creates total. Both forms update the
+operations dashboard once, may delete or replace nothing, and may not create or update a route or
+workflow trigger. The operator requires encrypted non-public RDS with deletion protection and
+seven-day backups; all interface endpoints use private DNS and the S3 endpoint is type `Gateway`.
 
 ```powershell
 .\scripts\operate-staging-runtime-lifecycle.ps1 -Action Plan -TargetMode active `
@@ -86,9 +88,11 @@ After checksum-reviewed apply, keep all routes and triggers disabled. Then:
 7. execute persistence, readiness, workload, tenant-isolation, restore/security tests required by
    that release candidate.
 
-Generate the traffic plan from the applied active plan. It must create exactly the JWT default
-route, two anonymous health routes, and enable the SQS mapping plus two EventBridge rules. It may
-change nothing else.
+Generate the base traffic plan from the applied active plan. It must create exactly the JWT default
+route and two anonymous health routes, then enable the outbox SQS mapping plus its reconciler and
+terminal EventBridge rules. Document scan processing remains independently dark and requires the
+mapping/reconciler-first, GuardDuty-rule-second release described by its D1 evidence. It may change
+nothing else.
 
 ```powershell
 .\scripts\operate-staging-runtime-lifecycle.ps1 -Action PlanTraffic -TrafficTarget enabled `
@@ -97,13 +101,15 @@ change nothing else.
 ```
 
 Apply only the exact reviewed checksum with `-Action ApplyTraffic`. Require `Mode=active`, three
-routes, one enabled mapping, two enabled rules, and empty queues before starting acceptance traffic.
+routes, one base mapping, two base rules, document processing still dark, and empty queues before
+starting acceptance traffic.
 
 For a bounded recovery that keeps the protected database, create a separate `TrafficTarget=disabled`
 plan from the applied enabled plan. It must delete only the three routes and disable only the three
-triggers. If staging is already dark when shutdown begins, the subsequent quiescence plan contains
-only the database-deletion-protection update; from live traffic it contains that update plus the
-exact six traffic actions. Both forms remain separately checksum reviewed.
+base triggers. Document processing must already have been disabled through its separate drain and
+rollback procedure. If staging is already dark when shutdown begins, the subsequent quiescence plan
+contains only the database-deletion-protection update; from live base traffic it contains that update
+plus the exact six traffic actions. Both forms remain separately checksum reviewed.
 
 When the bounded exercise ends, repeat the two-step shutdown. Never leave staging active merely to
 preserve test records.
