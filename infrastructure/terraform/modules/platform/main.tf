@@ -645,13 +645,10 @@ resource "aws_apigatewayv2_route" "gateway" {
   target             = "integrations/${aws_apigatewayv2_integration.gateway_lambda[0].id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.gateway[0].id
-  authorization_scopes = [
-    "documents:read",
-    "documents:write",
-    "jobs:read",
-    "profile:read",
-    "profile:write"
-  ]
+  authorization_scopes = concat(
+    ["jobs:read", "profile:read", "profile:write"],
+    var.deploy_document_intake ? ["documents:read", "documents:write"] : []
+  )
 }
 
 resource "aws_apigatewayv2_route" "gateway_lambda_public" {
