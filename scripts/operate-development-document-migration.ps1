@@ -412,6 +412,83 @@ function Add-ManagedResources {
   }
 }
 
+function Assert-CurrentGatewayArtifactEvidence {
+  param(
+    [Parameter(Mandatory)][object]$Gateway,
+    [Parameter(Mandatory)][object]$Head,
+    [Parameter(Mandatory)][string]$ExpectedBucket,
+    [Parameter(Mandatory)][string]$ExpectedKmsKeyArn
+  )
+
+  $key = [string]$Gateway.s3_key
+  $objectVersion = [string]$Gateway.s3_object_version
+  $base64Sha256 = [string]$Gateway.source_code_hash
+  $bucket = [string]$Gateway.s3_bucket
+  $keyMatch = [regex]::Match($key, '^lambda/gateway/(?<source>[a-f0-9]{40})/(?<artifact>[a-f0-9]{64})/gateway-lambda\.zip$')
+  if (-not $keyMatch.Success -or [string]::IsNullOrWhiteSpace($objectVersion) -or
+      $base64Sha256 -notmatch '^[A-Za-z0-9+/]{43}=$' -or $bucket -cne $ExpectedBucket) {
+    throw "The current gateway artifact does not match the immutable Terraform-owned release shape."
+  }
+  $sourceSha = [string]$keyMatch.Groups['source'].Value
+  $artifactSha256 = [string]$keyMatch.Groups['artifact'].Value
+  try {
+    $decodedSha256 = ([BitConverter]::ToString([Convert]::FromBase64String($base64Sha256)) -replace '-', '').ToLowerInvariant()
+  } catch {
+    throw "The current gateway code hash is not valid base64 SHA-256."
+  }
+  $environment = @($Gateway.environment)
+  if ($decodedSha256 -cne $artifactSha256 -or $environment.Count -ne 1 -or
+      [string]$environment[0].variables.RELEASE_SHA -cne $artifactSha256) {
+    throw "The current gateway code hash and release marker do not match its immutable artifact key."
+  }
+  if ([string]$Head.VersionId -cne $objectVersion -or [long]$Head.ContentLength -le 0 -or
+      [string]$Head.ServerSideEncryption -cne "aws:kms" -or
+      [string]$Head.SSEKMSKeyId -cne $ExpectedKmsKeyArn -or -not $Head.BucketKeyEnabled -or
+      [string]$Head.ChecksumSHA256 -cne $base64Sha256 -or
+      [string]$Head.Metadata.'source-sha' -cne $sourceSha -or
+      [string]$Head.Metadata.'artifact-sha256' -cne $artifactSha256) {
+    throw "The current gateway artifact failed its exact version, checksum, KMS, or release-metadata gate."
+  }
+  return [pscustomobject]@{
+    Key = $key
+    ObjectVersion = $objectVersion
+    Base64Sha256 = $base64Sha256
+    SourceSha = $sourceSha
+    ArtifactSha256 = $artifactSha256
+  }
+}
+
+function Set-VerifiedCurrentGatewayArtifactVariables {
+  $state = Invoke-TerraformJson -Arguments @("show", "-json") -Operation "Current gateway input preservation"
+  $resources = New-Object 'Collections.Generic.Dictionary[string, object]' ([StringComparer]::Ordinal)
+  Add-ManagedResources -Module $state.values.root_module -Destination $resources
+  $gatewayAddress = "module.platform.aws_lambda_function.gateway[0]"
+  if (-not $resources.ContainsKey($gatewayAddress)) {
+    throw "Current Terraform state does not contain the exact development gateway Lambda."
+  }
+  $gateway = $resources[$gatewayAddress].values
+  if (-not $resources.ContainsKey("module.platform.aws_kms_key.platform")) {
+    throw "Current Terraform state does not contain the exact platform KMS key."
+  }
+  $kmsKeyArn = [string]$resources["module.platform.aws_kms_key.platform"].values.arn
+  if ($kmsKeyArn -notmatch "^arn:aws:kms:$([regex]::Escape($Region)):$ExpectedAccountId`:key/[a-f0-9-]+$") {
+    throw "The Terraform-owned platform KMS key is outside the exact development boundary."
+  }
+  $head = Invoke-AwsJson -Arguments @(
+    "s3api", "head-object", "--bucket", ([string]$gateway.s3_bucket), "--key", ([string]$gateway.s3_key),
+    "--version-id", ([string]$gateway.s3_object_version),
+    "--checksum-mode", "ENABLED", "--output", "json"
+  ) -Operation "Current gateway artifact validation"
+  $evidence = Assert-CurrentGatewayArtifactEvidence -Gateway $gateway -Head $head `
+    -ExpectedBucket ([string](Get-TerraformOutput -Name "artifact_bucket")) -ExpectedKmsKeyArn $kmsKeyArn
+
+  $env:TF_VAR_gateway_lambda_artifact_s3_key = $evidence.Key
+  $env:TF_VAR_gateway_lambda_artifact_s3_object_version = $evidence.ObjectVersion
+  $env:TF_VAR_gateway_lambda_artifact_sha256 = $evidence.ArtifactSha256
+  $env:TF_VAR_gateway_lambda_artifact_base64sha256 = $evidence.Base64Sha256
+  return [pscustomobject]@{ SourceSha = $evidence.SourceSha; ArtifactSha256 = $evidence.ArtifactSha256 }
+}
+
 function Assert-PlanWasApplied {
   param([Parameter(Mandatory)][object]$Plan)
 
@@ -894,6 +971,7 @@ if ($Action -eq "PlanTask") {
   $savedTerraformVariables = Save-AndClearTerraformVariables
   try {
     Set-VariablesFromPlan -Plan $sourcePlan -NewMigrationImage $MigrationImage
+    Set-VerifiedCurrentGatewayArtifactVariables | Out-Null
     & terraform "-chdir=$terraformDirectory" plan -input=false -lock-timeout=5m -refresh=true `
       -detailed-exitcode "-out=$taskPlan" *> $logPath
     $planExit = $LASTEXITCODE

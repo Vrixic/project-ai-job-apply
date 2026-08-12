@@ -48,10 +48,10 @@ $baselineFunctions = @($ast.FindAll({
       $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
       $node.Name -in @(
         "ConvertTo-TerraformEnvironmentValue", "Get-MeaningfulChanges", "Assert-PlanWasApplied",
-        "Assert-ExactTaskPlan"
+        "Assert-ExactTaskPlan", "Assert-CurrentGatewayArtifactEvidence"
       )
     }, $true))
-if ($baselineFunctions.Count -ne 4) { throw "The input and plan guards must each be defined once." }
+if ($baselineFunctions.Count -ne 5) { throw "The input and plan guards must each be defined once." }
 foreach ($function in $baselineFunctions | Sort-Object { $_.Extent.StartOffset }) {
   Invoke-Expression $function.Extent.Text
 }
@@ -169,5 +169,60 @@ try {
   $unknownFaultRejected = $true
 }
 if (-not $unknownFaultRejected) { throw "Unknown migration fault injection was accepted." }
+
+$sourceSha = "c" * 40
+$artifactSha = "d" * 64
+$base64Sha = [Convert]::ToBase64String([byte[]](0..31 | ForEach-Object { 0xdd }))
+$bucket = "example-artifacts"
+$version = "exact-version"
+$kmsArn = "arn:aws:kms:us-east-2:111122223333:key/00000000-0000-0000-0000-000000000000"
+$gateway = [pscustomobject]@{
+  s3_key = "lambda/gateway/$sourceSha/$artifactSha/gateway-lambda.zip"
+  s3_object_version = $version
+  source_code_hash = $base64Sha
+  s3_bucket = $bucket
+  environment = @([pscustomobject]@{ variables = [pscustomobject]@{ RELEASE_SHA = $artifactSha } })
+}
+$head = [pscustomobject]@{
+  VersionId = $version
+  ContentLength = 1
+  ServerSideEncryption = "aws:kms"
+  SSEKMSKeyId = $kmsArn
+  BucketKeyEnabled = $true
+  ChecksumSHA256 = $base64Sha
+  Metadata = [pscustomobject]@{ 'source-sha' = $sourceSha; 'artifact-sha256' = $artifactSha }
+}
+$evidence = Assert-CurrentGatewayArtifactEvidence -Gateway $gateway -Head $head `
+  -ExpectedBucket $bucket -ExpectedKmsKeyArn $kmsArn
+if ($evidence.ArtifactSha256 -cne $artifactSha -or $evidence.ObjectVersion -cne $version) {
+  throw "Valid current gateway evidence was not preserved exactly."
+}
+
+foreach ($case in @(
+    @{ name = "bucket"; target = "gateway"; property = "s3_bucket"; value = "wrong" },
+    @{ name = "key"; target = "gateway"; property = "s3_key"; value = "wrong" },
+    @{ name = "hash"; target = "gateway"; property = "source_code_hash"; value = "not-base64" },
+    @{ name = "decoded-hash"; target = "gateway"; property = "source_code_hash"; value = ([Convert]::ToBase64String([byte[]](0..31 | ForEach-Object { 0xee }))) },
+    @{ name = "release"; target = "gateway"; property = "environment"; value = @([pscustomobject]@{ variables = [pscustomobject]@{ RELEASE_SHA = "e" * 64 } }) },
+    @{ name = "version"; target = "head"; property = "VersionId"; value = "wrong" },
+    @{ name = "content"; target = "head"; property = "ContentLength"; value = 0 },
+    @{ name = "encryption"; target = "head"; property = "ServerSideEncryption"; value = "AES256" },
+    @{ name = "checksum"; target = "head"; property = "ChecksumSHA256"; value = ([Convert]::ToBase64String([byte[]](0..31 | ForEach-Object { 0xee }))) },
+    @{ name = "kms"; target = "head"; property = "SSEKMSKeyId"; value = "$kmsArn-wrong" },
+    @{ name = "bucket-key"; target = "head"; property = "BucketKeyEnabled"; value = $false },
+    @{ name = "metadata"; target = "head"; property = "Metadata"; value = [pscustomobject]@{ 'source-sha' = $sourceSha; 'artifact-sha256' = "e" * 64 } }
+  )) {
+  $badGateway = $gateway | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+  $badHead = $head | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+  if ($case.target -ceq "gateway") { $badGateway.($case.property) = $case.value } else { $badHead.($case.property) = $case.value }
+  $rejected = $false
+  try {
+    Assert-CurrentGatewayArtifactEvidence -Gateway $badGateway -Head $badHead `
+      -ExpectedBucket $bucket -ExpectedKmsKeyArn $kmsArn | Out-Null
+  } catch {
+    $rejected = $true
+  }
+  if (-not $rejected) { throw "Invalid current gateway $($case.name) evidence was accepted." }
+}
 
 Write-Host "Development document migration operator path and baseline tests passed."
