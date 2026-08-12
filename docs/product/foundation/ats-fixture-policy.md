@@ -55,7 +55,8 @@ provider evidence. Provider-inspired behaviors may be described with neutral beh
 
 1. **Open an intake record outside Git.** Record an opaque evidence ID, exact provider family and
    variant, source category, intended behavior coverage, accountable owner, acquisition date,
-   applicable terms/policy version, authorization scope, retention, and deletion owner. Use
+   applicable terms/policy version, authorization scope, authorization expiry and revalidation
+   date, retention, and deletion owner. Use
    [`authorized-provider-intake.template.json`](../../../packages/test-fixtures/ats/templates/authorized-provider-intake.template.json)
    as the field checklist. Do not put credentials, private URLs, account IDs, raw terms, or people’s
    names in repository metadata.
@@ -106,6 +107,8 @@ The validator enforces these minimum controls:
 - synthetic/provider evidence separation and no representative claim for synthetic material;
 - opaque authorization, scan, human-review, raw-disposition, and representativeness evidence for
   every approved provider-derived fixture; and
+- a non-expired authorization plus a current or future authorization revalidation date for every
+  approved provider-derived fixture;
 - both secret and PII scan categories, human sanitization acceptance, and human representative
   acceptance for provider-derived material.
 
@@ -136,6 +139,8 @@ does not count as that representative fixture.
 ## Change and incident handling
 
 - Payload or behavior-tag changes require new checksums and repeated scanner/human review evidence.
+- An elapsed authorization expiry or revalidation date fails repository validation and removes the
+  fixture from active evidence until an accountable renewed disposition is recorded.
 - Authorization, terms, provider layout, or policy changes trigger revalidation; disable affected
   tests/adapters until disposition is recorded.
 - A discovered secret, PII item, unauthorized capture, or live endpoint is a security/privacy

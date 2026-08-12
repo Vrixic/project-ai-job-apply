@@ -96,6 +96,8 @@ test("requires provider fixtures to record secret and PII scanner evidence", () 
     kind: "controlled_test_tenant",
     capturedOn: "2026-08-01",
     authorizationEvidenceId: "authorization-example",
+    authorizationExpiresOn: null,
+    authorizationRevalidateOn: "2027-08-01",
   };
   metadata.sanitization.status = "complete";
   metadata.sanitization.humanReview = {
@@ -133,6 +135,8 @@ test("accepts a fully evidenced provider-derived fixture contract", () => {
     kind: "controlled_test_tenant",
     capturedOn: "2026-08-01",
     authorizationEvidenceId: "authorization-example",
+    authorizationExpiresOn: null,
+    authorizationRevalidateOn: "2027-08-01",
   };
   metadata.sanitization.status = "complete";
   metadata.sanitization.automatedChecks.push(
@@ -178,4 +182,42 @@ test("accepts a fully evidenced provider-derived fixture contract", () => {
   assert.deepEqual(validateTree(root, { today: new Date("2026-08-11T00:00:00.000Z") }), [
     "example-provider-controlled-form-v1",
   ]);
+});
+
+test("rejects provider evidence after authorization revalidation becomes overdue", () => {
+  const root = copySyntheticFixture();
+  const { metadataPath, metadata } = loadMetadata(root);
+  metadata.evidenceClass = "sanitized_authorized_provider";
+  metadata.provider = { family: "example-provider", variant: "controlled-test" };
+  metadata.source = {
+    kind: "controlled_test_tenant",
+    capturedOn: "2026-08-01",
+    authorizationEvidenceId: "authorization-example",
+    authorizationExpiresOn: null,
+    authorizationRevalidateOn: "2026-08-10",
+  };
+  writeMetadata(metadataPath, metadata);
+  assert.throws(
+    () => validateTree(root, { today: new Date("2026-08-11T00:00:00.000Z") }),
+    /source authorization revalidation is overdue/,
+  );
+});
+
+test("rejects provider evidence after its source authorization expires", () => {
+  const root = copySyntheticFixture();
+  const { metadataPath, metadata } = loadMetadata(root);
+  metadata.evidenceClass = "sanitized_authorized_provider";
+  metadata.provider = { family: "example-provider", variant: "controlled-test" };
+  metadata.source = {
+    kind: "controlled_test_tenant",
+    capturedOn: "2026-08-01",
+    authorizationEvidenceId: "authorization-example",
+    authorizationExpiresOn: "2026-08-10",
+    authorizationRevalidateOn: "2027-08-01",
+  };
+  writeMetadata(metadataPath, metadata);
+  assert.throws(
+    () => validateTree(root, { today: new Date("2026-08-11T00:00:00.000Z") }),
+    /source authorization has expired/,
+  );
 });

@@ -25,6 +25,61 @@ launch. Those capabilities retain their owning-delivery gates. The independent a
 penetration test of the exact public-launch candidate required by
 [ADR-015](../adr/015-independent-prelaunch-security-review.md) remains a separate D6 gate.
 
+## Reviewer selection and execution boundary
+
+The product-risk owner selects named people, not organizations or automated tools alone. A
+reviewer may rely on a specialist, but must name that reliance, its scope, and any evidence the
+reviewer did not personally assess.
+
+Minimum competence for the **security reviewer** is demonstrated experience assessing web/API
+authentication and object/function/property authorization, OIDC session behavior, AWS serverless
+and IAM/KMS/network boundaries, secure software supply chains, logging/recovery, and incident and
+vulnerability-management design. The reviewer must be able to challenge both source-level claims
+and the linked deployed evidence rather than accepting the evidence matrix as a checklist.
+
+Minimum competence for the **privacy reviewer** is demonstrated experience assessing data
+inventory and minimization, purpose and consent boundaries, individual-rights flows, retention and
+deletion, subprocessors, telemetry, and privacy risks across product and cloud systems. Legal
+conclusions remain owned by the qualified counsel completing D0-014. A privacy reviewer who is not
+that counsel must identify the counsel conclusions relied on and must not independently declare
+legal compliance.
+
+The **product-risk owner** must have authority to keep capabilities blocked, fund remediation, and
+accept only the residual risks this record permits. A repository author may hold that role, but
+must provide their legal name and actual role and may not use product-risk acceptance to replace a
+reviewer disposition or a counsel conclusion.
+
+D0-015 is an accountable foundation review, not the independent D6 penetration test. Nevertheless,
+each reviewer must disclose whether they principally designed or implemented a reviewed control,
+report to or are paid by a person whose decision they are reviewing, hold a material financial
+interest, or have another relationship that could impair challenge. Such a reviewer must not be
+described as independent. The product-risk owner must appoint an additional competent reviewer
+when a disclosed conflict prevents credible review; merely recording the conflict does not cure
+it. The D6 assessor remains subject to ADR-015's stricter independence requirement regardless of
+the D0 reviewer selection.
+
+Execute the review in this order:
+
+1. Merge every intended review-package correction, then identify one full 40-character commit.
+2. Complete D0-014 and provide its attributable, sanitized conclusions and conditions.
+3. Record reviewer identities, competence, conflicts, dates, exact scope, accessible evidence, and
+   exclusions. Repository authors may supply links and factual environment labels but may not
+   record that a reviewer inspected them.
+4. Each reviewer inspects every applicable FR row and deployed-evidence row and records an explicit
+   result. Silence, a prepared link, or an engineering `Pass` is not reviewer acceptance.
+5. Record sanitized findings, owners, due dates, blocked activities, and restricted evidence
+   references. Engineering remediates; the reviewer records any required retest result.
+6. Reconcile D0-014 dependencies and record each time-bounded residual-risk decision. Keep future
+   capability gates explicit rather than treating unimplemented controls as deployed.
+7. The security reviewer, privacy reviewer, and product-risk owner each enter their own traceable
+   disposition bound to the same commit. Delivery governance may close D0-015 only afterward.
+
+Repository evidence can pre-populate the review-package manifest, control descriptions, immutable
+artifact links, environment labels, and known engineering states. Reviewer identity and
+competence, conflicts, evidence-inspection results, FR dispositions, findings, retests, residual
+risk acceptance, exclusions, signatures, and completion dates always require the attributable
+human actor named for that field.
+
 ## 1. Review identity and immutable scope
 
 The record is invalid until every `Pending` field in this section is completed by or verified with

@@ -13,7 +13,8 @@
     "permittedActions": ["capture", "sanitize", "store", "test"],
     "legalPrivacyDispositionId": "OPAQUE_DISPOSITION_ID",
     "securityPrivacyDispositionId": "OPAQUE_DISPOSITION_ID",
-    "expiresOn": "YYYY-MM-DD_OR_NULL"
+    "expiresOn": "YYYY-MM-DD_OR_NULL",
+    "revalidateOn": "YYYY-MM-DD"
   },
   "quarantine": {
     "restrictedLocationId": "OPAQUE_LOCATION_ID",
