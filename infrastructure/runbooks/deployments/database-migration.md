@@ -52,6 +52,11 @@ The task release is deliberately review-separated:
    success messages, zero active migration tasks, and zero ECS services.
 5. `Verify` repeats the task/log/zero-compute checks and saves a refresh-backed zero-drift plan.
 
+If the local waiter exits after a durable claim and ECS submission, never call `Execute` again.
+Use `Recover` with the exact submitted receipt and reviewed descriptor. It has no submission path;
+it accepts only the exact claimed task already stopped with exit `0`, the four aggregate success
+records, and zero remaining migration compute, then finalizes the existing receipt for `Verify`.
+
 Run `Get-Help` through the script's `-Help` switch for exact commands. Never reuse an execution
 descriptor for a different task plan or image. The durable claim is never removed automatically,
 so an ambiguous submission cannot become eligible for replay by deleting a local receipt or

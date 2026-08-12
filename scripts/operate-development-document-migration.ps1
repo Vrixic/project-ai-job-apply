@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [ValidateSet("Status", "PlanTask", "ApplyTask", "PlanExecution", "Execute", "Verify")]
+  [ValidateSet("Status", "PlanTask", "ApplyTask", "PlanExecution", "Execute", "Recover", "Verify")]
   [string]$Action = "Status",
 
   [string]$AwsProfile = "ai-job-apply-development-admin",
@@ -84,6 +84,18 @@ Usage:
   # Recheck the stopped task, aggregate-only log contract, zero-task boundary, encrypted state,
   # and save a refresh-backed zero-drift plan.
   .\scripts\operate-development-document-migration.ps1 -Action Verify `
+    -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
+    -SourceSha APPLIED_RELEASE_40_CHARACTER_COMMIT `
+    -MigrationImage EXACT_ECR_URI_AT_SHA256 `
+    -TaskPlanPath .terraform/development-document-migration/task-....tfplan `
+    -ReviewedTaskPlanSha256 64_CHARACTER_SHA256 `
+    -ExecutionPlanPath .terraform/development-document-migration/execution-....json `
+    -ReviewedExecutionPlanSha256 64_CHARACTER_SHA256 `
+    -ReceiptPath .terraform/development-document-migration/receipt-....json
+
+  # Finalize an existing submitted receipt after an interrupted local waiter. This never submits
+  # a task and accepts only the exact claimed descriptor/task that is already STOPPED and valid.
+  .\scripts\operate-development-document-migration.ps1 -Action Recover `
     -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
     -SourceSha APPLIED_RELEASE_40_CHARACTER_COMMIT `
     -MigrationImage EXACT_ECR_URI_AT_SHA256 `
@@ -335,6 +347,47 @@ function Assert-CallerToolsAndSource {
     return $head
   }
   return ""
+}
+
+function Assert-RecoveryOperatorBinding {
+  param(
+    [Parameter(Mandatory)][string]$ExecutionOperatorSourceSha,
+    [Parameter(Mandatory)][string]$CurrentOperatorSourceSha,
+    [Parameter(Mandatory)][bool]$IsAncestor,
+    [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$ChangeRecords
+  )
+
+  Assert-ReleaseSourceBinding -ReleaseSourceSha $ExecutionOperatorSourceSha `
+    -OperatorSourceSha $CurrentOperatorSourceSha -AllowAncestor -IsAncestor:$IsAncestor
+  if ($ExecutionOperatorSourceSha -cne $CurrentOperatorSourceSha) {
+    Assert-OperatorOnlyReleaseDelta -ChangeRecords $ChangeRecords
+  }
+}
+
+function Assert-RecoveryOperatorSource {
+  param([Parameter(Mandatory)][string]$ExecutionOperatorSourceSha)
+
+  if ($ExecutionOperatorSourceSha -notmatch '^[a-f0-9]{40}$') {
+    throw "The execution descriptor does not contain an exact operator source SHA."
+  }
+  & git -C $repositoryRoot merge-base --is-ancestor $ExecutionOperatorSourceSha $operatorSourceSha 2>$null
+  $isAncestor = $LASTEXITCODE -eq 0
+  $changes = if ($ExecutionOperatorSourceSha -ceq $operatorSourceSha) {
+    @()
+  } else {
+    @(& git -C $repositoryRoot diff --name-status --no-renames "$ExecutionOperatorSourceSha..$operatorSourceSha" 2>$null)
+  }
+  if ($LASTEXITCODE -ne 0) { throw "The execution-to-recovery operator delta could not be inspected." }
+  Assert-RecoveryOperatorBinding -ExecutionOperatorSourceSha $ExecutionOperatorSourceSha `
+    -CurrentOperatorSourceSha $operatorSourceSha -IsAncestor:$isAncestor -ChangeRecords $changes
+  foreach ($path in $changes | ForEach-Object { ($_ -split "`t", 2)[1] }) {
+    foreach ($revision in @($ExecutionOperatorSourceSha, $operatorSourceSha)) {
+      $type = (& git -C $repositoryRoot cat-file -t "$revision`:$path" 2>$null).Trim()
+      if ($LASTEXITCODE -ne 0 -or $type -cne "blob") {
+        throw "The recovery operator delta contains a non-blob or missing path."
+      }
+    }
+  }
 }
 
 function Initialize-EncryptedBackend {
@@ -1031,13 +1084,14 @@ function Read-ExecutionPlan {
   param(
     [Parameter(Mandatory)][string]$Path,
     [Parameter(Mandatory)][string]$Sha256,
-    [Parameter(Mandatory)][string]$TaskPlanSha256
+    [Parameter(Mandatory)][string]$TaskPlanSha256,
+    [Parameter(Mandatory)][string]$ExpectedOperatorSourceSha
   )
 
   if ((Get-FileSha256 -Path $Path) -cne $Sha256) { throw "The execution-plan checksum does not match the reviewed value." }
   $plan = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
   Assert-ExecutionIdentity -Value $plan -ExpectedKind "development-document-migration-execution" `
-    -ReleaseSourceSha $SourceSha -OperatorSourceSha $operatorSourceSha
+    -ReleaseSourceSha $SourceSha -OperatorSourceSha $ExpectedOperatorSourceSha
   $request = $plan.runTaskRequest
   $properties = @($request.PSObject.Properties.Name)
   $allowed = @("cluster", "taskDefinition", "count", "launchType", "networkConfiguration", "clientToken", "startedBy")
@@ -1167,7 +1221,8 @@ function New-DurableExecutionClaim {
     if (Test-Path -LiteralPath $temporaryClaim) { Remove-Item -LiteralPath $temporaryClaim -Force }
   }
   Assert-DurableExecutionClaim -ClaimKey $claimKey -ClaimVersion ([string]$put.VersionId) `
-    -ExecutionPlanSha256 $ExecutionPlanSha256 -ExpectedChecksum $claimChecksum
+    -ExecutionPlanSha256 $ExecutionPlanSha256 -ExpectedChecksum $claimChecksum `
+    -ExpectedClaimOperatorSourceSha $operatorSourceSha
   return [pscustomobject]@{
     Key = $claimKey
     VersionId = [string]$put.VersionId
@@ -1180,7 +1235,8 @@ function Assert-DurableExecutionClaim {
     [Parameter(Mandatory)][string]$ClaimKey,
     [Parameter(Mandatory)][string]$ClaimVersion,
     [Parameter(Mandatory)][string]$ExecutionPlanSha256,
-    [Parameter(Mandatory)][string]$ExpectedChecksum
+    [Parameter(Mandatory)][string]$ExpectedChecksum,
+    [Parameter(Mandatory)][string]$ExpectedClaimOperatorSourceSha
   )
 
   if ($ClaimKey -cne "operator-claims/development-document-migration/$ExecutionPlanSha256.json" -or
@@ -1195,10 +1251,10 @@ function Assert-DurableExecutionClaim {
   Assert-DurableExecutionClaimEvidence -Head $head -ClaimVersion $ClaimVersion `
     -ExecutionPlanSha256 $ExecutionPlanSha256 -ExpectedChecksum $ExpectedChecksum `
     -ExpectedKmsKeyArn $script:stateKmsKeyArn -ReleaseSourceSha $SourceSha `
-    -OperatorSourceSha $operatorSourceSha
+    -OperatorSourceSha $ExpectedClaimOperatorSourceSha
 }
 
-$postApplyAction = $Action -in @("PlanExecution", "Execute", "Verify")
+$postApplyAction = $Action -in @("PlanExecution", "Execute", "Recover", "Verify")
 $operatorSourceSha = Assert-CallerToolsAndSource -RequireSource:($Action -ne "Status") `
   -AllowAncestorSource:$postApplyAction
 Initialize-EncryptedBackend
@@ -1364,7 +1420,8 @@ if ($Action -eq "PlanExecution") {
   }
   Write-JsonFile -Path $executionPlan -Value $descriptor
   $sha256 = Get-FileSha256 -Path $executionPlan
-  $null = Read-ExecutionPlan -Path $executionPlan -Sha256 $sha256 -TaskPlanSha256 $ReviewedTaskPlanSha256
+  $null = Read-ExecutionPlan -Path $executionPlan -Sha256 $sha256 `
+    -TaskPlanSha256 $ReviewedTaskPlanSha256 -ExpectedOperatorSourceSha $operatorSourceSha
   [pscustomobject]@{
     Outcome                  = "review-required"
     ExecutionPlanPath        = $executionPlan
@@ -1380,7 +1437,18 @@ if ([string]::IsNullOrWhiteSpace($ExecutionPlanPath) -or $ReviewedExecutionPlanS
   throw "$Action requires the exact execution plan and its reviewed SHA-256."
 }
 $executionPlan = Resolve-OperatorPath -Candidate $ExecutionPlanPath -MustExist -RequireOperatorRoot
-$executionDescriptor = Read-ExecutionPlan -Path $executionPlan -Sha256 $ReviewedExecutionPlanSha256 -TaskPlanSha256 $ReviewedTaskPlanSha256
+$expectedExecutionOperatorSha = $operatorSourceSha
+if ($Action -in @("Recover", "Verify")) {
+  if ((Get-FileSha256 -Path $executionPlan) -cne $ReviewedExecutionPlanSha256) {
+    throw "The execution-plan checksum does not match the reviewed value."
+  }
+  $untrustedExecutionDescriptor = Get-Content -LiteralPath $executionPlan -Raw | ConvertFrom-Json
+  $expectedExecutionOperatorSha = [string]$untrustedExecutionDescriptor.operatorSourceSha
+  Assert-RecoveryOperatorSource -ExecutionOperatorSourceSha $expectedExecutionOperatorSha
+}
+$executionDescriptor = Read-ExecutionPlan -Path $executionPlan `
+  -Sha256 $ReviewedExecutionPlanSha256 -TaskPlanSha256 $ReviewedTaskPlanSha256 `
+  -ExpectedOperatorSourceSha $expectedExecutionOperatorSha
 $request = $executionDescriptor.runTaskRequest
 if ([string]$request.cluster -cne $clusterArn -or [string]$request.taskDefinition -cne $taskDefinitionArn -or
     (@($request.networkConfiguration.awsvpcConfiguration.subnets) -join ',') -cne ($subnets -join ',') -or
@@ -1459,16 +1527,66 @@ if ($Action -eq "Execute") {
   exit 0
 }
 
+if ($Action -eq "Recover") {
+  if ([string]::IsNullOrWhiteSpace($ReceiptPath)) { throw "Recover requires the submitted execution receipt path." }
+  $receipt = Resolve-OperatorPath -Candidate $ReceiptPath -MustExist -RequireOperatorRoot
+  $receiptValue = Get-Content -LiteralPath $receipt -Raw | ConvertFrom-Json
+  Assert-ExecutionIdentity -Value $receiptValue -ExpectedKind "development-document-migration-receipt" `
+    -ReleaseSourceSha $SourceSha -OperatorSourceSha $expectedExecutionOperatorSha
+  Assert-DurableExecutionClaim -ClaimKey ([string]$receiptValue.executionClaimKey) `
+    -ClaimVersion ([string]$receiptValue.executionClaimVersion) `
+    -ExecutionPlanSha256 $ReviewedExecutionPlanSha256 `
+    -ExpectedChecksum ([string]$receiptValue.executionClaimChecksumSHA256) `
+    -ExpectedClaimOperatorSourceSha $expectedExecutionOperatorSha
+  if ([string]$receiptValue.environment -cne "development" -or
+      [string]$receiptValue.accountId -cne $ExpectedAccountId -or
+      [string]$receiptValue.stateBucket -cne $StateBucket -or
+      [string]$receiptValue.migrationImage -cne $MigrationImage -or
+      [string]$receiptValue.taskPlanSha256 -cne $ReviewedTaskPlanSha256 -or
+      [string]$receiptValue.executionPlanSha256 -cne $ReviewedExecutionPlanSha256 -or
+      [string]$receiptValue.executionClaimKey -cne "operator-claims/development-document-migration/$ReviewedExecutionPlanSha256.json" -or
+      [string]::IsNullOrWhiteSpace([string]$receiptValue.executionClaimVersion) -or
+      [string]$receiptValue.executionClaimChecksumSHA256 -notmatch '^[A-Za-z0-9+/]{43}=$' -or
+      [string]$receiptValue.phase -cne "submitted" -or
+      $null -ne (Get-OptionalProperty $receiptValue "exitCode") -or
+      $null -ne (Get-OptionalProperty $receiptValue "stoppedAt") -or
+      [string]$receiptValue.taskArn -notmatch "^arn:aws:ecs:$([regex]::Escape($Region)):$ExpectedAccountId`:task/") {
+    throw "The submitted migration receipt is incomplete or belongs to a different reviewed execution."
+  }
+  $stoppedTask = Assert-TaskResultAndLogs -ClusterArn $clusterArn `
+    -TaskArn ([string]$receiptValue.taskArn) -TaskDefinitionArn $taskDefinitionArn
+  Assert-ZeroMigrationCompute -ClusterArn $clusterArn
+  $receiptValue.phase = "verified"
+  $receiptValue.stoppedAt = ([datetime]$stoppedTask.stoppedAt).ToUniversalTime().ToString("o")
+  $receiptValue.exitCode = 0
+  $receiptValue | Add-Member -NotePropertyName recoveredByOperatorSourceSha `
+    -NotePropertyValue $operatorSourceSha -Force
+  Write-JsonFile -Path $receipt -Value $receiptValue -AllowReplace
+  [pscustomobject]@{
+    Outcome                   = "recovered"
+    ReceiptPath               = $receipt
+    ReceiptSha256             = Get-FileSha256 -Path $receipt
+    ExecutionPlanSha256       = $ReviewedExecutionPlanSha256
+    ExecutedTaskCount         = 1
+    ExitCode                  = 0
+    AggregateSuccessLogCount  = 4
+    ActiveMigrationTaskCount  = 0
+    ContinuousEcsServiceCount = 0
+  }
+  exit 0
+}
+
 if ($Action -ne "Verify") { throw "Unsupported migration operator action." }
 if ([string]::IsNullOrWhiteSpace($ReceiptPath)) { throw "Verify requires the execution receipt path." }
 $receipt = Resolve-OperatorPath -Candidate $ReceiptPath -MustExist -RequireOperatorRoot
 $receiptValue = Get-Content -LiteralPath $receipt -Raw | ConvertFrom-Json
 Assert-ExecutionIdentity -Value $receiptValue -ExpectedKind "development-document-migration-receipt" `
-  -ReleaseSourceSha $SourceSha -OperatorSourceSha $operatorSourceSha
+  -ReleaseSourceSha $SourceSha -OperatorSourceSha $expectedExecutionOperatorSha
 Assert-DurableExecutionClaim -ClaimKey ([string]$receiptValue.executionClaimKey) `
   -ClaimVersion ([string]$receiptValue.executionClaimVersion) `
   -ExecutionPlanSha256 $ReviewedExecutionPlanSha256 `
-  -ExpectedChecksum ([string]$receiptValue.executionClaimChecksumSHA256)
+  -ExpectedChecksum ([string]$receiptValue.executionClaimChecksumSHA256) `
+  -ExpectedClaimOperatorSourceSha $expectedExecutionOperatorSha
 if ([string]$receiptValue.environment -cne "development" -or
     [string]$receiptValue.accountId -cne $ExpectedAccountId -or [string]$receiptValue.stateBucket -cne $StateBucket -or
     [string]$receiptValue.migrationImage -cne $MigrationImage -or

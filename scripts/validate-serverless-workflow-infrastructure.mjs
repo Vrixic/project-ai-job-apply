@@ -52,9 +52,11 @@ const developmentMigrationOperator = "scripts/operate-development-document-migra
 const candidateDocuments = "infrastructure/terraform/modules/platform/candidate-documents.tf";
 
 for (const required of [
-  'ValidateSet("Status", "PlanTask", "ApplyTask", "PlanExecution", "Execute", "Verify")',
+  'ValidateSet("Status", "PlanTask", "ApplyTask", "PlanExecution", "Execute", "Recover", "Verify")',
   "Assert-ReleaseSourceBinding",
   "Assert-OperatorOnlyReleaseDelta",
+  "Assert-RecoveryOperatorBinding",
+  'if ($Action -eq "Recover")',
   "operatorSourceSha",
   "--if-none-match '*'",
   '"s3api", "list-object-versions"',
