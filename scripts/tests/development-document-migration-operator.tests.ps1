@@ -49,10 +49,10 @@ $baselineFunctions = @($ast.FindAll({
       $node.Name -in @(
         "ConvertTo-TerraformEnvironmentValue", "Get-MeaningfulChanges", "Assert-PlanWasApplied",
         "Assert-ExactTaskPlan", "Assert-CurrentGatewayArtifactEvidence",
-        "Test-IgnorableRdsRestorableTimeRefresh"
+        "Test-IgnorableRdsRestorableTimeRefresh", "Get-OptionalProperty"
       )
     }, $true))
-if ($baselineFunctions.Count -ne 6) { throw "The input and plan guards must each be defined once." }
+if ($baselineFunctions.Count -ne 7) { throw "The input and plan guards must each be defined once." }
 foreach ($function in $baselineFunctions | Sort-Object { $_.Extent.StartOffset }) {
   Invoke-Expression $function.Extent.Text
 }
@@ -144,6 +144,12 @@ $normalizedTaskPlan = [pscustomobject]@{
   }
 }
 Assert-ExactTaskPlan -Plan $normalizedTaskPlan
+
+$omittedKnownFieldsPlan = $normalizedTaskPlan | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+foreach ($field in @("ipc_mode", "pid_mode", "task_role_arn")) {
+  $omittedKnownFieldsPlan.resource_changes[0].change.after_unknown.PSObject.Properties.Remove($field)
+}
+Assert-ExactTaskPlan -Plan $omittedKnownFieldsPlan
 
 $unsafeNormalizationPlan = $normalizedTaskPlan | ConvertTo-Json -Depth 30 | ConvertFrom-Json
 $unsafeContainer = $unsafeNormalizationPlan.resource_changes[0].change.before.container_definitions | ConvertFrom-Json
