@@ -27,7 +27,7 @@
     "@ai-job-apply/domain": "workspace:*",
     "@ai-job-apply/event-contracts": "workspace:*",
     "drizzle-orm": "0.45.2",
-    "postgres": "3.4.7",
-    "uuid": "13.0.1"
+    "postgres": "3.4.9",
+    "uuid": "14.0.1"
   }
 }
