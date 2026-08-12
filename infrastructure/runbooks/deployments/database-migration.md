@@ -10,9 +10,9 @@ service and must return to zero running tasks after every migration.
 - Confirm RDS is available, encrypted, deletion protected, and covered by current backups/PITR.
 - Build only `Dockerfile.migration`; push it to the environment-local immutable, KMS-encrypted,
   scan-on-push `ai-job-apply/migration` repository.
-- Confirm the image contains the migration orchestrator plus independently checksum-verifying
-  profile and jobs migration packages. The orchestrator must run owners in declared order and stop
-  before later owners if any owner fails.
+- Confirm the image contains the migration orchestrator plus every declared independently
+  checksum-verifying service-owned migration package. The orchestrator must run owners in declared
+  order and stop before later owners if any owner fails.
 - Require the exact platform digest to have a complete scan with zero High or Critical findings.
 - Review the SQL for transactional behavior, replay safety, bounded locks, data classification,
   downgrade/forward-recovery strategy, and aggregate-only observability.
@@ -23,6 +23,35 @@ Create a refresh-backed Terraform plan with the exact digest URI. The plan may r
 one-off migration task definition and narrow execution-secret policy when required. Review and
 apply its exact SHA-256. Require a read-only root filesystem, non-root image user, Fargate,
 `awsvpc`, the migration command, and only the database secret.
+
+For a development document-schema release, use
+`scripts/operate-development-document-migration.ps1`. Keep every saved plan, metadata sidecar,
+execution descriptor, receipt, and log under the ignored development `.terraform` directory.
+Supply the exact account and state bucket out of band; do not record them in source or shared
+evidence.
+
+The task release is deliberately review-separated:
+
+1. `PlanTask` verifies the merged source and immutable ECR artifact, reconstructs every existing
+   Terraform input from the checksum-bound already-applied plan, and saves a refresh-backed plan.
+   It rejects resource drift and any meaningful change except a create-before-destroy replacement
+   of `module.platform.aws_ecs_task_definition.migration[0]` caused only by the image digest.
+2. Independently inspect the saved plan and its `.metadata.json` sidecar, then pass the printed
+   SHA-256 to `ApplyTask`. The apply rechecks the artifact, plan semantics, encrypted state, task
+   definition, empty cluster, and zero-service boundary before reporting success.
+3. `PlanExecution` resolves the exact applied task definition, two migration subnets, and one
+   application security group into a JSON `run-task` request. Review its SHA-256. The request has
+   count one, Fargate, public control-plane/image access, an idempotency token, and no `overrides`
+   property.
+4. `Execute` accepts only that checksum-reviewed descriptor, submits it through
+   `--cli-input-json`, writes a local receipt immediately, waits for `STOPPED`, and requires the
+   exact image digest, exit code `0`, no effective override, four aggregate-only success messages,
+   zero active migration tasks, and zero ECS services.
+5. `Verify` repeats the task/log/zero-compute checks and saves a refresh-backed zero-drift plan.
+
+Run `Get-Help` through the script's `-Help` switch for exact commands. Never reuse an execution
+descriptor for a different task plan or image. If execution becomes ambiguous, retain the receipt,
+inspect that exact task, and do not generate a second descriptor or retry blindly.
 
 ## Execute once
 
