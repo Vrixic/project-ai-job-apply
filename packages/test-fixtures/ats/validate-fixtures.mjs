@@ -171,6 +171,8 @@ function validateCommon(fixture, metadata) {
     "kind",
     "capturedOn",
     "authorizationEvidenceId",
+    "authorizationExpiresOn",
+    "authorizationRevalidateOn",
   ]);
   const sourceKinds = [
     "created_for_testing",
@@ -272,7 +274,9 @@ function validateSynthetic(fixture, metadata) {
     metadata.provider.family !== "synthetic" ||
     metadata.source.kind !== "created_for_testing" ||
     metadata.source.capturedOn !== null ||
-    metadata.source.authorizationEvidenceId !== null
+    metadata.source.authorizationEvidenceId !== null ||
+    metadata.source.authorizationExpiresOn !== null ||
+    metadata.source.authorizationRevalidateOn !== null
   ) {
     fail(fixture, "synthetic fixtures must use only synthetic source/provider metadata");
   }
@@ -306,6 +310,7 @@ function validateSynthetic(fixture, metadata) {
 }
 
 function validateProvider(fixture, metadata, today) {
+  const todayCalendarDate = new Date(`${today.toISOString().slice(0, 10)}T00:00:00.000Z`);
   if (
     metadata.provider.family === "synthetic" ||
     metadata.source.kind === "created_for_testing" ||
@@ -319,6 +324,20 @@ function validateProvider(fixture, metadata, today) {
     "source.authorizationEvidenceId",
     metadata.source.authorizationEvidenceId,
   );
+  if (metadata.source.authorizationExpiresOn !== null) {
+    assertDate(fixture, "source.authorizationExpiresOn", metadata.source.authorizationExpiresOn);
+    const expiresOn = new Date(`${metadata.source.authorizationExpiresOn}T00:00:00.000Z`);
+    if (expiresOn < todayCalendarDate) fail(fixture, "source authorization has expired");
+  }
+  assertDate(
+    fixture,
+    "source.authorizationRevalidateOn",
+    metadata.source.authorizationRevalidateOn,
+  );
+  const revalidateOn = new Date(`${metadata.source.authorizationRevalidateOn}T00:00:00.000Z`);
+  if (revalidateOn < todayCalendarDate) {
+    fail(fixture, "source authorization revalidation is overdue");
+  }
   if (
     metadata.sanitization.status !== "complete" ||
     metadata.sanitization.humanReview.state !== "approved_sanitized" ||
@@ -355,7 +374,7 @@ function validateProvider(fixture, metadata, today) {
     if (due.valueOf() - captured.valueOf() > 30 * 24 * 60 * 60 * 1000) {
       fail(fixture, "raw quarantine retention exceeds 30 days");
     }
-    if (due < today) fail(fixture, "raw quarantine deletion deadline has elapsed");
+    if (due < todayCalendarDate) fail(fixture, "raw quarantine deletion deadline has elapsed");
   }
   if (
     metadata.representativeness.claim !== true ||

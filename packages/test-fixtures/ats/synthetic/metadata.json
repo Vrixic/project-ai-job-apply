@@ -9,7 +9,9 @@
   "source": {
     "kind": "created_for_testing",
     "capturedOn": null,
-    "authorizationEvidenceId": null
+    "authorizationEvidenceId": null,
+    "authorizationExpiresOn": null,
+    "authorizationRevalidateOn": null
   },
   "dataSafety": {
     "containsProductionData": false,

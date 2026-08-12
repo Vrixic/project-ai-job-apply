@@ -8,7 +8,9 @@
   "source": {
     "kind": "controlled_test_tenant",
     "capturedOn": "YYYY-MM-DD",
-    "authorizationEvidenceId": "authorization-opaque-id"
+    "authorizationEvidenceId": "authorization-opaque-id",
+    "authorizationExpiresOn": "YYYY-MM-DD_OR_NULL",
+    "authorizationRevalidateOn": "YYYY-MM-DD"
   },
   "dataSafety": {
     "containsProductionData": false,
