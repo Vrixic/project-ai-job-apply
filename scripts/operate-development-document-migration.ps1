@@ -788,6 +788,39 @@ function Test-IgnorableRdsRestorableTimeRefresh {
     ($after | ConvertTo-Json -Compress -Depth 50))
 }
 
+function Test-IgnorableMigrationTaskTagsRefresh {
+  param([Parameter(Mandatory)][object]$Drift)
+
+  if ([string]$Drift.address -cne $migrationAddress -or
+      @($Drift.change.actions).Count -ne 1 -or
+      [string]@($Drift.change.actions)[0] -cne "update") {
+    return $false
+  }
+  $beforeTags = $Drift.change.before.PSObject.Properties["tags"]
+  $afterTags = $Drift.change.after.PSObject.Properties["tags"]
+  if ($null -eq $beforeTags -or $null -ne $beforeTags.Value -or
+      $null -eq $afterTags -or $null -eq $afterTags.Value -or
+      @($afterTags.Value.PSObject.Properties).Count -ne 0 -or
+      @($Drift.change.after_unknown.PSObject.Properties).Count -ne 0) {
+    return $false
+  }
+  $before = $Drift.change.before | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+  $after = $Drift.change.after | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+  $before.PSObject.Properties.Remove("tags")
+  $after.PSObject.Properties.Remove("tags")
+  return (($before | ConvertTo-Json -Compress -Depth 50) -ceq
+    ($after | ConvertTo-Json -Compress -Depth 50))
+}
+
+function Get-UnacceptedVerificationDrift {
+  param([AllowNull()][object[]]$Drift)
+
+  return @(Get-MeaningfulChanges -Changes $Drift | Where-Object {
+      -not (Test-IgnorableRdsRestorableTimeRefresh -Drift $_) -and
+      -not (Test-IgnorableMigrationTaskTagsRefresh -Drift $_)
+    })
+}
+
 function Assert-ExactTaskPlan {
   param([Parameter(Mandatory)][object]$Plan)
 
@@ -1664,7 +1697,7 @@ try {
 if ($driftExit -ne 0) { throw "Post-migration Terraform verification did not return zero drift. Inspect the ignored local drift log." }
 $driftJson = Get-PlanJson -Path $driftPlan
 if (@(Get-MeaningfulChanges -Changes @($driftJson.resource_changes)).Count -ne 0 -or
-    @(Get-MeaningfulChanges -Changes @($driftJson.resource_drift)).Count -ne 0) {
+    @(Get-UnacceptedVerificationDrift -Drift @($driftJson.resource_drift)).Count -ne 0) {
   throw "The saved post-migration plan contains a change or resource drift."
 }
 Assert-StateObjectEncryption

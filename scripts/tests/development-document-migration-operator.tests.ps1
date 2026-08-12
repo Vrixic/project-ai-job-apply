@@ -55,10 +55,11 @@ $baselineFunctions = @($ast.FindAll({
         "Assert-DurableClaimPutResult", "Assert-DurableExecutionClaimEvidence",
         "Test-DurableClaimHistoryExists", "Assert-RecoveryOperatorBinding",
         "Resolve-TaskLogStreamName",
-        "Set-RecoveredReceiptEvidence"
+        "Set-RecoveredReceiptEvidence", "Test-IgnorableMigrationTaskTagsRefresh",
+        "Get-UnacceptedVerificationDrift"
       )
     }, $true))
-if ($baselineFunctions.Count -ne 17) { throw "The input and plan guards must each be defined once." }
+if ($baselineFunctions.Count -ne 19) { throw "The input and plan guards must each be defined once." }
 foreach ($function in $baselineFunctions | Sort-Object { $_.Extent.StartOffset }) {
   Invoke-Expression $function.Extent.Text
 }
@@ -101,6 +102,47 @@ try {
     -StoppedAt ([datetime]::UtcNow) -RecoveryOperatorSourceSha ("c" * 40)
 } catch { $repeatFinalizationRejected = $true }
 if (-not $repeatFinalizationRejected) { throw "A finalized receipt was recoverable twice." }
+
+$migrationAddress = "module.platform.aws_ecs_task_definition.migration[0]"
+$tagsRefresh = [pscustomobject]@{
+  address = $migrationAddress
+  change = [pscustomobject]@{
+    actions = @("update")
+    before = [pscustomobject]@{ family = "migration"; tags = $null }
+    after = [pscustomobject]@{ family = "migration"; tags = [pscustomobject]@{} }
+    after_unknown = [pscustomobject]@{}
+  }
+}
+if (-not (Test-IgnorableMigrationTaskTagsRefresh -Drift $tagsRefresh)) {
+  throw "The exact null-to-empty migration tag refresh was not accepted."
+}
+if (@(Get-UnacceptedVerificationDrift -Drift @($tagsRefresh)).Count -ne 0) {
+  throw "The exact migration tag normalization remained unaccepted verification drift."
+}
+foreach ($unsafeTagsRefresh in @(
+    @{ property = "address"; value = "module.platform.aws_ecs_task_definition.other[0]" },
+    @{ property = "afterTags"; value = [pscustomobject]@{ unexpected = "value" } },
+    @{ property = "reverseTags"; value = $true },
+    @{ property = "afterFamily"; value = "changed" },
+    @{ property = "unknownTags"; value = $true },
+    @{ property = "unknownOther"; value = $true }
+  )) {
+  $unsafe = $tagsRefresh | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+  switch ($unsafeTagsRefresh.property) {
+    "address" { $unsafe.address = $unsafeTagsRefresh.value }
+    "afterTags" { $unsafe.change.after.tags = $unsafeTagsRefresh.value }
+    "reverseTags" {
+      $unsafe.change.before.tags = [pscustomobject]@{}
+      $unsafe.change.after.tags = $null
+    }
+    "afterFamily" { $unsafe.change.after.family = $unsafeTagsRefresh.value }
+    "unknownTags" { $unsafe.change.after_unknown | Add-Member -NotePropertyName tags -NotePropertyValue $true }
+    "unknownOther" { $unsafe.change.after_unknown | Add-Member -NotePropertyName latent -NotePropertyValue $true }
+  }
+  if (Test-IgnorableMigrationTaskTagsRefresh -Drift $unsafe) {
+    throw "Unsafe migration task drift was accepted as tag normalization."
+  }
+}
 
 $emptyClaimHistory = [pscustomobject]@{}
 if (Test-DurableClaimHistoryExists -History $emptyClaimHistory -ClaimKey "claim") {
