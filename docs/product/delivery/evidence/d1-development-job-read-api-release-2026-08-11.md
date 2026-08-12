@@ -2,12 +2,11 @@
 
 ## Outcome
 
-Three immutable development gateway releases containing `GET /v1/jobs/{jobId}` were applied, but
-the read path is not yet accepted. The first release performed an unnecessary profile identity
-write and timed out. Version `8` removed that write and passed its reviewed release boundary, but a
-new direct missing-job case proved that the bundled application returns `500` after authorization.
-Version `9` safely classified the failure as `TypeError` / `ERR_INVALID_ARG_TYPE` at the job route.
-The narrow parameter-serialization correction is locally verified but not merged or released.
+The authenticated development `GET /v1/jobs/{jobId}` read path is accepted on immutable Lambda
+alias version `10`. The recovery removed an unnecessary profile identity write, permanently added
+the missing route to the direct boundary matrix, classified the bundled parameter failure without
+retaining sensitive details, and corrected the PostgreSQL timestamp binding. Direct missing-job
+`404`, fresh browser `jobs:read` authorization, all alarms, and zero Terraform drift pass.
 
 ## Applied release evidence
 
@@ -120,20 +119,38 @@ pass.
   code `ERR_INVALID_ARG_TYPE`.
 
 The failing query was the only path passing a JavaScript `Date` object across this bundled
-postgres.js parameter boundary. The local correction converts the already trusted internal
+postgres.js parameter boundary. The correction converts the already trusted internal
 freshness boundary to an ISO timestamp before binding it; the job identifier and timestamp remain
 parameterized. New repository tests prove primitive binding and fail-closed handling of an invalid
 internal date. Jobs tests pass `12/12`, gateway tests pass `40/40`, both type checks pass, and the
-Lambda bundle builds. Docker was unavailable, so deployed correction acceptance remains required
-and no PostgreSQL integration pass is claimed for this change.
+Lambda bundle builds. Docker was unavailable, so no fresh local PostgreSQL integration pass is
+claimed for this change; deployed development acceptance supplies the runtime evidence.
 
-## Remaining acceptance gate
+## Version 10 correction release and acceptance
 
-1. Merge the parameter-serialization correction.
-2. Publish and apply a separately reviewed immutable correction release.
-3. Prove `200/200/401`, all direct boundary cases including missing-job `404`, a fresh authenticated
-   browser pass, all alarms `OK`, and zero Terraform drift.
-4. Record only sanitized acceptance evidence.
+- Source SHA: `33072bfc6ffe24ef2d323cf600bf04337752ae11`.
+- Artifact SHA-256: `627b139a1fd259cd11f3f35ba3644c78c5bff450cccac83624548a1972e2364c`.
+- The artifact was reproduced twice after gateway `40/40`, jobs `12/12`, and the dependency audit
+  passed. Its four new immutable evidence objects passed private/versioned/customer-KMS bucket,
+  checksum, metadata, and read-back verification.
+- Reviewed release-plan SHA-256:
+  `e1e65c512a2e7a6bb515fb807cdd498b5dcb05bd6f1ec75c7a49c7354eb8bbc3`.
+- The exact plan applied `0` creates, `2` in-place updates, `0` deletes, and `0` replacements.
+  Alias version `10` became active without weighted routing and matched the artifact checksum.
+- The full steady-state preflight passed before and after the direct matrix. Liveness, readiness,
+  and anonymous denial returned `200/200/401`.
+- All 16 direct cases passed without product writes. The formerly failing `jobs:read` missing-job
+  case now returns the stable non-cacheable `404` problem contract.
+- All 16 development alarms were `OK`; no unhandled-request event was emitted after the release.
+- The post-apply refresh-backed plan had zero changes and SHA-256
+  `7a0ac031c0ce63891df87febd99abcbfe194fbc5656a24b25b4505f60764c321`.
+- The product owner completed a fresh local BFF/browser check against the deployed development
+  API and received only the sanitized success state: the server-held session has `jobs:read`.
 
-D1-004 remains in progress. Moderation resolution and end-to-end catalog acceptance remain after
-this development read-path recovery.
+## Acceptance disposition
+
+The development job-read recovery gate is complete. No real provider, public UGC, candidate PII,
+or production activation was enabled. The privacy-safe failure classifier remains as a general
+allowlisted operational control rather than temporary sensitive logging.
+
+D1-004 remains in progress for moderation resolution and end-to-end catalog acceptance.
