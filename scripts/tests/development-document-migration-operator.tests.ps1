@@ -53,13 +53,37 @@ $baselineFunctions = @($ast.FindAll({
         "Test-EcsFaultInjectionDisabled", "Assert-ReleaseSourceBinding",
         "Assert-OperatorOnlyReleaseDelta", "Assert-ExecutionIdentity",
         "Assert-DurableClaimPutResult", "Assert-DurableExecutionClaimEvidence",
-        "Test-DurableClaimHistoryExists", "Assert-RecoveryOperatorBinding"
+        "Test-DurableClaimHistoryExists", "Assert-RecoveryOperatorBinding",
+        "Resolve-TaskLogStreamName"
       )
     }, $true))
-if ($baselineFunctions.Count -ne 15) { throw "The input and plan guards must each be defined once." }
+if ($baselineFunctions.Count -ne 16) { throw "The input and plan guards must each be defined once." }
 foreach ($function in $baselineFunctions | Sort-Object { $_.Extent.StartOffset }) {
   Invoke-Expression $function.Extent.Text
 }
+
+$logTask = [pscustomobject]@{ taskArn = "arn:aws:ecs:us-east-2:111122223333:task/cluster/$('a' * 32)" }
+$logContainer = [pscustomobject]@{ name = "database-migration" }
+$logDefinition = [pscustomobject]@{ containerDefinitions = @([pscustomobject]@{
+      name = "database-migration"
+      logConfiguration = [pscustomobject]@{ options = [pscustomobject]@{
+          'awslogs-stream-prefix' = "migration"
+        } }
+    }) }
+$derivedLogStream = Resolve-TaskLogStreamName -Task $logTask -Container $logContainer `
+  -TaskDefinition $logDefinition
+if ($derivedLogStream -cne "migration/database-migration/$('a' * 32)") {
+  throw "The omitted ECS log stream did not resolve deterministically."
+}
+$logContainer | Add-Member -NotePropertyName logStreamName -NotePropertyValue $derivedLogStream
+$null = Resolve-TaskLogStreamName -Task $logTask -Container $logContainer -TaskDefinition $logDefinition
+$logContainer.logStreamName = "wrong"
+$wrongLogStreamRejected = $false
+try {
+  $null = Resolve-TaskLogStreamName -Task $logTask -Container $logContainer `
+    -TaskDefinition $logDefinition
+} catch { $wrongLogStreamRejected = $true }
+if (-not $wrongLogStreamRejected) { throw "An unexpected ECS log stream was accepted." }
 
 $emptyClaimHistory = [pscustomobject]@{}
 if (Test-DurableClaimHistoryExists -History $emptyClaimHistory -ClaimKey "claim") {

@@ -1024,6 +1024,29 @@ function Test-NoEffectiveOverrides {
   return $true
 }
 
+function Resolve-TaskLogStreamName {
+  param(
+    [Parameter(Mandatory)][object]$Task,
+    [Parameter(Mandatory)][object]$Container,
+    [Parameter(Mandatory)][object]$TaskDefinition
+  )
+
+  $taskId = ([string]$Task.taskArn -split '/')[-1]
+  $definitionContainer = @($TaskDefinition.containerDefinitions)
+  $prefix = [string]$definitionContainer[0].logConfiguration.options.'awslogs-stream-prefix'
+  if ($taskId -notmatch '^[a-f0-9]{32}$' -or $definitionContainer.Count -ne 1 -or
+      [string]$definitionContainer[0].name -cne "database-migration" -or
+      [string]::IsNullOrWhiteSpace($prefix)) {
+    throw "The migration log-stream identity could not be derived from the exact task definition."
+  }
+  $expected = "$prefix/database-migration/$taskId"
+  $reported = [string](Get-OptionalProperty $Container "logStreamName")
+  if (-not [string]::IsNullOrWhiteSpace($reported) -and $reported -cne $expected) {
+    throw "ECS reported a migration log stream outside the exact task identity."
+  }
+  return $expected
+}
+
 function Assert-TaskResultAndLogs {
   param(
     [Parameter(Mandatory)][string]$ClusterArn,
@@ -1043,13 +1066,14 @@ function Assert-TaskResultAndLogs {
       [string]$task.lastStatus -cne "STOPPED" -or -not (Test-NoEffectiveOverrides $task.overrides) -or
       $containers.Count -ne 1 -or [string]$containers[0].name -cne "database-migration" -or
       [int]$containers[0].exitCode -ne 0 -or [string]$containers[0].image -cne $MigrationImage -or
-      [string]$containers[0].imageDigest -cne (($MigrationImage -split '@', 2)[1]) -or
-      [string]::IsNullOrWhiteSpace([string]$containers[0].logStreamName)) {
+      [string]$containers[0].imageDigest -cne (($MigrationImage -split '@', 2)[1])) {
     throw "The migration task did not stop successfully on the exact reviewed no-override definition."
   }
 
   $definition = Assert-TaskDefinition -TaskDefinitionArn $TaskDefinitionArn
   $logGroup = [string]@($definition.containerDefinitions)[0].logConfiguration.options.'awslogs-group'
+  $logStream = Resolve-TaskLogStreamName -Task $task -Container $containers[0] `
+    -TaskDefinition $definition
   $expectedMessages = @(
     'Database migrations through 0005_resume_fact_proposals applied and verified.',
     'Jobs migrations through 0003_duplicate_resolution_audit_guard applied and verified.',
@@ -1059,7 +1083,7 @@ function Assert-TaskResultAndLogs {
   for ($attempt = 0; $attempt -lt 30; $attempt++) {
     $logs = Invoke-AwsJson -Arguments @(
       "logs", "get-log-events", "--log-group-name", $logGroup,
-      "--log-stream-name", ([string]$containers[0].logStreamName), "--start-from-head",
+      "--log-stream-name", $logStream, "--start-from-head",
       "--limit", "100", "--output", "json"
     ) -Operation "Migration aggregate-log validation"
     $messages = @($logs.events | ForEach-Object { [string]$_.message })
