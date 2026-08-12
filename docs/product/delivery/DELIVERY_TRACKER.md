@@ -11,7 +11,7 @@ This is the master record for the delivery phases defined in the [product and sy
 
 | ID | Delivery | Status | Start | Completion | Living task document |
 |---|---|---|---|---|---|
-| D0 | Product, data, and legal foundation | In progress | 2026-07-27 | Not completed | [Phase 0 tasks](phase-0-foundation.md) |
+| D0 | Product, data, and legal foundation | Complete | 2026-07-27 | 2026-08-12 | [Phase 0 tasks](phase-0-foundation.md) |
 | D1 | Useful web product and canonical job catalog | In progress | 2026-08-11 | Not completed | [Phase 1 tasks](phase-1-web-and-job-catalog.md) |
 | D2 | Extension and community loop | Not started | Not started | Not completed | [Phase 2 tasks](phase-2-extension-and-community.md) |
 | D3 | High-quality application preparation | Not started | Not started | Not completed | [Phase 3 tasks](phase-3-application-preparation.md) |
@@ -22,13 +22,13 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## D0 — Product, data, and legal foundation
 
-- Status: In progress
+- Status: Complete
 - Start: 2026-07-27
-- Completion: Not completed
+- Completion: 2026-08-12
 - Depends on: Approved product direction
 - Task document: [Phase 0 tasks](phase-0-foundation.md)
 - Exit gate: Schemas, policies, threat/data maps, engineering foundation, and an authenticated end-to-end skeleton are reviewed and evidenced; the skeleton runs on the accepted scale-to-zero application runtime with no obsolete always-on gateway/worker path.
-- Current engineering status: all revised Phase 0 implementation work is complete and D0-012 is ready for the immutable-revision exit review. Counsel is a mandatory D6-016 gate, accountable security/privacy assessment is a mandatory D6-015 gate, and representative provider fixtures block their owning D2–D4 adapters. No legal, security/privacy, source-authorization, or representative-provider approval is claimed. [Engineering pre-audit](evidence/d0-security-privacy-engineering-preaudit-2026-08-12.md), [ADR-019](../../adr/019-defer-foundational-counsel-review-to-public-launch.md), [ADR-020](../../adr/020-defer-accountable-foundation-security-review-to-launch.md), [ADR-021](../../adr/021-own-provider-fixtures-with-adapter-deliveries.md)
+- Current engineering status: Phase 0 is complete. D0-012 accepted immutable revision `ee232824208d6a431024d34904144182b036502d` after every revised exit criterion and the full verifier passed. Counsel remains mandatory D6-016, independent security/privacy assessment remains mandatory D6-015, and representative provider fixtures block their owning D2–D4 adapters. No external approval or provider evidence is claimed. [Final acceptance](evidence/d0-final-exit-acceptance-2026-08-12.md)
 
 ## D1 — Useful web product and canonical job catalog
 
@@ -100,6 +100,7 @@ Append only material cross-delivery events.
 
 | Date | Delivery | Update | Evidence |
 |---|---|---|---|
+| 2026-08-12 | D0 | Accepted the final Phase 0 exit against immutable revision `ee232824208d6a431024d34904144182b036502d`. Every revised criterion and repository verifier passes; Phase 0 is complete without weakening or claiming any transferred D2–D6 gate. | [Final acceptance](evidence/d0-final-exit-acceptance-2026-08-12.md), [D0 tasks](phase-0-foundation.md) |
 | 2026-08-12 | D0/D2–D4 | Completed D0-007's repository-controlled fixture process and transferred authorized representative provider evidence to blocking D2-011, D3-013, and D4-012 tasks. No source authorization or provider representativeness is claimed; D0 is ready for its refreshed exit review. | [ADR-021](../../adr/021-own-provider-fixtures-with-adapter-deliveries.md), [fixture policy](../foundation/ats-fixture-policy.md), [D0 tasks](phase-0-foundation.md) |
 | 2026-08-12 | D0/D6 | Product owner removed D0-015 after the security/privacy engineering pre-audit passed and transferred the complete foundation package to mandatory D6-015 independent exact-candidate assessment. No accountable approval was claimed; all capability gates remain active. D0 now waits only on D0-007 and the refreshed exit review. | [ADR-020](../../adr/020-defer-accountable-foundation-security-review-to-launch.md), [engineering pre-audit](evidence/d0-security-privacy-engineering-preaudit-2026-08-12.md), [D6 tasks](phase-6-mobile-and-paid.md) |
 | 2026-08-12 | D0 | Completed the D0-015 repository-controlled engineering pre-audit. Current dependency, auth/gateway/web, infrastructure, credential-pattern, fixture, and incremental pinned-SAST checks pass after replacing flagged fixture slug/version regexes with explicit linear validation. Accountable human dispositions remain pending. | [Engineering pre-audit](evidence/d0-security-privacy-engineering-preaudit-2026-08-12.md), [D0 tasks](phase-0-foundation.md) |

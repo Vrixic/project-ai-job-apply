@@ -1636,7 +1636,7 @@ The living delivery tracker is authoritative. Current dependency order is:
 4. Acquire authorized representative provider fixtures in D2, D3, and D4 after each owning
    adapter declares its supported variants; D0-007 owns the approved process and fail-closed gate,
    not premature provider selection.
-5. Complete the evidence-based D0 exit review; keep all non-synthetic capability work behind its
+5. Preserve the accepted D0 foundation while keeping all non-synthetic capability work behind its
    owning source, fixture, legal/privacy, security, and external-action gates.
 11. Instrument time, correction rate, factuality, failure reason, and cost.
 12. Test with real consenting users before expanding ATS coverage.
