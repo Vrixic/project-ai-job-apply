@@ -2,12 +2,12 @@
 
 ## Outcome
 
-Two immutable development gateway releases containing `GET /v1/jobs/{jobId}` were applied, but
-the read path is not accepted. The first release performed an unnecessary profile identity write
-and timed out. Version `8` removed that write and passed its reviewed release boundary, but a newly
-added direct missing-job case proved that the bundled application returns `500` after
-authorization. Development remains synthetic-only while privacy-safe exception classification is
-merged and released for exact diagnosis.
+Three immutable development gateway releases containing `GET /v1/jobs/{jobId}` were applied, but
+the read path is not yet accepted. The first release performed an unnecessary profile identity
+write and timed out. Version `8` removed that write and passed its reviewed release boundary, but a
+new direct missing-job case proved that the bundled application returns `500` after authorization.
+Version `9` safely classified the failure as `TypeError` / `ERR_INVALID_ARG_TYPE` at the job route.
+The narrow parameter-serialization correction is locally verified but not merged or released.
 
 ## Applied release evidence
 
@@ -96,20 +96,44 @@ catalog query all succeeded with zero rows. The RDS error log contained no corre
 error. This narrows the defect to an unclassified client-side exception in the bundled application
 path rather than Auth0, API Gateway, database permissions, schema state, or the SQL statement.
 
-The repository now adds the missing deployed job-route case and a privacy-safe internal-failure
+The repository added the missing deployed job-route case and a privacy-safe internal-failure
 classifier. It emits only an allowlisted route template, error type, and constrained error code;
 tests prove messages, stacks, bearer values, email, location, and filesystem content cannot enter
 the diagnostic. Gateway tests pass `40/40`, web tests pass `40/40`, type checks, lint, and formatting
-pass. This diagnostic source is not yet merged or released.
+pass.
+
+## Version 9 diagnostic release
+
+- Source SHA: `2d9090c5794b076b4dae36632f707b9ba305e7c0`.
+- Artifact SHA-256: `9753fd74a81deddd7bc203a4b0121a5fdbbad2cf4223595a2df2ef610c7d9edd`.
+- The artifact was reproduced twice, passed the dependency audit, and was written once under four
+  previously unused keys in the private versioned artifact bucket. Customer-managed KMS,
+  checksum, source metadata, and read-back verification passed.
+- Reviewed release-plan SHA-256:
+  `9cfaf60245686dd929c2ff24896c2e01fe9b4c8bcdcf4616145412a0c0599e5d`.
+- The exact plan applied `0` creates, `2` in-place updates, `0` deletes, and `0` replacements.
+  Alias version `9` became active without weighted routing and matched the artifact checksum.
+- The full steady-state preflight passed Lambda state, durable triggers, Auth0 configuration,
+  Terraform inputs, alarms, and public `200/200/401` behavior.
+- One direct missing-job reproduction returned the expected diagnostic `500`. CloudWatch retained
+  only the allowlisted classification: route `/v1/jobs/:jobId`, error type `TypeError`, and error
+  code `ERR_INVALID_ARG_TYPE`.
+
+The failing query was the only path passing a JavaScript `Date` object across this bundled
+postgres.js parameter boundary. The local correction converts the already trusted internal
+freshness boundary to an ISO timestamp before binding it; the job identifier and timestamp remain
+parameterized. New repository tests prove primitive binding and fail-closed handling of an invalid
+internal date. Jobs tests pass `12/12`, gateway tests pass `40/40`, both type checks pass, and the
+Lambda bundle builds. Docker was unavailable, so deployed correction acceptance remains required
+and no PostgreSQL integration pass is claimed for this change.
 
 ## Remaining acceptance gate
 
-1. Merge and release the privacy-safe diagnostic and direct job-route verification source.
-2. Reproduce once, inspect only the allowlisted error type/code, and implement the root correction.
-3. Publish and apply a separately reviewed immutable correction release.
-4. Prove `200/200/401`, all direct boundary cases including missing-job `404`, a fresh authenticated
+1. Merge the parameter-serialization correction.
+2. Publish and apply a separately reviewed immutable correction release.
+3. Prove `200/200/401`, all direct boundary cases including missing-job `404`, a fresh authenticated
    browser pass, all alarms `OK`, and zero Terraform drift.
-5. Record only sanitized acceptance evidence and return temporary diagnostic capacity to zero.
+4. Record only sanitized acceptance evidence.
 
 D1-004 remains in progress. Moderation resolution and end-to-end catalog acceptance remain after
 this development read-path recovery.
