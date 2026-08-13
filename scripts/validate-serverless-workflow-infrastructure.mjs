@@ -137,10 +137,10 @@ for (const required of [
   'resource "aws_cloudwatch_metric_alarm" "document_processing_timed_out"',
   'resource "aws_iam_role" "document_parser_object_access"',
   "GUARDDUTY_PROTECTION_PLAN_ARN   = aws_guardduty_malware_protection_plan.candidate_documents[0].arn",
-  "DOCUMENT_OBJECT_ACCESS_ROLE_ARN = aws_iam_role.document_parser_object_access[0].arn",
+  "DOCUMENT_OBJECT_ACCESS_ROLE_ARN = local.document_parser_object_access_role_arn",
   'state       = var.document_scan_event_rule_enabled ? "ENABLED" : "DISABLED"',
   "enabled                 = var.document_scan_mapping_enabled",
-  "dead_letter_config { arn = aws_sqs_queue.document_scan_delivery_dead_letter[0].arn }",
+  "dead_letter_config { arn = local.document_scan_delivery_dead_letter_queue_arn }",
 ]) {
   requireText(
     candidateDocuments,
@@ -172,9 +172,7 @@ const documentScanQueuePolicy = section(
   'resource "aws_sqs_queue_policy" "document_scan_results"',
 );
 if (
-  !documentScanQueuePolicy.includes(
-    "values   = [aws_cloudwatch_event_rule.document_scan_results[0].arn]",
-  ) ||
+  !documentScanQueuePolicy.includes("values   = [local.document_scan_results_rule_arn]") ||
   documentScanQueuePolicy.includes("document_scan_tag_failure") ||
   documentScanQueuePolicy.includes("document_scan_plan_unhealthy") ||
   documentScanQueuePolicy.includes("document_reconciler_rule_arn")
@@ -190,9 +188,9 @@ const documentDeliveryDlqPolicy = section(
   'resource "aws_sqs_queue_policy" "document_scan_delivery_dead_letter"',
 );
 for (const required of [
-  "aws_cloudwatch_event_rule.document_scan_results[0].arn",
-  "aws_cloudwatch_event_rule.document_scan_tag_failure[0].arn",
-  "aws_cloudwatch_event_rule.document_scan_plan_unhealthy[0].arn",
+  "local.document_scan_results_rule_arn",
+  "local.document_scan_tag_failure_rule_arn",
+  "local.document_scan_plan_unhealthy_rule_arn",
   "local.document_reconciler_rule_arn",
 ]) {
   if (!documentDeliveryDlqPolicy.includes(required)) {
@@ -275,7 +273,13 @@ for (const required of [
 }
 requireText(
   platform,
-  'platform_kms_key_arn          = "arn:aws:kms:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:key/${aws_kms_key.platform.key_id}"',
+  'platform_kms_key_arn           = "arn:aws:kms:' +
+    "$" +
+    "{data.aws_region.current.region}:" +
+    "$" +
+    "{data.aws_caller_identity.current.account_id}:key/" +
+    "$" +
+    '{aws_kms_key.platform.key_id}"',
   "the stable plan-known platform KMS ARN invariant is missing",
 );
 const durableStack = section(

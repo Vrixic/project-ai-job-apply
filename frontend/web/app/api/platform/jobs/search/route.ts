@@ -1,0 +1,26 @@
+import { getAuth0Client } from "../../../../../lib/auth0";
+import { readJobSearchBffBody } from "../../../../../lib/job-search-bff";
+import { forwardPlatformRequest } from "../../../../../lib/platform-api";
+
+export const dynamic = "force-dynamic";
+
+export async function POST(request: Request): Promise<Response> {
+  const decoded = await readJobSearchBffBody(request);
+  if ("failure" in decoded) {
+    return decoded.failure;
+  }
+  return forwardPlatformRequest(
+    "/v1/jobs/search",
+    {
+      method: "POST",
+      body: decoded.body,
+      signal: request.signal,
+      headers: { "content-type": "application/json" },
+    },
+    {
+      auth0: getAuth0Client(),
+      baseUrl: process.env.PLATFORM_API_BASE_URL ?? "http://localhost:4000",
+      fetch,
+    },
+  );
+}

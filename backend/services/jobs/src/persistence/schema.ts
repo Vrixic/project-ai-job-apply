@@ -1,6 +1,9 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
+  boolean,
   check,
+  customType,
   foreignKey,
   index,
   integer,
@@ -21,6 +24,19 @@ import type {
 } from "../domain/canonical-job.js";
 
 const jobs = pgSchema("jobs");
+const tsvector = customType<{ data: string }>({ dataType: () => "tsvector" });
+
+export const catalogSearchState = jobs.table(
+  "catalog_search_state",
+  {
+    singleton: boolean("singleton").primaryKey().default(true),
+    revision: bigint("revision", { mode: "bigint" }).notNull().default(1n),
+  },
+  (table) => [
+    check("catalog_search_state_singleton_ck", sql`${table.singleton}`),
+    check("catalog_search_state_revision_ck", sql`${table.revision} > 0`),
+  ],
+);
 
 export const companies = jobs.table(
   "companies",
@@ -60,6 +76,13 @@ export const canonicalJobs = jobs.table(
     consecutiveVerificationFailures: integer("consecutive_verification_failures")
       .notNull()
       .default(0),
+    searchDocument: tsvector("search_document")
+      .notNull()
+      .generatedAlwaysAs(
+        sql`setweight(to_tsvector('simple'::regconfig, coalesce(title, '')), 'A') ||
+          setweight(to_tsvector('simple'::regconfig, coalesce(department, '')), 'B') ||
+          setweight(to_tsvector('simple'::regconfig, coalesce(description, '')), 'C')`,
+      ),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

@@ -33,12 +33,21 @@ evidence.
 The task release is deliberately review-separated:
 
 1. `PlanTask` verifies the merged source and immutable ECR artifact, reconstructs every existing
-   Terraform input from the checksum-bound already-applied plan, and saves a refresh-backed plan.
+   Terraform input from the checksum-bound retained `ParserDark` or `CompleteDark` verification
+   plan, and saves a refresh-backed plan. The adjacent `.baseline.json` sidecar is mandatory and
+   must bind the exact current source, account, region, absolute plan path/hash, Terraform 1.9.8
+   zero-change shape, current state lineage/serial, exact variable set, publication receipt,
+   rollout stage, and applicable parser-version pin. A KMS-prerequisite-only baseline is rejected.
+   Pass the verifier's exact `BaselineMetadataSha256` as mandatory
+   `-AppliedPlanMetadataSha256`; the operator checks those bytes before parsing the sidecar and
+   cross-binds its stage and parser pin to the exact saved-plan variables.
    It rejects resource drift and any meaningful change except a create-before-destroy replacement
    of `module.platform.aws_ecs_task_definition.migration[0]` caused only by the image digest.
 2. Independently inspect the saved plan and its `.metadata.json` sidecar, then pass the printed
-   SHA-256 to `ApplyTask`. The apply rechecks the artifact, plan semantics, encrypted state, task
-   definition, empty cluster, and zero-service boundary before reporting success.
+   SHA-256 to `ApplyTask`. Task metadata binds the retained plan and sidecar paths/checksums, stage,
+   state identity, receipt, and parser pin. The apply rechecks that complete handoff against live
+   state plus the artifact, plan semantics, encrypted state, task definition, empty cluster, and
+   zero-service boundary before reporting success.
 3. `PlanExecution` resolves the exact applied task definition, two migration subnets, and one
    application security group into a JSON `run-task` request. Review its SHA-256. If an operator-
    only correction was merged after `ApplyTask`, the release SHA may be an ancestor of the clean

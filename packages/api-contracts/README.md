@@ -12,3 +12,8 @@ Defines versioned API schemas and generates type-safe clients for web, mobile, e
 - `tests/` — Schema examples and consumer contract tests.
 
 Contracts contain transport shapes, not backend implementation or persistence models.
+
+The D1 catalog contract defines a strict `POST /v1/jobs/search` body with bounded supported filters,
+an exact `jobs:read` security requirement, active redacted result summaries, and an opaque
+continuation cursor. It intentionally excludes saved-job state, profile matching, and unsupported
+inferred filters.

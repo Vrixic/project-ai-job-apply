@@ -265,6 +265,36 @@
         }
       }
     },
+    "/jobs/search": {
+      "post": {
+        "operationId": "searchCanonicalJobs",
+        "security": [{ "oidc": ["jobs:read"] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/JobSearchRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "One stable page of active canonical jobs",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/JobSearchPage" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" }
+        }
+      }
+    },
     "/jobs/{jobId}": {
       "get": {
         "operationId": "getCanonicalJob",
@@ -786,6 +816,52 @@
         },
         "additionalProperties": false
       },
+      "JobSearchFilters": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240,
+            "pattern": "\\S"
+          },
+          "company": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "location": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240,
+            "pattern": "\\S"
+          },
+          "verifiedWithinDays": { "type": "integer", "minimum": 1, "maximum": 365 }
+        },
+        "additionalProperties": false
+      },
+      "JobSearchRequest": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "filters": { "$ref": "#/components/schemas/JobSearchFilters" },
+          "sort": { "type": "string", "enum": ["relevance", "freshness"], "default": "relevance" },
+          "pageSize": { "type": "integer", "minimum": 1, "maximum": 25, "default": 20 },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+          }
+        },
+        "additionalProperties": false
+      },
       "JobCompanySummary": {
         "type": "object",
         "required": ["id", "name"],
@@ -812,6 +888,54 @@
           "firstObservedAt": { "type": "string", "format": "date-time" },
           "lastVerifiedAt": { "type": "string", "format": "date-time" },
           "validThrough": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      },
+      "CanonicalJobSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "company",
+          "title",
+          "locations",
+          "status",
+          "firstObservedAt",
+          "lastVerifiedAt",
+          "expiresAt"
+        ],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "company": { "$ref": "#/components/schemas/JobCompanySummary" },
+          "title": { "type": "string", "minLength": 1, "maxLength": 240 },
+          "locations": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": { "type": "string", "minLength": 1, "maxLength": 240 }
+          },
+          "department": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "status": { "type": "string", "enum": ["active"] },
+          "firstObservedAt": { "type": "string", "format": "date-time" },
+          "lastVerifiedAt": { "type": "string", "format": "date-time" },
+          "expiresAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      },
+      "JobSearchPage": {
+        "type": "object",
+        "required": ["items"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 25,
+            "items": { "$ref": "#/components/schemas/CanonicalJobSummary" }
+          },
+          "nextCursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+          }
         },
         "additionalProperties": false
       },

@@ -16,9 +16,8 @@ function ConvertTo-ExactBoolean {
 function Get-DevelopmentDocumentBooleanVariableNames {
   return @(
     "database_performance_insights", "deploy_applications", "deploy_document_intake",
-    "deploy_document_processing", "deploy_gateway_lambda", "deploy_profile_readiness_durable",
-    "deploy_serverless_outbox", "document_scan_event_rule_enabled", "document_scan_mapping_enabled",
-    "document_processing_kms_prerequisite_enabled",
+    "deploy_gateway_lambda", "deploy_profile_readiness_durable", "deploy_serverless_outbox",
+    "document_scan_event_rule_enabled", "document_scan_mapping_enabled", "document_security_health_rules_enabled",
     "enable_container_insights", "enable_redis", "high_availability",
     "private_application_networking", "serverless_runtime_enabled"
   )
@@ -34,6 +33,7 @@ function Get-DevelopmentDocumentVariableKinds {
   $kinds["candidate_document_cors_allowed_origins"] = "composite"
   foreach ($name in @(
       "database_engine_version", "database_instance_class", "document_parser_artifact_base64sha256",
+      "document_parser_invocation_qualified_arn", "document_processing_deployment_stage",
       "document_parser_artifact_s3_key", "document_parser_artifact_s3_object_version",
       "document_parser_artifact_sha256", "document_parser_version",
       "document_processor_artifact_base64sha256", "document_processor_artifact_s3_key",
@@ -185,13 +185,16 @@ function Get-TerraformVariableEnvironmentAssignments {
   return $assignments
 }
 
-function Get-DevelopmentDocumentDarkExpectedActions {
-  $creates = @(
+function Get-DevelopmentDocumentStageExpectedActions {
+  param([Parameter(Mandatory)][ValidateSet("kms-prerequisite", "parser-dark", "complete-dark")][string]$Stage)
+  if ($Stage -ceq "kms-prerequisite") {
+    return @{ "module.platform.aws_kms_key.platform" = "update" }
+  }
+  $parserCreates = @(
     "module.platform.aws_cloudwatch_event_rule.document_processing_reconciler[0]",
     "module.platform.aws_cloudwatch_event_rule.document_scan_plan_unhealthy[0]",
     "module.platform.aws_cloudwatch_event_rule.document_scan_results[0]",
     "module.platform.aws_cloudwatch_event_rule.document_scan_tag_failure[0]",
-    "module.platform.aws_cloudwatch_event_target.document_processing_reconciler[0]",
     "module.platform.aws_cloudwatch_event_target.document_scan_plan_unhealthy[0]",
     "module.platform.aws_cloudwatch_event_target.document_scan_results[0]",
     "module.platform.aws_cloudwatch_event_target.document_scan_tag_failure[0]",
@@ -211,47 +214,124 @@ function Get-DevelopmentDocumentDarkExpectedActions {
     "module.platform.aws_iam_role.document_processor[0]",
     "module.platform.aws_iam_role_policy.document_parser[0]",
     "module.platform.aws_iam_role_policy.document_parser_object_access[0]",
-    "module.platform.aws_iam_role_policy.document_processor[0]",
     "module.platform.aws_lambda_alias.document_parser[0]",
-    "module.platform.aws_lambda_alias.document_processor[0]",
-    "module.platform.aws_lambda_event_source_mapping.document_scan_results[0]",
     "module.platform.aws_lambda_function.document_parser[0]",
-    "module.platform.aws_lambda_function.document_processor[0]",
-    "module.platform.aws_lambda_permission.document_processing_reconciler[0]",
     "module.platform.aws_security_group.document_parser[0]",
     "module.platform.aws_sqs_queue.document_scan_dead_letter[0]",
     "module.platform.aws_sqs_queue.document_scan_delivery_dead_letter[0]",
     "module.platform.aws_sqs_queue.document_scan_results[0]",
     "module.platform.aws_sqs_queue_policy.document_scan_delivery_dead_letter[0]",
     "module.platform.aws_sqs_queue_policy.document_scan_results[0]",
-    "module.platform.aws_vpc_endpoint.candidate_documents_s3[0]",
+    "module.platform.aws_vpc_endpoint.candidate_documents_s3[0]"
+  )
+  $parserUpdates = @(
+    "module.platform.aws_s3_bucket_policy.candidate_documents[0]",
+    "module.platform.aws_sns_topic_policy.operational_alerts"
+  )
+  $completeCreates = @(
+    "module.platform.aws_cloudwatch_event_target.document_processing_reconciler[0]",
+    "module.platform.aws_iam_role_policy.document_processor[0]",
+    "module.platform.aws_lambda_alias.document_processor[0]",
+    "module.platform.aws_lambda_event_source_mapping.document_scan_results[0]",
+    "module.platform.aws_lambda_function.document_processor[0]",
+    "module.platform.aws_lambda_permission.document_processing_reconciler[0]",
     "module.platform.aws_vpc_endpoint.sts[0]"
   )
-  $updates = @(
-    "module.platform.aws_s3_bucket_policy.candidate_documents[0]",
-    "module.platform.aws_sns_topic_policy.operational_alerts",
+  $completeUpdates = @(
     "module.platform.aws_vpc_endpoint.lambda[0]",
     "module.platform.aws_vpc_endpoint.secretsmanager[0]",
     "module.platform.aws_vpc_endpoint.sqs[0]"
   )
   $result = @{}
+  $creates = if ($Stage -ceq "parser-dark") { $parserCreates } else { $completeCreates }
+  $updates = if ($Stage -ceq "parser-dark") { $parserUpdates } else { $completeUpdates }
   foreach ($address in $creates) { $result[$address] = "create" }
   foreach ($address in $updates) { $result[$address] = "update" }
   return $result
 }
 
-function Get-DevelopmentDocumentDarkExpectedDataReads {
-  return @(
-    "module.platform.data.aws_iam_policy_document.candidate_documents_s3_endpoint[0]",
-    "module.platform.data.aws_iam_policy_document.document_parser_object_access_assume[0]",
-    "module.platform.data.aws_iam_policy_document.document_processor[0]",
-    "module.platform.data.aws_iam_policy_document.document_scan_delivery_dead_letter[0]",
-    "module.platform.data.aws_iam_policy_document.document_scan_queue[0]",
-    "module.platform.data.aws_iam_policy_document.document_sts_endpoint[0]",
-    "module.platform.data.aws_iam_policy_document.outbox_lambda_endpoint[0]",
-    "module.platform.data.aws_iam_policy_document.outbox_sqs_endpoint[0]",
-    "module.platform.data.aws_iam_policy_document.secrets_endpoint[0]"
+function Get-DevelopmentDocumentDarkExpectedActions { return Get-DevelopmentDocumentStageExpectedActions -Stage "complete-dark" }
+
+function Get-DevelopmentDocumentDarkExpectedDataReads { return @() }
+
+function Assert-DevelopmentDocumentStageResourceInventory {
+  param(
+    [Parameter(Mandatory)][ValidateSet("parser-dark", "complete-dark")][string]$Stage,
+    [Parameter(Mandatory)][string[]]$StateAddresses,
+    [Parameter(Mandatory)][object]$LiveInventory
   )
+  $laterStage = @(
+    "module.platform.aws_cloudwatch_event_target.document_processing_reconciler[0]",
+    "module.platform.aws_iam_role_policy.document_processor[0]",
+    "module.platform.aws_lambda_alias.document_processor[0]",
+    "module.platform.aws_lambda_event_source_mapping.document_scan_results[0]",
+    "module.platform.aws_lambda_function.document_processor[0]",
+    "module.platform.aws_lambda_permission.document_processing_reconciler[0]",
+    "module.platform.aws_vpc_endpoint.sts[0]"
+  )
+  $requiredParser = @(
+    "module.platform.aws_iam_role.document_processor[0]",
+    "module.platform.aws_iam_role.document_parser[0]",
+    "module.platform.aws_iam_role.document_parser_object_access[0]",
+    "module.platform.aws_lambda_alias.document_parser[0]",
+    "module.platform.aws_lambda_function.document_parser[0]",
+    "module.platform.aws_vpc_endpoint.candidate_documents_s3[0]"
+  )
+  foreach ($address in $requiredParser) {
+    if ($address -notin $StateAddresses) { throw "The staged document state is missing '$address'." }
+  }
+  if ($Stage -ceq "parser-dark") {
+    foreach ($address in $laterStage) {
+      if ($address -in $StateAddresses) { throw "Parser-dark contains later-stage resource '$address'." }
+    }
+    foreach ($name in @("ProcessorFunctions", "ProcessorAliases", "ProcessorMappings", "StsEndpoints", "ReconcilerTargets", "ReconcilerPermissions", "ProcessorInlinePolicies", "LaterStageEndpointGrants")) {
+      $property = $LiveInventory.PSObject.Properties[$name]
+      if ($null -eq $property -or [int]$property.Value -ne 0) { throw "Parser-dark live inventory contains or cannot prove absence of '$name'." }
+    }
+  }
+  else {
+    foreach ($address in $laterStage) {
+      if ($address -notin $StateAddresses) { throw "Complete-dark is missing '$address'." }
+    }
+    foreach ($name in @("ProcessorFunctions", "ProcessorAliases", "ProcessorMappings", "StsEndpoints", "ReconcilerTargets", "ReconcilerPermissions", "ProcessorInlinePolicies")) {
+      $property = $LiveInventory.PSObject.Properties[$name]
+      if ($null -eq $property -or [int]$property.Value -ne 1) { throw "Complete-dark live inventory is not exact for '$name'." }
+    }
+    $endpointGrants = $LiveInventory.PSObject.Properties["LaterStageEndpointGrants"]
+    if ($null -eq $endpointGrants -or [int]$endpointGrants.Value -ne 3) {
+      throw "Complete-dark must contain exactly three later-stage endpoint grants."
+    }
+  }
+  $known = @((Get-DevelopmentDocumentStageExpectedActions -Stage "parser-dark").Keys) + $laterStage
+  $documentOwnedPattern = '^module\.platform\.aws_[^.]+\.document_[A-Za-z0-9_]+(?:\[[0-9]+\])?$'
+  $unmanaged = @($StateAddresses | Where-Object { $_ -match $documentOwnedPattern -and $_ -notin $known })
+  if ($unmanaged.Count -ne 0) { throw "The document stage contains an unmanaged or unexpected runtime resource: $($unmanaged -join ', ')." }
+}
+
+function Assert-ParserLambdaResourcePolicyAbsence {
+  param([AllowNull()][object]$UnqualifiedPolicy, [AllowNull()][object]$QualifiedPolicy)
+  if ($null -ne $UnqualifiedPolicy -or $null -ne $QualifiedPolicy) {
+    throw "The parser Lambda must not have a function or alias resource policy."
+  }
+}
+
+function Assert-ExactProcessorLambdaResourcePolicyDocument {
+  param([Parameter(Mandatory)][object]$PolicyValue, [Parameter(Mandatory)][string]$AccountId,
+    [Parameter(Mandatory)][string]$ExpectedSourceArn)
+  $policy = ConvertFrom-IamPolicyValue $PolicyValue
+  $statements = @($policy.Statement)
+  if ([string]$policy.Version -cne "2012-10-17" -or $statements.Count -ne 1) {
+    throw "The processor Lambda resource policy must contain exactly one statement."
+  }
+  $statement = $statements[0]
+  Assert-ExactObjectKeys $statement @("Action", "Condition", "Effect", "Principal", "Resource", "Sid") "processor Lambda resource-policy statement"
+  if ([string]$statement.Sid -cne "AllowExactDocumentReconcilerRule") { throw "The processor Lambda resource policy has an unexpected Sid." }
+  Assert-ExactStringSet $statement.Effect @("Allow") "processor Lambda resource-policy effect"
+  Assert-ExactStringSet $statement.Action @("lambda:InvokeFunction") "processor Lambda resource-policy actions"
+  Assert-ExactObjectKeys $statement.Principal @("Service") "processor Lambda resource-policy principal"
+  Assert-ExactStringSet $statement.Principal.Service @("events.amazonaws.com") "processor Lambda resource-policy principal"
+  Assert-ExactCondition $statement.Condition @{ ArnLike = @{ "AWS:SourceArn" = @($ExpectedSourceArn) } }
+  Assert-ExactStringSet $statement.Resource @("arn:aws:lambda:us-east-2:${AccountId}:function:ai-job-apply-development-document-processor:development") "processor Lambda resource-policy target"
 }
 
 function Get-OptionalTerraformChangeValue {
@@ -330,7 +410,7 @@ function ConvertTo-StrictUtcWholeSecond {
 }
 
 function Assert-DevelopmentDocumentExactDataReads {
-  param([Parameter(Mandatory)][object[]]$Records)
+  param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Records)
   $expected = @(Get-DevelopmentDocumentDarkExpectedDataReads | Sort-Object)
   $actual = @($Records | ForEach-Object { [string]$_.address } | Sort-Object)
   if (($actual -join "|") -cne ($expected -join "|")) { throw "The dark plan has an unexpected deferred data read set." }
@@ -388,6 +468,39 @@ function Assert-DevelopmentDocumentAcceptedResourceDrift {
   }
 }
 
+function Assert-DevelopmentDocumentRetainedBaselinePlan {
+  param([Parameter(Mandatory)][object]$Plan)
+
+  if ($Plan.complete -isnot [bool] -or -not $Plan.complete -or
+    $Plan.errored -isnot [bool] -or $Plan.errored -or
+    $Plan.applyable -isnot [bool] -or $Plan.applyable -or
+    [string]$Plan.terraform_version -cne "1.9.8" -or
+    $null -eq $Plan.variables -or $null -eq $Plan.planned_values -or
+    $null -eq $Plan.planned_values.root_module) {
+    throw "The retained document baseline is not a complete, nonerrored, nonapplyable Terraform 1.9.8 zero-change plan."
+  }
+
+  $meaningfulResources = @($Plan.resource_changes | Where-Object {
+      $null -ne $_ -and (@($_.change.actions) -join ",") -cne "no-op"
+    })
+  $outputChangesProperty = $Plan.PSObject.Properties["output_changes"]
+  $meaningfulOutputs = @(
+    if ($null -ne $outputChangesProperty -and $null -ne $outputChangesProperty.Value) {
+      $outputChangesProperty.Value.PSObject.Properties | Where-Object {
+        $null -ne $_.Value -and (@($_.Value.actions) -join ",") -cne "no-op"
+      }
+    }
+  )
+  if ($meaningfulResources.Count -ne 0 -or $meaningfulOutputs.Count -ne 0) {
+    throw "The retained document baseline contains a meaningful resource or output change."
+  }
+
+  $drift = @($Plan.resource_drift | Where-Object { $null -ne $_ })
+  if ($drift.Count -ne 0) {
+    Assert-DevelopmentDocumentAcceptedResourceDrift -Records $drift
+  }
+}
+
 function Get-TerraformStateResourceMap {
   param([Parameter(Mandatory)][object]$RootModule)
   $map = @{}
@@ -416,7 +529,9 @@ function Assert-DevelopmentDocumentDarkVariables {
   param(
     [Parameter(Mandatory)][object]$BaselineVariables,
     [Parameter(Mandatory)][object]$PlanVariables,
-    [Parameter(Mandatory)][object]$Receipt
+    [Parameter(Mandatory)][object]$Receipt,
+    [Parameter(Mandatory)][ValidateSet("kms-prerequisite", "parser-dark", "complete-dark")][string]$Stage,
+    [string]$ParserQualifiedArn = ""
   )
 
   $processor = @($Receipt.artifacts | Where-Object {
@@ -429,10 +544,11 @@ function Assert-DevelopmentDocumentDarkVariables {
     throw "The publication receipt must contain one verified ZIP for each document Lambda."
   }
   $overlay = @{
-    deploy_document_processing = $true
-    document_processing_kms_prerequisite_enabled = $true
+    document_processing_deployment_stage = $Stage
+    document_parser_invocation_qualified_arn = $(if ($Stage -ceq "complete-dark") { $ParserQualifiedArn } else { "" })
     document_scan_mapping_enabled = $false
     document_scan_event_rule_enabled = $false
+    document_security_health_rules_enabled = $Stage -in @("parser-dark", "complete-dark")
     document_processor_artifact_s3_key = [string]$processor[0].key
     document_processor_artifact_s3_object_version = [string]$processor[0].versionId
     document_processor_artifact_sha256 = [string]$processor[0].artifactSha256
@@ -443,18 +559,27 @@ function Assert-DevelopmentDocumentDarkVariables {
     document_parser_artifact_base64sha256 = [string]$parser[0].objectBase64Sha256
     document_processor_extension_layer_arn = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
   }
-  $baselineProperties = @($BaselineVariables.PSObject.Properties)
-  $planProperties = @($PlanVariables.PSObject.Properties)
-  if ($planProperties.Count -ne ($baselineProperties.Count + 1)) {
-    throw "The dark plan variable set must be the accepted baseline plus its exact KMS prerequisite switch."
+  if ($Stage -cne "complete-dark") {
+    foreach ($name in @(
+        "document_processor_artifact_s3_key", "document_processor_artifact_s3_object_version",
+        "document_processor_artifact_sha256", "document_processor_artifact_base64sha256",
+        "document_processor_extension_layer_arn"
+      )) { $null = $overlay.Remove($name) }
   }
-  $prerequisite = $PlanVariables.PSObject.Properties["document_processing_kms_prerequisite_enabled"]
-  if ($null -eq $prerequisite -or
-    -not (ConvertTo-ExactBoolean $prerequisite.Value.value "document_processing_kms_prerequisite_enabled")) {
-    throw "The dark plan must preserve the reviewed KMS prerequisite."
-  }
-  foreach ($property in $baselineProperties) {
+  $baselineByCurrentName = @{}
+  foreach ($property in @($BaselineVariables.PSObject.Properties)) {
     $name = [string]$property.Name
+    if ($name -in @("deploy_document_processing", "document_processing_kms_prerequisite_enabled")) { continue }
+    $baselineByCurrentName[$name] = $property.Value.value
+  }
+  $baselineByCurrentName["document_processing_deployment_stage"] = "kms-prerequisite"
+  $baselineByCurrentName["document_parser_invocation_qualified_arn"] = ""
+  $baselineByCurrentName["document_security_health_rules_enabled"] = $false
+  $planNames = @($PlanVariables.PSObject.Properties | ForEach-Object Name | Sort-Object)
+  if (($planNames -join "|") -cne (@($baselineByCurrentName.Keys | Sort-Object) -join "|")) {
+    throw "The staged plan variable set is not the exact migrated baseline variable set."
+  }
+  foreach ($name in @($baselineByCurrentName.Keys)) {
     $planned = $PlanVariables.PSObject.Properties[$name]
     if ($null -eq $planned) { throw "The dark plan omits baseline variable '$name'." }
     $actualCanonical = ConvertTo-DevelopmentDocumentComparableVariableValue `
@@ -462,16 +587,21 @@ function Assert-DevelopmentDocumentDarkVariables {
     $expectedCanonical = if ($overlay.ContainsKey($name)) {
       ConvertTo-DevelopmentDocumentComparableVariableValue -Name $name -Value $overlay[$name]
     } else {
-      ConvertTo-DevelopmentDocumentComparableVariableValue -Name $name -Value $property.Value.value -SerializedBaseline
+      ConvertTo-DevelopmentDocumentComparableVariableValue -Name $name -Value $baselineByCurrentName[$name] -SerializedBaseline
     }
     if ($actualCanonical -cne $expectedCanonical) {
       throw "The dark plan changed unapproved variable '$name'."
     }
   }
-  if (-not (ConvertTo-ExactBoolean $PlanVariables.deploy_document_processing.value "deploy_document_processing") -or
+  if ([string]$PlanVariables.document_processing_deployment_stage.value -cne $Stage -or
     (ConvertTo-ExactBoolean $PlanVariables.document_scan_mapping_enabled.value "document_scan_mapping_enabled") -or
-    (ConvertTo-ExactBoolean $PlanVariables.document_scan_event_rule_enabled.value "document_scan_event_rule_enabled")) {
-    throw "Document processing must be deployed dark with both processing triggers disabled."
+    (ConvertTo-ExactBoolean $PlanVariables.document_scan_event_rule_enabled.value "document_scan_event_rule_enabled") -or
+    (ConvertTo-ExactBoolean $PlanVariables.document_security_health_rules_enabled.value "document_security_health_rules_enabled") -ne
+    ($Stage -in @("parser-dark", "complete-dark"))) {
+    throw "The requested stage must keep processing dark and set only the two security-health alert rules active."
+  }
+  if ($Stage -ceq "complete-dark" -and $ParserQualifiedArn -cnotmatch '^arn:aws:lambda:us-east-2:[0-9]{12}:function:ai-job-apply-development-document-parser:[1-9][0-9]*$') {
+    throw "Complete-dark requires one exact positive numeric parser-version ARN."
   }
 }
 
@@ -712,22 +842,25 @@ function Assert-SecretEndpointPolicyDelta {
 }
 
 function Assert-ApprovedPolicyUpdateSemantics {
-  param([Parameter(Mandatory)][object[]]$Changes, [Parameter(Mandatory)][string]$AccountId)
+  param([Parameter(Mandatory)][object[]]$Changes, [Parameter(Mandatory)][string]$AccountId,
+    [Parameter(Mandatory)][ValidateSet("parser-dark", "complete-dark")][string]$Stage)
   $byAddress = @{}; foreach ($change in $Changes) { $byAddress[[string]$change.address] = $change }
-  $expectedActions = Get-DevelopmentDocumentDarkExpectedActions
+  $expectedActions = Get-DevelopmentDocumentStageExpectedActions -Stage $Stage
   foreach ($address in @($expectedActions.Keys | Where-Object { $expectedActions[$_] -eq "update" })) {
     Assert-OnlyPolicyAttributeChanged $byAddress[$address].change
   }
-  $s3Change = $byAddress["module.platform.aws_s3_bucket_policy.candidate_documents[0]"].change
-  $beforeS3 = ConvertFrom-IamPolicyValue $s3Change.before.policy
-  $transport = @($beforeS3.Statement | Where-Object Sid -eq "DenyInsecureTransport")[0]
-  $bucketArn = @($transport.Resource | Where-Object { [string]$_ -notlike "*/*" })[0]
-  $s3 = Get-PolicyAddedStatements $s3Change.before.policy $s3Change.after.policy @("DenyQuarantineReadsWithoutCleanMalwareTag")
-  Assert-ExactAddedStatement $s3[0] CandidateDeny $AccountId $bucketArn
-
-  $sns = $byAddress["module.platform.aws_sns_topic_policy.operational_alerts"].change
-  $addedSns = Get-PolicyAddedStatements $sns.before.policy $sns.after.policy @("AllowExactDocumentOperationalRules")
-  Assert-ExactAddedStatement $addedSns[0] SnsAlerts $AccountId
+  if ($Stage -ceq "parser-dark") {
+    $s3Change = $byAddress["module.platform.aws_s3_bucket_policy.candidate_documents[0]"].change
+    $beforeS3 = ConvertFrom-IamPolicyValue $s3Change.before.policy
+    $transport = @($beforeS3.Statement | Where-Object Sid -eq "DenyInsecureTransport")[0]
+    $bucketArn = @($transport.Resource | Where-Object { [string]$_ -notlike "*/*" })[0]
+    $s3 = Get-PolicyAddedStatements $s3Change.before.policy $s3Change.after.policy @("DenyQuarantineReadsWithoutCleanMalwareTag")
+    Assert-ExactAddedStatement $s3[0] CandidateDeny $AccountId $bucketArn
+    $sns = $byAddress["module.platform.aws_sns_topic_policy.operational_alerts"].change
+    $addedSns = Get-PolicyAddedStatements $sns.before.policy $sns.after.policy @("AllowExactDocumentOperationalRules")
+    Assert-ExactAddedStatement $addedSns[0] SnsAlerts $AccountId
+    return
+  }
   $sqs = $byAddress["module.platform.aws_vpc_endpoint.sqs[0]"].change
   $addedSqs = Get-PolicyAddedStatements $sqs.before.policy $sqs.after.policy @("ExactDocumentProcessorQueueOnly")
   Assert-ExactAddedStatement $addedSqs[0] SqsProcessor $AccountId
@@ -740,24 +873,11 @@ function Assert-ApprovedPolicyUpdateSemantics {
 
 function Assert-DevelopmentDocumentKmsPrerequisiteVariables {
   param([Parameter(Mandatory)][object]$BaselineVariables, [Parameter(Mandatory)][object]$PlanVariables)
-  $baselineProperties = @($BaselineVariables.PSObject.Properties)
-  $planProperties = @($PlanVariables.PSObject.Properties)
-  if ($planProperties.Count -ne ($baselineProperties.Count + 1)) {
-    throw "The prerequisite plan variable set is not the exact baseline plus its KMS switch."
-  }
-  foreach ($property in $baselineProperties) {
-    $name = [string]$property.Name
-    $planned = $PlanVariables.PSObject.Properties[$name]
-    if ($null -eq $planned -or
-      (ConvertTo-DevelopmentDocumentComparableVariableValue $name $planned.Value.value) -cne
-      (ConvertTo-DevelopmentDocumentComparableVariableValue $name $property.Value.value -SerializedBaseline)) {
-      throw "The prerequisite plan changed baseline variable '$name'."
-    }
-  }
-  $switch = $PlanVariables.PSObject.Properties["document_processing_kms_prerequisite_enabled"]
-  if ($null -eq $switch -or -not (ConvertTo-ExactBoolean $switch.Value.value "KMS prerequisite switch")) {
-    throw "The prerequisite plan must enable only the exact KMS prerequisite switch."
-  }
+  $emptyReceipt = [pscustomobject]@{ artifacts = @(
+      [pscustomobject]@{ artifactName = "document-processor-lambda"; suffix = "zip"; key = ""; versionId = ""; artifactSha256 = ""; objectBase64Sha256 = "" },
+      [pscustomobject]@{ artifactName = "document-parser-lambda"; suffix = "zip"; key = ""; versionId = ""; artifactSha256 = ""; objectBase64Sha256 = "" }
+    ) }
+  Assert-DevelopmentDocumentDarkVariables $BaselineVariables $PlanVariables $emptyReceipt "kms-prerequisite"
 }
 
 function Assert-DevelopmentDocumentKmsPrerequisitePlan {
@@ -846,11 +966,26 @@ function Assert-ExactDocumentIdentityPolicy {
 
 function Assert-ExactDocumentCreatedResourcePolicies {
   param([Parameter(Mandatory)][hashtable]$ByAddress, [Parameter(Mandatory)][string]$AccountId,
-    [Parameter(Mandatory)][string]$PlatformKmsArn)
+    [Parameter(Mandatory)][string]$PlatformKmsArn,
+    [Parameter(Mandatory)][ValidateSet("parser-dark", "complete-dark")][string]$Stage)
+  if ($Stage -ceq "complete-dark") {
+    Assert-ExactDocumentIdentityPolicy $ByAddress["module.platform.aws_iam_role_policy.document_processor[0]"].change.after.policy Processor $AccountId $PlatformKmsArn
+    $objectRole = "arn:aws:iam::${AccountId}:role/ai-job-apply-development-document-object-access"
+    $processorRole = "arn:aws:iam::${AccountId}:role/ai-job-apply-development-document-processor"
+    $stsPolicy = ConvertFrom-IamPolicyValue $ByAddress["module.platform.aws_vpc_endpoint.sts[0]"].change.after.policy
+    $sts = @($stsPolicy.Statement)
+    if ([string]$stsPolicy.Version -cne "2012-10-17" -or $sts.Count -ne 1 -or [string]$sts[0].Sid -cne "CoordinatorAssumesExactDocumentObjectRoleOnly") { throw "The STS endpoint policy has an unexpected shape." }
+    Assert-ExactStringSet $sts[0].Effect @("Allow") "STS endpoint effect"
+    Assert-ExactStringSet $sts[0].Action @("sts:AssumeRole") "STS endpoint actions"
+    Assert-ExactStringSet $sts[0].Resource @($objectRole) "STS endpoint resources"
+    Assert-ExactObjectKeys $sts[0].Principal @("AWS") "STS endpoint principal"
+    Assert-ExactStringSet $sts[0].Principal.AWS @("*") "STS endpoint principal"
+    Assert-ExactCondition $sts[0].Condition @{ ArnEquals = @{ "aws:PrincipalArn" = @($processorRole) } }
+    return
+  }
   Assert-ExactDocumentTrustPolicy $ByAddress["module.platform.aws_iam_role.document_processor[0]"].change.after.assume_role_policy Lambda $AccountId
   Assert-ExactDocumentTrustPolicy $ByAddress["module.platform.aws_iam_role.document_parser[0]"].change.after.assume_role_policy Lambda $AccountId
   Assert-ExactDocumentTrustPolicy $ByAddress["module.platform.aws_iam_role.document_parser_object_access[0]"].change.after.assume_role_policy ObjectAccess $AccountId
-  Assert-ExactDocumentIdentityPolicy $ByAddress["module.platform.aws_iam_role_policy.document_processor[0]"].change.after.policy Processor $AccountId $PlatformKmsArn
   Assert-ExactDocumentIdentityPolicy $ByAddress["module.platform.aws_iam_role_policy.document_parser[0]"].change.after.policy Parser $AccountId $PlatformKmsArn
   Assert-ExactDocumentIdentityPolicy $ByAddress["module.platform.aws_iam_role_policy.document_parser_object_access[0]"].change.after.policy ObjectAccess $AccountId $PlatformKmsArn
 
@@ -881,10 +1016,6 @@ function Assert-ExactDocumentCreatedResourcePolicies {
     Assert-ExactStringSet $statement.Resource @("arn:aws:s3:::ai-job-apply-development-candidate-docs-${AccountId}/$prefix/*") "S3 endpoint resources"
     Assert-ExactCondition $statement.Condition @{ ArnEquals = @{ "aws:PrincipalArn" = @($(if ([string]$statement.Sid -eq "ExactCoordinatorNormalizedReadsOnly") { $processorRole } else { $objectRole })) } }
   }
-  $stsPolicy = ConvertFrom-IamPolicyValue $ByAddress["module.platform.aws_vpc_endpoint.sts[0]"].change.after.policy; $sts = @($stsPolicy.Statement)
-  if ([string]$stsPolicy.Version -cne "2012-10-17" -or $sts.Count -ne 1 -or [string]$sts[0].Sid -cne "CoordinatorAssumesExactDocumentObjectRoleOnly") { throw "The STS endpoint policy has an unexpected shape." }
-  Assert-ExactStringSet $sts[0].Effect @("Allow") "STS endpoint effect"; Assert-ExactStringSet $sts[0].Action @("sts:AssumeRole") "STS endpoint actions"; Assert-ExactStringSet $sts[0].Resource @($objectRole) "STS endpoint resources"
-  Assert-ExactObjectKeys $sts[0].Principal @("AWS") "STS endpoint principal"; Assert-ExactStringSet $sts[0].Principal.AWS @("*") "STS endpoint principal"; Assert-ExactCondition $sts[0].Condition @{ ArnEquals = @{ "aws:PrincipalArn" = @($processorRole) } }
 }
 
 function Assert-ExactDocumentLambdaRuntime {
@@ -985,9 +1116,10 @@ function Assert-ExactDocumentAlarmSet {
 }
 
 function Assert-DevelopmentDocumentDarkPlan {
-  param([Parameter(Mandatory)][object]$Plan, [Parameter(Mandatory)][string]$AccountId)
+  param([Parameter(Mandatory)][object]$Plan, [Parameter(Mandatory)][string]$AccountId,
+    [Parameter(Mandatory)][ValidateSet("parser-dark", "complete-dark")][string]$Stage)
 
-  $expected = Get-DevelopmentDocumentDarkExpectedActions
+  $expected = Get-DevelopmentDocumentStageExpectedActions -Stage $Stage
   Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($Plan.resource_drift)
   $kmsRecords = @($Plan.resource_changes | Where-Object { [string]$_.address -ceq "module.platform.aws_kms_key.platform" })
   if ($kmsRecords.Count -ne 1 -or [string]$kmsRecords[0].mode -cne "managed" -or
@@ -1014,18 +1146,19 @@ function Assert-DevelopmentDocumentDarkPlan {
     if ($action -cne $expected[$address]) { throw "The dark plan action for '$address' must be '$($expected[$address])'." }
   }
 
-  $securityCreateFields = @{
-    "module.platform.aws_iam_role.document_processor[0]" = @("assume_role_policy")
-    "module.platform.aws_iam_role.document_parser[0]" = @("assume_role_policy")
-    "module.platform.aws_iam_role.document_parser_object_access[0]" = @("assume_role_policy")
-    "module.platform.aws_iam_role_policy.document_parser[0]" = @("policy")
-    "module.platform.aws_iam_role_policy.document_parser_object_access[0]" = @("policy")
-    "module.platform.aws_iam_role_policy.document_processor[0]" = @("policy")
-    "module.platform.aws_sqs_queue_policy.document_scan_delivery_dead_letter[0]" = @("policy", "queue_url")
-    "module.platform.aws_sqs_queue_policy.document_scan_results[0]" = @("policy", "queue_url")
-    "module.platform.aws_vpc_endpoint.candidate_documents_s3[0]" = @("policy")
-    "module.platform.aws_vpc_endpoint.sts[0]" = @("policy")
-  }
+  $securityCreateFields = if ($Stage -ceq "parser-dark") { @{
+      "module.platform.aws_iam_role.document_processor[0]" = @("assume_role_policy")
+      "module.platform.aws_iam_role.document_parser[0]" = @("assume_role_policy")
+      "module.platform.aws_iam_role.document_parser_object_access[0]" = @("assume_role_policy")
+      "module.platform.aws_iam_role_policy.document_parser[0]" = @("policy", "role")
+      "module.platform.aws_iam_role_policy.document_parser_object_access[0]" = @("policy", "role")
+      "module.platform.aws_sqs_queue_policy.document_scan_delivery_dead_letter[0]" = @("policy", "queue_url")
+      "module.platform.aws_sqs_queue_policy.document_scan_results[0]" = @("policy", "queue_url")
+      "module.platform.aws_vpc_endpoint.candidate_documents_s3[0]" = @("policy")
+    } } else { @{
+      "module.platform.aws_iam_role_policy.document_processor[0]" = @("policy", "role")
+      "module.platform.aws_vpc_endpoint.sts[0]" = @("policy")
+    } }
   $byAddress = @{}; foreach ($change in $changes) { $byAddress[[string]$change.address] = $change }
   foreach ($entry in $securityCreateFields.GetEnumerator()) {
     foreach ($field in @($entry.Value)) {
@@ -1040,22 +1173,38 @@ function Assert-DevelopmentDocumentDarkPlan {
       }
     }
   }
-  Assert-ExactDocumentCreatedResourcePolicies -ByAddress $byAddress -AccountId $AccountId -PlatformKmsArn $platformKmsArn
+  foreach ($address in @($expected.Keys | Where-Object { $expected[$_] -ceq "update" })) {
+    $afterUnknown = Get-OptionalTerraformChangeValue $byAddress[$address].change "after_unknown"
+    $unknown = if ($null -eq $afterUnknown) { $null } else { $afterUnknown.PSObject.Properties["policy"] }
+    if (($null -ne $unknown -and (ConvertTo-DeploymentCanonicalValue $unknown.Value -SortArrays) -match 'true') -or
+      [string]::IsNullOrWhiteSpace([string]$byAddress[$address].change.after.policy)) {
+      throw "Updated security policy must be fully known before review for '$address'."
+    }
+  }
+  Assert-ExactDocumentCreatedResourcePolicies -ByAddress $byAddress -AccountId $AccountId -PlatformKmsArn $platformKmsArn -Stage $Stage
 
-  $mapping = @($changes | Where-Object address -eq "module.platform.aws_lambda_event_source_mapping.document_scan_results[0]")[0]
-  foreach ($ruleAddress in @(
+  if ($Stage -ceq "parser-dark") {
+    foreach ($ruleAddress in @(
       "module.platform.aws_cloudwatch_event_rule.document_scan_results[0]",
       "module.platform.aws_cloudwatch_event_rule.document_scan_tag_failure[0]",
       "module.platform.aws_cloudwatch_event_rule.document_scan_plan_unhealthy[0]",
       "module.platform.aws_cloudwatch_event_rule.document_processing_reconciler[0]"
-    )) {
-    if ([string]$byAddress[$ruleAddress].change.after.state -cne "DISABLED") {
-      throw "Every document EventBridge rule must be disabled in the initial dark plan."
+      )) {
+      $expectedState = if ($ruleAddress -in @(
+          "module.platform.aws_cloudwatch_event_rule.document_scan_tag_failure[0]",
+          "module.platform.aws_cloudwatch_event_rule.document_scan_plan_unhealthy[0]"
+        )) { "ENABLED" } else { "DISABLED" }
+      if ([string]$byAddress[$ruleAddress].change.after.state -cne $expectedState) {
+        throw "A document EventBridge rule does not match its reviewed processing-dark/security-alert state."
+      }
     }
   }
-  if (ConvertTo-ExactBoolean $mapping.change.after.enabled "document mapping enabled") {
-    throw "The document queue mapping must be disabled in the initial dark plan."
+  else {
+    $mapping = $byAddress["module.platform.aws_lambda_event_source_mapping.document_scan_results[0]"]
+    if (ConvertTo-ExactBoolean $mapping.change.after.enabled "document mapping enabled") {
+      throw "The document queue mapping must be disabled in complete-dark."
+    }
   }
-  Assert-ApprovedPolicyUpdateSemantics -Changes $changes -AccountId $AccountId
+  Assert-ApprovedPolicyUpdateSemantics -Changes $changes -AccountId $AccountId -Stage $Stage
   return $changes
 }

@@ -1,16 +1,18 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import {
+  type CanonicalObservation,
   canonicalizeObservation,
+  type DuplicateResolution,
   defaultFreshnessDays,
   evaluateLifecycle,
   exactIdentityKeys,
-  suspectStaleFailureThreshold,
-  type CanonicalObservation,
-  type DuplicateResolution,
   type JobObservation,
   type JobProvenance,
   type JobStatus,
+  normalizeText,
+  suspectStaleFailureThreshold,
 } from "../domain/canonical-job.js";
 
 export interface CatalogObservation extends JobObservation {
@@ -57,9 +59,44 @@ export interface ActiveJobRecord {
   sources: ActiveJobSourceRecord[];
 }
 
+export type JobSearchSort = "relevance" | "freshness";
+
+export interface ActiveJobSearchFilters {
+  title?: string;
+  company?: string;
+  location?: string;
+  verifiedWithinDays?: number;
+}
+
+export interface ActiveJobSearchInput {
+  query?: string;
+  filters?: ActiveJobSearchFilters;
+  sort?: JobSearchSort;
+  pageSize?: number;
+  cursor?: string;
+}
+
+export interface ActiveJobSummaryRecord {
+  id: string;
+  company: ActiveJobRecord["company"];
+  title: string;
+  locations: string[];
+  department?: string;
+  status: "active";
+  firstObservedAt: Date;
+  lastVerifiedAt: Date;
+  expiresAt: Date;
+}
+
+export interface ActiveJobSearchPage {
+  items: ActiveJobSummaryRecord[];
+  nextCursor?: string;
+}
+
 export interface JobCatalogReader {
   ping(): Promise<void>;
   getActiveJob(jobId: string, now?: Date): Promise<ActiveJobRecord | null>;
+  searchActiveJobs(input: ActiveJobSearchInput, now?: Date): Promise<ActiveJobSearchPage>;
 }
 
 export interface RecordObservationResult {
@@ -100,7 +137,21 @@ export interface ReopenDuplicateCandidateInput {
 
 export interface JobCatalogOptions {
   acceptedProvenance?: ReadonlySet<JobProvenance>;
+  searchCursorKeys: JobSearchCursorKeyring;
+}
+
+export interface JobCatalogDatabaseOptions {
   maxConnections?: number;
+}
+
+export interface JobSearchCursorKey {
+  id: string;
+  key: Uint8Array;
+}
+
+export interface JobSearchCursorKeyring {
+  active: JobSearchCursorKey;
+  verification?: readonly JobSearchCursorKey[];
 }
 
 interface ExactMatchRow {
@@ -151,6 +202,223 @@ interface ActiveJobRow {
     lastVerifiedAt: string;
     validThrough: string | null;
   }>;
+}
+
+interface ActiveJobSearchRow {
+  id: string;
+  companyId: string;
+  companyName: string;
+  companyVerifiedDomain: string | null;
+  title: string;
+  locations: string[];
+  department: string | null;
+  firstObservedAt: Date;
+  lastVerifiedAt: Date;
+  expiresAt: Date;
+  rankKey: string;
+}
+
+interface NormalizedJobSearchInput {
+  query: string | null;
+  title: string | null;
+  company: string | null;
+  location: string | null;
+  verifiedWithinDays: number | null;
+  sort: JobSearchSort;
+  pageSize: number;
+  cursor?: string;
+}
+
+interface JobSearchCursor {
+  version: 1;
+  keyId: string;
+  revision: string;
+  sort: JobSearchSort;
+  asOf: string;
+  lastVerifiedAt: string;
+  id: string;
+  rankKey?: string;
+}
+
+const JOB_SEARCH_CURSOR_PATTERN = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+const JOB_SEARCH_CURSOR_KEY_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,31}$/;
+const JOB_SEARCH_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const JOB_SEARCH_RANK_PATTERN = /^\d+\.\d{6}$/;
+const JOB_SEARCH_CURSOR_MAXIMUM_AGE_MILLISECONDS = 15 * 60 * 1_000;
+
+export class InvalidJobSearchError extends Error {
+  constructor(message = "The job search request is invalid") {
+    super(message);
+    this.name = "InvalidJobSearchError";
+  }
+}
+
+export class JobSearchCatalogChangedError extends Error {
+  constructor() {
+    super("The job catalog changed; restart the search from the first page");
+    this.name = "JobSearchCatalogChangedError";
+  }
+}
+
+function normalizeOptionalSearchText(
+  value: string | undefined,
+  maximumLength: number,
+  label: string,
+): string | null {
+  if (value === undefined) {
+    return null;
+  }
+  if (typeof value !== "string" || value.length > maximumLength || !/\S/u.test(value)) {
+    throw new InvalidJobSearchError(`${label} is invalid`);
+  }
+  return normalizeText(value);
+}
+
+function normalizeJobSearchInput(input: ActiveJobSearchInput): NormalizedJobSearchInput {
+  const sort = input.sort ?? "relevance";
+  if (sort !== "relevance" && sort !== "freshness") {
+    throw new InvalidJobSearchError("Search sort is invalid");
+  }
+  const pageSize = input.pageSize ?? 20;
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 25) {
+    throw new InvalidJobSearchError("Search page size is invalid");
+  }
+  const verifiedWithinDays = input.filters?.verifiedWithinDays ?? null;
+  if (
+    verifiedWithinDays !== null &&
+    (!Number.isInteger(verifiedWithinDays) || verifiedWithinDays < 1 || verifiedWithinDays > 365)
+  ) {
+    throw new InvalidJobSearchError("Search freshness is invalid");
+  }
+  if (
+    input.cursor !== undefined &&
+    (typeof input.cursor !== "string" ||
+      input.cursor.length > 1024 ||
+      !JOB_SEARCH_CURSOR_PATTERN.test(input.cursor))
+  ) {
+    throw new InvalidJobSearchError("Search cursor is invalid");
+  }
+  return {
+    query: normalizeOptionalSearchText(input.query, 200, "Search query"),
+    title: normalizeOptionalSearchText(input.filters?.title, 240, "Title filter"),
+    company: normalizeOptionalSearchText(input.filters?.company, 200, "Company filter"),
+    location: normalizeOptionalSearchText(input.filters?.location, 240, "Location filter"),
+    verifiedWithinDays,
+    sort,
+    pageSize,
+    ...(input.cursor ? { cursor: input.cursor } : {}),
+  };
+}
+
+function canonicalJobSearchRequest(input: NormalizedJobSearchInput): string {
+  return JSON.stringify({
+    query: input.query,
+    title: input.title,
+    company: input.company,
+    location: input.location,
+    verifiedWithinDays: input.verifiedWithinDays,
+    sort: input.sort,
+    pageSize: input.pageSize,
+  });
+}
+
+function validateCursorKey(key: JobSearchCursorKey): void {
+  if (!JOB_SEARCH_CURSOR_KEY_ID_PATTERN.test(key.id) || key.key.byteLength !== 32) {
+    throw new Error("A versioned 32-byte job-search cursor key is required");
+  }
+}
+
+function cursorSignature(key: Uint8Array, body: string, request: string): Buffer {
+  return createHmac("sha256", key)
+    .update("job-search-cursor:v1\0", "utf8")
+    .update(body, "utf8")
+    .update("\0", "utf8")
+    .update(request, "utf8")
+    .digest();
+}
+
+function encodeJobSearchCursor(
+  cursor: JobSearchCursor,
+  request: string,
+  key: JobSearchCursorKey,
+): string {
+  const body = Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+  return `${body}.${cursorSignature(key.key, body, request).toString("base64url")}`;
+}
+
+function decodeJobSearchCursor(
+  value: string | undefined,
+  request: string,
+  sort: JobSearchSort,
+  now: Date,
+  keys: ReadonlyMap<string, Uint8Array>,
+): JobSearchCursor | null {
+  if (!value) {
+    return null;
+  }
+  let decoded: string;
+  let candidate: unknown;
+  try {
+    const segments = value.split(".");
+    if (segments.length !== 2) {
+      throw new Error("invalid cursor segments");
+    }
+    const [body, signatureText] = segments as [string, string];
+    decoded = Buffer.from(body, "base64url").toString("utf8");
+    if (Buffer.from(decoded, "utf8").toString("base64url") !== body) {
+      throw new Error("non-canonical cursor");
+    }
+    candidate = JSON.parse(decoded);
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+      throw new Error("invalid cursor payload");
+    }
+    const keyId = (candidate as { keyId?: unknown }).keyId;
+    const key = typeof keyId === "string" ? keys.get(keyId) : undefined;
+    const actual = Buffer.from(signatureText, "base64url");
+    if (
+      !key ||
+      actual.toString("base64url") !== signatureText ||
+      actual.byteLength !== 32 ||
+      !timingSafeEqual(actual, cursorSignature(key, body, request))
+    ) {
+      throw new Error("invalid cursor signature");
+    }
+  } catch {
+    throw new InvalidJobSearchError("Search cursor is invalid");
+  }
+  const cursor = candidate as Partial<JobSearchCursor>;
+  if (cursor.version !== 1) {
+    throw new InvalidJobSearchError("Search cursor version is unsupported");
+  }
+  const expectedKeys =
+    sort === "relevance"
+      ? ["asOf", "id", "keyId", "lastVerifiedAt", "rankKey", "revision", "sort", "version"]
+      : ["asOf", "id", "keyId", "lastVerifiedAt", "revision", "sort", "version"];
+  const asOf = typeof cursor.asOf === "string" ? new Date(cursor.asOf) : undefined;
+  if (
+    Object.keys(cursor).sort().join("|") !== expectedKeys.sort().join("|") ||
+    typeof cursor.keyId !== "string" ||
+    !JOB_SEARCH_CURSOR_KEY_ID_PATTERN.test(cursor.keyId) ||
+    typeof cursor.revision !== "string" ||
+    !/^[1-9]\d*$/.test(cursor.revision) ||
+    cursor.sort !== sort ||
+    !asOf ||
+    Number.isNaN(asOf.getTime()) ||
+    asOf.toISOString() !== cursor.asOf ||
+    asOf.getTime() > now.getTime() ||
+    now.getTime() - asOf.getTime() > JOB_SEARCH_CURSOR_MAXIMUM_AGE_MILLISECONDS ||
+    typeof cursor.lastVerifiedAt !== "string" ||
+    Number.isNaN(new Date(cursor.lastVerifiedAt).getTime()) ||
+    new Date(cursor.lastVerifiedAt).toISOString() !== cursor.lastVerifiedAt ||
+    typeof cursor.id !== "string" ||
+    !JOB_SEARCH_ID_PATTERN.test(cursor.id) ||
+    (sort === "relevance" &&
+      (typeof cursor.rankKey !== "string" || !JOB_SEARCH_RANK_PATTERN.test(cursor.rankKey)))
+  ) {
+    throw new InvalidJobSearchError("Search cursor does not match this request");
+  }
+  return cursor as JobSearchCursor;
 }
 
 interface DuplicateCandidateRow {
@@ -253,13 +521,30 @@ async function findExactMatches(
 
 export class PostgresJobCatalog {
   private readonly acceptedProvenance: ReadonlySet<JobProvenance>;
+  private readonly activeCursorKey: JobSearchCursorKey;
+  private readonly cursorKeys: ReadonlyMap<string, Uint8Array>;
 
   constructor(
     private readonly client: postgres.Sql,
-    options: JobCatalogOptions = {},
+    options: JobCatalogOptions,
   ) {
     this.acceptedProvenance =
       options.acceptedProvenance ?? new Set<JobProvenance>(["authorized_fixture"]);
+    const keys = [
+      options.searchCursorKeys.active,
+      ...(options.searchCursorKeys.verification ?? []),
+    ];
+    for (const key of keys) {
+      validateCursorKey(key);
+    }
+    if (new Set(keys.map((key) => key.id)).size !== keys.length) {
+      throw new Error("Job-search cursor key identifiers must be unique");
+    }
+    this.activeCursorKey = {
+      id: options.searchCursorKeys.active.id,
+      key: Buffer.from(options.searchCursorKeys.active.key),
+    };
+    this.cursorKeys = new Map(keys.map((key) => [key.id, Buffer.from(key.key)]));
   }
 
   async recordObservation(input: CatalogObservation): Promise<RecordObservationResult> {
@@ -729,6 +1014,179 @@ export class PostgresJobCatalog {
     };
   }
 
+  async searchActiveJobs(
+    input: ActiveJobSearchInput,
+    now: Date = new Date(),
+  ): Promise<ActiveJobSearchPage> {
+    if (!Number.isFinite(now.getTime())) {
+      throw new InvalidJobSearchError("Search freshness boundary is invalid");
+    }
+    const normalized = normalizeJobSearchInput(input);
+    const canonicalRequest = canonicalJobSearchRequest(normalized);
+    const cursor = decodeJobSearchCursor(
+      normalized.cursor,
+      canonicalRequest,
+      normalized.sort,
+      now,
+      this.cursorKeys,
+    );
+    const activeAt = cursor?.asOf ?? now.toISOString();
+    const cursorVerifiedAt = cursor?.lastVerifiedAt ?? null;
+    const cursorId = cursor?.id ?? null;
+    const cursorRank = cursor?.rankKey ?? null;
+    return this.client.begin("read only isolation level repeatable read", async (transaction) => {
+      const [state] = await transaction<{ revision: string }[]>`
+        SELECT revision::text AS revision
+        FROM jobs.catalog_search_state
+        WHERE singleton = true
+      `;
+      if (!state) {
+        throw new Error("The job-search catalog revision is unavailable");
+      }
+      if (cursor && cursor.revision !== state.revision) {
+        throw new JobSearchCatalogChangedError();
+      }
+      const rows = await transaction<ActiveJobSearchRow[]>`
+      WITH ranked_jobs AS (
+        SELECT
+          job.id,
+          company.id AS "companyId",
+          company.display_name AS "companyName",
+          company.verified_domain AS "companyVerifiedDomain",
+          job.title,
+          job.locations,
+          job.department,
+          job.first_observed_at AS "firstObservedAt",
+          job.last_verified_at AS "lastVerifiedAt",
+          job.expires_at AS "expiresAt",
+          round((CASE
+            WHEN ${normalized.query}::text IS NULL THEN 0::numeric
+            ELSE
+              ts_rank_cd(
+                job.search_document,
+                websearch_to_tsquery('simple'::regconfig, ${normalized.query}::text)
+              )::numeric +
+              CASE WHEN strpos(company.normalized_name, ${normalized.query}::text) > 0
+                THEN 0.5::numeric ELSE 0::numeric END
+          END), 6) AS rank_key
+        FROM jobs.canonical_jobs AS job
+        INNER JOIN jobs.companies AS company ON company.id = job.company_id
+        WHERE job.status = 'active'
+          AND job.expires_at > ${activeAt}
+          AND job.description IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1
+            FROM jobs.duplicate_candidates AS duplicate
+            WHERE duplicate.resolution = 'exact'
+              AND CASE
+                WHEN duplicate.canonical_job_id = duplicate.job_id
+                  THEN duplicate.candidate_job_id
+                ELSE duplicate.job_id
+              END = job.id
+          )
+          AND (
+            ${normalized.query}::text IS NULL
+            OR job.search_document @@ websearch_to_tsquery(
+              'simple'::regconfig,
+              ${normalized.query}::text
+            )
+            OR strpos(company.normalized_name, ${normalized.query}::text) > 0
+          )
+          AND (${normalized.title}::text IS NULL OR job.normalized_title = ${normalized.title})
+          AND (${normalized.company}::text IS NULL OR company.normalized_name = ${normalized.company})
+          AND (
+            ${normalized.location}::text IS NULL
+            OR job.normalized_locations @> ARRAY[${normalized.location}]::text[]
+          )
+          AND (
+            ${normalized.verifiedWithinDays}::integer IS NULL
+            OR job.last_verified_at >= (
+              ${activeAt}::timestamptz - (${normalized.verifiedWithinDays} * interval '1 day')
+            )
+          )
+      )
+      SELECT
+        id,
+        "companyId",
+        "companyName",
+        "companyVerifiedDomain",
+        title,
+        locations,
+        department,
+        "firstObservedAt",
+        "lastVerifiedAt",
+        "expiresAt",
+        rank_key::text AS "rankKey"
+      FROM ranked_jobs
+      WHERE ${cursorId}::uuid IS NULL
+        OR (
+          ${normalized.sort}::text = 'relevance'
+          AND (
+            rank_key < ${cursorRank}::numeric
+            OR (rank_key = ${cursorRank}::numeric AND "lastVerifiedAt" < ${cursorVerifiedAt}::timestamptz)
+            OR (
+              rank_key = ${cursorRank}::numeric
+              AND "lastVerifiedAt" = ${cursorVerifiedAt}::timestamptz
+              AND id > ${cursorId}::uuid
+            )
+          )
+        )
+        OR (
+          ${normalized.sort}::text = 'freshness'
+          AND (
+            "lastVerifiedAt" < ${cursorVerifiedAt}::timestamptz
+            OR (
+              "lastVerifiedAt" = ${cursorVerifiedAt}::timestamptz
+              AND id > ${cursorId}::uuid
+            )
+          )
+        )
+      ORDER BY
+        CASE WHEN ${normalized.sort}::text = 'relevance' THEN rank_key END DESC,
+        "lastVerifiedAt" DESC,
+        id ASC
+      LIMIT ${normalized.pageSize + 1}
+    `;
+      const pageRows = rows.slice(0, normalized.pageSize);
+      const items = pageRows.map(
+        (row): ActiveJobSummaryRecord => ({
+          id: row.id,
+          company: {
+            id: row.companyId,
+            name: row.companyName,
+            ...(row.companyVerifiedDomain ? { verifiedDomain: row.companyVerifiedDomain } : {}),
+          },
+          title: row.title,
+          locations: row.locations,
+          ...(row.department ? { department: row.department } : {}),
+          status: "active",
+          firstObservedAt: row.firstObservedAt,
+          lastVerifiedAt: row.lastVerifiedAt,
+          expiresAt: row.expiresAt,
+        }),
+      );
+      const last = rows.length > normalized.pageSize ? pageRows.at(-1) : undefined;
+      if (!last) {
+        return { items };
+      }
+      const nextCursor = encodeJobSearchCursor(
+        {
+          version: 1,
+          keyId: this.activeCursorKey.id,
+          revision: state.revision,
+          sort: normalized.sort,
+          asOf: activeAt,
+          lastVerifiedAt: last.lastVerifiedAt.toISOString(),
+          id: last.id,
+          ...(normalized.sort === "relevance" ? { rankKey: last.rankKey } : {}),
+        },
+        canonicalRequest,
+        this.activeCursorKey,
+      );
+      return { items, nextCursor };
+    });
+  }
+
   async close(): Promise<void> {
     await this.client.end();
   }
@@ -890,7 +1348,7 @@ export class PostgresJobCatalog {
 
 export function createJobCatalogDatabase(
   databaseUrl: string,
-  options: JobCatalogOptions = {},
+  options: JobCatalogDatabaseOptions = {},
 ): postgres.Sql {
   return postgres(databaseUrl, {
     max: options.maxConnections ?? 10,

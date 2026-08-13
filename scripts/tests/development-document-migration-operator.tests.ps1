@@ -12,6 +12,17 @@ $ast = [Management.Automation.Language.Parser]::ParseInput(
 )
 if (@($errors).Count -ne 0) { throw "The development migration operator did not parse." }
 
+$currentJobsSuccessMarker =
+  "Jobs migrations through 0004_job_search applied and verified."
+$retiredJobsSuccessMarker =
+  "Jobs migrations through 0003_duplicate_resolution_audit_guard applied and verified."
+if (-not $source.Contains($currentJobsSuccessMarker)) {
+  throw "The development migration operator does not require the current Jobs migration marker."
+}
+if ($source.Contains($retiredJobsSuccessMarker)) {
+  throw "The development migration operator still accepts the retired Jobs migration marker."
+}
+
 $pathFunctions = @($ast.FindAll({
       param($node)
       $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
@@ -56,10 +67,13 @@ $baselineFunctions = @($ast.FindAll({
         "Test-DurableClaimHistoryExists", "Assert-RecoveryOperatorBinding",
         "Resolve-TaskLogStreamName",
         "Set-RecoveredReceiptEvidence", "Test-IgnorableMigrationTaskTagsRefresh",
-        "Get-UnacceptedVerificationDrift"
+        "Get-UnacceptedVerificationDrift", "Get-DeclaredVariableNames",
+        "Get-CurrentTerraformStateIdentity", "Assert-ExactCurrentBaselineVariableSet",
+        "Assert-RetainedMigrationBaselinePlan", "Assert-RetainedBaselineCurrentState",
+        "Read-RetainedMigrationBaseline", "Assert-TaskMetadataBaselineBinding"
       )
     }, $true))
-if ($baselineFunctions.Count -ne 19) { throw "The input and plan guards must each be defined once." }
+if ($baselineFunctions.Count -ne 26) { throw "The input and plan guards must each be defined once." }
 foreach ($function in $baselineFunctions | Sort-Object { $_.Extent.StartOffset }) {
   Invoke-Expression $function.Extent.Text
 }
@@ -364,6 +378,151 @@ try {
   $changeRejected = $true
 }
 if (-not $changeRejected) { throw "The input baseline accepted an unapplied resource change." }
+
+$retainedVariables = [pscustomobject]@{}
+foreach ($name in @(Get-DeclaredVariableNames)) {
+  $retainedVariables | Add-Member -NotePropertyName $name -NotePropertyValue ([pscustomobject]@{ value = "test" })
+}
+$retainedVariables.document_processing_deployment_stage.value = "parser-dark"
+$retainedVariables.document_parser_invocation_qualified_arn.value = ""
+$retainedPlan = [pscustomobject]@{
+  complete = $true
+  applyable = $false
+  errored = $false
+  terraform_version = "1.9.8"
+  variables = $retainedVariables
+  planned_values = [pscustomobject]@{ root_module = [pscustomobject]@{} }
+  resource_changes = @([pscustomobject]@{ change = [pscustomobject]@{ actions = @("no-op") } })
+  resource_drift = @()
+  output_changes = [pscustomobject]@{}
+}
+Assert-RetainedMigrationBaselinePlan -Plan $retainedPlan
+
+$missingVariablePlan = $retainedPlan | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+$missingVariablePlan.variables.PSObject.Properties.Remove(@(Get-DeclaredVariableNames)[0])
+$missingVariableRejected = $false
+try { Assert-RetainedMigrationBaselinePlan -Plan $missingVariablePlan }
+catch { $missingVariableRejected = $true }
+if (-not $missingVariableRejected) { throw "The retained migration baseline accepted a stale variable set." }
+
+$retainedState = [pscustomobject]@{ Lineage = "12345678-1234-1234-1234-123456789abc"; Serial = 51 }
+$stateMismatchRejected = $false
+try {
+  Assert-RetainedBaselineCurrentState `
+    -Metadata ([pscustomobject]@{ StateLineage = $retainedState.Lineage; StateSerial = 50 }) `
+    -State $retainedState
+} catch { $stateMismatchRejected = $true }
+if (-not $stateMismatchRejected) { throw "PlanTask accepted a retained baseline from a stale state serial." }
+
+$SourceSha = "a" * 40
+$ExpectedAccountId = "111122223333"
+$Region = "us-east-2"
+$retainedRoot = Join-Path $terraformRoot "retained-baseline-test-$([guid]::NewGuid().ToString('N'))"
+$null = New-Item -ItemType Directory -Path $retainedRoot
+try {
+  $retainedPath = Join-Path $retainedRoot "parser-dark.tfplan"
+  [IO.File]::WriteAllText($retainedPath, "verified-plan", [Text.UTF8Encoding]::new($false))
+  $retainedSha = (Get-FileHash -LiteralPath $retainedPath -Algorithm SHA256).Hash.ToLowerInvariant()
+  $sidecarPath = "$retainedPath.baseline.json"
+  $sidecar = [ordered]@{
+    SchemaVersion = "1"; Kind = "development-document-zero-drift-baseline"; Environment = "development"
+    AccountId = $ExpectedAccountId; Region = $Region; SourceSha = $SourceSha
+    StateLineage = $retainedState.Lineage; StateSerial = $retainedState.Serial; Stage = "parser-dark"
+    ReceiptSha256 = "b" * 64; ParserQualifiedArn = ""; PlanPath = $retainedPath
+    PlanSha256 = $retainedSha; Applyable = $false; MeaningfulChanges = 0
+    CreatedAt = "2026-08-13T20:00:00.0000000Z"
+  }
+  [IO.File]::WriteAllText($sidecarPath, ($sidecar | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
+  $sidecarSha = (Get-FileHash -LiteralPath $sidecarPath -Algorithm SHA256).Hash.ToLowerInvariant()
+  function Get-FileSha256([string]$Path) {
+    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+  }
+  function Get-PlanJson([string]$Path) { return $script:retainedPlanFixture }
+  function Get-CurrentTerraformStateIdentity { return $script:retainedStateFixture }
+  $script:retainedPlanFixture = $retainedPlan
+  $script:retainedStateFixture = $retainedState
+
+  $evidence = Read-RetainedMigrationBaseline -PlanPath $retainedPath -PlanSha256 $retainedSha `
+    -MetadataSha256 $sidecarSha -RequireCurrentState
+  if ([string]$evidence.Metadata.Stage -cne "parser-dark" -or
+    [string]$evidence.Metadata.StateLineage -cne [string]$retainedState.Lineage -or
+    [long]$evidence.Metadata.StateSerial -ne [long]$retainedState.Serial -or
+    [string]$evidence.MetadataSha256 -cne (Get-FileSha256 $sidecarPath)) {
+    throw "PlanTask did not accept and bind the exact current retained-baseline handoff."
+  }
+
+  $sidecarChecksumRejected = $false
+  try {
+    $null = Read-RetainedMigrationBaseline -PlanPath $retainedPath -PlanSha256 $retainedSha `
+      -MetadataSha256 ("c" * 64)
+  }
+  catch { $sidecarChecksumRejected = $true }
+  if (-not $sidecarChecksumRejected) { throw "PlanTask accepted a mismatched retained-sidecar checksum." }
+
+  $sidecar.ReceiptSha256 = "d" * 64
+  [IO.File]::WriteAllText($sidecarPath, ($sidecar | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
+  $receiptTamperRejected = $false
+  try {
+    $null = Read-RetainedMigrationBaseline -PlanPath $retainedPath -PlanSha256 $retainedSha `
+      -MetadataSha256 $sidecarSha
+  }
+  catch { $receiptTamperRejected = $true }
+  if (-not $receiptTamperRejected) { throw "PlanTask accepted a tampered receipt under the reviewed sidecar checksum." }
+
+  $sidecar.ReceiptSha256 = "b" * 64
+  $sidecar.Stage = "complete-dark"
+  $sidecar.ParserQualifiedArn = "arn:aws:lambda:us-east-2:${ExpectedAccountId}:function:ai-job-apply-development-document-parser:7"
+  [IO.File]::WriteAllText($sidecarPath, ($sidecar | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
+  $relabelSha = (Get-FileHash -LiteralPath $sidecarPath -Algorithm SHA256).Hash.ToLowerInvariant()
+  $stageRelabelRejected = $false
+  try {
+    $null = Read-RetainedMigrationBaseline -PlanPath $retainedPath -PlanSha256 $retainedSha `
+      -MetadataSha256 $relabelSha
+  }
+  catch { $stageRelabelRejected = $true }
+  if (-not $stageRelabelRejected) { throw "PlanTask accepted a parser-dark plan relabeled complete-dark." }
+
+  $sidecar.Stage = "parser-dark"
+  $sidecar.ParserQualifiedArn = "arn:aws:lambda:us-east-2:${ExpectedAccountId}:function:ai-job-apply-development-document-parser:8"
+  [IO.File]::WriteAllText($sidecarPath, ($sidecar | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
+  $parserSubstitutionSha = (Get-FileHash -LiteralPath $sidecarPath -Algorithm SHA256).Hash.ToLowerInvariant()
+  $parserSubstitutionRejected = $false
+  try {
+    $null = Read-RetainedMigrationBaseline -PlanPath $retainedPath -PlanSha256 $retainedSha `
+      -MetadataSha256 $parserSubstitutionSha
+  }
+  catch { $parserSubstitutionRejected = $true }
+  if (-not $parserSubstitutionRejected) { throw "PlanTask accepted a substituted parser ARN for parser-dark." }
+
+  $sidecar.ParserQualifiedArn = ""
+  $sidecar.PlanSha256 = "c" * 64
+  [IO.File]::WriteAllText($sidecarPath, ($sidecar | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
+  $sidecarMismatchSha = (Get-FileHash -LiteralPath $sidecarPath -Algorithm SHA256).Hash.ToLowerInvariant()
+  $sidecarMismatchRejected = $false
+  try {
+    $null = Read-RetainedMigrationBaseline -PlanPath $retainedPath -PlanSha256 $retainedSha `
+      -MetadataSha256 $sidecarMismatchSha
+  }
+  catch { $sidecarMismatchRejected = $true }
+  if (-not $sidecarMismatchRejected) { throw "PlanTask accepted a retained sidecar with a mismatched plan hash." }
+
+  $sidecar.PlanSha256 = $retainedSha
+  [IO.File]::WriteAllText($sidecarPath, ($sidecar | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
+  $currentSidecarSha = (Get-FileHash -LiteralPath $sidecarPath -Algorithm SHA256).Hash.ToLowerInvariant()
+  $script:retainedStateFixture = [pscustomobject]@{ Lineage = $retainedState.Lineage; Serial = 52 }
+  $currentStateMismatchRejected = $false
+  try {
+    $null = Read-RetainedMigrationBaseline -PlanPath $retainedPath -PlanSha256 $retainedSha `
+      -MetadataSha256 $currentSidecarSha -RequireCurrentState
+  }
+  catch { $currentStateMismatchRejected = $true }
+  if (-not $currentStateMismatchRejected) { throw "PlanTask accepted a retained sidecar from a changed current state." }
+}
+finally {
+  Remove-Item Function:\Get-PlanJson -ErrorAction SilentlyContinue
+  Remove-Item Function:\Get-CurrentTerraformStateIdentity -ErrorAction SilentlyContinue
+  if (Test-Path -LiteralPath $retainedRoot) { Remove-Item -LiteralPath $retainedRoot -Recurse -Force }
+}
 
 $oneItemList = ConvertTo-TerraformEnvironmentValue -Value @("http://localhost:3000")
 if ($oneItemList -cne '["http://localhost:3000"]') {

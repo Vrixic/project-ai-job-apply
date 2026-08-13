@@ -132,6 +132,22 @@ export interface paths {
         patch: operations["updateProfileFact"];
         trace?: never;
     };
+    "/jobs/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["searchCanonicalJobs"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/jobs/{jobId}": {
         parameters: {
             query?: never;
@@ -337,6 +353,24 @@ export interface components {
             confirmedCount: number;
             proposedCount: number;
         };
+        JobSearchFilters: {
+            title?: string;
+            company?: string;
+            location?: string;
+            verifiedWithinDays?: number;
+        };
+        JobSearchRequest: {
+            query?: string;
+            filters?: components["schemas"]["JobSearchFilters"];
+            /**
+             * @default relevance
+             * @enum {string}
+             */
+            sort: "relevance" | "freshness";
+            /** @default 20 */
+            pageSize: number;
+            cursor?: string;
+        };
         JobCompanySummary: {
             /** Format: uuid */
             id: string;
@@ -356,6 +390,26 @@ export interface components {
             lastVerifiedAt: string;
             /** Format: date-time */
             validThrough?: string;
+        };
+        CanonicalJobSummary: {
+            /** Format: uuid */
+            id: string;
+            company: components["schemas"]["JobCompanySummary"];
+            title: string;
+            locations: string[];
+            department?: string;
+            /** @enum {string} */
+            status: "active";
+            /** Format: date-time */
+            firstObservedAt: string;
+            /** Format: date-time */
+            lastVerifiedAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        JobSearchPage: {
+            items: components["schemas"]["CanonicalJobSummary"][];
+            nextCursor?: string;
         };
         CanonicalJobDetail: {
             /** Format: uuid */
@@ -738,6 +792,36 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    searchCanonicalJobs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description One stable page of active canonical jobs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobSearchPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];

@@ -8,6 +8,7 @@ import type {
 } from "@ai-job-apply/api-contracts";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { isIsolationOperationEligible } from "../lib/isolation-operation";
+import { JobSearchForm } from "./job-search-form";
 import { ProfileFactsForm } from "./profile-facts-form";
 import { ResumeUploadForm } from "./resume-upload-form";
 
@@ -457,6 +458,7 @@ export function FoundationForm({
 
       <ProfileFactsForm authenticated={authenticated} refreshVersion={profileRefreshVersion} />
       <ResumeUploadForm authenticated={authenticated} onDocumentParsed={handleDocumentParsed} />
+      <JobSearchForm authenticated={authenticated} />
 
       {!authConfigured && (
         <aside>

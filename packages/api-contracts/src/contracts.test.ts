@@ -72,6 +72,57 @@ describe("CanonicalJobDetail", () => {
   });
 });
 
+describe("job search contracts", () => {
+  const validateRequest = compileComponentValidator("JobSearchRequest");
+  const validatePage = compileComponentValidator("JobSearchPage");
+  const summary = {
+    id: "018f92b0-4ad7-7b1d-8f44-b7ae694c85c1",
+    company: {
+      id: "018f92b0-4ad7-7b1d-8f44-b7ae694c85c2",
+      name: "Synthetic Company",
+      verifiedDomain: "example.test",
+    },
+    title: "Software Engineer",
+    locations: ["Remote - US"],
+    department: "Engineering",
+    status: "active",
+    firstObservedAt: "2026-08-11T12:00:00.000Z",
+    lastVerifiedAt: "2026-08-11T12:00:00.000Z",
+    expiresAt: "2026-09-10T12:00:00.000Z",
+  };
+
+  it("accepts a bounded filter request and active redacted page", () => {
+    expect(
+      validateRequest({
+        query: "distributed systems",
+        filters: {
+          title: "Software Engineer",
+          company: "Synthetic Company",
+          location: "Remote - US",
+          verifiedWithinDays: 30,
+        },
+        sort: "relevance",
+        pageSize: 25,
+      }),
+    ).toBe(true);
+    expect(validatePage({ items: [summary], nextCursor: "opaque_cursor_v1.signature_v1" })).toBe(
+      true,
+    );
+  });
+
+  it("rejects unbounded, unsupported, terminal, and internal search data", () => {
+    expect(validateRequest({ query: " ", pageSize: 26 })).toBe(false);
+    expect(validateRequest({ sort: "match" })).toBe(false);
+    expect(validateRequest({ filters: { workMode: "remote" } })).toBe(false);
+    expect(validateRequest({ query: "engineer", rawQuery: true })).toBe(false);
+    expect(validateRequest({ cursor: "unsigned-cursor" })).toBe(false);
+    expect(validatePage({ items: [{ ...summary, status: "blocked" }] })).toBe(false);
+    expect(validatePage({ items: [{ ...summary, description: "not returned by search" }] })).toBe(
+      false,
+    );
+  });
+});
+
 describe("profile fact commands", () => {
   const validateCreate = compileComponentValidator("CreateProfileFactRequest");
   const validateUpdate = compileComponentValidator("UpdateProfileFactRequest");

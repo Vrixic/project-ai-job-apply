@@ -45,7 +45,8 @@ h1 {
 form,
 .result,
 aside,
-.profile-facts {
+.profile-facts,
+.job-search {
   margin-top: 32px;
   padding: 24px;
   border: 1px solid #cedbd3;
@@ -143,6 +144,44 @@ aside {
   background: #f8fbf9;
 }
 
+.job-search {
+  background: #f8fbf9;
+}
+
+.job-search-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 18px;
+}
+
+.job-search-fields button {
+  align-self: end;
+  margin-bottom: 20px;
+}
+
+.job-results {
+  display: grid;
+  gap: 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.job-results article {
+  padding: 18px;
+  border: 1px solid #cedbd3;
+  border-radius: 12px;
+  background: white;
+}
+
+.job-results h3,
+.job-results p {
+  margin: 0 0 8px;
+}
+
+.job-results small {
+  color: #596960;
+}
+
 .section-heading,
 .fact-list li,
 .fact-actions {
@@ -220,5 +259,9 @@ aside {
   .section-heading {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .job-search-fields {
+    grid-template-columns: 1fr;
   }
 }

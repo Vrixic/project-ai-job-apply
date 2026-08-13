@@ -175,10 +175,11 @@ run "document_processing_is_isolated_scale_to_zero_and_dark_first" {
 
   variables {
     deploy_document_intake                        = true
-    deploy_document_processing                    = true
-    document_processing_kms_prerequisite_enabled  = true
+    document_processing_deployment_stage          = "complete-dark"
+    document_parser_invocation_qualified_arn      = "arn:aws:lambda:us-east-2:123456789012:function:ai-job-apply-staging-document-parser:1"
     document_scan_mapping_enabled                 = false
     document_scan_event_rule_enabled              = false
+    document_security_health_rules_enabled        = true
     serverless_runtime_enabled                    = true
     document_processor_artifact_s3_key            = "lambda/documents/processor.zip"
     document_processor_artifact_s3_object_version = "processor-version"
@@ -211,8 +212,8 @@ run "document_processing_is_isolated_scale_to_zero_and_dark_first" {
     condition = (
       !aws_lambda_event_source_mapping.document_scan_results[0].enabled &&
       aws_cloudwatch_event_rule.document_scan_results[0].state == "DISABLED" &&
-      aws_cloudwatch_event_rule.document_scan_tag_failure[0].state == "DISABLED" &&
-      aws_cloudwatch_event_rule.document_scan_plan_unhealthy[0].state == "DISABLED" &&
+      aws_cloudwatch_event_rule.document_scan_tag_failure[0].state == "ENABLED" &&
+      aws_cloudwatch_event_rule.document_scan_plan_unhealthy[0].state == "ENABLED" &&
       aws_cloudwatch_event_rule.document_processing_reconciler[0].state == "DISABLED" &&
       aws_lambda_event_source_mapping.document_scan_results[0].batch_size == 1 &&
       aws_sqs_queue.document_scan_results[0].visibility_timeout_seconds == 360 &&
@@ -248,24 +249,77 @@ run "document_event_rule_requires_mapping_first" {
   expect_failures = [var.document_scan_event_rule_enabled]
 }
 
-run "document_processing_requires_reviewed_kms_prerequisite" {
+run "document_processing_rejects_unknown_stage" {
   command = plan
 
   variables {
-    deploy_document_intake                        = true
-    deploy_document_processing                    = true
-    document_processor_artifact_s3_key            = "lambda/documents/processor.zip"
-    document_processor_artifact_s3_object_version = "processor-version"
-    document_processor_artifact_sha256            = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
-    document_processor_artifact_base64sha256      = "ZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWU="
-    document_parser_artifact_s3_key               = "lambda/documents/parser.zip"
-    document_parser_artifact_s3_object_version    = "parser-version"
-    document_parser_artifact_sha256               = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-    document_parser_artifact_base64sha256         = "ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY="
-    document_processor_extension_layer_arn        = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
+    document_processing_deployment_stage = "partial"
   }
 
-  expect_failures = [var.document_processing_kms_prerequisite_enabled]
+  expect_failures = [var.document_processing_deployment_stage]
+}
+
+run "kms_prerequisite_does_not_create_document_runtime" {
+  command = plan
+
+  variables {
+    document_processing_deployment_stage = "kms-prerequisite"
+  }
+
+  assert {
+    condition = (
+      length(aws_lambda_function.document_parser) == 0 &&
+      length(aws_lambda_function.document_processor) == 0 &&
+      length(aws_sqs_queue.document_scan_results) == 0
+    )
+    error_message = "The KMS prerequisite may add only document EventBridge grants, never runtime resources."
+  }
+}
+
+run "parser_dark_rejects_a_premature_parser_invocation_pin" {
+  command = plan
+
+  variables {
+    deploy_document_intake                     = true
+    document_processing_deployment_stage       = "parser-dark"
+    document_parser_invocation_qualified_arn   = "arn:aws:lambda:us-east-2:123456789012:function:ai-job-apply-staging-document-parser:1"
+    document_parser_artifact_s3_key            = "lambda/documents/parser.zip"
+    document_parser_artifact_s3_object_version = "parser-version"
+    document_parser_artifact_sha256            = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    document_parser_artifact_base64sha256      = "ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY="
+    document_security_health_rules_enabled     = true
+  }
+
+  expect_failures = [var.document_parser_invocation_qualified_arn]
+}
+
+run "parser_dark_does_not_create_coordinator_runtime" {
+  command = plan
+
+  variables {
+    deploy_document_intake                     = true
+    document_processing_deployment_stage       = "parser-dark"
+    document_parser_artifact_s3_key            = "lambda/documents/parser.zip"
+    document_parser_artifact_s3_object_version = "parser-version"
+    document_parser_artifact_sha256            = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    document_parser_artifact_base64sha256      = "ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY="
+    document_security_health_rules_enabled     = true
+  }
+
+  assert {
+    condition = (
+      length(aws_lambda_function.document_parser) == 1 &&
+      length(aws_lambda_function.document_processor) == 0 &&
+      length(aws_lambda_event_source_mapping.document_scan_results) == 0 &&
+      length(aws_vpc_endpoint.sts) == 0 &&
+      length(aws_cloudwatch_event_target.document_processing_reconciler) == 0 &&
+      aws_cloudwatch_event_rule.document_scan_results[0].state == "DISABLED" &&
+      aws_cloudwatch_event_rule.document_processing_reconciler[0].state == "DISABLED" &&
+      aws_cloudwatch_event_rule.document_scan_tag_failure[0].state == "ENABLED" &&
+      aws_cloudwatch_event_rule.document_scan_plan_unhealthy[0].state == "ENABLED"
+    )
+    error_message = "Parser-dark must not create any invokable coordinator runtime or coordinator service endpoint."
+  }
 }
 
 run "disabled_runtime_is_dark_without_a_legacy_provider" {

@@ -52,19 +52,26 @@ delivery evidence; this section is not approval of Phase 1 or later behavior.
 | `PUT /v1/me/job-preferences` | Candidate | `profile:write`; strict schema/payload boundary; owner-scoped write | Local and deployed persistence/isolation evidence passes |
 | `GET /v1/operations/{operationId}` | Candidate | `profile:read`; operation owner predicate | Deployed two-account denial passes |
 | `GET /v1/jobs/{jobId}` | Candidate | `jobs:read`; active redacted canonical-job response | Implemented and deployed as later D1 work; not approved by D0-015 |
-| `GET /v1/resumes` | Candidate | `documents:read`; candidate-owner predicate; metadata only | Implemented and locally tested as D1 work; not deployed or independently approved |
-| `POST /v1/resumes/uploads` | Candidate | `documents:write`; strict metadata schema; idempotency; candidate owner; no file bytes | Implemented and locally tested as D1 work; not deployed or independently approved |
-| Exact S3 resume-upload POST grant | Temporary object access | Five-minute expiry; one quarantine key/type/size/hash/KMS key; no read or list | Implemented and locally tested as D1 work; dark Terraform plan only |
+| `POST /v1/jobs/search` | Candidate | `jobs:read`; bounded JSON-only body; active redacted summaries; no query string, profile matching, or candidate-owned write | Implemented and locally tested as D1 work; migration and gateway deployment remain open; not independently approved |
+| `GET /v1/resumes` | Candidate | `documents:read`; candidate-owner predicate; metadata only | Implemented, deployed, and accepted for synthetic development intake; processing and independent approval remain open |
+| `POST /v1/resumes/uploads` | Candidate | `documents:write`; strict metadata schema; idempotency; candidate owner; no file bytes | Implemented, deployed, and accepted for synthetic development intake; not independently approved |
+| Exact S3 resume-upload POST grant | Temporary object access | Five-minute expiry; one quarantine key/type/size/hash/KMS key; no read or list | Implemented, deployed, and accepted for synthetic development quarantine intake only |
 | GuardDuty scan-result consumer | AWS service event | Exact account/region/protection-plan/bucket/key/version; identifier-only transform; encrypted queue; at-least-once receipt | Implemented and locally verified; dark deployment pending |
 | Document parser invocation | Coordinator service | Exact numeric Lambda version; parser has no DB secret or general egress; exact clean S3 version only | Implemented and locally verified; dark deployment pending |
 
 There is no current public administrator, support, provider-webhook, temporary-object-download,
-WebSocket, extension, mobile, ATS, AI, billing, outreach, or remote-browser API. The D1 upload
-grant is write-only and is not currently deployed. The direct Lambda
+WebSocket, extension, mobile, ATS, AI, billing, outreach, or remote-browser API. The deployed D1
+upload grant is write-only; the scan consumer, parser, and coordinator remain nondeployed. The direct Lambda
 boundary verifier rejects missing/invalid/wrong-issuer/wrong-audience/insufficient-scope identity,
 unknown routes and methods, malformed bodies, unsupported media types, and oversized payloads.
 The deployed profile slice additionally proves cross-user denial. These controls are engineering
 evidence, not an independent assessment.
+
+The platform uses `400 Bad Request` for syntactically valid JSON that fails a strict request schema
+or bounded domain validation, including unsupported search fields, filters, and continuation
+cursors. It intentionally does not split those failures into `422`; malformed JSON is also `400`,
+while oversized bodies and unsupported media types remain `413` and `415`. Every case returns
+bounded problem details; search schema and domain failures do not reflect candidate search text.
 
 Current capacity is bounded by API Gateway/Lambda settings and low reserved concurrency. There is
 no claim that account-, route-, or business-flow-aware public abuse controls are complete. Before
