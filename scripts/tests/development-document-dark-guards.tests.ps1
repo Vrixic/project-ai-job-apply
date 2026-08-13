@@ -3,6 +3,24 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "..\lib\deployment-operator-guards.ps1")
 . (Join-Path $PSScriptRoot "..\lib\development-document-dark-guards.ps1")
 
+if ((ConvertTo-ExactBoolean -Value $true -Label "runtime true") -ne $true) {
+  throw "A runtime true boolean was not preserved."
+}
+if ((ConvertTo-ExactBoolean -Value $false -Label "runtime false") -ne $false) {
+  throw "A runtime false boolean was not preserved."
+}
+if ((ConvertTo-ExactBoolean -Value "true" -Label "serialized true") -ne $true) {
+  throw "The exact serialized true boolean was not normalized."
+}
+if ((ConvertTo-ExactBoolean -Value "false" -Label "serialized false") -ne $false) {
+  throw "The exact serialized false boolean was not normalized."
+}
+foreach ($invalidBoolean in @("False", 0, [pscustomobject]@{ value = $false })) {
+  $rejected = $false
+  try { $null = ConvertTo-ExactBoolean -Value $invalidBoolean -Label "invalid boolean" } catch { $rejected = $true }
+  if (-not $rejected) { throw "A non-exact boolean representation was accepted." }
+}
+
 $expected = Get-DevelopmentDocumentDarkExpectedActions
 if ($expected.Count -ne 45) { throw "Expected 45 exact dark deployment changes." }
 if (@($expected.Values | Where-Object { $_ -eq "create" }).Count -ne 39) { throw "Expected 39 creates." }
@@ -167,9 +185,9 @@ $receipt = [pscustomobject]@{
 }
 Assert-DevelopmentDocumentPublicationReceipt -Receipt $receipt
 $baselineVariables = [pscustomobject]@{
-  deploy_document_processing = [pscustomobject]@{ value = $false }
-  document_scan_mapping_enabled = [pscustomobject]@{ value = $false }
-  document_scan_event_rule_enabled = [pscustomobject]@{ value = $false }
+  deploy_document_processing = [pscustomobject]@{ value = "false" }
+  document_scan_mapping_enabled = [pscustomobject]@{ value = "false" }
+  document_scan_event_rule_enabled = [pscustomobject]@{ value = "false" }
   document_processor_artifact_s3_key = [pscustomobject]@{ value = "" }
   document_processor_artifact_s3_object_version = [pscustomobject]@{ value = "" }
   document_processor_artifact_sha256 = [pscustomobject]@{ value = "" }
@@ -182,7 +200,7 @@ $baselineVariables = [pscustomobject]@{
   unrelated = [pscustomobject]@{ value = "same" }
 }
 $planVariables = $baselineVariables | ConvertTo-Json -Depth 10 | ConvertFrom-Json
-$planVariables.deploy_document_processing.value = $true
+$planVariables.deploy_document_processing.value = "true"
 $planVariables.document_processor_artifact_s3_key.value = "lambda/documents/$source/$processorSha/document-processor-lambda.zip"
 $planVariables.document_processor_artifact_s3_object_version.value = "version-zip"
 $planVariables.document_processor_artifact_sha256.value = $processorSha
@@ -268,4 +286,4 @@ if ($documentSource -notmatch "DenyQuarantineReadsWithoutCleanMalwareTag" -or
   throw "The semantic guard is detached from current document isolation source."
 }
 
-Write-Output "Development document dark guard tests passed: 21"
+Write-Output "Development document dark guard tests passed: 28"
