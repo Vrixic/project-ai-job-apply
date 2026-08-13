@@ -51,9 +51,10 @@ no gateway or general worker image exists.
 - `operate-staging-runtime-lifecycle.ps1` — Creates and applies checksum-reviewed, two-step
   staging activation/quiescence/dormancy plans while retaining the isolated control plane.
 - `operate-development-document-migration.ps1` — Reconstructs development Terraform inputs from
-  an already-applied saved plan, plans/applies only an immutable migration task-definition
-  replacement, and executes one checksum-reviewed no-override Fargate migration with aggregate-log,
-  zero-task, encrypted-state, and zero-drift postconditions.
+  the exact retained ParserDark/CompleteDark zero-change plan and adjacent checksum-bound sidecar,
+  plans/applies only an immutable migration task-definition replacement, and executes one
+  checksum-reviewed no-override Fargate migration with aggregate-log, zero-task, encrypted-state,
+  and zero-drift postconditions.
 
 ## Repository and infrastructure policy
 
@@ -65,7 +66,8 @@ no gateway or general worker image exists.
   checksum-reviewed zero-change baseline, consumes a checksum-reviewed immutable publication
   receipt, and advances KMS, parser-dark, and complete-dark stages one at a time with processing
   triggers disabled, bounded security-health alerts active, and plans bound to the exact state
-  lineage/serial and parser version. See
+  lineage/serial and parser version. Its read-only `Verify` action retains a checksum-bound,
+  nonapplyable zero-change baseline and metadata sidecar for the next guarded migration release. See
   `infrastructure/runbooks/deployments/development-document-dark-deployment.md`.
 - `validate-serverless-workflow-infrastructure.mjs` — Enforces the steady-state Lambda durable,
   migration-only container, and retired-path absence policies.

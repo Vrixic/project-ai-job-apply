@@ -468,6 +468,39 @@ function Assert-DevelopmentDocumentAcceptedResourceDrift {
   }
 }
 
+function Assert-DevelopmentDocumentRetainedBaselinePlan {
+  param([Parameter(Mandatory)][object]$Plan)
+
+  if ($Plan.complete -isnot [bool] -or -not $Plan.complete -or
+    $Plan.errored -isnot [bool] -or $Plan.errored -or
+    $Plan.applyable -isnot [bool] -or $Plan.applyable -or
+    [string]$Plan.terraform_version -cne "1.9.8" -or
+    $null -eq $Plan.variables -or $null -eq $Plan.planned_values -or
+    $null -eq $Plan.planned_values.root_module) {
+    throw "The retained document baseline is not a complete, nonerrored, nonapplyable Terraform 1.9.8 zero-change plan."
+  }
+
+  $meaningfulResources = @($Plan.resource_changes | Where-Object {
+      $null -ne $_ -and (@($_.change.actions) -join ",") -cne "no-op"
+    })
+  $outputChangesProperty = $Plan.PSObject.Properties["output_changes"]
+  $meaningfulOutputs = @(
+    if ($null -ne $outputChangesProperty -and $null -ne $outputChangesProperty.Value) {
+      $outputChangesProperty.Value.PSObject.Properties | Where-Object {
+        $null -ne $_.Value -and (@($_.Value.actions) -join ",") -cne "no-op"
+      }
+    }
+  )
+  if ($meaningfulResources.Count -ne 0 -or $meaningfulOutputs.Count -ne 0) {
+    throw "The retained document baseline contains a meaningful resource or output change."
+  }
+
+  $drift = @($Plan.resource_drift | Where-Object { $null -ne $_ })
+  if ($drift.Count -ne 0) {
+    Assert-DevelopmentDocumentAcceptedResourceDrift -Records $drift
+  }
+}
+
 function Get-TerraformStateResourceMap {
   param([Parameter(Mandatory)][object]$RootModule)
   $map = @{}

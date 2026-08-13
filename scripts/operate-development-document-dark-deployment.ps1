@@ -43,6 +43,10 @@ The operator reconstructs all current deployment inputs from a checksum-reviewed
 baseline, overlays only the selected monotonic stage and verified Lambda publication, derives the
 applied parser-version pin for CompleteDark, and forces every processing trigger dark. Apply
 consumes only the exact checksum-reviewed saved plan; resource-targeted planning is unsupported.
+Verify retains a new checksum-bound zero-change plan and metadata sidecar below the ignored
+development .terraform directory. Its BaselinePath, BaselineSha256, and
+BaselineMetadataSha256 can be passed unchanged to the migration operator as AppliedPlanPath,
+AppliedPlanSha256, and AppliedPlanMetadataSha256.
 "@
   exit 0
 }
@@ -188,6 +192,143 @@ function Read-Plan {
   $raw = & terraform "-chdir=$terraformDirectory" show -json $Path 2>$null
   if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($raw)) { throw "A saved Terraform plan could not be inspected." }
   return $raw | ConvertFrom-Json
+}
+
+function Write-ExclusiveJsonFile {
+  param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][object]$Value)
+
+  $stream = [IO.File]::Open($Path, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+  try {
+    $writer = [IO.StreamWriter]::new($stream, [Text.UTF8Encoding]::new($false))
+    try { $writer.Write(($Value | ConvertTo-Json -Depth 30)) }
+    finally { $writer.Dispose() }
+  }
+  finally { $stream.Dispose() }
+}
+
+function New-RetainedBaselineMetadata {
+  param(
+    [Parameter(Mandatory)][ValidatePattern("^[a-f0-9]{40}$")][string]$SourceSha,
+    [Parameter(Mandatory)][ValidateSet("kms-prerequisite", "parser-dark", "complete-dark")][string]$DeploymentStage,
+    [Parameter(Mandatory)][string]$PlanPath,
+    [Parameter(Mandatory)][ValidatePattern("^[a-f0-9]{64}$")][string]$PlanSha256,
+    [Parameter(Mandatory)][string]$StateLineage,
+    [Parameter(Mandatory)][long]$StateSerial,
+    [string]$ReceiptSha256 = "",
+    [string]$ParserQualifiedArn = ""
+  )
+
+  return [ordered]@{
+    SchemaVersion      = "1"
+    Kind               = "development-document-zero-drift-baseline"
+    Environment        = "development"
+    AccountId          = $ExpectedAccountId
+    Region             = $Region
+    SourceSha          = $SourceSha
+    StateLineage       = $StateLineage
+    StateSerial        = $StateSerial
+    Stage              = $DeploymentStage
+    ReceiptSha256      = $ReceiptSha256
+    ParserQualifiedArn = $ParserQualifiedArn
+    PlanPath           = $PlanPath
+    PlanSha256         = $PlanSha256
+    Applyable          = $false
+    MeaningfulChanges  = 0
+    CreatedAt          = (Get-Date).ToUniversalTime().ToString("o")
+  }
+}
+
+function Assert-RetainedBaselineMetadata {
+  param([Parameter(Mandatory)][object]$Metadata, [Parameter(Mandatory)][hashtable]$Expected)
+
+  $expectedKeys = @(
+    "AccountId", "Applyable", "CreatedAt", "Environment", "Kind", "MeaningfulChanges",
+    "ParserQualifiedArn", "PlanPath", "PlanSha256", "ReceiptSha256", "Region", "SchemaVersion",
+    "SourceSha", "Stage", "StateLineage", "StateSerial"
+  ) | Sort-Object
+  $actualKeys = @($Metadata.PSObject.Properties | ForEach-Object Name | Sort-Object)
+  if (($actualKeys -join "|") -cne ($expectedKeys -join "|")) {
+    throw "The retained document baseline metadata has an unexpected schema."
+  }
+  foreach ($entry in $Expected.GetEnumerator()) {
+    $property = $Metadata.PSObject.Properties[[string]$entry.Key]
+    if ($null -eq $property -or [string]$property.Value -cne [string]$entry.Value) {
+      throw "The retained document baseline metadata does not match '$($entry.Key)'."
+    }
+  }
+  $createdAtValid = if ($Metadata.CreatedAt -is [datetime]) {
+    $Metadata.CreatedAt.Year -ge 2000 -and $Metadata.CreatedAt.Year -le 2099
+  }
+  else {
+    [string]$Metadata.CreatedAt -match '^20[0-9]{2}-[0-9]{2}-[0-9]{2}T'
+  }
+  if ($Metadata.Applyable -isnot [bool] -or $Metadata.Applyable -or
+    [int]$Metadata.MeaningfulChanges -ne 0 -or
+    -not $createdAtValid -or
+    [string]$Metadata.SourceSha -cnotmatch '^[a-f0-9]{40}$' -or
+    [string]$Metadata.PlanSha256 -cnotmatch '^[a-f0-9]{64}$' -or
+    [string]$Metadata.StateLineage -cnotmatch '^[a-f0-9-]{36}$' -or
+    [long]$Metadata.StateSerial -lt 1 -or
+    [string]$Metadata.Stage -notin @("kms-prerequisite", "parser-dark", "complete-dark") -or
+    ([string]$Metadata.Stage -ceq "kms-prerequisite" -and -not [string]::IsNullOrEmpty([string]$Metadata.ReceiptSha256)) -or
+    ([string]$Metadata.Stage -cne "kms-prerequisite" -and [string]$Metadata.ReceiptSha256 -cnotmatch '^[a-f0-9]{64}$') -or
+    ([string]$Metadata.Stage -cne "complete-dark" -and -not [string]::IsNullOrEmpty([string]$Metadata.ParserQualifiedArn)) -or
+    ([string]$Metadata.Stage -ceq "complete-dark" -and
+      [string]$Metadata.ParserQualifiedArn -cnotmatch "^arn:aws:lambda:$([regex]::Escape($Region)):$ExpectedAccountId`:function:ai-job-apply-development-document-parser:[1-9][0-9]*$")) {
+    throw "The retained document baseline metadata does not prove a zero-change verification."
+  }
+}
+
+function Save-RetainedBaselineMetadata {
+  param(
+    [Parameter(Mandatory)][string]$SourceSha,
+    [Parameter(Mandatory)][ValidateSet("kms-prerequisite", "parser-dark", "complete-dark")][string]$DeploymentStage,
+    [Parameter(Mandatory)][string]$PlanPath,
+    [Parameter(Mandatory)][string]$StateLineage,
+    [Parameter(Mandatory)][long]$StateSerial,
+    [string]$ReceiptSha256 = "",
+    [string]$ParserQualifiedArn = ""
+  )
+
+  $planSha256 = (Get-FileHash -LiteralPath $PlanPath -Algorithm SHA256).Hash.ToLowerInvariant()
+  $metadataPath = "$PlanPath.baseline.json"
+  $metadata = New-RetainedBaselineMetadata -SourceSha $SourceSha -DeploymentStage $DeploymentStage `
+    -PlanPath $PlanPath -PlanSha256 $planSha256 -StateLineage $StateLineage -StateSerial $StateSerial `
+    -ReceiptSha256 $ReceiptSha256 -ParserQualifiedArn $ParserQualifiedArn
+  Write-ExclusiveJsonFile -Path $metadataPath -Value $metadata
+  $stored = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+  Assert-RetainedBaselineMetadata -Metadata $stored -Expected @{
+    SchemaVersion = "1"; Kind = "development-document-zero-drift-baseline"; Environment = "development"
+    AccountId = $ExpectedAccountId; Region = $Region; SourceSha = $SourceSha; StateLineage = $StateLineage
+    StateSerial = $StateSerial; Stage = $DeploymentStage; ReceiptSha256 = $ReceiptSha256
+    ParserQualifiedArn = $ParserQualifiedArn; PlanPath = $PlanPath; PlanSha256 = $planSha256
+    Applyable = $false; MeaningfulChanges = 0
+  }
+  $metadataSha256 = (Get-FileHash -LiteralPath $metadataPath -Algorithm SHA256).Hash.ToLowerInvariant()
+  return [pscustomobject]@{
+    PlanPath = $PlanPath; PlanSha256 = $planSha256
+    MetadataPath = $metadataPath; MetadataSha256 = $metadataSha256
+  }
+}
+
+function Assert-RetainedBaselinePathsAvailable {
+  param([Parameter(Mandatory)][string]$PlanPath, [Parameter(Mandatory)][string]$MetadataPath)
+  if ((Test-Path -LiteralPath $PlanPath) -or (Test-Path -LiteralPath $MetadataPath)) {
+    throw "Refusing to overwrite a document verification plan or retained-baseline sidecar."
+  }
+}
+
+function Assert-StateIdentityStable {
+  param([Parameter(Mandatory)][object]$Before, [Parameter(Mandatory)][object]$After)
+  if ([string]$After.Lineage -cne [string]$Before.Lineage -or [long]$After.Serial -ne [long]$Before.Serial) {
+    throw "Remote state lineage or serial changed while producing the retained zero-change baseline."
+  }
+}
+
+function Remove-NewRetainedBaselineArtifacts {
+  param([Parameter(Mandatory)][string]$PlanPath, [Parameter(Mandatory)][string]$MetadataPath)
+  if (Test-Path -LiteralPath $MetadataPath) { Remove-Item -LiteralPath $MetadataPath -Force }
+  if (Test-Path -LiteralPath $PlanPath) { Remove-Item -LiteralPath $PlanPath -Force }
 }
 
 function Read-Baseline {
@@ -708,15 +849,36 @@ function Assert-LiveParserDarkBoundary {
 
 function Invoke-ZeroDrift {
   param([Parameter(Mandatory)][object]$Baseline, [AllowNull()][object]$Receipt,
-    [Parameter(Mandatory)][string]$DeploymentStage, [string]$ParserQualifiedArn = "")
+    [Parameter(Mandatory)][string]$DeploymentStage, [string]$ParserQualifiedArn = "", [switch]$Retain)
   Set-DarkVariables -Baseline $Baseline -Receipt $Receipt -DeploymentStage $DeploymentStage -ParserQualifiedArn $ParserQualifiedArn
-  $path = Join-Path $operatorRoot "verify-$([guid]::NewGuid().ToString('N')).tfplan"
+  $prefix = if ($Retain) { "baseline-$DeploymentStage-$($commit.Substring(0, 12))-$(Get-Date -Format 'yyyyMMdd-HHmmss')" } else { "verify" }
+  $path = Join-Path $operatorRoot "$prefix-$([guid]::NewGuid().ToString('N')).tfplan"
+  $metadataPath = "$path.baseline.json"
+  Assert-RetainedBaselinePathsAvailable -PlanPath $path -MetadataPath $metadataPath
+  $stateIdentityBefore = if ($Retain) { Get-StateIdentity } else { $null }
+  $succeeded = $false
   try {
     & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m "-out=$path" -detailed-exitcode | Out-Null
     $code = $LASTEXITCODE
     if ($code -eq 1) { throw "The document dark zero-drift plan failed." }
     if ($code -eq 2) { throw "The deployed document dark boundary has drift." }
-  } finally { if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force } }
+    $plan = Read-Plan -Path $path
+    Assert-DevelopmentDocumentRetainedBaselinePlan -Plan $plan
+    if (-not $Retain) { $succeeded = $true; return $null }
+    $stateIdentity = Get-StateIdentity
+    Assert-StateIdentityStable -Before $stateIdentityBefore -After $stateIdentity
+    $result = Save-RetainedBaselineMetadata -SourceSha $commit -DeploymentStage $DeploymentStage `
+      -PlanPath $path -StateLineage $stateIdentity.Lineage -StateSerial $stateIdentity.Serial `
+      -ReceiptSha256 $(if ($null -eq $Receipt) { "" } else { $ReviewedReceiptSha256 }) `
+      -ParserQualifiedArn $ParserQualifiedArn
+    $succeeded = $true
+    return $result
+  }
+  finally {
+    if (-not $Retain -or -not $succeeded) {
+      Remove-NewRetainedBaselineArtifacts -PlanPath $path -MetadataPath $metadataPath
+    }
+  }
 }
 
 function Get-StateIdentity {
@@ -854,8 +1016,13 @@ $parserQualifiedArn = if ($Stage -ceq "CompleteDark") { Get-AppliedParserQualifi
 if ($Action -ceq "Verify") {
   Set-DarkVariables -Baseline $baseline -Receipt $receipt -DeploymentStage $stageValue -ParserQualifiedArn $parserQualifiedArn
   Assert-LiveStageBoundary -DeploymentStage $stageValue -Receipt $receipt -ParserQualifiedArn $parserQualifiedArn
-  Invoke-ZeroDrift -Baseline $baseline -Receipt $receipt -DeploymentStage $stageValue -ParserQualifiedArn $parserQualifiedArn
-  [pscustomobject]@{ Result = "verified"; Environment = "development"; Stage = $stageValue; ProcessingTriggers = "disabled"; SecurityHealthRules = $(if ($Stage -eq "KmsPrerequisite") { "not-deployed" } else { "enabled" }); Drift = $false } | ConvertTo-Json
+  $retainedBaseline = Invoke-ZeroDrift -Baseline $baseline -Receipt $receipt -DeploymentStage $stageValue `
+    -ParserQualifiedArn $parserQualifiedArn -Retain
+  [pscustomobject]@{ Result = "verified"; Environment = "development"; Stage = $stageValue; ProcessingTriggers = "disabled"; SecurityHealthRules = $(if ($Stage -eq "KmsPrerequisite") { "not-deployed" } else { "enabled" }); Drift = $false
+    BaselinePath = $retainedBaseline.PlanPath; BaselineSha256 = $retainedBaseline.PlanSha256
+    BaselineMetadataPath = $retainedBaseline.MetadataPath
+    BaselineMetadataSha256 = $retainedBaseline.MetadataSha256
+    ApprovalCommand = "Use verified development $stageValue migration baseline $($retainedBaseline.PlanSha256)" } | ConvertTo-Json
   exit 0
 }
 

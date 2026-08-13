@@ -65,6 +65,29 @@ Verify the applied stage without changing AWS:
   -PublicationReceiptPath VERIFIED_RECEIPT -ReviewedReceiptSha256 RECEIPT_SHA256
 ```
 
+Successful verification retains the exact refresh-backed zero-change plan under the ignored
+`development/.terraform/development-document-dark-deployment` directory instead of deleting it.
+The printed `BaselinePath`, `BaselineSha256`, `BaselineMetadataPath`, and
+`BaselineMetadataSha256` bind the plan and adjacent `.baseline.json` sidecar to the exact account,
+region, merged source, state lineage and serial, stage, publication receipt, and parser-version pin.
+The plan is independently re-read and accepted only when Terraform 1.9.8
+reports it complete, nonerrored, nonapplyable, and free of meaningful resource or output changes;
+only the already bounded provider refresh records may remain. The operator never overwrites a
+plan or sidecar.
+
+Use that exact verified baseline for the next guarded migration task release:
+
+```powershell
+.\scripts\operate-development-document-migration.ps1 -Action PlanTask `
+  -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
+  -SourceSha MERGED_40_CHARACTER_COMMIT -MigrationImage EXACT_ECR_URI_AT_SHA256 `
+  -AppliedPlanPath BASELINE_PATH_FROM_VERIFY -AppliedPlanSha256 BASELINE_SHA256_FROM_VERIFY `
+  -AppliedPlanMetadataSha256 BASELINE_METADATA_SHA256_FROM_VERIFY
+```
+
+Do not substitute the applied ParserDark change plan: the migration operator correctly requires a
+zero-change applied-state baseline.
+
 Every saved plan metadata record binds the stage, account, region, state bucket/key,
 lineage/serial, merged commit, baseline checksum, publication receipt checksum, parser-version pin,
 plan path, and plan checksum. Apply refuses changed state or source and re-runs the exact semantic

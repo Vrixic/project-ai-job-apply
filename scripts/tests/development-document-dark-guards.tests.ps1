@@ -345,6 +345,33 @@ $completeChanges += New-TestPolicyUpdate "module.platform.aws_vpc_endpoint.secre
 $validCompletePlan = [pscustomobject]@{ resource_drift = $kmsPlan.resource_drift; resource_changes = @($kmsNoop) + $completeChanges }
 $null = Assert-DevelopmentDocumentDarkPlan $validCompletePlan $account complete-dark
 
+$retainedBaselinePlan = [pscustomobject]@{
+  complete = $true
+  applyable = $false
+  errored = $false
+  terraform_version = "1.9.8"
+  variables = [pscustomobject]@{ migration_image = [pscustomobject]@{ value = "example" } }
+  planned_values = [pscustomobject]@{ root_module = [pscustomobject]@{} }
+  resource_changes = @([pscustomobject]@{ change = [pscustomobject]@{ actions = @("no-op") } })
+  resource_drift = @()
+  output_changes = [pscustomobject]@{}
+}
+Assert-DevelopmentDocumentRetainedBaselinePlan -Plan $retainedBaselinePlan
+
+$applyableBaselineRejected = $false
+$applyableBaseline = $retainedBaselinePlan | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+$applyableBaseline.applyable = $true
+try { Assert-DevelopmentDocumentRetainedBaselinePlan -Plan $applyableBaseline }
+catch { $applyableBaselineRejected = $true }
+if (-not $applyableBaselineRejected) { throw "A retained baseline was accepted as applyable." }
+
+$changedBaselineRejected = $false
+$changedBaseline = $retainedBaselinePlan | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+$changedBaseline.resource_changes = @([pscustomobject]@{ change = [pscustomobject]@{ actions = @("update") } })
+try { Assert-DevelopmentDocumentRetainedBaselinePlan -Plan $changedBaseline }
+catch { $changedBaselineRejected = $true }
+if (-not $changedBaselineRejected) { throw "A retained baseline accepted a meaningful resource change." }
+
 $documentSource = Get-Content (Join-Path $repositoryRoot "infrastructure\terraform\modules\platform\candidate-documents.tf") -Raw
 $platformSource = Get-Content (Join-Path $repositoryRoot "infrastructure\terraform\modules\platform\main.tf") -Raw
 if (($documentSource + $platformSource) -match 'var\.deploy_document_processing|var\.document_processing_kms_prerequisite_enabled') {
