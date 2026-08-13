@@ -314,7 +314,24 @@ foreach ($entry in $expected.GetEnumerator()) {
     else { [pscustomobject]@{ actions = @($entry.Value); after = $after; after_unknown = [pscustomobject]@{} } }
   $changes += [pscustomobject]@{ address = $entry.Key; mode = "managed"; change = $change }
 }
-$dataReads = @(Get-DevelopmentDocumentDarkExpectedDataReads | ForEach-Object {
+$expectedPostPrerequisiteDataReads = @(
+  "module.platform.data.aws_iam_policy_document.candidate_documents_s3_endpoint[0]",
+  "module.platform.data.aws_iam_policy_document.document_parser_object_access_assume[0]",
+  "module.platform.data.aws_iam_policy_document.document_processor[0]",
+  "module.platform.data.aws_iam_policy_document.document_scan_delivery_dead_letter[0]",
+  "module.platform.data.aws_iam_policy_document.document_scan_queue[0]",
+  "module.platform.data.aws_iam_policy_document.document_sts_endpoint[0]",
+  "module.platform.data.aws_iam_policy_document.outbox_lambda_endpoint[0]",
+  "module.platform.data.aws_iam_policy_document.outbox_sqs_endpoint[0]",
+  "module.platform.data.aws_iam_policy_document.secrets_endpoint[0]"
+)
+$actualPostPrerequisiteDataReads = @(Get-DevelopmentDocumentDarkExpectedDataReads)
+if ($actualPostPrerequisiteDataReads.Count -ne 9 -or
+  (@($actualPostPrerequisiteDataReads | Sort-Object) -join "|") -cne
+  (@($expectedPostPrerequisiteDataReads | Sort-Object) -join "|")) {
+  throw "The post-prerequisite deferred data-read allowlist is not the exact reviewed set of nine."
+}
+$dataReads = @($actualPostPrerequisiteDataReads | ForEach-Object {
     [pscustomobject]@{
       address = $_; mode = "data"; type = "aws_iam_policy_document"
       change = [pscustomobject]@{ actions = @("read"); before = $null; replace_paths = $null
@@ -346,6 +363,32 @@ $resourceDrift = @(
 )
 $plan = [pscustomobject]@{ resource_changes = @($changes + $dataReads + $kmsNoop); resource_drift = $resourceDrift }
 $null = Assert-DevelopmentDocumentDarkPlan -Plan $plan -AccountId $account
+
+$rdsOnlyDriftPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$rdsOnlyDriftPlan.resource_drift = @($rdsOnlyDriftPlan.resource_drift[0])
+$null = Assert-DevelopmentDocumentDarkPlan $rdsOnlyDriftPlan $account
+
+$migrationOnlyDriftPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$migrationOnlyDriftPlan.resource_drift = @($migrationOnlyDriftPlan.resource_drift[1])
+$null = Assert-DevelopmentDocumentDarkPlan $migrationOnlyDriftPlan $account
+
+$emptyDriftPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$emptyDriftPlan.resource_drift = @()
+$rejected = $false
+try { $null = Assert-DevelopmentDocumentDarkPlan $emptyDriftPlan $account } catch { $rejected = $true }
+if (-not $rejected) { throw "An empty accepted resource-drift set was accepted." }
+
+$duplicateDriftPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$duplicateDriftPlan.resource_drift = @($duplicateDriftPlan.resource_drift[0], $duplicateDriftPlan.resource_drift[0])
+$rejected = $false
+try { $null = Assert-DevelopmentDocumentDarkPlan $duplicateDriftPlan $account } catch { $rejected = $true }
+if (-not $rejected) { throw "Duplicate accepted resource-drift records were accepted." }
+
+$unknownDriftPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$unknownDriftPlan.resource_drift[0].address = "module.platform.aws_db_instance.unreviewed[0]"
+$rejected = $false
+try { $null = Assert-DevelopmentDocumentDarkPlan $unknownDriftPlan $account } catch { $rejected = $true }
+if (-not $rejected) { throw "An unknown resource-drift address was accepted." }
 
 $nonemptyTagSensitivityPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
 $nonemptyTagSensitivityPlan.resource_drift[1].change.after_sensitive.tags = [pscustomobject]@{ Environment = $false }
@@ -472,6 +515,22 @@ $extraDataPlan.resource_changes += [pscustomobject]@{
 $rejected = $false
 try { $null = Assert-DevelopmentDocumentDarkPlan $extraDataPlan $account } catch { $rejected = $true }
 if (-not $rejected) { throw "An unreviewed deferred data read was accepted." }
+$missingDataPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$missingDataAddress = $expectedPostPrerequisiteDataReads[0]
+$missingDataPlan.resource_changes = @($missingDataPlan.resource_changes | Where-Object {
+    [string]$_.address -cne $missingDataAddress
+  })
+$rejected = $false
+try { $null = Assert-DevelopmentDocumentDarkPlan $missingDataPlan $account } catch { $rejected = $true }
+if (-not $rejected) { throw "A dark plan missing an exact deferred data read was accepted." }
+$wrongShapeDataPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$wrongShapeDataRecord = @($wrongShapeDataPlan.resource_changes | Where-Object {
+    [string]$_.address -ceq $expectedPostPrerequisiteDataReads[0]
+  })[0]
+$wrongShapeDataRecord.mode = "managed"
+$rejected = $false
+try { $null = Assert-DevelopmentDocumentDarkPlan $wrongShapeDataPlan $account } catch { $rejected = $true }
+if (-not $rejected) { throw "A deferred data read with an unsafe record shape was accepted." }
 $badDriftPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
 $badDriftPlan.resource_drift[0].change.after.id = "changed"
 $rejected = $false

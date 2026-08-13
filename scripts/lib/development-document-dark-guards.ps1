@@ -243,8 +243,6 @@ function Get-DevelopmentDocumentDarkExpectedActions {
 function Get-DevelopmentDocumentDarkExpectedDataReads {
   return @(
     "module.platform.data.aws_iam_policy_document.candidate_documents_s3_endpoint[0]",
-    "module.platform.data.aws_iam_policy_document.document_parser[0]",
-    "module.platform.data.aws_iam_policy_document.document_parser_object_access[0]",
     "module.platform.data.aws_iam_policy_document.document_parser_object_access_assume[0]",
     "module.platform.data.aws_iam_policy_document.document_processor[0]",
     "module.platform.data.aws_iam_policy_document.document_scan_delivery_dead_letter[0]",
@@ -350,13 +348,18 @@ function Assert-DevelopmentDocumentExactDataReads {
 function Assert-DevelopmentDocumentAcceptedResourceDrift {
   param([AllowNull()][object[]]$Records)
   $drift = @($Records)
-  $expected = @(
+  $allowed = @(
     "module.platform.aws_db_instance.postgres[0]",
     "module.platform.aws_ecs_task_definition.migration[0]"
   )
-  $actualAddresses = @($drift | ForEach-Object { [string]$_.address } | Sort-Object)
-  if (($actualAddresses -join "|") -cne (@($expected | Sort-Object) -join "|")) {
-    throw "The plan contains unaccepted resource drift."
+  if ($drift.Count -eq 0) { throw "The plan must contain a nonempty accepted resource-drift subset." }
+  $seenAddresses = @()
+  foreach ($record in $drift) {
+    $address = [string]$record.address
+    if (-not ($allowed -ccontains $address) -or $seenAddresses -ccontains $address) {
+      throw "The plan contains unknown or duplicate resource drift."
+    }
+    $seenAddresses += $address
   }
   foreach ($record in $drift) {
     Assert-NoTerraformReplacementPaths $record.change
