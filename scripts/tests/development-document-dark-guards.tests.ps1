@@ -274,11 +274,14 @@ $objectPolicy = New-TestPolicy @(
   @{ Sid = "SessionPolicyMustNarrowObjectAccess"; Effect = "Allow"; Action = @("s3:GetObject", "s3:GetObjectVersion", "s3:GetObjectTagging", "s3:GetObjectVersionTagging", "s3:PutObject"); Resource = @("$bucketArn/quarantine/*", "$bucketArn/normalized/*") },
   @{ Sid = "EncryptAndDecryptViaS3Only"; Effect = "Allow"; Action = @("kms:Decrypt", "kms:GenerateDataKey"); Resource = $kmsArn; Condition = @{ StringEquals = @{ "kms:ViaService" = "s3.us-east-2.amazonaws.com" } } }
 )
-$s3EndpointPolicy = New-TestPolicy @(
-  @{ Sid = "ExactParserQuarantineReadsOnly"; Effect = "Allow"; Action = @("s3:GetObject", "s3:GetObjectVersion", "s3:GetObjectTagging", "s3:GetObjectVersionTagging"); Resource = "$bucketArn/quarantine/*"; Principal = @{ AWS = "*" }; Condition = @{ ArnEquals = @{ "aws:PrincipalArn" = $objectRole } } },
-  @{ Sid = "ExactParserNormalizedWritesAndVerification"; Effect = "Allow"; Action = @("s3:GetObject", "s3:GetObjectVersion", "s3:PutObject"); Resource = "$bucketArn/normalized/*"; Principal = @{ AWS = "*" }; Condition = @{ ArnEquals = @{ "aws:PrincipalArn" = $objectRole } } },
-  @{ Sid = "ExactCoordinatorNormalizedReadsOnly"; Effect = "Allow"; Action = @("s3:GetObject", "s3:GetObjectVersion"); Resource = "$bucketArn/normalized/*"; Principal = @{ AWS = "*" }; Condition = @{ ArnEquals = @{ "aws:PrincipalArn" = $processorRole } } }
-)
+function New-TestS3EndpointPolicy([object]$Principal) {
+  return New-TestPolicy @(
+    @{ Sid = "ExactParserQuarantineReadsOnly"; Effect = "Allow"; Action = @("s3:GetObject", "s3:GetObjectVersion", "s3:GetObjectTagging", "s3:GetObjectVersionTagging"); Resource = "$bucketArn/quarantine/*"; Principal = $Principal; Condition = @{ ArnEquals = @{ "aws:PrincipalArn" = $objectRole } } },
+    @{ Sid = "ExactParserNormalizedWritesAndVerification"; Effect = "Allow"; Action = @("s3:GetObject", "s3:GetObjectVersion", "s3:PutObject"); Resource = "$bucketArn/normalized/*"; Principal = $Principal; Condition = @{ ArnEquals = @{ "aws:PrincipalArn" = $objectRole } } },
+    @{ Sid = "ExactCoordinatorNormalizedReadsOnly"; Effect = "Allow"; Action = @("s3:GetObject", "s3:GetObjectVersion"); Resource = "$bucketArn/normalized/*"; Principal = $Principal; Condition = @{ ArnEquals = @{ "aws:PrincipalArn" = $processorRole } } }
+  )
+}
+$s3EndpointPolicy = New-TestS3EndpointPolicy "*"
 function New-TestQueuePolicy([string]$Sid, [string]$QueueName, [string[]]$RuleNames) {
   return New-TestPolicy @(@{ Sid = $Sid; Effect = "Allow"; Action = "sqs:SendMessage"; Resource = "arn:aws:sqs:us-east-2:${account}:$QueueName"
       Principal = @{ Service = "events.amazonaws.com" }; Condition = @{ StringEquals = @{ "aws:SourceAccount" = $account }
@@ -311,6 +314,21 @@ $parserChanges += New-TestPolicyUpdate "module.platform.aws_s3_bucket_policy.can
 $parserChanges += New-TestPolicyUpdate "module.platform.aws_sns_topic_policy.operational_alerts" (New-TestPolicy @($snsBase)) (New-TestPolicy @($snsBase, $snsAdded))
 $validParserPlan = [pscustomobject]@{ resource_drift = $kmsPlan.resource_drift; resource_changes = @($kmsNoop) + $parserChanges }
 $null = Assert-DevelopmentDocumentDarkPlan $validParserPlan $account parser-dark
+foreach ($fixture in @(
+    [pscustomobject]@{ Label = "AWS wildcard object"; Principal = @{ AWS = "*" } },
+    [pscustomobject]@{ Label = "service wildcard object"; Principal = @{ Service = "*" } },
+    [pscustomobject]@{ Label = "different scalar"; Principal = "arn:aws:iam::${account}:root" },
+    [pscustomobject]@{ Label = "wildcard list"; Principal = [object[]]@("*", "arn:aws:iam::${account}:root") }
+  )) {
+  $badPrincipalPlan = $validParserPlan | ConvertTo-Json -Depth 60 | ConvertFrom-Json
+  $endpointChange = @($badPrincipalPlan.resource_changes | Where-Object {
+      [string]$_.address -ceq "module.platform.aws_vpc_endpoint.candidate_documents_s3[0]"
+    })
+  $endpointChange[0].change.after.policy = New-TestS3EndpointPolicy $fixture.Principal
+  $rejected = $false
+  try { $null = Assert-DevelopmentDocumentDarkPlan $badPrincipalPlan $account parser-dark } catch { $rejected = $true }
+  if (-not $rejected) { throw "The S3 endpoint guard accepted the $($fixture.Label) principal shape." }
+}
 
 $processorPolicy = New-TestPolicy @(
   @{ Sid = "WriteOwnedLogs"; Effect = "Allow"; Action = @("logs:CreateLogStream", "logs:PutLogEvents"); Resource = "arn:aws:logs:us-east-2:${account}:log-group:/ai-job-apply/development/application:*" },

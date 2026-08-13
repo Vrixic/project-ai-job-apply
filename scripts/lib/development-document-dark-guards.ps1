@@ -1011,7 +1011,9 @@ function Assert-ExactDocumentCreatedResourcePolicies {
     (@($s3Policy.Statement.Sid | Sort-Object) -join "|") -cne (@($expectedS3.Keys | Sort-Object) -join "|")) { throw "The S3 endpoint policy has an unexpected version or Sids." }
   foreach ($statement in @($s3Policy.Statement)) {
     Assert-ExactStringSet $statement.Effect @("Allow") "S3 endpoint effect"; Assert-ExactStringSet $statement.Action @($expectedS3[[string]$statement.Sid]) "S3 endpoint actions"
-    Assert-ExactObjectKeys $statement.Principal @("AWS") "S3 endpoint principal"; Assert-ExactStringSet $statement.Principal.AWS @("*") "S3 endpoint principal"
+    if ($statement.Principal -isnot [string] -or [string]$statement.Principal -cne "*") {
+      throw "The S3 endpoint principal must be the exact canonical scalar wildcard."
+    }
     $prefix = if ([string]$statement.Sid -eq "ExactParserQuarantineReadsOnly") { "quarantine" } else { "normalized" }
     Assert-ExactStringSet $statement.Resource @("arn:aws:s3:::ai-job-apply-development-candidate-docs-${AccountId}/$prefix/*") "S3 endpoint resources"
     Assert-ExactCondition $statement.Condition @{ ArnEquals = @{ "aws:PrincipalArn" = @($(if ([string]$statement.Sid -eq "ExactCoordinatorNormalizedReadsOnly") { $processorRole } else { $objectRole })) } }
