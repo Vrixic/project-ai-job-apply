@@ -88,7 +88,7 @@ Usage:
     -ReviewedExecutionPlanSha256 64_CHARACTER_SHA256
 
   # Recheck the stopped task, aggregate-only log contract, zero-task boundary, encrypted state,
-  # and save a refresh-backed zero-drift plan.
+  # and save a refresh-backed zero-drift plan plus its adjacent current-state baseline sidecar.
   .\scripts\operate-development-document-migration.ps1 -Action Verify `
     -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
     -SourceSha APPLIED_RELEASE_40_CHARACTER_COMMIT `
@@ -119,6 +119,8 @@ verification, and ApplyTask revalidates its checksum, source, state identity, va
 receipt, parser pin, and zero-change plan before consuming the reviewed task plan.
 Post-apply actions may bind an already-applied ancestor release while recording the exact current
 operator revision in the execution descriptor and receipt.
+Successful Verify prints BaselinePath, BaselineSha256, BaselineMetadataPath, and
+BaselineMetadataSha256 for the next checksum-reviewed document-dark or gateway release.
 "@
   exit 0
 }
@@ -716,6 +718,157 @@ function Assert-RetainedMigrationBaselinePlan {
     throw "The retained migration baseline contains unaccepted refresh drift."
   }
   Assert-ExactCurrentBaselineVariableSet -Plan $Plan
+}
+
+function Get-ExactStringPlanVariable {
+  param([Parameter(Mandatory)][object]$Plan, [Parameter(Mandatory)][string]$Name)
+  $property = $Plan.variables.PSObject.Properties[$Name]
+  $valueProperty = if ($null -eq $property -or $null -eq $property.Value) {
+    $null
+  } else { $property.Value.PSObject.Properties["value"] }
+  if ($null -eq $valueProperty -or $valueProperty.Value -isnot [string]) {
+    throw "The retained migration baseline requires exact string variable '$Name'."
+  }
+  return [string]$valueProperty.Value
+}
+
+function New-PostMigrationBaselineMetadata {
+  param(
+    [Parameter(Mandatory)][object]$Plan,
+    [Parameter(Mandatory)][string]$PlanPath,
+    [Parameter(Mandatory)][string]$PlanSha256,
+    [Parameter(Mandatory)][object]$State,
+    [Parameter(Mandatory)][object]$TaskMetadata
+  )
+  $stage = Get-ExactStringPlanVariable -Plan $Plan -Name "document_processing_deployment_stage"
+  $parserQualifiedArn = Get-ExactStringPlanVariable -Plan $Plan -Name "document_parser_invocation_qualified_arn"
+  $planMigrationImage = Get-ExactStringPlanVariable -Plan $Plan -Name "migration_image"
+  if ($stage -notin @("parser-dark", "complete-dark") -or
+      $planMigrationImage -cne $MigrationImage -or
+      [string]$TaskMetadata.appliedBaselineStage -cne $stage -or
+      [string]$TaskMetadata.appliedBaselineParserQualifiedArn -cne $parserQualifiedArn -or
+      [string]$TaskMetadata.appliedBaselineReceiptSha256 -notmatch '^[a-f0-9]{64}$') {
+    throw "The post-migration baseline does not preserve the exact stage, parser, receipt, and migration-image handoff."
+  }
+  return [ordered]@{
+    SchemaVersion      = "2"
+    Kind               = "development-document-zero-drift-baseline"
+    Environment        = "development"
+    AccountId          = $ExpectedAccountId
+    Region             = $Region
+    SourceSha          = $SourceSha
+    StateLineage       = [string]$State.Lineage
+    StateSerial        = [long]$State.Serial
+    Stage              = $stage
+    ReceiptSha256      = [string]$TaskMetadata.appliedBaselineReceiptSha256
+    ParserQualifiedArn = $parserQualifiedArn
+    MigrationImage     = $planMigrationImage
+    PlanPath           = [IO.Path]::GetFullPath($PlanPath)
+    PlanSha256         = $PlanSha256
+    Applyable          = $false
+    MeaningfulChanges  = 0
+    CreatedAt          = (Get-Date).ToUniversalTime().ToString("o")
+  }
+}
+
+function Assert-PostMigrationBaselineMetadata {
+  param(
+    [Parameter(Mandatory)][object]$Metadata,
+    [Parameter(Mandatory)][object]$Plan,
+    [Parameter(Mandatory)][string]$PlanPath,
+    [Parameter(Mandatory)][string]$PlanSha256,
+    [Parameter(Mandatory)][object]$State,
+    [Parameter(Mandatory)][object]$TaskMetadata
+  )
+  $expectedKeys = @(
+    "AccountId", "Applyable", "CreatedAt", "Environment", "Kind", "MeaningfulChanges",
+    "MigrationImage", "ParserQualifiedArn", "PlanPath", "PlanSha256", "ReceiptSha256", "Region",
+    "SchemaVersion", "SourceSha", "Stage", "StateLineage", "StateSerial"
+  ) | Sort-Object
+  $actualKeys = @($Metadata.PSObject.Properties | ForEach-Object Name | Sort-Object)
+  $stage = Get-ExactStringPlanVariable -Plan $Plan -Name "document_processing_deployment_stage"
+  $parserQualifiedArn = Get-ExactStringPlanVariable -Plan $Plan -Name "document_parser_invocation_qualified_arn"
+  $planMigrationImage = Get-ExactStringPlanVariable -Plan $Plan -Name "migration_image"
+  $createdAt = [datetime]::MinValue
+  $createdAtValid = [datetime]::TryParse([string]$Metadata.CreatedAt, [ref]$createdAt) -and
+    $createdAt.Year -ge 2000 -and $createdAt.Year -le 2099
+  $metadataPlanPath = if ([string]::IsNullOrWhiteSpace([string]$Metadata.PlanPath)) { "" } else {
+    [IO.Path]::GetFullPath([string]$Metadata.PlanPath)
+  }
+  if (($actualKeys -join "|") -cne ($expectedKeys -join "|") -or
+      [string]$Metadata.SchemaVersion -cne "2" -or
+      [string]$Metadata.Kind -cne "development-document-zero-drift-baseline" -or
+      [string]$Metadata.Environment -cne "development" -or
+      [string]$Metadata.AccountId -cne $ExpectedAccountId -or [string]$Metadata.Region -cne $Region -or
+      [string]$Metadata.SourceSha -cne $SourceSha -or
+      [string]$Metadata.StateLineage -cne [string]$State.Lineage -or
+      [long]$Metadata.StateSerial -ne [long]$State.Serial -or
+      [string]$Metadata.Stage -cne $stage -or
+      [string]$Metadata.ReceiptSha256 -cne [string]$TaskMetadata.appliedBaselineReceiptSha256 -or
+      [string]$Metadata.ParserQualifiedArn -cne $parserQualifiedArn -or
+      [string]$Metadata.MigrationImage -cne $planMigrationImage -or
+      $metadataPlanPath -cne [IO.Path]::GetFullPath($PlanPath) -or
+      [string]$Metadata.PlanSha256 -cne $PlanSha256 -or
+      $Metadata.Applyable -isnot [bool] -or $Metadata.Applyable -or
+      [int]$Metadata.MeaningfulChanges -ne 0 -or -not $createdAtValid) {
+    throw "The retained post-migration baseline metadata does not match its exact plan and release bindings."
+  }
+}
+
+function Save-PostMigrationBaselineMetadata {
+  param(
+    [Parameter(Mandatory)][object]$Plan,
+    [Parameter(Mandatory)][string]$PlanPath,
+    [Parameter(Mandatory)][string]$PlanSha256,
+    [Parameter(Mandatory)][object]$State,
+    [Parameter(Mandatory)][object]$TaskMetadata
+  )
+  $metadataPath = "$PlanPath.baseline.json"
+  $metadata = New-PostMigrationBaselineMetadata -Plan $Plan -PlanPath $PlanPath `
+    -PlanSha256 $PlanSha256 -State $State -TaskMetadata $TaskMetadata
+  $created = $false
+  try {
+    $json = $metadata | ConvertTo-Json -Depth 40
+    $bytes = [Text.UTF8Encoding]::new($false).GetBytes($json)
+    try {
+      $stream = [IO.File]::Open($metadataPath, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    } catch [IO.IOException] {
+      throw "Refusing to overwrite a retained post-migration baseline sidecar."
+    }
+    $created = $true
+    try {
+      $stream.Write($bytes, 0, $bytes.Length)
+      $stream.Flush($true)
+    } finally { $stream.Dispose() }
+    $stored = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+    Assert-PostMigrationBaselineMetadata -Metadata $stored -Plan $Plan -PlanPath $PlanPath `
+      -PlanSha256 $PlanSha256 -State $State -TaskMetadata $TaskMetadata
+    return [pscustomobject]@{
+      Path = $metadataPath
+      Sha256 = Get-FileSha256 -Path $metadataPath
+      CreatedByInvocation = $true
+    }
+  } catch {
+    if ($created -and (Test-Path -LiteralPath $metadataPath)) {
+      Remove-Item -LiteralPath $metadataPath -Force
+    }
+    throw
+  }
+}
+
+function Remove-NewPostMigrationBaselineArtifacts {
+  param(
+    [Parameter(Mandatory)][string]$PlanPath,
+    [Parameter(Mandatory)][string]$MetadataPath,
+    [bool]$PlanOwned = $false,
+    [bool]$MetadataOwned = $false
+  )
+  if ($MetadataOwned -and (Test-Path -LiteralPath $MetadataPath)) {
+    Remove-Item -LiteralPath $MetadataPath -Force
+  }
+  if ($PlanOwned -and (Test-Path -LiteralPath $PlanPath)) {
+    Remove-Item -LiteralPath $PlanPath -Force
+  }
 }
 
 function Assert-RetainedBaselineCurrentState {
@@ -1897,24 +2050,46 @@ if ([string]::IsNullOrWhiteSpace($DriftPlanPath)) {
   $DriftPlanPath = Join-Path $operatorRoot "zero-drift-$($SourceSha.Substring(0, 12))-$timestamp.tfplan"
 }
 $driftPlan = Resolve-OperatorPath -Candidate $DriftPlanPath -RequireOperatorRoot
-if (Test-Path -LiteralPath $driftPlan) { throw "Refusing to replace an existing drift plan." }
+$baselineMetadataPath = "$driftPlan.baseline.json"
+if ((Test-Path -LiteralPath $driftPlan) -or (Test-Path -LiteralPath $baselineMetadataPath)) {
+  throw "Refusing to replace an existing drift plan or retained-baseline sidecar."
+}
 $driftLog = "$driftPlan.plan.log"
-$savedTerraformVariables = Save-AndClearTerraformVariables
+$stateBeforeBaseline = Get-CurrentTerraformStateIdentity
+$baselineMetadata = $null
+$planOwnedByInvocation = $false
 try {
-  Set-VariablesFromPlan -Plan $taskPlanJson -NewMigrationImage $MigrationImage
-  & terraform "-chdir=$terraformDirectory" plan -input=false -lock-timeout=5m -refresh=true `
-    -detailed-exitcode "-out=$driftPlan" *> $driftLog
-  $driftExit = $LASTEXITCODE
-} finally {
-  Restore-TerraformVariables -Saved $savedTerraformVariables
+  $savedTerraformVariables = Save-AndClearTerraformVariables
+  try {
+    Set-VariablesFromPlan -Plan $taskPlanJson -NewMigrationImage $MigrationImage
+    & terraform "-chdir=$terraformDirectory" plan -input=false -lock-timeout=5m -refresh=true `
+      -detailed-exitcode "-out=$driftPlan" *> $driftLog
+    $driftExit = $LASTEXITCODE
+    if (Test-Path -LiteralPath $driftPlan -PathType Leaf) {
+      $planOwnedByInvocation = $true
+    }
+  } finally {
+    Restore-TerraformVariables -Saved $savedTerraformVariables
+  }
+  if ($driftExit -ne 0) {
+    throw "Post-migration Terraform verification did not return zero drift. Inspect the ignored local drift log."
+  }
+  $driftJson = Get-PlanJson -Path $driftPlan
+  Assert-RetainedMigrationBaselinePlan -Plan $driftJson
+  $stateAfterBaseline = Get-CurrentTerraformStateIdentity
+  if ([string]$stateAfterBaseline.Lineage -cne [string]$stateBeforeBaseline.Lineage -or
+      [long]$stateAfterBaseline.Serial -ne [long]$stateBeforeBaseline.Serial) {
+    throw "Remote state changed while producing the retained post-migration baseline."
+  }
+  Assert-StateObjectEncryption
+  $driftPlanSha256 = Get-FileSha256 -Path $driftPlan
+  $baselineMetadata = Save-PostMigrationBaselineMetadata -Plan $driftJson -PlanPath $driftPlan `
+    -PlanSha256 $driftPlanSha256 -State $stateAfterBaseline -TaskMetadata $taskMetadata
+} catch {
+  Remove-NewPostMigrationBaselineArtifacts -PlanPath $driftPlan -MetadataPath $baselineMetadataPath `
+    -PlanOwned $planOwnedByInvocation -MetadataOwned $false
+  throw
 }
-if ($driftExit -ne 0) { throw "Post-migration Terraform verification did not return zero drift. Inspect the ignored local drift log." }
-$driftJson = Get-PlanJson -Path $driftPlan
-if (@(Get-MeaningfulChanges -Changes @($driftJson.resource_changes)).Count -ne 0 -or
-    @(Get-UnacceptedVerificationDrift -Drift @($driftJson.resource_drift)).Count -ne 0) {
-  throw "The saved post-migration plan contains a change or resource drift."
-}
-Assert-StateObjectEncryption
 [pscustomobject]@{
   Outcome                    = "verified"
   Environment                = "development"
@@ -1924,7 +2099,11 @@ Assert-StateObjectEncryption
   ExecutionPlanSha256        = $ReviewedExecutionPlanSha256
   ReceiptSha256              = Get-FileSha256 -Path $receipt
   DriftPlanPath              = $driftPlan
-  DriftPlanSha256            = Get-FileSha256 -Path $driftPlan
+  DriftPlanSha256            = $driftPlanSha256
+  BaselinePath               = $driftPlan
+  BaselineSha256             = $driftPlanSha256
+  BaselineMetadataPath       = $baselineMetadata.Path
+  BaselineMetadataSha256     = $baselineMetadata.Sha256
   ArtifactDigest             = $artifact.Digest
   ExecutedTaskCount          = 1
   ExitCode                   = 0

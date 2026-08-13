@@ -48,11 +48,39 @@ $baselineMetadata = [pscustomobject]@{
   PlanPath = $baselinePath; PlanSha256 = $baselineSha; Applyable = $false; MeaningfulChanges = 0
   CreatedAt = "2026-08-13T12:00:00Z"
 }
-$null = Assert-RetainedGatewayBaselineMetadata $baselineMetadata $baselinePath $baselineSha $sourceSha $account "us-east-2"; $passed++
+$baselineMigrationImage = "$repositoryUrl@sha256:$('1' * 64)"
+$metadataPlan = [pscustomobject]@{ variables = [pscustomobject]@{
+    document_processing_deployment_stage = [pscustomobject]@{ value = "parser-dark" }
+    document_parser_invocation_qualified_arn = [pscustomobject]@{ value = "" }
+    migration_image = [pscustomobject]@{ value = $baselineMigrationImage }
+  } }
+$currentState = [pscustomobject]@{ Lineage = $lineage; Serial = 42 }
+$null = Assert-RetainedGatewayBaselineMetadata $baselineMetadata $metadataPlan $baselinePath $baselineSha `
+  $sourceSha $account "us-east-2" $repositoryUrl $currentState; $passed++
+$baselineMetadataV2 = Copy-Fixture $baselineMetadata
+$baselineMetadataV2.SchemaVersion = "2"
+$baselineMetadataV2 | Add-Member MigrationImage $baselineMigrationImage
+$null = Assert-RetainedGatewayBaselineMetadata $baselineMetadataV2 $metadataPlan $baselinePath $baselineSha `
+  $sourceSha $account "us-east-2" $repositoryUrl $currentState; $passed++
 $badMetadata = Copy-Fixture $baselineMetadata; $badMetadata.Applyable = $true
-Assert-Rejected { Assert-RetainedGatewayBaselineMetadata $badMetadata $baselinePath $baselineSha $sourceSha $account "us-east-2" } "Applyable retained metadata was accepted."
+Assert-Rejected { Assert-RetainedGatewayBaselineMetadata $badMetadata $metadataPlan $baselinePath $baselineSha $sourceSha $account "us-east-2" $repositoryUrl $currentState } "Applyable retained metadata was accepted."
 $badMetadata = Copy-Fixture $baselineMetadata; $badMetadata.ParserQualifiedArn = "arn:aws:lambda:us-east-2:999999999999:function:ai-job-apply-development-document-parser:7"; $badMetadata.Stage = "complete-dark"
-Assert-Rejected { Assert-RetainedGatewayBaselineMetadata $badMetadata $baselinePath $baselineSha $sourceSha $account "us-east-2" } "A cross-account parser pin was accepted."
+Assert-Rejected { Assert-RetainedGatewayBaselineMetadata $badMetadata $metadataPlan $baselinePath $baselineSha $sourceSha $account "us-east-2" $repositoryUrl $currentState } "A cross-account parser pin was accepted."
+foreach ($mutation in @("migration", "serial", "stage", "extra", "missing", "kms")) {
+  $badMetadata = Copy-Fixture $baselineMetadataV2
+  switch ($mutation) {
+    "migration" { $badMetadata.MigrationImage = "$repositoryUrl@sha256:$('2' * 64)" }
+    "serial" { $badMetadata.StateSerial = 43 }
+    "stage" { $badMetadata.Stage = "complete-dark" }
+    "extra" { $badMetadata | Add-Member Unexpected "value" }
+    "missing" { $badMetadata.PSObject.Properties.Remove("ReceiptSha256") }
+    "kms" { $badMetadata.Stage = "kms-prerequisite" }
+  }
+  Assert-Rejected {
+    Assert-RetainedGatewayBaselineMetadata $badMetadata $metadataPlan $baselinePath $baselineSha `
+      $sourceSha $account "us-east-2" $repositoryUrl $currentState
+  } "A version-2 baseline accepted $mutation tampering."
+}
 
 function New-Variables {
   param([switch]$Released)
@@ -66,6 +94,14 @@ function New-Variables {
     gateway_lambda_artifact_base64sha256 = [pscustomobject]@{ value = $(if ($Released) { $artifactBase64 } else { [Convert]::ToBase64String(([byte[]](33..64))) }) }
     document_processing_deployment_stage = [pscustomobject]@{ value = "parser-dark" }
     document_parser_invocation_qualified_arn = [pscustomobject]@{ value = "" }
+    document_parser_artifact_s3_key = [pscustomobject]@{ value = "lambda/documents/$sourceSha/$('3' * 64)/document-parser-lambda.zip" }
+    document_parser_artifact_s3_object_version = [pscustomobject]@{ value = "parser-version" }
+    document_parser_artifact_sha256 = [pscustomobject]@{ value = "3" * 64 }
+    document_parser_artifact_base64sha256 = [pscustomobject]@{ value = $artifactBase64 }
+    document_processor_artifact_s3_key = [pscustomobject]@{ value = "" }
+    document_processor_artifact_s3_object_version = [pscustomobject]@{ value = "" }
+    document_processor_artifact_sha256 = [pscustomobject]@{ value = "" }
+    document_processor_artifact_base64sha256 = [pscustomobject]@{ value = "" }
     document_scan_mapping_enabled = [pscustomobject]@{ value = $false }
     document_scan_event_rule_enabled = [pscustomobject]@{ value = $false }
     migration_image = [pscustomobject]@{ value = "$repositoryUrl@sha256:$('1' * 64)" }
@@ -73,6 +109,34 @@ function New-Variables {
   }
 }
 $baselineVariables = New-Variables; $releaseVariables = New-Variables -Released
+$documentReceiptSha = "f" * 64
+$documentReceipt = [pscustomobject]@{
+  schemaVersion = 1; kind = "development-document-lambda-publication"; environment = "development"
+  region = "us-east-2"; sourceSha = $sourceSha; boundarySha256 = $boundarySha; phase = "verified"
+  createdAt = "2026-08-13T12:00:00Z"; completedAt = "2026-08-13T12:01:00Z"
+  artifacts = @(
+    foreach ($name in @("document-parser-lambda", "document-processor-lambda")) {
+      $digest = if ($name -ceq "document-parser-lambda") { "3" * 64 } else { "4" * 64 }
+      foreach ($suffix in @("zip", "cdx.json", "manifest.json", "sha256")) {
+        [pscustomobject]@{
+          artifactName = $name; artifactSha256 = $digest; suffix = $suffix
+          key = "lambda/documents/$sourceSha/$digest/$name.$suffix"
+          versionId = $(if ($name -ceq "document-parser-lambda" -and $suffix -ceq "zip") { "parser-version" } else { "version-$name-$suffix" })
+          objectSha256 = $(if ($suffix -ceq "zip") { $digest } else { "5" * 64 })
+          objectBase64Sha256 = $artifactBase64; contentLength = 100
+        }
+      }
+    }
+  )
+}
+$null = Assert-GatewayDocumentBaselineReceipt $documentReceipt $documentReceiptSha `
+  ([pscustomobject]@{ variables = $baselineVariables }) $sourceSha $boundarySha; $passed++
+$tamperedDocumentReceipt = Copy-Fixture $documentReceipt
+$tamperedDocumentReceipt.artifacts[0].versionId = "wrong"
+Assert-Rejected {
+  Assert-GatewayDocumentBaselineReceipt $tamperedDocumentReceipt $documentReceiptSha `
+    ([pscustomobject]@{ variables = $baselineVariables }) $sourceSha $boundarySha
+} "A document receipt relabeled away from exact plan variables was accepted."
 $baselinePlan = [pscustomobject]@{
   complete = $true; errored = $false; applyable = $false; terraform_version = "1.9.8"
   variables = $baselineVariables; planned_values = [pscustomobject]@{ root_module = [pscustomobject]@{} }

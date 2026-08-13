@@ -11,6 +11,10 @@ $ast = [Management.Automation.Language.Parser]::ParseInput(
   [ref]$errors
 )
 if (@($errors).Count -ne 0) { throw "The development migration operator did not parse." }
+if ($source -notmatch 'if \(Test-Path -LiteralPath \$driftPlan -PathType Leaf\)\s*\{\s*\$planOwnedByInvocation = \$true' -or
+    $source -match 'if \(\$driftExit -eq 0 -and \(Test-Path -LiteralPath \$driftPlan') {
+  throw "Unexpected Terraform exit plans are not marked owned before exit validation and cleanup."
+}
 
 $currentJobsSuccessMarker =
   "Jobs migrations through 0004_job_search applied and verified."
@@ -70,10 +74,13 @@ $baselineFunctions = @($ast.FindAll({
         "Get-UnacceptedVerificationDrift", "Get-DeclaredVariableNames",
         "Get-CurrentTerraformStateIdentity", "Assert-ExactCurrentBaselineVariableSet",
         "Assert-RetainedMigrationBaselinePlan", "Assert-RetainedBaselineCurrentState",
-        "Read-RetainedMigrationBaseline", "Assert-TaskMetadataBaselineBinding"
+        "Read-RetainedMigrationBaseline", "Assert-TaskMetadataBaselineBinding",
+        "Get-FileSha256", "Write-JsonFile", "Get-ExactStringPlanVariable",
+        "New-PostMigrationBaselineMetadata", "Assert-PostMigrationBaselineMetadata",
+        "Save-PostMigrationBaselineMetadata", "Remove-NewPostMigrationBaselineArtifacts"
       )
     }, $true))
-if ($baselineFunctions.Count -ne 26) { throw "The input and plan guards must each be defined once." }
+if ($baselineFunctions.Count -ne 33) { throw "The input, plan, and retained-handoff guards must each be defined once." }
 foreach ($function in $baselineFunctions | Sort-Object { $_.Extent.StartOffset }) {
   Invoke-Expression $function.Extent.Text
 }
@@ -398,6 +405,92 @@ $retainedPlan = [pscustomobject]@{
 }
 Assert-RetainedMigrationBaselinePlan -Plan $retainedPlan
 
+$SourceSha = "a" * 40
+$ExpectedAccountId = "111122223333"
+$Region = "us-east-2"
+$MigrationImage = "111122223333.dkr.ecr.us-east-2.amazonaws.com/ai-job-apply/migration@sha256:$('e' * 64)"
+$retainedPlan.variables.migration_image.value = $MigrationImage
+$retainedState = [pscustomobject]@{ Lineage = "12345678-1234-1234-1234-123456789abc"; Serial = 51 }
+$retainedTaskMetadata = [pscustomobject]@{
+  appliedBaselineStage = "parser-dark"
+  appliedBaselineReceiptSha256 = "b" * 64
+  appliedBaselineParserQualifiedArn = ""
+}
+$handoffRoot = Join-Path $terraformRoot "post-migration-handoff-test-$([guid]::NewGuid().ToString('N'))"
+$null = New-Item -ItemType Directory -Path $handoffRoot
+try {
+  $handoffPlanPath = Join-Path $handoffRoot "verified.tfplan"
+  [IO.File]::WriteAllText($handoffPlanPath, "verified-current-plan", [Text.UTF8Encoding]::new($false))
+  $handoffPlanSha = Get-FileSha256 -Path $handoffPlanPath
+  $handoff = Save-PostMigrationBaselineMetadata -Plan $retainedPlan -PlanPath $handoffPlanPath `
+    -PlanSha256 $handoffPlanSha -State $retainedState -TaskMetadata $retainedTaskMetadata
+  if ([string]$handoff.Path -cne "$handoffPlanPath.baseline.json" -or
+      [string]$handoff.Sha256 -cne (Get-FileSha256 -Path $handoff.Path)) {
+    throw "Migration Verify did not emit the exact adjacent retained-baseline handoff."
+  }
+  $storedHandoff = Get-Content -LiteralPath $handoff.Path -Raw | ConvertFrom-Json
+  Assert-PostMigrationBaselineMetadata -Metadata $storedHandoff -Plan $retainedPlan `
+    -PlanPath $handoffPlanPath -PlanSha256 $handoffPlanSha -State $retainedState `
+    -TaskMetadata $retainedTaskMetadata
+
+  foreach ($tamper in @(
+      @{ Property = "MigrationImage"; Value = "111122223333.dkr.ecr.us-east-2.amazonaws.com/ai-job-apply/migration@sha256:$('f' * 64)" },
+      @{ Property = "ReceiptSha256"; Value = "c" * 64 },
+      @{ Property = "Stage"; Value = "complete-dark" },
+      @{ Property = "ParserQualifiedArn"; Value = "arn:aws:lambda:us-east-2:${ExpectedAccountId}:function:ai-job-apply-development-document-parser:7" },
+      @{ Property = "StateSerial"; Value = 52 },
+      @{ Property = "PlanSha256"; Value = "d" * 64 },
+      @{ Property = "SchemaVersion"; Value = "1" }
+    )) {
+    $badHandoff = $storedHandoff | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+    $badHandoff.($tamper.Property) = $tamper.Value
+    $tamperRejected = $false
+    try {
+      Assert-PostMigrationBaselineMetadata -Metadata $badHandoff -Plan $retainedPlan `
+        -PlanPath $handoffPlanPath -PlanSha256 $handoffPlanSha -State $retainedState `
+        -TaskMetadata $retainedTaskMetadata
+    } catch { $tamperRejected = $true }
+    if (-not $tamperRejected) { throw "The post-migration handoff accepted tampered $($tamper.Property)." }
+  }
+
+  $overwriteRejected = $false
+  $collisionPlanSha = Get-FileSha256 -Path $handoffPlanPath
+  $collisionMetadataSha = Get-FileSha256 -Path $handoff.Path
+  try {
+    $null = Save-PostMigrationBaselineMetadata -Plan $retainedPlan -PlanPath $handoffPlanPath `
+      -PlanSha256 $handoffPlanSha -State $retainedState -TaskMetadata $retainedTaskMetadata
+  } catch { $overwriteRejected = $true }
+  if (-not $overwriteRejected -or -not (Test-Path -LiteralPath $handoffPlanPath) -or
+      -not (Test-Path -LiteralPath $handoff.Path)) {
+    throw "The retained post-migration baseline did not preserve preexisting plan/sidecar bytes."
+  }
+  if ((Get-FileSha256 -Path $handoffPlanPath) -cne $collisionPlanSha -or
+      (Get-FileSha256 -Path $handoff.Path) -cne $collisionMetadataSha) {
+    throw "A rejected retained-baseline overwrite changed existing bytes."
+  }
+
+  Remove-NewPostMigrationBaselineArtifacts -PlanPath $handoffPlanPath -MetadataPath $handoff.Path `
+    -PlanOwned $false -MetadataOwned $false
+  if ((Get-FileSha256 -Path $handoffPlanPath) -cne $collisionPlanSha -or
+      (Get-FileSha256 -Path $handoff.Path) -cne $collisionMetadataSha) {
+    throw "Ownership-aware failure cleanup removed or changed another writer's artifacts."
+  }
+
+  # Model Terraform writing the requested plan and then returning detailed exit code 2. Because
+  # the target was absent before invocation, Verify owns and must remove both newly-created bytes.
+  $cleanupPlan = Join-Path $handoffRoot "unexpected-exit-two.tfplan"
+  $cleanupMetadata = "$cleanupPlan.baseline.json"
+  [IO.File]::WriteAllText($cleanupPlan, "unexpected-exit-two-plan", [Text.UTF8Encoding]::new($false))
+  [IO.File]::WriteAllText($cleanupMetadata, "unexpected-exit-two-metadata", [Text.UTF8Encoding]::new($false))
+  Remove-NewPostMigrationBaselineArtifacts -PlanPath $cleanupPlan -MetadataPath $cleanupMetadata `
+    -PlanOwned $true -MetadataOwned $true
+  if ((Test-Path -LiteralPath $cleanupPlan) -or (Test-Path -LiteralPath $cleanupMetadata)) {
+    throw "Unexpected-exit-two cleanup retained a newly-created migration baseline artifact."
+  }
+} finally {
+  if (Test-Path -LiteralPath $handoffRoot) { Remove-Item -LiteralPath $handoffRoot -Recurse -Force }
+}
+
 $missingVariablePlan = $retainedPlan | ConvertTo-Json -Depth 30 | ConvertFrom-Json
 $missingVariablePlan.variables.PSObject.Properties.Remove(@(Get-DeclaredVariableNames)[0])
 $missingVariableRejected = $false
@@ -405,7 +498,6 @@ try { Assert-RetainedMigrationBaselinePlan -Plan $missingVariablePlan }
 catch { $missingVariableRejected = $true }
 if (-not $missingVariableRejected) { throw "The retained migration baseline accepted a stale variable set." }
 
-$retainedState = [pscustomobject]@{ Lineage = "12345678-1234-1234-1234-123456789abc"; Serial = 51 }
 $stateMismatchRejected = $false
 try {
   Assert-RetainedBaselineCurrentState `
@@ -414,9 +506,6 @@ try {
 } catch { $stateMismatchRejected = $true }
 if (-not $stateMismatchRejected) { throw "PlanTask accepted a retained baseline from a stale state serial." }
 
-$SourceSha = "a" * 40
-$ExpectedAccountId = "111122223333"
-$Region = "us-east-2"
 $retainedRoot = Join-Path $terraformRoot "retained-baseline-test-$([guid]::NewGuid().ToString('N'))"
 $null = New-Item -ItemType Directory -Path $retainedRoot
 try {

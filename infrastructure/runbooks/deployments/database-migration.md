@@ -59,7 +59,16 @@ The task release is deliberately review-separated:
    the versioned state bucket, writes a local receipt immediately, waits for `STOPPED`, and
    requires the exact image digest, exit code `0`, no effective override, four aggregate-only
    success messages, zero active migration tasks, and zero ECS services.
-5. `Verify` repeats the task/log/zero-compute checks and saves a refresh-backed zero-drift plan.
+5. `Verify` repeats the task/log/zero-compute checks and retains a refresh-backed zero-drift plan
+   plus its adjacent `.baseline.json` sidecar. The operator rejects overwrites, removes only newly
+   created plan/sidecar bytes if any validation or write fails, and requires state lineage/serial
+   to remain unchanged while producing the handoff. The version-2 sidecar binds the exact current
+   Terraform variable inventory, merged source, account, region, state lineage/serial, document
+   stage, parser-version pin, reviewed document-publication receipt, immutable migration-image
+   digest, plan path/hash, Terraform `1.9.8`, nonapplyable shape, zero meaningful resource/output
+   changes, and only the bounded provider refresh records. Retain the printed `BaselinePath`,
+   `BaselineSha256`, `BaselineMetadataPath`, and `BaselineMetadataSha256` for the next separately
+   reviewed `CompleteDark` or gateway release; do not substitute the consumed migration task plan.
 
 If the local waiter exits after a durable claim and ECS submission, never call `Execute` again.
 Use `Recover` with the exact submitted receipt and reviewed descriptor. It has no submission path;

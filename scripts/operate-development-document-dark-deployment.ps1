@@ -8,6 +8,7 @@ param(
   [ValidatePattern("^[a-z0-9.-]+$")][string]$StateBucket = "",
   [string]$BaselinePlanPath = "",
   [ValidatePattern("^[a-f0-9]{64}$")][string]$ReviewedBaselineSha256 = "",
+  [ValidatePattern("^(?:|[a-f0-9]{64})$")][string]$ReviewedBaselineMetadataSha256 = "",
   [string]$PublicationReceiptPath = "",
   [ValidatePattern("^[a-f0-9]{64}$")][string]$ReviewedReceiptSha256 = "",
   [string]$PlanPath = "",
@@ -26,17 +27,20 @@ Usage:
   .\scripts\operate-development-document-dark-deployment.ps1 -Action Plan -Stage ParserDark `
     -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
     -BaselinePlanPath ZERO_CHANGE_PLAN -ReviewedBaselineSha256 BASELINE_SHA256 `
+    [-ReviewedBaselineMetadataSha256 BASELINE_METADATA_SHA256] `
     -PublicationReceiptPath VERIFIED_RECEIPT -ReviewedReceiptSha256 RECEIPT_SHA256
 
   .\scripts\operate-development-document-dark-deployment.ps1 -Action Apply -Stage ParserDark `
     -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
     -BaselinePlanPath ZERO_CHANGE_PLAN -ReviewedBaselineSha256 BASELINE_SHA256 `
+    [-ReviewedBaselineMetadataSha256 BASELINE_METADATA_SHA256] `
     -PublicationReceiptPath VERIFIED_RECEIPT -ReviewedReceiptSha256 RECEIPT_SHA256 `
     -PlanPath PLAN_PATH_FROM_PLAN -ReviewedPlanSha256 PLAN_SHA256
 
   .\scripts\operate-development-document-dark-deployment.ps1 -Action Verify -Stage ParserDark `
     -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
     -BaselinePlanPath ZERO_CHANGE_PLAN -ReviewedBaselineSha256 BASELINE_SHA256 `
+    [-ReviewedBaselineMetadataSha256 BASELINE_METADATA_SHA256] `
     -PublicationReceiptPath VERIFIED_RECEIPT -ReviewedReceiptSha256 RECEIPT_SHA256
 
 The operator reconstructs all current deployment inputs from a checksum-reviewed zero-change
@@ -331,7 +335,88 @@ function Remove-NewRetainedBaselineArtifacts {
   if (Test-Path -LiteralPath $PlanPath) { Remove-Item -LiteralPath $PlanPath -Force }
 }
 
+function Get-DevelopmentDocumentBaselineShape {
+  param(
+    [Parameter(Mandatory)][object]$Variables,
+    [Parameter(Mandatory)][string]$RequestedStage,
+    [Parameter(Mandatory)][string]$AppliedStage
+  )
+
+  $legacyName = "document_processing_kms_prerequisite_enabled"
+  $legacy = @($legacyBaselineVariableNames | Sort-Object -Unique)
+  $legacyWithoutKms = @($legacy | Where-Object { $_ -cne $legacyName })
+  $current = @($allowedVariableNames | Sort-Object -Unique)
+  $actual = @($Variables.PSObject.Properties | ForEach-Object Name | Sort-Object -Unique)
+  if (($actual -join "|") -ceq ($current -join "|")) { return "current" }
+  if ($RequestedStage -cne "parser-dark" -or $AppliedStage -cne "kms-prerequisite") {
+    throw "A historical baseline is accepted only for the initial ParserDark transition."
+  }
+  if (($actual -join "|") -ceq ($legacy -join "|")) {
+    $value = ConvertTo-ExactBoolean $Variables.PSObject.Properties[$legacyName].Value.value `
+      "legacy KMS prerequisite switch"
+    if (-not $value) { throw "The historical baseline does not prove the applied KMS prerequisite." }
+    return "historical"
+  }
+  if (($actual -join "|") -ceq ($legacyWithoutKms -join "|")) {
+    # The accepted intake baseline predates this short-lived legacy input. Exact current state is
+    # independently required to prove the KMS prerequisite before ParserDark can plan or verify.
+    return "historical"
+  }
+  throw "The reviewed baseline does not contain the exact approved development variable set."
+}
+
+function Assert-CurrentDocumentBaselineMetadata {
+  param(
+    [Parameter(Mandatory)][object]$Metadata,
+    [Parameter(Mandatory)][object]$Baseline,
+    [Parameter(Mandatory)][string]$ResolvedPlanPath,
+    [Parameter(Mandatory)][string]$PlanSha256,
+    [Parameter(Mandatory)][string]$AppliedStage,
+    [Parameter(Mandatory)][string]$ReceiptSha256,
+    [Parameter(Mandatory)][object]$StateIdentity,
+    [Parameter(Mandatory)][string]$SourceSha
+  )
+
+  $v1Keys = @(
+    "AccountId", "Applyable", "CreatedAt", "Environment", "Kind", "MeaningfulChanges",
+    "ParserQualifiedArn", "PlanPath", "PlanSha256", "ReceiptSha256", "Region", "SchemaVersion",
+    "SourceSha", "Stage", "StateLineage", "StateSerial"
+  ) | Sort-Object
+  $v2Keys = @($v1Keys + "MigrationImage" | Sort-Object)
+  $actualKeys = @($Metadata.PSObject.Properties | ForEach-Object Name | Sort-Object)
+  $schema = [string]$Metadata.SchemaVersion
+  $expectedKeys = if ($schema -ceq "1") { $v1Keys } elseif ($schema -ceq "2") { $v2Keys } else { @() }
+  if ($expectedKeys.Count -eq 0 -or ($actualKeys -join "|") -cne ($expectedKeys -join "|")) {
+    throw "The current document baseline metadata has an unexpected schema."
+  }
+  $planParserPin = [string]$Baseline.variables.document_parser_invocation_qualified_arn.value
+  if ([string]$Metadata.Kind -cne "development-document-zero-drift-baseline" -or
+    [string]$Metadata.Environment -cne "development" -or [string]$Metadata.AccountId -cne $ExpectedAccountId -or
+    [string]$Metadata.Region -cne $Region -or [string]$Metadata.SourceSha -cne $SourceSha -or
+    [string]$Metadata.Stage -cne $AppliedStage -or [string]$Metadata.ReceiptSha256 -cne $ReceiptSha256 -or
+    [string]$Metadata.ParserQualifiedArn -cne $planParserPin -or
+    [string]$Metadata.PlanPath -cne $ResolvedPlanPath -or [string]$Metadata.PlanSha256 -cne $PlanSha256 -or
+    [string]$Metadata.StateLineage -cne [string]$StateIdentity.Lineage -or
+    [long]$Metadata.StateSerial -ne [long]$StateIdentity.Serial -or
+    $Metadata.Applyable -isnot [bool] -or $Metadata.Applyable -or [int]$Metadata.MeaningfulChanges -ne 0 -or
+    [string]$Metadata.CreatedAt -cnotmatch '^20[0-9]{2}-[0-9]{2}-[0-9]{2}T') {
+    throw "The current document baseline metadata does not match source, state, stage, receipt, or plan."
+  }
+  if ($schema -ceq "2") {
+    $migrationImage = [string]$Baseline.variables.migration_image.value
+    if ([string]$Metadata.MigrationImage -cne $migrationImage -or
+      $migrationImage -cnotmatch "^${ExpectedAccountId}\.dkr\.ecr\.us-east-2\.amazonaws\.com/ai-job-apply/migration@sha256:[a-f0-9]{64}$") {
+      throw "The current document baseline metadata does not bind the exact migration image digest."
+    }
+  }
+}
+
 function Read-Baseline {
+  param(
+    [Parameter(Mandatory)][string]$RequestedStage,
+    [Parameter(Mandatory)][string]$AppliedStage,
+    [AllowNull()][object]$Receipt
+  )
   $resolved = Resolve-InputPath -Candidate $BaselinePlanPath -MustExist
   $sha = (Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash.ToLowerInvariant()
   if ($sha -cne $ReviewedBaselineSha256) { throw "The zero-change baseline checksum does not match review." }
@@ -340,10 +425,72 @@ function Read-Baseline {
   if ($changes.Count -ne 0 -or [string]$baseline.terraform_version -cne "1.9.8") {
     throw "The reviewed baseline is not a Terraform 1.9.8 zero-change plan."
   }
-  $names = @($baseline.variables.PSObject.Properties | ForEach-Object Name | Sort-Object)
-  if (($names -join "|") -cne (@($legacyBaselineVariableNames | Sort-Object) -join "|")) {
-    throw "The reviewed baseline does not contain the exact approved development variable set."
+  $shape = Get-DevelopmentDocumentBaselineShape -Variables $baseline.variables `
+    -RequestedStage $RequestedStage -AppliedStage $AppliedStage
+  if ($shape -ceq "current") {
+    if ($AppliedStage -notin @("parser-dark", "complete-dark") -or $null -eq $Receipt) {
+      throw "A current-shape retained baseline requires an applied document runtime and verified receipt."
+    }
+    foreach ($name in @(Get-DevelopmentDocumentBooleanVariableNames)) {
+      $null = ConvertTo-ExactBoolean $baseline.variables.PSObject.Properties[$name].Value.value "baseline $name"
+    }
+    $parser = @($Receipt.artifacts | Where-Object { $_.artifactName -eq "document-parser-lambda" -and $_.suffix -eq "zip" })
+    $processor = @($Receipt.artifacts | Where-Object { $_.artifactName -eq "document-processor-lambda" -and $_.suffix -eq "zip" })
+    if ($parser.Count -ne 1 -or $processor.Count -ne 1 -or
+      -not (ConvertTo-ExactBoolean $baseline.variables.deploy_document_intake.value "deploy_document_intake") -or
+      [string]$baseline.variables.document_processing_deployment_stage.value -cne $AppliedStage -or
+      (ConvertTo-ExactBoolean $baseline.variables.document_scan_mapping_enabled.value "document_scan_mapping_enabled") -or
+      (ConvertTo-ExactBoolean $baseline.variables.document_scan_event_rule_enabled.value "document_scan_event_rule_enabled") -or
+      -not (ConvertTo-ExactBoolean $baseline.variables.document_security_health_rules_enabled.value "document_security_health_rules_enabled") -or
+      [string]$baseline.variables.document_parser_version.value -cne "resume-parser-v1" -or
+      [string]$baseline.variables.gateway_lambda_extension_layer_arn.value -cne $extensionLayerArn -or
+      [string]$baseline.variables.document_parser_artifact_s3_key.value -cne [string]$parser[0].key -or
+      [string]$baseline.variables.document_parser_artifact_s3_object_version.value -cne [string]$parser[0].versionId -or
+      [string]$baseline.variables.document_parser_artifact_sha256.value -cne [string]$parser[0].artifactSha256 -or
+      [string]$baseline.variables.document_parser_artifact_base64sha256.value -cne [string]$parser[0].objectBase64Sha256) {
+      throw "The current retained baseline does not prove the exact applied dark document boundary."
+    }
+    $parserPin = [string]$baseline.variables.document_parser_invocation_qualified_arn.value
+    if (($AppliedStage -ceq "parser-dark" -and -not [string]::IsNullOrEmpty($parserPin)) -or
+      ($AppliedStage -ceq "complete-dark" -and $parserPin -cnotmatch "^arn:aws:lambda:us-east-2:${ExpectedAccountId}:function:ai-job-apply-development-document-parser:[1-9][0-9]*$")) {
+      throw "The current retained baseline has an invalid parser-version pin."
+    }
+    if ($AppliedStage -ceq "parser-dark") {
+      foreach ($name in @(
+          "document_processor_artifact_s3_key", "document_processor_artifact_s3_object_version",
+          "document_processor_artifact_sha256", "document_processor_artifact_base64sha256",
+          "document_processor_extension_layer_arn"
+        )) {
+        if (-not [string]::IsNullOrEmpty([string]$baseline.variables.PSObject.Properties[$name].Value.value)) {
+          throw "ParserDark retained baseline contains a CompleteDark artifact input."
+        }
+      }
+    } elseif (
+      [string]$baseline.variables.document_processor_artifact_s3_key.value -cne [string]$processor[0].key -or
+      [string]$baseline.variables.document_processor_artifact_s3_object_version.value -cne [string]$processor[0].versionId -or
+      [string]$baseline.variables.document_processor_artifact_sha256.value -cne [string]$processor[0].artifactSha256 -or
+      [string]$baseline.variables.document_processor_artifact_base64sha256.value -cne [string]$processor[0].objectBase64Sha256 -or
+      [string]$baseline.variables.document_processor_extension_layer_arn.value -cne $extensionLayerArn) {
+      throw "CompleteDark retained baseline does not bind the exact reviewed processor artifact."
+    }
+    $metadataPath = "$resolved.baseline.json"
+    if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) {
+      throw "A current-shape retained baseline requires its adjacent metadata sidecar."
+    }
+    if ([string]::IsNullOrWhiteSpace($ReviewedBaselineMetadataSha256)) {
+      throw "A current-shape retained baseline requires its reviewed metadata SHA-256."
+    }
+    $metadataSha256 = (Get-FileHash -LiteralPath $metadataPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($metadataSha256 -cne $ReviewedBaselineMetadataSha256) {
+      throw "The retained baseline metadata checksum does not match review."
+    }
+    $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+    Assert-CurrentDocumentBaselineMetadata -Metadata $metadata -Baseline $baseline -ResolvedPlanPath $resolved `
+      -PlanSha256 $sha -AppliedStage $AppliedStage -ReceiptSha256 $ReviewedReceiptSha256 `
+      -StateIdentity (Get-StateIdentity) -SourceSha $commit
+    return $baseline
   }
+  $legacyKmsPrerequisiteEnabled = $true
   foreach ($name in @(Get-DevelopmentDocumentBooleanVariableNames)) {
     if ($name -ceq "document_security_health_rules_enabled") { continue }
     $property = $baseline.variables.PSObject.Properties[$name]
@@ -352,7 +499,7 @@ function Read-Baseline {
   }
   if (-not (ConvertTo-ExactBoolean $baseline.variables.deploy_document_intake.value "deploy_document_intake") -or
     (ConvertTo-ExactBoolean $baseline.variables.deploy_document_processing.value "legacy document processing switch") -or
-    -not (ConvertTo-ExactBoolean $baseline.variables.document_processing_kms_prerequisite_enabled.value "legacy KMS prerequisite switch") -or
+    -not $legacyKmsPrerequisiteEnabled -or
     (ConvertTo-ExactBoolean $baseline.variables.document_scan_mapping_enabled.value "document_scan_mapping_enabled") -or
     (ConvertTo-ExactBoolean $baseline.variables.document_scan_event_rule_enabled.value "document_scan_event_rule_enabled") -or
     [string]$baseline.variables.document_parser_version.value -cne "resume-parser-v1" -or
@@ -1007,10 +1154,10 @@ function Assert-LiveStageBoundary {
 $commit = Assert-CallerAndSource
 Initialize-Backend
 $null = New-Item -ItemType Directory -Path $operatorRoot -Force
-$baseline = Read-Baseline
 $appliedStage = Get-AppliedDocumentStage
 Assert-MonotonicDocumentStage -Applied $appliedStage -Requested $stageValue -Operation $Action
 $receipt = if ($Stage -ceq "KmsPrerequisite") { $null } else { Read-Receipt -Commit $commit }
+$baseline = Read-Baseline -RequestedStage $stageValue -AppliedStage $appliedStage -Receipt $receipt
 $parserQualifiedArn = if ($Stage -ceq "CompleteDark") { Get-AppliedParserQualifiedArn } else { "" }
 
 if ($Action -ceq "Verify") {

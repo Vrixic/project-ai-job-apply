@@ -43,6 +43,7 @@ Use the same command shape for `ParserDark` and then `CompleteDark`:
 .\scripts\operate-development-document-dark-deployment.ps1 -Action Plan -Stage ParserDark `
   -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
   -BaselinePlanPath ZERO_CHANGE_PLAN -ReviewedBaselineSha256 BASELINE_SHA256 `
+  [-ReviewedBaselineMetadataSha256 BASELINE_METADATA_SHA256] `
   -PublicationReceiptPath VERIFIED_RECEIPT -ReviewedReceiptSha256 RECEIPT_SHA256
 ```
 
@@ -52,6 +53,7 @@ Review the exact saved bytes and checksum, then apply them:
 .\scripts\operate-development-document-dark-deployment.ps1 -Action Apply -Stage ParserDark `
   -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
   -BaselinePlanPath ZERO_CHANGE_PLAN -ReviewedBaselineSha256 BASELINE_SHA256 `
+  [-ReviewedBaselineMetadataSha256 BASELINE_METADATA_SHA256] `
   -PublicationReceiptPath VERIFIED_RECEIPT -ReviewedReceiptSha256 RECEIPT_SHA256 `
   -PlanPath PLAN_PATH_FROM_PLAN -ReviewedPlanSha256 PLAN_SHA256
 ```
@@ -62,6 +64,7 @@ Verify the applied stage without changing AWS:
 .\scripts\operate-development-document-dark-deployment.ps1 -Action Verify -Stage ParserDark `
   -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
   -BaselinePlanPath ZERO_CHANGE_PLAN -ReviewedBaselineSha256 BASELINE_SHA256 `
+  [-ReviewedBaselineMetadataSha256 BASELINE_METADATA_SHA256] `
   -PublicationReceiptPath VERIFIED_RECEIPT -ReviewedReceiptSha256 RECEIPT_SHA256
 ```
 
@@ -74,6 +77,12 @@ The plan is independently re-read and accepted only when Terraform 1.9.8
 reports it complete, nonerrored, nonapplyable, and free of meaningful resource or output changes;
 only the already bounded provider refresh records may remain. The operator never overwrites a
 plan or sidecar.
+
+The optional metadata argument is omitted only for the checksum-reviewed historical intake
+baseline used by the initial `KmsPrerequisite` to `ParserDark` transition. Every current-shape
+retained baseline requires `ReviewedBaselineMetadataSha256`; the operator hashes the adjacent
+sidecar before parsing it and then revalidates its exact source, state, stage, receipt, parser pin,
+plan, and schema-v2 migration-image bindings.
 
 Use that exact verified baseline for the next guarded migration task release:
 

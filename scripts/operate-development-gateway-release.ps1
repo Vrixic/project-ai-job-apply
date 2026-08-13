@@ -264,6 +264,25 @@ function Set-VariablesFromPlan {
     $env:TF_VAR_gateway_lambda_artifact_base64sha256 = [string]$Artifact.objectBase64Sha256
   }
 }
+function Read-BaselineDocumentReceipt {
+  param([Parameter(Mandatory)][string]$ReceiptSha256)
+  if ($ReceiptSha256 -cnotmatch '^[a-f0-9]{64}$') {
+    throw "The retained baseline does not contain an exact document receipt checksum."
+  }
+  $receiptRoot = Join-Path $terraformRoot "development-document-artifacts"
+  if (-not (Test-Path -LiteralPath $receiptRoot -PathType Container)) {
+    throw "The ignored development document receipt directory is unavailable."
+  }
+  $matches = @(
+    Get-ChildItem -LiteralPath $receiptRoot -File -Filter "receipt-*.json" | Where-Object {
+      (Get-FileSha256 -Path $_.FullName) -ceq $ReceiptSha256
+    }
+  )
+  if ($matches.Count -ne 1) {
+    throw "Exactly one local document publication receipt must match the retained baseline checksum."
+  }
+  return Get-Content -LiteralPath $matches[0].FullName -Raw | ConvertFrom-Json
+}
 function Read-Baseline {
   foreach ($required in @($BaselinePlanPath, $ReviewedBaselineSha256, $BaselineMetadataPath, $ReviewedBaselineMetadataSha256)) {
     if ([string]::IsNullOrWhiteSpace($required)) { throw "A checksum-reviewed current Terraform input baseline and metadata sidecar are required." }
@@ -278,12 +297,19 @@ function Read-Baseline {
     throw "A baseline plan or metadata checksum does not match review."
   }
   $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
-  $null = Assert-RetainedGatewayBaselineMetadata $metadata $planPath $ReviewedBaselineSha256 `
-    $SourceSha $ExpectedAccountId $Region
   $plan = Read-Plan $planPath
   $variableSource = Get-Content -LiteralPath (Join-Path $terraformDirectory "variables.tf") -Raw
   $declaredVariables = @([regex]::Matches($variableSource, '(?m)^\s*variable\s+"([a-zA-Z0-9_]+)"\s*\{') | ForEach-Object { $_.Groups[1].Value })
   $null = Assert-RetainedGatewayBaselinePlan $plan $declaredVariables
+  $state = Get-StateIdentity
+  $null = Assert-RetainedGatewayBaselineMetadata -Metadata $metadata -Plan $plan `
+    -PlanPath $planPath -PlanSha256 $ReviewedBaselineSha256 -SourceSha $SourceSha `
+    -AccountId $ExpectedAccountId -Region $Region `
+    -ExpectedMigrationRepositoryUrl $boundary.MigrationRepositoryUrl -CurrentState $state
+  $documentReceipt = Read-BaselineDocumentReceipt -ReceiptSha256 ([string]$metadata.ReceiptSha256)
+  $null = Assert-GatewayDocumentBaselineReceipt -Receipt $documentReceipt `
+    -ReceiptSha256 ([string]$metadata.ReceiptSha256) -Plan $plan -SourceSha $SourceSha `
+    -ExpectedBoundarySha256 $boundary.BoundarySha256
   $stage = [string](Get-GatewayPlanVariableValue $plan.variables "document_processing_deployment_stage")
   $parserArn = [string](Get-GatewayPlanVariableValue $plan.variables "document_parser_invocation_qualified_arn")
   if ($stage -cne [string]$metadata.Stage -or $parserArn -cne [string]$metadata.ParserQualifiedArn -or
@@ -294,11 +320,11 @@ function Read-Baseline {
   if ($migrationImage -cnotmatch "^$([regex]::Escape([string]$boundary.MigrationRepositoryUrl))@sha256:[a-f0-9]{64}$") {
     throw "The retained baseline migration digest is outside the exact Terraform-owned repository."
   }
-  $state = Get-StateIdentity
-  if ([string]$metadata.StateLineage -cne [string]$state.Lineage -or [long]$metadata.StateSerial -ne [long]$state.Serial) {
-    throw "The retained baseline state lineage or serial is no longer current."
+  return [pscustomobject]@{
+    Path = $planPath; MetadataPath = $metadataPath; Metadata = $metadata; Plan = $plan
+    DocumentReceiptSha256 = [string]$metadata.ReceiptSha256
+    MigrationImage = $migrationImage; MetadataSchemaVersion = [string]$metadata.SchemaVersion
   }
-  return [pscustomobject]@{ Path = $planPath; MetadataPath = $metadataPath; Metadata = $metadata; Plan = $plan }
 }
 function Get-BuiltArtifact {
   $files = [ordered]@{}
@@ -463,7 +489,7 @@ if ($Action -ceq "Plan") {
     $ExpectedAccountId $boundary.MigrationRepositoryUrl $baseline.Metadata.ParserQualifiedArn
   $changes = @(Assert-ExactGatewayReleasePlan $plan $publication.Artifact)
   $sha = Get-FileSha256 $path
-  $metadata = [ordered]@{ SchemaVersion = "1"; Kind = "development-gateway-release-plan"; Environment = "development"; AccountId = $ExpectedAccountId; Region = $Region; StateBucket = $StateBucket; StateKey = "platform.tfstate"; StateLineage = $state.Lineage; StateSerial = $state.Serial; SourceSha = $SourceSha; ReceiptSha256 = $ReviewedReceiptSha256; BaselinePath = $baseline.Path; BaselineSha256 = $ReviewedBaselineSha256; BaselineMetadataPath = $baseline.MetadataPath; BaselineMetadataSha256 = $ReviewedBaselineMetadataSha256; BaselineStage = [string]$baseline.Metadata.Stage; BaselineParserQualifiedArn = [string]$baseline.Metadata.ParserQualifiedArn; BaselineDocumentReceiptSha256 = [string]$baseline.Metadata.ReceiptSha256; BaselineStateLineage = [string]$baseline.Metadata.StateLineage; BaselineStateSerial = [long]$baseline.Metadata.StateSerial; MigrationImage = [string](Get-GatewayPlanVariableValue $baseline.Plan.variables "migration_image"); PlanPath = $path; PlanSha256 = $sha; ChangedResources = @($changes | ForEach-Object address | Sort-Object); CreatedAt = (Get-Date).ToUniversalTime().ToString("o") }
+  $metadata = [ordered]@{ SchemaVersion = "1"; Kind = "development-gateway-release-plan"; Environment = "development"; AccountId = $ExpectedAccountId; Region = $Region; StateBucket = $StateBucket; StateKey = "platform.tfstate"; StateLineage = $state.Lineage; StateSerial = $state.Serial; SourceSha = $SourceSha; ReceiptSha256 = $ReviewedReceiptSha256; BaselinePath = $baseline.Path; BaselineSha256 = $ReviewedBaselineSha256; BaselineMetadataPath = $baseline.MetadataPath; BaselineMetadataSha256 = $ReviewedBaselineMetadataSha256; BaselineMetadataSchemaVersion = $baseline.MetadataSchemaVersion; BaselineStage = [string]$baseline.Metadata.Stage; BaselineParserQualifiedArn = [string]$baseline.Metadata.ParserQualifiedArn; BaselineDocumentReceiptSha256 = $baseline.DocumentReceiptSha256; BaselineStateLineage = [string]$baseline.Metadata.StateLineage; BaselineStateSerial = [long]$baseline.Metadata.StateSerial; BaselineMigrationImage = $baseline.MigrationImage; MigrationImage = [string](Get-GatewayPlanVariableValue $baseline.Plan.variables "migration_image"); PlanPath = $path; PlanSha256 = $sha; ChangedResources = @($changes | ForEach-Object address | Sort-Object); CreatedAt = (Get-Date).ToUniversalTime().ToString("o") }
   Write-ExclusiveJson "$path$metadataSuffix" $metadata
   [pscustomobject]@{ Outcome = "review-required"; PlanPath = $path; PlanSha256 = $sha; Updates = $changes.Count; ApprovalCommand = "Apply reviewed development gateway release plan $sha" } | ConvertTo-Json
   exit 0
@@ -475,7 +501,7 @@ if ((Get-FileSha256 $path) -cne $ReviewedPlanSha256) { throw "The gateway releas
 $metadataPath = "$path$metadataSuffix"
 if (-not (Test-Path $metadataPath -PathType Leaf)) { throw "The gateway release plan metadata is missing." }
 $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
-Assert-ReviewedPlanMetadata $metadata @{ SchemaVersion = "1"; Kind = "development-gateway-release-plan"; Environment = "development"; AccountId = $ExpectedAccountId; Region = $Region; StateBucket = $StateBucket; StateKey = "platform.tfstate"; SourceSha = $SourceSha; ReceiptSha256 = $ReviewedReceiptSha256; BaselinePath = $baseline.Path; BaselineSha256 = $ReviewedBaselineSha256; BaselineMetadataPath = $baseline.MetadataPath; BaselineMetadataSha256 = $ReviewedBaselineMetadataSha256; BaselineStage = [string]$baseline.Metadata.Stage; BaselineParserQualifiedArn = [string]$baseline.Metadata.ParserQualifiedArn; BaselineDocumentReceiptSha256 = [string]$baseline.Metadata.ReceiptSha256; BaselineStateLineage = [string]$baseline.Metadata.StateLineage; BaselineStateSerial = [long]$baseline.Metadata.StateSerial; MigrationImage = [string](Get-GatewayPlanVariableValue $baseline.Plan.variables "migration_image"); PlanPath = $path; PlanSha256 = $ReviewedPlanSha256 }
+Assert-ReviewedPlanMetadata $metadata @{ SchemaVersion = "1"; Kind = "development-gateway-release-plan"; Environment = "development"; AccountId = $ExpectedAccountId; Region = $Region; StateBucket = $StateBucket; StateKey = "platform.tfstate"; SourceSha = $SourceSha; ReceiptSha256 = $ReviewedReceiptSha256; BaselinePath = $baseline.Path; BaselineSha256 = $ReviewedBaselineSha256; BaselineMetadataPath = $baseline.MetadataPath; BaselineMetadataSha256 = $ReviewedBaselineMetadataSha256; BaselineMetadataSchemaVersion = $baseline.MetadataSchemaVersion; BaselineStage = [string]$baseline.Metadata.Stage; BaselineParserQualifiedArn = [string]$baseline.Metadata.ParserQualifiedArn; BaselineDocumentReceiptSha256 = $baseline.DocumentReceiptSha256; BaselineStateLineage = [string]$baseline.Metadata.StateLineage; BaselineStateSerial = [long]$baseline.Metadata.StateSerial; BaselineMigrationImage = $baseline.MigrationImage; MigrationImage = [string](Get-GatewayPlanVariableValue $baseline.Plan.variables "migration_image"); PlanPath = $path; PlanSha256 = $ReviewedPlanSha256 }
 $state = Get-StateIdentity
 if ([string]$state.Lineage -cne [string]$metadata.StateLineage -or [long]$state.Serial -ne [long]$metadata.StateSerial) { throw "Remote state changed after review; generate a new gateway release plan." }
 $plan = Read-Plan $path
