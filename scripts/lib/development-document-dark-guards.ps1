@@ -276,6 +276,27 @@ function Assert-NoTerraformReplacementPaths {
   if ($null -ne $paths -and @($paths).Count -ne 0) { throw "A Terraform change contains replacement paths." }
 }
 
+function ConvertTo-StrictUtcWholeSecond {
+  param([Parameter(Mandatory)][AllowNull()][object]$Value, [string]$Label = "UTC timestamp")
+  if ($Value -is [datetime]) {
+    $parsed = [datetime]$Value
+    if ($parsed.Kind -ne [DateTimeKind]::Utc -or $parsed.Ticks % [TimeSpan]::TicksPerSecond -ne 0 -or
+      $parsed.Year -lt 2000 -or $parsed.Year -gt 2099) {
+      throw "$Label must be a UTC whole-second DateTime within 2000-2099."
+    }
+    return $parsed
+  }
+  if ($Value -isnot [string] -or $Value -cnotmatch '^20\d{2}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$') {
+    throw "$Label must be an exact RFC3339 whole-second UTC string within 2000-2099."
+  }
+  $parsed = [datetime]::MinValue
+  if (-not [datetime]::TryParseExact($Value, "yyyy-MM-dd'T'HH:mm:ss'Z'",
+      [Globalization.CultureInfo]::InvariantCulture,
+      [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal,
+      [ref]$parsed)) { throw "$Label is not a valid UTC timestamp." }
+  return $parsed
+}
+
 function Assert-DevelopmentDocumentExactDataReads {
   param([Parameter(Mandatory)][object[]]$Records)
   $expected = @(Get-DevelopmentDocumentDarkExpectedDataReads | Sort-Object)
@@ -313,17 +334,9 @@ function Assert-DevelopmentDocumentAcceptedResourceDrift {
     }
     $after = $record.change.after | ConvertTo-Json -Depth 100 | ConvertFrom-Json
     if ([string]$record.address -ceq "module.platform.aws_db_instance.postgres[0]") {
-      if ([string]$record.type -cne "aws_db_instance" -or
-        [string]$record.change.before.latest_restorable_time -notmatch '^20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' -or
-        [string]$record.change.after.latest_restorable_time -notmatch '^20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$') {
-        throw "RDS drift is not limited to its provider-observed restore clock."
-      }
-      $beforeClock = [datetime]::ParseExact([string]$record.change.before.latest_restorable_time,
-        "yyyy-MM-dd'T'HH:mm:ss'Z'", [Globalization.CultureInfo]::InvariantCulture,
-        [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal)
-      $afterClock = [datetime]::ParseExact([string]$record.change.after.latest_restorable_time,
-        "yyyy-MM-dd'T'HH:mm:ss'Z'", [Globalization.CultureInfo]::InvariantCulture,
-        [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal)
+      if ([string]$record.type -cne "aws_db_instance") { throw "RDS drift has an unexpected resource type." }
+      $beforeClock = ConvertTo-StrictUtcWholeSecond $record.change.before.latest_restorable_time "RDS before restore clock"
+      $afterClock = ConvertTo-StrictUtcWholeSecond $record.change.after.latest_restorable_time "RDS after restore clock"
       if ($afterClock -le $beforeClock) { throw "The provider-observed RDS restore clock did not move strictly forward." }
       $after.latest_restorable_time = $record.change.before.latest_restorable_time
     }

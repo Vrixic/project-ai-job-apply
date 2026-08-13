@@ -346,6 +346,47 @@ $resourceDrift = @(
 $plan = [pscustomobject]@{ resource_changes = @($changes + $dataReads + $kmsNoop); resource_drift = $resourceDrift }
 $null = Assert-DevelopmentDocumentDarkPlan -Plan $plan -AccountId $account
 
+$dateObjectDriftPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$dateObjectDriftPlan.resource_drift[0].change.before.latest_restorable_time = [datetime]::Parse(
+  "2026-08-12T22:13:52Z", [Globalization.CultureInfo]::InvariantCulture,
+  [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal)
+$dateObjectDriftPlan.resource_drift[0].change.after.latest_restorable_time = [datetime]::Parse(
+  "2026-08-13T02:03:53Z", [Globalization.CultureInfo]::InvariantCulture,
+  [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal)
+$null = Assert-DevelopmentDocumentDarkPlan $dateObjectDriftPlan $account
+$localDateDriftPlan = $dateObjectDriftPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$localDateDriftPlan.resource_drift[0].change.after.latest_restorable_time = [datetime]::SpecifyKind(
+  [datetime]"2026-08-13T02:03:53", [DateTimeKind]::Local)
+$rejected = $false
+try { $null = Assert-DevelopmentDocumentDarkPlan $localDateDriftPlan $account } catch { $rejected = $true }
+if (-not $rejected) { throw "A local-kind RDS restore DateTime was accepted." }
+$unspecifiedDateDriftPlan = $dateObjectDriftPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$unspecifiedDateDriftPlan.resource_drift[0].change.after.latest_restorable_time = [datetime]::SpecifyKind(
+  [datetime]"2026-08-13T02:03:53", [DateTimeKind]::Unspecified)
+$rejected = $false
+try { $null = Assert-DevelopmentDocumentDarkPlan $unspecifiedDateDriftPlan $account } catch { $rejected = $true }
+if (-not $rejected) { throw "An unspecified-kind RDS restore DateTime was accepted." }
+$fractionalDateDriftPlan = $dateObjectDriftPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$fractionalDateDriftPlan.resource_drift[0].change.after.latest_restorable_time = $dateObjectDriftPlan.resource_drift[0].change.after.latest_restorable_time.AddMilliseconds(1)
+$rejected = $false
+try { $null = Assert-DevelopmentDocumentDarkPlan $fractionalDateDriftPlan $account } catch { $rejected = $true }
+if (-not $rejected) { throw "A fractional UTC RDS restore DateTime was accepted." }
+foreach ($outOfRange in @("1999-12-31T23:59:59Z", "2100-01-01T00:00:00Z")) {
+  $outOfRangeStringPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $outOfRangeStringPlan.resource_drift[0].change.after.latest_restorable_time = $outOfRange
+  $rejected = $false
+  try { $null = Assert-DevelopmentDocumentDarkPlan $outOfRangeStringPlan $account } catch { $rejected = $true }
+  if (-not $rejected) { throw "An out-of-range RDS restore-time string was accepted." }
+
+  $outOfRangeDatePlan = $dateObjectDriftPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $outOfRangeDatePlan.resource_drift[0].change.after.latest_restorable_time = [datetime]::Parse(
+    $outOfRange, [Globalization.CultureInfo]::InvariantCulture,
+    [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal)
+  $rejected = $false
+  try { $null = Assert-DevelopmentDocumentDarkPlan $outOfRangeDatePlan $account } catch { $rejected = $true }
+  if (-not $rejected) { throw "An out-of-range UTC RDS restore DateTime was accepted." }
+}
+
 $unknownSecurityPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
 $unknownSecurityChange = @($unknownSecurityPlan.resource_changes | Where-Object address -eq "module.platform.aws_iam_role_policy.document_processor[0]")[0]
 $unknownSecurityChange.change.after_unknown | Add-Member policy $true
@@ -603,4 +644,4 @@ foreach ($ruleName in @("document_scan_tag_failure", "document_scan_plan_unhealt
   if ($documentSource -notmatch $rulePattern) { throw "A document health rule is not explicitly dark." }
 }
 
-Write-Output "Development document dark guard tests passed: 83"
+Write-Output "Development document dark guard tests passed: 94"
