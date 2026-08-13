@@ -22,6 +22,10 @@ both AWS environments accepted the steady-state serverless runtime.
   artifacts with exact-version metadata.
 - `build-document-lambdas.mjs` — Builds separate deterministic document coordinator and isolated
   parser artifacts, manifests, and CycloneDX SBOMs; the parser artifact has no database runtime.
+- `publish-development-document-lambdas.ps1` — Provides the fail-closed local development fallback
+  for an exhausted GitHub Actions budget: it tests and reproducibly builds both document Lambda
+  artifacts, publishes eight new conditional/versioned/KMS-bound objects, verifies exact checksums
+  and metadata, and emits a checksum-reviewed ignored receipt without deploying either Lambda.
 
 Artifacts are published by the protected GitHub workflows. The migration-only container is built
 from `Dockerfile.migration` and runs the fail-fast profile/jobs/documents migration orchestrator;
@@ -57,6 +61,10 @@ no gateway or general worker image exists.
 - `operate-bootstrap-workload-boundary.ps1` — Produces, checksum-gates, applies, and independently
   verifies the one-statement document-role bootstrap boundary change. See
   `docs/security/bootstrap-workload-boundary-runbook.md`.
+- `operate-development-document-dark-deployment.ps1` — Reconstructs exact current inputs from a
+  checksum-reviewed zero-change baseline, consumes a checksum-reviewed immutable publication
+  receipt, and plans/applies/verifies the trigger-disabled document-processing runtime. See
+  `infrastructure/runbooks/deployments/development-document-dark-deployment.md`.
 - `validate-serverless-workflow-infrastructure.mjs` — Enforces the steady-state Lambda durable,
   migration-only container, and retired-path absence policies.
 - `audit-dependencies.mjs` — Applies the centralized lockfile audit policy and exact expiring

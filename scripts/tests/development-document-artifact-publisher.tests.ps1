@@ -1,0 +1,150 @@
+$ErrorActionPreference = "Stop"
+
+$repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
+$publisherPath = Join-Path $repositoryRoot "scripts\publish-development-document-lambdas.ps1"
+$source = Get-Content -LiteralPath $publisherPath -Raw
+$tokens = $null
+$errors = $null
+$ast = [Management.Automation.Language.Parser]::ParseInput($source, [ref]$tokens, [ref]$errors)
+if (@($errors).Count -ne 0) { throw "The development document artifact publisher did not parse." }
+
+foreach ($functionName in @(
+    "Get-OptionalProperty",
+    "Resolve-OperatorPath",
+    "Get-FileSha256",
+    "Get-FileBase64Sha256",
+    "Get-KeyHistoryMatches",
+    "Assert-ChecksumCompanion",
+    "Assert-CanonicalReceiptMatrix"
+  )) {
+  $functions = @($ast.FindAll({
+        param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -ceq $functionName
+      }, $true))
+  if ($functions.Count -ne 1) { throw "$functionName must be defined exactly once." }
+  Invoke-Expression $functions[0].Extent.Text
+}
+
+$digest = "a" * 64
+if (-not (Assert-ChecksumCompanion -Text "$digest  document-processor-lambda.zip`n" `
+      -ExpectedDigest $digest -ExpectedFileName "document-processor-lambda.zip")) {
+  throw "The canonical checksum companion was not accepted."
+}
+foreach ($invalid in @(
+    [pscustomobject]@{ Text = "$("b" * 64)  document-processor-lambda.zip`n"; File = "document-processor-lambda.zip" },
+    [pscustomobject]@{ Text = "$digest  document-parser-lambda.zip`n"; File = "document-processor-lambda.zip" },
+    [pscustomobject]@{ Text = "$digest document-processor-lambda.zip`n"; File = "document-processor-lambda.zip" }
+  )) {
+  $rejected = $false
+  try {
+    $null = Assert-ChecksumCompanion -Text $invalid.Text `
+      -ExpectedDigest $digest -ExpectedFileName $invalid.File
+  } catch { $rejected = $true }
+if (-not $rejected) { throw "A malformed checksum companion was accepted." }
+}
+
+$canonicalArtifacts = @()
+foreach ($name in @("document-processor-lambda", "document-parser-lambda")) {
+  foreach ($suffix in @("zip", "cdx.json", "manifest.json", "sha256")) {
+    $canonicalArtifacts += [pscustomobject]@{
+      artifactName   = $name
+      artifactSha256 = $digest
+      suffix         = $suffix
+    }
+  }
+}
+if (-not (Assert-CanonicalReceiptMatrix -Artifacts $canonicalArtifacts `
+      -ExpectedArtifactNames @("document-processor-lambda", "document-parser-lambda"))) {
+  throw "The canonical eight-object receipt matrix was not accepted."
+}
+$twoRejected = $false
+try {
+  $null = Assert-CanonicalReceiptMatrix -Artifacts @($canonicalArtifacts[0], $canonicalArtifacts[4]) `
+    -ExpectedArtifactNames @("document-processor-lambda", "document-parser-lambda")
+} catch { $twoRejected = $true }
+if (-not $twoRejected) { throw "A two-record receipt was accepted." }
+$missingMatrix = @($canonicalArtifacts | Select-Object -First 7)
+$missingMatrix += [pscustomobject]@{
+  artifactName   = "document-parser-lambda"
+  artifactSha256 = $digest
+  suffix         = "zip"
+}
+$matrixRejected = $false
+try {
+  $null = Assert-CanonicalReceiptMatrix -Artifacts $missingMatrix `
+    -ExpectedArtifactNames @("document-processor-lambda", "document-parser-lambda")
+} catch { $matrixRejected = $true }
+if (-not $matrixRejected) { throw "A receipt with a missing companion matrix was accepted." }
+
+if (@(Get-KeyHistoryMatches -Result ([pscustomobject]@{}) -Key "exact/key").Count -ne 0) {
+  throw "Omitted S3 version-history arrays were not treated as empty."
+}
+if (@(Get-KeyHistoryMatches -Result ([pscustomobject]@{ Versions = @(); DeleteMarkers = @() }) -Key "exact/key").Count -ne 0) {
+  throw "Empty S3 version-history arrays were not treated as empty."
+}
+$versionHistory = [pscustomobject]@{
+  Versions      = @([pscustomobject]@{ Key = "exact/key" })
+  DeleteMarkers = @([pscustomobject]@{ Key = "other/key" })
+}
+if (@(Get-KeyHistoryMatches -Result $versionHistory -Key "exact/key").Count -ne 1) {
+  throw "An existing exact object version was not detected."
+}
+$deleteHistory = [pscustomobject]@{
+  DeleteMarkers = @([pscustomobject]@{ Key = "exact/key" })
+}
+if (@(Get-KeyHistoryMatches -Result $deleteHistory -Key "exact/key").Count -ne 1) {
+  throw "An existing exact delete marker was not detected."
+}
+
+$terraformDirectory = [IO.Path]::GetFullPath((
+    Join-Path $repositoryRoot "infrastructure\terraform\environments\development"
+  ))
+$terraformRoot = [IO.Path]::GetFullPath((Join-Path $terraformDirectory ".terraform"))
+$operatorRoot = Join-Path $terraformRoot "development-document-artifacts"
+$expected = [IO.Path]::GetFullPath((Join-Path $operatorRoot "receipt-test.json"))
+if ((Resolve-OperatorPath -Candidate ".terraform\development-document-artifacts\receipt-test.json") -cne $expected) {
+  throw "The publisher did not resolve a relative receipt inside its ignored root."
+}
+if ((Resolve-OperatorPath -Candidate $expected) -cne $expected) {
+  throw "The publisher did not preserve an absolute receipt inside its ignored root."
+}
+$traversalRejected = $false
+try { $null = Resolve-OperatorPath -Candidate "..\outside.json" } catch { $traversalRejected = $true }
+if (-not $traversalRejected) { throw "The publisher accepted a path outside its ignored root." }
+
+$temporary = [IO.Path]::GetTempFileName()
+try {
+  [IO.File]::WriteAllText($temporary, "abc", [Text.UTF8Encoding]::new($false))
+  if ((Get-FileSha256 -Path $temporary) -cne "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad") {
+    throw "Hexadecimal file SHA-256 is incorrect."
+  }
+  if ((Get-FileBase64Sha256 -Path $temporary) -cne "ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0=") {
+    throw "Base64 file SHA-256 is incorrect."
+  }
+} finally {
+  if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
+}
+
+foreach ($required in @(
+    'ValidateSet("Status", "Publish", "Verify")',
+    'pnpm --filter @ai-job-apply/documents-service test',
+    'pnpm audit:dependencies',
+    'First document Lambda build',
+    'Second document Lambda build',
+    '"--if-none-match", "*"',
+    '"--checksum-mode", "ENABLED"',
+    'kind           = "development-document-lambda-publication"',
+    '@($receipt.artifacts).Count -ne 8',
+    'boundarySha256 = Get-TextSha256',
+    'LambdaDeploymentChanged = $false',
+    'TriggerChanged          = $false'
+  )) {
+  if (-not $source.Contains($required)) { throw "Publisher guard is missing: $required" }
+}
+
+if ($source.Contains('@($receipt.artifacts).Count -ne 2')) {
+  throw "The publisher still accepts the obsolete two-entry receipt shape."
+}
+
+Write-Host "Development document artifact publisher pure guard tests passed."
