@@ -62,21 +62,87 @@ jobs:
 
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
-      - name: Build and push commit image
-        id: build
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
-        with:
-          context: .
-          file: Dockerfile.migration
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.ecr.outputs.registry }}/${{ env.REPOSITORY }}:${{ github.sha }}
-          cache-from: type=gha,scope=${{ inputs.environment }}-migration
-          cache-to: type=gha,mode=max,scope=${{ inputs.environment }}-migration
+      - name: Build, prove, and publish deterministic OCI image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          source_epoch="$(git show -s --format=%ct "$SOURCE_SHA")"
+          created="$(date -u -d "@$source_epoch" '+%Y-%m-%dT%H:%M:%SZ')"
+          first="$RUNNER_TEMP/migration-oci-first"
+          second="$RUNNER_TEMP/migration-oci-second"
+          build=(
+            docker buildx build --no-cache --platform linux/amd64
+            --provenance=false --sbom=false
+            --build-arg "SOURCE_DATE_EPOCH=$source_epoch"
+            --build-arg BUILDKIT_MULTI_PLATFORM=1
+            --label "org.opencontainers.image.revision=$SOURCE_SHA"
+            --label "org.opencontainers.image.created=$created"
+            --label org.opencontainers.image.title=ai-job-apply-migration
+            --tag ai-job-apply-migration:smoke
+            --file Dockerfile.migration
+          )
+          "${build[@]}" --output "type=oci,dest=$first,tar=false,rewrite-timestamp=true" .
+          "${build[@]}" --output "type=oci,dest=$second,tar=false,rewrite-timestamp=true" .
+
+          identity() {
+            local layout="$1" index_digest index_path platform config
+            test "$(jq -r '.mediaType' "$layout/index.json")" = application/vnd.oci.image.index.v1+json
+            test "$(jq '.manifests | length' "$layout/index.json")" -eq 1
+            index_digest="$(jq -r '.manifests[0].digest' "$layout/index.json")"
+            test "$(jq -r '.manifests[0].mediaType' "$layout/index.json")" = application/vnd.oci.image.index.v1+json
+            index_path="$layout/blobs/sha256/${index_digest#sha256:}"
+            test "$(sha256sum "$index_path" | cut -d' ' -f1)" = "${index_digest#sha256:}"
+            test "$(jq -r '.mediaType' "$index_path")" = application/vnd.oci.image.index.v1+json
+            test "$(jq '.manifests | length' "$index_path")" -eq 1
+            test "$(jq -r '.manifests[0].platform.os' "$index_path")" = linux
+            test "$(jq -r '.manifests[0].platform.architecture' "$index_path")" = amd64
+            platform="$(jq -r '.manifests[0].digest' "$index_path")"
+            test "$(sha256sum "$layout/blobs/sha256/${platform#sha256:}" | cut -d' ' -f1)" = "${platform#sha256:}"
+            config="$(jq -r '.config.digest' "$layout/blobs/sha256/${platform#sha256:}")"
+            config_path="$layout/blobs/sha256/${config#sha256:}"
+            test "$(sha256sum "$config_path" | cut -d' ' -f1)" = "${config#sha256:}"
+            test "$(jq -r '.os' "$config_path")" = linux
+            test "$(jq -r '.architecture' "$config_path")" = amd64
+            test "$(jq -r '.created' "$config_path")" = "$created"
+            test "$(jq -r '.config.User' "$config_path")" = 65532:65532
+            test "$(jq -r '.config.WorkingDir' "$config_path")" = /migration
+            test "$(jq -r '.config.Entrypoint | join(" ")' "$config_path")" = /nodejs/bin/node
+            test "$(jq -r '.config.Cmd | join(" ")' "$config_path")" = runner/dist/src/main.js
+            test "$(jq -r '.config.Labels["org.opencontainers.image.revision"]' "$config_path")" = "$SOURCE_SHA"
+            test "$(jq -r '.config.Labels["org.opencontainers.image.created"]' "$config_path")" = "$created"
+            jq -r '.layers[].digest' "$layout/blobs/sha256/${platform#sha256:}" > "$layout/compressed-layers"
+            jq -r '.rootfs.diff_ids[]' "$config_path" > "$layout/diff-ids"
+            {
+              printf '%s\n' "$index_digest"
+              printf '%s\n%s\n' "$platform" "$config"
+              sha256sum "$layout/compressed-layers" | cut -d' ' -f1
+              sha256sum "$layout/diff-ids" | cut -d' ' -f1
+            }
+          }
+          diff -u <(identity "$first") <(identity "$second")
+
+          tar -cf "$RUNNER_TEMP/migration-oci.tar" -C "$second" .
+          docker load -i "$RUNNER_TEMP/migration-oci.tar"
+          docker run --rm --platform linux/amd64 --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges --user 65532:65532 --entrypoint /nodejs/bin/node \
+            ai-job-apply-migration:smoke --input-type=module -e \
+            'import{access,readdir}from"node:fs/promises";const{migrationRunners}=await import("./runner/dist/src/index.js");if(migrationRunners.map(x=>x.owner).join(",")!=="profile,jobs,documents")throw new Error("owner/order mismatch");for(const runner of migrationRunners)await access(runner.executable);const expected={profile:["0001_foundation.sql","0002_serverless_outbox.sql","0003_retire_legacy_dispatch.sql","0004_profile_fact_versions.sql","0005_resume_fact_proposals.sql"],jobs:["0001_job_catalog.sql","0002_duplicate_resolution.sql","0003_duplicate_resolution_audit_guard.sql","0004_job_search.sql"],documents:["0001_resume_intake.sql","0002_resume_processing.sql"]};for(const[owner,names]of Object.entries(expected)){const files=(await readdir(`./${owner}/migrations`)).filter(x=>x.endsWith(".sql")).sort();if(files.join(",")!==names.join(","))throw new Error(`${owner} SQL migration set mismatch`)}console.log("migration-runtime-smoke:ok")'
+
+          index_digest="$(jq -r '.manifests[0].digest' "$second/index.json")"
+          index_path="$second/blobs/sha256/${index_digest#sha256:}"
+          platform_digest="$(jq -r '.manifests[0].digest' "$index_path")"
+          handoff_tag="$REGISTRY/$REPOSITORY:$SOURCE_SHA-linux-amd64"
+          docker buildx imagetools create --prefer-index=false --tag "$handoff_tag" "oci-layout://$second@$platform_digest"
+          platform_readback="$(docker buildx imagetools inspect "$handoff_tag" --raw)"
+          test "$(printf '%s' "$platform_readback" | sha256sum | cut -d' ' -f1)" = "${platform_digest#sha256:}"
+          aws ecr put-image --repository-name "$REPOSITORY" --image-tag "$SOURCE_SHA" \
+            --image-manifest "file://$index_path" \
+            --image-manifest-media-type application/vnd.oci.image.index.v1+json > /dev/null
 
       - name: Wait for ECR scan and enforce severity gate
         env:
-          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
           SOURCE_SHA: ${{ github.sha }}
           TARGET_ENVIRONMENT: ${{ inputs.environment }}
         run: |
@@ -87,6 +153,10 @@ jobs:
             --accepted-media-types application/vnd.oci.image.index.v1+json \
             --query 'images[0].imageManifest' \
             --output text)"
+          index_digest="sha256:$(printf '%s' "$index_manifest" | sha256sum | cut -d' ' -f1)"
+          tag_digest="$(aws ecr describe-images --repository-name "$REPOSITORY" \
+            --image-ids "imageTag=$SOURCE_SHA" --query 'imageDetails[0].imageDigest' --output text)"
+          test "$index_digest" = "$tag_digest"
           mapfile -t platform_digests < <(
             jq -r \
               '.manifests[]
@@ -100,12 +170,18 @@ jobs:
           platform_digest="${platform_digests[0]}"
 
           scan_status=""
-          for attempt in $(seq 1 60); do
-            scan_status="$(aws ecr describe-image-scan-findings \
+          for _ in $(seq 1 60); do
+            if scan_result="$(aws ecr describe-image-scan-findings \
               --repository-name "$REPOSITORY" \
               --image-id "imageDigest=$platform_digest" \
-              --query 'imageScanStatus.status' \
-              --output text 2>/dev/null || true)"
+              --query 'imageScanStatus.status' --output text 2>&1)"; then
+              scan_status="$scan_result"
+            elif grep -qE '(Image)?ScanNotFoundException' <<<"$scan_result"; then
+              scan_status=""
+            else
+              echo "ECR image scan lookup failed." >&2
+              exit 1
+            fi
             case "$scan_status" in
               COMPLETE) break ;;
               FAILED|UNSUPPORTED_IMAGE)
@@ -129,7 +205,7 @@ jobs:
             echo
             echo "- Environment: \`$TARGET_ENVIRONMENT\`"
             echo "- Source commit: \`$SOURCE_SHA\`"
-            echo "- Immutable index digest: \`$IMAGE_DIGEST\`"
+            echo "- Immutable index digest: \`$index_digest\`"
             echo "- Scanned linux/amd64 digest: \`$platform_digest\`"
             echo "- ECR scan: complete"
             echo "- Critical findings: $critical"

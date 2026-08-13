@@ -44,9 +44,11 @@ Usage:
 
 Status and Verify are read-only. Publish is the explicit GitHub Actions-budget fallback and is the
 only action that writes AWS state: one immutable ECR image tagged with the exact source commit. It
-tests and audits the migration owners, performs two clean linux/amd64 builds, proves source labels
-and byte identity, pushes the already-verified second build, requires a COMPLETE ECR scan with zero
-Critical and High findings, and emits a checksum-reviewed receipt. It never runs a migration,
+tests and audits the migration owners, performs two clean linux/amd64 OCI exports, proves index,
+platform, config, compressed-layer, and rootfs byte identity, smoke-tests the second build, then
+publishes the exact platform and source index. It requires a COMPLETE platform ECR scan with zero
+Critical and High findings and emits a checksum-reviewed version-2 receipt whose imageUri uses the
+platform digest. It never runs a migration,
 registers a task definition, applies Terraform, or changes application traffic.
 
 Receipts and logs remain below the ignored development .terraform directory. Do not copy account
@@ -180,6 +182,28 @@ function Invoke-AwsJson {
   catch { throw "$Operation returned invalid JSON." }
 }
 
+function Invoke-AwsScanJson {
+  param([Parameter(Mandatory)][string[]]$Arguments, [switch]$AllowNotFound)
+  $null = New-Item -ItemType Directory -Path $operatorRoot -Force
+  $errorPath = Join-Path $operatorRoot (".scan-{0}.stderr" -f [guid]::NewGuid().ToString("N"))
+  try {
+    $raw = & aws @Arguments 2> $errorPath
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+      $errorText = if (Test-Path -LiteralPath $errorPath -PathType Leaf) {
+        Get-Content -LiteralPath $errorPath -Raw
+      } else { "" }
+      if ($AllowNotFound -and $errorText -match '(?:Image)?ScanNotFoundException') { return $null }
+      throw "Migration image vulnerability scan lookup failed. Refresh credentials and inspect it locally."
+    }
+    if (-not $raw) { throw "Migration image vulnerability scan lookup returned no JSON." }
+    try { return ($raw -join [Environment]::NewLine) | ConvertFrom-Json }
+    catch { throw "Migration image vulnerability scan lookup returned invalid JSON." }
+  } finally {
+    if (Test-Path -LiteralPath $errorPath -PathType Leaf) { Remove-Item -LiteralPath $errorPath -Force }
+  }
+}
+
 function Invoke-TerraformJson {
   param([Parameter(Mandatory)][string[]]$Arguments, [Parameter(Mandatory)][string]$Operation)
   $raw = & terraform "-chdir=$terraformDirectory" @Arguments 2>$null
@@ -230,31 +254,139 @@ function Assert-RepositoryShape {
   return $true
 }
 
-function Assert-BuildIdentity {
+function Resolve-OciBlobPath {
   param(
-    [Parameter(Mandatory)][object]$Image,
+    [Parameter(Mandatory)][string]$LayoutPath,
+    [Parameter(Mandatory)][string]$Digest
+  )
+  if ($Digest -notmatch '^sha256:[a-f0-9]{64}$') { throw "An OCI descriptor contains an invalid digest." }
+  $candidate = [IO.Path]::GetFullPath((Join-Path $LayoutPath "blobs\sha256\$($Digest.Substring(7))"))
+  $root = [IO.Path]::GetFullPath($LayoutPath).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+  if (-not $candidate.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) -or
+      -not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+    throw "An OCI descriptor references a missing or out-of-layout blob."
+  }
+  if ((Get-FileSha256 -Path $candidate) -cne $Digest.Substring(7)) {
+    throw "An OCI blob does not match its content digest."
+  }
+  return $candidate
+}
+
+function Get-OciLayoutIdentity {
+  param(
+    [Parameter(Mandatory)][string]$LayoutPath,
     [Parameter(Mandatory)][string]$ExpectedSourceSha,
     [Parameter(Mandatory)][string]$ExpectedCreated
   )
-  $labels = Get-OptionalProperty -Object $Image.Config -Name "Labels"
-  $layers = @(Get-OptionalProperty -Object $Image.RootFS -Name "Layers")
-  $imageCreated = ConvertTo-CanonicalUtcWholeSecond -Value $Image.Created -Description "Image.Created"
+  $layout = [IO.Path]::GetFullPath($LayoutPath)
+  $layoutMarkerPath = Join-Path $layout "oci-layout"
+  $indexPath = Join-Path $layout "index.json"
+  if (-not (Test-Path -LiteralPath $layoutMarkerPath -PathType Leaf) -or
+      -not (Test-Path -LiteralPath $indexPath -PathType Leaf)) {
+    throw "The deterministic build did not export a complete OCI image layout."
+  }
+  try {
+    $layoutMarker = Get-Content -LiteralPath $layoutMarkerPath -Raw | ConvertFrom-Json
+    $index = Get-Content -LiteralPath $indexPath -Raw | ConvertFrom-Json
+  } catch { throw "The deterministic build exported invalid OCI JSON." }
+  if ([string]$layoutMarker.imageLayoutVersion -cne "1.0.0" -or [int]$index.schemaVersion -ne 2 -or
+      [string]$index.mediaType -cne "application/vnd.oci.image.index.v1+json") {
+    throw "The deterministic build did not export an OCI 1.0 image index."
+  }
+  $indexDigest = "sha256:$(Get-FileSha256 -Path $indexPath)"
+  $wrapperDescriptors = @($index.manifests)
+  if ($wrapperDescriptors.Count -eq 1 -and
+      [string]$wrapperDescriptors[0].mediaType -ceq "application/vnd.oci.image.index.v1+json" -and
+      $null -eq (Get-OptionalProperty -Object $wrapperDescriptors[0] -Name "platform")) {
+    $indexPath = Resolve-OciBlobPath -LayoutPath $layout -Digest ([string]$wrapperDescriptors[0].digest)
+    if ([long]$wrapperDescriptors[0].size -ne (Get-Item -LiteralPath $indexPath).Length) {
+      throw "The OCI export wrapper does not bind its exact image index."
+    }
+    try { $index = Get-Content -LiteralPath $indexPath -Raw | ConvertFrom-Json }
+    catch { throw "The OCI export wrapper references an invalid image index." }
+    $indexDigest = [string]$wrapperDescriptors[0].digest
+  }
+  if ([int]$index.schemaVersion -ne 2 -or
+      [string]$index.mediaType -cne "application/vnd.oci.image.index.v1+json") {
+    throw "The deterministic export does not contain a canonical OCI image index."
+  }
+  $allDescriptors = @($index.manifests)
+  $platformDescriptors = @($allDescriptors | Where-Object {
+      [string]$_.platform.os -ceq "linux" -and [string]$_.platform.architecture -ceq "amd64"
+    })
+  # Provenance and SBOM attestations are disabled, so no non-platform descriptors are allowed.
+  if ($allDescriptors.Count -ne 1 -or $platformDescriptors.Count -ne 1) {
+    throw "The OCI index must contain exactly one linux/amd64 image and no attestations."
+  }
+  $platformDescriptor = $platformDescriptors[0]
+  if ([string]$platformDescriptor.mediaType -cne "application/vnd.oci.image.manifest.v1+json") {
+    throw "The linux/amd64 OCI child is not an image manifest."
+  }
+  $manifestPath = Resolve-OciBlobPath -LayoutPath $layout -Digest ([string]$platformDescriptor.digest)
+  if ([long]$platformDescriptor.size -ne (Get-Item -LiteralPath $manifestPath).Length) {
+    throw "The linux/amd64 OCI child size does not match its descriptor."
+  }
+  try { $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json }
+  catch { throw "The linux/amd64 OCI child manifest is invalid JSON." }
+  if ([int]$manifest.schemaVersion -ne 2 -or
+      [string]$manifest.mediaType -cne "application/vnd.oci.image.manifest.v1+json" -or
+      [string]$manifest.config.mediaType -cne "application/vnd.oci.image.config.v1+json") {
+    throw "The linux/amd64 child does not use the required OCI image media types."
+  }
+  $configPath = Resolve-OciBlobPath -LayoutPath $layout -Digest ([string]$manifest.config.digest)
+  if ([long]$manifest.config.size -ne (Get-Item -LiteralPath $configPath).Length) {
+    throw "The OCI image configuration size does not match its descriptor."
+  }
+  try { $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json }
+  catch { throw "The OCI image configuration is invalid JSON." }
+  $layers = @($manifest.layers)
+  $diffIds = @($config.rootfs.diff_ids)
+  foreach ($layer in $layers) {
+    if ([string]$layer.mediaType -notmatch '^application/vnd\.oci\.image\.layer\.v1\.tar\+gzip$') {
+      throw "The OCI image contains an unsupported compressed layer type."
+    }
+    $layerPath = Resolve-OciBlobPath -LayoutPath $layout -Digest ([string]$layer.digest)
+    if ([long]$layer.size -ne (Get-Item -LiteralPath $layerPath).Length) {
+      throw "An OCI layer size does not match its descriptor."
+    }
+  }
+  $configCreated = ConvertTo-CanonicalUtcWholeSecond -Value $config.created -Description "OCI config.created"
   $labelCreated = ConvertTo-CanonicalUtcWholeSecond `
-    -Value (Get-OptionalProperty -Object $labels -Name "org.opencontainers.image.created") `
+    -Value (Get-OptionalProperty -Object $config.config.Labels -Name "org.opencontainers.image.created") `
     -Description "The org.opencontainers.image.created label"
-  if ([string]$Image.Id -notmatch '^sha256:[a-f0-9]{64}$' -or
-      [string]$Image.Os -cne "linux" -or [string]$Image.Architecture -cne "amd64" -or
-      $imageCreated -cne $ExpectedCreated -or
-      [string](Get-OptionalProperty -Object $labels -Name "org.opencontainers.image.revision") -cne $ExpectedSourceSha -or
-      $labelCreated -cne $ExpectedCreated -or
-      [string](Get-OptionalProperty -Object $labels -Name "org.opencontainers.image.title") -cne "ai-job-apply-migration" -or
-      $layers.Count -lt 1 -or @($layers | Where-Object { [string]$_ -notmatch '^sha256:[a-f0-9]{64}$' }).Count -ne 0) {
-    throw "The local image is not the exact source-bound linux/amd64 migration artifact."
+  if ([string]$config.architecture -cne "amd64" -or [string]$config.os -cne "linux" -or
+      $configCreated -cne $ExpectedCreated -or $labelCreated -cne $ExpectedCreated -or
+      [string]$config.config.User -cne "65532:65532" -or
+      [string]$config.config.WorkingDir -cne "/migration" -or
+      @($config.config.Entrypoint).Count -ne 1 -or [string]@($config.config.Entrypoint)[0] -cne "/nodejs/bin/node" -or
+      @($config.config.Cmd).Count -ne 1 -or [string]@($config.config.Cmd)[0] -cne "runner/dist/src/main.js" -or
+      [string](Get-OptionalProperty -Object $config.config.Labels -Name "org.opencontainers.image.revision") -cne $ExpectedSourceSha -or
+      [string](Get-OptionalProperty -Object $config.config.Labels -Name "org.opencontainers.image.title") -cne "ai-job-apply-migration" -or
+      [string]$config.rootfs.type -cne "layers" -or $layers.Count -lt 1 -or $layers.Count -ne $diffIds.Count -or
+      @($diffIds | Where-Object { [string]$_ -notmatch '^sha256:[a-f0-9]{64}$' }).Count -ne 0) {
+    throw "The OCI config is not the exact source-bound linux/amd64 migration artifact."
   }
+  $compressed = @($layers | ForEach-Object { [string]$_.digest })
   return [pscustomobject]@{
-    ConfigDigest = [string]$Image.Id
-    LayerSetSha256 = Get-TextSha256 -Value ($layers -join "`n")
+    IndexDigest                  = $indexDigest
+    PlatformDigest               = [string]$platformDescriptor.digest
+    ConfigDigest                 = [string]$manifest.config.digest
+    CompressedLayerSetSha256     = Get-TextSha256 -Value ($compressed -join "`n")
+    RootfsDiffIdSetSha256        = Get-TextSha256 -Value (($diffIds | ForEach-Object { [string]$_ }) -join "`n")
+    ManifestJson                 = [IO.File]::ReadAllText($manifestPath, [Text.Encoding]::UTF8)
+    IndexPath                    = $indexPath
   }
+}
+
+function Assert-DeterministicOciIdentity {
+  param([Parameter(Mandatory)][object]$First, [Parameter(Mandatory)][object]$Second)
+  foreach ($name in @("IndexDigest", "PlatformDigest", "ConfigDigest", "CompressedLayerSetSha256", "RootfsDiffIdSetSha256")) {
+    if ([string](Get-OptionalProperty -Object $First -Name $name) -cne
+        [string](Get-OptionalProperty -Object $Second -Name $name)) {
+      throw "The two clean migration image builds were not byte-identical at the OCI $name boundary."
+    }
+  }
+  return $true
 }
 
 function Assert-ExactPropertySet {
@@ -288,8 +420,9 @@ function Test-CanonicalUtcTimestamp {
 function Get-CanonicalReceiptPropertyNames {
   return @(
     "schemaVersion", "kind", "environment", "region", "sourceSha", "boundarySha256",
-    "repositoryName", "repositoryUri", "sourceTag", "platform", "created", "configDigest",
-    "layerSetSha256", "phase", "registryDigest", "imageUri", "scanStatus", "criticalFindings",
+    "repositoryName", "repositoryUri", "sourceTag", "handoffTag", "platform", "created",
+    "indexDigest", "platformDigest", "configDigest", "compressedLayerSetSha256",
+    "rootfsDiffIdSetSha256", "phase", "imageUri", "scanStatus", "criticalFindings",
     "highFindings", "publicationStartedAt", "publicationCompletedAt"
   )
 }
@@ -301,7 +434,7 @@ function Assert-ResumablePublicationReceipt {
   )
   $null = Assert-ExactPropertySet -Value $Receipt -ExpectedNames (Get-CanonicalReceiptPropertyNames) `
     -Description "The retained in-progress publication receipt"
-  if ([int]$Receipt.schemaVersion -ne 1 -or
+  if ([int]$Receipt.schemaVersion -ne 2 -or
       [string]$Receipt.kind -cne "development-migration-image-publication" -or
       [string]$Receipt.environment -cne "development" -or
       [string]$Receipt.region -cne [string]$Expected.region -or
@@ -310,12 +443,16 @@ function Assert-ResumablePublicationReceipt {
       [string]$Receipt.repositoryName -cne [string]$Expected.repositoryName -or
       [string]$Receipt.repositoryUri -cne [string]$Expected.repositoryUri -or
       [string]$Receipt.sourceTag -cne [string]$Expected.sourceTag -or
+      [string]$Receipt.handoffTag -cne [string]$Expected.handoffTag -or
       [string]$Receipt.platform -cne "linux/amd64" -or
       [string]$Receipt.created -cne [string]$Expected.created -or
+      [string]$Receipt.indexDigest -cne [string]$Expected.indexDigest -or
+      [string]$Receipt.platformDigest -cne [string]$Expected.platformDigest -or
       [string]$Receipt.configDigest -cne [string]$Expected.configDigest -or
-      [string]$Receipt.layerSetSha256 -cne [string]$Expected.layerSetSha256 -or
+      [string]$Receipt.compressedLayerSetSha256 -cne [string]$Expected.compressedLayerSetSha256 -or
+      [string]$Receipt.rootfsDiffIdSetSha256 -cne [string]$Expected.rootfsDiffIdSetSha256 -or
       [string]$Receipt.phase -cne "publishing" -or
-      [string]$Receipt.registryDigest -cne "" -or [string]$Receipt.imageUri -cne "" -or
+      [string]$Receipt.imageUri -cne "" -or
       [string]$Receipt.scanStatus -cne "" -or [int]$Receipt.criticalFindings -ne -1 -or
       [int]$Receipt.highFindings -ne -1 -or
       -not (Test-CanonicalUtcTimestamp -Value $Receipt.publicationStartedAt) -or
@@ -327,43 +464,67 @@ function Assert-ResumablePublicationReceipt {
 
 function Resolve-PublicationResumeMode {
   param(
-    [Parameter(Mandatory)][bool]$RemoteExists,
+    [Parameter(Mandatory)][bool]$RemoteIndexExists,
+    [Parameter(Mandatory)][bool]$RemotePlatformExists,
     [Parameter(Mandatory)][bool]$ReceiptExists,
     [AllowNull()][object]$Receipt,
     [Parameter(Mandatory)][object]$Expected
   )
   if (-not $ReceiptExists) {
-    if ($RemoteExists) { throw "The immutable source tag already exists without the exact resumable receipt." }
+    if ($RemoteIndexExists -or $RemotePlatformExists) { throw "An immutable publication tag already exists without the exact resumable receipt." }
     return "new-publication"
   }
   if ($null -eq $Receipt) { throw "The retained publication receipt could not be parsed." }
   $null = Assert-ResumablePublicationReceipt -Receipt $Receipt -Expected $Expected
-  if ($RemoteExists) { return "resume-readback" }
+  if ($RemoteIndexExists -and -not $RemotePlatformExists) { throw "The source index exists without its exact platform handoff." }
+  if ($RemoteIndexExists) { return "resume-readback" }
+  if ($RemotePlatformExists) { return "resume-index" }
   return "resume-push"
 }
 
-function Assert-RemoteImage {
+function Assert-RemoteOciImage {
   param(
-    [Parameter(Mandatory)][object]$ImageDetail,
-    [Parameter(Mandatory)][object]$BatchImage,
+    [Parameter(Mandatory)][object]$IndexDetail,
+    [Parameter(Mandatory)][object]$IndexImage,
+    [Parameter(Mandatory)][object]$PlatformImage,
     [Parameter(Mandatory)][object]$Scan,
     [Parameter(Mandatory)][string]$ExpectedTag,
+    [Parameter(Mandatory)][string]$ExpectedIndexDigest,
+    [Parameter(Mandatory)][string]$ExpectedPlatformDigest,
     [Parameter(Mandatory)][string]$ExpectedConfigDigest,
-    [string]$ExpectedRegistryDigest = ""
+    [Parameter(Mandatory)][string]$ExpectedCompressedLayerSetSha256
   )
-  $digest = [string]$ImageDetail.imageDigest
-  $tags = @($ImageDetail.imageTags)
-  if ($digest -notmatch '^sha256:[a-f0-9]{64}$' -or
-      (-not [string]::IsNullOrWhiteSpace($ExpectedRegistryDigest) -and $digest -cne $ExpectedRegistryDigest) -or
-      $tags -notcontains $ExpectedTag -or [string]$BatchImage.imageId.imageDigest -cne $digest) {
-    throw "The exact immutable source tag did not resolve to the expected ECR digest."
+  $tags = @($IndexDetail.imageTags)
+  if ([string]$IndexDetail.imageDigest -cne $ExpectedIndexDigest -or $tags -notcontains $ExpectedTag -or
+      [string]$IndexImage.imageId.imageDigest -cne $ExpectedIndexDigest) {
+    throw "The exact immutable source tag did not resolve to the expected OCI index digest."
   }
-  try { $manifest = [string]$BatchImage.imageManifest | ConvertFrom-Json }
-  catch { throw "ECR returned an invalid image manifest." }
+  $indexJson = [string]$IndexImage.imageManifest
+  if (("sha256:$(Get-TextSha256 -Value $indexJson)") -cne $ExpectedIndexDigest) {
+    throw "ECR did not return the exact byte-bound OCI index."
+  }
+  try { $index = $indexJson | ConvertFrom-Json }
+  catch { throw "ECR returned an invalid OCI index." }
+  $descriptors = @($index.manifests)
+  $platformDescriptors = @($descriptors | Where-Object {
+      [string]$_.platform.os -ceq "linux" -and [string]$_.platform.architecture -ceq "amd64"
+    })
+  if ($descriptors.Count -ne 1 -or $platformDescriptors.Count -ne 1 -or
+      [string]$platformDescriptors[0].digest -cne $ExpectedPlatformDigest -or
+      [string]$PlatformImage.imageId.imageDigest -cne $ExpectedPlatformDigest) {
+    throw "The remote OCI index does not bind exactly one expected linux/amd64 child."
+  }
+  $manifestJson = [string]$PlatformImage.imageManifest
+  if (("sha256:$(Get-TextSha256 -Value $manifestJson)") -cne $ExpectedPlatformDigest) {
+    throw "ECR did not return the exact byte-bound linux/amd64 manifest."
+  }
+  try { $manifest = $manifestJson | ConvertFrom-Json }
+  catch { throw "ECR returned an invalid linux/amd64 manifest." }
+  $compressed = @($manifest.layers | ForEach-Object { [string]$_.digest })
   if ([int]$manifest.schemaVersion -ne 2 -or [string]$manifest.config.digest -cne $ExpectedConfigDigest -or
-      @($manifest.layers).Count -lt 1 -or
-      @($manifest.layers | Where-Object { [string]$_.digest -notmatch '^sha256:[a-f0-9]{64}$' }).Count -ne 0) {
-    throw "The ECR manifest does not bind the deterministic local image configuration."
+      $compressed.Count -lt 1 -or @($compressed | Where-Object { $_ -notmatch '^sha256:[a-f0-9]{64}$' }).Count -ne 0 -or
+      (Get-TextSha256 -Value ($compressed -join "`n")) -cne $ExpectedCompressedLayerSetSha256) {
+    throw "The remote platform manifest does not bind the exact configuration and compressed layers."
   }
   $scanStatus = [string]$Scan.imageScanStatus.status
   $counts = $Scan.imageScanFindings.findingSeverityCounts
@@ -375,7 +536,8 @@ function Assert-RemoteImage {
     throw "The exact linux/amd64 image does not have a COMPLETE zero-Critical/zero-High ECR scan."
   }
   return [pscustomobject]@{
-    RegistryDigest = $digest
+    IndexDigest    = $ExpectedIndexDigest
+    PlatformDigest = $ExpectedPlatformDigest
     Critical       = $critical
     High           = $high
   }
@@ -391,16 +553,19 @@ function Assert-PublicationReceipt {
   )
   $null = Assert-ExactPropertySet -Value $Receipt -ExpectedNames (Get-CanonicalReceiptPropertyNames) `
     -Description "The verified publication receipt"
-  if ([int]$Receipt.schemaVersion -ne 1 -or [string]$Receipt.kind -cne "development-migration-image-publication" -or
+  if ([int]$Receipt.schemaVersion -ne 2 -or [string]$Receipt.kind -cne "development-migration-image-publication" -or
       [string]$Receipt.environment -cne "development" -or [string]$Receipt.region -cne $ExpectedRegion -or
       [string]$Receipt.sourceSha -cne $ExpectedSourceSha -or [string]$Receipt.boundarySha256 -cne $Boundary.BoundarySha256 -or
       [string]$Receipt.repositoryName -cne $Boundary.RepositoryName -or
       [string]$Receipt.repositoryUri -cne $Boundary.RepositoryUri -or [string]$Receipt.phase -cne "verified" -or
       [string]$Receipt.platform -cne "linux/amd64" -or [string]$Receipt.created -cne $ExpectedCreated -or
+      [string]$Receipt.handoffTag -cne "$ExpectedSourceSha-linux-amd64" -or
+      [string]$Receipt.indexDigest -notmatch '^sha256:[a-f0-9]{64}$' -or
+      [string]$Receipt.platformDigest -notmatch '^sha256:[a-f0-9]{64}$' -or
       [string]$Receipt.configDigest -notmatch '^sha256:[a-f0-9]{64}$' -or
-      [string]$Receipt.layerSetSha256 -notmatch '^[a-f0-9]{64}$' -or
-      [string]$Receipt.registryDigest -notmatch '^sha256:[a-f0-9]{64}$' -or
-      [string]$Receipt.imageUri -cne "$($Boundary.RepositoryUri)@$($Receipt.registryDigest)" -or
+      [string]$Receipt.compressedLayerSetSha256 -notmatch '^[a-f0-9]{64}$' -or
+      [string]$Receipt.rootfsDiffIdSetSha256 -notmatch '^[a-f0-9]{64}$' -or
+      [string]$Receipt.imageUri -cne "$($Boundary.RepositoryUri)@$($Receipt.platformDigest)" -or
       [string]$Receipt.sourceTag -cne $ExpectedSourceSha -or [string]$Receipt.scanStatus -cne "COMPLETE" -or
       [int]$Receipt.criticalFindings -ne 0 -or [int]$Receipt.highFindings -ne 0 -or
       -not (Test-CanonicalUtcTimestamp -Value $Receipt.publicationStartedAt) -or
@@ -518,20 +683,53 @@ function Invoke-LocalGate {
   if ($LASTEXITCODE -ne 0) { throw "$Name failed. Inspect the ignored local log." }
 }
 
-function Get-LocalImage {
-  param([Parameter(Mandatory)][string]$Tag)
-  $raw = & docker image inspect $Tag --format '{{json .}}' 2>$null
-  if ($LASTEXITCODE -ne 0 -or -not $raw) { throw "Docker could not inspect the deterministic migration image." }
-  try { return ($raw -join [Environment]::NewLine) | ConvertFrom-Json }
-  catch { throw "Docker returned invalid image-inspection JSON." }
+function Get-EcrTagState {
+  param([Parameter(Mandatory)][object]$Boundary, [Parameter(Mandatory)][string]$Tag)
+  $response = Invoke-AwsJson -Arguments @(
+    "ecr", "batch-get-image", "--repository-name", $Boundary.RepositoryName,
+    "--image-ids", "imageTag=$Tag", "--accepted-media-types",
+    "application/vnd.oci.image.index.v1+json", "application/vnd.oci.image.manifest.v1+json",
+    "--output", "json"
+  ) -Operation "Immutable migration tag lookup"
+  $images = @($response.images)
+  $failures = @($response.failures)
+  if ($images.Count -eq 1 -and $failures.Count -eq 0) {
+    return [pscustomobject]@{ Exists = $true; Image = $images[0] }
+  }
+  if ($images.Count -eq 0 -and $failures.Count -eq 1 -and
+      [string]$failures[0].failureCode -ceq "ImageNotFound") {
+    return [pscustomobject]@{ Exists = $false; Image = $null }
+  }
+  throw "An immutable migration-tag lookup returned an ambiguous result."
+}
+
+function Assert-PlatformHandoff {
+  param(
+    [Parameter(Mandatory)][object]$BatchImage,
+    [Parameter(Mandatory)][object]$Identity
+  )
+  if ([string]$BatchImage.imageId.imageDigest -cne [string]$Identity.PlatformDigest) {
+    throw "The immutable platform handoff resolves to the wrong digest."
+  }
+  $manifestJson = [string]$BatchImage.imageManifest
+  if (("sha256:$(Get-TextSha256 -Value $manifestJson)") -cne [string]$Identity.PlatformDigest) {
+    throw "The immutable platform handoff did not preserve the exact OCI manifest bytes."
+  }
+  try { $manifest = $manifestJson | ConvertFrom-Json }
+  catch { throw "The immutable platform handoff is not valid OCI JSON." }
+  $compressed = @($manifest.layers | ForEach-Object { [string]$_.digest })
+  if ([string]$manifest.config.digest -cne [string]$Identity.ConfigDigest -or
+      (Get-TextSha256 -Value ($compressed -join "`n")) -cne [string]$Identity.CompressedLayerSetSha256) {
+    throw "The immutable platform handoff changed the config or compressed layer chain."
+  }
+  return $true
 }
 
 function Get-RemoteImageReadback {
   param(
     [Parameter(Mandatory)][object]$Boundary,
     [Parameter(Mandatory)][string]$Tag,
-    [Parameter(Mandatory)][string]$ConfigDigest,
-    [string]$RegistryDigest = "",
+    [Parameter(Mandatory)][object]$Identity,
     [switch]$WaitForScan
   )
   $detailResponse = Invoke-AwsJson -Arguments @(
@@ -540,29 +738,37 @@ function Get-RemoteImageReadback {
   ) -Operation "Immutable migration image lookup"
   $details = @($detailResponse.imageDetails)
   if ($details.Count -ne 1) { throw "The exact migration image tag did not resolve once." }
-  $digest = [string]$details[0].imageDigest
-  $batchResponse = Invoke-AwsJson -Arguments @(
+  $indexResponse = Invoke-AwsJson -Arguments @(
     "ecr", "batch-get-image", "--repository-name", $Boundary.RepositoryName,
-    "--image-ids", "imageDigest=$digest", "--accepted-media-types",
-    "application/vnd.oci.image.manifest.v1+json", "application/vnd.docker.distribution.manifest.v2+json",
+    "--image-ids", "imageDigest=$($Identity.IndexDigest)", "--accepted-media-types",
+    "application/vnd.oci.image.index.v1+json",
     "--output", "json"
-  ) -Operation "Immutable migration manifest readback"
-  if (@($batchResponse.images).Count -ne 1 -or @($batchResponse.failures).Count -ne 0) {
-    throw "ECR did not return exactly one immutable migration manifest."
+  ) -Operation "Immutable migration index readback"
+  $platformResponse = Invoke-AwsJson -Arguments @(
+    "ecr", "batch-get-image", "--repository-name", $Boundary.RepositoryName,
+    "--image-ids", "imageDigest=$($Identity.PlatformDigest)", "--accepted-media-types",
+    "application/vnd.oci.image.manifest.v1+json", "--output", "json"
+  ) -Operation "Immutable migration platform readback"
+  if (@($indexResponse.images).Count -ne 1 -or @($indexResponse.failures).Count -ne 0 -or
+      @($platformResponse.images).Count -ne 1 -or @($platformResponse.failures).Count -ne 0) {
+    throw "ECR did not return exactly one index and one linux/amd64 child manifest."
   }
   $scan = $null
   $attemptLimit = if ($WaitForScan) { 60 } else { 1 }
   for ($attempt = 1; $attempt -le $attemptLimit; $attempt++) {
-    $scan = Invoke-AwsJson -Arguments @(
+    $scan = Invoke-AwsScanJson -Arguments @(
       "ecr", "describe-image-scan-findings", "--repository-name", $Boundary.RepositoryName,
-      "--image-id", "imageDigest=$digest", "--output", "json"
-    ) -Operation "Migration image vulnerability scan" -AllowFailure:$WaitForScan
+      "--image-id", "imageDigest=$($Identity.PlatformDigest)", "--output", "json"
+    ) -AllowNotFound:$WaitForScan
     $scanStatus = if ($null -eq $scan) { "" } else { [string]$scan.imageScanStatus.status }
     if ($scanStatus -ceq "COMPLETE" -or $scanStatus -in @("FAILED", "UNSUPPORTED_IMAGE")) { break }
     if ($WaitForScan) { Start-Sleep -Seconds 10 }
   }
-  return Assert-RemoteImage -ImageDetail $details[0] -BatchImage $batchResponse.images[0] -Scan $scan `
-    -ExpectedTag $Tag -ExpectedConfigDigest $ConfigDigest -ExpectedRegistryDigest $RegistryDigest
+  return Assert-RemoteOciImage -IndexDetail $details[0] -IndexImage $indexResponse.images[0] `
+    -PlatformImage $platformResponse.images[0] -Scan $scan -ExpectedTag $Tag `
+    -ExpectedIndexDigest $Identity.IndexDigest -ExpectedPlatformDigest $Identity.PlatformDigest `
+    -ExpectedConfigDigest $Identity.ConfigDigest `
+    -ExpectedCompressedLayerSetSha256 $Identity.CompressedLayerSetSha256
 }
 
 function Read-AndValidateReceipt {
@@ -608,6 +814,7 @@ if ($Action -eq "Publish") {
   $auditLog = Join-Path $operatorRoot "dependency-audit-$timestamp.log"
   $buildOneLog = Join-Path $operatorRoot "build-one-$timestamp.log"
   $buildTwoLog = Join-Path $operatorRoot "build-two-$timestamp.log"
+  $smokeLog = Join-Path $operatorRoot "runtime-smoke-$timestamp.log"
   Invoke-LocalGate -Name "Migration owner tests" -LogPath $testLog -Command {
     pnpm --filter @ai-job-apply/database-migrations test
     if ($LASTEXITCODE -eq 0) { pnpm --filter @ai-job-apply/profile-service test }
@@ -619,10 +826,14 @@ if ($Action -eq "Publish") {
   $commitEpoch = (& git -C $repositoryRoot show -s --format=%ct $SourceSha 2>$null).Trim()
   if ($commitEpoch -notmatch '^[0-9]{10,}$') { throw "The exact source commit timestamp could not be resolved." }
   $created = [DateTimeOffset]::FromUnixTimeSeconds([long]$commitEpoch).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ")
-  $tagOne = "$($boundary.RepositoryUri):local-$SourceSha-one"
-  $tagTwo = "$($boundary.RepositoryUri):local-$SourceSha-two"
+  $buildTag = "ai-job-apply-migration:local-$SourceSha"
+  $layoutOne = Join-Path $operatorRoot "oci-$($SourceSha.Substring(0, 12))-one-$timestamp"
+  $layoutTwo = Join-Path $operatorRoot "oci-$($SourceSha.Substring(0, 12))-two-$timestamp"
+  foreach ($layout in @($layoutOne, $layoutTwo)) {
+    if (Test-Path -LiteralPath $layout) { throw "Refusing to replace a deterministic OCI build layout." }
+  }
   $buildArguments = @(
-    "buildx", "build", "--load", "--no-cache", "--platform", "linux/amd64",
+    "buildx", "build", "--no-cache", "--platform", "linux/amd64",
     "--provenance=false", "--sbom=false", "--build-arg", "SOURCE_DATE_EPOCH=$commitEpoch",
     "--build-arg", "BUILDKIT_MULTI_PLATFORM=1",
     "--label", "org.opencontainers.image.revision=$SourceSha",
@@ -631,18 +842,28 @@ if ($Action -eq "Publish") {
     "--file", (Join-Path $repositoryRoot "Dockerfile.migration")
   )
   Invoke-LocalGate -Name "First deterministic migration image build" -LogPath $buildOneLog -Command {
-    docker @buildArguments --tag $tagOne $repositoryRoot
+    docker @buildArguments --output "type=oci,dest=$layoutOne,tar=false,rewrite-timestamp=true" --tag $buildTag $repositoryRoot
   }
-  $imageOne = Get-LocalImage -Tag $tagOne
-  $identityOne = Assert-BuildIdentity -Image $imageOne -ExpectedSourceSha $SourceSha -ExpectedCreated $created
+  $identityOne = Get-OciLayoutIdentity -LayoutPath $layoutOne -ExpectedSourceSha $SourceSha -ExpectedCreated $created
   Invoke-LocalGate -Name "Second deterministic migration image build" -LogPath $buildTwoLog -Command {
-    docker @buildArguments --tag $tagTwo $repositoryRoot
+    docker @buildArguments --output "type=oci,dest=$layoutTwo,tar=false,rewrite-timestamp=true" --tag $buildTag $repositoryRoot
   }
-  $imageTwo = Get-LocalImage -Tag $tagTwo
-  $identityTwo = Assert-BuildIdentity -Image $imageTwo -ExpectedSourceSha $SourceSha -ExpectedCreated $created
-  if ($identityOne.ConfigDigest -cne $identityTwo.ConfigDigest -or
-      $identityOne.LayerSetSha256 -cne $identityTwo.LayerSetSha256) {
-    throw "The two clean migration image builds did not have identical configuration and rootfs identities."
+  $identityTwo = Get-OciLayoutIdentity -LayoutPath $layoutTwo -ExpectedSourceSha $SourceSha -ExpectedCreated $created
+  $null = Assert-DeterministicOciIdentity -First $identityOne -Second $identityTwo
+
+  $loadArchive = Join-Path $operatorRoot "oci-load-$($SourceSha.Substring(0, 12))-$timestamp.tar"
+  try {
+    Invoke-LocalGate -Name "Deterministic migration image load" -LogPath $smokeLog -Command {
+      tar -cf $loadArchive -C $layoutTwo .
+      if ($LASTEXITCODE -eq 0) { docker load -i $loadArchive }
+    }
+    $smokeScript = 'import{access,readdir}from"node:fs/promises";const{migrationRunners}=await import("./runner/dist/src/index.js");if(migrationRunners.map(x=>x.owner).join(",")!=="profile,jobs,documents")throw new Error("owner/order mismatch");for(const runner of migrationRunners)await access(runner.executable);const expected={profile:["0001_foundation.sql","0002_serverless_outbox.sql","0003_retire_legacy_dispatch.sql","0004_profile_fact_versions.sql","0005_resume_fact_proposals.sql"],jobs:["0001_job_catalog.sql","0002_duplicate_resolution.sql","0003_duplicate_resolution_audit_guard.sql","0004_job_search.sql"],documents:["0001_resume_intake.sql","0002_resume_processing.sql"]};for(const[owner,names]of Object.entries(expected)){const files=(await readdir(`./${owner}/migrations`)).filter(x=>x.endsWith(".sql")).sort();if(files.join(",")!==names.join(","))throw new Error(`${owner} SQL migration set mismatch`)}console.log("migration-runtime-smoke:ok")'
+    & docker run --rm --platform linux/amd64 --network none --read-only --cap-drop ALL `
+      --security-opt no-new-privileges --user 65532:65532 --entrypoint /nodejs/bin/node `
+      $buildTag --input-type=module -e $smokeScript *> $smokeLog
+    if ($LASTEXITCODE -ne 0) { throw "The deterministic migration runtime smoke test failed; inspect the ignored local log." }
+  } finally {
+    if (Test-Path -LiteralPath $loadArchive -PathType Leaf) { Remove-Item -LiteralPath $loadArchive -Force }
   }
 
   if ([string]::IsNullOrWhiteSpace($ReceiptPath)) {
@@ -650,7 +871,7 @@ if ($Action -eq "Publish") {
   }
   $receipt = Resolve-OperatorPath -Candidate $ReceiptPath
   $plannedReceipt = [ordered]@{
-    schemaVersion     = 1
+    schemaVersion     = 2
     kind              = "development-migration-image-publication"
     environment       = "development"
     region            = $Region
@@ -659,12 +880,15 @@ if ($Action -eq "Publish") {
     repositoryName    = $boundary.RepositoryName
     repositoryUri     = $boundary.RepositoryUri
     sourceTag         = $SourceSha
+    handoffTag        = "$SourceSha-linux-amd64"
     platform          = "linux/amd64"
     created           = $created
+    indexDigest       = $identityTwo.IndexDigest
+    platformDigest    = $identityTwo.PlatformDigest
     configDigest      = $identityTwo.ConfigDigest
-    layerSetSha256    = $identityTwo.LayerSetSha256
+    compressedLayerSetSha256 = $identityTwo.CompressedLayerSetSha256
+    rootfsDiffIdSetSha256 = $identityTwo.RootfsDiffIdSetSha256
     phase             = "publishing"
-    registryDigest    = ""
     imageUri          = ""
     scanStatus        = ""
     criticalFindings  = -1
@@ -674,26 +898,15 @@ if ($Action -eq "Publish") {
   }
 
   $receiptExisted = Test-Path -LiteralPath $receipt -PathType Leaf
-  $existingImage = Invoke-AwsJson -Arguments @(
-    "ecr", "batch-get-image", "--repository-name", $boundary.RepositoryName,
-    "--image-ids", "imageTag=$SourceSha", "--accepted-media-types",
-    "application/vnd.oci.image.manifest.v1+json", "application/vnd.docker.distribution.manifest.v2+json",
-    "--output", "json"
-  ) -Operation "Existing immutable source tag check"
-  $existingImages = @($existingImage.images)
-  $existingFailures = @($existingImage.failures)
-  $remoteExists = $existingImages.Count -eq 1 -and $existingFailures.Count -eq 0
-  $remoteAbsent = $existingImages.Count -eq 0 -and $existingFailures.Count -eq 1 -and
-    [string]$existingFailures[0].failureCode -ceq "ImageNotFound"
-  if (-not $remoteExists -and -not $remoteAbsent) {
-    throw "The immutable source-tag preflight returned an ambiguous result."
-  }
+  $sourceState = Get-EcrTagState -Boundary $boundary -Tag $SourceSha
+  $handoffState = Get-EcrTagState -Boundary $boundary -Tag $plannedReceipt.handoffTag
   $retained = $null
   if ($receiptExisted) {
     try { $retained = Get-Content -LiteralPath $receipt -Raw | ConvertFrom-Json }
     catch { throw "The retained publication receipt is not valid JSON." }
   }
-  $resumeMode = Resolve-PublicationResumeMode -RemoteExists $remoteExists `
+  $resumeMode = Resolve-PublicationResumeMode -RemoteIndexExists $sourceState.Exists `
+    -RemotePlatformExists $handoffState.Exists `
     -ReceiptExists $receiptExisted -Receipt $retained -Expected $plannedReceipt
   if ($resumeMode -ceq "new-publication") {
     Write-JsonFile -Path $receipt -Value $plannedReceipt
@@ -701,7 +914,7 @@ if ($Action -eq "Publish") {
     $plannedReceipt = $retained
   }
 
-  if ($resumeMode -in @("new-publication", "resume-push")) {
+  if ($resumeMode -in @("new-publication", "resume-push", "resume-index")) {
     $registryHost = $boundary.RepositoryUri.Split('/')[0]
     $dockerAuthDirectory = Join-Path $operatorRoot ("docker-auth-{0}" -f [guid]::NewGuid().ToString("N"))
     $previousDockerConfig = $env:DOCKER_CONFIG
@@ -712,10 +925,24 @@ if ($Action -eq "Publish") {
       if ($LASTEXITCODE -ne 0 -or -not $password) { throw "ECR login-token retrieval failed." }
       $password | docker login --username AWS --password-stdin $registryHost *> $null
       if ($LASTEXITCODE -ne 0) { throw "Docker could not authenticate to the exact development registry." }
-      docker tag $tagTwo "$($boundary.RepositoryUri):$SourceSha"
-      if ($LASTEXITCODE -ne 0) { throw "Docker could not create the exact immutable source tag." }
-      docker push "$($boundary.RepositoryUri):$SourceSha" *> (Join-Path $operatorRoot "push-$timestamp.log")
-      if ($LASTEXITCODE -ne 0) { throw "The immutable migration image push failed; inspect the ignored local log." }
+      $ociReference = "oci-layout://$([IO.Path]::GetFullPath($layoutTwo).Replace('\', '/'))@$($identityTwo.PlatformDigest)"
+      if ($resumeMode -in @("new-publication", "resume-push")) {
+        docker buildx imagetools create --prefer-index=false --tag `
+          "$($boundary.RepositoryUri):$($plannedReceipt.handoffTag)" $ociReference `
+          *> (Join-Path $operatorRoot "push-platform-$timestamp.log")
+        if ($LASTEXITCODE -ne 0) { throw "The immutable linux/amd64 handoff push failed; inspect the ignored local log." }
+      }
+      $handoffReadback = Get-EcrTagState -Boundary $boundary -Tag $plannedReceipt.handoffTag
+      if (-not $handoffReadback.Exists) { throw "The immutable linux/amd64 handoff tag is unavailable." }
+      $null = Assert-PlatformHandoff -BatchImage $handoffReadback.Image -Identity $identityTwo
+      $indexPublication = Invoke-AwsJson -Arguments @(
+        "ecr", "put-image", "--repository-name", $boundary.RepositoryName,
+        "--image-tag", $SourceSha, "--image-manifest", "file://$($identityTwo.IndexPath)",
+        "--image-manifest-media-type", "application/vnd.oci.image.index.v1+json", "--output", "json"
+      ) -Operation "Immutable OCI source index publication"
+      if ([string]$indexPublication.image.imageId.imageDigest -cne $identityTwo.IndexDigest) {
+        throw "ECR did not install the exact byte-bound OCI source index."
+      }
     } finally {
       if ($null -eq $previousDockerConfig) { Remove-Item Env:\DOCKER_CONFIG -ErrorAction SilentlyContinue }
       else { $env:DOCKER_CONFIG = $previousDockerConfig }
@@ -725,11 +952,12 @@ if ($Action -eq "Publish") {
     }
   }
 
-  $readback = Get-RemoteImageReadback -Boundary $boundary -Tag $SourceSha `
-    -ConfigDigest $identityTwo.ConfigDigest -WaitForScan
+  $finalHandoff = Get-EcrTagState -Boundary $boundary -Tag $plannedReceipt.handoffTag
+  if (-not $finalHandoff.Exists) { throw "The immutable linux/amd64 handoff tag is unavailable." }
+  $null = Assert-PlatformHandoff -BatchImage $finalHandoff.Image -Identity $identityTwo
+  $readback = Get-RemoteImageReadback -Boundary $boundary -Tag $SourceSha -Identity $identityTwo -WaitForScan
   $plannedReceipt.phase = "verified"
-  $plannedReceipt.registryDigest = $readback.RegistryDigest
-  $plannedReceipt.imageUri = "$($boundary.RepositoryUri)@$($readback.RegistryDigest)"
+  $plannedReceipt.imageUri = "$($boundary.RepositoryUri)@$($readback.PlatformDigest)"
   $plannedReceipt.scanStatus = "COMPLETE"
   $plannedReceipt.criticalFindings = $readback.Critical
   $plannedReceipt.highFindings = $readback.High
@@ -739,7 +967,8 @@ if ($Action -eq "Publish") {
     Outcome                 = "published-and-verified"
     SourceSha               = $SourceSha
     ImageUri                = $plannedReceipt.imageUri
-    RegistryDigest          = $readback.RegistryDigest
+    IndexDigest             = $readback.IndexDigest
+    PlatformDigest          = $readback.PlatformDigest
     ReceiptPath             = $receipt
     ReceiptSha256           = Get-FileSha256 -Path $receipt
     Platform                = "linux/amd64"
@@ -758,13 +987,22 @@ if ([string]::IsNullOrWhiteSpace($ReceiptPath) -or $ReviewedReceiptSha256 -notma
 }
 $receipt = Resolve-OperatorPath -Candidate $ReceiptPath -MustExist
 $receiptValue = Read-AndValidateReceipt -Path $receipt -Sha256 $ReviewedReceiptSha256 -Boundary $boundary
-$readback = Get-RemoteImageReadback -Boundary $boundary -Tag $SourceSha `
-  -ConfigDigest ([string]$receiptValue.configDigest) -RegistryDigest ([string]$receiptValue.registryDigest)
+$receiptIdentity = [pscustomobject]@{
+  IndexDigest              = [string]$receiptValue.indexDigest
+  PlatformDigest           = [string]$receiptValue.platformDigest
+  ConfigDigest             = [string]$receiptValue.configDigest
+  CompressedLayerSetSha256 = [string]$receiptValue.compressedLayerSetSha256
+}
+$verifiedHandoff = Get-EcrTagState -Boundary $boundary -Tag ([string]$receiptValue.handoffTag)
+if (-not $verifiedHandoff.Exists) { throw "The reviewed linux/amd64 handoff tag is unavailable." }
+$null = Assert-PlatformHandoff -BatchImage $verifiedHandoff.Image -Identity $receiptIdentity
+$readback = Get-RemoteImageReadback -Boundary $boundary -Tag $SourceSha -Identity $receiptIdentity
 [pscustomobject]@{
   Outcome              = "verified"
   SourceSha            = $SourceSha
   ImageUri             = $receiptValue.imageUri
-  RegistryDigest       = $readback.RegistryDigest
+  IndexDigest          = $readback.IndexDigest
+  PlatformDigest       = $readback.PlatformDigest
   ReceiptSha256        = $ReviewedReceiptSha256
   Platform             = "linux/amd64"
   ScanStatus           = "COMPLETE"

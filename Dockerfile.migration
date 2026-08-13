@@ -1,4 +1,5 @@
 FROM node:24.18.0-trixie-slim@sha256:5301bbf5e8046148348b1dea15436326f43c579031f8d76654a631225bdfe467 AS build
+ARG SOURCE_DATE_EPOCH
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 RUN corepack enable
@@ -14,6 +15,7 @@ RUN pnpm contracts:generate \
   && pnpm --filter @ai-job-apply/profile-service deploy --prod --legacy /migration/profile \
   && pnpm --filter @ai-job-apply/jobs-service deploy --prod --legacy /migration/jobs \
   && pnpm --filter @ai-job-apply/documents-service deploy --prod --legacy /migration/documents
+RUN SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" node -e 'const fs=require("node:fs"),path=require("node:path");const raw=process.env.SOURCE_DATE_EPOCH;if(!/^[0-9]+$/.test(raw))throw new Error("SOURCE_DATE_EPOCH must be Unix seconds");const epoch=Number(raw),instant=new Date(epoch*1000);if(!Number.isSafeInteger(epoch)||Number.isNaN(instant.valueOf()))throw new Error("invalid SOURCE_DATE_EPOCH");const root="/migration",moduleFiles=[];const normalize=(entry)=>{const stat=fs.lstatSync(entry);if(stat.isDirectory()){for(const child of fs.readdirSync(entry).sort())normalize(path.join(entry,child));}if(stat.isSymbolicLink())fs.lutimesSync(entry,instant,instant);else fs.utimesSync(entry,instant,instant);};const discover=(entry)=>{const stat=fs.lstatSync(entry);if(!stat.isDirectory())return;for(const child of fs.readdirSync(entry).sort()){const candidate=path.join(entry,child);if(child===".modules.yaml")moduleFiles.push(candidate);else if(fs.lstatSync(candidate).isDirectory())discover(candidate);}};discover(root);if(moduleFiles.length!==3)throw new Error(`expected exactly three generated .modules.yaml files, found ${moduleFiles.length}`);for(const file of moduleFiles){const current=fs.readFileSync(file,"utf8"),matches=current.match(/^prunedAt:.*$/gm)||[];if(matches.length!==1)throw new Error(`expected exactly one prunedAt in ${file}`);fs.writeFileSync(file,current.replace(/^prunedAt:.*$/m,`prunedAt: ${instant.toUTCString()}`));}normalize(root);'
 
 FROM gcr.io/distroless/nodejs24-debian13:nonroot-amd64@sha256:b1386d556b478c420927eb212236bfb31be9834a4549850a060a6351f7fff514 AS runtime
 ENV NODE_ENV=production
