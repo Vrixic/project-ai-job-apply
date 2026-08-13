@@ -650,6 +650,7 @@ describe("candidate API", () => {
     });
 
     expect(accepted.statusCode).toBe(200);
+    expect(accepted.headers["cache-control"]).toBe("no-store");
     expect(accepted.json()).toEqual({
       items: [
         expect.objectContaining({

@@ -129,6 +129,8 @@ function Invoke-BoundaryCase {
     [Parameter(Mandatory = $true)]
     [int]$ExpectedStatus,
     [string]$ExpectedCode,
+    [string]$ForbiddenResponseText,
+    [ValidateSet("", "JobSearchPage")][string]$ExpectedSuccessContract = "",
     [Parameter(Mandatory = $true)]
     [string]$ExpectedVersion
   )
@@ -163,6 +165,47 @@ function Invoke-BoundaryCase {
   $response = Get-Content -LiteralPath $outputPath -Raw | ConvertFrom-Json
   if ([int]$response.statusCode -ne $ExpectedStatus) {
     throw "The $Name boundary case returned unexpected status $([int]$response.statusCode)."
+  }
+  if (-not [string]::IsNullOrEmpty($ForbiddenResponseText) -and
+      ([string]$response.body).IndexOf($ForbiddenResponseText, [StringComparison]::Ordinal) -ge 0) {
+    throw "The $Name boundary case reflected restricted request content."
+  }
+  if ($ExpectedSuccessContract -ceq "JobSearchPage") {
+    $mediaType = ([string]$response.headers."content-type").Split(";", 2)[0].Trim()
+    if ($mediaType -ine "application/json" -or [string]$response.headers."cache-control" -cne "no-store") {
+      throw "The $Name boundary case did not return private JSON."
+    }
+    try { $page = [string]$response.body | ConvertFrom-Json }
+    catch { throw "The $Name boundary case did not return a JSON job-search page." }
+    $pageKeys = @($page.PSObject.Properties | ForEach-Object Name | Sort-Object)
+    if (($pageKeys -join "|") -notin @("items", "items|nextCursor") -or
+      $null -eq $page.items -or @($page.items).Count -gt 25) {
+      throw "The $Name boundary case returned an invalid job-search page shape."
+    }
+    if ($pageKeys -ccontains "nextCursor") {
+      $cursor = [string]$page.nextCursor
+      if ($cursor -cnotmatch '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$' -or $cursor.Length -gt 1024) {
+        throw "The $Name boundary case returned an invalid continuation cursor."
+      }
+    }
+    foreach ($item in @($page.items)) {
+      $keys = @($item.PSObject.Properties | ForEach-Object Name | Sort-Object)
+      $allowedKeys = @("company", "department", "expiresAt", "firstObservedAt", "id", "lastVerifiedAt", "locations", "status", "title")
+      $requiredKeys = @("company", "expiresAt", "firstObservedAt", "id", "lastVerifiedAt", "locations", "status", "title")
+      if (@($keys | Where-Object { $_ -notin $allowedKeys }).Count -ne 0 -or
+        @($requiredKeys | Where-Object { $_ -notin $keys }).Count -ne 0 -or
+        [string]$item.status -cne "active" -or @($item.locations).Count -lt 1 -or @($item.locations).Count -gt 20) {
+        throw "The $Name boundary case returned an invalid canonical-job summary shape."
+      }
+      $companyKeys = @($item.company.PSObject.Properties | ForEach-Object Name | Sort-Object)
+      if (($companyKeys -join "|") -notin @("id|name", "id|name|verifiedDomain") -or
+        [string]$item.company.id -cnotmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$' -or
+        [string]::IsNullOrWhiteSpace([string]$item.company.name) -or ([string]$item.company.name).Length -gt 200 -or
+        ($companyKeys -ccontains "verifiedDomain" -and
+          ([string]::IsNullOrWhiteSpace([string]$item.company.verifiedDomain) -or ([string]$item.company.verifiedDomain).Length -gt 253))) {
+        throw "The $Name boundary case returned an invalid company summary shape."
+      }
+    }
   }
   if ($ExpectedStatus -ge 400) {
     $problem = [string]$response.body | ConvertFrom-Json
@@ -258,6 +301,10 @@ try {
   $missingSubjectClaims = New-AuthorizerClaims -Issuer $issuer -Audience $audience
   $null = $missingSubjectClaims.Remove("sub")
   $wrongScopeClaims = New-AuthorizerClaims -Issuer $issuer -Audience $audience -Scope "unrelated:scope"
+  $profileOnlyClaims = New-AuthorizerClaims -Issuer $issuer -Audience $audience -Scope "profile:read"
+  $searchBody = '{"pageSize":1}'
+  $restrictedSearchMarker = "boundary-search-text-must-not-be-reflected"
+  $restrictedQueryMarker = "boundary-query-text-must-not-be-reflected"
 
   $cases = @(
     @{
@@ -301,6 +348,57 @@ try {
       Event = New-HttpApiEvent -Method "GET" -Path "/v1/jobs/00000000-0000-7000-8000-000000000000" -RequestId "boundary-missing-job" -Claims $validClaims
       Status = 404
       Code = "not_found"
+    },
+    @{
+      Name = "job-search"
+      Event = New-HttpApiEvent -Method "POST" -Path "/v1/jobs/search" -RequestId "boundary-job-search" -Claims $validClaims -Body $searchBody -ContentType "application/json"
+      Status = 200
+      Code = $null
+      SuccessContract = "JobSearchPage"
+    },
+    @{
+      Name = "job-search-missing-authorizer"
+      Event = New-HttpApiEvent -Method "POST" -Path "/v1/jobs/search" -RequestId "boundary-job-search-missing-authorizer" -Body $searchBody -ContentType "application/json"
+      Status = 401
+      Code = "authentication_required"
+    },
+    @{
+      Name = "job-search-wrong-scope"
+      Event = New-HttpApiEvent -Method "POST" -Path "/v1/jobs/search" -RequestId "boundary-job-search-wrong-scope" -Claims $profileOnlyClaims -Body $searchBody -ContentType "application/json"
+      Status = 403
+      Code = "forbidden"
+    },
+    @{
+      Name = "job-search-invalid-body"
+      Event = New-HttpApiEvent -Method "POST" -Path "/v1/jobs/search" -RequestId "boundary-job-search-invalid-body" -Claims $validClaims -Body ("{`"query`":`"$restrictedSearchMarker`",`"unsupported`":true}") -ContentType "application/json"
+      Status = 400
+      Code = "invalid_request"
+      ForbiddenResponseText = $restrictedSearchMarker
+    },
+    @{
+      Name = "job-search-oversized"
+      Event = New-HttpApiEvent -Method "POST" -Path "/v1/jobs/search" -RequestId "boundary-job-search-oversized" -Claims $validClaims -Body ("x" * (64 * 1024 + 1)) -ContentType "application/json"
+      Status = 413
+      Code = "payload_too_large"
+    },
+    @{
+      Name = "job-search-wrong-media-type"
+      Event = New-HttpApiEvent -Method "POST" -Path "/v1/jobs/search" -RequestId "boundary-job-search-wrong-media-type" -Claims $validClaims -Body $searchBody -ContentType "text/plain"
+      Status = 415
+      Code = "unsupported_media_type"
+    },
+    @{
+      Name = "job-search-wrong-path"
+      Event = New-HttpApiEvent -Method "POST" -Path "/v1/jobs/search/" -RequestId "boundary-job-search-wrong-path" -Claims $validClaims -Body $searchBody -ContentType "application/json"
+      Status = 404
+      Code = "not_found"
+    },
+    @{
+      Name = "job-search-unexpected-query"
+      Event = New-HttpApiEvent -Method "POST" -Path "/v1/jobs/search" -RequestId "boundary-job-search-unexpected-query" -Claims $validClaims -Body $searchBody -ContentType "application/json" -RawQueryString "query=$restrictedQueryMarker"
+      Status = 400
+      Code = "invalid_request"
+      ForbiddenResponseText = $restrictedQueryMarker
     },
     @{
       Name = "unknown-route"
@@ -365,6 +463,8 @@ try {
       -Event $case.Event `
       -ExpectedStatus $case.Status `
       -ExpectedCode $case.Code `
+      -ForbiddenResponseText $(if ($case.ContainsKey("ForbiddenResponseText")) { $case.ForbiddenResponseText } else { "" }) `
+      -ExpectedSuccessContract $(if ($case.ContainsKey("SuccessContract")) { $case.SuccessContract } else { "" }) `
       -ExpectedVersion $expectedVersion
   }
 

@@ -48,6 +48,8 @@ jobs:
       - name: Build reproducible artifact and CycloneDX SBOM
         id: artifact
         shell: bash
+        env:
+          ARTIFACT_SOURCE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           pnpm --filter @ai-job-apply/gateway build:lambda
@@ -55,6 +57,8 @@ jobs:
           pnpm --filter @ai-job-apply/gateway build:lambda
           second_sha="$(jq -r .artifactSha256 backend/gateway/dist/lambda/gateway-lambda.manifest.json)"
           test "$first_sha" = "$second_sha"
+          test "$(jq -r .schemaVersion backend/gateway/dist/lambda/gateway-lambda.manifest.json)" = "2"
+          test "$(jq -r .sourceSha backend/gateway/dist/lambda/gateway-lambda.manifest.json)" = "$GITHUB_SHA"
           test "$(jq -r .bomFormat backend/gateway/dist/lambda/gateway-lambda.cdx.json)" = "CycloneDX"
           test "$(jq -r .specVersion backend/gateway/dist/lambda/gateway-lambda.cdx.json)" = "1.6"
           base64_sha="$(jq -r .artifactBase64Sha256 backend/gateway/dist/lambda/gateway-lambda.manifest.json)"
