@@ -308,6 +308,68 @@ function Assert-DevelopmentDocumentStageResourceInventory {
   if ($unmanaged.Count -ne 0) { throw "The document stage contains an unmanaged or unexpected runtime resource: $($unmanaged -join ', ')." }
 }
 
+function Get-DevelopmentDocumentLaterStageEndpointGrantCount {
+  param(
+    [Parameter(Mandatory)][object[]]$Policies,
+    [Parameter(Mandatory)][ValidatePattern("^[0-9]{12}$")][string]$AccountId
+  )
+  $processorArn = "arn:aws:iam::${AccountId}:role/ai-job-apply-development-document-processor"
+  $conditionlessSids = @("ExactDocumentProcessorQueueOnly", "CoordinatorInvokesExactParserVersionOnly")
+  $count = 0
+  foreach ($policy in $Policies) {
+    if ($null -eq $policy) { throw "A live endpoint policy is null." }
+    $statementsProperty = $policy.PSObject.Properties["Statement"]
+    if ($null -eq $statementsProperty -or $null -eq $statementsProperty.Value) {
+      throw "A live endpoint policy lacks statements."
+    }
+    foreach ($statement in @($statementsProperty.Value)) {
+      if ($null -eq $statement) { throw "A live endpoint policy contains a null statement." }
+      $sidProperty = $statement.PSObject.Properties["Sid"]
+      $sid = if ($null -eq $sidProperty -or $null -eq $sidProperty.Value) { "" } else { [string]$sidProperty.Value }
+      $conditionProperty = $statement.PSObject.Properties["Condition"]
+
+      if ($sid -in $conditionlessSids) {
+        if ($null -ne $conditionProperty) {
+          throw "The '$sid' endpoint grant must omit Condition canonically."
+        }
+        $count++
+        continue
+      }
+
+      if ($sid -ceq "ExactLambdaRolesDatabaseSecretOnly") {
+        if ($null -eq $conditionProperty -or $null -eq $conditionProperty.Value) {
+          throw "The Secrets endpoint Lambda-role grant requires its exact principal condition."
+        }
+        $condition = $conditionProperty.Value
+        Assert-ExactObjectKeys $condition @("ArnEquals") "Secrets endpoint Lambda-role condition"
+        $arnEqualsProperty = $condition.PSObject.Properties["ArnEquals"]
+        if ($null -eq $arnEqualsProperty -or $null -eq $arnEqualsProperty.Value) {
+          throw "The Secrets endpoint Lambda-role grant lacks ArnEquals."
+        }
+        Assert-ExactObjectKeys $arnEqualsProperty.Value @("aws:PrincipalArn") "Secrets endpoint Lambda-role ArnEquals condition"
+        $principalsProperty = $arnEqualsProperty.Value.PSObject.Properties["aws:PrincipalArn"]
+        $principals = if ($null -eq $principalsProperty -or $null -eq $principalsProperty.Value) { @() } else { @($principalsProperty.Value) }
+        if ($principals.Count -eq 0 -or @($principals | Where-Object {
+              $_ -isnot [string] -or [string]$_ -cnotmatch "^arn:aws:iam::${AccountId}:role/[A-Za-z0-9+=,.@_/-]+$"
+            }).Count -ne 0 -or @($principals | Select-Object -Unique).Count -ne $principals.Count) {
+          throw "The Secrets endpoint Lambda-role principal condition is empty, duplicated, or broadened."
+        }
+        if ($principals -ccontains $processorArn) { $count++ }
+        continue
+      }
+
+      if ($null -eq $conditionProperty -or $null -eq $conditionProperty.Value) { continue }
+      $arnEqualsProperty = $conditionProperty.Value.PSObject.Properties["ArnEquals"]
+      if ($null -eq $arnEqualsProperty -or $null -eq $arnEqualsProperty.Value) { continue }
+      $principalsProperty = $arnEqualsProperty.Value.PSObject.Properties["aws:PrincipalArn"]
+      if ($null -ne $principalsProperty -and @($principalsProperty.Value) -ccontains $processorArn) {
+        throw "An unexpected endpoint statement grants the document processor role."
+      }
+    }
+  }
+  return $count
+}
+
 function Assert-ParserLambdaResourcePolicyAbsence {
   param([AllowNull()][object]$UnqualifiedPolicy, [AllowNull()][object]$QualifiedPolicy)
   if ($null -ne $UnqualifiedPolicy -or $null -ne $QualifiedPolicy) {
