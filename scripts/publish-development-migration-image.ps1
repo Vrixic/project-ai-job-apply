@@ -95,6 +95,37 @@ function Get-TextSha256 {
   } finally { $algorithm.Dispose() }
 }
 
+function ConvertTo-CanonicalUtcWholeSecond {
+  param(
+    [AllowNull()][object]$Value,
+    [Parameter(Mandatory)][string]$Description
+  )
+  if ($Value -is [DateTime]) {
+    $dateTimeValue = [DateTime]$Value
+    if ($dateTimeValue.Kind -ne [DateTimeKind]::Utc -or
+        ($dateTimeValue.Ticks % [TimeSpan]::TicksPerSecond) -ne 0) {
+      throw "$Description must be an exact UTC whole-second timestamp."
+    }
+    return $dateTimeValue.ToString("yyyy-MM-ddTHH:mm:ssZ", [Globalization.CultureInfo]::InvariantCulture)
+  }
+  if ($Value -isnot [string] -or [string]$Value -cnotmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$') {
+    throw "$Description must be an exact UTC whole-second timestamp."
+  }
+  $parsed = [DateTime]::MinValue
+  $valid = [DateTime]::TryParseExact(
+    [string]$Value,
+    "yyyy-MM-ddTHH:mm:ss'Z'",
+    [Globalization.CultureInfo]::InvariantCulture,
+    [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal,
+    [ref]$parsed
+  )
+  if (-not $valid -or $parsed.Kind -ne [DateTimeKind]::Utc -or
+      [string]$Value -cne $parsed.ToString("yyyy-MM-ddTHH:mm:ssZ", [Globalization.CultureInfo]::InvariantCulture)) {
+    throw "$Description must be an exact UTC whole-second timestamp."
+  }
+  return [string]$Value
+}
+
 function Resolve-OperatorPath {
   param([Parameter(Mandatory)][string]$Candidate, [switch]$MustExist)
   if ([string]::IsNullOrWhiteSpace($Candidate)) { throw "A required operator path is missing." }
@@ -207,11 +238,15 @@ function Assert-BuildIdentity {
   )
   $labels = Get-OptionalProperty -Object $Image.Config -Name "Labels"
   $layers = @(Get-OptionalProperty -Object $Image.RootFS -Name "Layers")
+  $imageCreated = ConvertTo-CanonicalUtcWholeSecond -Value $Image.Created -Description "Image.Created"
+  $labelCreated = ConvertTo-CanonicalUtcWholeSecond `
+    -Value (Get-OptionalProperty -Object $labels -Name "org.opencontainers.image.created") `
+    -Description "The org.opencontainers.image.created label"
   if ([string]$Image.Id -notmatch '^sha256:[a-f0-9]{64}$' -or
       [string]$Image.Os -cne "linux" -or [string]$Image.Architecture -cne "amd64" -or
-      [string]$Image.Created -cne $ExpectedCreated -or
+      $imageCreated -cne $ExpectedCreated -or
       [string](Get-OptionalProperty -Object $labels -Name "org.opencontainers.image.revision") -cne $ExpectedSourceSha -or
-      [string](Get-OptionalProperty -Object $labels -Name "org.opencontainers.image.created") -cne $ExpectedCreated -or
+      $labelCreated -cne $ExpectedCreated -or
       [string](Get-OptionalProperty -Object $labels -Name "org.opencontainers.image.title") -cne "ai-job-apply-migration" -or
       $layers.Count -lt 1 -or @($layers | Where-Object { [string]$_ -notmatch '^sha256:[a-f0-9]{64}$' }).Count -ne 0) {
     throw "The local image is not the exact source-bound linux/amd64 migration artifact."

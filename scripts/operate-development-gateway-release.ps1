@@ -81,6 +81,21 @@ function Get-TextSha256 {
   try { return ([BitConverter]::ToString($algorithm.ComputeHash([Text.Encoding]::UTF8.GetBytes($Value)))).Replace("-", "").ToLowerInvariant() }
   finally { $algorithm.Dispose() }
 }
+function Get-OptionalProperty {
+  param([AllowNull()][object]$Object, [Parameter(Mandatory)][string]$Name)
+  if ($null -eq $Object) { return $null }
+  $property = $Object.PSObject.Properties[$Name]
+  if ($null -eq $property) { return $null }
+  return $property.Value
+}
+function Get-GatewayKeyHistoryMatches {
+  param([AllowNull()][object]$Result, [Parameter(Mandatory)][string]$Key)
+  $versions = @(Get-OptionalProperty -Object $Result -Name "Versions")
+  $deleteMarkers = @(Get-OptionalProperty -Object $Result -Name "DeleteMarkers")
+  return @(@($versions + $deleteMarkers) | Where-Object {
+      $null -ne $_ -and [string](Get-OptionalProperty -Object $_ -Name "Key") -ceq $Key
+    })
+}
 function Invoke-AwsJson {
   param([Parameter(Mandatory)][string[]]$Arguments, [Parameter(Mandatory)][string]$Operation)
   $raw = & aws @Arguments 2>$null
@@ -396,11 +411,7 @@ if ($Action -ceq "Publish") {
   foreach ($suffix in @("zip", "cdx.json", "manifest.json", "sha256")) {
     $key = "$prefix/gateway-lambda.$suffix"
     $history = Invoke-AwsJson @("s3api", "list-object-versions", "--bucket", $boundary.Bucket, "--prefix", $key, "--max-keys", "20", "--output", "json") "Immutable destination validation"
-    $versionsProperty = $history.PSObject.Properties["Versions"]
-    $markersProperty = $history.PSObject.Properties["DeleteMarkers"]
-    $versions = if ($null -eq $versionsProperty) { @() } else { @($versionsProperty.Value) }
-    $markers = if ($null -eq $markersProperty) { @() } else { @($markersProperty.Value) }
-    if (@($versions + $markers | Where-Object { [string]$_.Key -ceq $key }).Count -ne 0) { throw "An immutable gateway destination key or delete marker already exists." }
+    if (@(Get-GatewayKeyHistoryMatches -Result $history -Key $key).Count -ne 0) { throw "An immutable gateway destination key or delete marker already exists." }
     $file = $second.Files[$suffix]
     $entries += [ordered]@{ artifactName = $artifactName; artifactSha256 = $second.ArtifactSha256; suffix = $suffix; key = $key; versionId = ""; objectSha256 = $file.Sha256; objectBase64Sha256 = $file.Base64Sha256; contentLength = $file.Length; localPath = $file.Path }
   }
