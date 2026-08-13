@@ -124,9 +124,9 @@ if ((ConvertTo-DevelopmentDocumentComparableVariableValue oidc_audience '["liter
 }
 
 $expected = Get-DevelopmentDocumentDarkExpectedActions
-if ($expected.Count -ne 45) { throw "Expected 45 exact dark deployment changes." }
+if ($expected.Count -ne 44) { throw "Expected 44 exact post-prerequisite dark deployment changes." }
 if (@($expected.Values | Where-Object { $_ -eq "create" }).Count -ne 39) { throw "Expected 39 creates." }
-if (@($expected.Values | Where-Object { $_ -eq "update" }).Count -ne 6) { throw "Expected six updates." }
+if (@($expected.Values | Where-Object { $_ -eq "update" }).Count -ne 5) { throw "Expected five post-prerequisite updates." }
 
 $emptyRootMap = Get-TerraformStateResourceMap -RootModule ([pscustomobject]@{
     child_modules = @([pscustomobject]@{
@@ -233,23 +233,176 @@ $updates = @{
   "module.platform.aws_vpc_endpoint.lambda[0]" = New-PolicyUpdate (New-PolicyJson @($base)) (New-PolicyJson @($base, $lambdaParser))
   "module.platform.aws_vpc_endpoint.secretsmanager[0]" = New-PolicyUpdate (New-PolicyJson @($base, $secretBase)) (New-PolicyJson @($base, $secretAfter))
 }
+$lambdaTrust = New-PolicyJson @([pscustomobject]@{ Effect = "Allow"; Action = "sts:AssumeRole"; Principal = [pscustomobject]@{ Service = "lambda.amazonaws.com" } })
+$objectTrust = New-PolicyJson @([pscustomobject]@{ Effect = "Allow"; Action = "sts:AssumeRole"; Principal = [pscustomobject]@{ AWS = $processorRole } })
+$kmsArn = "arn:aws:kms:${region}:${account}:key/00000000-0000-0000-0000-000000000001"
+$bucket = "arn:aws:s3:::ai-job-apply-development-candidate-docs-$account"
+$processorStatements = @(
+  [pscustomobject]@{ Sid="WriteOwnedLogs"; Effect="Allow"; Action=@("logs:CreateLogStream","logs:PutLogEvents"); Resource="arn:aws:logs:${region}:${account}:log-group:/ai-job-apply/development/application:*" },
+  [pscustomobject]@{ Sid="ManageVpcInterfaces"; Effect="Allow"; Action=@("ec2:AssignPrivateIpAddresses","ec2:CreateNetworkInterface","ec2:DeleteNetworkInterface","ec2:DescribeNetworkInterfaces","ec2:DescribeSubnets","ec2:UnassignPrivateIpAddresses"); Resource="*" },
+  [pscustomobject]@{ Sid="ReadDatabaseSecret"; Effect="Allow"; Action="secretsmanager:GetSecretValue"; Resource="arn:aws:secretsmanager:${region}:${account}:secret:ai-job-apply/development/database-url-x" },
+  [pscustomobject]@{ Sid="ConsumeExactScanQueue"; Effect="Allow"; Action=@("sqs:ChangeMessageVisibility","sqs:DeleteMessage","sqs:GetQueueAttributes","sqs:ReceiveMessage"); Resource="arn:aws:sqs:${region}:${account}:ai-job-apply-development-document-scan-results" },
+  [pscustomobject]@{ Sid="InvokeExactParserVersion"; Effect="Allow"; Action="lambda:InvokeFunction"; Resource="arn:aws:lambda:${region}:${account}:function:ai-job-apply-development-document-parser:1" },
+  [pscustomobject]@{ Sid="AssumeExactObjectAccessRole"; Effect="Allow"; Action="sts:AssumeRole"; Resource="arn:aws:iam::${account}:role/ai-job-apply-development-document-object-access" },
+  [pscustomobject]@{ Sid="ReadNormalizedDocumentsOnly"; Effect="Allow"; Action=@("s3:GetObject","s3:GetObjectVersion"); Resource="$bucket/normalized/*" },
+  [pscustomobject]@{ Sid="DecryptOwnedRuntimeData"; Effect="Allow"; Action=@("kms:Decrypt","kms:GenerateDataKey"); Resource=$kmsArn },
+  [pscustomobject]@{ Sid="WriteNativeTraces"; Effect="Allow"; Action=@("xray:PutTelemetryRecords","xray:PutTraceSegments"); Resource="*" }
+)
+$parserStatements = @(
+  $processorStatements[1],
+  [pscustomobject]@{ Sid="DecryptLambdaEnvironment"; Effect="Allow"; Action="kms:Decrypt"; Resource=$kmsArn; Condition=[pscustomobject]@{ StringEquals=[pscustomobject]@{ "kms:ViaService"="lambda.${region}.amazonaws.com" } } }
+)
+$objectStatements = @(
+  [pscustomobject]@{ Sid="SessionPolicyMustNarrowObjectAccess"; Effect="Allow"; Action=@("s3:GetObject","s3:GetObjectVersion","s3:GetObjectTagging","s3:GetObjectVersionTagging","s3:PutObject"); Resource=@("$bucket/quarantine/*","$bucket/normalized/*") },
+  [pscustomobject]@{ Sid="EncryptAndDecryptViaS3Only"; Effect="Allow"; Action=@("kms:Decrypt","kms:GenerateDataKey"); Resource=$kmsArn; Condition=[pscustomobject]@{ StringEquals=[pscustomobject]@{ "kms:ViaService"="s3.${region}.amazonaws.com" } } }
+)
+function New-QueuePolicy([string]$Sid,[string]$Queue,[string[]]$Rules) {
+  New-PolicyJson @([pscustomobject]@{ Sid=$Sid; Effect="Allow"; Action="sqs:SendMessage"; Resource="arn:aws:sqs:${region}:${account}:$Queue"; Principal=[pscustomobject]@{ Service="events.amazonaws.com" }; Condition=[pscustomobject]@{ ArnEquals=[pscustomobject]@{ "aws:SourceArn"=@($Rules|ForEach-Object{"arn:aws:events:${region}:${account}:rule/$_"}) }; StringEquals=[pscustomobject]@{ "aws:SourceAccount"=$account } } })
+}
+$s3EndpointStatements = @(
+  [pscustomobject]@{ Sid="ExactParserQuarantineReadsOnly";Effect="Allow";Action=@("s3:GetObject","s3:GetObjectVersion","s3:GetObjectTagging","s3:GetObjectVersionTagging");Resource="$bucket/quarantine/*";Principal=[pscustomobject]@{AWS="*"};Condition=[pscustomobject]@{ArnEquals=[pscustomobject]@{"aws:PrincipalArn"="arn:aws:iam::${account}:role/ai-job-apply-development-document-object-access"}}},
+  [pscustomobject]@{ Sid="ExactParserNormalizedWritesAndVerification";Effect="Allow";Action=@("s3:GetObject","s3:GetObjectVersion","s3:PutObject");Resource="$bucket/normalized/*";Principal=[pscustomobject]@{AWS="*"};Condition=[pscustomobject]@{ArnEquals=[pscustomobject]@{"aws:PrincipalArn"="arn:aws:iam::${account}:role/ai-job-apply-development-document-object-access"}}},
+  [pscustomobject]@{ Sid="ExactCoordinatorNormalizedReadsOnly";Effect="Allow";Action=@("s3:GetObject","s3:GetObjectVersion");Resource="$bucket/normalized/*";Principal=[pscustomobject]@{AWS="*"};Condition=[pscustomobject]@{ArnEquals=[pscustomobject]@{"aws:PrincipalArn"=$processorRole}}}
+)
+$stsEndpointPolicy = New-PolicyJson @([pscustomobject]@{ Sid="CoordinatorAssumesExactDocumentObjectRoleOnly";Effect="Allow";Action="sts:AssumeRole";Resource="arn:aws:iam::${account}:role/ai-job-apply-development-document-object-access";Principal=[pscustomobject]@{AWS="*"};Condition=[pscustomobject]@{ArnEquals=[pscustomobject]@{"aws:PrincipalArn"=$processorRole}} })
 
 $changes = @()
 foreach ($entry in $expected.GetEnumerator()) {
   $after = [pscustomobject]@{}
-  if ($entry.Key -eq "module.platform.aws_cloudwatch_event_rule.document_scan_results[0]" -or
-    $entry.Key -eq "module.platform.aws_cloudwatch_event_rule.document_processing_reconciler[0]") {
+  if ($entry.Key -like "module.platform.aws_cloudwatch_event_rule.document_*") {
     $after | Add-Member state "DISABLED"
   }
   if ($entry.Key -eq "module.platform.aws_lambda_event_source_mapping.document_scan_results[0]") {
     $after | Add-Member enabled $false
   }
+  $securityValue = switch ($entry.Key) {
+    "module.platform.aws_iam_role.document_processor[0]" { @("assume_role_policy",$lambdaTrust) }
+    "module.platform.aws_iam_role.document_parser[0]" { @("assume_role_policy",$lambdaTrust) }
+    "module.platform.aws_iam_role.document_parser_object_access[0]" { @("assume_role_policy",$objectTrust) }
+    "module.platform.aws_iam_role_policy.document_parser[0]" { @("policy",(New-PolicyJson $parserStatements)) }
+    "module.platform.aws_iam_role_policy.document_parser_object_access[0]" { @("policy",(New-PolicyJson $objectStatements)) }
+    "module.platform.aws_iam_role_policy.document_processor[0]" { @("policy",(New-PolicyJson $processorStatements)) }
+    "module.platform.aws_sqs_queue_policy.document_scan_delivery_dead_letter[0]" { @("policy",(New-QueuePolicy "ExactEventBridgeRuleDeadLettersOnly" "ai-job-apply-development-document-scan-delivery-dlq" @("ai-job-apply-development-document-scan-results","ai-job-apply-development-document-scan-tag-failure","ai-job-apply-development-document-scan-plan-unhealthy","ai-job-apply-development-document-processing-reconciler"))) }
+    "module.platform.aws_sqs_queue_policy.document_scan_results[0]" { @("policy",(New-QueuePolicy "ExactGuardDutyResultRuleOnly" "ai-job-apply-development-document-scan-results" @("ai-job-apply-development-document-scan-results"))) }
+    "module.platform.aws_vpc_endpoint.candidate_documents_s3[0]" { @("policy",(New-PolicyJson $s3EndpointStatements)) }
+    "module.platform.aws_vpc_endpoint.sts[0]" { @("policy",$stsEndpointPolicy) }
+  }
+  if ($securityValue) { $after | Add-Member $securityValue[0] $securityValue[1] }
+  if ($entry.Key -like "module.platform.aws_sqs_queue_policy.document_scan_*") {
+    $queueName = if ($entry.Key -like "*delivery_dead_letter*") { "ai-job-apply-development-document-scan-delivery-dlq" } else { "ai-job-apply-development-document-scan-results" }
+    $after | Add-Member queue_url "https://sqs.us-east-2.amazonaws.com/$account/$queueName"
+  }
   $change = if ($entry.Value -eq "update") { $updates[$entry.Key] }
-    else { [pscustomobject]@{ actions = @($entry.Value); after = $after } }
-  $changes += [pscustomobject]@{ address = $entry.Key; change = $change }
+    else { [pscustomobject]@{ actions = @($entry.Value); after = $after; after_unknown = [pscustomobject]@{} } }
+  $changes += [pscustomobject]@{ address = $entry.Key; mode = "managed"; change = $change }
 }
-$plan = [pscustomobject]@{ resource_changes = $changes }
+$dataReads = @(Get-DevelopmentDocumentDarkExpectedDataReads | ForEach-Object {
+    [pscustomobject]@{
+      address = $_; mode = "data"; type = "aws_iam_policy_document"
+      change = [pscustomobject]@{ actions = @("read"); before = $null; replace_paths = $null
+        before_sensitive = [pscustomobject]@{}; after_sensitive = [pscustomobject]@{} }
+    }
+  })
+$kmsNoop = [pscustomobject]@{
+  address = "module.platform.aws_kms_key.platform"; mode = "managed"; type = "aws_kms_key"
+  change = [pscustomobject]@{ actions = @("no-op"); before = [pscustomobject]@{ arn = $kmsArn }
+    after = [pscustomobject]@{ arn = $kmsArn }; after_unknown = [pscustomobject]@{}
+    before_sensitive = [pscustomobject]@{}; after_sensitive = [pscustomobject]@{} }
+}
+$resourceDrift = @(
+  [pscustomobject]@{
+    address = "module.platform.aws_db_instance.postgres[0]"; mode = "managed"; type = "aws_db_instance"
+    change = [pscustomobject]@{ actions = @("update"); replace_paths = $null; after_unknown = [pscustomobject]@{}
+      before_sensitive = [pscustomobject]@{}; after_sensitive = [pscustomobject]@{}
+      before = [pscustomobject]@{ id = "db"; latest_restorable_time = "2026-08-12T22:13:52Z" }
+      after = [pscustomobject]@{ id = "db"; latest_restorable_time = "2026-08-13T02:03:53Z" } }
+  },
+  [pscustomobject]@{
+    address = "module.platform.aws_ecs_task_definition.migration[0]"; mode = "managed"; type = "aws_ecs_task_definition"
+    change = [pscustomobject]@{ actions = @("update"); replace_paths = $null; after_unknown = [pscustomobject]@{}
+      before_sensitive = [pscustomobject]@{}; after_sensitive = [pscustomobject]@{}
+      before = [pscustomobject]@{ id = "migration"; tags = $null }
+      after = [pscustomobject]@{ id = "migration"; tags = [pscustomobject]@{} } }
+  }
+)
+$plan = [pscustomobject]@{ resource_changes = @($changes + $dataReads + $kmsNoop); resource_drift = $resourceDrift }
 $null = Assert-DevelopmentDocumentDarkPlan -Plan $plan -AccountId $account
+
+$unknownSecurityPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$unknownSecurityChange = @($unknownSecurityPlan.resource_changes | Where-Object address -eq "module.platform.aws_iam_role_policy.document_processor[0]")[0]
+$unknownSecurityChange.change.after_unknown | Add-Member policy $true
+$rejected = $false
+try { $null = Assert-DevelopmentDocumentDarkPlan $unknownSecurityPlan $account } catch { $rejected = $true }
+if (-not $rejected) { throw "An unknown created security policy was accepted." }
+$broadCreatedPolicyPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$broadCreatedPolicy = @($broadCreatedPolicyPlan.resource_changes | Where-Object address -eq "module.platform.aws_iam_role_policy.document_parser[0]")[0]
+$broadCreatedPolicyJson = $broadCreatedPolicy.change.after.policy | ConvertFrom-Json
+@($broadCreatedPolicyJson.Statement | Where-Object Sid -eq "DecryptLambdaEnvironment")[0].Action = @("kms:Decrypt", "kms:GenerateDataKey")
+$broadCreatedPolicy.change.after.policy = $broadCreatedPolicyJson | ConvertTo-Json -Compress -Depth 30
+$rejected = $false
+try { $null = Assert-DevelopmentDocumentDarkPlan $broadCreatedPolicyPlan $account } catch { $rejected = $true }
+if (-not $rejected) { throw "A broadened created role policy was accepted." }
+$broadTrustPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$broadTrust = @($broadTrustPlan.resource_changes | Where-Object address -eq "module.platform.aws_iam_role.document_processor[0]")[0]
+$broadTrustJson = $broadTrust.change.after.assume_role_policy | ConvertFrom-Json
+$broadTrustJson.Statement[0].Principal.Service = "ec2.amazonaws.com"
+$broadTrust.change.after.assume_role_policy = $broadTrustJson | ConvertTo-Json -Compress -Depth 30
+$rejected = $false
+try { $null = Assert-DevelopmentDocumentDarkPlan $broadTrustPlan $account } catch { $rejected = $true }
+if (-not $rejected) { throw "A broadened created role trust was accepted." }
+$extraTrustKeyPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$extraTrust = @($extraTrustKeyPlan.resource_changes | Where-Object address -eq "module.platform.aws_iam_role.document_processor[0]")[0]
+$extraTrustJson = $extraTrust.change.after.assume_role_policy | ConvertFrom-Json
+$extraTrustJson.Statement[0] | Add-Member Condition ([pscustomobject]@{ StringEquals = [pscustomobject]@{ "aws:SourceAccount" = $account } })
+$extraTrust.change.after.assume_role_policy = $extraTrustJson | ConvertTo-Json -Compress -Depth 30
+$rejected = $false
+try { $null = Assert-DevelopmentDocumentDarkPlan $extraTrustKeyPlan $account } catch { $rejected = $true }
+if (-not $rejected) { throw "A role trust with an extra condition was accepted." }
+$wrongS3VersionPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$wrongS3Version = @($wrongS3VersionPlan.resource_changes | Where-Object address -eq "module.platform.aws_vpc_endpoint.candidate_documents_s3[0]")[0]
+$wrongS3VersionJson = $wrongS3Version.change.after.policy | ConvertFrom-Json
+$wrongS3VersionJson.Version = "2008-10-17"
+$wrongS3Version.change.after.policy = $wrongS3VersionJson | ConvertTo-Json -Compress -Depth 30
+$rejected = $false
+try { $null = Assert-DevelopmentDocumentDarkPlan $wrongS3VersionPlan $account } catch { $rejected = $true }
+if (-not $rejected) { throw "An S3 endpoint policy with the wrong version was accepted." }
+$wrongKmsBindingPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$wrongKmsPolicy = @($wrongKmsBindingPlan.resource_changes | Where-Object address -eq "module.platform.aws_iam_role_policy.document_parser[0]")[0]
+$wrongKmsPolicyJson = $wrongKmsPolicy.change.after.policy | ConvertFrom-Json
+@($wrongKmsPolicyJson.Statement | Where-Object Sid -eq "DecryptLambdaEnvironment")[0].Resource = "arn:aws:kms:${region}:${account}:key/00000000-0000-0000-0000-000000000002"
+$wrongKmsPolicy.change.after.policy = $wrongKmsPolicyJson | ConvertTo-Json -Compress -Depth 30
+$rejected = $false
+try { $null = Assert-DevelopmentDocumentDarkPlan $wrongKmsBindingPlan $account } catch { $rejected = $true }
+if (-not $rejected) { throw "A same-account but different KMS key was accepted." }
+$wrongQueueUrlPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+@($wrongQueueUrlPlan.resource_changes | Where-Object address -eq "module.platform.aws_sqs_queue_policy.document_scan_results[0]")[0].change.after.queue_url = "https://sqs.us-east-2.amazonaws.com/$account/other"
+$rejected = $false
+try { $null = Assert-DevelopmentDocumentDarkPlan $wrongQueueUrlPlan $account } catch { $rejected = $true }
+if (-not $rejected) { throw "A queue policy with a different URL was accepted." }
+$extraDataPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$extraDataPlan.resource_changes += [pscustomobject]@{
+  address = "module.platform.data.aws_iam_policy_document.unreviewed[0]"; mode = "data"; type = "aws_iam_policy_document"
+  change = [pscustomobject]@{ actions = @("read"); before = $null; replace_paths = $null
+    before_sensitive = [pscustomobject]@{}; after_sensitive = [pscustomobject]@{} }
+}
+$rejected = $false
+try { $null = Assert-DevelopmentDocumentDarkPlan $extraDataPlan $account } catch { $rejected = $true }
+if (-not $rejected) { throw "An unreviewed deferred data read was accepted." }
+$badDriftPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$badDriftPlan.resource_drift[0].change.after.id = "changed"
+$rejected = $false
+try { $null = Assert-DevelopmentDocumentDarkPlan $badDriftPlan $account } catch { $rejected = $true }
+if (-not $rejected) { throw "Resource drift affecting more than the accepted provider field was accepted." }
+$backwardDriftPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$backwardDriftPlan.resource_drift[0].change.after.latest_restorable_time = "2026-08-12T21:13:52Z"
+$rejected = $false
+try { $null = Assert-DevelopmentDocumentDarkPlan $backwardDriftPlan $account } catch { $rejected = $true }
+if (-not $rejected) { throw "A backward RDS restore clock was accepted." }
+$fractionalDriftPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$fractionalDriftPlan.resource_drift[0].change.after.latest_restorable_time = "2026-08-13T02:03:53.123Z"
+$rejected = $false
+try { $null = Assert-DevelopmentDocumentDarkPlan $fractionalDriftPlan $account } catch { $rejected = $true }
+if (-not $rejected) { throw "A non-whole-second RDS restore clock was accepted." }
 
 $badPlan = $plan | ConvertTo-Json -Depth 10 | ConvertFrom-Json
 @($badPlan.resource_changes | Where-Object address -eq "module.platform.aws_lambda_event_source_mapping.document_scan_results[0]")[0].change.after.enabled = $true
@@ -304,6 +457,7 @@ $baselineVariables = [pscustomobject]@{
   oidc_audience = [pscustomobject]@{ value = "same" }
 }
 $planVariables = $baselineVariables | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+$planVariables | Add-Member document_processing_kms_prerequisite_enabled ([pscustomobject]@{ value = "true" })
 $planVariables.deploy_document_processing.value = "true"
 $planVariables.candidate_document_cors_allowed_origins.value = @("https://app.example")
 $planVariables.gateway_lambda_reserved_concurrency.value = "2"
@@ -317,6 +471,24 @@ $planVariables.document_parser_artifact_sha256.value = $parserSha
 $planVariables.document_parser_artifact_base64sha256.value = ("Z" * 43) + "="
 $planVariables.document_processor_extension_layer_arn.value = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
 Assert-DevelopmentDocumentDarkVariables -BaselineVariables $baselineVariables -PlanVariables $planVariables -Receipt $receipt
+$prerequisiteVariables = $baselineVariables | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+$prerequisiteVariables | Add-Member document_processing_kms_prerequisite_enabled ([pscustomobject]@{ value = "true" })
+$prerequisiteVariables.candidate_document_cors_allowed_origins.value = @("https://app.example")
+Assert-DevelopmentDocumentKmsPrerequisiteVariables $baselineVariables $prerequisiteVariables
+$kmsPrerequisiteChange = [pscustomobject]@{
+  address = "module.platform.aws_kms_key.platform"; mode = "managed"; type = "aws_kms_key"
+  change = $updates["module.platform.aws_kms_key.platform"]
+}
+$kmsPrerequisitePlan = [pscustomobject]@{ resource_changes = @($kmsPrerequisiteChange); resource_drift = $resourceDrift }
+$null = Assert-DevelopmentDocumentKmsPrerequisitePlan $kmsPrerequisitePlan $account
+$badPrerequisitePlan = $kmsPrerequisitePlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$badPrerequisitePlan.resource_changes += [pscustomobject]@{
+  address = "module.platform.aws_sns_topic_policy.operational_alerts"; mode = "managed"; type = "aws_sns_topic_policy"
+  change = [pscustomobject]@{ actions = @("update") }
+}
+$rejected = $false
+try { $null = Assert-DevelopmentDocumentKmsPrerequisitePlan $badPrerequisitePlan $account } catch { $rejected = $true }
+if (-not $rejected) { throw "A second prerequisite mutation was accepted." }
 $differentCompositeVariables = $planVariables | ConvertTo-Json -Depth 10 | ConvertFrom-Json
 $differentCompositeVariables.candidate_document_cors_allowed_origins.value = @("https://other.example")
 $rejected = $false
@@ -401,5 +573,13 @@ if ($documentSource -notmatch "DenyQuarantineReadsWithoutCleanMalwareTag" -or
   $documentSource -notmatch 'document_scan_mapping_enabled\s*\?\s*"ENABLED"\s*:\s*"DISABLED"') {
   throw "The semantic guard is detached from current document isolation source."
 }
+if ($platformSource -notmatch 'platform_kms_key_arn\s*=\s*"arn:aws:kms:' -or
+  @([regex]::Matches($platformSource, 'var\.document_processing_kms_prerequisite_enabled\s*\?\s*\[1\]\s*:\s*\[\]')).Count -ne 2) {
+  throw "The KMS prerequisite is not isolated behind its exact plan-known source boundary."
+}
+foreach ($ruleName in @("document_scan_tag_failure", "document_scan_plan_unhealthy")) {
+  $rulePattern = 'resource\s+"aws_cloudwatch_event_rule"\s+"' + $ruleName + '"(?s:.*?)state\s*=\s*"DISABLED"'
+  if ($documentSource -notmatch $rulePattern) { throw "A document health rule is not explicitly dark." }
+}
 
-Write-Output "Development document dark guard tests passed: 54"
+Write-Output "Development document dark guard tests passed: 75"

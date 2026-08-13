@@ -110,7 +110,7 @@ data "aws_iam_policy_document" "candidate_documents" {
     condition {
       test     = "StringNotEquals"
       variable = "s3:x-amz-server-side-encryption-aws-kms-key-id"
-      values   = [aws_kms_key.platform.arn]
+      values   = [local.platform_kms_key_arn]
     }
     condition {
       test     = "ArnNotEquals"
@@ -223,7 +223,7 @@ data "aws_iam_policy_document" "guardduty_malware" {
     sid       = "AllowDecryptForMalwareScan"
     effect    = "Allow"
     actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
-    resources = [aws_kms_key.platform.arn]
+    resources = [local.platform_kms_key_arn]
     condition {
       test     = "StringLike"
       variable = "kms:ViaService"
@@ -412,6 +412,7 @@ resource "aws_cloudwatch_event_rule" "document_scan_tag_failure" {
   count       = var.deploy_document_processing ? 1 : 0
   name        = "${var.name}-${var.environment}-document-scan-tag-failure"
   description = "Exact GuardDuty post-scan tag failure for the candidate-document plan"
+  state       = "DISABLED"
   event_pattern = jsonencode({
     source      = ["aws.guardduty"]
     detail-type = ["GuardDuty Malware Protection Post Scan Action Failed"]
@@ -444,6 +445,7 @@ resource "aws_cloudwatch_event_rule" "document_scan_plan_unhealthy" {
   count       = var.deploy_document_processing ? 1 : 0
   name        = "${var.name}-${var.environment}-document-scan-plan-unhealthy"
   description = "Exact GuardDuty candidate-document protection-plan warning or error"
+  state       = "DISABLED"
   event_pattern = jsonencode({
     source = ["aws.guardduty"]
     detail-type = [
@@ -573,7 +575,7 @@ data "aws_iam_policy_document" "document_processor" {
     sid       = "DecryptOwnedRuntimeData"
     effect    = "Allow"
     actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
-    resources = [aws_kms_key.platform.arn]
+    resources = [local.platform_kms_key_arn]
   }
   statement {
     sid       = "WriteNativeTraces"
@@ -599,7 +601,7 @@ data "aws_iam_policy_document" "document_parser" {
     sid       = "DecryptLambdaEnvironment"
     effect    = "Allow"
     actions   = ["kms:Decrypt"]
-    resources = [aws_kms_key.platform.arn]
+    resources = [local.platform_kms_key_arn]
     condition {
       test     = "StringEquals"
       variable = "kms:ViaService"
@@ -626,7 +628,7 @@ data "aws_iam_policy_document" "document_parser_object_access" {
     sid       = "EncryptAndDecryptViaS3Only"
     effect    = "Allow"
     actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
-    resources = [aws_kms_key.platform.arn]
+    resources = [local.platform_kms_key_arn]
     condition {
       test     = "StringEquals"
       variable = "kms:ViaService"

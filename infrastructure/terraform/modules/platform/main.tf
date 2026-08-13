@@ -18,6 +18,7 @@ locals {
   operational_metric_namespace  = "${var.name}/${var.environment}/operational"
   observability_runbook_url     = "https://github.com/Vrixic/project-ai-job-apply/blob/main/infrastructure/runbooks/observability/development-alert-delivery.md"
   provider_recovery_runbook_url = "https://github.com/Vrixic/project-ai-job-apply/blob/main/infrastructure/runbooks/providers/development-provider-and-log-recovery.md"
+  platform_kms_key_arn          = "arn:aws:kms:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:key/${aws_kms_key.platform.key_id}"
   database_metric_identifier = (
     var.persistent_data_plane_enabled
     ? aws_db_instance.postgres[0].identifier
@@ -70,7 +71,7 @@ data "aws_iam_policy_document" "platform_kms" {
   }
 
   dynamic "statement" {
-    for_each = var.deploy_document_processing ? [1] : []
+    for_each = var.document_processing_kms_prerequisite_enabled ? [1] : []
     content {
       sid    = "AllowEventBridgeDocumentScanQueueEncryption"
       effect = "Allow"
@@ -100,7 +101,7 @@ data "aws_iam_policy_document" "platform_kms" {
   }
 
   dynamic "statement" {
-    for_each = var.deploy_document_processing ? [1] : []
+    for_each = var.document_processing_kms_prerequisite_enabled ? [1] : []
     content {
       sid       = "AllowEventBridgeDocumentOperationalAlertEncryption"
       effect    = "Allow"
@@ -700,7 +701,7 @@ resource "aws_iam_role_policy" "execution_secrets" {
       Action = ["secretsmanager:GetSecretValue", "kms:Decrypt"]
       Resource = [
         aws_secretsmanager_secret.database_url.arn,
-        aws_kms_key.platform.arn
+        local.platform_kms_key_arn
       ]
     }]
   })
@@ -1116,7 +1117,7 @@ data "aws_iam_policy_document" "gateway_lambda" {
     sid       = "DecryptDatabaseSecret"
     effect    = "Allow"
     actions   = ["kms:Decrypt"]
-    resources = [aws_kms_key.platform.arn]
+    resources = [local.platform_kms_key_arn]
   }
 
   statement {
@@ -1148,7 +1149,7 @@ data "aws_iam_policy_document" "gateway_lambda" {
         "kms:Decrypt",
         "kms:GenerateDataKey"
       ]
-      resources = [aws_kms_key.platform.arn]
+      resources = [local.platform_kms_key_arn]
     }
   }
 
@@ -1168,7 +1169,7 @@ data "aws_iam_policy_document" "gateway_lambda" {
       sid       = "EncryptCandidateDocumentUploads"
       effect    = "Allow"
       actions   = ["kms:GenerateDataKey"]
-      resources = [aws_kms_key.platform.arn]
+      resources = [local.platform_kms_key_arn]
     }
   }
 }
@@ -1456,7 +1457,7 @@ data "aws_iam_policy_document" "outbox_starter" {
     sid       = "DecryptOwnedData"
     effect    = "Allow"
     actions   = ["kms:Decrypt"]
-    resources = [aws_kms_key.platform.arn]
+    resources = [local.platform_kms_key_arn]
   }
 
   statement {
@@ -1514,7 +1515,7 @@ data "aws_iam_policy_document" "outbox_reconciler" {
     sid       = "DecryptOwnedData"
     effect    = "Allow"
     actions   = ["kms:Decrypt"]
-    resources = [aws_kms_key.platform.arn]
+    resources = [local.platform_kms_key_arn]
   }
 
   statement {
@@ -1531,7 +1532,7 @@ data "aws_iam_policy_document" "outbox_reconciler" {
       "kms:Decrypt",
       "kms:GenerateDataKey"
     ]
-    resources = [aws_kms_key.platform.arn]
+    resources = [local.platform_kms_key_arn]
   }
 }
 

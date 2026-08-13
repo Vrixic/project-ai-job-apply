@@ -273,6 +273,11 @@ for (const required of [
 ]) {
   requireText(durable, required, `durable security/replay boundary is missing: ${required}`);
 }
+requireText(
+  platform,
+  'platform_kms_key_arn          = "arn:aws:kms:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:key/${aws_kms_key.platform.key_id}"',
+  "the stable plan-known platform KMS ARN invariant is missing",
+);
 const durableStack = section(
   durable,
   'resource "aws_cloudformation_stack" "profile_readiness_durable"',
@@ -321,7 +326,7 @@ for (const policy of ["gateway_lambda", "outbox_reconciler"]) {
     `data "aws_iam_policy_document" "${policy}"`,
     `resource "aws_iam_role_policy" "${policy}"`,
   );
-  for (const required of ['"kms:Decrypt"', '"kms:GenerateDataKey"', "aws_kms_key.platform.arn"]) {
+  for (const required of ['"kms:Decrypt"', '"kms:GenerateDataKey"', "local.platform_kms_key_arn"]) {
     if (!policySource.includes(required)) {
       failures.push(
         `${platform}: ${policy} is missing encrypted outbox producer permission ${required}`,

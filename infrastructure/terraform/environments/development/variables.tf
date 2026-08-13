@@ -103,6 +103,11 @@ variable "deploy_document_processing" {
   type    = bool
   default = false
 }
+variable "document_processing_kms_prerequisite_enabled" {
+  description = "Stage only the exact document EventBridge KMS grants before dark resource creation."
+  type        = bool
+  default     = false
+}
 variable "document_scan_mapping_enabled" {
   type    = bool
   default = false
