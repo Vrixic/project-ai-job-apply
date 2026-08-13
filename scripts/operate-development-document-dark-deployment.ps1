@@ -703,13 +703,12 @@ function Get-LiveDocumentStageInventory {
   $vpcId = [string]$State["module.platform.aws_vpc.this"].id
   $endpoints = @((Invoke-AwsJson @("ec2", "describe-vpc-endpoints", "--filters", "Name=vpc-id,Values=$vpcId", "--output", "json")).VpcEndpoints)
   $sts = @($endpoints | Where-Object ServiceName -eq "com.amazonaws.$Region.sts")
-  $laterSids = @("ExactDocumentProcessorQueueOnly", "CoordinatorInvokesExactParserVersionOnly")
-  $laterGrantCount = 0
+  $endpointPolicies = @()
   foreach ($endpoint in @($endpoints | Where-Object { $_.ServiceName -in @("com.amazonaws.$Region.sqs", "com.amazonaws.$Region.lambda", "com.amazonaws.$Region.secretsmanager") })) {
     $policy = $endpoint.PolicyDocument | ConvertFrom-Json
-    $laterGrantCount += @($policy.Statement | Where-Object { [string]$_.Sid -in $laterSids -or
-          ((@($_.Condition.ArnEquals."aws:PrincipalArn") -contains "arn:aws:iam::${ExpectedAccountId}:role/$processorName")) }).Count
+    $endpointPolicies += ,$policy
   }
+  $laterGrantCount = Get-DevelopmentDocumentLaterStageEndpointGrantCount -Policies $endpointPolicies -AccountId $ExpectedAccountId
   $inline = @((Invoke-AwsJson @("iam", "list-role-policies", "--role-name", $processorName, "--output", "json")).PolicyNames | Where-Object { $_ -eq "document-processor-runtime" })
   return [pscustomobject]@{
     ProcessorFunctions = $processorFunctions.Count; ProcessorAliases = $aliases.Count

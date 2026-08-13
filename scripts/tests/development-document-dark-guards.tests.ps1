@@ -74,6 +74,41 @@ $rejected = $false
 try { Assert-DevelopmentDocumentStageResourceInventory complete-dark $missingComplete $completeInventory } catch { $rejected = $true }
 if (-not $rejected) { throw "Complete-dark accepted a missing reconciler permission." }
 
+$processorRoleArn = "arn:aws:iam::${account}:role/ai-job-apply-development-document-processor"
+$unrelatedConditionOmitted = [pscustomobject]@{ Version = "2012-10-17"; Statement = @([pscustomobject]@{ Sid = "Unrelated" }) }
+$unrelatedConditionNull = [pscustomobject]@{ Version = "2012-10-17"; Statement = @([pscustomobject]@{ Sid = "Unrelated"; Condition = $null }) }
+$unrelatedConditionScalar = [pscustomobject]@{ Version = "2012-10-17"; Statement = @([pscustomobject]@{ Sid = "Unrelated"; Condition = "not-an-object" }) }
+$unrelatedConditionList = [pscustomobject]@{ Version = "2012-10-17"; Statement = @([pscustomobject]@{ Sid = "Unrelated"; Condition = @("not", "an-object") }) }
+if ((Get-DevelopmentDocumentLaterStageEndpointGrantCount @(
+      $unrelatedConditionOmitted, $unrelatedConditionNull, $unrelatedConditionScalar, $unrelatedConditionList
+    ) $account) -ne 0) {
+  throw "Optional absent, null, scalar, or list conditions on unrelated endpoint statements were counted as later-stage grants."
+}
+$queueGrant = [pscustomobject]@{ Version = "2012-10-17"; Statement = @([pscustomobject]@{ Sid = "ExactDocumentProcessorQueueOnly" }) }
+$lambdaGrant = [pscustomobject]@{ Version = "2012-10-17"; Statement = @([pscustomobject]@{ Sid = "CoordinatorInvokesExactParserVersionOnly" }) }
+$secretGrant = [pscustomobject]@{ Version = "2012-10-17"; Statement = @([pscustomobject]@{
+      Sid = "ExactLambdaRolesDatabaseSecretOnly"
+      Condition = [pscustomobject]@{ ArnEquals = [pscustomobject]@{
+          "aws:PrincipalArn" = @("arn:aws:iam::${account}:role/existing", $processorRoleArn)
+        } }
+    }) }
+if ((Get-DevelopmentDocumentLaterStageEndpointGrantCount @($queueGrant, $lambdaGrant, $secretGrant) $account) -ne 3) {
+  throw "The three exact later-stage endpoint grant forms were not counted."
+}
+foreach ($case in @(
+    @{ Label = "present-null Condition on conditionless grant"; Policy = [pscustomobject]@{ Statement = @([pscustomobject]@{ Sid = "ExactDocumentProcessorQueueOnly"; Condition = $null }) } },
+    @{ Label = "unexpected Condition on conditionless grant"; Policy = [pscustomobject]@{ Statement = @([pscustomobject]@{ Sid = "CoordinatorInvokesExactParserVersionOnly"; Condition = [pscustomobject]@{ ArnEquals = [pscustomobject]@{ "aws:PrincipalArn" = $processorRoleArn } } }) } },
+    @{ Label = "omitted required Condition"; Policy = [pscustomobject]@{ Statement = @([pscustomobject]@{ Sid = "ExactLambdaRolesDatabaseSecretOnly" }) } },
+    @{ Label = "present-null required Condition"; Policy = [pscustomobject]@{ Statement = @([pscustomobject]@{ Sid = "ExactLambdaRolesDatabaseSecretOnly"; Condition = $null }) } },
+    @{ Label = "unexpected required Condition operator"; Policy = [pscustomobject]@{ Statement = @([pscustomobject]@{ Sid = "ExactLambdaRolesDatabaseSecretOnly"; Condition = [pscustomobject]@{ ArnLike = [pscustomobject]@{ "aws:PrincipalArn" = $processorRoleArn } } }) } },
+    @{ Label = "broadened required Condition"; Policy = [pscustomobject]@{ Statement = @([pscustomobject]@{ Sid = "ExactLambdaRolesDatabaseSecretOnly"; Condition = [pscustomobject]@{ ArnEquals = [pscustomobject]@{ "aws:PrincipalArn" = @($processorRoleArn, "*") } } }) } },
+    @{ Label = "unexpected processor grant"; Policy = [pscustomobject]@{ Statement = @([pscustomobject]@{ Sid = "UnexpectedProcessorGrant"; Condition = [pscustomobject]@{ ArnEquals = [pscustomobject]@{ "aws:PrincipalArn" = $processorRoleArn } } }) } }
+  )) {
+  $rejected = $false
+  try { $null = Get-DevelopmentDocumentLaterStageEndpointGrantCount @($case.Policy) $account } catch { $rejected = $true }
+  if (-not $rejected) { throw "The endpoint grant inventory accepted $($case.Label)." }
+}
+
 Assert-ParserLambdaResourcePolicyAbsence -UnqualifiedPolicy $null -QualifiedPolicy $null
 foreach ($parserPolicyLeak in @(
     @{ UnqualifiedPolicy = '{"Version":"2012-10-17","Statement":[]}'; QualifiedPolicy = $null },
