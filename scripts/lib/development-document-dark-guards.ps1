@@ -276,6 +276,40 @@ function Assert-NoTerraformReplacementPaths {
   if ($null -ne $paths -and @($paths).Count -ne 0) { throw "A Terraform change contains replacement paths." }
 }
 
+function Assert-DevelopmentDocumentAcceptedDriftSensitivity {
+  param([Parameter(Mandatory)][object]$Record)
+  $beforeCanonical = ConvertTo-OptionalTerraformMetadataCanonicalValue $Record.change "before_sensitive" -SortArrays
+  $afterCanonical = ConvertTo-OptionalTerraformMetadataCanonicalValue $Record.change "after_sensitive" -SortArrays
+  if ($beforeCanonical -ceq $afterCanonical) { return }
+
+  if ([string]$Record.address -cne "module.platform.aws_ecs_task_definition.migration[0]") {
+    throw "Accepted provider-observed drift has changed sensitivity metadata."
+  }
+
+  $beforeSensitive = Get-OptionalTerraformChangeValue $Record.change "before_sensitive"
+  $afterSensitive = Get-OptionalTerraformChangeValue $Record.change "after_sensitive"
+  if ($null -eq $beforeSensitive -or $null -eq $afterSensitive -or
+    $null -ne $beforeSensitive.PSObject.Properties["tags"]) {
+    throw "Migration task sensitivity drift is not the exact omitted-to-empty tags normalization."
+  }
+
+  $afterTagsProperty = $afterSensitive.PSObject.Properties["tags"]
+  if ($null -eq $afterTagsProperty -or
+    $afterTagsProperty.Value -isnot [Management.Automation.PSCustomObject] -or
+    @($afterTagsProperty.Value.PSObject.Properties).Count -ne 0) {
+    throw "Migration task sensitivity drift is not the exact omitted-to-empty tags normalization."
+  }
+
+  $normalizedAfterSensitive = [ordered]@{}
+  foreach ($property in @($afterSensitive.PSObject.Properties)) {
+    if ([string]$property.Name -cne "tags") { $normalizedAfterSensitive[[string]$property.Name] = $property.Value }
+  }
+  if ($beforeCanonical -cne
+    (ConvertTo-DeploymentCanonicalValue ([pscustomobject]$normalizedAfterSensitive) -SortArrays)) {
+    throw "Migration task sensitivity drift changed metadata other than the exact empty tags normalization."
+  }
+}
+
 function ConvertTo-StrictUtcWholeSecond {
   param([Parameter(Mandatory)][AllowNull()][object]$Value, [string]$Label = "UTC timestamp")
   if ($Value -is [datetime]) {
@@ -327,11 +361,10 @@ function Assert-DevelopmentDocumentAcceptedResourceDrift {
   foreach ($record in $drift) {
     Assert-NoTerraformReplacementPaths $record.change
     if ([string]$record.mode -cne "managed" -or (@($record.change.actions) -join ",") -cne "update" -or
-      (ConvertTo-OptionalTerraformMetadataCanonicalValue $record.change "after_unknown") -cne "{}" -or
-      (ConvertTo-OptionalTerraformMetadataCanonicalValue $record.change "before_sensitive" -SortArrays) -cne
-      (ConvertTo-OptionalTerraformMetadataCanonicalValue $record.change "after_sensitive" -SortArrays)) {
+      (ConvertTo-OptionalTerraformMetadataCanonicalValue $record.change "after_unknown") -cne "{}") {
       throw "Accepted provider-observed drift has an unsafe action or metadata shape."
     }
+    Assert-DevelopmentDocumentAcceptedDriftSensitivity $record
     $after = $record.change.after | ConvertTo-Json -Depth 100 | ConvertFrom-Json
     if ([string]$record.address -ceq "module.platform.aws_db_instance.postgres[0]") {
       if ([string]$record.type -cne "aws_db_instance") { throw "RDS drift has an unexpected resource type." }
