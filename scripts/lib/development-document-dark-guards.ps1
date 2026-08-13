@@ -256,17 +256,37 @@ function Get-DevelopmentDocumentDarkExpectedDataReads {
   )
 }
 
+function Get-OptionalTerraformChangeValue {
+  param([Parameter(Mandatory)][object]$Change, [Parameter(Mandatory)][string]$Name)
+  $property = $Change.PSObject.Properties[$Name]
+  if ($null -eq $property) { return $null }
+  return $property.Value
+}
+
+function ConvertTo-OptionalTerraformMetadataCanonicalValue {
+  param([Parameter(Mandatory)][object]$Change, [Parameter(Mandatory)][string]$Name, [switch]$SortArrays)
+  $value = Get-OptionalTerraformChangeValue $Change $Name
+  if ($null -eq $value) { return "{}" }
+  return ConvertTo-DeploymentCanonicalValue $value -SortArrays:$SortArrays
+}
+
+function Assert-NoTerraformReplacementPaths {
+  param([Parameter(Mandatory)][object]$Change)
+  $paths = Get-OptionalTerraformChangeValue $Change "replace_paths"
+  if ($null -ne $paths -and @($paths).Count -ne 0) { throw "A Terraform change contains replacement paths." }
+}
+
 function Assert-DevelopmentDocumentExactDataReads {
   param([Parameter(Mandatory)][object[]]$Records)
   $expected = @(Get-DevelopmentDocumentDarkExpectedDataReads | Sort-Object)
   $actual = @($Records | ForEach-Object { [string]$_.address } | Sort-Object)
   if (($actual -join "|") -cne ($expected -join "|")) { throw "The dark plan has an unexpected deferred data read set." }
   foreach ($record in $Records) {
+    Assert-NoTerraformReplacementPaths $record.change
     if ([string]$record.mode -cne "data" -or [string]$record.type -cne "aws_iam_policy_document" -or
       (@($record.change.actions) -join ",") -cne "read" -or $null -ne $record.change.before -or
-      $null -ne $record.change.replace_paths -or
-      (ConvertTo-DeploymentCanonicalValue $record.change.before_sensitive) -match 'true' -or
-      (ConvertTo-DeploymentCanonicalValue $record.change.after_sensitive) -match 'true') {
+      (ConvertTo-OptionalTerraformMetadataCanonicalValue $record.change "before_sensitive") -match 'true' -or
+      (ConvertTo-OptionalTerraformMetadataCanonicalValue $record.change "after_sensitive") -match 'true') {
       throw "A deferred data read has an unsafe mode, action, prior value, replacement, or sensitivity shape."
     }
   }
@@ -284,11 +304,11 @@ function Assert-DevelopmentDocumentAcceptedResourceDrift {
     throw "The plan contains unaccepted resource drift."
   }
   foreach ($record in $drift) {
+    Assert-NoTerraformReplacementPaths $record.change
     if ([string]$record.mode -cne "managed" -or (@($record.change.actions) -join ",") -cne "update" -or
-      $null -ne $record.change.replace_paths -or
-      (ConvertTo-DeploymentCanonicalValue $record.change.after_unknown) -cne "{}" -or
-      (ConvertTo-DeploymentCanonicalValue $record.change.before_sensitive -SortArrays) -cne
-      (ConvertTo-DeploymentCanonicalValue $record.change.after_sensitive -SortArrays)) {
+      (ConvertTo-OptionalTerraformMetadataCanonicalValue $record.change "after_unknown") -cne "{}" -or
+      (ConvertTo-OptionalTerraformMetadataCanonicalValue $record.change "before_sensitive" -SortArrays) -cne
+      (ConvertTo-OptionalTerraformMetadataCanonicalValue $record.change "after_sensitive" -SortArrays)) {
       throw "Accepted provider-observed drift has an unsafe action or metadata shape."
     }
     $after = $record.change.after | ConvertTo-Json -Depth 100 | ConvertFrom-Json
@@ -594,14 +614,17 @@ function Get-PolicyAddedStatements {
 
 function Assert-OnlyPolicyAttributeChanged {
   param([Parameter(Mandatory)][object]$Change)
+  Assert-NoTerraformReplacementPaths $Change
   $afterCopy = $Change.after | ConvertTo-Json -Depth 100 | ConvertFrom-Json
   $afterCopy.policy = $Change.before.policy
   if ((ConvertTo-DeploymentCanonicalValue $Change.before -SortArrays) -cne
     (ConvertTo-DeploymentCanonicalValue $afterCopy -SortArrays)) { throw "An approved update changed more than its policy document." }
-  $unknownPolicy = $Change.after_unknown.PSObject.Properties["policy"]
-  $sensitivePolicy = $Change.after_sensitive.PSObject.Properties["policy"]
-  if ((ConvertTo-DeploymentCanonicalValue $Change.before_sensitive -SortArrays) -cne
-    (ConvertTo-DeploymentCanonicalValue $Change.after_sensitive -SortArrays) -or
+  $afterUnknown = Get-OptionalTerraformChangeValue $Change "after_unknown"
+  $afterSensitive = Get-OptionalTerraformChangeValue $Change "after_sensitive"
+  $unknownPolicy = if ($null -eq $afterUnknown) { $null } else { $afterUnknown.PSObject.Properties["policy"] }
+  $sensitivePolicy = if ($null -eq $afterSensitive) { $null } else { $afterSensitive.PSObject.Properties["policy"] }
+  if ((ConvertTo-OptionalTerraformMetadataCanonicalValue $Change "before_sensitive" -SortArrays) -cne
+    (ConvertTo-OptionalTerraformMetadataCanonicalValue $Change "after_sensitive" -SortArrays) -or
     ($null -ne $unknownPolicy -and (ConvertTo-DeploymentCanonicalValue $unknownPolicy.Value -SortArrays) -match 'true') -or
     ($null -ne $sensitivePolicy -and (ConvertTo-DeploymentCanonicalValue $sensitivePolicy.Value -SortArrays) -match 'true')) {
     throw "An approved update changed sensitivity or contains an unknown result."
@@ -921,12 +944,13 @@ function Assert-DevelopmentDocumentDarkPlan {
   if ($kmsRecords.Count -ne 1 -or [string]$kmsRecords[0].mode -cne "managed" -or
     [string]$kmsRecords[0].type -cne "aws_kms_key" -or (@($kmsRecords[0].change.actions) -join ",") -cne "no-op" -or
     [string]$kmsRecords[0].change.before.arn -cne [string]$kmsRecords[0].change.after.arn -or
-    (ConvertTo-DeploymentCanonicalValue $kmsRecords[0].change.after_unknown) -cne "{}" -or
-    (ConvertTo-DeploymentCanonicalValue $kmsRecords[0].change.before_sensitive -SortArrays) -cne
-    (ConvertTo-DeploymentCanonicalValue $kmsRecords[0].change.after_sensitive -SortArrays)) {
+    (ConvertTo-OptionalTerraformMetadataCanonicalValue $kmsRecords[0].change "after_unknown") -cne "{}" -or
+    (ConvertTo-OptionalTerraformMetadataCanonicalValue $kmsRecords[0].change "before_sensitive" -SortArrays) -cne
+    (ConvertTo-OptionalTerraformMetadataCanonicalValue $kmsRecords[0].change "after_sensitive" -SortArrays)) {
     throw "The final dark plan does not bind security policies to one exact no-op platform KMS key."
   }
   $platformKmsArn = [string]$kmsRecords[0].change.after.arn
+  Assert-NoTerraformReplacementPaths $kmsRecords[0].change
   $nonNoop = @($Plan.resource_changes | Where-Object { (@($_.change.actions) -join ",") -ne "no-op" })
   $dataReads = @($nonNoop | Where-Object mode -eq "data")
   Assert-DevelopmentDocumentExactDataReads -Records $dataReads
@@ -956,7 +980,8 @@ function Assert-DevelopmentDocumentDarkPlan {
   $byAddress = @{}; foreach ($change in $changes) { $byAddress[[string]$change.address] = $change }
   foreach ($entry in $securityCreateFields.GetEnumerator()) {
     foreach ($field in @($entry.Value)) {
-      $unknown = $byAddress[$entry.Key].change.after_unknown.PSObject.Properties[$field]
+      $afterUnknown = Get-OptionalTerraformChangeValue $byAddress[$entry.Key].change "after_unknown"
+      $unknown = if ($null -eq $afterUnknown) { $null } else { $afterUnknown.PSObject.Properties[$field] }
       if ($null -ne $unknown -and (ConvertTo-DeploymentCanonicalValue $unknown.Value -SortArrays) -match 'true') {
         throw "Security field '$field' must be fully known before review for '$($entry.Key)'."
       }
