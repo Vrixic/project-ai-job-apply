@@ -725,9 +725,14 @@ function Assert-ExactAddedStatement {
       if ($Statement.Principal -isnot [string] -or [string]$Statement.Principal -cne "*") {
         throw "Unexpected candidate deny principal shape."
       }
+      $malwareRole = "arn:aws:iam::${AccountId}:role/ai-job-apply-development-document-malware-scan"
+      $principalArn = $Statement.Condition.ArnNotEquals."aws:PrincipalArn"
+      if ($principalArn -isnot [string] -or [string]$principalArn -cne $malwareRole) {
+        throw "Unexpected candidate deny malware-scan role condition."
+      }
       Assert-ExactCondition $Statement.Condition @{
         StringNotEquals = @{ "s3:ExistingObjectTag/GuardDutyMalwareScanStatus" = @("NO_THREATS_FOUND") }
-        ArnNotEquals = @{ "aws:PrincipalArn" = @("arn:aws:iam::${AccountId}:role/ai-job-apply-development-guardduty-malware") }
+        ArnNotEquals = @{ "aws:PrincipalArn" = @($malwareRole) }
       }
     }
     "SnsAlerts" {
