@@ -131,9 +131,6 @@ function ConvertTo-DevelopmentDocumentComparableVariableValue {
       return ConvertTo-DeploymentCanonicalValue $Value
     }
     "number" {
-      if (-not $SerializedBaseline -and $Value -is [string]) {
-        throw "Fresh-plan Terraform variable '$Name' must be a CLR numeric value."
-      }
       return ConvertTo-TerraformCanonicalNumber $Value "Terraform variable $Name"
     }
     "composite" {

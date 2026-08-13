@@ -24,7 +24,7 @@ foreach ($invalidBoolean in @("False", 0, [pscustomobject]@{ value = $false })) 
 $savedPlanVariableFixture = [pscustomobject]@{
   oidc_issuer = [pscustomobject]@{ value = "https://issuer.example/"; sensitive = $true }
   candidate_document_cors_allowed_origins = [pscustomobject]@{ value = '["https://a.example","https://b.example"]' }
-  gateway_lambda_reserved_concurrency = [pscustomobject]@{ value = 2 }
+  gateway_lambda_reserved_concurrency = [pscustomobject]@{ value = "2" }
   deploy_document_processing = [pscustomobject]@{ value = "false" }
 }
 $environmentAssignments = Get-TerraformVariableEnvironmentAssignments -Variables $savedPlanVariableFixture
@@ -97,6 +97,10 @@ if ((ConvertTo-TerraformCompositeCanonicalValue $serializedTuple) -cne
 if ((ConvertTo-DevelopmentDocumentComparableVariableValue gateway_lambda_reserved_concurrency "2" -SerializedBaseline) -cne
   (ConvertTo-DevelopmentDocumentComparableVariableValue gateway_lambda_reserved_concurrency ([int64]2))) {
   throw "Equivalent serialized and structured numeric values do not compare canonically."
+}
+if ((ConvertTo-DevelopmentDocumentComparableVariableValue gateway_lambda_reserved_concurrency "2" -SerializedBaseline) -cne
+  (ConvertTo-DevelopmentDocumentComparableVariableValue gateway_lambda_reserved_concurrency "2")) {
+  throw "Equivalent saved-plan and TF_VAR-provenance numeric strings do not compare canonically."
 }
 if ((ConvertTo-DevelopmentDocumentComparableVariableValue profile_readiness_execution_timeout_seconds "30.0" -SerializedBaseline) -cne
   (ConvertTo-DevelopmentDocumentComparableVariableValue profile_readiness_execution_timeout_seconds ([int64]30))) {
@@ -302,7 +306,7 @@ $baselineVariables = [pscustomobject]@{
 $planVariables = $baselineVariables | ConvertTo-Json -Depth 10 | ConvertFrom-Json
 $planVariables.deploy_document_processing.value = "true"
 $planVariables.candidate_document_cors_allowed_origins.value = @("https://app.example")
-$planVariables.gateway_lambda_reserved_concurrency.value = [int64]2
+$planVariables.gateway_lambda_reserved_concurrency.value = "2"
 $planVariables.document_processor_artifact_s3_key.value = "lambda/documents/$source/$processorSha/document-processor-lambda.zip"
 $planVariables.document_processor_artifact_s3_object_version.value = "version-zip"
 $planVariables.document_processor_artifact_sha256.value = $processorSha
@@ -319,7 +323,7 @@ $rejected = $false
 try { Assert-DevelopmentDocumentDarkVariables -BaselineVariables $baselineVariables -PlanVariables $differentCompositeVariables -Receipt $receipt } catch { $rejected = $true }
 if (-not $rejected) { throw "A semantically different composite variable was accepted." }
 $differentNumericVariables = $planVariables | ConvertTo-Json -Depth 10 | ConvertFrom-Json
-$differentNumericVariables.gateway_lambda_reserved_concurrency.value = [int64]3
+$differentNumericVariables.gateway_lambda_reserved_concurrency.value = "3"
 $rejected = $false
 try { Assert-DevelopmentDocumentDarkVariables -BaselineVariables $baselineVariables -PlanVariables $differentNumericVariables -Receipt $receipt } catch { $rejected = $true }
 if (-not $rejected) { throw "A semantically different numeric variable was accepted." }
