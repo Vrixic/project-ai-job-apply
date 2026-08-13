@@ -10,7 +10,8 @@ if (@($errors).Count -ne 0) { throw "The development migration image publisher d
 
 foreach ($functionName in @(
     "Get-OptionalProperty", "Get-FileSha256", "Get-TextSha256",
-    "ConvertTo-CanonicalUtcWholeSecond", "Resolve-OperatorPath", "Write-JsonFile",
+    "ConvertTo-CanonicalUtcWholeSecond", "ConvertFrom-PublicationReceiptJson",
+    "Resolve-OperatorPath", "Write-JsonFile",
     "Invoke-AwsScanJson",
     "Assert-RepositoryShape", "Resolve-OciBlobPath", "Get-OciLayoutIdentity",
     "Assert-DeterministicOciIdentity", "Assert-RemoteOciImage", "Assert-PlatformHandoff",
@@ -155,9 +156,58 @@ $receipt = [pscustomobject]@{
   indexDigest = $identity.IndexDigest; platformDigest = $identity.PlatformDigest; configDigest = $identity.ConfigDigest
   compressedLayerSetSha256 = $identity.CompressedLayerSetSha256; rootfsDiffIdSetSha256 = $identity.RootfsDiffIdSetSha256
   phase = "verified"; imageUri = "$repositoryUri@$($identity.PlatformDigest)"; scanStatus = "COMPLETE"; criticalFindings = 0; highFindings = 0
-  publicationStartedAt = "2026-08-13T12:00:00.0000000+00:00"; publicationCompletedAt = "2026-08-13T12:01:00.0000000+00:00"
+  publicationStartedAt = "2026-08-13T20:33:10.2160450+00:00"; publicationCompletedAt = "2026-08-13T20:35:18.8312542+00:00"
 }
 $null = Assert-PublicationReceipt -Receipt $receipt -Boundary $boundary -ExpectedRegion $region -ExpectedSourceSha $sourceSha -ExpectedCreated $created
+$receiptJson = $receipt | ConvertTo-Json -Depth 20
+$receiptJsonSha = Get-TextSha256 -Value $receiptJson
+$receiptFromJson = ConvertFrom-PublicationReceiptJson -Json $receiptJson
+if ($receiptFromJson.created -isnot [string] -or
+    $receiptFromJson.publicationStartedAt -isnot [string] -or
+    $receiptFromJson.publicationCompletedAt -isnot [string]) {
+  throw "Receipt JSON timestamps were not preserved as exact strings."
+}
+$null = Assert-PublicationReceipt -Receipt $receiptFromJson -Boundary $boundary -ExpectedRegion $region `
+  -ExpectedSourceSha $sourceSha -ExpectedCreated $created
+if ((Get-TextSha256 -Value $receiptJson) -cne $receiptJsonSha) { throw "Receipt JSON bytes changed during validation." }
+
+foreach ($timestampMutation in @(
+    @{ name = "Z publication timestamp"; from = "2026-08-13T20:33:10.2160450+00:00"; to = "2026-08-13T20:33:10.2160450Z" },
+    @{ name = "short fractional timestamp"; from = "2026-08-13T20:33:10.2160450+00:00"; to = "2026-08-13T20:33:10.216045+00:00" },
+    @{ name = "nonzero offset timestamp"; from = "2026-08-13T20:33:10.2160450+00:00"; to = "2026-08-13T20:33:10.2160450+01:00" },
+    @{ name = "completion before start"; from = "2026-08-13T20:35:18.8312542+00:00"; to = "2026-08-13T20:32:18.8312542+00:00" },
+    @{ name = "offset created timestamp"; from = $created; to = "2026-08-13T12:00:00+00:00" }
+  )) {
+  $mutatedJson = $receiptJson.Replace($timestampMutation.from, $timestampMutation.to)
+  try {
+    $mutatedReceipt = ConvertFrom-PublicationReceiptJson -Json $mutatedJson
+    $null = Assert-PublicationReceipt -Receipt $mutatedReceipt -Boundary $boundary -ExpectedRegion $region `
+      -ExpectedSourceSha $sourceSha -ExpectedCreated $created
+    throw "$($timestampMutation.name) accepted"
+  } catch { if ($_.Exception.Message -eq "$($timestampMutation.name) accepted") { throw } }
+}
+$nonStringTimestampJson = $receiptJson.Replace('"2026-08-13T20:33:10.2160450+00:00"', '123')
+try {
+  $nonStringTimestampReceipt = ConvertFrom-PublicationReceiptJson -Json $nonStringTimestampJson
+  $null = Assert-PublicationReceipt -Receipt $nonStringTimestampReceipt -Boundary $boundary -ExpectedRegion $region `
+    -ExpectedSourceSha $sourceSha -ExpectedCreated $created
+  throw "non-string publication timestamp accepted"
+} catch { if ($_.Exception.Message -eq "non-string publication timestamp accepted") { throw } }
+try { $null = ConvertFrom-PublicationReceiptJson -Json ($receiptJson.Substring(0, $receiptJson.Length - 1)); throw "malformed receipt JSON accepted" }
+catch { if ($_.Exception.Message -eq "malformed receipt JSON accepted") { throw } }
+
+$utcWholeSecond = [datetime]::SpecifyKind([datetime]"2026-08-13T12:00:00", [DateTimeKind]::Utc)
+if ((ConvertTo-CanonicalUtcWholeSecond -Value $utcWholeSecond -Description "test timestamp") -cne $created) {
+  throw "UTC whole-second DateTime was not canonicalized."
+}
+foreach ($badDateTime in @(
+    [datetime]::SpecifyKind([datetime]"2026-08-13T12:00:00", [DateTimeKind]::Local),
+    [datetime]::SpecifyKind([datetime]"2026-08-13T12:00:00", [DateTimeKind]::Unspecified),
+    $utcWholeSecond.AddTicks(1)
+  )) {
+  try { $null = ConvertTo-CanonicalUtcWholeSecond -Value $badDateTime -Description "test timestamp"; throw "noncanonical DateTime accepted" }
+  catch { if ($_.Exception.Message -eq "noncanonical DateTime accepted") { throw } }
+}
 foreach ($property in @("imageUri", "handoffTag")) {
   $copy = $receipt | Select-Object *
   $copy.$property = if ($property -like "*Sha256") { "5" * 64 } elseif ($property -eq "imageUri") { "$repositoryUri@$($identity.IndexDigest)" } elseif ($property -eq "handoffTag") { "wrong" } else { "sha256:" + ("5" * 64) }

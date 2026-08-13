@@ -128,6 +128,16 @@ function ConvertTo-CanonicalUtcWholeSecond {
   return [string]$Value
 }
 
+function ConvertFrom-PublicationReceiptJson {
+  param([Parameter(Mandatory)][string]$Json)
+  $parameters = @{}
+  if ((Get-Command ConvertFrom-Json).Parameters.ContainsKey("DateKind")) {
+    $parameters.DateKind = "String"
+  }
+  try { return $Json | ConvertFrom-Json @parameters }
+  catch { throw "The publication receipt is not valid JSON." }
+}
+
 function Resolve-OperatorPath {
   param([Parameter(Mandatory)][string]$Candidate, [switch]$MustExist)
   if ([string]::IsNullOrWhiteSpace($Candidate)) { throw "A required operator path is missing." }
@@ -778,7 +788,7 @@ function Read-AndValidateReceipt {
     [Parameter(Mandatory)][object]$Boundary
   )
   if ((Get-FileSha256 -Path $Path) -cne $Sha256) { throw "The publication receipt checksum does not match the reviewed value." }
-  $receipt = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+  $receipt = ConvertFrom-PublicationReceiptJson -Json (Get-Content -LiteralPath $Path -Raw)
   $sourceEpoch = (& git -C $repositoryRoot show -s --format=%ct $SourceSha 2>$null).Trim()
   if ($sourceEpoch -notmatch '^[0-9]{10,}$') { throw "The exact source commit timestamp could not be resolved." }
   $expectedCreated = [DateTimeOffset]::FromUnixTimeSeconds([long]$sourceEpoch).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ")
@@ -902,7 +912,7 @@ if ($Action -eq "Publish") {
   $handoffState = Get-EcrTagState -Boundary $boundary -Tag $plannedReceipt.handoffTag
   $retained = $null
   if ($receiptExisted) {
-    try { $retained = Get-Content -LiteralPath $receipt -Raw | ConvertFrom-Json }
+    try { $retained = ConvertFrom-PublicationReceiptJson -Json (Get-Content -LiteralPath $receipt -Raw) }
     catch { throw "The retained publication receipt is not valid JSON." }
   }
   $resumeMode = Resolve-PublicationResumeMode -RemoteIndexExists $sourceState.Exists `
