@@ -23,7 +23,7 @@ function ConvertTo-DeploymentCanonicalValue {
         [pscustomobject]@{ Name = [string]$_; Value = $Value[$_] }
       })
   }
-  elseif ($Value -is [System.Collections.IEnumerable] -and $Value -isnot [pscustomobject]) {
+  elseif ($Value -is [System.Collections.IEnumerable]) {
     $items = @($Value | ForEach-Object {
         ConvertTo-DeploymentCanonicalValue -Value $_ -SortArrays:$SortArrays
       })

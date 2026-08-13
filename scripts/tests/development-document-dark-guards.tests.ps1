@@ -23,11 +23,9 @@ foreach ($invalidBoolean in @("False", 0, [pscustomobject]@{ value = $false })) 
 
 $savedPlanVariableFixture = [pscustomobject]@{
   oidc_issuer = [pscustomobject]@{ value = "https://issuer.example/"; sensitive = $true }
-  candidate_document_cors_allowed_origins = [pscustomobject]@{ value = @("https://a.example", "https://b.example") }
+  candidate_document_cors_allowed_origins = [pscustomobject]@{ value = '["https://a.example","https://b.example"]' }
   gateway_lambda_reserved_concurrency = [pscustomobject]@{ value = 2 }
   deploy_document_processing = [pscustomobject]@{ value = "false" }
-  synthetic_map = [pscustomobject]@{ value = [pscustomobject]@{ z = "last"; a = 1 } }
-  synthetic_tuple = [pscustomobject]@{ value = @("one", 2, $true) }
 }
 $environmentAssignments = Get-TerraformVariableEnvironmentAssignments -Variables $savedPlanVariableFixture
 $expectedAssignments = @{
@@ -35,15 +33,13 @@ $expectedAssignments = @{
   TF_VAR_candidate_document_cors_allowed_origins = '["https://a.example","https://b.example"]'
   TF_VAR_gateway_lambda_reserved_concurrency = "2"
   TF_VAR_deploy_document_processing = "false"
-  TF_VAR_synthetic_map = '{"a":1,"z":"last"}'
-  TF_VAR_synthetic_tuple = '["one",2,true]'
 }
 if ($environmentAssignments.Count -ne $expectedAssignments.Count) {
   throw "The saved-plan fixture did not produce the exact TF_VAR assignment set."
 }
 foreach ($entry in $expectedAssignments.GetEnumerator()) {
   if ([string]$environmentAssignments[$entry.Key] -cne [string]$entry.Value) {
-    throw "Terraform environment serialization differs for '$($entry.Key)'."
+    throw "Terraform environment serialization differs for '$($entry.Key)': '$($environmentAssignments[$entry.Key])'."
   }
 }
 
@@ -84,6 +80,27 @@ foreach ($invalidVariable in @(
   }
   catch { $rejected = $true }
   if (-not $rejected) { throw "An unsupported Terraform environment value was accepted." }
+}
+
+$serializedMap = '{"z":"last","a":1}' | ConvertFrom-Json
+$structuredMap = [pscustomobject]@{ a = 1; z = "last" }
+if ((ConvertTo-TerraformCompositeCanonicalValue $serializedMap) -cne
+  (ConvertTo-TerraformCompositeCanonicalValue $structuredMap)) {
+  throw "Equivalent serialized and structured maps do not compare canonically."
+}
+$serializedTuple = '["one",2,true]' | ConvertFrom-Json
+$structuredTuple = @("one", 2, $true)
+if ((ConvertTo-TerraformCompositeCanonicalValue $serializedTuple) -cne
+  (ConvertTo-TerraformCompositeCanonicalValue $structuredTuple)) {
+  throw "Equivalent serialized and structured tuples do not compare canonically."
+}
+if ((ConvertTo-DevelopmentDocumentComparableVariableValue gateway_lambda_reserved_concurrency "2" -SerializedBaseline) -cne
+  (ConvertTo-DevelopmentDocumentComparableVariableValue gateway_lambda_reserved_concurrency 2)) {
+  throw "Equivalent serialized and structured numeric values do not compare canonically."
+}
+if ((ConvertTo-DevelopmentDocumentComparableVariableValue oidc_audience '["literal-string"]' -SerializedBaseline) -cne
+  (ConvertTo-DevelopmentDocumentComparableVariableValue oidc_audience '["literal-string"]')) {
+  throw "A JSON-looking string variable did not remain an exact string."
 }
 
 $expected = Get-DevelopmentDocumentDarkExpectedActions
@@ -262,10 +279,12 @@ $baselineVariables = [pscustomobject]@{
   document_parser_artifact_sha256 = [pscustomobject]@{ value = "" }
   document_parser_artifact_base64sha256 = [pscustomobject]@{ value = "" }
   document_processor_extension_layer_arn = [pscustomobject]@{ value = "" }
-  unrelated = [pscustomobject]@{ value = "same" }
+  candidate_document_cors_allowed_origins = [pscustomobject]@{ value = '["https://app.example"]' }
+  oidc_audience = [pscustomobject]@{ value = "same" }
 }
 $planVariables = $baselineVariables | ConvertTo-Json -Depth 10 | ConvertFrom-Json
 $planVariables.deploy_document_processing.value = "true"
+$planVariables.candidate_document_cors_allowed_origins.value = @("https://app.example")
 $planVariables.document_processor_artifact_s3_key.value = "lambda/documents/$source/$processorSha/document-processor-lambda.zip"
 $planVariables.document_processor_artifact_s3_object_version.value = "version-zip"
 $planVariables.document_processor_artifact_sha256.value = $processorSha
@@ -276,7 +295,12 @@ $planVariables.document_parser_artifact_sha256.value = $parserSha
 $planVariables.document_parser_artifact_base64sha256.value = ("Z" * 43) + "="
 $planVariables.document_processor_extension_layer_arn.value = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
 Assert-DevelopmentDocumentDarkVariables -BaselineVariables $baselineVariables -PlanVariables $planVariables -Receipt $receipt
-$planVariables.unrelated.value = "changed"
+$differentCompositeVariables = $planVariables | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+$differentCompositeVariables.candidate_document_cors_allowed_origins.value = @("https://other.example")
+$rejected = $false
+try { Assert-DevelopmentDocumentDarkVariables -BaselineVariables $baselineVariables -PlanVariables $differentCompositeVariables -Receipt $receipt } catch { $rejected = $true }
+if (-not $rejected) { throw "A semantically different composite variable was accepted." }
+$planVariables.oidc_audience.value = "changed"
 $rejected = $false
 try { Assert-DevelopmentDocumentDarkVariables -BaselineVariables $baselineVariables -PlanVariables $planVariables -Receipt $receipt } catch { $rejected = $true }
 if (-not $rejected) { throw "An unrelated variable change was accepted." }
@@ -351,4 +375,4 @@ if ($documentSource -notmatch "DenyQuarantineReadsWithoutCleanMalwareTag" -or
   throw "The semantic guard is detached from current document isolation source."
 }
 
-Write-Output "Development document dark guard tests passed: 40"
+Write-Output "Development document dark guard tests passed: 44"
