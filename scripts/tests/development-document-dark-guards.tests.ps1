@@ -338,13 +338,38 @@ $resourceDrift = @(
   [pscustomobject]@{
     address = "module.platform.aws_ecs_task_definition.migration[0]"; mode = "managed"; type = "aws_ecs_task_definition"
     change = [pscustomobject]@{ actions = @("update"); replace_paths = $null; after_unknown = [pscustomobject]@{}
-      before_sensitive = [pscustomobject]@{}; after_sensitive = [pscustomobject]@{}
+      before_sensitive = [pscustomobject]@{ id = $false }
+      after_sensitive = [pscustomobject]@{ id = $false; tags = [pscustomobject]@{} }
       before = [pscustomobject]@{ id = "migration"; tags = $null }
       after = [pscustomobject]@{ id = "migration"; tags = [pscustomobject]@{} } }
   }
 )
 $plan = [pscustomobject]@{ resource_changes = @($changes + $dataReads + $kmsNoop); resource_drift = $resourceDrift }
 $null = Assert-DevelopmentDocumentDarkPlan -Plan $plan -AccountId $account
+
+$nonemptyTagSensitivityPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$nonemptyTagSensitivityPlan.resource_drift[1].change.after_sensitive.tags = [pscustomobject]@{ Environment = $false }
+$rejected = $false
+try { $null = Assert-DevelopmentDocumentDarkPlan $nonemptyTagSensitivityPlan $account } catch { $rejected = $true }
+if (-not $rejected) { throw "Nonempty migration-task tag sensitivity metadata was accepted." }
+
+$trueTagSensitivityPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$trueTagSensitivityPlan.resource_drift[1].change.after_sensitive.tags = $true
+$rejected = $false
+try { $null = Assert-DevelopmentDocumentDarkPlan $trueTagSensitivityPlan $account } catch { $rejected = $true }
+if (-not $rejected) { throw "True migration-task tag sensitivity metadata was accepted." }
+
+$otherSensitivityPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$otherSensitivityPlan.resource_drift[1].change.after_sensitive | Add-Member unreviewed $false
+$rejected = $false
+try { $null = Assert-DevelopmentDocumentDarkPlan $otherSensitivityPlan $account } catch { $rejected = $true }
+if (-not $rejected) { throw "A migration-task sensitivity change outside tags was accepted." }
+
+$differentAddressSensitivityPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$differentAddressSensitivityPlan.resource_drift[0].change.after_sensitive | Add-Member tags ([pscustomobject]@{})
+$rejected = $false
+try { $null = Assert-DevelopmentDocumentDarkPlan $differentAddressSensitivityPlan $account } catch { $rejected = $true }
+if (-not $rejected) { throw "Empty tag sensitivity normalization was accepted for a different resource address." }
 
 $dateObjectDriftPlan = $plan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
 $dateObjectDriftPlan.resource_drift[0].change.before.latest_restorable_time = [datetime]::Parse(
