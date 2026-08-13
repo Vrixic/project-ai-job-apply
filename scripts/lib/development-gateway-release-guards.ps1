@@ -35,24 +35,39 @@ function Get-GatewayMeaningfulChanges {
 function Assert-RetainedGatewayBaselineMetadata {
   param(
     [Parameter(Mandatory)][object]$Metadata,
+    [Parameter(Mandatory)][object]$Plan,
     [Parameter(Mandatory)][string]$PlanPath,
     [Parameter(Mandatory)][string]$PlanSha256,
     [Parameter(Mandatory)][string]$SourceSha,
     [Parameter(Mandatory)][string]$AccountId,
-    [Parameter(Mandatory)][string]$Region
+    [Parameter(Mandatory)][string]$Region,
+    [Parameter(Mandatory)][string]$ExpectedMigrationRepositoryUrl,
+    [Parameter(Mandatory)][object]$CurrentState
   )
-  $expectedKeys = @(
+  $v1Keys = @(
     "AccountId", "Applyable", "CreatedAt", "Environment", "Kind", "MeaningfulChanges",
     "ParserQualifiedArn", "PlanPath", "PlanSha256", "ReceiptSha256", "Region", "SchemaVersion",
     "SourceSha", "Stage", "StateLineage", "StateSerial"
   ) | Sort-Object
+  $v2Keys = @($v1Keys + "MigrationImage" | Sort-Object)
   $actualKeys = @($Metadata.PSObject.Properties | ForEach-Object Name | Sort-Object)
+  $schemaVersion = [string]$Metadata.SchemaVersion
+  $expectedKeys = if ($schemaVersion -ceq "1") { $v1Keys } elseif ($schemaVersion -ceq "2") { $v2Keys } else { @() }
   $createdAt = [datetime]::MinValue
   $createdAtValid = [datetime]::TryParse([string]$Metadata.CreatedAt, [ref]$createdAt) -and
     $createdAt.Year -ge 2000 -and $createdAt.Year -le 2099
   $metadataPlanPath = if ([string]::IsNullOrWhiteSpace([string]$Metadata.PlanPath)) { "" } else { [IO.Path]::GetFullPath([string]$Metadata.PlanPath) }
-  if (($actualKeys -join "|") -cne ($expectedKeys -join "|") -or
-      [string]$Metadata.SchemaVersion -cne "1" -or
+  $stage = Get-GatewayPlanVariableValue -Variables $Plan.variables -Name "document_processing_deployment_stage"
+  $parserQualifiedArn = Get-GatewayPlanVariableValue -Variables $Plan.variables -Name "document_parser_invocation_qualified_arn"
+  $migrationImage = Get-GatewayPlanVariableValue -Variables $Plan.variables -Name "migration_image"
+  if ($stage -isnot [string] -or $parserQualifiedArn -isnot [string] -or $migrationImage -isnot [string]) {
+    throw "The retained baseline stage, parser pin, and migration image must be exact strings."
+  }
+  if ($ExpectedMigrationRepositoryUrl -cne "$AccountId.dkr.ecr.$Region.amazonaws.com/ai-job-apply/migration" -or
+      [string]$migrationImage -cnotmatch "^$([regex]::Escape($ExpectedMigrationRepositoryUrl))@sha256:[a-f0-9]{64}$") {
+    throw "The retained baseline migration image is outside the exact Terraform-owned development repository."
+  }
+  if ($expectedKeys.Count -eq 0 -or ($actualKeys -join "|") -cne ($expectedKeys -join "|") -or
       [string]$Metadata.Kind -cne "development-document-zero-drift-baseline" -or
       [string]$Metadata.Environment -cne "development" -or
       [string]$Metadata.AccountId -cne $AccountId -or [string]$Metadata.Region -cne $Region -or
@@ -61,13 +76,95 @@ function Assert-RetainedGatewayBaselineMetadata {
       [string]$Metadata.PlanSha256 -cne $PlanSha256 -or -not $createdAtValid -or
       $Metadata.Applyable -isnot [bool] -or $Metadata.Applyable -or
       [int]$Metadata.MeaningfulChanges -ne 0 -or
-      [string]$Metadata.StateLineage -cnotmatch '^[a-f0-9-]{36}$' -or [long]$Metadata.StateSerial -lt 1 -or
-      [string]$Metadata.Stage -notin @("parser-dark", "complete-dark") -or
+      [string]$CurrentState.Lineage -cnotmatch '^[a-f0-9-]{36}$' -or [long]$CurrentState.Serial -lt 1 -or
+      [string]$Metadata.StateLineage -cne [string]$CurrentState.Lineage -or
+      [long]$Metadata.StateSerial -ne [long]$CurrentState.Serial -or
+      [string]$stage -notin @("parser-dark", "complete-dark") -or
+      [string]$Metadata.Stage -cne [string]$stage -or
       [string]$Metadata.ReceiptSha256 -cnotmatch '^[a-f0-9]{64}$' -or
-      ([string]$Metadata.Stage -ceq "parser-dark" -and -not [string]::IsNullOrEmpty([string]$Metadata.ParserQualifiedArn)) -or
-      ([string]$Metadata.Stage -ceq "complete-dark" -and
-        [string]$Metadata.ParserQualifiedArn -cnotmatch "^arn:aws:lambda:$([regex]::Escape($Region)):$AccountId`:function:ai-job-apply-development-document-parser:[1-9][0-9]*$")) {
+      [string]$Metadata.ParserQualifiedArn -cne [string]$parserQualifiedArn -or
+      ([string]$stage -ceq "parser-dark" -and -not [string]::IsNullOrEmpty([string]$parserQualifiedArn)) -or
+      ([string]$stage -ceq "complete-dark" -and
+        [string]$parserQualifiedArn -cnotmatch "^arn:aws:lambda:$([regex]::Escape($Region)):$AccountId`:function:ai-job-apply-development-document-parser:[1-9][0-9]*$")) {
     throw "The retained baseline metadata does not match the exact document-to-gateway handoff."
+  }
+  if ($schemaVersion -ceq "2" -and [string]$Metadata.MigrationImage -cne [string]$migrationImage) {
+    throw "The version-2 retained baseline metadata does not bind the exact migration image."
+  }
+  return $true
+}
+
+function Assert-GatewayDocumentBaselineReceipt {
+  param(
+    [Parameter(Mandatory)][object]$Receipt,
+    [Parameter(Mandatory)][string]$ReceiptSha256,
+    [Parameter(Mandatory)][object]$Plan,
+    [Parameter(Mandatory)][string]$SourceSha,
+    [Parameter(Mandatory)][string]$ExpectedBoundarySha256
+  )
+  $expectedKeys = @(
+    "artifacts", "boundarySha256", "completedAt", "createdAt", "environment", "kind",
+    "phase", "region", "schemaVersion", "sourceSha"
+  ) | Sort-Object
+  $actualKeys = @($Receipt.PSObject.Properties | ForEach-Object Name | Sort-Object)
+  if ($ReceiptSha256 -cnotmatch '^[a-f0-9]{64}$' -or
+      ($actualKeys -join "|") -cne ($expectedKeys -join "|") -or
+      [int]$Receipt.schemaVersion -ne 1 -or
+      [string]$Receipt.kind -cne "development-document-lambda-publication" -or
+      [string]$Receipt.environment -cne "development" -or [string]$Receipt.region -cne "us-east-2" -or
+      [string]$Receipt.sourceSha -cne $SourceSha -or
+      [string]$Receipt.boundarySha256 -cne $ExpectedBoundarySha256 -or
+      [string]$Receipt.phase -cne "verified") {
+    throw "The retained baseline document receipt does not match the exact release boundary."
+  }
+  $entries = @($Receipt.artifacts)
+  if ($entries.Count -ne 8) { throw "The retained baseline document receipt must contain exactly eight objects." }
+  foreach ($name in @("document-parser-lambda", "document-processor-lambda")) {
+    $named = @($entries | Where-Object { [string]$_.artifactName -ceq $name })
+    $suffixes = @($named | ForEach-Object { [string]$_.suffix } | Sort-Object)
+    $digests = @($named | ForEach-Object { [string]$_.artifactSha256 } | Sort-Object -Unique)
+    if ($named.Count -ne 4 -or ($suffixes -join ",") -cne "cdx.json,manifest.json,sha256,zip" -or
+        $digests.Count -ne 1 -or [string]$digests[0] -cnotmatch '^[a-f0-9]{64}$') {
+      throw "The retained baseline document receipt has an invalid artifact matrix."
+    }
+    foreach ($entry in $named) {
+      if ([string]$entry.key -cne "lambda/documents/$SourceSha/$($entry.artifactSha256)/$name.$($entry.suffix)" -or
+          [string]::IsNullOrWhiteSpace([string]$entry.versionId) -or
+          [string]$entry.objectSha256 -cnotmatch '^[a-f0-9]{64}$' -or
+          [string]$entry.objectBase64Sha256 -cnotmatch '^[A-Za-z0-9+/]{43}=$' -or
+          [long]$entry.contentLength -le 0 -or
+          ([string]$entry.suffix -ceq "zip" -and
+            [string]$entry.objectSha256 -cne [string]$entry.artifactSha256)) {
+        throw "The retained baseline document receipt contains an invalid immutable object."
+      }
+    }
+  }
+  $parser = @($entries | Where-Object { [string]$_.artifactName -ceq "document-parser-lambda" -and [string]$_.suffix -ceq "zip" })
+  $processor = @($entries | Where-Object { [string]$_.artifactName -ceq "document-processor-lambda" -and [string]$_.suffix -ceq "zip" })
+  if ($parser.Count -ne 1 -or $processor.Count -ne 1) { throw "The document receipt lacks an exact parser/processor ZIP pair." }
+  foreach ($binding in @(
+      @{ Variable = "document_parser_artifact_s3_key"; Value = [string]$parser[0].key },
+      @{ Variable = "document_parser_artifact_s3_object_version"; Value = [string]$parser[0].versionId },
+      @{ Variable = "document_parser_artifact_sha256"; Value = [string]$parser[0].artifactSha256 },
+      @{ Variable = "document_parser_artifact_base64sha256"; Value = [string]$parser[0].objectBase64Sha256 }
+    )) {
+    if ([string](Get-GatewayPlanVariableValue $Plan.variables $binding.Variable) -cne $binding.Value) {
+      throw "The retained baseline plan does not match its document receipt '$($binding.Variable)'."
+    }
+  }
+  $stage = [string](Get-GatewayPlanVariableValue $Plan.variables "document_processing_deployment_stage")
+  $processorBindings = @(
+    @{ Variable = "document_processor_artifact_s3_key"; Value = [string]$processor[0].key },
+    @{ Variable = "document_processor_artifact_s3_object_version"; Value = [string]$processor[0].versionId },
+    @{ Variable = "document_processor_artifact_sha256"; Value = [string]$processor[0].artifactSha256 },
+    @{ Variable = "document_processor_artifact_base64sha256"; Value = [string]$processor[0].objectBase64Sha256 }
+  )
+  foreach ($binding in $processorBindings) {
+    $actual = [string](Get-GatewayPlanVariableValue $Plan.variables $binding.Variable)
+    $expected = if ($stage -ceq "complete-dark") { $binding.Value } else { "" }
+    if ($actual -cne $expected) {
+      throw "The retained baseline plan does not preserve its stage-specific document receipt '$($binding.Variable)'."
+    }
   }
   return $true
 }

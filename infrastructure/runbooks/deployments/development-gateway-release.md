@@ -20,6 +20,13 @@ migration image, public-route switch, identity settings, data resources, or dura
   variable inventory and have no meaningful resource or output changes. The
   release guard preserves every non-gateway variable and explicitly requires processing-dark
   triggers, the applied parser boundary, and an immutable migration digest.
+- A migration `Verify` handoff uses the canonical version-2 sidecar and additionally binds the
+  immutable migration image explicitly. The gateway operator hashes the plan and sidecar before
+  parsing, requires the exact version-2 key set, resolves the one local document-publication
+  receipt matching its bound checksum, and cross-checks that receipt's parser/processor objects
+  against the exact stage-specific Terraform variables. Canonical version-1 document-dark
+  baselines remain accepted where valid, but KMS-only, stale-state, relabeled, extra/missing-field,
+  cross-account, mutable-image, receipt-tampered, and plan-variable-tampered handoffs fail closed.
 - Confirm the current alias is healthy, the database migrations include Jobs `0004_job_search`,
   the DLQs are empty, and current backup/PITR evidence is acceptable.
 
@@ -70,7 +77,9 @@ The only acceptable meaningful addresses are:
 Any create, delete, replacement, extra resource, protected function setting change, Terraform
 variable inventory change, non-gateway input change, mutable migration image, or processing-trigger
 enablement is a blocker. Review the saved plan locally without publishing its body or sensitive
-values, then retain its exact SHA-256.
+values, then retain its exact SHA-256. The plan metadata preserves the reviewed baseline sidecar
+checksum/schema, document receipt checksum, stage/parser pin, and migration image so `Apply`
+rechecks the same handoff instead of accepting a later local substitution.
 
 ## Apply and verify
 
