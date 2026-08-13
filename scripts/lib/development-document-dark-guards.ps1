@@ -52,14 +52,36 @@ function Get-DevelopmentDocumentVariableKinds {
   return $kinds
 }
 
-function Test-TerraformNumericValue {
-  param([Parameter(Mandatory)][object]$Value)
-  $numericTypeCodes = @(
-    [TypeCode]::Byte, [TypeCode]::SByte, [TypeCode]::Int16, [TypeCode]::UInt16,
-    [TypeCode]::Int32, [TypeCode]::UInt32, [TypeCode]::Int64, [TypeCode]::UInt64,
-    [TypeCode]::Single, [TypeCode]::Double, [TypeCode]::Decimal
-  )
-  return $Value -is [IConvertible] -and [Convert]::GetTypeCode($Value) -in $numericTypeCodes
+function ConvertTo-TerraformCanonicalNumber {
+  param([Parameter(Mandatory)][AllowNull()][object]$Value, [string]$Label = "Terraform number")
+  if ($null -eq $Value -or $Value -is [bool]) { throw "$Label must be a finite numeric value." }
+  $invariant = [Globalization.CultureInfo]::InvariantCulture
+  $number = $null
+  if ($Value -is [string]) {
+    if ($Value -cnotmatch '^-?(0|[1-9][0-9]*)(\.[0-9]+)?$') {
+      throw "$Label must use exact invariant non-exponent numeric syntax."
+    }
+    try {
+      $number = [decimal]::Parse($Value,
+        [Globalization.NumberStyles]::AllowLeadingSign -bor [Globalization.NumberStyles]::AllowDecimalPoint,
+        $invariant)
+    }
+    catch { throw "$Label is outside the supported exact decimal range." }
+  }
+  else {
+    $supported = $Value -is [sbyte] -or $Value -is [byte] -or
+      $Value -is [int16] -or $Value -is [uint16] -or $Value -is [int32] -or
+      $Value -is [uint32] -or $Value -is [int64] -or $Value -is [uint64] -or
+      $Value -is [single] -or $Value -is [double] -or $Value -is [decimal]
+    if (-not $supported -or
+      ($Value -is [single] -and ([single]::IsNaN($Value) -or [single]::IsInfinity($Value))) -or
+      ($Value -is [double] -and ([double]::IsNaN($Value) -or [double]::IsInfinity($Value)))) {
+      throw "$Label must be a supported finite CLR numeric value."
+    }
+    try { $number = [Convert]::ToDecimal($Value, $invariant) }
+    catch { throw "$Label is outside the supported exact decimal range." }
+  }
+  return $number.ToString("G29", $invariant)
 }
 
 function ConvertTo-TerraformCompositeCanonicalValue {
@@ -109,12 +131,10 @@ function ConvertTo-DevelopmentDocumentComparableVariableValue {
       return ConvertTo-DeploymentCanonicalValue $Value
     }
     "number" {
-      $normalized = $Value
-      if ($SerializedBaseline -and $Value -is [string]) {
-        try { $normalized = $Value | ConvertFrom-Json } catch { throw "Terraform variable '$Name' is not exact numeric JSON." }
+      if (-not $SerializedBaseline -and $Value -is [string]) {
+        throw "Fresh-plan Terraform variable '$Name' must be a CLR numeric value."
       }
-      if (-not (Test-TerraformNumericValue $normalized)) { throw "Terraform variable '$Name' must remain numeric." }
-      return ConvertTo-DeploymentCanonicalValue $normalized
+      return ConvertTo-TerraformCanonicalNumber $Value "Terraform variable $Name"
     }
     "composite" {
       $normalized = $Value
@@ -142,8 +162,7 @@ function ConvertTo-TerraformVariableEnvironmentValue {
     "boolean" { return (ConvertTo-ExactBoolean $Value "Terraform variable $Name").ToString().ToLowerInvariant() }
     "string" { return [string]$Value }
     "number" {
-      if ($Value -is [string]) { return ConvertTo-DeploymentCanonicalValue ($Value | ConvertFrom-Json) }
-      return ConvertTo-DeploymentCanonicalValue $Value
+      return ConvertTo-TerraformCanonicalNumber $Value "Terraform variable $Name"
     }
     "composite" {
       if ($Value -is [string]) {
