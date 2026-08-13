@@ -280,6 +280,12 @@
         "responses": {
           "200": {
             "description": "One stable page of active canonical jobs",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/JobSearchPage" }

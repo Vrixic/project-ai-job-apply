@@ -26,6 +26,17 @@ both AWS environments accepted the steady-state serverless runtime.
   for an exhausted GitHub Actions budget: it tests and reproducibly builds both document Lambda
   artifacts, publishes eight new conditional/versioned/KMS-bound objects, verifies exact checksums
   and metadata, and emits a checksum-reviewed ignored receipt without deploying either Lambda.
+- `publish-development-migration-image.ps1` — Provides the corresponding fail-closed development
+  fallback for the migration-only container: it resolves the Terraform-owned immutable KMS ECR
+  repository, proves two source-bound `linux/amd64` builds have identical configuration and rootfs
+  identities, publishes the exact commit tag, requires a completed zero-High/zero-Critical scan,
+  and emits a checksum-reviewed ignored receipt without changing Terraform or executing a migration. See
+  `infrastructure/runbooks/deployments/development-migration-image-publication.md`.
+- `operate-development-gateway-release.ps1` — Provides the source- and checksum-bound local gateway
+  publication fallback plus exact Terraform plan/apply/verify flow. It preserves every non-gateway
+  input, limits a release to the gateway Lambda function and immutable alias, and runs the direct
+  authenticated search boundary. See
+  `infrastructure/runbooks/deployments/development-gateway-release.md`.
 
 Artifacts are published by the protected GitHub workflows. The migration-only container is built
 from `Dockerfile.migration` and runs the fail-fast profile/jobs/documents migration orchestrator;
@@ -37,7 +48,10 @@ no gateway or general worker image exists.
   runtime, Auth0 alignment, durable triggers, empty ECS application boundary, and `200/200/401`,
   then starts only the local web BFF against that deployed API.
 - `verify-gateway-lambda-boundary.ps1` — Runs the direct immutable-alias request/identity boundary
-  matrix for development or staging; the environment wrappers select the account.
+  matrix for development or staging, including strict `POST /v1/jobs/search`
+  `200/401/403/400/413/415/404` cases, nested JSON response-shape validation, and query-string
+  non-reflection without printing candidate query values; the environment wrappers select the
+  account. Deployed stale-cursor `409` acceptance remains a separate guarded synthetic procedure.
 - `inspect-deployed-outbox.ps1` — Performs bounded aggregate inspection of pending durable outbox
   work without retaining identifiers or candidate values.
 - `inspect-development-workload-and-cost.ps1` and `inspect-staging-workload-and-cost.ps1` — Inspect

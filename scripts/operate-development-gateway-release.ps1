@@ -1,0 +1,480 @@
+[CmdletBinding()]
+param(
+  [ValidateSet("Status", "Publish", "VerifyPublication", "Plan", "Apply", "Verify")]
+  [string]$Action = "Status",
+  [string]$AwsProfile = "ai-job-apply-development-admin",
+  [string]$Region = "us-east-2",
+  [ValidatePattern("^[0-9]{12}$")][string]$ExpectedAccountId = "",
+  [ValidatePattern("^[a-z0-9.-]+$")][string]$StateBucket = "",
+  [ValidatePattern("^[a-f0-9]{40}$")][string]$SourceSha = "",
+  [string]$ReceiptPath = "",
+  [ValidatePattern("^[a-f0-9]{64}$")][string]$ReviewedReceiptSha256 = "",
+  [string]$BaselinePlanPath = "",
+  [ValidatePattern("^[a-f0-9]{64}$")][string]$ReviewedBaselineSha256 = "",
+  [string]$BaselineMetadataPath = "",
+  [ValidatePattern("^[a-f0-9]{64}$")][string]$ReviewedBaselineMetadataSha256 = "",
+  [string]$PlanPath = "",
+  [ValidatePattern("^[a-f0-9]{64}$")][string]$ReviewedPlanSha256 = "",
+  [switch]$Help
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib\deployment-operator-guards.ps1")
+. (Join-Path $PSScriptRoot "lib\development-gateway-release-guards.ps1")
+
+if ($Help) {
+  @"
+Usage:
+  .\scripts\operate-development-gateway-release.ps1 -Action Publish -ExpectedAccountId ACCOUNT_ID `
+    -StateBucket STATE_BUCKET -SourceSha MERGED_COMMIT
+  .\scripts\operate-development-gateway-release.ps1 -Action VerifyPublication `
+    -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET -SourceSha MERGED_COMMIT `
+    -ReceiptPath RECEIPT -ReviewedReceiptSha256 RECEIPT_SHA256
+  .\scripts\operate-development-gateway-release.ps1 -Action Plan `
+    -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET -SourceSha MERGED_COMMIT `
+    -ReceiptPath RECEIPT -ReviewedReceiptSha256 RECEIPT_SHA256 `
+    -BaselinePlanPath CURRENT_PLAN -ReviewedBaselineSha256 BASELINE_SHA256 `
+    -BaselineMetadataPath CURRENT_PLAN_METADATA -ReviewedBaselineMetadataSha256 METADATA_SHA256
+  .\scripts\operate-development-gateway-release.ps1 -Action Apply [same inputs] `
+    -PlanPath RELEASE_PLAN -ReviewedPlanSha256 RELEASE_PLAN_SHA256
+  .\scripts\operate-development-gateway-release.ps1 -Action Verify [same receipt and baseline inputs]
+
+Publish is the GitHub Actions-budget fallback and writes only four new immutable, versioned,
+KMS-encrypted gateway release objects. Plan overlays only the verified gateway artifact onto a
+checksum-reviewed current input baseline. Apply consumes only the reviewed saved plan. Verify
+checks the exact numeric Lambda alias, direct search/auth/input boundary, and zero Terraform drift.
+All receipts, saved plans, metadata, and logs remain below the ignored development .terraform tree.
+"@
+  exit 0
+}
+
+if ($Region -cne "us-east-2") { throw "Development gateway release is restricted to us-east-2." }
+if ($ExpectedAccountId -notmatch '^[0-9]{12}$' -or [string]::IsNullOrWhiteSpace($StateBucket)) {
+  throw "The exact development account ID and encrypted Terraform state bucket are required."
+}
+
+$repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+$terraformDirectory = Join-Path $repositoryRoot "infrastructure\terraform\environments\development"
+$terraformRoot = Join-Path $terraformDirectory ".terraform"
+$operatorRoot = Join-Path $terraformRoot "development-gateway-release"
+$terraformDataDirectory = Join-Path $terraformRoot "development-gateway-release-data"
+$artifactDirectory = Join-Path $repositoryRoot "backend\gateway\dist\lambda"
+$artifactName = "gateway-lambda"
+$metadataSuffix = ".gateway-release.json"
+
+$env:AWS_PROFILE = $AwsProfile
+$env:AWS_REGION = $Region
+$env:AWS_DEFAULT_REGION = $Region
+$env:AWS_PAGER = ""
+
+function Get-FileSha256 { param([Parameter(Mandatory)][string]$Path); return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() }
+function Get-FileBase64Sha256 {
+  param([Parameter(Mandatory)][string]$Path)
+  $algorithm = [Security.Cryptography.SHA256]::Create(); $stream = [IO.File]::OpenRead($Path)
+  try { return [Convert]::ToBase64String($algorithm.ComputeHash($stream)) }
+  finally { $stream.Dispose(); $algorithm.Dispose() }
+}
+function Get-TextSha256 {
+  param([Parameter(Mandatory)][string]$Value)
+  $algorithm = [Security.Cryptography.SHA256]::Create()
+  try { return ([BitConverter]::ToString($algorithm.ComputeHash([Text.Encoding]::UTF8.GetBytes($Value)))).Replace("-", "").ToLowerInvariant() }
+  finally { $algorithm.Dispose() }
+}
+function Invoke-AwsJson {
+  param([Parameter(Mandatory)][string[]]$Arguments, [Parameter(Mandatory)][string]$Operation)
+  $raw = & aws @Arguments 2>$null
+  if ($LASTEXITCODE -ne 0) { throw "$Operation failed. Refresh the development IAM Identity Center session and inspect locally." }
+  if (-not $raw) { return $null }
+  try { return ($raw -join [Environment]::NewLine) | ConvertFrom-Json }
+  catch { throw "$Operation returned invalid JSON." }
+}
+function Invoke-TerraformJson {
+  param([Parameter(Mandatory)][string[]]$Arguments, [Parameter(Mandatory)][string]$Operation)
+  $raw = & terraform "-chdir=$terraformDirectory" @Arguments 2>$null
+  if ($LASTEXITCODE -ne 0) { throw "$Operation failed." }
+  try { return ($raw -join [Environment]::NewLine) | ConvertFrom-Json }
+  catch { throw "$Operation returned invalid JSON." }
+}
+function Resolve-GatewayOperatorPath {
+  param([Parameter(Mandatory)][string]$Candidate, [switch]$MustExist, [switch]$ReleaseOnly)
+  if ([string]::IsNullOrWhiteSpace($Candidate)) { throw "A required operator path is missing." }
+  $resolved = if ([IO.Path]::IsPathRooted($Candidate)) { [IO.Path]::GetFullPath($Candidate) }
+    else { [IO.Path]::GetFullPath((Join-Path $terraformDirectory $Candidate)) }
+  $root = [IO.Path]::GetFullPath($(if ($ReleaseOnly) { $operatorRoot } else { $terraformRoot })).TrimEnd([char[]]@("\", "/"))
+  if (-not $resolved.StartsWith($root + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Gateway release artifacts must stay below the ignored development .terraform directory."
+  }
+  if ($MustExist -and -not (Test-Path -LiteralPath $resolved -PathType Leaf)) { throw "A required operator artifact does not exist." }
+  return $resolved
+}
+function Write-ExclusiveJson {
+  param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][object]$Value, [switch]$Replace)
+  if ((Test-Path -LiteralPath $Path) -and -not $Replace) { throw "Refusing to overwrite an operator artifact." }
+  $null = New-Item -ItemType Directory -Path (Split-Path -Parent $Path) -Force
+  $temporary = "$Path.$([guid]::NewGuid().ToString('N')).tmp"
+  try {
+    [IO.File]::WriteAllText($temporary, ($Value | ConvertTo-Json -Depth 50), [Text.UTF8Encoding]::new($false))
+    Move-Item -LiteralPath $temporary -Destination $Path -Force:$Replace
+  } finally { if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force } }
+}
+function Assert-CallerAndSource {
+  $identity = Invoke-AwsJson @("sts", "get-caller-identity", "--output", "json") "AWS caller validation"
+  if ([string]$identity.Account -cne $ExpectedAccountId -or -not ([string]$identity.Arn).Contains(":assumed-role/")) {
+    throw "Use the exact temporary development IAM Identity Center caller."
+  }
+  $terraformVersion = (& terraform version -json 2>$null | ConvertFrom-Json).terraform_version
+  if ($LASTEXITCODE -ne 0 -or [string]$terraformVersion -cne "1.9.8") { throw "Terraform 1.9.8 is required." }
+  if ((& node --version 2>$null).Trim() -notmatch '^v24\.' -or (& pnpm --version 2>$null).Trim() -cne "10.24.0") {
+    throw "Node.js 24 and pnpm 10.24.0 are required."
+  }
+  $branch = (& git -C $repositoryRoot branch --show-current 2>$null).Trim()
+  $head = (& git -C $repositoryRoot rev-parse HEAD 2>$null).Trim()
+  $origin = (& git -C $repositoryRoot rev-parse origin/main 2>$null).Trim()
+  $dirty = @(& git -C $repositoryRoot status --porcelain 2>$null)
+  if ($branch -cne "main" -or $head -cne $origin -or $dirty.Count -ne 0) { throw "The release requires clean main exactly matching origin/main." }
+  if ($Action -ne "Status" -and ($SourceSha -notmatch '^[a-f0-9]{40}$' -or $SourceSha -cne $head)) {
+    throw "SourceSha must equal the exact merged main checkout."
+  }
+  return $head
+}
+function Initialize-Backend {
+  $location = (& aws s3api get-bucket-location --bucket $StateBucket --query LocationConstraint --output text 2>$null).Trim()
+  if ($LASTEXITCODE -ne 0 -or $location -cne $Region) { throw "The state bucket is outside us-east-2." }
+  $encryption = Invoke-AwsJson @("s3api", "get-bucket-encryption", "--bucket", $StateBucket, "--output", "json") "State encryption validation"
+  $rules = @($encryption.ServerSideEncryptionConfiguration.Rules | Where-Object {
+      [string]$_.ApplyServerSideEncryptionByDefault.SSEAlgorithm -ceq "aws:kms" -and $_.BucketKeyEnabled
+    })
+  if ($rules.Count -ne 1) { throw "The state bucket must use one bucket-key-enabled KMS default." }
+  $kmsArn = [string]$rules[0].ApplyServerSideEncryptionByDefault.KMSMasterKeyID
+  if ($kmsArn -cnotmatch "^arn:aws:kms:$Region`:$ExpectedAccountId`:key/") { throw "The state KMS key is outside the exact boundary." }
+  $versioning = Invoke-AwsJson @("s3api", "get-bucket-versioning", "--bucket", $StateBucket, "--output", "json") "State versioning validation"
+  $public = Invoke-AwsJson @("s3api", "get-public-access-block", "--bucket", $StateBucket, "--output", "json") "State public-access validation"
+  $block = $public.PublicAccessBlockConfiguration
+  if ([string]$versioning.Status -cne "Enabled" -or -not ($block.BlockPublicAcls -and $block.IgnorePublicAcls -and $block.BlockPublicPolicy -and $block.RestrictPublicBuckets)) {
+    throw "The state bucket must be versioned and fully private."
+  }
+  $null = New-Item -ItemType Directory -Path $terraformDataDirectory -Force
+  $env:TF_DATA_DIR = $terraformDataDirectory
+  & terraform "-chdir=$terraformDirectory" init -reconfigure -input=false -lockfile=readonly `
+    "-backend-config=bucket=$StateBucket" "-backend-config=key=platform.tfstate" `
+    "-backend-config=region=$Region" "-backend-config=kms_key_id=$kmsArn" | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "The encrypted development backend could not be initialized." }
+  $head = Invoke-AwsJson @("s3api", "head-object", "--bucket", $StateBucket, "--key", "platform.tfstate", "--output", "json") "State object validation"
+  if ([long]$head.ContentLength -le 0 -or [string]::IsNullOrWhiteSpace([string]$head.VersionId) -or
+      [string]$head.ServerSideEncryption -cne "aws:kms" -or -not $head.BucketKeyEnabled) {
+    throw "The remote state object is not nonempty, versioned, and KMS encrypted."
+  }
+}
+function Add-ManagedResources {
+  param([AllowNull()][object]$Module, [Parameter(Mandatory)][Collections.Generic.Dictionary[string, object]]$Destination)
+  if ($null -eq $Module) { return }
+  $resourceProperty = $Module.PSObject.Properties["resources"]
+  $childProperty = $Module.PSObject.Properties["child_modules"]
+  foreach ($resource in @($(if ($null -eq $resourceProperty) { @() } else { $resourceProperty.Value }))) {
+    if ($null -ne $resource -and [string]$resource.mode -ceq "managed") { $Destination[[string]$resource.address] = $resource }
+  }
+  foreach ($child in @($(if ($null -eq $childProperty) { @() } else { $childProperty.Value }))) { Add-ManagedResources $child $Destination }
+}
+function Resolve-ArtifactBoundary {
+  $state = Invoke-TerraformJson @("show", "-json") "Terraform state inspection"
+  $resources = New-Object 'Collections.Generic.Dictionary[string, object]' ([StringComparer]::Ordinal)
+  Add-ManagedResources $state.values.root_module $resources
+  foreach ($address in @("module.platform.aws_s3_bucket.artifacts", "module.platform.aws_kms_key.platform", "module.platform.aws_ecr_repository.migration")) {
+    if (-not $resources.ContainsKey($address)) { throw "Terraform state does not own '$address'." }
+  }
+  $bucket = [string]$resources["module.platform.aws_s3_bucket.artifacts"].values.bucket
+  $kmsArn = [string]$resources["module.platform.aws_kms_key.platform"].values.arn
+  $migrationRepositoryUrl = [string]$resources["module.platform.aws_ecr_repository.migration"].values.repository_url
+  if ($migrationRepositoryUrl -cne "$ExpectedAccountId.dkr.ecr.$Region.amazonaws.com/ai-job-apply/migration") {
+    throw "Terraform state does not own the exact development migration repository."
+  }
+  $location = (& aws s3api get-bucket-location --bucket $bucket --query LocationConstraint --output text 2>$null).Trim()
+  if ($LASTEXITCODE -ne 0 -or $location -cne $Region) { throw "The Terraform-owned artifact bucket is outside us-east-2." }
+  $versioning = Invoke-AwsJson @("s3api", "get-bucket-versioning", "--bucket", $bucket, "--output", "json") "Artifact versioning validation"
+  $encryption = Invoke-AwsJson @("s3api", "get-bucket-encryption", "--bucket", $bucket, "--output", "json") "Artifact encryption validation"
+  $public = Invoke-AwsJson @("s3api", "get-public-access-block", "--bucket", $bucket, "--output", "json") "Artifact public-access validation"
+  $rules = @($encryption.ServerSideEncryptionConfiguration.Rules | Where-Object { [string]$_.ApplyServerSideEncryptionByDefault.KMSMasterKeyID -ceq $kmsArn -and $_.BucketKeyEnabled })
+  $key = Invoke-AwsJson @("kms", "describe-key", "--key-id", $kmsArn, "--output", "json") "Artifact KMS validation"
+  $block = $public.PublicAccessBlockConfiguration
+  if ([string]$versioning.Status -cne "Enabled" -or $rules.Count -ne 1 -or
+      [string]$key.KeyMetadata.Arn -cne $kmsArn -or [string]$key.KeyMetadata.KeyManager -cne "CUSTOMER" -or
+      [string]$key.KeyMetadata.KeyState -cne "Enabled" -or -not $key.KeyMetadata.Enabled -or
+      -not ($block.BlockPublicAcls -and $block.IgnorePublicAcls -and $block.BlockPublicPolicy -and $block.RestrictPublicBuckets)) {
+    throw "The Terraform-owned artifact bucket is not immutable, private, and protected by the exact platform KMS key."
+  }
+  $parserAddress = "module.platform.aws_lambda_function.document_parser[0]"
+  $parserQualifiedArn = if ($resources.ContainsKey($parserAddress)) { [string]$resources[$parserAddress].values.qualified_arn } else { "" }
+  if (-not [string]::IsNullOrEmpty($parserQualifiedArn) -and
+      $parserQualifiedArn -cnotmatch "^arn:aws:lambda:$Region`:$ExpectedAccountId`:function:ai-job-apply-development-document-parser:[1-9][0-9]*$") {
+    throw "Terraform state contains an invalid document parser version boundary."
+  }
+  return [pscustomobject]@{
+    Bucket = $bucket; KmsArn = $kmsArn
+    BoundarySha256 = Get-TextSha256 "$ExpectedAccountId|$Region|$bucket|$kmsArn"
+    MigrationRepositoryUrl = $migrationRepositoryUrl; ParserQualifiedArn = $parserQualifiedArn
+  }
+}
+function Read-Plan { param([Parameter(Mandatory)][string]$Path); return Invoke-TerraformJson @("show", "-json", $Path) "Saved plan inspection" }
+function Get-StateIdentity {
+  $raw = & terraform "-chdir=$terraformDirectory" state pull 2>$null
+  if ($LASTEXITCODE -ne 0 -or -not $raw) { throw "Current Terraform state identity could not be read." }
+  $state = ($raw -join [Environment]::NewLine) | ConvertFrom-Json
+  if ([string]$state.lineage -cnotmatch '^[a-f0-9-]{36}$' -or [long]$state.serial -lt 1) { throw "Current Terraform state identity is invalid." }
+  return [pscustomobject]@{ Lineage = [string]$state.lineage; Serial = [long]$state.serial }
+}
+function Save-AndClearTerraformVariables {
+  $saved = @{}
+  foreach ($item in @(Get-ChildItem Env: | Where-Object Name -like "TF_VAR_*")) { $saved[$item.Name] = $item.Value; Remove-Item "Env:$($item.Name)" }
+  return $saved
+}
+function Restore-TerraformVariables {
+  param([Parameter(Mandatory)][hashtable]$Saved)
+  foreach ($item in @(Get-ChildItem Env: | Where-Object Name -like "TF_VAR_*")) { Remove-Item "Env:$($item.Name)" }
+  foreach ($entry in $Saved.GetEnumerator()) { Set-Item "Env:$($entry.Key)" ([string]$entry.Value) }
+}
+function Set-VariablesFromPlan {
+  param([Parameter(Mandatory)][object]$Plan, [AllowNull()][object]$Artifact)
+  foreach ($property in $Plan.variables.PSObject.Properties) {
+    $value = $property.Value.value
+    $serialized = if ($value -is [bool]) { ([string]$value).ToLowerInvariant() }
+      elseif ($value -is [string]) { $value }
+      else { ConvertTo-Json -InputObject $value -Depth 30 -Compress }
+    Set-Item "Env:TF_VAR_$($property.Name)" $serialized
+  }
+  if ($null -ne $Artifact) {
+    $env:TF_VAR_gateway_lambda_artifact_s3_key = [string]$Artifact.key
+    $env:TF_VAR_gateway_lambda_artifact_s3_object_version = [string]$Artifact.versionId
+    $env:TF_VAR_gateway_lambda_artifact_sha256 = [string]$Artifact.artifactSha256
+    $env:TF_VAR_gateway_lambda_artifact_base64sha256 = [string]$Artifact.objectBase64Sha256
+  }
+}
+function Read-Baseline {
+  foreach ($required in @($BaselinePlanPath, $ReviewedBaselineSha256, $BaselineMetadataPath, $ReviewedBaselineMetadataSha256)) {
+    if ([string]::IsNullOrWhiteSpace($required)) { throw "A checksum-reviewed current Terraform input baseline and metadata sidecar are required." }
+  }
+  $planPath = Resolve-GatewayOperatorPath $BaselinePlanPath -MustExist
+  $metadataPath = Resolve-GatewayOperatorPath $BaselineMetadataPath -MustExist
+  $expectedMetadataPath = "$planPath.baseline.json"
+  if ([IO.Path]::GetFullPath($metadataPath) -cne [IO.Path]::GetFullPath($expectedMetadataPath)) {
+    throw "The retained baseline metadata must be the plan's adjacent .baseline.json sidecar."
+  }
+  if ((Get-FileSha256 $planPath) -cne $ReviewedBaselineSha256 -or (Get-FileSha256 $metadataPath) -cne $ReviewedBaselineMetadataSha256) {
+    throw "A baseline plan or metadata checksum does not match review."
+  }
+  $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+  $null = Assert-RetainedGatewayBaselineMetadata $metadata $planPath $ReviewedBaselineSha256 `
+    $SourceSha $ExpectedAccountId $Region
+  $plan = Read-Plan $planPath
+  $variableSource = Get-Content -LiteralPath (Join-Path $terraformDirectory "variables.tf") -Raw
+  $declaredVariables = @([regex]::Matches($variableSource, '(?m)^\s*variable\s+"([a-zA-Z0-9_]+)"\s*\{') | ForEach-Object { $_.Groups[1].Value })
+  $null = Assert-RetainedGatewayBaselinePlan $plan $declaredVariables
+  $stage = [string](Get-GatewayPlanVariableValue $plan.variables "document_processing_deployment_stage")
+  $parserArn = [string](Get-GatewayPlanVariableValue $plan.variables "document_parser_invocation_qualified_arn")
+  if ($stage -cne [string]$metadata.Stage -or $parserArn -cne [string]$metadata.ParserQualifiedArn -or
+      ($stage -ceq "complete-dark" -and $parserArn -cne [string]$boundary.ParserQualifiedArn)) {
+    throw "The retained baseline stage/parser binding does not match its plan and Terraform state."
+  }
+  $migrationImage = [string](Get-GatewayPlanVariableValue $plan.variables "migration_image")
+  if ($migrationImage -cnotmatch "^$([regex]::Escape([string]$boundary.MigrationRepositoryUrl))@sha256:[a-f0-9]{64}$") {
+    throw "The retained baseline migration digest is outside the exact Terraform-owned repository."
+  }
+  $state = Get-StateIdentity
+  if ([string]$metadata.StateLineage -cne [string]$state.Lineage -or [long]$metadata.StateSerial -ne [long]$state.Serial) {
+    throw "The retained baseline state lineage or serial is no longer current."
+  }
+  return [pscustomobject]@{ Path = $planPath; MetadataPath = $metadataPath; Metadata = $metadata; Plan = $plan }
+}
+function Get-BuiltArtifact {
+  $files = [ordered]@{}
+  foreach ($suffix in @("zip", "cdx.json", "manifest.json", "sha256")) {
+    $path = Join-Path $artifactDirectory "$artifactName.$suffix"
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item $path).Length -le 0) { throw "A gateway release artifact is missing or empty." }
+    $files[$suffix] = [pscustomobject]@{ Path = $path; Sha256 = Get-FileSha256 $path; Base64Sha256 = Get-FileBase64Sha256 $path; Length = (Get-Item $path).Length }
+  }
+  $manifest = Get-Content -LiteralPath $files["manifest.json"].Path -Raw | ConvertFrom-Json
+  $sbom = Get-Content -LiteralPath $files["cdx.json"].Path -Raw | ConvertFrom-Json
+  $checksum = (Get-Content -LiteralPath $files["sha256"].Path -Raw).Replace("`r`n", "`n").TrimEnd("`n")
+  if ([int]$manifest.schemaVersion -ne 2 -or [string]$manifest.sourceSha -cne $SourceSha -or
+      [string]$manifest.artifactSha256 -cne $files["zip"].Sha256 -or
+      [string]$manifest.artifactBase64Sha256 -cne $files["zip"].Base64Sha256 -or
+      $checksum -cne "$($files['zip'].Sha256)  gateway-lambda.zip" -or
+      [string]$sbom.bomFormat -cne "CycloneDX" -or [string]$sbom.specVersion -cne "1.6") {
+    throw "The gateway manifest, checksum, provenance, or CycloneDX SBOM is invalid."
+  }
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $archive = [IO.Compression.ZipFile]::OpenRead($files["zip"].Path)
+  try {
+    $entry = @($archive.Entries | Where-Object FullName -CEQ "index.mjs")
+    if ($entry.Count -ne 1) { throw "The gateway ZIP does not contain exactly one handler bundle." }
+    $reader = [IO.StreamReader]::new($entry[0].Open(), [Text.Encoding]::UTF8, $true)
+    try { $bundle = $reader.ReadToEnd() } finally { $reader.Dispose() }
+    if ($bundle.IndexOf("/* applydash-artifact-source:$SourceSha */", [StringComparison]::Ordinal) -lt 0) {
+      throw "The gateway bundle does not attest to the exact merged source commit."
+    }
+  } finally { $archive.Dispose() }
+  return [pscustomobject]@{ ArtifactSha256 = $files["zip"].Sha256; Files = $files }
+}
+function Assert-StoredObject {
+  param([Parameter(Mandatory)][object]$Boundary, [Parameter(Mandatory)][object]$Entry)
+  $head = Invoke-AwsJson @("s3api", "head-object", "--bucket", $Boundary.Bucket, "--key", [string]$Entry.key, "--version-id", [string]$Entry.versionId, "--checksum-mode", "ENABLED", "--output", "json") "Gateway object readback"
+  if ([string]$head.VersionId -cne [string]$Entry.versionId -or [long]$head.ContentLength -ne [long]$Entry.contentLength -or
+      [string]$head.ServerSideEncryption -cne "aws:kms" -or [string]$head.SSEKMSKeyId -cne $Boundary.KmsArn -or -not $head.BucketKeyEnabled -or
+      [string]$head.ChecksumSHA256 -cne [string]$Entry.objectBase64Sha256 -or [string]$head.Metadata.'source-sha' -cne $SourceSha -or
+      [string]$head.Metadata.'artifact-sha256' -cne [string]$Entry.artifactSha256) { throw "A gateway object failed exact-version KMS, checksum, metadata, or length readback." }
+}
+function Read-Receipt {
+  param([Parameter(Mandatory)][object]$Boundary)
+  if ([string]::IsNullOrWhiteSpace($ReceiptPath) -or $ReviewedReceiptSha256 -notmatch '^[a-f0-9]{64}$') { throw "The exact publication receipt and reviewed checksum are required." }
+  $path = Resolve-GatewayOperatorPath $ReceiptPath -MustExist
+  if ((Get-FileSha256 $path) -cne $ReviewedReceiptSha256) { throw "The publication receipt checksum does not match review." }
+  $receipt = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+  $zip = Assert-GatewayPublicationReceipt $receipt $SourceSha $Boundary.BoundarySha256
+  foreach ($entry in @($receipt.artifacts)) { Assert-StoredObject $Boundary $entry }
+  return [pscustomobject]@{ Path = $path; Receipt = $receipt; Artifact = $zip }
+}
+function Assert-LiveGateway {
+  param([Parameter(Mandatory)][object]$Artifact)
+  $alias = Invoke-AwsJson @("lambda", "get-alias", "--function-name", "ai-job-apply-development-gateway", "--name", "development", "--output", "json") "Gateway alias validation"
+  if ([string]$alias.FunctionVersion -cnotmatch '^[1-9][0-9]*$') { throw "The development alias is not pinned to an immutable numeric version." }
+  $function = Invoke-AwsJson @("lambda", "get-function", "--function-name", "ai-job-apply-development-gateway:development", "--output", "json") "Gateway function validation"
+  if ([string]$function.Configuration.Version -cne [string]$alias.FunctionVersion -or [string]$function.Configuration.State -cne "Active" -or
+      [string]$function.Configuration.LastUpdateStatus -cne "Successful" -or [string]$function.Configuration.CodeSha256 -cne [string]$Artifact.objectBase64Sha256 -or
+      [string]$function.Configuration.Environment.Variables.RELEASE_SHA -cne [string]$Artifact.artifactSha256) { throw "The live gateway alias does not match the checksum-reviewed immutable artifact." }
+}
+function Invoke-ZeroDrift {
+  param([Parameter(Mandatory)][object]$Baseline, [Parameter(Mandatory)][object]$Artifact)
+  $path = Join-Path $operatorRoot "verify-$($SourceSha.Substring(0,12))-$(Get-Date -Format 'yyyyMMdd-HHmmss').tfplan"
+  if (Test-Path $path) { throw "Refusing to overwrite a verification plan." }
+  $saved = Save-AndClearTerraformVariables
+  try {
+    Set-VariablesFromPlan $Baseline.Plan $Artifact
+    & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m -detailed-exitcode "-out=$path" *> "$path.log"
+    $exitCode = $LASTEXITCODE
+  } finally { Restore-TerraformVariables $saved }
+  if ($exitCode -ne 0) { throw "The post-release Terraform plan is not zero drift. Inspect the ignored verification log." }
+  $plan = Read-Plan $path
+  $variableSource = Get-Content -LiteralPath (Join-Path $terraformDirectory "variables.tf") -Raw
+  $declaredVariables = @([regex]::Matches($variableSource, '(?m)^\s*variable\s+"([a-zA-Z0-9_]+)"\s*\{') | ForEach-Object { $_.Groups[1].Value })
+  $null = Assert-RetainedGatewayBaselinePlan $plan $declaredVariables
+  $null = Assert-GatewayReleaseVariables $Baseline.Plan.variables $plan.variables $Artifact `
+    $ExpectedAccountId $boundary.MigrationRepositoryUrl $Baseline.Metadata.ParserQualifiedArn
+  return Get-FileSha256 $path
+}
+
+$commit = Assert-CallerAndSource
+Initialize-Backend
+$boundary = Resolve-ArtifactBoundary
+$null = New-Item -ItemType Directory -Path $operatorRoot -Force
+
+if ($Action -ceq "Status") {
+  [pscustomobject]@{ Environment = "development"; SourceSha = $commit; TerraformOwnedBucket = $true; CustomerKmsEncrypted = $true; MutationPerformed = $false } | ConvertTo-Json
+  exit 0
+}
+
+if ($Action -ceq "Publish") {
+  $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+  foreach ($gate in @(
+      @{ Name = "gateway-tests"; Command = { pnpm --filter @ai-job-apply/gateway test } },
+      @{ Name = "dependency-audit"; Command = { pnpm audit:dependencies } }
+    )) {
+    & $gate.Command *> (Join-Path $operatorRoot "$($gate.Name)-$timestamp.log")
+    if ($LASTEXITCODE -ne 0) { throw "$($gate.Name) failed. Inspect the ignored local log." }
+  }
+  $previous = $env:ARTIFACT_SOURCE_SHA
+  try {
+    $env:ARTIFACT_SOURCE_SHA = $SourceSha
+    pnpm --filter @ai-job-apply/gateway build:lambda *> (Join-Path $operatorRoot "build-one-$timestamp.log")
+    if ($LASTEXITCODE -ne 0) { throw "The first gateway build failed." }; $first = Get-BuiltArtifact
+    $fingerprint = @($first.Files.Values | ForEach-Object Sha256) -join "|"
+    pnpm --filter @ai-job-apply/gateway build:lambda *> (Join-Path $operatorRoot "build-two-$timestamp.log")
+    if ($LASTEXITCODE -ne 0) { throw "The second gateway build failed." }; $second = Get-BuiltArtifact
+    if ((@($second.Files.Values | ForEach-Object Sha256) -join "|") -cne $fingerprint) { throw "The gateway builds were not byte-for-byte reproducible." }
+  } finally { if ($null -eq $previous) { Remove-Item Env:ARTIFACT_SOURCE_SHA -ErrorAction SilentlyContinue } else { $env:ARTIFACT_SOURCE_SHA = $previous } }
+  $prefix = "lambda/gateway/$SourceSha/$($second.ArtifactSha256)"
+  $entries = @()
+  foreach ($suffix in @("zip", "cdx.json", "manifest.json", "sha256")) {
+    $key = "$prefix/gateway-lambda.$suffix"
+    $history = Invoke-AwsJson @("s3api", "list-object-versions", "--bucket", $boundary.Bucket, "--prefix", $key, "--max-keys", "20", "--output", "json") "Immutable destination validation"
+    $versionsProperty = $history.PSObject.Properties["Versions"]
+    $markersProperty = $history.PSObject.Properties["DeleteMarkers"]
+    $versions = if ($null -eq $versionsProperty) { @() } else { @($versionsProperty.Value) }
+    $markers = if ($null -eq $markersProperty) { @() } else { @($markersProperty.Value) }
+    if (@($versions + $markers | Where-Object { [string]$_.Key -ceq $key }).Count -ne 0) { throw "An immutable gateway destination key or delete marker already exists." }
+    $file = $second.Files[$suffix]
+    $entries += [ordered]@{ artifactName = $artifactName; artifactSha256 = $second.ArtifactSha256; suffix = $suffix; key = $key; versionId = ""; objectSha256 = $file.Sha256; objectBase64Sha256 = $file.Base64Sha256; contentLength = $file.Length; localPath = $file.Path }
+  }
+  if ([string]::IsNullOrWhiteSpace($ReceiptPath)) { $ReceiptPath = Join-Path $operatorRoot "receipt-$($SourceSha.Substring(0,12))-$timestamp.json" }
+  $receipt = Resolve-GatewayOperatorPath $ReceiptPath -ReleaseOnly
+  $value = [ordered]@{ schemaVersion = 1; kind = "development-gateway-lambda-publication"; environment = "development"; region = $Region; sourceSha = $SourceSha; boundarySha256 = $boundary.BoundarySha256; phase = "publishing"; createdAt = (Get-Date).ToUniversalTime().ToString("o"); artifacts = @($entries | ForEach-Object { $copy = [ordered]@{}; foreach ($keyName in @("artifactName","artifactSha256","suffix","key","versionId","objectSha256","objectBase64Sha256","contentLength")) { $copy[$keyName] = $_[$keyName] }; $copy }) }
+  Write-ExclusiveJson $receipt $value
+  foreach ($entry in $entries) {
+    $put = Invoke-AwsJson @("s3api", "put-object", "--bucket", $boundary.Bucket, "--key", $entry.key, "--body", $entry.localPath, "--checksum-algorithm", "SHA256", "--checksum-sha256", $entry.objectBase64Sha256, "--metadata", "source-sha=$SourceSha,artifact-sha256=$($entry.artifactSha256)", "--if-none-match", "*", "--output", "json") "Immutable gateway publication"
+    if ([string]::IsNullOrWhiteSpace([string]$put.VersionId)) { throw "S3 did not return an immutable object version." }
+    (@($value.artifacts | Where-Object key -CEQ $entry.key))[0].versionId = [string]$put.VersionId
+    Write-ExclusiveJson $receipt $value -Replace
+    Assert-StoredObject $boundary (@($value.artifacts | Where-Object key -CEQ $entry.key))[0]
+  }
+  $value.phase = "verified"; $value.completedAt = (Get-Date).ToUniversalTime().ToString("o"); Write-ExclusiveJson $receipt $value -Replace
+  [pscustomobject]@{ Outcome = "published-and-verified"; ReceiptPath = $receipt; ReceiptSha256 = Get-FileSha256 $receipt; SourceSha = $SourceSha; PublishedObjectCount = 4; DeploymentChanged = $false } | ConvertTo-Json
+  exit 0
+}
+
+$publication = Read-Receipt $boundary
+if ($Action -ceq "VerifyPublication") {
+  [pscustomobject]@{ Outcome = "verified"; SourceSha = $SourceSha; ReceiptSha256 = $ReviewedReceiptSha256; PublishedObjectCount = 4; DeploymentChanged = $false } | ConvertTo-Json
+  exit 0
+}
+$baseline = Read-Baseline
+
+if ($Action -ceq "Verify") {
+  Assert-LiveGateway $publication.Artifact
+  & (Join-Path $PSScriptRoot "verify-development-gateway-lambda-boundary.ps1") -AwsProfile $AwsProfile -AwsRegion $Region | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "The direct development gateway/search boundary failed." }
+  $driftSha = Invoke-ZeroDrift $baseline $publication.Artifact
+  [pscustomobject]@{ Outcome = "verified"; SourceSha = $SourceSha; AliasImmutable = $true; SearchBoundary = "passed"; Drift = $false; VerificationPlanSha256 = $driftSha } | ConvertTo-Json
+  exit 0
+}
+
+if ($Action -ceq "Plan") {
+  if ([string]::IsNullOrWhiteSpace($PlanPath)) { $PlanPath = Join-Path $operatorRoot "release-$($SourceSha.Substring(0,12))-$(Get-Date -Format 'yyyyMMdd-HHmmss').tfplan" }
+  $path = Resolve-GatewayOperatorPath $PlanPath -ReleaseOnly
+  if (Test-Path $path) { throw "Refusing to overwrite a release plan." }
+  $state = Get-StateIdentity; $saved = Save-AndClearTerraformVariables
+  try {
+    Set-VariablesFromPlan $baseline.Plan $publication.Artifact
+    & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m -detailed-exitcode "-out=$path" *> "$path.log"
+    $exitCode = $LASTEXITCODE
+  } finally { Restore-TerraformVariables $saved }
+  if ($exitCode -ne 2) { if (Test-Path $path) { Remove-Item $path -Force }; throw "The gateway release did not produce an exact reviewable change." }
+  $plan = Read-Plan $path
+  $null = Assert-GatewayReleaseVariables $baseline.Plan.variables $plan.variables $publication.Artifact `
+    $ExpectedAccountId $boundary.MigrationRepositoryUrl $baseline.Metadata.ParserQualifiedArn
+  $changes = @(Assert-ExactGatewayReleasePlan $plan $publication.Artifact)
+  $sha = Get-FileSha256 $path
+  $metadata = [ordered]@{ SchemaVersion = "1"; Kind = "development-gateway-release-plan"; Environment = "development"; AccountId = $ExpectedAccountId; Region = $Region; StateBucket = $StateBucket; StateKey = "platform.tfstate"; StateLineage = $state.Lineage; StateSerial = $state.Serial; SourceSha = $SourceSha; ReceiptSha256 = $ReviewedReceiptSha256; BaselinePath = $baseline.Path; BaselineSha256 = $ReviewedBaselineSha256; BaselineMetadataPath = $baseline.MetadataPath; BaselineMetadataSha256 = $ReviewedBaselineMetadataSha256; BaselineStage = [string]$baseline.Metadata.Stage; BaselineParserQualifiedArn = [string]$baseline.Metadata.ParserQualifiedArn; BaselineDocumentReceiptSha256 = [string]$baseline.Metadata.ReceiptSha256; BaselineStateLineage = [string]$baseline.Metadata.StateLineage; BaselineStateSerial = [long]$baseline.Metadata.StateSerial; MigrationImage = [string](Get-GatewayPlanVariableValue $baseline.Plan.variables "migration_image"); PlanPath = $path; PlanSha256 = $sha; ChangedResources = @($changes | ForEach-Object address | Sort-Object); CreatedAt = (Get-Date).ToUniversalTime().ToString("o") }
+  Write-ExclusiveJson "$path$metadataSuffix" $metadata
+  [pscustomobject]@{ Outcome = "review-required"; PlanPath = $path; PlanSha256 = $sha; Updates = $changes.Count; ApprovalCommand = "Apply reviewed development gateway release plan $sha" } | ConvertTo-Json
+  exit 0
+}
+
+if ([string]::IsNullOrWhiteSpace($PlanPath) -or $ReviewedPlanSha256 -notmatch '^[a-f0-9]{64}$') { throw "Apply requires the exact reviewed release plan and SHA-256." }
+$path = Resolve-GatewayOperatorPath $PlanPath -MustExist -ReleaseOnly
+if ((Get-FileSha256 $path) -cne $ReviewedPlanSha256) { throw "The gateway release plan checksum does not match review." }
+$metadataPath = "$path$metadataSuffix"
+if (-not (Test-Path $metadataPath -PathType Leaf)) { throw "The gateway release plan metadata is missing." }
+$metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+Assert-ReviewedPlanMetadata $metadata @{ SchemaVersion = "1"; Kind = "development-gateway-release-plan"; Environment = "development"; AccountId = $ExpectedAccountId; Region = $Region; StateBucket = $StateBucket; StateKey = "platform.tfstate"; SourceSha = $SourceSha; ReceiptSha256 = $ReviewedReceiptSha256; BaselinePath = $baseline.Path; BaselineSha256 = $ReviewedBaselineSha256; BaselineMetadataPath = $baseline.MetadataPath; BaselineMetadataSha256 = $ReviewedBaselineMetadataSha256; BaselineStage = [string]$baseline.Metadata.Stage; BaselineParserQualifiedArn = [string]$baseline.Metadata.ParserQualifiedArn; BaselineDocumentReceiptSha256 = [string]$baseline.Metadata.ReceiptSha256; BaselineStateLineage = [string]$baseline.Metadata.StateLineage; BaselineStateSerial = [long]$baseline.Metadata.StateSerial; MigrationImage = [string](Get-GatewayPlanVariableValue $baseline.Plan.variables "migration_image"); PlanPath = $path; PlanSha256 = $ReviewedPlanSha256 }
+$state = Get-StateIdentity
+if ([string]$state.Lineage -cne [string]$metadata.StateLineage -or [long]$state.Serial -ne [long]$metadata.StateSerial) { throw "Remote state changed after review; generate a new gateway release plan." }
+$plan = Read-Plan $path
+$null = Assert-GatewayReleaseVariables $baseline.Plan.variables $plan.variables $publication.Artifact `
+  $ExpectedAccountId $boundary.MigrationRepositoryUrl $baseline.Metadata.ParserQualifiedArn
+$null = Assert-ExactGatewayReleasePlan $plan $publication.Artifact
+& terraform "-chdir=$terraformDirectory" apply -input=false -lock-timeout=5m $path *> "$path.apply.log"
+if ($LASTEXITCODE -ne 0) { throw "The exact reviewed gateway release plan failed to apply." }
+Assert-LiveGateway $publication.Artifact
+& (Join-Path $PSScriptRoot "verify-development-gateway-lambda-boundary.ps1") -AwsProfile $AwsProfile -AwsRegion $Region | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "The direct development gateway/search boundary failed after apply." }
+$driftSha = Invoke-ZeroDrift $baseline $publication.Artifact
+[pscustomobject]@{ Outcome = "applied-and-verified"; SourceSha = $SourceSha; AliasImmutable = $true; SearchBoundary = "passed"; Drift = $false; VerificationPlanSha256 = $driftSha } | ConvertTo-Json

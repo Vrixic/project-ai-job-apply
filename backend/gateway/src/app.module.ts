@@ -42,6 +42,7 @@ import {
   type DynamicModule,
   type ExceptionFilter,
   Get,
+  Header,
   Headers,
   HttpCode,
   HttpException,
@@ -419,6 +420,7 @@ class CandidateController {
 
   @Post("/jobs/search")
   @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
   async searchCanonicalJobs(@Req() request: AuthenticatedRequest): Promise<JobSearchPage> {
     await this.identity.authorize(request, "jobs:read");
     if (!validateJobSearch(request.body)) {

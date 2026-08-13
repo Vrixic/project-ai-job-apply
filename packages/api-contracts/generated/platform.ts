@@ -813,6 +813,7 @@ export interface operations {
             /** @description One stable page of active canonical jobs */
             200: {
                 headers: {
+                    "Cache-Control": "no-store";
                     [name: string]: unknown;
                 };
                 content: {

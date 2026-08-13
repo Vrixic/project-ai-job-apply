@@ -127,6 +127,7 @@ export async function buildLambdaArtifact({
   applicationName,
   handlers,
   packageFilter,
+  external = [],
 }) {
   const sourceSha = process.env.ARTIFACT_SOURCE_SHA ?? "local";
   if (!/^(?:local|[a-f0-9]{40})$/.test(sourceSha)) {
@@ -157,6 +158,7 @@ export async function buildLambdaArtifact({
     minify: false,
     legalComments: "none",
     treeShaking: true,
+    external,
   });
   if (result.outputFiles.length !== 1 || !result.outputFiles[0]) {
     throw new Error(`Expected exactly one bundled output for ${artifactName}`);
