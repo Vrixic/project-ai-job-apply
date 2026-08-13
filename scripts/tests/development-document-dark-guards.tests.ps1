@@ -128,6 +128,24 @@ if ($expected.Count -ne 44) { throw "Expected 44 exact post-prerequisite dark de
 if (@($expected.Values | Where-Object { $_ -eq "create" }).Count -ne 39) { throw "Expected 39 creates." }
 if (@($expected.Values | Where-Object { $_ -eq "update" }).Count -ne 5) { throw "Expected five post-prerequisite updates." }
 
+$omittedOptionalChange = [pscustomobject]@{ actions = @("update") }
+Assert-NoTerraformReplacementPaths $omittedOptionalChange
+foreach ($metadataName in @("after_unknown", "before_sensitive", "after_sensitive")) {
+  if ((ConvertTo-OptionalTerraformMetadataCanonicalValue $omittedOptionalChange $metadataName) -cne "{}") {
+    throw "Omitted Terraform metadata '$metadataName' was not treated as exact empty metadata."
+  }
+}
+$emptyOptionalChange = [pscustomobject]@{ actions = @("update"); replace_paths = @() }
+Assert-NoTerraformReplacementPaths $emptyOptionalChange
+$replacementChange = [pscustomobject]@{ actions = @("create", "delete"); replace_paths = @(@("policy")) }
+$rejected = $false
+try { Assert-NoTerraformReplacementPaths $replacementChange } catch { $rejected = $true }
+if (-not $rejected) { throw "A nonempty Terraform replacement path was accepted." }
+$unknownMetadataChange = [pscustomobject]@{ actions = @("update"); after_unknown = [pscustomobject]@{ policy = $true } }
+if ((ConvertTo-OptionalTerraformMetadataCanonicalValue $unknownMetadataChange "after_unknown") -notmatch "true") {
+  throw "Nonempty optional Terraform metadata was treated as empty."
+}
+
 $emptyRootMap = Get-TerraformStateResourceMap -RootModule ([pscustomobject]@{
     child_modules = @([pscustomobject]@{
         resources = @([pscustomobject]@{ address = "module.child.resource.example"; values = [pscustomobject]@{ id = "one" } })
@@ -479,6 +497,9 @@ $kmsPrerequisiteChange = [pscustomobject]@{
   address = "module.platform.aws_kms_key.platform"; mode = "managed"; type = "aws_kms_key"
   change = $updates["module.platform.aws_kms_key.platform"]
 }
+$kmsPrerequisiteChange.change.PSObject.Properties.Remove("after_unknown")
+$kmsPrerequisiteChange.change.PSObject.Properties.Remove("before_sensitive")
+$kmsPrerequisiteChange.change.PSObject.Properties.Remove("after_sensitive")
 $kmsPrerequisitePlan = [pscustomobject]@{ resource_changes = @($kmsPrerequisiteChange); resource_drift = $resourceDrift }
 $null = Assert-DevelopmentDocumentKmsPrerequisitePlan $kmsPrerequisitePlan $account
 $badPrerequisitePlan = $kmsPrerequisitePlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
@@ -582,4 +603,4 @@ foreach ($ruleName in @("document_scan_tag_failure", "document_scan_plan_unhealt
   if ($documentSource -notmatch $rulePattern) { throw "A document health rule is not explicitly dark." }
 }
 
-Write-Output "Development document dark guard tests passed: 75"
+Write-Output "Development document dark guard tests passed: 83"
