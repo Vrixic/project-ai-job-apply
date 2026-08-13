@@ -722,8 +722,9 @@ function Assert-ExactAddedStatement {
       }
       Assert-ExactStringSet $Statement.Action @("s3:GetObject", "s3:GetObjectVersion") "candidate deny actions"
       Assert-ExactStringSet $Statement.Resource @("$CandidateBucketArn/quarantine/*") "candidate deny resources"
-      Assert-ExactObjectKeys $Statement.Principal @("AWS") "candidate deny principal"
-      Assert-ExactStringSet $Statement.Principal.AWS @("*") "candidate deny principals"
+      if ($Statement.Principal -isnot [string] -or [string]$Statement.Principal -cne "*") {
+        throw "Unexpected candidate deny principal shape."
+      }
       Assert-ExactCondition $Statement.Condition @{
         StringNotEquals = @{ "s3:ExistingObjectTag/GuardDutyMalwareScanStatus" = @("NO_THREATS_FOUND") }
         ArnNotEquals = @{ "aws:PrincipalArn" = @("arn:aws:iam::${AccountId}:role/ai-job-apply-development-guardduty-malware") }
@@ -852,6 +853,10 @@ function Assert-ApprovedPolicyUpdateSemantics {
   if ($Stage -ceq "parser-dark") {
     $s3Change = $byAddress["module.platform.aws_s3_bucket_policy.candidate_documents[0]"].change
     $beforeS3 = ConvertFrom-IamPolicyValue $s3Change.before.policy
+    $afterS3 = ConvertFrom-IamPolicyValue $s3Change.after.policy
+    if ([string]$beforeS3.Version -cne "2012-10-17" -or [string]$afterS3.Version -cne "2012-10-17") {
+      throw "The candidate-document bucket policy version is not exact."
+    }
     $transport = @($beforeS3.Statement | Where-Object Sid -eq "DenyInsecureTransport")[0]
     $bucketArn = @($transport.Resource | Where-Object { [string]$_ -notlike "*/*" })[0]
     $s3 = Get-PolicyAddedStatements $s3Change.before.policy $s3Change.after.policy @("DenyQuarantineReadsWithoutCleanMalwareTag")

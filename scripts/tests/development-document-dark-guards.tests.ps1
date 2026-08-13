@@ -307,13 +307,46 @@ foreach ($entry in $parser.GetEnumerator()) {
   $parserChanges += New-TestCreate $entry.Key $fields
 }
 $transport = @{ Sid = "DenyInsecureTransport"; Effect = "Deny"; Action = "s3:*"; Resource = @($bucketArn, "$bucketArn/*") }
-$candidateDeny = @{ Sid = "DenyQuarantineReadsWithoutCleanMalwareTag"; Effect = "Deny"; Action = @("s3:GetObject", "s3:GetObjectVersion"); Resource = "$bucketArn/quarantine/*"; Principal = @{ AWS = "*" }; Condition = @{ StringNotEquals = @{ "s3:ExistingObjectTag/GuardDutyMalwareScanStatus" = "NO_THREATS_FOUND" }; ArnNotEquals = @{ "aws:PrincipalArn" = "arn:aws:iam::${account}:role/ai-job-apply-development-guardduty-malware" } } }
+$candidateDeny = @{ Sid = "DenyQuarantineReadsWithoutCleanMalwareTag"; Effect = "Deny"; Action = @("s3:GetObject", "s3:GetObjectVersion"); Resource = "$bucketArn/quarantine/*"; Principal = "*"; Condition = @{ StringNotEquals = @{ "s3:ExistingObjectTag/GuardDutyMalwareScanStatus" = "NO_THREATS_FOUND" }; ArnNotEquals = @{ "aws:PrincipalArn" = "arn:aws:iam::${account}:role/ai-job-apply-development-guardduty-malware" } } }
 $snsBase = @{ Sid = "Existing"; Effect = "Allow"; Action = "sns:GetTopicAttributes"; Resource = "*" }
 $snsAdded = @{ Sid = "AllowExactDocumentOperationalRules"; Effect = "Allow"; Action = "SNS:Publish"; Resource = "arn:aws:sns:us-east-2:${account}:ai-job-apply-development-operational-alerts"; Principal = @{ Service = "events.amazonaws.com" }; Condition = @{ StringEquals = @{ "aws:SourceAccount" = $account }; ArnEquals = @{ "aws:SourceArn" = @("arn:aws:events:us-east-2:${account}:rule/ai-job-apply-development-document-scan-tag-failure", "arn:aws:events:us-east-2:${account}:rule/ai-job-apply-development-document-scan-plan-unhealthy") } } }
 $parserChanges += New-TestPolicyUpdate "module.platform.aws_s3_bucket_policy.candidate_documents[0]" (New-TestPolicy @($transport)) (New-TestPolicy @($transport, $candidateDeny))
 $parserChanges += New-TestPolicyUpdate "module.platform.aws_sns_topic_policy.operational_alerts" (New-TestPolicy @($snsBase)) (New-TestPolicy @($snsBase, $snsAdded))
 $validParserPlan = [pscustomobject]@{ resource_drift = $kmsPlan.resource_drift; resource_changes = @($kmsNoop) + $parserChanges }
 $null = Assert-DevelopmentDocumentDarkPlan $validParserPlan $account parser-dark
+foreach ($fixture in @(
+    [pscustomobject]@{ Label = "AWS wildcard object"; Principal = @{ AWS = "*" } },
+    [pscustomobject]@{ Label = "service wildcard object"; Principal = @{ Service = "*" } },
+    [pscustomobject]@{ Label = "different scalar"; Principal = "arn:aws:iam::${account}:root" },
+    [pscustomobject]@{ Label = "wildcard list"; Principal = [object[]]@("*") }
+  )) {
+  $badCandidatePlan = $validParserPlan | ConvertTo-Json -Depth 60 | ConvertFrom-Json
+  $candidatePolicyChange = @($badCandidatePlan.resource_changes | Where-Object {
+      [string]$_.address -ceq "module.platform.aws_s3_bucket_policy.candidate_documents[0]"
+    })
+  $candidatePolicy = $candidatePolicyChange[0].change.after.policy | ConvertFrom-Json
+  $candidateStatement = @($candidatePolicy.Statement | Where-Object {
+      [string]$_.Sid -ceq "DenyQuarantineReadsWithoutCleanMalwareTag"
+    })
+  $candidateStatement[0].Principal = $fixture.Principal
+  $candidatePolicyChange[0].change.after.policy = $candidatePolicy | ConvertTo-Json -Compress -Depth 40
+  $rejected = $false
+  try { $null = Assert-DevelopmentDocumentDarkPlan $badCandidatePlan $account parser-dark } catch { $rejected = $true }
+  if (-not $rejected) { throw "The candidate bucket guard accepted the $($fixture.Label) principal shape." }
+}
+$badCandidateVersionPlan = $validParserPlan | ConvertTo-Json -Depth 60 | ConvertFrom-Json
+$candidateVersionChange = @($badCandidateVersionPlan.resource_changes | Where-Object {
+    [string]$_.address -ceq "module.platform.aws_s3_bucket_policy.candidate_documents[0]"
+  })
+$candidateVersionBefore = $candidateVersionChange[0].change.before.policy | ConvertFrom-Json
+$candidateVersionAfter = $candidateVersionChange[0].change.after.policy | ConvertFrom-Json
+$candidateVersionBefore.Version = "2008-10-17"
+$candidateVersionAfter.Version = "2008-10-17"
+$candidateVersionChange[0].change.before.policy = $candidateVersionBefore | ConvertTo-Json -Compress -Depth 40
+$candidateVersionChange[0].change.after.policy = $candidateVersionAfter | ConvertTo-Json -Compress -Depth 40
+$rejected = $false
+try { $null = Assert-DevelopmentDocumentDarkPlan $badCandidateVersionPlan $account parser-dark } catch { $rejected = $true }
+if (-not $rejected) { throw "The candidate bucket guard accepted a non-standard policy version." }
 foreach ($fixture in @(
     [pscustomobject]@{ Label = "AWS wildcard object"; Principal = @{ AWS = "*" } },
     [pscustomobject]@{ Label = "service wildcard object"; Principal = @{ Service = "*" } },
