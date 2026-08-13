@@ -112,8 +112,11 @@ $allowedVariableNames = @(
   "profile_readiness_activity_artifact_base64sha256",
   "profile_readiness_lambda_extension_layer_arn",
   "profile_readiness_execution_timeout_seconds", "profile_readiness_retention_days",
-  "deploy_document_processing", "document_scan_mapping_enabled",
+  "document_processing_deployment_stage", "document_parser_invocation_qualified_arn",
+  "deploy_document_processing",
+  "document_scan_mapping_enabled",
   "document_scan_event_rule_enabled",
+  "document_security_health_rules_enabled",
   "document_processor_artifact_s3_key", "document_processor_artifact_s3_object_version",
   "document_processor_artifact_sha256", "document_processor_artifact_base64sha256",
   "document_processor_extension_layer_arn", "document_parser_artifact_s3_key",
@@ -190,7 +193,8 @@ function Initialize-Backend {
 function Resolve-PlanBelowTerraformData {
   param([Parameter(Mandatory)][string]$Candidate, [switch]$MustExist)
 
-  $resolved = [IO.Path]::GetFullPath($Candidate, $terraformDirectory)
+  $resolved = if ([IO.Path]::IsPathRooted($Candidate)) { [IO.Path]::GetFullPath($Candidate) }
+    else { [IO.Path]::GetFullPath((Join-Path $terraformDirectory $Candidate)) }
   $prefix = $allowedPlanRoot + [IO.Path]::DirectorySeparatorChar
   if (-not $resolved.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
     throw "Plan paths must stay below the ignored staging .terraform directory."
@@ -219,11 +223,21 @@ function Set-VariablesFromAppliedPlan {
     throw "The source plan contains an unapproved staging input: $($unexpected.Name -join ', ')."
   }
   foreach ($property in $properties) {
+    if ([string]$property.Name -ceq "deploy_document_processing") {
+      if ([bool]$property.Value.value) {
+        throw "The staging lifecycle operator cannot migrate an active legacy document-processing boundary."
+      }
+      continue
+    }
     $value = $property.Value.value
     $serialized = if ($value -is [bool]) { $value.ToString().ToLowerInvariant() }
       elseif ($value -is [string]) { $value }
       else { $value | ConvertTo-Json -Compress -Depth 20 }
     [Environment]::SetEnvironmentVariable("TF_VAR_$($property.Name)", [string]$serialized, "Process")
+  }
+  if ($null -eq $plan.variables.PSObject.Properties["document_processing_deployment_stage"]) {
+    $env:TF_VAR_document_processing_deployment_stage = "disabled"
+    $env:TF_VAR_document_parser_invocation_qualified_arn = ""
   }
   $env:TF_VAR_staging_runtime_mode = $StagingMode
   $env:TF_VAR_serverless_runtime_enabled = $RuntimeEnabled.ToString().ToLowerInvariant()
@@ -231,6 +245,7 @@ function Set-VariablesFromAppliedPlan {
   # and exact GuardDuty rule require their own reviewed, sequential activation plans.
   $env:TF_VAR_document_scan_mapping_enabled = "false"
   $env:TF_VAR_document_scan_event_rule_enabled = "false"
+  $env:TF_VAR_document_security_health_rules_enabled = "false"
 }
 
 function Get-Database {
@@ -389,7 +404,7 @@ function Assert-TransitionPreconditions {
 function Assert-PlanBoundary {
   param([Parameter(Mandatory)][object]$Plan)
 
-  $documentProcessingDeployed = [bool]$Plan.variables.deploy_document_processing.value
+  $documentProcessingDeployed = [string]$Plan.variables.document_processing_deployment_stage.value -cne "disabled"
   $changes = @($Plan.resource_changes | Where-Object {
       (@($_.change.actions) -join ",") -ne "no-op"
     })

@@ -63,7 +63,9 @@ no gateway or general worker image exists.
   `docs/security/bootstrap-workload-boundary-runbook.md`.
 - `operate-development-document-dark-deployment.ps1` — Reconstructs exact current inputs from a
   checksum-reviewed zero-change baseline, consumes a checksum-reviewed immutable publication
-  receipt, and plans/applies/verifies the trigger-disabled document-processing runtime. See
+  receipt, and advances KMS, parser-dark, and complete-dark stages one at a time with processing
+  triggers disabled, bounded security-health alerts active, and plans bound to the exact state
+  lineage/serial and parser version. See
   `infrastructure/runbooks/deployments/development-document-dark-deployment.md`.
 - `validate-serverless-workflow-infrastructure.mjs` — Enforces the steady-state Lambda durable,
   migration-only container, and retired-path absence policies.

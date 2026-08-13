@@ -27,6 +27,7 @@ import type {
 } from "aws-lambda";
 import { createGatewayApplication } from "./application.js";
 import { MAXIMUM_GATEWAY_BODY_BYTES } from "./gateway-boundary.js";
+import { deriveJobSearchCursorKeys } from "./job-search-cursor-key.js";
 import { SqsOutboxNudgePublisher } from "./sqs-outbox-nudge-publisher.js";
 
 type JwtClaimValue = string | number | boolean | string[] | undefined;
@@ -94,6 +95,7 @@ const PROTECTED_EXACT_ROUTES = new Set([
   "POST /v1/profile/facts",
   "GET /v1/resumes",
   "POST /v1/resumes/uploads",
+  "POST /v1/jobs/search",
 ]);
 const OPERATION_PATH_PATTERN =
   /^\/v1\/operations\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -506,7 +508,9 @@ async function createConfiguredApplication(
       ? { nudgePublisher: new SqsOutboxNudgePublisher(config.OUTBOX_QUEUE_URL) }
       : {}),
   });
-  const catalog = new PostgresJobCatalog(database.client);
+  const catalog = new PostgresJobCatalog(database.client, {
+    searchCursorKeys: deriveJobSearchCursorKeys(databaseUrl),
+  });
   const documents =
     config.DOCUMENT_UPLOAD_BUCKET && config.DOCUMENT_UPLOAD_KMS_KEY_ARN
       ? new PostgresDocumentStore(

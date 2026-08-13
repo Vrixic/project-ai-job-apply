@@ -1,7 +1,7 @@
 import { Ajv2020, type ErrorObject, type ValidateFunction } from "ajv/dist/2020.js";
 import * as addFormatsModule from "ajv-formats";
-import contract from "../openapi/platform.v1.json" with { type: "json" };
 import type { components, paths } from "../generated/platform.js";
+import contract from "../openapi/platform.v1.json" with { type: "json" };
 
 export type ApiComponents = components;
 export type ApiPaths = paths;
@@ -20,6 +20,9 @@ export type CreateResumeUploadResponse = components["schemas"]["CreateResumeUplo
 export type ResumeDocument = components["schemas"]["ResumeDocument"];
 export type ResumeDocumentCollection = components["schemas"]["ResumeDocumentCollection"];
 export type ResumeUploadGrant = components["schemas"]["ResumeUploadGrant"];
+export type JobSearchRequest = components["schemas"]["JobSearchRequest"];
+export type JobSearchPage = components["schemas"]["JobSearchPage"];
+export type CanonicalJobSummary = components["schemas"]["CanonicalJobSummary"];
 export type CanonicalJobDetail = components["schemas"]["CanonicalJobDetail"];
 export type ProblemDetails = components["schemas"]["ProblemDetails"];
 

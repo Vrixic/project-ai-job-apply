@@ -473,9 +473,11 @@ function Set-VariablesFromPlan {
   $unexpected = @($actual | Where-Object { $_ -notin $declared })
   $missing = @($declared | Where-Object { $_ -notin $actual })
   $newDocumentDefaults = [ordered]@{
-    deploy_document_processing                    = $false
+    document_processing_deployment_stage          = "kms-prerequisite"
+    document_parser_invocation_qualified_arn      = ""
     document_scan_mapping_enabled                 = $false
     document_scan_event_rule_enabled              = $false
+    document_security_health_rules_enabled        = $false
     document_processor_artifact_s3_key            = ""
     document_processor_artifact_s3_object_version = ""
     document_processor_artifact_sha256            = ""
@@ -1131,7 +1133,7 @@ function Assert-TaskResultAndLogs {
     -TaskDefinition $definition
   $expectedMessages = @(
     'Database migrations through 0005_resume_fact_proposals applied and verified.',
-    'Jobs migrations through 0003_duplicate_resolution_audit_guard applied and verified.',
+    'Jobs migrations through 0004_job_search applied and verified.',
     'Documents migrations through 0002_resume_processing applied and verified.',
     'All service-owned database migrations applied and verified.'
   )

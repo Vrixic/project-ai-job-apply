@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-  [ValidateSet("Plan", "Apply", "Verify", "PlanPrerequisite", "ApplyPrerequisite", "VerifyPrerequisite")][string]$Action = "Verify",
+  [ValidateSet("Plan", "Apply", "Verify")][string]$Action = "Verify",
+  [ValidateSet("KmsPrerequisite", "ParserDark", "CompleteDark")][string]$Stage = "ParserDark",
   [string]$AwsProfile = "ai-job-apply-development-admin",
   [string]$Region = "us-east-2",
   [ValidatePattern("^[0-9]{12}$")][string]$ExpectedAccountId = "",
@@ -22,29 +23,26 @@ $ErrorActionPreference = "Stop"
 if ($Help) {
   @"
 Usage:
-  .\scripts\operate-development-document-dark-deployment.ps1 -Action Plan `
+  .\scripts\operate-development-document-dark-deployment.ps1 -Action Plan -Stage ParserDark `
     -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
     -BaselinePlanPath ZERO_CHANGE_PLAN -ReviewedBaselineSha256 BASELINE_SHA256 `
     -PublicationReceiptPath VERIFIED_RECEIPT -ReviewedReceiptSha256 RECEIPT_SHA256
 
-  .\scripts\operate-development-document-dark-deployment.ps1 -Action Apply `
+  .\scripts\operate-development-document-dark-deployment.ps1 -Action Apply -Stage ParserDark `
     -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
     -BaselinePlanPath ZERO_CHANGE_PLAN -ReviewedBaselineSha256 BASELINE_SHA256 `
     -PublicationReceiptPath VERIFIED_RECEIPT -ReviewedReceiptSha256 RECEIPT_SHA256 `
     -PlanPath PLAN_PATH_FROM_PLAN -ReviewedPlanSha256 PLAN_SHA256
 
-  .\scripts\operate-development-document-dark-deployment.ps1 -Action Verify `
+  .\scripts\operate-development-document-dark-deployment.ps1 -Action Verify -Stage ParserDark `
     -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
     -BaselinePlanPath ZERO_CHANGE_PLAN -ReviewedBaselineSha256 BASELINE_SHA256 `
     -PublicationReceiptPath VERIFIED_RECEIPT -ReviewedReceiptSha256 RECEIPT_SHA256
 
-  .\scripts\operate-development-document-dark-deployment.ps1 -Action PlanPrerequisite `
-    -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
-    -BaselinePlanPath ZERO_CHANGE_PLAN -ReviewedBaselineSha256 BASELINE_SHA256
-
 The operator reconstructs all current deployment inputs from a checksum-reviewed zero-change
-baseline, overlays only the verified document Lambda publication, and forces all document
-processing triggers dark. Apply consumes only the exact checksum-reviewed saved plan.
+baseline, overlays only the selected monotonic stage and verified Lambda publication, derives the
+applied parser-version pin for CompleteDark, and forces every processing trigger dark. Apply
+consumes only the exact checksum-reviewed saved plan; resource-targeted planning is unsupported.
 "@
   exit 0
 }
@@ -58,8 +56,8 @@ foreach ($required in @($BaselinePlanPath, $ReviewedBaselineSha256)) {
     throw "A checksum-reviewed zero-change baseline is required."
   }
 }
-$isPrerequisiteAction = $Action -in @("PlanPrerequisite", "ApplyPrerequisite", "VerifyPrerequisite")
-if (-not $isPrerequisiteAction) {
+$stageValue = @{ KmsPrerequisite = "kms-prerequisite"; ParserDark = "parser-dark"; CompleteDark = "complete-dark" }[$Stage]
+if ($Stage -cne "KmsPrerequisite") {
   foreach ($required in @($PublicationReceiptPath, $ReviewedReceiptSha256)) {
     if ([string]::IsNullOrWhiteSpace($required)) { throw "A checksum-reviewed verified publication receipt is required." }
   }
@@ -75,14 +73,15 @@ $extensionLayerArn = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters
 $allowedVariableNames = @(
   "candidate_document_cors_allowed_origins", "database_engine_version", "database_instance_class",
   "database_performance_insights", "deploy_applications", "deploy_document_intake",
-  "deploy_document_processing", "deploy_gateway_lambda", "deploy_profile_readiness_durable",
-  "deploy_serverless_outbox", "document_parser_artifact_base64sha256",
+  "deploy_gateway_lambda", "deploy_profile_readiness_durable", "deploy_serverless_outbox",
+  "document_parser_artifact_base64sha256", "document_parser_invocation_qualified_arn",
   "document_parser_artifact_s3_key", "document_parser_artifact_s3_object_version",
   "document_parser_artifact_sha256", "document_parser_version",
   "document_processor_artifact_base64sha256", "document_processor_artifact_s3_key",
   "document_processor_artifact_s3_object_version", "document_processor_artifact_sha256",
-  "document_processor_extension_layer_arn", "document_scan_event_rule_enabled",
-  "document_scan_mapping_enabled", "enable_container_insights", "enable_redis",
+  "document_processor_extension_layer_arn", "document_processing_deployment_stage",
+  "document_scan_event_rule_enabled",
+  "document_scan_mapping_enabled", "document_security_health_rules_enabled", "enable_container_insights", "enable_redis",
   "gateway_lambda_artifact_base64sha256", "gateway_lambda_artifact_s3_key",
   "gateway_lambda_artifact_s3_object_version", "gateway_lambda_artifact_sha256",
   "gateway_lambda_extension_layer_arn", "gateway_lambda_reserved_concurrency", "high_availability",
@@ -97,6 +96,9 @@ $allowedVariableNames = @(
   "workflow_ingress_artifact_s3_object_version", "workflow_ingress_artifact_sha256",
   "workflow_ingress_lambda_extension_layer_arn"
 )
+$legacyBaselineVariableNames = @($allowedVariableNames | Where-Object {
+    $_ -notin @("document_processing_deployment_stage", "document_parser_invocation_qualified_arn", "document_security_health_rules_enabled")
+  }) + @("deploy_document_processing", "document_processing_kms_prerequisite_enabled")
 
 $env:AWS_PROFILE = $AwsProfile
 $env:AWS_REGION = $Region
@@ -198,17 +200,18 @@ function Read-Baseline {
     throw "The reviewed baseline is not a Terraform 1.9.8 zero-change plan."
   }
   $names = @($baseline.variables.PSObject.Properties | ForEach-Object Name | Sort-Object)
-  if (($names -join "|") -cne (@($allowedVariableNames | Sort-Object) -join "|")) {
+  if (($names -join "|") -cne (@($legacyBaselineVariableNames | Sort-Object) -join "|")) {
     throw "The reviewed baseline does not contain the exact approved development variable set."
   }
   foreach ($name in @(Get-DevelopmentDocumentBooleanVariableNames)) {
+    if ($name -ceq "document_security_health_rules_enabled") { continue }
     $property = $baseline.variables.PSObject.Properties[$name]
-    if ($null -eq $property -and $name -ceq "document_processing_kms_prerequisite_enabled") { continue }
     if ($null -eq $property) { throw "The reviewed baseline omits boolean variable '$name'." }
     $null = ConvertTo-ExactBoolean $property.Value.value "baseline $name"
   }
   if (-not (ConvertTo-ExactBoolean $baseline.variables.deploy_document_intake.value "deploy_document_intake") -or
-    (ConvertTo-ExactBoolean $baseline.variables.deploy_document_processing.value "deploy_document_processing") -or
+    (ConvertTo-ExactBoolean $baseline.variables.deploy_document_processing.value "legacy document processing switch") -or
+    -not (ConvertTo-ExactBoolean $baseline.variables.document_processing_kms_prerequisite_enabled.value "legacy KMS prerequisite switch") -or
     (ConvertTo-ExactBoolean $baseline.variables.document_scan_mapping_enabled.value "document_scan_mapping_enabled") -or
     (ConvertTo-ExactBoolean $baseline.variables.document_scan_event_rule_enabled.value "document_scan_event_rule_enabled") -or
     [string]$baseline.variables.document_parser_version.value -cne "resume-parser-v1" -or
@@ -230,17 +233,25 @@ function Get-BoundaryValues {
 }
 
 function Set-BaselineVariables {
-  param([Parameter(Mandatory)][object]$Baseline, [switch]$EnableDocumentKmsPrerequisite)
-  $assignments = Get-TerraformVariableEnvironmentAssignments -Variables $Baseline.variables
+  param([Parameter(Mandatory)][object]$Baseline, [string]$DeploymentStage = "kms-prerequisite",
+    [string]$ParserQualifiedArn = "")
+  $migratedVariables = [pscustomobject]@{}
+  foreach ($property in @($Baseline.variables.PSObject.Properties)) {
+    if ([string]$property.Name -in @("deploy_document_processing", "document_processing_kms_prerequisite_enabled")) { continue }
+    $migratedVariables | Add-Member ([string]$property.Name) $property.Value
+  }
+  $migratedVariables | Add-Member document_processing_deployment_stage ([pscustomobject]@{ value = $DeploymentStage })
+  $migratedVariables | Add-Member document_parser_invocation_qualified_arn ([pscustomobject]@{ value = $ParserQualifiedArn })
+  $migratedVariables | Add-Member document_security_health_rules_enabled ([pscustomobject]@{ value = $DeploymentStage -in @("parser-dark", "complete-dark") })
+  $assignments = Get-TerraformVariableEnvironmentAssignments -Variables $migratedVariables
   foreach ($entry in $assignments.GetEnumerator()) {
     [Environment]::SetEnvironmentVariable([string]$entry.Key, [string]$entry.Value, "Process")
   }
-  $env:TF_VAR_document_processing_kms_prerequisite_enabled = $(if ($EnableDocumentKmsPrerequisite) { "true" } else { "false" })
 }
 
 function Assert-BaselineCurrent {
-  param([Parameter(Mandatory)][object]$Baseline, [switch]$EnableDocumentKmsPrerequisite)
-  Set-BaselineVariables -Baseline $Baseline -EnableDocumentKmsPrerequisite:$EnableDocumentKmsPrerequisite
+  param([Parameter(Mandatory)][object]$Baseline)
+  Set-BaselineVariables -Baseline $Baseline -DeploymentStage "kms-prerequisite"
   $path = Join-Path $operatorRoot "baseline-current-$([guid]::NewGuid().ToString('N')).tfplan"
   try {
     & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m `
@@ -287,22 +298,26 @@ function Read-Receipt {
 }
 
 function Set-DarkVariables {
-  param([Parameter(Mandatory)][object]$Baseline, [Parameter(Mandatory)][object]$Receipt)
-  Set-BaselineVariables -Baseline $Baseline -EnableDocumentKmsPrerequisite
-  $processor = @($Receipt.artifacts | Where-Object { $_.artifactName -eq "document-processor-lambda" -and $_.suffix -eq "zip" })[0]
-  $parser = @($Receipt.artifacts | Where-Object { $_.artifactName -eq "document-parser-lambda" -and $_.suffix -eq "zip" })[0]
-  $env:TF_VAR_deploy_document_processing = "true"
+  param([Parameter(Mandatory)][object]$Baseline, [AllowNull()][object]$Receipt,
+    [Parameter(Mandatory)][string]$DeploymentStage, [string]$ParserQualifiedArn = "")
+  Set-BaselineVariables -Baseline $Baseline -DeploymentStage $DeploymentStage -ParserQualifiedArn $ParserQualifiedArn
   $env:TF_VAR_document_scan_mapping_enabled = "false"
   $env:TF_VAR_document_scan_event_rule_enabled = "false"
-  $env:TF_VAR_document_processor_artifact_s3_key = [string]$processor.key
-  $env:TF_VAR_document_processor_artifact_s3_object_version = [string]$processor.versionId
-  $env:TF_VAR_document_processor_artifact_sha256 = [string]$processor.artifactSha256
-  $env:TF_VAR_document_processor_artifact_base64sha256 = [string]$processor.objectBase64Sha256
+  $env:TF_VAR_document_security_health_rules_enabled = ($DeploymentStage -in @("parser-dark", "complete-dark")).ToString().ToLowerInvariant()
+  if ($DeploymentStage -ceq "kms-prerequisite") { return }
+  $processor = @($Receipt.artifacts | Where-Object { $_.artifactName -eq "document-processor-lambda" -and $_.suffix -eq "zip" })[0]
+  $parser = @($Receipt.artifacts | Where-Object { $_.artifactName -eq "document-parser-lambda" -and $_.suffix -eq "zip" })[0]
   $env:TF_VAR_document_parser_artifact_s3_key = [string]$parser.key
   $env:TF_VAR_document_parser_artifact_s3_object_version = [string]$parser.versionId
   $env:TF_VAR_document_parser_artifact_sha256 = [string]$parser.artifactSha256
   $env:TF_VAR_document_parser_artifact_base64sha256 = [string]$parser.objectBase64Sha256
-  $env:TF_VAR_document_processor_extension_layer_arn = $extensionLayerArn
+  if ($DeploymentStage -ceq "complete-dark") {
+    $env:TF_VAR_document_processor_artifact_s3_key = [string]$processor.key
+    $env:TF_VAR_document_processor_artifact_s3_object_version = [string]$processor.versionId
+    $env:TF_VAR_document_processor_artifact_sha256 = [string]$processor.artifactSha256
+    $env:TF_VAR_document_processor_artifact_base64sha256 = [string]$processor.objectBase64Sha256
+    $env:TF_VAR_document_processor_extension_layer_arn = $extensionLayerArn
+  }
 }
 
 function Get-StateResourceMap {
@@ -379,6 +394,73 @@ function Assert-EventTargetExact {
     $actualInput = if ($null -eq $targetInputProperty) { "" } else { [string]$targetInputProperty.Value }
     if ($actualInput -cne $expectedInput) { throw "A document alert target input is not exact." }
   }
+}
+
+function Get-LiveDocumentStageInventory {
+  param([Parameter(Mandatory)][hashtable]$State)
+  $processorName = "ai-job-apply-development-document-processor"
+  $functions = Invoke-AwsJson @("lambda", "list-functions", "--output", "json")
+  $processorFunctions = @($functions.Functions | Where-Object FunctionName -eq $processorName)
+  $aliases = @()
+  $mappings = @()
+  $permissions = 0
+  if ($processorFunctions.Count -eq 1) {
+    $aliases = @((Invoke-AwsJson @("lambda", "list-aliases", "--function-name", $processorName, "--output", "json")).Aliases)
+    $mappings = @((Invoke-AwsJson @("lambda", "list-event-source-mappings", "--function-name", $processorName, "--output", "json")).EventSourceMappings)
+    $policy = Invoke-AwsJson @("lambda", "get-policy", "--function-name", $processorName, "--qualifier", "development", "--output", "json")
+    $permissions = @((([string]$policy.Policy | ConvertFrom-Json).Statement) | Where-Object Sid -eq "AllowExactDocumentReconcilerRule").Count
+  }
+  $reconcilerName = [string]$State["module.platform.aws_cloudwatch_event_rule.document_processing_reconciler[0]"].name
+  $targets = @((Invoke-AwsJson @("events", "list-targets-by-rule", "--rule", $reconcilerName, "--output", "json")).Targets)
+  $vpcId = [string]$State["module.platform.aws_vpc.this"].id
+  $endpoints = @((Invoke-AwsJson @("ec2", "describe-vpc-endpoints", "--filters", "Name=vpc-id,Values=$vpcId", "--output", "json")).VpcEndpoints)
+  $sts = @($endpoints | Where-Object ServiceName -eq "com.amazonaws.$Region.sts")
+  $laterSids = @("ExactDocumentProcessorQueueOnly", "CoordinatorInvokesExactParserVersionOnly")
+  $laterGrantCount = 0
+  foreach ($endpoint in @($endpoints | Where-Object { $_.ServiceName -in @("com.amazonaws.$Region.sqs", "com.amazonaws.$Region.lambda", "com.amazonaws.$Region.secretsmanager") })) {
+    $policy = $endpoint.PolicyDocument | ConvertFrom-Json
+    $laterGrantCount += @($policy.Statement | Where-Object { [string]$_.Sid -in $laterSids -or
+          ((@($_.Condition.ArnEquals."aws:PrincipalArn") -contains "arn:aws:iam::${ExpectedAccountId}:role/$processorName")) }).Count
+  }
+  $inline = @((Invoke-AwsJson @("iam", "list-role-policies", "--role-name", $processorName, "--output", "json")).PolicyNames | Where-Object { $_ -eq "document-processor-runtime" })
+  return [pscustomobject]@{
+    ProcessorFunctions = $processorFunctions.Count; ProcessorAliases = $aliases.Count
+    ProcessorMappings = $mappings.Count; StsEndpoints = $sts.Count; ReconcilerTargets = $targets.Count
+    ReconcilerPermissions = $permissions; ProcessorInlinePolicies = $inline.Count
+    LaterStageEndpointGrants = $laterGrantCount
+  }
+}
+
+function Get-OptionalLambdaResourcePolicy {
+  param([Parameter(Mandatory)][string]$FunctionName, [string]$Qualifier = "")
+  $arguments = @("lambda", "get-policy", "--function-name", $FunctionName)
+  if (-not [string]::IsNullOrWhiteSpace($Qualifier)) { $arguments += @("--qualifier", $Qualifier) }
+  $arguments += @("--output", "json")
+  $raw = & aws @arguments 2>&1
+  if ($LASTEXITCODE -ne 0) {
+    $message = @($raw | ForEach-Object { [string]$_ }) -join "`n"
+    if ($message -match 'ResourceNotFoundException') { return $null }
+    throw "AWS Lambda resource-policy read failed. Refresh development SSO."
+  }
+  if (-not $raw) { throw "AWS returned an empty Lambda resource-policy response." }
+  try { return ($raw | ConvertFrom-Json) } catch { throw "AWS returned invalid Lambda resource-policy JSON." }
+}
+
+function Assert-NoLambdaResourcePolicy {
+  param([Parameter(Mandatory)][string]$FunctionName)
+  $unqualified = Get-OptionalLambdaResourcePolicy -FunctionName $FunctionName
+  $qualified = Get-OptionalLambdaResourcePolicy -FunctionName $FunctionName -Qualifier "development"
+  Assert-ParserLambdaResourcePolicyAbsence -UnqualifiedPolicy $unqualified -QualifiedPolicy $qualified
+}
+
+function Assert-ExactProcessorLambdaResourcePolicy {
+  param([Parameter(Mandatory)][string]$FunctionName, [Parameter(Mandatory)][string]$ExpectedSourceArn)
+  $policyResponse = Get-OptionalLambdaResourcePolicy -FunctionName $FunctionName -Qualifier "development"
+  if ($null -eq $policyResponse) { throw "The processor alias lacks its exact reconciler resource policy." }
+  Assert-ExactProcessorLambdaResourcePolicyDocument -PolicyValue ([string]$policyResponse.Policy) `
+    -AccountId $ExpectedAccountId -ExpectedSourceArn $ExpectedSourceArn
+  $functionPolicy = Get-OptionalLambdaResourcePolicy -FunctionName $FunctionName
+  if ($null -ne $functionPolicy) { throw "The unqualified processor Lambda must not have an additional resource policy." }
 }
 
 function Assert-LiveDarkBoundary {
@@ -465,7 +547,8 @@ function Assert-LiveDarkBoundary {
   foreach ($ruleAddress in @("document_scan_results", "document_processing_reconciler", "document_scan_tag_failure", "document_scan_plan_unhealthy")) {
     $rule = [string]$state["module.platform.aws_cloudwatch_event_rule.$ruleAddress[0]"].name
     $value = Invoke-AwsJson @("events", "describe-rule", "--name", $rule, "--output", "json")
-    if ([string]$value.State -cne "DISABLED") { throw "A dark document-processing rule is enabled." }
+    $expectedState = if ($ruleAddress -in @("document_scan_tag_failure", "document_scan_plan_unhealthy")) { "ENABLED" } else { "DISABLED" }
+    if ([string]$value.State -cne $expectedState) { throw "A document rule differs from its processing-dark/security-alert state." }
     $expectedRule = $state["module.platform.aws_cloudwatch_event_rule.$ruleAddress[0]"]
     if ($ruleAddress -eq "document_scan_results" -and
       (ConvertTo-DeploymentCanonicalValue ($value.EventPattern | ConvertFrom-Json) -SortArrays) -cne
@@ -529,9 +612,104 @@ function Assert-LiveDarkBoundary {
   }
 }
 
+function Assert-LiveParserDarkBoundary {
+  param([Parameter(Mandatory)][object]$Receipt)
+  $state = Get-StateResourceMap
+  $vpcId = [string]$state["module.platform.aws_vpc.this"].id
+  $platformKmsArn = [string]$state["module.platform.aws_kms_key.platform"].arn
+  $candidateBucket = [string]$state["module.platform.aws_s3_bucket.candidate_documents[0]"].bucket
+  $privateSubnetIds = @($state.Keys | Where-Object { $_ -like "module.platform.aws_subnet.private*" } | ForEach-Object { [string]$state[$_].id })
+  $parserSecurityGroup = [string]$state["module.platform.aws_security_group.document_parser[0]"].id
+  $parserArtifact = @($Receipt.artifacts | Where-Object { $_.artifactName -eq "document-parser-lambda" -and $_.suffix -eq "zip" })[0]
+  $parserName = "ai-job-apply-development-document-parser"
+  Assert-NoLambdaResourcePolicy -FunctionName $parserName
+  $alias = Invoke-AwsJson @("lambda", "get-alias", "--function-name", $parserName, "--name", "development", "--output", "json")
+  $deployed = Invoke-AwsJson @("lambda", "get-function", "--function-name", "$parserName`:development", "--output", "json")
+  $concurrency = Invoke-AwsJson @("lambda", "get-function-concurrency", "--function-name", $parserName, "--output", "json")
+  if ([string]$alias.FunctionVersion -cnotmatch "^[1-9][0-9]*$" -or
+    [string]$alias.Description -cne "Reviewed immutable development document parser release" -or
+    [string]$deployed.Configuration.Version -cne [string]$alias.FunctionVersion -or
+    [string]$deployed.Configuration.CodeSha256 -cne [string]$parserArtifact.objectBase64Sha256) {
+    throw "The parser-dark Lambda alias is not the exact reviewed immutable parser."
+  }
+  Assert-ExactDocumentLambdaRuntime -Configuration $deployed.Configuration -Concurrency $concurrency -Kind parser `
+    -ExpectedRoleArn ([string]$state["module.platform.aws_iam_role.document_parser[0]"].arn) `
+    -ExpectedKmsArn $platformKmsArn -ExpectedVpcId $vpcId -ExpectedSubnetIds $privateSubnetIds `
+    -ExpectedSecurityGroupId $parserSecurityGroup -ExpectedEnvironment @{
+      NODE_ENV = "production"; RELEASE_SHA = [string]$parserArtifact.artifactSha256
+      CANDIDATE_DOCUMENT_BUCKET = $candidateBucket; PLATFORM_KMS_KEY_ARN = $platformKmsArn
+      DOCUMENT_PARSER_VERSION = "resume-parser-v1"
+    }
+  $boundaryArn = "arn:aws:iam::${ExpectedAccountId}:policy/ai-job-apply-development-workload-boundary"
+  Assert-LiveRolePolicy "ai-job-apply-development-document-parser" "document-parser-runtime" `
+    $state["module.platform.aws_iam_role_policy.document_parser[0]"].policy `
+    $state["module.platform.aws_iam_role.document_parser[0]"].assume_role_policy $boundaryArn
+  Assert-LiveRolePolicy "ai-job-apply-development-document-object-access" "document-object-access-runtime" `
+    $state["module.platform.aws_iam_role_policy.document_parser_object_access[0]"].policy `
+    $state["module.platform.aws_iam_role.document_parser_object_access[0]"].assume_role_policy $boundaryArn
+  $processorRole = Invoke-AwsJson @("iam", "get-role", "--role-name", "ai-job-apply-development-document-processor", "--output", "json")
+  $processorAttached = Invoke-AwsJson @("iam", "list-attached-role-policies", "--role-name", "ai-job-apply-development-document-processor", "--output", "json")
+  $processorInline = Invoke-AwsJson @("iam", "list-role-policies", "--role-name", "ai-job-apply-development-document-processor", "--output", "json")
+  if ([string]$processorRole.Role.PermissionsBoundary.PermissionsBoundaryArn -cne $boundaryArn -or
+    (ConvertTo-DeploymentCanonicalValue (ConvertFrom-IamPolicyValue $processorRole.Role.AssumeRolePolicyDocument) -SortArrays) -cne
+    (ConvertTo-DeploymentCanonicalValue (ConvertFrom-IamPolicyValue $state["module.platform.aws_iam_role.document_processor[0]"].assume_role_policy) -SortArrays) -or
+    @($processorAttached.AttachedPolicies).Count -ne 0 -or @($processorInline.PolicyNames).Count -ne 0) {
+    throw "Parser-dark processor role is not exact, bounded, and policy-free."
+  }
+  $prefixLists = Invoke-AwsJson @("ec2", "describe-prefix-lists", "--filters", "Name=prefix-list-name,Values=com.amazonaws.$Region.s3", "--output", "json")
+  if (@($prefixLists.PrefixLists).Count -ne 1) { throw "The regional S3 prefix list is unavailable." }
+  Assert-ParserSecurityGroup $parserSecurityGroup $vpcId ([string]$prefixLists.PrefixLists[0].PrefixListId)
+  foreach ($definition in @(
+      @("document_scan_results", 345600, 360, [string]$state["module.platform.aws_sqs_queue.document_scan_dead_letter[0]"].arn),
+      @("document_scan_dead_letter", 1209600, 30, ""),
+      @("document_scan_delivery_dead_letter", 1209600, 30, "")
+    )) {
+    $queue = $state["module.platform.aws_sqs_queue.$($definition[0])[0]"]
+    $attributes = Invoke-AwsJson @("sqs", "get-queue-attributes", "--queue-url", [string]$queue.url, "--attribute-names", "All", "--output", "json")
+    Assert-ExactDocumentQueueAttributes $attributes.Attributes $platformKmsArn ([int]$definition[1]) ([int]$definition[2]) ([string]$definition[3])
+  }
+  foreach ($policyAddress in @("document_scan_results", "document_scan_delivery_dead_letter")) {
+    $queue = $state["module.platform.aws_sqs_queue.$policyAddress[0]"]
+    $attributes = Invoke-AwsJson @("sqs", "get-queue-attributes", "--queue-url", [string]$queue.url, "--attribute-names", "Policy", "--output", "json")
+    if ((ConvertTo-DeploymentCanonicalValue (ConvertFrom-IamPolicyValue $attributes.Attributes.Policy) -SortArrays) -cne
+      (ConvertTo-DeploymentCanonicalValue (ConvertFrom-IamPolicyValue $state["module.platform.aws_sqs_queue_policy.$policyAddress[0]"].policy) -SortArrays)) {
+      throw "A parser-dark queue policy differs from reviewed state."
+    }
+  }
+  foreach ($ruleAddress in @("document_scan_results", "document_processing_reconciler", "document_scan_tag_failure", "document_scan_plan_unhealthy")) {
+    $rule = $state["module.platform.aws_cloudwatch_event_rule.$ruleAddress[0]"]
+    $live = Invoke-AwsJson @("events", "describe-rule", "--name", [string]$rule.name, "--output", "json")
+    $expectedState = if ($ruleAddress -in @("document_scan_tag_failure", "document_scan_plan_unhealthy")) { "ENABLED" } else { "DISABLED" }
+    if ([string]$live.State -cne $expectedState) { throw "A parser-dark rule differs from its reviewed state." }
+  }
+  foreach ($targetAddress in @("document_scan_results", "document_scan_tag_failure", "document_scan_plan_unhealthy")) {
+    $target = $state["module.platform.aws_cloudwatch_event_target.$targetAddress[0]"]
+    Assert-EventTargetExact ([string]$target.rule) $target
+  }
+  $alarmNames = @($state.Keys | Where-Object { $_ -like "module.platform.aws_cloudwatch_metric_alarm.document_*" } | ForEach-Object { [string]$state[$_].alarm_name } | Sort-Object)
+  $alarms = $null
+  for ($attempt = 0; $attempt -lt 60; $attempt++) {
+    $alarms = Invoke-AwsJson -Arguments (@("cloudwatch", "describe-alarms", "--alarm-names") + $alarmNames + @("--output", "json"))
+    if (@($alarms.MetricAlarms).Count -eq 8 -and @($alarms.MetricAlarms | Where-Object StateValue -ne "OK").Count -eq 0) { break }
+    Start-Sleep -Seconds 10
+  }
+  Assert-ExactDocumentAlarmSet @($alarms.MetricAlarms) $alarmNames ([string]$state["module.platform.aws_sns_topic.operational_alerts"].arn)
+  $endpoints = Invoke-AwsJson @("ec2", "describe-vpc-endpoints", "--filters", "Name=vpc-id,Values=$vpcId", "--output", "json")
+  foreach ($service in @("s3", "lambda", "sqs", "secretsmanager")) {
+    $matching = @($endpoints.VpcEndpoints | Where-Object { $_.ServiceName -eq "com.amazonaws.$Region.$service" -and $_.State -eq "available" })
+    if ($matching.Count -ne 1) { throw "The parser-dark $service endpoint boundary is unavailable." }
+    $address = if ($service -eq "s3") { "module.platform.aws_vpc_endpoint.candidate_documents_s3[0]" } else { "module.platform.aws_vpc_endpoint.$service[0]" }
+    if ((ConvertTo-DeploymentCanonicalValue ($matching[0].PolicyDocument | ConvertFrom-Json) -SortArrays) -cne
+      (ConvertTo-DeploymentCanonicalValue ($state[$address].policy | ConvertFrom-Json) -SortArrays)) {
+      throw "The parser-dark $service endpoint policy differs from reviewed state."
+    }
+  }
+}
+
 function Invoke-ZeroDrift {
-  param([Parameter(Mandatory)][object]$Baseline, [Parameter(Mandatory)][object]$Receipt)
-  Set-DarkVariables -Baseline $Baseline -Receipt $Receipt
+  param([Parameter(Mandatory)][object]$Baseline, [AllowNull()][object]$Receipt,
+    [Parameter(Mandatory)][string]$DeploymentStage, [string]$ParserQualifiedArn = "")
+  Set-DarkVariables -Baseline $Baseline -Receipt $Receipt -DeploymentStage $DeploymentStage -ParserQualifiedArn $ParserQualifiedArn
   $path = Join-Path $operatorRoot "verify-$([guid]::NewGuid().ToString('N')).tfplan"
   try {
     & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m "-out=$path" -detailed-exitcode | Out-Null
@@ -541,107 +719,180 @@ function Invoke-ZeroDrift {
   } finally { if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force } }
 }
 
+function Get-StateIdentity {
+  $raw = & terraform "-chdir=$terraformDirectory" state pull 2>$null
+  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($raw)) { throw "Terraform state identity could not be read." }
+  $state = $raw | ConvertFrom-Json
+  if ([string]::IsNullOrWhiteSpace([string]$state.lineage) -or [long]$state.serial -lt 1) {
+    throw "Terraform state lacks a valid lineage or serial."
+  }
+  return [pscustomobject]@{ Lineage = [string]$state.lineage; Serial = [long]$state.serial }
+}
+
+function Get-AppliedDocumentStage {
+  $state = Get-StateResourceMap
+  $hasParser = $state.ContainsKey("module.platform.aws_lambda_function.document_parser[0]")
+  $hasProcessor = $state.ContainsKey("module.platform.aws_lambda_function.document_processor[0]")
+  if ($hasProcessor -and -not $hasParser) { throw "Applied document stage is contradictory: processor exists without parser." }
+  if ($hasProcessor) { return "complete-dark" }
+  if ($hasParser) { return "parser-dark" }
+  $kmsPolicy = ConvertFrom-IamPolicyValue $state["module.platform.aws_kms_key.platform"].policy
+  $kmsSids = @($kmsPolicy.Statement.Sid | ForEach-Object { [string]$_ })
+  $documentKmsSids = @("AllowEventBridgeDocumentScanQueueEncryption", "AllowEventBridgeDocumentOperationalAlertEncryption")
+  $present = @($documentKmsSids | Where-Object { $_ -in $kmsSids }).Count
+  if ($present -eq 0) { return "disabled" }
+  if ($present -ne 2) { throw "Applied KMS prerequisite is partial or contradictory." }
+  return "kms-prerequisite"
+}
+
+function Get-AppliedParserQualifiedArn {
+  $state = Get-StateResourceMap
+  $parser = $state["module.platform.aws_lambda_function.document_parser[0]"]
+  $arn = if ($null -eq $parser) { "" } else { [string]$parser.qualified_arn }
+  if ($arn -cnotmatch "^arn:aws:lambda:us-east-2:${ExpectedAccountId}:function:ai-job-apply-development-document-parser:[1-9][0-9]*$") {
+    throw "The applied parser does not expose one exact positive numeric version ARN."
+  }
+  return $arn
+}
+
+function Assert-MonotonicDocumentStage {
+  param([Parameter(Mandatory)][string]$Applied, [Parameter(Mandatory)][string]$Requested,
+    [Parameter(Mandatory)][string]$Operation)
+  $rank = @{ "disabled" = 0; "kms-prerequisite" = 1; "parser-dark" = 2; "complete-dark" = 3 }
+  if (-not $rank.ContainsKey($Applied) -or -not $rank.ContainsKey($Requested)) { throw "Unknown document stage." }
+  if ($Operation -ceq "Verify") {
+    if ($rank[$Requested] -ne $rank[$Applied]) { throw "Verify requires the exact currently applied document stage '$Applied'." }
+    return
+  }
+  if ($rank[$Requested] -ne ($rank[$Applied] + 1)) {
+    throw "A saved plan may advance exactly one stage from '$Applied'; requested '$Requested'."
+  }
+}
+
+function Assert-LiveStageBoundary {
+  param([Parameter(Mandatory)][string]$DeploymentStage, [AllowNull()][object]$Receipt,
+    [string]$ParserQualifiedArn = "")
+  $state = Get-StateResourceMap
+  $inventory = if ($DeploymentStage -ceq "kms-prerequisite") { $null } else { Get-LiveDocumentStageInventory -State $state }
+  $requiredParser = @(
+    "module.platform.aws_lambda_function.document_parser[0]",
+    "module.platform.aws_lambda_alias.document_parser[0]",
+    "module.platform.aws_vpc_endpoint.candidate_documents_s3[0]"
+  )
+  $completeOnly = @(
+    "module.platform.aws_lambda_function.document_processor[0]",
+    "module.platform.aws_lambda_alias.document_processor[0]",
+    "module.platform.aws_lambda_event_source_mapping.document_scan_results[0]",
+    "module.platform.aws_vpc_endpoint.sts[0]"
+  )
+  if ($DeploymentStage -ceq "kms-prerequisite") {
+    foreach ($address in $requiredParser + $completeOnly) {
+      if ($state.ContainsKey($address)) { throw "KMS-prerequisite unexpectedly contains '$address'." }
+    }
+    return
+  }
+  Assert-DevelopmentDocumentStageResourceInventory -Stage $DeploymentStage -StateAddresses @($state.Keys) -LiveInventory $inventory
+  foreach ($address in $requiredParser) {
+    if (-not $state.ContainsKey($address)) { throw "The applied parser-dark boundary is missing '$address'." }
+  }
+  if ($DeploymentStage -ceq "parser-dark") {
+    foreach ($address in $completeOnly) {
+      if ($state.ContainsKey($address)) { throw "Parser-dark unexpectedly contains '$address'." }
+    }
+  } else {
+    foreach ($address in $completeOnly) {
+      if (-not $state.ContainsKey($address)) { throw "Complete-dark is missing '$address'." }
+    }
+  }
+  $parserArtifact = @($Receipt.artifacts | Where-Object { $_.artifactName -eq "document-parser-lambda" -and $_.suffix -eq "zip" })[0]
+  $alias = Invoke-AwsJson @("lambda", "get-alias", "--function-name", "ai-job-apply-development-document-parser", "--name", "development", "--output", "json")
+  $deployed = Invoke-AwsJson @("lambda", "get-function", "--function-name", "ai-job-apply-development-document-parser:development", "--output", "json")
+  if ([string]$alias.FunctionVersion -cnotmatch "^[1-9][0-9]*$" -or
+    [string]$deployed.Configuration.CodeSha256 -cne [string]$parserArtifact.objectBase64Sha256 -or
+    [string]$deployed.Configuration.Environment.Variables.RELEASE_SHA -cne [string]$parserArtifact.artifactSha256) {
+    throw "The live parser alias is not the checksum-reviewed immutable artifact."
+  }
+  foreach ($ruleAddress in @("document_scan_results", "document_scan_tag_failure", "document_scan_plan_unhealthy", "document_processing_reconciler")) {
+    $rule = $state["module.platform.aws_cloudwatch_event_rule.$ruleAddress[0]"]
+    $live = Invoke-AwsJson @("events", "describe-rule", "--name", [string]$rule.name, "--output", "json")
+    $expectedState = if ($ruleAddress -in @("document_scan_tag_failure", "document_scan_plan_unhealthy")) { "ENABLED" } else { "DISABLED" }
+    if ([string]$live.State -cne $expectedState) { throw "A document EventBridge rule differs from its processing-dark/security-alert state." }
+  }
+  if ($DeploymentStage -ceq "complete-dark") {
+    if ([string]$state["module.platform.aws_lambda_function.document_parser[0]"].qualified_arn -cne $ParserQualifiedArn) {
+      throw "Complete-dark is not pinned to the exact applied parser version."
+    }
+    $processorArtifact = @($Receipt.artifacts | Where-Object { $_.artifactName -eq "document-processor-lambda" -and $_.suffix -eq "zip" })[0]
+    $processor = Invoke-AwsJson @("lambda", "get-function", "--function-name", "ai-job-apply-development-document-processor:development", "--output", "json")
+    if ([string]$processor.Configuration.CodeSha256 -cne [string]$processorArtifact.objectBase64Sha256 -or
+      [string]$processor.Configuration.Environment.Variables.DOCUMENT_PARSER_FUNCTION_ARN -cne $ParserQualifiedArn) {
+      throw "The live processor does not match the reviewed artifact and parser-version pin."
+    }
+    $mapping = Invoke-AwsJson @("lambda", "list-event-source-mappings", "--function-name", "ai-job-apply-development-document-processor:development", "--output", "json")
+    if (@($mapping.EventSourceMappings).Count -ne 1 -or [string]$mapping.EventSourceMappings[0].State -cne "Disabled") {
+      throw "The complete-dark document mapping is not exactly disabled."
+    }
+    Assert-NoLambdaResourcePolicy -FunctionName "ai-job-apply-development-document-parser"
+    Assert-ExactProcessorLambdaResourcePolicy -FunctionName "ai-job-apply-development-document-processor" `
+      -ExpectedSourceArn ([string]$state["module.platform.aws_cloudwatch_event_rule.document_processing_reconciler[0]"].arn)
+    Assert-LiveDarkBoundary -Receipt $Receipt
+  }
+  else {
+    Assert-LiveParserDarkBoundary -Receipt $Receipt
+  }
+}
+
 $commit = Assert-CallerAndSource
 Initialize-Backend
 $null = New-Item -ItemType Directory -Path $operatorRoot -Force
 $baseline = Read-Baseline
-$prerequisiteMetadataSuffix = ".document-kms-prerequisite.json"
+$appliedStage = Get-AppliedDocumentStage
+Assert-MonotonicDocumentStage -Applied $appliedStage -Requested $stageValue -Operation $Action
+$receipt = if ($Stage -ceq "KmsPrerequisite") { $null } else { Read-Receipt -Commit $commit }
+$parserQualifiedArn = if ($Stage -ceq "CompleteDark") { Get-AppliedParserQualifiedArn } else { "" }
 
-if ($isPrerequisiteAction) {
-  Set-BaselineVariables -Baseline $baseline -EnableDocumentKmsPrerequisite
-  if ($Action -eq "VerifyPrerequisite") {
-    $verifyPath = Join-Path $operatorRoot "verify-prerequisite-$([guid]::NewGuid().ToString('N')).tfplan"
-    try {
-      & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m `
-        "-out=$verifyPath" -detailed-exitcode | Out-Null
-      if ($LASTEXITCODE -eq 1) { throw "The KMS prerequisite verification plan failed." }
-      if ($LASTEXITCODE -eq 2) { throw "The KMS prerequisite is not at zero drift." }
-    } finally { if (Test-Path -LiteralPath $verifyPath) { Remove-Item -LiteralPath $verifyPath -Force } }
-    [pscustomobject]@{ Result = "verified"; Environment = "development"; Prerequisite = "document-kms"; Drift = $false } | ConvertTo-Json
-    exit 0
-  }
-  if ($Action -eq "PlanPrerequisite") {
-    if ([string]::IsNullOrWhiteSpace($PlanPath)) { $PlanPath = Join-Path $operatorRoot "kms-prerequisite-$(Get-Date -Format 'yyyyMMdd-HHmmss').tfplan" }
-    $resolved = Resolve-DeploymentPlanPath -Candidate $PlanPath -AllowedRoot $operatorRoot
-    if (Test-Path -LiteralPath $resolved) { throw "Refusing to overwrite an existing saved plan." }
-    try {
-      & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m "-out=$resolved" | Out-Null
-      if ($LASTEXITCODE -ne 0) { throw "The refresh-backed KMS prerequisite plan failed." }
-      $plan = Read-Plan -Path $resolved
-      Assert-DevelopmentDocumentKmsPrerequisiteVariables $baseline.variables $plan.variables
-      $null = Assert-DevelopmentDocumentKmsPrerequisitePlan $plan $ExpectedAccountId
-    } catch { if (Test-Path -LiteralPath $resolved) { Remove-Item -LiteralPath $resolved -Force }; throw }
-    $sha = (Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash.ToLowerInvariant()
-    [pscustomobject]@{
-      SchemaVersion = "1"; Operation = "development-document-kms-prerequisite"; AccountId = $ExpectedAccountId
-      StateBucket = $StateBucket; Commit = $commit; BaselineSha256 = $ReviewedBaselineSha256
-      PlanPath = $resolved; PlanSha256 = $sha; CreatedAt = (Get-Date).ToUniversalTime().ToString("o")
-    } | ConvertTo-Json | Set-Content -LiteralPath "$resolved$prerequisiteMetadataSuffix" -Encoding utf8
-    [pscustomobject]@{ Result = "review-required"; Updates = 1; PlanPath = $resolved; PlanSha256 = $sha
-      ApprovalCommand = "Apply reviewed development document KMS prerequisite plan $sha" } | ConvertTo-Json
-    exit 0
-  }
-  if ([string]::IsNullOrWhiteSpace($PlanPath) -or [string]::IsNullOrWhiteSpace($ReviewedPlanSha256)) {
-    throw "ApplyPrerequisite requires the exact saved plan and reviewed SHA-256."
-  }
-  $resolved = Resolve-DeploymentPlanPath -Candidate $PlanPath -AllowedRoot $operatorRoot -MustExist
-  $actual = (Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash.ToLowerInvariant()
-  if ($actual -cne $ReviewedPlanSha256) { throw "The KMS prerequisite plan checksum does not match review." }
-  $metadataPath = "$resolved$prerequisiteMetadataSuffix"
-  if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) { throw "KMS prerequisite plan metadata is missing." }
-  $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
-  Assert-ReviewedPlanMetadata $metadata @{
-    SchemaVersion = "1"; Operation = "development-document-kms-prerequisite"; AccountId = $ExpectedAccountId
-    StateBucket = $StateBucket; Commit = $commit; BaselineSha256 = $ReviewedBaselineSha256
-    PlanPath = $resolved; PlanSha256 = $ReviewedPlanSha256
-  }
-  $plan = Read-Plan -Path $resolved
-  Assert-DevelopmentDocumentKmsPrerequisiteVariables $baseline.variables $plan.variables
-  $null = Assert-DevelopmentDocumentKmsPrerequisitePlan $plan $ExpectedAccountId
-  & terraform "-chdir=$terraformDirectory" apply -input=false -lock-timeout=5m $resolved
-  if ($LASTEXITCODE -ne 0) { throw "The exact reviewed KMS prerequisite plan failed to apply." }
-  Set-BaselineVariables -Baseline $baseline -EnableDocumentKmsPrerequisite
-  $verifyPath = Join-Path $operatorRoot "verify-prerequisite-$([guid]::NewGuid().ToString('N')).tfplan"
-  try {
-    & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m `
-      "-out=$verifyPath" -detailed-exitcode | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "The applied KMS prerequisite did not converge to zero drift." }
-  } finally { if (Test-Path -LiteralPath $verifyPath) { Remove-Item -LiteralPath $verifyPath -Force } }
-  [pscustomobject]@{ Result = "applied-and-verified"; Environment = "development"; Prerequisite = "document-kms"; Drift = $false } | ConvertTo-Json
+if ($Action -ceq "Verify") {
+  Set-DarkVariables -Baseline $baseline -Receipt $receipt -DeploymentStage $stageValue -ParserQualifiedArn $parserQualifiedArn
+  Assert-LiveStageBoundary -DeploymentStage $stageValue -Receipt $receipt -ParserQualifiedArn $parserQualifiedArn
+  Invoke-ZeroDrift -Baseline $baseline -Receipt $receipt -DeploymentStage $stageValue -ParserQualifiedArn $parserQualifiedArn
+  [pscustomobject]@{ Result = "verified"; Environment = "development"; Stage = $stageValue; ProcessingTriggers = "disabled"; SecurityHealthRules = $(if ($Stage -eq "KmsPrerequisite") { "not-deployed" } else { "enabled" }); Drift = $false } | ConvertTo-Json
   exit 0
 }
 
-Assert-BaselineCurrent -Baseline $baseline -EnableDocumentKmsPrerequisite
-$receipt = Read-Receipt -Commit $commit
-Set-DarkVariables -Baseline $baseline -Receipt $receipt
-
-if ($Action -eq "Verify") {
-  Assert-LiveDarkBoundary -Receipt $receipt
-  Invoke-ZeroDrift -Baseline $baseline -Receipt $receipt
-  [pscustomobject]@{ Result = "verified"; Environment = "development"; Triggers = "disabled"; Drift = $false } | ConvertTo-Json
-  exit 0
-}
-
-if ($Action -eq "Plan") {
-  if ([string]::IsNullOrWhiteSpace($PlanPath)) { $PlanPath = Join-Path $operatorRoot "dark-$(Get-Date -Format 'yyyyMMdd-HHmmss').tfplan" }
+Set-DarkVariables -Baseline $baseline -Receipt $receipt -DeploymentStage $stageValue -ParserQualifiedArn $parserQualifiedArn
+$operation = "development-document-$stageValue"
+$metadataSuffix = ".document-$stageValue.json"
+if ($Action -ceq "Plan") {
+  if ([string]::IsNullOrWhiteSpace($PlanPath)) { $PlanPath = Join-Path $operatorRoot "$stageValue-$(Get-Date -Format 'yyyyMMdd-HHmmss').tfplan" }
   $resolved = Resolve-DeploymentPlanPath -Candidate $PlanPath -AllowedRoot $operatorRoot
   if (Test-Path -LiteralPath $resolved) { throw "Refusing to overwrite an existing saved plan." }
+  $stateIdentity = Get-StateIdentity
   try {
     & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m "-out=$resolved" | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "The refresh-backed document dark plan failed." }
+    if ($LASTEXITCODE -ne 0) { throw "The refresh-backed $stageValue plan failed." }
     $plan = Read-Plan -Path $resolved
-    Assert-DevelopmentDocumentDarkVariables -BaselineVariables $baseline.variables -PlanVariables $plan.variables -Receipt $receipt
-    $changes = Assert-DevelopmentDocumentDarkPlan -Plan $plan -AccountId $ExpectedAccountId
+    if ($Stage -ceq "KmsPrerequisite") {
+      Assert-DevelopmentDocumentKmsPrerequisiteVariables $baseline.variables $plan.variables
+      $changes = @(Assert-DevelopmentDocumentKmsPrerequisitePlan -Plan $plan -AccountId $ExpectedAccountId)
+    } else {
+      Assert-DevelopmentDocumentDarkVariables $baseline.variables $plan.variables $receipt $stageValue $parserQualifiedArn
+      $changes = Assert-DevelopmentDocumentDarkPlan -Plan $plan -AccountId $ExpectedAccountId -Stage $stageValue
+    }
   } catch { if (Test-Path -LiteralPath $resolved) { Remove-Item -LiteralPath $resolved -Force }; throw }
   $sha = (Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash.ToLowerInvariant()
   [pscustomobject]@{
-    SchemaVersion = "1"; Operation = "development-document-dark-deployment"; AccountId = $ExpectedAccountId
-    StateBucket = $StateBucket; Commit = $commit; BaselineSha256 = $ReviewedBaselineSha256
-    ReceiptSha256 = $ReviewedReceiptSha256; PlanPath = $resolved; PlanSha256 = $sha
+    SchemaVersion = "2"; Operation = $operation; Stage = $stageValue; AccountId = $ExpectedAccountId
+    Region = $Region; StateBucket = $StateBucket; StateKey = "platform.tfstate"
+    StateLineage = $stateIdentity.Lineage; StateSerial = $stateIdentity.Serial
+    Commit = $commit; BaselineSha256 = $ReviewedBaselineSha256
+    ReceiptSha256 = $(if ($null -eq $receipt) { "" } else { $ReviewedReceiptSha256 })
+    ParserQualifiedArn = $parserQualifiedArn; PlanPath = $resolved; PlanSha256 = $sha
     CreatedAt = (Get-Date).ToUniversalTime().ToString("o")
   } | ConvertTo-Json | Set-Content -LiteralPath "$resolved$metadataSuffix" -Encoding utf8
-  [pscustomobject]@{ Result = "review-required"; Creates = 39; Updates = 5; PlanPath = $resolved; PlanSha256 = $sha
-    ApprovalCommand = "Apply reviewed development document dark plan $sha" } | ConvertTo-Json
+  $creates = @($changes | Where-Object { (@($_.change.actions) -join ",") -ceq "create" }).Count
+  $updates = @($changes | Where-Object { (@($_.change.actions) -join ",") -ceq "update" }).Count
+  [pscustomobject]@{ Result = "review-required"; Stage = $stageValue; Creates = $creates; Updates = $updates
+    PlanPath = $resolved; PlanSha256 = $sha; ApprovalCommand = "Apply reviewed development $stageValue plan $sha" } | ConvertTo-Json
   exit 0
 }
 
@@ -650,20 +901,32 @@ if ([string]::IsNullOrWhiteSpace($PlanPath) -or [string]::IsNullOrWhiteSpace($Re
 }
 $resolved = Resolve-DeploymentPlanPath -Candidate $PlanPath -AllowedRoot $operatorRoot -MustExist
 $actual = (Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($actual -cne $ReviewedPlanSha256) { throw "The dark plan checksum does not match review." }
+if ($actual -cne $ReviewedPlanSha256) { throw "The staged plan checksum does not match review." }
 $metadataPath = "$resolved$metadataSuffix"
-if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) { throw "Dark plan metadata is missing." }
+if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) { throw "Staged plan metadata is missing." }
 $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
 Assert-ReviewedPlanMetadata -Metadata $metadata -Expected @{
-  SchemaVersion = "1"; Operation = "development-document-dark-deployment"; AccountId = $ExpectedAccountId
-  StateBucket = $StateBucket; Commit = $commit; BaselineSha256 = $ReviewedBaselineSha256
-  ReceiptSha256 = $ReviewedReceiptSha256; PlanPath = $resolved; PlanSha256 = $ReviewedPlanSha256
+  SchemaVersion = "2"; Operation = $operation; Stage = $stageValue; AccountId = $ExpectedAccountId
+  Region = $Region; StateBucket = $StateBucket; StateKey = "platform.tfstate"
+  Commit = $commit; BaselineSha256 = $ReviewedBaselineSha256
+  ReceiptSha256 = $(if ($null -eq $receipt) { "" } else { $ReviewedReceiptSha256 })
+  ParserQualifiedArn = $parserQualifiedArn; PlanPath = $resolved; PlanSha256 = $ReviewedPlanSha256
+}
+$stateIdentity = Get-StateIdentity
+if ([string]$stateIdentity.Lineage -cne [string]$metadata.StateLineage -or [long]$stateIdentity.Serial -ne [long]$metadata.StateSerial) {
+  throw "Remote state lineage or serial changed after review; generate a new plan."
 }
 $plan = Read-Plan -Path $resolved
-Assert-DevelopmentDocumentDarkVariables -BaselineVariables $baseline.variables -PlanVariables $plan.variables -Receipt $receipt
-$null = Assert-DevelopmentDocumentDarkPlan -Plan $plan -AccountId $ExpectedAccountId
+if ($Stage -ceq "KmsPrerequisite") {
+  Assert-DevelopmentDocumentKmsPrerequisiteVariables $baseline.variables $plan.variables
+  $null = Assert-DevelopmentDocumentKmsPrerequisitePlan -Plan $plan -AccountId $ExpectedAccountId
+} else {
+  Assert-DevelopmentDocumentDarkVariables $baseline.variables $plan.variables $receipt $stageValue $parserQualifiedArn
+  $null = Assert-DevelopmentDocumentDarkPlan -Plan $plan -AccountId $ExpectedAccountId -Stage $stageValue
+}
 & terraform "-chdir=$terraformDirectory" apply -input=false -lock-timeout=5m $resolved
-if ($LASTEXITCODE -ne 0) { throw "The exact reviewed document dark plan failed to apply." }
-Assert-LiveDarkBoundary -Receipt $receipt
-Invoke-ZeroDrift -Baseline $baseline -Receipt $receipt
-[pscustomobject]@{ Result = "applied-and-verified"; Environment = "development"; Triggers = "disabled"; Drift = $false } | ConvertTo-Json
+if ($LASTEXITCODE -ne 0) { throw "The exact reviewed $stageValue plan failed to apply." }
+Assert-LiveStageBoundary -DeploymentStage $stageValue -Receipt $receipt -ParserQualifiedArn $parserQualifiedArn
+Invoke-ZeroDrift -Baseline $baseline -Receipt $receipt -DeploymentStage $stageValue -ParserQualifiedArn $parserQualifiedArn
+[pscustomobject]@{ Result = "applied-and-verified"; Environment = "development"; Stage = $stageValue; ProcessingTriggers = "disabled"; SecurityHealthRules = $(if ($Stage -eq "KmsPrerequisite") { "not-deployed" } else { "enabled" }); Drift = $false } | ConvertTo-Json
+exit 0

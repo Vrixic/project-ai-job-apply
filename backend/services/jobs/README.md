@@ -17,6 +17,13 @@ The active-job read model returns only active, unexpired canonical records and r
 summaries. It excludes raw snapshots, exact source identity keys, content hashes, pending or
 suspect records, and terminal tombstones.
 
+The D1 search read model uses PostgreSQL full-text search and stable keyset pagination over that
+same active catalog. It supports only honestly persisted title, company, location, and verification
+freshness filters, plus relevance or freshness ordering. Exact duplicate aliases resolve to one
+canonical result. Search cursors are bounded, opaque, request-bound continuation tokens; they do
+not contain the candidate's query or filter values. Search returns summaries without descriptions
+or source metadata, and no matching or personalization is inferred at this boundary.
+
 Probable-duplicate review is an internal catalog boundary. A reviewed exact match creates a
 reversible canonical alias without moving or deleting either record's source provenance. Canonical
 reads aggregate those sources, every decision or reopen action is append-only audited using opaque
@@ -25,7 +32,7 @@ future authenticated admin API or user-facing reporting surface for this capabil
 
 ## Planned additions
 
-- `src/api/` — Search-independent job reads and contribution/report commands.
+- `src/api/` — Contribution and report commands.
 - Provider adapters will live behind the integrations boundary, not inside source-truth rules.
 
 This service determines source truth. Per-user ranking belongs to matching.

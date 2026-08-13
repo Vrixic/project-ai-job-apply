@@ -72,10 +72,11 @@ module "platform" {
   candidate_document_cors_allowed_origins = (
     var.candidate_document_cors_allowed_origins
   )
-  deploy_document_processing                    = var.deploy_document_processing
-  document_processing_kms_prerequisite_enabled  = var.document_processing_kms_prerequisite_enabled
+  document_processing_deployment_stage          = var.document_processing_deployment_stage
+  document_parser_invocation_qualified_arn      = var.document_parser_invocation_qualified_arn
   document_scan_mapping_enabled                 = var.document_scan_mapping_enabled
   document_scan_event_rule_enabled              = var.document_scan_event_rule_enabled
+  document_security_health_rules_enabled        = var.document_security_health_rules_enabled
   document_processor_artifact_s3_key            = var.document_processor_artifact_s3_key
   document_processor_artifact_s3_object_version = var.document_processor_artifact_s3_object_version
   document_processor_artifact_sha256            = var.document_processor_artifact_sha256

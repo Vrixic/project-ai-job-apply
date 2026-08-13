@@ -15,6 +15,7 @@ import {
 import { createDatabase, PostgresProfileStore } from "@ai-job-apply/profile-service";
 import { FastifyAdapter } from "@nestjs/platform-fastify";
 import { createGatewayApplication } from "./application.js";
+import { deriveJobSearchCursorKeys } from "./job-search-cursor-key.js";
 
 const config = loadBackendConfig();
 const logger = createLogger({
@@ -24,7 +25,9 @@ const logger = createLogger({
 });
 const database = createDatabase(config.DATABASE_URL);
 const store = new PostgresProfileStore(database, { dispatchTarget: "lambda_durable" });
-const catalog = new PostgresJobCatalog(database.client);
+const catalog = new PostgresJobCatalog(database.client, {
+  searchCursorKeys: deriveJobSearchCursorKeys(config.DATABASE_URL),
+});
 const documents =
   config.DOCUMENT_UPLOAD_BUCKET && config.DOCUMENT_UPLOAD_KMS_KEY_ARN
     ? new PostgresDocumentStore(

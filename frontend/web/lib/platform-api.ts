@@ -10,6 +10,7 @@ interface PlatformRequestDependencies {
   random?: () => number;
   retryDelaysMilliseconds?: readonly number[];
   sleep?: (milliseconds: number) => Promise<void>;
+  timeoutMilliseconds?: number;
 }
 
 const defaultReadRetryDelaysMilliseconds = [250, 750, 1_500] as const;
@@ -80,45 +81,58 @@ export async function forwardPlatformRequest(
     : [];
   const random = dependencies.random ?? Math.random;
   const wait = dependencies.sleep ?? sleep;
+  const timeoutController = new AbortController();
+  const timeout = setTimeout(
+    () => timeoutController.abort(),
+    dependencies.timeoutMilliseconds ?? 10_000,
+  );
+  const signal = init.signal
+    ? AbortSignal.any([init.signal, timeoutController.signal])
+    : timeoutController.signal;
   let response: Response | undefined;
 
-  for (let attempt = 0; attempt <= retryDelays.length; attempt += 1) {
-    try {
-      response = await dependencies.fetch(new URL(path, baseUrl), {
-        ...init,
-        cache: "no-store",
-        headers: {
-          ...init.headers,
-          authorization: `Bearer ${token}`,
-        },
-      });
-    } catch {
-      response = undefined;
+  try {
+    for (let attempt = 0; attempt <= retryDelays.length; attempt += 1) {
+      try {
+        response = await dependencies.fetch(new URL(path, baseUrl), {
+          ...init,
+          cache: "no-store",
+          signal,
+          headers: {
+            ...init.headers,
+            authorization: `Bearer ${token}`,
+          },
+        });
+      } catch {
+        response = undefined;
+      }
+
+      const delay = retryDelays[attempt];
+      if (response && (!transientReadStatuses.has(response.status) || delay === undefined)) {
+        break;
+      }
+      if (delay === undefined || signal.aborted) {
+        return problem(503, "platform_unavailable", "The platform API is unavailable");
+      }
+      await response?.body?.cancel();
+      await wait(Math.round(delay / 2 + random() * (delay / 2)));
     }
 
-    const delay = retryDelays[attempt];
-    if (response && (!transientReadStatuses.has(response.status) || delay === undefined)) {
-      break;
-    }
-    if (delay === undefined) {
+    if (!response) {
       return problem(503, "platform_unavailable", "The platform API is unavailable");
     }
-    await response?.body?.cancel();
-    await wait(Math.round(delay / 2 + random() * (delay / 2)));
-  }
 
-  if (!response) {
-    return problem(503, "platform_unavailable", "The platform API is unavailable");
+    const headers = new Headers({ "cache-control": "no-store" });
+    const contentType = response.headers.get("content-type");
+    const correlationId = response.headers.get("x-correlation-id");
+    if (contentType) {
+      headers.set("content-type", contentType);
+    }
+    if (correlationId) {
+      headers.set("x-correlation-id", correlationId);
+    }
+    return new Response(response.body, { status: response.status, headers });
+  } finally {
+    clearTimeout(timeout);
   }
-
-  const headers = new Headers({ "cache-control": "no-store" });
-  const contentType = response.headers.get("content-type");
-  const correlationId = response.headers.get("x-correlation-id");
-  if (contentType) {
-    headers.set("content-type", contentType);
-  }
-  if (correlationId) {
-    headers.set("x-correlation-id", correlationId);
-  }
-  return new Response(response.body, { status: response.status, headers });
 }

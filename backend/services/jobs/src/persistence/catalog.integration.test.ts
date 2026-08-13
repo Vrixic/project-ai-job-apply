@@ -13,7 +13,9 @@ describeWithDatabase("PostgresJobCatalog", () => {
   const client = createJobCatalogDatabase(databaseUrl ?? "postgres://invalid", {
     maxConnections: 2,
   });
-  const catalog = new PostgresJobCatalog(client);
+  const catalog = new PostgresJobCatalog(client, {
+    searchCursorKeys: { active: { id: "test-v1", key: Buffer.alloc(32, 1) } },
+  });
   const runId = crypto.randomUUID();
   const observedAt = new Date("2026-08-11T12:00:00.000Z");
 
@@ -49,10 +51,10 @@ describeWithDatabase("PostgresJobCatalog", () => {
       env: environment,
     });
     expect(first.stdout.trim()).toBe(
-      "Jobs migrations through 0003_duplicate_resolution_audit_guard applied and verified.",
+      "Jobs migrations through 0004_job_search applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(
-      "Jobs migrations through 0003_duplicate_resolution_audit_guard applied and verified.",
+      "Jobs migrations through 0004_job_search applied and verified.",
     );
     await catalog.ping();
   });
@@ -119,6 +121,268 @@ describeWithDatabase("PostgresJobCatalog", () => {
     expect(active?.sources[0]).not.toHaveProperty("rawSnapshot");
     expect(active?.sources[0]).not.toHaveProperty("externalJobId");
     expect(active?.sources[0]).not.toHaveProperty("atsTenant");
+  });
+
+  it("searches and filters active jobs with stable opaque keyset pagination", async () => {
+    const searchToken = `résumé-${runId}`;
+    const first = await catalog.recordObservation(
+      fixture({
+        sourceUrl: `https://jobs.example.test/${runId}/search-a`,
+        externalJobId: "search-a",
+        employerRequisitionId: `req-${runId}-search-a`,
+        title: "Principal Unicode Engineer",
+        locations: ["Montréal, QC"],
+        department: "Internationalization",
+        description: `${searchToken} builds reliable multilingual systems.`,
+      }),
+    );
+    const second = await catalog.recordObservation(
+      fixture({
+        sourceUrl: `https://jobs.example.test/${runId}/search-b`,
+        externalJobId: "search-b",
+        employerRequisitionId: `req-${runId}-search-b`,
+        title: "Principal Unicode Engineer",
+        locations: ["Montréal, QC"],
+        department: "Internationalization",
+        description: `${searchToken} improves deterministic language tooling.`,
+      }),
+    );
+    await catalog.recordObservation(
+      fixture({
+        sourceUrl: `https://jobs.example.test/${runId}/search-filtered-out`,
+        externalJobId: "search-filtered-out",
+        employerRequisitionId: `req-${runId}-search-filtered-out`,
+        title: "Product Designer",
+        locations: ["Boston, MA"],
+        description: "A distinct synthetic design role.",
+      }),
+    );
+
+    const request = {
+      query: searchToken,
+      filters: {
+        title: "Principal Unicode Engineer",
+        company: `Synthetic Company ${runId}`,
+        location: "Montréal, QC",
+        verifiedWithinDays: 2,
+      },
+      sort: "relevance" as const,
+      pageSize: 1,
+    };
+    const pageOne = await catalog.searchActiveJobs(request, observedAt);
+    expect(pageOne.items).toHaveLength(1);
+    expect(pageOne.nextCursor).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+    expect(pageOne.items[0]).not.toHaveProperty("description");
+    const pageTwo = await catalog.searchActiveJobs(
+      { ...request, cursor: pageOne.nextCursor as string },
+      observedAt,
+    );
+    expect(pageTwo.items).toHaveLength(1);
+    expect(new Set([...pageOne.items, ...pageTwo.items].map((job) => job.id))).toEqual(
+      new Set([first.job.id, second.job.id]),
+    );
+    expect(pageTwo).not.toHaveProperty("nextCursor");
+    const freshnessOne = await catalog.searchActiveJobs(
+      { filters: request.filters, sort: "freshness", pageSize: 1 },
+      observedAt,
+    );
+    const freshnessTwo = await catalog.searchActiveJobs(
+      {
+        filters: request.filters,
+        sort: "freshness",
+        pageSize: 1,
+        cursor: freshnessOne.nextCursor as string,
+      },
+      observedAt,
+    );
+    expect(new Set([...freshnessOne.items, ...freshnessTwo.items].map((job) => job.id))).toEqual(
+      new Set([first.job.id, second.job.id]),
+    );
+    await expect(
+      catalog.searchActiveJobs(
+        { ...request, query: "different", cursor: pageOne.nextCursor as string },
+        observedAt,
+      ),
+    ).rejects.toThrow("Search cursor is invalid");
+  });
+
+  it("parameterizes search text and excludes blocked, expired, and exact-alias losers", async () => {
+    const token = `aliassearch${runId.replaceAll("-", "")}`;
+    const canonical = await catalog.recordObservation(
+      fixture({
+        sourceUrl: `https://jobs.example.test/${runId}/search-alias-a`,
+        externalJobId: "search-alias-a",
+        employerRequisitionId: `req-${runId}-search-alias-a`,
+        description: `${token} shared description`,
+      }),
+    );
+    const alias = await catalog.recordObservation(
+      fixture({
+        provider: "other",
+        sourceUrl: `https://mirror.example.test/${runId}/search-alias-b`,
+        atsTenant: `search-alias-${runId}`,
+        externalJobId: "search-alias-b",
+        employerRequisitionId: `req-${runId}-search-alias-b`,
+        description: `${token} shared description`,
+      }),
+    );
+    await catalog.reviewDuplicateCandidate({
+      jobId: canonical.job.id,
+      candidateJobId: alias.job.id,
+      resolution: "exact",
+      canonicalJobId: canonical.job.id,
+      reviewedBy: "operator:synthetic-test",
+      reasonCode: "synthetic.search_alias",
+      reviewedAt: observedAt,
+    });
+    const blocked = await catalog.recordObservation(
+      fixture({
+        sourceUrl: `https://jobs.example.test/${runId}/search-blocked`,
+        externalJobId: "search-blocked",
+        employerRequisitionId: `req-${runId}-search-blocked`,
+        description: `${token} blocked description`,
+      }),
+    );
+    await catalog.setTerminalStatus(
+      blocked.job.id,
+      "blocked",
+      "synthetic_search_block",
+      observedAt,
+    );
+    await catalog.recordObservation(
+      fixture({
+        sourceUrl: `https://jobs.example.test/${runId}/search-expired`,
+        externalJobId: "search-expired",
+        employerRequisitionId: `req-${runId}-search-expired`,
+        description: `${token} expired description`,
+        observedAt: new Date("2026-06-01T12:00:00.000Z"),
+      }),
+    );
+
+    const active = await catalog.searchActiveJobs({ query: token, pageSize: 25 }, observedAt);
+    expect(active.items.map((job) => job.id)).toEqual([canonical.job.id]);
+    const afterExpiry = await catalog.searchActiveJobs(
+      { query: token, pageSize: 25 },
+      new Date(canonical.job.expiresAt.getTime() + 1),
+    );
+    expect(afterExpiry.items).toEqual([]);
+
+    const injection = await catalog.searchActiveJobs(
+      { query: "' OR true; DROP TABLE jobs.canonical_jobs; --", pageSize: 25 },
+      observedAt,
+    );
+    expect(injection.items).toEqual([]);
+    const [catalogStillPresent] = await client<{ present: boolean }[]>`
+      SELECT to_regclass('jobs.canonical_jobs') IS NOT NULL AS present
+    `;
+    expect(catalogStillPresent?.present).toBe(true);
+  });
+
+  it("fails a continuation explicitly when a catalog mutation changes the search revision", async () => {
+    const token = `mutationsearch${runId.replaceAll("-", "")}`;
+    for (const suffix of ["a", "b"]) {
+      await catalog.recordObservation(
+        fixture({
+          sourceUrl: `https://jobs.example.test/${runId}/mutation-${suffix}`,
+          externalJobId: `mutation-${suffix}`,
+          employerRequisitionId: `req-${runId}-mutation-${suffix}`,
+          description: `${token} deterministic pagination record`,
+        }),
+      );
+    }
+    const request = { query: token, pageSize: 1, sort: "freshness" as const };
+    const first = await catalog.searchActiveJobs(request, observedAt);
+    expect(first.nextCursor).toBeDefined();
+
+    await catalog.recordObservation(
+      fixture({
+        sourceUrl: `https://jobs.example.test/${runId}/mutation-after-first-page`,
+        externalJobId: "mutation-after-first-page",
+        employerRequisitionId: `req-${runId}-mutation-after-first-page`,
+        description: "An unrelated catalog mutation.",
+      }),
+    );
+
+    await expect(
+      catalog.searchActiveJobs({ ...request, cursor: first.nextCursor as string }, observedAt),
+    ).rejects.toThrow("catalog changed");
+  });
+
+  it("uses the normalized-location GIN index for a representative containment filter", async () => {
+    const fixtureCompanyId = "20000000-0000-7000-8000-000000000001";
+    const rollback = new Error("rollback representative search-plan fixture");
+    let serializedPlan = "";
+
+    await expect(
+      client.begin(async (transaction) => {
+        await transaction`
+          INSERT INTO jobs.companies (
+            id, display_name, normalized_name, verified_domain
+          ) VALUES (
+            ${fixtureCompanyId},
+            ${"Representative Planner Fixture"},
+            ${"representative planner fixture"},
+            ${"planner-fixture.example.test"}
+          )
+        `;
+        await transaction`
+          INSERT INTO jobs.canonical_jobs (
+            id,
+            company_id,
+            title,
+            normalized_title,
+            locations,
+            normalized_locations,
+            description,
+            dedupe_fingerprint,
+            status,
+            first_observed_at,
+            last_verified_at,
+            expires_at
+          )
+          SELECT
+            (
+              '20000000-0000-7000-8000-' || lpad(series::text, 12, '0')
+            )::uuid,
+            ${fixtureCompanyId}::uuid,
+            'Synthetic planner job ' || series,
+            'synthetic planner job ' || series,
+            CASE
+              WHEN series = 4242 THEN '["Selective Planner Location"]'::jsonb
+              ELSE '["Representative Other Location"]'::jsonb
+            END,
+            CASE
+              WHEN series = 4242 THEN ARRAY['selective planner location']::text[]
+              ELSE ARRAY['representative other location']::text[]
+            END,
+            'Synthetic planner-only fixture',
+            'planner-fixture-' || series,
+            'active',
+            ${observedAt.toISOString()}::timestamptz,
+            ${observedAt.toISOString()}::timestamptz,
+            ${new Date(observedAt.getTime() + 86_400_000).toISOString()}::timestamptz
+          FROM generate_series(1, 10000) AS series
+        `;
+        await transaction`ANALYZE jobs.canonical_jobs`;
+        const [plan] = await transaction<Array<{ "QUERY PLAN": unknown }>>`
+          EXPLAIN (FORMAT JSON)
+          SELECT id
+          FROM jobs.canonical_jobs
+          WHERE normalized_locations @> ARRAY[${"selective planner location"}]::text[]
+        `;
+        serializedPlan = JSON.stringify(plan?.["QUERY PLAN"]);
+        throw rollback;
+      }),
+    ).rejects.toBe(rollback);
+
+    expect(serializedPlan).toContain('"Node Type":"Bitmap Index Scan"');
+    expect(serializedPlan).toContain('"Index Name":"canonical_jobs_normalized_locations_gin"');
+    const [rolledBack] = await client<{ count: number }[]>`
+      SELECT count(*)::int AS count
+      FROM jobs.companies
+      WHERE id = ${fixtureCompanyId}
+    `;
+    expect(rolledBack?.count).toBe(0);
   });
 
   it("flags a fuzzy match without merging canonical records", async () => {

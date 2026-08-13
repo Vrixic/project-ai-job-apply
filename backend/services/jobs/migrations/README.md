@@ -10,3 +10,5 @@ other service may modify these tables.
   topology, and append-only resolution audit events.
 - `0003_duplicate_resolution_audit_guard.sql` — Database-enforced immutability for duplicate
   resolution audit events.
+- `0004_job_search.sql` — Weighted PostgreSQL full-text retrieval plus title, location, freshness,
+  and stable active-page indexes. It adds no dedicated search service or candidate data.

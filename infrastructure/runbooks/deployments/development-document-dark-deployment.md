@@ -1,80 +1,95 @@
-# Development document-processing dark deployment
+# Development document-processing staged dark deployment
 
-This operator deploys the resume coordinator and isolated parser into development without
-allowing any candidate document to flow through them. It is intentionally separate from artifact
-publication and database migration.
+This operator advances the document runtime through one monotonic stage at a time. It never uses
+Terraform `-target`, and it never enables the scan-result mapping, scan-result rule, or reconciler.
+Parser and complete stages deliberately enable only the two bounded GuardDuty protection-health
+alert rules after their referenced protection plan and candidate-document bucket exist.
+
+## Stages
+
+| Stage | Applied boundary | Exact reviewed action set |
+|---|---|---|
+| `KmsPrerequisite` | Two exact EventBridge grants on the platform KMS key | One in-place update when first installed; zero drift thereafter |
+| `ParserDark` | Encrypted queues, dark processing rules, active bounded security-health alerts, bounded roles, isolated parser, S3 endpoint, metrics and alarms | 32 creates and two policy updates |
+| `CompleteDark` | Coordinator, disabled mapping and reconciler target, STS endpoint, and exact existing endpoint grants | Seven creates and three policy updates |
+
+The operator rejects skipped or reversed stages. `CompleteDark` reads the numeric parser version
+ARN from applied `ParserDark` state, verifies its exact account, region, function name, and positive
+version, then binds that ARN into the processor policy, environment, and Lambda endpoint policy.
+It never predicts a Lambda version or invokes `$LATEST`.
 
 ## Required reviewed inputs
 
-- a clean `main` checkout exactly matching `origin/main`;
-- the exact development IAM Identity Center account in `us-east-2`;
-- the environment's private, versioned, customer-KMS Terraform state bucket;
-- a saved Terraform `1.9.8` baseline whose reviewed checksum is supplied and whose plan has zero
-  changes;
-- a `verified` document publication receipt and its reviewed checksum.
+- clean `main` exactly matching `origin/main`;
+- the development IAM Identity Center caller in the exact account and `us-east-2`;
+- the private, versioned, customer-KMS Terraform state bucket;
+- a checksum-reviewed Terraform `1.9.8` zero-change baseline;
+- for parser and complete stages, the checksum-reviewed verified document publication receipt.
 
-The receipt must bind eight exact-version S3 objects—ZIP, SBOM, manifest, and checksum for both
-Lambdas—to merged source, the Terraform-owned artifact bucket, and the platform KMS key. The
-operator independently reads those exact versions before planning or applying.
+The historical intake-only baseline is accepted only as an input reconstruction boundary. The
+operator maps its retired deployment and KMS booleans to `kms-prerequisite`; current Terraform
+source contains only the stage enum and parser-version pin.
 
-## Structural boundary
+## Plan, apply, and verify
 
-The plan may contain exactly 39 creates and six in-place updates. Creates are limited to the
-document queues and policies, EventBridge rules and targets, three bounded IAM roles and inline
-policies, parser security group, S3/STS endpoints, two immutable Lambda functions and aliases,
-the disabled queue mapping, reconciler permission, three log metrics, and eight alarms. Updates
-are limited to the platform KMS key policy, candidate-document bucket policy, operational SNS
-policy, and the existing Lambda, Secrets Manager, and SQS endpoint policies.
+`KmsPrerequisite` represents the already-applied, checksum-reviewed development boundary and can
+be checked with `-Action Verify -Stage KmsPrerequisite` without publication-receipt arguments. Its
+historical one-update plan is retained in the semantic guard; development's next transition is
+`ParserDark`.
 
-No existing resource may be deleted or replaced. The GuardDuty scan-result rule, SQS mapping, and
-reconciler are forced disabled. The two security-health EventBridge rules remain enabled so a
-GuardDuty protection-plan failure can alert even while processing is dark.
-
-Each of the six updates is also checked semantically. Every prior statement must remain unchanged;
-only the exact document EventBridge KMS grants, clean-tag quarantine deny, health-alert SNS grant,
-processor-only SQS endpoint grant, immutable-parser Lambda endpoint grant, and processor addition
-to the existing database-secret endpoint condition are permitted. Unknown or sensitive policy
-results, broader actions/resources/principals, and changes outside each policy attribute fail.
-
-The processor uses the exact already accepted, versioned AWS Parameters and Secrets extension
-layer. The isolated parser has no layer and no database runtime.
-
-## Plan and apply
+Use the same command shape for `ParserDark` and then `CompleteDark`:
 
 ```powershell
-.\scripts\operate-development-document-dark-deployment.ps1 -Action Plan `
+.\scripts\operate-development-document-dark-deployment.ps1 -Action Plan -Stage ParserDark `
   -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
   -BaselinePlanPath ZERO_CHANGE_PLAN -ReviewedBaselineSha256 BASELINE_SHA256 `
   -PublicationReceiptPath VERIFIED_RECEIPT -ReviewedReceiptSha256 RECEIPT_SHA256
 ```
 
-Review the saved plan and reported checksum. Apply those exact bytes:
+Review the exact saved bytes and checksum, then apply them:
 
 ```powershell
-.\scripts\operate-development-document-dark-deployment.ps1 -Action Apply `
+.\scripts\operate-development-document-dark-deployment.ps1 -Action Apply -Stage ParserDark `
   -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
   -BaselinePlanPath ZERO_CHANGE_PLAN -ReviewedBaselineSha256 BASELINE_SHA256 `
   -PublicationReceiptPath VERIFIED_RECEIPT -ReviewedReceiptSha256 RECEIPT_SHA256 `
   -PlanPath PLAN_PATH_FROM_PLAN -ReviewedPlanSha256 PLAN_SHA256
 ```
 
-Apply repeats every checksum, receipt, variable-overlay, and structural-plan check before changing
-AWS. It then verifies immutable aliases and code hashes, permissions boundaries, five private
-endpoints, three empty encrypted queues, disabled processing triggers, enabled security-health
-rules and exact retry/DLQ targets, exact queue policies, eight actionable `OK` alarms, and a
-refresh-backed zero-change plan. Lambda verification requires an `Active`/`Successful` immutable
-release with the exact runtime, handler, architecture, timeout, concurrency, role, VPC, environment,
-tracing, and logging boundary. The parser additionally must retain its no-secret, no-shared-log,
-no-active-tracing, S3-and-DNS-only isolation.
-
-Run the same live and zero-drift proof later without applying:
+Verify the applied stage without changing AWS:
 
 ```powershell
-.\scripts\operate-development-document-dark-deployment.ps1 -Action Verify `
+.\scripts\operate-development-document-dark-deployment.ps1 -Action Verify -Stage ParserDark `
   -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
   -BaselinePlanPath ZERO_CHANGE_PLAN -ReviewedBaselineSha256 BASELINE_SHA256 `
   -PublicationReceiptPath VERIFIED_RECEIPT -ReviewedReceiptSha256 RECEIPT_SHA256
 ```
 
-Do not enable either trigger with this operator. Trigger activation requires separate synthetic
-conformance and separately reviewed plans.
+Every saved plan metadata record binds the stage, account, region, state bucket/key,
+lineage/serial, merged commit, baseline checksum, publication receipt checksum, parser-version pin,
+plan path, and plan checksum. Apply refuses changed state or source and re-runs the exact semantic
+plan guard before consuming the reviewed bytes.
+
+## Fail-closed invariants
+
+- no deferred data reads;
+- no unknown or sensitive trust, identity policy, endpoint policy, queue policy, attachment role,
+  or queue URL;
+- no deletes, replacements, extra actions, or cross-stage resources;
+- deterministic exact role, queue, rule, function, alias, ARN, and queue-URL bindings;
+- scan-result and reconciler rules `DISABLED`, SQS mapping absent or disabled, and only the two
+  GuardDuty protection-health alert rules `ENABLED`;
+- parser-dark proves the coordinator Lambda, alias, policy, mapping, STS endpoint, reconciler
+  target/permission, and later-stage endpoint grants do not exist;
+- parser Lambda has no function- or alias-level resource policy in either stage; complete-dark's
+  processor alias has exactly one reconciler permission with the exact action, service principal,
+  source rule, qualified alias resource, and statement ID;
+- any Terraform state address in the document-owned resource namespace outside the exact stage
+  allowlist is rejected, including shadow roles, queues, rules, targets, alarms, filters, aliases,
+  permissions, mappings, endpoints, or security groups;
+- complete-dark rechecks exact live Lambda, role/trust/policy, security-group, queue, target, alarm,
+  and endpoint boundaries;
+- immutable artifact and live alias hashes match the reviewed receipt;
+- refresh-backed zero drift after each apply.
+
+Trigger activation is a later, separately reviewed rollout after synthetic dark conformance.

@@ -208,36 +208,52 @@ variable "candidate_document_cors_allowed_origins" {
   }
 }
 
-variable "deploy_document_processing" {
-  description = "Dark-deploy the isolated document coordinator/parser boundary and encrypted queues."
-  type        = bool
-  default     = false
+variable "document_processing_deployment_stage" {
+  description = "Monotonic document-processing rollout stage; every processing trigger remains independently dark."
+  type        = string
+  default     = "disabled"
 
   validation {
-    condition = !var.deploy_document_processing || (
+    condition = contains([
+      "disabled", "kms-prerequisite", "parser-dark", "complete-dark"
+    ], var.document_processing_deployment_stage)
+    error_message = "Document processing stage must be disabled, kms-prerequisite, parser-dark, or complete-dark."
+  }
+
+  validation {
+    condition = !contains(["parser-dark", "complete-dark"], var.document_processing_deployment_stage) || (
       var.deploy_document_intake &&
+      var.document_parser_artifact_s3_key != "" &&
+      var.document_parser_artifact_s3_object_version != "" &&
+      var.document_parser_artifact_sha256 != "" &&
+      var.document_parser_artifact_base64sha256 != ""
+    )
+    error_message = "Parser-dark and complete-dark require intake and one immutable versioned parser artifact with exact digests."
+  }
+
+  validation {
+    condition = var.document_processing_deployment_stage != "complete-dark" || (
       var.document_processor_artifact_s3_key != "" &&
       var.document_processor_artifact_s3_object_version != "" &&
       var.document_processor_artifact_sha256 != "" &&
       var.document_processor_artifact_base64sha256 != "" &&
-      var.document_parser_artifact_s3_key != "" &&
-      var.document_parser_artifact_s3_object_version != "" &&
-      var.document_parser_artifact_sha256 != "" &&
-      var.document_parser_artifact_base64sha256 != "" &&
       var.document_processor_extension_layer_arn != ""
     )
-    error_message = "Document processing requires intake, both immutable versioned artifacts with exact digests, and the reviewed Secrets extension."
+    error_message = "Complete-dark requires the immutable processor artifact and reviewed Secrets extension."
   }
 }
 
-variable "document_processing_kms_prerequisite_enabled" {
-  description = "Add only the exact document EventBridge KMS grants before dependent resources are planned."
-  type        = bool
-  default     = false
+variable "document_parser_invocation_qualified_arn" {
+  description = "Exact already-applied positive numeric parser Lambda version invoked by the coordinator."
+  type        = string
+  default     = ""
 
   validation {
-    condition     = !var.deploy_document_processing || var.document_processing_kms_prerequisite_enabled
-    error_message = "Document processing requires the reviewed KMS prerequisite to remain enabled."
+    condition = var.document_processing_deployment_stage == "complete-dark" ? can(regex(
+      "^arn:aws:lambda:[a-z0-9-]+:[0-9]{12}:function:${var.name}-${var.environment}-document-parser:[1-9][0-9]*$",
+      var.document_parser_invocation_qualified_arn
+    )) : var.document_parser_invocation_qualified_arn == ""
+    error_message = "Only complete-dark accepts a parser invocation ARN, and it must name one positive numeric version of this environment's document-parser Lambda."
   }
 }
 
@@ -248,7 +264,7 @@ variable "document_scan_mapping_enabled" {
 
   validation {
     condition = !var.document_scan_mapping_enabled || (
-      var.deploy_document_processing && var.serverless_runtime_enabled
+      var.document_processing_deployment_stage == "complete-dark" && var.serverless_runtime_enabled
     )
     error_message = "Document scan mapping activation requires the deployed processing boundary and active serverless runtime."
   }
@@ -261,9 +277,25 @@ variable "document_scan_event_rule_enabled" {
 
   validation {
     condition = !var.document_scan_event_rule_enabled || (
-      var.document_scan_mapping_enabled && var.deploy_document_processing && var.serverless_runtime_enabled
+      var.document_scan_mapping_enabled &&
+      var.document_processing_deployment_stage == "complete-dark" &&
+      var.serverless_runtime_enabled
     )
     error_message = "The GuardDuty scan rule requires an already-enabled processor mapping and active reviewed runtime."
+  }
+}
+
+variable "document_security_health_rules_enabled" {
+  description = "Enable only the two bounded GuardDuty protection-health alert rules; never enables document processing."
+  type        = bool
+  default     = false
+
+  validation {
+    condition = !var.document_security_health_rules_enabled || (
+      var.deploy_document_intake &&
+      contains(["parser-dark", "complete-dark"], var.document_processing_deployment_stage)
+    )
+    error_message = "Document security-health alerts require the deployed candidate-document and parser-dark boundary."
   }
 }
 

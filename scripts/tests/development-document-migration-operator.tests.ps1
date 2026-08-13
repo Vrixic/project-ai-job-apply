@@ -12,6 +12,17 @@ $ast = [Management.Automation.Language.Parser]::ParseInput(
 )
 if (@($errors).Count -ne 0) { throw "The development migration operator did not parse." }
 
+$currentJobsSuccessMarker =
+  "Jobs migrations through 0004_job_search applied and verified."
+$retiredJobsSuccessMarker =
+  "Jobs migrations through 0003_duplicate_resolution_audit_guard applied and verified."
+if (-not $source.Contains($currentJobsSuccessMarker)) {
+  throw "The development migration operator does not require the current Jobs migration marker."
+}
+if ($source.Contains($retiredJobsSuccessMarker)) {
+  throw "The development migration operator still accepts the retired Jobs migration marker."
+}
+
 $pathFunctions = @($ast.FindAll({
       param($node)
       $node -is [Management.Automation.Language.FunctionDefinitionAst] -and

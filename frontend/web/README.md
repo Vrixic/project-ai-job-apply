@@ -65,6 +65,13 @@ separate configuration.
 
 The truth-profile panel uses server-held Auth0 sessions to list, create, correct, and reject
 candidate-owned facts. Direct entries are clearly described as user-confirmed; correction creates
-a new version and the browser supplies no identity or provenance claim. Resume upload and parsing
-are intentionally absent until the encrypted document and proposed-fact review boundary is
-implemented.
+a new version and the browser supplies no identity or provenance claim. The deployed development
+intake flow issues a direct, five-minute, write-only quarantine upload grant and lists only
+candidate-owned document metadata. Scan-result consumption, isolated parsing, and proposed-fact
+review are implemented and locally verified but remain nondeployed and unavailable to users.
+
+The first catalog-discovery slice adds a responsive, labelled search form and compact active-job
+summaries. The browser sends supported keywords and title, company, location, or freshness filters
+only in a bounded JSON body to a narrow server-side BFF. Auth0 tokens remain server-held, raw query
+strings are rejected, and pagination uses the API's opaque cursor. Results are explicitly
+non-personalized; saved jobs and profile matching remain separate future slices.

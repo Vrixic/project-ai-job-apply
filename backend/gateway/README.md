@@ -30,6 +30,12 @@ Because this catalog is shared rather than candidate-owned, the route verifies t
 principal and exact scope without creating or updating a profile identity record. Owner-scoped
 profile and operation routes continue resolving the provider identity to an internal user UUID.
 
+`POST /v1/jobs/search` uses the same exact `jobs:read` boundary. Its strict, size-bounded JSON body
+keeps query and filter values out of URLs, and the Lambda route continues rejecting every raw query
+string before framework dispatch. The gateway returns only active canonical summaries and an
+opaque continuation cursor; it does not log, audit, or emit search values and does not perform
+profile matching.
+
 The scale-to-zero migration adds a shared application factory and an API Gateway HTTP API payload
 2.0 Lambda entrypoint. The Lambda path accepts identity only from the exact validated authorizer
 context. The protected API Gateway route requires at least one exact platform scope, and Lambda

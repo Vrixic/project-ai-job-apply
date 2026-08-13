@@ -11,14 +11,20 @@ data "aws_iam_policy" "workload_boundary" {
 }
 
 locals {
-  azs                           = slice(data.aws_availability_zones.available.names, 0, 2)
-  private_cidrs                 = [cidrsubnet(var.vpc_cidr, 4, 0), cidrsubnet(var.vpc_cidr, 4, 1)]
-  public_cidrs                  = [cidrsubnet(var.vpc_cidr, 4, 8), cidrsubnet(var.vpc_cidr, 4, 9)]
-  application_metric_namespace  = "${var.name}/${var.environment}/application"
-  operational_metric_namespace  = "${var.name}/${var.environment}/operational"
-  observability_runbook_url     = "https://github.com/Vrixic/project-ai-job-apply/blob/main/infrastructure/runbooks/observability/development-alert-delivery.md"
-  provider_recovery_runbook_url = "https://github.com/Vrixic/project-ai-job-apply/blob/main/infrastructure/runbooks/providers/development-provider-and-log-recovery.md"
-  platform_kms_key_arn          = "arn:aws:kms:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:key/${aws_kms_key.platform.key_id}"
+  document_processing_kms_enabled = contains(
+    ["kms-prerequisite", "parser-dark", "complete-dark"],
+    var.document_processing_deployment_stage
+  )
+  document_parser_dark_enabled   = contains(["parser-dark", "complete-dark"], var.document_processing_deployment_stage)
+  document_complete_dark_enabled = var.document_processing_deployment_stage == "complete-dark"
+  azs                            = slice(data.aws_availability_zones.available.names, 0, 2)
+  private_cidrs                  = [cidrsubnet(var.vpc_cidr, 4, 0), cidrsubnet(var.vpc_cidr, 4, 1)]
+  public_cidrs                   = [cidrsubnet(var.vpc_cidr, 4, 8), cidrsubnet(var.vpc_cidr, 4, 9)]
+  application_metric_namespace   = "${var.name}/${var.environment}/application"
+  operational_metric_namespace   = "${var.name}/${var.environment}/operational"
+  observability_runbook_url      = "https://github.com/Vrixic/project-ai-job-apply/blob/main/infrastructure/runbooks/observability/development-alert-delivery.md"
+  provider_recovery_runbook_url  = "https://github.com/Vrixic/project-ai-job-apply/blob/main/infrastructure/runbooks/providers/development-provider-and-log-recovery.md"
+  platform_kms_key_arn           = "arn:aws:kms:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:key/${aws_kms_key.platform.key_id}"
   database_metric_identifier = (
     var.persistent_data_plane_enabled
     ? aws_db_instance.postgres[0].identifier
@@ -71,7 +77,7 @@ data "aws_iam_policy_document" "platform_kms" {
   }
 
   dynamic "statement" {
-    for_each = var.document_processing_kms_prerequisite_enabled ? [1] : []
+    for_each = local.document_processing_kms_enabled ? [1] : []
     content {
       sid    = "AllowEventBridgeDocumentScanQueueEncryption"
       effect = "Allow"
@@ -101,7 +107,7 @@ data "aws_iam_policy_document" "platform_kms" {
   }
 
   dynamic "statement" {
-    for_each = var.document_processing_kms_prerequisite_enabled ? [1] : []
+    for_each = local.document_processing_kms_enabled ? [1] : []
     content {
       sid       = "AllowEventBridgeDocumentOperationalAlertEncryption"
       effect    = "Allow"
@@ -333,7 +339,7 @@ data "aws_iam_policy_document" "operational_alerts" {
   }
 
   dynamic "statement" {
-    for_each = var.deploy_document_processing ? [1] : []
+    for_each = local.document_parser_dark_enabled ? [1] : []
     content {
       sid       = "AllowExactDocumentOperationalRules"
       effect    = "Allow"
@@ -1182,7 +1188,7 @@ resource "aws_iam_role_policy" "gateway_lambda" {
 }
 
 resource "aws_security_group" "secrets_endpoint" {
-  count       = var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || var.deploy_document_processing ? 1 : 0
+  count       = var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled ? 1 : 0
   name_prefix = "${var.name}-${var.environment}-secrets-endpoint-"
   description = "TLS from private application functions to the Secrets Manager endpoint"
   vpc_id      = aws_vpc.this.id
@@ -1196,7 +1202,7 @@ resource "aws_security_group" "secrets_endpoint" {
 }
 
 data "aws_iam_policy_document" "secrets_endpoint" {
-  count = var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || var.deploy_document_processing ? 1 : 0
+  count = var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled ? 1 : 0
 
   statement {
     sid       = "ExactMigrationExecutionRoleDatabaseSecret"
@@ -1233,7 +1239,7 @@ data "aws_iam_policy_document" "secrets_endpoint" {
         var.deploy_serverless_outbox ? aws_iam_role.outbox_reconciler[0].arn : "",
         var.deploy_profile_readiness_durable ? aws_iam_role.profile_readiness_activity[0].arn : "",
         var.deploy_profile_readiness_durable ? aws_iam_role.profile_readiness_terminal[0].arn : "",
-        var.deploy_document_processing ? aws_iam_role.document_processor[0].arn : ""
+        local.document_complete_dark_enabled ? local.document_processor_role_arn : ""
       ])
     }
   }
@@ -1242,7 +1248,7 @@ data "aws_iam_policy_document" "secrets_endpoint" {
 resource "aws_vpc_endpoint" "secretsmanager" {
   count = (
     var.persistent_data_plane_enabled && (
-      var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || var.deploy_document_processing
+      var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled
     )
   ) ? 1 : 0
   vpc_id              = aws_vpc.this.id
@@ -1252,6 +1258,8 @@ resource "aws_vpc_endpoint" "secretsmanager" {
   subnet_ids          = [aws_subnet.private[0].id]
   security_group_ids  = [aws_security_group.secrets_endpoint[0].id]
   policy              = data.aws_iam_policy_document.secrets_endpoint[0].json
+
+  depends_on = [aws_iam_role.document_processor]
 }
 
 resource "aws_lambda_function" "gateway" {
@@ -1551,7 +1559,7 @@ resource "aws_iam_role_policy" "outbox_reconciler" {
 }
 
 data "aws_iam_policy_document" "outbox_sqs_endpoint" {
-  count = var.deploy_serverless_outbox || var.deploy_document_processing ? 1 : 0
+  count = var.deploy_serverless_outbox || local.document_complete_dark_enabled ? 1 : 0
 
   dynamic "statement" {
     for_each = var.deploy_serverless_outbox ? [1] : []
@@ -1583,22 +1591,22 @@ data "aws_iam_policy_document" "outbox_sqs_endpoint" {
   }
 
   dynamic "statement" {
-    for_each = var.deploy_document_processing ? [1] : []
+    for_each = local.document_complete_dark_enabled ? [1] : []
     content {
       sid       = "ExactDocumentProcessorQueueOnly"
       effect    = "Allow"
       actions   = ["sqs:ChangeMessageVisibility", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ReceiveMessage"]
-      resources = [aws_sqs_queue.document_scan_results[0].arn]
+      resources = [local.document_scan_results_queue_arn]
       principals {
         type        = "AWS"
-        identifiers = [aws_iam_role.document_processor[0].arn]
+        identifiers = [local.document_processor_role_arn]
       }
     }
   }
 }
 
 resource "aws_vpc_endpoint" "sqs" {
-  count               = (var.deploy_serverless_outbox || var.deploy_document_processing) && var.persistent_data_plane_enabled ? 1 : 0
+  count               = (var.deploy_serverless_outbox || local.document_complete_dark_enabled) && var.persistent_data_plane_enabled ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.sqs"
   vpc_endpoint_type   = "Interface"
@@ -1606,10 +1614,15 @@ resource "aws_vpc_endpoint" "sqs" {
   subnet_ids          = [aws_subnet.private[0].id]
   security_group_ids  = [aws_security_group.secrets_endpoint[0].id]
   policy              = data.aws_iam_policy_document.outbox_sqs_endpoint[0].json
+
+  depends_on = [
+    aws_iam_role.document_processor,
+    aws_sqs_queue.document_scan_results
+  ]
 }
 
 data "aws_iam_policy_document" "outbox_lambda_endpoint" {
-  count = var.deploy_serverless_outbox || var.deploy_document_processing ? 1 : 0
+  count = var.deploy_serverless_outbox || local.document_complete_dark_enabled ? 1 : 0
 
   dynamic "statement" {
     for_each = var.deploy_serverless_outbox ? [1] : []
@@ -1631,22 +1644,22 @@ data "aws_iam_policy_document" "outbox_lambda_endpoint" {
   }
 
   dynamic "statement" {
-    for_each = var.deploy_document_processing ? [1] : []
+    for_each = local.document_complete_dark_enabled ? [1] : []
     content {
       sid       = "CoordinatorInvokesExactParserVersionOnly"
       effect    = "Allow"
       actions   = ["lambda:InvokeFunction"]
-      resources = [aws_lambda_function.document_parser[0].qualified_arn]
+      resources = [var.document_parser_invocation_qualified_arn]
       principals {
         type        = "AWS"
-        identifiers = [aws_iam_role.document_processor[0].arn]
+        identifiers = [local.document_processor_role_arn]
       }
     }
   }
 }
 
 resource "aws_vpc_endpoint" "lambda" {
-  count               = (var.deploy_serverless_outbox || var.deploy_document_processing) && var.persistent_data_plane_enabled ? 1 : 0
+  count               = (var.deploy_serverless_outbox || local.document_complete_dark_enabled) && var.persistent_data_plane_enabled ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.lambda"
   vpc_endpoint_type   = "Interface"
@@ -1654,16 +1667,21 @@ resource "aws_vpc_endpoint" "lambda" {
   subnet_ids          = [aws_subnet.private[0].id]
   security_group_ids  = [aws_security_group.secrets_endpoint[0].id]
   policy              = data.aws_iam_policy_document.outbox_lambda_endpoint[0].json
+
+  depends_on = [
+    aws_iam_role.document_processor,
+    aws_lambda_function.document_parser
+  ]
 }
 
 data "aws_iam_policy_document" "document_sts_endpoint" {
-  count = var.deploy_document_processing ? 1 : 0
+  count = local.document_complete_dark_enabled ? 1 : 0
 
   statement {
     sid       = "CoordinatorAssumesExactDocumentObjectRoleOnly"
     effect    = "Allow"
     actions   = ["sts:AssumeRole"]
-    resources = [aws_iam_role.document_parser_object_access[0].arn]
+    resources = [local.document_parser_object_access_role_arn]
     principals {
       type        = "*"
       identifiers = ["*"]
@@ -1671,13 +1689,13 @@ data "aws_iam_policy_document" "document_sts_endpoint" {
     condition {
       test     = "ArnEquals"
       variable = "aws:PrincipalArn"
-      values   = [aws_iam_role.document_processor[0].arn]
+      values   = [local.document_processor_role_arn]
     }
   }
 }
 
 resource "aws_vpc_endpoint" "sts" {
-  count               = var.deploy_document_processing && var.persistent_data_plane_enabled ? 1 : 0
+  count               = local.document_complete_dark_enabled && var.persistent_data_plane_enabled ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.sts"
   vpc_endpoint_type   = "Interface"
@@ -1685,6 +1703,11 @@ resource "aws_vpc_endpoint" "sts" {
   subnet_ids          = [aws_subnet.private[0].id]
   security_group_ids  = [aws_security_group.secrets_endpoint[0].id]
   policy              = data.aws_iam_policy_document.document_sts_endpoint[0].json
+
+  depends_on = [
+    aws_iam_role.document_processor,
+    aws_iam_role.document_parser_object_access
+  ]
 }
 
 resource "aws_lambda_function" "outbox_starter" {

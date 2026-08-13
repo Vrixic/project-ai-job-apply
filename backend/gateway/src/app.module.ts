@@ -1,3 +1,40 @@
+import type {
+  CanonicalJobDetail,
+  CreateProfileFactRequest,
+  CreateResumeUploadRequest,
+  CreateResumeUploadResponse,
+  CurrentUser,
+  JobSearchPage,
+  JobSearchRequest,
+  Operation,
+  ProblemDetails,
+  ProfileFact,
+  ProfileFactCollection,
+  PutJobPreferencesRequest,
+  PutJobPreferencesResponse,
+  ResumeDocumentCollection,
+  UpdateProfileFactRequest,
+} from "@ai-job-apply/api-contracts";
+import { compileComponentValidator, formatValidationErrors } from "@ai-job-apply/api-contracts";
+import { type AccessTokenVerifier, AuthenticationError, bearerToken } from "@ai-job-apply/auth";
+import {
+  DocumentIdempotencyConflictError,
+  DocumentIntakeUnavailableError,
+  type DocumentStore,
+  ResumeDocumentLimitError,
+} from "@ai-job-apply/documents-service";
+import {
+  InvalidJobSearchError,
+  type JobCatalogReader,
+  JobSearchCatalogChangedError,
+} from "@ai-job-apply/jobs-service";
+import { activeTraceparent, correlationId } from "@ai-job-apply/observability";
+import {
+  IdempotencyConflictError,
+  ProfileFactTransitionConflictError,
+  ProfileFactVersionConflictError,
+  type ProfileStore,
+} from "@ai-job-apply/profile-service";
 import {
   type ArgumentsHost,
   Catch,
@@ -19,37 +56,6 @@ import {
   Req,
   UseFilters,
 } from "@nestjs/common";
-import type {
-  CanonicalJobDetail,
-  CreateProfileFactRequest,
-  CreateResumeUploadRequest,
-  CreateResumeUploadResponse,
-  CurrentUser,
-  Operation,
-  ProblemDetails,
-  ProfileFact,
-  ProfileFactCollection,
-  ResumeDocumentCollection,
-  PutJobPreferencesRequest,
-  PutJobPreferencesResponse,
-  UpdateProfileFactRequest,
-} from "@ai-job-apply/api-contracts";
-import { compileComponentValidator, formatValidationErrors } from "@ai-job-apply/api-contracts";
-import { type AccessTokenVerifier, AuthenticationError, bearerToken } from "@ai-job-apply/auth";
-import {
-  DocumentIdempotencyConflictError,
-  DocumentIntakeUnavailableError,
-  type DocumentStore,
-  ResumeDocumentLimitError,
-} from "@ai-job-apply/documents-service";
-import type { JobCatalogReader } from "@ai-job-apply/jobs-service";
-import { activeTraceparent, correlationId } from "@ai-job-apply/observability";
-import {
-  IdempotencyConflictError,
-  ProfileFactTransitionConflictError,
-  ProfileFactVersionConflictError,
-  type ProfileStore,
-} from "@ai-job-apply/profile-service";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
 const PROFILE_STORE = Symbol("PROFILE_STORE");
@@ -73,6 +79,7 @@ const SAFE_ROUTE_TEMPLATES = new Set([
   "/v1/profile/facts/:factId",
   "/v1/resumes",
   "/v1/resumes/uploads",
+  "/v1/jobs/search",
   "/v1/jobs/:jobId",
   "/v1/operations/:operationId",
 ]);
@@ -179,6 +186,16 @@ class ProblemDetailsFilter implements ExceptionFilter {
       code = "document_intake_unavailable";
       title = "Resume intake is unavailable";
       detail = exception.message;
+    } else if (exception instanceof InvalidJobSearchError) {
+      status = HttpStatus.BAD_REQUEST;
+      code = "invalid_job_search";
+      title = "Invalid job search";
+      detail = exception.message;
+    } else if (exception instanceof JobSearchCatalogChangedError) {
+      status = HttpStatus.CONFLICT;
+      code = "job_search_catalog_changed";
+      title = "Job catalog changed";
+      detail = exception.message;
     } else if (exception instanceof HttpException) {
       status = exception.getStatus();
       code =
@@ -245,6 +262,7 @@ const validatePreferences = compileComponentValidator("PutJobPreferencesRequest"
 const validateCreateProfileFact = compileComponentValidator("CreateProfileFactRequest");
 const validateUpdateProfileFact = compileComponentValidator("UpdateProfileFactRequest");
 const validateCreateResumeUpload = compileComponentValidator("CreateResumeUploadRequest");
+const validateJobSearch = compileComponentValidator("JobSearchRequest");
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function requireIdempotencyKey(value: string | undefined): string {
@@ -396,6 +414,33 @@ class CandidateController {
         lastVerifiedAt: source.lastVerifiedAt.toISOString(),
         ...(source.validThrough ? { validThrough: source.validThrough.toISOString() } : {}),
       })),
+    };
+  }
+
+  @Post("/jobs/search")
+  @HttpCode(HttpStatus.OK)
+  async searchCanonicalJobs(@Req() request: AuthenticatedRequest): Promise<JobSearchPage> {
+    await this.identity.authorize(request, "jobs:read");
+    if (!validateJobSearch(request.body)) {
+      throw new HttpException(
+        formatValidationErrors(validateJobSearch.errors),
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const page = await this.catalog.searchActiveJobs(request.body as JobSearchRequest);
+    return {
+      items: page.items.map((job) => ({
+        id: job.id,
+        company: job.company,
+        title: job.title,
+        locations: job.locations,
+        ...(job.department ? { department: job.department } : {}),
+        status: "active",
+        firstObservedAt: job.firstObservedAt.toISOString(),
+        lastVerifiedAt: job.lastVerifiedAt.toISOString(),
+        expiresAt: job.expiresAt.toISOString(),
+      })),
+      ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
     };
   }
 

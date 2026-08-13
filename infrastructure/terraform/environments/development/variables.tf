@@ -99,14 +99,22 @@ variable "candidate_document_cors_allowed_origins" {
   default = []
 }
 
-variable "deploy_document_processing" {
-  type    = bool
-  default = false
+variable "document_processing_deployment_stage" {
+  description = "Monotonic document-processing rollout stage."
+  type        = string
+  default     = "disabled"
+
+  validation {
+    condition = contains([
+      "disabled", "kms-prerequisite", "parser-dark", "complete-dark"
+    ], var.document_processing_deployment_stage)
+    error_message = "Document processing stage must be disabled, kms-prerequisite, parser-dark, or complete-dark."
+  }
 }
-variable "document_processing_kms_prerequisite_enabled" {
-  description = "Stage only the exact document EventBridge KMS grants before dark resource creation."
-  type        = bool
-  default     = false
+variable "document_parser_invocation_qualified_arn" {
+  description = "Operator-derived positive numeric parser version ARN used only by complete-dark."
+  type        = string
+  default     = ""
 }
 variable "document_scan_mapping_enabled" {
   type    = bool
@@ -114,6 +122,10 @@ variable "document_scan_mapping_enabled" {
 }
 
 variable "document_scan_event_rule_enabled" {
+  type    = bool
+  default = false
+}
+variable "document_security_health_rules_enabled" {
   type    = bool
   default = false
 }

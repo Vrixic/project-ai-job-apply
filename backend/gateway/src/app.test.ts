@@ -18,7 +18,12 @@ import type {
 import type { AuthPrincipal } from "@ai-job-apply/auth";
 import { createTestTokenIssuer } from "@ai-job-apply/auth/testing";
 import { type DocumentStore, ResumeUploadRegistrationError } from "@ai-job-apply/documents-service";
-import type { ActiveJobRecord, JobCatalogReader } from "@ai-job-apply/jobs-service";
+import {
+  type ActiveJobRecord,
+  type ActiveJobSearchInput,
+  type JobCatalogReader,
+  JobSearchCatalogChangedError,
+} from "@ai-job-apply/jobs-service";
 import type { ProfileStore } from "@ai-job-apply/profile-service";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { v7 as uuidv7 } from "uuid";
@@ -164,6 +169,8 @@ class MemoryProfileStore implements ProfileStore {
 }
 
 class MemoryJobCatalog implements JobCatalogReader {
+  lastSearchInput: ActiveJobSearchInput | undefined;
+  catalogChanged = false;
   readonly job: ActiveJobRecord = {
     id: uuidv7(),
     company: {
@@ -192,6 +199,29 @@ class MemoryJobCatalog implements JobCatalogReader {
 
   async getActiveJob(jobId: string): Promise<ActiveJobRecord | null> {
     return jobId === this.job.id ? this.job : null;
+  }
+
+  async searchActiveJobs(input: ActiveJobSearchInput) {
+    this.lastSearchInput = input;
+    if (this.catalogChanged) {
+      throw new JobSearchCatalogChangedError();
+    }
+    return {
+      items: [
+        {
+          id: this.job.id,
+          company: this.job.company,
+          title: this.job.title,
+          locations: this.job.locations,
+          ...(this.job.department ? { department: this.job.department } : {}),
+          status: "active" as const,
+          firstObservedAt: this.job.firstObservedAt,
+          lastVerifiedAt: this.job.lastVerifiedAt,
+          expiresAt: this.job.expiresAt,
+        },
+      ],
+      ...(input.cursor ? {} : { nextCursor: "opaque_cursor_v1.signature_v1" }),
+    };
   }
 
   async ping(): Promise<void> {}
@@ -567,6 +597,97 @@ describe("candidate API", () => {
     expect(missing.statusCode).toBe(404);
     expect(invalid.statusCode).toBe(400);
     expect(store.resolveUserCalls).toBe(identityWritesBeforeJobReads);
+  });
+
+  it("searches active jobs through a strict privacy-safe body and dedicated read scope", async () => {
+    const jobToken = await issuer.issue("candidate-job-search", { scope: "jobs:read" });
+    const profileToken = await issuer.issue("candidate-job-search-wrong-scope", {
+      scope: "profile:read",
+    });
+    const payload = {
+      query: "software engineer",
+      filters: {
+        title: "Software Engineer",
+        company: "Synthetic Company",
+        location: "Remote - US",
+        verifiedWithinDays: 30,
+      },
+      sort: "relevance",
+      pageSize: 10,
+    };
+    const identityWritesBeforeSearch = store.resolveUserCalls;
+    const accepted = await app.inject({
+      method: "POST",
+      url: "/v1/jobs/search",
+      headers: { authorization: `Bearer ${jobToken}` },
+      payload,
+    });
+    const forbidden = await app.inject({
+      method: "POST",
+      url: "/v1/jobs/search",
+      headers: { authorization: `Bearer ${profileToken}` },
+      payload,
+    });
+    const invalid = await app.inject({
+      method: "POST",
+      url: "/v1/jobs/search",
+      headers: { authorization: `Bearer ${jobToken}` },
+      payload: { ...payload, sort: "match", pageSize: 26 },
+    });
+    const unauthenticated = await app.inject({
+      method: "POST",
+      url: "/v1/jobs/search",
+      payload,
+    });
+    const malformed = await app.inject({
+      method: "POST",
+      url: "/v1/jobs/search",
+      headers: {
+        authorization: `Bearer ${jobToken}`,
+        "content-type": "application/json",
+      },
+      payload: '{"query":"must-not-leak"',
+    });
+
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.json()).toEqual({
+      items: [
+        expect.objectContaining({
+          id: catalog.job.id,
+          status: "active",
+          company: {
+            id: catalog.job.company.id,
+            name: "Synthetic Company",
+            verifiedDomain: "example.test",
+          },
+        }),
+      ],
+      nextCursor: "opaque_cursor_v1.signature_v1",
+    });
+    expect(accepted.json().items[0]).not.toHaveProperty("description");
+    expect(catalog.lastSearchInput).toEqual(payload);
+    expect(forbidden.statusCode).toBe(403);
+    expect(unauthenticated.statusCode).toBe(401);
+    expect(invalid.statusCode).toBe(400);
+    expect(malformed.statusCode).toBe(400);
+    expect(malformed.body).not.toContain("must-not-leak");
+    expect(invalid.json().detail).not.toContain("software engineer");
+    expect(store.resolveUserCalls).toBe(identityWritesBeforeSearch);
+
+    catalog.catalogChanged = true;
+    const changed = await app.inject({
+      method: "POST",
+      url: "/v1/jobs/search",
+      headers: { authorization: `Bearer ${jobToken}` },
+      payload: { ...payload, cursor: "opaque_cursor_v1.signature_v1" },
+    });
+    catalog.catalogChanged = false;
+    expect(changed.statusCode).toBe(409);
+    expect(changed.json()).toMatchObject({
+      code: "job_search_catalog_changed",
+      title: "Job catalog changed",
+    });
+    expect(changed.json().detail).toContain("restart the search");
   });
 
   it("registers and lists resume uploads without proxying candidate bytes", async () => {

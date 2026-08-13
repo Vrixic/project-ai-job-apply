@@ -129,6 +129,34 @@ describe("platform BFF", () => {
     expect(platformFetch).toHaveBeenCalledTimes(1);
   });
 
+  it("aborts an upstream mutation at the server timeout boundary", async () => {
+    let observedSignal: AbortSignal | undefined;
+    const response = await forwardPlatformRequest(
+      "/v1/jobs/search",
+      { method: "POST", body: "{}" },
+      {
+        auth0: {
+          getSession: async () => ({ user: { sub: "synthetic-user" } }),
+          getAccessToken: async () => ({ token: "synthetic-token" }),
+        },
+        baseUrl: "http://localhost:4000",
+        fetch: async (_input, init) => {
+          observedSignal = init?.signal ?? undefined;
+          await new Promise<void>((_resolve, reject) => {
+            observedSignal?.addEventListener("abort", () => reject(new Error("aborted")), {
+              once: true,
+            });
+          });
+          return new Response(null, { status: 200 });
+        },
+        timeoutMilliseconds: 1,
+      },
+    );
+
+    expect(response.status).toBe(503);
+    expect(observedSignal?.aborted).toBe(true);
+  });
+
   it("preserves a preference not-found response without leaking upstream headers", async () => {
     const response = await forwardPlatformRequest(
       "/v1/me/job-preferences",

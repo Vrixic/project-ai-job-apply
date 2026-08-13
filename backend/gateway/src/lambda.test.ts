@@ -134,6 +134,78 @@ describe("API Gateway Lambda boundary", () => {
     expect(inject).toHaveBeenCalledWith(expect.objectContaining({ method: "GET", url: path }));
   });
 
+  it("allows only a JSON body on the exact protected job-search route", async () => {
+    const principalBridge = createInvocationPrincipalBridge();
+    const inject = vi.fn().mockResolvedValue({
+      statusCode: 200,
+      body: '{"items":[]}',
+      headers: { "content-type": "application/json" },
+    });
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge,
+    });
+    const payload = JSON.stringify({ query: "synthetic engineer", pageSize: 10 });
+    const input = routedEvent("POST", "/v1/jobs/search", {
+      body: payload,
+      headers: {
+        authorization: "Bearer opaque-api-gateway-token",
+        "content-type": "application/json",
+      },
+    });
+
+    const response = await invoke(handler, input);
+
+    expect(response.statusCode).toBe(200);
+    expect(inject).toHaveBeenCalledWith(
+      expect.objectContaining({ method: "POST", url: "/v1/jobs/search", payload }),
+    );
+
+    const queryBearing = await invoke(
+      handler,
+      routedEvent("POST", "/v1/jobs/search", {
+        rawQueryString: "query=must-not-enter-url-telemetry",
+        body: payload,
+        headers: {
+          authorization: "Bearer opaque-api-gateway-token",
+          "content-type": "application/json",
+        },
+      }),
+    );
+    expect(queryBearing.statusCode).toBe(400);
+    expect(inject).toHaveBeenCalledOnce();
+
+    const missingBody = await invoke(handler, routedEvent("POST", "/v1/jobs/search"));
+    expect(missingBody.statusCode).toBe(400);
+    const wrongMedia = await invoke(
+      handler,
+      routedEvent("POST", "/v1/jobs/search", {
+        body: payload,
+        headers: {
+          authorization: "Bearer opaque-api-gateway-token",
+          "content-type": "text/plain",
+        },
+      }),
+    );
+    expect(wrongMedia.statusCode).toBe(415);
+    const oversized = await invoke(
+      handler,
+      routedEvent("POST", "/v1/jobs/search", {
+        body: "x".repeat(64 * 1024 + 1),
+        headers: {
+          authorization: "Bearer opaque-api-gateway-token",
+          "content-type": "application/json",
+        },
+      }),
+    );
+    expect(oversized.statusCode).toBe(413);
+    const wrongPath = await invoke(handler, routedEvent("POST", "/v1/jobs/search/"));
+    expect(wrongPath.statusCode).toBe(404);
+    expect(inject).toHaveBeenCalledOnce();
+  });
+
   it.each([
     ["POST", "/v1/profile/facts"],
     ["PATCH", "/v1/profile/facts/018f92b0-4ad7-7b1d-8f44-b7ae694c85c1"],
