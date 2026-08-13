@@ -23,39 +23,136 @@ function Get-DevelopmentDocumentBooleanVariableNames {
   )
 }
 
+function Get-DevelopmentDocumentVariableKinds {
+  $kinds = @{}
+  foreach ($name in @(Get-DevelopmentDocumentBooleanVariableNames)) { $kinds[$name] = "boolean" }
+  foreach ($name in @(
+      "gateway_lambda_reserved_concurrency", "profile_readiness_execution_timeout_seconds",
+      "profile_readiness_retention_days"
+    )) { $kinds[$name] = "number" }
+  $kinds["candidate_document_cors_allowed_origins"] = "composite"
+  foreach ($name in @(
+      "database_engine_version", "database_instance_class", "document_parser_artifact_base64sha256",
+      "document_parser_artifact_s3_key", "document_parser_artifact_s3_object_version",
+      "document_parser_artifact_sha256", "document_parser_version",
+      "document_processor_artifact_base64sha256", "document_processor_artifact_s3_key",
+      "document_processor_artifact_s3_object_version", "document_processor_artifact_sha256",
+      "document_processor_extension_layer_arn", "gateway_lambda_artifact_base64sha256",
+      "gateway_lambda_artifact_s3_key", "gateway_lambda_artifact_s3_object_version",
+      "gateway_lambda_artifact_sha256", "gateway_lambda_extension_layer_arn", "migration_image",
+      "oidc_audience", "oidc_issuer", "profile_readiness_activity_artifact_base64sha256",
+      "profile_readiness_activity_artifact_s3_key", "profile_readiness_activity_artifact_s3_object_version",
+      "profile_readiness_activity_artifact_sha256", "profile_readiness_durable_artifact_base64sha256",
+      "profile_readiness_durable_artifact_s3_key", "profile_readiness_durable_artifact_s3_object_version",
+      "profile_readiness_durable_artifact_sha256", "profile_readiness_lambda_extension_layer_arn",
+      "workflow_ingress_artifact_base64sha256", "workflow_ingress_artifact_s3_key",
+      "workflow_ingress_artifact_s3_object_version", "workflow_ingress_artifact_sha256",
+      "workflow_ingress_lambda_extension_layer_arn"
+    )) { $kinds[$name] = "string" }
+  return $kinds
+}
+
+function Test-TerraformNumericValue {
+  param([Parameter(Mandatory)][object]$Value)
+  $numericTypeCodes = @(
+    [TypeCode]::Byte, [TypeCode]::SByte, [TypeCode]::Int16, [TypeCode]::UInt16,
+    [TypeCode]::Int32, [TypeCode]::UInt32, [TypeCode]::Int64, [TypeCode]::UInt64,
+    [TypeCode]::Single, [TypeCode]::Double, [TypeCode]::Decimal
+  )
+  return $Value -is [IConvertible] -and [Convert]::GetTypeCode($Value) -in $numericTypeCodes
+}
+
+function ConvertTo-TerraformCompositeCanonicalValue {
+  param([Parameter(Mandatory)][AllowNull()][object]$Value, [string]$Label = "Terraform composite")
+  if ($null -eq $Value -or $Value -is [string] -or $Value -is [ValueType]) {
+    throw "$Label must be a structured list, map, object, tuple, or set value."
+  }
+  $isDictionary = $Value -is [System.Collections.IDictionary]
+  $isSequence = $Value -is [System.Collections.IEnumerable]
+  $isObject = $Value -is [pscustomobject]
+  if (-not ($isDictionary -or $isSequence -or $isObject)) {
+    throw "$Label has an unsupported runtime type."
+  }
+  return ConvertTo-DeploymentCanonicalValue -Value $Value
+}
+
+function ConvertFrom-TerraformCompositeJson {
+  param([Parameter(Mandatory)][string]$Json, [string]$Label = "Terraform composite")
+  $trimmed = $Json.Trim()
+  if (-not ($trimmed.StartsWith("[") -or $trimmed.StartsWith("{"))) {
+    throw "$Label must be a JSON array or object."
+  }
+  try {
+    if ($trimmed.StartsWith("[")) {
+      $parsedArray = $trimmed | ConvertFrom-Json
+      if ($parsedArray -is [array]) { return ,$parsedArray }
+      return ,@($parsedArray)
+    }
+    return $trimmed | ConvertFrom-Json
+  }
+  catch { throw "$Label is not valid composite JSON." }
+}
+
+function ConvertTo-DevelopmentDocumentComparableVariableValue {
+  param(
+    [Parameter(Mandatory)][string]$Name,
+    [Parameter(Mandatory)][AllowNull()][object]$Value,
+    [switch]$SerializedBaseline
+  )
+  $kinds = Get-DevelopmentDocumentVariableKinds
+  if (-not $kinds.ContainsKey($Name)) { throw "Unknown development Terraform variable '$Name'." }
+  if ($null -eq $Value) { throw "Terraform variable '$Name' cannot be null." }
+  switch ($kinds[$Name]) {
+    "boolean" { return ConvertTo-DeploymentCanonicalValue (ConvertTo-ExactBoolean $Value "Terraform variable $Name") }
+    "string" {
+      if ($Value -isnot [string]) { throw "Terraform variable '$Name' must remain a string." }
+      return ConvertTo-DeploymentCanonicalValue $Value
+    }
+    "number" {
+      $normalized = $Value
+      if ($SerializedBaseline -and $Value -is [string]) {
+        try { $normalized = $Value | ConvertFrom-Json } catch { throw "Terraform variable '$Name' is not exact numeric JSON." }
+      }
+      if (-not (Test-TerraformNumericValue $normalized)) { throw "Terraform variable '$Name' must remain numeric." }
+      return ConvertTo-DeploymentCanonicalValue $normalized
+    }
+    "composite" {
+      $normalized = $Value
+      if ($SerializedBaseline -and $Value -is [string]) {
+        $normalized = ConvertFrom-TerraformCompositeJson $Value "Terraform variable $Name"
+      }
+      elseif (-not $SerializedBaseline -and $Value -is [string]) {
+        throw "Fresh-plan Terraform variable '$Name' must be structured."
+      }
+      return ConvertTo-TerraformCompositeCanonicalValue $normalized "Terraform variable $Name"
+    }
+  }
+}
+
 function ConvertTo-TerraformVariableEnvironmentValue {
   param(
     [Parameter(Mandatory)][string]$Name,
     [Parameter(Mandatory)][AllowNull()][object]$Value
   )
 
-  if ($null -eq $Value) {
-    throw "Terraform variable '$Name' has an unsupported null value."
+  $kinds = Get-DevelopmentDocumentVariableKinds
+  if (-not $kinds.ContainsKey($Name)) { throw "Unknown development Terraform variable '$Name'." }
+  $null = ConvertTo-DevelopmentDocumentComparableVariableValue -Name $Name -Value $Value -SerializedBaseline
+  switch ($kinds[$Name]) {
+    "boolean" { return (ConvertTo-ExactBoolean $Value "Terraform variable $Name").ToString().ToLowerInvariant() }
+    "string" { return [string]$Value }
+    "number" {
+      if ($Value -is [string]) { return ConvertTo-DeploymentCanonicalValue ($Value | ConvertFrom-Json) }
+      return ConvertTo-DeploymentCanonicalValue $Value
+    }
+    "composite" {
+      if ($Value -is [string]) {
+        return ConvertTo-TerraformCompositeCanonicalValue `
+          (ConvertFrom-TerraformCompositeJson $Value "Terraform variable $Name") "Terraform variable $Name"
+      }
+      return ConvertTo-TerraformCompositeCanonicalValue $Value "Terraform variable $Name"
+    }
   }
-  if ($Name -in @(Get-DevelopmentDocumentBooleanVariableNames)) {
-    return (ConvertTo-ExactBoolean -Value $Value -Label "Terraform variable $Name").ToString().ToLowerInvariant()
-  }
-  if ($Value -is [string]) { return $Value }
-  if ($Value -is [bool]) {
-    throw "Non-boolean Terraform variable '$Name' cannot contain a boolean value."
-  }
-
-  $numericTypeCodes = @(
-    [TypeCode]::Byte, [TypeCode]::SByte, [TypeCode]::Int16, [TypeCode]::UInt16,
-    [TypeCode]::Int32, [TypeCode]::UInt32, [TypeCode]::Int64, [TypeCode]::UInt64,
-    [TypeCode]::Single, [TypeCode]::Double, [TypeCode]::Decimal
-  )
-  if ($Value -is [IConvertible] -and [Convert]::GetTypeCode($Value) -in $numericTypeCodes) {
-    return ConvertTo-DeploymentCanonicalValue -Value $Value
-  }
-
-  $isDictionary = $Value -is [System.Collections.IDictionary]
-  $isSequence = $Value -is [System.Collections.IEnumerable] -and $Value -isnot [string]
-  $isObject = $Value -is [pscustomobject]
-  if ($isDictionary -or $isSequence -or $isObject) {
-    return ConvertTo-DeploymentCanonicalValue -Value $Value
-  }
-  throw "Terraform variable '$Name' has unsupported runtime type '$($Value.GetType().FullName)'."
 }
 
 function Get-TerraformVariableEnvironmentAssignments {
@@ -183,7 +280,6 @@ function Assert-DevelopmentDocumentDarkVariables {
   }
   $baselineProperties = @($BaselineVariables.PSObject.Properties)
   $planProperties = @($PlanVariables.PSObject.Properties)
-  $booleanNames = @(Get-DevelopmentDocumentBooleanVariableNames)
   if ($baselineProperties.Count -ne $planProperties.Count) {
     throw "The dark plan variable set differs from the accepted baseline."
   }
@@ -191,16 +287,12 @@ function Assert-DevelopmentDocumentDarkVariables {
     $name = [string]$property.Name
     $planned = $PlanVariables.PSObject.Properties[$name]
     if ($null -eq $planned) { throw "The dark plan omits baseline variable '$name'." }
-    $expected = if ($overlay.ContainsKey($name)) { $overlay[$name] } else { $property.Value.value }
-    if ($name -in $booleanNames) {
-      $actualCanonical = ConvertTo-DeploymentCanonicalValue -Value `
-        (ConvertTo-ExactBoolean -Value $planned.Value.value -Label "planned $name")
-      $expectedCanonical = ConvertTo-DeploymentCanonicalValue -Value `
-        (ConvertTo-ExactBoolean -Value $expected -Label "baseline $name")
-    }
-    else {
-      $actualCanonical = ConvertTo-DeploymentCanonicalValue -Value $planned.Value.value
-      $expectedCanonical = ConvertTo-DeploymentCanonicalValue -Value $expected
+    $actualCanonical = ConvertTo-DevelopmentDocumentComparableVariableValue `
+      -Name $name -Value $planned.Value.value
+    $expectedCanonical = if ($overlay.ContainsKey($name)) {
+      ConvertTo-DevelopmentDocumentComparableVariableValue -Name $name -Value $overlay[$name]
+    } else {
+      ConvertTo-DevelopmentDocumentComparableVariableValue -Name $name -Value $property.Value.value -SerializedBaseline
     }
     if ($actualCanonical -cne $expectedCanonical) {
       throw "The dark plan changed unapproved variable '$name'."
