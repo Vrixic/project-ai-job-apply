@@ -220,15 +220,9 @@ function Get-BoundaryValues {
 
 function Set-BaselineVariables {
   param([Parameter(Mandatory)][object]$Baseline)
-  $booleanNames = @(Get-DevelopmentDocumentBooleanVariableNames)
-  foreach ($property in @($Baseline.variables.PSObject.Properties)) {
-    $value = $property.Value.value
-    $serialized = if ($property.Name -in $booleanNames) {
-      (ConvertTo-ExactBoolean $value "baseline $($property.Name)").ToString().ToLowerInvariant()
-    }
-      elseif ($value -is [string]) { $value }
-      else { $value | ConvertTo-Json -Compress -Depth 20 }
-    [Environment]::SetEnvironmentVariable("TF_VAR_$($property.Name)", [string]$serialized, "Process")
+  $assignments = Get-TerraformVariableEnvironmentAssignments -Variables $Baseline.variables
+  foreach ($entry in $assignments.GetEnumerator()) {
+    [Environment]::SetEnvironmentVariable([string]$entry.Key, [string]$entry.Value, "Process")
   }
 }
 

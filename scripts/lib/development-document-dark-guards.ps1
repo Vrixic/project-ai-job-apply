@@ -23,6 +23,54 @@ function Get-DevelopmentDocumentBooleanVariableNames {
   )
 }
 
+function ConvertTo-TerraformVariableEnvironmentValue {
+  param(
+    [Parameter(Mandatory)][string]$Name,
+    [Parameter(Mandatory)][AllowNull()][object]$Value
+  )
+
+  if ($null -eq $Value) {
+    throw "Terraform variable '$Name' has an unsupported null value."
+  }
+  if ($Name -in @(Get-DevelopmentDocumentBooleanVariableNames)) {
+    return (ConvertTo-ExactBoolean -Value $Value -Label "Terraform variable $Name").ToString().ToLowerInvariant()
+  }
+  if ($Value -is [string]) { return $Value }
+  if ($Value -is [bool]) {
+    throw "Non-boolean Terraform variable '$Name' cannot contain a boolean value."
+  }
+
+  $numericTypeCodes = @(
+    [TypeCode]::Byte, [TypeCode]::SByte, [TypeCode]::Int16, [TypeCode]::UInt16,
+    [TypeCode]::Int32, [TypeCode]::UInt32, [TypeCode]::Int64, [TypeCode]::UInt64,
+    [TypeCode]::Single, [TypeCode]::Double, [TypeCode]::Decimal
+  )
+  if ($Value -is [IConvertible] -and [Convert]::GetTypeCode($Value) -in $numericTypeCodes) {
+    return ConvertTo-DeploymentCanonicalValue -Value $Value
+  }
+
+  $isDictionary = $Value -is [System.Collections.IDictionary]
+  $isSequence = $Value -is [System.Collections.IEnumerable] -and $Value -isnot [string]
+  $isObject = $Value -is [pscustomobject]
+  if ($isDictionary -or $isSequence -or $isObject) {
+    return ConvertTo-DeploymentCanonicalValue -Value $Value
+  }
+  throw "Terraform variable '$Name' has unsupported runtime type '$($Value.GetType().FullName)'."
+}
+
+function Get-TerraformVariableEnvironmentAssignments {
+  param([Parameter(Mandatory)][object]$Variables)
+  $assignments = @{}
+  foreach ($property in @($Variables.PSObject.Properties)) {
+    if ($null -eq $property.Value) { throw "Terraform variable '$($property.Name)' has no saved-plan record." }
+    $valueProperty = $property.Value.PSObject.Properties["value"]
+    if ($null -eq $valueProperty) { throw "Terraform variable '$($property.Name)' has no saved-plan value." }
+    $assignments["TF_VAR_$($property.Name)"] = ConvertTo-TerraformVariableEnvironmentValue `
+      -Name ([string]$property.Name) -Value $valueProperty.Value
+  }
+  return $assignments
+}
+
 function Get-DevelopmentDocumentDarkExpectedActions {
   $creates = @(
     "module.platform.aws_cloudwatch_event_rule.document_processing_reconciler[0]",

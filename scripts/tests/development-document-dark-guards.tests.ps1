@@ -21,6 +21,71 @@ foreach ($invalidBoolean in @("False", 0, [pscustomobject]@{ value = $false })) 
   if (-not $rejected) { throw "A non-exact boolean representation was accepted." }
 }
 
+$savedPlanVariableFixture = [pscustomobject]@{
+  oidc_issuer = [pscustomobject]@{ value = "https://issuer.example/"; sensitive = $true }
+  candidate_document_cors_allowed_origins = [pscustomobject]@{ value = @("https://a.example", "https://b.example") }
+  gateway_lambda_reserved_concurrency = [pscustomobject]@{ value = 2 }
+  deploy_document_processing = [pscustomobject]@{ value = "false" }
+  synthetic_map = [pscustomobject]@{ value = [pscustomobject]@{ z = "last"; a = 1 } }
+  synthetic_tuple = [pscustomobject]@{ value = @("one", 2, $true) }
+}
+$environmentAssignments = Get-TerraformVariableEnvironmentAssignments -Variables $savedPlanVariableFixture
+$expectedAssignments = @{
+  TF_VAR_oidc_issuer = "https://issuer.example/"
+  TF_VAR_candidate_document_cors_allowed_origins = '["https://a.example","https://b.example"]'
+  TF_VAR_gateway_lambda_reserved_concurrency = "2"
+  TF_VAR_deploy_document_processing = "false"
+  TF_VAR_synthetic_map = '{"a":1,"z":"last"}'
+  TF_VAR_synthetic_tuple = '["one",2,true]'
+}
+if ($environmentAssignments.Count -ne $expectedAssignments.Count) {
+  throw "The saved-plan fixture did not produce the exact TF_VAR assignment set."
+}
+foreach ($entry in $expectedAssignments.GetEnumerator()) {
+  if ([string]$environmentAssignments[$entry.Key] -cne [string]$entry.Value) {
+    throw "Terraform environment serialization differs for '$($entry.Key)'."
+  }
+}
+
+$savedEnvironment = @{}
+try {
+  foreach ($entry in $environmentAssignments.GetEnumerator()) {
+    $savedEnvironment[$entry.Key] = [Environment]::GetEnvironmentVariable([string]$entry.Key, "Process")
+    [Environment]::SetEnvironmentVariable([string]$entry.Key, [string]$entry.Value, "Process")
+    if ([Environment]::GetEnvironmentVariable([string]$entry.Key, "Process") -cne [string]$expectedAssignments[$entry.Key]) {
+      throw "The exact serialized TF_VAR value was not written for '$($entry.Key)'."
+    }
+  }
+}
+finally {
+  foreach ($entry in $savedEnvironment.GetEnumerator()) {
+    if ($null -eq $entry.Value) {
+      Remove-Item -LiteralPath "Env:\$($entry.Key)" -ErrorAction SilentlyContinue
+    }
+    else {
+      [Environment]::SetEnvironmentVariable([string]$entry.Key, [string]$entry.Value, "Process")
+    }
+  }
+}
+foreach ($entry in $savedEnvironment.GetEnumerator()) {
+  $restoredValue = [Environment]::GetEnvironmentVariable([string]$entry.Key, "Process")
+  if (-not [object]::Equals($restoredValue, $entry.Value)) {
+    throw "The pre-test TF_VAR environment was not restored for '$($entry.Key)'."
+  }
+}
+foreach ($invalidVariable in @(
+    [pscustomobject]@{ Name = "candidate_document_cors_allowed_origins"; Value = $null },
+    [pscustomobject]@{ Name = "gateway_lambda_reserved_concurrency"; Value = $false },
+    [pscustomobject]@{ Name = "unsupported"; Value = [datetime]::UtcNow }
+  )) {
+  $rejected = $false
+  try {
+    $null = ConvertTo-TerraformVariableEnvironmentValue -Name $invalidVariable.Name -Value $invalidVariable.Value
+  }
+  catch { $rejected = $true }
+  if (-not $rejected) { throw "An unsupported Terraform environment value was accepted." }
+}
+
 $expected = Get-DevelopmentDocumentDarkExpectedActions
 if ($expected.Count -ne 45) { throw "Expected 45 exact dark deployment changes." }
 if (@($expected.Values | Where-Object { $_ -eq "create" }).Count -ne 39) { throw "Expected 39 creates." }
@@ -286,4 +351,4 @@ if ($documentSource -notmatch "DenyQuarantineReadsWithoutCleanMalwareTag" -or
   throw "The semantic guard is detached from current document isolation source."
 }
 
-Write-Output "Development document dark guard tests passed: 28"
+Write-Output "Development document dark guard tests passed: 40"
