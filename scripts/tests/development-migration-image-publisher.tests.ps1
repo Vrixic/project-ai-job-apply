@@ -11,6 +11,7 @@ if (@($errors).Count -ne 0) { throw "The development migration image publisher d
 foreach ($functionName in @(
     "Get-OptionalProperty",
     "Get-TextSha256",
+    "ConvertTo-CanonicalUtcWholeSecond",
     "Resolve-OperatorPath",
     "Write-JsonFile",
     "Assert-RepositoryShape",
@@ -87,6 +88,82 @@ $image = [pscustomobject]@{
 $identity = Assert-BuildIdentity -Image $image -ExpectedSourceSha $sourceSha -ExpectedCreated $created
 if ($identity.ConfigDigest -cne $configDigest -or $identity.LayerSetSha256 -notmatch '^[a-f0-9]{64}$') {
   throw "The canonical local build identity was not accepted."
+}
+$powerShellSevenImage = [pscustomobject]@{
+  Id = $configDigest
+  Os = "linux"
+  Architecture = "amd64"
+  Created = [DateTime]::SpecifyKind([DateTime]::ParseExact(
+      $created, "yyyy-MM-ddTHH:mm:ss'Z'", [Globalization.CultureInfo]::InvariantCulture
+    ), [DateTimeKind]::Utc)
+  Config = [pscustomobject]@{ Labels = [pscustomobject]@{
+      'org.opencontainers.image.revision' = $sourceSha
+      'org.opencontainers.image.created' = [DateTime]::SpecifyKind([DateTime]::ParseExact(
+          $created, "yyyy-MM-ddTHH:mm:ss'Z'", [Globalization.CultureInfo]::InvariantCulture
+        ), [DateTimeKind]::Utc)
+      'org.opencontainers.image.title' = "ai-job-apply-migration"
+    } }
+  RootFS = [pscustomobject]@{ Layers = @("sha256:$('c' * 64)", "sha256:$('d' * 64)") }
+}
+$powerShellSevenIdentity = Assert-BuildIdentity -Image $powerShellSevenImage `
+  -ExpectedSourceSha $sourceSha -ExpectedCreated $created
+if ($powerShellSevenIdentity.ConfigDigest -cne $configDigest) {
+  throw "The PowerShell 7 UTC DateTime-shaped image timestamps were not normalized."
+}
+$dockerInspectJson = @"
+{
+  "Id": "$configDigest",
+  "Os": "linux",
+  "Architecture": "amd64",
+  "Created": "$created",
+  "Config": {
+    "Labels": {
+      "org.opencontainers.image.revision": "$sourceSha",
+      "org.opencontainers.image.created": "$created",
+      "org.opencontainers.image.title": "ai-job-apply-migration"
+    }
+  },
+  "RootFS": {
+    "Layers": ["sha256:$('c' * 64)", "sha256:$('d' * 64)"]
+  }
+}
+"@ | ConvertFrom-Json
+$convertedIdentity = Assert-BuildIdentity -Image $dockerInspectJson `
+  -ExpectedSourceSha $sourceSha -ExpectedCreated $created
+if ($convertedIdentity.ConfigDigest -cne $configDigest) {
+  throw "The runtime-specific ConvertFrom-Json image timestamps were not normalized."
+}
+
+foreach ($invalidCreated in @(
+    [DateTime]::SpecifyKind([DateTime]::Parse("2026-08-13T12:00:00"), [DateTimeKind]::Local),
+    [DateTime]::SpecifyKind([DateTime]::Parse("2026-08-13T12:00:00"), [DateTimeKind]::Unspecified),
+    [DateTime]::SpecifyKind([DateTime]::Parse("2026-08-13T12:00:00.1000000"), [DateTimeKind]::Utc),
+    [DateTimeOffset]::Parse("2026-08-13T12:00:00+00:00"),
+    [DateTimeOffset]::Parse("2026-08-13T08:00:00-04:00"),
+    "2026-08-13T12:00:00.0000000Z",
+    "2026-08-13T12:00:00+00:00",
+    "2026-08-13T08:00:00-04:00",
+    "2026-02-30T12:00:00Z",
+    "10000-01-01T00:00:00Z",
+    "not-a-timestamp"
+  )) {
+  $invalidImageCreated = $powerShellSevenImage | Select-Object *
+  $invalidImageCreated.Created = $invalidCreated
+  $rejected = $false
+  try { $null = Assert-BuildIdentity -Image $invalidImageCreated -ExpectedSourceSha $sourceSha -ExpectedCreated $created }
+  catch { $rejected = $true }
+  if (-not $rejected) { throw "A noncanonical Image.Created timestamp was accepted: $invalidCreated" }
+
+  $invalidLabelCreated = $powerShellSevenImage | Select-Object *
+  $invalidLabelCreated.Config = [pscustomobject]@{ Labels = [pscustomobject]@{
+      'org.opencontainers.image.revision' = $sourceSha
+      'org.opencontainers.image.created' = $invalidCreated
+      'org.opencontainers.image.title' = "ai-job-apply-migration"
+    } }
+  $rejected = $false
+  try { $null = Assert-BuildIdentity -Image $invalidLabelCreated -ExpectedSourceSha $sourceSha -ExpectedCreated $created }
+  catch { $rejected = $true }
+  if (-not $rejected) { throw "A noncanonical created label timestamp was accepted: $invalidCreated" }
 }
 foreach ($mutation in @(
     @{ property = "Architecture"; value = "arm64" },

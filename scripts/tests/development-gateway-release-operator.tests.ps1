@@ -4,14 +4,50 @@ $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $operatorPath = Join-Path $repositoryRoot "scripts\operate-development-gateway-release.ps1"
 $operator = Get-Content -LiteralPath $operatorPath -Raw
 $tokens = $null; $errors = $null
-[Management.Automation.Language.Parser]::ParseFile($operatorPath, [ref]$tokens, [ref]$errors) | Out-Null
+$ast = [Management.Automation.Language.Parser]::ParseFile($operatorPath, [ref]$tokens, [ref]$errors)
 if (@($errors).Count -ne 0) { throw "The gateway release operator does not parse: $($errors.Message -join '; ')." }
+
+foreach ($functionName in @("Get-OptionalProperty", "Get-GatewayKeyHistoryMatches")) {
+  $functions = @($ast.FindAll({
+        param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $functionName
+      }, $true))
+  if ($functions.Count -ne 1) { throw "$functionName must be defined exactly once." }
+  Invoke-Expression $functions[0].Extent.Text
+}
+
+$exactKey = "lambda/gateway/source/artifact/gateway-lambda.zip"
+foreach ($emptyHistory in @(
+    [pscustomobject]@{},
+    [pscustomobject]@{ Versions = @(); DeleteMarkers = @() },
+    [pscustomobject]@{ Versions = @($null); DeleteMarkers = @($null) }
+  )) {
+  if (@(Get-GatewayKeyHistoryMatches -Result $emptyHistory -Key $exactKey).Count -ne 0) {
+    throw "Empty or null S3 gateway history was treated as an existing immutable key."
+  }
+}
+foreach ($existingHistory in @(
+    [pscustomobject]@{ Versions = @([pscustomobject]@{ Key = $exactKey }) },
+    [pscustomobject]@{ DeleteMarkers = @([pscustomobject]@{ Key = $exactKey }) }
+  )) {
+  if (@(Get-GatewayKeyHistoryMatches -Result $existingHistory -Key $exactKey).Count -ne 1) {
+    throw "An exact gateway object version or delete marker was not detected."
+  }
+}
+$unrelatedHistory = [pscustomobject]@{
+  Versions = @($null, [pscustomobject]@{ Key = "$exactKey.unrelated" }, [pscustomobject]@{})
+  DeleteMarkers = @([pscustomobject]@{ Key = "unrelated/$exactKey" })
+}
+if (@(Get-GatewayKeyHistoryMatches -Result $unrelatedHistory -Key $exactKey).Count -ne 0) {
+  throw "Gateway history matching was relaxed beyond the exact immutable key."
+}
 
 foreach ($required in @(
     'ValidateSet("Status", "Publish", "VerifyPublication", "Plan", "Apply", "Verify")',
     'SourceSha must equal the exact merged main checkout', 'ARTIFACT_SOURCE_SHA',
     'Assert-GatewayPublicationReceipt', 'Assert-GatewayReleaseVariables', 'Assert-ExactGatewayReleasePlan',
     'Assert-RetainedGatewayBaselineMetadata', 'Assert-RetainedGatewayBaselinePlan',
+    'Get-GatewayKeyHistoryMatches -Result $history -Key $key',
     '$planPath.baseline.json', 'The retained baseline state lineage or serial is no longer current',
     'MigrationRepositoryUrl', 'ParserQualifiedArn',
     'Remote state changed after review', 'verify-development-gateway-lambda-boundary.ps1',
