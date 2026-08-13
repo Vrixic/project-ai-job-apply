@@ -307,7 +307,8 @@ foreach ($entry in $parser.GetEnumerator()) {
   $parserChanges += New-TestCreate $entry.Key $fields
 }
 $transport = @{ Sid = "DenyInsecureTransport"; Effect = "Deny"; Action = "s3:*"; Resource = @($bucketArn, "$bucketArn/*") }
-$candidateDeny = @{ Sid = "DenyQuarantineReadsWithoutCleanMalwareTag"; Effect = "Deny"; Action = @("s3:GetObject", "s3:GetObjectVersion"); Resource = "$bucketArn/quarantine/*"; Principal = "*"; Condition = @{ StringNotEquals = @{ "s3:ExistingObjectTag/GuardDutyMalwareScanStatus" = "NO_THREATS_FOUND" }; ArnNotEquals = @{ "aws:PrincipalArn" = "arn:aws:iam::${account}:role/ai-job-apply-development-guardduty-malware" } } }
+$malwareScanRole = "arn:aws:iam::${account}:role/ai-job-apply-development-document-malware-scan"
+$candidateDeny = @{ Sid = "DenyQuarantineReadsWithoutCleanMalwareTag"; Effect = "Deny"; Action = @("s3:GetObject", "s3:GetObjectVersion"); Resource = "$bucketArn/quarantine/*"; Principal = "*"; Condition = @{ StringNotEquals = @{ "s3:ExistingObjectTag/GuardDutyMalwareScanStatus" = "NO_THREATS_FOUND" }; ArnNotEquals = @{ "aws:PrincipalArn" = $malwareScanRole } } }
 $snsBase = @{ Sid = "Existing"; Effect = "Allow"; Action = "sns:GetTopicAttributes"; Resource = "*" }
 $snsAdded = @{ Sid = "AllowExactDocumentOperationalRules"; Effect = "Allow"; Action = "SNS:Publish"; Resource = "arn:aws:sns:us-east-2:${account}:ai-job-apply-development-operational-alerts"; Principal = @{ Service = "events.amazonaws.com" }; Condition = @{ StringEquals = @{ "aws:SourceAccount" = $account }; ArnEquals = @{ "aws:SourceArn" = @("arn:aws:events:us-east-2:${account}:rule/ai-job-apply-development-document-scan-tag-failure", "arn:aws:events:us-east-2:${account}:rule/ai-job-apply-development-document-scan-plan-unhealthy") } } }
 $parserChanges += New-TestPolicyUpdate "module.platform.aws_s3_bucket_policy.candidate_documents[0]" (New-TestPolicy @($transport)) (New-TestPolicy @($transport, $candidateDeny))
@@ -333,6 +334,28 @@ foreach ($fixture in @(
   $rejected = $false
   try { $null = Assert-DevelopmentDocumentDarkPlan $badCandidatePlan $account parser-dark } catch { $rejected = $true }
   if (-not $rejected) { throw "The candidate bucket guard accepted the $($fixture.Label) principal shape." }
+}
+foreach ($fixture in @(
+    [pscustomobject]@{ Label = "retired role name"; Value = "arn:aws:iam::${account}:role/ai-job-apply-development-guardduty-malware" },
+    [pscustomobject]@{ Label = "different role"; Value = "arn:aws:iam::${account}:role/ai-job-apply-development-document-parser" },
+    [pscustomobject]@{ Label = "wildcard scalar"; Value = "*" },
+    [pscustomobject]@{ Label = "singleton list"; Value = [object[]]@($malwareScanRole) },
+    [pscustomobject]@{ Label = "multiple values"; Value = [object[]]@($malwareScanRole, "arn:aws:iam::${account}:role/other") },
+    [pscustomobject]@{ Label = "object value"; Value = [pscustomobject]@{ AWS = $malwareScanRole } }
+  )) {
+  $badCandidateConditionPlan = $validParserPlan | ConvertTo-Json -Depth 60 | ConvertFrom-Json
+  $candidatePolicyChange = @($badCandidateConditionPlan.resource_changes | Where-Object {
+      [string]$_.address -ceq "module.platform.aws_s3_bucket_policy.candidate_documents[0]"
+    })
+  $candidatePolicy = $candidatePolicyChange[0].change.after.policy | ConvertFrom-Json
+  $candidateStatement = @($candidatePolicy.Statement | Where-Object {
+      [string]$_.Sid -ceq "DenyQuarantineReadsWithoutCleanMalwareTag"
+    })
+  $candidateStatement[0].Condition.ArnNotEquals."aws:PrincipalArn" = $fixture.Value
+  $candidatePolicyChange[0].change.after.policy = $candidatePolicy | ConvertTo-Json -Compress -Depth 40
+  $rejected = $false
+  try { $null = Assert-DevelopmentDocumentDarkPlan $badCandidateConditionPlan $account parser-dark } catch { $rejected = $true }
+  if (-not $rejected) { throw "The candidate bucket guard accepted the $($fixture.Label) ArnNotEquals value." }
 }
 $badCandidateVersionPlan = $validParserPlan | ConvertTo-Json -Depth 60 | ConvertFrom-Json
 $candidateVersionChange = @($badCandidateVersionPlan.resource_changes | Where-Object {
