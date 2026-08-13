@@ -176,6 +176,7 @@ run "document_processing_is_isolated_scale_to_zero_and_dark_first" {
   variables {
     deploy_document_intake                        = true
     deploy_document_processing                    = true
+    document_processing_kms_prerequisite_enabled  = true
     document_scan_mapping_enabled                 = false
     document_scan_event_rule_enabled              = false
     serverless_runtime_enabled                    = true
@@ -210,6 +211,8 @@ run "document_processing_is_isolated_scale_to_zero_and_dark_first" {
     condition = (
       !aws_lambda_event_source_mapping.document_scan_results[0].enabled &&
       aws_cloudwatch_event_rule.document_scan_results[0].state == "DISABLED" &&
+      aws_cloudwatch_event_rule.document_scan_tag_failure[0].state == "DISABLED" &&
+      aws_cloudwatch_event_rule.document_scan_plan_unhealthy[0].state == "DISABLED" &&
       aws_cloudwatch_event_rule.document_processing_reconciler[0].state == "DISABLED" &&
       aws_lambda_event_source_mapping.document_scan_results[0].batch_size == 1 &&
       aws_sqs_queue.document_scan_results[0].visibility_timeout_seconds == 360 &&
@@ -243,6 +246,26 @@ run "document_event_rule_requires_mapping_first" {
   }
 
   expect_failures = [var.document_scan_event_rule_enabled]
+}
+
+run "document_processing_requires_reviewed_kms_prerequisite" {
+  command = plan
+
+  variables {
+    deploy_document_intake                        = true
+    deploy_document_processing                    = true
+    document_processor_artifact_s3_key            = "lambda/documents/processor.zip"
+    document_processor_artifact_s3_object_version = "processor-version"
+    document_processor_artifact_sha256            = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    document_processor_artifact_base64sha256      = "ZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWU="
+    document_parser_artifact_s3_key               = "lambda/documents/parser.zip"
+    document_parser_artifact_s3_object_version    = "parser-version"
+    document_parser_artifact_sha256               = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    document_parser_artifact_base64sha256         = "ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY="
+    document_processor_extension_layer_arn        = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
+  }
+
+  expect_failures = [var.document_processing_kms_prerequisite_enabled]
 }
 
 run "disabled_runtime_is_dark_without_a_legacy_provider" {

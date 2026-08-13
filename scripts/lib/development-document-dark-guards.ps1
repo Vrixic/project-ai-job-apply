@@ -18,6 +18,7 @@ function Get-DevelopmentDocumentBooleanVariableNames {
     "database_performance_insights", "deploy_applications", "deploy_document_intake",
     "deploy_document_processing", "deploy_gateway_lambda", "deploy_profile_readiness_durable",
     "deploy_serverless_outbox", "document_scan_event_rule_enabled", "document_scan_mapping_enabled",
+    "document_processing_kms_prerequisite_enabled",
     "enable_container_insights", "enable_redis", "high_availability",
     "private_application_networking", "serverless_runtime_enabled"
   )
@@ -227,7 +228,6 @@ function Get-DevelopmentDocumentDarkExpectedActions {
     "module.platform.aws_vpc_endpoint.sts[0]"
   )
   $updates = @(
-    "module.platform.aws_kms_key.platform",
     "module.platform.aws_s3_bucket_policy.candidate_documents[0]",
     "module.platform.aws_sns_topic_policy.operational_alerts",
     "module.platform.aws_vpc_endpoint.lambda[0]",
@@ -238,6 +238,85 @@ function Get-DevelopmentDocumentDarkExpectedActions {
   foreach ($address in $creates) { $result[$address] = "create" }
   foreach ($address in $updates) { $result[$address] = "update" }
   return $result
+}
+
+function Get-DevelopmentDocumentDarkExpectedDataReads {
+  return @(
+    "module.platform.data.aws_iam_policy_document.candidate_documents_s3_endpoint[0]",
+    "module.platform.data.aws_iam_policy_document.document_parser[0]",
+    "module.platform.data.aws_iam_policy_document.document_parser_object_access[0]",
+    "module.platform.data.aws_iam_policy_document.document_parser_object_access_assume[0]",
+    "module.platform.data.aws_iam_policy_document.document_processor[0]",
+    "module.platform.data.aws_iam_policy_document.document_scan_delivery_dead_letter[0]",
+    "module.platform.data.aws_iam_policy_document.document_scan_queue[0]",
+    "module.platform.data.aws_iam_policy_document.document_sts_endpoint[0]",
+    "module.platform.data.aws_iam_policy_document.outbox_lambda_endpoint[0]",
+    "module.platform.data.aws_iam_policy_document.outbox_sqs_endpoint[0]",
+    "module.platform.data.aws_iam_policy_document.secrets_endpoint[0]"
+  )
+}
+
+function Assert-DevelopmentDocumentExactDataReads {
+  param([Parameter(Mandatory)][object[]]$Records)
+  $expected = @(Get-DevelopmentDocumentDarkExpectedDataReads | Sort-Object)
+  $actual = @($Records | ForEach-Object { [string]$_.address } | Sort-Object)
+  if (($actual -join "|") -cne ($expected -join "|")) { throw "The dark plan has an unexpected deferred data read set." }
+  foreach ($record in $Records) {
+    if ([string]$record.mode -cne "data" -or [string]$record.type -cne "aws_iam_policy_document" -or
+      (@($record.change.actions) -join ",") -cne "read" -or $null -ne $record.change.before -or
+      $null -ne $record.change.replace_paths -or
+      (ConvertTo-DeploymentCanonicalValue $record.change.before_sensitive) -match 'true' -or
+      (ConvertTo-DeploymentCanonicalValue $record.change.after_sensitive) -match 'true') {
+      throw "A deferred data read has an unsafe mode, action, prior value, replacement, or sensitivity shape."
+    }
+  }
+}
+
+function Assert-DevelopmentDocumentAcceptedResourceDrift {
+  param([AllowNull()][object[]]$Records)
+  $drift = @($Records)
+  $expected = @(
+    "module.platform.aws_db_instance.postgres[0]",
+    "module.platform.aws_ecs_task_definition.migration[0]"
+  )
+  $actualAddresses = @($drift | ForEach-Object { [string]$_.address } | Sort-Object)
+  if (($actualAddresses -join "|") -cne (@($expected | Sort-Object) -join "|")) {
+    throw "The plan contains unaccepted resource drift."
+  }
+  foreach ($record in $drift) {
+    if ([string]$record.mode -cne "managed" -or (@($record.change.actions) -join ",") -cne "update" -or
+      $null -ne $record.change.replace_paths -or
+      (ConvertTo-DeploymentCanonicalValue $record.change.after_unknown) -cne "{}" -or
+      (ConvertTo-DeploymentCanonicalValue $record.change.before_sensitive -SortArrays) -cne
+      (ConvertTo-DeploymentCanonicalValue $record.change.after_sensitive -SortArrays)) {
+      throw "Accepted provider-observed drift has an unsafe action or metadata shape."
+    }
+    $after = $record.change.after | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+    if ([string]$record.address -ceq "module.platform.aws_db_instance.postgres[0]") {
+      if ([string]$record.type -cne "aws_db_instance" -or
+        [string]$record.change.before.latest_restorable_time -notmatch '^20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' -or
+        [string]$record.change.after.latest_restorable_time -notmatch '^20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$') {
+        throw "RDS drift is not limited to its provider-observed restore clock."
+      }
+      $beforeClock = [datetime]::ParseExact([string]$record.change.before.latest_restorable_time,
+        "yyyy-MM-dd'T'HH:mm:ss'Z'", [Globalization.CultureInfo]::InvariantCulture,
+        [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal)
+      $afterClock = [datetime]::ParseExact([string]$record.change.after.latest_restorable_time,
+        "yyyy-MM-dd'T'HH:mm:ss'Z'", [Globalization.CultureInfo]::InvariantCulture,
+        [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal)
+      if ($afterClock -le $beforeClock) { throw "The provider-observed RDS restore clock did not move strictly forward." }
+      $after.latest_restorable_time = $record.change.before.latest_restorable_time
+    }
+    else {
+      if ([string]$record.type -cne "aws_ecs_task_definition" -or $null -ne $record.change.before.tags -or
+        @($record.change.after.tags.PSObject.Properties).Count -ne 0) {
+        throw "Migration task drift is not limited to provider-normalized empty tags."
+      }
+      $after.tags = $null
+    }
+    if ((ConvertTo-DeploymentCanonicalValue $record.change.before -SortArrays) -cne
+      (ConvertTo-DeploymentCanonicalValue $after -SortArrays)) { throw "Accepted drift changed another resource attribute." }
+  }
 }
 
 function Get-TerraformStateResourceMap {
@@ -282,6 +361,7 @@ function Assert-DevelopmentDocumentDarkVariables {
   }
   $overlay = @{
     deploy_document_processing = $true
+    document_processing_kms_prerequisite_enabled = $true
     document_scan_mapping_enabled = $false
     document_scan_event_rule_enabled = $false
     document_processor_artifact_s3_key = [string]$processor[0].key
@@ -296,8 +376,13 @@ function Assert-DevelopmentDocumentDarkVariables {
   }
   $baselineProperties = @($BaselineVariables.PSObject.Properties)
   $planProperties = @($PlanVariables.PSObject.Properties)
-  if ($baselineProperties.Count -ne $planProperties.Count) {
-    throw "The dark plan variable set differs from the accepted baseline."
+  if ($planProperties.Count -ne ($baselineProperties.Count + 1)) {
+    throw "The dark plan variable set must be the accepted baseline plus its exact KMS prerequisite switch."
+  }
+  $prerequisite = $PlanVariables.PSObject.Properties["document_processing_kms_prerequisite_enabled"]
+  if ($null -eq $prerequisite -or
+    -not (ConvertTo-ExactBoolean $prerequisite.Value.value "document_processing_kms_prerequisite_enabled")) {
+    throw "The dark plan must preserve the reviewed KMS prerequisite."
   }
   foreach ($property in $baselineProperties) {
     $name = [string]$property.Name
@@ -561,12 +646,6 @@ function Assert-ApprovedPolicyUpdateSemantics {
   foreach ($address in @($expectedActions.Keys | Where-Object { $expectedActions[$_] -eq "update" })) {
     Assert-OnlyPolicyAttributeChanged $byAddress[$address].change
   }
-  $kms = Get-PolicyAddedStatements $byAddress["module.platform.aws_kms_key.platform"].change.before.policy `
-    $byAddress["module.platform.aws_kms_key.platform"].change.after.policy `
-    @("AllowEventBridgeDocumentScanQueueEncryption", "AllowEventBridgeDocumentOperationalAlertEncryption")
-  Assert-ExactAddedStatement @($kms | Where-Object Sid -eq "AllowEventBridgeDocumentScanQueueEncryption")[0] KmsQueue $AccountId
-  Assert-ExactAddedStatement @($kms | Where-Object Sid -eq "AllowEventBridgeDocumentOperationalAlertEncryption")[0] KmsAlerts $AccountId
-
   $s3Change = $byAddress["module.platform.aws_s3_bucket_policy.candidate_documents[0]"].change
   $beforeS3 = ConvertFrom-IamPolicyValue $s3Change.before.policy
   $transport = @($beforeS3.Statement | Where-Object Sid -eq "DenyInsecureTransport")[0]
@@ -585,6 +664,155 @@ function Assert-ApprovedPolicyUpdateSemantics {
   Assert-ExactAddedStatement $addedLambda[0] LambdaParser $AccountId
   $secrets = $byAddress["module.platform.aws_vpc_endpoint.secretsmanager[0]"].change
   Assert-SecretEndpointPolicyDelta $secrets.before.policy $secrets.after.policy $AccountId
+}
+
+function Assert-DevelopmentDocumentKmsPrerequisiteVariables {
+  param([Parameter(Mandatory)][object]$BaselineVariables, [Parameter(Mandatory)][object]$PlanVariables)
+  $baselineProperties = @($BaselineVariables.PSObject.Properties)
+  $planProperties = @($PlanVariables.PSObject.Properties)
+  if ($planProperties.Count -ne ($baselineProperties.Count + 1)) {
+    throw "The prerequisite plan variable set is not the exact baseline plus its KMS switch."
+  }
+  foreach ($property in $baselineProperties) {
+    $name = [string]$property.Name
+    $planned = $PlanVariables.PSObject.Properties[$name]
+    if ($null -eq $planned -or
+      (ConvertTo-DevelopmentDocumentComparableVariableValue $name $planned.Value.value) -cne
+      (ConvertTo-DevelopmentDocumentComparableVariableValue $name $property.Value.value -SerializedBaseline)) {
+      throw "The prerequisite plan changed baseline variable '$name'."
+    }
+  }
+  $switch = $PlanVariables.PSObject.Properties["document_processing_kms_prerequisite_enabled"]
+  if ($null -eq $switch -or -not (ConvertTo-ExactBoolean $switch.Value.value "KMS prerequisite switch")) {
+    throw "The prerequisite plan must enable only the exact KMS prerequisite switch."
+  }
+}
+
+function Assert-DevelopmentDocumentKmsPrerequisitePlan {
+  param([Parameter(Mandatory)][object]$Plan, [Parameter(Mandatory)][string]$AccountId)
+  Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($Plan.resource_drift)
+  $nonNoop = @($Plan.resource_changes | Where-Object { (@($_.change.actions) -join ",") -ne "no-op" })
+  $data = @($nonNoop | Where-Object mode -eq "data")
+  if ($data.Count -ne 0) { throw "The KMS prerequisite plan must not defer any data reads." }
+  $managed = @($nonNoop | Where-Object mode -eq "managed")
+  if ($managed.Count -ne 1 -or [string]$managed[0].address -cne "module.platform.aws_kms_key.platform" -or
+    [string]$managed[0].type -cne "aws_kms_key" -or (@($managed[0].change.actions) -join ",") -cne "update") {
+    throw "The KMS prerequisite must contain exactly one in-place platform KMS update."
+  }
+  Assert-OnlyPolicyAttributeChanged $managed[0].change
+  $added = Get-PolicyAddedStatements $managed[0].change.before.policy $managed[0].change.after.policy `
+    @("AllowEventBridgeDocumentScanQueueEncryption", "AllowEventBridgeDocumentOperationalAlertEncryption")
+  Assert-ExactAddedStatement @($added | Where-Object Sid -eq "AllowEventBridgeDocumentScanQueueEncryption")[0] KmsQueue $AccountId
+  Assert-ExactAddedStatement @($added | Where-Object Sid -eq "AllowEventBridgeDocumentOperationalAlertEncryption")[0] KmsAlerts $AccountId
+  return $managed[0]
+}
+
+function Assert-ExactDocumentTrustPolicy {
+  param([Parameter(Mandatory)][object]$PolicyValue, [Parameter(Mandatory)][ValidateSet("Lambda", "ObjectAccess")][string]$Kind,
+    [Parameter(Mandatory)][string]$AccountId)
+  $policy = ConvertFrom-IamPolicyValue $PolicyValue
+  $statements = @($policy.Statement)
+  if ([string]$policy.Version -cne "2012-10-17" -or $statements.Count -ne 1) { throw "A document role trust policy has an unexpected shape." }
+  $statement = $statements[0]
+  Assert-ExactObjectKeys $statement @("Action", "Effect", "Principal") "document trust statement"
+  Assert-ExactStringSet $statement.Action @("sts:AssumeRole") "document trust actions"
+  Assert-ExactStringSet $statement.Effect @("Allow") "document trust effect"
+  Assert-ExactObjectKeys $statement.Principal @($(if ($Kind -eq "Lambda") { "Service" } else { "AWS" })) "document trust principal"
+  if ($Kind -eq "Lambda") {
+    Assert-ExactStringSet $statement.Principal.Service @("lambda.amazonaws.com") "document Lambda trust principal"
+  } else {
+    Assert-ExactStringSet $statement.Principal.AWS @("arn:aws:iam::${AccountId}:role/ai-job-apply-development-document-processor") "object-access trust principal"
+  }
+}
+
+function Assert-ExactDocumentIdentityPolicy {
+  param([Parameter(Mandatory)][object]$PolicyValue, [Parameter(Mandatory)][ValidateSet("Processor", "Parser", "ObjectAccess")][string]$Kind,
+    [Parameter(Mandatory)][string]$AccountId, [Parameter(Mandatory)][string]$PlatformKmsArn)
+  if ($PlatformKmsArn -notmatch "^arn:aws:kms:us-east-2:${AccountId}:key/[a-f0-9-]+$") { throw "The exact plan-owned platform KMS ARN is unavailable." }
+  $policy = ConvertFrom-IamPolicyValue $PolicyValue
+  if ([string]$policy.Version -cne "2012-10-17") { throw "A document identity policy version is invalid." }
+  $statements = @($policy.Statement)
+  $expected = switch ($Kind) {
+    "Processor" { @{
+        WriteOwnedLogs = @("logs:CreateLogStream", "logs:PutLogEvents"); ManageVpcInterfaces = @("ec2:AssignPrivateIpAddresses", "ec2:CreateNetworkInterface", "ec2:DeleteNetworkInterface", "ec2:DescribeNetworkInterfaces", "ec2:DescribeSubnets", "ec2:UnassignPrivateIpAddresses")
+        ReadDatabaseSecret = @("secretsmanager:GetSecretValue"); ConsumeExactScanQueue = @("sqs:ChangeMessageVisibility", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ReceiveMessage")
+        InvokeExactParserVersion = @("lambda:InvokeFunction"); AssumeExactObjectAccessRole = @("sts:AssumeRole"); ReadNormalizedDocumentsOnly = @("s3:GetObject", "s3:GetObjectVersion")
+        DecryptOwnedRuntimeData = @("kms:Decrypt", "kms:GenerateDataKey"); WriteNativeTraces = @("xray:PutTelemetryRecords", "xray:PutTraceSegments")
+      } }
+    "Parser" { @{ ManageVpcInterfaces = @("ec2:AssignPrivateIpAddresses", "ec2:CreateNetworkInterface", "ec2:DeleteNetworkInterface", "ec2:DescribeNetworkInterfaces", "ec2:DescribeSubnets", "ec2:UnassignPrivateIpAddresses"); DecryptLambdaEnvironment = @("kms:Decrypt") } }
+    "ObjectAccess" { @{ SessionPolicyMustNarrowObjectAccess = @("s3:GetObject", "s3:GetObjectVersion", "s3:GetObjectTagging", "s3:GetObjectVersionTagging", "s3:PutObject"); EncryptAndDecryptViaS3Only = @("kms:Decrypt", "kms:GenerateDataKey") } }
+  }
+  if ((@($statements.Sid | Sort-Object) -join "|") -cne (@($expected.Keys | Sort-Object) -join "|")) { throw "A document identity policy has unexpected Sids." }
+  foreach ($statement in $statements) {
+    Assert-ExactStringSet $statement.Effect @("Allow") "document identity effect"
+    Assert-ExactStringSet $statement.Action @($expected[[string]$statement.Sid]) "document identity actions"
+    if ($null -ne $statement.PSObject.Properties["Principal"]) { throw "An identity policy contains a principal." }
+    $resources = @($statement.Resource | ForEach-Object { [string]$_ })
+    $resourcePattern = switch ([string]$statement.Sid) {
+      "WriteOwnedLogs" { "^arn:aws:logs:us-east-2:${AccountId}:log-group:/ai-job-apply/development/application:\*$" }
+      "ReadDatabaseSecret" { "^arn:aws:secretsmanager:us-east-2:${AccountId}:secret:ai-job-apply/development/database-url-[A-Za-z0-9]+$" }
+      "ConsumeExactScanQueue" { "^arn:aws:sqs:us-east-2:${AccountId}:ai-job-apply-development-document-scan-results$" }
+      "InvokeExactParserVersion" { "^arn:aws:lambda:us-east-2:${AccountId}:function:ai-job-apply-development-document-parser:[1-9][0-9]*$" }
+      "AssumeExactObjectAccessRole" { "^arn:aws:iam::${AccountId}:role/ai-job-apply-development-document-object-access$" }
+      "ReadNormalizedDocumentsOnly" { "^arn:aws:s3:::ai-job-apply-development-candidate-docs-${AccountId}/normalized/\*$" }
+      "SessionPolicyMustNarrowObjectAccess" { "^arn:aws:s3:::ai-job-apply-development-candidate-docs-${AccountId}/(quarantine|normalized)/\*$" }
+      "DecryptOwnedRuntimeData" { "^$([regex]::Escape($PlatformKmsArn))$" }
+      "DecryptLambdaEnvironment" { "^$([regex]::Escape($PlatformKmsArn))$" }
+      "EncryptAndDecryptViaS3Only" { "^$([regex]::Escape($PlatformKmsArn))$" }
+      default { "^\*$" }
+    }
+    if (@($resources | Where-Object { $_ -notmatch $resourcePattern }).Count -ne 0 -or
+      ([string]$statement.Sid -eq "SessionPolicyMustNarrowObjectAccess" -and $resources.Count -ne 2) -or
+      ([string]$statement.Sid -ne "SessionPolicyMustNarrowObjectAccess" -and $resources.Count -ne 1)) { throw "A document identity statement has unexpected resources." }
+    if ([string]$statement.Sid -eq "DecryptLambdaEnvironment") {
+      Assert-ExactCondition $statement.Condition @{ StringEquals = @{ "kms:ViaService" = @("lambda.us-east-2.amazonaws.com") } }
+    } elseif ([string]$statement.Sid -eq "EncryptAndDecryptViaS3Only") {
+      Assert-ExactCondition $statement.Condition @{ StringEquals = @{ "kms:ViaService" = @("s3.us-east-2.amazonaws.com") } }
+    } elseif ($null -ne $statement.PSObject.Properties["Condition"]) { throw "An unexpected identity-policy condition is present." }
+  }
+}
+
+function Assert-ExactDocumentCreatedResourcePolicies {
+  param([Parameter(Mandatory)][hashtable]$ByAddress, [Parameter(Mandatory)][string]$AccountId,
+    [Parameter(Mandatory)][string]$PlatformKmsArn)
+  Assert-ExactDocumentTrustPolicy $ByAddress["module.platform.aws_iam_role.document_processor[0]"].change.after.assume_role_policy Lambda $AccountId
+  Assert-ExactDocumentTrustPolicy $ByAddress["module.platform.aws_iam_role.document_parser[0]"].change.after.assume_role_policy Lambda $AccountId
+  Assert-ExactDocumentTrustPolicy $ByAddress["module.platform.aws_iam_role.document_parser_object_access[0]"].change.after.assume_role_policy ObjectAccess $AccountId
+  Assert-ExactDocumentIdentityPolicy $ByAddress["module.platform.aws_iam_role_policy.document_processor[0]"].change.after.policy Processor $AccountId $PlatformKmsArn
+  Assert-ExactDocumentIdentityPolicy $ByAddress["module.platform.aws_iam_role_policy.document_parser[0]"].change.after.policy Parser $AccountId $PlatformKmsArn
+  Assert-ExactDocumentIdentityPolicy $ByAddress["module.platform.aws_iam_role_policy.document_parser_object_access[0]"].change.after.policy ObjectAccess $AccountId $PlatformKmsArn
+
+  foreach ($definition in @(
+      @("document_scan_results", "ExactGuardDutyResultRuleOnly", "ai-job-apply-development-document-scan-results", @("ai-job-apply-development-document-scan-results")),
+      @("document_scan_delivery_dead_letter", "ExactEventBridgeRuleDeadLettersOnly", "ai-job-apply-development-document-scan-delivery-dlq", @("ai-job-apply-development-document-scan-results", "ai-job-apply-development-document-scan-tag-failure", "ai-job-apply-development-document-scan-plan-unhealthy", "ai-job-apply-development-document-processing-reconciler"))
+    )) {
+    $change = $ByAddress["module.platform.aws_sqs_queue_policy.$($definition[0])[0]"].change.after
+    $expectedUrl = "https://sqs.us-east-2.amazonaws.com/${AccountId}/$($definition[2])"
+    if ([string]$change.queue_url -cne $expectedUrl) { throw "A document queue policy targets an unexpected URL." }
+    $policy = ConvertFrom-IamPolicyValue $change.policy; $statements = @($policy.Statement)
+    if ([string]$policy.Version -cne "2012-10-17" -or $statements.Count -ne 1 -or [string]$statements[0].Sid -cne [string]$definition[1]) { throw "A document queue policy has an unexpected shape." }
+    Assert-ExactStringSet $statements[0].Effect @("Allow") "queue policy effect"; Assert-ExactStringSet $statements[0].Action @("sqs:SendMessage") "queue policy actions"
+    Assert-ExactStringSet $statements[0].Resource @("arn:aws:sqs:us-east-2:${AccountId}:$($definition[2])") "queue policy resources"
+    Assert-ExactObjectKeys $statements[0].Principal @("Service") "queue policy principal"; Assert-ExactStringSet $statements[0].Principal.Service @("events.amazonaws.com") "queue policy principal"
+    Assert-ExactCondition $statements[0].Condition @{ ArnEquals = @{ "aws:SourceArn" = @($definition[3] | ForEach-Object { "arn:aws:events:us-east-2:${AccountId}:rule/$_" }) }; StringEquals = @{ "aws:SourceAccount" = @($AccountId) } }
+  }
+
+  $objectRole = "arn:aws:iam::${AccountId}:role/ai-job-apply-development-document-object-access"; $processorRole = "arn:aws:iam::${AccountId}:role/ai-job-apply-development-document-processor"
+  $s3Policy = ConvertFrom-IamPolicyValue $ByAddress["module.platform.aws_vpc_endpoint.candidate_documents_s3[0]"].change.after.policy
+  $expectedS3 = @{ ExactParserQuarantineReadsOnly = @("s3:GetObject", "s3:GetObjectVersion", "s3:GetObjectTagging", "s3:GetObjectVersionTagging"); ExactParserNormalizedWritesAndVerification = @("s3:GetObject", "s3:GetObjectVersion", "s3:PutObject"); ExactCoordinatorNormalizedReadsOnly = @("s3:GetObject", "s3:GetObjectVersion") }
+  if ([string]$s3Policy.Version -cne "2012-10-17" -or
+    (@($s3Policy.Statement.Sid | Sort-Object) -join "|") -cne (@($expectedS3.Keys | Sort-Object) -join "|")) { throw "The S3 endpoint policy has an unexpected version or Sids." }
+  foreach ($statement in @($s3Policy.Statement)) {
+    Assert-ExactStringSet $statement.Effect @("Allow") "S3 endpoint effect"; Assert-ExactStringSet $statement.Action @($expectedS3[[string]$statement.Sid]) "S3 endpoint actions"
+    Assert-ExactObjectKeys $statement.Principal @("AWS") "S3 endpoint principal"; Assert-ExactStringSet $statement.Principal.AWS @("*") "S3 endpoint principal"
+    $prefix = if ([string]$statement.Sid -eq "ExactParserQuarantineReadsOnly") { "quarantine" } else { "normalized" }
+    Assert-ExactStringSet $statement.Resource @("arn:aws:s3:::ai-job-apply-development-candidate-docs-${AccountId}/$prefix/*") "S3 endpoint resources"
+    Assert-ExactCondition $statement.Condition @{ ArnEquals = @{ "aws:PrincipalArn" = @($(if ([string]$statement.Sid -eq "ExactCoordinatorNormalizedReadsOnly") { $processorRole } else { $objectRole })) } }
+  }
+  $stsPolicy = ConvertFrom-IamPolicyValue $ByAddress["module.platform.aws_vpc_endpoint.sts[0]"].change.after.policy; $sts = @($stsPolicy.Statement)
+  if ([string]$stsPolicy.Version -cne "2012-10-17" -or $sts.Count -ne 1 -or [string]$sts[0].Sid -cne "CoordinatorAssumesExactDocumentObjectRoleOnly") { throw "The STS endpoint policy has an unexpected shape." }
+  Assert-ExactStringSet $sts[0].Effect @("Allow") "STS endpoint effect"; Assert-ExactStringSet $sts[0].Action @("sts:AssumeRole") "STS endpoint actions"; Assert-ExactStringSet $sts[0].Resource @($objectRole) "STS endpoint resources"
+  Assert-ExactObjectKeys $sts[0].Principal @("AWS") "STS endpoint principal"; Assert-ExactStringSet $sts[0].Principal.AWS @("*") "STS endpoint principal"; Assert-ExactCondition $sts[0].Condition @{ ArnEquals = @{ "aws:PrincipalArn" = @($processorRole) } }
 }
 
 function Assert-ExactDocumentLambdaRuntime {
@@ -688,7 +916,21 @@ function Assert-DevelopmentDocumentDarkPlan {
   param([Parameter(Mandatory)][object]$Plan, [Parameter(Mandatory)][string]$AccountId)
 
   $expected = Get-DevelopmentDocumentDarkExpectedActions
-  $changes = @($Plan.resource_changes | Where-Object { (@($_.change.actions) -join ",") -ne "no-op" })
+  Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($Plan.resource_drift)
+  $kmsRecords = @($Plan.resource_changes | Where-Object { [string]$_.address -ceq "module.platform.aws_kms_key.platform" })
+  if ($kmsRecords.Count -ne 1 -or [string]$kmsRecords[0].mode -cne "managed" -or
+    [string]$kmsRecords[0].type -cne "aws_kms_key" -or (@($kmsRecords[0].change.actions) -join ",") -cne "no-op" -or
+    [string]$kmsRecords[0].change.before.arn -cne [string]$kmsRecords[0].change.after.arn -or
+    (ConvertTo-DeploymentCanonicalValue $kmsRecords[0].change.after_unknown) -cne "{}" -or
+    (ConvertTo-DeploymentCanonicalValue $kmsRecords[0].change.before_sensitive -SortArrays) -cne
+    (ConvertTo-DeploymentCanonicalValue $kmsRecords[0].change.after_sensitive -SortArrays)) {
+    throw "The final dark plan does not bind security policies to one exact no-op platform KMS key."
+  }
+  $platformKmsArn = [string]$kmsRecords[0].change.after.arn
+  $nonNoop = @($Plan.resource_changes | Where-Object { (@($_.change.actions) -join ",") -ne "no-op" })
+  $dataReads = @($nonNoop | Where-Object mode -eq "data")
+  Assert-DevelopmentDocumentExactDataReads -Records $dataReads
+  $changes = @($nonNoop | Where-Object mode -eq "managed")
   if ($changes.Count -ne $expected.Count) {
     throw "The dark plan has $($changes.Count) changes; exactly $($expected.Count) are approved."
   }
@@ -699,13 +941,46 @@ function Assert-DevelopmentDocumentDarkPlan {
     if ($action -cne $expected[$address]) { throw "The dark plan action for '$address' must be '$($expected[$address])'." }
   }
 
-  $scanRule = @($changes | Where-Object address -eq "module.platform.aws_cloudwatch_event_rule.document_scan_results[0]")[0]
-  $reconciler = @($changes | Where-Object address -eq "module.platform.aws_cloudwatch_event_rule.document_processing_reconciler[0]")[0]
+  $securityCreateFields = @{
+    "module.platform.aws_iam_role.document_processor[0]" = @("assume_role_policy")
+    "module.platform.aws_iam_role.document_parser[0]" = @("assume_role_policy")
+    "module.platform.aws_iam_role.document_parser_object_access[0]" = @("assume_role_policy")
+    "module.platform.aws_iam_role_policy.document_parser[0]" = @("policy")
+    "module.platform.aws_iam_role_policy.document_parser_object_access[0]" = @("policy")
+    "module.platform.aws_iam_role_policy.document_processor[0]" = @("policy")
+    "module.platform.aws_sqs_queue_policy.document_scan_delivery_dead_letter[0]" = @("policy", "queue_url")
+    "module.platform.aws_sqs_queue_policy.document_scan_results[0]" = @("policy", "queue_url")
+    "module.platform.aws_vpc_endpoint.candidate_documents_s3[0]" = @("policy")
+    "module.platform.aws_vpc_endpoint.sts[0]" = @("policy")
+  }
+  $byAddress = @{}; foreach ($change in $changes) { $byAddress[[string]$change.address] = $change }
+  foreach ($entry in $securityCreateFields.GetEnumerator()) {
+    foreach ($field in @($entry.Value)) {
+      $unknown = $byAddress[$entry.Key].change.after_unknown.PSObject.Properties[$field]
+      if ($null -ne $unknown -and (ConvertTo-DeploymentCanonicalValue $unknown.Value -SortArrays) -match 'true') {
+        throw "Security field '$field' must be fully known before review for '$($entry.Key)'."
+      }
+      $value = $byAddress[$entry.Key].change.after.PSObject.Properties[$field]
+      if ($null -eq $value -or [string]::IsNullOrWhiteSpace([string]$value.Value)) {
+        throw "Security field '$field' is unavailable for exact review on '$($entry.Key)'."
+      }
+    }
+  }
+  Assert-ExactDocumentCreatedResourcePolicies -ByAddress $byAddress -AccountId $AccountId -PlatformKmsArn $platformKmsArn
+
   $mapping = @($changes | Where-Object address -eq "module.platform.aws_lambda_event_source_mapping.document_scan_results[0]")[0]
-  if ([string]$scanRule.change.after.state -cne "DISABLED" -or
-    [string]$reconciler.change.after.state -cne "DISABLED" -or
-    (ConvertTo-ExactBoolean $mapping.change.after.enabled "document mapping enabled")) {
-    throw "The scan rule, queue mapping, and reconciler must all be disabled in the dark plan."
+  foreach ($ruleAddress in @(
+      "module.platform.aws_cloudwatch_event_rule.document_scan_results[0]",
+      "module.platform.aws_cloudwatch_event_rule.document_scan_tag_failure[0]",
+      "module.platform.aws_cloudwatch_event_rule.document_scan_plan_unhealthy[0]",
+      "module.platform.aws_cloudwatch_event_rule.document_processing_reconciler[0]"
+    )) {
+    if ([string]$byAddress[$ruleAddress].change.after.state -cne "DISABLED") {
+      throw "Every document EventBridge rule must be disabled in the initial dark plan."
+    }
+  }
+  if (ConvertTo-ExactBoolean $mapping.change.after.enabled "document mapping enabled") {
+    throw "The document queue mapping must be disabled in the initial dark plan."
   }
   Assert-ApprovedPolicyUpdateSemantics -Changes $changes -AccountId $AccountId
   return $changes

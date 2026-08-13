@@ -230,6 +230,17 @@ variable "deploy_document_processing" {
   }
 }
 
+variable "document_processing_kms_prerequisite_enabled" {
+  description = "Add only the exact document EventBridge KMS grants before dependent resources are planned."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.deploy_document_processing || var.document_processing_kms_prerequisite_enabled
+    error_message = "Document processing requires the reviewed KMS prerequisite to remain enabled."
+  }
+}
+
 variable "document_scan_mapping_enabled" {
   description = "Enable the SQS processor mapping after direct dark conformance."
   type        = bool

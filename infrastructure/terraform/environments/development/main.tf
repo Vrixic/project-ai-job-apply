@@ -73,6 +73,7 @@ module "platform" {
     var.candidate_document_cors_allowed_origins
   )
   deploy_document_processing                    = var.deploy_document_processing
+  document_processing_kms_prerequisite_enabled  = var.document_processing_kms_prerequisite_enabled
   document_scan_mapping_enabled                 = var.document_scan_mapping_enabled
   document_scan_event_rule_enabled              = var.document_scan_event_rule_enabled
   document_processor_artifact_s3_key            = var.document_processor_artifact_s3_key

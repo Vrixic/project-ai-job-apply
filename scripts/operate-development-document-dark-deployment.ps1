@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [ValidateSet("Plan", "Apply", "Verify")][string]$Action = "Verify",
+  [ValidateSet("Plan", "Apply", "Verify", "PlanPrerequisite", "ApplyPrerequisite", "VerifyPrerequisite")][string]$Action = "Verify",
   [string]$AwsProfile = "ai-job-apply-development-admin",
   [string]$Region = "us-east-2",
   [ValidatePattern("^[0-9]{12}$")][string]$ExpectedAccountId = "",
@@ -38,6 +38,10 @@ Usage:
     -BaselinePlanPath ZERO_CHANGE_PLAN -ReviewedBaselineSha256 BASELINE_SHA256 `
     -PublicationReceiptPath VERIFIED_RECEIPT -ReviewedReceiptSha256 RECEIPT_SHA256
 
+  .\scripts\operate-development-document-dark-deployment.ps1 -Action PlanPrerequisite `
+    -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
+    -BaselinePlanPath ZERO_CHANGE_PLAN -ReviewedBaselineSha256 BASELINE_SHA256
+
 The operator reconstructs all current deployment inputs from a checksum-reviewed zero-change
 baseline, overlays only the verified document Lambda publication, and forces all document
 processing triggers dark. Apply consumes only the exact checksum-reviewed saved plan.
@@ -49,9 +53,15 @@ if ($Region -cne "us-east-2") { throw "Development deployment is restricted to u
 if ($ExpectedAccountId -notmatch "^[0-9]{12}$" -or [string]::IsNullOrWhiteSpace($StateBucket)) {
   throw "The exact development account ID and encrypted state bucket are required."
 }
-foreach ($required in @($BaselinePlanPath, $ReviewedBaselineSha256, $PublicationReceiptPath, $ReviewedReceiptSha256)) {
+foreach ($required in @($BaselinePlanPath, $ReviewedBaselineSha256)) {
   if ([string]::IsNullOrWhiteSpace($required)) {
-    throw "A checksum-reviewed zero-change baseline and verified publication receipt are required."
+    throw "A checksum-reviewed zero-change baseline is required."
+  }
+}
+$isPrerequisiteAction = $Action -in @("PlanPrerequisite", "ApplyPrerequisite", "VerifyPrerequisite")
+if (-not $isPrerequisiteAction) {
+  foreach ($required in @($PublicationReceiptPath, $ReviewedReceiptSha256)) {
+    if ([string]::IsNullOrWhiteSpace($required)) { throw "A checksum-reviewed verified publication receipt is required." }
   }
 }
 
@@ -193,6 +203,7 @@ function Read-Baseline {
   }
   foreach ($name in @(Get-DevelopmentDocumentBooleanVariableNames)) {
     $property = $baseline.variables.PSObject.Properties[$name]
+    if ($null -eq $property -and $name -ceq "document_processing_kms_prerequisite_enabled") { continue }
     if ($null -eq $property) { throw "The reviewed baseline omits boolean variable '$name'." }
     $null = ConvertTo-ExactBoolean $property.Value.value "baseline $name"
   }
@@ -219,16 +230,17 @@ function Get-BoundaryValues {
 }
 
 function Set-BaselineVariables {
-  param([Parameter(Mandatory)][object]$Baseline)
+  param([Parameter(Mandatory)][object]$Baseline, [switch]$EnableDocumentKmsPrerequisite)
   $assignments = Get-TerraformVariableEnvironmentAssignments -Variables $Baseline.variables
   foreach ($entry in $assignments.GetEnumerator()) {
     [Environment]::SetEnvironmentVariable([string]$entry.Key, [string]$entry.Value, "Process")
   }
+  $env:TF_VAR_document_processing_kms_prerequisite_enabled = $(if ($EnableDocumentKmsPrerequisite) { "true" } else { "false" })
 }
 
 function Assert-BaselineCurrent {
-  param([Parameter(Mandatory)][object]$Baseline)
-  Set-BaselineVariables -Baseline $Baseline
+  param([Parameter(Mandatory)][object]$Baseline, [switch]$EnableDocumentKmsPrerequisite)
+  Set-BaselineVariables -Baseline $Baseline -EnableDocumentKmsPrerequisite:$EnableDocumentKmsPrerequisite
   $path = Join-Path $operatorRoot "baseline-current-$([guid]::NewGuid().ToString('N')).tfplan"
   try {
     & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m `
@@ -276,7 +288,7 @@ function Read-Receipt {
 
 function Set-DarkVariables {
   param([Parameter(Mandatory)][object]$Baseline, [Parameter(Mandatory)][object]$Receipt)
-  Set-BaselineVariables -Baseline $Baseline
+  Set-BaselineVariables -Baseline $Baseline -EnableDocumentKmsPrerequisite
   $processor = @($Receipt.artifacts | Where-Object { $_.artifactName -eq "document-processor-lambda" -and $_.suffix -eq "zip" })[0]
   $parser = @($Receipt.artifacts | Where-Object { $_.artifactName -eq "document-parser-lambda" -and $_.suffix -eq "zip" })[0]
   $env:TF_VAR_deploy_document_processing = "true"
@@ -450,7 +462,7 @@ function Assert-LiveDarkBoundary {
     [string]$mappings[0].EventSourceArn -cne [string]$state["module.platform.aws_sqs_queue.document_scan_results[0]"].arn -or
     [string]$mappings[0].FunctionArn -cne $processorAliasArn) { throw "The document queue mapping is not exactly disabled and bounded." }
   Assert-ExactStringSet $mappings[0].FunctionResponseTypes @("ReportBatchItemFailures") "mapping response types"
-  foreach ($ruleAddress in @("document_scan_results", "document_processing_reconciler")) {
+  foreach ($ruleAddress in @("document_scan_results", "document_processing_reconciler", "document_scan_tag_failure", "document_scan_plan_unhealthy")) {
     $rule = [string]$state["module.platform.aws_cloudwatch_event_rule.$ruleAddress[0]"].name
     $value = Invoke-AwsJson @("events", "describe-rule", "--name", $rule, "--output", "json")
     if ([string]$value.State -cne "DISABLED") { throw "A dark document-processing rule is enabled." }
@@ -461,14 +473,6 @@ function Assert-LiveDarkBoundary {
     if ($ruleAddress -eq "document_processing_reconciler" -and [string]$value.ScheduleExpression -cne [string]$expectedRule.schedule_expression) {
       throw "The reconciler schedule is not exact."
     }
-  }
-  foreach ($ruleAddress in @("document_scan_tag_failure", "document_scan_plan_unhealthy")) {
-    $rule = [string]$state["module.platform.aws_cloudwatch_event_rule.$ruleAddress[0]"].name
-    $value = Invoke-AwsJson @("events", "describe-rule", "--name", $rule, "--output", "json")
-    if ([string]$value.State -cne "ENABLED") { throw "A document security alert rule is not enabled." }
-    $expectedPattern = [string]$state["module.platform.aws_cloudwatch_event_rule.$ruleAddress[0]"].event_pattern
-    if ((ConvertTo-DeploymentCanonicalValue ($value.EventPattern | ConvertFrom-Json) -SortArrays) -cne
-      (ConvertTo-DeploymentCanonicalValue ($expectedPattern | ConvertFrom-Json) -SortArrays)) { throw "A security alert rule pattern is not exact." }
   }
   $queueDefinitions = @(
     @("document_scan_results", 345600, 360, [string]$state["module.platform.aws_sqs_queue.document_scan_dead_letter[0]"].arn),
@@ -541,7 +545,73 @@ $commit = Assert-CallerAndSource
 Initialize-Backend
 $null = New-Item -ItemType Directory -Path $operatorRoot -Force
 $baseline = Read-Baseline
-Assert-BaselineCurrent -Baseline $baseline
+$prerequisiteMetadataSuffix = ".document-kms-prerequisite.json"
+
+if ($isPrerequisiteAction) {
+  Set-BaselineVariables -Baseline $baseline -EnableDocumentKmsPrerequisite
+  if ($Action -eq "VerifyPrerequisite") {
+    $verifyPath = Join-Path $operatorRoot "verify-prerequisite-$([guid]::NewGuid().ToString('N')).tfplan"
+    try {
+      & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m `
+        "-out=$verifyPath" -detailed-exitcode | Out-Null
+      if ($LASTEXITCODE -eq 1) { throw "The KMS prerequisite verification plan failed." }
+      if ($LASTEXITCODE -eq 2) { throw "The KMS prerequisite is not at zero drift." }
+    } finally { if (Test-Path -LiteralPath $verifyPath) { Remove-Item -LiteralPath $verifyPath -Force } }
+    [pscustomobject]@{ Result = "verified"; Environment = "development"; Prerequisite = "document-kms"; Drift = $false } | ConvertTo-Json
+    exit 0
+  }
+  if ($Action -eq "PlanPrerequisite") {
+    if ([string]::IsNullOrWhiteSpace($PlanPath)) { $PlanPath = Join-Path $operatorRoot "kms-prerequisite-$(Get-Date -Format 'yyyyMMdd-HHmmss').tfplan" }
+    $resolved = Resolve-DeploymentPlanPath -Candidate $PlanPath -AllowedRoot $operatorRoot
+    if (Test-Path -LiteralPath $resolved) { throw "Refusing to overwrite an existing saved plan." }
+    try {
+      & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m "-out=$resolved" | Out-Null
+      if ($LASTEXITCODE -ne 0) { throw "The refresh-backed KMS prerequisite plan failed." }
+      $plan = Read-Plan -Path $resolved
+      Assert-DevelopmentDocumentKmsPrerequisiteVariables $baseline.variables $plan.variables
+      $null = Assert-DevelopmentDocumentKmsPrerequisitePlan $plan $ExpectedAccountId
+    } catch { if (Test-Path -LiteralPath $resolved) { Remove-Item -LiteralPath $resolved -Force }; throw }
+    $sha = (Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash.ToLowerInvariant()
+    [pscustomobject]@{
+      SchemaVersion = "1"; Operation = "development-document-kms-prerequisite"; AccountId = $ExpectedAccountId
+      StateBucket = $StateBucket; Commit = $commit; BaselineSha256 = $ReviewedBaselineSha256
+      PlanPath = $resolved; PlanSha256 = $sha; CreatedAt = (Get-Date).ToUniversalTime().ToString("o")
+    } | ConvertTo-Json | Set-Content -LiteralPath "$resolved$prerequisiteMetadataSuffix" -Encoding utf8
+    [pscustomobject]@{ Result = "review-required"; Updates = 1; PlanPath = $resolved; PlanSha256 = $sha
+      ApprovalCommand = "Apply reviewed development document KMS prerequisite plan $sha" } | ConvertTo-Json
+    exit 0
+  }
+  if ([string]::IsNullOrWhiteSpace($PlanPath) -or [string]::IsNullOrWhiteSpace($ReviewedPlanSha256)) {
+    throw "ApplyPrerequisite requires the exact saved plan and reviewed SHA-256."
+  }
+  $resolved = Resolve-DeploymentPlanPath -Candidate $PlanPath -AllowedRoot $operatorRoot -MustExist
+  $actual = (Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($actual -cne $ReviewedPlanSha256) { throw "The KMS prerequisite plan checksum does not match review." }
+  $metadataPath = "$resolved$prerequisiteMetadataSuffix"
+  if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) { throw "KMS prerequisite plan metadata is missing." }
+  $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+  Assert-ReviewedPlanMetadata $metadata @{
+    SchemaVersion = "1"; Operation = "development-document-kms-prerequisite"; AccountId = $ExpectedAccountId
+    StateBucket = $StateBucket; Commit = $commit; BaselineSha256 = $ReviewedBaselineSha256
+    PlanPath = $resolved; PlanSha256 = $ReviewedPlanSha256
+  }
+  $plan = Read-Plan -Path $resolved
+  Assert-DevelopmentDocumentKmsPrerequisiteVariables $baseline.variables $plan.variables
+  $null = Assert-DevelopmentDocumentKmsPrerequisitePlan $plan $ExpectedAccountId
+  & terraform "-chdir=$terraformDirectory" apply -input=false -lock-timeout=5m $resolved
+  if ($LASTEXITCODE -ne 0) { throw "The exact reviewed KMS prerequisite plan failed to apply." }
+  Set-BaselineVariables -Baseline $baseline -EnableDocumentKmsPrerequisite
+  $verifyPath = Join-Path $operatorRoot "verify-prerequisite-$([guid]::NewGuid().ToString('N')).tfplan"
+  try {
+    & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m `
+      "-out=$verifyPath" -detailed-exitcode | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "The applied KMS prerequisite did not converge to zero drift." }
+  } finally { if (Test-Path -LiteralPath $verifyPath) { Remove-Item -LiteralPath $verifyPath -Force } }
+  [pscustomobject]@{ Result = "applied-and-verified"; Environment = "development"; Prerequisite = "document-kms"; Drift = $false } | ConvertTo-Json
+  exit 0
+}
+
+Assert-BaselineCurrent -Baseline $baseline -EnableDocumentKmsPrerequisite
 $receipt = Read-Receipt -Commit $commit
 Set-DarkVariables -Baseline $baseline -Receipt $receipt
 
@@ -570,7 +640,7 @@ if ($Action -eq "Plan") {
     ReceiptSha256 = $ReviewedReceiptSha256; PlanPath = $resolved; PlanSha256 = $sha
     CreatedAt = (Get-Date).ToUniversalTime().ToString("o")
   } | ConvertTo-Json | Set-Content -LiteralPath "$resolved$metadataSuffix" -Encoding utf8
-  [pscustomobject]@{ Result = "review-required"; Creates = 39; Updates = 6; PlanPath = $resolved; PlanSha256 = $sha
+  [pscustomobject]@{ Result = "review-required"; Creates = 39; Updates = 5; PlanPath = $resolved; PlanSha256 = $sha
     ApprovalCommand = "Apply reviewed development document dark plan $sha" } | ConvertTo-Json
   exit 0
 }

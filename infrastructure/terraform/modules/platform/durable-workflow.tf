@@ -88,7 +88,7 @@ data "aws_iam_policy_document" "profile_readiness_database_handler" {
     sid       = "DecryptOwnedData"
     effect    = "Allow"
     actions   = ["kms:Decrypt"]
-    resources = [aws_kms_key.platform.arn]
+    resources = [local.platform_kms_key_arn]
   }
 
   statement {
@@ -211,7 +211,7 @@ data "aws_iam_policy_document" "profile_readiness_durable" {
       "kms:Decrypt",
       "kms:GenerateDataKey"
     ]
-    resources = [aws_kms_key.platform.arn]
+    resources = [local.platform_kms_key_arn]
   }
 
   statement {
