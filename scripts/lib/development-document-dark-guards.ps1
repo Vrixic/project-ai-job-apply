@@ -1,5 +1,28 @@
 Set-StrictMode -Version Latest
 
+function ConvertTo-ExactBoolean {
+  param(
+    [Parameter(Mandatory)][AllowNull()][object]$Value,
+    [string]$Label = "boolean"
+  )
+  if ($Value -is [bool]) { return $Value }
+  if ($Value -is [string]) {
+    if ($Value -ceq "true") { return $true }
+    if ($Value -ceq "false") { return $false }
+  }
+  throw "$Label must be a runtime boolean or the exact lowercase string 'true' or 'false'."
+}
+
+function Get-DevelopmentDocumentBooleanVariableNames {
+  return @(
+    "database_performance_insights", "deploy_applications", "deploy_document_intake",
+    "deploy_document_processing", "deploy_gateway_lambda", "deploy_profile_readiness_durable",
+    "deploy_serverless_outbox", "document_scan_event_rule_enabled", "document_scan_mapping_enabled",
+    "enable_container_insights", "enable_redis", "high_availability",
+    "private_application_networking", "serverless_runtime_enabled"
+  )
+}
+
 function Get-DevelopmentDocumentDarkExpectedActions {
   $creates = @(
     "module.platform.aws_cloudwatch_event_rule.document_processing_reconciler[0]",
@@ -112,6 +135,7 @@ function Assert-DevelopmentDocumentDarkVariables {
   }
   $baselineProperties = @($BaselineVariables.PSObject.Properties)
   $planProperties = @($PlanVariables.PSObject.Properties)
+  $booleanNames = @(Get-DevelopmentDocumentBooleanVariableNames)
   if ($baselineProperties.Count -ne $planProperties.Count) {
     throw "The dark plan variable set differs from the accepted baseline."
   }
@@ -120,15 +144,23 @@ function Assert-DevelopmentDocumentDarkVariables {
     $planned = $PlanVariables.PSObject.Properties[$name]
     if ($null -eq $planned) { throw "The dark plan omits baseline variable '$name'." }
     $expected = if ($overlay.ContainsKey($name)) { $overlay[$name] } else { $property.Value.value }
-    $actualCanonical = ConvertTo-DeploymentCanonicalValue -Value $planned.Value.value
-    $expectedCanonical = ConvertTo-DeploymentCanonicalValue -Value $expected
+    if ($name -in $booleanNames) {
+      $actualCanonical = ConvertTo-DeploymentCanonicalValue -Value `
+        (ConvertTo-ExactBoolean -Value $planned.Value.value -Label "planned $name")
+      $expectedCanonical = ConvertTo-DeploymentCanonicalValue -Value `
+        (ConvertTo-ExactBoolean -Value $expected -Label "baseline $name")
+    }
+    else {
+      $actualCanonical = ConvertTo-DeploymentCanonicalValue -Value $planned.Value.value
+      $expectedCanonical = ConvertTo-DeploymentCanonicalValue -Value $expected
+    }
     if ($actualCanonical -cne $expectedCanonical) {
       throw "The dark plan changed unapproved variable '$name'."
     }
   }
-  if (-not $PlanVariables.deploy_document_processing.value -or
-    [bool]$PlanVariables.document_scan_mapping_enabled.value -or
-    [bool]$PlanVariables.document_scan_event_rule_enabled.value) {
+  if (-not (ConvertTo-ExactBoolean $PlanVariables.deploy_document_processing.value "deploy_document_processing") -or
+    (ConvertTo-ExactBoolean $PlanVariables.document_scan_mapping_enabled.value "document_scan_mapping_enabled") -or
+    (ConvertTo-ExactBoolean $PlanVariables.document_scan_event_rule_enabled.value "document_scan_event_rule_enabled")) {
     throw "Document processing must be deployed dark with both processing triggers disabled."
   }
 }
@@ -490,7 +522,7 @@ function Assert-ExactDocumentAlarmSet {
     throw "The exact document alarm set is not present."
   }
   foreach ($alarm in $Alarms) {
-    if (-not [bool]$alarm.ActionsEnabled -or [string]$alarm.StateValue -cne "OK") { throw "A document alarm is not actionable and OK." }
+    if (-not (ConvertTo-ExactBoolean $alarm.ActionsEnabled "alarm ActionsEnabled") -or [string]$alarm.StateValue -cne "OK") { throw "A document alarm is not actionable and OK." }
     Assert-ExactStringSet $alarm.AlarmActions @($TopicArn) "alarm actions"
     Assert-ExactStringSet $alarm.OKActions @($TopicArn) "alarm recovery actions"
   }
@@ -516,7 +548,7 @@ function Assert-DevelopmentDocumentDarkPlan {
   $mapping = @($changes | Where-Object address -eq "module.platform.aws_lambda_event_source_mapping.document_scan_results[0]")[0]
   if ([string]$scanRule.change.after.state -cne "DISABLED" -or
     [string]$reconciler.change.after.state -cne "DISABLED" -or
-    [bool]$mapping.change.after.enabled) {
+    (ConvertTo-ExactBoolean $mapping.change.after.enabled "document mapping enabled")) {
     throw "The scan rule, queue mapping, and reconciler must all be disabled in the dark plan."
   }
   Assert-ApprovedPolicyUpdateSemantics -Changes $changes -AccountId $AccountId

@@ -135,16 +135,17 @@ function Initialize-Backend {
   $versioning = Invoke-AwsJson @("s3api", "get-bucket-versioning", "--bucket", $StateBucket, "--output", "json")
   $public = Invoke-AwsJson @("s3api", "get-public-access-block", "--bucket", $StateBucket, "--output", "json")
   if ([string]$versioning.Status -cne "Enabled" -or
-    -not [bool]$public.PublicAccessBlockConfiguration.BlockPublicAcls -or
-    -not [bool]$public.PublicAccessBlockConfiguration.IgnorePublicAcls -or
-    -not [bool]$public.PublicAccessBlockConfiguration.BlockPublicPolicy -or
-    -not [bool]$public.PublicAccessBlockConfiguration.RestrictPublicBuckets) {
+    -not (ConvertTo-ExactBoolean $public.PublicAccessBlockConfiguration.BlockPublicAcls "BlockPublicAcls") -or
+    -not (ConvertTo-ExactBoolean $public.PublicAccessBlockConfiguration.IgnorePublicAcls "IgnorePublicAcls") -or
+    -not (ConvertTo-ExactBoolean $public.PublicAccessBlockConfiguration.BlockPublicPolicy "BlockPublicPolicy") -or
+    -not (ConvertTo-ExactBoolean $public.PublicAccessBlockConfiguration.RestrictPublicBuckets "RestrictPublicBuckets")) {
     throw "The state bucket is not versioned and private."
   }
   $encryption = Invoke-AwsJson @("s3api", "get-bucket-encryption", "--bucket", $StateBucket, "--output", "json")
   $rules = @($encryption.ServerSideEncryptionConfiguration.Rules | Where-Object {
       $_.ApplyServerSideEncryptionByDefault.SSEAlgorithm -eq "aws:kms" -and
-      $_.ApplyServerSideEncryptionByDefault.KMSMasterKeyID -and [bool]$_.BucketKeyEnabled
+      $_.ApplyServerSideEncryptionByDefault.KMSMasterKeyID -and
+      (ConvertTo-ExactBoolean $_.BucketKeyEnabled "state bucket BucketKeyEnabled")
     })
   if ($rules.Count -ne 1) { throw "The state bucket must use one KMS default with Bucket Key enabled." }
   $kmsArn = [string]$rules[0].ApplyServerSideEncryptionByDefault.KMSMasterKeyID
@@ -154,7 +155,8 @@ function Initialize-Backend {
   }
   $head = Invoke-AwsJson @("s3api", "head-object", "--bucket", $StateBucket, "--key", "platform.tfstate", "--output", "json")
   if ([long]$head.ContentLength -le 0 -or [string]::IsNullOrWhiteSpace([string]$head.VersionId) -or
-    [string]$head.ServerSideEncryption -cne "aws:kms" -or -not [bool]$head.BucketKeyEnabled) {
+    [string]$head.ServerSideEncryption -cne "aws:kms" -or
+    -not (ConvertTo-ExactBoolean $head.BucketKeyEnabled "state object BucketKeyEnabled")) {
     throw "The remote platform state object is not nonempty, versioned, and KMS encrypted."
   }
   $objectKey = Invoke-AwsJson @("kms", "describe-key", "--key-id", [string]$head.SSEKMSKeyId, "--output", "json")
@@ -189,10 +191,15 @@ function Read-Baseline {
   if (($names -join "|") -cne (@($allowedVariableNames | Sort-Object) -join "|")) {
     throw "The reviewed baseline does not contain the exact approved development variable set."
   }
-  if (-not [bool]$baseline.variables.deploy_document_intake.value -or
-    [bool]$baseline.variables.deploy_document_processing.value -or
-    [bool]$baseline.variables.document_scan_mapping_enabled.value -or
-    [bool]$baseline.variables.document_scan_event_rule_enabled.value -or
+  foreach ($name in @(Get-DevelopmentDocumentBooleanVariableNames)) {
+    $property = $baseline.variables.PSObject.Properties[$name]
+    if ($null -eq $property) { throw "The reviewed baseline omits boolean variable '$name'." }
+    $null = ConvertTo-ExactBoolean $property.Value.value "baseline $name"
+  }
+  if (-not (ConvertTo-ExactBoolean $baseline.variables.deploy_document_intake.value "deploy_document_intake") -or
+    (ConvertTo-ExactBoolean $baseline.variables.deploy_document_processing.value "deploy_document_processing") -or
+    (ConvertTo-ExactBoolean $baseline.variables.document_scan_mapping_enabled.value "document_scan_mapping_enabled") -or
+    (ConvertTo-ExactBoolean $baseline.variables.document_scan_event_rule_enabled.value "document_scan_event_rule_enabled") -or
     [string]$baseline.variables.document_parser_version.value -cne "resume-parser-v1" -or
     [string]$baseline.variables.gateway_lambda_extension_layer_arn.value -cne $extensionLayerArn) {
     throw "The baseline is not the accepted intake-only runtime or exact accepted extension-layer version."
@@ -205,16 +212,20 @@ function Get-BoundaryValues {
   $stateRaw = & terraform "-chdir=$terraformDirectory" show -json 2>$null
   if ($LASTEXITCODE -ne 0) { throw "Terraform state could not be inspected." }
   $state = $stateRaw | ConvertFrom-Json
-  $kms = @($state.values.root_module.child_modules.resources | Where-Object address -eq "module.platform.aws_kms_key.platform")
-  if ($kms.Count -ne 1 -or [string]::IsNullOrWhiteSpace($artifactBucket)) { throw "Terraform-owned artifact/KMS boundary is unavailable." }
-  return [pscustomobject]@{ ArtifactBucket = $artifactBucket; PlatformKmsArn = [string]$kms[0].values.arn }
+  $resources = Get-TerraformStateResourceMap -RootModule $state.values.root_module
+  $kms = $resources["module.platform.aws_kms_key.platform"]
+  if ($null -eq $kms -or [string]::IsNullOrWhiteSpace($artifactBucket)) { throw "Terraform-owned artifact/KMS boundary is unavailable." }
+  return [pscustomobject]@{ ArtifactBucket = $artifactBucket; PlatformKmsArn = [string]$kms.arn }
 }
 
 function Set-BaselineVariables {
   param([Parameter(Mandatory)][object]$Baseline)
+  $booleanNames = @(Get-DevelopmentDocumentBooleanVariableNames)
   foreach ($property in @($Baseline.variables.PSObject.Properties)) {
     $value = $property.Value.value
-    $serialized = if ($value -is [bool]) { $value.ToString().ToLowerInvariant() }
+    $serialized = if ($property.Name -in $booleanNames) {
+      (ConvertTo-ExactBoolean $value "baseline $($property.Name)").ToString().ToLowerInvariant()
+    }
       elseif ($value -is [string]) { $value }
       else { $value | ConvertTo-Json -Compress -Depth 20 }
     [Environment]::SetEnvironmentVariable("TF_VAR_$($property.Name)", [string]$serialized, "Process")
@@ -505,7 +516,7 @@ function Assert-LiveDarkBoundary {
     $expectedEndpoint = $state[$address]
     $expectedType = if ($service -eq "s3") { "Gateway" } else { "Interface" }
     if ([string]$matching[0].VpcEndpointType -cne $expectedType -or [string]$matching[0].VpcId -cne $vpcId -or
-      ($service -ne "s3" -and -not [bool]$matching[0].PrivateDnsEnabled) -or
+      ($service -ne "s3" -and -not (ConvertTo-ExactBoolean $matching[0].PrivateDnsEnabled "$service PrivateDnsEnabled")) -or
       (ConvertTo-DeploymentCanonicalValue ($matching[0].PolicyDocument | ConvertFrom-Json) -SortArrays) -cne
       (ConvertTo-DeploymentCanonicalValue ($expectedEndpoint.policy | ConvertFrom-Json) -SortArrays)) {
       throw "The $service VPC endpoint shape or policy is not exact."
