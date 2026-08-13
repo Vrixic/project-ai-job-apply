@@ -95,8 +95,24 @@ if ((ConvertTo-TerraformCompositeCanonicalValue $serializedTuple) -cne
   throw "Equivalent serialized and structured tuples do not compare canonically."
 }
 if ((ConvertTo-DevelopmentDocumentComparableVariableValue gateway_lambda_reserved_concurrency "2" -SerializedBaseline) -cne
-  (ConvertTo-DevelopmentDocumentComparableVariableValue gateway_lambda_reserved_concurrency 2)) {
+  (ConvertTo-DevelopmentDocumentComparableVariableValue gateway_lambda_reserved_concurrency ([int64]2))) {
   throw "Equivalent serialized and structured numeric values do not compare canonically."
+}
+if ((ConvertTo-DevelopmentDocumentComparableVariableValue profile_readiness_execution_timeout_seconds "30.0" -SerializedBaseline) -cne
+  (ConvertTo-DevelopmentDocumentComparableVariableValue profile_readiness_execution_timeout_seconds ([int64]30))) {
+  throw "Equivalent timeout number representations do not compare canonically."
+}
+if ((ConvertTo-DevelopmentDocumentComparableVariableValue profile_readiness_retention_days "14" -SerializedBaseline) -cne
+  (ConvertTo-DevelopmentDocumentComparableVariableValue profile_readiness_retention_days ([decimal]14.0))) {
+  throw "Equivalent retention number representations do not compare canonically."
+}
+$baselineNumber = ConvertTo-DevelopmentDocumentComparableVariableValue gateway_lambda_reserved_concurrency "2" -SerializedBaseline
+$freshNumber = ConvertTo-DevelopmentDocumentComparableVariableValue gateway_lambda_reserved_concurrency ([int64]3)
+if ($baselineNumber -ceq $freshNumber) { throw "A semantically different Terraform number compared equal." }
+foreach ($invalidNumber in @("02", "2e0", [double]::NaN, [double]::PositiveInfinity, $false)) {
+  $rejected = $false
+  try { $null = ConvertTo-TerraformCanonicalNumber $invalidNumber "invalid number" } catch { $rejected = $true }
+  if (-not $rejected) { throw "An ambiguous or non-finite Terraform number was accepted." }
 }
 if ((ConvertTo-DevelopmentDocumentComparableVariableValue oidc_audience '["literal-string"]' -SerializedBaseline) -cne
   (ConvertTo-DevelopmentDocumentComparableVariableValue oidc_audience '["literal-string"]')) {
@@ -280,11 +296,13 @@ $baselineVariables = [pscustomobject]@{
   document_parser_artifact_base64sha256 = [pscustomobject]@{ value = "" }
   document_processor_extension_layer_arn = [pscustomobject]@{ value = "" }
   candidate_document_cors_allowed_origins = [pscustomobject]@{ value = '["https://app.example"]' }
+  gateway_lambda_reserved_concurrency = [pscustomobject]@{ value = "2" }
   oidc_audience = [pscustomobject]@{ value = "same" }
 }
 $planVariables = $baselineVariables | ConvertTo-Json -Depth 10 | ConvertFrom-Json
 $planVariables.deploy_document_processing.value = "true"
 $planVariables.candidate_document_cors_allowed_origins.value = @("https://app.example")
+$planVariables.gateway_lambda_reserved_concurrency.value = [int64]2
 $planVariables.document_processor_artifact_s3_key.value = "lambda/documents/$source/$processorSha/document-processor-lambda.zip"
 $planVariables.document_processor_artifact_s3_object_version.value = "version-zip"
 $planVariables.document_processor_artifact_sha256.value = $processorSha
@@ -300,6 +318,11 @@ $differentCompositeVariables.candidate_document_cors_allowed_origins.value = @("
 $rejected = $false
 try { Assert-DevelopmentDocumentDarkVariables -BaselineVariables $baselineVariables -PlanVariables $differentCompositeVariables -Receipt $receipt } catch { $rejected = $true }
 if (-not $rejected) { throw "A semantically different composite variable was accepted." }
+$differentNumericVariables = $planVariables | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+$differentNumericVariables.gateway_lambda_reserved_concurrency.value = [int64]3
+$rejected = $false
+try { Assert-DevelopmentDocumentDarkVariables -BaselineVariables $baselineVariables -PlanVariables $differentNumericVariables -Receipt $receipt } catch { $rejected = $true }
+if (-not $rejected) { throw "A semantically different numeric variable was accepted." }
 $planVariables.oidc_audience.value = "changed"
 $rejected = $false
 try { Assert-DevelopmentDocumentDarkVariables -BaselineVariables $baselineVariables -PlanVariables $planVariables -Receipt $receipt } catch { $rejected = $true }
@@ -375,4 +398,4 @@ if ($documentSource -notmatch "DenyQuarantineReadsWithoutCleanMalwareTag" -or
   throw "The semantic guard is detached from current document isolation source."
 }
 
-Write-Output "Development document dark guard tests passed: 44"
+Write-Output "Development document dark guard tests passed: 54"
