@@ -421,7 +421,8 @@ function Get-DevelopmentDocumentBaselineShape {
   param(
     [Parameter(Mandatory)][object]$Variables,
     [Parameter(Mandatory)][string]$RequestedStage,
-    [Parameter(Mandatory)][string]$AppliedStage
+    [Parameter(Mandatory)][string]$AppliedStage,
+    [Parameter(Mandatory)][ValidateSet("Plan", "Apply", "Verify")][string]$Operation
   )
 
   $legacyName = "document_processing_kms_prerequisite_enabled"
@@ -430,8 +431,12 @@ function Get-DevelopmentDocumentBaselineShape {
   $current = @($allowedVariableNames | Sort-Object -Unique)
   $actual = @($Variables.PSObject.Properties | ForEach-Object Name | Sort-Object -Unique)
   if (($actual -join "|") -ceq ($current -join "|")) { return "current" }
-  if ($RequestedStage -cne "parser-dark" -or $AppliedStage -cne "kms-prerequisite") {
-    throw "A historical baseline is accepted only for the initial ParserDark transition."
+  $isInitialParserTransition = $RequestedStage -ceq "parser-dark" -and $AppliedStage -ceq "kms-prerequisite" -and
+    $Operation -in @("Plan", "Apply")
+  $isAppliedParserVerification = $RequestedStage -ceq "parser-dark" -and $AppliedStage -ceq "parser-dark" -and
+    $Operation -ceq "Verify"
+  if (-not $isInitialParserTransition -and -not $isAppliedParserVerification) {
+    throw "A historical baseline is accepted only for the initial ParserDark transition or exact applied ParserDark verification."
   }
   if (($actual -join "|") -ceq ($legacy -join "|")) {
     $value = ConvertTo-ExactBoolean $Variables.PSObject.Properties[$legacyName].Value.value `
@@ -508,6 +513,7 @@ function Read-Baseline {
   param(
     [Parameter(Mandatory)][string]$RequestedStage,
     [Parameter(Mandatory)][string]$AppliedStage,
+    [Parameter(Mandatory)][ValidateSet("Plan", "Apply", "Verify")][string]$Operation,
     [AllowNull()][object]$Receipt
   )
   $resolved = Resolve-InputPath -Candidate $BaselinePlanPath -MustExist
@@ -519,7 +525,7 @@ function Read-Baseline {
     throw "The reviewed baseline is not a Terraform 1.9.8 zero-change plan."
   }
   $shape = Get-DevelopmentDocumentBaselineShape -Variables $baseline.variables `
-    -RequestedStage $RequestedStage -AppliedStage $AppliedStage
+    -RequestedStage $RequestedStage -AppliedStage $AppliedStage -Operation $Operation
   if ($shape -ceq "current") {
     if ($AppliedStage -notin @("parser-dark", "complete-dark") -or $null -eq $Receipt) {
       throw "A current-shape retained baseline requires an applied document runtime and verified receipt."
@@ -1255,7 +1261,7 @@ $null = New-Item -ItemType Directory -Path $operatorRoot -Force
 $appliedStage = Get-AppliedDocumentStage
 Assert-MonotonicDocumentStage -Applied $appliedStage -Requested $stageValue -Operation $Action
 $receipt = if ($Stage -ceq "KmsPrerequisite") { $null } else { Read-Receipt -Commit $releaseCommit }
-$baseline = Read-Baseline -RequestedStage $stageValue -AppliedStage $appliedStage -Receipt $receipt
+$baseline = Read-Baseline -RequestedStage $stageValue -AppliedStage $appliedStage -Operation $Action -Receipt $receipt
 $parserQualifiedArn = if ($Stage -ceq "CompleteDark") { Get-AppliedParserQualifiedArn } else { "" }
 
 if ($Action -ceq "Verify") {
