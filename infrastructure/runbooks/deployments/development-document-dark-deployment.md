@@ -139,6 +139,35 @@ artifacts while preserving the exact older numeric parser-version ARN used by th
 later `CompleteDark` verification proves that pinned immutable version remains healthy, the
 current parser alias still matches the current receipt, and no processing trigger is active.
 
+If the exact `a6d0fba09082b8bc61ee7b604ee1d5c47bd71624` CompleteDark apply completed but its
+post-apply inventory verification stopped before retaining a baseline, recover with `Verify` only.
+The recovery accepts only the checksum-reviewed schema-3/4 ParserDark baseline whose stored
+release/operator chain is `d0e55de86edfa6b5f655f5631bb1741d6c5b5ac8` to
+`cd8bc47fd89239c5e224ccdd1baff097d13c5bf7`, state lineage
+`472ef790-b249-45ec-817f-718005980d9e`, and serial `103`; live CompleteDark state must be the same
+lineage at serial `106`. Supply both independently reviewed deltas: deployed release `a6d0fba` to
+current operator, and retained-baseline operator `cd8bc47` to current operator. The sidecar's
+stored `d0e55de` to `cd8bc47` delta remains independently recomputed. Plan, Apply, ParserDark,
+different state serials, or any other historical baseline cannot use this exception.
+
+```powershell
+.\scripts\operate-development-document-dark-deployment.ps1 -Action Verify -Stage CompleteDark `
+  -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
+  -ReleaseSourceSha a6d0fba09082b8bc61ee7b604ee1d5c47bd71624 `
+  -ReviewedOperatorDeltaSha256 REVIEWED_A6_TO_CURRENT_OPERATOR_DELTA `
+  -ReviewedBaselineToOperatorDeltaSha256 REVIEWED_CD8_TO_CURRENT_OPERATOR_DELTA `
+  -BaselinePlanPath RETAINED_PARSER_DARK_BASELINE -ReviewedBaselineSha256 BASELINE_SHA256 `
+  -ReviewedBaselineMetadataSha256 BASELINE_METADATA_SHA256 `
+  -PublicationReceiptPath DEPLOYED_A6_RECEIPT -ReviewedReceiptSha256 CURRENT_RECEIPT_SHA256
+```
+
+Recovery derives the exact old numeric parser-version pin from the applied processor state, proves
+that immutable version still matches the retained ParserDark artifact, revalidates the current
+parser and processor artifacts from the deployed receipt, and keeps every processing trigger
+disabled. Success emits a normal current CompleteDark schema-3 zero-drift baseline at serial
+`106`, binding release `a6d0fba`, the current operator and release-to-operator delta, the current
+receipt, and the recovered old parser-version pin. Failed retention removes both new artifacts.
+
 The optional metadata argument is omitted only for the checksum-reviewed historical intake
 baseline used by the initial `KmsPrerequisite` to `ParserDark` transition. Every current-shape
 retained baseline requires `ReviewedBaselineMetadataSha256`; the operator hashes the adjacent

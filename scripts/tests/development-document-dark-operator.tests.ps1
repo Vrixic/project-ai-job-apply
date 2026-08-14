@@ -26,6 +26,8 @@ foreach ($required in @(
     'ReviewedBaselineToOperatorDeltaSha256', 'Assert-CompleteDarkTransitionBaselineMetadata',
     'ParserSourceTransition = [bool]$parserSourceTransition',
     'Assert-LivePinnedParserVersion', 'MustMatchBaselineArtifact',
+    'Assert-CompleteDarkVerifyRecoveryBaselineMetadata', 'Get-AppliedProcessorParserQualifiedArn',
+    '-PinnedParserMatchesBaselineArtifact:$completeDarkVerifyRecovery',
     '-Retain:($Stage -ceq "CompleteDark")',
     '$result.BaselineMetadataSha256 = $postApplyBaseline.MetadataSha256',
     'Plan and Apply require the exact current release', 'SchemaVersion = "2"', '$planMetadata.Commit = $operatorCommit'
@@ -75,6 +77,190 @@ $compatibilityFunctions = @($ast.FindAll({
     }, $true))
 if ($compatibilityFunctions.Count -ne 5) { throw "The retained baseline compatibility guards must each be defined once." }
 foreach ($function in $compatibilityFunctions | Sort-Object { $_.Extent.StartOffset }) { Invoke-Expression $function.Extent.Text }
+
+$inventoryFunctions = @($ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+      $node.Name -ceq "Get-LiveDocumentStageInventory"
+    }, $true))
+if ($inventoryFunctions.Count -ne 1) { throw "The live document inventory must be defined exactly once." }
+Invoke-Expression $inventoryFunctions[0].Extent.Text
+
+$ExpectedAccountId = "111122223333"
+$Region = "us-east-2"
+$processorName = "ai-job-apply-development-document-processor"
+$processorArn = "arn:aws:lambda:${Region}:${ExpectedAccountId}:function:$processorName"
+$processorAliasArn = "${processorArn}:development"
+$script:testProcessorExists = $true
+$script:testProcessorMappings = @()
+$script:testInventoryMappingQueries = 0
+$script:testLaterStageGrantCount = 3
+
+function Invoke-AwsJson {
+  param([Parameter(Mandatory)][string[]]$Arguments)
+  $signature = $Arguments -join " "
+  switch -Regex ($signature) {
+    '^lambda list-functions --output json$' {
+      return [pscustomobject]@{ Functions = @($(if ($script:testProcessorExists) {
+              [pscustomobject]@{ FunctionName = $processorName; FunctionArn = $processorArn }
+            })) }
+    }
+    '^lambda list-event-source-mappings --output json$' {
+      $script:testInventoryMappingQueries++
+      return [pscustomobject]@{ EventSourceMappings = @($script:testProcessorMappings) }
+    }
+    '^lambda list-event-source-mappings .*--function-name' {
+      throw "The live inventory used Lambda's function filter instead of enumerating all mappings."
+    }
+    '^lambda list-aliases --function-name ai-job-apply-development-document-processor --output json$' {
+      return [pscustomobject]@{ Aliases = @([pscustomobject]@{ Name = "development"; AliasArn = $processorAliasArn }) }
+    }
+    '^lambda get-policy --function-name ai-job-apply-development-document-processor --qualifier development --output json$' {
+      return [pscustomobject]@{ Policy = ([pscustomobject]@{
+            Statement = @([pscustomobject]@{ Sid = "AllowExactDocumentReconcilerRule" })
+          } | ConvertTo-Json -Compress) }
+    }
+    '^events list-targets-by-rule --rule ai-job-apply-development-document-processing-reconciler --output json$' {
+      return [pscustomobject]@{ Targets = @($(if ($script:testProcessorExists) {
+              [pscustomobject]@{ Id = "document-processing-reconciler" }
+            })) }
+    }
+    '^ec2 describe-vpc-endpoints --filters Name=vpc-id,Values=vpc-fixture --output json$' {
+      $endpoints = if ($script:testProcessorExists) {
+        @(
+          [pscustomobject]@{ ServiceName = "com.amazonaws.us-east-2.sts"; PolicyDocument = '{"Statement":[]}' },
+          [pscustomobject]@{ ServiceName = "com.amazonaws.us-east-2.sqs"; PolicyDocument = '{"Statement":[]}' },
+          [pscustomobject]@{ ServiceName = "com.amazonaws.us-east-2.lambda"; PolicyDocument = '{"Statement":[]}' },
+          [pscustomobject]@{ ServiceName = "com.amazonaws.us-east-2.secretsmanager"; PolicyDocument = '{"Statement":[]}' }
+        )
+      }
+      else { @() }
+      return [pscustomobject]@{ VpcEndpoints = $endpoints }
+    }
+    '^iam list-role-policies --role-name ai-job-apply-development-document-processor --output json$' {
+      return [pscustomobject]@{ PolicyNames = @($(if ($script:testProcessorExists) { "document-processor-runtime" })) }
+    }
+    default { throw "Unexpected live-inventory AWS fixture call '$signature'." }
+  }
+}
+
+function Get-DevelopmentDocumentLaterStageEndpointGrantCount {
+  param([object[]]$Policies, [string]$AccountId)
+  return $script:testLaterStageGrantCount
+}
+
+$inventoryState = @{
+  "module.platform.aws_cloudwatch_event_rule.document_processing_reconciler[0]" = [pscustomobject]@{
+    name = "ai-job-apply-development-document-processing-reconciler"
+  }
+  "module.platform.aws_vpc.this" = [pscustomobject]@{ id = "vpc-fixture" }
+}
+$requiredParserStateAddresses = @(
+  "module.platform.aws_iam_role.document_processor[0]",
+  "module.platform.aws_iam_role.document_parser[0]",
+  "module.platform.aws_iam_role.document_parser_object_access[0]",
+  "module.platform.aws_lambda_alias.document_parser[0]",
+  "module.platform.aws_lambda_function.document_parser[0]",
+  "module.platform.aws_vpc_endpoint.candidate_documents_s3[0]"
+)
+$completeStateAddresses = @($requiredParserStateAddresses + @(
+    "module.platform.aws_cloudwatch_event_target.document_processing_reconciler[0]",
+    "module.platform.aws_iam_role_policy.document_processor[0]",
+    "module.platform.aws_lambda_alias.document_processor[0]",
+    "module.platform.aws_lambda_event_source_mapping.document_scan_results[0]",
+    "module.platform.aws_lambda_function.document_processor[0]",
+    "module.platform.aws_lambda_permission.document_processing_reconciler[0]",
+    "module.platform.aws_vpc_endpoint.sts[0]"
+  ))
+
+function Get-TestLiveDocumentInventory([object[]]$Mappings, [bool]$ProcessorExists = $true) {
+  $script:testProcessorExists = $ProcessorExists
+  $script:testProcessorMappings = @($Mappings)
+  $script:testLaterStageGrantCount = if ($ProcessorExists) { 3 } else { 0 }
+  $script:testInventoryMappingQueries = 0
+  $inventory = Get-LiveDocumentStageInventory -State $inventoryState
+  if ($script:testInventoryMappingQueries -ne 1) {
+    throw "The live inventory did not enumerate all Lambda event-source mappings exactly once."
+  }
+  return $inventory
+}
+
+function Assert-TestCompleteInventoryRejected([object[]]$Mappings, [string]$Label) {
+  $inventory = Get-TestLiveDocumentInventory -Mappings $Mappings
+  $rejected = $false
+  try {
+    Assert-DevelopmentDocumentStageResourceInventory -Stage "complete-dark" `
+      -StateAddresses $completeStateAddresses -LiveInventory $inventory
+  } catch { $rejected = $true }
+  if (-not $rejected) { throw "The CompleteDark live inventory accepted '$Label'." }
+}
+
+$expectedAliasMapping = [pscustomobject]@{ FunctionArn = $processorAliasArn }
+$unrelatedMapping = [pscustomobject]@{
+  FunctionArn = "arn:aws:lambda:${Region}:${ExpectedAccountId}:function:unrelated:development"
+}
+$shadowPrefixMapping = [pscustomobject]@{ FunctionArn = "${processorArn}-shadow:development" }
+foreach ($acceptedMappings in @(
+    [pscustomobject]@{ Label = "expected development alias only"; Mappings = @($expectedAliasMapping) },
+    [pscustomobject]@{ Label = "unrelated function ignored"; Mappings = @($expectedAliasMapping, $unrelatedMapping) },
+    [pscustomobject]@{ Label = "shadow prefix ignored"; Mappings = @($expectedAliasMapping, $shadowPrefixMapping) }
+  )) {
+  $inventory = Get-TestLiveDocumentInventory -Mappings $acceptedMappings.Mappings
+  if ([int]$inventory.ProcessorMappings -ne 1) {
+    throw "The live inventory did not retain exactly one mapping for '$($acceptedMappings.Label)'."
+  }
+  Assert-DevelopmentDocumentStageResourceInventory -Stage "complete-dark" `
+    -StateAddresses $completeStateAddresses -LiveInventory $inventory
+}
+
+foreach ($familyMember in @(
+    [pscustomobject]@{ Label = "unqualified function"; FunctionArn = $processorArn },
+    [pscustomobject]@{ Label = "numeric version"; FunctionArn = "${processorArn}:2" },
+    [pscustomobject]@{ Label = "other alias"; FunctionArn = "${processorArn}:canary" }
+  )) {
+  $familyMappings = @($expectedAliasMapping, [pscustomobject]@{ FunctionArn = $familyMember.FunctionArn })
+  $inventory = Get-TestLiveDocumentInventory -Mappings $familyMappings
+  if ([int]$inventory.ProcessorMappings -ne 2) {
+    throw "The live inventory did not count the expected alias plus '$($familyMember.Label)' as two mappings."
+  }
+  Assert-TestCompleteInventoryRejected -Mappings $familyMappings -Label "expected alias plus $($familyMember.Label)"
+}
+Assert-TestCompleteInventoryRejected -Mappings @() -Label "zero processor-family mappings"
+
+$wrongFamilyMemberOnly = @([pscustomobject]@{ FunctionArn = "${processorArn}:2" })
+$wrongOnlyInventory = Get-TestLiveDocumentInventory -Mappings $wrongFamilyMemberOnly
+Assert-DevelopmentDocumentStageResourceInventory -Stage "complete-dark" `
+  -StateAddresses $completeStateAddresses -LiveInventory $wrongOnlyInventory
+$aliasQualifiedMappings = @($wrongFamilyMemberOnly | Where-Object FunctionArn -ceq $processorAliasArn)
+$laterDeepCheckRejected = $false
+try {
+  if ($aliasQualifiedMappings.Count -ne 1) { throw "The exact development-alias mapping is absent." }
+} catch { $laterDeepCheckRejected = $true }
+if (-not $laterDeepCheckRejected) {
+  throw "A sole wrong processor-family member bypassed the later alias-qualified mapping check."
+}
+$deepMappingQueryOffset = $source.IndexOf('"ai-job-apply-development-document-processor:development", "--output", "json")')
+$deepMappingCountOffset = $source.IndexOf('if ($mappings.Count -ne 1 -or [string]$mappings[0].State -cne "Disabled"', $deepMappingQueryOffset)
+$deepMappingArnOffset = $source.IndexOf('[string]$mappings[0].FunctionArn -cne $processorAliasArn', $deepMappingCountOffset)
+if ($deepMappingQueryOffset -lt 0 -or $deepMappingCountOffset -lt $deepMappingQueryOffset -or
+  $deepMappingArnOffset -lt $deepMappingCountOffset) {
+  throw "The later alias-qualified deep mapping check was removed or weakened."
+}
+
+$parserInventory = Get-TestLiveDocumentInventory -Mappings @($unrelatedMapping, $shadowPrefixMapping) -ProcessorExists $false
+Assert-DevelopmentDocumentStageResourceInventory -Stage "parser-dark" `
+  -StateAddresses $requiredParserStateAddresses -LiveInventory $parserInventory
+if (@($parserInventory.PSObject.Properties | Where-Object { [int]$_.Value -ne 0 }).Count -ne 0) {
+  throw "ParserDark live inventory no longer proves every later-stage field absent."
+}
+$rogueParserInventory = Get-TestLiveDocumentInventory `
+  -Mappings @([pscustomobject]@{ FunctionArn = "${processorArn}:development" }) -ProcessorExists $false
+$rogueParserRejected = $false
+try {
+  Assert-DevelopmentDocumentStageResourceInventory -Stage "parser-dark" `
+    -StateAddresses $requiredParserStateAddresses -LiveInventory $rogueParserInventory
+} catch { $rogueParserRejected = $true }
+if (-not $rogueParserRejected) { throw "ParserDark accepted an exact-family processor mapping." }
 
 $deltaFunctions = @($ast.FindAll({
       param($node)
@@ -667,6 +853,285 @@ $successAfterSaveOffset = $source.IndexOf('$succeeded = $true', $saveCallOffset)
 if ($saveCallOffset -lt 0 -or $successAfterSaveOffset -lt $saveCallOffset -or
   -not $source.Contains('Remove-NewRetainedBaselineArtifacts -PlanPath $path -MetadataPath $metadataPath')) {
   throw "Verify can report retained-baseline success before sidecar validation or leave failed artifacts behind."
+}
+
+$recoveryFunctions = @($ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+      $node.Name -in @(
+        "Assert-CompleteDarkVerifyRecoveryBaselineMetadata",
+        "Get-AppliedProcessorParserQualifiedArn"
+      )
+    }, $true))
+if ($recoveryFunctions.Count -ne 2) { throw "The CompleteDark Verify recovery functions must each be defined once." }
+foreach ($function in $recoveryFunctions | Sort-Object { $_.Extent.StartOffset }) {
+  Invoke-Expression $function.Extent.Text
+}
+
+$ExpectedAccountId = "111122223333"
+$Region = "us-east-2"
+$completeDarkRecoveryReleaseSourceSha = "a6d0fba09082b8bc61ee7b604ee1d5c47bd71624"
+$completeDarkRecoveryBaselineReleaseSourceSha = "d0e55de86edfa6b5f655f5631bb1741d6c5b5ac8"
+$completeDarkRecoveryBaselineOperatorSourceSha = "cd8bc47fd89239c5e224ccdd1baff097d13c5bf7"
+$completeDarkRecoveryBaselineReceiptSha256 = "97d4084d0a5b2ddfc563f3e4f76bafb9598dcdd0e9579fb18821b6bdc9097677"
+$completeDarkRecoveryReceiptSha256 = "524bbf645621a0aa744c3e84f7deff5f8430830e87330267ed5ca7243f40023e"
+$completeDarkRecoveryStateLineage = "472ef790-b249-45ec-817f-718005980d9e"
+$completeDarkRecoveryBaselineStateSerial = 103
+$completeDarkRecoveryCurrentStateSerial = 106
+$operatorCommit = "f" * 40
+$releaseCommit = $completeDarkRecoveryReleaseSourceSha
+$storedRecoveryDelta = "a" * 64
+$expectedRecoveryBaselineDelta = "b" * 64
+$expectedRecoveryReleaseDelta = "c" * 64
+$ReviewedBaselineToOperatorDeltaSha256 = $expectedRecoveryBaselineDelta
+$ReviewedOperatorDeltaSha256 = $expectedRecoveryReleaseDelta
+$operatorDeltaSha256 = $ReviewedOperatorDeltaSha256
+$ReviewedReceiptSha256 = $completeDarkRecoveryReceiptSha256
+$recoveryPlanPath = "C:\ignored\parser-dark-recovery.tfplan"
+$recoveryPlanSha = "d" * 64
+$recoveryMigrationImage = "${ExpectedAccountId}.dkr.ecr.us-east-2.amazonaws.com/ai-job-apply/migration@sha256:$('e' * 64)"
+$recoveryParserArtifactSha = "6" * 64
+$recoveryProcessorArtifactSha = "7" * 64
+$recoveryBaseline = [pscustomobject]@{ variables = [pscustomobject]@{
+    document_parser_invocation_qualified_arn = [pscustomobject]@{ value = "" }
+    document_parser_artifact_s3_key = [pscustomobject]@{
+      value = "lambda/documents/$completeDarkRecoveryBaselineReleaseSourceSha/$recoveryParserArtifactSha/document-parser-lambda.zip"
+    }
+    document_parser_artifact_s3_object_version = [pscustomobject]@{ value = "baseline-parser-version" }
+    document_parser_artifact_sha256 = [pscustomobject]@{ value = $recoveryParserArtifactSha }
+    document_parser_artifact_base64sha256 = [pscustomobject]@{ value = ("Y" * 43) + "=" }
+    document_processor_artifact_s3_key = [pscustomobject]@{ value = "" }
+    document_processor_artifact_s3_object_version = [pscustomobject]@{ value = "" }
+    document_processor_artifact_sha256 = [pscustomobject]@{ value = "" }
+    document_processor_artifact_base64sha256 = [pscustomobject]@{ value = "" }
+    document_processor_extension_layer_arn = [pscustomobject]@{ value = "" }
+    migration_image = [pscustomobject]@{ value = $recoveryMigrationImage }
+  } }
+$recoveryReceipt = [pscustomobject]@{ artifacts = @(
+    [pscustomobject]@{
+      artifactName = "document-parser-lambda"; suffix = "zip"
+      key = "lambda/documents/$completeDarkRecoveryReleaseSourceSha/$recoveryParserArtifactSha/document-parser-lambda.zip"
+    },
+    [pscustomobject]@{
+      artifactName = "document-processor-lambda"; suffix = "zip"
+      key = "lambda/documents/$completeDarkRecoveryReleaseSourceSha/$recoveryProcessorArtifactSha/document-processor-lambda.zip"
+    }
+  ) }
+$recoveryStateIdentity = [pscustomobject]@{
+  Lineage = $completeDarkRecoveryStateLineage
+  Serial = $completeDarkRecoveryCurrentStateSerial
+}
+
+function New-TestRecoveryMetadata([ValidateSet("3", "4")][string]$SchemaVersion) {
+  $values = [ordered]@{
+    SchemaVersion = $SchemaVersion; Kind = "development-document-zero-drift-baseline"
+    Environment = "development"; AccountId = $ExpectedAccountId; Region = $Region
+    ReleaseSourceSha = $completeDarkRecoveryBaselineReleaseSourceSha
+    OperatorSourceSha = $completeDarkRecoveryBaselineOperatorSourceSha
+    OperatorDeltaSha256 = $storedRecoveryDelta
+    StateLineage = $completeDarkRecoveryStateLineage; StateSerial = $completeDarkRecoveryBaselineStateSerial
+    Stage = "parser-dark"; ReceiptSha256 = $completeDarkRecoveryBaselineReceiptSha256
+    ParserQualifiedArn = ""; PlanPath = $recoveryPlanPath; PlanSha256 = $recoveryPlanSha
+    Applyable = $false; MeaningfulChanges = 0; CreatedAt = "2026-08-14T05:49:55.4463539Z"
+  }
+  if ($SchemaVersion -ceq "4") { $values.MigrationImage = $recoveryMigrationImage }
+  return [pscustomobject]$values
+}
+
+$script:rejectedRecoveryDeltaPair = ""
+function Get-ReviewedOperatorDelta {
+  param([string]$ReleaseSha, [string]$OperatorSha, [string]$ReviewedSha256)
+  $pair = "$ReleaseSha->$OperatorSha"
+  if ($pair -ceq $script:rejectedRecoveryDeltaPair) { throw "The fixture delta pair is not ancestral." }
+  $expected = if ($ReleaseSha -ceq $completeDarkRecoveryBaselineReleaseSourceSha -and
+    $OperatorSha -ceq $completeDarkRecoveryBaselineOperatorSourceSha) { $storedRecoveryDelta }
+  elseif ($ReleaseSha -ceq $completeDarkRecoveryBaselineOperatorSourceSha -and $OperatorSha -ceq $operatorCommit) {
+    $expectedRecoveryBaselineDelta
+  }
+  elseif ($ReleaseSha -ceq $completeDarkRecoveryReleaseSourceSha -and $OperatorSha -ceq $operatorCommit) {
+    $expectedRecoveryReleaseDelta
+  }
+  else { throw "The fixture delta pair is outside the exact recovery graph." }
+  if ([string]::IsNullOrEmpty($ReviewedSha256) -or $ReviewedSha256 -cne $expected) {
+    throw "The fixture reviewed delta is missing or mismatched."
+  }
+  return $expected
+}
+
+function Assert-TestRecoveryAccepted([object]$Metadata, [object]$Baseline = $recoveryBaseline,
+  [object]$Receipt = $recoveryReceipt, [object]$StateIdentity = $recoveryStateIdentity,
+  [string]$RequestedStage = "complete-dark", [string]$AppliedStage = "complete-dark",
+  [ValidateSet("Plan", "Apply", "Verify")][string]$Operation = "Verify") {
+  Assert-CompleteDarkVerifyRecoveryBaselineMetadata -Metadata $Metadata -Baseline $Baseline `
+    -ResolvedPlanPath $recoveryPlanPath -PlanSha256 $recoveryPlanSha `
+    -CurrentStateIdentity $StateIdentity -Receipt $Receipt -RequestedStage $RequestedStage `
+    -AppliedStage $AppliedStage -Operation $Operation
+}
+
+foreach ($schema in @("3", "4")) {
+  Assert-TestRecoveryAccepted -Metadata (New-TestRecoveryMetadata $schema)
+}
+
+$steadyCompletePin = "arn:aws:lambda:us-east-2:${ExpectedAccountId}:function:ai-job-apply-development-document-parser:1"
+$steadyCompleteBaseline = [pscustomobject]@{ variables = [pscustomobject]@{
+    document_parser_invocation_qualified_arn = [pscustomobject]@{ value = $steadyCompletePin }
+    migration_image = [pscustomobject]@{ value = $recoveryMigrationImage }
+  } }
+$steadyCompleteMetadata = New-TestRecoveryMetadata "4"
+$steadyCompleteMetadata.ReleaseSourceSha = $operatorCommit
+$steadyCompleteMetadata.OperatorSourceSha = $operatorCommit
+$steadyCompleteMetadata.OperatorDeltaSha256 = "5" * 64
+$steadyCompleteMetadata.Stage = "complete-dark"
+$steadyCompleteMetadata.ReceiptSha256 = $completeDarkRecoveryReceiptSha256
+$steadyCompleteMetadata.ParserQualifiedArn = $steadyCompletePin
+$steadyCompleteMetadata.StateSerial = $completeDarkRecoveryCurrentStateSerial
+Assert-CurrentDocumentBaselineMetadata -Metadata $steadyCompleteMetadata -Baseline $steadyCompleteBaseline `
+  -ResolvedPlanPath $recoveryPlanPath -PlanSha256 $recoveryPlanSha -AppliedStage "complete-dark" `
+  -ReceiptSha256 $completeDarkRecoveryReceiptSha256 -StateIdentity $recoveryStateIdentity `
+  -ReleaseSourceSha $operatorCommit -OperatorSourceSha $operatorCommit `
+  -OperatorDeltaSha256 ("5" * 64)
+
+foreach ($operation in @("Plan", "Apply")) {
+  $rejected = $false
+  try { Assert-TestRecoveryAccepted -Metadata (New-TestRecoveryMetadata "4") -Operation $operation }
+  catch { $rejected = $true }
+  if (-not $rejected) { throw "CompleteDark ParserDark-baseline recovery accepted Action $operation." }
+}
+foreach ($stageCase in @(
+    [pscustomobject]@{ Label = "wrong requested stage"; Requested = "parser-dark"; Applied = "complete-dark" },
+    [pscustomobject]@{ Label = "wrong live stage"; Requested = "complete-dark"; Applied = "parser-dark" }
+  )) {
+  $rejected = $false
+  try {
+    Assert-TestRecoveryAccepted -Metadata (New-TestRecoveryMetadata "4") `
+      -RequestedStage $stageCase.Requested -AppliedStage $stageCase.Applied
+  } catch { $rejected = $true }
+  if (-not $rejected) { throw "CompleteDark Verify recovery accepted $($stageCase.Label)." }
+}
+
+foreach ($metadataMutation in @(
+    [pscustomobject]@{ Label = "baseline stage"; Property = "Stage"; Value = "complete-dark" },
+    [pscustomobject]@{ Label = "baseline release source"; Property = "ReleaseSourceSha"; Value = ("1" * 40) },
+    [pscustomobject]@{ Label = "baseline operator source"; Property = "OperatorSourceSha"; Value = ("2" * 40) },
+    [pscustomobject]@{ Label = "stored release delta"; Property = "OperatorDeltaSha256"; Value = ("3" * 64) },
+    [pscustomobject]@{ Label = "baseline receipt"; Property = "ReceiptSha256"; Value = ("4" * 64) },
+    [pscustomobject]@{ Label = "baseline serial regression"; Property = "StateSerial"; Value = 102 },
+    [pscustomobject]@{ Label = "baseline serial advance"; Property = "StateSerial"; Value = 104 },
+    [pscustomobject]@{ Label = "baseline lineage"; Property = "StateLineage"; Value = "12345678-1234-1234-1234-123456789abc" }
+  )) {
+  $badMetadata = New-TestRecoveryMetadata "4"
+  $badMetadata.($metadataMutation.Property) = $metadataMutation.Value
+  $rejected = $false
+  try { Assert-TestRecoveryAccepted -Metadata $badMetadata } catch { $rejected = $true }
+  if (-not $rejected) { throw "CompleteDark Verify recovery accepted '$($metadataMutation.Label)' tampering." }
+}
+
+foreach ($currentStateMutation in @(
+    [pscustomobject]@{ Label = "current state regression"; Lineage = $completeDarkRecoveryStateLineage; Serial = 105 },
+    [pscustomobject]@{ Label = "current state advance"; Lineage = $completeDarkRecoveryStateLineage; Serial = 107 },
+    [pscustomobject]@{ Label = "current state lineage"; Lineage = "12345678-1234-1234-1234-123456789abc"; Serial = 106 }
+  )) {
+  $rejected = $false
+  try {
+    Assert-TestRecoveryAccepted -Metadata (New-TestRecoveryMetadata "4") `
+      -StateIdentity ([pscustomobject]@{ Lineage = $currentStateMutation.Lineage; Serial = $currentStateMutation.Serial })
+  } catch { $rejected = $true }
+  if (-not $rejected) { throw "CompleteDark Verify recovery accepted '$($currentStateMutation.Label)'." }
+}
+
+foreach ($deltaCase in @(
+    [pscustomobject]@{ Label = "missing baseline-to-current delta"; Variable = "baseline"; Value = "" },
+    [pscustomobject]@{ Label = "wrong baseline-to-current delta"; Variable = "baseline"; Value = ("8" * 64) },
+    [pscustomobject]@{ Label = "missing release-to-current delta"; Variable = "release"; Value = "" },
+    [pscustomobject]@{ Label = "wrong release-to-current delta"; Variable = "release"; Value = ("9" * 64) }
+  )) {
+  $savedBaselineDelta = $ReviewedBaselineToOperatorDeltaSha256
+  $savedReleaseDelta = $ReviewedOperatorDeltaSha256
+  try {
+    if ($deltaCase.Variable -ceq "baseline") { $script:ReviewedBaselineToOperatorDeltaSha256 = $deltaCase.Value }
+    else { $script:ReviewedOperatorDeltaSha256 = $deltaCase.Value }
+    $rejected = $false
+    try { Assert-TestRecoveryAccepted -Metadata (New-TestRecoveryMetadata "4") } catch { $rejected = $true }
+    if (-not $rejected) { throw "CompleteDark Verify recovery accepted '$($deltaCase.Label)'." }
+  }
+  finally {
+    $script:ReviewedBaselineToOperatorDeltaSha256 = $savedBaselineDelta
+    $script:ReviewedOperatorDeltaSha256 = $savedReleaseDelta
+  }
+}
+foreach ($pair in @(
+    "$completeDarkRecoveryBaselineOperatorSourceSha->$operatorCommit",
+    "$completeDarkRecoveryReleaseSourceSha->$operatorCommit"
+  )) {
+  $script:rejectedRecoveryDeltaPair = $pair
+  $rejected = $false
+  try { Assert-TestRecoveryAccepted -Metadata (New-TestRecoveryMetadata "4") } catch { $rejected = $true }
+  $script:rejectedRecoveryDeltaPair = ""
+  if (-not $rejected) { throw "CompleteDark Verify recovery accepted nonancestor delta '$pair'." }
+}
+
+$tamperedBaselinePin = $recoveryBaseline | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+$tamperedBaselinePin.variables.document_parser_invocation_qualified_arn.value =
+  "arn:aws:lambda:us-east-2:${ExpectedAccountId}:function:ai-job-apply-development-document-parser:1"
+$tamperedBaselinePinRejected = $false
+try { Assert-TestRecoveryAccepted -Metadata (New-TestRecoveryMetadata "4") -Baseline $tamperedBaselinePin }
+catch { $tamperedBaselinePinRejected = $true }
+if (-not $tamperedBaselinePinRejected) { throw "CompleteDark Verify recovery accepted a nonempty ParserDark baseline pin." }
+
+foreach ($artifactCase in @("baseline-parser-source", "baseline-processor", "current-parser-source", "current-processor-source")) {
+  $badBaseline = $recoveryBaseline | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+  $badReceipt = $recoveryReceipt | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+  switch ($artifactCase) {
+    "baseline-parser-source" { $badBaseline.variables.document_parser_artifact_s3_key.value = $badBaseline.variables.document_parser_artifact_s3_key.value -replace $completeDarkRecoveryBaselineReleaseSourceSha, $completeDarkRecoveryReleaseSourceSha }
+    "baseline-processor" { $badBaseline.variables.document_processor_artifact_sha256.value = "1" * 64 }
+    "current-parser-source" { $badReceipt.artifacts[0].key = $badReceipt.artifacts[0].key -replace $completeDarkRecoveryReleaseSourceSha, $completeDarkRecoveryBaselineReleaseSourceSha }
+    "current-processor-source" { $badReceipt.artifacts[1].key = $badReceipt.artifacts[1].key -replace $completeDarkRecoveryReleaseSourceSha, $completeDarkRecoveryBaselineReleaseSourceSha }
+  }
+  $rejected = $false
+  try { Assert-TestRecoveryAccepted -Metadata (New-TestRecoveryMetadata "4") -Baseline $badBaseline -Receipt $badReceipt }
+  catch { $rejected = $true }
+  if (-not $rejected) { throw "CompleteDark Verify recovery accepted '$artifactCase' tampering." }
+}
+
+$savedRecoveryRelease = $releaseCommit
+$savedRecoveryReceiptSha = $ReviewedReceiptSha256
+try {
+  foreach ($bindingCase in @("release", "receipt")) {
+    if ($bindingCase -ceq "release") { $script:releaseCommit = "1" * 40 }
+    else { $script:ReviewedReceiptSha256 = "2" * 64 }
+    $rejected = $false
+    try { Assert-TestRecoveryAccepted -Metadata (New-TestRecoveryMetadata "4") } catch { $rejected = $true }
+    if (-not $rejected) { throw "CompleteDark Verify recovery accepted wrong current $bindingCase binding." }
+    $script:releaseCommit = $savedRecoveryRelease
+    $script:ReviewedReceiptSha256 = $savedRecoveryReceiptSha
+  }
+}
+finally {
+  $script:releaseCommit = $savedRecoveryRelease
+  $script:ReviewedReceiptSha256 = $savedRecoveryReceiptSha
+}
+
+$script:testAppliedProcessorPin = "arn:aws:lambda:us-east-2:${ExpectedAccountId}:function:ai-job-apply-development-document-parser:1"
+function Get-StateResourceMap {
+  return @{
+    "module.platform.aws_lambda_function.document_processor[0]" = [pscustomobject]@{
+      environment = @([pscustomobject]@{
+          variables = [pscustomobject]@{ DOCUMENT_PARSER_FUNCTION_ARN = $script:testAppliedProcessorPin }
+        })
+    }
+  }
+}
+if ((Get-AppliedProcessorParserQualifiedArn) -cne $script:testAppliedProcessorPin) {
+  throw "CompleteDark Verify recovery did not derive the exact applied parser v1 pin."
+}
+foreach ($badPin in @("", "arn:aws:lambda:us-east-2:${ExpectedAccountId}:function:ai-job-apply-development-document-parser",
+    "arn:aws:lambda:us-east-2:${ExpectedAccountId}:function:ai-job-apply-development-document-parser:2",
+    "arn:aws:lambda:us-east-2:${ExpectedAccountId}:function:ai-job-apply-development-document-parser:development",
+    "arn:aws:lambda:us-east-2:000000000000:function:ai-job-apply-development-document-parser:1")) {
+  $script:testAppliedProcessorPin = $badPin
+  $rejected = $false
+  try { $null = Get-AppliedProcessorParserQualifiedArn } catch { $rejected = $true }
+  if (-not $rejected) { throw "CompleteDark Verify recovery accepted invalid applied processor pin '$badPin'." }
 }
 
 Write-Output "Development document staged operator tests passed."
