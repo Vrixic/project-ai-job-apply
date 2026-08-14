@@ -22,6 +22,7 @@ foreach ($required in @(
     'Use verified development $stageValue migration baseline',
     'ReviewedBaselineMetadataSha256',
     '$metadataSha256 -cne $ReviewedBaselineMetadataSha256'
+    'Plan and Apply require the exact current release', 'SchemaVersion = "2"', '$planMetadata.Commit = $operatorCommit'
   )) {
   if (-not $source.Contains($required)) { throw "The staged operator is missing '$required'." }
 }
@@ -63,6 +64,103 @@ $compatibilityFunctions = @($ast.FindAll({
     }, $true))
 if ($compatibilityFunctions.Count -ne 3) { throw "The retained baseline compatibility guards must each be defined once." }
 foreach ($function in $compatibilityFunctions | Sort-Object { $_.Extent.StartOffset }) { Invoke-Expression $function.Extent.Text }
+
+$deltaFunctions = @($ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+      $node.Name -in @("Get-TextSha256", "Get-ReviewedOperatorDelta")
+    }, $true))
+if ($deltaFunctions.Count -ne 2) { throw "The canonical operator-delta guards must each be defined once." }
+foreach ($function in $deltaFunctions | Sort-Object { $_.Extent.StartOffset }) { Invoke-Expression $function.Extent.Text }
+$releaseSha = "d0e55de86edfa6b5f655f5631bb1741d6c5b5ac8"
+$operatorSha = (& git -C $repositoryRoot rev-parse HEAD).Trim()
+$records = @(& git -C $repositoryRoot diff --name-status --no-renames "$releaseSha..$operatorSha")
+$patch = @(& git -C $repositoryRoot diff --full-index --binary --no-ext-diff --no-renames "$releaseSha..$operatorSha")
+$ReviewedOperatorDeltaSha256 = Get-TextSha256 ("development-operator-delta-v1`n$releaseSha`n$operatorSha`n--name-status--`n" +
+  (($records -join "`n") + "`n--patch--`n" + ($patch -join "`n") + "`n"))
+if ((Get-ReviewedOperatorDelta $releaseSha $operatorSha) -cne $ReviewedOperatorDeltaSha256) {
+  throw "The exact reviewed descendant operator delta was not accepted."
+}
+$ReviewedOperatorDeltaSha256 = "0" * 64
+$deltaTamperRejected = $false
+try { $null = Get-ReviewedOperatorDelta $releaseSha $operatorSha } catch { $deltaTamperRejected = $true }
+if (-not $deltaTamperRejected) { throw "A tampered descendant operator-delta checksum was accepted." }
+$ReviewedOperatorDeltaSha256 = ""
+$currentDelta = Get-ReviewedOperatorDelta $operatorSha $operatorSha
+if ($currentDelta -cne (Get-TextSha256 "development-operator-delta-v1`n$operatorSha`n$operatorSha`n--name-status--`n--patch--`n")) {
+  throw "The exact-current operator delta is not deterministic."
+}
+$ReviewedOperatorDeltaSha256 = "1" * 64
+$currentReviewedRejected = $false
+try { $null = Get-ReviewedOperatorDelta $operatorSha $operatorSha } catch { $currentReviewedRejected = $true }
+if (-not $currentReviewedRejected) { throw "An exact-current operation accepted a spurious reviewed delta." }
+$ReviewedOperatorDeltaSha256 = "2" * 64
+$nonAncestorRejected = $false
+try { $null = Get-ReviewedOperatorDelta ("f" * 40) $operatorSha } catch { $nonAncestorRejected = $true }
+if (-not $nonAncestorRejected) { throw "A nonancestor release source was accepted." }
+
+# Exercise Git's actual name-status, binary, rename, and object-type behavior in an isolated fixture.
+$realRepositoryRoot = $repositoryRoot
+$fixtureRoot = Join-Path ([IO.Path]::GetTempPath()) "applydash-operator-delta-$([guid]::NewGuid().ToString('N'))"
+$null = New-Item -ItemType Directory -Path $fixtureRoot
+try {
+  $repositoryRoot = $fixtureRoot
+  & git -C $fixtureRoot init -q; & git -C $fixtureRoot config user.email "fixture@example.invalid"
+  & git -C $fixtureRoot config user.name "Operator Delta Fixture"
+  & git -C $fixtureRoot config core.autocrlf false
+  $allowedPath = Join-Path $fixtureRoot "scripts\operate-development-document-dark-deployment.ps1"
+  $null = New-Item -ItemType Directory -Path (Split-Path -Parent $allowedPath) -Force
+  [IO.File]::WriteAllText($allowedPath, "base`n", [Text.UTF8Encoding]::new($false))
+  & git -C $fixtureRoot add .; & git -C $fixtureRoot commit -q -m base
+  $fixtureBase = (& git -C $fixtureRoot rev-parse HEAD).Trim()
+
+  function Get-FixtureDeltaSha([string]$From, [string]$To) {
+    $fixtureRecords = @(& git -C $fixtureRoot diff --name-status --no-renames "$From..$To")
+    $fixturePatch = @(& git -C $fixtureRoot diff --full-index --binary --no-ext-diff --no-renames "$From..$To")
+    return Get-TextSha256 ("development-operator-delta-v1`n$From`n$To`n--name-status--`n" +
+      (($fixtureRecords -join "`n") + "`n--patch--`n" + ($fixturePatch -join "`n") + "`n"))
+  }
+  function Assert-FixtureDeltaRejected([string]$From, [string]$To, [string]$Label) {
+    $script:ReviewedOperatorDeltaSha256 = Get-FixtureDeltaSha $From $To
+    $wasRejected = $false
+    try { $null = Get-ReviewedOperatorDelta $From $To } catch { $wasRejected = $true }
+    if (-not $wasRejected) { throw "The operator delta accepted fixture '$Label'." }
+  }
+
+  [IO.File]::WriteAllText($allowedPath, "safe verifier correction`n", [Text.UTF8Encoding]::new($false))
+  & git -C $fixtureRoot add .; & git -C $fixtureRoot commit -q -m allowed
+  $fixtureAllowed = (& git -C $fixtureRoot rev-parse HEAD).Trim()
+  $ReviewedOperatorDeltaSha256 = Get-FixtureDeltaSha $fixtureBase $fixtureAllowed
+  if ((Get-ReviewedOperatorDelta $fixtureBase $fixtureAllowed) -cne $ReviewedOperatorDeltaSha256) {
+    throw "The isolated allowed modified-blob delta was rejected."
+  }
+
+  & git -C $fixtureRoot checkout -q $fixtureBase
+  [IO.File]::WriteAllText((Join-Path $fixtureRoot "README.md"), "outside`n", [Text.UTF8Encoding]::new($false))
+  & git -C $fixtureRoot add .; & git -C $fixtureRoot commit -q -m outside
+  Assert-FixtureDeltaRejected $fixtureBase ((& git -C $fixtureRoot rev-parse HEAD).Trim()) "outside allowlist/add"
+
+  & git -C $fixtureRoot checkout -q $fixtureBase
+  & git -C $fixtureRoot mv "scripts/operate-development-document-dark-deployment.ps1" "scripts/renamed.ps1"
+  & git -C $fixtureRoot commit -q -m rename
+  Assert-FixtureDeltaRejected $fixtureBase ((& git -C $fixtureRoot rev-parse HEAD).Trim()) "rename/add-delete"
+
+  & git -C $fixtureRoot checkout -q $fixtureBase
+  [IO.File]::WriteAllBytes($allowedPath, [byte[]](0, 255, 1, 254, 2, 253))
+  & git -C $fixtureRoot add .; & git -C $fixtureRoot commit -q -m binary
+  Assert-FixtureDeltaRejected $fixtureBase ((& git -C $fixtureRoot rev-parse HEAD).Trim()) "binary"
+
+  & git -C $fixtureRoot checkout -q $fixtureBase
+  & git -C $fixtureRoot update-index --add --cacheinfo "160000,$fixtureBase,scripts/operate-development-document-dark-deployment.ps1"
+  & git -C $fixtureRoot commit -q -m gitlink
+  Assert-FixtureDeltaRejected $fixtureBase ((& git -C $fixtureRoot rev-parse HEAD).Trim()) "non-blob gitlink"
+} finally {
+  $repositoryRoot = $realRepositoryRoot
+  $resolvedFixture = [IO.Path]::GetFullPath($fixtureRoot)
+  $tempPrefix = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+  if (-not $resolvedFixture.StartsWith($tempPrefix, [StringComparison]::OrdinalIgnoreCase)) { throw "Fixture cleanup escaped the temporary directory." }
+  if (Test-Path -LiteralPath $resolvedFixture) { Remove-Item -LiteralPath $resolvedFixture -Recurse -Force }
+}
 
 Assert-MonotonicDocumentStage "kms-prerequisite" "parser-dark" "Plan"
 Assert-MonotonicDocumentStage "parser-dark" "complete-dark" "Plan"
@@ -153,14 +251,30 @@ $metadataCommon = [ordered]@{
 $stateIdentity = [pscustomobject]@{ Lineage = $metadataLineage; Serial = 42 }
 $metadataV1 = [pscustomobject]$metadataCommon
 Assert-CurrentDocumentBaselineMetadata $metadataV1 $metadataBaseline $metadataPlanPath $metadataPlanSha `
-  "parser-dark" $metadataReceiptSha $stateIdentity $metadataSourceSha
+  "parser-dark" $metadataReceiptSha $stateIdentity $metadataSourceSha $metadataSourceSha ("a" * 64)
 $metadataV2Values = [ordered]@{}
 foreach ($entry in $metadataCommon.GetEnumerator()) { $metadataV2Values[$entry.Key] = $entry.Value }
 $metadataV2Values.SchemaVersion = "2"
 $metadataV2Values.MigrationImage = $migrationImage
 $metadataV2 = [pscustomobject]$metadataV2Values
 Assert-CurrentDocumentBaselineMetadata $metadataV2 $metadataBaseline $metadataPlanPath $metadataPlanSha `
-  "parser-dark" $metadataReceiptSha $stateIdentity $metadataSourceSha
+  "parser-dark" $metadataReceiptSha $stateIdentity $metadataSourceSha $metadataSourceSha ("a" * 64)
+$metadataV3Values = [ordered]@{}
+foreach ($entry in $metadataCommon.GetEnumerator()) { if ($entry.Key -cne "SourceSha") { $metadataV3Values[$entry.Key] = $entry.Value } }
+$metadataV3Values.SchemaVersion = "3"
+$metadataV3Values.ReleaseSourceSha = "e" * 40
+$metadataV3Values.OperatorSourceSha = $metadataSourceSha
+$metadataV3Values.OperatorDeltaSha256 = "a" * 64
+$metadataV3 = [pscustomobject]$metadataV3Values
+Assert-CurrentDocumentBaselineMetadata $metadataV3 $metadataBaseline $metadataPlanPath $metadataPlanSha `
+  "parser-dark" $metadataReceiptSha $stateIdentity ("e" * 40) $metadataSourceSha ("a" * 64)
+$metadataV3.OperatorDeltaSha256 = "b" * 64
+$dualDeltaRejected = $false
+try {
+  Assert-CurrentDocumentBaselineMetadata $metadataV3 $metadataBaseline $metadataPlanPath $metadataPlanSha `
+    "parser-dark" $metadataReceiptSha $stateIdentity ("e" * 40) $metadataSourceSha ("a" * 64)
+} catch { $dualDeltaRejected = $true }
+if (-not $dualDeltaRejected) { throw "A tampered retained-baseline operator delta was accepted." }
 foreach ($mutation in @("migration", "receipt", "serial", "extra")) {
   $badMetadata = $metadataV2 | ConvertTo-Json -Depth 10 | ConvertFrom-Json
   switch ($mutation) {
@@ -172,7 +286,7 @@ foreach ($mutation in @("migration", "receipt", "serial", "extra")) {
   $rejected = $false
   try {
     Assert-CurrentDocumentBaselineMetadata $badMetadata $metadataBaseline $metadataPlanPath $metadataPlanSha `
-      "parser-dark" $metadataReceiptSha $stateIdentity $metadataSourceSha
+      "parser-dark" $metadataReceiptSha $stateIdentity $metadataSourceSha $metadataSourceSha ("a" * 64)
   } catch { $rejected = $true }
   if (-not $rejected) { throw "The current retained baseline metadata accepted '$mutation' tampering." }
 }
@@ -195,6 +309,7 @@ foreach ($function in $metadataFunctions | Sort-Object { $_.Extent.StartOffset }
 $ExpectedAccountId = "111122223333"
 $Region = "us-east-2"
 $sourceSha = "a" * 40
+$operatorDeltaSha = "b" * 64
 $receiptSha = "b" * 64
 $lineage = "12345678-1234-1234-1234-123456789abc"
 $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) "applydash-document-baseline-$([guid]::NewGuid().ToString('N'))"
@@ -202,7 +317,8 @@ $null = New-Item -ItemType Directory -Path $temporaryRoot
 try {
   $planPath = Join-Path $temporaryRoot "parser-dark.tfplan"
   [IO.File]::WriteAllText($planPath, "zero-change-plan", [Text.UTF8Encoding]::new($false))
-  $saved = Save-RetainedBaselineMetadata -SourceSha $sourceSha -DeploymentStage "parser-dark" `
+  $saved = Save-RetainedBaselineMetadata -ReleaseSourceSha $sourceSha -OperatorSourceSha $sourceSha `
+    -OperatorDeltaSha256 $operatorDeltaSha -DeploymentStage "parser-dark" `
     -PlanPath $planPath -StateLineage $lineage -StateSerial 42 -ReceiptSha256 $receiptSha
   $expectedPlanSha = (Get-FileHash -LiteralPath $planPath -Algorithm SHA256).Hash.ToLowerInvariant()
   if ([string]$saved.PlanPath -cne $planPath -or [string]$saved.PlanSha256 -cne $expectedPlanSha -or
@@ -213,14 +329,16 @@ try {
   }
   $stored = Get-Content -LiteralPath $saved.MetadataPath -Raw | ConvertFrom-Json
   if ([string]$stored.Stage -cne "parser-dark" -or [string]$stored.ReceiptSha256 -cne $receiptSha -or
-    [string]$stored.SourceSha -cne $sourceSha -or [long]$stored.StateSerial -ne 42 -or
+    [string]$stored.ReleaseSourceSha -cne $sourceSha -or [string]$stored.OperatorSourceSha -cne $sourceSha -or
+    [string]$stored.OperatorDeltaSha256 -cne $operatorDeltaSha -or [long]$stored.StateSerial -ne 42 -or
     [string]$stored.PlanSha256 -cne $expectedPlanSha -or $stored.Applyable -isnot [bool] -or $stored.Applyable) {
     throw "The retained baseline metadata omitted its exact stage, source, state, hash, or applyable boundary."
   }
 
   $overwriteRejected = $false
   try {
-    $null = Save-RetainedBaselineMetadata -SourceSha $sourceSha -DeploymentStage "parser-dark" `
+    $null = Save-RetainedBaselineMetadata -ReleaseSourceSha $sourceSha -OperatorSourceSha $sourceSha `
+      -OperatorDeltaSha256 $operatorDeltaSha -DeploymentStage "parser-dark" `
       -PlanPath $planPath -StateLineage $lineage -StateSerial 42 -ReceiptSha256 $receiptSha
   } catch { $overwriteRejected = $true }
   if (-not $overwriteRejected) { throw "The retained baseline writer overwrote an existing metadata sidecar." }

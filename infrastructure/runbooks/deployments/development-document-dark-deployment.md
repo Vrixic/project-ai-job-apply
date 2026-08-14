@@ -63,6 +63,8 @@ Verify the applied stage without changing AWS:
 ```powershell
 .\scripts\operate-development-document-dark-deployment.ps1 -Action Verify -Stage ParserDark `
   -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
+  -ReleaseSourceSha DEPLOYED_DOCUMENT_ARTIFACT_COMMIT `
+  -ReviewedOperatorDeltaSha256 REVIEWED_CANONICAL_OPERATOR_DELTA_SHA256 `
   -BaselinePlanPath ZERO_CHANGE_PLAN -ReviewedBaselineSha256 BASELINE_SHA256 `
   [-ReviewedBaselineMetadataSha256 BASELINE_METADATA_SHA256] `
   -PublicationReceiptPath VERIFIED_RECEIPT -ReviewedReceiptSha256 RECEIPT_SHA256
@@ -77,6 +79,20 @@ The plan is independently re-read and accepted only when Terraform 1.9.8
 reports it complete, nonerrored, nonapplyable, and free of meaningful resource or output changes;
 only the already bounded provider refresh records may remain. The operator never overwrites a
 plan or sidecar.
+
+When the deployed immutable document artifacts belong to an ancestor of the current operator,
+only `Verify` may use that release. The operator proves Git ancestry, accepts only modified regular
+blobs on the explicit deployment-operator/test/runbook allowlist, rejects binary, renamed, added,
+deleted, submodule, Terraform, product, and artifact changes, and recomputes the reviewed SHA-256
+over the exact name-status records and full-index patch. The retained schema-3 sidecar records the
+release SHA, current operator SHA, and canonical delta SHA-256. Migration and gateway consumers
+independently recompute that evidence before accepting it. Omit the delta argument only when the
+release and operator commits are identical.
+
+`Plan` and `Apply` reject ancestor releases and retain the existing exact-current schema-2 plan
+metadata. Therefore a later `CompleteDark` source transition is blocked until current-source
+document artifacts have been separately published and reviewed; the Verify-only exception cannot
+be used to update processing resources.
 
 The optional metadata argument is omitted only for the checksum-reviewed historical intake
 baseline used by the initial `KmsPrerequisite` to `ParserDark` transition. Every current-shape

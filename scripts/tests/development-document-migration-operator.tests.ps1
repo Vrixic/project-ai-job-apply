@@ -66,7 +66,7 @@ $baselineFunctions = @($ast.FindAll({
         "Assert-ExactTaskPlan", "Assert-CurrentGatewayArtifactEvidence",
         "Test-IgnorableRdsRestorableTimeRefresh", "Get-OptionalProperty",
         "Test-EcsFaultInjectionDisabled", "Assert-ReleaseSourceBinding",
-        "Assert-OperatorOnlyReleaseDelta", "Assert-ExecutionIdentity",
+        "Assert-OperatorOnlyReleaseDelta", "Get-DocumentOperatorDeltaSha256", "Assert-ExecutionIdentity",
         "Assert-DurableClaimPutResult", "Assert-DurableExecutionClaimEvidence",
         "Test-DurableClaimHistoryExists", "Assert-RecoveryOperatorBinding",
         "Resolve-TaskLogStreamName",
@@ -75,12 +75,12 @@ $baselineFunctions = @($ast.FindAll({
         "Get-CurrentTerraformStateIdentity", "Assert-ExactCurrentBaselineVariableSet",
         "Assert-RetainedMigrationBaselinePlan", "Assert-RetainedBaselineCurrentState",
         "Read-RetainedMigrationBaseline", "Assert-TaskMetadataBaselineBinding",
-        "Get-FileSha256", "Write-JsonFile", "Get-ExactStringPlanVariable",
+        "Get-FileSha256", "Get-TextSha256", "Write-JsonFile", "Get-ExactStringPlanVariable",
         "New-PostMigrationBaselineMetadata", "Assert-PostMigrationBaselineMetadata",
         "Save-PostMigrationBaselineMetadata", "Remove-NewPostMigrationBaselineArtifacts"
       )
     }, $true))
-if ($baselineFunctions.Count -ne 33) { throw "The input, plan, and retained-handoff guards must each be defined once." }
+if ($baselineFunctions.Count -ne 35) { throw "The input, plan, and retained-handoff guards must each be defined once." }
 foreach ($function in $baselineFunctions | Sort-Object { $_.Extent.StartOffset }) {
   Invoke-Expression $function.Extent.Text
 }
@@ -406,6 +406,7 @@ $retainedPlan = [pscustomobject]@{
 Assert-RetainedMigrationBaselinePlan -Plan $retainedPlan
 
 $SourceSha = "a" * 40
+$operatorSourceSha = (& git -C $repositoryRoot rev-parse HEAD).Trim()
 $ExpectedAccountId = "111122223333"
 $Region = "us-east-2"
 $MigrationImage = "111122223333.dkr.ecr.us-east-2.amazonaws.com/ai-job-apply/migration@sha256:$('e' * 64)"
@@ -415,6 +416,11 @@ $retainedTaskMetadata = [pscustomobject]@{
   appliedBaselineStage = "parser-dark"
   appliedBaselineReceiptSha256 = "b" * 64
   appliedBaselineParserQualifiedArn = ""
+  appliedBaselineReleaseSourceSha = "d0e55de86edfa6b5f655f5631bb1741d6c5b5ac8"
+  appliedBaselineOperatorSourceSha = "d0e55de86edfa6b5f655f5631bb1741d6c5b5ac8"
+  appliedBaselineOperatorDeltaSha256 = Get-DocumentOperatorDeltaSha256 `
+    -ReleaseSha "d0e55de86edfa6b5f655f5631bb1741d6c5b5ac8" `
+    -OperatorSha "d0e55de86edfa6b5f655f5631bb1741d6c5b5ac8"
 }
 $handoffRoot = Join-Path $terraformRoot "post-migration-handoff-test-$([guid]::NewGuid().ToString('N'))"
 $null = New-Item -ItemType Directory -Path $handoffRoot
@@ -429,6 +435,13 @@ try {
     throw "Migration Verify did not emit the exact adjacent retained-baseline handoff."
   }
   $storedHandoff = Get-Content -LiteralPath $handoff.Path -Raw | ConvertFrom-Json
+  $expectedLaterOperatorDelta = Get-DocumentOperatorDeltaSha256 `
+    -ReleaseSha ([string]$retainedTaskMetadata.appliedBaselineReleaseSourceSha) -OperatorSha $operatorSourceSha
+  if ([string]$storedHandoff.OperatorSourceSha -cne $operatorSourceSha -or
+    [string]$storedHandoff.OperatorDeltaSha256 -cne $expectedLaterOperatorDelta -or
+    [string]$storedHandoff.OperatorDeltaSha256 -ceq [string]$retainedTaskMetadata.appliedBaselineOperatorDeltaSha256) {
+    throw "The post-migration handoff did not recompute the release delta for the later execution operator."
+  }
   Assert-PostMigrationBaselineMetadata -Metadata $storedHandoff -Plan $retainedPlan `
     -PlanPath $handoffPlanPath -PlanSha256 $handoffPlanSha -State $retainedState `
     -TaskMetadata $retainedTaskMetadata

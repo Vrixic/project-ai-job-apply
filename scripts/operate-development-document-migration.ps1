@@ -307,6 +307,46 @@ function Assert-OperatorOnlyReleaseDelta {
   }
 }
 
+function Get-DocumentOperatorDeltaSha256 {
+  param([Parameter(Mandatory)][string]$ReleaseSha, [Parameter(Mandatory)][string]$OperatorSha)
+  if ($ReleaseSha -notmatch '^[a-f0-9]{40}$' -or $OperatorSha -notmatch '^[a-f0-9]{40}$') {
+    throw "The retained document release/operator SHAs are invalid."
+  }
+  if ($ReleaseSha -ceq $OperatorSha) {
+    return Get-TextSha256 "development-operator-delta-v1`n$ReleaseSha`n$OperatorSha`n--name-status--`n--patch--`n"
+  }
+  & git -C $repositoryRoot merge-base --is-ancestor $ReleaseSha $OperatorSha 2>$null
+  if ($LASTEXITCODE -ne 0) { throw "The retained document release is not an ancestor of its operator." }
+  $allowed = @(
+    "scripts/lib/development-document-dark-guards.ps1", "scripts/lib/development-gateway-release-guards.ps1",
+    "scripts/operate-development-document-dark-deployment.ps1", "scripts/operate-development-document-migration.ps1",
+    "scripts/operate-development-gateway-release.ps1", "scripts/tests/development-document-dark-guards.tests.ps1",
+    "scripts/tests/development-document-dark-operator.tests.ps1", "scripts/tests/development-document-migration-operator.tests.ps1",
+    "scripts/tests/development-gateway-release-guards.tests.ps1", "scripts/tests/development-gateway-release-operator.tests.ps1",
+    "scripts/validate-serverless-workflow-infrastructure.mjs",
+    "infrastructure/runbooks/deployments/development-document-dark-deployment.md",
+    "infrastructure/runbooks/deployments/database-migration.md",
+    "infrastructure/runbooks/deployments/development-gateway-lambda-release.md"
+  )
+  $records = @(& git -C $repositoryRoot diff --name-status --no-renames "$ReleaseSha..$OperatorSha" 2>$null)
+  $numstat = @(& git -C $repositoryRoot diff --numstat --no-renames "$ReleaseSha..$OperatorSha" 2>$null)
+  if ($LASTEXITCODE -ne 0 -or $records.Count -eq 0 -or @($numstat | Where-Object { $_ -match '^-\t-\t' }).Count -ne 0) {
+    throw "The retained document operator delta is empty, unreadable, or binary."
+  }
+  foreach ($record in $records) {
+    if ($record -notmatch '^M\t(.+)$' -or $Matches[1] -notin $allowed) { throw "The retained document delta is outside the modified-file allowlist." }
+    $path = $Matches[1]
+    foreach ($revision in @($ReleaseSha, $OperatorSha)) {
+      $type = (& git -C $repositoryRoot cat-file -t "$revision`:$path" 2>$null).Trim()
+      if ($LASTEXITCODE -ne 0 -or $type -cne "blob") { throw "The retained document delta contains a missing or non-blob path." }
+    }
+  }
+  $patch = @(& git -C $repositoryRoot diff --full-index --binary --no-ext-diff --no-renames "$ReleaseSha..$OperatorSha" 2>$null)
+  if ($LASTEXITCODE -ne 0) { throw "The retained document canonical patch could not be read." }
+  return Get-TextSha256 ("development-operator-delta-v1`n$ReleaseSha`n$OperatorSha`n--name-status--`n" +
+    (($records -join "`n") + "`n--patch--`n" + ($patch -join "`n") + "`n"))
+}
+
 function Assert-CallerToolsAndSource {
   param(
     [switch]$RequireSource,
@@ -747,16 +787,24 @@ function New-PostMigrationBaselineMetadata {
       $planMigrationImage -cne $MigrationImage -or
       [string]$TaskMetadata.appliedBaselineStage -cne $stage -or
       [string]$TaskMetadata.appliedBaselineParserQualifiedArn -cne $parserQualifiedArn -or
-      [string]$TaskMetadata.appliedBaselineReceiptSha256 -notmatch '^[a-f0-9]{64}$') {
+      [string]$TaskMetadata.appliedBaselineReceiptSha256 -notmatch '^[a-f0-9]{64}$' -or
+      [string]$TaskMetadata.appliedBaselineReleaseSourceSha -notmatch '^[a-f0-9]{40}$' -or
+      [string]$TaskMetadata.appliedBaselineOperatorSourceSha -notmatch '^[a-f0-9]{40}$' -or
+      [string]$TaskMetadata.appliedBaselineOperatorDeltaSha256 -cne
+        (Get-DocumentOperatorDeltaSha256 -ReleaseSha ([string]$TaskMetadata.appliedBaselineReleaseSourceSha) `
+          -OperatorSha ([string]$TaskMetadata.appliedBaselineOperatorSourceSha))) {
     throw "The post-migration baseline does not preserve the exact stage, parser, receipt, and migration-image handoff."
   }
   return [ordered]@{
-    SchemaVersion      = "2"
+    SchemaVersion      = "4"
     Kind               = "development-document-zero-drift-baseline"
     Environment        = "development"
     AccountId          = $ExpectedAccountId
     Region             = $Region
-    SourceSha          = $SourceSha
+    ReleaseSourceSha   = [string]$TaskMetadata.appliedBaselineReleaseSourceSha
+    OperatorSourceSha  = $operatorSourceSha
+    OperatorDeltaSha256 = Get-DocumentOperatorDeltaSha256 `
+      -ReleaseSha ([string]$TaskMetadata.appliedBaselineReleaseSourceSha) -OperatorSha $operatorSourceSha
     StateLineage       = [string]$State.Lineage
     StateSerial        = [long]$State.Serial
     Stage              = $stage
@@ -783,7 +831,7 @@ function Assert-PostMigrationBaselineMetadata {
   $expectedKeys = @(
     "AccountId", "Applyable", "CreatedAt", "Environment", "Kind", "MeaningfulChanges",
     "MigrationImage", "ParserQualifiedArn", "PlanPath", "PlanSha256", "ReceiptSha256", "Region",
-    "SchemaVersion", "SourceSha", "Stage", "StateLineage", "StateSerial"
+    "OperatorDeltaSha256", "OperatorSourceSha", "ReleaseSourceSha", "SchemaVersion", "Stage", "StateLineage", "StateSerial"
   ) | Sort-Object
   $actualKeys = @($Metadata.PSObject.Properties | ForEach-Object Name | Sort-Object)
   $stage = Get-ExactStringPlanVariable -Plan $Plan -Name "document_processing_deployment_stage"
@@ -796,11 +844,15 @@ function Assert-PostMigrationBaselineMetadata {
     [IO.Path]::GetFullPath([string]$Metadata.PlanPath)
   }
   if (($actualKeys -join "|") -cne ($expectedKeys -join "|") -or
-      [string]$Metadata.SchemaVersion -cne "2" -or
+      [string]$Metadata.SchemaVersion -cne "4" -or
       [string]$Metadata.Kind -cne "development-document-zero-drift-baseline" -or
       [string]$Metadata.Environment -cne "development" -or
       [string]$Metadata.AccountId -cne $ExpectedAccountId -or [string]$Metadata.Region -cne $Region -or
-      [string]$Metadata.SourceSha -cne $SourceSha -or
+      [string]$Metadata.ReleaseSourceSha -cne [string]$TaskMetadata.appliedBaselineReleaseSourceSha -or
+      [string]$Metadata.OperatorSourceSha -cne $operatorSourceSha -or
+      [string]$Metadata.OperatorDeltaSha256 -cne
+        (Get-DocumentOperatorDeltaSha256 -ReleaseSha ([string]$TaskMetadata.appliedBaselineReleaseSourceSha) `
+          -OperatorSha $operatorSourceSha) -or
       [string]$Metadata.StateLineage -cne [string]$State.Lineage -or
       [long]$Metadata.StateSerial -ne [long]$State.Serial -or
       [string]$Metadata.Stage -cne $stage -or
@@ -907,16 +959,23 @@ function Read-RetainedMigrationBaseline {
     "ParserQualifiedArn", "PlanPath", "PlanSha256", "ReceiptSha256", "Region", "SchemaVersion",
     "SourceSha", "Stage", "StateLineage", "StateSerial"
   ) | Sort-Object
+  $dualKeys = @($expectedKeys | Where-Object { $_ -cne "SourceSha" }) + @("OperatorDeltaSha256", "OperatorSourceSha", "ReleaseSourceSha") | Sort-Object
   $actualKeys = @($metadata.PSObject.Properties | ForEach-Object Name | Sort-Object)
   $metadataPlanPath = if ([string]::IsNullOrWhiteSpace([string]$metadata.PlanPath)) { "" } else {
     [IO.Path]::GetFullPath([string]$metadata.PlanPath)
   }
-  if (($actualKeys -join "|") -cne ($expectedKeys -join "|") -or
-    [string]$metadata.SchemaVersion -cne "1" -or
+  $schema = [string]$metadata.SchemaVersion
+  $schemaValid = ($schema -ceq "1" -and ($actualKeys -join "|") -ceq ($expectedKeys -join "|") -and
+      [string]$metadata.SourceSha -ceq $SourceSha) -or
+    ($schema -ceq "3" -and ($actualKeys -join "|") -ceq ($dualKeys -join "|") -and
+      [string]$metadata.ReleaseSourceSha -match '^[a-f0-9]{40}$' -and
+      [string]$metadata.OperatorSourceSha -ceq $operatorSourceSha -and
+      [string]$metadata.OperatorDeltaSha256 -ceq
+        (Get-DocumentOperatorDeltaSha256 -ReleaseSha ([string]$metadata.ReleaseSourceSha) -OperatorSha $operatorSourceSha))
+  if (-not $schemaValid -or
     [string]$metadata.Kind -cne "development-document-zero-drift-baseline" -or
     [string]$metadata.Environment -cne "development" -or
     [string]$metadata.AccountId -cne $ExpectedAccountId -or [string]$metadata.Region -cne $Region -or
-    [string]$metadata.SourceSha -cne $SourceSha -or
     $metadataPlanPath -cne [IO.Path]::GetFullPath($resolvedPlan) -or
     [string]$metadata.PlanSha256 -cne $PlanSha256 -or
     -not $createdAtValid -or
@@ -954,6 +1013,11 @@ function Read-RetainedMigrationBaseline {
   return [pscustomobject]@{
     Plan = $plan; PlanPath = $resolvedPlan; PlanSha256 = $PlanSha256
     Metadata = $metadata; MetadataPath = $sidecarPath; MetadataSha256 = $sidecarSha256
+    ReleaseSourceSha = $(if ($schema -ceq "3") { [string]$metadata.ReleaseSourceSha } else { $SourceSha })
+    OperatorSourceSha = $(if ($schema -ceq "3") { [string]$metadata.OperatorSourceSha } else { $SourceSha })
+    OperatorDeltaSha256 = $(if ($schema -ceq "3") { [string]$metadata.OperatorDeltaSha256 } else {
+      Get-DocumentOperatorDeltaSha256 -ReleaseSha $SourceSha -OperatorSha $SourceSha
+    })
   }
 }
 
@@ -968,7 +1032,10 @@ function Assert-TaskMetadataBaselineBinding {
     [string]$TaskMetadata.appliedBaselineStateLineage -cne [string]$metadata.StateLineage -or
     [long]$TaskMetadata.appliedBaselineStateSerial -ne [long]$metadata.StateSerial -or
     [string]$TaskMetadata.appliedBaselineReceiptSha256 -cne [string]$metadata.ReceiptSha256 -or
-    [string]$TaskMetadata.appliedBaselineParserQualifiedArn -cne [string]$metadata.ParserQualifiedArn) {
+    [string]$TaskMetadata.appliedBaselineParserQualifiedArn -cne [string]$metadata.ParserQualifiedArn -or
+    [string]$TaskMetadata.appliedBaselineReleaseSourceSha -cne [string]$Baseline.ReleaseSourceSha -or
+    [string]$TaskMetadata.appliedBaselineOperatorSourceSha -cne [string]$Baseline.OperatorSourceSha -or
+    [string]$TaskMetadata.appliedBaselineOperatorDeltaSha256 -cne [string]$Baseline.OperatorDeltaSha256) {
     throw "The task-plan metadata does not preserve the exact retained-baseline handoff."
   }
 }
@@ -1759,6 +1826,9 @@ if ($Action -eq "PlanTask") {
     appliedBaselineStateSerial = [long]$baselineEvidence.Metadata.StateSerial
     appliedBaselineReceiptSha256 = [string]$baselineEvidence.Metadata.ReceiptSha256
     appliedBaselineParserQualifiedArn = [string]$baselineEvidence.Metadata.ParserQualifiedArn
+    appliedBaselineReleaseSourceSha = [string]$baselineEvidence.ReleaseSourceSha
+    appliedBaselineOperatorSourceSha = [string]$baselineEvidence.OperatorSourceSha
+    appliedBaselineOperatorDeltaSha256 = [string]$baselineEvidence.OperatorDeltaSha256
     taskPlanPath        = $taskPlan
     taskPlanSha256      = $sha256
     meaningfulChanges   = 1
