@@ -50,9 +50,11 @@ function Assert-RetainedGatewayBaselineMetadata {
     "SourceSha", "Stage", "StateLineage", "StateSerial"
   ) | Sort-Object
   $v2Keys = @($v1Keys + "MigrationImage" | Sort-Object)
+  $v3Keys = @($v1Keys | Where-Object { $_ -cne "SourceSha" }) + @("OperatorDeltaSha256", "OperatorSourceSha", "ReleaseSourceSha") | Sort-Object
+  $v4Keys = @($v3Keys + "MigrationImage" | Sort-Object)
   $actualKeys = @($Metadata.PSObject.Properties | ForEach-Object Name | Sort-Object)
   $schemaVersion = [string]$Metadata.SchemaVersion
-  $expectedKeys = if ($schemaVersion -ceq "1") { $v1Keys } elseif ($schemaVersion -ceq "2") { $v2Keys } else { @() }
+  $expectedKeys = if ($schemaVersion -ceq "1") { $v1Keys } elseif ($schemaVersion -ceq "2") { $v2Keys } elseif ($schemaVersion -ceq "3") { $v3Keys } elseif ($schemaVersion -ceq "4") { $v4Keys } else { @() }
   $createdAt = [datetime]::MinValue
   $createdAtValid = [datetime]::TryParse([string]$Metadata.CreatedAt, [ref]$createdAt) -and
     $createdAt.Year -ge 2000 -and $createdAt.Year -le 2099
@@ -67,11 +69,16 @@ function Assert-RetainedGatewayBaselineMetadata {
       [string]$migrationImage -cnotmatch "^$([regex]::Escape($ExpectedMigrationRepositoryUrl))@sha256:[a-f0-9]{64}$") {
     throw "The retained baseline migration image is outside the exact Terraform-owned development repository."
   }
+  $sourceBindingValid = if ($schemaVersion -in @("3", "4")) {
+    [string]$Metadata.ReleaseSourceSha -match '^[a-f0-9]{40}$' -and
+      [string]$Metadata.OperatorSourceSha -ceq $SourceSha -and
+      [string]$Metadata.OperatorDeltaSha256 -match '^[a-f0-9]{64}$'
+  } else { [string]$Metadata.SourceSha -ceq $SourceSha }
   if ($expectedKeys.Count -eq 0 -or ($actualKeys -join "|") -cne ($expectedKeys -join "|") -or
       [string]$Metadata.Kind -cne "development-document-zero-drift-baseline" -or
       [string]$Metadata.Environment -cne "development" -or
       [string]$Metadata.AccountId -cne $AccountId -or [string]$Metadata.Region -cne $Region -or
-      [string]$Metadata.SourceSha -cne $SourceSha -or
+      -not $sourceBindingValid -or
       $metadataPlanPath -cne [IO.Path]::GetFullPath($PlanPath) -or
       [string]$Metadata.PlanSha256 -cne $PlanSha256 -or -not $createdAtValid -or
       $Metadata.Applyable -isnot [bool] -or $Metadata.Applyable -or
@@ -88,7 +95,7 @@ function Assert-RetainedGatewayBaselineMetadata {
         [string]$parserQualifiedArn -cnotmatch "^arn:aws:lambda:$([regex]::Escape($Region)):$AccountId`:function:ai-job-apply-development-document-parser:[1-9][0-9]*$")) {
     throw "The retained baseline metadata does not match the exact document-to-gateway handoff."
   }
-  if ($schemaVersion -ceq "2" -and [string]$Metadata.MigrationImage -cne [string]$migrationImage) {
+  if ($schemaVersion -in @("2", "4") -and [string]$Metadata.MigrationImage -cne [string]$migrationImage) {
     throw "The version-2 retained baseline metadata does not bind the exact migration image."
   }
   return $true

@@ -153,6 +153,40 @@ function Assert-CallerAndSource {
   }
   return $head
 }
+
+function Get-DocumentOperatorDeltaSha256 {
+  param([Parameter(Mandatory)][string]$ReleaseSha, [Parameter(Mandatory)][string]$OperatorSha)
+  if ($ReleaseSha -notmatch '^[a-f0-9]{40}$' -or $OperatorSha -notmatch '^[a-f0-9]{40}$') { throw "The document baseline source SHAs are invalid." }
+  if ($ReleaseSha -ceq $OperatorSha) {
+    return Get-TextSha256 "development-operator-delta-v1`n$ReleaseSha`n$OperatorSha`n--name-status--`n--patch--`n"
+  }
+  & git -C $repositoryRoot merge-base --is-ancestor $ReleaseSha $OperatorSha 2>$null
+  if ($LASTEXITCODE -ne 0) { throw "The document baseline release is not an ancestor of the gateway operator." }
+  $allowed = @(
+    "scripts/lib/development-document-dark-guards.ps1", "scripts/lib/development-gateway-release-guards.ps1",
+    "scripts/operate-development-document-dark-deployment.ps1", "scripts/operate-development-document-migration.ps1",
+    "scripts/operate-development-gateway-release.ps1", "scripts/tests/development-document-dark-guards.tests.ps1",
+    "scripts/tests/development-document-dark-operator.tests.ps1", "scripts/tests/development-document-migration-operator.tests.ps1",
+    "scripts/tests/development-gateway-release-guards.tests.ps1", "scripts/tests/development-gateway-release-operator.tests.ps1",
+    "scripts/validate-serverless-workflow-infrastructure.mjs",
+    "infrastructure/runbooks/deployments/development-document-dark-deployment.md", "infrastructure/runbooks/deployments/database-migration.md",
+    "infrastructure/runbooks/deployments/development-gateway-lambda-release.md"
+  )
+  $records = @(& git -C $repositoryRoot diff --name-status --no-renames "$ReleaseSha..$OperatorSha" 2>$null)
+  $numstat = @(& git -C $repositoryRoot diff --numstat --no-renames "$ReleaseSha..$OperatorSha" 2>$null)
+  if ($LASTEXITCODE -ne 0 -or $records.Count -eq 0 -or @($numstat | Where-Object { $_ -match '^-\t-\t' }).Count -ne 0) { throw "The document operator delta is empty, unreadable, or binary." }
+  foreach ($record in $records) {
+    if ($record -notmatch '^M\t(.+)$' -or $Matches[1] -notin $allowed) { throw "The document operator delta is outside the modified-file allowlist." }
+    $path = $Matches[1]
+    foreach ($revision in @($ReleaseSha, $OperatorSha)) {
+      $type = (& git -C $repositoryRoot cat-file -t "$revision`:$path" 2>$null).Trim()
+      if ($LASTEXITCODE -ne 0 -or $type -cne "blob") { throw "The document operator delta contains a missing or non-blob path." }
+    }
+  }
+  $patch = @(& git -C $repositoryRoot diff --full-index --binary --no-ext-diff --no-renames "$ReleaseSha..$OperatorSha" 2>$null)
+  if ($LASTEXITCODE -ne 0) { throw "The document canonical operator patch could not be read." }
+  return Get-TextSha256 ("development-operator-delta-v1`n$ReleaseSha`n$OperatorSha`n--name-status--`n" + (($records -join "`n") + "`n--patch--`n" + ($patch -join "`n") + "`n"))
+}
 function Initialize-Backend {
   $location = (& aws s3api get-bucket-location --bucket $StateBucket --query LocationConstraint --output text 2>$null).Trim()
   if ($LASTEXITCODE -ne 0 -or $location -cne $Region) { throw "The state bucket is outside us-east-2." }
@@ -306,9 +340,17 @@ function Read-Baseline {
     -PlanPath $planPath -PlanSha256 $ReviewedBaselineSha256 -SourceSha $SourceSha `
     -AccountId $ExpectedAccountId -Region $Region `
     -ExpectedMigrationRepositoryUrl $boundary.MigrationRepositoryUrl -CurrentState $state
+  $documentReleaseSha = if ([string]$metadata.SchemaVersion -in @("3", "4")) {
+    if ([string]$metadata.OperatorSourceSha -cne $SourceSha -or
+      [string]$metadata.OperatorDeltaSha256 -cne
+        (Get-DocumentOperatorDeltaSha256 -ReleaseSha ([string]$metadata.ReleaseSourceSha) -OperatorSha $SourceSha)) {
+      throw "The retained document baseline operator delta does not match the current gateway release source."
+    }
+    [string]$metadata.ReleaseSourceSha
+  } else { $SourceSha }
   $documentReceipt = Read-BaselineDocumentReceipt -ReceiptSha256 ([string]$metadata.ReceiptSha256)
   $null = Assert-GatewayDocumentBaselineReceipt -Receipt $documentReceipt `
-    -ReceiptSha256 ([string]$metadata.ReceiptSha256) -Plan $plan -SourceSha $SourceSha `
+    -ReceiptSha256 ([string]$metadata.ReceiptSha256) -Plan $plan -SourceSha $documentReleaseSha `
     -ExpectedBoundarySha256 $boundary.BoundarySha256
   $stage = [string](Get-GatewayPlanVariableValue $plan.variables "document_processing_deployment_stage")
   $parserArn = [string](Get-GatewayPlanVariableValue $plan.variables "document_parser_invocation_qualified_arn")

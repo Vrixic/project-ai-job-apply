@@ -62,6 +62,33 @@ $baselineMetadataV2.SchemaVersion = "2"
 $baselineMetadataV2 | Add-Member MigrationImage $baselineMigrationImage
 $null = Assert-RetainedGatewayBaselineMetadata $baselineMetadataV2 $metadataPlan $baselinePath $baselineSha `
   $sourceSha $account "us-east-2" $repositoryUrl $currentState; $passed++
+$baselineMetadataV3 = Copy-Fixture $baselineMetadata
+$baselineMetadataV3.SchemaVersion = "3"
+$baselineMetadataV3.PSObject.Properties.Remove("SourceSha")
+$baselineMetadataV3 | Add-Member ReleaseSourceSha ("b" * 40)
+$baselineMetadataV3 | Add-Member OperatorSourceSha $sourceSha
+$baselineMetadataV3 | Add-Member OperatorDeltaSha256 ("c" * 64)
+$null = Assert-RetainedGatewayBaselineMetadata $baselineMetadataV3 $metadataPlan $baselinePath $baselineSha `
+  $sourceSha $account "us-east-2" $repositoryUrl $currentState; $passed++
+$baselineMetadataV4 = Copy-Fixture $baselineMetadataV3
+$baselineMetadataV4.SchemaVersion = "4"
+$baselineMetadataV4 | Add-Member MigrationImage $baselineMigrationImage
+$null = Assert-RetainedGatewayBaselineMetadata $baselineMetadataV4 $metadataPlan $baselinePath $baselineSha `
+  $sourceSha $account "us-east-2" $repositoryUrl $currentState; $passed++
+foreach ($mutation in @("release", "operator", "delta", "schema", "extra")) {
+  $badDualMetadata = Copy-Fixture $baselineMetadataV4
+  switch ($mutation) {
+    "release" { $badDualMetadata.ReleaseSourceSha = "not-a-sha" }
+    "operator" { $badDualMetadata.OperatorSourceSha = "d" * 40 }
+    "delta" { $badDualMetadata.OperatorDeltaSha256 = "not-a-digest" }
+    "schema" { $badDualMetadata.SchemaVersion = "5" }
+    "extra" { $badDualMetadata | Add-Member Unexpected "value" }
+  }
+  Assert-Rejected {
+    Assert-RetainedGatewayBaselineMetadata $badDualMetadata $metadataPlan $baselinePath $baselineSha `
+      $sourceSha $account "us-east-2" $repositoryUrl $currentState
+  } "A dual-source baseline accepted $mutation tampering."
+}
 $badMetadata = Copy-Fixture $baselineMetadata; $badMetadata.Applyable = $true
 Assert-Rejected { Assert-RetainedGatewayBaselineMetadata $badMetadata $metadataPlan $baselinePath $baselineSha $sourceSha $account "us-east-2" $repositoryUrl $currentState } "Applyable retained metadata was accepted."
 $badMetadata = Copy-Fixture $baselineMetadata; $badMetadata.ParserQualifiedArn = "arn:aws:lambda:us-east-2:999999999999:function:ai-job-apply-development-document-parser:7"; $badMetadata.Stage = "complete-dark"
