@@ -191,7 +191,7 @@ $parserVariables.document_parser_artifact_sha256.value = $parserSha
 $parserVariables.document_parser_artifact_base64sha256.value = (("Y" * 43) + "=")
 Assert-DevelopmentDocumentDarkVariables $baseline $parserVariables $receipt "parser-dark"
 
-$qualified = "arn:aws:lambda:us-east-2:${account}:function:ai-job-apply-development-document-parser:7"
+$qualified = "arn:aws:lambda:us-east-2:${account}:function:ai-job-apply-development-document-parser:1"
 
 $existingStatement = [pscustomobject]@{ Sid = "Existing"; Effect = "Allow"; Action = "kms:DescribeKey"; Resource = "*" }
 $kmsStatements = @(
@@ -447,7 +447,7 @@ $processorPolicy = New-TestPolicy @(
   @{ Sid = "DecryptOwnedRuntimeData"; Effect = "Allow"; Action = @("kms:Decrypt", "kms:GenerateDataKey"); Resource = $kmsArn },
   @{ Sid = "WriteNativeTraces"; Effect = "Allow"; Action = @("xray:PutTelemetryRecords", "xray:PutTraceSegments"); Resource = "*" }
 )
-$stsPolicy = New-TestPolicy @(@{ Sid = "CoordinatorAssumesExactDocumentObjectRoleOnly"; Effect = "Allow"; Action = "sts:AssumeRole"; Resource = $objectRole; Principal = @{ AWS = "*" }; Condition = @{ ArnEquals = @{ "aws:PrincipalArn" = $processorRole } } })
+$stsPolicy = New-TestPolicy @(@{ Sid = "CoordinatorAssumesExactDocumentObjectRoleOnly"; Effect = "Allow"; Action = "sts:AssumeRole"; Resource = $objectRole; Principal = "*"; Condition = @{ ArnEquals = @{ "aws:PrincipalArn" = $processorRole } } })
 $completeChanges = @()
 foreach ($entry in $complete.GetEnumerator()) {
   if ($entry.Value -eq "update") { continue }
@@ -472,6 +472,26 @@ $validCompletePlan = [pscustomobject]@{
   planned_values = $kmsPlan.planned_values; resource_changes = @($kmsNoop) + $completeChanges
 }
 $null = Assert-DevelopmentDocumentDarkPlan $validCompletePlan $account complete-dark
+foreach ($principalMutation in @("object", "list", "null", "other", "service", "extra")) {
+  $badStsPlan = $validCompletePlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $stsChange = @($badStsPlan.resource_changes | Where-Object {
+      [string]$_.address -ceq "module.platform.aws_vpc_endpoint.sts[0]"
+    })[0]
+  $badStsPolicy = $stsChange.change.after.policy | ConvertFrom-Json
+  switch ($principalMutation) {
+    "object" { $badStsPolicy.Statement[0].Principal = [pscustomobject]@{ AWS = "*" } }
+    "list" { $badStsPolicy.Statement[0].Principal = @("*") }
+    "null" { $badStsPolicy.Statement[0].Principal = $null }
+    "other" { $badStsPolicy.Statement[0].Principal = "arn:aws:iam::${account}:root" }
+    "service" { $badStsPolicy.Statement[0].Principal = [pscustomobject]@{ Service = "sts.amazonaws.com" } }
+    "extra" { $badStsPolicy.Statement[0].Principal = [pscustomobject]@{ AWS = "*"; Service = "sts.amazonaws.com" } }
+  }
+  $stsChange.change.after.policy = $badStsPolicy | ConvertTo-Json -Compress -Depth 40
+  $rejected = $false
+  try { $null = Assert-DevelopmentDocumentDarkPlan $badStsPlan $account complete-dark }
+  catch { $rejected = $true }
+  if (-not $rejected) { throw "The CompleteDark STS policy accepted '$principalMutation' principal tampering." }
+}
 
 $currentSource = "d" * 40
 $currentParserSha = "e" * 64
@@ -484,7 +504,9 @@ $parserFunctionBefore = [pscustomobject]@{
   runtime = "nodejs24.x"; handler = "index.handler"; timeout = 45; memory_size = 1536
   s3_key = $receipt.artifacts[1].key; s3_object_version = $receipt.artifacts[1].versionId
   source_code_hash = $receipt.artifacts[1].objectBase64Sha256; code_sha256 = $receipt.artifacts[1].objectBase64Sha256
-  qualified_arn = $qualified; qualified_invoke_arn = "$qualified`:invoke"; version = "7"; last_modified = "old"
+  arn = "arn:aws:lambda:us-east-2:${account}:function:ai-job-apply-development-document-parser"
+  invoke_arn = "arn:aws:apigateway:us-east-2:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-2:${account}:function:ai-job-apply-development-document-parser/invocations"
+  qualified_arn = $qualified; qualified_invoke_arn = "$qualified`:invoke"; version = "1"; last_modified = "old"
   environment = @([pscustomobject]@{ variables = [pscustomobject]@{
         NODE_ENV = "production"; RELEASE_SHA = $parserSha; DOCUMENT_PARSER_VERSION = "resume-parser-v1"
       } })
@@ -494,50 +516,120 @@ $parserFunctionAfter.s3_key = $currentReceipt.artifacts[1].key
 $parserFunctionAfter.s3_object_version = $currentReceipt.artifacts[1].versionId
 $parserFunctionAfter.source_code_hash = $currentReceipt.artifacts[1].objectBase64Sha256
 $parserFunctionAfter.environment[0].variables.RELEASE_SHA = $currentParserSha
-$parserFunctionAfter.code_sha256 = $null; $parserFunctionAfter.qualified_arn = $null
+$parserFunctionAfter.code_sha256 = $parserFunctionBefore.code_sha256; $parserFunctionAfter.qualified_arn = $null
 $parserFunctionAfter.qualified_invoke_arn = $null; $parserFunctionAfter.version = $null; $parserFunctionAfter.last_modified = $null
 $parserFunctionTransition = [pscustomobject]@{
   address = "module.platform.aws_lambda_function.document_parser[0]"; mode = "managed"; type = "aws_lambda_function"
   change = [pscustomobject]@{
-    actions = @("update"); before = $parserFunctionBefore; after = $parserFunctionAfter; replace_paths = @()
+    actions = @("update"); before = $parserFunctionBefore; after = $parserFunctionAfter
     before_sensitive = [pscustomobject]@{}; after_sensitive = [pscustomobject]@{}
-    after_unknown = [pscustomobject]@{ code_sha256 = $true; last_modified = $true; qualified_arn = $true; qualified_invoke_arn = $true; version = $true }
+    after_unknown = [pscustomobject][ordered]@{
+      architectures = @($false); capacity_provider_config = @(); dead_letter_config = @(); durable_config = @()
+      environment = @([pscustomobject]@{ variables = [pscustomobject]@{} }); ephemeral_storage = @([pscustomobject]@{})
+      file_system_config = @(); image_config = @(); last_modified = $true; layers = @()
+      logging_config = @([pscustomobject]@{}); qualified_arn = $true; qualified_invoke_arn = $true
+      snap_start = @(); tags = [pscustomobject]@{}; tags_all = [pscustomobject]@{}; tenancy_config = @()
+      tracing_config = @([pscustomobject]@{}); version = $true
+      vpc_config = @([pscustomobject]@{ security_group_ids = @($false); subnet_ids = @($false, $false) })
+    }
   }
 }
 $parserAliasBefore = [pscustomobject]@{
   name = "development"; description = "Reviewed immutable development document parser release"
-  function_name = "ai-job-apply-development-document-parser"; function_version = "7"
+  function_name = "ai-job-apply-development-document-parser"; function_version = "1"
   arn = "old-alias-arn"; invoke_arn = "old-alias-invoke"; routing_config = @()
 }
 $parserAliasAfter = $parserAliasBefore | ConvertTo-Json -Depth 20 | ConvertFrom-Json
-$parserAliasAfter.function_version = $null; $parserAliasAfter.arn = $null; $parserAliasAfter.invoke_arn = $null
+$parserAliasAfter.function_version = $null
 $parserAliasTransition = [pscustomobject]@{
   address = "module.platform.aws_lambda_alias.document_parser[0]"; mode = "managed"; type = "aws_lambda_alias"
   change = [pscustomobject]@{
-    actions = @("update"); before = $parserAliasBefore; after = $parserAliasAfter; replace_paths = @()
+    actions = @("update"); before = $parserAliasBefore; after = $parserAliasAfter
     before_sensitive = [pscustomobject]@{}; after_sensitive = [pscustomobject]@{}
-    after_unknown = [pscustomobject]@{ arn = $true; function_version = $true; invoke_arn = $true }
+    after_unknown = [pscustomobject]@{ function_version = $true; routing_config = @() }
   }
+}
+function New-TestCompleteDarkSourceTransitionOutputs([string]$ParserQualifiedArn) {
+  $outputs = [ordered]@{}
+  foreach ($name in @(
+      "alert_delivery_canary_alarm_name", "application_security_group_id", "artifact_bucket",
+      "candidate_document_bucket", "candidate_document_malware_protection_plan_id", "cost_export_arn",
+      "cost_export_bucket", "document_scan_event_rule_arn", "ecs_cluster_arn", "gateway_lambda_alias_arn",
+      "gateway_lambda_authorizer_id", "gateway_lambda_function_name", "gateway_url", "migration_repository_url",
+      "migration_subnet_ids", "migration_task_definition_arn", "monthly_budget_name",
+      "observability_dashboard_name", "operational_alert_topic_arn", "outbox_reconciler_alias_arn",
+      "outbox_reconciler_rule_arn", "outbox_starter_alias_arn", "outbox_starter_event_source_mapping_uuid",
+      "profile_readiness_activity_alias_arn", "profile_readiness_durable_alias_arn",
+      "profile_readiness_durable_version_arn", "profile_readiness_terminal_alias_arn",
+      "profile_readiness_terminal_rule_arn", "vpc_id"
+    )) {
+    $outputs[$name] = [pscustomobject][ordered]@{
+      actions = @("no-op"); before = "known-$name"; after = "known-$name"; after_unknown = $false
+      before_sensitive = $false; after_sensitive = $false
+    }
+  }
+  $outputs.document_parser_version_arn = [pscustomobject][ordered]@{
+    actions = @("update"); before = $ParserQualifiedArn; after_unknown = $true
+    before_sensitive = $false; after_sensitive = $false
+  }
+  foreach ($name in @("document_processor_alias_arn", "document_scan_event_source_mapping_uuid")) {
+    $outputs[$name] = [pscustomobject][ordered]@{
+      actions = @("create"); before = $null; after_unknown = $true
+      before_sensitive = $false; after_sensitive = $false
+    }
+  }
+  return [pscustomobject]$outputs
 }
 $validTransitionPlan = $validCompletePlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
 $validTransitionPlan.resource_changes = @($validTransitionPlan.resource_changes) + @($parserFunctionTransition, $parserAliasTransition)
+$validTransitionPlan.output_changes = New-TestCompleteDarkSourceTransitionOutputs $qualified
 $null = Assert-DevelopmentDocumentDarkPlan $validTransitionPlan $account complete-dark `
   -ParserSourceTransition -BaselineVariables $parserVariables -Receipt $currentReceipt -ParserQualifiedArn $qualified
+foreach ($replacePathsCase in @(
+    [pscustomobject]@{ Label = "null"; Value = $null },
+    [pscustomobject]@{ Label = "empty"; Value = @() }
+  )) {
+  $replacePathsPlan = $validTransitionPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  foreach ($address in @(
+      "module.platform.aws_lambda_function.document_parser[0]",
+      "module.platform.aws_lambda_alias.document_parser[0]"
+    )) {
+    $replacePathsChange = @($replacePathsPlan.resource_changes | Where-Object address -eq $address)[0]
+    $replacePathsChange.change | Add-Member -NotePropertyName replace_paths -NotePropertyValue $replacePathsCase.Value
+  }
+  $null = Assert-DevelopmentDocumentDarkPlan $replacePathsPlan $account complete-dark `
+    -ParserSourceTransition -BaselineVariables $parserVariables -Receipt $currentReceipt -ParserQualifiedArn $qualified
+}
 
-foreach ($mutation in @("artifact", "stable-field", "unknown", "unknown-false", "unknown-missing", "alias-unknown-false", "replacement", "alias-routing", "pin", "output", "sensitivity")) {
+foreach ($mutation in @(
+    "artifact", "stable-field", "known-code", "unknown", "unknown-false", "unknown-missing",
+    "unknown-extra-false", "unknown-false-to-true", "unknown-nested", "unknown-security", "code-unknown",
+    "alias-unknown-false", "alias-unknown-missing", "alias-unknown-arn", "alias-unknown-nested", "alias-known-arn", "replacement",
+    "alias-routing", "pin", "output", "sensitivity"
+  )) {
   $badTransition = $validTransitionPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
   $badFunction = @($badTransition.resource_changes | Where-Object address -eq "module.platform.aws_lambda_function.document_parser[0]")[0]
   $badAlias = @($badTransition.resource_changes | Where-Object address -eq "module.platform.aws_lambda_alias.document_parser[0]")[0]
   switch ($mutation) {
     "artifact" { $badFunction.change.after.s3_key = "lambda/documents/$currentSource/$currentParserSha/wrong.zip" }
     "stable-field" { $badFunction.change.after.timeout = 46 }
+    "known-code" { $badFunction.change.after.code_sha256 = $null }
     "unknown" { $badFunction.change.after_unknown | Add-Member role $true }
     "unknown-false" { $badFunction.change.after_unknown.version = $false }
     "unknown-missing" { $badFunction.change.after_unknown.PSObject.Properties.Remove("last_modified") }
+    "unknown-extra-false" { $badFunction.change.after_unknown | Add-Member extra_scaffolding @() }
+    "unknown-false-to-true" { $badFunction.change.after_unknown.architectures[0] = $true }
+    "unknown-nested" { $badFunction.change.after_unknown.environment[0].variables | Add-Member SECRET $true }
+    "unknown-security" { $badFunction.change.after_unknown | Add-Member kms_key_arn $true }
+    "code-unknown" { $badFunction.change.after_unknown | Add-Member code_sha256 $true }
     "alias-unknown-false" { $badAlias.change.after_unknown.function_version = $false }
-    "replacement" { $badFunction.change.replace_paths = @(@("s3_key")) }
+    "alias-unknown-missing" { $badAlias.change.after_unknown.PSObject.Properties.Remove("function_version") }
+    "alias-unknown-arn" { $badAlias.change.after_unknown | Add-Member arn $true }
+    "alias-unknown-nested" { $badAlias.change.after_unknown.routing_config = @([pscustomobject]@{ additional_version_weights = $true }) }
+    "alias-known-arn" { $badAlias.change.after.arn = "" }
+    "replacement" { $badFunction.change | Add-Member replace_paths @(@("s3_key")) }
     "alias-routing" { $badAlias.change.after.routing_config = @([pscustomobject]@{ additional_version_weights = @{ "6" = 0.1 } }) }
-    "pin" { $badAlias.change.before.function_version = "6" }
+    "pin" { $badAlias.change.before.function_version = "2" }
     "output" { $badTransition.output_changes = [pscustomobject]@{ parser = [pscustomobject]@{ actions = @("update") } } }
     "sensitivity" { $badFunction.change.after_sensitive = [pscustomobject]@{ environment = $true } }
   }
@@ -547,6 +639,96 @@ foreach ($mutation in @("artifact", "stable-field", "unknown", "unknown-false", 
       -ParserSourceTransition -BaselineVariables $parserVariables -Receipt $currentReceipt -ParserQualifiedArn $qualified
   } catch { $rejected = $true }
   if (-not $rejected) { throw "The CompleteDark parser source-transition guard accepted '$mutation' tampering." }
+}
+$explicitNullOutputsPlan = $validTransitionPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+foreach ($name in @(
+    "document_parser_version_arn", "document_processor_alias_arn", "document_scan_event_source_mapping_uuid"
+  )) {
+  $explicitNullOutputsPlan.output_changes.$name | Add-Member -NotePropertyName after -NotePropertyValue $null
+}
+$null = Assert-DevelopmentDocumentDarkPlan $explicitNullOutputsPlan $account complete-dark `
+  -ParserSourceTransition -BaselineVariables $parserVariables -Receipt $currentReceipt -ParserQualifiedArn $qualified
+
+foreach ($outputMutation in @(
+    "missing-transition", "missing-noop", "extra", "parser-action", "create-action", "parser-before",
+    "create-before", "known-after", "unknown-false", "before-sensitive", "after-sensitive",
+    "noop-action", "noop-value", "noop-unknown", "noop-sensitive", "noop-missing-field", "noop-extra-field",
+    "transition-extra-field"
+  )) {
+  $badOutputPlan = $validTransitionPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $parserOutput = $badOutputPlan.output_changes.document_parser_version_arn
+  $processorOutput = $badOutputPlan.output_changes.document_processor_alias_arn
+  $noOpOutput = $badOutputPlan.output_changes.artifact_bucket
+  switch ($outputMutation) {
+    "missing-transition" { $badOutputPlan.output_changes.PSObject.Properties.Remove("document_processor_alias_arn") }
+    "missing-noop" { $badOutputPlan.output_changes.PSObject.Properties.Remove("artifact_bucket") }
+    "extra" { $badOutputPlan.output_changes | Add-Member unexpected_output ([pscustomobject]@{ actions = @("no-op") }) }
+    "parser-action" { $parserOutput.actions = @("create") }
+    "create-action" { $processorOutput.actions = @("update") }
+    "parser-before" { $parserOutput.before = $qualified -replace ':1$', ':2' }
+    "create-before" { $processorOutput.before = "not-null" }
+    "known-after" { $processorOutput | Add-Member after "known" }
+    "unknown-false" { $processorOutput.after_unknown = $false }
+    "before-sensitive" { $processorOutput.before_sensitive = $true }
+    "after-sensitive" { $processorOutput.after_sensitive = $true }
+    "noop-action" { $noOpOutput.actions = @("update") }
+    "noop-value" { $noOpOutput.after = "changed" }
+    "noop-unknown" { $noOpOutput.after_unknown = $true }
+    "noop-sensitive" { $noOpOutput.after_sensitive = $true }
+    "noop-missing-field" { $noOpOutput.PSObject.Properties.Remove("after_unknown") }
+    "noop-extra-field" { $noOpOutput | Add-Member unexpected $false }
+    "transition-extra-field" { $processorOutput | Add-Member unexpected $false }
+  }
+  $rejected = $false
+  try {
+    $null = Assert-DevelopmentDocumentDarkPlan $badOutputPlan $account complete-dark `
+      -ParserSourceTransition -BaselineVariables $parserVariables -Receipt $currentReceipt -ParserQualifiedArn $qualified
+  } catch { $rejected = $true }
+  if (-not $rejected) { throw "The CompleteDark output guard accepted '$outputMutation' tampering." }
+}
+$diagnosticRoot = Join-Path $repositoryRoot `
+  "infrastructure\terraform\environments\development\.terraform\development-document-dark-deployment"
+$diagnosticPlanPath = Join-Path $diagnosticRoot "diagnostic-complete-dark-output-e56.tfplan"
+$diagnosticShowPath = Join-Path $diagnosticRoot "diagnostic-complete-dark-output-e56-327f4ca835b8.show.json"
+$diagnosticPlanPresent = Test-Path -LiteralPath $diagnosticPlanPath -PathType Leaf
+$diagnosticShowPresent = Test-Path -LiteralPath $diagnosticShowPath -PathType Leaf
+if ($diagnosticPlanPresent -xor $diagnosticShowPresent) {
+  throw "The frozen CompleteDark diagnostic plan/show pair is incomplete."
+}
+if ($diagnosticPlanPresent) {
+  if ((Get-FileHash -LiteralPath $diagnosticPlanPath -Algorithm SHA256).Hash.ToLowerInvariant() -cne
+      "327f4ca835b8cc3155ea4ffae8715f0ed7ffbabfecbc2632a821529e7e9cb2a4" -or
+    (Get-FileHash -LiteralPath $diagnosticShowPath -Algorithm SHA256).Hash.ToLowerInvariant() -cne
+      "9c3bb8f7d3f198007d131c3fb90315573f236f2bd06fb69ab1022103b7ee59a5") {
+    throw "The frozen CompleteDark diagnostic bytes changed before semantic acceptance."
+  }
+  $diagnosticPlan = Get-Content -LiteralPath $diagnosticShowPath -Raw | ConvertFrom-Json
+  $diagnosticFunction = @($diagnosticPlan.resource_changes | Where-Object {
+      [string]$_.address -ceq "module.platform.aws_lambda_function.document_parser[0]"
+    })[0]
+  $diagnosticBaselineVariables = [pscustomobject]@{
+    document_parser_artifact_s3_key = [pscustomobject]@{ value = [string]$diagnosticFunction.change.before.s3_key }
+    document_parser_artifact_s3_object_version = [pscustomobject]@{ value = [string]$diagnosticFunction.change.before.s3_object_version }
+    document_parser_artifact_sha256 = [pscustomobject]@{ value = [string]$diagnosticFunction.change.before.environment[0].variables.RELEASE_SHA }
+    document_parser_artifact_base64sha256 = [pscustomobject]@{ value = [string]$diagnosticFunction.change.before.source_code_hash }
+  }
+  $diagnosticReceipt = [pscustomobject]@{ artifacts = @([pscustomobject]@{
+        artifactName = "document-parser-lambda"; suffix = "zip"
+        key = [string]$diagnosticFunction.change.after.s3_key
+        versionId = [string]$diagnosticFunction.change.after.s3_object_version
+        artifactSha256 = [string]$diagnosticFunction.change.after.environment[0].variables.RELEASE_SHA
+        objectBase64Sha256 = [string]$diagnosticFunction.change.after.source_code_hash
+      }) }
+  $diagnosticPin = [string]$diagnosticFunction.change.before.qualified_arn
+  $diagnosticChanges = @(Assert-DevelopmentDocumentDarkPlan $diagnosticPlan "362544434697" complete-dark `
+      -ParserSourceTransition -BaselineVariables $diagnosticBaselineVariables `
+      -Receipt $diagnosticReceipt -ParserQualifiedArn $diagnosticPin)
+  if ($diagnosticPin -cne "arn:aws:lambda:us-east-2:362544434697:function:ai-job-apply-development-document-parser:1" -or
+    $diagnosticChanges.Count -ne 12 -or
+    @($diagnosticChanges | Where-Object { (@($_.change.actions) -join ",") -ceq "create" }).Count -ne 7 -or
+    @($diagnosticChanges | Where-Object { (@($_.change.actions) -join ",") -ceq "update" }).Count -ne 5) {
+    throw "The frozen CompleteDark diagnostic did not retain its exact pin and 7-create/5-update boundary."
+  }
 }
 $transitionWithoutModeRejected = $false
 try { $null = Assert-DevelopmentDocumentDarkPlan $validTransitionPlan $account complete-dark }

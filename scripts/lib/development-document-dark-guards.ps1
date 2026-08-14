@@ -454,11 +454,11 @@ function Assert-ExactDocumentParserSourceTransition {
   $function = $function[0]; $alias = $alias[0]
   foreach ($change in @($function, $alias)) {
     if ([string]$change.mode -cne "managed" -or (@($change.change.actions) -join ",") -cne "update" -or
-      @((Get-OptionalTerraformChangeValue $change.change "replace_paths")).Count -ne 0 -or
       (ConvertTo-OptionalTerraformMetadataCanonicalValue $change.change "before_sensitive" -SortArrays) -cne
       (ConvertTo-OptionalTerraformMetadataCanonicalValue $change.change "after_sensitive" -SortArrays)) {
       throw "The parser source transition may not create, delete, replace, or broaden sensitivity."
     }
+    Assert-NoTerraformReplacementPaths $change.change
   }
 
   if ([string]$function.change.before.s3_key -cne $oldKey -or
@@ -470,6 +470,8 @@ function Assert-ExactDocumentParserSourceTransition {
     [string]$function.change.after.s3_key -cne [string]$artifact.key -or
     [string]$function.change.after.s3_object_version -cne [string]$artifact.versionId -or
     [string]$function.change.after.source_code_hash -cne [string]$artifact.objectBase64Sha256 -or
+    [string]::IsNullOrWhiteSpace([string]$function.change.before.code_sha256) -or
+    [string]$function.change.after.code_sha256 -cne [string]$function.change.before.code_sha256 -or
     [string]$function.change.after.environment[0].variables.RELEASE_SHA -cne [string]$artifact.artifactSha256) {
     throw "The parser function transition is not bound from the retained artifact/version to the exact-current receipt."
   }
@@ -485,16 +487,19 @@ function Assert-ExactDocumentParserSourceTransition {
     throw "The parser source transition changes a non-artifact Lambda field."
   }
   $functionUnknown = Get-OptionalTerraformChangeValue $function.change "after_unknown"
-  $expectedFunctionUnknowns = @("code_sha256", "last_modified", "qualified_arn", "qualified_invoke_arn", "version")
-  if ($null -eq $functionUnknown) {
-    throw "The parser source transition omits the exact computed Lambda fields."
+  $expectedFunctionUnknown = [ordered]@{
+    architectures = @($false); capacity_provider_config = @(); dead_letter_config = @(); durable_config = @()
+    environment = @([ordered]@{ variables = [ordered]@{} }); ephemeral_storage = @([ordered]@{})
+    file_system_config = @(); image_config = @(); last_modified = $true; layers = @()
+    logging_config = @([ordered]@{}); qualified_arn = $true; qualified_invoke_arn = $true
+    snap_start = @(); tags = [ordered]@{}; tags_all = [ordered]@{}; tenancy_config = @()
+    tracing_config = @([ordered]@{}); version = $true
+    vpc_config = @([ordered]@{ security_group_ids = @($false); subnet_ids = @($false, $false) })
   }
-  Assert-ExactObjectKeys $functionUnknown $expectedFunctionUnknowns "parser source-transition Lambda unknowns"
-  foreach ($field in $expectedFunctionUnknowns) {
-    if ($functionUnknown.PSObject.Properties[$field].Value -isnot [bool] -or
-      -not $functionUnknown.PSObject.Properties[$field].Value) {
-      throw "The parser source transition Lambda unknown '$field' is not exactly true."
-    }
+  if ($null -eq $functionUnknown -or
+    (ConvertTo-DeploymentCanonicalValue $functionUnknown) -cne
+    (ConvertTo-DeploymentCanonicalValue $expectedFunctionUnknown)) {
+    throw "The parser source transition Lambda unknowns differ from the exact provider shape."
   }
 
   if ([string]$alias.change.before.function_version -cne $pinnedVersion) {
@@ -502,7 +507,7 @@ function Assert-ExactDocumentParserSourceTransition {
   }
   $aliasBefore = $alias.change.before | ConvertTo-Json -Depth 40 | ConvertFrom-Json
   $aliasAfter = $alias.change.after | ConvertTo-Json -Depth 40 | ConvertFrom-Json
-  foreach ($field in @("arn", "function_version", "invoke_arn")) {
+  foreach ($field in @("function_version")) {
     $aliasBefore.PSObject.Properties.Remove($field); $aliasAfter.PSObject.Properties.Remove($field)
   }
   if ((ConvertTo-DeploymentCanonicalValue $aliasBefore -SortArrays) -cne
@@ -510,16 +515,11 @@ function Assert-ExactDocumentParserSourceTransition {
     throw "The parser source transition changes alias routing or a non-version field."
   }
   $aliasUnknown = Get-OptionalTerraformChangeValue $alias.change "after_unknown"
-  $expectedAliasUnknowns = @("arn", "function_version", "invoke_arn")
-  if ($null -eq $aliasUnknown) {
-    throw "The parser source transition omits the exact computed alias fields."
-  }
-  Assert-ExactObjectKeys $aliasUnknown $expectedAliasUnknowns "parser source-transition alias unknowns"
-  foreach ($field in $expectedAliasUnknowns) {
-    if ($aliasUnknown.PSObject.Properties[$field].Value -isnot [bool] -or
-      -not $aliasUnknown.PSObject.Properties[$field].Value) {
-      throw "The parser source transition alias unknown '$field' is not exactly true."
-    }
+  $expectedAliasUnknown = [ordered]@{ function_version = $true; routing_config = @() }
+  if ($null -eq $aliasUnknown -or
+    (ConvertTo-DeploymentCanonicalValue $aliasUnknown) -cne
+    (ConvertTo-DeploymentCanonicalValue $expectedAliasUnknown)) {
+    throw "The parser source transition alias unknowns differ from the exact provider shape."
   }
 }
 
@@ -1405,8 +1405,9 @@ function Assert-ExactDocumentCreatedResourcePolicies {
     Assert-ExactStringSet $sts[0].Effect @("Allow") "STS endpoint effect"
     Assert-ExactStringSet $sts[0].Action @("sts:AssumeRole") "STS endpoint actions"
     Assert-ExactStringSet $sts[0].Resource @($objectRole) "STS endpoint resources"
-    Assert-ExactObjectKeys $sts[0].Principal @("AWS") "STS endpoint principal"
-    Assert-ExactStringSet $sts[0].Principal.AWS @("*") "STS endpoint principal"
+    if ($sts[0].Principal -isnot [string] -or [string]$sts[0].Principal -cne "*") {
+      throw "The STS endpoint principal must be the exact canonical scalar wildcard."
+    }
     Assert-ExactCondition $sts[0].Condition @{ ArnEquals = @{ "aws:PrincipalArn" = @($processorRole) } }
     return
   }
@@ -1544,6 +1545,66 @@ function Assert-ExactDocumentAlarmSet {
   }
 }
 
+function Assert-DevelopmentDocumentCompleteDarkSourceTransitionOutputs {
+  param(
+    [Parameter(Mandatory)][object]$OutputChanges,
+    [Parameter(Mandatory)][string]$ParserQualifiedArn
+  )
+
+  $transitionActions = [ordered]@{
+    document_parser_version_arn = "update"
+    document_processor_alias_arn = "create"
+    document_scan_event_source_mapping_uuid = "create"
+  }
+  $noOpNames = @(
+    "alert_delivery_canary_alarm_name", "application_security_group_id", "artifact_bucket",
+    "candidate_document_bucket", "candidate_document_malware_protection_plan_id", "cost_export_arn",
+    "cost_export_bucket", "document_scan_event_rule_arn", "ecs_cluster_arn", "gateway_lambda_alias_arn",
+    "gateway_lambda_authorizer_id", "gateway_lambda_function_name", "gateway_url", "migration_repository_url",
+    "migration_subnet_ids", "migration_task_definition_arn", "monthly_budget_name",
+    "observability_dashboard_name", "operational_alert_topic_arn", "outbox_reconciler_alias_arn",
+    "outbox_reconciler_rule_arn", "outbox_starter_alias_arn", "outbox_starter_event_source_mapping_uuid",
+    "profile_readiness_activity_alias_arn", "profile_readiness_durable_alias_arn",
+    "profile_readiness_durable_version_arn", "profile_readiness_terminal_alias_arn",
+    "profile_readiness_terminal_rule_arn", "vpc_id"
+  )
+  Assert-ExactObjectKeys $OutputChanges @($noOpNames + $transitionActions.Keys) `
+    "CompleteDark source-transition outputs"
+
+  foreach ($name in $noOpNames) {
+    $change = $OutputChanges.PSObject.Properties[$name].Value
+    Assert-ExactObjectKeys $change @(
+      "actions", "after", "after_sensitive", "after_unknown", "before", "before_sensitive"
+    ) "CompleteDark no-op output '$name'"
+    if ((@($change.actions) -join ",") -cne "no-op" -or $null -eq $change.before -or
+      $null -eq $change.after -or
+      (ConvertTo-DeploymentCanonicalValue $change.before) -cne
+      (ConvertTo-DeploymentCanonicalValue $change.after) -or
+      $change.after_unknown -isnot [bool] -or $change.after_unknown -or
+      $change.before_sensitive -isnot [bool] -or $change.after_sensitive -isnot [bool] -or
+      $change.before_sensitive -ne $change.after_sensitive) {
+      throw "CompleteDark output '$name' is not an exact known sensitivity-stable no-op."
+    }
+  }
+
+  foreach ($entry in $transitionActions.GetEnumerator()) {
+    $name = [string]$entry.Key
+    $change = $OutputChanges.PSObject.Properties[$name].Value
+    $keys = @("actions", "after_sensitive", "after_unknown", "before", "before_sensitive")
+    if ($null -ne $change.PSObject.Properties["after"]) { $keys += "after" }
+    Assert-ExactObjectKeys $change $keys "CompleteDark transitioning output '$name'"
+    $expectedBefore = if ($name -ceq "document_parser_version_arn") { $ParserQualifiedArn } else { $null }
+    if ((@($change.actions) -join ",") -cne [string]$entry.Value -or
+      $(if ($null -eq $expectedBefore) { $null -ne $change.before } else { [string]$change.before -cne $expectedBefore }) -or
+      $null -ne (Get-OptionalTerraformChangeValue $change "after") -or
+      $change.after_unknown -isnot [bool] -or -not $change.after_unknown -or
+      $change.before_sensitive -isnot [bool] -or $change.before_sensitive -or
+      $change.after_sensitive -isnot [bool] -or $change.after_sensitive) {
+      throw "CompleteDark output '$name' is not its exact nonsensitive unknown transition."
+    }
+  }
+}
+
 function Assert-DevelopmentDocumentDarkPlan {
   param([Parameter(Mandatory)][object]$Plan, [Parameter(Mandatory)][string]$AccountId,
     [Parameter(Mandatory)][ValidateSet("parser-dark", "complete-dark")][string]$Stage,
@@ -1556,18 +1617,24 @@ function Assert-DevelopmentDocumentDarkPlan {
     throw "The document dark transition must be a successful applyable Terraform 1.9.8 plan."
   }
   $outputChanges = Get-OptionalTerraformChangeValue $Plan "output_changes"
-  $meaningfulOutputs = @(
-    if ($null -ne $outputChanges) {
-      $outputChanges.PSObject.Properties | Where-Object {
-        $actions = @($_.Value.actions)
-        -not ($actions.Count -eq 1 -and $actions[0] -ceq "no-op")
-      }
-    }
-  )
-  if ($meaningfulOutputs.Count -ne 0) { throw "The document dark transition contains a meaningful output change." }
   if ($ParserSourceTransition -and ($Stage -cne "complete-dark" -or $null -eq $BaselineVariables -or
       $null -eq $Receipt -or [string]::IsNullOrWhiteSpace($ParserQualifiedArn))) {
     throw "The parser source transition requires CompleteDark, retained variables, receipt, and version pin."
+  }
+  if ($ParserSourceTransition) {
+    Assert-DevelopmentDocumentCompleteDarkSourceTransitionOutputs `
+      -OutputChanges $outputChanges -ParserQualifiedArn $ParserQualifiedArn
+  }
+  else {
+    $meaningfulOutputs = @(
+      if ($null -ne $outputChanges) {
+        $outputChanges.PSObject.Properties | Where-Object {
+          $actions = @($_.Value.actions)
+          -not ($actions.Count -eq 1 -and $actions[0] -ceq "no-op")
+        }
+      }
+    )
+    if ($meaningfulOutputs.Count -ne 0) { throw "The document dark transition contains a meaningful output change." }
   }
   $expected = Get-DevelopmentDocumentStageExpectedActions -Stage $Stage -ParserSourceTransition:$ParserSourceTransition
   Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($Plan.resource_drift) -RootModule $Plan.planned_values.root_module
