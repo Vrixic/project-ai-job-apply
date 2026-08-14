@@ -416,37 +416,106 @@ function Assert-NoTerraformReplacementPaths {
   if ($null -ne $paths -and @($paths).Count -ne 0) { throw "A Terraform change contains replacement paths." }
 }
 
+function Test-DevelopmentDocumentEmptyObject {
+  param([AllowNull()][object]$Value)
+  return $null -ne $Value -and $Value -is [Management.Automation.PSCustomObject] -and
+    @($Value.PSObject.Properties).Count -eq 0
+}
+
+function Test-DevelopmentDocumentEmptyArray {
+  param([AllowNull()][object]$Value)
+  return $null -ne $Value -and $Value -is [System.Array] -and @($Value).Count -eq 0
+}
+
+function Assert-DevelopmentDocumentNullToEmptyObject {
+  param([Parameter(Mandatory)][object]$Before, [Parameter(Mandatory)][object]$After,
+    [Parameter(Mandatory)][string]$Name, [Parameter(Mandatory)][string]$Label)
+  $beforeProperty = $Before.PSObject.Properties[$Name]
+  $afterProperty = $After.PSObject.Properties[$Name]
+  if ($null -eq $beforeProperty -or $null -ne $beforeProperty.Value -or $null -eq $afterProperty -or
+    -not (Test-DevelopmentDocumentEmptyObject $afterProperty.Value)) {
+    throw "$Label is not the exact null-to-empty-object provider normalization."
+  }
+  $afterProperty.Value = $null
+}
+
+function Assert-DevelopmentDocumentNullToEmptyArray {
+  param([Parameter(Mandatory)][object]$Before, [Parameter(Mandatory)][object]$After,
+    [Parameter(Mandatory)][string]$Name, [Parameter(Mandatory)][string]$Label)
+  $beforeProperty = $Before.PSObject.Properties[$Name]
+  $afterProperty = $After.PSObject.Properties[$Name]
+  if ($null -eq $beforeProperty -or $null -ne $beforeProperty.Value -or $null -eq $afterProperty -or
+    -not (Test-DevelopmentDocumentEmptyArray $afterProperty.Value)) {
+    throw "$Label is not the exact null-to-empty-array provider normalization."
+  }
+  $afterProperty.Value = $null
+}
+
 function Assert-DevelopmentDocumentAcceptedDriftSensitivity {
-  param([Parameter(Mandatory)][object]$Record)
-  $beforeCanonical = ConvertTo-OptionalTerraformMetadataCanonicalValue $Record.change "before_sensitive" -SortArrays
-  $afterCanonical = ConvertTo-OptionalTerraformMetadataCanonicalValue $Record.change "after_sensitive" -SortArrays
-  if ($beforeCanonical -ceq $afterCanonical) { return }
-
-  if ([string]$Record.address -cne "module.platform.aws_ecs_task_definition.migration[0]") {
-    throw "Accepted provider-observed drift has changed sensitivity metadata."
+  param([Parameter(Mandatory)][object]$Record,
+    [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$Normalizations)
+  $beforeValue = Get-OptionalTerraformChangeValue $Record.change "before_sensitive"
+  $afterValue = Get-OptionalTerraformChangeValue $Record.change "after_sensitive"
+  if ($null -eq $beforeValue) { $beforeValue = [pscustomobject]@{} }
+  if ($null -eq $afterValue) { $afterValue = [pscustomobject]@{} }
+  $before = $beforeValue | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $after = $afterValue | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  foreach ($normalization in $Normalizations) {
+    switch ($normalization) {
+      "tags" {
+        if ($null -ne $before.PSObject.Properties["tags"] -or
+          -not (Test-DevelopmentDocumentEmptyObject $after.PSObject.Properties["tags"].Value)) {
+          throw "Tag sensitivity metadata is not the exact omitted-to-empty normalization."
+        }
+        $after.PSObject.Properties.Remove("tags")
+      }
+      "layers" {
+        if ($null -ne $before.PSObject.Properties["layers"] -or
+          -not (Test-DevelopmentDocumentEmptyArray $after.PSObject.Properties["layers"].Value)) {
+          throw "Layer sensitivity metadata is not the exact omitted-to-empty normalization."
+        }
+        $after.PSObject.Properties.Remove("layers")
+      }
+      "inline_policy" {
+        $beforePolicies = $before.PSObject.Properties["inline_policy"]
+        $afterPolicies = $after.PSObject.Properties["inline_policy"]
+        if ($null -eq $beforePolicies -or -not (Test-DevelopmentDocumentEmptyArray $beforePolicies.Value) -or
+          $null -eq $afterPolicies -or @($afterPolicies.Value).Count -ne 1 -or
+          -not (Test-DevelopmentDocumentEmptyObject @($afterPolicies.Value)[0])) {
+          throw "Inline-policy sensitivity metadata is not the exact empty-to-singleton-empty normalization."
+        }
+        $afterPolicies.Value = @()
+      }
+      "insufficient_data_actions" {
+        if ($null -ne $before.PSObject.Properties["insufficient_data_actions"] -or
+          -not (Test-DevelopmentDocumentEmptyArray $after.PSObject.Properties["insufficient_data_actions"].Value)) {
+          throw "Alarm sensitivity metadata is not the exact omitted-to-empty-array normalization."
+        }
+        $after.PSObject.Properties.Remove("insufficient_data_actions")
+      }
+      "dimensions" {
+        if ($null -ne $before.PSObject.Properties["dimensions"] -or
+          -not (Test-DevelopmentDocumentEmptyObject $after.PSObject.Properties["dimensions"].Value)) {
+          throw "Dimension sensitivity metadata is not the exact omitted-to-empty normalization."
+        }
+        $after.PSObject.Properties.Remove("dimensions")
+      }
+      "metric_transformation_dimensions" {
+        $beforeTransform = @($before.PSObject.Properties["metric_transformation"].Value)
+        $afterTransform = @($after.PSObject.Properties["metric_transformation"].Value)
+        if ($beforeTransform.Count -ne 1 -or $afterTransform.Count -ne 1 -or
+          $null -ne $beforeTransform[0].PSObject.Properties["dimensions"] -or
+          -not (Test-DevelopmentDocumentEmptyObject $afterTransform[0].PSObject.Properties["dimensions"].Value)) {
+          throw "Metric-filter sensitivity metadata is not the exact omitted-to-empty dimension normalization."
+        }
+        $afterTransform[0].PSObject.Properties.Remove("dimensions")
+      }
+      default { throw "Unknown accepted sensitivity normalization '$normalization'." }
+    }
   }
-
-  $beforeSensitive = Get-OptionalTerraformChangeValue $Record.change "before_sensitive"
-  $afterSensitive = Get-OptionalTerraformChangeValue $Record.change "after_sensitive"
-  if ($null -eq $beforeSensitive -or $null -eq $afterSensitive -or
-    $null -ne $beforeSensitive.PSObject.Properties["tags"]) {
-    throw "Migration task sensitivity drift is not the exact omitted-to-empty tags normalization."
-  }
-
-  $afterTagsProperty = $afterSensitive.PSObject.Properties["tags"]
-  if ($null -eq $afterTagsProperty -or
-    $afterTagsProperty.Value -isnot [Management.Automation.PSCustomObject] -or
-    @($afterTagsProperty.Value.PSObject.Properties).Count -ne 0) {
-    throw "Migration task sensitivity drift is not the exact omitted-to-empty tags normalization."
-  }
-
-  $normalizedAfterSensitive = [ordered]@{}
-  foreach ($property in @($afterSensitive.PSObject.Properties)) {
-    if ([string]$property.Name -cne "tags") { $normalizedAfterSensitive[[string]$property.Name] = $property.Value }
-  }
-  if ($beforeCanonical -cne
-    (ConvertTo-DeploymentCanonicalValue ([pscustomobject]$normalizedAfterSensitive) -SortArrays)) {
-    throw "Migration task sensitivity drift changed metadata other than the exact empty tags normalization."
+  if ((ConvertTo-DeploymentCanonicalValue $before -SortArrays) -cne
+    (ConvertTo-DeploymentCanonicalValue $after -SortArrays)) {
+    throw "Accepted provider-observed drift changed other sensitivity metadata."
   }
 }
 
@@ -487,46 +556,212 @@ function Assert-DevelopmentDocumentExactDataReads {
   }
 }
 
+function Assert-DevelopmentDocumentExactQueueDriftPolicy {
+  param([Parameter(Mandatory)][object]$PolicyValue, [Parameter(Mandatory)][string]$AccountId,
+    [Parameter(Mandatory)][ValidateSet("Results", "DeliveryDeadLetter")][string]$Kind)
+  $definition = if ($Kind -ceq "Results") {
+    @("ExactGuardDutyResultRuleOnly", "ai-job-apply-development-document-scan-results",
+      @("ai-job-apply-development-document-scan-results"))
+  } else {
+    @("ExactEventBridgeRuleDeadLettersOnly", "ai-job-apply-development-document-scan-delivery-dlq",
+      @("ai-job-apply-development-document-scan-results", "ai-job-apply-development-document-scan-tag-failure",
+        "ai-job-apply-development-document-scan-plan-unhealthy", "ai-job-apply-development-document-processing-reconciler"))
+  }
+  $policy = ConvertFrom-IamPolicyValue $PolicyValue
+  $statements = @($policy.Statement)
+  if ([string]$policy.Version -cne "2012-10-17" -or $statements.Count -ne 1 -or
+    [string]$statements[0].Sid -cne [string]$definition[0]) {
+    throw "A computed document queue policy has an unexpected shape."
+  }
+  $statement = $statements[0]
+  Assert-ExactObjectKeys $statement @("Action", "Condition", "Effect", "Principal", "Resource", "Sid") "computed queue-policy statement"
+  Assert-ExactStringSet $statement.Effect @("Allow") "computed queue-policy effect"
+  Assert-ExactStringSet $statement.Action @("sqs:SendMessage") "computed queue-policy actions"
+  Assert-ExactStringSet $statement.Resource @("arn:aws:sqs:us-east-2:${AccountId}:$($definition[1])") "computed queue-policy resources"
+  Assert-ExactObjectKeys $statement.Principal @("Service") "computed queue-policy principal"
+  Assert-ExactStringSet $statement.Principal.Service @("events.amazonaws.com") "computed queue-policy principal"
+  Assert-ExactCondition $statement.Condition @{
+    ArnEquals = @{ "aws:SourceArn" = @($definition[2] | ForEach-Object { "arn:aws:events:us-east-2:${AccountId}:rule/$_" }) }
+    StringEquals = @{ "aws:SourceAccount" = @($AccountId) }
+  }
+}
+
 function Assert-DevelopmentDocumentAcceptedResourceDrift {
-  param([AllowNull()][object[]]$Records)
+  param([AllowNull()][object[]]$Records, [Parameter(Mandatory)][object]$RootModule)
   $drift = @($Records)
-  $allowed = @(
-    "module.platform.aws_db_instance.postgres[0]",
-    "module.platform.aws_ecs_task_definition.migration[0]"
-  )
   if ($drift.Count -eq 0) { throw "The plan must contain a nonempty accepted resource-drift subset." }
+
+  $eventRules = @(
+    "module.platform.aws_cloudwatch_event_rule.document_processing_reconciler[0]",
+    "module.platform.aws_cloudwatch_event_rule.document_scan_plan_unhealthy[0]",
+    "module.platform.aws_cloudwatch_event_rule.document_scan_results[0]",
+    "module.platform.aws_cloudwatch_event_rule.document_scan_tag_failure[0]"
+  )
+  $metricFilters = @(
+    "module.platform.aws_cloudwatch_log_metric_filter.document_processing_record_failed[0]",
+    "module.platform.aws_cloudwatch_log_metric_filter.document_processing_timed_out[0]",
+    "module.platform.aws_cloudwatch_log_metric_filter.document_security_contradiction[0]"
+  )
+  $dimensionAlarms = @(
+    "module.platform.aws_cloudwatch_metric_alarm.document_processing_record_failed[0]",
+    "module.platform.aws_cloudwatch_metric_alarm.document_processing_timed_out[0]",
+    "module.platform.aws_cloudwatch_metric_alarm.document_security_contradiction[0]"
+  )
+  $alarms = @($dimensionAlarms + @(
+      "module.platform.aws_cloudwatch_metric_alarm.document_parser_errors[0]",
+      "module.platform.aws_cloudwatch_metric_alarm.document_processor_errors[0]",
+      "module.platform.aws_cloudwatch_metric_alarm.document_scan_dead_letter[0]",
+      "module.platform.aws_cloudwatch_metric_alarm.document_scan_delivery_dead_letter[0]",
+      "module.platform.aws_cloudwatch_metric_alarm.document_scan_queue_age[0]"
+    ))
+  $tagOnly = @($eventRules + @(
+      "module.platform.aws_ecs_task_definition.migration[0]",
+      "module.platform.aws_iam_role.document_processor[0]",
+      "module.platform.aws_security_group.document_parser[0]",
+      "module.platform.aws_sqs_queue.document_scan_dead_letter[0]",
+      "module.platform.aws_vpc_endpoint.candidate_documents_s3[0]"
+    ))
+  $parserRoles = @(
+    "module.platform.aws_iam_role.document_parser[0]",
+    "module.platform.aws_iam_role.document_parser_object_access[0]"
+  )
+  $policyAddresses = @(
+    "module.platform.aws_s3_bucket.candidate_documents[0]",
+    "module.platform.aws_sns_topic.operational_alerts",
+    "module.platform.aws_sqs_queue.document_scan_delivery_dead_letter[0]",
+    "module.platform.aws_sqs_queue.document_scan_results[0]"
+  )
+  $allowedTypes = @{}
+  foreach ($address in $eventRules) { $allowedTypes[$address] = "aws_cloudwatch_event_rule" }
+  foreach ($address in $metricFilters) { $allowedTypes[$address] = "aws_cloudwatch_log_metric_filter" }
+  foreach ($address in $alarms) { $allowedTypes[$address] = "aws_cloudwatch_metric_alarm" }
+  foreach ($address in @($parserRoles + "module.platform.aws_iam_role.document_processor[0]")) { $allowedTypes[$address] = "aws_iam_role" }
+  $allowedTypes["module.platform.aws_db_instance.postgres[0]"] = "aws_db_instance"
+  $allowedTypes["module.platform.aws_ecs_task_definition.migration[0]"] = "aws_ecs_task_definition"
+  $allowedTypes["module.platform.aws_lambda_function.document_parser[0]"] = "aws_lambda_function"
+  $allowedTypes["module.platform.aws_s3_bucket.candidate_documents[0]"] = "aws_s3_bucket"
+  $allowedTypes["module.platform.aws_security_group.document_parser[0]"] = "aws_security_group"
+  $allowedTypes["module.platform.aws_sns_topic.operational_alerts"] = "aws_sns_topic"
+  foreach ($address in @(
+      "module.platform.aws_sqs_queue.document_scan_dead_letter[0]",
+      "module.platform.aws_sqs_queue.document_scan_delivery_dead_letter[0]",
+      "module.platform.aws_sqs_queue.document_scan_results[0]"
+    )) { $allowedTypes[$address] = "aws_sqs_queue" }
+  $allowedTypes["module.platform.aws_vpc_endpoint.candidate_documents_s3[0]"] = "aws_vpc_endpoint"
+
+  $planned = Get-TerraformStateResourceMap $RootModule
+  $kms = $planned["module.platform.aws_kms_key.platform"]
+  if ($null -eq $kms -or [string]$kms.arn -cnotmatch '^arn:aws:kms:us-east-2:([0-9]{12}):key/[a-f0-9-]+$') {
+    throw "The retained plan lacks the exact plan-owned KMS identity."
+  }
+  $accountId = [string]$Matches[1]
+  $kmsArn = [string]$kms.arn
   $seenAddresses = @()
   foreach ($record in $drift) {
     $address = [string]$record.address
-    if (-not ($allowed -ccontains $address) -or $seenAddresses -ccontains $address) {
-      throw "The plan contains unknown or duplicate resource drift."
+    if (-not $allowedTypes.ContainsKey($address) -or $seenAddresses -ccontains $address -or
+      [string]$record.type -cne [string]$allowedTypes[$address]) {
+      throw "The plan contains unknown, mistyped, or duplicate resource drift."
     }
     $seenAddresses += $address
-  }
-  foreach ($record in $drift) {
     Assert-NoTerraformReplacementPaths $record.change
     if ([string]$record.mode -cne "managed" -or (@($record.change.actions) -join ",") -cne "update" -or
-      (ConvertTo-OptionalTerraformMetadataCanonicalValue $record.change "after_unknown") -cne "{}") {
+      (ConvertTo-OptionalTerraformMetadataCanonicalValue $record.change "after_unknown") -cne "{}" -or
+      $null -eq $record.change.before -or $null -eq $record.change.after) {
       throw "Accepted provider-observed drift has an unsafe action or metadata shape."
     }
-    Assert-DevelopmentDocumentAcceptedDriftSensitivity $record
+
+    $before = $record.change.before | ConvertTo-Json -Depth 100 | ConvertFrom-Json
     $after = $record.change.after | ConvertTo-Json -Depth 100 | ConvertFrom-Json
-    if ([string]$record.address -ceq "module.platform.aws_db_instance.postgres[0]") {
-      if ([string]$record.type -cne "aws_db_instance") { throw "RDS drift has an unexpected resource type." }
-      $beforeClock = ConvertTo-StrictUtcWholeSecond $record.change.before.latest_restorable_time "RDS before restore clock"
-      $afterClock = ConvertTo-StrictUtcWholeSecond $record.change.after.latest_restorable_time "RDS after restore clock"
-      if ($afterClock -le $beforeClock) { throw "The provider-observed RDS restore clock did not move strictly forward." }
-      $after.latest_restorable_time = $record.change.before.latest_restorable_time
-    }
-    else {
-      if ([string]$record.type -cne "aws_ecs_task_definition" -or $null -ne $record.change.before.tags -or
-        @($record.change.after.tags.PSObject.Properties).Count -ne 0) {
-        throw "Migration task drift is not limited to provider-normalized empty tags."
+    $sensitivity = @()
+    if ($address -cin $tagOnly) {
+      Assert-DevelopmentDocumentNullToEmptyObject $before $after tags "Resource tag drift"
+      $sensitivity += "tags"
+    } elseif ($address -cin $metricFilters) {
+      $beforeTransforms = @($before.metric_transformation); $afterTransforms = @($after.metric_transformation)
+      if ($beforeTransforms.Count -ne 1 -or $afterTransforms.Count -ne 1) { throw "Metric-filter drift has an unexpected transformation count." }
+      Assert-DevelopmentDocumentNullToEmptyObject $beforeTransforms[0] $afterTransforms[0] dimensions "Metric-filter dimension drift"
+      $sensitivity += "metric_transformation_dimensions"
+    } elseif ($address -cin $alarms) {
+      Assert-DevelopmentDocumentNullToEmptyArray $before $after insufficient_data_actions "Alarm action drift"
+      Assert-DevelopmentDocumentNullToEmptyObject $before $after tags "Alarm tag drift"
+      $sensitivity += @("insufficient_data_actions", "tags")
+      if ($address -cin $dimensionAlarms) {
+        Assert-DevelopmentDocumentNullToEmptyObject $before $after dimensions "Alarm dimension drift"
+        $sensitivity += "dimensions"
       }
-      $after.tags = $null
+    } elseif ($address -ceq "module.platform.aws_db_instance.postgres[0]") {
+      $beforeClock = ConvertTo-StrictUtcWholeSecond $before.latest_restorable_time "RDS before restore clock"
+      $afterClock = ConvertTo-StrictUtcWholeSecond $after.latest_restorable_time "RDS after restore clock"
+      if ($afterClock -le $beforeClock) { throw "The provider-observed RDS restore clock did not move strictly forward." }
+      $after.latest_restorable_time = $before.latest_restorable_time
+    } elseif ($address -cin $parserRoles) {
+      Assert-DevelopmentDocumentNullToEmptyObject $before $after tags "Role tag drift"
+      $roleKind = if ($address -ceq "module.platform.aws_iam_role.document_parser[0]") { "Parser" } else { "ObjectAccess" }
+      if (-not (Test-DevelopmentDocumentEmptyArray $before.inline_policy) -or @($after.inline_policy).Count -ne 1 -or
+        [string]$after.inline_policy[0].name -cne $(if ($roleKind -ceq "Parser") { "document-parser-runtime" } else { "document-object-access-runtime" })) {
+        throw "The parser role inline-policy normalization has an unexpected shape."
+      }
+      $expected = $planned[$address]
+      if ($null -eq $expected -or (ConvertTo-DeploymentCanonicalValue $after.inline_policy -SortArrays) -cne
+        (ConvertTo-DeploymentCanonicalValue $expected.inline_policy -SortArrays)) {
+        throw "The parser role inline policy differs from the exact source-evaluated policy."
+      }
+      Assert-ExactDocumentIdentityPolicy $after.inline_policy[0].policy $roleKind $accountId $kmsArn
+      $after.inline_policy = @()
+      $sensitivity += @("tags", "inline_policy")
+    } elseif ($address -ceq "module.platform.aws_lambda_function.document_parser[0]") {
+      Assert-DevelopmentDocumentNullToEmptyArray $before $after layers "Parser layer drift"
+      Assert-DevelopmentDocumentNullToEmptyObject $before $after tags "Parser tag drift"
+      $sensitivity += @("layers", "tags")
+    } elseif ($address -ceq "module.platform.aws_s3_bucket.candidate_documents[0]") {
+      $expected = $planned["module.platform.aws_s3_bucket_policy.candidate_documents[0]"]
+      if ($null -eq $expected -or [string]$after.policy -cne [string]$expected.policy) {
+        throw "Candidate-document bucket drift differs from the exact source-evaluated policy."
+      }
+      $beforePolicy = ConvertFrom-IamPolicyValue $before.policy
+      if ([string]$beforePolicy.Version -cne "2012-10-17" -or
+        (@($beforePolicy.Statement.Sid | Sort-Object) -join "|") -cne
+        ((@("DenyInsecureTransport", "DenyWrongEncryptionKey", "DenyWrongEncryptionMode") | Sort-Object) -join "|")) {
+        throw "Candidate-document bucket drift does not start from the exact three-statement boundary."
+      }
+      $added = Get-PolicyAddedStatements $before.policy $after.policy @("DenyQuarantineReadsWithoutCleanMalwareTag")
+      $statement = @($added)[0]
+      $bucketArn = ([string]@($statement.Resource)[0]) -replace '/quarantine/\*$', ''
+      Assert-ExactAddedStatement $statement CandidateDeny $accountId $bucketArn
+      $after.policy = $before.policy
+    } elseif ($address -ceq "module.platform.aws_sns_topic.operational_alerts") {
+      $expected = $planned["module.platform.aws_sns_topic_policy.operational_alerts"]
+      if ($null -eq $expected -or [string]$after.policy -cne [string]$expected.policy) {
+        throw "Operational-alert topic drift differs from the exact source-evaluated policy."
+      }
+      $beforePolicy = ConvertFrom-IamPolicyValue $before.policy
+      if ([string]$beforePolicy.Version -cne "2012-10-17" -or
+        (@($beforePolicy.Statement.Sid | Sort-Object) -join "|") -cne
+        ((@("AllowAccountAdministration", "AllowAwsBudgetsPublishing", "AllowCloudWatchAlarmPublishing") | Sort-Object) -join "|")) {
+        throw "Operational-alert topic drift does not start from the exact three-statement boundary."
+      }
+      $added = Get-PolicyAddedStatements $before.policy $after.policy @("AllowExactDocumentOperationalRules")
+      Assert-ExactAddedStatement @($added)[0] SnsAlerts $accountId
+      $after.policy = $before.policy
+    } elseif ($address -cin $policyAddresses) {
+      Assert-DevelopmentDocumentNullToEmptyObject $before $after tags "Queue tag drift"
+      if (-not [string]::IsNullOrEmpty([string]$before.policy)) { throw "A computed document queue policy did not start empty." }
+      $expected = $planned[$address]
+      if ($null -eq $expected -or [string]$after.policy -cne [string]$expected.policy) {
+        throw "Document queue drift differs from the exact source-evaluated policy."
+      }
+      Assert-DevelopmentDocumentExactQueueDriftPolicy $after.policy $accountId `
+        $(if ($address -ceq "module.platform.aws_sqs_queue.document_scan_results[0]") { "Results" } else { "DeliveryDeadLetter" })
+      $after.policy = $before.policy
+      $sensitivity += "tags"
+    } else { throw "The accepted resource drift category is not implemented." }
+
+    Assert-DevelopmentDocumentAcceptedDriftSensitivity $record $sensitivity
+    if ((ConvertTo-DeploymentCanonicalValue $before -SortArrays) -cne
+      (ConvertTo-DeploymentCanonicalValue $after -SortArrays)) {
+      throw "Accepted drift changed another resource attribute."
     }
-    if ((ConvertTo-DeploymentCanonicalValue $record.change.before -SortArrays) -cne
-      (ConvertTo-DeploymentCanonicalValue $after -SortArrays)) { throw "Accepted drift changed another resource attribute." }
   }
 }
 
@@ -559,7 +794,7 @@ function Assert-DevelopmentDocumentRetainedBaselinePlan {
 
   $drift = @($Plan.resource_drift | Where-Object { $null -ne $_ })
   if ($drift.Count -ne 0) {
-    Assert-DevelopmentDocumentAcceptedResourceDrift -Records $drift
+    Assert-DevelopmentDocumentAcceptedResourceDrift -Records $drift -RootModule $Plan.planned_values.root_module
   }
 }
 
@@ -954,7 +1189,7 @@ function Assert-DevelopmentDocumentKmsPrerequisiteVariables {
 
 function Assert-DevelopmentDocumentKmsPrerequisitePlan {
   param([Parameter(Mandatory)][object]$Plan, [Parameter(Mandatory)][string]$AccountId)
-  Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($Plan.resource_drift)
+  Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($Plan.resource_drift) -RootModule $Plan.planned_values.root_module
   $nonNoop = @($Plan.resource_changes | Where-Object { (@($_.change.actions) -join ",") -ne "no-op" })
   $data = @($nonNoop | Where-Object mode -eq "data")
   if ($data.Count -ne 0) { throw "The KMS prerequisite plan must not defer any data reads." }
@@ -1194,7 +1429,7 @@ function Assert-DevelopmentDocumentDarkPlan {
     [Parameter(Mandatory)][ValidateSet("parser-dark", "complete-dark")][string]$Stage)
 
   $expected = Get-DevelopmentDocumentStageExpectedActions -Stage $Stage
-  Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($Plan.resource_drift)
+  Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($Plan.resource_drift) -RootModule $Plan.planned_values.root_module
   $kmsRecords = @($Plan.resource_changes | Where-Object { [string]$_.address -ceq "module.platform.aws_kms_key.platform" })
   if ($kmsRecords.Count -ne 1 -or [string]$kmsRecords[0].mode -cne "managed" -or
     [string]$kmsRecords[0].type -cne "aws_kms_key" -or (@($kmsRecords[0].change.actions) -join ",") -cne "no-op" -or
