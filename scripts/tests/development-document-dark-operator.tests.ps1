@@ -46,9 +46,13 @@ if ($source -notmatch 'state pull' -or $source -notmatch 'Remote state lineage o
   throw "Apply is not fail-closed against state changes after plan review."
 }
 $metadataHashOffset = $source.IndexOf('$metadataSha256 = (Get-FileHash -LiteralPath $metadataPath')
-$metadataParseOffset = $source.IndexOf('$metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json')
+$metadataParseOffset = $source.IndexOf('$metadata = ConvertFrom-DocumentBaselineJson -Json (Get-Content -LiteralPath $metadataPath -Raw)')
 if ($metadataHashOffset -lt 0 -or $metadataParseOffset -lt $metadataHashOffset) {
   throw "The current retained baseline metadata is parsed before its reviewed checksum is verified."
+}
+if ($source -notmatch '\$convertFromJson\.Parameters\.ContainsKey\("DateKind"\)' -or
+  $source -notmatch 'ConvertFrom-Json -InputObject \$Json -DateKind String') {
+  throw "The retained baseline sidecar parser does not preserve ISO timestamp strings when supported."
 }
 $stagingLifecycle = Get-Content -LiteralPath (Join-Path $repositoryRoot "scripts\operate-staging-runtime-lifecycle.ps1") -Raw
 if ($stagingLifecycle -match '\[IO\.Path\]::GetFullPath\(\$Candidate,') {
@@ -63,11 +67,12 @@ $compatibilityFunctions = @($ast.FindAll({
       param($node)
       $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
       $node.Name -in @(
-        "Get-DevelopmentDocumentBaselineShape", "Assert-CurrentDocumentBaselineMetadata",
+        "Get-DevelopmentDocumentBaselineShape", "ConvertFrom-DocumentBaselineJson",
+        "Assert-CurrentDocumentBaselineMetadata",
         "Assert-CompleteDarkTransitionBaselineMetadata", "Assert-MonotonicDocumentStage"
       )
     }, $true))
-if ($compatibilityFunctions.Count -ne 4) { throw "The retained baseline compatibility guards must each be defined once." }
+if ($compatibilityFunctions.Count -ne 5) { throw "The retained baseline compatibility guards must each be defined once." }
 foreach ($function in $compatibilityFunctions | Sort-Object { $_.Extent.StartOffset }) { Invoke-Expression $function.Extent.Text }
 
 $deltaFunctions = @($ast.FindAll({
@@ -296,6 +301,56 @@ $metadataV3Values.OperatorDeltaSha256 = "a" * 64
 $metadataV3 = [pscustomobject]$metadataV3Values
 Assert-CurrentDocumentBaselineMetadata $metadataV3 $metadataBaseline $metadataPlanPath $metadataPlanSha `
   "parser-dark" $metadataReceiptSha $stateIdentity ("e" * 40) $metadataSourceSha ("a" * 64)
+
+$sidecarFixtureRoot = Join-Path ([IO.Path]::GetTempPath()) "applydash-baseline-json-$([guid]::NewGuid().ToString('N'))"
+$null = New-Item -ItemType Directory -Path $sidecarFixtureRoot
+try {
+  $sidecarFixturePath = Join-Path $sidecarFixtureRoot "baseline.tfplan.baseline.json"
+  $sidecarCreatedAt = "2026-08-13T20:00:00.0000000Z"
+  [IO.File]::WriteAllText(
+    $sidecarFixturePath,
+    ($metadataV3 | ConvertTo-Json -Depth 20),
+    [Text.UTF8Encoding]::new($false)
+  )
+  $parsedSidecar = ConvertFrom-DocumentBaselineJson -Json (Get-Content -LiteralPath $sidecarFixturePath -Raw)
+  if ($parsedSidecar.CreatedAt -isnot [string] -or [string]$parsedSidecar.CreatedAt -cne $sidecarCreatedAt) {
+    throw "The retained baseline sidecar parser changed the exact CreatedAt JSON string."
+  }
+  Assert-CurrentDocumentBaselineMetadata $parsedSidecar $metadataBaseline $metadataPlanPath $metadataPlanSha `
+    "parser-dark" $metadataReceiptSha $stateIdentity ("e" * 40) $metadataSourceSha ("a" * 64)
+
+  $malformedJsonRejected = $false
+  try { $null = ConvertFrom-DocumentBaselineJson -Json '{"CreatedAt":' } catch { $malformedJsonRejected = $true }
+  if (-not $malformedJsonRejected) { throw "Malformed retained baseline JSON was accepted." }
+
+  foreach ($createdAtMutation in @(
+      [pscustomobject]@{ Label = "number"; Value = 20260813 },
+      [pscustomobject]@{ Label = "boolean"; Value = $true },
+      [pscustomobject]@{ Label = "array"; Value = @($sidecarCreatedAt) },
+      [pscustomobject]@{ Label = "null"; Value = $null },
+      [pscustomobject]@{ Label = "missing uppercase T"; Value = "2026-08-13 20:00:00.0000000Z" },
+      [pscustomobject]@{ Label = "lowercase t"; Value = "2026-08-13t20:00:00.0000000Z" },
+      [pscustomobject]@{ Label = "out-of-range century"; Value = "1999-08-13T20:00:00.0000000Z" },
+      [pscustomobject]@{ Label = "leading whitespace"; Value = " 2026-08-13T20:00:00.0000000Z" }
+    )) {
+    $badSidecarValues = [ordered]@{}
+    foreach ($entry in $metadataV3Values.GetEnumerator()) { $badSidecarValues[$entry.Key] = $entry.Value }
+    $badSidecarValues.CreatedAt = $createdAtMutation.Value
+    $badSidecar = ConvertFrom-DocumentBaselineJson -Json ([pscustomobject]$badSidecarValues | ConvertTo-Json -Depth 20)
+    $createdAtRejected = $false
+    try {
+      Assert-CurrentDocumentBaselineMetadata $badSidecar $metadataBaseline $metadataPlanPath $metadataPlanSha `
+        "parser-dark" $metadataReceiptSha $stateIdentity ("e" * 40) $metadataSourceSha ("a" * 64)
+    } catch { $createdAtRejected = $true }
+    if (-not $createdAtRejected) {
+      throw "The retained baseline sidecar accepted the '$($createdAtMutation.Label)' CreatedAt mutation."
+    }
+  }
+}
+finally {
+  Remove-Item -LiteralPath $sidecarFixtureRoot -Recurse -Force
+}
+
 $metadataV3.OperatorDeltaSha256 = "b" * 64
 $dualDeltaRejected = $false
 try {

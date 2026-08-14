@@ -513,6 +513,7 @@ function Assert-CurrentDocumentBaselineMetadata {
     [string]$Metadata.StateLineage -cne [string]$StateIdentity.Lineage -or
     [long]$Metadata.StateSerial -ne [long]$StateIdentity.Serial -or
     $Metadata.Applyable -isnot [bool] -or $Metadata.Applyable -or [int]$Metadata.MeaningfulChanges -ne 0 -or
+    $Metadata.CreatedAt -isnot [string] -or
     [string]$Metadata.CreatedAt -cnotmatch '^20[0-9]{2}-[0-9]{2}-[0-9]{2}T') {
     throw "The current document baseline metadata does not match source, state, stage, receipt, or plan."
   }
@@ -523,6 +524,16 @@ function Assert-CurrentDocumentBaselineMetadata {
       throw "The current document baseline metadata does not bind the exact migration image digest."
     }
   }
+}
+
+function ConvertFrom-DocumentBaselineJson {
+  param([Parameter(Mandatory)][string]$Json)
+
+  $convertFromJson = Get-Command ConvertFrom-Json -CommandType Cmdlet
+  if ($convertFromJson.Parameters.ContainsKey("DateKind")) {
+    return ConvertFrom-Json -InputObject $Json -DateKind String
+  }
+  return ConvertFrom-Json -InputObject $Json
 }
 
 function Assert-CompleteDarkTransitionBaselineMetadata {
@@ -647,7 +658,7 @@ function Read-Baseline {
     if ($metadataSha256 -cne $ReviewedBaselineMetadataSha256) {
       throw "The retained baseline metadata checksum does not match review."
     }
-    $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+    $metadata = ConvertFrom-DocumentBaselineJson -Json (Get-Content -LiteralPath $metadataPath -Raw)
     $stateIdentity = Get-StateIdentity
     if ($parserSourceTransition) {
       Assert-CompleteDarkTransitionBaselineMetadata -Metadata $metadata -Baseline $baseline `
