@@ -7,6 +7,7 @@ $account = "123456789012"
 
 $parser = Get-DevelopmentDocumentStageExpectedActions "parser-dark"
 $complete = Get-DevelopmentDocumentStageExpectedActions "complete-dark"
+$completeTransition = Get-DevelopmentDocumentStageExpectedActions "complete-dark" -ParserSourceTransition
 $kms = Get-DevelopmentDocumentStageExpectedActions "kms-prerequisite"
 if ($parser.Count -ne 34 -or @($parser.Values | Where-Object { $_ -ceq "create" }).Count -ne 32 -or
   @($parser.Values | Where-Object { $_ -ceq "update" }).Count -ne 2) {
@@ -15,6 +16,13 @@ if ($parser.Count -ne 34 -or @($parser.Values | Where-Object { $_ -ceq "create" 
 if ($complete.Count -ne 10 -or @($complete.Values | Where-Object { $_ -ceq "create" }).Count -ne 7 -or
   @($complete.Values | Where-Object { $_ -ceq "update" }).Count -ne 3) {
   throw "Complete-dark does not retain its exact 7-create/3-update action boundary."
+}
+if ($completeTransition.Count -ne 12 -or
+  @($completeTransition.Values | Where-Object { $_ -ceq "create" }).Count -ne 7 -or
+  @($completeTransition.Values | Where-Object { $_ -ceq "update" }).Count -ne 5 -or
+  $completeTransition["module.platform.aws_lambda_function.document_parser[0]"] -cne "update" -or
+  $completeTransition["module.platform.aws_lambda_alias.document_parser[0]"] -cne "update") {
+  throw "CompleteDark source transition does not retain its exact 7-create/5-update boundary."
 }
 if ($kms.Count -ne 1 -or $kms["module.platform.aws_kms_key.platform"] -cne "update") {
   throw "The KMS prerequisite is not exactly one in-place update."
@@ -351,7 +359,11 @@ $snsBase = @{ Sid = "Existing"; Effect = "Allow"; Action = "sns:GetTopicAttribut
 $snsAdded = @{ Sid = "AllowExactDocumentOperationalRules"; Effect = "Allow"; Action = "SNS:Publish"; Resource = "arn:aws:sns:us-east-2:${account}:ai-job-apply-development-operational-alerts"; Principal = @{ Service = "events.amazonaws.com" }; Condition = @{ StringEquals = @{ "aws:SourceAccount" = $account }; ArnEquals = @{ "aws:SourceArn" = @("arn:aws:events:us-east-2:${account}:rule/ai-job-apply-development-document-scan-tag-failure", "arn:aws:events:us-east-2:${account}:rule/ai-job-apply-development-document-scan-plan-unhealthy") } } }
 $parserChanges += New-TestPolicyUpdate "module.platform.aws_s3_bucket_policy.candidate_documents[0]" (New-TestPolicy @($transport)) (New-TestPolicy @($transport, $candidateDeny))
 $parserChanges += New-TestPolicyUpdate "module.platform.aws_sns_topic_policy.operational_alerts" (New-TestPolicy @($snsBase)) (New-TestPolicy @($snsBase, $snsAdded))
-$validParserPlan = [pscustomobject]@{ resource_drift = $kmsPlan.resource_drift; planned_values = $kmsPlan.planned_values; resource_changes = @($kmsNoop) + $parserChanges }
+$validParserPlan = [pscustomobject]@{
+  terraform_version = "1.9.8"; complete = $true; errored = $false; applyable = $true
+  output_changes = [pscustomobject]@{}; resource_drift = $kmsPlan.resource_drift
+  planned_values = $kmsPlan.planned_values; resource_changes = @($kmsNoop) + $parserChanges
+}
 $null = Assert-DevelopmentDocumentDarkPlan $validParserPlan $account parser-dark
 foreach ($fixture in @(
     [pscustomobject]@{ Label = "AWS wildcard object"; Principal = @{ AWS = "*" } },
@@ -454,8 +466,96 @@ $secretAfter.Condition.ArnEquals."aws:PrincipalArn" = @("arn:aws:iam::${account}
 $completeChanges += New-TestPolicyUpdate "module.platform.aws_vpc_endpoint.sqs[0]" (New-TestPolicy @($endpointBase)) (New-TestPolicy @($endpointBase, $sqsAdded))
 $completeChanges += New-TestPolicyUpdate "module.platform.aws_vpc_endpoint.lambda[0]" (New-TestPolicy @($endpointBase)) (New-TestPolicy @($endpointBase, $lambdaAdded))
 $completeChanges += New-TestPolicyUpdate "module.platform.aws_vpc_endpoint.secretsmanager[0]" (New-TestPolicy @($endpointBase, $secretBase)) (New-TestPolicy @($endpointBase, $secretAfter))
-$validCompletePlan = [pscustomobject]@{ resource_drift = $kmsPlan.resource_drift; planned_values = $kmsPlan.planned_values; resource_changes = @($kmsNoop) + $completeChanges }
+$validCompletePlan = [pscustomobject]@{
+  terraform_version = "1.9.8"; complete = $true; errored = $false; applyable = $true
+  output_changes = [pscustomobject]@{}; resource_drift = $kmsPlan.resource_drift
+  planned_values = $kmsPlan.planned_values; resource_changes = @($kmsNoop) + $completeChanges
+}
 $null = Assert-DevelopmentDocumentDarkPlan $validCompletePlan $account complete-dark
+
+$currentSource = "d" * 40
+$currentParserSha = "e" * 64
+$currentReceipt = [pscustomobject]@{ artifacts = @(
+    [pscustomobject]@{ artifactName = "document-processor-lambda"; suffix = "zip"; key = "lambda/documents/$currentSource/$('f' * 64)/document-processor-lambda.zip"; versionId = "current-processor"; artifactSha256 = "f" * 64; objectBase64Sha256 = (("W" * 43) + "=") },
+    [pscustomobject]@{ artifactName = "document-parser-lambda"; suffix = "zip"; key = "lambda/documents/$currentSource/$currentParserSha/document-parser-lambda.zip"; versionId = "current-parser"; artifactSha256 = $currentParserSha; objectBase64Sha256 = (("X" * 43) + "=") }
+  ) }
+$parserFunctionBefore = [pscustomobject]@{
+  function_name = "ai-job-apply-development-document-parser"; description = "Isolated no-DB/no-internet bounded PDF and DOCX parser"
+  runtime = "nodejs24.x"; handler = "index.handler"; timeout = 45; memory_size = 1536
+  s3_key = $receipt.artifacts[1].key; s3_object_version = $receipt.artifacts[1].versionId
+  source_code_hash = $receipt.artifacts[1].objectBase64Sha256; code_sha256 = $receipt.artifacts[1].objectBase64Sha256
+  qualified_arn = $qualified; qualified_invoke_arn = "$qualified`:invoke"; version = "7"; last_modified = "old"
+  environment = @([pscustomobject]@{ variables = [pscustomobject]@{
+        NODE_ENV = "production"; RELEASE_SHA = $parserSha; DOCUMENT_PARSER_VERSION = "resume-parser-v1"
+      } })
+}
+$parserFunctionAfter = $parserFunctionBefore | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+$parserFunctionAfter.s3_key = $currentReceipt.artifacts[1].key
+$parserFunctionAfter.s3_object_version = $currentReceipt.artifacts[1].versionId
+$parserFunctionAfter.source_code_hash = $currentReceipt.artifacts[1].objectBase64Sha256
+$parserFunctionAfter.environment[0].variables.RELEASE_SHA = $currentParserSha
+$parserFunctionAfter.code_sha256 = $null; $parserFunctionAfter.qualified_arn = $null
+$parserFunctionAfter.qualified_invoke_arn = $null; $parserFunctionAfter.version = $null; $parserFunctionAfter.last_modified = $null
+$parserFunctionTransition = [pscustomobject]@{
+  address = "module.platform.aws_lambda_function.document_parser[0]"; mode = "managed"; type = "aws_lambda_function"
+  change = [pscustomobject]@{
+    actions = @("update"); before = $parserFunctionBefore; after = $parserFunctionAfter; replace_paths = @()
+    before_sensitive = [pscustomobject]@{}; after_sensitive = [pscustomobject]@{}
+    after_unknown = [pscustomobject]@{ code_sha256 = $true; last_modified = $true; qualified_arn = $true; qualified_invoke_arn = $true; version = $true }
+  }
+}
+$parserAliasBefore = [pscustomobject]@{
+  name = "development"; description = "Reviewed immutable development document parser release"
+  function_name = "ai-job-apply-development-document-parser"; function_version = "7"
+  arn = "old-alias-arn"; invoke_arn = "old-alias-invoke"; routing_config = @()
+}
+$parserAliasAfter = $parserAliasBefore | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+$parserAliasAfter.function_version = $null; $parserAliasAfter.arn = $null; $parserAliasAfter.invoke_arn = $null
+$parserAliasTransition = [pscustomobject]@{
+  address = "module.platform.aws_lambda_alias.document_parser[0]"; mode = "managed"; type = "aws_lambda_alias"
+  change = [pscustomobject]@{
+    actions = @("update"); before = $parserAliasBefore; after = $parserAliasAfter; replace_paths = @()
+    before_sensitive = [pscustomobject]@{}; after_sensitive = [pscustomobject]@{}
+    after_unknown = [pscustomobject]@{ arn = $true; function_version = $true; invoke_arn = $true }
+  }
+}
+$validTransitionPlan = $validCompletePlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$validTransitionPlan.resource_changes = @($validTransitionPlan.resource_changes) + @($parserFunctionTransition, $parserAliasTransition)
+$null = Assert-DevelopmentDocumentDarkPlan $validTransitionPlan $account complete-dark `
+  -ParserSourceTransition -BaselineVariables $parserVariables -Receipt $currentReceipt -ParserQualifiedArn $qualified
+
+foreach ($mutation in @("artifact", "stable-field", "unknown", "unknown-false", "unknown-missing", "alias-unknown-false", "replacement", "alias-routing", "pin", "output", "sensitivity")) {
+  $badTransition = $validTransitionPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $badFunction = @($badTransition.resource_changes | Where-Object address -eq "module.platform.aws_lambda_function.document_parser[0]")[0]
+  $badAlias = @($badTransition.resource_changes | Where-Object address -eq "module.platform.aws_lambda_alias.document_parser[0]")[0]
+  switch ($mutation) {
+    "artifact" { $badFunction.change.after.s3_key = "lambda/documents/$currentSource/$currentParserSha/wrong.zip" }
+    "stable-field" { $badFunction.change.after.timeout = 46 }
+    "unknown" { $badFunction.change.after_unknown | Add-Member role $true }
+    "unknown-false" { $badFunction.change.after_unknown.version = $false }
+    "unknown-missing" { $badFunction.change.after_unknown.PSObject.Properties.Remove("last_modified") }
+    "alias-unknown-false" { $badAlias.change.after_unknown.function_version = $false }
+    "replacement" { $badFunction.change.replace_paths = @(@("s3_key")) }
+    "alias-routing" { $badAlias.change.after.routing_config = @([pscustomobject]@{ additional_version_weights = @{ "6" = 0.1 } }) }
+    "pin" { $badAlias.change.before.function_version = "6" }
+    "output" { $badTransition.output_changes = [pscustomobject]@{ parser = [pscustomobject]@{ actions = @("update") } } }
+    "sensitivity" { $badFunction.change.after_sensitive = [pscustomobject]@{ environment = $true } }
+  }
+  $rejected = $false
+  try {
+    $null = Assert-DevelopmentDocumentDarkPlan $badTransition $account complete-dark `
+      -ParserSourceTransition -BaselineVariables $parserVariables -Receipt $currentReceipt -ParserQualifiedArn $qualified
+  } catch { $rejected = $true }
+  if (-not $rejected) { throw "The CompleteDark parser source-transition guard accepted '$mutation' tampering." }
+}
+$transitionWithoutModeRejected = $false
+try { $null = Assert-DevelopmentDocumentDarkPlan $validTransitionPlan $account complete-dark }
+catch { $transitionWithoutModeRejected = $true }
+if (-not $transitionWithoutModeRejected) { throw "Parser updates were accepted without the explicit CompleteDark source-transition mode." }
+$wrongStageTransitionRejected = $false
+try { $null = Get-DevelopmentDocumentStageExpectedActions parser-dark -ParserSourceTransition }
+catch { $wrongStageTransitionRejected = $true }
+if (-not $wrongStageTransitionRejected) { throw "Parser source transition was accepted outside CompleteDark." }
 
 $retainedBaselinePlan = [pscustomobject]@{
   complete = $true

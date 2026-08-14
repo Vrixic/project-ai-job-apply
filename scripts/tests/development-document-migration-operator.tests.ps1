@@ -1,6 +1,8 @@
 $ErrorActionPreference = "Stop"
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
+. (Join-Path $repositoryRoot "scripts\lib\deployment-operator-guards.ps1")
+. (Join-Path $repositoryRoot "scripts\lib\development-document-dark-guards.ps1")
 $operatorPath = Join-Path $repositoryRoot "scripts\operate-development-document-migration.ps1"
 $source = Get-Content -LiteralPath $operatorPath -Raw
 $tokens = $null
@@ -14,6 +16,9 @@ if (@($errors).Count -ne 0) { throw "The development migration operator did not 
 if ($source -notmatch 'if \(Test-Path -LiteralPath \$driftPlan -PathType Leaf\)\s*\{\s*\$planOwnedByInvocation = \$true' -or
     $source -match 'if \(\$driftExit -eq 0 -and \(Test-Path -LiteralPath \$driftPlan') {
   throw "Unexpected Terraform exit plans are not marked owned before exit validation and cleanup."
+}
+if ($source -notmatch 'Assert-RetainedMigrationBaselinePlan -Plan \$driftJson') {
+  throw "Post-migration Verify does not route its retained plan through the shared provider-drift guard."
 }
 
 $currentJobsSuccessMarker =
@@ -64,14 +69,14 @@ $baselineFunctions = @($ast.FindAll({
       $node.Name -in @(
         "ConvertTo-TerraformEnvironmentValue", "Get-MeaningfulChanges", "Assert-PlanWasApplied",
         "Assert-ExactTaskPlan", "Assert-CurrentGatewayArtifactEvidence",
-        "Test-IgnorableRdsRestorableTimeRefresh", "Get-OptionalProperty",
+        "Assert-AcceptedMigrationProviderDrift", "Test-IgnorableRdsRestorableTimeRefresh",
+        "Test-IgnorableMigrationTaskTagsRefresh", "Get-UnacceptedVerificationDrift", "Get-OptionalProperty",
         "Test-EcsFaultInjectionDisabled", "Assert-ReleaseSourceBinding",
         "Assert-OperatorOnlyReleaseDelta", "Get-DocumentOperatorDeltaSha256", "Assert-ExecutionIdentity",
         "Assert-DurableClaimPutResult", "Assert-DurableExecutionClaimEvidence",
         "Test-DurableClaimHistoryExists", "Assert-RecoveryOperatorBinding",
         "Resolve-TaskLogStreamName",
-        "Set-RecoveredReceiptEvidence", "Test-IgnorableMigrationTaskTagsRefresh",
-        "Get-UnacceptedVerificationDrift", "Get-DeclaredVariableNames",
+        "Set-RecoveredReceiptEvidence", "Get-DeclaredVariableNames",
         "Get-CurrentTerraformStateIdentity", "Assert-ExactCurrentBaselineVariableSet",
         "Assert-RetainedMigrationBaselinePlan", "Assert-RetainedBaselineCurrentState",
         "Read-RetainedMigrationBaseline", "Assert-TaskMetadataBaselineBinding",
@@ -80,7 +85,7 @@ $baselineFunctions = @($ast.FindAll({
         "Save-PostMigrationBaselineMetadata", "Remove-NewPostMigrationBaselineArtifacts"
       )
     }, $true))
-if ($baselineFunctions.Count -ne 35) { throw "The input, plan, and retained-handoff guards must each be defined once." }
+if ($baselineFunctions.Count -ne 36) { throw "The input, plan, and retained-handoff guards must each be defined once." }
 foreach ($function in $baselineFunctions | Sort-Object { $_.Extent.StartOffset }) {
   Invoke-Expression $function.Extent.Text
 }
@@ -125,45 +130,6 @@ try {
 if (-not $repeatFinalizationRejected) { throw "A finalized receipt was recoverable twice." }
 
 $migrationAddress = "module.platform.aws_ecs_task_definition.migration[0]"
-$tagsRefresh = [pscustomobject]@{
-  address = $migrationAddress
-  change = [pscustomobject]@{
-    actions = @("update")
-    before = [pscustomobject]@{ family = "migration"; tags = $null }
-    after = [pscustomobject]@{ family = "migration"; tags = [pscustomobject]@{} }
-    after_unknown = [pscustomobject]@{}
-  }
-}
-if (-not (Test-IgnorableMigrationTaskTagsRefresh -Drift $tagsRefresh)) {
-  throw "The exact null-to-empty migration tag refresh was not accepted."
-}
-if (@(Get-UnacceptedVerificationDrift -Drift @($tagsRefresh)).Count -ne 0) {
-  throw "The exact migration tag normalization remained unaccepted verification drift."
-}
-foreach ($unsafeTagsRefresh in @(
-    @{ property = "address"; value = "module.platform.aws_ecs_task_definition.other[0]" },
-    @{ property = "afterTags"; value = [pscustomobject]@{ unexpected = "value" } },
-    @{ property = "reverseTags"; value = $true },
-    @{ property = "afterFamily"; value = "changed" },
-    @{ property = "unknownTags"; value = $true },
-    @{ property = "unknownOther"; value = $true }
-  )) {
-  $unsafe = $tagsRefresh | ConvertTo-Json -Depth 10 | ConvertFrom-Json
-  switch ($unsafeTagsRefresh.property) {
-    "address" { $unsafe.address = $unsafeTagsRefresh.value }
-    "afterTags" { $unsafe.change.after.tags = $unsafeTagsRefresh.value }
-    "reverseTags" {
-      $unsafe.change.before.tags = [pscustomobject]@{}
-      $unsafe.change.after.tags = $null
-    }
-    "afterFamily" { $unsafe.change.after.family = $unsafeTagsRefresh.value }
-    "unknownTags" { $unsafe.change.after_unknown | Add-Member -NotePropertyName tags -NotePropertyValue $true }
-    "unknownOther" { $unsafe.change.after_unknown | Add-Member -NotePropertyName latent -NotePropertyValue $true }
-  }
-  if (Test-IgnorableMigrationTaskTagsRefresh -Drift $unsafe) {
-    throw "Unsafe migration task drift was accepted as tag normalization."
-  }
-}
 
 $emptyClaimHistory = [pscustomobject]@{}
 if (Test-DurableClaimHistoryExists -History $emptyClaimHistory -ClaimKey "claim") {
@@ -403,7 +369,221 @@ $retainedPlan = [pscustomobject]@{
   resource_drift = @()
   output_changes = [pscustomobject]@{}
 }
+
+function New-MigrationDriftRecord([string]$Address, [string]$Type, [object]$Before, [object]$After,
+  [object]$BeforeSensitive = ([pscustomobject]@{}), [object]$AfterSensitive = ([pscustomobject]@{})) {
+  return [pscustomobject]@{
+    address = $Address; mode = "managed"; type = $Type
+    change = [pscustomobject]@{
+      actions = @("update"); before = $Before; after = $After; after_unknown = [pscustomobject]@{}
+      before_sensitive = $BeforeSensitive; after_sensitive = $AfterSensitive; replace_paths = @()
+    }
+  }
+}
+function New-MigrationTagDriftRecord([string]$Address, [string]$Type) {
+  return New-MigrationDriftRecord $Address $Type `
+    ([pscustomobject]@{ id = $Address; tags = $null }) `
+    ([pscustomobject]@{ id = $Address; tags = [pscustomobject]@{} }) `
+    ([pscustomobject]@{ tags_all = [pscustomobject]@{} }) `
+    ([pscustomobject]@{ tags = [pscustomobject]@{}; tags_all = [pscustomobject]@{} })
+}
+function New-MigrationTestPolicy([object[]]$Statements) {
+  return @{ Version = "2012-10-17"; Statement = $Statements } | ConvertTo-Json -Compress -Depth 40
+}
+function New-MigrationQueuePolicy([string]$Sid, [string]$QueueName, [string[]]$RuleNames,
+  [string]$AccountId) {
+  return New-MigrationTestPolicy @(@{
+      Sid = $Sid; Effect = "Allow"; Action = "sqs:SendMessage"
+      Resource = "arn:aws:sqs:us-east-2:${AccountId}:$QueueName"
+      Principal = @{ Service = "events.amazonaws.com" }
+      Condition = @{
+        StringEquals = @{ "aws:SourceAccount" = $AccountId }
+        ArnEquals = @{ "aws:SourceArn" = @($RuleNames | ForEach-Object {
+              "arn:aws:events:us-east-2:${AccountId}:rule/$_"
+            }) }
+      }
+    })
+}
+
+$driftAccount = "111122223333"
+$driftKmsArn = "arn:aws:kms:us-east-2:${driftAccount}:key/00000000-0000-0000-0000-000000000001"
+$driftBucketArn = "arn:aws:s3:::ai-job-apply-development-candidate-docs-${driftAccount}"
+$driftMalwareRole = "arn:aws:iam::${driftAccount}:role/ai-job-apply-development-document-malware-scan"
+$parserPolicy = New-MigrationTestPolicy @(
+  @{ Sid = "ManageVpcInterfaces"; Effect = "Allow"; Action = @("ec2:AssignPrivateIpAddresses", "ec2:CreateNetworkInterface", "ec2:DeleteNetworkInterface", "ec2:DescribeNetworkInterfaces", "ec2:DescribeSubnets", "ec2:UnassignPrivateIpAddresses"); Resource = "*" },
+  @{ Sid = "DecryptLambdaEnvironment"; Effect = "Allow"; Action = "kms:Decrypt"; Resource = $driftKmsArn; Condition = @{ StringEquals = @{ "kms:ViaService" = "lambda.us-east-2.amazonaws.com" } } }
+)
+$objectPolicy = New-MigrationTestPolicy @(
+  @{ Sid = "SessionPolicyMustNarrowObjectAccess"; Effect = "Allow"; Action = @("s3:GetObject", "s3:GetObjectVersion", "s3:GetObjectTagging", "s3:GetObjectVersionTagging", "s3:PutObject"); Resource = @("$driftBucketArn/quarantine/*", "$driftBucketArn/normalized/*") },
+  @{ Sid = "EncryptAndDecryptViaS3Only"; Effect = "Allow"; Action = @("kms:Decrypt", "kms:GenerateDataKey"); Resource = $driftKmsArn; Condition = @{ StringEquals = @{ "kms:ViaService" = "s3.us-east-2.amazonaws.com" } } }
+)
+$parserInline = @([pscustomobject]@{ name = "document-parser-runtime"; policy = $parserPolicy })
+$objectInline = @([pscustomobject]@{ name = "document-object-access-runtime"; policy = $objectPolicy })
+$candidateDeny = @{
+  Sid = "DenyQuarantineReadsWithoutCleanMalwareTag"; Effect = "Deny"
+  Action = @("s3:GetObject", "s3:GetObjectVersion"); Resource = "$driftBucketArn/quarantine/*"; Principal = "*"
+  Condition = @{
+    StringNotEquals = @{ "s3:ExistingObjectTag/GuardDutyMalwareScanStatus" = "NO_THREATS_FOUND" }
+    ArnNotEquals = @{ "aws:PrincipalArn" = $driftMalwareRole }
+  }
+}
+$s3Base = @(
+  @{ Sid = "DenyInsecureTransport"; Effect = "Deny" },
+  @{ Sid = "DenyWrongEncryptionMode"; Effect = "Deny" },
+  @{ Sid = "DenyWrongEncryptionKey"; Effect = "Deny" }
+)
+$s3Before = New-MigrationTestPolicy $s3Base
+$s3After = New-MigrationTestPolicy @($s3Base + $candidateDeny)
+$snsAdded = @{
+  Sid = "AllowExactDocumentOperationalRules"; Effect = "Allow"; Action = "SNS:Publish"
+  Resource = "arn:aws:sns:us-east-2:${driftAccount}:ai-job-apply-development-operational-alerts"
+  Principal = @{ Service = "events.amazonaws.com" }
+  Condition = @{
+    StringEquals = @{ "aws:SourceAccount" = $driftAccount }
+    ArnEquals = @{ "aws:SourceArn" = @(
+        "arn:aws:events:us-east-2:${driftAccount}:rule/ai-job-apply-development-document-scan-tag-failure",
+        "arn:aws:events:us-east-2:${driftAccount}:rule/ai-job-apply-development-document-scan-plan-unhealthy"
+      ) }
+  }
+}
+$snsBase = @(
+  @{ Sid = "AllowAccountAdministration"; Effect = "Allow" },
+  @{ Sid = "AllowCloudWatchAlarmPublishing"; Effect = "Allow" },
+  @{ Sid = "AllowAwsBudgetsPublishing"; Effect = "Allow" }
+)
+$snsBefore = New-MigrationTestPolicy $snsBase
+$snsAfter = New-MigrationTestPolicy @($snsBase + $snsAdded)
+$deliveryPolicy = New-MigrationQueuePolicy "ExactEventBridgeRuleDeadLettersOnly" `
+  "ai-job-apply-development-document-scan-delivery-dlq" `
+  @("ai-job-apply-development-document-scan-results", "ai-job-apply-development-document-scan-tag-failure", "ai-job-apply-development-document-scan-plan-unhealthy", "ai-job-apply-development-document-processing-reconciler") $driftAccount
+$resultsPolicy = New-MigrationQueuePolicy "ExactGuardDutyResultRuleOnly" `
+  "ai-job-apply-development-document-scan-results" @("ai-job-apply-development-document-scan-results") $driftAccount
+
+$fullProviderDrift = @()
+foreach ($address in @(
+    "module.platform.aws_cloudwatch_event_rule.document_processing_reconciler[0]",
+    "module.platform.aws_cloudwatch_event_rule.document_scan_plan_unhealthy[0]",
+    "module.platform.aws_cloudwatch_event_rule.document_scan_results[0]",
+    "module.platform.aws_cloudwatch_event_rule.document_scan_tag_failure[0]"
+  )) { $fullProviderDrift += New-MigrationTagDriftRecord $address "aws_cloudwatch_event_rule" }
+foreach ($address in @(
+    "module.platform.aws_cloudwatch_log_metric_filter.document_processing_record_failed[0]",
+    "module.platform.aws_cloudwatch_log_metric_filter.document_processing_timed_out[0]",
+    "module.platform.aws_cloudwatch_log_metric_filter.document_security_contradiction[0]"
+  )) {
+  $fullProviderDrift += New-MigrationDriftRecord $address "aws_cloudwatch_log_metric_filter" `
+    ([pscustomobject]@{ id = $address; metric_transformation = @([pscustomobject]@{ name = "metric"; dimensions = $null }) }) `
+    ([pscustomobject]@{ id = $address; metric_transformation = @([pscustomobject]@{ name = "metric"; dimensions = [pscustomobject]@{} }) }) `
+    ([pscustomobject]@{ metric_transformation = @([pscustomobject]@{}) }) `
+    ([pscustomobject]@{ metric_transformation = @([pscustomobject]@{ dimensions = [pscustomobject]@{} }) })
+}
+$dimensionAlarms = @("document_processing_record_failed", "document_processing_timed_out", "document_security_contradiction")
+foreach ($name in @(
+    "document_parser_errors", "document_processing_record_failed", "document_processing_timed_out",
+    "document_processor_errors", "document_scan_dead_letter", "document_scan_delivery_dead_letter",
+    "document_scan_queue_age", "document_security_contradiction"
+  )) {
+  $address = "module.platform.aws_cloudwatch_metric_alarm.$name[0]"
+  $before = [ordered]@{ id = $address; insufficient_data_actions = $null; tags = $null }
+  $after = [ordered]@{ id = $address; insufficient_data_actions = @(); tags = [pscustomobject]@{} }
+  $beforeSensitive = [ordered]@{ tags_all = [pscustomobject]@{} }
+  $afterSensitive = [ordered]@{ insufficient_data_actions = @(); tags = [pscustomobject]@{}; tags_all = [pscustomobject]@{} }
+  if ($name -cin $dimensionAlarms) {
+    $before.dimensions = $null; $after.dimensions = [pscustomobject]@{}; $afterSensitive.dimensions = [pscustomobject]@{}
+  } else {
+    $before.dimensions = [pscustomobject]@{ FunctionName = "unchanged" }
+    $after.dimensions = [pscustomobject]@{ FunctionName = "unchanged" }
+    $beforeSensitive.dimensions = [pscustomobject]@{}; $afterSensitive.dimensions = [pscustomobject]@{}
+  }
+  $fullProviderDrift += New-MigrationDriftRecord $address "aws_cloudwatch_metric_alarm" `
+    ([pscustomobject]$before) ([pscustomobject]$after) `
+    ([pscustomobject]$beforeSensitive) ([pscustomobject]$afterSensitive)
+}
+$fullProviderDrift += New-MigrationDriftRecord "module.platform.aws_db_instance.postgres[0]" "aws_db_instance" `
+  ([pscustomobject]@{ id = "db"; latest_restorable_time = "2026-08-13T12:00:00Z" }) `
+  ([pscustomobject]@{ id = "db"; latest_restorable_time = "2026-08-13T12:00:01Z" })
+foreach ($role in @(
+    [pscustomobject]@{ Address = "module.platform.aws_iam_role.document_parser[0]"; Inline = $parserInline },
+    [pscustomobject]@{ Address = "module.platform.aws_iam_role.document_parser_object_access[0]"; Inline = $objectInline }
+  )) {
+  $fullProviderDrift += New-MigrationDriftRecord $role.Address "aws_iam_role" `
+    ([pscustomobject]@{ id = $role.Address; inline_policy = @(); tags = $null }) `
+    ([pscustomobject]@{ id = $role.Address; inline_policy = $role.Inline; tags = [pscustomobject]@{} }) `
+    ([pscustomobject]@{ inline_policy = @(); managed_policy_arns = @(); tags_all = [pscustomobject]@{} }) `
+    ([pscustomobject]@{ inline_policy = @([pscustomobject]@{}); managed_policy_arns = @(); tags = [pscustomobject]@{}; tags_all = [pscustomobject]@{} })
+}
+$fullProviderDrift += New-MigrationTagDriftRecord "module.platform.aws_iam_role.document_processor[0]" "aws_iam_role"
+$fullProviderDrift += New-MigrationDriftRecord "module.platform.aws_lambda_function.document_parser[0]" "aws_lambda_function" `
+  ([pscustomobject]@{ id = "parser"; layers = $null; tags = $null }) `
+  ([pscustomobject]@{ id = "parser"; layers = @(); tags = [pscustomobject]@{} }) `
+  ([pscustomobject]@{ tags_all = [pscustomobject]@{} }) `
+  ([pscustomobject]@{ layers = @(); tags = [pscustomobject]@{}; tags_all = [pscustomobject]@{} })
+$fullProviderDrift += New-MigrationDriftRecord "module.platform.aws_s3_bucket.candidate_documents[0]" "aws_s3_bucket" `
+  ([pscustomobject]@{ id = "candidate"; policy = $s3Before }) `
+  ([pscustomobject]@{ id = "candidate"; policy = $s3After })
+$fullProviderDrift += New-MigrationTagDriftRecord "module.platform.aws_security_group.document_parser[0]" "aws_security_group"
+$fullProviderDrift += New-MigrationDriftRecord "module.platform.aws_sns_topic.operational_alerts" "aws_sns_topic" `
+  ([pscustomobject]@{ id = "alerts"; policy = $snsBefore }) `
+  ([pscustomobject]@{ id = "alerts"; policy = $snsAfter })
+$fullProviderDrift += New-MigrationTagDriftRecord "module.platform.aws_sqs_queue.document_scan_dead_letter[0]" "aws_sqs_queue"
+foreach ($queue in @(
+    [pscustomobject]@{ Address = "module.platform.aws_sqs_queue.document_scan_delivery_dead_letter[0]"; Policy = $deliveryPolicy },
+    [pscustomobject]@{ Address = "module.platform.aws_sqs_queue.document_scan_results[0]"; Policy = $resultsPolicy }
+  )) {
+  $fullProviderDrift += New-MigrationDriftRecord $queue.Address "aws_sqs_queue" `
+    ([pscustomobject]@{ id = $queue.Address; policy = ""; tags = $null }) `
+    ([pscustomobject]@{ id = $queue.Address; policy = $queue.Policy; tags = [pscustomobject]@{} }) `
+    ([pscustomobject]@{ tags_all = [pscustomobject]@{} }) `
+    ([pscustomobject]@{ tags = [pscustomobject]@{}; tags_all = [pscustomobject]@{} })
+}
+$fullProviderDrift += New-MigrationTagDriftRecord "module.platform.aws_vpc_endpoint.candidate_documents_s3[0]" "aws_vpc_endpoint"
+if ($fullProviderDrift.Count -ne 27 -or
+    @($fullProviderDrift | ForEach-Object address | Sort-Object -Unique).Count -ne 27) {
+  throw "The migration consumer full provider-normalization fixture is not exactly 27 unique records."
+}
+$driftRoot = [pscustomobject]@{ resources = @(
+    [pscustomobject]@{ address = "module.platform.aws_kms_key.platform"; values = [pscustomobject]@{ arn = $driftKmsArn } },
+    [pscustomobject]@{ address = "module.platform.aws_iam_role.document_parser[0]"; values = [pscustomobject]@{ inline_policy = $parserInline } },
+    [pscustomobject]@{ address = "module.platform.aws_iam_role.document_parser_object_access[0]"; values = [pscustomobject]@{ inline_policy = $objectInline } },
+    [pscustomobject]@{ address = "module.platform.aws_s3_bucket_policy.candidate_documents[0]"; values = [pscustomobject]@{ policy = $s3After } },
+    [pscustomobject]@{ address = "module.platform.aws_sns_topic_policy.operational_alerts"; values = [pscustomobject]@{ policy = $snsAfter } },
+    [pscustomobject]@{ address = "module.platform.aws_sqs_queue.document_scan_delivery_dead_letter[0]"; values = [pscustomobject]@{ policy = $deliveryPolicy } },
+    [pscustomobject]@{ address = "module.platform.aws_sqs_queue.document_scan_results[0]"; values = [pscustomobject]@{ policy = $resultsPolicy } }
+  ) }
+$retainedPlan.planned_values.root_module = $driftRoot
+$retainedPlan.resource_drift = $fullProviderDrift
 Assert-RetainedMigrationBaselinePlan -Plan $retainedPlan
+foreach ($record in $fullProviderDrift) {
+  $subsetPlan = $retainedPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $subsetPlan.resource_drift = @($record)
+  Assert-RetainedMigrationBaselinePlan -Plan $subsetPlan
+}
+$ecsTagDrift = New-MigrationTagDriftRecord $migrationAddress "aws_ecs_task_definition"
+$ecsSubsetPlan = $retainedPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$ecsSubsetPlan.resource_drift = @($ecsTagDrift)
+Assert-RetainedMigrationBaselinePlan -Plan $ecsSubsetPlan
+$rdsSubset = @($fullProviderDrift | Where-Object address -eq "module.platform.aws_db_instance.postgres[0]")[0]
+if (-not (Test-IgnorableRdsRestorableTimeRefresh -Drift $rdsSubset) -or
+    -not (Test-IgnorableMigrationTaskTagsRefresh -Drift $ecsTagDrift) -or
+    @(Get-UnacceptedVerificationDrift -Drift $fullProviderDrift -RootModule $driftRoot).Count -ne 0) {
+  throw "The legacy migration drift entry points do not delegate to the shared semantic guard."
+}
+foreach ($mutation in @("duplicate", "action", "unknown", "sensitive", "other")) {
+  $badPlan = $retainedPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  switch ($mutation) {
+    "duplicate" { $badPlan.resource_drift = @($badPlan.resource_drift) + @($badPlan.resource_drift[0]) }
+    "action" { $badPlan.resource_drift[0].change.actions = @("delete", "create") }
+    "unknown" { $badPlan.resource_drift[0].change.after_unknown = [pscustomobject]@{ tags = $true } }
+    "sensitive" {
+      $badPlan.resource_drift[0].change.after_sensitive.tags =
+        [pscustomobject]@{ restricted = $true }
+    }
+    "other" { $badPlan.resource_drift[0].change.after.id = "changed" }
+  }
+  $rejected = $false
+  try { Assert-RetainedMigrationBaselinePlan -Plan $badPlan } catch { $rejected = $true }
+  if (-not $rejected) { throw "The migration retained-baseline path accepted '$mutation' provider drift." }
+}
 
 $SourceSha = "a" * 40
 $operatorSourceSha = (& git -C $repositoryRoot rev-parse HEAD).Trim()
@@ -421,6 +601,25 @@ $retainedTaskMetadata = [pscustomobject]@{
   appliedBaselineOperatorDeltaSha256 = Get-DocumentOperatorDeltaSha256 `
     -ReleaseSha "d0e55de86edfa6b5f655f5631bb1741d6c5b5ac8" `
     -OperatorSha "d0e55de86edfa6b5f655f5631bb1741d6c5b5ac8"
+}
+$postMigrationFullDriftPlan = $retainedPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+Assert-RetainedMigrationBaselinePlan -Plan $postMigrationFullDriftPlan
+foreach ($mutation in @("duplicate", "unknown", "sensitive")) {
+  $badPostMigrationPlan = $postMigrationFullDriftPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  switch ($mutation) {
+    "duplicate" {
+      $badPostMigrationPlan.resource_drift = @($badPostMigrationPlan.resource_drift) +
+        @($badPostMigrationPlan.resource_drift[0])
+    }
+    "unknown" { $badPostMigrationPlan.resource_drift[0].change.after_unknown = [pscustomobject]@{ tags = $true } }
+    "sensitive" {
+      $badPostMigrationPlan.resource_drift[0].change.after_sensitive.tags =
+        [pscustomobject]@{ restricted = $true }
+    }
+  }
+  $rejected = $false
+  try { Assert-RetainedMigrationBaselinePlan -Plan $badPostMigrationPlan } catch { $rejected = $true }
+  if (-not $rejected) { throw "The post-migration retained-plan path accepted '$mutation' provider drift." }
 }
 $handoffRoot = Join-Path $terraformRoot "post-migration-handoff-test-$([guid]::NewGuid().ToString('N'))"
 $null = New-Item -ItemType Directory -Path $handoffRoot
@@ -652,7 +851,8 @@ $normalizedTaskPlan = [pscustomobject]@{
   applyable = $true
   errored = $false
   variables = [pscustomobject]@{ migration_image = [pscustomobject]@{ value = $MigrationImage } }
-  resource_drift = @()
+  planned_values = [pscustomobject]@{ root_module = $driftRoot }
+  resource_drift = $fullProviderDrift
   resource_changes = @([pscustomobject]@{
       address = $migrationAddress
       change = [pscustomobject]@{
@@ -687,6 +887,23 @@ $normalizedTaskPlan = [pscustomobject]@{
   }
 }
 Assert-ExactTaskPlan -Plan $normalizedTaskPlan
+foreach ($mutation in @("duplicate", "unknown", "sensitive")) {
+  $badTaskDriftPlan = $normalizedTaskPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  switch ($mutation) {
+    "duplicate" {
+      $badTaskDriftPlan.resource_drift = @($badTaskDriftPlan.resource_drift) +
+        @($badTaskDriftPlan.resource_drift[0])
+    }
+    "unknown" { $badTaskDriftPlan.resource_drift[0].change.after_unknown = [pscustomobject]@{ tags = $true } }
+    "sensitive" {
+      $badTaskDriftPlan.resource_drift[0].change.after_sensitive.tags =
+        [pscustomobject]@{ restricted = $true }
+    }
+  }
+  $rejected = $false
+  try { Assert-ExactTaskPlan -Plan $badTaskDriftPlan } catch { $rejected = $true }
+  if (-not $rejected) { throw "The migration task-plan path accepted '$mutation' provider drift." }
+}
 
 $omittedKnownFieldsPlan = $normalizedTaskPlan | ConvertTo-Json -Depth 30 | ConvertFrom-Json
 foreach ($field in @("ipc_mode", "pid_mode", "task_role_arn")) {
@@ -804,57 +1021,6 @@ foreach ($case in @(
     $rejected = $true
   }
   if (-not $rejected) { throw "Invalid current gateway $($case.name) evidence was accepted." }
-}
-
-$rdsBefore = [pscustomobject]@{
-  identifier = "ai-job-apply-development"
-  latest_restorable_time = "2026-08-12T17:28:57Z"
-  storage_encrypted = $true
-  deletion_protection = $true
-  backup_retention_period = 7
-}
-$rdsAfter = $rdsBefore | ConvertTo-Json -Depth 10 | ConvertFrom-Json
-$rdsAfter.latest_restorable_time = "2026-08-12T21:28:54Z"
-$rdsRefresh = [pscustomobject]@{
-  address = "module.platform.aws_db_instance.postgres[0]"
-  change = [pscustomobject]@{ actions = @("update"); before = $rdsBefore; after = $rdsAfter }
-}
-if (-not (Test-IgnorableRdsRestorableTimeRefresh -Drift $rdsRefresh)) {
-  throw "A forward-only RDS restorable-time refresh was rejected."
-}
-$dateObjectRefresh = $rdsRefresh | ConvertTo-Json -Depth 10 | ConvertFrom-Json
-$dateObjectRefresh.change.before.latest_restorable_time = [datetime]::Parse(
-  "2026-08-12T17:28:57Z", [Globalization.CultureInfo]::InvariantCulture,
-  [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal
-)
-$dateObjectRefresh.change.after.latest_restorable_time = [datetime]::Parse(
-  "2026-08-12T21:28:54Z", [Globalization.CultureInfo]::InvariantCulture,
-  [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal
-)
-if (-not (Test-IgnorableRdsRestorableTimeRefresh -Drift $dateObjectRefresh)) {
-  throw "A PowerShell 7 DateTime-shaped RDS restorable-time refresh was rejected."
-}
-foreach ($mutation in @("backward-time", "protection", "address")) {
-  $badRefresh = $rdsRefresh | ConvertTo-Json -Depth 10 | ConvertFrom-Json
-  switch ($mutation) {
-    "backward-time" { $badRefresh.change.after.latest_restorable_time = "2026-08-12T16:28:54Z" }
-    "protection" { $badRefresh.change.after.deletion_protection = $false }
-    "address" { $badRefresh.address = "module.platform.aws_db_instance.other[0]" }
-  }
-  if (Test-IgnorableRdsRestorableTimeRefresh -Drift $badRefresh) {
-    throw "Unsafe RDS refresh mutation '$mutation' was ignored."
-  }
-}
-foreach ($invalid in @("malformed-time", "missing-time", "extra-action")) {
-  $badRefresh = $rdsRefresh | ConvertTo-Json -Depth 10 | ConvertFrom-Json
-  switch ($invalid) {
-    "malformed-time" { $badRefresh.change.after.latest_restorable_time = "2026-08-12 21:28:54" }
-    "missing-time" { $badRefresh.change.after.PSObject.Properties.Remove("latest_restorable_time") }
-    "extra-action" { $badRefresh.change.actions = @("update", "delete") }
-  }
-  if (Test-IgnorableRdsRestorableTimeRefresh -Drift $badRefresh) {
-    throw "Invalid RDS refresh shape '$invalid' was ignored."
-  }
 }
 
 if (-not (Test-EcsFaultInjectionDisabled -TaskDefinition ([pscustomobject]@{})) -or

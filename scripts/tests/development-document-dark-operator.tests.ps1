@@ -22,6 +22,11 @@ foreach ($required in @(
     'Use verified development $stageValue migration baseline',
     'ReviewedBaselineMetadataSha256',
     '$metadataSha256 -cne $ReviewedBaselineMetadataSha256'
+    'ReviewedBaselineToOperatorDeltaSha256', 'Assert-CompleteDarkTransitionBaselineMetadata',
+    'ParserSourceTransition = [bool]$parserSourceTransition',
+    'Assert-LivePinnedParserVersion', 'MustMatchBaselineArtifact',
+    '-Retain:($Stage -ceq "CompleteDark")',
+    '$result.BaselineMetadataSha256 = $postApplyBaseline.MetadataSha256',
     'Plan and Apply require the exact current release', 'SchemaVersion = "2"', '$planMetadata.Commit = $operatorCommit'
   )) {
   if (-not $source.Contains($required)) { throw "The staged operator is missing '$required'." }
@@ -59,10 +64,10 @@ $compatibilityFunctions = @($ast.FindAll({
       $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
       $node.Name -in @(
         "Get-DevelopmentDocumentBaselineShape", "Assert-CurrentDocumentBaselineMetadata",
-        "Assert-MonotonicDocumentStage"
+        "Assert-CompleteDarkTransitionBaselineMetadata", "Assert-MonotonicDocumentStage"
       )
     }, $true))
-if ($compatibilityFunctions.Count -ne 3) { throw "The retained baseline compatibility guards must each be defined once." }
+if ($compatibilityFunctions.Count -ne 4) { throw "The retained baseline compatibility guards must each be defined once." }
 foreach ($function in $compatibilityFunctions | Sort-Object { $_.Extent.StartOffset }) { Invoke-Expression $function.Extent.Text }
 
 $deltaFunctions = @($ast.FindAll({
@@ -298,6 +303,74 @@ try {
     "parser-dark" $metadataReceiptSha $stateIdentity ("e" * 40) $metadataSourceSha ("a" * 64)
 } catch { $dualDeltaRejected = $true }
 if (-not $dualDeltaRejected) { throw "A tampered retained-baseline operator delta was accepted." }
+
+function Get-TestCanonicalOperatorDelta([string]$From, [string]$To) {
+  if ($From -ceq $To) {
+    return Get-TextSha256 "development-operator-delta-v1`n$From`n$To`n--name-status--`n--patch--`n"
+  }
+  $deltaRecords = @(& git -C $repositoryRoot diff --name-status --no-renames "$From..$To")
+  $deltaPatch = @(& git -C $repositoryRoot diff --full-index --binary --no-ext-diff --no-renames "$From..$To")
+  if ($LASTEXITCODE -ne 0) { throw "The transition metadata fixture could not read its commit delta." }
+  return Get-TextSha256 ("development-operator-delta-v1`n$From`n$To`n--name-status--`n" +
+    (($deltaRecords -join "`n") + "`n--patch--`n" + ($deltaPatch -join "`n") + "`n"))
+}
+$transitionReleaseSha = "d0e55de86edfa6b5f655f5631bb1741d6c5b5ac8"
+$transitionBaselineOperatorSha = "d7844ba85b5b8291de4a78c47c88e1ec218211fa"
+$operatorCommit = (& git -C $repositoryRoot rev-parse HEAD).Trim()
+$transitionMetadata = $metadataV3 | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+$transitionMetadata.ReleaseSourceSha = $transitionReleaseSha
+$transitionMetadata.OperatorSourceSha = $transitionBaselineOperatorSha
+$transitionMetadata.OperatorDeltaSha256 = Get-TestCanonicalOperatorDelta $transitionReleaseSha $transitionBaselineOperatorSha
+$transitionMetadata.ReceiptSha256 = "7" * 64
+$transitionMetadata.CreatedAt = "2026-08-13T20:00:00.0000000Z"
+$transitionBaseline = $metadataBaseline | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+$transitionArtifactSha = "6" * 64
+$transitionBaseline.variables | Add-Member document_parser_artifact_s3_key ([pscustomobject]@{
+    value = "lambda/documents/$transitionReleaseSha/$transitionArtifactSha/document-parser-lambda.zip"
+  })
+$transitionBaseline.variables | Add-Member document_parser_artifact_s3_object_version ([pscustomobject]@{ value = "version-1" })
+$transitionBaseline.variables | Add-Member document_parser_artifact_sha256 ([pscustomobject]@{ value = $transitionArtifactSha })
+$transitionBaseline.variables | Add-Member document_parser_artifact_base64sha256 ([pscustomobject]@{ value = (("Y" * 43) + "=") })
+$ReviewedReceiptSha256 = "8" * 64
+$ReviewedBaselineToOperatorDeltaSha256 = if ($transitionBaselineOperatorSha -ceq $operatorCommit) { "" } else {
+  Get-TestCanonicalOperatorDelta $transitionBaselineOperatorSha $operatorCommit
+}
+Assert-CompleteDarkTransitionBaselineMetadata $transitionMetadata $transitionBaseline $metadataPlanPath `
+  $metadataPlanSha $stateIdentity
+$transitionMetadataV4 = $transitionMetadata | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+$transitionMetadataV4.SchemaVersion = "4"
+$transitionMetadataV4.CreatedAt = "2026-08-13T20:00:00.0000000Z"
+$transitionMetadataV4 | Add-Member MigrationImage $migrationImage
+Assert-CompleteDarkTransitionBaselineMetadata $transitionMetadataV4 $transitionBaseline $metadataPlanPath `
+  $metadataPlanSha $stateIdentity
+foreach ($mutation in @("receipt", "release", "delta", "parser-key", "serial", "extra")) {
+  $badTransitionMetadata = $transitionMetadata | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+  $badTransitionBaseline = $transitionBaseline | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+  $badTransitionMetadata.CreatedAt = "2026-08-13T20:00:00.0000000Z"
+  switch ($mutation) {
+    "receipt" { $badTransitionMetadata.ReceiptSha256 = $ReviewedReceiptSha256 }
+    "release" { $badTransitionMetadata.ReleaseSourceSha = "f" * 40 }
+    "delta" { $badTransitionMetadata.OperatorDeltaSha256 = "0" * 64 }
+    "parser-key" { $badTransitionBaseline.variables.document_parser_artifact_s3_key.value = "lambda/documents/$operatorCommit/$transitionArtifactSha/document-parser-lambda.zip" }
+    "serial" { $badTransitionMetadata.StateSerial = 43 }
+    "extra" { $badTransitionMetadata | Add-Member Unexpected "value" }
+  }
+  $rejected = $false
+  try {
+    Assert-CompleteDarkTransitionBaselineMetadata $badTransitionMetadata $badTransitionBaseline `
+      $metadataPlanPath $metadataPlanSha $stateIdentity
+  } catch { $rejected = $true }
+  if (-not $rejected) { throw "The CompleteDark source-transition baseline accepted '$mutation' tampering." }
+}
+$ReviewedBaselineToOperatorDeltaSha256 = "0" * 64
+$baselineDeltaTamperRejected = $false
+try {
+  Assert-CompleteDarkTransitionBaselineMetadata $transitionMetadata $transitionBaseline $metadataPlanPath `
+    $metadataPlanSha $stateIdentity
+} catch { $baselineDeltaTamperRejected = $true }
+if (-not $baselineDeltaTamperRejected) {
+  throw "A tampered baseline-to-current operator delta was accepted."
+}
 foreach ($mutation in @("migration", "receipt", "serial", "extra")) {
   $badMetadata = $metadataV2 | ConvertTo-Json -Depth 10 | ConvertFrom-Json
   switch ($mutation) {
