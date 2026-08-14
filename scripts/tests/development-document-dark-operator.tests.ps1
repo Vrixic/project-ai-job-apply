@@ -186,17 +186,32 @@ function New-TestBaselineVariables([string[]]$Names) {
   return $variables
 }
 
+$variableAssignments = @($ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+      $node.Left.Extent.Text -in @('$allowedVariableNames', '$legacyBaselineVariableNames')
+    }, $true) | Sort-Object { $_.Extent.StartOffset })
+if ($variableAssignments.Count -ne 2) { throw "The current and historical variable sets must each be assigned exactly once." }
+foreach ($assignment in $variableAssignments) { Invoke-Expression $assignment.Extent.Text }
+
 $legacyKmsName = "document_processing_kms_prerequisite_enabled"
-$expectedLegacyNames = @("deploy_document_intake", "deploy_document_processing", $legacyKmsName)
-$allowedVariableNames = @("deploy_document_intake", "document_processing_deployment_stage")
-$legacyBaselineVariableNames = $expectedLegacyNames
-$withoutLegacyKms = New-TestBaselineVariables @("deploy_document_intake", "deploy_document_processing")
-if ((Get-DevelopmentDocumentBaselineShape $withoutLegacyKms "parser-dark" "kms-prerequisite") -cne "historical") {
+$expectedLegacyNames = @($legacyBaselineVariableNames)
+if ($expectedLegacyNames.Count -ne 53 -or
+  @($expectedLegacyNames | Where-Object { $_ -cne $legacyKmsName }).Count -ne 52) {
+  throw "The historical ParserDark recovery boundary is not the exact 52/53-variable baseline pair."
+}
+$withoutLegacyKms = New-TestBaselineVariables @($expectedLegacyNames | Where-Object { $_ -cne $legacyKmsName })
+if ((Get-DevelopmentDocumentBaselineShape $withoutLegacyKms "parser-dark" "kms-prerequisite" "Plan") -cne "historical") {
   throw "The exact accepted baseline without the later legacy KMS variable was not accepted."
 }
 $withLegacyKms = New-TestBaselineVariables $expectedLegacyNames
-if ((Get-DevelopmentDocumentBaselineShape $withLegacyKms "parser-dark" "kms-prerequisite") -cne "historical") {
+if ((Get-DevelopmentDocumentBaselineShape $withLegacyKms "parser-dark" "kms-prerequisite" "Apply") -cne "historical") {
   throw "An exact historical baseline with a true KMS prerequisite was not accepted."
+}
+foreach ($historical in @($withoutLegacyKms, $withLegacyKms)) {
+  if ((Get-DevelopmentDocumentBaselineShape $historical "parser-dark" "parser-dark" "Verify") -cne "historical") {
+    throw "Exact applied ParserDark verification rejected an accepted 52/53-variable historical KMS baseline."
+  }
 }
 foreach ($case in @(
     @{ Label = "false KMS prerequisite"; Variables = $withLegacyKms | ConvertTo-Json -Depth 10 | ConvertFrom-Json; Mutation = "false" },
@@ -208,23 +223,31 @@ foreach ($case in @(
   if ($case.Mutation -ceq "wrong") { $case.Variables.$legacyKmsName.value = "TRUE" }
   $rejected = $false
   try {
-    $null = Get-DevelopmentDocumentBaselineShape $case.Variables "parser-dark" "kms-prerequisite"
+    $null = Get-DevelopmentDocumentBaselineShape $case.Variables "parser-dark" "kms-prerequisite" "Plan"
   } catch { $rejected = $true }
   if (-not $rejected) { throw "The compatibility guard accepted $($case.Label)." }
 }
-$wrongStageRejected = $false
-try {
-  $null = Get-DevelopmentDocumentBaselineShape $withoutLegacyKms "complete-dark" "parser-dark"
-} catch { $wrongStageRejected = $true }
-if (-not $wrongStageRejected) { throw "The absent legacy KMS value escaped the ParserDark-only boundary." }
+foreach ($recoveryRejection in @(
+    @{ Requested = "parser-dark"; Applied = "parser-dark"; Operation = "Plan"; Label = "same-stage Plan" },
+    @{ Requested = "parser-dark"; Applied = "parser-dark"; Operation = "Apply"; Label = "same-stage Apply" },
+    @{ Requested = "complete-dark"; Applied = "parser-dark"; Operation = "Verify"; Label = "CompleteDark Verify" },
+    @{ Requested = "parser-dark"; Applied = "complete-dark"; Operation = "Verify"; Label = "different live stage" }
+  )) {
+  $rejected = $false
+  try {
+    $null = Get-DevelopmentDocumentBaselineShape $withoutLegacyKms $recoveryRejection.Requested `
+      $recoveryRejection.Applied $recoveryRejection.Operation
+  } catch { $rejected = $true }
+  if (-not $rejected) { throw "Historical baseline recovery accepted $($recoveryRejection.Label)." }
+}
 $currentVariables = New-TestBaselineVariables $allowedVariableNames
-if ((Get-DevelopmentDocumentBaselineShape $currentVariables "complete-dark" "parser-dark") -cne "current") {
+if ((Get-DevelopmentDocumentBaselineShape $currentVariables "complete-dark" "parser-dark" "Plan") -cne "current") {
   throw "The exact current retained baseline shape was not accepted for the monotonic next stage."
 }
 $missingCurrentRejected = $false
 try {
   $null = Get-DevelopmentDocumentBaselineShape (New-TestBaselineVariables @("deploy_document_intake")) `
-    "complete-dark" "parser-dark"
+    "complete-dark" "parser-dark" "Plan"
 } catch { $missingCurrentRejected = $true }
 if (-not $missingCurrentRejected) { throw "A current retained baseline with a missing variable was accepted." }
 

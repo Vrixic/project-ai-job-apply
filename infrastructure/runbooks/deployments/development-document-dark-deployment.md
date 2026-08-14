@@ -30,6 +30,12 @@ The historical intake-only baseline is accepted only as an input reconstruction 
 operator maps its retired deployment and KMS booleans to `kms-prerequisite`; current Terraform
 source contains only the stage enum and parser-version pin.
 
+An already-applied `ParserDark` release may also use that exact checksum-reviewed historical
+52/53-variable KMS baseline for `Verify` recovery only. The exception requires the requested and
+live stages both to be `parser-dark`; it is unavailable to `Plan`, `Apply`, `CompleteDark`, or any
+different live stage. Receipt, release/source delta, state, KMS, live isolation, and zero-drift
+checks remain unchanged, and failed retained-baseline creation removes its new plan and sidecar.
+
 ## Plan, apply, and verify
 
 `KmsPrerequisite` represents the already-applied, checksum-reviewed development boundary and can
