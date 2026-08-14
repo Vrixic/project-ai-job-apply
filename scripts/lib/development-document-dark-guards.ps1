@@ -606,6 +606,15 @@ function Assert-DevelopmentDocumentAcceptedDriftSensitivity {
         }
         $afterPolicies.Value = @()
       }
+      "event_source_mapping_filters" {
+        foreach ($name in @("queues", "topics")) {
+          if ($null -ne $before.PSObject.Properties[$name] -or
+            -not (Test-DevelopmentDocumentEmptyArray $after.PSObject.Properties[$name].Value)) {
+            throw "Event-source mapping $name sensitivity metadata is not the exact omitted-to-empty-array normalization."
+          }
+          $after.PSObject.Properties.Remove($name)
+        }
+      }
       "insufficient_data_actions" {
         if ($null -ne $before.PSObject.Properties["insufficient_data_actions"] -or
           -not (Test-DevelopmentDocumentEmptyArray $after.PSObject.Properties["insufficient_data_actions"].Value)) {
@@ -736,11 +745,16 @@ function Assert-DevelopmentDocumentAcceptedResourceDrift {
     ))
   $tagOnly = @($eventRules + @(
       "module.platform.aws_ecs_task_definition.migration[0]",
-      "module.platform.aws_iam_role.document_processor[0]",
       "module.platform.aws_security_group.document_parser[0]",
       "module.platform.aws_sqs_queue.document_scan_dead_letter[0]",
       "module.platform.aws_vpc_endpoint.candidate_documents_s3[0]"
     ))
+  $processorRole = "module.platform.aws_iam_role.document_processor[0]"
+  $completeDarkMapping = "module.platform.aws_lambda_event_source_mapping.document_scan_results[0]"
+  $completeDarkTagOnly = @(
+    "module.platform.aws_lambda_function.document_processor[0]",
+    "module.platform.aws_vpc_endpoint.sts[0]"
+  )
   $parserRoles = @(
     "module.platform.aws_iam_role.document_parser[0]",
     "module.platform.aws_iam_role.document_parser_object_access[0]"
@@ -758,7 +772,9 @@ function Assert-DevelopmentDocumentAcceptedResourceDrift {
   foreach ($address in @($parserRoles + "module.platform.aws_iam_role.document_processor[0]")) { $allowedTypes[$address] = "aws_iam_role" }
   $allowedTypes["module.platform.aws_db_instance.postgres[0]"] = "aws_db_instance"
   $allowedTypes["module.platform.aws_ecs_task_definition.migration[0]"] = "aws_ecs_task_definition"
+  $allowedTypes[$completeDarkMapping] = "aws_lambda_event_source_mapping"
   $allowedTypes["module.platform.aws_lambda_function.document_parser[0]"] = "aws_lambda_function"
+  $allowedTypes["module.platform.aws_lambda_function.document_processor[0]"] = "aws_lambda_function"
   $allowedTypes["module.platform.aws_s3_bucket.candidate_documents[0]"] = "aws_s3_bucket"
   $allowedTypes["module.platform.aws_security_group.document_parser[0]"] = "aws_security_group"
   $allowedTypes["module.platform.aws_sns_topic.operational_alerts"] = "aws_sns_topic"
@@ -768,6 +784,7 @@ function Assert-DevelopmentDocumentAcceptedResourceDrift {
       "module.platform.aws_sqs_queue.document_scan_results[0]"
     )) { $allowedTypes[$address] = "aws_sqs_queue" }
   $allowedTypes["module.platform.aws_vpc_endpoint.candidate_documents_s3[0]"] = "aws_vpc_endpoint"
+  $allowedTypes["module.platform.aws_vpc_endpoint.sts[0]"] = "aws_vpc_endpoint"
 
   $planned = Get-TerraformStateResourceMap $RootModule
   $kms = $planned["module.platform.aws_kms_key.platform"]
@@ -794,7 +811,55 @@ function Assert-DevelopmentDocumentAcceptedResourceDrift {
     $before = $record.change.before | ConvertTo-Json -Depth 100 | ConvertFrom-Json
     $after = $record.change.after | ConvertTo-Json -Depth 100 | ConvertFrom-Json
     $sensitivity = @()
-    if ($address -cin $tagOnly) {
+    if ($address -ceq $processorRole) {
+      $beforePolicies = $before.PSObject.Properties["inline_policy"]
+      $afterPolicies = $after.PSObject.Properties["inline_policy"]
+      if ($null -eq $beforePolicies -and $null -eq $afterPolicies) {
+        Assert-DevelopmentDocumentNullToEmptyObject $before $after tags "Processor role tag drift"
+        $sensitivity += "tags"
+      } elseif ($null -eq $beforePolicies -or $null -eq $afterPolicies -or
+        -not (Test-DevelopmentDocumentEmptyArray $beforePolicies.Value)) {
+        throw "The processor role drift has an unexpected inline-policy boundary."
+      } elseif (Test-DevelopmentDocumentEmptyArray $afterPolicies.Value) {
+        Assert-DevelopmentDocumentNullToEmptyObject $before $after tags "Processor role tag drift"
+        $sensitivity += "tags"
+      } else {
+        $expectedRole = $planned[$processorRole]
+        $expectedPolicy = $planned["module.platform.aws_iam_role_policy.document_processor[0]"]
+        if (@($afterPolicies.Value).Count -ne 1 -or
+          [string]@($afterPolicies.Value)[0].name -cne "document-processor-runtime" -or
+          -not (Test-DevelopmentDocumentEmptyObject $before.tags) -or
+          -not (Test-DevelopmentDocumentEmptyObject $after.tags) -or
+          $null -eq $expectedRole -or $null -eq $expectedPolicy -or
+          [string]$expectedPolicy.role -cne "ai-job-apply-development-document-processor" -or
+          [string]$expectedPolicy.policy -cne [string]@($afterPolicies.Value)[0].policy -or
+          (ConvertTo-DeploymentCanonicalValue $after -SortArrays) -cne
+          (ConvertTo-DeploymentCanonicalValue $expectedRole -SortArrays)) {
+          throw "The processor role inline-policy normalization differs from the exact source-evaluated policy."
+        }
+        Assert-ExactDocumentIdentityPolicy @($afterPolicies.Value)[0].policy Processor $accountId $kmsArn
+        $afterPolicies.Value = @()
+        $sensitivity += "inline_policy"
+      }
+    } elseif ($address -ceq $completeDarkMapping) {
+      $expected = $planned[$address]
+      if ($null -eq $expected -or (ConvertTo-DeploymentCanonicalValue $after -SortArrays) -cne
+        (ConvertTo-DeploymentCanonicalValue $expected -SortArrays)) {
+        throw "The CompleteDark event-source mapping normalization differs from the exact source-evaluated value."
+      }
+      Assert-DevelopmentDocumentNullToEmptyArray $before $after queues "Event-source mapping queue drift"
+      Assert-DevelopmentDocumentNullToEmptyArray $before $after topics "Event-source mapping topic drift"
+      Assert-DevelopmentDocumentNullToEmptyObject $before $after tags "Event-source mapping tag drift"
+      $sensitivity += @("event_source_mapping_filters", "tags")
+    } elseif ($address -cin $completeDarkTagOnly) {
+      $expected = $planned[$address]
+      if ($null -eq $expected -or (ConvertTo-DeploymentCanonicalValue $after -SortArrays) -cne
+        (ConvertTo-DeploymentCanonicalValue $expected -SortArrays)) {
+        throw "A CompleteDark post-create tag normalization differs from the exact source-evaluated value."
+      }
+      Assert-DevelopmentDocumentNullToEmptyObject $before $after tags "CompleteDark post-create tag drift"
+      $sensitivity += "tags"
+    } elseif ($address -cin $tagOnly) {
       Assert-DevelopmentDocumentNullToEmptyObject $before $after tags "Resource tag drift"
       $sensitivity += "tags"
     } elseif ($address -cin $metricFilters) {

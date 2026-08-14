@@ -897,6 +897,162 @@ $retainedFullDriftPlan.planned_values.root_module = $plannedDriftRoot
 $retainedFullDriftPlan.resource_drift = $driftRecords
 Assert-DevelopmentDocumentRetainedBaselinePlan -Plan $retainedFullDriftPlan
 
+$defaultTags = [pscustomobject]@{ Environment = "development"; ManagedBy = "terraform"; Project = "ai-job-apply" }
+$processorRuntimeInline = @([pscustomobject]@{ name = "document-processor-runtime"; policy = $processorPolicy })
+$processorRoleDrift = New-DriftRecord "module.platform.aws_iam_role.document_processor[0]" "aws_iam_role" `
+  ([pscustomobject]@{ id = "processor-role"; inline_policy = @(); tags = [pscustomobject]@{}; tags_all = $defaultTags }) `
+  ([pscustomobject]@{ id = "processor-role"; inline_policy = $processorRuntimeInline; tags = [pscustomobject]@{}; tags_all = $defaultTags }) `
+  ([pscustomobject]@{ inline_policy = @(); tags = [pscustomobject]@{}; tags_all = [pscustomobject]@{} }) `
+  ([pscustomobject]@{ inline_policy = @([pscustomobject]@{}); tags = [pscustomobject]@{}; tags_all = [pscustomobject]@{} })
+$mappingDrift = New-DriftRecord "module.platform.aws_lambda_event_source_mapping.document_scan_results[0]" `
+  "aws_lambda_event_source_mapping" `
+  ([pscustomobject]@{ id = "mapping"; enabled = $false; queues = $null; topics = $null; tags = $null; tags_all = $defaultTags }) `
+  ([pscustomobject]@{ id = "mapping"; enabled = $false; queues = @(); topics = @(); tags = [pscustomobject]@{}; tags_all = $defaultTags }) `
+  ([pscustomobject]@{ tags_all = [pscustomobject]@{} }) `
+  ([pscustomobject]@{ queues = @(); topics = @(); tags = [pscustomobject]@{}; tags_all = [pscustomobject]@{} })
+$processorFunctionDrift = New-DriftRecord "module.platform.aws_lambda_function.document_processor[0]" "aws_lambda_function" `
+  ([pscustomobject]@{ id = "processor"; tags = $null; tags_all = $defaultTags }) `
+  ([pscustomobject]@{ id = "processor"; tags = [pscustomobject]@{}; tags_all = $defaultTags }) `
+  ([pscustomobject]@{ tags_all = [pscustomobject]@{} }) `
+  ([pscustomobject]@{ tags = [pscustomobject]@{}; tags_all = [pscustomobject]@{} })
+$stsEndpointDrift = New-DriftRecord "module.platform.aws_vpc_endpoint.sts[0]" "aws_vpc_endpoint" `
+  ([pscustomobject]@{ id = "sts-endpoint"; tags = $null; tags_all = $defaultTags }) `
+  ([pscustomobject]@{ id = "sts-endpoint"; tags = [pscustomobject]@{}; tags_all = $defaultTags }) `
+  ([pscustomobject]@{ tags_all = [pscustomobject]@{} }) `
+  ([pscustomobject]@{ tags = [pscustomobject]@{}; tags_all = [pscustomobject]@{} })
+$rdsDrift = @($driftRecords | Where-Object address -eq "module.platform.aws_db_instance.postgres[0]")[0] |
+  ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$completeDarkPostCreateDrift = @(
+  $rdsDrift, $processorRoleDrift, $mappingDrift, $processorFunctionDrift, $stsEndpointDrift
+)
+$completeDarkPlannedResources = @(
+  [pscustomobject]@{ address = "module.platform.aws_kms_key.platform"; values = [pscustomobject]@{ arn = $kmsArn } },
+  [pscustomobject]@{ address = "module.platform.aws_iam_role.document_processor[0]"; values = $processorRoleDrift.change.after },
+  [pscustomobject]@{ address = "module.platform.aws_iam_role_policy.document_processor[0]"; values = [pscustomobject]@{
+      role = "ai-job-apply-development-document-processor"; policy = $processorPolicy
+    } },
+  [pscustomobject]@{ address = "module.platform.aws_lambda_event_source_mapping.document_scan_results[0]"; values = $mappingDrift.change.after },
+  [pscustomobject]@{ address = "module.platform.aws_lambda_function.document_processor[0]"; values = $processorFunctionDrift.change.after },
+  [pscustomobject]@{ address = "module.platform.aws_vpc_endpoint.sts[0]"; values = $stsEndpointDrift.change.after }
+)
+$completeDarkPlannedRoot = [pscustomobject]@{ resources = $completeDarkPlannedResources }
+Assert-DevelopmentDocumentAcceptedResourceDrift -Records $completeDarkPostCreateDrift -RootModule $completeDarkPlannedRoot
+foreach ($record in @($processorRoleDrift, $mappingDrift, $processorFunctionDrift, $stsEndpointDrift)) {
+  Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($record) -RootModule $completeDarkPlannedRoot
+}
+$retainedCompleteDarkDriftPlan = $retainedBaselinePlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$retainedCompleteDarkDriftPlan.planned_values.root_module = $completeDarkPlannedRoot
+$retainedCompleteDarkDriftPlan.resource_drift = $completeDarkPostCreateDrift
+Assert-DevelopmentDocumentRetainedBaselinePlan -Plan $retainedCompleteDarkDriftPlan
+
+function Assert-CompleteDarkPostCreateDriftRejected([object[]]$Records, [object]$Root, [string]$Label) {
+  $rejected = $false
+  try { Assert-DevelopmentDocumentAcceptedResourceDrift -Records $Records -RootModule $Root } catch { $rejected = $true }
+  if (-not $rejected) { throw "The CompleteDark post-create drift guard accepted '$Label'." }
+}
+
+foreach ($mutation in @(
+    "missing", "extra", "name", "action", "resource", "managed-role", "separate-policy", "planned-role",
+    "tags", "sensitivity", "missing-sensitivity", "other", "type", "address", "unknown", "replacement"
+  )) {
+  $record = $processorRoleDrift | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $root = $completeDarkPlannedRoot | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $plannedRole = @($root.resources | Where-Object address -eq "module.platform.aws_iam_role.document_processor[0]")[0]
+  $plannedPolicy = @($root.resources | Where-Object address -eq "module.platform.aws_iam_role_policy.document_processor[0]")[0]
+  switch ($mutation) {
+    "missing" { $record.change.after.inline_policy = @(); $plannedRole.values.inline_policy = @() }
+    "extra" {
+      $record.change.after.inline_policy = @($record.change.after.inline_policy) + @($record.change.after.inline_policy[0])
+      $plannedRole.values.inline_policy = $record.change.after.inline_policy
+    }
+    "name" { $record.change.after.inline_policy[0].name = "unexpected"; $plannedRole.values.inline_policy = $record.change.after.inline_policy }
+    "action" {
+      $policy = $record.change.after.inline_policy[0].policy | ConvertFrom-Json
+      @($policy.Statement | Where-Object Sid -eq "ReadDatabaseSecret")[0].Action = "secretsmanager:*"
+      $value = $policy | ConvertTo-Json -Compress -Depth 50
+      $record.change.after.inline_policy[0].policy = $value
+      $plannedRole.values.inline_policy = $record.change.after.inline_policy
+      $plannedPolicy.values.policy = $value
+    }
+    "resource" {
+      $policy = $record.change.after.inline_policy[0].policy | ConvertFrom-Json
+      @($policy.Statement | Where-Object Sid -eq "ConsumeExactScanQueue")[0].Resource = "*"
+      $value = $policy | ConvertTo-Json -Compress -Depth 50
+      $record.change.after.inline_policy[0].policy = $value
+      $plannedRole.values.inline_policy = $record.change.after.inline_policy
+      $plannedPolicy.values.policy = $value
+    }
+    "managed-role" { $plannedPolicy.values.role = "unexpected" }
+    "separate-policy" { $plannedPolicy.values.policy = "{}" }
+    "planned-role" { $plannedRole.values.inline_policy = @() }
+    "tags" {
+      $record.change.after.tags = [pscustomobject]@{ Unexpected = "value" }
+      $plannedRole.values.tags = $record.change.after.tags
+    }
+    "sensitivity" { $record.change.after_sensitive.inline_policy[0] = [pscustomobject]@{ secret = $true } }
+    "missing-sensitivity" { $record.change.after_sensitive.inline_policy = @() }
+    "other" { $record.change.after.id = "changed"; $plannedRole.values.id = "changed" }
+    "type" { $record.type = "aws_lambda_function" }
+    "address" { $record.address = "module.platform.aws_iam_role.document_processor_shadow[0]" }
+    "unknown" { $record.change.after_unknown = [pscustomobject]@{ inline_policy = $true } }
+    "replacement" { $record.change.replace_paths = @(@("inline_policy")) }
+  }
+  Assert-CompleteDarkPostCreateDriftRejected @($record) $root "processor role $mutation"
+}
+
+foreach ($mutation in @(
+    "queues", "topics", "tags", "missing-queues", "missing-topics", "reverse-tags", "sensitive-queues",
+    "sensitive-topics", "sensitive-tags", "missing-sensitive-queues", "missing-sensitive-topics",
+    "other", "planned", "type", "address", "unknown", "replacement"
+  )) {
+  $record = $mappingDrift | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $root = $completeDarkPlannedRoot | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $planned = @($root.resources | Where-Object address -eq "module.platform.aws_lambda_event_source_mapping.document_scan_results[0]")[0]
+  switch ($mutation) {
+    "queues" { $record.change.after.queues = @("unexpected"); $planned.values.queues = $record.change.after.queues }
+    "topics" { $record.change.after.topics = @("unexpected"); $planned.values.topics = $record.change.after.topics }
+    "tags" { $record.change.after.tags = [pscustomobject]@{ Unexpected = "value" }; $planned.values.tags = $record.change.after.tags }
+    "missing-queues" { $record.change.after.PSObject.Properties.Remove("queues"); $planned.values.PSObject.Properties.Remove("queues") }
+    "missing-topics" { $record.change.after.PSObject.Properties.Remove("topics"); $planned.values.PSObject.Properties.Remove("topics") }
+    "reverse-tags" { $record.change.before.tags = [pscustomobject]@{}; $record.change.after.tags = $null; $planned.values.tags = $null }
+    "sensitive-queues" { $record.change.after_sensitive.queues = @([pscustomobject]@{ secret = $true }) }
+    "sensitive-topics" { $record.change.after_sensitive.topics = @([pscustomobject]@{ secret = $true }) }
+    "sensitive-tags" { $record.change.after_sensitive.tags = [pscustomobject]@{ secret = $true } }
+    "missing-sensitive-queues" { $record.change.after_sensitive.PSObject.Properties.Remove("queues") }
+    "missing-sensitive-topics" { $record.change.after_sensitive.PSObject.Properties.Remove("topics") }
+    "other" { $record.change.after.enabled = $true; $planned.values.enabled = $true }
+    "planned" { $planned.values.id = "unexpected" }
+    "type" { $record.type = "aws_lambda_function" }
+    "address" { $record.address = "module.platform.aws_lambda_event_source_mapping.document_scan_results_shadow[0]" }
+    "unknown" { $record.change.after_unknown = [pscustomobject]@{ queues = $true } }
+    "replacement" { $record.change.replace_paths = @(@("queues")) }
+  }
+  Assert-CompleteDarkPostCreateDriftRejected @($record) $root "event-source mapping $mutation"
+}
+
+foreach ($fixture in @(
+    [pscustomobject]@{ Address = "module.platform.aws_lambda_function.document_processor[0]"; Type = "aws_lambda_function"; Record = $processorFunctionDrift },
+    [pscustomobject]@{ Address = "module.platform.aws_vpc_endpoint.sts[0]"; Type = "aws_vpc_endpoint"; Record = $stsEndpointDrift }
+  )) {
+  foreach ($mutation in @("tags", "reverse", "sensitivity", "other", "planned", "type", "address", "unknown", "replacement")) {
+    $record = $fixture.Record | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+    $root = $completeDarkPlannedRoot | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+    $planned = @($root.resources | Where-Object address -eq $fixture.Address)[0]
+    switch ($mutation) {
+      "tags" { $record.change.after.tags = [pscustomobject]@{ Unexpected = "value" }; $planned.values.tags = $record.change.after.tags }
+      "reverse" { $record.change.before.tags = [pscustomobject]@{}; $record.change.after.tags = $null; $planned.values.tags = $null }
+      "sensitivity" { $record.change.after_sensitive.tags = [pscustomobject]@{ secret = $true } }
+      "other" { $record.change.after.id = "changed"; $planned.values.id = "changed" }
+      "planned" { $planned.values.id = "unexpected" }
+      "type" { $record.type = $(if ($fixture.Type -ceq "aws_lambda_function") { "aws_vpc_endpoint" } else { "aws_lambda_function" }) }
+      "address" { $record.address = "$($fixture.Address.TrimEnd('[0]'))_shadow[0]" }
+      "unknown" { $record.change.after_unknown = [pscustomobject]@{ tags = $true } }
+      "replacement" { $record.change.replace_paths = @(@("tags")) }
+    }
+    Assert-CompleteDarkPostCreateDriftRejected @($record) $root "$($fixture.Address) $mutation"
+  }
+}
+
 $driftMutations = @(
   "duplicate", "extra", "type", "action", "unknown", "replacement", "reverse", "other", "sensitive", "policy",
   "nonempty-tags", "nonempty-layers", "nonempty-actions", "nonempty-metric-dimensions", "nonempty-alarm-dimensions"
