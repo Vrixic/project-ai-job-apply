@@ -176,29 +176,17 @@ function Assert-GatewayDocumentBaselineReceipt {
   return $true
 }
 
-function Test-GatewayAcceptedBaselineDrift {
-  param([Parameter(Mandatory)][object]$Drift)
-  $afterUnknown = Get-GatewayOptionalProperty $Drift.change "after_unknown"
-  $afterUnknownCount = if ($null -eq $afterUnknown) { 0 } else { @($afterUnknown.PSObject.Properties).Count }
-  if ([string]$Drift.mode -cne "managed" -or (@($Drift.change.actions) -join ",") -cne "update" -or
-      @((Get-GatewayOptionalProperty $Drift.change "replace_paths")).Count -ne 0 -or
-      $afterUnknownCount -ne 0 -or
-      (ConvertTo-GatewayCanonicalJson (Get-GatewayOptionalProperty $Drift.change "before_sensitive")) -cne
-        (ConvertTo-GatewayCanonicalJson (Get-GatewayOptionalProperty $Drift.change "after_sensitive"))) {
-    return $false
+function Assert-AcceptedGatewayProviderDrift {
+  param([Parameter(Mandatory)][object]$Plan)
+
+  $drift = @($Plan.resource_drift | Where-Object { $null -ne $_ })
+  if ($drift.Count -eq 0) { return }
+  $plannedValues = Get-GatewayOptionalProperty $Plan "planned_values"
+  $rootModule = Get-GatewayOptionalProperty $plannedValues "root_module"
+  if ($null -eq $rootModule) {
+    throw "Accepted gateway provider drift requires the exact source-evaluated planned root module."
   }
-  $before = $Drift.change.before | ConvertTo-Json -Depth 50 | ConvertFrom-Json
-  $after = $Drift.change.after | ConvertTo-Json -Depth 50 | ConvertFrom-Json
-  if ([string]$Drift.address -ceq "module.platform.aws_db_instance.postgres[0]" -and [string]$Drift.type -ceq "aws_db_instance") {
-    $before.PSObject.Properties.Remove("latest_restorable_time")
-    $after.PSObject.Properties.Remove("latest_restorable_time")
-  } elseif ([string]$Drift.address -ceq "module.platform.aws_ecs_task_definition.migration[0]" -and [string]$Drift.type -ceq "aws_ecs_task_definition") {
-    $before.PSObject.Properties.Remove("tags")
-    $after.PSObject.Properties.Remove("tags")
-    $before.PSObject.Properties.Remove("tags_all")
-    $after.PSObject.Properties.Remove("tags_all")
-  } else { return $false }
-  return (ConvertTo-GatewayCanonicalJson $before) -ceq (ConvertTo-GatewayCanonicalJson $after)
+  Assert-DevelopmentDocumentAcceptedResourceDrift -Records $drift -RootModule $rootModule
 }
 
 function Assert-RetainedGatewayBaselinePlan {
@@ -227,13 +215,7 @@ function Assert-RetainedGatewayBaselinePlan {
   if (($actualVariables -join "|") -cne ($declared -join "|")) {
     throw "The retained gateway baseline does not contain the exact current development variable set."
   }
-  $seenDrift = @()
-  foreach ($drift in @($Plan.resource_drift | Where-Object { $null -ne $_ })) {
-    if ($seenDrift -ccontains [string]$drift.address -or -not (Test-GatewayAcceptedBaselineDrift $drift)) {
-      throw "The retained gateway baseline contains unaccepted provider refresh drift."
-    }
-    $seenDrift += [string]$drift.address
-  }
+  Assert-AcceptedGatewayProviderDrift -Plan $Plan
   return $true
 }
 
@@ -350,9 +332,7 @@ function Assert-ExactGatewayReleasePlan {
   if ([string]$Plan.terraform_version -cne "1.9.8" -or $Plan.errored -or -not $Plan.complete -or -not $Plan.applyable) {
     throw "The gateway release must be a successful Terraform 1.9.8 plan."
   }
-  if (@(Get-GatewayMeaningfulChanges @($Plan.resource_drift)).Count -ne 0) {
-    throw "The gateway release contains resource drift; reconcile it separately."
-  }
+  Assert-AcceptedGatewayProviderDrift -Plan $Plan
   $outputChanges = Get-GatewayOptionalProperty $Plan "output_changes"
   $meaningfulOutputs = @(
     if ($null -ne $outputChanges) {
@@ -372,8 +352,8 @@ function Assert-ExactGatewayReleasePlan {
     throw "The release plan is not limited to the gateway Lambda function and immutable alias."
   }
   foreach ($change in $changes) {
+    Assert-NoTerraformReplacementPaths $change.change
     if ([string]$change.mode -cne "managed" -or (@($change.change.actions) -join ",") -cne "update" -or
-        @((Get-GatewayOptionalProperty $change.change "replace_paths")).Count -ne 0 -or
         (ConvertTo-GatewayCanonicalJson (Get-GatewayOptionalProperty $change.change "before_sensitive")) -cne
           (ConvertTo-GatewayCanonicalJson (Get-GatewayOptionalProperty $change.change "after_sensitive"))) {
       throw "The gateway release may not create, delete, or replace infrastructure."
