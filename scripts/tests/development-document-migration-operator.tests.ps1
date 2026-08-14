@@ -20,6 +20,11 @@ if ($source -notmatch 'if \(Test-Path -LiteralPath \$driftPlan -PathType Leaf\)\
 if ($source -notmatch 'Assert-RetainedMigrationBaselinePlan -Plan \$driftJson') {
   throw "Post-migration Verify does not route its retained plan through the shared provider-drift guard."
 }
+if ($source -notmatch 'ConvertTo-DeploymentCanonicalValue -Value \$beforeContainer' -or
+    $source -notmatch 'ConvertTo-DeploymentCanonicalValue -Value \$afterContainer' -or
+    $source -match 'ConvertTo-DeploymentCanonicalValue -Value \$(?:before|after)Container[^\r\n]*-SortArrays') {
+  throw "The migration container comparison must canonicalize object keys without sorting arrays."
+}
 
 $currentJobsSuccessMarker =
   "Jobs migrations through 0004_job_search applied and verified."
@@ -836,6 +841,20 @@ $beforeContainer = [ordered]@{
   name = "database-migration"
   image = "example.invalid/migration@sha256:$('b' * 64)"
   command = @("runner/dist/src/main.js")
+  essential = $true
+  readonlyRootFilesystem = $true
+  environment = @(
+    [ordered]@{ name = "NODE_ENV"; value = "production" },
+    [ordered]@{ name = "MIGRATION_MODE"; value = "run" }
+  )
+  logConfiguration = [ordered]@{
+    logDriver = "awslogs"
+    options = [ordered]@{
+      'awslogs-region' = "us-east-2"
+      'awslogs-stream-prefix' = "migration"
+      'awslogs-group' = "/ai-job-apply/development/migration"
+    }
+  }
   mountPoints = @()
   portMappings = @()
   systemControls = @()
@@ -845,6 +864,20 @@ $afterContainer = [ordered]@{
   name = "database-migration"
   image = $MigrationImage
   command = @("runner/dist/src/main.js")
+  essential = $true
+  readonlyRootFilesystem = $true
+  environment = @(
+    [ordered]@{ name = "NODE_ENV"; value = "production" },
+    [ordered]@{ name = "MIGRATION_MODE"; value = "run" }
+  )
+  logConfiguration = [ordered]@{
+    logDriver = "awslogs"
+    options = [ordered]@{
+      'awslogs-group' = "/ai-job-apply/development/migration"
+      'awslogs-region' = "us-east-2"
+      'awslogs-stream-prefix' = "migration"
+    }
+  }
 }
 $normalizedTaskPlan = [pscustomobject]@{
   complete = $true
@@ -887,6 +920,77 @@ $normalizedTaskPlan = [pscustomobject]@{
   }
 }
 Assert-ExactTaskPlan -Plan $normalizedTaskPlan
+
+function Get-TaskPlanContainerFixture {
+  param(
+    [Parameter(Mandatory)][object]$Plan,
+    [Parameter(Mandatory)][ValidateSet("before", "after")][string]$Side
+  )
+
+  $json = [string]$Plan.resource_changes[0].change.$Side.container_definitions
+  $containers = $json | ConvertFrom-Json
+  return @($containers)[0]
+}
+
+function Set-TaskPlanContainerFixture {
+  param(
+    [Parameter(Mandatory)][object]$Plan,
+    [Parameter(Mandatory)][ValidateSet("before", "after")][string]$Side,
+    [Parameter(Mandatory)][object]$Container
+  )
+
+  $Plan.resource_changes[0].change.$Side.container_definitions =
+    ConvertTo-Json -InputObject @(,$Container) -Compress -Depth 30
+}
+
+$containerTamperCases = @(
+  @{ Label = "array reorder"; Mutate = {
+      param($container)
+      $container.environment = @($container.environment[1], $container.environment[0])
+    } },
+  @{ Label = "array value"; Mutate = {
+      param($container)
+      $container.environment[1].value = "tampered"
+    } },
+  @{ Label = "value type"; Mutate = {
+      param($container)
+      $container.essential = "true"
+    } },
+  @{ Label = "key"; Mutate = {
+      param($container)
+      $region = $container.logConfiguration.options.'awslogs-region'
+      $container.logConfiguration.options.PSObject.Properties.Remove('awslogs-region')
+      $container.logConfiguration.options | Add-Member -NotePropertyName 'AWSLOGS-REGION' -NotePropertyValue $region
+    } },
+  @{ Label = "extra key"; Mutate = {
+      param($container)
+      $container.logConfiguration.options | Add-Member -NotePropertyName 'unexpected' -NotePropertyValue "value"
+    } },
+  @{ Label = "missing key"; Mutate = {
+      param($container)
+      $container.logConfiguration.options.PSObject.Properties.Remove('awslogs-group')
+    } },
+  @{ Label = "image"; Mutate = {
+      param($container)
+      $container.image = "example.invalid/migration@sha256:$('c' * 64)"
+    } },
+  @{ Label = "runtime"; Mutate = {
+      param($container)
+      $container.readonlyRootFilesystem = $false
+    } }
+)
+foreach ($case in $containerTamperCases) {
+  $tamperedPlan = $normalizedTaskPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $tamperedContainer = Get-TaskPlanContainerFixture -Plan $tamperedPlan -Side "after"
+  & $case.Mutate $tamperedContainer
+  Set-TaskPlanContainerFixture -Plan $tamperedPlan -Side "after" -Container $tamperedContainer
+  $tamperRejected = $false
+  try { Assert-ExactTaskPlan -Plan $tamperedPlan } catch { $tamperRejected = $true }
+  if (-not $tamperRejected) {
+    throw "The migration task plan accepted a $($case.Label) container-definition tamper."
+  }
+}
+
 foreach ($mutation in @("duplicate", "unknown", "sensitive")) {
   $badTaskDriftPlan = $normalizedTaskPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
   switch ($mutation) {

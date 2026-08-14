@@ -1219,7 +1219,9 @@ function Assert-ExactTaskPlan {
     }
   }
   @($beforeContainer)[0].image = $MigrationImage
-  if (($beforeContainer | ConvertTo-Json -Compress -Depth 30) -cne ($afterContainer | ConvertTo-Json -Compress -Depth 30)) {
+  $beforeContainerCanonical = ConvertTo-DeploymentCanonicalValue -Value $beforeContainer
+  $afterContainerCanonical = ConvertTo-DeploymentCanonicalValue -Value $afterContainer
+  if ($beforeContainerCanonical -cne $afterContainerCanonical) {
     throw "The migration digest must be the only container-definition change."
   }
 
