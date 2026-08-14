@@ -186,7 +186,13 @@ function Get-TerraformVariableEnvironmentAssignments {
 }
 
 function Get-DevelopmentDocumentStageExpectedActions {
-  param([Parameter(Mandatory)][ValidateSet("kms-prerequisite", "parser-dark", "complete-dark")][string]$Stage)
+  param(
+    [Parameter(Mandatory)][ValidateSet("kms-prerequisite", "parser-dark", "complete-dark")][string]$Stage,
+    [switch]$ParserSourceTransition
+  )
+  if ($ParserSourceTransition -and $Stage -cne "complete-dark") {
+    throw "A parser source transition is permitted only while advancing to complete-dark."
+  }
   if ($Stage -ceq "kms-prerequisite") {
     return @{ "module.platform.aws_kms_key.platform" = "update" }
   }
@@ -247,6 +253,10 @@ function Get-DevelopmentDocumentStageExpectedActions {
   $updates = if ($Stage -ceq "parser-dark") { $parserUpdates } else { $completeUpdates }
   foreach ($address in $creates) { $result[$address] = "create" }
   foreach ($address in $updates) { $result[$address] = "update" }
+  if ($ParserSourceTransition) {
+    $result["module.platform.aws_lambda_function.document_parser[0]"] = "update"
+    $result["module.platform.aws_lambda_alias.document_parser[0]"] = "update"
+  }
   return $result
 }
 
@@ -401,6 +411,116 @@ function Get-OptionalTerraformChangeValue {
   $property = $Change.PSObject.Properties[$Name]
   if ($null -eq $property) { return $null }
   return $property.Value
+}
+
+function Assert-ExactDocumentParserSourceTransition {
+  param(
+    [Parameter(Mandatory)][object[]]$Changes,
+    [Parameter(Mandatory)][object]$BaselineVariables,
+    [Parameter(Mandatory)][object]$Receipt,
+    [Parameter(Mandatory)][string]$ParserQualifiedArn
+  )
+
+  if ($ParserQualifiedArn -cnotmatch '^arn:aws:lambda:us-east-2:[0-9]{12}:function:ai-job-apply-development-document-parser:([1-9][0-9]*)$') {
+    throw "The parser source transition requires the exact already-applied numeric parser version."
+  }
+  $pinnedVersion = [string]$Matches[1]
+  $artifact = @($Receipt.artifacts | Where-Object {
+      [string]$_.artifactName -ceq "document-parser-lambda" -and [string]$_.suffix -ceq "zip"
+    })
+  if ($artifact.Count -ne 1) { throw "The parser source transition requires one exact reviewed parser ZIP." }
+  $artifact = $artifact[0]
+
+  $oldKey = [string]$BaselineVariables.document_parser_artifact_s3_key.value
+  $oldVersionId = [string]$BaselineVariables.document_parser_artifact_s3_object_version.value
+  $oldArtifactSha = [string]$BaselineVariables.document_parser_artifact_sha256.value
+  $oldObjectSha = [string]$BaselineVariables.document_parser_artifact_base64sha256.value
+  if ($oldKey -cnotmatch "^lambda/documents/[a-f0-9]{40}/$oldArtifactSha/document-parser-lambda\.zip$" -or
+    [string]::IsNullOrWhiteSpace($oldVersionId) -or $oldArtifactSha -cnotmatch '^[a-f0-9]{64}$' -or
+    $oldObjectSha -cnotmatch '^[A-Za-z0-9+/]{43}=$') {
+    throw "The retained ParserDark baseline does not bind one immutable parser artifact."
+  }
+  if ($oldKey -ceq [string]$artifact.key -or $oldVersionId -ceq [string]$artifact.versionId -or
+    $oldArtifactSha -ceq [string]$artifact.artifactSha256 -or $oldObjectSha -ceq [string]$artifact.objectBase64Sha256) {
+    throw "The CompleteDark source transition must move every parser artifact identity to the exact-current receipt."
+  }
+
+  $function = @($Changes | Where-Object { [string]$_.address -ceq "module.platform.aws_lambda_function.document_parser[0]" })
+  $alias = @($Changes | Where-Object { [string]$_.address -ceq "module.platform.aws_lambda_alias.document_parser[0]" })
+  if ($function.Count -ne 1 -or $alias.Count -ne 1 -or [string]$function[0].type -cne "aws_lambda_function" -or
+    [string]$alias[0].type -cne "aws_lambda_alias") {
+    throw "The parser source transition lacks its exact function and alias updates."
+  }
+  $function = $function[0]; $alias = $alias[0]
+  foreach ($change in @($function, $alias)) {
+    if ([string]$change.mode -cne "managed" -or (@($change.change.actions) -join ",") -cne "update" -or
+      @((Get-OptionalTerraformChangeValue $change.change "replace_paths")).Count -ne 0 -or
+      (ConvertTo-OptionalTerraformMetadataCanonicalValue $change.change "before_sensitive" -SortArrays) -cne
+      (ConvertTo-OptionalTerraformMetadataCanonicalValue $change.change "after_sensitive" -SortArrays)) {
+      throw "The parser source transition may not create, delete, replace, or broaden sensitivity."
+    }
+  }
+
+  if ([string]$function.change.before.s3_key -cne $oldKey -or
+    [string]$function.change.before.s3_object_version -cne $oldVersionId -or
+    [string]$function.change.before.source_code_hash -cne $oldObjectSha -or
+    [string]$function.change.before.environment[0].variables.RELEASE_SHA -cne $oldArtifactSha -or
+    [string]$function.change.before.qualified_arn -cne $ParserQualifiedArn -or
+    [string]$function.change.before.version -cne $pinnedVersion -or
+    [string]$function.change.after.s3_key -cne [string]$artifact.key -or
+    [string]$function.change.after.s3_object_version -cne [string]$artifact.versionId -or
+    [string]$function.change.after.source_code_hash -cne [string]$artifact.objectBase64Sha256 -or
+    [string]$function.change.after.environment[0].variables.RELEASE_SHA -cne [string]$artifact.artifactSha256) {
+    throw "The parser function transition is not bound from the retained artifact/version to the exact-current receipt."
+  }
+  $functionBefore = $function.change.before | ConvertTo-Json -Depth 60 | ConvertFrom-Json
+  $functionAfter = $function.change.after | ConvertTo-Json -Depth 60 | ConvertFrom-Json
+  $functionBefore.environment[0].variables.PSObject.Properties.Remove("RELEASE_SHA")
+  $functionAfter.environment[0].variables.PSObject.Properties.Remove("RELEASE_SHA")
+  foreach ($field in @("code_sha256", "last_modified", "qualified_arn", "qualified_invoke_arn", "s3_key", "s3_object_version", "source_code_hash", "version")) {
+    $functionBefore.PSObject.Properties.Remove($field); $functionAfter.PSObject.Properties.Remove($field)
+  }
+  if ((ConvertTo-DeploymentCanonicalValue $functionBefore -SortArrays) -cne
+    (ConvertTo-DeploymentCanonicalValue $functionAfter -SortArrays)) {
+    throw "The parser source transition changes a non-artifact Lambda field."
+  }
+  $functionUnknown = Get-OptionalTerraformChangeValue $function.change "after_unknown"
+  $expectedFunctionUnknowns = @("code_sha256", "last_modified", "qualified_arn", "qualified_invoke_arn", "version")
+  if ($null -eq $functionUnknown) {
+    throw "The parser source transition omits the exact computed Lambda fields."
+  }
+  Assert-ExactObjectKeys $functionUnknown $expectedFunctionUnknowns "parser source-transition Lambda unknowns"
+  foreach ($field in $expectedFunctionUnknowns) {
+    if ($functionUnknown.PSObject.Properties[$field].Value -isnot [bool] -or
+      -not $functionUnknown.PSObject.Properties[$field].Value) {
+      throw "The parser source transition Lambda unknown '$field' is not exactly true."
+    }
+  }
+
+  if ([string]$alias.change.before.function_version -cne $pinnedVersion) {
+    throw "The parser alias transition does not start at the exact pinned parser version."
+  }
+  $aliasBefore = $alias.change.before | ConvertTo-Json -Depth 40 | ConvertFrom-Json
+  $aliasAfter = $alias.change.after | ConvertTo-Json -Depth 40 | ConvertFrom-Json
+  foreach ($field in @("arn", "function_version", "invoke_arn")) {
+    $aliasBefore.PSObject.Properties.Remove($field); $aliasAfter.PSObject.Properties.Remove($field)
+  }
+  if ((ConvertTo-DeploymentCanonicalValue $aliasBefore -SortArrays) -cne
+    (ConvertTo-DeploymentCanonicalValue $aliasAfter -SortArrays)) {
+    throw "The parser source transition changes alias routing or a non-version field."
+  }
+  $aliasUnknown = Get-OptionalTerraformChangeValue $alias.change "after_unknown"
+  $expectedAliasUnknowns = @("arn", "function_version", "invoke_arn")
+  if ($null -eq $aliasUnknown) {
+    throw "The parser source transition omits the exact computed alias fields."
+  }
+  Assert-ExactObjectKeys $aliasUnknown $expectedAliasUnknowns "parser source-transition alias unknowns"
+  foreach ($field in $expectedAliasUnknowns) {
+    if ($aliasUnknown.PSObject.Properties[$field].Value -isnot [bool] -or
+      -not $aliasUnknown.PSObject.Properties[$field].Value) {
+      throw "The parser source transition alias unknown '$field' is not exactly true."
+    }
+  }
 }
 
 function ConvertTo-OptionalTerraformMetadataCanonicalValue {
@@ -1426,9 +1546,30 @@ function Assert-ExactDocumentAlarmSet {
 
 function Assert-DevelopmentDocumentDarkPlan {
   param([Parameter(Mandatory)][object]$Plan, [Parameter(Mandatory)][string]$AccountId,
-    [Parameter(Mandatory)][ValidateSet("parser-dark", "complete-dark")][string]$Stage)
+    [Parameter(Mandatory)][ValidateSet("parser-dark", "complete-dark")][string]$Stage,
+    [switch]$ParserSourceTransition,
+    [AllowNull()][object]$BaselineVariables,
+    [AllowNull()][object]$Receipt,
+    [string]$ParserQualifiedArn = "")
 
-  $expected = Get-DevelopmentDocumentStageExpectedActions -Stage $Stage
+  if ([string]$Plan.terraform_version -cne "1.9.8" -or $Plan.errored -or -not $Plan.complete -or -not $Plan.applyable) {
+    throw "The document dark transition must be a successful applyable Terraform 1.9.8 plan."
+  }
+  $outputChanges = Get-OptionalTerraformChangeValue $Plan "output_changes"
+  $meaningfulOutputs = @(
+    if ($null -ne $outputChanges) {
+      $outputChanges.PSObject.Properties | Where-Object {
+        $actions = @($_.Value.actions)
+        -not ($actions.Count -eq 1 -and $actions[0] -ceq "no-op")
+      }
+    }
+  )
+  if ($meaningfulOutputs.Count -ne 0) { throw "The document dark transition contains a meaningful output change." }
+  if ($ParserSourceTransition -and ($Stage -cne "complete-dark" -or $null -eq $BaselineVariables -or
+      $null -eq $Receipt -or [string]::IsNullOrWhiteSpace($ParserQualifiedArn))) {
+    throw "The parser source transition requires CompleteDark, retained variables, receipt, and version pin."
+  }
+  $expected = Get-DevelopmentDocumentStageExpectedActions -Stage $Stage -ParserSourceTransition:$ParserSourceTransition
   Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($Plan.resource_drift) -RootModule $Plan.planned_values.root_module
   $kmsRecords = @($Plan.resource_changes | Where-Object { [string]$_.address -ceq "module.platform.aws_kms_key.platform" })
   if ($kmsRecords.Count -ne 1 -or [string]$kmsRecords[0].mode -cne "managed" -or
@@ -1482,7 +1623,8 @@ function Assert-DevelopmentDocumentDarkPlan {
       }
     }
   }
-  foreach ($address in @($expected.Keys | Where-Object { $expected[$_] -ceq "update" })) {
+  $policyUpdates = Get-DevelopmentDocumentStageExpectedActions -Stage $Stage
+  foreach ($address in @($policyUpdates.Keys | Where-Object { $policyUpdates[$_] -ceq "update" })) {
     $afterUnknown = Get-OptionalTerraformChangeValue $byAddress[$address].change "after_unknown"
     $unknown = if ($null -eq $afterUnknown) { $null } else { $afterUnknown.PSObject.Properties["policy"] }
     if (($null -ne $unknown -and (ConvertTo-DeploymentCanonicalValue $unknown.Value -SortArrays) -match 'true') -or
@@ -1515,5 +1657,9 @@ function Assert-DevelopmentDocumentDarkPlan {
     }
   }
   Assert-ApprovedPolicyUpdateSemantics -Changes $changes -AccountId $AccountId -Stage $Stage
+  if ($ParserSourceTransition) {
+    Assert-ExactDocumentParserSourceTransition -Changes $changes -BaselineVariables $BaselineVariables `
+      -Receipt $Receipt -ParserQualifiedArn $ParserQualifiedArn
+  }
   return $changes
 }

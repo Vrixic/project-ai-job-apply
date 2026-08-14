@@ -41,6 +41,8 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib\deployment-operator-guards.ps1")
+. (Join-Path $PSScriptRoot "lib\development-document-dark-guards.ps1")
 
 if ($Help) {
   @"
@@ -730,33 +732,7 @@ function Assert-RetainedMigrationBaselinePlan {
   if ($meaningfulOutputs.Count -ne 0) {
     throw "The retained migration baseline contains a meaningful output change."
   }
-  $drift = @($Plan.resource_drift | Where-Object { $null -ne $_ })
-  $seenDrift = @()
-  foreach ($record in $drift) {
-    $address = [string]$record.address
-    $expectedType = if ($address -ceq "module.platform.aws_db_instance.postgres[0]") {
-      "aws_db_instance"
-    } elseif ($address -ceq $migrationAddress) {
-      "aws_ecs_task_definition"
-    } else { "" }
-    $replacePaths = Get-OptionalProperty -Object $record.change -Name "replace_paths"
-    $afterUnknown = Get-OptionalProperty -Object $record.change -Name "after_unknown"
-    $beforeSensitive = Get-OptionalProperty -Object $record.change -Name "before_sensitive"
-    $afterSensitive = Get-OptionalProperty -Object $record.change -Name "after_sensitive"
-    if ([string]::IsNullOrEmpty($expectedType) -or $seenDrift -ccontains $address -or
-      [string]$record.mode -cne "managed" -or [string]$record.type -cne $expectedType -or
-      (@($record.change.actions) -join ",") -cne "update" -or
-      ($null -ne $replacePaths -and @($replacePaths).Count -ne 0) -or
-      ($null -ne $afterUnknown -and @($afterUnknown.PSObject.Properties).Count -ne 0) -or
-      (($beforeSensitive | ConvertTo-Json -Compress -Depth 30) -cne
-        ($afterSensitive | ConvertTo-Json -Compress -Depth 30))) {
-      throw "The retained migration baseline contains unsafe or duplicate provider refresh drift."
-    }
-    $seenDrift += $address
-  }
-  if (@(Get-UnacceptedVerificationDrift -Drift $drift).Count -ne 0) {
-    throw "The retained migration baseline contains unaccepted refresh drift."
-  }
+  Assert-AcceptedMigrationProviderDrift -Plan $Plan
   Assert-ExactCurrentBaselineVariableSet -Plan $Plan
 }
 
@@ -1155,79 +1131,52 @@ function Get-MeaningfulChanges {
     })
 }
 
+function Assert-AcceptedMigrationProviderDrift {
+  param([Parameter(Mandatory)][object]$Plan)
+
+  $drift = @($Plan.resource_drift | Where-Object { $null -ne $_ })
+  if ($drift.Count -eq 0) { return }
+  Assert-DevelopmentDocumentAcceptedResourceDrift -Records $drift `
+    -RootModule $Plan.planned_values.root_module
+}
+
+# Retain the focused legacy guard entry points used by repository validation and downstream test
+# harnesses, but make them thin adapters over the single shared semantic implementation.
 function Test-IgnorableRdsRestorableTimeRefresh {
   param([Parameter(Mandatory)][object]$Drift)
 
-  if ([string]$Drift.address -cne "module.platform.aws_db_instance.postgres[0]" -or
-      @($Drift.change.actions).Count -ne 1 -or [string]@($Drift.change.actions)[0] -cne "update") {
-    return $false
-  }
-  $beforeTime = [datetime]::MinValue
-  $afterTime = [datetime]::MinValue
-  $beforeValue = $Drift.change.before.latest_restorable_time
-  $afterValue = $Drift.change.after.latest_restorable_time
-  $beforeValid = if ($beforeValue -is [datetime]) {
-    $beforeTime = [datetime]$beforeValue
-    $beforeTime.Kind -eq [DateTimeKind]::Utc -and $beforeTime.Ticks % [TimeSpan]::TicksPerSecond -eq 0
-  } else {
-    [string]$beforeValue -match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$' -and [datetime]::TryParseExact(
-      [string]$beforeValue, "yyyy-MM-dd'T'HH:mm:ss'Z'", [Globalization.CultureInfo]::InvariantCulture,
-      [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal,
-      [ref]$beforeTime
-    )
-  }
-  $afterValid = if ($afterValue -is [datetime]) {
-    $afterTime = [datetime]$afterValue
-    $afterTime.Kind -eq [DateTimeKind]::Utc -and $afterTime.Ticks % [TimeSpan]::TicksPerSecond -eq 0
-  } else {
-    [string]$afterValue -match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$' -and [datetime]::TryParseExact(
-      [string]$afterValue, "yyyy-MM-dd'T'HH:mm:ss'Z'", [Globalization.CultureInfo]::InvariantCulture,
-      [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal,
-      [ref]$afterTime
-    )
-  }
-  if (-not $beforeValid -or -not $afterValid -or $afterTime -lt $beforeTime) {
-    return $false
-  }
-  $before = $Drift.change.before | ConvertTo-Json -Depth 50 | ConvertFrom-Json
-  $after = $Drift.change.after | ConvertTo-Json -Depth 50 | ConvertFrom-Json
-  $before.PSObject.Properties.Remove("latest_restorable_time")
-  $after.PSObject.Properties.Remove("latest_restorable_time")
-  return (($before | ConvertTo-Json -Compress -Depth 50) -ceq
-    ($after | ConvertTo-Json -Compress -Depth 50))
+  $root = [pscustomobject]@{ resources = @([pscustomobject]@{
+        address = "module.platform.aws_kms_key.platform"
+        values = [pscustomobject]@{ arn = "arn:aws:kms:us-east-2:000000000000:key/00000000-0000-0000-0000-000000000000" }
+      }) }
+  try {
+    Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($Drift) -RootModule $root
+    return $true
+  } catch { return $false }
 }
 
 function Test-IgnorableMigrationTaskTagsRefresh {
   param([Parameter(Mandatory)][object]$Drift)
 
-  if ([string]$Drift.address -cne $migrationAddress -or
-      @($Drift.change.actions).Count -ne 1 -or
-      [string]@($Drift.change.actions)[0] -cne "update") {
-    return $false
-  }
-  $beforeTags = $Drift.change.before.PSObject.Properties["tags"]
-  $afterTags = $Drift.change.after.PSObject.Properties["tags"]
-  if ($null -eq $beforeTags -or $null -ne $beforeTags.Value -or
-      $null -eq $afterTags -or $null -eq $afterTags.Value -or
-      @($afterTags.Value.PSObject.Properties).Count -ne 0 -or
-      @($Drift.change.after_unknown.PSObject.Properties).Count -ne 0) {
-    return $false
-  }
-  $before = $Drift.change.before | ConvertTo-Json -Depth 50 | ConvertFrom-Json
-  $after = $Drift.change.after | ConvertTo-Json -Depth 50 | ConvertFrom-Json
-  $before.PSObject.Properties.Remove("tags")
-  $after.PSObject.Properties.Remove("tags")
-  return (($before | ConvertTo-Json -Compress -Depth 50) -ceq
-    ($after | ConvertTo-Json -Compress -Depth 50))
+  $root = [pscustomobject]@{ resources = @([pscustomobject]@{
+        address = "module.platform.aws_kms_key.platform"
+        values = [pscustomobject]@{ arn = "arn:aws:kms:us-east-2:000000000000:key/00000000-0000-0000-0000-000000000000" }
+      }) }
+  try {
+    Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($Drift) -RootModule $root
+    return $true
+  } catch { return $false }
 }
 
 function Get-UnacceptedVerificationDrift {
-  param([AllowNull()][object[]]$Drift)
+  param([AllowNull()][object[]]$Drift, [Parameter(Mandatory)][object]$RootModule)
 
-  return @(Get-MeaningfulChanges -Changes $Drift | Where-Object {
-      -not (Test-IgnorableRdsRestorableTimeRefresh -Drift $_) -and
-      -not (Test-IgnorableMigrationTaskTagsRefresh -Drift $_)
-    })
+  $records = @($Drift | Where-Object { $null -ne $_ })
+  if ($records.Count -eq 0) { return @() }
+  try {
+    Assert-DevelopmentDocumentAcceptedResourceDrift -Records $records -RootModule $RootModule
+    return @()
+  } catch { return $records }
 }
 
 function Assert-ExactTaskPlan {
@@ -1239,10 +1188,7 @@ function Assert-ExactTaskPlan {
   if ([string]$Plan.variables.migration_image.value -cne $MigrationImage) {
     throw "The task plan is not bound to the reviewed migration digest."
   }
-  $drift = @(Get-MeaningfulChanges -Changes @($Plan.resource_drift) | Where-Object {
-      -not (Test-IgnorableRdsRestorableTimeRefresh -Drift $_)
-    })
-  if ($drift.Count -ne 0) { throw "The task plan contains resource drift; reconcile it separately before migration." }
+  Assert-AcceptedMigrationProviderDrift -Plan $Plan
   $changes = @(Get-MeaningfulChanges -Changes @($Plan.resource_changes))
   if ($changes.Count -ne 1 -or [string]$changes[0].address -cne $migrationAddress) {
     throw "The task plan may change only the one-off migration task definition."

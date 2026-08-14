@@ -40,9 +40,13 @@ The task release is deliberately review-separated:
    rollout stage, and applicable parser-version pin. A KMS-prerequisite-only baseline is rejected.
    Pass the verifier's exact `BaselineMetadataSha256` as mandatory
    `-AppliedPlanMetadataSha256`; the operator checks those bytes before parsing the sidecar and
-   cross-binds its stage and parser pin to the exact saved-plan variables.
-   It rejects resource drift and any meaningful change except a create-before-destroy replacement
-   of `module.platform.aws_ecs_task_definition.migration[0]` caused only by the image digest.
+   cross-binds its stage and parser pin to the exact saved-plan variables. Retained, task-release,
+   and post-migration plans accept only the same semantic, subset-safe provider-normalization
+   records as the document-dark verifier, including the legacy forward-only RDS restore clock and
+   migration-task null-to-empty tag records; duplicates, unknowns, broadened policy semantics, or
+   any other drift fail closed. The task plan rejects every meaningful change except a
+   create-before-destroy replacement of `module.platform.aws_ecs_task_definition.migration[0]`
+   caused only by the image digest.
 2. Independently inspect the saved plan and its `.metadata.json` sidecar, then pass the printed
    SHA-256 to `ApplyTask`. Task metadata binds the retained plan and sidecar paths/checksums, stage,
    state identity, receipt, and parser pin. The apply rechecks that complete handoff against live
@@ -62,11 +66,12 @@ The task release is deliberately review-separated:
 5. `Verify` repeats the task/log/zero-compute checks and retains a refresh-backed zero-drift plan
    plus its adjacent `.baseline.json` sidecar. The operator rejects overwrites, removes only newly
    created plan/sidecar bytes if any validation or write fails, and requires state lineage/serial
-   to remain unchanged while producing the handoff. The version-2 sidecar binds the exact current
-   Terraform variable inventory, merged source, account, region, state lineage/serial, document
-   stage, parser-version pin, reviewed document-publication receipt, immutable migration-image
-   digest, plan path/hash, Terraform `1.9.8`, nonapplyable shape, zero meaningful resource/output
-   changes, and only the bounded provider refresh records. Retain the printed `BaselinePath`,
+   to remain unchanged while producing the handoff. The schema-4 sidecar binds the exact release
+   source, current operator source and canonical delta, current Terraform variable inventory,
+   account, region, state lineage/serial, document stage, parser-version pin, reviewed document-
+   publication receipt, immutable migration-image digest, plan path/hash, Terraform `1.9.8`,
+   nonapplyable shape, zero meaningful resource/output changes, and only the bounded provider
+   refresh records. Retain the printed `BaselinePath`,
    `BaselineSha256`, `BaselineMetadataPath`, and `BaselineMetadataSha256` for the next separately
    reviewed `CompleteDark` or gateway release; do not substitute the consumed migration task plan.
 

@@ -11,12 +11,21 @@ alert rules after their referenced protection plan and candidate-document bucket
 |---|---|---|
 | `KmsPrerequisite` | Two exact EventBridge grants on the platform KMS key | One in-place update when first installed; zero drift thereafter |
 | `ParserDark` | Encrypted queues, dark processing rules, active bounded security-health alerts, bounded roles, isolated parser, S3 endpoint, metrics and alarms | 32 creates and two policy updates |
-| `CompleteDark` | Coordinator, disabled mapping and reconciler target, STS endpoint, and exact existing endpoint grants | Seven creates and three policy updates |
+| `CompleteDark` | Coordinator, disabled mapping and reconciler target, STS endpoint, and exact existing endpoint grants | Seven creates and three policy updates; when advancing from an ancestor-release ParserDark baseline, exactly two additional in-place parser function/alias source updates |
 
 The operator rejects skipped or reversed stages. `CompleteDark` reads the numeric parser version
 ARN from applied `ParserDark` state, verifies its exact account, region, function name, and positive
 version, then binds that ARN into the processor policy, environment, and Lambda endpoint policy.
 It never predicts a Lambda version or invokes `$LATEST`.
+
+When the accepted ParserDark baseline belongs to an ancestor document release, CompleteDark uses
+an explicit source transition. The processor remains pinned to the already-applied numeric parser
+version proven by that baseline. In the same reviewed plan, the parser function and development
+alias move to the separately published exact-current parser artifact while the normal seven
+CompleteDark resources and three endpoint-policy grants are added. Apply and live verification
+prove that both the retained pinned version and the new alias artifact exist with their exact
+checksums. The old pin is intentional: it avoids predicting the new Lambda version during plan,
+and it remains immutable for direct dark conformance.
 
 ## Required reviewed inputs
 
@@ -25,6 +34,11 @@ It never predicts a Lambda version or invokes `$LATEST`.
 - the private, versioned, customer-KMS Terraform state bucket;
 - a checksum-reviewed Terraform `1.9.8` zero-change baseline;
 - for parser and complete stages, the checksum-reviewed verified document publication receipt.
+
+If the retained schema-3/4 ParserDark baseline's operator revision is an ancestor of current
+`main`, also require the independently reviewed canonical delta from that baseline operator to
+current `main`. Omit it when both revisions are exact. Only modified regular blobs on the existing
+deployment-operator/test/runbook allowlist are accepted.
 
 The historical intake-only baseline is accepted only as an input reconstruction boundary. The
 operator maps its retired deployment and KMS booleans to `kms-prerequisite`; current Terraform
@@ -96,9 +110,34 @@ independently recompute that evidence before accepting it. Omit the delta argume
 release and operator commits are identical.
 
 `Plan` and `Apply` reject ancestor releases and retain the existing exact-current schema-2 plan
-metadata. Therefore a later `CompleteDark` source transition is blocked until current-source
-document artifacts have been separately published and reviewed; the Verify-only exception cannot
-be used to update processing resources.
+metadata. A `CompleteDark` source transition therefore requires current-source document artifacts
+to be separately published and reviewed. It never reuses the Verify-only ancestor artifact
+exception. The retained ParserDark plan and sidecar remain separate inputs: their plan, metadata,
+release/operator/delta, old receipt, state lineage/serial, parser artifact, and live numeric version
+are revalidated before planning and applying the exact-current release.
+
+For that transition, add the baseline-to-current delta only when the retained sidecar's
+`OperatorSourceSha` is older than current `main`:
+
+```powershell
+.\scripts\operate-development-document-dark-deployment.ps1 -Action Plan -Stage CompleteDark `
+  -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
+  -BaselinePlanPath PARSER_DARK_BASELINE -ReviewedBaselineSha256 BASELINE_SHA256 `
+  -ReviewedBaselineMetadataSha256 BASELINE_METADATA_SHA256 `
+  [-ReviewedBaselineToOperatorDeltaSha256 REVIEWED_BASELINE_OPERATOR_DELTA_SHA256] `
+  -PublicationReceiptPath EXACT_CURRENT_RECEIPT -ReviewedReceiptSha256 CURRENT_RECEIPT_SHA256
+```
+
+The accepted transition plan has exactly seven creates and five in-place updates: the normal
+three endpoint-policy updates plus the parser function and parser alias. Any replacement, delete,
+additional resource/output, protected runtime-field change, unexpected unknown, sensitivity
+broadening, trigger activation, receipt mismatch, version-pin mismatch, or state change is a hard
+failure. Apply uses the same optional baseline-to-current delta argument and the exact reviewed
+plan checksum. A successful `CompleteDark` apply retains and prints a new checksum-bound
+zero-drift baseline and metadata sidecar. That handoff binds the current parser and processor
+artifacts while preserving the exact older numeric parser-version ARN used by the dark processor;
+later `CompleteDark` verification proves that pinned immutable version remains healthy, the
+current parser alias still matches the current receipt, and no processing trigger is active.
 
 The optional metadata argument is omitted only for the checksum-reviewed historical intake
 baseline used by the initial `KmsPrerequisite` to `ParserDark` transition. Every current-shape
