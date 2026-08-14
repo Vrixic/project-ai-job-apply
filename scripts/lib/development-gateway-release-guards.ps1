@@ -306,9 +306,14 @@ function Assert-GatewayReleaseVariables {
   }
   $stage = [string](Get-GatewayPlanVariableValue $ReleaseVariables "document_processing_deployment_stage")
   $parserArn = [string](Get-GatewayPlanVariableValue $ReleaseVariables "document_parser_invocation_qualified_arn")
+  $mappingEnabled = ConvertTo-ExactBoolean `
+    (Get-GatewayPlanVariableValue $ReleaseVariables "document_scan_mapping_enabled") `
+    "document_scan_mapping_enabled"
+  $eventRuleEnabled = ConvertTo-ExactBoolean `
+    (Get-GatewayPlanVariableValue $ReleaseVariables "document_scan_event_rule_enabled") `
+    "document_scan_event_rule_enabled"
   if ($stage -notin @("parser-dark", "complete-dark") -or
-      [bool](Get-GatewayPlanVariableValue $ReleaseVariables "document_scan_mapping_enabled") -or
-      [bool](Get-GatewayPlanVariableValue $ReleaseVariables "document_scan_event_rule_enabled")) {
+      $mappingEnabled -or $eventRuleEnabled) {
     throw "The gateway release must preserve the deployed processing-dark boundary."
   }
   if ($stage -ceq "parser-dark" -and -not [string]::IsNullOrEmpty($parserArn)) {

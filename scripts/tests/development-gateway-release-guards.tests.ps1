@@ -20,6 +20,35 @@ $artifactSha = "b" * 64
 $boundarySha = "c" * 64
 $artifactBase64 = [Convert]::ToBase64String(([byte[]](1..32)))
 $repositoryUrl = "$account.dkr.ecr.us-east-2.amazonaws.com/ai-job-apply/migration"
+foreach ($case in @(
+    @{ Label = "runtime false"; Value = $false; Expected = $false },
+    @{ Label = "runtime true"; Value = $true; Expected = $true },
+    @{ Label = "string false"; Value = "false"; Expected = $false },
+    @{ Label = "string true"; Value = "true"; Expected = $true }
+  )) {
+  $actual = ConvertTo-ExactBoolean $case.Value $case.Label
+  if ($actual -isnot [bool] -or $actual -ne $case.Expected) {
+    throw "ConvertTo-ExactBoolean rejected or changed the $($case.Label) form."
+  }
+  $passed++
+}
+foreach ($case in @(
+    @{ Label = "null"; Value = $null },
+    @{ Label = "uppercase false"; Value = "False" },
+    @{ Label = "uppercase true"; Value = "TRUE" },
+    @{ Label = "leading whitespace"; Value = " false" },
+    @{ Label = "trailing whitespace"; Value = "false " },
+    @{ Label = "empty string"; Value = "" },
+    @{ Label = "numeric zero"; Value = 0 },
+    @{ Label = "numeric one"; Value = 1 },
+    @{ Label = "string zero"; Value = "0" },
+    @{ Label = "string one"; Value = "1" },
+    @{ Label = "object"; Value = [pscustomobject]@{} },
+    @{ Label = "array"; Value = [object[]]@($false) }
+  )) {
+  Assert-Rejected { ConvertTo-ExactBoolean $case.Value $case.Label } `
+    "ConvertTo-ExactBoolean accepted the noncanonical $($case.Label) form."
+}
 function New-GatewayProviderDriftRecord {
   param(
     [Parameter(Mandatory)][string]$Address,
@@ -200,8 +229,8 @@ function New-Variables {
     document_processor_artifact_s3_object_version = [pscustomobject]@{ value = "" }
     document_processor_artifact_sha256 = [pscustomobject]@{ value = "" }
     document_processor_artifact_base64sha256 = [pscustomobject]@{ value = "" }
-    document_scan_mapping_enabled = [pscustomobject]@{ value = $false }
-    document_scan_event_rule_enabled = [pscustomobject]@{ value = $false }
+    document_scan_mapping_enabled = [pscustomobject]@{ value = "false" }
+    document_scan_event_rule_enabled = [pscustomobject]@{ value = "false" }
     migration_image = [pscustomobject]@{ value = "$repositoryUrl@sha256:$('1' * 64)" }
     oidc_audience = [pscustomobject]@{ value = "ai-job-apply-api" }
   }
@@ -282,6 +311,46 @@ foreach ($mutation in @("duplicate", "address", "unknown", "sensitivity", "repla
   } "The retained gateway baseline accepted CompleteDark $mutation tampering."
 }
 $null = Assert-GatewayReleaseVariables $baselineVariables $releaseVariables $artifact $account $repositoryUrl ""; $passed++
+$runtimeBooleanBaseline = Copy-Fixture $baselineVariables
+$runtimeBooleanRelease = Copy-Fixture $releaseVariables
+foreach ($variables in @($runtimeBooleanBaseline, $runtimeBooleanRelease)) {
+  $variables.document_scan_mapping_enabled.value = $false
+  $variables.document_scan_event_rule_enabled.value = $false
+}
+$null = Assert-GatewayReleaseVariables $runtimeBooleanBaseline $runtimeBooleanRelease `
+  $artifact $account $repositoryUrl ""; $passed++
+$completeDarkParserArn = "arn:aws:lambda:us-east-2:${account}:function:ai-job-apply-development-document-parser:1"
+$completeDarkBaseline = Copy-Fixture $baselineVariables
+$completeDarkRelease = Copy-Fixture $releaseVariables
+foreach ($variables in @($completeDarkBaseline, $completeDarkRelease)) {
+  $variables.document_processing_deployment_stage.value = "complete-dark"
+  $variables.document_parser_invocation_qualified_arn.value = $completeDarkParserArn
+}
+$null = Assert-GatewayReleaseVariables $completeDarkBaseline $completeDarkRelease `
+  $artifact $account $repositoryUrl $completeDarkParserArn; $passed++
+foreach ($name in @("document_scan_mapping_enabled", "document_scan_event_rule_enabled")) {
+  foreach ($enabled in @($true, "true")) {
+    $enabledBaseline = Copy-Fixture $baselineVariables
+    $enabledRelease = Copy-Fixture $releaseVariables
+    $enabledBaseline.$name.value = $enabled
+    $enabledRelease.$name.value = $enabled
+    Assert-Rejected {
+      Assert-GatewayReleaseVariables $enabledBaseline $enabledRelease $artifact $account $repositoryUrl ""
+    } "The gateway release accepted enabled processing-dark flag '$name'."
+  }
+}
+foreach ($case in @(
+    @{ Name = "document_scan_mapping_enabled"; Value = "False" },
+    @{ Name = "document_scan_event_rule_enabled"; Value = "false " }
+  )) {
+  $malformedBaseline = Copy-Fixture $baselineVariables
+  $malformedRelease = Copy-Fixture $releaseVariables
+  $malformedBaseline.($case.Name).value = $case.Value
+  $malformedRelease.($case.Name).value = $case.Value
+  Assert-Rejected {
+    Assert-GatewayReleaseVariables $malformedBaseline $malformedRelease $artifact $account $repositoryUrl ""
+  } "The gateway release accepted noncanonical boolean '$($case.Name)'."
+}
 $changed = Copy-Fixture $releaseVariables; $changed.document_processing_deployment_stage.value = "complete-dark"
 Assert-Rejected { Assert-GatewayReleaseVariables $baselineVariables $changed $artifact $account $repositoryUrl "" } "A document-stage change was accepted."
 $changed = Copy-Fixture $releaseVariables; $changed.migration_image.value = "999999999999.dkr.ecr.us-east-2.amazonaws.com/ai-job-apply/migration@sha256:$('1' * 64)"
