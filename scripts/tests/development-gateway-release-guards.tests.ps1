@@ -371,16 +371,92 @@ $functionAfter.s3_key = $artifact.key; $functionAfter.s3_object_version = $artif
 $functionAfter.source_code_hash = $artifactBase64; $functionAfter.version = "8"
 $functionAfter.environment[0].variables.RELEASE_SHA = $artifactSha
 $aliasBefore = [pscustomobject]@{ arn = "old-alias"; description = "reviewed"; function_name = "gateway"; function_version = "7"; invoke_arn = "old-invoke"; name = "development"; routing_config = @() }
-$aliasAfter = Copy-Fixture $aliasBefore; $aliasAfter.arn = "new-alias"; $aliasAfter.function_version = "8"; $aliasAfter.invoke_arn = "new-invoke"
+$aliasAfter = Copy-Fixture $aliasBefore; $aliasAfter.arn = "new-alias"; $aliasAfter.PSObject.Properties.Remove("function_version"); $aliasAfter.invoke_arn = "new-invoke"
+$functionUnknown = [pscustomobject]@{
+  architectures = @($false); capacity_provider_config = @(); dead_letter_config = @(); durable_config = @()
+  environment = @([pscustomobject]@{ variables = [pscustomobject]@{} })
+  ephemeral_storage = @([pscustomobject]@{}); file_system_config = @(); image_config = @()
+  last_modified = $true; layers = @($false); logging_config = @([pscustomobject]@{})
+  qualified_arn = $true; qualified_invoke_arn = $true; snap_start = @(); tags = [pscustomobject]@{}
+  tags_all = [pscustomobject]@{}; tenancy_config = @(); tracing_config = @([pscustomobject]@{})
+  version = $true
+  vpc_config = @([pscustomobject]@{ security_group_ids = @($false); subnet_ids = @($false, $false) })
+}
+$functionSensitivity = [pscustomobject]@{
+  architectures = @($false); capacity_provider_config = @(); dead_letter_config = @(); durable_config = @()
+  environment = @([pscustomobject]@{ variables = [pscustomobject]@{ OIDC_ISSUER = $true } })
+  ephemeral_storage = @([pscustomobject]@{}); file_system_config = @(); image_config = @()
+  layers = @($false); logging_config = @([pscustomobject]@{}); snap_start = @(); tags = [pscustomobject]@{}
+  tags_all = [pscustomobject]@{}; tenancy_config = @(); tracing_config = @([pscustomobject]@{})
+  vpc_config = @([pscustomobject]@{ security_group_ids = @($false); subnet_ids = @($false, $false) })
+}
+$aliasUnknown = [pscustomobject]@{ function_version = $true; routing_config = @() }
+$aliasSensitivity = [pscustomobject]@{ routing_config = @() }
 $plan = [pscustomobject]@{
   complete = $true; applyable = $true; errored = $false; terraform_version = "1.9.8"; resource_drift = @()
   output_changes = [pscustomobject]@{ gateway_lambda_alias_arn = [pscustomobject]@{ actions = @("no-op") } }
   resource_changes = @(
-    [pscustomobject]@{ address = "module.platform.aws_lambda_function.gateway[0]"; mode = "managed"; type = "aws_lambda_function"; change = [pscustomobject]@{ actions = @("update"); before = $functionBefore; after = $functionAfter; replace_paths = @(); before_sensitive = @{}; after_sensitive = @{}; after_unknown = [pscustomobject]@{ code_sha256 = $true; last_modified = $true; qualified_arn = $true; qualified_invoke_arn = $true; version = $true } } },
-    [pscustomobject]@{ address = "module.platform.aws_lambda_alias.gateway[0]"; mode = "managed"; type = "aws_lambda_alias"; change = [pscustomobject]@{ actions = @("update"); before = $aliasBefore; after = $aliasAfter; replace_paths = @(); before_sensitive = @{}; after_sensitive = @{}; after_unknown = [pscustomobject]@{ arn = $true; function_version = $true; invoke_arn = $true } } }
+    [pscustomobject]@{ address = "module.platform.aws_lambda_function.gateway[0]"; mode = "managed"; type = "aws_lambda_function"; change = [pscustomobject]@{ actions = @("update"); before = $functionBefore; after = $functionAfter; replace_paths = @(); before_sensitive = $functionSensitivity; after_sensitive = (Copy-Fixture $functionSensitivity); after_unknown = $functionUnknown } },
+    [pscustomobject]@{ address = "module.platform.aws_lambda_alias.gateway[0]"; mode = "managed"; type = "aws_lambda_alias"; change = [pscustomobject]@{ actions = @("update"); before = $aliasBefore; after = $aliasAfter; replace_paths = @(); before_sensitive = $aliasSensitivity; after_sensitive = (Copy-Fixture $aliasSensitivity); after_unknown = $aliasUnknown } }
   )
 }
 $null = Assert-ExactGatewayReleasePlan $plan $artifact; $passed++
+$unknownBefore = ConvertTo-GatewayCanonicalJson $plan.resource_changes[0].change.after_unknown
+$actualUnknownPaths = @(Get-GatewayUnknownTrueLeafPaths $plan.resource_changes[0].change.after_unknown | Sort-Object)
+if (($actualUnknownPaths -join "|") -cne "last_modified|qualified_arn|qualified_invoke_arn|version" -or
+    (ConvertTo-GatewayCanonicalJson $plan.resource_changes[0].change.after_unknown) -cne $unknownBefore) {
+  throw "Gateway unknown-leaf canonicalization changed its input or returned an unexpected path set."
+}
+$passed++
+foreach ($field in @("last_modified", "qualified_arn", "qualified_invoke_arn", "version")) {
+  $badPlan = Copy-Fixture $plan
+  $badPlan.resource_changes[0].change.after_unknown.PSObject.Properties.Remove($field)
+  Assert-Rejected { Assert-ExactGatewayReleasePlan $badPlan $artifact } `
+    "A gateway function plan omitted required computed unknown '$field'."
+}
+foreach ($mutation in @(
+    @{ Label = "obsolete code digest"; Apply = { param($unknown) $unknown | Add-Member NoteProperty code_sha256 $true } },
+    @{ Label = "architecture"; Apply = { param($unknown) $unknown.architectures[0] = $true } },
+    @{ Label = "sensitive environment"; Apply = { param($unknown) $unknown.environment[0].variables | Add-Member NoteProperty OIDC_ISSUER $true } },
+    @{ Label = "ephemeral storage"; Apply = { param($unknown) $unknown.ephemeral_storage[0] | Add-Member NoteProperty size $true } },
+    @{ Label = "tag"; Apply = { param($unknown) $unknown.tags | Add-Member NoteProperty Unexpected $true } },
+    @{ Label = "security group"; Apply = { param($unknown) $unknown.vpc_config[0].security_group_ids[0] = $true } },
+    @{ Label = "subnet"; Apply = { param($unknown) $unknown.vpc_config[0].subnet_ids[1] = $true } },
+    @{ Label = "null scalar"; Apply = { param($unknown) $unknown | Add-Member NoteProperty unexpected $null } },
+    @{ Label = "string scalar"; Apply = { param($unknown) $unknown | Add-Member NoteProperty unexpected "false" } },
+    @{ Label = "dictionary node"; Apply = { param($unknown) $unknown | Add-Member NoteProperty unexpected @{} } }
+  )) {
+  $badPlan = Copy-Fixture $plan
+  & $mutation.Apply $badPlan.resource_changes[0].change.after_unknown
+  Assert-Rejected { Assert-ExactGatewayReleasePlan $badPlan $artifact } `
+    "A gateway function plan accepted $($mutation.Label) unknown tampering."
+}
+$badPlan = Copy-Fixture $plan
+$badPlan.resource_changes[1].change.after_unknown.PSObject.Properties.Remove("function_version")
+Assert-Rejected { Assert-ExactGatewayReleasePlan $badPlan $artifact } `
+  "A gateway alias plan omitted its required computed function version."
+foreach ($mutation in @(
+    @{ Label = "missing before version"; Apply = { param($change) $change.before.PSObject.Properties.Remove("function_version") } },
+    @{ Label = "nonnumeric before version"; Apply = { param($change) $change.before.function_version = "latest" } },
+    @{ Label = "concrete after version"; Apply = { param($change) $change.after | Add-Member NoteProperty function_version "8" } }
+  )) {
+  $badPlan = Copy-Fixture $plan
+  & $mutation.Apply $badPlan.resource_changes[1].change
+  Assert-Rejected { Assert-ExactGatewayReleasePlan $badPlan $artifact } `
+    "A gateway alias plan accepted $($mutation.Label)."
+}
+foreach ($mutation in @(
+    @{ Label = "obsolete ARN"; Apply = { param($unknown) $unknown | Add-Member NoteProperty arn $true } },
+    @{ Label = "obsolete invoke ARN"; Apply = { param($unknown) $unknown | Add-Member NoteProperty invoke_arn $true } },
+    @{ Label = "routing weight"; Apply = { param($unknown) $unknown.routing_config = @([pscustomobject]@{ additional_version_weights = $true }) } },
+    @{ Label = "null scalar"; Apply = { param($unknown) $unknown | Add-Member NoteProperty unexpected $null } },
+    @{ Label = "numeric scalar"; Apply = { param($unknown) $unknown | Add-Member NoteProperty unexpected 0 } }
+  )) {
+  $badPlan = Copy-Fixture $plan
+  & $mutation.Apply $badPlan.resource_changes[1].change.after_unknown
+  Assert-Rejected { Assert-ExactGatewayReleasePlan $badPlan $artifact } `
+    "A gateway alias plan accepted $($mutation.Label) unknown tampering."
+}
 foreach ($replacementShape in @("omitted", "null", "empty")) {
   $replacementPlan = Copy-Fixture $plan
   foreach ($change in @($replacementPlan.resource_changes)) {
@@ -414,5 +490,35 @@ $badPlan = Copy-Fixture $plan; $badPlan.resource_changes[0].change.after_unknown
 Assert-Rejected { Assert-ExactGatewayReleasePlan $badPlan $artifact } "An unknown nonapproved field was accepted."
 $badPlan = Copy-Fixture $plan; $badPlan.resource_drift = @([pscustomobject]@{ change = [pscustomobject]@{ actions = @("update") } })
 Assert-Rejected { Assert-ExactGatewayReleasePlan $badPlan $artifact } "Unreviewed release-time resource drift was accepted."
+
+$repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
+$terraformDirectory = Join-Path $repositoryRoot "infrastructure\terraform\environments\development"
+$diagnosticPlanPath = Join-Path $terraformDirectory `
+  ".terraform\development-gateway-release\release-1948a4d49366-20260814-184301-fd82e936c7bc4d46a8d867ab92266969.tfplan"
+if (Test-Path -LiteralPath $diagnosticPlanPath -PathType Leaf) {
+  $diagnosticPlanSha256 = "36d47da067e6448db3d72b110e2cad3cf27afa95c15959e3e0e8d3b092edb1f4"
+  if ((Get-FileHash -LiteralPath $diagnosticPlanPath -Algorithm SHA256).Hash.ToLowerInvariant() -cne $diagnosticPlanSha256) {
+    throw "The local gateway diagnostic plan does not match its checksum pin."
+  }
+  $diagnosticReceiptPath = Join-Path $terraformDirectory `
+    ".terraform\development-gateway-release\receipt-1948a4d49366-20260814-183209.json"
+  if (-not (Test-Path -LiteralPath $diagnosticReceiptPath -PathType Leaf) -or
+      (Get-FileHash -LiteralPath $diagnosticReceiptPath -Algorithm SHA256).Hash.ToLowerInvariant() -cne
+        "9eee009f6076c1ebc2007ef9631a47b7f33b3993974ca3672f7df2fb0f856f49") {
+    throw "The local gateway diagnostic receipt does not match its checksum pin."
+  }
+  $diagnosticReceipt = Get-Content -LiteralPath $diagnosticReceiptPath -Raw | ConvertFrom-Json
+  $diagnosticArtifact = Assert-GatewayPublicationReceipt $diagnosticReceipt `
+    "1948a4d49366872981a9419b76968b9bc372b8f3" `
+    "6a2decf2ded0ea2c5b6d1236108d2eb61a5990af40434f38d7423a1c317624b9"
+  $diagnosticRaw = & terraform "-chdir=$terraformDirectory" show -json $diagnosticPlanPath 2>$null
+  if ($LASTEXITCODE -ne 0 -or -not $diagnosticRaw) { throw "The local gateway diagnostic plan could not be decoded." }
+  $diagnosticPlan = ($diagnosticRaw -join [Environment]::NewLine) | ConvertFrom-Json
+  $null = Assert-ExactGatewayReleasePlan $diagnosticPlan $diagnosticArtifact
+  if ((Get-FileHash -LiteralPath $diagnosticPlanPath -Algorithm SHA256).Hash.ToLowerInvariant() -cne $diagnosticPlanSha256) {
+    throw "The local gateway diagnostic plan changed during guard validation."
+  }
+  $passed++
+}
 
 Write-Output "Development gateway release guard tests passed: $passed"

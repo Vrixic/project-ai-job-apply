@@ -24,6 +24,32 @@ function Get-GatewayOptionalProperty {
   return $property.Value
 }
 
+function Get-GatewayUnknownTrueLeafPaths {
+  param(
+    [Parameter(Mandatory)][object]$Value,
+    [AllowEmptyString()][string]$Path = ""
+  )
+  if ($Value -is [bool]) {
+    if ($Value) { return $Path }
+    return
+  }
+  if ($Value -is [array]) {
+    for ($index = 0; $index -lt $Value.Count; $index++) {
+      Get-GatewayUnknownTrueLeafPaths -Value $Value[$index] -Path "$Path[$index]"
+    }
+    return
+  }
+  if ($Value -is [pscustomobject]) {
+    foreach ($property in $Value.PSObject.Properties) {
+      $childPath = if ([string]::IsNullOrEmpty($Path)) { [string]$property.Name }
+        else { "$Path.$($property.Name)" }
+      Get-GatewayUnknownTrueLeafPaths -Value $property.Value -Path $childPath
+    }
+    return
+  }
+  throw "Terraform after_unknown contains a null or nonboolean scalar leaf."
+}
+
 function Get-GatewayMeaningfulChanges {
   param([AllowNull()][object[]]$Changes)
   return @($Changes | Where-Object {
@@ -383,24 +409,36 @@ function Assert-ExactGatewayReleasePlan {
     throw "The gateway release changed a nonapproved Lambda function field."
   }
   $functionUnknown = Get-GatewayOptionalProperty $function.change "after_unknown"
-  $unknownFunctionKeys = @($(if ($null -eq $functionUnknown) { @() } else { $functionUnknown.PSObject.Properties | ForEach-Object Name }))
-  if (@($unknownFunctionKeys | Where-Object { $_ -notin @("code_sha256", "last_modified", "qualified_arn", "qualified_invoke_arn", "version") }).Count -ne 0) {
+  $unknownFunctionPaths = @(
+    if ($null -ne $functionUnknown) {
+      Get-GatewayUnknownTrueLeafPaths -Value $functionUnknown | Sort-Object
+    }
+  )
+  $expectedFunctionUnknownPaths = @("last_modified", "qualified_arn", "qualified_invoke_arn", "version") | Sort-Object
+  if (($unknownFunctionPaths -join "|") -cne ($expectedFunctionUnknownPaths -join "|")) {
     throw "The gateway release contains an unknown nonapproved Lambda function field."
   }
   $alias = @($changes | Where-Object { [string]$_.address -ceq "module.platform.aws_lambda_alias.gateway[0]" })[0]
   if ([string]$alias.type -cne "aws_lambda_alias") { throw "The gateway alias change has an unexpected Terraform type." }
   $aliasBefore = $alias.change.before | ConvertTo-Json -Depth 50 | ConvertFrom-Json
   $aliasAfter = $alias.change.after | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+  $aliasBeforeVersion = $aliasBefore.PSObject.Properties["function_version"]
+  $aliasAfterVersion = $aliasAfter.PSObject.Properties["function_version"]
   foreach ($field in @("arn", "function_version", "invoke_arn")) {
     $aliasBefore.PSObject.Properties.Remove($field); $aliasAfter.PSObject.Properties.Remove($field)
   }
   if ((ConvertTo-GatewayCanonicalJson $aliasBefore) -cne (ConvertTo-GatewayCanonicalJson $aliasAfter) -or
-      [string]$alias.change.before.function_version -ceq [string]$alias.change.after.function_version) {
+      $null -eq $aliasBeforeVersion -or $aliasBeforeVersion.Value -isnot [string] -or
+      [string]$aliasBeforeVersion.Value -cnotmatch '^[1-9][0-9]*$' -or $null -ne $aliasAfterVersion) {
     throw "The gateway release changed alias routing or a non-version field."
   }
   $aliasUnknown = Get-GatewayOptionalProperty $alias.change "after_unknown"
-  $unknownAliasKeys = @($(if ($null -eq $aliasUnknown) { @() } else { $aliasUnknown.PSObject.Properties | ForEach-Object Name }))
-  if (@($unknownAliasKeys | Where-Object { $_ -notin @("arn", "function_version", "invoke_arn") }).Count -ne 0) {
+  $unknownAliasPaths = @(
+    if ($null -ne $aliasUnknown) {
+      Get-GatewayUnknownTrueLeafPaths -Value $aliasUnknown | Sort-Object
+    }
+  )
+  if (($unknownAliasPaths -join "|") -cne "function_version") {
     throw "The gateway release contains an unknown nonapproved alias field."
   }
   return $changes
