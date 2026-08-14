@@ -226,6 +226,61 @@ function Add-ManagedResources {
   }
   foreach ($child in @($(if ($null -eq $childProperty) { @() } else { $childProperty.Value }))) { Add-ManagedResources $child $Destination }
 }
+function Get-StateDocumentProcessorParserQualifiedArn {
+  param(
+    [Parameter(Mandatory)][Collections.Generic.Dictionary[string, object]]$Resources,
+    [Parameter(Mandatory)][string]$AccountId,
+    [Parameter(Mandatory)][string]$Region
+  )
+  $processorAddress = "module.platform.aws_lambda_function.document_processor[0]"
+  if (-not $Resources.ContainsKey($processorAddress)) { return "" }
+  $processor = $Resources[$processorAddress]
+  $valuesProperty = $processor.PSObject.Properties["values"]
+  if ($null -eq $valuesProperty -or $null -eq $valuesProperty.Value) {
+    throw "Terraform state contains an invalid document processor resource boundary."
+  }
+  $environmentProperty = $valuesProperty.Value.PSObject.Properties["environment"]
+  if ($null -eq $environmentProperty -or $environmentProperty.Value -isnot [array]) {
+    throw "Terraform state contains an invalid document processor environment boundary."
+  }
+  $environment = @($environmentProperty.Value | Where-Object { $null -ne $_ })
+  if ($environment.Count -ne 1) {
+    throw "Terraform state contains an invalid document processor environment boundary."
+  }
+  $variablesProperty = $environment[0].PSObject.Properties["variables"]
+  if ($null -eq $variablesProperty -or $null -eq $variablesProperty.Value) {
+    throw "Terraform state contains an invalid document processor environment boundary."
+  }
+  $parserProperty = $variablesProperty.Value.PSObject.Properties["DOCUMENT_PARSER_FUNCTION_ARN"]
+  if ($null -eq $parserProperty -or $parserProperty.Value -isnot [string] -or
+      [string]$parserProperty.Value -cnotmatch "^arn:aws:lambda:$Region`:$AccountId`:function:ai-job-apply-development-document-parser:[1-9][0-9]*$") {
+    throw "Terraform state contains an invalid document processor parser-version boundary."
+  }
+  return [string]$parserProperty.Value
+}
+function Assert-RetainedGatewayParserBinding {
+  param(
+    [Parameter(Mandatory)][ValidateSet("parser-dark", "complete-dark")][string]$Stage,
+    [Parameter(Mandatory)][AllowEmptyString()][string]$PlanParserQualifiedArn,
+    [Parameter(Mandatory)][AllowEmptyString()][string]$MetadataParserQualifiedArn,
+    [Parameter(Mandatory)][AllowEmptyString()][string]$StateParserQualifiedArn,
+    [Parameter(Mandatory)][AllowEmptyString()][string]$StateProcessorParserQualifiedArn,
+    [Parameter(Mandatory)][string]$AccountId,
+    [Parameter(Mandatory)][string]$Region
+  )
+  $parserPattern = "^arn:aws:lambda:$Region`:$AccountId`:function:ai-job-apply-development-document-parser:[1-9][0-9]*$"
+  if ($PlanParserQualifiedArn -cne $MetadataParserQualifiedArn -or
+      $StateParserQualifiedArn -cnotmatch $parserPattern -or
+      ($Stage -ceq "parser-dark" -and
+        (-not [string]::IsNullOrEmpty($PlanParserQualifiedArn) -or
+         -not [string]::IsNullOrEmpty($StateProcessorParserQualifiedArn))) -or
+      ($Stage -ceq "complete-dark" -and
+        ($PlanParserQualifiedArn -cnotmatch $parserPattern -or
+         $PlanParserQualifiedArn -cne $StateProcessorParserQualifiedArn))) {
+    throw "The retained baseline stage/parser binding does not match its plan and Terraform state."
+  }
+  return $true
+}
 function Resolve-ArtifactBoundary {
   $state = Invoke-TerraformJson @("show", "-json") "Terraform state inspection"
   $resources = New-Object 'Collections.Generic.Dictionary[string, object]' ([StringComparer]::Ordinal)
@@ -259,10 +314,13 @@ function Resolve-ArtifactBoundary {
       $parserQualifiedArn -cnotmatch "^arn:aws:lambda:$Region`:$ExpectedAccountId`:function:ai-job-apply-development-document-parser:[1-9][0-9]*$") {
     throw "Terraform state contains an invalid document parser version boundary."
   }
+  $processorParserQualifiedArn = Get-StateDocumentProcessorParserQualifiedArn -Resources $resources `
+    -AccountId $ExpectedAccountId -Region $Region
   return [pscustomobject]@{
     Bucket = $bucket; KmsArn = $kmsArn
     BoundarySha256 = Get-TextSha256 "$ExpectedAccountId|$Region|$bucket|$kmsArn"
     MigrationRepositoryUrl = $migrationRepositoryUrl; ParserQualifiedArn = $parserQualifiedArn
+    ProcessorParserQualifiedArn = $processorParserQualifiedArn
   }
 }
 function Read-Plan { param([Parameter(Mandatory)][string]$Path); return Invoke-TerraformJson @("show", "-json", $Path) "Saved plan inspection" }
@@ -355,10 +413,14 @@ function Read-Baseline {
     -ExpectedBoundarySha256 $boundary.BoundarySha256
   $stage = [string](Get-GatewayPlanVariableValue $plan.variables "document_processing_deployment_stage")
   $parserArn = [string](Get-GatewayPlanVariableValue $plan.variables "document_parser_invocation_qualified_arn")
-  if ($stage -cne [string]$metadata.Stage -or $parserArn -cne [string]$metadata.ParserQualifiedArn -or
-      ($stage -ceq "complete-dark" -and $parserArn -cne [string]$boundary.ParserQualifiedArn)) {
+  if ($stage -cne [string]$metadata.Stage) {
     throw "The retained baseline stage/parser binding does not match its plan and Terraform state."
   }
+  $null = Assert-RetainedGatewayParserBinding -Stage $stage -PlanParserQualifiedArn $parserArn `
+    -MetadataParserQualifiedArn ([string]$metadata.ParserQualifiedArn) `
+    -StateParserQualifiedArn ([string]$boundary.ParserQualifiedArn) `
+    -StateProcessorParserQualifiedArn ([string]$boundary.ProcessorParserQualifiedArn) `
+    -AccountId $ExpectedAccountId -Region $Region
   $migrationImage = [string](Get-GatewayPlanVariableValue $plan.variables "migration_image")
   if ($migrationImage -cnotmatch "^$([regex]::Escape([string]$boundary.MigrationRepositoryUrl))@sha256:[a-f0-9]{64}$") {
     throw "The retained baseline migration digest is outside the exact Terraform-owned repository."
