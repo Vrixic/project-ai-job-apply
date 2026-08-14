@@ -2,6 +2,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $operatorPath = Join-Path $repositoryRoot "scripts\operate-development-document-dark-deployment.ps1"
+. (Join-Path $repositoryRoot "scripts\lib\deployment-operator-guards.ps1")
 . (Join-Path $repositoryRoot "scripts\lib\development-document-dark-guards.ps1")
 $source = Get-Content -LiteralPath $operatorPath -Raw
 $tokens = $null
@@ -260,6 +261,127 @@ try {
     "complete-dark" "parser-dark" "Plan"
 } catch { $missingCurrentRejected = $true }
 if (-not $missingCurrentRejected) { throw "A current retained baseline with a missing variable was accepted." }
+
+$setBaselineFunctions = @($ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+      $node.Name -ceq "Set-BaselineVariables"
+    }, $true))
+if ($setBaselineFunctions.Count -ne 1) { throw "The baseline variable migration must be defined exactly once." }
+Invoke-Expression $setBaselineFunctions[0].Extent.Text
+
+function New-DeploymentBaselineVariableFixture([string[]]$Names) {
+  $variables = [pscustomobject]@{}
+  $kinds = Get-DevelopmentDocumentVariableKinds
+  foreach ($name in $Names) {
+    $value = if ($name -in @("deploy_document_processing", "document_processing_kms_prerequisite_enabled")) {
+      $true
+    }
+    else {
+      switch ($kinds[$name]) {
+        "boolean" { $false }
+        "number" { 7 }
+        "composite" { , @("https://candidate.example") }
+        "string" { "fixture-$name" }
+        default { throw "The deployment fixture encountered unknown variable '$name'." }
+      }
+    }
+    $variables | Add-Member $name ([pscustomobject]@{ value = $value })
+  }
+  return $variables
+}
+
+$derivedVariableNames = @(
+  "document_processing_deployment_stage", "document_parser_invocation_qualified_arn",
+  "document_security_health_rules_enabled"
+)
+$retiredVariableNames = @("deploy_document_processing", "document_processing_kms_prerequisite_enabled")
+$testTfVariableNames = @($allowedVariableNames + $retiredVariableNames + "unexpected_variable")
+function Clear-TestTerraformVariables {
+  foreach ($name in $testTfVariableNames) {
+    Remove-Item -LiteralPath "Env:TF_VAR_$name" -ErrorAction SilentlyContinue
+  }
+}
+
+try {
+  $currentSchema4Fixture = [pscustomobject]@{
+    SchemaVersion = "4"
+    variables = New-DeploymentBaselineVariableFixture $allowedVariableNames
+  }
+  $currentSchema4Fixture.variables.document_processing_deployment_stage.value = "tampered-stage"
+  $currentSchema4Fixture.variables.document_parser_invocation_qualified_arn.value = "tampered-pin"
+  $currentSchema4Fixture.variables.document_security_health_rules_enabled.value = "false"
+  $currentSchema4Fixture.variables.migration_image | Add-Member before_unknown ([pscustomobject]@{ digest = $false })
+  $currentSchema4Fixture.variables.migration_image | Add-Member after_sensitive ([pscustomobject]@{ digest = $true })
+  $currentFixtureBefore = $currentSchema4Fixture | ConvertTo-Json -Depth 20
+  $testParserPin = "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-development-document-parser:7"
+
+  Clear-TestTerraformVariables
+  Set-BaselineVariables -Baseline $currentSchema4Fixture -DeploymentStage "complete-dark" `
+    -ParserQualifiedArn $testParserPin
+  if ([string][Environment]::GetEnvironmentVariable("TF_VAR_document_processing_deployment_stage", "Process") -cne "complete-dark" -or
+    [string][Environment]::GetEnvironmentVariable("TF_VAR_document_parser_invocation_qualified_arn", "Process") -cne $testParserPin -or
+    [string][Environment]::GetEnvironmentVariable("TF_VAR_document_security_health_rules_enabled", "Process") -cne "true") {
+    throw "The schema-4 baseline did not receive the exact derived CompleteDark values."
+  }
+  foreach ($name in @($allowedVariableNames | Where-Object { $_ -notin $derivedVariableNames })) {
+    $expected = ConvertTo-TerraformVariableEnvironmentValue -Name $name `
+      -Value $currentSchema4Fixture.variables.PSObject.Properties[$name].Value.value
+    if ([string][Environment]::GetEnvironmentVariable("TF_VAR_$name", "Process") -cne [string]$expected) {
+      throw "The schema-4 baseline changed preserved variable '$name'."
+    }
+  }
+  if (($currentSchema4Fixture | ConvertTo-Json -Depth 20) -cne $currentFixtureBefore) {
+    throw "The schema-4 baseline migration mutated retained values, types, unknowns, or sensitivity metadata."
+  }
+  foreach ($name in $retiredVariableNames) {
+    if (Test-Path -LiteralPath "Env:TF_VAR_$name") {
+      throw "The current baseline migration retained retired variable '$name'."
+    }
+  }
+
+  $legacyFixture = [pscustomobject]@{
+    variables = New-DeploymentBaselineVariableFixture $legacyBaselineVariableNames
+  }
+  Clear-TestTerraformVariables
+  Set-BaselineVariables -Baseline $legacyFixture -DeploymentStage "parser-dark"
+  foreach ($name in $retiredVariableNames) {
+    if (Test-Path -LiteralPath "Env:TF_VAR_$name") {
+      throw "The historical baseline migration retained retired variable '$name'."
+    }
+  }
+  if ([string][Environment]::GetEnvironmentVariable("TF_VAR_document_processing_deployment_stage", "Process") -cne "parser-dark" -or
+    [string][Environment]::GetEnvironmentVariable("TF_VAR_document_parser_invocation_qualified_arn", "Process") -cne "" -or
+    [string][Environment]::GetEnvironmentVariable("TF_VAR_document_security_health_rules_enabled", "Process") -cne "true") {
+    throw "The historical baseline did not migrate to the exact current derived variable set."
+  }
+
+  $extraCurrentFixture = New-DeploymentBaselineVariableFixture $allowedVariableNames
+  $extraCurrentFixture | Add-Member unexpected_variable ([pscustomobject]@{ value = "unexpected" })
+  $extraCurrentRejected = $false
+  try { $null = Get-DevelopmentDocumentBaselineShape $extraCurrentFixture "complete-dark" "parser-dark" "Plan" }
+  catch { $extraCurrentRejected = $true }
+  if (-not $extraCurrentRejected) { throw "A schema-4 current baseline with an extra variable was accepted." }
+
+  $missingExactCurrentFixture = New-DeploymentBaselineVariableFixture $allowedVariableNames
+  $missingExactCurrentFixture.PSObject.Properties.Remove("migration_image")
+  $missingExactCurrentRejected = $false
+  try { $null = Get-DevelopmentDocumentBaselineShape $missingExactCurrentFixture "complete-dark" "parser-dark" "Plan" }
+  catch { $missingExactCurrentRejected = $true }
+  if (-not $missingExactCurrentRejected) { throw "A schema-4 current baseline missing one exact variable was accepted." }
+
+  $tamperedCurrentFixture = [pscustomobject]@{
+    variables = New-DeploymentBaselineVariableFixture $allowedVariableNames
+  }
+  $tamperedCurrentFixture.variables.deploy_applications.value = "TRUE"
+  $tamperedCurrentRejected = $false
+  try { Set-BaselineVariables -Baseline $tamperedCurrentFixture -DeploymentStage "complete-dark" -ParserQualifiedArn $testParserPin }
+  catch { $tamperedCurrentRejected = $true }
+  if (-not $tamperedCurrentRejected) { throw "A current baseline with a type-tampered preserved variable was accepted." }
+}
+finally {
+  Clear-TestTerraformVariables
+}
 
 $ExpectedAccountId = "111122223333"
 $Region = "us-east-2"
