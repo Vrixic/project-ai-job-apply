@@ -425,10 +425,11 @@ function Assert-RecoveryOperatorSource {
   }
   & git -C $repositoryRoot merge-base --is-ancestor $ExecutionOperatorSourceSha $operatorSourceSha 2>$null
   $isAncestor = $LASTEXITCODE -eq 0
-  $changes = if ($ExecutionOperatorSourceSha -ceq $operatorSourceSha) {
-    @()
-  } else {
-    @(& git -C $repositoryRoot diff --name-status --no-renames "$ExecutionOperatorSourceSha..$operatorSourceSha" 2>$null)
+  [string[]]$changes = [string[]]@()
+  if ($ExecutionOperatorSourceSha -cne $operatorSourceSha) {
+    $changes = [string[]]@(
+      & git -C $repositoryRoot diff --name-status --no-renames "$ExecutionOperatorSourceSha..$operatorSourceSha" 2>$null
+    )
   }
   if ($LASTEXITCODE -ne 0) { throw "The execution-to-recovery operator delta could not be inspected." }
   Assert-RecoveryOperatorBinding -ExecutionOperatorSourceSha $ExecutionOperatorSourceSha `

@@ -79,7 +79,7 @@ $baselineFunctions = @($ast.FindAll({
         "Test-EcsFaultInjectionDisabled", "Assert-ReleaseSourceBinding",
         "Assert-OperatorOnlyReleaseDelta", "Get-DocumentOperatorDeltaSha256", "Assert-ExecutionIdentity",
         "Assert-DurableClaimPutResult", "Assert-DurableExecutionClaimEvidence",
-        "Test-DurableClaimHistoryExists", "Assert-RecoveryOperatorBinding",
+        "Test-DurableClaimHistoryExists", "Assert-RecoveryOperatorBinding", "Assert-RecoveryOperatorSource",
         "Resolve-TaskLogStreamName",
         "Set-RecoveredReceiptEvidence", "Get-DeclaredVariableNames",
         "Get-CurrentTerraformStateIdentity", "Assert-ExactCurrentBaselineVariableSet",
@@ -90,7 +90,7 @@ $baselineFunctions = @($ast.FindAll({
         "Save-PostMigrationBaselineMetadata", "Remove-NewPostMigrationBaselineArtifacts"
       )
     }, $true))
-if ($baselineFunctions.Count -ne 36) { throw "The input, plan, and retained-handoff guards must each be defined once." }
+if ($baselineFunctions.Count -ne 37) { throw "The input, plan, and retained-handoff guards must each be defined once." }
 foreach ($function in $baselineFunctions | Sort-Object { $_.Extent.StartOffset }) {
   Invoke-Expression $function.Extent.Text
 }
@@ -212,6 +212,77 @@ foreach ($unsafeDelta in @(
   $deltaRejected = $false
   try { Assert-OperatorOnlyReleaseDelta -ChangeRecords $unsafeDelta } catch { $deltaRejected = $true }
   if (-not $deltaRejected) { throw "A non-verifier release delta was accepted." }
+}
+
+$originalRepositoryRoot = $repositoryRoot
+$operatorSourceVariableExisted = Test-Path -LiteralPath Variable:\operatorSourceSha
+if ($operatorSourceVariableExisted) { $originalOperatorSourceSha = $operatorSourceSha }
+$mockExecutionOperatorSourceSha = "c" * 40
+$mockCurrentOperatorSourceSha = "d" * 40
+$script:recoveryGitMode = "exact"
+$script:recoveryGitDiffCalls = 0
+$script:recoveryGitCatFileCalls = 0
+function git {
+  $arguments = @($args)
+  if ($arguments -contains "merge-base") {
+    $global:LASTEXITCODE = 0
+    return
+  }
+  if ($arguments -contains "diff") {
+    $script:recoveryGitDiffCalls++
+    $global:LASTEXITCODE = 0
+    if ($script:recoveryGitMode -ceq "valid") {
+      return "M`tscripts/operate-development-document-migration.ps1"
+    }
+    if ($script:recoveryGitMode -ceq "invalid") {
+      return "M`tbackend/services/profile/src/index.ts"
+    }
+    throw "The exact-current recovery path unexpectedly inspected a Git delta."
+  }
+  if ($arguments -contains "cat-file") {
+    $script:recoveryGitCatFileCalls++
+    $global:LASTEXITCODE = 0
+    return "blob"
+  }
+  $global:LASTEXITCODE = 1
+  throw "Unexpected mocked Git invocation: $($arguments -join ' ')"
+}
+try {
+  $repositoryRoot = "mock-repository-root"
+  $operatorSourceSha = $mockCurrentOperatorSourceSha
+
+  Assert-RecoveryOperatorSource -ExecutionOperatorSourceSha $mockCurrentOperatorSourceSha
+  if ($script:recoveryGitDiffCalls -ne 0 -or $script:recoveryGitCatFileCalls -ne 0) {
+    throw "Exact-current recovery inspected a nonexistent operator delta."
+  }
+
+  $script:recoveryGitMode = "valid"
+  Assert-RecoveryOperatorSource -ExecutionOperatorSourceSha $mockExecutionOperatorSourceSha
+  if ($script:recoveryGitDiffCalls -ne 1 -or $script:recoveryGitCatFileCalls -ne 2) {
+    throw "Allowlisted ancestor recovery did not inspect the exact nonempty blob delta."
+  }
+
+  $script:recoveryGitMode = "invalid"
+  $invalidIntegratedRecoveryRejected = $false
+  try {
+    Assert-RecoveryOperatorSource -ExecutionOperatorSourceSha $mockExecutionOperatorSourceSha
+  } catch {
+    $invalidIntegratedRecoveryRejected = $true
+  }
+  if (-not $invalidIntegratedRecoveryRejected) {
+    throw "The integrated recovery path accepted a non-verifier operator delta."
+  }
+} finally {
+  Remove-Item -LiteralPath Function:\git -Force
+  $repositoryRoot = $originalRepositoryRoot
+  if ($operatorSourceVariableExisted) {
+    $operatorSourceSha = $originalOperatorSourceSha
+  } else {
+    Remove-Variable -Name operatorSourceSha -ErrorAction SilentlyContinue
+  }
+  Remove-Variable -Name recoveryGitMode -Scope Script -ErrorAction SilentlyContinue
+  Remove-Variable -Name recoveryGitDiffCalls -Scope Script -ErrorAction SilentlyContinue
+  Remove-Variable -Name recoveryGitCatFileCalls -Scope Script -ErrorAction SilentlyContinue
 }
 
 $executionIdentity = [pscustomobject]@{
