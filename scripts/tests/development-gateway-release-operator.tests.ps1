@@ -47,6 +47,7 @@ foreach ($required in @(
     'SourceSha must equal the exact merged main checkout', 'ARTIFACT_SOURCE_SHA',
     'Assert-GatewayPublicationReceipt', 'Assert-GatewayReleaseVariables', 'Assert-ExactGatewayReleasePlan',
     'Assert-RetainedGatewayBaselineMetadata', 'Assert-RetainedGatewayBaselinePlan',
+    'lib\development-document-dark-guards.ps1',
     'Get-GatewayKeyHistoryMatches -Result $history -Key $key',
     '$planPath.baseline.json', 'Read-BaselineDocumentReceipt',
     'Assert-GatewayDocumentBaselineReceipt', 'BaselineMetadataSchemaVersion',
@@ -59,6 +60,13 @@ foreach ($required in @(
     'gateway_lambda_artifact_s3_object_version', '--if-none-match', 'lambda/gateway/$SourceSha/'
   )) {
   if (-not $operator.Contains($required)) { throw "The gateway release operator is missing '$required'." }
+}
+$deploymentGuardsOffset = $operator.IndexOf('lib\deployment-operator-guards.ps1', [StringComparison]::Ordinal)
+$documentGuardsOffset = $operator.IndexOf('lib\development-document-dark-guards.ps1', [StringComparison]::Ordinal)
+$gatewayGuardsOffset = $operator.IndexOf('lib\development-gateway-release-guards.ps1', [StringComparison]::Ordinal)
+if ($deploymentGuardsOffset -lt 0 -or $documentGuardsOffset -le $deploymentGuardsOffset -or
+    $gatewayGuardsOffset -le $documentGuardsOffset) {
+  throw "The gateway operator must load deployment, document-drift, then gateway guards in fail-closed dependency order."
 }
 foreach ($forbidden in @('terraform destroy', '-target=', 'terraform import', 'serverless_runtime_enabled = "false"')) {
   if ($operator.Contains($forbidden)) { throw "The gateway release operator contains forbidden text '$forbidden'." }

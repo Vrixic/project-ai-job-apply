@@ -1,5 +1,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "..\lib\deployment-operator-guards.ps1")
+. (Join-Path $PSScriptRoot "..\lib\development-document-dark-guards.ps1")
 . (Join-Path $PSScriptRoot "..\lib\development-gateway-release-guards.ps1")
 
 $passed = 0
@@ -18,6 +20,75 @@ $artifactSha = "b" * 64
 $boundarySha = "c" * 64
 $artifactBase64 = [Convert]::ToBase64String(([byte[]](1..32)))
 $repositoryUrl = "$account.dkr.ecr.us-east-2.amazonaws.com/ai-job-apply/migration"
+function New-GatewayProviderDriftRecord {
+  param(
+    [Parameter(Mandatory)][string]$Address,
+    [Parameter(Mandatory)][string]$Type,
+    [Parameter(Mandatory)][object]$Before,
+    [Parameter(Mandatory)][object]$After,
+    [object]$BeforeSensitive = ([pscustomobject]@{}),
+    [object]$AfterSensitive = ([pscustomobject]@{})
+  )
+  return [pscustomobject]@{
+    address = $Address; mode = "managed"; type = $Type
+    change = [pscustomobject]@{
+      actions = @("update"); before = $Before; after = $After; after_unknown = [pscustomobject]@{}
+      before_sensitive = $BeforeSensitive; after_sensitive = $AfterSensitive
+    }
+  }
+}
+function New-GatewayCompleteDarkProviderDriftFixture {
+  $kmsArn = "arn:aws:kms:us-east-2:${account}:key/12345678-1234-1234-1234-123456789abc"
+  $parserArn = "arn:aws:lambda:us-east-2:${account}:function:ai-job-apply-development-document-parser:1"
+  $objectRoleArn = "arn:aws:iam::${account}:role/ai-job-apply-development-document-object-access"
+  $bucketArn = "arn:aws:s3:::ai-job-apply-development-candidate-docs-${account}"
+  $processorPolicy = @{ Version = "2012-10-17"; Statement = @(
+      @{ Sid = "WriteOwnedLogs"; Effect = "Allow"; Action = @("logs:CreateLogStream", "logs:PutLogEvents"); Resource = "arn:aws:logs:us-east-2:${account}:log-group:/ai-job-apply/development/application:*" },
+      @{ Sid = "ManageVpcInterfaces"; Effect = "Allow"; Action = @("ec2:AssignPrivateIpAddresses", "ec2:CreateNetworkInterface", "ec2:DeleteNetworkInterface", "ec2:DescribeNetworkInterfaces", "ec2:DescribeSubnets", "ec2:UnassignPrivateIpAddresses"); Resource = "*" },
+      @{ Sid = "ReadDatabaseSecret"; Effect = "Allow"; Action = "secretsmanager:GetSecretValue"; Resource = "arn:aws:secretsmanager:us-east-2:${account}:secret:ai-job-apply/development/database-url-x" },
+      @{ Sid = "ConsumeExactScanQueue"; Effect = "Allow"; Action = @("sqs:ChangeMessageVisibility", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ReceiveMessage"); Resource = "arn:aws:sqs:us-east-2:${account}:ai-job-apply-development-document-scan-results" },
+      @{ Sid = "InvokeExactParserVersion"; Effect = "Allow"; Action = "lambda:InvokeFunction"; Resource = $parserArn },
+      @{ Sid = "AssumeExactObjectAccessRole"; Effect = "Allow"; Action = "sts:AssumeRole"; Resource = $objectRoleArn },
+      @{ Sid = "ReadNormalizedDocumentsOnly"; Effect = "Allow"; Action = @("s3:GetObject", "s3:GetObjectVersion"); Resource = "$bucketArn/normalized/*" },
+      @{ Sid = "DecryptOwnedRuntimeData"; Effect = "Allow"; Action = @("kms:Decrypt", "kms:GenerateDataKey"); Resource = $kmsArn },
+      @{ Sid = "WriteNativeTraces"; Effect = "Allow"; Action = @("xray:PutTelemetryRecords", "xray:PutTraceSegments"); Resource = "*" }
+    ) } | ConvertTo-Json -Compress -Depth 40
+  $defaultTags = [pscustomobject]@{ Environment = "development"; ManagedBy = "terraform"; Project = "ai-job-apply" }
+  $runtimeInline = @([pscustomobject]@{ name = "document-processor-runtime"; policy = $processorPolicy })
+  $role = New-GatewayProviderDriftRecord "module.platform.aws_iam_role.document_processor[0]" "aws_iam_role" `
+    ([pscustomobject]@{ id = "processor-role"; inline_policy = @(); tags = [pscustomobject]@{}; tags_all = $defaultTags }) `
+    ([pscustomobject]@{ id = "processor-role"; inline_policy = $runtimeInline; tags = [pscustomobject]@{}; tags_all = $defaultTags }) `
+    ([pscustomobject]@{ inline_policy = @(); tags = [pscustomobject]@{}; tags_all = [pscustomobject]@{} }) `
+    ([pscustomobject]@{ inline_policy = @([pscustomobject]@{}); tags = [pscustomobject]@{}; tags_all = [pscustomobject]@{} })
+  $mapping = New-GatewayProviderDriftRecord "module.platform.aws_lambda_event_source_mapping.document_scan_results[0]" `
+    "aws_lambda_event_source_mapping" `
+    ([pscustomobject]@{ id = "mapping"; enabled = $false; queues = $null; topics = $null; tags = $null; tags_all = $defaultTags }) `
+    ([pscustomobject]@{ id = "mapping"; enabled = $false; queues = @(); topics = @(); tags = [pscustomobject]@{}; tags_all = $defaultTags }) `
+    ([pscustomobject]@{ tags_all = [pscustomobject]@{} }) `
+    ([pscustomobject]@{ queues = @(); topics = @(); tags = [pscustomobject]@{}; tags_all = [pscustomobject]@{} })
+  $processor = New-GatewayProviderDriftRecord "module.platform.aws_lambda_function.document_processor[0]" "aws_lambda_function" `
+    ([pscustomobject]@{ id = "processor"; tags = $null; tags_all = $defaultTags }) `
+    ([pscustomobject]@{ id = "processor"; tags = [pscustomobject]@{}; tags_all = $defaultTags }) `
+    ([pscustomobject]@{ tags_all = [pscustomobject]@{} }) `
+    ([pscustomobject]@{ tags = [pscustomobject]@{}; tags_all = [pscustomobject]@{} })
+  $sts = New-GatewayProviderDriftRecord "module.platform.aws_vpc_endpoint.sts[0]" "aws_vpc_endpoint" `
+    ([pscustomobject]@{ id = "sts-endpoint"; tags = $null; tags_all = $defaultTags }) `
+    ([pscustomobject]@{ id = "sts-endpoint"; tags = [pscustomobject]@{}; tags_all = $defaultTags }) `
+    ([pscustomobject]@{ tags_all = [pscustomobject]@{} }) `
+    ([pscustomobject]@{ tags = [pscustomobject]@{}; tags_all = [pscustomobject]@{} })
+  $rds = New-GatewayProviderDriftRecord "module.platform.aws_db_instance.postgres[0]" "aws_db_instance" `
+    ([pscustomobject]@{ id = "postgres"; latest_restorable_time = "2026-08-14T16:08:52Z" }) `
+    ([pscustomobject]@{ id = "postgres"; latest_restorable_time = "2026-08-14T18:58:53Z" })
+  $root = [pscustomobject]@{ resources = @(
+      [pscustomobject]@{ address = "module.platform.aws_kms_key.platform"; values = [pscustomobject]@{ arn = $kmsArn } },
+      [pscustomobject]@{ address = $role.address; values = $role.change.after },
+      [pscustomobject]@{ address = "module.platform.aws_iam_role_policy.document_processor[0]"; values = [pscustomobject]@{ role = "ai-job-apply-development-document-processor"; policy = $processorPolicy } },
+      [pscustomobject]@{ address = $mapping.address; values = $mapping.change.after },
+      [pscustomobject]@{ address = $processor.address; values = $processor.change.after },
+      [pscustomobject]@{ address = $sts.address; values = $sts.change.after }
+    ) }
+  return [pscustomobject]@{ Records = @($rds, $role, $mapping, $processor, $sts); Root = $root }
+}
 $receipt = [pscustomobject]@{
   schemaVersion = 1; kind = "development-gateway-lambda-publication"; environment = "development"
   region = "us-east-2"; sourceSha = $sourceSha; boundarySha256 = $boundarySha; phase = "verified"
@@ -178,6 +249,38 @@ $badBaseline = Copy-Fixture $baselinePlan; $badBaseline.resource_changes = @([ps
 Assert-Rejected { Assert-RetainedGatewayBaselinePlan $badBaseline @($baselineVariables.PSObject.Properties | ForEach-Object Name) } "A retained plan resource change was accepted."
 $badBaseline = Copy-Fixture $baselinePlan; $badBaseline.resource_drift = @([pscustomobject]@{ address = "module.platform.aws_s3_bucket.artifacts"; mode = "managed"; type = "aws_s3_bucket"; change = [pscustomobject]@{ actions = @("update"); before = @{}; after = @{}; replace_paths = @(); after_unknown = @{}; before_sensitive = @{}; after_sensitive = @{} } })
 Assert-Rejected { Assert-RetainedGatewayBaselinePlan $badBaseline @($baselineVariables.PSObject.Properties | ForEach-Object Name) } "Unaccepted refresh drift in an exit-zero-shaped plan was accepted."
+$completeDarkDriftFixture = New-GatewayCompleteDarkProviderDriftFixture
+$completeDarkBaselinePlan = Copy-Fixture $baselinePlan
+$completeDarkBaselinePlan.planned_values.root_module = $completeDarkDriftFixture.Root
+$completeDarkBaselinePlan.resource_drift = $completeDarkDriftFixture.Records
+$null = Assert-RetainedGatewayBaselinePlan $completeDarkBaselinePlan @($baselineVariables.PSObject.Properties | ForEach-Object Name); $passed++
+foreach ($replacementShape in @("omitted", "null", "empty")) {
+  $replacementPlan = Copy-Fixture $completeDarkBaselinePlan
+  foreach ($record in @($replacementPlan.resource_drift)) {
+    if ($replacementShape -ceq "omitted") { $record.change.PSObject.Properties.Remove("replace_paths") }
+    elseif ($replacementShape -ceq "null") { $record.change | Add-Member NoteProperty replace_paths $null -Force }
+    else { $record.change | Add-Member NoteProperty replace_paths @() -Force }
+  }
+  $null = Assert-RetainedGatewayBaselinePlan $replacementPlan @($baselineVariables.PSObject.Properties | ForEach-Object Name); $passed++
+}
+$badBaseline = Copy-Fixture $completeDarkBaselinePlan; $badBaseline.planned_values.PSObject.Properties.Remove("root_module")
+Assert-Rejected { Assert-RetainedGatewayBaselinePlan $badBaseline @($baselineVariables.PSObject.Properties | ForEach-Object Name) } "CompleteDark drift without its planned root was accepted."
+$badBaseline = Copy-Fixture $completeDarkBaselinePlan
+@($badBaseline.planned_values.root_module.resources | Where-Object address -eq "module.platform.aws_lambda_event_source_mapping.document_scan_results[0]")[0].values.id = "other-mapping"
+Assert-Rejected { Assert-RetainedGatewayBaselinePlan $badBaseline @($baselineVariables.PSObject.Properties | ForEach-Object Name) } "CompleteDark drift detached from its planned mapping was accepted."
+foreach ($mutation in @("duplicate", "address", "unknown", "sensitivity", "replacement")) {
+  $badBaseline = Copy-Fixture $completeDarkBaselinePlan
+  switch ($mutation) {
+    "duplicate" { $badBaseline.resource_drift = @($badBaseline.resource_drift) + @($badBaseline.resource_drift[0]) }
+    "address" { $badBaseline.resource_drift[4].address = "module.platform.aws_vpc_endpoint.sts_shadow[0]" }
+    "unknown" { $badBaseline.resource_drift[3].change.after_unknown = [pscustomobject]@{ tags = $true } }
+    "sensitivity" { $badBaseline.resource_drift[3].change.after_sensitive.tags = [pscustomobject]@{ secret = $true } }
+    "replacement" { $badBaseline.resource_drift[2].change | Add-Member NoteProperty replace_paths @(@("queues")) -Force }
+  }
+  Assert-Rejected {
+    Assert-RetainedGatewayBaselinePlan $badBaseline @($baselineVariables.PSObject.Properties | ForEach-Object Name)
+  } "The retained gateway baseline accepted CompleteDark $mutation tampering."
+}
 $null = Assert-GatewayReleaseVariables $baselineVariables $releaseVariables $artifact $account $repositoryUrl ""; $passed++
 $changed = Copy-Fixture $releaseVariables; $changed.document_processing_deployment_stage.value = "complete-dark"
 Assert-Rejected { Assert-GatewayReleaseVariables $baselineVariables $changed $artifact $account $repositoryUrl "" } "A document-stage change was accepted."
@@ -209,6 +312,29 @@ $plan = [pscustomobject]@{
   )
 }
 $null = Assert-ExactGatewayReleasePlan $plan $artifact; $passed++
+foreach ($replacementShape in @("omitted", "null", "empty")) {
+  $replacementPlan = Copy-Fixture $plan
+  foreach ($change in @($replacementPlan.resource_changes)) {
+    if ($replacementShape -ceq "omitted") { $change.change.PSObject.Properties.Remove("replace_paths") }
+    elseif ($replacementShape -ceq "null") { $change.change.replace_paths = $null }
+    else { $change.change.replace_paths = @() }
+  }
+  $null = Assert-ExactGatewayReleasePlan $replacementPlan $artifact; $passed++
+}
+foreach ($index in @(0, 1)) {
+  $replacementPlan = Copy-Fixture $plan
+  $replacementPlan.resource_changes[$index].change.replace_paths = @(@("version"))
+  Assert-Rejected { Assert-ExactGatewayReleasePlan $replacementPlan $artifact } "A gateway function or alias replacement path was accepted."
+}
+$completeDarkReleasePlan = Copy-Fixture $plan
+$completeDarkReleasePlan | Add-Member NoteProperty planned_values ([pscustomobject]@{ root_module = $completeDarkDriftFixture.Root }) -Force
+$completeDarkReleasePlan.resource_drift = $completeDarkDriftFixture.Records
+$null = Assert-ExactGatewayReleasePlan $completeDarkReleasePlan $artifact; $passed++
+$badPlan = Copy-Fixture $completeDarkReleasePlan
+@($badPlan.planned_values.root_module.resources | Where-Object address -eq "module.platform.aws_lambda_event_source_mapping.document_scan_results[0]")[0].values.id = "other-mapping"
+Assert-Rejected { Assert-ExactGatewayReleasePlan $badPlan $artifact } "A gateway release accepted CompleteDark drift detached from the planned mapping."
+$badPlan = Copy-Fixture $completeDarkReleasePlan; $badPlan.resource_drift[3].change.after_unknown = [pscustomobject]@{ tags = $true }
+Assert-Rejected { Assert-ExactGatewayReleasePlan $badPlan $artifact } "A gateway release accepted tampered CompleteDark drift."
 $badPlan = Copy-Fixture $plan; $badPlan.resource_changes[0].change.after.memory_size = 2048
 Assert-Rejected { Assert-ExactGatewayReleasePlan $badPlan $artifact } "A nonapproved function field change was accepted."
 $badPlan = Copy-Fixture $plan; $badPlan.resource_changes[1].change.after.routing_config = @([pscustomobject]@{ additional_version_weights = @{ "7" = 0.1 } })
@@ -218,6 +344,6 @@ Assert-Rejected { Assert-ExactGatewayReleasePlan $badPlan $artifact } "A meaning
 $badPlan = Copy-Fixture $plan; $badPlan.resource_changes[0].change.after_unknown | Add-Member NoteProperty memory_size $true
 Assert-Rejected { Assert-ExactGatewayReleasePlan $badPlan $artifact } "An unknown nonapproved field was accepted."
 $badPlan = Copy-Fixture $plan; $badPlan.resource_drift = @([pscustomobject]@{ change = [pscustomobject]@{ actions = @("update") } })
-Assert-Rejected { Assert-ExactGatewayReleasePlan $badPlan $artifact } "Release-time resource drift was accepted."
+Assert-Rejected { Assert-ExactGatewayReleasePlan $badPlan $artifact } "Unreviewed release-time resource drift was accepted."
 
 Write-Output "Development gateway release guard tests passed: $passed"
