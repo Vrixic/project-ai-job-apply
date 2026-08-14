@@ -214,6 +214,7 @@ $kmsStatements = @(
 )
 $beforeKms = @{ Version = "2012-10-17"; Statement = @($existingStatement) } | ConvertTo-Json -Compress -Depth 20
 $afterKms = @{ Version = "2012-10-17"; Statement = @($existingStatement) + $kmsStatements } | ConvertTo-Json -Compress -Depth 20
+$kmsArn = "arn:aws:kms:us-east-2:${account}:key/00000000-0000-0000-0000-000000000001"
 $kmsPlan = [pscustomobject]@{
   resource_drift = @([pscustomobject]@{
       address = "module.platform.aws_db_instance.postgres[0]"; mode = "managed"; type = "aws_db_instance"
@@ -223,6 +224,9 @@ $kmsPlan = [pscustomobject]@{
         after = [pscustomobject]@{ id = "db"; latest_restorable_time = "2026-08-13T02:03:53Z" }
       }
     })
+  planned_values = [pscustomobject]@{ root_module = [pscustomobject]@{ resources = @(
+        [pscustomobject]@{ address = "module.platform.aws_kms_key.platform"; values = [pscustomobject]@{ arn = $kmsArn } }
+      ) } }
   resource_changes = @([pscustomobject]@{
       address = "module.platform.aws_kms_key.platform"; mode = "managed"; type = "aws_kms_key"
       change = [pscustomobject]@{
@@ -292,7 +296,6 @@ function New-TestPolicyUpdate([string]$Address, [string]$Before, [string]$After)
       after = [pscustomobject]@{ id = "same"; policy = $After }; after_unknown = [pscustomobject]@{}
       before_sensitive = [pscustomobject]@{}; after_sensitive = [pscustomobject]@{} } }
 }
-$kmsArn = "arn:aws:kms:us-east-2:${account}:key/00000000-0000-0000-0000-000000000001"
 $kmsNoop = [pscustomobject]@{ address = "module.platform.aws_kms_key.platform"; mode = "managed"; type = "aws_kms_key"
   change = [pscustomobject]@{ actions = @("no-op"); before = [pscustomobject]@{ arn = $kmsArn }; after = [pscustomobject]@{ arn = $kmsArn }
     after_unknown = [pscustomobject]@{}; before_sensitive = [pscustomobject]@{}; after_sensitive = [pscustomobject]@{} } }
@@ -348,7 +351,7 @@ $snsBase = @{ Sid = "Existing"; Effect = "Allow"; Action = "sns:GetTopicAttribut
 $snsAdded = @{ Sid = "AllowExactDocumentOperationalRules"; Effect = "Allow"; Action = "SNS:Publish"; Resource = "arn:aws:sns:us-east-2:${account}:ai-job-apply-development-operational-alerts"; Principal = @{ Service = "events.amazonaws.com" }; Condition = @{ StringEquals = @{ "aws:SourceAccount" = $account }; ArnEquals = @{ "aws:SourceArn" = @("arn:aws:events:us-east-2:${account}:rule/ai-job-apply-development-document-scan-tag-failure", "arn:aws:events:us-east-2:${account}:rule/ai-job-apply-development-document-scan-plan-unhealthy") } } }
 $parserChanges += New-TestPolicyUpdate "module.platform.aws_s3_bucket_policy.candidate_documents[0]" (New-TestPolicy @($transport)) (New-TestPolicy @($transport, $candidateDeny))
 $parserChanges += New-TestPolicyUpdate "module.platform.aws_sns_topic_policy.operational_alerts" (New-TestPolicy @($snsBase)) (New-TestPolicy @($snsBase, $snsAdded))
-$validParserPlan = [pscustomobject]@{ resource_drift = $kmsPlan.resource_drift; resource_changes = @($kmsNoop) + $parserChanges }
+$validParserPlan = [pscustomobject]@{ resource_drift = $kmsPlan.resource_drift; planned_values = $kmsPlan.planned_values; resource_changes = @($kmsNoop) + $parserChanges }
 $null = Assert-DevelopmentDocumentDarkPlan $validParserPlan $account parser-dark
 foreach ($fixture in @(
     [pscustomobject]@{ Label = "AWS wildcard object"; Principal = @{ AWS = "*" } },
@@ -451,7 +454,7 @@ $secretAfter.Condition.ArnEquals."aws:PrincipalArn" = @("arn:aws:iam::${account}
 $completeChanges += New-TestPolicyUpdate "module.platform.aws_vpc_endpoint.sqs[0]" (New-TestPolicy @($endpointBase)) (New-TestPolicy @($endpointBase, $sqsAdded))
 $completeChanges += New-TestPolicyUpdate "module.platform.aws_vpc_endpoint.lambda[0]" (New-TestPolicy @($endpointBase)) (New-TestPolicy @($endpointBase, $lambdaAdded))
 $completeChanges += New-TestPolicyUpdate "module.platform.aws_vpc_endpoint.secretsmanager[0]" (New-TestPolicy @($endpointBase, $secretBase)) (New-TestPolicy @($endpointBase, $secretAfter))
-$validCompletePlan = [pscustomobject]@{ resource_drift = $kmsPlan.resource_drift; resource_changes = @($kmsNoop) + $completeChanges }
+$validCompletePlan = [pscustomobject]@{ resource_drift = $kmsPlan.resource_drift; planned_values = $kmsPlan.planned_values; resource_changes = @($kmsNoop) + $completeChanges }
 $null = Assert-DevelopmentDocumentDarkPlan $validCompletePlan $account complete-dark
 
 $retainedBaselinePlan = [pscustomobject]@{
@@ -466,6 +469,255 @@ $retainedBaselinePlan = [pscustomobject]@{
   output_changes = [pscustomobject]@{}
 }
 Assert-DevelopmentDocumentRetainedBaselinePlan -Plan $retainedBaselinePlan
+
+function New-DriftRecord([string]$Address, [string]$Type, [object]$Before, [object]$After,
+  [object]$BeforeSensitive = ([pscustomobject]@{}), [object]$AfterSensitive = ([pscustomobject]@{})) {
+  return [pscustomobject]@{
+    address = $Address; mode = "managed"; type = $Type
+    change = [pscustomobject]@{
+      actions = @("update"); before = $Before; after = $After; after_unknown = [pscustomobject]@{}
+      before_sensitive = $BeforeSensitive; after_sensitive = $AfterSensitive; replace_paths = @()
+    }
+  }
+}
+function New-TagDriftRecord([string]$Address, [string]$Type) {
+  return New-DriftRecord $Address $Type `
+    ([pscustomobject]@{ id = $Address; tags = $null }) `
+    ([pscustomobject]@{ id = $Address; tags = [pscustomobject]@{} }) `
+    ([pscustomobject]@{ tags_all = [pscustomobject]@{} }) `
+    ([pscustomobject]@{ tags = [pscustomobject]@{}; tags_all = [pscustomobject]@{} })
+}
+
+$driftRecords = @()
+foreach ($address in @(
+    "module.platform.aws_cloudwatch_event_rule.document_processing_reconciler[0]",
+    "module.platform.aws_cloudwatch_event_rule.document_scan_plan_unhealthy[0]",
+    "module.platform.aws_cloudwatch_event_rule.document_scan_results[0]",
+    "module.platform.aws_cloudwatch_event_rule.document_scan_tag_failure[0]"
+  )) { $driftRecords += New-TagDriftRecord $address "aws_cloudwatch_event_rule" }
+foreach ($address in @(
+    "module.platform.aws_cloudwatch_log_metric_filter.document_processing_record_failed[0]",
+    "module.platform.aws_cloudwatch_log_metric_filter.document_processing_timed_out[0]",
+    "module.platform.aws_cloudwatch_log_metric_filter.document_security_contradiction[0]"
+  )) {
+  $driftRecords += New-DriftRecord $address "aws_cloudwatch_log_metric_filter" `
+    ([pscustomobject]@{ id = $address; metric_transformation = @([pscustomobject]@{ name = "metric"; dimensions = $null }) }) `
+    ([pscustomobject]@{ id = $address; metric_transformation = @([pscustomobject]@{ name = "metric"; dimensions = [pscustomobject]@{} }) }) `
+    ([pscustomobject]@{ metric_transformation = @([pscustomobject]@{}) }) `
+    ([pscustomobject]@{ metric_transformation = @([pscustomobject]@{ dimensions = [pscustomobject]@{} }) })
+}
+$dimensionAlarmNames = @("document_processing_record_failed", "document_processing_timed_out", "document_security_contradiction")
+foreach ($name in @(
+    "document_parser_errors", "document_processing_record_failed", "document_processing_timed_out",
+    "document_processor_errors", "document_scan_dead_letter", "document_scan_delivery_dead_letter",
+    "document_scan_queue_age", "document_security_contradiction"
+  )) {
+  $address = "module.platform.aws_cloudwatch_metric_alarm.$name[0]"
+  $beforeAlarm = [ordered]@{ id = $address; insufficient_data_actions = $null; tags = $null }
+  $afterAlarm = [ordered]@{ id = $address; insufficient_data_actions = @(); tags = [pscustomobject]@{} }
+  $beforeAlarmSensitive = [ordered]@{ tags_all = [pscustomobject]@{} }
+  $afterAlarmSensitive = [ordered]@{ insufficient_data_actions = @(); tags = [pscustomobject]@{}; tags_all = [pscustomobject]@{} }
+  if ($name -cin $dimensionAlarmNames) {
+    $beforeAlarm.dimensions = $null; $afterAlarm.dimensions = [pscustomobject]@{}
+    $afterAlarmSensitive.dimensions = [pscustomobject]@{}
+  } else {
+    $beforeAlarm.dimensions = [pscustomobject]@{ FunctionName = "unchanged" }
+    $afterAlarm.dimensions = [pscustomobject]@{ FunctionName = "unchanged" }
+    $beforeAlarmSensitive.dimensions = [pscustomobject]@{}
+    $afterAlarmSensitive.dimensions = [pscustomobject]@{}
+  }
+  $driftRecords += New-DriftRecord $address "aws_cloudwatch_metric_alarm" `
+    ([pscustomobject]$beforeAlarm) ([pscustomobject]$afterAlarm) `
+    ([pscustomobject]$beforeAlarmSensitive) ([pscustomobject]$afterAlarmSensitive)
+}
+$driftRecords += New-DriftRecord "module.platform.aws_db_instance.postgres[0]" "aws_db_instance" `
+  ([pscustomobject]@{ id = "db"; latest_restorable_time = "2026-08-13T12:00:00Z" }) `
+  ([pscustomobject]@{ id = "db"; latest_restorable_time = "2026-08-13T12:00:01Z" })
+
+$parserInline = @([pscustomobject]@{ name = "document-parser-runtime"; policy = $parserPolicy })
+$objectInline = @([pscustomobject]@{ name = "document-object-access-runtime"; policy = $objectPolicy })
+foreach ($role in @(
+    [pscustomobject]@{ Address = "module.platform.aws_iam_role.document_parser[0]"; Inline = $parserInline },
+    [pscustomobject]@{ Address = "module.platform.aws_iam_role.document_parser_object_access[0]"; Inline = $objectInline }
+  )) {
+  $driftRecords += New-DriftRecord $role.Address "aws_iam_role" `
+    ([pscustomobject]@{ id = $role.Address; inline_policy = @(); tags = $null }) `
+    ([pscustomobject]@{ id = $role.Address; inline_policy = $role.Inline; tags = [pscustomobject]@{} }) `
+    ([pscustomobject]@{ inline_policy = @(); managed_policy_arns = @(); tags_all = [pscustomobject]@{} }) `
+    ([pscustomobject]@{ inline_policy = @([pscustomobject]@{}); managed_policy_arns = @(); tags = [pscustomobject]@{}; tags_all = [pscustomobject]@{} })
+}
+$driftRecords += New-TagDriftRecord "module.platform.aws_iam_role.document_processor[0]" "aws_iam_role"
+$driftRecords += New-DriftRecord "module.platform.aws_lambda_function.document_parser[0]" "aws_lambda_function" `
+  ([pscustomobject]@{ id = "parser"; layers = $null; tags = $null }) `
+  ([pscustomobject]@{ id = "parser"; layers = @(); tags = [pscustomobject]@{} }) `
+  ([pscustomobject]@{ tags_all = [pscustomobject]@{} }) `
+  ([pscustomobject]@{ layers = @(); tags = [pscustomobject]@{}; tags_all = [pscustomobject]@{} })
+
+$s3BaseStatements = @(
+  [pscustomobject]@{ Sid = "DenyInsecureTransport"; Effect = "Deny" },
+  [pscustomobject]@{ Sid = "DenyWrongEncryptionMode"; Effect = "Deny" },
+  [pscustomobject]@{ Sid = "DenyWrongEncryptionKey"; Effect = "Deny" }
+)
+$s3DriftBefore = New-TestPolicy $s3BaseStatements
+$s3DriftAfter = New-TestPolicy @($s3BaseStatements + $candidateDeny)
+$driftRecords += New-DriftRecord "module.platform.aws_s3_bucket.candidate_documents[0]" "aws_s3_bucket" `
+  ([pscustomobject]@{ id = "candidate"; policy = $s3DriftBefore }) `
+  ([pscustomobject]@{ id = "candidate"; policy = $s3DriftAfter })
+$driftRecords += New-TagDriftRecord "module.platform.aws_security_group.document_parser[0]" "aws_security_group"
+$snsBaseStatements = @(
+  [pscustomobject]@{ Sid = "AllowAccountAdministration"; Effect = "Allow" },
+  [pscustomobject]@{ Sid = "AllowCloudWatchAlarmPublishing"; Effect = "Allow" },
+  [pscustomobject]@{ Sid = "AllowAwsBudgetsPublishing"; Effect = "Allow" }
+)
+$snsDriftBefore = New-TestPolicy $snsBaseStatements
+$snsDriftAfter = New-TestPolicy @($snsBaseStatements + $snsAdded)
+$driftRecords += New-DriftRecord "module.platform.aws_sns_topic.operational_alerts" "aws_sns_topic" `
+  ([pscustomobject]@{ id = "alerts"; policy = $snsDriftBefore }) `
+  ([pscustomobject]@{ id = "alerts"; policy = $snsDriftAfter })
+
+$deliveryQueuePolicy = New-TestQueuePolicy "ExactEventBridgeRuleDeadLettersOnly" `
+  "ai-job-apply-development-document-scan-delivery-dlq" `
+  @("ai-job-apply-development-document-scan-results", "ai-job-apply-development-document-scan-tag-failure", "ai-job-apply-development-document-scan-plan-unhealthy", "ai-job-apply-development-document-processing-reconciler")
+$resultQueuePolicy = New-TestQueuePolicy "ExactGuardDutyResultRuleOnly" `
+  "ai-job-apply-development-document-scan-results" @("ai-job-apply-development-document-scan-results")
+$driftRecords += New-TagDriftRecord "module.platform.aws_sqs_queue.document_scan_dead_letter[0]" "aws_sqs_queue"
+foreach ($queue in @(
+    [pscustomobject]@{ Address = "module.platform.aws_sqs_queue.document_scan_delivery_dead_letter[0]"; Policy = $deliveryQueuePolicy },
+    [pscustomobject]@{ Address = "module.platform.aws_sqs_queue.document_scan_results[0]"; Policy = $resultQueuePolicy }
+  )) {
+  $driftRecords += New-DriftRecord $queue.Address "aws_sqs_queue" `
+    ([pscustomobject]@{ id = $queue.Address; policy = ""; tags = $null }) `
+    ([pscustomobject]@{ id = $queue.Address; policy = $queue.Policy; tags = [pscustomobject]@{} }) `
+    ([pscustomobject]@{ tags_all = [pscustomobject]@{} }) `
+    ([pscustomobject]@{ tags = [pscustomobject]@{}; tags_all = [pscustomobject]@{} })
+}
+$driftRecords += New-TagDriftRecord "module.platform.aws_vpc_endpoint.candidate_documents_s3[0]" "aws_vpc_endpoint"
+if ($driftRecords.Count -ne 27) { throw "The full provider-normalization fixture does not contain exactly 27 unique records." }
+
+$plannedDriftResources = @(
+  [pscustomobject]@{ address = "module.platform.aws_kms_key.platform"; values = [pscustomobject]@{ arn = $kmsArn } },
+  [pscustomobject]@{ address = "module.platform.aws_iam_role.document_parser[0]"; values = [pscustomobject]@{ inline_policy = $parserInline } },
+  [pscustomobject]@{ address = "module.platform.aws_iam_role.document_parser_object_access[0]"; values = [pscustomobject]@{ inline_policy = $objectInline } },
+  [pscustomobject]@{ address = "module.platform.aws_s3_bucket_policy.candidate_documents[0]"; values = [pscustomobject]@{ policy = $s3DriftAfter } },
+  [pscustomobject]@{ address = "module.platform.aws_sns_topic_policy.operational_alerts"; values = [pscustomobject]@{ policy = $snsDriftAfter } },
+  [pscustomobject]@{ address = "module.platform.aws_sqs_queue.document_scan_delivery_dead_letter[0]"; values = [pscustomobject]@{ policy = $deliveryQueuePolicy } },
+  [pscustomobject]@{ address = "module.platform.aws_sqs_queue.document_scan_results[0]"; values = [pscustomobject]@{ policy = $resultQueuePolicy } }
+)
+$plannedDriftRoot = [pscustomobject]@{ resources = $plannedDriftResources }
+Assert-DevelopmentDocumentAcceptedResourceDrift -Records $driftRecords -RootModule $plannedDriftRoot
+foreach ($record in $driftRecords) {
+  Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($record) -RootModule $plannedDriftRoot
+}
+$ecsMigrationDrift = New-TagDriftRecord "module.platform.aws_ecs_task_definition.migration[0]" "aws_ecs_task_definition"
+Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($ecsMigrationDrift) -RootModule $plannedDriftRoot
+$retainedFullDriftPlan = $retainedBaselinePlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$retainedFullDriftPlan.planned_values.root_module = $plannedDriftRoot
+$retainedFullDriftPlan.resource_drift = $driftRecords
+Assert-DevelopmentDocumentRetainedBaselinePlan -Plan $retainedFullDriftPlan
+
+$driftMutations = @(
+  "duplicate", "extra", "type", "action", "unknown", "replacement", "reverse", "other", "sensitive", "policy",
+  "nonempty-tags", "nonempty-layers", "nonempty-actions", "nonempty-metric-dimensions", "nonempty-alarm-dimensions"
+)
+foreach ($mutation in $driftMutations) {
+  $badRecords = $driftRecords | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  switch ($mutation) {
+    "duplicate" { $badRecords = @($badRecords) + @($badRecords[0]) }
+    "extra" { $badRecords[0].address = "module.platform.aws_cloudwatch_event_rule.unreviewed[0]" }
+    "type" { $badRecords[0].type = "aws_sns_topic" }
+    "action" { $badRecords[0].change.actions = @("delete", "create") }
+    "unknown" { $badRecords[0].change.after_unknown = [pscustomobject]@{ tags = $true } }
+    "replacement" { $badRecords[0].change.replace_paths = @(@("tags")) }
+    "reverse" { $badRecords[0].change.before.tags = [pscustomobject]@{}; $badRecords[0].change.after.tags = $null }
+    "other" { $badRecords[0].change.after.id = "changed" }
+    "sensitive" { $badRecords[0].change.after_sensitive.tags = [pscustomobject]@{ secret = $true } }
+    "policy" {
+      $queue = @($badRecords | Where-Object address -eq "module.platform.aws_sqs_queue.document_scan_results[0]")[0]
+      $queue.change.after.policy = $queue.change.after.policy.Replace("sqs:SendMessage", "sqs:*")
+    }
+    "nonempty-tags" { $badRecords[0].change.after.tags = [pscustomobject]@{ Unexpected = "value" } }
+    "nonempty-layers" {
+      $lambda = @($badRecords | Where-Object address -eq "module.platform.aws_lambda_function.document_parser[0]")[0]
+      $lambda.change.after.layers = @("arn:aws:lambda:us-east-2:${account}:layer:unexpected:1")
+    }
+    "nonempty-actions" {
+      $alarm = @($badRecords | Where-Object address -eq "module.platform.aws_cloudwatch_metric_alarm.document_parser_errors[0]")[0]
+      $alarm.change.after.insufficient_data_actions = @("arn:aws:sns:us-east-2:${account}:unexpected")
+    }
+    "nonempty-metric-dimensions" {
+      $metric = @($badRecords | Where-Object address -eq "module.platform.aws_cloudwatch_log_metric_filter.document_processing_record_failed[0]")[0]
+      $metric.change.after.metric_transformation[0].dimensions = [pscustomobject]@{ Unexpected = "value" }
+    }
+    "nonempty-alarm-dimensions" {
+      $alarm = @($badRecords | Where-Object address -eq "module.platform.aws_cloudwatch_metric_alarm.document_processing_record_failed[0]")[0]
+      $alarm.change.after.dimensions = [pscustomobject]@{ Unexpected = "value" }
+    }
+  }
+  $rejected = $false
+  try { Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($badRecords) -RootModule $plannedDriftRoot } catch { $rejected = $true }
+  if (-not $rejected) { throw "The provider-normalization guard accepted '$mutation' drift." }
+}
+$emptyDriftRejected = $false
+try { Assert-DevelopmentDocumentAcceptedResourceDrift -Records @() -RootModule $plannedDriftRoot } catch { $emptyDriftRejected = $true }
+if (-not $emptyDriftRejected) { throw "The provider-normalization guard accepted an empty direct drift set." }
+
+foreach ($mutation in @("action", "principal", "condition", "resource")) {
+  $queueRecord = @($driftRecords | Where-Object address -eq "module.platform.aws_sqs_queue.document_scan_results[0]")[0] |
+    ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $badRoot = $plannedDriftRoot | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $policy = $queueRecord.change.after.policy | ConvertFrom-Json
+  switch ($mutation) {
+    "action" { $policy.Statement[0].Action = "sqs:*" }
+    "principal" { $policy.Statement[0].Principal.Service = "lambda.amazonaws.com" }
+    "condition" { $policy.Statement[0].Condition.StringEquals."aws:SourceAccount" = "000000000000" }
+    "resource" { $policy.Statement[0].Resource = "arn:aws:sqs:us-east-2:${account}:unexpected" }
+  }
+  $badPolicy = $policy | ConvertTo-Json -Compress -Depth 50
+  $queueRecord.change.after.policy = $badPolicy
+  @($badRoot.resources | Where-Object address -eq "module.platform.aws_sqs_queue.document_scan_results[0]")[0].values.policy = $badPolicy
+  $rejected = $false
+  try { Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($queueRecord) -RootModule $badRoot } catch { $rejected = $true }
+  if (-not $rejected) { throw "The queue drift semantic guard accepted a wrong $mutation." }
+}
+foreach ($fixture in @(
+    [pscustomobject]@{ Address = "module.platform.aws_s3_bucket.candidate_documents[0]"; Planned = "module.platform.aws_s3_bucket_policy.candidate_documents[0]"; Kind = "principal" },
+    [pscustomobject]@{ Address = "module.platform.aws_s3_bucket.candidate_documents[0]"; Planned = "module.platform.aws_s3_bucket_policy.candidate_documents[0]"; Kind = "condition" },
+    [pscustomobject]@{ Address = "module.platform.aws_s3_bucket.candidate_documents[0]"; Planned = "module.platform.aws_s3_bucket_policy.candidate_documents[0]"; Kind = "resource" },
+    [pscustomobject]@{ Address = "module.platform.aws_sns_topic.operational_alerts"; Planned = "module.platform.aws_sns_topic_policy.operational_alerts"; Kind = "principal" }
+  )) {
+  $policyRecord = @($driftRecords | Where-Object address -eq $fixture.Address)[0] |
+    ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $badRoot = $plannedDriftRoot | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $policy = $policyRecord.change.after.policy | ConvertFrom-Json
+  $added = @($policy.Statement)[-1]
+  switch ($fixture.Kind) {
+    "principal" { $added.Principal = [pscustomobject]@{ AWS = "*" } }
+    "condition" { $added.Condition.StringNotEquals."s3:ExistingObjectTag/GuardDutyMalwareScanStatus" = "THREATS_FOUND" }
+    "resource" { $added.Resource = "arn:aws:s3:::unexpected/quarantine/*" }
+  }
+  $badPolicy = $policy | ConvertTo-Json -Compress -Depth 50
+  $policyRecord.change.after.policy = $badPolicy
+  @($badRoot.resources | Where-Object address -eq $fixture.Planned)[0].values.policy = $badPolicy
+  $rejected = $false
+  try { Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($policyRecord) -RootModule $badRoot } catch { $rejected = $true }
+  if (-not $rejected) { throw "The $($fixture.Address) drift semantic guard accepted a wrong $($fixture.Kind)." }
+}
+foreach ($mutation in @("name", "action", "resource")) {
+  $roleRecord = @($driftRecords | Where-Object address -eq "module.platform.aws_iam_role.document_parser[0]")[0] |
+    ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $badRoot = $plannedDriftRoot | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $policy = $roleRecord.change.after.inline_policy[0].policy | ConvertFrom-Json
+  switch ($mutation) {
+    "name" { $roleRecord.change.after.inline_policy[0].name = "unexpected" }
+    "action" { @($policy.Statement | Where-Object Sid -eq "DecryptLambdaEnvironment")[0].Action = "kms:*" }
+    "resource" { @($policy.Statement | Where-Object Sid -eq "DecryptLambdaEnvironment")[0].Resource = "*" }
+  }
+  if ($mutation -cne "name") { $roleRecord.change.after.inline_policy[0].policy = $policy | ConvertTo-Json -Compress -Depth 50 }
+  @($badRoot.resources | Where-Object address -eq "module.platform.aws_iam_role.document_parser[0]")[0].values.inline_policy = $roleRecord.change.after.inline_policy
+  $rejected = $false
+  try { Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($roleRecord) -RootModule $badRoot } catch { $rejected = $true }
+  if (-not $rejected) { throw "The inline-policy drift guard accepted a wrong $mutation." }
+}
 
 $applyableBaselineRejected = $false
 $applyableBaseline = $retainedBaselinePlan | ConvertTo-Json -Depth 20 | ConvertFrom-Json
