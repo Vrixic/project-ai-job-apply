@@ -709,7 +709,11 @@ function Set-BaselineVariables {
     [string]$ParserQualifiedArn = "")
   $migratedVariables = [pscustomobject]@{}
   foreach ($property in @($Baseline.variables.PSObject.Properties)) {
-    if ([string]$property.Name -in @("deploy_document_processing", "document_processing_kms_prerequisite_enabled")) { continue }
+    if ([string]$property.Name -in @(
+        "deploy_document_processing", "document_processing_kms_prerequisite_enabled",
+        "document_processing_deployment_stage", "document_parser_invocation_qualified_arn",
+        "document_security_health_rules_enabled"
+      )) { continue }
     $migratedVariables | Add-Member ([string]$property.Name) $property.Value
   }
   $migratedVariables | Add-Member document_processing_deployment_stage ([pscustomobject]@{ value = $DeploymentStage })
