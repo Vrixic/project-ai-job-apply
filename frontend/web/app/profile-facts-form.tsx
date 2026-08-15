@@ -6,7 +6,7 @@ import type {
   ProfileFactCollection,
   UpdateProfileFactRequest,
 } from "@ai-job-apply/api-contracts";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 const kinds: Array<{ value: CreateProfileFactRequest["kind"]; label: string }> = [
   { value: "identity", label: "Contact or identity" },
@@ -66,7 +66,7 @@ export function ProfileFactsForm({
   refreshVersion?: number;
 }) {
   const [facts, setFacts] = useState<ProfileFact[]>([]);
-  const [kind, setKind] = useState<CreateProfileFactRequest["kind"]>("skill");
+  const [kind, setKind] = useState<CreateProfileFactRequest["kind"] | "">("");
   const [key, setKey] = useState("");
   const [value, setValue] = useState("");
   const [editing, setEditing] = useState<ProfileFact>();
@@ -75,51 +75,125 @@ export function ProfileFactsForm({
   const [saving, setSaving] = useState(false);
   const [savingFactId, setSavingFactId] = useState<string>();
   const [message, setMessage] = useState<string>();
+  const lastRefreshVersion = useRef(0);
+  const loadRequestVersion = useRef(0);
+  const sessionGeneration = useRef(0);
+  const sessionController = useRef<AbortController | undefined>(undefined);
 
-  const load = useCallback(async () => {
-    if (!authenticated) {
-      setLoading(false);
-      setFacts([]);
-      return;
-    }
-    setLoading(true);
-    try {
-      const collection = await factRequest<ProfileFactCollection>("/api/platform/profile-facts");
-      setFacts(collection.facts);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not load profile facts");
-    } finally {
-      setLoading(false);
-    }
+  const load = useCallback(
+    async (announceResumeResult: boolean, generation: number, signal: AbortSignal) => {
+      const requestVersion = ++loadRequestVersion.current;
+      setLoading(true);
+      try {
+        const collection = await factRequest<ProfileFactCollection>("/api/platform/profile-facts", {
+          signal,
+        });
+        if (
+          signal.aborted ||
+          generation !== sessionGeneration.current ||
+          requestVersion !== loadRequestVersion.current
+        ) {
+          return;
+        }
+        setFacts(collection.facts);
+        if (announceResumeResult) {
+          setMessage(
+            collection.proposedCount === 1
+              ? "1 extracted fact is waiting for your review."
+              : collection.proposedCount > 1
+                ? `${collection.proposedCount} extracted facts are waiting for your review.`
+                : "Resume parsing finished; no extracted facts are waiting for review.",
+          );
+        }
+      } catch (error) {
+        if (
+          !signal.aborted &&
+          generation === sessionGeneration.current &&
+          requestVersion === loadRequestVersion.current
+        ) {
+          setMessage(error instanceof Error ? error.message : "Could not load profile facts");
+        }
+      } finally {
+        if (
+          !signal.aborted &&
+          generation === sessionGeneration.current &&
+          requestVersion === loadRequestVersion.current
+        ) {
+          setLoading(false);
+        }
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const generation = ++sessionGeneration.current;
+    sessionController.current?.abort();
+    const controller = new AbortController();
+    sessionController.current = controller;
+    loadRequestVersion.current += 1;
+    setFacts([]);
+    setKind("");
+    setKey("");
+    setValue("");
+    setEditing(undefined);
+    setEditedValue("");
+    setMessage(undefined);
+    setSaving(false);
+    setSavingFactId(undefined);
+    setLoading(authenticated);
+
+    return () => {
+      if (sessionGeneration.current === generation) controller.abort();
+    };
   }, [authenticated]);
 
   useEffect(() => {
-    if (refreshVersion >= 0) void load();
-  }, [load, refreshVersion]);
+    const announceResumeResult = refreshVersion > lastRefreshVersion.current;
+    lastRefreshVersion.current = refreshVersion;
+    const controller = sessionController.current;
+    if (!authenticated || !controller) return;
+    void load(announceResumeResult, sessionGeneration.current, controller.signal);
+  }, [authenticated, load, refreshVersion]);
 
   async function createFact(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!kind) {
+      setMessage("Choose a fact category before saving.");
+      return;
+    }
     setSaving(true);
     setMessage(undefined);
+    const generation = sessionGeneration.current;
+    const controller = sessionController.current;
+    if (!authenticated || !controller) {
+      setSaving(false);
+      return;
+    }
     try {
       const created = await factRequest<ProfileFact>("/api/platform/profile-facts", {
         method: "POST",
+        signal: controller.signal,
         headers: { "idempotency-key": `profile-fact-${crypto.randomUUID()}` },
         body: JSON.stringify({
           kind,
           key: key.trim(),
           value: value.trim(),
-          sensitivity: "standard",
+          sensitivity: "confidential",
         }),
       });
+      if (controller.signal.aborted || generation !== sessionGeneration.current) return;
       setFacts((current) => [...current, created]);
+      setKind("");
       setKey("");
       setValue("");
       setMessage("Profile fact saved as confirmed user input.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not save profile fact");
+      if (!controller.signal.aborted && generation === sessionGeneration.current) {
+        setMessage(error instanceof Error ? error.message : "Could not save profile fact");
+      }
     } finally {
-      setSaving(false);
+      if (!controller.signal.aborted && generation === sessionGeneration.current) setSaving(false);
     }
   }
 
@@ -127,6 +201,9 @@ export function ProfileFactsForm({
     fact: ProfileFact,
     command: Omit<UpdateProfileFactRequest, "expectedVersion">,
   ) {
+    const generation = sessionGeneration.current;
+    const controller = sessionController.current;
+    if (!authenticated || !controller) return;
     setSavingFactId(fact.id);
     setMessage(undefined);
     try {
@@ -134,28 +211,36 @@ export function ProfileFactsForm({
         `/api/platform/profile-facts/${encodeURIComponent(fact.id)}`,
         {
           method: "PATCH",
+          signal: controller.signal,
           headers: { "idempotency-key": `profile-fact-${crypto.randomUUID()}` },
           body: JSON.stringify({ expectedVersion: fact.version, ...command }),
         },
       );
+      if (controller.signal.aborted || generation !== sessionGeneration.current) return;
       setFacts((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       setEditing(undefined);
       setMessage("A new profile fact version was saved. Prior versions remain auditable.");
     } catch (error) {
+      if (controller.signal.aborted || generation !== sessionGeneration.current) return;
       if (error instanceof FactRequestError && error.status === 409) {
-        await load();
-        setMessage(
-          "This proposal changed after it was loaded. The latest version is shown; review it again.",
-        );
+        await load(false, generation, controller.signal);
+        if (!controller.signal.aborted && generation === sessionGeneration.current) {
+          setMessage(
+            "This proposal changed after it was loaded. The latest version is shown; review it again.",
+          );
+        }
       } else {
         setMessage(error instanceof Error ? error.message : "Could not update profile fact");
       }
     } finally {
-      setSavingFactId(undefined);
+      if (!controller.signal.aborted && generation === sessionGeneration.current) {
+        setSavingFactId(undefined);
+      }
     }
   }
 
   function beginCorrection(fact: ProfileFact) {
+    if (!authenticated || saving || savingFactId !== undefined) return;
     setEditing(fact);
     setEditedValue(displayValue(fact.value));
   }
@@ -166,10 +251,24 @@ export function ProfileFactsForm({
     invalidated: invalidatedFacts,
   } = partitionProfileFacts(facts);
 
+  if (!authenticated) {
+    return (
+      <section className="profile-facts" aria-labelledby="profile-facts-heading">
+        <div className="section-heading">
+          <div>
+            <div className="eyebrow">Truth profile</div>
+            <h2 id="profile-facts-heading">Your profile facts</h2>
+          </div>
+        </div>
+        <p>Sign in to review or add profile facts.</p>
+      </section>
+    );
+  }
+
   function factCard(fact: ProfileFact, review: boolean, mutable = true) {
     const source = fact.evidence?.supportingSpans[0];
     const cardSaving = savingFactId === fact.id;
-    const anyFactSaving = savingFactId !== undefined;
+    const anyFactSaving = !authenticated || savingFactId !== undefined;
     return (
       <li key={fact.id}>
         <div>
@@ -278,17 +377,19 @@ export function ProfileFactsForm({
             <input
               value={editedValue}
               onChange={(event) => setEditedValue(event.target.value)}
+              disabled={!authenticated || saving || savingFactId !== undefined}
               required
             />
           </label>
           <div className="fact-actions">
-            <button type="submit" disabled={saving || savingFactId !== undefined}>
+            <button type="submit" disabled={!authenticated || saving || savingFactId !== undefined}>
               Save correction
             </button>
             <button
               className="secondary-button"
               type="button"
               onClick={() => setEditing(undefined)}
+              disabled={!authenticated || saving || savingFactId !== undefined}
             >
               Cancel
             </button>
@@ -299,7 +400,15 @@ export function ProfileFactsForm({
       <form className="compact-form" onSubmit={createFact}>
         <label>
           Fact category
-          <select value={kind} onChange={(event) => setKind(event.target.value as typeof kind)}>
+          <select
+            value={kind}
+            onChange={(event) =>
+              setKind(event.target.value as CreateProfileFactRequest["kind"] | "")
+            }
+            required
+            disabled={!authenticated || loading || saving || savingFactId !== undefined}
+          >
+            <option value="">Choose a category</option>
             {kinds.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -307,18 +416,33 @@ export function ProfileFactsForm({
             ))}
           </select>
         </label>
+        <p className="field-help">
+          Direct-entered profile facts are stored as confidential. Restricted sponsorship,
+          work-authorization, demographic, disability, veteran, and legal answers are not collected
+          here; their dedicated restricted-data flow is not yet available.
+        </p>
         <label>
           Fact name
           <span>For example: programming language, degree, or employer</span>
-          <input value={key} onChange={(event) => setKey(event.target.value)} required />
+          <input
+            value={key}
+            onChange={(event) => setKey(event.target.value)}
+            disabled={!authenticated || loading || saving || savingFactId !== undefined}
+            required
+          />
         </label>
         <label>
           Confirmed value
-          <input value={value} onChange={(event) => setValue(event.target.value)} required />
+          <input
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            disabled={!authenticated || loading || saving || savingFactId !== undefined}
+            required
+          />
         </label>
         <button
           type="submit"
-          disabled={!authenticated || loading || saving || savingFactId !== undefined}
+          disabled={!authenticated || loading || saving || savingFactId !== undefined || !kind}
         >
           {saving ? "Saving…" : "Add confirmed fact"}
         </button>
