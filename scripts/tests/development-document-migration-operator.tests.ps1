@@ -25,6 +25,19 @@ if ($source -notmatch 'ConvertTo-DeploymentCanonicalValue -Value \$beforeContain
     $source -match 'ConvertTo-DeploymentCanonicalValue -Value \$(?:before|after)Container[^\r\n]*-SortArrays') {
   throw "The migration container comparison must canonicalize object keys without sorting arrays."
 }
+if ($source -notmatch '\[string\]\$ReviewedBaselineToCurrentDeltaSha256 = ""' -or
+    @([regex]::Matches($source, '-ReviewedBaselineToCurrentDeltaSha256 \$ReviewedBaselineToCurrentDeltaSha256')).Count -ne 2 -or
+    @([regex]::Matches($source, 'Assert-CleanCurrentMainHead -ExpectedSha \$operatorSourceSha')).Count -ne 3 -or
+    $source -notmatch '\[string\]\$ReviewedTaskPlanMetadataSha256 = ""' -or
+    $source -notmatch 'PlanMetadataSha256\s+= \$taskMetadataSha256' -or
+    $source -notmatch 'diff --name-status --find-renames --find-copies-harder' -or
+    $source -notmatch '(?s)terraform "-chdir=\$terraformDirectory" apply.+?if \(\$LASTEXITCODE -ne 0\).+?Assert-CleanCurrentMainHead -ExpectedSha \$operatorSourceSha' -or
+    $source -notmatch 'Assert-CleanCurrentMainHead -ExpectedSha \$head\s+if \(\$Action -in @\("PlanTask", "ApplyTask"\)\) \{ Assert-NoUntrackedTerraformInputs \}' -or
+    $source -notmatch '(?s)\$operatorSourceSha = Assert-CallerToolsAndSource.+?Initialize-EncryptedBackend' -or
+    $source -notmatch 'appliedBaselineCurrentOperatorSourceSha = \[string\]\$baselineEvidence\.CurrentOperatorSourceSha' -or
+    $source -notmatch 'appliedBaselineToCurrentDeltaSha256 = \[string\]\$baselineEvidence\.BaselineToCurrentDeltaSha256') {
+  throw "PlanTask and ApplyTask do not preserve the reviewed baseline-to-current handoff and recheck current HEAD."
+}
 
 $currentJobsSuccessMarker =
   "Jobs migrations through 0004_job_search applied and verified."
@@ -77,20 +90,24 @@ $baselineFunctions = @($ast.FindAll({
         "Assert-AcceptedMigrationProviderDrift", "Test-IgnorableRdsRestorableTimeRefresh",
         "Test-IgnorableMigrationTaskTagsRefresh", "Get-UnacceptedVerificationDrift", "Get-OptionalProperty",
         "Test-EcsFaultInjectionDisabled", "Assert-ReleaseSourceBinding",
-        "Assert-OperatorOnlyReleaseDelta", "Get-DocumentOperatorDeltaSha256", "Assert-ExecutionIdentity",
+        "Assert-OperatorOnlyReleaseDelta", "Get-DocumentOperatorDeltaSha256",
+        "Get-ReviewedBaselineToCurrentDeltaSha256", "Assert-CleanCurrentMainHead",
+        "Assert-NoUntrackedTerraformInputs", "Assert-ExecutionIdentity",
         "Assert-DurableClaimPutResult", "Assert-DurableExecutionClaimEvidence",
         "Test-DurableClaimHistoryExists", "Assert-RecoveryOperatorBinding", "Assert-RecoveryOperatorSource",
         "Resolve-TaskLogStreamName",
         "Set-RecoveredReceiptEvidence", "Get-DeclaredVariableNames",
         "Get-CurrentTerraformStateIdentity", "Assert-ExactCurrentBaselineVariableSet",
         "Assert-RetainedMigrationBaselinePlan", "Assert-RetainedBaselineCurrentState",
-        "Read-RetainedMigrationBaseline", "Assert-TaskMetadataBaselineBinding",
+        "Assert-RetainedBaselinePlanningState", "Test-ExactCompleteDarkStaleStateHandoff",
+        "Assert-ExactTerraformStateIdentity",
+        "Read-RetainedMigrationBaseline", "Assert-TaskMetadataBaselineBinding", "Read-TaskPlanMetadata",
         "Get-FileSha256", "Get-TextSha256", "Write-JsonFile", "Get-ExactStringPlanVariable",
         "New-PostMigrationBaselineMetadata", "Assert-PostMigrationBaselineMetadata",
         "Save-PostMigrationBaselineMetadata", "Remove-NewPostMigrationBaselineArtifacts"
       )
     }, $true))
-if ($baselineFunctions.Count -ne 37) { throw "The input, plan, and retained-handoff guards must each be defined once." }
+if ($baselineFunctions.Count -ne 44) { throw "The input, plan, and retained-handoff guards must each be defined once." }
 foreach ($function in $baselineFunctions | Sort-Object { $_.Extent.StartOffset }) {
   Invoke-Expression $function.Extent.Text
 }
@@ -158,6 +175,279 @@ try {
   Remove-Variable -Name documentDeltaMode -Scope Script -ErrorAction SilentlyContinue
   Remove-Variable -Name documentDeltaCatFileCalls -Scope Script -ErrorAction SilentlyContinue
 }
+
+$script:fullDeltaMode = "valid"
+$script:fullDeltaRecords = @(
+  "M`tscripts/operate-development-document-migration.ps1",
+  "A`tdocs/product/delivery/evidence/new.md",
+  "D`tdocs/product/delivery/evidence/retired.md"
+)
+$script:fullDeltaPatch = @("fixture full patch", "second line")
+function git {
+  $arguments = @($args)
+  if ($arguments -contains "merge-base") {
+    $global:LASTEXITCODE = if ($script:fullDeltaMode -ceq "nonancestor") { 1 } else { 0 }
+    return
+  }
+  if ($arguments -contains "--name-status") {
+    if ($arguments -notcontains "--no-renames" -and $script:fullDeltaMode -ceq "detected-error") {
+      $global:LASTEXITCODE = 128
+      return
+    }
+    if ($arguments -contains "--no-renames" -and $script:fullDeltaMode -ceq "records-error") {
+      $global:LASTEXITCODE = 128
+      return
+    }
+    $global:LASTEXITCODE = 0
+    if ($arguments -notcontains "--no-renames" -and $script:fullDeltaMode -ceq "rename") {
+      return "R100`tdocs/product/delivery/evidence/old.md`tdocs/product/delivery/evidence/new.md"
+    }
+    if ($arguments -notcontains "--no-renames" -and $script:fullDeltaMode -ceq "copy") {
+      return "C100`tdocs/product/delivery/evidence/old.md`tdocs/product/delivery/evidence/new.md"
+    }
+    if ($script:fullDeltaMode -ceq "unsupported") { return "T`tscripts/operate-development-document-migration.ps1" }
+    return $script:fullDeltaRecords
+  }
+  if ($arguments -contains "--numstat") {
+    if ($script:fullDeltaMode -ceq "numstat-error") { $global:LASTEXITCODE = 128; return }
+    $global:LASTEXITCODE = 0
+    if ($script:fullDeltaMode -ceq "binary") { return @("1`t1`tscripts/operate-development-document-migration.ps1", "-`t-`tdocs/product/delivery/evidence/new.md", "1`t0`tdocs/product/delivery/evidence/retired.md") }
+    return @("1`t1`tscripts/operate-development-document-migration.ps1", "1`t0`tdocs/product/delivery/evidence/new.md", "0`t1`tdocs/product/delivery/evidence/retired.md")
+  }
+  if ($arguments -contains "ls-tree") {
+    $global:LASTEXITCODE = 0
+    if ($script:fullDeltaMode -ceq "symlink") { return "120000 blob $('a' * 40)`tfixture" }
+    if ($script:fullDeltaMode -ceq "gitlink") { return "160000 commit $('a' * 40)`tfixture" }
+    if ($script:fullDeltaMode -ceq "mode") { return "100600 blob $('a' * 40)`tfixture" }
+    if ($script:fullDeltaMode -ceq "ambiguous") {
+      return @("100644 blob $('a' * 40)`tfixture", "100644 blob $('b' * 40)`tfixture-two")
+    }
+    return "100644 blob $('a' * 40)`tfixture"
+  }
+  if ($arguments -contains "--full-index") {
+    if ($script:fullDeltaMode -ceq "patch-error") { $global:LASTEXITCODE = 128; return }
+    $global:LASTEXITCODE = 0
+    return $script:fullDeltaPatch
+  }
+  $global:LASTEXITCODE = 1
+  throw "Unexpected full-delta mocked Git invocation: $($arguments -join ' ')"
+}
+try {
+  $repositoryRoot = "mock-repository-root"
+  $baselineOperatorSha = "3" * 40
+  $currentOperatorSha = "4" * 40
+  $reviewedFullDeltaSha = Get-TextSha256 ("development-operator-delta-v1`n$baselineOperatorSha`n$currentOperatorSha`n--name-status--`n" +
+    (($script:fullDeltaRecords -join "`n") + "`n--patch--`n" + ($script:fullDeltaPatch -join "`n") + "`n"))
+  $acceptedFullDelta = Get-ReviewedBaselineToCurrentDeltaSha256 `
+    -BaselineOperatorSha $baselineOperatorSha -CurrentOperatorSha $currentOperatorSha `
+    -ReviewedSha256 $reviewedFullDeltaSha
+  if ($acceptedFullDelta -cne $reviewedFullDeltaSha) {
+    throw "The independently reviewed full baseline-to-current delta was not accepted."
+  }
+  foreach ($reviewed in @("", ("0" * 64))) {
+    $rejected = $false
+    try {
+      $null = Get-ReviewedBaselineToCurrentDeltaSha256 `
+        -BaselineOperatorSha $baselineOperatorSha -CurrentOperatorSha $currentOperatorSha `
+        -ReviewedSha256 $reviewed
+    } catch { $rejected = $true }
+    if (-not $rejected) { throw "A missing or wrong full baseline-to-current review hash was accepted." }
+  }
+  foreach ($mode in @(
+      "nonancestor", "detected-error", "records-error", "numstat-error", "patch-error", "binary",
+      "rename", "copy", "symlink", "gitlink", "mode", "ambiguous", "unsupported"
+    )) {
+    $script:fullDeltaMode = $mode
+    $rejected = $false
+    try {
+      $null = Get-ReviewedBaselineToCurrentDeltaSha256 `
+        -BaselineOperatorSha $baselineOperatorSha -CurrentOperatorSha $currentOperatorSha `
+        -ReviewedSha256 $reviewedFullDeltaSha
+    } catch { $rejected = $true }
+    if (-not $rejected) { throw "The full baseline-to-current delta accepted '$mode'." }
+  }
+  $script:fullDeltaMode = "valid"
+  $exactDelta = Get-ReviewedBaselineToCurrentDeltaSha256 `
+    -BaselineOperatorSha $currentOperatorSha -CurrentOperatorSha $currentOperatorSha
+  if ($exactDelta -notmatch '^[a-f0-9]{64}$') { throw "An exact-current baseline did not retain canonical binding." }
+  $extraExactReviewRejected = $false
+  try {
+    $null = Get-ReviewedBaselineToCurrentDeltaSha256 `
+      -BaselineOperatorSha $currentOperatorSha -CurrentOperatorSha $currentOperatorSha `
+      -ReviewedSha256 ("a" * 64)
+  } catch { $extraExactReviewRejected = $true }
+  if (-not $extraExactReviewRejected) { throw "An exact-current baseline accepted an unnecessary review hash." }
+} finally {
+  Remove-Item -LiteralPath Function:\git -Force
+  $repositoryRoot = $originalRepositoryRoot
+  Remove-Variable -Name fullDeltaMode -Scope Script -ErrorAction SilentlyContinue
+  Remove-Variable -Name fullDeltaRecords -Scope Script -ErrorAction SilentlyContinue
+  Remove-Variable -Name fullDeltaPatch -Scope Script -ErrorAction SilentlyContinue
+}
+
+$script:headGuardMode = "valid"
+$script:headGuardSawForcedStatus = $false
+$script:headGuardSawExplicitUpstream = $false
+function git {
+  $arguments = @($args)
+  if ($arguments -contains "branch") {
+    if ($script:headGuardMode -ceq "branch-error") { $global:LASTEXITCODE = 128; return }
+    $global:LASTEXITCODE = 0
+    return $(if ($script:headGuardMode -ceq "branch") { "feature" } else { "main" })
+  }
+  if ($arguments -contains "rev-parse") {
+    if ($arguments[-1] -ceq "refs/remotes/origin/main") { $script:headGuardSawExplicitUpstream = $true }
+    if (($arguments[-1] -ceq "HEAD" -and $script:headGuardMode -ceq "head-error") -or
+        ($arguments[-1] -ceq "refs/remotes/origin/main" -and $script:headGuardMode -ceq "upstream-error")) {
+      $global:LASTEXITCODE = 128
+      return
+    }
+    $global:LASTEXITCODE = 0
+    if ($arguments[-1] -ceq "HEAD") { return $(if ($script:headGuardMode -ceq "head") { "6" * 40 } else { "5" * 40 }) }
+    return $(if ($script:headGuardMode -in @("divergent", "ambiguous-tag")) { "7" * 40 } else { "5" * 40 })
+  }
+  if ($arguments -contains "status") {
+    $script:headGuardSawForcedStatus = $arguments -contains "--porcelain=v1" -and
+      $arguments -contains "--untracked-files=all" -and $arguments -contains "--ignore-submodules=none"
+    if ($script:headGuardMode -ceq "config-error") { $global:LASTEXITCODE = 128; return }
+    $global:LASTEXITCODE = 0
+    if ($script:headGuardMode -ceq "dirty") { return " M tracked.txt" }
+    if ($script:headGuardMode -ceq "hidden-config") { return "?? .config/operator/hidden.json" }
+    return
+  }
+  $global:LASTEXITCODE = 1
+  throw "Unexpected HEAD-guard mocked Git invocation: $($arguments -join ' ')"
+}
+try {
+  $repositoryRoot = "mock-repository-root"
+  Assert-CleanCurrentMainHead -ExpectedSha ("5" * 40)
+  if (-not $script:headGuardSawForcedStatus) { throw "The clean-source guard omitted a forced complete porcelain-v1 status." }
+  if (-not $script:headGuardSawExplicitUpstream) { throw "The clean-source guard used an ambiguous origin/main revision." }
+  foreach ($mode in @(
+      "branch", "head", "divergent", "ambiguous-tag", "dirty", "hidden-config", "branch-error", "head-error",
+      "upstream-error", "config-error"
+    )) {
+    $script:headGuardMode = $mode
+    $rejected = $false
+    try { Assert-CleanCurrentMainHead -ExpectedSha ("5" * 40) } catch { $rejected = $true }
+    if (-not $rejected) { throw "The clean-current-main guard accepted '$mode'." }
+  }
+} finally {
+  Remove-Item -LiteralPath Function:\git -Force
+  $repositoryRoot = $originalRepositoryRoot
+  Remove-Variable -Name headGuardMode -Scope Script -ErrorAction SilentlyContinue
+  Remove-Variable -Name headGuardSawForcedStatus -Scope Script -ErrorAction SilentlyContinue
+  Remove-Variable -Name headGuardSawExplicitUpstream -Scope Script -ErrorAction SilentlyContinue
+}
+
+$terraformInputFixtureRoot = Join-Path ([IO.Path]::GetTempPath()) "migration-terraform-input-$([guid]::NewGuid().ToString('N'))"
+$originalRepositoryRoot = $repositoryRoot
+$terraformFixtureAssumePath = "infrastructure/terraform/fixture/main.tf"
+$terraformFixtureConfigSet = $false
+$terraformFixtureAssumeSet = $false
+$terraformFixtureSkipSet = $false
+$savedFixtureExclude = ""
+try {
+  $repositoryRoot = $terraformInputFixtureRoot
+  $terraformFixtureSource = Join-Path $repositoryRoot "infrastructure\terraform\fixture"
+  $terraformFixtureIgnored = Join-Path $terraformFixtureSource ".terraform"
+  $null = New-Item -ItemType Directory -Path $terraformFixtureIgnored -Force
+  [IO.File]::WriteAllText((Join-Path $terraformFixtureSource "main.tf"), "terraform {}", [Text.UTF8Encoding]::new($false))
+  [IO.File]::WriteAllText((Join-Path $terraformFixtureSource "template.txt"), "tracked template", [Text.UTF8Encoding]::new($false))
+  [IO.File]::WriteAllText((Join-Path $terraformFixtureIgnored "ignored.auto.tfvars"), "ignored = true", [Text.UTF8Encoding]::new($false))
+  & git -C $repositoryRoot init --quiet
+  if ($LASTEXITCODE -ne 0) { throw "The Terraform-input fixture Git repository could not be initialized." }
+  & git -C $repositoryRoot config user.name "Migration Guard Test"
+  if ($LASTEXITCODE -ne 0) { throw "The Terraform-input fixture user name could not be configured." }
+  & git -C $repositoryRoot config user.email "migration-guard@example.invalid"
+  if ($LASTEXITCODE -ne 0) { throw "The Terraform-input fixture user email could not be configured." }
+  $terraformFixtureConfigSet = $true
+  & git -C $repositoryRoot add -- infrastructure/terraform
+  if ($LASTEXITCODE -ne 0) { throw "The Terraform-input fixture could not be staged." }
+  & git -C $repositoryRoot commit --quiet -m "Create Terraform input fixture"
+  if ($LASTEXITCODE -ne 0) { throw "The Terraform-input fixture could not be committed." }
+  $fixtureExcludePath = Join-Path $repositoryRoot ".git\info\exclude"
+  $savedFixtureExclude = [IO.File]::ReadAllText($fixtureExcludePath)
+  Assert-NoUntrackedTerraformInputs
+
+  $ignoredPlanPath = Join-Path $terraformFixtureSource "reviewed-local.tfplan"
+  [IO.File]::AppendAllText($fixtureExcludePath, "*.tfplan`n", [Text.UTF8Encoding]::new($false))
+  [IO.File]::WriteAllText($ignoredPlanPath, "local saved plan", [Text.UTF8Encoding]::new($false))
+  Assert-NoUntrackedTerraformInputs
+  Remove-Item -LiteralPath $ignoredPlanPath -Force
+  [IO.File]::WriteAllText($fixtureExcludePath, $savedFixtureExclude, [Text.UTF8Encoding]::new($false))
+
+  foreach ($ignoredInput in @(
+      @{ Name = "evil.tf"; Content = "terraform {}"; Pattern = "evil.tf" },
+      @{ Name = "secret.auto.tfvars"; Content = "secret = true"; Pattern = "*.auto.tfvars" },
+      @{ Name = "hidden-template.txt"; Content = "hidden template"; Pattern = "hidden-template.txt" },
+      @{ Name = "hidden-data.json"; Content = '{"hidden":true}'; Pattern = "hidden-data.json" }
+    )) {
+    $ignoredPath = Join-Path $terraformFixtureSource $ignoredInput.Name
+    [IO.File]::AppendAllText($fixtureExcludePath, "$($ignoredInput.Pattern)`n", [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText($ignoredPath, $ignoredInput.Content, [Text.UTF8Encoding]::new($false))
+    $rejected = $false
+    try { Assert-NoUntrackedTerraformInputs } catch { $rejected = $true }
+    if (-not $rejected) { throw "A .git/info/exclude-hidden Terraform source '$($ignoredInput.Name)' was accepted." }
+    Remove-Item -LiteralPath $ignoredPath -Force
+    [IO.File]::WriteAllText($fixtureExcludePath, $savedFixtureExclude, [Text.UTF8Encoding]::new($false))
+  }
+
+  & git -C $repositoryRoot update-index --assume-unchanged -- $terraformFixtureAssumePath
+  if ($LASTEXITCODE -ne 0) { throw "The Terraform-input assume-unchanged fixture could not be set." }
+  $terraformFixtureAssumeSet = $true
+  $assumeFlagRejected = $false
+  try { Assert-NoUntrackedTerraformInputs } catch { $assumeFlagRejected = $true }
+  if (-not $assumeFlagRejected) { throw "An assume-unchanged Terraform index flag was accepted even before byte drift." }
+  [IO.File]::WriteAllText((Join-Path $terraformFixtureSource "main.tf"), "terraform { required_version = `"> 99`" }", [Text.UTF8Encoding]::new($false))
+  if (@(& git -C $repositoryRoot status --porcelain=v1).Count -ne 0) {
+    throw "The assume-unchanged fixture was unexpectedly visible to porcelain status."
+  }
+  $assumeUnchangedRejected = $false
+  try { Assert-NoUntrackedTerraformInputs } catch { $assumeUnchangedRejected = $true }
+  if (-not $assumeUnchangedRejected) { throw "An assume-unchanged modified Terraform file was accepted." }
+  & git -C $repositoryRoot update-index --no-assume-unchanged -- $terraformFixtureAssumePath
+  if ($LASTEXITCODE -ne 0) { throw "The Terraform-input assume-unchanged fixture could not be cleared." }
+  $terraformFixtureAssumeSet = $false
+  & git -C $repositoryRoot checkout -- $terraformFixtureAssumePath
+  if ($LASTEXITCODE -ne 0) { throw "The Terraform-input fixture could not restore its tracked bytes." }
+
+  & git -C $repositoryRoot update-index --skip-worktree -- $terraformFixtureAssumePath
+  if ($LASTEXITCODE -ne 0) { throw "The Terraform-input skip-worktree fixture could not be set." }
+  $terraformFixtureSkipSet = $true
+  $skipWorktreeRejected = $false
+  try { Assert-NoUntrackedTerraformInputs } catch { $skipWorktreeRejected = $true }
+  if (-not $skipWorktreeRejected) { throw "A skip-worktree Terraform index flag was accepted." }
+  & git -C $repositoryRoot update-index --no-skip-worktree -- $terraformFixtureAssumePath
+  if ($LASTEXITCODE -ne 0) { throw "The Terraform-input skip-worktree fixture could not be cleared." }
+  $terraformFixtureSkipSet = $false
+
+  $trackedTemplatePath = Join-Path $terraformFixtureSource "template.txt"
+  Remove-Item -LiteralPath $trackedTemplatePath -Force
+  $missingTrackedRejected = $false
+  try { Assert-NoUntrackedTerraformInputs } catch { $missingTrackedRejected = $true }
+  if (-not $missingTrackedRejected) { throw "A missing tracked Terraform template input was accepted." }
+} finally {
+  if ($terraformFixtureAssumeSet -and (Test-Path -LiteralPath (Join-Path $repositoryRoot ".git"))) {
+    & git -C $repositoryRoot update-index --no-assume-unchanged -- $terraformFixtureAssumePath 2>$null
+  }
+  if ($terraformFixtureSkipSet -and (Test-Path -LiteralPath (Join-Path $repositoryRoot ".git"))) {
+    & git -C $repositoryRoot update-index --no-skip-worktree -- $terraformFixtureAssumePath 2>$null
+  }
+  if (-not [string]::IsNullOrEmpty($savedFixtureExclude) -and
+      (Test-Path -LiteralPath (Join-Path $repositoryRoot ".git\info\exclude"))) {
+    [IO.File]::WriteAllText((Join-Path $repositoryRoot ".git\info\exclude"), $savedFixtureExclude, [Text.UTF8Encoding]::new($false))
+  }
+  if ($terraformFixtureConfigSet -and (Test-Path -LiteralPath (Join-Path $repositoryRoot ".git"))) {
+    & git -C $repositoryRoot config --unset user.name 2>$null
+    & git -C $repositoryRoot config --unset user.email 2>$null
+  }
+  $repositoryRoot = $originalRepositoryRoot
+  if (Test-Path -LiteralPath $terraformInputFixtureRoot) {
+    Remove-Item -LiteralPath $terraformInputFixtureRoot -Recurse -Force
+  }
+}
+Assert-NoUntrackedTerraformInputs
 
 $logTask = [pscustomobject]@{ taskArn = "arn:aws:ecs:us-east-2:111122223333:task/cluster/$('a' * 32)" }
 $logContainer = [pscustomobject]@{ name = "database-migration" }
@@ -763,6 +1053,21 @@ foreach ($mutation in @("duplicate", "unknown", "sensitive")) {
 }
 $handoffRoot = Join-Path $terraformRoot "post-migration-handoff-test-$([guid]::NewGuid().ToString('N'))"
 $null = New-Item -ItemType Directory -Path $handoffRoot
+$script:handoffGitRecords = @(
+  "M`tscripts/operate-development-document-migration.ps1",
+  "M`tscripts/tests/development-document-migration-operator.tests.ps1"
+)
+$script:handoffGitPatch = @("fixture retained-handoff patch")
+function git {
+  $arguments = @($args)
+  if ($arguments -contains "merge-base") { $global:LASTEXITCODE = 0; return }
+  if ($arguments -contains "--name-status") { $global:LASTEXITCODE = 0; return $script:handoffGitRecords }
+  if ($arguments -contains "--numstat") { $global:LASTEXITCODE = 0; return @("1`t1`tscripts/operate-development-document-migration.ps1", "1`t1`tscripts/tests/development-document-migration-operator.tests.ps1") }
+  if ($arguments -contains "cat-file") { $global:LASTEXITCODE = 0; return "blob" }
+  if ($arguments -contains "--full-index") { $global:LASTEXITCODE = 0; return $script:handoffGitPatch }
+  $global:LASTEXITCODE = 1
+  throw "Unexpected retained-handoff mocked Git invocation: $($arguments -join ' ')"
+}
 try {
   $handoffPlanPath = Join-Path $handoffRoot "verified.tfplan"
   [IO.File]::WriteAllText($handoffPlanPath, "verified-current-plan", [Text.UTF8Encoding]::new($false))
@@ -857,6 +1162,63 @@ try {
     -State $retainedState
 } catch { $stateMismatchRejected = $true }
 if (-not $stateMismatchRejected) { throw "PlanTask accepted a retained baseline from a stale state serial." }
+
+$staleBaselineMetadata = [pscustomobject]@{
+  StateLineage = "472ef790-b249-45ec-817f-718005980d9e"
+  StateSerial = 107
+}
+$currentPlanningState = [pscustomobject]@{
+  Lineage = $staleBaselineMetadata.StateLineage
+  Serial = 108
+}
+Assert-RetainedBaselinePlanningState -Metadata $staleBaselineMetadata `
+  -State $currentPlanningState -AllowExactCompleteDark107To108
+foreach ($stateCase in @(
+    @{ metadata = $staleBaselineMetadata; state = $currentPlanningState; allow = $false },
+    @{ metadata = [pscustomobject]@{ StateLineage = $staleBaselineMetadata.StateLineage; StateSerial = 106 }; state = $currentPlanningState; allow = $true },
+    @{ metadata = $staleBaselineMetadata; state = [pscustomobject]@{ Lineage = $staleBaselineMetadata.StateLineage; Serial = 109 }; allow = $true },
+    @{ metadata = $staleBaselineMetadata; state = [pscustomobject]@{ Lineage = "87654321-4321-4321-4321-cba987654321"; Serial = 108 }; allow = $true }
+  )) {
+  $rejected = $false
+  try {
+    Assert-RetainedBaselinePlanningState -Metadata $stateCase.metadata -State $stateCase.state `
+      -AllowExactCompleteDark107To108:$stateCase.allow
+  } catch { $rejected = $true }
+  if (-not $rejected) { throw "An unsafe retained-baseline planning-state transition was accepted." }
+}
+Assert-ExactTerraformStateIdentity -Expected $currentPlanningState -Actual $currentPlanningState
+$planningDriftRejected = $false
+try {
+  Assert-ExactTerraformStateIdentity -Expected $currentPlanningState `
+    -Actual ([pscustomobject]@{ Lineage = $currentPlanningState.Lineage; Serial = 109 })
+} catch { $planningDriftRejected = $true }
+if (-not $planningDriftRejected) { throw "ApplyTask accepted state drift after planning identity was bound." }
+
+$exactStaleHandoff = @{
+  Schema = "3"; Stage = "complete-dark"
+  BaselineOperatorSha = "9d290416c61847f1682157c08312cdb920d42107"
+  PlanSha256 = "2143c836f9c55d2126efef55b314f167b35d593d64338791cb6c3837c6e2a6a4"
+  MetadataSha256 = "e0efc63e7c17685e363e23f15f7f1d39e83c46beff3f08fdb768bd67e78b8011"
+  Metadata = $staleBaselineMetadata
+}
+if (-not (Test-ExactCompleteDarkStaleStateHandoff @exactStaleHandoff)) {
+  throw "The exact retained CompleteDark serial-107 handoff was not recognized."
+}
+foreach ($handoffMutation in @(
+    @{ Name = "Schema"; Value = "4" },
+    @{ Name = "Stage"; Value = "parser-dark" },
+    @{ Name = "BaselineOperatorSha"; Value = "8" * 40 },
+    @{ Name = "PlanSha256"; Value = "a" * 64 },
+    @{ Name = "MetadataSha256"; Value = "b" * 64 },
+    @{ Name = "Metadata"; Value = [pscustomobject]@{ StateLineage = "87654321-4321-4321-4321-cba987654321"; StateSerial = 107 } },
+    @{ Name = "Metadata"; Value = [pscustomobject]@{ StateLineage = $staleBaselineMetadata.StateLineage; StateSerial = 106 } }
+  )) {
+  $mutatedHandoff = @{} + $exactStaleHandoff
+  $mutatedHandoff[$handoffMutation.Name] = $handoffMutation.Value
+  if (Test-ExactCompleteDarkStaleStateHandoff @mutatedHandoff) {
+    throw "The one-shot stale-state handoff accepted a wrong $($handoffMutation.Name)."
+  }
+}
 
 $retainedRoot = Join-Path $terraformRoot "retained-baseline-test-$([guid]::NewGuid().ToString('N'))"
 $null = New-Item -ItemType Directory -Path $retainedRoot
@@ -958,11 +1320,246 @@ try {
   }
   catch { $currentStateMismatchRejected = $true }
   if (-not $currentStateMismatchRejected) { throw "PlanTask accepted a retained sidecar from a changed current state." }
+
+  $planningState = [pscustomobject]@{ Lineage = $retainedState.Lineage; Serial = $retainedState.Serial }
+  $script:retainedStateFixture = $planningState
+  $ancestorPlan = $retainedPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $ancestorPlan.variables.document_processing_deployment_stage.value = "complete-dark"
+  $ancestorPlan.variables.document_parser_invocation_qualified_arn.value =
+    "arn:aws:lambda:us-east-2:${ExpectedAccountId}:function:ai-job-apply-development-document-parser:7"
+  $retainedMigrationImage = "111122223333.dkr.ecr.us-east-2.amazonaws.com/ai-job-apply/migration@sha256:$('d' * 64)"
+  $ancestorPlan.variables.migration_image.value = $retainedMigrationImage
+  $baselineOperatorSha = "8" * 40
+  $currentOperatorSha = "9" * 40
+  $operatorSourceSha = $currentOperatorSha
+  $fullRecords = @(
+    "M`tscripts/operate-development-document-migration.ps1",
+    "A`tdocs/product/delivery/evidence/d1-new.md"
+  )
+  $fullPatch = @("fixture complete-dark patch")
+  $reviewedBaselineDelta = Get-TextSha256 ("development-operator-delta-v1`n$baselineOperatorSha`n$currentOperatorSha`n--name-status--`n" +
+    (($fullRecords -join "`n") + "`n--patch--`n" + ($fullPatch -join "`n") + "`n"))
+  $ancestorSidecar = [ordered]@{
+    SchemaVersion = "4"; Kind = "development-document-zero-drift-baseline"; Environment = "development"
+    AccountId = $ExpectedAccountId; Region = $Region; ReleaseSourceSha = $baselineOperatorSha
+    OperatorSourceSha = $baselineOperatorSha
+    OperatorDeltaSha256 = Get-TextSha256 "development-operator-delta-v1`n$baselineOperatorSha`n$baselineOperatorSha`n--name-status--`n--patch--`n"
+    StateLineage = $retainedState.Lineage; StateSerial = $retainedState.Serial; Stage = "complete-dark"
+    ReceiptSha256 = "b" * 64
+    ParserQualifiedArn = $ancestorPlan.variables.document_parser_invocation_qualified_arn.value
+    MigrationImage = $retainedMigrationImage; PlanPath = $retainedPath; PlanSha256 = $retainedSha
+    Applyable = $false; MeaningfulChanges = 0; CreatedAt = "2026-08-15T20:00:00.0000000Z"
+  }
+  function Get-PlanJson([string]$Path) { return $script:ancestorPlanFixture }
+  $script:ancestorPlanFixture = $ancestorPlan
+  $script:ancestorGitMode = "valid"
+  function git {
+    $arguments = @($args)
+    if ($arguments -contains "merge-base") { $global:LASTEXITCODE = if ($script:ancestorGitMode -ceq "nonancestor") { 1 } else { 0 }; return }
+    if ($arguments -contains "--name-status") { $global:LASTEXITCODE = 0; return $script:ancestorRecordsFixture }
+    if ($arguments -contains "--numstat") { $global:LASTEXITCODE = 0; return @("1`t1`tscripts/operate-development-document-migration.ps1", "1`t0`tdocs/product/delivery/evidence/d1-new.md") }
+    if ($arguments -contains "ls-tree") { $global:LASTEXITCODE = 0; return "100644 blob $('a' * 40)`tfixture" }
+    if ($arguments -contains "--full-index") { $global:LASTEXITCODE = 0; return $script:ancestorPatchFixture }
+    $global:LASTEXITCODE = 1
+    throw "Unexpected retained-ancestor mocked Git invocation: $($arguments -join ' ')"
+  }
+  $script:ancestorRecordsFixture = $fullRecords
+  $script:ancestorPatchFixture = $fullPatch
+  try {
+    [IO.File]::WriteAllText($sidecarPath, ($ancestorSidecar | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
+    $ancestorSidecarSha = Get-FileSha256 -Path $sidecarPath
+    $ancestorEvidence = Read-RetainedMigrationBaseline -PlanPath $retainedPath -PlanSha256 $retainedSha `
+      -MetadataSha256 $ancestorSidecarSha `
+      -ReviewedBaselineToCurrentDeltaSha256 $reviewedBaselineDelta -RequireCurrentState
+    if ([string]$ancestorEvidence.ReleaseSourceSha -cne $baselineOperatorSha -or
+        [string]$ancestorEvidence.OperatorSourceSha -cne $baselineOperatorSha -or
+        [string]$ancestorEvidence.CurrentOperatorSourceSha -cne $currentOperatorSha -or
+        [string]$ancestorEvidence.BaselineToCurrentDeltaSha256 -cne $reviewedBaselineDelta -or
+        [long]$ancestorEvidence.PlanningState.Serial -ne [long]$retainedState.Serial -or
+        [string]$ancestorEvidence.Metadata.MigrationImage -ceq $MigrationImage -or
+        [string]$ancestorEvidence.Metadata.Stage -cne "complete-dark") {
+      throw "The reviewed ancestor CompleteDark baseline-to-current handoff was not preserved."
+    }
+
+    foreach ($reviewed in @("", ("0" * 64))) {
+      $rejected = $false
+      try {
+        $null = Read-RetainedMigrationBaseline -PlanPath $retainedPath -PlanSha256 $retainedSha `
+          -MetadataSha256 $ancestorSidecarSha -ReviewedBaselineToCurrentDeltaSha256 $reviewed
+      } catch { $rejected = $true }
+      if (-not $rejected) { throw "An ancestor CompleteDark baseline accepted a missing or wrong review hash." }
+    }
+
+    $script:ancestorGitMode = "nonancestor"
+    $nonancestorRejected = $false
+    try {
+      $null = Read-RetainedMigrationBaseline -PlanPath $retainedPath -PlanSha256 $retainedSha `
+        -MetadataSha256 $ancestorSidecarSha `
+        -ReviewedBaselineToCurrentDeltaSha256 $reviewedBaselineDelta
+    } catch { $nonancestorRejected = $true }
+    if (-not $nonancestorRejected) { throw "A nonancestor CompleteDark baseline was accepted." }
+    $script:ancestorGitMode = "valid"
+
+    $parserAncestorSidecar = $ancestorSidecar | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+    $parserAncestorSidecar.Stage = "parser-dark"
+    $parserAncestorSidecar.ParserQualifiedArn = ""
+    $ancestorPlan.variables.document_processing_deployment_stage.value = "parser-dark"
+    $ancestorPlan.variables.document_parser_invocation_qualified_arn.value = ""
+    [IO.File]::WriteAllText($sidecarPath, ($parserAncestorSidecar | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
+    $parserAncestorSha = Get-FileSha256 -Path $sidecarPath
+    $parserAncestorRejected = $false
+    try {
+      $null = Read-RetainedMigrationBaseline -PlanPath $retainedPath -PlanSha256 $retainedSha `
+        -MetadataSha256 $parserAncestorSha `
+        -ReviewedBaselineToCurrentDeltaSha256 $reviewedBaselineDelta
+    } catch { $parserAncestorRejected = $true }
+    if (-not $parserAncestorRejected) { throw "An ancestor ParserDark baseline crossed an operator revision." }
+
+    $ancestorPlan.variables.document_processing_deployment_stage.value = "complete-dark"
+    $ancestorPlan.variables.document_parser_invocation_qualified_arn.value = $ancestorSidecar.ParserQualifiedArn
+    $tamperedSidecar = $ancestorSidecar | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+    $tamperedSidecar.OperatorDeltaSha256 = "f" * 64
+    [IO.File]::WriteAllText($sidecarPath, ($tamperedSidecar | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
+    $tamperedSidecarSha = Get-FileSha256 -Path $sidecarPath
+    $metadataTamperRejected = $false
+    try {
+      $null = Read-RetainedMigrationBaseline -PlanPath $retainedPath -PlanSha256 $retainedSha `
+        -MetadataSha256 $tamperedSidecarSha `
+        -ReviewedBaselineToCurrentDeltaSha256 $reviewedBaselineDelta
+    } catch { $metadataTamperRejected = $true }
+    if (-not $metadataTamperRejected) { throw "A retained CompleteDark baseline with a tampered stored delta was accepted." }
+
+    $tamperedImageSidecar = $ancestorSidecar | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+    $tamperedImageSidecar.MigrationImage = $MigrationImage
+    [IO.File]::WriteAllText($sidecarPath, ($tamperedImageSidecar | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
+    $tamperedImageSha = Get-FileSha256 -Path $sidecarPath
+    $imageTamperRejected = $false
+    try {
+      $null = Read-RetainedMigrationBaseline -PlanPath $retainedPath -PlanSha256 $retainedSha `
+        -MetadataSha256 $tamperedImageSha `
+        -ReviewedBaselineToCurrentDeltaSha256 $reviewedBaselineDelta
+    } catch { $imageTamperRejected = $true }
+    if (-not $imageTamperRejected) { throw "A schema-4 baseline metadata image not matching its retained plan was accepted." }
+
+    $taskBinding = [pscustomobject]@{
+      appliedPlanPath = $ancestorEvidence.PlanPath; appliedPlanSha256 = $ancestorEvidence.PlanSha256
+      appliedBaselineMetadataPath = $ancestorEvidence.MetadataPath
+      appliedBaselineMetadataSha256 = $ancestorEvidence.MetadataSha256
+      appliedBaselineStage = $ancestorEvidence.Metadata.Stage
+      appliedBaselineStateLineage = $ancestorEvidence.Metadata.StateLineage
+      appliedBaselineStateSerial = $ancestorEvidence.Metadata.StateSerial
+      appliedBaselineReceiptSha256 = $ancestorEvidence.Metadata.ReceiptSha256
+      appliedBaselineParserQualifiedArn = $ancestorEvidence.Metadata.ParserQualifiedArn
+      appliedBaselineReleaseSourceSha = $ancestorEvidence.ReleaseSourceSha
+      appliedBaselineOperatorSourceSha = $ancestorEvidence.OperatorSourceSha
+      appliedBaselineOperatorDeltaSha256 = $ancestorEvidence.OperatorDeltaSha256
+      appliedBaselineCurrentOperatorSourceSha = $ancestorEvidence.CurrentOperatorSourceSha
+      appliedBaselineToCurrentDeltaSha256 = $ancestorEvidence.BaselineToCurrentDeltaSha256
+      planningStateLineage = $ancestorEvidence.PlanningState.Lineage
+      planningStateSerial = $ancestorEvidence.PlanningState.Serial
+    }
+    Assert-TaskMetadataBaselineBinding -TaskMetadata $taskBinding -Baseline $ancestorEvidence
+    foreach ($property in @("appliedBaselineCurrentOperatorSourceSha", "appliedBaselineToCurrentDeltaSha256")) {
+      $tamperedBinding = $taskBinding | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+      $tamperedBinding.($property) = if ($property -match "SourceSha$") { "7" * 40 } else { "7" * 64 }
+      $bindingRejected = $false
+      try { Assert-TaskMetadataBaselineBinding -TaskMetadata $tamperedBinding -Baseline $ancestorEvidence } catch { $bindingRejected = $true }
+      if (-not $bindingRejected) { throw "ApplyTask accepted tampered task metadata '$property'." }
+    }
+
+    $currentSidecar = $ancestorSidecar | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+    $currentSidecar.ReleaseSourceSha = $currentOperatorSha
+    $currentSidecar.OperatorSourceSha = $currentOperatorSha
+    $currentSidecar.OperatorDeltaSha256 = Get-TextSha256 "development-operator-delta-v1`n$currentOperatorSha`n$currentOperatorSha`n--name-status--`n--patch--`n"
+    $currentSidecar.StateSerial = $planningState.Serial
+    [IO.File]::WriteAllText($sidecarPath, ($currentSidecar | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
+    $currentSchema4Sha = Get-FileSha256 -Path $sidecarPath
+    $null = Read-RetainedMigrationBaseline -PlanPath $retainedPath -PlanSha256 $retainedSha `
+      -MetadataSha256 $currentSchema4Sha -RequireCurrentState
+    $extraCurrentReviewRejected = $false
+    try {
+      $null = Read-RetainedMigrationBaseline -PlanPath $retainedPath -PlanSha256 $retainedSha `
+        -MetadataSha256 $currentSchema4Sha `
+        -ReviewedBaselineToCurrentDeltaSha256 $reviewedBaselineDelta
+    } catch { $extraCurrentReviewRejected = $true }
+    if (-not $extraCurrentReviewRejected) { throw "An exact-current schema-4 baseline accepted an unnecessary review hash." }
+  } finally {
+    Remove-Item -LiteralPath Function:\git -Force
+    Remove-Variable -Name ancestorGitMode -Scope Script -ErrorAction SilentlyContinue
+    Remove-Variable -Name ancestorRecordsFixture -Scope Script -ErrorAction SilentlyContinue
+    Remove-Variable -Name ancestorPatchFixture -Scope Script -ErrorAction SilentlyContinue
+    Remove-Variable -Name ancestorPlanFixture -Scope Script -ErrorAction SilentlyContinue
+  }
 }
 finally {
+  Remove-Item -LiteralPath Function:\git -Force -ErrorAction SilentlyContinue
+  Remove-Variable -Name handoffGitRecords -Scope Script -ErrorAction SilentlyContinue
+  Remove-Variable -Name handoffGitPatch -Scope Script -ErrorAction SilentlyContinue
   Remove-Item Function:\Get-PlanJson -ErrorAction SilentlyContinue
   Remove-Item Function:\Get-CurrentTerraformStateIdentity -ErrorAction SilentlyContinue
   if (Test-Path -LiteralPath $retainedRoot) { Remove-Item -LiteralPath $retainedRoot -Recurse -Force }
+}
+
+$taskMetadataRoot = Join-Path $operatorRoot "task-metadata-test-$([guid]::NewGuid().ToString('N'))"
+$null = New-Item -ItemType Directory -Path $taskMetadataRoot
+try {
+  $taskPlanFixturePath = Join-Path $taskMetadataRoot "task.tfplan"
+  $appliedPlanFixturePath = Join-Path $taskMetadataRoot "applied.tfplan"
+  $appliedBaselineFixturePath = "$appliedPlanFixturePath.baseline.json"
+  [IO.File]::WriteAllText($taskPlanFixturePath, "task-plan", [Text.UTF8Encoding]::new($false))
+  [IO.File]::WriteAllText($appliedPlanFixturePath, "applied-plan", [Text.UTF8Encoding]::new($false))
+  [IO.File]::WriteAllText($appliedBaselineFixturePath, "applied-baseline", [Text.UTF8Encoding]::new($false))
+  $taskPlanFixtureSha = Get-FileSha256 -Path $taskPlanFixturePath
+  $taskMetadataFixture = [ordered]@{
+    schemaVersion = 2; kind = "development-document-migration-task"; environment = "development"
+    region = $Region; accountId = $ExpectedAccountId; stateBucket = "fixture-state-bucket"
+    sourceSha = $SourceSha; migrationImage = $MigrationImage
+    appliedPlanPath = $appliedPlanFixturePath
+    appliedPlanSha256 = Get-FileSha256 -Path $appliedPlanFixturePath
+    appliedBaselineMetadataPath = $appliedBaselineFixturePath
+    appliedBaselineMetadataSha256 = Get-FileSha256 -Path $appliedBaselineFixturePath
+    appliedBaselineStage = "complete-dark"; appliedBaselineStateLineage = $retainedState.Lineage
+    appliedBaselineStateSerial = 107; appliedBaselineReceiptSha256 = "b" * 64
+    appliedBaselineParserQualifiedArn = "arn:aws:lambda:us-east-2:${ExpectedAccountId}:function:ai-job-apply-development-document-parser:7"
+    appliedBaselineReleaseSourceSha = "7" * 40; appliedBaselineOperatorSourceSha = "7" * 40
+    appliedBaselineOperatorDeltaSha256 = "c" * 64
+    appliedBaselineCurrentOperatorSourceSha = "8" * 40
+    appliedBaselineToCurrentDeltaSha256 = "d" * 64
+    planningStateLineage = $retainedState.Lineage; planningStateSerial = 108
+    taskPlanPath = $taskPlanFixturePath; taskPlanSha256 = $taskPlanFixtureSha
+    meaningfulChanges = 1; destructiveChanges = 0; createdAt = "2026-08-15T21:00:00.0000000Z"
+  }
+  $StateBucket = "fixture-state-bucket"
+  $taskMetadataFixturePath = "$taskPlanFixturePath.metadata.json"
+  [IO.File]::WriteAllText($taskMetadataFixturePath, ($taskMetadataFixture | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
+  $taskMetadataFixtureSha = Get-FileSha256 -Path $taskMetadataFixturePath
+  $historicalTaskMetadata = Read-TaskPlanMetadata -PlanPath $taskPlanFixturePath `
+    -PlanSha256 $taskPlanFixtureSha -MetadataSha256 $taskMetadataFixtureSha
+  if ([string]$historicalTaskMetadata.appliedBaselineCurrentOperatorSourceSha -ceq $operatorSourceSha) {
+    throw "The generic task-metadata fixture did not exercise a historical apply-operator binding."
+  }
+
+  $tamperedTaskMetadata = $taskMetadataFixture | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+  $tamperedTaskMetadata.planningStateSerial = 109
+  [IO.File]::WriteAllText($taskMetadataFixturePath, ($tamperedTaskMetadata | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
+  $checksumTamperRejected = $false
+  try {
+    $null = Read-TaskPlanMetadata -PlanPath $taskPlanFixturePath `
+      -PlanSha256 $taskPlanFixtureSha -MetadataSha256 $taskMetadataFixtureSha
+  } catch { $checksumTamperRejected = $true }
+  if (-not $checksumTamperRejected) { throw "A changed task-plan metadata sidecar retained its prior reviewed checksum." }
+
+  $tamperedTaskMetadata | Add-Member -NotePropertyName unexpected -NotePropertyValue $true
+  [IO.File]::WriteAllText($taskMetadataFixturePath, ($tamperedTaskMetadata | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
+  $extraFieldSha = Get-FileSha256 -Path $taskMetadataFixturePath
+  $extraFieldRejected = $false
+  try {
+    $null = Read-TaskPlanMetadata -PlanPath $taskPlanFixturePath `
+      -PlanSha256 $taskPlanFixtureSha -MetadataSha256 $extraFieldSha
+  } catch { $extraFieldRejected = $true }
+  if (-not $extraFieldRejected) { throw "Task-plan metadata accepted an unreviewed extra field under a recomputed checksum." }
+} finally {
+  if (Test-Path -LiteralPath $taskMetadataRoot) { Remove-Item -LiteralPath $taskMetadataRoot -Recurse -Force }
 }
 
 $oneItemList = ConvertTo-TerraformEnvironmentValue -Value @("http://localhost:3000")

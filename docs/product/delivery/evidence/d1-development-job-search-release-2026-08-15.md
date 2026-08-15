@@ -35,6 +35,21 @@ objectives, real source data, or production readiness.
   `e0efc63e7c17685e363e23f15f7f1d39e83c46beff3f08fdb768bd67e78b8011`.
   Two independent reviews found zero meaningful changes and preserved the current parser with the
   processor's retained numeric parser pin.
+- Pre-deployment review for the later stale-cursor package found that this valid retained baseline
+  records the earlier migration-operator source. The pre-correction `PlanTask`/`ApplyTask` boundary
+  required that operator source to equal current `main`, while the document-dark recovery
+  allowlist correctly refuses the unrelated acceptance-package delta. No task-definition plan or
+  AWS mutation was attempted. A local migration-operator correction now requires an independently
+  reviewed checksum of the complete canonical baseline-operator-to-current Git delta on both
+  actions, accepts that handoff only from an ancestor `CompleteDark` baseline, and binds both
+  operator identities, the historical retained-state identity, the exact planning-state identity,
+  the delta, and the task plan; the adjacent task metadata is independently checksum-reviewed for
+  every downstream action. The only stale-state case is the exact accepted serial-107 plan/sidecar
+  named above handed to the same lineage at serial 108;
+  every other baseline must equal the planning state. The correction is locally verified under
+  PowerShell 7 and Windows PowerShell 5.1, and two independent reviews accept its exact frozen
+  bytes and synchronized documentation; merge and deployment remain open. The serial-107 baseline
+  is historical evidence, not standalone authorization to apply a new task definition.
 - The [gateway release operator](../../../../scripts/operate-development-gateway-release.ps1)
   ran its tests and dependency audit, built twice byte-for-byte, and conditionally published four
   previously unused immutable objects: ZIP, CycloneDX 1.6 SBOM, manifest, and checksum.
@@ -90,10 +105,13 @@ objectives, real source data, or production readiness.
 ## Remaining D1-005 gates
 
 - The [Jobs-owned stale-cursor acceptance foundation](d1-job-search-stale-cursor-acceptance-foundation-2026-08-15.md)
-  is implemented, independently reviewed, and locally verified after this release. It still
-  requires merge, immutable migration-image and task-definition release, and execution of the
-  exact guarded operator against the deployed boundary; do not replace those gates with ad hoc SQL
-  or a general command override.
+  is implemented, independently accepted, and locally verified after this release. Pre-deployment
+  review also produced the
+  independently accepted but unmerged retained-baseline source-handoff correction described above.
+  It still requires merge, exact-merged-source checks, immutable migration-image publication
+  and receipt review, a separately reviewed baseline-delta-bound task-definition plan/apply, and
+  the exact guarded AWS acceptance and receipt verification; do not replace those gates with ad
+  hoc SQL or a general command override.
 - Prove a genuine cursor becomes `409 job_search_catalog_changed` after one explicitly reviewed
   catalog revision and that a fresh restart returns the unchanged ordered result set without
   duplicates or omissions.

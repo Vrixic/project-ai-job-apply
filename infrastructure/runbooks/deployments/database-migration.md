@@ -32,12 +32,75 @@ evidence.
 
 The task release is deliberately review-separated:
 
+When an ancestor `CompleteDark` baseline is required, derive the review value independently from
+the exact merged commits before invoking `PlanTask`. Run this from clean `main == origin/main`,
+inspect the detected records and `numstat` before accepting the digest, and stop on any rename,
+copy, binary record, unsupported status, non-regular mode, or Git error. The operator independently
+repeats these checks; this review command does not authorize planning:
+
+```powershell
+$baselineOperatorSha = '9d290416c61847f1682157c08312cdb920d42107'
+$currentOperatorSha = '<MERGED_40_CHARACTER_COMMIT>'
+$repo = (& git rev-parse --show-toplevel).Trim()
+if ($LASTEXITCODE -ne 0) { throw 'Repository root resolution failed.' }
+& git -C $repo merge-base --is-ancestor $baselineOperatorSha $currentOperatorSha
+if ($LASTEXITCODE -ne 0) { throw 'The retained baseline operator is not an ancestor.' }
+$detected = @(& git -C $repo diff --name-status --find-renames --find-copies-harder `
+    "$baselineOperatorSha..$currentOperatorSha")
+if ($LASTEXITCODE -ne 0 -or $detected.Count -eq 0 -or
+    @($detected | Where-Object { $_ -match '^[RC][0-9]*\t' }).Count -ne 0) {
+  throw 'The delta is unreadable, empty, renamed, or copied.'
+}
+$records = @(& git -C $repo diff --name-status --no-renames `
+    "$baselineOperatorSha..$currentOperatorSha")
+if ($LASTEXITCODE -ne 0) { throw 'The canonical name-status delta failed.' }
+$numstat = @(& git -C $repo diff --numstat --no-renames `
+    "$baselineOperatorSha..$currentOperatorSha")
+if ($LASTEXITCODE -ne 0 -or $numstat.Count -ne $records.Count -or
+    @($numstat | Where-Object { $_ -match '^-\t-\t' }).Count -ne 0) {
+  throw 'The canonical delta is binary or structurally ambiguous.'
+}
+$patch = @(& git -C $repo diff --full-index --binary --no-ext-diff --no-renames `
+    "$baselineOperatorSha..$currentOperatorSha")
+if ($LASTEXITCODE -ne 0) { throw 'The canonical patch failed.' }
+$payload = "development-operator-delta-v1`n$baselineOperatorSha`n$currentOperatorSha`n--name-status--`n" +
+  (($records -join "`n") + "`n--patch--`n" + ($patch -join "`n") + "`n")
+$utf8 = New-Object System.Text.UTF8Encoding($false)
+$sha256 = [Security.Cryptography.SHA256]::Create()
+try {
+  ($sha256.ComputeHash($utf8.GetBytes($payload)) |
+      ForEach-Object { $_.ToString('x2') }) -join ''
+} finally {
+  $sha256.Dispose()
+}
+```
+
+Independently inspect every `A`, `M`, or `D` path at the applicable commit with `git ls-tree` and
+require mode `100644` or `100755` plus object type `blob`. Record the resulting lowercase digest
+as `ReviewedBaselineToCurrentDeltaSha256`; do not reuse a digest after the merged commit changes.
+
 1. `PlanTask` verifies the merged source and immutable ECR artifact, reconstructs every existing
    Terraform input from the checksum-bound retained `ParserDark` or `CompleteDark` verification
    plan, and saves a refresh-backed plan. The adjacent `.baseline.json` sidecar is mandatory and
-   must bind the exact current source, account, region, absolute plan path/hash, Terraform 1.9.8
-   zero-change shape, current state lineage/serial, exact variable set, publication receipt,
-   rollout stage, and applicable parser-version pin. A KMS-prerequisite-only baseline is rejected.
+   must bind its exact release/operator source, account, region, absolute plan path/hash,
+   Terraform 1.9.8 zero-change shape, retained state lineage/serial, exact variable set,
+   publication receipt, rollout stage, and applicable parser-version pin. A
+   KMS-prerequisite-only baseline is rejected. An exact-current retained baseline requires
+   `-ReviewedBaselineToCurrentDeltaSha256` to be omitted. An older retained baseline is accepted
+   only from a schema-3 or schema-4 `CompleteDark` sidecar: its stored
+   release-to-baseline-operator delta must still validate, its operator commit must be an ancestor
+   of clean `main == origin/main`, and both `PlanTask` and `ApplyTask` must receive the
+   independently reviewed SHA-256 of the complete canonical baseline-operator-to-current Git
+   delta. The delta admits only unambiguous added, modified, or deleted regular blobs, with no
+   rename, copy, binary, missing, symlink, gitlink, or mode ambiguity; a missing, unexpected, or
+   mismatched checksum fails closed. This does not broaden the document-dark recovery allowlist.
+   Older Terraform state is not generally accepted. The sole stale-state handoff is the exact
+   reviewed schema-3 CompleteDark baseline at operator `9d290416c61847f1682157c08312cdb920d42107`,
+   plan SHA-256 `2143c836f9c55d2126efef55b314f167b35d593d64338791cb6c3837c6e2a6a4`,
+   metadata SHA-256 `e0efc63e7c17685e363e23f15f7f1d39e83c46beff3f08fdb768bd67e78b8011`,
+   lineage `472ef790-b249-45ec-817f-718005980d9e`, and serial `107`, and only when the
+   current planning state is the same lineage at serial `108`. Every other retained baseline must
+   equal the current planning-state identity.
    Pass the verifier's exact `BaselineMetadataSha256` as mandatory
    `-AppliedPlanMetadataSha256`; the operator checks those bytes before parsing the sidecar and
    cross-binds its stage and parser pin to the exact saved-plan variables. Retained, task-release,
@@ -47,11 +110,19 @@ The task release is deliberately review-separated:
    any other drift fail closed. The task plan rejects every meaningful change except a
    create-before-destroy replacement of `module.platform.aws_ecs_task_definition.migration[0]`
    caused only by the image digest.
-2. Independently inspect the saved plan and its `.metadata.json` sidecar, then pass the printed
-   SHA-256 to `ApplyTask`. Task metadata binds the retained plan and sidecar paths/checksums, stage,
-   state identity, receipt, and parser pin. The apply rechecks that complete handoff against live
-   state plus the artifact, plan semantics, encrypted state, task definition, empty cluster, and
-   zero-service boundary before reporting success.
+2. Independently inspect the saved plan and its `.metadata.json` sidecar, then pass both printed
+   SHA-256 values to `ApplyTask`. Task metadata binds the retained plan and sidecar paths/checksums,
+   stage, the historical retained state identity, the exact current planning state identity,
+   receipt, parser pin, retained release/operator identity, current operator identity, and
+   baseline-to-current delta checksum in task-metadata schema 2. The apply requires
+   the same reviewed delta argument used for planning and rederives it before rechecking that
+   complete handoff against live state plus the artifact, plan semantics, encrypted state, task
+   definition, empty cluster, and zero-service boundary. `ApplyTask` and every later task-plan
+   consumer require `-ReviewedTaskPlanMetadataSha256` in addition to the reviewed plan SHA. A
+   changed HEAD, planning-state lineage/serial, baseline sidecar, delta, or task metadata is a
+   blocker. The source guard checks the explicit remote-tracking ref, Git command exits, index
+   flags, every tracked Terraform-source byte, and every extra file below the Terraform source
+   root; only regular untracked `.tfplan` artifacts are permitted outside `.terraform`.
 3. `PlanExecution` resolves the exact applied task definition, two migration subnets, and one
    application security group into a JSON `run-task` request. Review its SHA-256. If an operator-
    only correction was merged after `ApplyTask`, the release SHA may be an ancestor of the clean

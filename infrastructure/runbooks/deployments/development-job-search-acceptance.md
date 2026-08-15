@@ -83,7 +83,21 @@ Publication does not authorize Terraform apply or ECS execution.
 
 Use only `PlanTask` and `ApplyTask` from the guarded
 [database-migration](database-migration.md) procedure. Start from the latest checksum-reviewed,
-refresh-backed zero-change CompleteDark baseline and its adjacent metadata sidecar:
+refresh-backed zero-change CompleteDark baseline and its adjacent metadata sidecar. If that
+baseline's recorded operator source is not the exact merged current source, Reviewer A must first
+inspect the complete canonical baseline-operator-to-current Git delta and independently record
+its SHA-256. The recorded baseline operator must be an ancestor of clean
+`main == origin/main`; do not refresh or broaden the document-dark recovery allowlist merely to
+admit this release delta. Use the byte-identical derivation and regular-blob inspection in the
+[database migration runbook](database-migration.md), and recompute it after any merged-source
+change.
+
+For this release, the only permitted stale-state handoff is the exact schema-3 `CompleteDark`
+baseline at operator `9d290416c61847f1682157c08312cdb920d42107`, plan SHA-256
+`2143c836f9c55d2126efef55b314f167b35d593d64338791cb6c3837c6e2a6a4`, sidecar SHA-256
+`e0efc63e7c17685e363e23f15f7f1d39e83c46beff3f08fdb768bd67e78b8011`, lineage
+`472ef790-b249-45ec-817f-718005980d9e`, and retained serial `107`, while the current planning state
+is the same lineage at serial `108`. This exception is not a general stale-baseline allowance:
 
 ```powershell
 .\scripts\operate-development-document-migration.ps1 -Action PlanTask `
@@ -92,8 +106,16 @@ refresh-backed zero-change CompleteDark baseline and its adjacent metadata sidec
   -MigrationImage EXACT_IMAGE_URI_AT_PLATFORM_DIGEST `
   -AppliedPlanPath CURRENT_ZERO_CHANGE_BASELINE `
   -AppliedPlanSha256 REVIEWED_BASELINE_SHA256 `
-  -AppliedPlanMetadataSha256 REVIEWED_BASELINE_METADATA_SHA256
+  -AppliedPlanMetadataSha256 REVIEWED_BASELINE_METADATA_SHA256 `
+  -ReviewedBaselineToCurrentDeltaSha256 REVIEWED_BASELINE_TO_CURRENT_DELTA_SHA256
 ```
+
+Omit `-ReviewedBaselineToCurrentDeltaSha256` only when the retained baseline already binds the
+exact current operator source. An ancestor baseline is accepted only from schema-3 or schema-4
+`CompleteDark` metadata, with its stored release-to-operator binding intact and an exact reviewed
+delta containing only unambiguous added, modified, or deleted blobs. Missing review, a wrong
+checksum, a nonancestor, rename, binary/non-blob record, dirty/divergent source, or changed current
+HEAD is a blocker.
 
 Reviewer A must inspect the saved plan, its metadata, and their hashes. The only meaningful change
 allowed is the create-before-destroy replacement of
@@ -102,6 +124,13 @@ default container command must remain `runner/dist/src/main.js`; the task must r
 non-root, read-only-root, `linux/amd64` Fargate container with only the `DATABASE_URL` secret and
 the existing application log boundary. Any other resource, output, variable, IAM, network,
 secret, runtime, or trigger change is a blocker.
+
+Task-metadata schema 2 must preserve the retained release/operator/delta binding, the exact
+current operator source, the reviewed baseline-to-current delta checksum, the historical retained
+state identity, and the exact current planning-state identity. Record the returned `PlanPath`,
+`PlanSha256`, `PlanMetadataPath`, and `PlanMetadataSha256`. Reviewer A must rehash and confirm both
+closed files and those fields in addition to the existing baseline plan, state, stage, receipt,
+and parser-pin handoff.
 
 Apply only those reviewed bytes:
 
@@ -112,8 +141,15 @@ Apply only those reviewed bytes:
   -MigrationImage EXACT_IMAGE_URI_AT_PLATFORM_DIGEST `
   -TaskPlanPath REVIEWED_TASK_PLAN `
   -ReviewedTaskPlanSha256 REVIEWED_TASK_PLAN_SHA256 `
-  -AppliedPlanMetadataSha256 REVIEWED_BASELINE_METADATA_SHA256
+  -ReviewedTaskPlanMetadataSha256 REVIEWED_TASK_PLAN_METADATA_SHA256 `
+  -AppliedPlanMetadataSha256 REVIEWED_BASELINE_METADATA_SHA256 `
+  -ReviewedBaselineToCurrentDeltaSha256 REVIEWED_BASELINE_TO_CURRENT_DELTA_SHA256
 ```
+
+Use the same omission rule for an exact-current baseline. `ApplyTask` must recompute the reviewed
+delta and revalidate the current clean source, every tracked Terraform-source byte, retained
+baseline bytes, exact planning-state lineage/serial, and every checksum-reviewed task-plan
+metadata binding before it consumes the reviewed plan.
 
 Do not continue to `PlanExecution` or `Execute` in the database-migration operator. This gate
 registers the image; it does not run the normal migration command. Confirm the new task-definition
@@ -334,6 +370,9 @@ credentials, or candidate/source content.
 Stop without improvising when any prerequisite or exact binding fails, including:
 
 - dirty, divergent, unmerged, or mismatched source;
+- a missing, unexpected, or mismatched reviewed baseline-to-current delta; a nonancestor retained
+  baseline operator; an ancestor baseline outside `CompleteDark`; or a changed source/state
+  binding between `PlanTask` and `ApplyTask`;
 - wrong account, region, caller type, state bucket, any non-blocked public-access setting, KMS
   boundary, state version, Terraform version, image, scan, source receipt, gateway artifact, alias,
   or code hash;
