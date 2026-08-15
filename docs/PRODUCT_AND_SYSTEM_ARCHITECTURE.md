@@ -1628,8 +1628,9 @@ Do not launch automated submission broadly until:
 
 The living delivery tracker is authoritative. Current dependency order is:
 
-1. Complete the open D1-002 generated-synthetic document-processing acceptance and the separately
-   reviewed activation sequence while keeping real resumes prohibited.
+1. Publish, deploy, and execute the locally verified D1-002 generated-synthetic direct-dark
+   acceptance packet while all document-processing triggers remain disabled; then stop for human
+   review of ADR-023 and the separate activation sequence. Keep real resumes prohibited.
 2. Complete D1-005's mutation-driven stale-cursor acceptance against the deployed gateway and its
    managed-OIDC/browser acceptance, then implement Matching-owned saved jobs, hard-constraint
    evaluation, and grounded explanations without cross-owner database access.

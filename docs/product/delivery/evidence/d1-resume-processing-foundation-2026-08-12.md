@@ -5,8 +5,10 @@
 D1-002 now has a locally implemented scan-result-to-proposal release candidate, and its development
 database migrations are deployed through Profile `0005` and Documents `0002`. It extends
 the already accepted development quarantine upload without granting the untrusted parser database
-access or general internet egress. No processing runtime is claimed as deployed, and real candidate
-resumes remain prohibited.
+access or general internet egress. At this record's initial acceptance no processing runtime was
+deployed; [later evidence](d1-development-job-search-release-2026-08-15.md) records the CompleteDark
+runtime with mapping, GuardDuty rule, and reconciler disabled. Real candidate resumes remain
+prohibited.
 
 ## Implemented boundary
 
@@ -53,7 +55,27 @@ slice.
 The same PostgreSQL integration suite must pass against the deployed development migration before
 the processing trigger can be enabled; the local disposable run does not replace deployed evidence.
 
-## Deployment sequence and next acceptance gate
+## 2026-08-15 direct-dark acceptance source update
+
+The generated-synthetic direct-dark acceptance packet is now implemented, independently reviewed,
+and locally verified. It binds four deterministic generated fixtures, exact runtime identities and
+upload destinations, byte-identical duplicate replay, explicit proposal review, contradiction
+invalidation, transactional rollback, durable recovery, exact database/object cleanup, value-free
+telemetry, and aggregate-only receipts. PowerShell 7 and 5.1 checks, Profile/Documents builds and
+unit tests, and 6/6 isolated PostgreSQL 16.14 lifecycle/recovery/refusal cases pass.
+
+At this local source-acceptance checkpoint the packet was not published, deployed, or run in AWS.
+Production container/image runtime smoke was not run because Docker was unavailable; only the static publisher smoke contract
+passes. Its direct Lambda calls fabricate an already-validated authorizer context and do not prove
+API Gateway routing, JWT/JWKS validation, or authorizer enforcement. It also does not prove
+GuardDuty service detection, EventBridge/SQS/event-source activation, a refresh-backed Terraform
+zero-drift plan, real-resume handling, or ADR-023 acceptance. All document-processing triggers
+remain disabled.
+
+## Original deployment sequence and current gate
+
+Steps 1–4 were subsequently completed. CompleteDark remains deployed with mapping, GuardDuty rule,
+and reconciler disabled; current work is step 5.
 
 1. Merge the exact verified revision, apply the updated bootstrap workload boundary, and verify that
    it permits the coordinator's narrowly scoped `sts:AssumeRole` while retaining the boundary's
@@ -66,8 +88,11 @@ the processing trigger can be enabled; the local disposable run does not replace
    verification. See [development migration evidence](d1-development-resume-processing-migration-2026-08-12.md).
 4. Create the coordinator/parser, queues, rules, policies, endpoints, and alarms dark; independently
    review and checksum-bind the plan before applying.
-5. Prove direct generated-synthetic clean, invalid, malware-test, duplicate, contradiction,
-   rollback, alarm, log-redaction, and zero-drift cases while public use remains disabled.
+5. Publish, deploy, and execute the locally verified direct generated-synthetic clean,
+   invalid, malware-test, duplicate, contradiction, rollback, alarm-health, log-redaction, and
+   cleanup packet while public use and all triggers remain disabled. This operator proves unchanged
+   state lineage/serial and the live boundary; the separately reviewed deployment Apply supplies
+   refresh-backed zero-drift evidence.
 6. Enable the SQS mapping and timeout reconciler first and the exact GuardDuty rule second, then
    perform candidate browser
    acceptance: upload a generated synthetic PDF/DOCX, observe terminal parsing, review proposals,

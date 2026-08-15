@@ -75,8 +75,10 @@ are implemented and deployed in development and synthetic staging. Phase 0 compl
 identity and canonical catalog foundations are complete, direct-entry profile facts and secure
 resume intake are deployed in development, document processing is deployed CompleteDark with its
 triggers disabled, and bounded canonical search and filters are released in synthetic development.
-Generated-synthetic document processing and stale-cursor acceptance, saved jobs, matching,
-reporting, application history, entitlements, and public job pages remain open. Real provider
+The generated-synthetic direct-dark document-processing acceptance packet is implemented and
+locally verified only; immutable image publication, deployment, AWS execution, and the
+separately human-reviewed activation sequence remain open. Stale-cursor acceptance, saved jobs,
+matching, reporting, application history, entitlements, and public job pages also remain open. Real provider
 ingestion, real candidate data, and production activation remain disabled behind their accountable
 release gates. Final public naming and the independent launch review remain D6 gates.
 

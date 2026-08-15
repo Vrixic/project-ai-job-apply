@@ -42,3 +42,9 @@ Every alert and privileged admin operation should link to a relevant runbook.
 - [Staging workload and initial cost acceptance](observability/staging-workload-and-cost.md) —
   Measures the fixed authenticated foundation workload, lean runtime signals, and attributable
   development/staging billing without exposing session or provider data.
+
+## Phase 1 procedures
+
+- [Development document-processing acceptance](deployments/development-document-processing-acceptance.md) —
+  Executes the generated-synthetic direct-dark document lifecycle with exact runtime, claim,
+  privacy, recovery, and cleanup guards while all document-processing triggers remain disabled.

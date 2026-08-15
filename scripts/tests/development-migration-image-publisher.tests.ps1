@@ -268,12 +268,16 @@ foreach ($required in @(
     '(?:Image)?ScanNotFoundException',
     'oci-layout://', '--network none', '--read-only', '--cap-drop ALL', 'migration-runtime-smoke:ok',
     'jobs/dist/src/search-acceptance.js', 'jobs/dist/src/run-search-acceptance.js',
+    'documents/dist/src/run-document-processing-acceptance.js',
     'schemaVersion     = 2', 'indexDigest', 'platformDigest', 'rootfsDiffIdSetSha256',
     'compressedLayerSetSha256', 'imageUri = "$($boundary.RepositoryUri)@$($readback.PlatformDigest)"',
     'ReviewedReceiptSha256', '[IO.File]::Replace($temporary, $Path, $backup)',
     'TerraformChanged        = $false', 'MigrationExecuted       = $false'
   )) {
   if (-not $source.Contains($required)) { throw "Migration image publisher guard is missing: $required" }
+}
+if (-not $source.Contains('for(const entrypoint of ["jobs/dist/src/search-acceptance.js","jobs/dist/src/run-search-acceptance.js","documents/dist/src/run-document-processing-acceptance.js"])await access(entrypoint)')) {
+  throw "The migration runtime smoke gate does not require the exact acceptance entrypoint set."
 }
 foreach ($forbidden in @("terraform apply", "ecs run-task", "register-task-definition", "BatchDeleteImage")) {
   if ($source.IndexOf($forbidden, [StringComparison]::OrdinalIgnoreCase) -ge 0) { throw "Forbidden operation: $forbidden" }
