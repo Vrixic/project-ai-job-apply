@@ -5,13 +5,13 @@
 The repository now has a Jobs-owned generated-synthetic contract and a dedicated fail-closed
 development operator for the remaining deployed stale-cursor acceptance. The original package is
 locally implemented and verified, but pre-deployment review found that the retained CompleteDark
-Terraform baseline is bound to an earlier migration-operator commit and therefore cannot be
-consumed after this package merges. A local correction now adds a separately reviewed,
+Terraform baseline is bound to an earlier migration-operator commit and therefore would not have
+been consumable after the package merge. The accepted correction adds a separately reviewed,
 canonical baseline-operator-to-current delta handoff to `PlanTask` and `ApplyTask`; its focused
 PowerShell 7 and Windows PowerShell 5.1 verification passes, and two independent reviews accept
-the exact frozen correction and synchronized documentation. Nothing in this package or correction
-has been merged, published as an immutable migration image, registered in a new task definition,
-or executed in AWS.
+the exact frozen correction and synchronized documentation. PR #278 squash-merged the accepted
+23-file tree at `eb0b7a169dc41cf34159e32df42b32ea9ed69276`. It has not been published as an
+immutable migration image, registered in a new task definition, or executed in AWS.
 
 This does not close D1-005's deployed `409 job_search_catalog_changed` gate.
 
@@ -73,16 +73,16 @@ The corrected migration-operator AST parses, its focused suite passes on PowerSh
 PowerShell 5.1, and `git diff --check` passes. The locally reviewed file SHA-256 values are
 `f93179ddedd99285154d9d591951a63ef8da24e08dd709102e27bba0d6e38793` for the operator and
 `687646d06ad53a6aacdab435ba7b42ac6386b905d7be3661f10ac810aa5a0d33` for its focused tests.
-These local hashes are not a merged-source, image, Terraform-plan, or AWS receipt.
+These are the merged operator/test hashes; they are not an image, Terraform-plan, or AWS receipt.
 
 ## Remaining deployment gates
 
-1. Merge the independently accepted development acceptance and migration-operator package, freeze clean
-   `main == origin/main`, and rerun the merged-source checks. The acceptance operator hard-codes
+1. Freeze the final clean `main == origin/main` revision containing the synchronized tracking
+   updates and rerun the exact-source checks. The acceptance operator hard-codes
    the Jobs entrypoint and exact environment keys, binds an immutable verified migration-image
    receipt and deployed task definition, uses a durable claimed run ID, retains recovery/cleanup
    evidence, and never accepts an arbitrary command or SQL statement.
-2. Publish and independently verify a new migration image from that exact merge. No image receipt
+2. Publish and independently verify a new migration image from that exact source. No image receipt
    or scan result exists for the current package.
 3. Independently derive and review the retained CompleteDark baseline-to-current canonical delta;
    run `PlanTask` with its checksum and accept only the image-driven task-definition replacement.

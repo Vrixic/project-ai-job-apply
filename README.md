@@ -70,9 +70,14 @@ scopes validate; test tokens are unavailable outside `NODE_ENV=test`.
 
 The repository foundation, Auth0 web slice, isolated AWS environments, scale-to-zero Lambda
 application runtime, durable workflow path, restore drills, observability, and provider retirement
-are implemented and deployed in development and synthetic staging. Phase 0 remains open for final
-repository/cost reconciliation, representative permitted ATS fixtures, and accountable
-legal/security/privacy review. Final public naming is a D6 gate, and mandatory pre-product
-participant research was removed from D0.
+are implemented and deployed in development and synthetic staging. Phase 0 completed on
+2026-08-12 after its evidence-based final acceptance. Phase 1 is in progress: the managed web
+identity and canonical catalog foundations are complete, direct-entry profile facts and secure
+resume intake are deployed in development, document processing is deployed CompleteDark with its
+triggers disabled, and bounded canonical search and filters are released in synthetic development.
+Generated-synthetic document processing and stale-cursor acceptance, saved jobs, matching,
+reporting, application history, entitlements, and public job pages remain open. Real provider
+ingestion, real candidate data, and production activation remain disabled behind their accountable
+release gates. Final public naming and the independent launch review remain D6 gates.
 
 Delivery progress, actual start/completion dates, tasks, evidence, risks, and decisions are maintained in the [delivery tracker](docs/product/delivery/DELIVERY_TRACKER.md).
