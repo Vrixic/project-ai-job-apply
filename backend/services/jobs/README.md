@@ -24,6 +24,14 @@ canonical result. Search cursors are bounded, opaque, request-bound continuation
 not contain the candidate's query or filter values. Search returns summaries without descriptions
 or source metadata, and no matching or personalization is inferred at this boundary.
 
+`src/run-search-acceptance.ts` is an internal generated-synthetic-only task entrypoint, not an API
+or a general SQL runner. It requires one explicit run ID and exact `prepare`, `mutate`, or `cleanup`
+action. The owned transaction creates two query fixtures plus one nonmatching revision sentinel,
+mutates only that sentinel through the real search-revision trigger, and removes only the exact
+claimed synthetic rows after verifying their complete shape and relationships. Its bounded JSON
+result contains no candidate or source values. Deployment requires a separately reviewed operator
+and an immutable migration-image receipt; the default migration task command remains unchanged.
+
 Probable-duplicate review is an internal catalog boundary. A reviewed exact match creates a
 reversible canonical alias without moving or deleting either record's source provenance. Canonical
 reads aggregate those sources, every decision or reopen action is append-only audited using opaque

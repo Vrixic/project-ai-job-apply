@@ -2,6 +2,10 @@ import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {
+  buildJobSearchAcceptanceFixture,
+  executeJobSearchAcceptance,
+} from "../search-acceptance.js";
 import type { CatalogObservation } from "./catalog.js";
 import { createJobCatalogDatabase, PostgresJobCatalog } from "./catalog.js";
 
@@ -306,6 +310,268 @@ describeWithDatabase("PostgresJobCatalog", () => {
     await expect(
       catalog.searchActiveJobs({ ...request, cursor: first.nextCursor as string }, observedAt),
     ).rejects.toThrow("catalog changed");
+  });
+
+  it("uses the owned synthetic acceptance contract to invalidate and clean a deployed-style cursor", async () => {
+    const acceptanceRunId = crypto.randomUUID();
+    const preparedAt = new Date();
+    const prepared = await executeJobSearchAcceptance(client, {
+      action: "prepare",
+      runId: acceptanceRunId,
+      at: preparedAt,
+    });
+    const request = { query: prepared.queryToken, pageSize: 1, sort: "freshness" as const };
+
+    try {
+      expect(prepared.affectedJobs).toBe(3);
+      expect(BigInt(prepared.revisionAfter)).toBeGreaterThan(BigInt(prepared.revisionBefore));
+      const first = await catalog.searchActiveJobs(request, preparedAt);
+      expect(first.items).toHaveLength(1);
+      expect(first.nextCursor).toBeDefined();
+
+      const mutated = await executeJobSearchAcceptance(client, {
+        action: "mutate",
+        runId: acceptanceRunId,
+        at: new Date(preparedAt.getTime() + 1_000),
+      });
+      expect(mutated.affectedJobs).toBe(1);
+      expect(BigInt(mutated.revisionAfter)).toBeGreaterThan(BigInt(mutated.revisionBefore));
+      await expect(
+        catalog.searchActiveJobs({ ...request, cursor: first.nextCursor as string }, preparedAt),
+      ).rejects.toThrow("catalog changed");
+
+      const restartedFirst = await catalog.searchActiveJobs(request, preparedAt);
+      const restartedSecond = await catalog.searchActiveJobs(
+        { ...request, cursor: restartedFirst.nextCursor as string },
+        preparedAt,
+      );
+      const restartedIds = [...restartedFirst.items, ...restartedSecond.items].map((job) => job.id);
+      expect(restartedIds).toHaveLength(2);
+      expect(new Set(restartedIds).size).toBe(2);
+      expect(restartedSecond.nextCursor).toBeUndefined();
+    } finally {
+      const cleaned = await executeJobSearchAcceptance(client, {
+        action: "cleanup",
+        runId: acceptanceRunId,
+      });
+      expect(cleaned.affectedJobs).toBe(3);
+      expect(
+        await catalog.searchActiveJobs({ query: prepared.queryToken, pageSize: 25 }, new Date()),
+      ).toEqual({ items: [] });
+    }
+  });
+
+  it("refuses cleanup when a claimed acceptance job has an unexpected source", async () => {
+    const acceptanceRunId = crypto.randomUUID();
+    const preparedAt = new Date();
+    const fixtureDefinition = buildJobSearchAcceptanceFixture(acceptanceRunId, preparedAt);
+    const fixtureSource = fixtureDefinition.jobs[0];
+    if (!fixtureSource) {
+      throw new Error("The acceptance fixture definition is incomplete");
+    }
+    await executeJobSearchAcceptance(client, {
+      action: "prepare",
+      runId: acceptanceRunId,
+      at: preparedAt,
+    });
+    const unexpectedSourceId = crypto.randomUUID();
+    const unexpectedIdentity = crypto.randomUUID().replaceAll("-", "");
+
+    try {
+      const inserted = await client`
+        INSERT INTO jobs.job_sources (
+          id, job_id, provider, provenance, ats_tenant, external_job_id,
+          employer_requisition_id, verified_company_domain, source_url, canonical_url,
+          canonical_url_hash, content_hash, adapter_version, raw_snapshot, first_observed_at,
+          last_observed_at, last_verified_at, valid_through, created_at, updated_at
+        )
+        SELECT
+          ${unexpectedSourceId}, job_id, provider, provenance, ats_tenant,
+          ${`unexpected-${acceptanceRunId}`}, ${`unexpected-${acceptanceRunId}`},
+          verified_company_domain, ${`https://jobs.example.test/${unexpectedIdentity}`},
+          ${`https://jobs.example.test/${unexpectedIdentity}`},
+          ${unexpectedIdentity.padEnd(64, "0")}, content_hash, adapter_version, raw_snapshot,
+          first_observed_at, last_observed_at, last_verified_at, valid_through, created_at, updated_at
+        FROM jobs.job_sources
+        WHERE id = ${fixtureSource.sourceId}
+      `;
+      expect(inserted.count).toBe(1);
+      await expect(
+        executeJobSearchAcceptance(client, { action: "cleanup", runId: acceptanceRunId }),
+      ).rejects.toThrow("unexpected related records");
+      const [remaining] = await client<{ count: number }[]>`
+        SELECT count(*)::int AS count
+        FROM jobs.job_sources AS source
+        INNER JOIN jobs.canonical_jobs AS job ON job.id = source.job_id
+        WHERE job.company_id = ${fixtureDefinition.companyId}
+      `;
+      expect(remaining?.count).toBe(4);
+    } finally {
+      await client`DELETE FROM jobs.job_sources WHERE id = ${unexpectedSourceId}`;
+      await executeJobSearchAcceptance(client, { action: "cleanup", runId: acceptanceRunId });
+    }
+  });
+
+  it("refuses mutation or cleanup when matching-job phase or lifecycle state is altered", async () => {
+    const acceptanceRunId = crypto.randomUUID();
+    const preparedAt = new Date();
+    const fixtureDefinition = buildJobSearchAcceptanceFixture(acceptanceRunId, preparedAt);
+    const matchingSource = fixtureDefinition.jobs.find((job) => job.matchesQuery);
+    if (!matchingSource) {
+      throw new Error("The acceptance fixture definition has no matching source");
+    }
+    await executeJobSearchAcceptance(client, {
+      action: "prepare",
+      runId: acceptanceRunId,
+      at: preparedAt,
+    });
+    const [claimed] = await client<{ jobId: string }[]>`
+      SELECT job_id AS "jobId" FROM jobs.job_sources WHERE id = ${matchingSource.sourceId}
+    `;
+    if (!claimed) {
+      throw new Error("The prepared acceptance job is unavailable");
+    }
+
+    try {
+      await client`
+        UPDATE jobs.canonical_jobs
+        SET status_reason = 'search_acceptance_revision_bumped'
+        WHERE id = ${claimed.jobId}
+      `;
+      await expect(
+        executeJobSearchAcceptance(client, {
+          action: "mutate",
+          runId: acceptanceRunId,
+          at: new Date(preparedAt.getTime() + 1_000),
+        }),
+      ).rejects.toThrow("exact expected phase");
+      await expect(
+        executeJobSearchAcceptance(client, { action: "cleanup", runId: acceptanceRunId }),
+      ).rejects.toThrow("exact expected phase");
+      await client`
+        UPDATE jobs.canonical_jobs
+        SET status_reason = 'search_acceptance_seeded', consecutive_verification_failures = 1
+        WHERE id = ${claimed.jobId}
+      `;
+      await expect(
+        executeJobSearchAcceptance(client, { action: "cleanup", runId: acceptanceRunId }),
+      ).rejects.toThrow("exact contract");
+    } finally {
+      await client`
+        UPDATE jobs.canonical_jobs
+        SET status_reason = 'search_acceptance_seeded', consecutive_verification_failures = 0
+        WHERE id = ${claimed.jobId}
+      `;
+      await executeJobSearchAcceptance(client, { action: "cleanup", runId: acceptanceRunId });
+    }
+  });
+
+  it("refuses cleanup when the sentinel mutation timestamp is not the exact reviewed offset", async () => {
+    const acceptanceRunId = crypto.randomUUID();
+    const preparedAt = new Date();
+    const exactMutationAt = new Date(preparedAt.getTime() + 1_000);
+    const wrongMutationAt = new Date(preparedAt.getTime() + 2_000);
+    const fixtureDefinition = buildJobSearchAcceptanceFixture(acceptanceRunId, preparedAt);
+    const sentinelSource = fixtureDefinition.jobs.find((job) => job.slug === "sentinel");
+    if (!sentinelSource) {
+      throw new Error("The acceptance fixture definition has no sentinel source");
+    }
+    await executeJobSearchAcceptance(client, {
+      action: "prepare",
+      runId: acceptanceRunId,
+      at: preparedAt,
+    });
+    const [claimed] = await client<{ jobId: string }[]>`
+      SELECT job_id AS "jobId" FROM jobs.job_sources WHERE id = ${sentinelSource.sourceId}
+    `;
+    if (!claimed) {
+      throw new Error("The prepared acceptance sentinel is unavailable");
+    }
+
+    try {
+      await client`
+        UPDATE jobs.canonical_jobs
+        SET status_reason = 'search_acceptance_revision_bumped',
+          last_verified_at = ${wrongMutationAt}, updated_at = ${wrongMutationAt}
+        WHERE id = ${claimed.jobId}
+      `;
+      await client`
+        UPDATE jobs.job_sources
+        SET last_observed_at = ${wrongMutationAt}, last_verified_at = ${wrongMutationAt},
+          updated_at = ${wrongMutationAt}
+        WHERE id = ${sentinelSource.sourceId}
+      `;
+      await expect(
+        executeJobSearchAcceptance(client, { action: "cleanup", runId: acceptanceRunId }),
+      ).rejects.toThrow("invalid mutation timestamp");
+    } finally {
+      await client`
+        UPDATE jobs.canonical_jobs
+        SET status_reason = 'search_acceptance_revision_bumped',
+          last_verified_at = ${exactMutationAt}, updated_at = ${exactMutationAt}
+        WHERE id = ${claimed.jobId}
+      `;
+      await client`
+        UPDATE jobs.job_sources
+        SET last_observed_at = ${exactMutationAt}, last_verified_at = ${exactMutationAt},
+          updated_at = ${exactMutationAt}
+        WHERE id = ${sentinelSource.sourceId}
+      `;
+      await executeJobSearchAcceptance(client, { action: "cleanup", runId: acceptanceRunId });
+    }
+  });
+
+  it("refuses cleanup when exact source timestamps or status-event evidence are altered", async () => {
+    const acceptanceRunId = crypto.randomUUID();
+    const preparedAt = new Date();
+    const fixtureDefinition = buildJobSearchAcceptanceFixture(acceptanceRunId, preparedAt);
+    const fixtureSource = fixtureDefinition.jobs[0];
+    if (!fixtureSource) {
+      throw new Error("The acceptance fixture definition is incomplete");
+    }
+    await executeJobSearchAcceptance(client, {
+      action: "prepare",
+      runId: acceptanceRunId,
+      at: preparedAt,
+    });
+    const [claimed] = await client<{ jobId: string }[]>`
+      SELECT job_id AS "jobId" FROM jobs.job_sources WHERE id = ${fixtureSource.sourceId}
+    `;
+    if (!claimed) {
+      throw new Error("The prepared acceptance job is unavailable");
+    }
+
+    try {
+      await client`
+        UPDATE jobs.job_sources
+        SET last_verified_at = last_verified_at + interval '1 second'
+        WHERE id = ${fixtureSource.sourceId}
+      `;
+      await expect(
+        executeJobSearchAcceptance(client, { action: "cleanup", runId: acceptanceRunId }),
+      ).rejects.toThrow("exact contract");
+      await client`
+        UPDATE jobs.job_sources SET last_verified_at = ${preparedAt}
+        WHERE id = ${fixtureSource.sourceId}
+      `;
+      await client`
+        UPDATE jobs.status_events SET reason = 'tampered_acceptance_event'
+        WHERE job_id = ${claimed.jobId}
+      `;
+      await expect(
+        executeJobSearchAcceptance(client, { action: "cleanup", runId: acceptanceRunId }),
+      ).rejects.toThrow("unexpected status event");
+    } finally {
+      await client`
+        UPDATE jobs.job_sources SET last_verified_at = ${preparedAt}
+        WHERE id = ${fixtureSource.sourceId}
+      `;
+      await client`
+        UPDATE jobs.status_events SET reason = 'search_acceptance_seeded'
+        WHERE job_id = ${claimed.jobId}
+      `;
+      await executeJobSearchAcceptance(client, { action: "cleanup", runId: acceptanceRunId });
+    }
   });
 
   it("uses the normalized-location GIN index for a representative containment filter", async () => {

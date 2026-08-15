@@ -24,10 +24,16 @@ param(
   [ValidatePattern("^[a-f0-9]{64}$")]
   [string]$AppliedPlanMetadataSha256 = "",
 
+  [ValidatePattern("^(?:|[a-f0-9]{64})$")]
+  [string]$ReviewedBaselineToCurrentDeltaSha256 = "",
+
   [string]$TaskPlanPath = "",
 
   [ValidatePattern("^[a-f0-9]{64}$")]
   [string]$ReviewedTaskPlanSha256 = "",
+
+  [ValidatePattern("^[a-f0-9]{64}$")]
+  [string]$ReviewedTaskPlanMetadataSha256 = "",
 
   [string]$ExecutionPlanPath = "",
 
@@ -60,7 +66,8 @@ Usage:
     -MigrationImage EXACT_ECR_URI_AT_SHA256 `
     -AppliedPlanPath .terraform/PREVIOUSLY_APPLIED.tfplan `
     -AppliedPlanSha256 64_CHARACTER_SHA256 `
-    -AppliedPlanMetadataSha256 64_CHARACTER_SIDECAR_SHA256
+    -AppliedPlanMetadataSha256 64_CHARACTER_SIDECAR_SHA256 `
+    [-ReviewedBaselineToCurrentDeltaSha256 64_CHARACTER_CANONICAL_DELTA_SHA256]
 
   # Apply only the exact checksum-reviewed task plan and its generated metadata sidecar.
   .\scripts\operate-development-document-migration.ps1 -Action ApplyTask `
@@ -69,7 +76,9 @@ Usage:
     -MigrationImage EXACT_ECR_URI_AT_SHA256 `
     -TaskPlanPath .terraform/development-document-migration/task-....tfplan `
     -ReviewedTaskPlanSha256 64_CHARACTER_SHA256 `
-    -AppliedPlanMetadataSha256 64_CHARACTER_SIDECAR_SHA256
+    -ReviewedTaskPlanMetadataSha256 64_CHARACTER_METADATA_SHA256 `
+    -AppliedPlanMetadataSha256 64_CHARACTER_SIDECAR_SHA256 `
+    [-ReviewedBaselineToCurrentDeltaSha256 64_CHARACTER_CANONICAL_DELTA_SHA256]
 
   # Produce a checksum-bound, no-override run-task request for independent review.
   .\scripts\operate-development-document-migration.ps1 -Action PlanExecution `
@@ -77,7 +86,8 @@ Usage:
     -SourceSha APPLIED_RELEASE_40_CHARACTER_COMMIT `
     -MigrationImage EXACT_ECR_URI_AT_SHA256 `
     -TaskPlanPath .terraform/development-document-migration/task-....tfplan `
-    -ReviewedTaskPlanSha256 64_CHARACTER_SHA256
+    -ReviewedTaskPlanSha256 64_CHARACTER_SHA256 `
+    -ReviewedTaskPlanMetadataSha256 64_CHARACTER_METADATA_SHA256
 
   # Execute the exact reviewed request once. The client token prevents duplicate submission.
   .\scripts\operate-development-document-migration.ps1 -Action Execute `
@@ -86,6 +96,7 @@ Usage:
     -MigrationImage EXACT_ECR_URI_AT_SHA256 `
     -TaskPlanPath .terraform/development-document-migration/task-....tfplan `
     -ReviewedTaskPlanSha256 64_CHARACTER_SHA256 `
+    -ReviewedTaskPlanMetadataSha256 64_CHARACTER_METADATA_SHA256 `
     -ExecutionPlanPath .terraform/development-document-migration/execution-....json `
     -ReviewedExecutionPlanSha256 64_CHARACTER_SHA256
 
@@ -97,6 +108,7 @@ Usage:
     -MigrationImage EXACT_ECR_URI_AT_SHA256 `
     -TaskPlanPath .terraform/development-document-migration/task-....tfplan `
     -ReviewedTaskPlanSha256 64_CHARACTER_SHA256 `
+    -ReviewedTaskPlanMetadataSha256 64_CHARACTER_METADATA_SHA256 `
     -ExecutionPlanPath .terraform/development-document-migration/execution-....json `
     -ReviewedExecutionPlanSha256 64_CHARACTER_SHA256 `
     -ReceiptPath .terraform/development-document-migration/receipt-....json
@@ -109,6 +121,7 @@ Usage:
     -MigrationImage EXACT_ECR_URI_AT_SHA256 `
     -TaskPlanPath .terraform/development-document-migration/task-....tfplan `
     -ReviewedTaskPlanSha256 64_CHARACTER_SHA256 `
+    -ReviewedTaskPlanMetadataSha256 64_CHARACTER_METADATA_SHA256 `
     -ExecutionPlanPath .terraform/development-document-migration/execution-....json `
     -ReviewedExecutionPlanSha256 64_CHARACTER_SHA256 `
     -ReceiptPath .terraform/development-document-migration/receipt-....json
@@ -119,6 +132,9 @@ or resource override. PlanTask and ApplyTask require SourceSha to equal the curr
 PlanTask accepts only the exact adjacent retained-baseline sidecar from ParserDark or CompleteDark
 verification, and ApplyTask revalidates its checksum, source, state identity, variables, stage,
 receipt, parser pin, and zero-change plan before consuming the reviewed task plan.
+An exact-current retained baseline requires no delta argument. An ancestor CompleteDark baseline
+requires its independently reviewed canonical baseline-operator-to-current SHA-256 on both
+PlanTask and ApplyTask; ancestor ParserDark baselines remain rejected.
 Post-apply actions may bind an already-applied ancestor release while recording the exact current
 operator revision in the execution descriptor and receipt.
 Successful Verify prints BaselinePath, BaselineSha256, BaselineMetadataPath, and
@@ -132,6 +148,10 @@ if ($Region -cne "us-east-2") {
 }
 if ($ExpectedAccountId -notmatch "^[0-9]{12}$" -or [string]::IsNullOrWhiteSpace($StateBucket)) {
   throw "The exact development account ID and encrypted Terraform state bucket are required."
+}
+if ($Action -notin @("PlanTask", "ApplyTask") -and
+    -not [string]::IsNullOrEmpty($ReviewedBaselineToCurrentDeltaSha256)) {
+  throw "The baseline-to-current review hash is accepted only by PlanTask and ApplyTask."
 }
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
@@ -350,6 +370,184 @@ function Get-DocumentOperatorDeltaSha256 {
     (($records -join "`n") + "`n--patch--`n" + ($patch -join "`n") + "`n"))
 }
 
+function Get-ReviewedBaselineToCurrentDeltaSha256 {
+  param(
+    [Parameter(Mandatory)][string]$BaselineOperatorSha,
+    [Parameter(Mandatory)][string]$CurrentOperatorSha,
+    [AllowEmptyString()][string]$ReviewedSha256 = ""
+  )
+
+  if ($BaselineOperatorSha -ceq $CurrentOperatorSha) {
+    if (-not [string]::IsNullOrEmpty($ReviewedSha256)) {
+      throw "A baseline-to-current delta must be omitted for an exact-current retained baseline."
+    }
+    return Get-DocumentOperatorDeltaSha256 -ReleaseSha $BaselineOperatorSha -OperatorSha $CurrentOperatorSha
+  }
+  if ($ReviewedSha256 -notmatch '^[a-f0-9]{64}$') {
+    throw "An ancestor CompleteDark baseline requires its independently reviewed canonical baseline-to-current delta SHA-256."
+  }
+  if ($BaselineOperatorSha -notmatch '^[a-f0-9]{40}$' -or $CurrentOperatorSha -notmatch '^[a-f0-9]{40}$') {
+    throw "The retained baseline and current operator SHAs must be exact commits."
+  }
+  & git -C $repositoryRoot merge-base --is-ancestor $BaselineOperatorSha $CurrentOperatorSha 2>$null
+  if ($LASTEXITCODE -ne 0) { throw "The retained baseline operator is not an ancestor of current main." }
+  $detectedRecords = @(
+    & git -C $repositoryRoot diff --name-status --find-renames --find-copies-harder `
+      "$BaselineOperatorSha..$CurrentOperatorSha" 2>$null
+  )
+  $detectedExit = $LASTEXITCODE
+  if ($detectedExit -ne 0 -or $detectedRecords.Count -eq 0 -or
+      @($detectedRecords | Where-Object { $_ -match '^[RC][0-9]*\t' }).Count -ne 0) {
+    throw "The baseline-to-current delta is unreadable or contains a rename or copy."
+  }
+  $records = @(& git -C $repositoryRoot diff --name-status --no-renames "$BaselineOperatorSha..$CurrentOperatorSha" 2>$null)
+  $recordsExit = $LASTEXITCODE
+  $numstat = @(& git -C $repositoryRoot diff --numstat --no-renames "$BaselineOperatorSha..$CurrentOperatorSha" 2>$null)
+  $numstatExit = $LASTEXITCODE
+  if ($recordsExit -ne 0 -or $numstatExit -ne 0 -or $records.Count -eq 0 -or
+      $numstat.Count -ne $records.Count -or
+      @($numstat | Where-Object { $_ -match '^-	-	' }).Count -ne 0) {
+    throw "The baseline-to-current delta is empty, unreadable, binary, or structurally ambiguous."
+  }
+  foreach ($record in $records) {
+    if ($record -notmatch '^(A|M|D)\t([^\t]+)$') {
+      throw "The baseline-to-current delta contains an unsupported change record."
+    }
+    $status = $Matches[1]
+    $path = $Matches[2]
+    $revisions = if ($status -ceq "A") { @($CurrentOperatorSha) }
+      elseif ($status -ceq "D") { @($BaselineOperatorSha) }
+      else { @($BaselineOperatorSha, $CurrentOperatorSha) }
+    foreach ($revision in $revisions) {
+      $treeEntry = @(& git -C $repositoryRoot ls-tree $revision -- $path 2>$null)
+      if ($LASTEXITCODE -ne 0 -or $treeEntry.Count -ne 1 -or
+          [string]$treeEntry[0] -notmatch '^(100644|100755) blob [a-f0-9]{40,64}\t') {
+        throw "The baseline-to-current delta contains a missing, ambiguous, or non-regular path."
+      }
+    }
+  }
+  $patch = @(& git -C $repositoryRoot diff --full-index --binary --no-ext-diff --no-renames "$BaselineOperatorSha..$CurrentOperatorSha" 2>$null)
+  $patchExit = $LASTEXITCODE
+  if ($patchExit -ne 0) { throw "The canonical baseline-to-current patch could not be read." }
+  $computed = Get-TextSha256 ("development-operator-delta-v1`n$BaselineOperatorSha`n$CurrentOperatorSha`n--name-status--`n" +
+    (($records -join "`n") + "`n--patch--`n" + ($patch -join "`n") + "`n"))
+  if ($computed -cne $ReviewedSha256) {
+    throw "The canonical baseline-to-current delta checksum does not match independent review."
+  }
+  return $computed
+}
+
+function Assert-CleanCurrentMainHead {
+  param([Parameter(Mandatory)][string]$ExpectedSha)
+
+  $branch = [string](& git -C $repositoryRoot branch --show-current 2>$null)
+  $branchExit = $LASTEXITCODE
+  $head = [string](& git -C $repositoryRoot rev-parse HEAD 2>$null)
+  $headExit = $LASTEXITCODE
+  $upstream = [string](& git -C $repositoryRoot rev-parse refs/remotes/origin/main 2>$null)
+  $upstreamExit = $LASTEXITCODE
+  $dirty = @(
+    & git -C $repositoryRoot status --porcelain=v1 --untracked-files=all --ignore-submodules=none 2>$null
+  )
+  $statusExit = $LASTEXITCODE
+  if ($branchExit -ne 0 -or $headExit -ne 0 -or $upstreamExit -ne 0 -or $statusExit -ne 0 -or
+      $ExpectedSha -notmatch '^[a-f0-9]{40}$' -or $branch.Trim() -cne "main" -or
+      $head.Trim() -cne $ExpectedSha -or $head.Trim() -cne $upstream.Trim() -or $dirty.Count -ne 0) {
+    throw "Migration operations require a clean main checkout exactly matching the bound origin/main commit."
+  }
+}
+
+function Assert-NoUntrackedTerraformInputs {
+  $terraformSourceRoot = [IO.Path]::GetFullPath((Join-Path $repositoryRoot "infrastructure\terraform"))
+  if (-not (Test-Path -LiteralPath $terraformSourceRoot -PathType Container)) {
+    throw "The Terraform source root is missing or is not a directory."
+  }
+  $repositoryPrefix = [IO.Path]::GetFullPath($repositoryRoot).TrimEnd([IO.Path]::DirectorySeparatorChar) +
+    [IO.Path]::DirectorySeparatorChar
+  $trackedPaths = @(
+    & git -C $repositoryRoot ls-tree -r --name-only HEAD -- infrastructure/terraform 2>$null
+  )
+  $trackedExit = $LASTEXITCODE
+  if ($trackedExit -ne 0) { throw "The tracked Terraform source inventory could not be read." }
+  $trackedOutsideData = @($trackedPaths | Where-Object {
+      ($_ -split '/') -notcontains '.terraform'
+    })
+  if (@($trackedOutsideData | Sort-Object -Unique).Count -ne $trackedOutsideData.Count) {
+    throw "The tracked Terraform source inventory is duplicated or ambiguous."
+  }
+  $pending = New-Object 'System.Collections.Generic.Stack[string]'
+  $enumeratedPaths = @{}
+  $pending.Push($terraformSourceRoot)
+  while ($pending.Count -gt 0) {
+    $directory = $pending.Pop()
+    try {
+      $entries = @(Get-ChildItem -LiteralPath $directory -Force -ErrorAction Stop)
+    } catch {
+      throw "A Terraform source directory could not be enumerated exactly."
+    }
+    foreach ($entry in $entries) {
+      if ($entry.PSIsContainer -and $entry.Name -ieq ".terraform") { continue }
+      if (($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Terraform source paths may not use reparse points."
+      }
+      if ($entry.PSIsContainer) {
+        $pending.Push([IO.Path]::GetFullPath($entry.FullName))
+        continue
+      }
+      $fullPath = [IO.Path]::GetFullPath($entry.FullName)
+      if (-not $fullPath.StartsWith($repositoryPrefix, [StringComparison]::OrdinalIgnoreCase) -or
+          -not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
+        throw "A Terraform-loaded input is not an exact regular repository file."
+      }
+      $relativePath = $fullPath.Substring($repositoryPrefix.Length).Replace('\', '/')
+      $isTracked = @($trackedOutsideData | Where-Object { $_ -ceq $relativePath }).Count -eq 1
+      if (-not $isTracked) {
+        if ([IO.Path]::GetExtension($fullPath) -ceq ".tfplan") { continue }
+        throw "Only untracked regular .tfplan artifacts are permitted below the Terraform source root."
+      }
+      $worktreeObject = @(
+        & git -C $repositoryRoot hash-object "--path=$relativePath" $fullPath 2>$null
+      )
+      $worktreeExit = $LASTEXITCODE
+      $headObject = @(& git -C $repositoryRoot rev-parse "HEAD:$relativePath" 2>$null)
+      $headExit = $LASTEXITCODE
+      if ($worktreeExit -ne 0 -or $headExit -ne 0 -or $worktreeObject.Count -ne 1 -or
+          $headObject.Count -ne 1 -or [string]$worktreeObject[0] -notmatch '^[a-f0-9]{40,64}$' -or
+          [string]$headObject[0] -notmatch '^[a-f0-9]{40,64}$' -or
+          [string]$worktreeObject[0] -cne [string]$headObject[0]) {
+        throw "Every Terraform source file must exactly match its filtered blob at HEAD."
+      }
+      if ($enumeratedPaths.ContainsKey($relativePath)) {
+        throw "A Terraform source path was enumerated more than once."
+      }
+      $enumeratedPaths[$relativePath] = $true
+    }
+  }
+  if ($trackedOutsideData.Count -ne $enumeratedPaths.Count) {
+    throw "The Terraform source inventory is missing, duplicated, or contains an extra worktree file."
+  }
+  foreach ($trackedPath in $trackedOutsideData) {
+    if (-not $enumeratedPaths.ContainsKey([string]$trackedPath)) {
+      throw "A tracked Terraform source file is absent from the exact worktree inventory."
+    }
+  }
+  $indexRecords = @(& git -C $repositoryRoot ls-files -v -- infrastructure/terraform 2>$null)
+  $indexExit = $LASTEXITCODE
+  if ($indexExit -ne 0) { throw "The Terraform index-flag inventory could not be read." }
+  $indexOutsideData = @($indexRecords | Where-Object {
+      $_ -match '^. (.+)$' -and (($Matches[1] -split '/') -notcontains '.terraform')
+    })
+  if ($indexOutsideData.Count -ne $trackedOutsideData.Count) {
+    throw "The Terraform index inventory does not match HEAD."
+  }
+  foreach ($record in $indexOutsideData) {
+    if ([string]$record -cnotmatch '^H (.+)$' -or
+        @($trackedOutsideData | Where-Object { $_ -ceq $Matches[1] }).Count -ne 1) {
+      throw "Terraform source files may not use assume-unchanged, skip-worktree, or another index flag."
+    }
+  }
+}
+
 function Assert-CallerToolsAndSource {
   param(
     [switch]$RequireSource,
@@ -371,13 +569,9 @@ function Assert-CallerToolsAndSource {
 
   if ($RequireSource) {
     if ($SourceSha -notmatch "^[a-f0-9]{40}$") { throw "The exact merged release source SHA is required." }
-    $branch = (& git -C $repositoryRoot branch --show-current 2>$null).Trim()
     $head = (& git -C $repositoryRoot rev-parse HEAD 2>$null).Trim()
-    $upstream = (& git -C $repositoryRoot rev-parse origin/main 2>$null).Trim()
-    $dirty = @(& git -C $repositoryRoot status --porcelain 2>$null)
-    if ($branch -cne "main" -or $head -cne $upstream -or $dirty.Count -ne 0) {
-      throw "Migration operations require a clean main checkout exactly matching origin/main."
-    }
+    Assert-CleanCurrentMainHead -ExpectedSha $head
+    if ($Action -in @("PlanTask", "ApplyTask")) { Assert-NoUntrackedTerraformInputs }
     $isAncestor = $false
     if ($head -cne $SourceSha -and $AllowAncestorSource) {
       & git -C $repositoryRoot merge-base --is-ancestor $SourceSha $head 2>$null
@@ -909,11 +1103,55 @@ function Assert-RetainedBaselineCurrentState {
   }
 }
 
+function Assert-RetainedBaselinePlanningState {
+  param(
+    [Parameter(Mandatory)][object]$Metadata,
+    [Parameter(Mandatory)][object]$State,
+    [switch]$AllowExactCompleteDark107To108
+  )
+
+  if ([string]$Metadata.StateLineage -cne [string]$State.Lineage -or
+      ([long]$Metadata.StateSerial -ne [long]$State.Serial -and
+       (-not $AllowExactCompleteDark107To108 -or
+        [string]$Metadata.StateLineage -cne "472ef790-b249-45ec-817f-718005980d9e" -or
+        [long]$Metadata.StateSerial -ne 107 -or [long]$State.Serial -ne 108))) {
+    throw "The retained baseline does not have an accepted lineage and serial handoff to current planning state."
+  }
+}
+
+function Test-ExactCompleteDarkStaleStateHandoff {
+  param(
+    [Parameter(Mandatory)][string]$Schema,
+    [Parameter(Mandatory)][string]$Stage,
+    [Parameter(Mandatory)][string]$BaselineOperatorSha,
+    [Parameter(Mandatory)][string]$PlanSha256,
+    [Parameter(Mandatory)][string]$MetadataSha256,
+    [Parameter(Mandatory)][object]$Metadata
+  )
+
+  return $Schema -ceq "3" -and $Stage -ceq "complete-dark" -and
+    $BaselineOperatorSha -ceq "9d290416c61847f1682157c08312cdb920d42107" -and
+    $PlanSha256 -ceq "2143c836f9c55d2126efef55b314f167b35d593d64338791cb6c3837c6e2a6a4" -and
+    $MetadataSha256 -ceq "e0efc63e7c17685e363e23f15f7f1d39e83c46beff3f08fdb768bd67e78b8011" -and
+    [string]$Metadata.StateLineage -ceq "472ef790-b249-45ec-817f-718005980d9e" -and
+    [long]$Metadata.StateSerial -eq 107
+}
+
+function Assert-ExactTerraformStateIdentity {
+  param([Parameter(Mandatory)][object]$Expected, [Parameter(Mandatory)][object]$Actual)
+
+  if ([string]$Expected.Lineage -cne [string]$Actual.Lineage -or
+      [long]$Expected.Serial -ne [long]$Actual.Serial) {
+    throw "Terraform state changed after the reviewed planning identity was bound."
+  }
+}
+
 function Read-RetainedMigrationBaseline {
   param(
     [Parameter(Mandatory)][string]$PlanPath,
     [Parameter(Mandatory)][ValidatePattern("^[a-f0-9]{64}$")][string]$PlanSha256,
     [Parameter(Mandatory)][ValidatePattern("^[a-f0-9]{64}$")][string]$MetadataSha256,
+    [AllowEmptyString()][string]$ReviewedBaselineToCurrentDeltaSha256 = "",
     [switch]$RequireCurrentState
   )
   $resolvedPlan = Resolve-OperatorPath -Candidate $PlanPath -MustExist
@@ -938,18 +1176,44 @@ function Read-RetainedMigrationBaseline {
     "SourceSha", "Stage", "StateLineage", "StateSerial"
   ) | Sort-Object
   $dualKeys = @($expectedKeys | Where-Object { $_ -cne "SourceSha" }) + @("OperatorDeltaSha256", "OperatorSourceSha", "ReleaseSourceSha") | Sort-Object
+  $schema4Keys = @($dualKeys) + @("MigrationImage") | Sort-Object
   $actualKeys = @($metadata.PSObject.Properties | ForEach-Object Name | Sort-Object)
   $metadataPlanPath = if ([string]::IsNullOrWhiteSpace([string]$metadata.PlanPath)) { "" } else {
     [IO.Path]::GetFullPath([string]$metadata.PlanPath)
   }
   $schema = [string]$metadata.SchemaVersion
-  $schemaValid = ($schema -ceq "1" -and ($actualKeys -join "|") -ceq ($expectedKeys -join "|") -and
-      [string]$metadata.SourceSha -ceq $SourceSha) -or
-    ($schema -ceq "3" -and ($actualKeys -join "|") -ceq ($dualKeys -join "|") -and
+  $baselineToCurrentDeltaSha256 = ""
+  $allowExactCompleteDark107To108 = $false
+  $schemaValid = $false
+  if ($schema -ceq "1") {
+    $schemaValid = (($actualKeys -join "|") -ceq ($expectedKeys -join "|") -and
+      [string]$metadata.SourceSha -ceq $SourceSha)
+    $baselineToCurrentDeltaSha256 = Get-ReviewedBaselineToCurrentDeltaSha256 `
+      -BaselineOperatorSha $operatorSourceSha -CurrentOperatorSha $operatorSourceSha `
+      -ReviewedSha256 $ReviewedBaselineToCurrentDeltaSha256
+  } elseif ($schema -in @("3", "4")) {
+    $expectedSchemaKeys = if ($schema -ceq "4") { $schema4Keys } else { $dualKeys }
+    $schemaValid = (($actualKeys -join "|") -ceq ($expectedSchemaKeys -join "|") -and
       [string]$metadata.ReleaseSourceSha -match '^[a-f0-9]{40}$' -and
-      [string]$metadata.OperatorSourceSha -ceq $operatorSourceSha -and
+      [string]$metadata.OperatorSourceSha -match '^[a-f0-9]{40}$' -and
       [string]$metadata.OperatorDeltaSha256 -ceq
-        (Get-DocumentOperatorDeltaSha256 -ReleaseSha ([string]$metadata.ReleaseSourceSha) -OperatorSha $operatorSourceSha))
+        (Get-DocumentOperatorDeltaSha256 -ReleaseSha ([string]$metadata.ReleaseSourceSha) `
+          -OperatorSha ([string]$metadata.OperatorSourceSha)))
+    if ($schemaValid) {
+      if ([string]$metadata.OperatorSourceSha -cne $operatorSourceSha -and
+          [string]$metadata.Stage -cne "complete-dark") {
+        throw "Only an ancestor CompleteDark retained baseline may cross an operator revision."
+      }
+      $baselineToCurrentDeltaSha256 = Get-ReviewedBaselineToCurrentDeltaSha256 `
+        -BaselineOperatorSha ([string]$metadata.OperatorSourceSha) -CurrentOperatorSha $operatorSourceSha `
+        -ReviewedSha256 $ReviewedBaselineToCurrentDeltaSha256
+      $allowExactCompleteDark107To108 = [string]$metadata.OperatorSourceSha -cne $operatorSourceSha -and
+        $ReviewedBaselineToCurrentDeltaSha256 -match '^[a-f0-9]{64}$' -and
+        (Test-ExactCompleteDarkStaleStateHandoff -Schema $schema -Stage ([string]$metadata.Stage) `
+          -BaselineOperatorSha ([string]$metadata.OperatorSourceSha) -PlanSha256 $PlanSha256 `
+          -MetadataSha256 $sidecarSha256 -Metadata $metadata)
+    }
+  }
   if (-not $schemaValid -or
     [string]$metadata.Kind -cne "development-document-zero-drift-baseline" -or
     [string]$metadata.Environment -cne "development" -or
@@ -984,18 +1248,27 @@ function Read-RetainedMigrationBaseline {
     [string]$metadata.ParserQualifiedArn -cne [string]$parserArnValueProperty.Value) {
     throw "The retained baseline metadata stage or parser pin does not match the exact Terraform plan variables."
   }
+  if ($schema -ceq "4" -and
+      [string]$metadata.MigrationImage -cne (Get-ExactStringPlanVariable -Plan $plan -Name "migration_image")) {
+    throw "The retained schema-4 baseline migration image does not match its exact retained plan."
+  }
+  $planningState = $null
   if ($RequireCurrentState) {
-    $state = Get-CurrentTerraformStateIdentity
-    Assert-RetainedBaselineCurrentState -Metadata $metadata -State $state
+    $planningState = Get-CurrentTerraformStateIdentity
+    Assert-RetainedBaselinePlanningState -Metadata $metadata -State $planningState `
+      -AllowExactCompleteDark107To108:$allowExactCompleteDark107To108
   }
   return [pscustomobject]@{
     Plan = $plan; PlanPath = $resolvedPlan; PlanSha256 = $PlanSha256
     Metadata = $metadata; MetadataPath = $sidecarPath; MetadataSha256 = $sidecarSha256
-    ReleaseSourceSha = $(if ($schema -ceq "3") { [string]$metadata.ReleaseSourceSha } else { $SourceSha })
-    OperatorSourceSha = $(if ($schema -ceq "3") { [string]$metadata.OperatorSourceSha } else { $SourceSha })
-    OperatorDeltaSha256 = $(if ($schema -ceq "3") { [string]$metadata.OperatorDeltaSha256 } else {
+    ReleaseSourceSha = $(if ($schema -in @("3", "4")) { [string]$metadata.ReleaseSourceSha } else { $SourceSha })
+    OperatorSourceSha = $(if ($schema -in @("3", "4")) { [string]$metadata.OperatorSourceSha } else { $SourceSha })
+    OperatorDeltaSha256 = $(if ($schema -in @("3", "4")) { [string]$metadata.OperatorDeltaSha256 } else {
       Get-DocumentOperatorDeltaSha256 -ReleaseSha $SourceSha -OperatorSha $SourceSha
     })
+    CurrentOperatorSourceSha = $operatorSourceSha
+    BaselineToCurrentDeltaSha256 = $baselineToCurrentDeltaSha256
+    PlanningState = $planningState
   }
 }
 
@@ -1013,7 +1286,11 @@ function Assert-TaskMetadataBaselineBinding {
     [string]$TaskMetadata.appliedBaselineParserQualifiedArn -cne [string]$metadata.ParserQualifiedArn -or
     [string]$TaskMetadata.appliedBaselineReleaseSourceSha -cne [string]$Baseline.ReleaseSourceSha -or
     [string]$TaskMetadata.appliedBaselineOperatorSourceSha -cne [string]$Baseline.OperatorSourceSha -or
-    [string]$TaskMetadata.appliedBaselineOperatorDeltaSha256 -cne [string]$Baseline.OperatorDeltaSha256) {
+    [string]$TaskMetadata.appliedBaselineOperatorDeltaSha256 -cne [string]$Baseline.OperatorDeltaSha256 -or
+    [string]$TaskMetadata.appliedBaselineCurrentOperatorSourceSha -cne [string]$Baseline.CurrentOperatorSourceSha -or
+    [string]$TaskMetadata.appliedBaselineToCurrentDeltaSha256 -cne [string]$Baseline.BaselineToCurrentDeltaSha256 -or
+    [string]$TaskMetadata.planningStateLineage -cne [string]$Baseline.PlanningState.Lineage -or
+    [long]$TaskMetadata.planningStateSerial -ne [long]$Baseline.PlanningState.Serial) {
     throw "The task-plan metadata does not preserve the exact retained-baseline handoff."
   }
 }
@@ -1260,24 +1537,53 @@ function Assert-ExactTaskPlan {
 function Read-TaskPlanMetadata {
   param(
     [Parameter(Mandatory)][string]$PlanPath,
-    [Parameter(Mandatory)][string]$PlanSha256
+    [Parameter(Mandatory)][string]$PlanSha256,
+    [Parameter(Mandatory)][ValidatePattern("^[a-f0-9]{64}$")][string]$MetadataSha256
   )
 
   if ((Get-FileSha256 -Path $PlanPath) -cne $PlanSha256) { throw "The task plan checksum does not match the reviewed value." }
   $metadataPath = "$PlanPath.metadata.json"
   if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) { throw "The task-plan metadata sidecar is missing." }
+  if ((Get-FileSha256 -Path $metadataPath) -cne $MetadataSha256) {
+    throw "The task-plan metadata checksum does not match independent review."
+  }
   $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
-  if ([int]$metadata.schemaVersion -ne 1 -or [string]$metadata.kind -cne "development-document-migration-task" -or
+  $expectedKeys = @(
+    "accountId", "appliedBaselineCurrentOperatorSourceSha", "appliedBaselineMetadataPath",
+    "appliedBaselineMetadataSha256", "appliedBaselineOperatorDeltaSha256",
+    "appliedBaselineOperatorSourceSha", "appliedBaselineParserQualifiedArn",
+    "appliedBaselineReceiptSha256", "appliedBaselineReleaseSourceSha", "appliedBaselineStage",
+    "appliedBaselineStateLineage", "appliedBaselineStateSerial",
+    "appliedBaselineToCurrentDeltaSha256", "appliedPlanPath", "appliedPlanSha256", "createdAt",
+    "destructiveChanges", "environment", "kind", "meaningfulChanges", "migrationImage",
+    "planningStateLineage", "planningStateSerial", "region",
+    "schemaVersion", "sourceSha", "stateBucket", "taskPlanPath", "taskPlanSha256"
+  ) | Sort-Object
+  $actualKeys = @($metadata.PSObject.Properties | ForEach-Object Name | Sort-Object)
+  $createdAt = [datetime]::MinValue
+  $createdAtValid = [datetime]::TryParse([string]$metadata.createdAt, [ref]$createdAt) -and
+    $createdAt.Year -ge 2000 -and $createdAt.Year -le 2099
+  if (($actualKeys -join "|") -cne ($expectedKeys -join "|") -or
+      [int]$metadata.schemaVersion -ne 2 -or [string]$metadata.kind -cne "development-document-migration-task" -or
       [string]$metadata.environment -cne "development" -or [string]$metadata.region -cne $Region -or
       [string]$metadata.accountId -cne $ExpectedAccountId -or [string]$metadata.stateBucket -cne $StateBucket -or
       [string]$metadata.sourceSha -cne $SourceSha -or [string]$metadata.migrationImage -cne $MigrationImage -or
       [string]$metadata.taskPlanSha256 -cne $PlanSha256 -or
       [string]$metadata.appliedPlanSha256 -notmatch '^[a-f0-9]{64}$' -or
       [string]$metadata.appliedBaselineMetadataSha256 -notmatch '^[a-f0-9]{64}$' -or
+      [string]$metadata.appliedBaselineReleaseSourceSha -notmatch '^[a-f0-9]{40}$' -or
+      [string]$metadata.appliedBaselineOperatorSourceSha -notmatch '^[a-f0-9]{40}$' -or
+      [string]$metadata.appliedBaselineOperatorDeltaSha256 -notmatch '^[a-f0-9]{64}$' -or
+      [string]$metadata.appliedBaselineCurrentOperatorSourceSha -notmatch '^[a-f0-9]{40}$' -or
+      [string]$metadata.appliedBaselineToCurrentDeltaSha256 -notmatch '^[a-f0-9]{64}$' -or
       [string]$metadata.appliedBaselineStage -notin @("parser-dark", "complete-dark") -or
       [string]$metadata.appliedBaselineStateLineage -notmatch '^[a-f0-9-]{36}$' -or
       [long]$metadata.appliedBaselineStateSerial -lt 1 -or
+      [string]$metadata.planningStateLineage -notmatch '^[a-f0-9-]{36}$' -or
+      [long]$metadata.planningStateSerial -lt 1 -or
       [string]$metadata.appliedBaselineReceiptSha256 -notmatch '^[a-f0-9]{64}$' -or
+      [int]$metadata.meaningfulChanges -ne 1 -or [int]$metadata.destructiveChanges -ne 0 -or
+      -not $createdAtValid -or
       [IO.Path]::GetFullPath([string]$metadata.taskPlanPath) -cne [IO.Path]::GetFullPath($PlanPath) -or
       [string]::IsNullOrWhiteSpace([string]$metadata.appliedPlanPath) -or
       [string]::IsNullOrWhiteSpace([string]$metadata.appliedBaselineMetadataPath)) {
@@ -1534,6 +1840,7 @@ function Read-ExecutionPlan {
     [Parameter(Mandatory)][string]$Path,
     [Parameter(Mandatory)][string]$Sha256,
     [Parameter(Mandatory)][string]$TaskPlanSha256,
+    [Parameter(Mandatory)][string]$TaskPlanMetadataSha256,
     [Parameter(Mandatory)][string]$ExpectedOperatorSourceSha
   )
 
@@ -1547,7 +1854,9 @@ function Read-ExecutionPlan {
   if ([string]$plan.environment -cne "development" -or [string]$plan.region -cne $Region -or
       [string]$plan.accountId -cne $ExpectedAccountId -or [string]$plan.stateBucket -cne $StateBucket -or
       [string]$plan.migrationImage -cne $MigrationImage -or
-      [string]$plan.taskPlanSha256 -cne $TaskPlanSha256 -or @($properties | Where-Object { $_ -notin $allowed }).Count -ne 0 -or
+      [string]$plan.taskPlanSha256 -cne $TaskPlanSha256 -or
+      [string]$plan.taskPlanMetadataSha256 -cne $TaskPlanMetadataSha256 -or
+      @($properties | Where-Object { $_ -notin $allowed }).Count -ne 0 -or
       $properties.Count -ne $allowed.Count -or [int]$request.count -ne 1 -or
       [string]$request.launchType -cne "FARGATE" -or
       [string]$request.networkConfiguration.awsvpcConfiguration.assignPublicIp -cne "ENABLED" -or
@@ -1732,7 +2041,8 @@ if ($Action -eq "PlanTask") {
     throw "PlanTask requires the retained plan plus its exact plan and metadata SHA-256 values."
   }
   $baselineEvidence = Read-RetainedMigrationBaseline -PlanPath $AppliedPlanPath `
-    -PlanSha256 $AppliedPlanSha256 -MetadataSha256 $AppliedPlanMetadataSha256 -RequireCurrentState
+    -PlanSha256 $AppliedPlanSha256 -MetadataSha256 $AppliedPlanMetadataSha256 `
+    -ReviewedBaselineToCurrentDeltaSha256 $ReviewedBaselineToCurrentDeltaSha256 -RequireCurrentState
   $appliedPlan = $baselineEvidence.PlanPath
   $sourcePlan = $baselineEvidence.Plan
 
@@ -1757,9 +2067,13 @@ if ($Action -eq "PlanTask") {
   if ($planExit -ne 2) { throw "The migration task plan did not produce exactly one reviewable change. Inspect the ignored local plan log." }
   $planJson = Get-PlanJson -Path $taskPlan
   Assert-ExactTaskPlan -Plan $planJson
+  Assert-CleanCurrentMainHead -ExpectedSha $operatorSourceSha
+  Assert-NoUntrackedTerraformInputs
+  Assert-ExactTerraformStateIdentity -Expected $baselineEvidence.PlanningState `
+    -Actual (Get-CurrentTerraformStateIdentity)
   $sha256 = Get-FileSha256 -Path $taskPlan
   $metadata = [ordered]@{
-    schemaVersion       = 1
+    schemaVersion       = 2
     kind                = "development-document-migration-task"
     environment         = "development"
     region              = $Region
@@ -1779,17 +2093,25 @@ if ($Action -eq "PlanTask") {
     appliedBaselineReleaseSourceSha = [string]$baselineEvidence.ReleaseSourceSha
     appliedBaselineOperatorSourceSha = [string]$baselineEvidence.OperatorSourceSha
     appliedBaselineOperatorDeltaSha256 = [string]$baselineEvidence.OperatorDeltaSha256
+    appliedBaselineCurrentOperatorSourceSha = [string]$baselineEvidence.CurrentOperatorSourceSha
+    appliedBaselineToCurrentDeltaSha256 = [string]$baselineEvidence.BaselineToCurrentDeltaSha256
+    planningStateLineage = [string]$baselineEvidence.PlanningState.Lineage
+    planningStateSerial = [long]$baselineEvidence.PlanningState.Serial
     taskPlanPath        = $taskPlan
     taskPlanSha256      = $sha256
     meaningfulChanges   = 1
     destructiveChanges  = 0
     createdAt           = (Get-Date).ToUniversalTime().ToString("o")
   }
-  Write-JsonFile -Path "$taskPlan.metadata.json" -Value $metadata
+  $taskMetadataPath = "$taskPlan.metadata.json"
+  Write-JsonFile -Path $taskMetadataPath -Value $metadata
+  $taskMetadataSha256 = Get-FileSha256 -Path $taskMetadataPath
   [pscustomobject]@{
     Outcome             = "review-required"
     PlanPath            = $taskPlan
     PlanSha256          = $sha256
+    PlanMetadataPath    = $taskMetadataPath
+    PlanMetadataSha256  = $taskMetadataSha256
     ChangedResource     = $migrationAddress
     ArtifactDigest      = $artifact.Digest
     TriggeredTaskCount  = 0
@@ -1797,11 +2119,13 @@ if ($Action -eq "PlanTask") {
   exit 0
 }
 
-if ([string]::IsNullOrWhiteSpace($TaskPlanPath) -or $ReviewedTaskPlanSha256 -notmatch '^[a-f0-9]{64}$') {
-  throw "$Action requires the exact task plan and its reviewed SHA-256."
+if ([string]::IsNullOrWhiteSpace($TaskPlanPath) -or $ReviewedTaskPlanSha256 -notmatch '^[a-f0-9]{64}$' -or
+    $ReviewedTaskPlanMetadataSha256 -notmatch '^[a-f0-9]{64}$') {
+  throw "$Action requires the exact task plan plus its reviewed plan and adjacent metadata SHA-256 values."
 }
 $taskPlan = Resolve-OperatorPath -Candidate $TaskPlanPath -MustExist -RequireOperatorRoot
-$taskMetadata = Read-TaskPlanMetadata -PlanPath $taskPlan -PlanSha256 $ReviewedTaskPlanSha256
+$taskMetadata = Read-TaskPlanMetadata -PlanPath $taskPlan -PlanSha256 $ReviewedTaskPlanSha256 `
+  -MetadataSha256 $ReviewedTaskPlanMetadataSha256
 $taskPlanJson = Get-PlanJson -Path $taskPlan
 Assert-ExactTaskPlan -Plan $taskPlanJson
 
@@ -1812,13 +2136,22 @@ if ($Action -eq "ApplyTask") {
   }
   $baselineEvidence = Read-RetainedMigrationBaseline -PlanPath ([string]$taskMetadata.appliedPlanPath) `
     -PlanSha256 ([string]$taskMetadata.appliedPlanSha256) `
-    -MetadataSha256 $AppliedPlanMetadataSha256 -RequireCurrentState
+    -MetadataSha256 $AppliedPlanMetadataSha256 `
+    -ReviewedBaselineToCurrentDeltaSha256 $ReviewedBaselineToCurrentDeltaSha256 -RequireCurrentState
   Assert-TaskMetadataBaselineBinding -TaskMetadata $taskMetadata -Baseline $baselineEvidence
   $clusterArn = [string](Get-TerraformOutput -Name "ecs_cluster_arn")
   Assert-ZeroMigrationCompute -ClusterArn $clusterArn
+  Assert-CleanCurrentMainHead -ExpectedSha $operatorSourceSha
+  Assert-NoUntrackedTerraformInputs
+  Assert-ExactTerraformStateIdentity -Expected ([pscustomobject]@{
+      Lineage = [string]$taskMetadata.planningStateLineage
+      Serial = [long]$taskMetadata.planningStateSerial
+    }) -Actual (Get-CurrentTerraformStateIdentity)
   $applyLog = "$taskPlan.apply.log"
   & terraform "-chdir=$terraformDirectory" apply -input=false -lock-timeout=5m $taskPlan *> $applyLog
   if ($LASTEXITCODE -ne 0) { throw "The exact reviewed migration task plan did not apply. Inspect the ignored local apply log." }
+  Assert-CleanCurrentMainHead -ExpectedSha $operatorSourceSha
+  Assert-NoUntrackedTerraformInputs
   Assert-StateObjectEncryption
   $taskDefinitionArn = [string](Get-TerraformOutput -Name "migration_task_definition_arn")
   $null = Assert-TaskDefinition -TaskDefinitionArn $taskDefinitionArn
@@ -1867,6 +2200,7 @@ if ($Action -eq "PlanExecution") {
     operatorSourceSha = $operatorSourceSha
     migrationImage = $MigrationImage
     taskPlanSha256 = $ReviewedTaskPlanSha256
+    taskPlanMetadataSha256 = $ReviewedTaskPlanMetadataSha256
     createdAt      = (Get-Date).ToUniversalTime().ToString("o")
     runTaskRequest = [ordered]@{
       cluster              = $clusterArn
@@ -1887,7 +2221,9 @@ if ($Action -eq "PlanExecution") {
   Write-JsonFile -Path $executionPlan -Value $descriptor
   $sha256 = Get-FileSha256 -Path $executionPlan
   $null = Read-ExecutionPlan -Path $executionPlan -Sha256 $sha256 `
-    -TaskPlanSha256 $ReviewedTaskPlanSha256 -ExpectedOperatorSourceSha $operatorSourceSha
+    -TaskPlanSha256 $ReviewedTaskPlanSha256 `
+    -TaskPlanMetadataSha256 $ReviewedTaskPlanMetadataSha256 `
+    -ExpectedOperatorSourceSha $operatorSourceSha
   [pscustomobject]@{
     Outcome                  = "review-required"
     ExecutionPlanPath        = $executionPlan
@@ -1914,6 +2250,7 @@ if ($Action -in @("Recover", "Verify")) {
 }
 $executionDescriptor = Read-ExecutionPlan -Path $executionPlan `
   -Sha256 $ReviewedExecutionPlanSha256 -TaskPlanSha256 $ReviewedTaskPlanSha256 `
+  -TaskPlanMetadataSha256 $ReviewedTaskPlanMetadataSha256 `
   -ExpectedOperatorSourceSha $expectedExecutionOperatorSha
 $request = $executionDescriptor.runTaskRequest
 if ([string]$request.cluster -cne $clusterArn -or [string]$request.taskDefinition -cne $taskDefinitionArn -or
@@ -1958,6 +2295,7 @@ if ($Action -eq "Execute") {
     operatorSourceSha   = $operatorSourceSha
     migrationImage      = $MigrationImage
     taskPlanSha256      = $ReviewedTaskPlanSha256
+    taskPlanMetadataSha256 = $ReviewedTaskPlanMetadataSha256
     executionPlanSha256 = $ReviewedExecutionPlanSha256
     executionClaimKey   = $claim.Key
     executionClaimVersion = $claim.VersionId
@@ -2009,6 +2347,7 @@ if ($Action -eq "Recover") {
       [string]$receiptValue.stateBucket -cne $StateBucket -or
       [string]$receiptValue.migrationImage -cne $MigrationImage -or
       [string]$receiptValue.taskPlanSha256 -cne $ReviewedTaskPlanSha256 -or
+      [string]$receiptValue.taskPlanMetadataSha256 -cne $ReviewedTaskPlanMetadataSha256 -or
       [string]$receiptValue.executionPlanSha256 -cne $ReviewedExecutionPlanSha256 -or
       [string]$receiptValue.executionClaimKey -cne "operator-claims/development-document-migration/$ReviewedExecutionPlanSha256.json" -or
       [string]::IsNullOrWhiteSpace([string]$receiptValue.executionClaimVersion) -or
@@ -2054,6 +2393,7 @@ if ([string]$receiptValue.environment -cne "development" -or
     [string]$receiptValue.accountId -cne $ExpectedAccountId -or [string]$receiptValue.stateBucket -cne $StateBucket -or
     [string]$receiptValue.migrationImage -cne $MigrationImage -or
     [string]$receiptValue.taskPlanSha256 -cne $ReviewedTaskPlanSha256 -or
+    [string]$receiptValue.taskPlanMetadataSha256 -cne $ReviewedTaskPlanMetadataSha256 -or
     [string]$receiptValue.executionPlanSha256 -cne $ReviewedExecutionPlanSha256 -or
     [string]$receiptValue.executionClaimKey -cne "operator-claims/development-document-migration/$ReviewedExecutionPlanSha256.json" -or
     [string]::IsNullOrWhiteSpace([string]$receiptValue.executionClaimVersion) -or

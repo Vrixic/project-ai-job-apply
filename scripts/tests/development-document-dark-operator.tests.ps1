@@ -331,7 +331,12 @@ $deltaFunctions = @($ast.FindAll({
 if ($deltaFunctions.Count -ne 2) { throw "The canonical operator-delta guards must each be defined once." }
 foreach ($function in $deltaFunctions | Sort-Object { $_.Extent.StartOffset }) { Invoke-Expression $function.Extent.Text }
 $releaseSha = "d0e55de86edfa6b5f655f5631bb1741d6c5b5ac8"
-$operatorSha = (& git -C $repositoryRoot rev-parse HEAD).Trim()
+$operatorSha = "9d290416c61847f1682157c08312cdb920d42107"
+$operatorObjectType = @(& git -C $repositoryRoot cat-file -t $operatorSha 2>$null)
+if ($LASTEXITCODE -ne 0 -or $operatorObjectType.Count -ne 1 -or
+    [string]$operatorObjectType[0] -cne "commit") {
+  throw "The accepted historical document operator commit is unavailable."
+}
 $records = @(& git -C $repositoryRoot diff --name-status --no-renames "$releaseSha..$operatorSha")
 $patch = @(& git -C $repositoryRoot diff --full-index --binary --no-ext-diff --no-renames "$releaseSha..$operatorSha")
 $ReviewedOperatorDeltaSha256 = Get-TextSha256 ("development-operator-delta-v1`n$releaseSha`n$operatorSha`n--name-status--`n" +
@@ -760,7 +765,7 @@ function Get-TestCanonicalOperatorDelta([string]$From, [string]$To) {
 }
 $transitionReleaseSha = "d0e55de86edfa6b5f655f5631bb1741d6c5b5ac8"
 $transitionBaselineOperatorSha = "d7844ba85b5b8291de4a78c47c88e1ec218211fa"
-$operatorCommit = (& git -C $repositoryRoot rev-parse HEAD).Trim()
+$operatorCommit = $operatorSha
 $transitionMetadata = $metadataV3 | ConvertTo-Json -Depth 20 | ConvertFrom-Json
 $transitionMetadata.ReleaseSourceSha = $transitionReleaseSha
 $transitionMetadata.OperatorSourceSha = $transitionBaselineOperatorSha

@@ -267,6 +267,7 @@ foreach ($required in @(
     'Get-OciLayoutIdentity', 'Assert-DeterministicOciIdentity', 'Assert-PlatformHandoff',
     '(?:Image)?ScanNotFoundException',
     'oci-layout://', '--network none', '--read-only', '--cap-drop ALL', 'migration-runtime-smoke:ok',
+    'jobs/dist/src/search-acceptance.js', 'jobs/dist/src/run-search-acceptance.js',
     'schemaVersion     = 2', 'indexDigest', 'platformDigest', 'rootfsDiffIdSetSha256',
     'compressedLayerSetSha256', 'imageUri = "$($boundary.RepositoryUri)@$($readback.PlatformDigest)"',
     'ReviewedReceiptSha256', '[IO.File]::Replace($temporary, $Path, $backup)',
