@@ -1628,18 +1628,27 @@ Do not launch automated submission broadly until:
 
 The living delivery tracker is authoritative. Current dependency order is:
 
-1. Complete [D0-016](product/delivery/phase-0-serverless-runtime-migration.md) by reconciling the
-   first post-retirement two-account billing window and final repository evidence.
-2. Reconcile delivered two-account billing against the revised runtime cost baseline under D0-008.
-3. Preserve the passed D0 security/privacy engineering pre-audit; D0-014 and D0-015 are removed
-   under ADR-019/ADR-020 and their accountable reviews are mandatory D6 public-launch inputs.
-4. Acquire authorized representative provider fixtures in D2, D3, and D4 after each owning
+1. Complete the open D1-002 generated-synthetic document-processing acceptance and the separately
+   reviewed activation sequence while keeping real resumes prohibited.
+2. Complete D1-005's mutation-driven stale-cursor acceptance against the deployed gateway and its
+   managed-OIDC/browser acceptance, then implement Matching-owned saved jobs, hard-constraint
+   evaluation, and grounded explanations without cross-owner database access.
+3. Implement D1 technical application history, reporting and moderation, provider-neutral
+   entitlements, crawlable job pages, and delivery-wide reliability/accessibility evidence with
+   synthetic data and fail-closed external integrations.
+4. Build source-neutral ingestion foundations, but keep Greenhouse, Lever, and Ashby production
+   ingestion disabled until their source-specific legal, provenance, revalidation, and takedown
+   conditions are approved and implemented.
+5. Acquire authorized representative provider fixtures in D2, D3, and D4 after each owning
    adapter declares its supported variants; D0-007 owns the approved process and fail-closed gate,
    not premature provider selection.
-5. Preserve the accepted D0 foundation while keeping all non-synthetic capability work behind its
+6. Preserve the accepted D0 foundation and passed security/privacy engineering pre-audit while
+   keeping all non-synthetic capability work behind its
    owning source, fixture, legal/privacy, security, and external-action gates.
-11. Instrument time, correction rate, factuality, failure reason, and cost.
-12. Test with real consenting users before expanding ATS coverage.
+7. Instrument time, correction rate, factuality, failure reason, and cost as each owning capability
+   becomes concrete.
+8. Test with real consenting users only after the applicable onboarding, provider, privacy,
+   security, deletion/export, and environment gates are accepted.
 
 ## 25. Decisions to revisit with product detail
 

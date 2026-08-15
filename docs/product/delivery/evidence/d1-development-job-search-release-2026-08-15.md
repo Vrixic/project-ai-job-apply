@@ -39,7 +39,7 @@ objectives, real source data, or production readiness.
   records the earlier migration-operator source. The pre-correction `PlanTask`/`ApplyTask` boundary
   required that operator source to equal current `main`, while the document-dark recovery
   allowlist correctly refuses the unrelated acceptance-package delta. No task-definition plan or
-  AWS mutation was attempted. A local migration-operator correction now requires an independently
+  AWS mutation was attempted. The merged migration-operator correction requires an independently
   reviewed checksum of the complete canonical baseline-operator-to-current Git delta on both
   actions, accepts that handoff only from an ancestor `CompleteDark` baseline, and binds both
   operator identities, the historical retained-state identity, the exact planning-state identity,
@@ -48,8 +48,9 @@ objectives, real source data, or production readiness.
   named above handed to the same lineage at serial 108;
   every other baseline must equal the planning state. The correction is locally verified under
   PowerShell 7 and Windows PowerShell 5.1, and two independent reviews accept its exact frozen
-  bytes and synchronized documentation; merge and deployment remain open. The serial-107 baseline
-  is historical evidence, not standalone authorization to apply a new task definition.
+  bytes and synchronized documentation. PR #278 squash-merged the accepted tree at
+  `eb0b7a169dc41cf34159e32df42b32ea9ed69276`; deployment remains open. The serial-107 baseline is
+  historical evidence, not standalone authorization to apply a new task definition.
 - The [gateway release operator](../../../../scripts/operate-development-gateway-release.ps1)
   ran its tests and dependency audit, built twice byte-for-byte, and conditionally published four
   previously unused immutable objects: ZIP, CycloneDX 1.6 SBOM, manifest, and checksum.
@@ -107,8 +108,8 @@ objectives, real source data, or production readiness.
 - The [Jobs-owned stale-cursor acceptance foundation](d1-job-search-stale-cursor-acceptance-foundation-2026-08-15.md)
   is implemented, independently accepted, and locally verified after this release. Pre-deployment
   review also produced the
-  independently accepted but unmerged retained-baseline source-handoff correction described above.
-  It still requires merge, exact-merged-source checks, immutable migration-image publication
+  independently accepted and merged retained-baseline source-handoff correction described above.
+  It still requires final-source checks, immutable migration-image publication
   and receipt review, a separately reviewed baseline-delta-bound task-definition plan/apply, and
   the exact guarded AWS acceptance and receipt verification; do not replace those gates with ad
   hoc SQL or a general command override.
