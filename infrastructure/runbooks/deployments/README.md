@@ -14,6 +14,9 @@ saved infrastructure plan, success evidence, and recovery boundary.
   verifies the direct authenticated job-search boundary without retaining query values.
 - [Database migration](database-migration.md) — Publishes the scanned migration-only image and
   runs exactly one hardened Fargate task while the retained cluster otherwise stays empty.
+- [Development document-processing acceptance](development-document-processing-acceptance.md) —
+  Runs the guarded generated-synthetic direct-dark lifecycle with all processing triggers disabled,
+  exact runtime and object-version binding, durable recovery, privacy-safe evidence, and cleanup.
 - [Staging runtime lifecycle](staging-runtime-lifecycle.md) — Activates isolated synthetic staging
   for bounded release exercises and returns its RDS/interface-endpoint data plane to a guarded
   dormant state.

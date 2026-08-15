@@ -69,6 +69,14 @@ no gateway or general worker image exists.
   plans/applies only an immutable migration task-definition replacement, and executes one
   checksum-reviewed no-override Fargate migration with aggregate-log, zero-task, encrypted-state,
   and zero-drift postconditions.
+- `operate-development-document-processing-acceptance.ps1` — Runs a checksum-reviewed,
+  generated-synthetic direct-dark acceptance lifecycle against exact gateway, processor, and
+  numeric parser identities while mapping, GuardDuty rule, and reconciler stay disabled. It uses
+  durable claims, exact-version upload/cleanup, aggregate-only receipts, and a bounded recovery
+  path. Direct authorizer context is a test harness and does not prove API Gateway routing,
+  JWT/JWKS validation, or authorizer enforcement.
+  See
+  `infrastructure/runbooks/deployments/development-document-processing-acceptance.md`.
 
 ## Repository and infrastructure policy
 

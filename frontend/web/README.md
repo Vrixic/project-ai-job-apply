@@ -69,9 +69,12 @@ a new version and the browser supplies no identity or provenance claim. The depl
 intake flow issues a direct, five-minute, write-only quarantine upload grant and lists only
 candidate-owned document metadata. Scan-result consumption, isolated parsing, and proposed-fact
 review are implemented, and the isolated processor/parser infrastructure is deployed CompleteDark
-in development with its event-source mapping and processing rules disabled. Generated-synthetic
-processing acceptance and the separately reviewed activation sequence remain open, so the
-end-to-end proposal flow is still unavailable to users and real resumes remain prohibited.
+in development with its event-source mapping, GuardDuty rule, and reconciler disabled. The generated-synthetic
+direct-dark acceptance packet is implemented and locally verified only; it is not published,
+deployed, or executed in AWS. Its direct Lambda calls fabricate an already-validated
+authorizer context and do not prove API Gateway routing, JWT/JWKS validation, or authorizer
+enforcement. The separately human-reviewed activation sequence remains open, so the end-to-end
+proposal flow is still unavailable to users and real resumes remain prohibited.
 
 The first catalog-discovery slice adds a responsive, labelled search form and compact active-job
 summaries. The browser sends supported keywords and title, company, location, or freshness filters

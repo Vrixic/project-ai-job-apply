@@ -11,6 +11,10 @@
     "./schema": {
       "types": "./dist/src/schema.d.ts",
       "default": "./dist/src/schema.js"
+    },
+    "./document-processing-acceptance": {
+      "types": "./dist/src/document-processing-acceptance.d.ts",
+      "default": "./dist/src/document-processing-acceptance.js"
     }
   },
   "scripts": {
