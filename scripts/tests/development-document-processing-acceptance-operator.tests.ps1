@@ -498,7 +498,7 @@ try {
     }
   }
 
-  & pnpm --filter @ai-job-apply/documents-service build | Out-Null
+  & pnpm --filter @ai-job-apply/documents-service... build | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "The production parser build failed." }
   $parsingModule = (Join-Path $repositoryRoot "backend\services\documents\dist\src\parsing\index.js").Replace("\", "/")
   $harness = @"
