@@ -13,6 +13,44 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  catalog-invariants:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: postgres://ai_job_apply:local_only@localhost:55432/ai_job_apply
+    services:
+      postgres:
+        image: postgres:16.6-alpine
+        env:
+          POSTGRES_DB: ai_job_apply
+          POSTGRES_USER: ai_job_apply
+          POSTGRES_PASSWORD: local_only
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U ai_job_apply -d ai_job_apply"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.24.0
+          run_install: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.12.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build Jobs service for PostgreSQL migration replay
+        run: pnpm --filter @ai-job-apply/jobs-service build
+      - name: Verify D1-004 catalog invariants
+        run: pnpm verify:d1-004-catalog-invariants
+      - name: Verify catalog-invariant orchestration
+        shell: pwsh
+        run: ./scripts/tests/d1-004-catalog-invariants.tests.ps1
+
   quality:
     runs-on: ubuntu-latest
     timeout-minutes: 20
