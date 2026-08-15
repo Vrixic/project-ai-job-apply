@@ -68,8 +68,65 @@ label span {
   font-weight: 450;
 }
 
+fieldset {
+  margin: 0 0 20px;
+  padding: 0;
+  border: 0;
+}
+
+legend {
+  margin-bottom: 7px;
+  font-weight: 700;
+}
+
+.field-help {
+  display: block;
+  margin-bottom: 10px;
+  color: #6a776f;
+  font-size: 0.82rem;
+}
+
+.repeatable-field {
+  padding: 16px;
+  border: 1px solid #dce5df;
+  border-radius: 12px;
+}
+
+.repeatable-row {
+  display: grid;
+  align-items: end;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.repeatable-row label {
+  margin: 0;
+}
+
+.choice-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 18px;
+}
+
+.choice-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  font-weight: 600;
+}
+
+.paired-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 18px;
+}
+
 input,
 select,
+textarea,
 button,
 .button-link {
   min-height: 48px;
@@ -77,8 +134,15 @@ button,
   font: inherit;
 }
 
+.repeatable-field button {
+  border: 1px solid #8aa596;
+  background: #eef5f1;
+  color: #164c33;
+}
+
 input,
-select {
+select,
+textarea {
   width: 100%;
   border: 1px solid #aebeb4;
   padding: 0 13px;
@@ -87,9 +151,15 @@ select {
 
 input:focus-visible,
 select:focus-visible,
+textarea:focus-visible,
 button:focus-visible {
   outline: 3px solid #8ad0ad;
   outline-offset: 2px;
+}
+
+.choice-option input {
+  width: auto;
+  min-height: auto;
 }
 
 button,
@@ -244,6 +314,12 @@ aside {
   border-color: #98c9ad;
 }
 
+.result small {
+  display: block;
+  color: #506259;
+  line-height: 1.5;
+}
+
 @media (max-width: 520px) {
   main {
     margin: 32px auto;
@@ -262,6 +338,16 @@ aside {
   }
 
   .job-search-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .repeatable-row {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .choice-group,
+  .paired-fields {
     grid-template-columns: 1fr;
   }
 }

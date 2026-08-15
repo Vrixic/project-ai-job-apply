@@ -65,13 +65,31 @@ separate configuration.
 
 The truth-profile panel uses server-held Auth0 sessions to list, create, correct, and reject
 candidate-owned facts. Direct entries are clearly described as user-confirmed; correction creates
-a new version and the browser supplies no identity or provenance claim. The deployed development
+a new version and the browser supplies no identity or provenance claim. Direct entries are fixed
+to the Confidential class. The general profile form does not collect Restricted sponsorship,
+work-authorization, demographic, disability, veteran, or legal answers; that capture remains
+deferred to the dedicated D3 restricted-data boundary and mandatory review flow.
+
+The local-only expanded onboarding editor starts with no fabricated preference values, uses
+separate array-backed controls for up to ten target roles and ten optional locations, preserves
+entry boundaries, commas, and line breaks while trimming entry edges and deduplicating exact
+entries, and supports ordered multi-choice work modes and employment types plus an optional
+all-or-none minimum-compensation amount/currency pair. It does
+not display, collect, or submit sponsorship. Because the current preference `PUT` is a full
+replacement, any loaded legacy preference containing either sponsorship boolean is detected
+without displaying the answer and saving fails closed until that field is migrated to the future
+restricted-data boundary. This packet is locally verified source only; real-browser, managed-OIDC,
+deployment, and real-candidate acceptance remain open.
+
+The deployed development
 intake flow issues a direct, five-minute, write-only quarantine upload grant and lists only
 candidate-owned document metadata. Scan-result consumption, isolated parsing, and proposed-fact
 review are implemented, and the isolated processor/parser infrastructure is deployed CompleteDark
-in development with its event-source mapping, GuardDuty rule, and reconciler disabled. The generated-synthetic
-direct-dark acceptance packet is implemented and locally verified only; it is not published,
-deployed, or executed in AWS. Its direct Lambda calls fabricate an already-validated
+in development with its event-source mapping, GuardDuty rule, and reconciler disabled. The
+generated-synthetic direct-dark acceptance source packet merged through PR #280 at `8965d8f` and
+is locally verified. Its immutable migration image and task definition remain unpublished;
+production container smoke/scan and AWS execution/acceptance remain unrun. Its direct Lambda calls
+fabricate an already-validated
 authorizer context and do not prove API Gateway routing, JWT/JWKS validation, or authorizer
 enforcement. The separately human-reviewed activation sequence remains open, so the end-to-end
 proposal flow is still unavailable to users and real resumes remain prohibited.

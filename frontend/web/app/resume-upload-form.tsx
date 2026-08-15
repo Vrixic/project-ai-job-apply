@@ -37,6 +37,19 @@ async function sha256(file: File): Promise<string> {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+async function waitForDelay(delay: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return;
+  await new Promise<void>((resolve) => {
+    const finish = () => {
+      window.clearTimeout(timer);
+      signal.removeEventListener("abort", finish);
+      resolve();
+    };
+    const timer = window.setTimeout(finish, delay);
+    signal.addEventListener("abort", finish, { once: true });
+  });
+}
+
 function statusLabel(status: string): string {
   return status.replaceAll("_", " ");
 }
@@ -104,28 +117,67 @@ export function ResumeUploadForm({
   const [loading, setLoading] = useState(authenticated);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<string>();
-  const polling = useRef(false);
+  const authenticatedRef = useRef(authenticated);
+  authenticatedRef.current = authenticated;
+  const sessionGeneration = useRef(0);
+  const activeControllers = useRef(new Set<AbortController>());
+  const pollingGeneration = useRef<number | undefined>(undefined);
   const pollingTargets = useRef(new ResumePollingTargets());
   const mounted = useRef(true);
+  const onDocumentParsedRef = useRef(onDocumentParsed);
+  onDocumentParsedRef.current = onDocumentParsed;
+
+  const sessionIsCurrent = useCallback((generation: number, signal?: AbortSignal): boolean => {
+    return (
+      mounted.current &&
+      authenticatedRef.current &&
+      generation === sessionGeneration.current &&
+      !signal?.aborted
+    );
+  }, []);
+
+  const createSessionController = useCallback(
+    (generation: number): AbortController | undefined => {
+      if (!sessionIsCurrent(generation)) return undefined;
+      const controller = new AbortController();
+      activeControllers.current.add(controller);
+      return controller;
+    },
+    [sessionIsCurrent],
+  );
+
+  const releaseSessionController = useCallback((controller: AbortController): void => {
+    activeControllers.current.delete(controller);
+  }, []);
+
+  const abortSessionRequests = useCallback((): void => {
+    for (const controller of activeControllers.current) controller.abort();
+    activeControllers.current.clear();
+  }, []);
 
   const pollUntilTerminal = useCallback(
-    async (documentIds: readonly string[]) => {
-      if (!authenticated || documentIds.length === 0) return;
+    async (documentIds: readonly string[], generation: number) => {
+      if (!sessionIsCurrent(generation) || documentIds.length === 0) return;
       pollingTargets.current.add(documentIds);
-      if (polling.current) return;
-      polling.current = true;
+      if (pollingGeneration.current === generation) return;
+      const controller = createSessionController(generation);
+      if (!controller) return;
+      pollingGeneration.current = generation;
       const delays = [2_000, 3_000, 5_000, 8_000, 10_000, 15_000, 20_000, 30_000];
       try {
-        while (mounted.current && pollingTargets.current.pending) {
+        while (sessionIsCurrent(generation, controller.signal) && pollingTargets.current.pending) {
           const round = pollingTargets.current.beginRound();
           let completed = false;
           for (const delay of delays) {
-            await new Promise((resolve) => window.setTimeout(resolve, delay));
-            if (!mounted.current) return;
-            const result = await request<ResumeDocumentCollection>("/api/platform/resumes");
-            if (!mounted.current) return;
+            await waitForDelay(delay, controller.signal);
+            if (!sessionIsCurrent(generation, controller.signal)) return;
+            const result = await request<ResumeDocumentCollection>("/api/platform/resumes", {
+              signal: controller.signal,
+            });
+            if (!sessionIsCurrent(generation, controller.signal)) return;
             setDocuments(result.documents);
             let parsed = false;
+            let terminalWithoutParsedFacts = false;
             for (const document of result.documents) {
               if (
                 pollingTargets.current.has(document.id) &&
@@ -133,9 +185,17 @@ export function ResumeUploadForm({
               ) {
                 pollingTargets.current.resolve(document.id);
                 parsed ||= document.status === "parsed";
+                terminalWithoutParsedFacts ||= document.status !== "parsed";
               }
             }
-            if (parsed) onDocumentParsed?.();
+            if (parsed) {
+              setMessage("Resume parsing finished. Checking for extracted facts to review.");
+              onDocumentParsedRef.current?.();
+            } else if (terminalWithoutParsedFacts) {
+              setMessage(
+                "Resume processing finished without parsed facts. Check its status below.",
+              );
+            }
             if (pollingTargets.current.roundComplete(round)) {
               completed = true;
               break;
@@ -143,80 +203,130 @@ export function ResumeUploadForm({
           }
           if (!completed) {
             pollingTargets.current.expire(round);
-            setMessage(
-              "Processing is taking longer than expected. Refresh later; the upload remains safe in quarantine.",
-            );
+            if (sessionIsCurrent(generation, controller.signal)) {
+              setMessage(
+                "Processing is taking longer than expected. Refresh later; the upload remains safe in quarantine.",
+              );
+            }
           }
         }
       } catch (error) {
-        if (mounted.current) {
+        if (sessionIsCurrent(generation, controller.signal)) {
           setMessage(error instanceof Error ? error.message : "Could not refresh resume status");
         }
       } finally {
-        polling.current = false;
+        releaseSessionController(controller);
+        if (pollingGeneration.current === generation) pollingGeneration.current = undefined;
       }
     },
-    [authenticated, onDocumentParsed],
+    [createSessionController, releaseSessionController, sessionIsCurrent],
   );
-
-  const load = useCallback(async () => {
-    if (!authenticated) {
-      setLoading(false);
-      setDocuments([]);
-      return;
-    }
-    setLoading(true);
-    try {
-      const result = await request<ResumeDocumentCollection>("/api/platform/resumes");
-      setDocuments(result.documents);
-      const processingIds = recoverableResumeIds(result.documents);
-      void pollUntilTerminal(processingIds);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not load resumes");
-    } finally {
-      setLoading(false);
-    }
-  }, [authenticated, pollUntilTerminal]);
 
   useEffect(() => {
     mounted.current = true;
-    void load();
+    const generation = ++sessionGeneration.current;
+    abortSessionRequests();
+    pollingTargets.current.clear();
+    pollingGeneration.current = undefined;
+
+    if (!authenticated) {
+      setDocuments([]);
+      setFile(undefined);
+      setLoading(false);
+      setUploading(false);
+      setMessage(undefined);
+      if (fileInput.current) fileInput.current.value = "";
+      return;
+    }
+
+    const controller = createSessionController(generation);
+    if (!controller) return;
+    setLoading(true);
+    void (async () => {
+      try {
+        const result = await request<ResumeDocumentCollection>("/api/platform/resumes", {
+          signal: controller.signal,
+        });
+        if (!sessionIsCurrent(generation, controller.signal)) return;
+        setDocuments(result.documents);
+        const processingIds = recoverableResumeIds(result.documents);
+        void pollUntilTerminal(processingIds, generation);
+      } catch (error) {
+        if (sessionIsCurrent(generation, controller.signal)) {
+          setMessage(error instanceof Error ? error.message : "Could not load resumes");
+        }
+      } finally {
+        releaseSessionController(controller);
+        if (sessionIsCurrent(generation, controller.signal)) setLoading(false);
+      }
+    })();
+
     return () => {
-      mounted.current = false;
+      if (sessionGeneration.current === generation) sessionGeneration.current += 1;
+      abortSessionRequests();
       pollingTargets.current.clear();
+      pollingGeneration.current = undefined;
     };
-  }, [load]);
+  }, [
+    abortSessionRequests,
+    authenticated,
+    createSessionController,
+    pollUntilTerminal,
+    releaseSessionController,
+    sessionIsCurrent,
+  ]);
+
+  useEffect(
+    () => () => {
+      mounted.current = false;
+      sessionGeneration.current += 1;
+      abortSessionRequests();
+      pollingTargets.current.clear();
+      pollingGeneration.current = undefined;
+    },
+    [abortSessionRequests],
+  );
 
   async function upload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!file) return;
+    const selectedFile = file;
+    const generation = sessionGeneration.current;
+    if (!selectedFile || !sessionIsCurrent(generation)) return;
+    const controller = createSessionController(generation);
+    if (!controller) return;
     setUploading(true);
     setMessage(undefined);
     try {
-      if (file.size < 1 || file.size > MAXIMUM_RESUME_BYTES) {
+      if (selectedFile.size < 1 || selectedFile.size > MAXIMUM_RESUME_BYTES) {
         throw new Error("Resume files must be between 1 byte and 5 MiB.");
       }
-      const mediaType = approvedMediaType(file);
+      const mediaType = approvedMediaType(selectedFile);
+      const digest = await sha256(selectedFile);
+      if (!sessionIsCurrent(generation, controller.signal)) return;
       const metadata: CreateResumeUploadRequest = {
-        fileName: file.name,
+        fileName: selectedFile.name,
         mediaType,
-        sizeBytes: file.size,
-        sha256: await sha256(file),
+        sizeBytes: selectedFile.size,
+        sha256: digest,
       };
       const registered = await request<CreateResumeUploadResponse>("/api/platform/resumes", {
         method: "POST",
         headers: { "idempotency-key": `resume-upload-${crypto.randomUUID()}` },
         body: JSON.stringify(metadata),
+        signal: controller.signal,
       });
+      if (!sessionIsCurrent(generation, controller.signal)) return;
       const form = new FormData();
       for (const [name, value] of Object.entries(registered.upload.fields)) {
         form.append(name, value);
       }
-      form.append("file", file, file.name);
+      form.append("file", selectedFile, selectedFile.name);
       const uploaded = await fetch(registered.upload.url, {
         method: registered.upload.method,
         body: form,
+        signal: controller.signal,
       });
+      if (!sessionIsCurrent(generation, controller.signal)) return;
       if (!uploaded.ok) {
         throw new Error("The encrypted upload was not accepted. Retry with a new upload grant.");
       }
@@ -226,13 +336,22 @@ export function ResumeUploadForm({
       }
       setDocuments((current) => [registered.document, ...current]);
       setMessage("Resume uploaded to quarantine. It will be scanned before any text is parsed.");
-      void pollUntilTerminal([registered.document.id]);
+      void pollUntilTerminal([registered.document.id], generation);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not upload the resume");
+      if (sessionIsCurrent(generation, controller.signal)) {
+        setMessage(error instanceof Error ? error.message : "Could not upload the resume");
+      }
     } finally {
-      setUploading(false);
+      releaseSessionController(controller);
+      if (sessionIsCurrent(generation, controller.signal)) setUploading(false);
     }
   }
+
+  const visibleDocuments = authenticated ? documents : [];
+  const visibleFile = authenticated ? file : undefined;
+  const visibleLoading = authenticated && loading;
+  const visibleUploading = authenticated && uploading;
+  const visibleMessage = authenticated ? message : undefined;
 
   return (
     <section className="profile-facts" aria-labelledby="resume-upload-heading">
@@ -241,20 +360,20 @@ export function ResumeUploadForm({
           <div className="eyebrow">Resume intake</div>
           <h2 id="resume-upload-heading">Your source resumes</h2>
         </div>
-        <span>{documents.length} stored</span>
+        <span>{visibleDocuments.length} stored</span>
       </div>
       <p>
         PDF and DOCX files are encrypted, quarantined, and malware-scanned before parsing. Parsed
         claims remain proposed until you review them; nothing is silently confirmed.
       </p>
 
-      {loading ? (
+      {visibleLoading ? (
         <p>Loading resumes…</p>
-      ) : documents.length === 0 ? (
+      ) : visibleDocuments.length === 0 ? (
         <p>No resumes uploaded yet.</p>
       ) : (
         <ul className="fact-list">
-          {documents.map((document) => (
+          {visibleDocuments.map((document) => (
             <li key={document.id}>
               <div>
                 <strong>{document.fileName}</strong>
@@ -278,17 +397,24 @@ export function ResumeUploadForm({
             ref={fileInput}
             type="file"
             accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            onChange={(event) => setFile(event.target.files?.[0])}
-            disabled={!authenticated || uploading}
+            onChange={(event) => {
+              if (authenticatedRef.current) {
+                setFile(event.target.files?.[0]);
+              } else {
+                event.target.value = "";
+                setFile(undefined);
+              }
+            }}
+            disabled={!authenticated || visibleUploading}
             required
           />
-          {file && <span aria-live="polite">Selected file: {file.name}</span>}
+          {visibleFile && <span aria-live="polite">Selected file: {visibleFile.name}</span>}
         </label>
-        <button type="submit" disabled={!authenticated || !file || uploading}>
-          {uploading ? "Encrypting and uploading…" : "Upload resume"}
+        <button type="submit" disabled={!authenticated || !visibleFile || visibleUploading}>
+          {visibleUploading ? "Encrypting and uploading…" : "Upload resume"}
         </button>
       </form>
-      {message && <output>{message}</output>}
+      {visibleMessage && <output>{visibleMessage}</output>}
     </section>
   );
 }

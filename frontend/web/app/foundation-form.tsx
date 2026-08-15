@@ -3,25 +3,37 @@
 import type {
   JobPreferenceSet,
   Operation,
-  PutJobPreferencesRequest,
   PutJobPreferencesResponse,
 } from "@ai-job-apply/api-contracts";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { isIsolationOperationEligible } from "../lib/isolation-operation";
 import { JobSearchForm } from "./job-search-form";
+import {
+  buildJobPreferenceRequest,
+  type EmploymentType,
+  emptyJobPreferenceFields,
+  hydrateJobPreferenceFields,
+  type JobPreferenceFields,
+  toggleOrderedChoice,
+  type WorkMode,
+} from "./preference-form-state";
 import { ProfileFactsForm } from "./profile-facts-form";
 import { ResumeUploadForm } from "./resume-upload-form";
 
-function splitValues(value: string): string[] {
-  return [
-    ...new Set(
-      value
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean),
-    ),
-  ];
-}
+const workModeOptions: ReadonlyArray<{ value: WorkMode; label: string }> = [
+  { value: "remote", label: "Remote" },
+  { value: "hybrid", label: "Hybrid" },
+  { value: "on_site", label: "On-site" },
+];
+const employmentTypeOptions: ReadonlyArray<{ value: EmploymentType; label: string }> = [
+  { value: "full_time", label: "Full-time" },
+  { value: "part_time", label: "Part-time" },
+  { value: "contract", label: "Contract" },
+  { value: "internship", label: "Internship" },
+];
+const workModeValues = workModeOptions.map((option) => option.value);
+const employmentTypeValues = employmentTypeOptions.map((option) => option.value);
+type RepeatablePreferenceField = "targetRoles" | "locations";
 
 async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
@@ -60,9 +72,9 @@ export function FoundationForm({
     () => setProfileRefreshVersion((version) => version + 1),
     [],
   );
-  const [targetRoles, setTargetRoles] = useState("Software Engineer");
-  const [locations, setLocations] = useState("New York, NY");
-  const [workMode, setWorkMode] = useState<"remote" | "hybrid" | "on_site">("remote");
+  const [preferenceFields, setPreferenceFields] = useState<JobPreferenceFields>(() =>
+    emptyJobPreferenceFields(),
+  );
   const [loadingPreferences, setLoadingPreferences] = useState(authenticated);
   const [saving, setSaving] = useState(false);
   const [renewingSession, setRenewingSession] = useState(false);
@@ -76,9 +88,31 @@ export function FoundationForm({
   const [operation, setOperation] = useState<Operation>();
   const [message, setMessage] = useState<string>();
   const lastSubmission = useRef<{ body: string; idempotencyKey: string } | undefined>(undefined);
+  const saveRequestVersion = useRef(0);
+  const operationPollVersion = useRef(0);
+  const preferenceRowSequence = useRef(0);
+  const [preferenceRowIds, setPreferenceRowIds] = useState<
+    Record<RepeatablePreferenceField, string[]>
+  >({ targetRoles: ["target-role-initial"], locations: [] });
+  const preferenceControlsDisabled = loadingPreferences || saving || !authenticated;
+
+  const replacePreferenceFields = useCallback((fields: JobPreferenceFields) => {
+    setPreferenceFields(fields);
+    setPreferenceRowIds({
+      targetRoles: fields.targetRoles.map(() => `target-role-${++preferenceRowSequence.current}`),
+      locations: fields.locations.map(() => `location-${++preferenceRowSequence.current}`),
+    });
+  }, []);
 
   useEffect(() => {
+    saveRequestVersion.current += 1;
+    setSaving(false);
+    setMessage(undefined);
     if (!authenticated) {
+      replacePreferenceFields(emptyJobPreferenceFields());
+      setOperationId(undefined);
+      setOperation(undefined);
+      lastSubmission.current = undefined;
       setLoadingPreferences(false);
       return;
     }
@@ -92,6 +126,9 @@ export function FoundationForm({
           signal: controller.signal,
         });
         if (response.status === 404) {
+          replacePreferenceFields(emptyJobPreferenceFields());
+          lastSubmission.current = undefined;
+          setMessage(undefined);
           return;
         }
         if (!response.ok) {
@@ -99,10 +136,14 @@ export function FoundationForm({
           throw new Error(problem.detail ?? problem.title ?? "Could not load saved preferences");
         }
         const preferences = (await response.json()) as JobPreferenceSet;
-        setTargetRoles(preferences.targetRoles.join(", "));
-        setLocations(preferences.locations.join(", "));
-        setWorkMode(preferences.workModes[0] ?? "remote");
-        setMessage("Saved preferences loaded.");
+        const fields = hydrateJobPreferenceFields(preferences);
+        replacePreferenceFields(fields);
+        lastSubmission.current = undefined;
+        setMessage(
+          fields.legacySponsorshipPresent
+            ? "These saved preferences contain a legacy sponsorship answer. It is not shown here, and saving is unavailable until it moves to the restricted-data boundary."
+            : "Saved preferences loaded.",
+        );
       } catch (error) {
         if (!controller.signal.aborted) {
           setMessage(error instanceof Error ? error.message : "Could not load saved preferences");
@@ -115,36 +156,91 @@ export function FoundationForm({
     }
     void loadPreferences();
     return () => controller.abort();
-  }, [authenticated]);
+  }, [authenticated, replacePreferenceFields]);
 
   useEffect(() => {
-    if (!operationId || operation?.state === "succeeded" || operation?.state === "failed") {
+    const pollVersion = ++operationPollVersion.current;
+    if (
+      !authenticated ||
+      !operationId ||
+      operation?.state === "succeeded" ||
+      operation?.state === "failed"
+    ) {
       return;
     }
+    const controller = new AbortController();
+    let requestInFlight = false;
     const timer = window.setInterval(async () => {
+      if (requestInFlight) return;
+      requestInFlight = true;
       try {
         const next = await apiRequest<Operation>(
           `/api/platform/operations/${encodeURIComponent(operationId)}`,
+          { signal: controller.signal },
         );
-        setOperation(next);
+        if (!controller.signal.aborted && pollVersion === operationPollVersion.current) {
+          setOperation(next);
+        }
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : "Could not read operation status");
+        if (!controller.signal.aborted && pollVersion === operationPollVersion.current) {
+          setMessage(error instanceof Error ? error.message : "Could not read operation status");
+        }
+      } finally {
+        requestInFlight = false;
       }
     }, 1_500);
-    return () => window.clearInterval(timer);
-  }, [operationId, operation?.state]);
+    return () => {
+      operationPollVersion.current += 1;
+      controller.abort();
+      window.clearInterval(timer);
+    };
+  }, [authenticated, operationId, operation?.state]);
+
+  function updateRepeatablePreference(
+    field: RepeatablePreferenceField,
+    index: number,
+    value: string,
+  ) {
+    setPreferenceFields((current) => ({
+      ...current,
+      [field]: current[field].map((item, itemIndex) => (itemIndex === index ? value : item)),
+    }));
+  }
+
+  function addRepeatablePreference(field: RepeatablePreferenceField) {
+    if (preferenceFields[field].length >= 10) return;
+    setPreferenceFields((current) => ({ ...current, [field]: [...current[field], ""] }));
+    setPreferenceRowIds((current) => ({
+      ...current,
+      [field]: [...current[field], `${field}-${++preferenceRowSequence.current}`],
+    }));
+  }
+
+  function removeRepeatablePreference(field: RepeatablePreferenceField, index: number) {
+    setPreferenceFields((current) => {
+      const remaining = current[field].filter((_, itemIndex) => itemIndex !== index);
+      return {
+        ...current,
+        [field]: field === "targetRoles" && remaining.length === 0 ? [""] : remaining,
+      };
+    });
+    setPreferenceRowIds((current) => ({
+      ...current,
+      [field]: current[field].filter((_, itemIndex) => itemIndex !== index),
+    }));
+  }
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSaving(true);
     setMessage(undefined);
-    const body: PutJobPreferencesRequest = {
-      targetRoles: splitValues(targetRoles),
-      locations: splitValues(locations),
-      workModes: [workMode],
-      employmentTypes: ["full_time"],
-    };
-    const serializedBody = JSON.stringify(body);
+    const result = buildJobPreferenceRequest(preferenceFields);
+    if (!result.ok) {
+      setMessage(result.message);
+      return;
+    }
+    setSaving(true);
+    const requestVersion = ++saveRequestVersion.current;
+    const serializedBody = JSON.stringify(result.request);
     if (!lastSubmission.current || lastSubmission.current.body !== serializedBody) {
       lastSubmission.current = {
         body: serializedBody,
@@ -160,6 +256,8 @@ export function FoundationForm({
           body: serializedBody,
         },
       );
+      if (requestVersion !== saveRequestVersion.current) return;
+      replacePreferenceFields(hydrateJobPreferenceFields(response.preferences));
       setOperationId(response.operationId);
       setOperation({
         id: response.operationId,
@@ -168,11 +266,13 @@ export function FoundationForm({
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
-      setMessage("Preferences saved. Readiness is being calculated.");
+      setMessage("Preferences saved. Checking optional preference details.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not save preferences");
+      if (requestVersion === saveRequestVersion.current) {
+        setMessage(error instanceof Error ? error.message : "Could not save preferences");
+      }
     } finally {
-      setSaving(false);
+      if (requestVersion === saveRequestVersion.current) setSaving(false);
     }
   }
 
@@ -228,7 +328,7 @@ export function FoundationForm({
 
   async function armIsolationProbe() {
     if (!operationId || !isIsolationOperationEligible(operation?.state, false)) {
-      setMessage("Create an eligible readiness operation before arming the isolation check.");
+      setMessage("Create a completed saved-preference check before arming the isolation check.");
       return;
     }
     setArmingIsolation(true);
@@ -290,7 +390,7 @@ export function FoundationForm({
   async function runPhase0Workload() {
     if (
       !window.confirm(
-        "Run the fixed Phase 0 workload: 500 public probes and 25 readiness workflows?",
+        "Run the fixed Phase 0 workload: 500 public probes and 25 preference workflows?",
       )
     ) {
       return;
@@ -419,45 +519,173 @@ export function FoundationForm({
         </aside>
       )}
 
-      <form onSubmit={save}>
-        <label>
-          Target roles
-          <span>Comma-separated, up to ten</span>
-          <input
-            value={targetRoles}
-            onChange={(event) => setTargetRoles(event.target.value)}
-            disabled={loadingPreferences}
-            required
-          />
-        </label>
-        <label>
-          Locations
-          <span>Leave empty if location is flexible</span>
-          <input
-            value={locations}
-            onChange={(event) => setLocations(event.target.value)}
-            disabled={loadingPreferences}
-          />
-        </label>
-        <label>
-          Work mode
-          <select
-            value={workMode}
-            onChange={(event) => setWorkMode(event.target.value as "remote" | "hybrid" | "on_site")}
-            disabled={loadingPreferences}
-          >
-            <option value="remote">Remote</option>
-            <option value="hybrid">Hybrid</option>
-            <option value="on_site">On-site</option>
-          </select>
-        </label>
-        <button type="submit" disabled={saving || loadingPreferences || !authenticated}>
-          {loadingPreferences ? "Loading…" : saving ? "Saving…" : "Save preferences"}
-        </button>
-      </form>
+      {authenticated && (
+        <>
+          <form className="preference-form" aria-label="Job preferences" onSubmit={save}>
+            <fieldset className="repeatable-field" disabled={preferenceControlsDisabled}>
+              <legend>Target roles</legend>
+              <span className="field-help">
+                Add up to ten roles; punctuation stays within each role
+              </span>
+              {preferenceRowIds.targetRoles.map((rowId, index) => (
+                <div className="repeatable-row" key={rowId}>
+                  <label>
+                    Target role {index + 1}
+                    <textarea
+                      maxLength={100}
+                      rows={2}
+                      value={preferenceFields.targetRoles[index] ?? ""}
+                      onChange={(event) =>
+                        updateRepeatablePreference("targetRoles", index, event.target.value)
+                      }
+                      required
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    aria-label={`Remove target role ${index + 1}`}
+                    onClick={() => removeRepeatablePreference("targetRoles", index)}
+                    disabled={preferenceFields.targetRoles.length === 1}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => addRepeatablePreference("targetRoles")}
+                disabled={preferenceFields.targetRoles.length >= 10}
+              >
+                Add target role
+              </button>
+            </fieldset>
+            <fieldset className="repeatable-field" disabled={preferenceControlsDisabled}>
+              <legend>Locations</legend>
+              <span className="field-help">Optional; add up to ten locations</span>
+              {preferenceRowIds.locations.map((rowId, index) => (
+                <div className="repeatable-row" key={rowId}>
+                  <label>
+                    Location {index + 1}
+                    <textarea
+                      maxLength={120}
+                      rows={2}
+                      value={preferenceFields.locations[index] ?? ""}
+                      onChange={(event) =>
+                        updateRepeatablePreference("locations", index, event.target.value)
+                      }
+                      required
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    aria-label={`Remove location ${index + 1}`}
+                    onClick={() => removeRepeatablePreference("locations", index)}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => addRepeatablePreference("locations")}
+                disabled={preferenceFields.locations.length >= 10}
+              >
+                Add location
+              </button>
+            </fieldset>
+            <fieldset disabled={preferenceControlsDisabled}>
+              <legend>Work modes</legend>
+              <span className="field-help">Select every mode you would accept</span>
+              <div className="choice-group">
+                {workModeOptions.map((option) => (
+                  <label className="choice-option" key={option.value}>
+                    <input
+                      type="checkbox"
+                      checked={preferenceFields.workModes.includes(option.value)}
+                      onChange={(event) =>
+                        setPreferenceFields((current) => ({
+                          ...current,
+                          workModes: toggleOrderedChoice(
+                            workModeValues,
+                            current.workModes,
+                            option.value,
+                            event.target.checked,
+                          ),
+                        }))
+                      }
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <fieldset disabled={preferenceControlsDisabled}>
+              <legend>Employment types</legend>
+              <span className="field-help">Select every type you would accept</span>
+              <div className="choice-group">
+                {employmentTypeOptions.map((option) => (
+                  <label className="choice-option" key={option.value}>
+                    <input
+                      type="checkbox"
+                      checked={preferenceFields.employmentTypes.includes(option.value)}
+                      onChange={(event) =>
+                        setPreferenceFields((current) => ({
+                          ...current,
+                          employmentTypes: toggleOrderedChoice(
+                            employmentTypeValues,
+                            current.employmentTypes,
+                            option.value,
+                            event.target.checked,
+                          ),
+                        }))
+                      }
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <div className="paired-fields">
+              <label>
+                Minimum compensation amount
+                <span>Optional; enter a whole number</span>
+                <input
+                  inputMode="numeric"
+                  value={preferenceFields.salaryMinimum}
+                  onChange={(event) =>
+                    setPreferenceFields((current) => ({
+                      ...current,
+                      salaryMinimum: event.target.value,
+                    }))
+                  }
+                  disabled={preferenceControlsDisabled}
+                />
+              </label>
+              <label>
+                Compensation currency
+                <span>Three-letter code, such as USD</span>
+                <input
+                  maxLength={3}
+                  value={preferenceFields.salaryCurrency}
+                  onChange={(event) =>
+                    setPreferenceFields((current) => ({
+                      ...current,
+                      salaryCurrency: event.target.value.toUpperCase(),
+                    }))
+                  }
+                  disabled={preferenceControlsDisabled}
+                />
+              </label>
+            </div>
+            <button type="submit" disabled={preferenceControlsDisabled}>
+              {loadingPreferences ? "Loading…" : saving ? "Saving…" : "Save preferences"}
+            </button>
+          </form>
 
-      <ProfileFactsForm authenticated={authenticated} refreshVersion={profileRefreshVersion} />
-      <ResumeUploadForm authenticated={authenticated} onDocumentParsed={handleDocumentParsed} />
+          <ResumeUploadForm authenticated onDocumentParsed={handleDocumentParsed} />
+          <ProfileFactsForm authenticated refreshVersion={profileRefreshVersion} />
+        </>
+      )}
       <JobSearchForm authenticated={authenticated} />
 
       {!authConfigured && (
@@ -466,23 +694,29 @@ export function FoundationForm({
           development tokens are not supported.
         </aside>
       )}
-      {message && <output>{message}</output>}
+      {authenticated && message && <output aria-live="polite">{message}</output>}
       {workloadMetrics && (
         <section className="result" aria-live="polite">
           <strong>Aggregate Phase 0 workload metrics</strong>
           <pre>{JSON.stringify(workloadMetrics, null, 2)}</pre>
         </section>
       )}
-      {operation && (
+      {authenticated && operation && (
         <section className="result" aria-live="polite">
-          <strong>Readiness workflow: {operation.state.replace("_", " ")}</strong>
+          <strong>Saved-preference check: {operation.state.replaceAll("_", " ")}</strong>
           {operation.result && (
-            <p>
-              Profile readiness: {operation.result.completionPercent}%.
-              {operation.result.missingFields.length > 0
-                ? ` Optional details: ${operation.result.missingFields.join(", ")}.`
-                : " No discovery details are missing."}
-            </p>
+            <>
+              <p>
+                {operation.result.missingFields.length > 0
+                  ? `Optional preference details not saved: ${operation.result.missingFields.join(", ")}.`
+                  : "All details evaluated by this saved-preference check are present."}
+              </p>
+              <small>
+                This check only reports whether optional location and minimum compensation
+                preferences are saved. It does not assess resume processing, profile facts,
+                matching, or application readiness.
+              </small>
+            </>
           )}
         </section>
       )}
