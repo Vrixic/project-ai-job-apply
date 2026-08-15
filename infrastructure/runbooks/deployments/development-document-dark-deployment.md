@@ -168,6 +168,47 @@ disabled. Success emits a normal current CompleteDark schema-3 zero-drift baseli
 `106`, binding release `a6d0fba`, the current operator and release-to-operator delta, the current
 receipt, and the recovered old parser-version pin. Failed retention removes both new artifacts.
 
+If the reviewed `b4bfb38ddb8740a9c9fb8528a7e733e32f184c01` gateway plan applied at document
+baseline serial `106`, advancing the same lineage to `107`, but its post-apply search check stopped
+before zero drift, use the separate already-applied-gateway recovery form. This is available only
+to `Verify` at requested and live `CompleteDark`. Its five gateway inputs are all-or-none; `Plan`,
+`Apply`, other stages, other serials, other paths, and partial input sets are rejected.
+
+```powershell
+.\scripts\operate-development-document-dark-deployment.ps1 -Action Verify -Stage CompleteDark `
+  -ExpectedAccountId 362544434697 `
+  -StateBucket ai-job-apply-development-terraform-state-362544434697 `
+  -ReleaseSourceSha a6d0fba09082b8bc61ee7b604ee1d5c47bd71624 `
+  -ReviewedOperatorDeltaSha256 REVIEWED_A6_TO_CURRENT_OPERATOR_DELTA `
+  -ReviewedBaselineToOperatorDeltaSha256 REVIEWED_B4B_TO_CURRENT_OPERATOR_DELTA `
+  -BaselinePlanPath RETAINED_B4B_COMPLETE_DARK_BASELINE `
+  -ReviewedBaselineSha256 6a6b281497f5f629e0ae1dc54052e2b0975d354ffc9aaa1d6f980368459e9d2b `
+  -ReviewedBaselineMetadataSha256 b219a07674552bed93ae492b3e96cdf8da0ebae1e1b1003830673adeec8daea1 `
+  -PublicationReceiptPath DEPLOYED_A6_DOCUMENT_RECEIPT `
+  -ReviewedReceiptSha256 524bbf645621a0aa744c3e84f7deff5f8430830e87330267ed5ca7243f40023e `
+  -AppliedGatewayPlanPath EXACT_B4B_APPLIED_GATEWAY_PLAN `
+  -ReviewedAppliedGatewayPlanSha256 1d41366e7f40d51c09000d823f1c0b104c82deee5f177e2a782e5a92641c5fab `
+  -ReviewedAppliedGatewayPlanMetadataSha256 6a46db5c0f5cb4aadfe97542c0333733dcb0e35f9578a4da9b704ef428d3d837 `
+  -AppliedGatewayReceiptPath EXACT_B4B_GATEWAY_RECEIPT `
+  -ReviewedAppliedGatewayReceiptSha256 2ea5d284126fc25bc4532059f7780a92669670927391ada50c2f70d53d0f8d41
+```
+
+The operator independently rehashes the exact plan, adjacent `.gateway-release.json`, and receipt;
+revalidates the original CompleteDark baseline and its `a6d0fba` to `b4bfb38` source binding;
+requires separately reviewed `a6d0fba` and `b4bfb38` deltas to current `main`; and accepts only
+modified regular, nonbinary blobs on the explicit recovery allowlist. The only product paths on
+that allowlist are the timestamp normalization implementation and test. It then reuses the strict
+gateway guards to prove the plan contains exactly the gateway function and alias updates, with no
+replacement, additional output, unknown-field, sensitivity, drift, parser-pin, document,
+migration-image, or artifact broadening. Exact-version receipt objects, current Terraform state,
+and the live unrouted numeric alias must all match the applied artifact.
+
+The applied plan is never applied again. Its planned variables are used only as the reconstructed
+serial-107 input template, because the serial-106 document baseline predates the gateway update.
+After the full live CompleteDark boundary passes, a refresh-backed Terraform 1.9.8 zero-change
+plan is retained with a current-source serial-107 sidecar. Any failure removes newly created
+baseline artifacts and does not weaken the older ParserDark recovery path.
+
 The optional metadata argument is omitted only for the checksum-reviewed historical intake
 baseline used by the initial `KmsPrerequisite` to `ParserDark` transition. Every current-shape
 retained baseline requires `ReviewedBaselineMetadataSha256`; the operator hashes the adjacent

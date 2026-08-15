@@ -320,6 +320,7 @@ function Get-DocumentOperatorDeltaSha256 {
   & git -C $repositoryRoot merge-base --is-ancestor $ReleaseSha $OperatorSha 2>$null
   if ($LASTEXITCODE -ne 0) { throw "The retained document release is not an ancestor of its operator." }
   $allowed = @(
+    "backend/services/jobs/src/persistence/catalog.ts", "backend/services/jobs/src/persistence/catalog.test.ts",
     "scripts/lib/development-document-dark-guards.ps1", "scripts/lib/development-gateway-release-guards.ps1",
     "scripts/operate-development-document-dark-deployment.ps1", "scripts/operate-development-document-migration.ps1",
     "scripts/operate-development-gateway-release.ps1", "scripts/tests/development-document-dark-guards.tests.ps1",
