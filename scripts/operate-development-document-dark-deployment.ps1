@@ -19,6 +19,8 @@ param(
   [ValidatePattern("^(?:|[a-f0-9]{64})$")][string]$ReviewedAppliedGatewayPlanMetadataSha256 = "",
   [string]$AppliedGatewayReceiptPath = "",
   [ValidatePattern("^(?:|[a-f0-9]{64})$")][string]$ReviewedAppliedGatewayReceiptSha256 = "",
+  [string]$RetainedParserReceiptPath = "",
+  [ValidatePattern("^(?:|[a-f0-9]{64})$")][string]$ReviewedRetainedParserReceiptSha256 = "",
   [string]$PlanPath = "",
   [ValidatePattern("^[a-f0-9]{64}$")][string]$ReviewedPlanSha256 = "",
   [switch]$Help
@@ -82,7 +84,9 @@ Usage:
     -ReviewedAppliedGatewayPlanSha256 APPLIED_GATEWAY_PLAN_SHA256 `
     -ReviewedAppliedGatewayPlanMetadataSha256 APPLIED_GATEWAY_PLAN_METADATA_SHA256 `
     -AppliedGatewayReceiptPath EXACT_ALREADY_APPLIED_GATEWAY_RECEIPT `
-    -ReviewedAppliedGatewayReceiptSha256 APPLIED_GATEWAY_RECEIPT_SHA256
+    -ReviewedAppliedGatewayReceiptSha256 APPLIED_GATEWAY_RECEIPT_SHA256 `
+    -RetainedParserReceiptPath EXACT_RETAINED_PARSER_RECEIPT `
+    -ReviewedRetainedParserReceiptSha256 RETAINED_PARSER_RECEIPT_SHA256
 
 The operator reconstructs all current deployment inputs from a checksum-reviewed zero-change
 baseline, overlays only the selected monotonic stage and verified Lambda publication, derives the
@@ -105,9 +109,11 @@ revalidates the baseline's stored release-to-operator delta, binds exact histori
 state serials, derives the old numeric parser pin from applied processor state, and proves the
 retained old parser artifact live before emitting a current CompleteDark zero-drift baseline.
 The final form is a one-time Verify-only recovery for the exact already-applied development
-gateway release. Its five AppliedGateway inputs are all-or-none and cannot be used by Plan or
+gateway release. Its seven recovery inputs are all-or-none and cannot be used by Plan or
 Apply. It consumes the reviewed applied plan only as a current-variable template, performs no
-apply, and retains a new baseline only after exact live, state, and zero-drift verification.
+apply, authenticates the retained ParserDark parser-v1 artifact from its separately reviewed
+historical publication receipt, and retains a new baseline only after exact live, state, and
+zero-drift verification.
 "@
   exit 0
 }
@@ -130,7 +136,8 @@ if ($Stage -cne "KmsPrerequisite") {
 $appliedGatewayInputValues = @(
   $AppliedGatewayPlanPath, $ReviewedAppliedGatewayPlanSha256,
   $ReviewedAppliedGatewayPlanMetadataSha256, $AppliedGatewayReceiptPath,
-  $ReviewedAppliedGatewayReceiptSha256
+  $ReviewedAppliedGatewayReceiptSha256, $RetainedParserReceiptPath,
+  $ReviewedRetainedParserReceiptSha256
 )
 $appliedGatewayInputCount = @($appliedGatewayInputValues | Where-Object {
     -not [string]::IsNullOrWhiteSpace([string]$_)
@@ -154,6 +161,7 @@ $script:parserSourceTransition = $false
 $script:completeDarkVerifyRecovery = $false
 $script:completeDarkAppliedGatewayRecovery = $false
 $script:appliedGatewayRecovery = $null
+$script:retainedParserArtifact = $null
 $script:baselineReceiptSha256 = ""
 $completeDarkRecoveryReleaseSourceSha = "a6d0fba09082b8bc61ee7b604ee1d5c47bd71624"
 $completeDarkRecoveryBaselineReleaseSourceSha = "d0e55de86edfa6b5f655f5631bb1741d6c5b5ac8"
@@ -175,6 +183,12 @@ $appliedGatewayRecoveryDocumentReceiptSha256 = "524bbf645621a0aa744c3e84f7deff5f
 $appliedGatewayRecoveryPlanSha256 = "1d41366e7f40d51c09000d823f1c0b104c82deee5f177e2a782e5a92641c5fab"
 $appliedGatewayRecoveryPlanMetadataSha256 = "6a46db5c0f5cb4aadfe97542c0333733dcb0e35f9578a4da9b704ef428d3d837"
 $appliedGatewayRecoveryReceiptSha256 = "2ea5d284126fc25bc4532059f7780a92669670927391ada50c2f70d53d0f8d41"
+$appliedGatewayRecoveryRetainedParserReceiptSourceSha = $completeDarkRecoveryBaselineReleaseSourceSha
+$appliedGatewayRecoveryRetainedParserReceiptSha256 = $completeDarkRecoveryBaselineReceiptSha256
+$appliedGatewayRecoveryRetainedParserArtifactSha256 = "99d958f709ae92e338b98286b37ef29815d4f839c91d3fe0684fdea9cb10d23f"
+$appliedGatewayRecoveryRetainedParserObjectBase64Sha256 = "mdlY9wmukuM4uYKGs37ymBXU+DnJHT/gaE/eqcsQ0j8="
+$appliedGatewayRecoveryRetainedParserObjectVersion = "maNFAWhxk8j27IhJ_kd6HcoBJJfGbFEi"
+$appliedGatewayRecoveryRetainedParserContentLength = 489567
 $appliedGatewayRecoveryParserQualifiedArn = "arn:aws:lambda:us-east-2:362544434697:function:ai-job-apply-development-document-parser:1"
 $appliedGatewayRecoveryMigrationImage = "362544434697.dkr.ecr.us-east-2.amazonaws.com/ai-job-apply/migration@sha256:9be2474047872b9dc3878301fe946becbb7653f4e4dc733235f6d424502563eb"
 $allowedVariableNames = @(
@@ -1183,6 +1197,83 @@ function Assert-BaselineCurrent {
   }
 }
 
+function Assert-AppliedGatewayRetainedParserReceipt {
+  param(
+    [Parameter(Mandatory)][object]$Receipt,
+    [Parameter(Mandatory)][string]$ResolvedPath,
+    [Parameter(Mandatory)][string]$ReceiptSha256
+  )
+
+  $receiptRoot = Join-Path $terraformDataRoot "development-document-artifacts"
+  $expectedPath = [IO.Path]::GetFullPath((Join-Path $receiptRoot `
+      "receipt-d0e55de86edf-20260813-192653.json"))
+  if (-not $appliedGatewayRecoveryRequested -or
+    [IO.Path]::GetFullPath($ResolvedPath) -cne $expectedPath -or
+    $ReviewedRetainedParserReceiptSha256 -cne $appliedGatewayRecoveryRetainedParserReceiptSha256 -or
+    $ReceiptSha256 -cne $appliedGatewayRecoveryRetainedParserReceiptSha256) {
+    throw "The retained ParserDark receipt path or checksum does not match the exact reviewed evidence."
+  }
+
+  Assert-DevelopmentDocumentPublicationReceipt -Receipt $Receipt
+  if ([string]$Receipt.sourceSha -cne $appliedGatewayRecoveryRetainedParserReceiptSourceSha) {
+    throw "The retained ParserDark receipt does not belong to the exact historical parser release."
+  }
+  $parserArtifacts = @($Receipt.artifacts | Where-Object {
+      [string]$_.artifactName -ceq "document-parser-lambda" -and [string]$_.suffix -ceq "zip"
+    })
+  $expectedKey = "lambda/documents/$appliedGatewayRecoveryRetainedParserReceiptSourceSha/" +
+    "$appliedGatewayRecoveryRetainedParserArtifactSha256/document-parser-lambda.zip"
+  if ($parserArtifacts.Count -ne 1 -or
+    [string]$parserArtifacts[0].key -cne $expectedKey -or
+    [string]$parserArtifacts[0].versionId -cne $appliedGatewayRecoveryRetainedParserObjectVersion -or
+    [string]$parserArtifacts[0].artifactSha256 -cne $appliedGatewayRecoveryRetainedParserArtifactSha256 -or
+    [string]$parserArtifacts[0].objectSha256 -cne $appliedGatewayRecoveryRetainedParserArtifactSha256 -or
+    [string]$parserArtifacts[0].objectBase64Sha256 -cne $appliedGatewayRecoveryRetainedParserObjectBase64Sha256 -or
+    [long]$parserArtifacts[0].contentLength -ne $appliedGatewayRecoveryRetainedParserContentLength) {
+    throw "The retained ParserDark receipt does not bind the exact parser-v1 artifact."
+  }
+  return $parserArtifacts[0]
+}
+
+function Read-AppliedGatewayRetainedParserReceipt {
+  $resolved = Resolve-InputPath -Candidate $RetainedParserReceiptPath -MustExist
+  $sha = (Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($sha -cne $ReviewedRetainedParserReceiptSha256) {
+    throw "The retained ParserDark receipt checksum does not match review."
+  }
+  try { $receipt = Get-Content -LiteralPath $resolved -Raw | ConvertFrom-Json }
+  catch { throw "The retained ParserDark receipt is not valid JSON." }
+  $parserArtifact = Assert-AppliedGatewayRetainedParserReceipt -Receipt $receipt `
+    -ResolvedPath $resolved -ReceiptSha256 $sha
+
+  $boundary = Get-BoundaryValues
+  $expectedBoundary = Get-TextSha256 `
+    "$ExpectedAccountId|$Region|$($boundary.ArtifactBucket)|$($boundary.PlatformKmsArn)"
+  if ([string]$receipt.boundarySha256 -cne $expectedBoundary) {
+    throw "The retained ParserDark receipt is outside the live development artifact/KMS boundary."
+  }
+  $platformKey = Invoke-AwsJson @("kms", "describe-key", "--key-id", [string]$boundary.PlatformKmsArn,
+    "--output", "json")
+  foreach ($artifact in @($receipt.artifacts)) {
+    $stored = Invoke-AwsJson @("s3api", "head-object", "--bucket", $boundary.ArtifactBucket,
+      "--key", [string]$artifact.key, "--version-id", [string]$artifact.versionId,
+      "--checksum-mode", "ENABLED", "--output", "json")
+    $storedKey = Invoke-AwsJson @("kms", "describe-key", "--key-id", [string]$stored.SSEKMSKeyId,
+      "--output", "json")
+    if ([string]$stored.VersionId -cne [string]$artifact.versionId -or
+      [long]$stored.ContentLength -ne [long]$artifact.contentLength -or
+      [string]$stored.ChecksumSHA256 -cne [string]$artifact.objectBase64Sha256 -or
+      [string]$stored.ServerSideEncryption -cne "aws:kms" -or
+      -not (ConvertTo-ExactBoolean $stored.BucketKeyEnabled "retained parser artifact BucketKeyEnabled") -or
+      [string]$storedKey.KeyMetadata.KeyId -cne [string]$platformKey.KeyMetadata.KeyId -or
+      [string]$stored.Metadata."source-sha" -cne $appliedGatewayRecoveryRetainedParserReceiptSourceSha -or
+      [string]$stored.Metadata."artifact-sha256" -cne [string]$artifact.artifactSha256) {
+      throw "A retained ParserDark publication object failed exact-version readback."
+    }
+  }
+  return [pscustomobject]@{ Receipt = $receipt; ParserArtifact = $parserArtifact }
+}
+
 function Read-Receipt {
   param([Parameter(Mandatory)][string]$Commit)
   $resolved = Resolve-InputPath -Candidate $PublicationReceiptPath -MustExist
@@ -1713,13 +1804,17 @@ function Get-AppliedProcessorParserQualifiedArn {
 
 function Assert-LivePinnedParserVersion {
   param([Parameter(Mandatory)][object]$Baseline, [Parameter(Mandatory)][string]$ParserQualifiedArn,
-    [switch]$MustMatchBaselineArtifact)
+    [AllowNull()][object]$ExpectedArtifact, [switch]$MustMatchBaselineArtifact)
   if ($ParserQualifiedArn -cnotmatch "^arn:aws:lambda:us-east-2:${ExpectedAccountId}:function:ai-job-apply-development-document-parser:([1-9][0-9]*)$") {
     throw "The processor parser pin is not one exact applied numeric version."
   }
   $pinnedVersion = [string]$Matches[1]
-  $artifactSha = [string]$Baseline.variables.document_parser_artifact_sha256.value
-  $objectSha = [string]$Baseline.variables.document_parser_artifact_base64sha256.value
+  $artifactSha = if ($null -eq $ExpectedArtifact) {
+    [string]$Baseline.variables.document_parser_artifact_sha256.value
+  } else { [string]$ExpectedArtifact.artifactSha256 }
+  $objectSha = if ($null -eq $ExpectedArtifact) {
+    [string]$Baseline.variables.document_parser_artifact_base64sha256.value
+  } else { [string]$ExpectedArtifact.objectBase64Sha256 }
   if ($artifactSha -cnotmatch '^[a-f0-9]{64}$' -or $objectSha -cnotmatch '^[A-Za-z0-9+/]{43}=$') {
     throw "The retained baseline parser artifact identity is invalid."
   }
@@ -1756,6 +1851,7 @@ function Assert-MonotonicDocumentStage {
 function Assert-LiveStageBoundary {
   param([Parameter(Mandatory)][string]$DeploymentStage, [AllowNull()][object]$Receipt,
     [string]$ParserQualifiedArn = "", [AllowNull()][object]$Baseline,
+    [AllowNull()][object]$ExpectedPinnedParserArtifact,
     [switch]$PinnedParserMatchesBaselineArtifact)
   $state = Get-StateResourceMap
   $inventory = if ($DeploymentStage -ceq "kms-prerequisite") { $null } else { Get-LiveDocumentStageInventory -State $state }
@@ -1806,6 +1902,7 @@ function Assert-LiveStageBoundary {
   if ($DeploymentStage -ceq "complete-dark") {
     if ($null -eq $Baseline) { throw "Complete-dark live verification requires the retained parser baseline." }
     Assert-LivePinnedParserVersion -Baseline $Baseline -ParserQualifiedArn $ParserQualifiedArn `
+      -ExpectedArtifact $ExpectedPinnedParserArtifact `
       -MustMatchBaselineArtifact:$PinnedParserMatchesBaselineArtifact
     $processorArtifact = @($Receipt.artifacts | Where-Object { $_.artifactName -eq "document-processor-lambda" -and $_.suffix -eq "zip" })[0]
     $processor = Invoke-AwsJson @("lambda", "get-function", "--function-name", "ai-job-apply-development-document-processor:development", "--output", "json")
@@ -1836,6 +1933,12 @@ Initialize-Backend
 $null = New-Item -ItemType Directory -Path $operatorRoot -Force
 $appliedStage = Get-AppliedDocumentStage
 Assert-MonotonicDocumentStage -Applied $appliedStage -Requested $stageValue -Operation $Action
+$retainedParserEvidence = if ($appliedGatewayRecoveryRequested) {
+  Read-AppliedGatewayRetainedParserReceipt
+} else { $null }
+$script:retainedParserArtifact = if ($null -eq $retainedParserEvidence) {
+  $null
+} else { $retainedParserEvidence.ParserArtifact }
 $receipt = if ($Stage -ceq "KmsPrerequisite") { $null } else { Read-Receipt -Commit $releaseCommit }
 $baseline = Read-Baseline -RequestedStage $stageValue -AppliedStage $appliedStage -Operation $Action -Receipt $receipt
 if (-not $parserSourceTransition -and -not $completeDarkVerifyRecovery -and
@@ -1849,13 +1952,14 @@ $parserQualifiedArn = if ($Stage -ceq "CompleteDark") {
   else { [string]$baseline.variables.document_parser_invocation_qualified_arn.value }
 } else { "" }
 if ($parserSourceTransition -or $completeDarkVerifyRecovery -or $completeDarkAppliedGatewayRecovery) {
-  Assert-LivePinnedParserVersion -Baseline $baseline -ParserQualifiedArn $parserQualifiedArn -MustMatchBaselineArtifact
+  Assert-LivePinnedParserVersion -Baseline $baseline -ParserQualifiedArn $parserQualifiedArn `
+    -ExpectedArtifact $script:retainedParserArtifact -MustMatchBaselineArtifact
 }
 
 if ($Action -ceq "Verify") {
   Set-DarkVariables -Baseline $baseline -Receipt $receipt -DeploymentStage $stageValue -ParserQualifiedArn $parserQualifiedArn
   Assert-LiveStageBoundary -DeploymentStage $stageValue -Receipt $receipt -ParserQualifiedArn $parserQualifiedArn `
-    -Baseline $baseline `
+    -Baseline $baseline -ExpectedPinnedParserArtifact $script:retainedParserArtifact `
     -PinnedParserMatchesBaselineArtifact:($completeDarkVerifyRecovery -or $completeDarkAppliedGatewayRecovery)
   $retainedBaseline = Invoke-ZeroDrift -Baseline $baseline -Receipt $receipt -DeploymentStage $stageValue `
     -ParserQualifiedArn $parserQualifiedArn -Retain

@@ -34,7 +34,9 @@ foreach ($required in @(
     'Assert-GatewayPublicationReceipt', 'Assert-GatewayReleaseVariables', 'Assert-ExactGatewayReleasePlan',
     'AppliedGatewayPlanPath', 'ReviewedAppliedGatewayPlanSha256',
     'ReviewedAppliedGatewayPlanMetadataSha256', 'AppliedGatewayReceiptPath',
-    'ReviewedAppliedGatewayReceiptSha256',
+    'ReviewedAppliedGatewayReceiptSha256', 'RetainedParserReceiptPath',
+    'ReviewedRetainedParserReceiptSha256', 'Read-AppliedGatewayRetainedParserReceipt',
+    'Assert-AppliedGatewayRetainedParserReceipt', 'ExpectedPinnedParserArtifact',
     'The already-applied gateway recovery inputs are all-or-none.',
     'Already-applied gateway recovery is accepted only for CompleteDark Verify.',
     '-Retain:($Stage -ceq "CompleteDark")',
@@ -67,6 +69,8 @@ $recoveryInputArguments = [ordered]@{
   ReviewedAppliedGatewayPlanMetadataSha256 = "d" * 64
   AppliedGatewayReceiptPath = "missing-gateway-receipt.json"
   ReviewedAppliedGatewayReceiptSha256 = "e" * 64
+  RetainedParserReceiptPath = "missing-retained-parser-receipt.json"
+  ReviewedRetainedParserReceiptSha256 = "f" * 64
 }
 function Invoke-TestOperatorFailure([string[]]$Arguments) {
   $savedErrorActionPreference = $ErrorActionPreference
@@ -1217,10 +1221,13 @@ $appliedRecoveryFunctions = @($ast.FindAll({
       $node.Name -in @(
         "Assert-CompleteDarkAppliedGatewayRecoveryBaselineMetadata",
         "Assert-AppliedGatewayRecoveryPlanMetadata",
-        "Assert-AppliedGatewayRecoveryStateAndLive"
+        "Assert-AppliedGatewayRecoveryStateAndLive",
+        "Assert-AppliedGatewayRetainedParserReceipt",
+        "Read-AppliedGatewayRetainedParserReceipt",
+        "Assert-LivePinnedParserVersion"
       )
     }, $true))
-if ($appliedRecoveryFunctions.Count -ne 3) {
+if ($appliedRecoveryFunctions.Count -ne 6) {
   throw "The already-applied gateway recovery guards must each be defined once."
 }
 foreach ($function in $appliedRecoveryFunctions | Sort-Object { $_.Extent.StartOffset }) {
@@ -1243,6 +1250,16 @@ $appliedGatewayRecoveryDocumentReceiptSha256 = "524bbf645621a0aa744c3e84f7deff5f
 $appliedGatewayRecoveryPlanSha256 = "1d41366e7f40d51c09000d823f1c0b104c82deee5f177e2a782e5a92641c5fab"
 $appliedGatewayRecoveryPlanMetadataSha256 = "6a46db5c0f5cb4aadfe97542c0333733dcb0e35f9578a4da9b704ef428d3d837"
 $appliedGatewayRecoveryReceiptSha256 = "2ea5d284126fc25bc4532059f7780a92669670927391ada50c2f70d53d0f8d41"
+$appliedGatewayRecoveryRetainedParserReceiptSourceSha =
+  "d0e55de86edfa6b5f655f5631bb1741d6c5b5ac8"
+$appliedGatewayRecoveryRetainedParserReceiptSha256 =
+  "97d4084d0a5b2ddfc563f3e4f76bafb9598dcdd0e9579fb18821b6bdc9097677"
+$appliedGatewayRecoveryRetainedParserArtifactSha256 =
+  "99d958f709ae92e338b98286b37ef29815d4f839c91d3fe0684fdea9cb10d23f"
+$appliedGatewayRecoveryRetainedParserObjectBase64Sha256 =
+  "mdlY9wmukuM4uYKGs37ymBXU+DnJHT/gaE/eqcsQ0j8="
+$appliedGatewayRecoveryRetainedParserObjectVersion = "maNFAWhxk8j27IhJ_kd6HcoBJJfGbFEi"
+$appliedGatewayRecoveryRetainedParserContentLength = 489567
 $appliedGatewayRecoveryParserQualifiedArn =
   "arn:aws:lambda:us-east-2:362544434697:function:ai-job-apply-development-document-parser:1"
 $appliedGatewayRecoveryMigrationImage =
@@ -1257,7 +1274,100 @@ $operatorDeltaSha256 = $expectedAppliedReleaseDelta
 $ReviewedReceiptSha256 = $appliedGatewayRecoveryDocumentReceiptSha256
 $ReviewedBaselineSha256 = $appliedGatewayRecoveryBaselineSha256
 $ReviewedBaselineMetadataSha256 = $appliedGatewayRecoveryBaselineMetadataSha256
+$terraformDataRoot = "C:\ignored"
+$RetainedParserReceiptPath =
+  "C:\ignored\development-document-artifacts\receipt-d0e55de86edf-20260813-192653.json"
+$ReviewedRetainedParserReceiptSha256 = $appliedGatewayRecoveryRetainedParserReceiptSha256
 $appliedRecoveryBaselinePath = "C:\ignored\baseline-complete-dark.tfplan"
+
+function New-RetainedParserReceiptFixture {
+  $artifacts = @()
+  foreach ($name in @("document-processor-lambda", "document-parser-lambda")) {
+    foreach ($suffix in @("zip", "cdx.json", "manifest.json", "sha256")) {
+      $isRetainedParser = $name -ceq "document-parser-lambda" -and $suffix -ceq "zip"
+      $artifactSha = if ($isRetainedParser) {
+        $appliedGatewayRecoveryRetainedParserArtifactSha256
+      } elseif ($name -ceq "document-parser-lambda") { "2" * 64 } else { "1" * 64 }
+      $artifacts += [pscustomobject][ordered]@{
+        artifactName = $name
+        artifactSha256 = $artifactSha
+        suffix = $suffix
+        key = "lambda/documents/$appliedGatewayRecoveryRetainedParserReceiptSourceSha/$artifactSha/$name.$suffix"
+        versionId = if ($isRetainedParser) {
+          $appliedGatewayRecoveryRetainedParserObjectVersion
+        } else { "version-$name-$suffix" }
+        objectSha256 = if ($isRetainedParser) { $artifactSha } else { "3" * 64 }
+        objectBase64Sha256 = if ($isRetainedParser) {
+          $appliedGatewayRecoveryRetainedParserObjectBase64Sha256
+        } else { ("A" * 43) + "=" }
+        contentLength = if ($isRetainedParser) {
+          $appliedGatewayRecoveryRetainedParserContentLength
+        } else { 100 }
+      }
+    }
+  }
+  return [pscustomobject][ordered]@{
+    schemaVersion = 1; kind = "development-document-lambda-publication"
+    environment = "development"; region = "us-east-2"
+    sourceSha = $appliedGatewayRecoveryRetainedParserReceiptSourceSha
+    boundarySha256 = "4" * 64; phase = "verified"
+    createdAt = "2026-08-13T23:27:48.3195687Z"; artifacts = $artifacts
+    completedAt = "2026-08-13T23:28:19.6938046Z"
+  }
+}
+
+$retainedReceiptFixture = New-RetainedParserReceiptFixture
+$retainedParserArtifact = Assert-AppliedGatewayRetainedParserReceipt -Receipt $retainedReceiptFixture `
+  -ResolvedPath $RetainedParserReceiptPath `
+  -ReceiptSha256 $appliedGatewayRecoveryRetainedParserReceiptSha256
+if ([string]$retainedParserArtifact.artifactSha256 -cne
+    $appliedGatewayRecoveryRetainedParserArtifactSha256 -or
+  [string]$retainedParserArtifact.objectBase64Sha256 -cne
+    $appliedGatewayRecoveryRetainedParserObjectBase64Sha256) {
+  throw "The retained ParserDark receipt did not return the authenticated parser-v1 artifact."
+}
+
+foreach ($receiptCase in @(
+    "path", "hash", "source", "shape", "kind", "artifact", "object", "base64",
+    "version", "key", "length", "swap")) {
+  $receipt = New-RetainedParserReceiptFixture
+  $path = $RetainedParserReceiptPath
+  $sha = $appliedGatewayRecoveryRetainedParserReceiptSha256
+  $parserZip = @($receipt.artifacts | Where-Object {
+      $_.artifactName -ceq "document-parser-lambda" -and $_.suffix -ceq "zip"
+    })[0]
+  switch ($receiptCase) {
+    "path" { $path = "C:\ignored\development-document-artifacts\receipt-other.json" }
+    "hash" { $sha = "5" * 64 }
+    "source" { $receipt.sourceSha = "6" * 40 }
+    "shape" { $receipt.artifacts = @($receipt.artifacts | Select-Object -First 7) }
+    "kind" { $receipt.kind = "development-gateway-lambda-publication" }
+    "artifact" { $parserZip.artifactSha256 = "7" * 64 }
+    "object" { $parserZip.objectSha256 = "8" * 64 }
+    "base64" { $parserZip.objectBase64Sha256 = ("B" * 43) + "=" }
+    "version" { $parserZip.versionId = "other-version" }
+    "key" { $parserZip.key += "-tampered" }
+    "length" { $parserZip.contentLength++ }
+    "swap" {
+      $currentArtifactSha = "d0e1297cdef2e9f477ef66df6cd7fe67f26068f96930f0490507c339da49f87d"
+      $parserZip.artifactSha256 = $currentArtifactSha
+      $parserZip.objectSha256 = $currentArtifactSha
+      $parserZip.objectBase64Sha256 = "0OEpfN7y6fR372bfbNf+Z/JgaPlpMPBJBQfDOdpJ+H0="
+      $parserZip.versionId = "i3giM8EvCnE6soLuV6mM3xb7ca4Z97MN"
+      $parserZip.key = "lambda/documents/$appliedGatewayRecoveryRetainedParserReceiptSourceSha/" +
+        "$currentArtifactSha/document-parser-lambda.zip"
+    }
+  }
+  $rejected = $false
+  try {
+    $null = Assert-AppliedGatewayRetainedParserReceipt -Receipt $receipt `
+      -ResolvedPath $path -ReceiptSha256 $sha
+  } catch { $rejected = $true }
+  if (-not $rejected) {
+    throw "Already-applied gateway recovery accepted retained receipt $receiptCase tampering."
+  }
+}
+
 $appliedRecoveryBaseline = [pscustomobject]@{ variables = [pscustomobject]@{
     document_parser_invocation_qualified_arn = [pscustomobject]@{ value = $appliedGatewayRecoveryParserQualifiedArn }
     migration_image = [pscustomobject]@{ value = $appliedGatewayRecoveryMigrationImage }
@@ -1495,6 +1605,16 @@ $script:liveGatewayArtifact = $appliedArtifact
 function Invoke-AwsJson {
   param([string[]]$Arguments)
   $signature = $Arguments -join " "
+  if ($signature -match '^lambda get-function .*document-parser:1 ') {
+    return [pscustomobject]@{ Configuration = [pscustomobject]@{
+        FunctionArn = $appliedGatewayRecoveryParserQualifiedArn; Version = "1"
+        CodeSha256 = $appliedGatewayRecoveryRetainedParserObjectBase64Sha256
+        Environment = [pscustomobject]@{ Variables = [pscustomobject]@{
+            RELEASE_SHA = $appliedGatewayRecoveryRetainedParserArtifactSha256
+          } }
+        State = "Active"; LastUpdateStatus = "Successful"
+      } }
+  }
   if ($signature -match '^lambda get-alias ') {
     return [pscustomobject]@{ FunctionVersion = $script:liveGatewayAliasVersion; RoutingConfig = [pscustomobject]@{} }
   }
@@ -1516,6 +1636,35 @@ if ($positiveRawEnvironment.GetType().FullName -cne "System.Object[]" -or
   throw "The applied-gateway positive fixture does not preserve the raw Terraform Object[] environment shape and extra variables."
 }
 Assert-AppliedGatewayRecoveryStateAndLive -State $positiveAppliedGatewayState -Artifact $appliedArtifact
+
+$currentParserPlanBaseline = [pscustomobject]@{ variables = [pscustomobject]@{
+    document_parser_artifact_sha256 = [pscustomobject]@{
+      value = "d0e1297cdef2e9f477ef66df6cd7fe67f26068f96930f0490507c339da49f87d"
+    }
+    document_parser_artifact_base64sha256 = [pscustomobject]@{
+      value = "0OEpfN7y6fR372bfbNf+Z/JgaPlpMPBJBQfDOdpJ+H0="
+    }
+  } }
+Assert-LivePinnedParserVersion -Baseline $currentParserPlanBaseline `
+  -ParserQualifiedArn $appliedGatewayRecoveryParserQualifiedArn `
+  -ExpectedArtifact $retainedParserArtifact -MustMatchBaselineArtifact
+$rejected = $false
+try {
+  Assert-LivePinnedParserVersion -Baseline $currentParserPlanBaseline `
+    -ParserQualifiedArn $appliedGatewayRecoveryParserQualifiedArn -MustMatchBaselineArtifact
+} catch { $rejected = $true }
+if (-not $rejected) {
+  throw "The realistic parser-v1 pin unexpectedly matched the current parser-v2 plan artifact."
+}
+$tamperedRetainedParser = $retainedParserArtifact | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+$tamperedRetainedParser.objectBase64Sha256 = ("Z" * 43) + "="
+$rejected = $false
+try {
+  Assert-LivePinnedParserVersion -Baseline $currentParserPlanBaseline `
+    -ParserQualifiedArn $appliedGatewayRecoveryParserQualifiedArn `
+    -ExpectedArtifact $tamperedRetainedParser -MustMatchBaselineArtifact
+} catch { $rejected = $true }
+if (-not $rejected) { throw "The parser-v1 pin accepted a swapped retained artifact identity." }
 
 foreach ($shapeCase in @(
     "environment-absent", "environment-null", "environment-empty", "environment-scalar",
@@ -1583,10 +1732,165 @@ foreach ($liveCase in @("missing-function", "state-key", "state-version", "state
   if (-not $rejected) { throw "Already-applied gateway recovery accepted $liveCase state/live tampering." }
 }
 
+$script:retainedReadReceipt = New-RetainedParserReceiptFixture
+$script:retainedReadResolvedPath = $RetainedParserReceiptPath
+$script:retainedReadFileSha = $appliedGatewayRecoveryRetainedParserReceiptSha256
+$script:retainedBoundaryCalls = 0
+$script:retainedLiveCalls = 0
+$script:retainedS3Calls = 0
+$script:retainedKmsCalls = 0
+$script:retainedReadbackTamper = ""
+function Resolve-InputPath {
+  param([string]$Candidate, [switch]$MustExist)
+  return $script:retainedReadResolvedPath
+}
+function Get-FileHash {
+  param([string]$LiteralPath, [string]$Algorithm)
+  return [pscustomobject]@{ Hash = $script:retainedReadFileSha }
+}
+function Get-Content {
+  param([string]$LiteralPath, [switch]$Raw)
+  return ($script:retainedReadReceipt | ConvertTo-Json -Depth 20)
+}
+function Get-BoundaryValues {
+  $script:retainedBoundaryCalls++
+  return [pscustomobject]@{ ArtifactBucket = "fixture-artifacts"; PlatformKmsArn = "fixture-kms-arn" }
+}
+function Get-TextSha256 {
+  param([string]$Value)
+  return "4" * 64
+}
+function Invoke-AwsJson {
+  param([string[]]$Arguments)
+  $script:retainedLiveCalls++
+  $signature = $Arguments -join " "
+  if ($signature -match '^kms describe-key ') {
+    $script:retainedKmsCalls++
+    $keyId = if ($script:retainedReadbackTamper -ceq "kms" -and
+      $script:retainedKmsCalls -gt 1) { "other-kms-id" } else { "fixture-kms-id" }
+    return [pscustomobject]@{ KeyMetadata = [pscustomobject]@{ KeyId = $keyId } }
+  }
+  if ($signature -match '^s3api head-object ') {
+    $script:retainedS3Calls++
+    $keyIndex = [array]::IndexOf($Arguments, "--key")
+    $versionIndex = [array]::IndexOf($Arguments, "--version-id")
+    $artifact = @($script:retainedReadReceipt.artifacts | Where-Object {
+        [string]$_.key -ceq [string]$Arguments[$keyIndex + 1] -and
+        [string]$_.versionId -ceq [string]$Arguments[$versionIndex + 1]
+      })[0]
+    $stored = [pscustomobject]@{
+      VersionId = [string]$artifact.versionId
+      ContentLength = [long]$artifact.contentLength
+      ChecksumSHA256 = [string]$artifact.objectBase64Sha256
+      ServerSideEncryption = "aws:kms"; SSEKMSKeyId = "fixture-kms-arn"
+      BucketKeyEnabled = $true
+      Metadata = [pscustomobject]@{
+        "source-sha" = $appliedGatewayRecoveryRetainedParserReceiptSourceSha
+        "artifact-sha256" = [string]$artifact.artifactSha256
+      }
+    }
+    if ($script:retainedS3Calls -eq 1) {
+      switch ($script:retainedReadbackTamper) {
+        "version" { $stored.VersionId += "-tampered" }
+        "content" { $stored.ContentLength++ }
+        "checksum" { $stored.ChecksumSHA256 = ("Z" * 43) + "=" }
+        "encryption" { $stored.ServerSideEncryption = "AES256" }
+        "bucket-key" { $stored.BucketKeyEnabled = $false }
+        "source-metadata" { $stored.Metadata."source-sha" = "0" * 40 }
+        "artifact-metadata" { $stored.Metadata."artifact-sha256" = "0" * 64 }
+      }
+    }
+    return $stored
+  }
+  throw "Unexpected retained receipt live call '$signature'."
+}
+
+$retainedReadResult = Read-AppliedGatewayRetainedParserReceipt
+if ([string]$retainedReadResult.ParserArtifact.artifactSha256 -cne
+    $appliedGatewayRecoveryRetainedParserArtifactSha256 -or
+  $script:retainedBoundaryCalls -ne 1 -or $script:retainedS3Calls -ne 8 -or
+  $script:retainedKmsCalls -ne 9) {
+  throw "The retained ParserDark receipt did not complete exact eight-object boundary readback."
+}
+
+foreach ($localCase in @(
+    "path", "file-hash", "reviewed-hash", "source", "shape", "artifact", "base64",
+    "version", "key", "swap")) {
+  $script:retainedReadReceipt = New-RetainedParserReceiptFixture
+  $script:retainedReadResolvedPath = $RetainedParserReceiptPath
+  $script:retainedReadFileSha = $appliedGatewayRecoveryRetainedParserReceiptSha256
+  $script:ReviewedRetainedParserReceiptSha256 = $appliedGatewayRecoveryRetainedParserReceiptSha256
+  $script:retainedBoundaryCalls = 0
+  $script:retainedLiveCalls = 0
+  $parserZip = @($script:retainedReadReceipt.artifacts | Where-Object {
+      $_.artifactName -ceq "document-parser-lambda" -and $_.suffix -ceq "zip"
+    })[0]
+  switch ($localCase) {
+    "path" { $script:retainedReadResolvedPath = "C:\ignored\other-receipt.json" }
+    "file-hash" { $script:retainedReadFileSha = "1" * 64 }
+    "reviewed-hash" { $script:ReviewedRetainedParserReceiptSha256 = "2" * 64 }
+    "source" { $script:retainedReadReceipt.sourceSha = "3" * 40 }
+    "shape" { $script:retainedReadReceipt.artifacts = @($script:retainedReadReceipt.artifacts | Select-Object -First 7) }
+    "artifact" { $parserZip.artifactSha256 = "5" * 64 }
+    "base64" { $parserZip.objectBase64Sha256 = ("B" * 43) + "=" }
+    "version" { $parserZip.versionId = "other-version" }
+    "key" { $parserZip.key += "-tampered" }
+    "swap" {
+      $currentArtifactSha = "d0e1297cdef2e9f477ef66df6cd7fe67f26068f96930f0490507c339da49f87d"
+      $parserZip.artifactSha256 = $currentArtifactSha
+      $parserZip.objectSha256 = $currentArtifactSha
+      $parserZip.objectBase64Sha256 = "0OEpfN7y6fR372bfbNf+Z/JgaPlpMPBJBQfDOdpJ+H0="
+      $parserZip.versionId = "i3giM8EvCnE6soLuV6mM3xb7ca4Z97MN"
+      $parserZip.key = "lambda/documents/$appliedGatewayRecoveryRetainedParserReceiptSourceSha/" +
+        "$currentArtifactSha/document-parser-lambda.zip"
+    }
+  }
+  $rejected = $false
+  try { $null = Read-AppliedGatewayRetainedParserReceipt } catch { $rejected = $true }
+  if (-not $rejected -or $script:retainedBoundaryCalls -ne 0 -or $script:retainedLiveCalls -ne 0) {
+    throw "Invalid retained receipt $localCase reached a live boundary call or was accepted."
+  }
+}
+$script:ReviewedRetainedParserReceiptSha256 = $appliedGatewayRecoveryRetainedParserReceiptSha256
+
+$script:retainedReadReceipt = New-RetainedParserReceiptFixture
+$script:retainedReadReceipt.boundarySha256 = "9" * 64
+$script:retainedReadResolvedPath = $RetainedParserReceiptPath
+$script:retainedReadFileSha = $appliedGatewayRecoveryRetainedParserReceiptSha256
+$script:retainedBoundaryCalls = 0
+$script:retainedLiveCalls = 0
+$rejected = $false
+try { $null = Read-AppliedGatewayRetainedParserReceipt } catch { $rejected = $true }
+if (-not $rejected -or $script:retainedBoundaryCalls -ne 1 -or $script:retainedLiveCalls -ne 0) {
+  throw "A wrong retained receipt boundary was accepted or reached artifact readback."
+}
+
+foreach ($readbackCase in @(
+    "version", "content", "checksum", "encryption", "bucket-key", "kms",
+    "source-metadata", "artifact-metadata")) {
+  $script:retainedReadReceipt = New-RetainedParserReceiptFixture
+  $script:retainedReadResolvedPath = $RetainedParserReceiptPath
+  $script:retainedReadFileSha = $appliedGatewayRecoveryRetainedParserReceiptSha256
+  $script:retainedBoundaryCalls = 0
+  $script:retainedLiveCalls = 0
+  $script:retainedS3Calls = 0
+  $script:retainedKmsCalls = 0
+  $script:retainedReadbackTamper = $readbackCase
+  $rejected = $false
+  try { $null = Read-AppliedGatewayRetainedParserReceipt } catch { $rejected = $true }
+  if (-not $rejected -or $script:retainedLiveCalls -eq 0) {
+    throw "Retained ParserDark receipt accepted $readbackCase live-object tampering."
+  }
+}
+$script:retainedReadbackTamper = ""
+
 $recoveryReadOffset = $source.IndexOf('$script:appliedGatewayRecovery = Read-AppliedGatewayRecovery')
 $recoveryTemplateOffset = $source.IndexOf('$baseline = $script:appliedGatewayRecovery.Plan', $recoveryReadOffset)
 $zeroDriftOffset = $source.IndexOf('Invoke-ZeroDrift -Baseline $baseline', $recoveryTemplateOffset)
-if ($recoveryReadOffset -lt 0 -or $recoveryTemplateOffset -lt $recoveryReadOffset -or
+$retainedReceiptReadOffset = $source.IndexOf('Read-AppliedGatewayRetainedParserReceipt')
+$currentReceiptReadOffset = $source.LastIndexOf('Read-Receipt -Commit $releaseCommit')
+if ($retainedReceiptReadOffset -lt 0 -or $currentReceiptReadOffset -lt $retainedReceiptReadOffset -or
+  $recoveryReadOffset -lt 0 -or $recoveryTemplateOffset -lt $recoveryReadOffset -or
   $zeroDriftOffset -lt $recoveryTemplateOffset -or
   $source.IndexOf('Assert-ExactGatewayReleasePlan -Plan $plan -Artifact $artifact') -lt 0 -or
   $source.IndexOf('Assert-GatewayReleaseVariables -BaselineVariables $Baseline.variables') -lt 0 -or
@@ -1594,6 +1898,11 @@ if ($recoveryReadOffset -lt 0 -or $recoveryTemplateOffset -lt $recoveryReadOffse
   $source.IndexOf('(Get-FileHash -LiteralPath $metadataPath -Algorithm SHA256)') -lt 0 -or
   $source.IndexOf('(Get-FileHash -LiteralPath $receiptPath -Algorithm SHA256)') -lt 0) {
   throw "Already-applied gateway recovery does not hash, guard, and consume the exact applied plan before zero drift."
+}
+if (-not $source.Contains('-ExpectedArtifact $script:retainedParserArtifact -MustMatchBaselineArtifact') -or
+  -not $source.Contains('-ExpectedArtifact $ExpectedPinnedParserArtifact') -or
+  -not $source.Contains('-ExpectedPinnedParserArtifact $script:retainedParserArtifact')) {
+  throw "The authenticated retained parser artifact is not used by both applied-gateway live pin checks."
 }
 
 Write-Output "Development document staged operator tests passed."
