@@ -4,6 +4,7 @@ $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $operatorPath = Join-Path $repositoryRoot "scripts\operate-development-document-dark-deployment.ps1"
 . (Join-Path $repositoryRoot "scripts\lib\deployment-operator-guards.ps1")
 . (Join-Path $repositoryRoot "scripts\lib\development-document-dark-guards.ps1")
+. (Join-Path $repositoryRoot "scripts\lib\development-gateway-release-guards.ps1")
 $source = Get-Content -LiteralPath $operatorPath -Raw
 $tokens = $null
 $errors = $null
@@ -27,7 +28,15 @@ foreach ($required in @(
     'ParserSourceTransition = [bool]$parserSourceTransition',
     'Assert-LivePinnedParserVersion', 'MustMatchBaselineArtifact',
     'Assert-CompleteDarkVerifyRecoveryBaselineMetadata', 'Get-AppliedProcessorParserQualifiedArn',
-    '-PinnedParserMatchesBaselineArtifact:$completeDarkVerifyRecovery',
+    '-PinnedParserMatchesBaselineArtifact:($completeDarkVerifyRecovery -or $completeDarkAppliedGatewayRecovery)',
+    'Assert-CompleteDarkAppliedGatewayRecoveryBaselineMetadata', 'Read-AppliedGatewayRecovery',
+    'Assert-AppliedGatewayRecoveryPlanMetadata', 'Assert-AppliedGatewayRecoveryStateAndLive',
+    'Assert-GatewayPublicationReceipt', 'Assert-GatewayReleaseVariables', 'Assert-ExactGatewayReleasePlan',
+    'AppliedGatewayPlanPath', 'ReviewedAppliedGatewayPlanSha256',
+    'ReviewedAppliedGatewayPlanMetadataSha256', 'AppliedGatewayReceiptPath',
+    'ReviewedAppliedGatewayReceiptSha256',
+    'The already-applied gateway recovery inputs are all-or-none.',
+    'Already-applied gateway recovery is accepted only for CompleteDark Verify.',
     '-Retain:($Stage -ceq "CompleteDark")',
     '$result.BaselineMetadataSha256 = $postApplyBaseline.MetadataSha256',
     'Plan and Apply require the exact current release', 'SchemaVersion = "2"', '$planMetadata.Commit = $operatorCommit'
@@ -44,6 +53,54 @@ if ($source -match '(?m)terraform[^\r\n]*\s-target(?:=|\s)') { throw "The staged
 if ($source -notmatch 'document_scan_mapping_enabled\s*=\s*"false"' -or
   $source -notmatch 'document_scan_event_rule_enabled\s*=\s*"false"') {
   throw "The operator does not force both trigger switches dark."
+}
+$hostExecutable = (Get-Process -Id $PID).Path
+$baseRecoveryArguments = @(
+  "-NoProfile", "-File", $operatorPath, "-Action", "Verify", "-Stage", "CompleteDark",
+  "-ExpectedAccountId", "362544434697", "-StateBucket", "fixture-state-bucket",
+  "-BaselinePlanPath", "missing-baseline.tfplan", "-ReviewedBaselineSha256", ("a" * 64),
+  "-PublicationReceiptPath", "missing-receipt.json", "-ReviewedReceiptSha256", ("b" * 64)
+)
+$recoveryInputArguments = [ordered]@{
+  AppliedGatewayPlanPath = "missing-gateway-plan.tfplan"
+  ReviewedAppliedGatewayPlanSha256 = "c" * 64
+  ReviewedAppliedGatewayPlanMetadataSha256 = "d" * 64
+  AppliedGatewayReceiptPath = "missing-gateway-receipt.json"
+  ReviewedAppliedGatewayReceiptSha256 = "e" * 64
+}
+function Invoke-TestOperatorFailure([string[]]$Arguments) {
+  $savedErrorActionPreference = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = "Continue"
+    $output = & $hostExecutable @Arguments 2>&1
+    return [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($output -join "`n") }
+  }
+  finally { $ErrorActionPreference = $savedErrorActionPreference }
+}
+foreach ($singleInput in $recoveryInputArguments.GetEnumerator()) {
+  $result = Invoke-TestOperatorFailure -Arguments @(
+    $baseRecoveryArguments + @("-$($singleInput.Key)", $singleInput.Value)
+  )
+  if ($result.ExitCode -eq 0 -or $result.Output -notmatch "all-or-none") {
+    throw "A partial already-applied gateway recovery input set was not rejected before external access."
+  }
+}
+$allRecoveryArguments = @($baseRecoveryArguments)
+foreach ($entry in $recoveryInputArguments.GetEnumerator()) {
+  $allRecoveryArguments += @("-$($entry.Key)", $entry.Value)
+}
+foreach ($actionCase in @(
+    [pscustomobject]@{ Action = "Plan"; Stage = "CompleteDark" },
+    [pscustomobject]@{ Action = "Apply"; Stage = "CompleteDark" },
+    [pscustomobject]@{ Action = "Verify"; Stage = "ParserDark" }
+  )) {
+  $caseArguments = @($allRecoveryArguments)
+  $caseArguments[([array]::IndexOf($caseArguments, "Verify"))] = $actionCase.Action
+  $caseArguments[([array]::IndexOf($caseArguments, "CompleteDark"))] = $actionCase.Stage
+  $result = Invoke-TestOperatorFailure -Arguments $caseArguments
+  if ($result.ExitCode -eq 0 -or $result.Output -notmatch "only for CompleteDark Verify") {
+    throw "Already-applied gateway recovery accepted Action $($actionCase.Action), Stage $($actionCase.Stage)."
+  }
 }
 if ($source -notmatch 'state pull' -or $source -notmatch 'Remote state lineage or serial changed after review') {
   throw "Apply is not fail-closed against state changes after plan review."
@@ -308,6 +365,11 @@ try {
   $allowedPath = Join-Path $fixtureRoot "scripts\operate-development-document-dark-deployment.ps1"
   $null = New-Item -ItemType Directory -Path (Split-Path -Parent $allowedPath) -Force
   [IO.File]::WriteAllText($allowedPath, "base`n", [Text.UTF8Encoding]::new($false))
+  $catalogPath = Join-Path $fixtureRoot "backend\services\jobs\src\persistence\catalog.ts"
+  $catalogTestPath = Join-Path $fixtureRoot "backend\services\jobs\src\persistence\catalog.test.ts"
+  $null = New-Item -ItemType Directory -Path (Split-Path -Parent $catalogPath) -Force
+  [IO.File]::WriteAllText($catalogPath, "catalog base`n", [Text.UTF8Encoding]::new($false))
+  [IO.File]::WriteAllText($catalogTestPath, "catalog test base`n", [Text.UTF8Encoding]::new($false))
   & git -C $fixtureRoot add .; & git -C $fixtureRoot commit -q -m base
   $fixtureBase = (& git -C $fixtureRoot rev-parse HEAD).Trim()
 
@@ -333,6 +395,16 @@ try {
   }
 
   & git -C $fixtureRoot checkout -q $fixtureBase
+  [IO.File]::WriteAllText($catalogPath, "normalized timestamp`n", [Text.UTF8Encoding]::new($false))
+  [IO.File]::WriteAllText($catalogTestPath, "timestamp regression`n", [Text.UTF8Encoding]::new($false))
+  & git -C $fixtureRoot add .; & git -C $fixtureRoot commit -q -m allowed-product-recovery
+  $fixtureProductAllowed = (& git -C $fixtureRoot rev-parse HEAD).Trim()
+  $ReviewedOperatorDeltaSha256 = Get-FixtureDeltaSha $fixtureBase $fixtureProductAllowed
+  if ((Get-ReviewedOperatorDelta $fixtureBase $fixtureProductAllowed) -cne $ReviewedOperatorDeltaSha256) {
+    throw "The exact two modified Jobs recovery paths were rejected."
+  }
+
+  & git -C $fixtureRoot checkout -q $fixtureBase
   [IO.File]::WriteAllText((Join-Path $fixtureRoot "README.md"), "outside`n", [Text.UTF8Encoding]::new($false))
   & git -C $fixtureRoot add .; & git -C $fixtureRoot commit -q -m outside
   Assert-FixtureDeltaRejected $fixtureBase ((& git -C $fixtureRoot rev-parse HEAD).Trim()) "outside allowlist/add"
@@ -341,6 +413,11 @@ try {
   & git -C $fixtureRoot mv "scripts/operate-development-document-dark-deployment.ps1" "scripts/renamed.ps1"
   & git -C $fixtureRoot commit -q -m rename
   Assert-FixtureDeltaRejected $fixtureBase ((& git -C $fixtureRoot rev-parse HEAD).Trim()) "rename/add-delete"
+
+  & git -C $fixtureRoot checkout -q $fixtureBase
+  Remove-Item -LiteralPath $catalogPath
+  & git -C $fixtureRoot add .; & git -C $fixtureRoot commit -q -m deleted-allowed-product-path
+  Assert-FixtureDeltaRejected $fixtureBase ((& git -C $fixtureRoot rev-parse HEAD).Trim()) "deleted Jobs recovery path"
 
   & git -C $fixtureRoot checkout -q $fixtureBase
   [IO.File]::WriteAllBytes($allowedPath, [byte[]](0, 255, 1, 254, 2, 253))
@@ -1132,6 +1209,391 @@ foreach ($badPin in @("", "arn:aws:lambda:us-east-2:${ExpectedAccountId}:functio
   $rejected = $false
   try { $null = Get-AppliedProcessorParserQualifiedArn } catch { $rejected = $true }
   if (-not $rejected) { throw "CompleteDark Verify recovery accepted invalid applied processor pin '$badPin'." }
+}
+
+$appliedRecoveryFunctions = @($ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+      $node.Name -in @(
+        "Assert-CompleteDarkAppliedGatewayRecoveryBaselineMetadata",
+        "Assert-AppliedGatewayRecoveryPlanMetadata",
+        "Assert-AppliedGatewayRecoveryStateAndLive"
+      )
+    }, $true))
+if ($appliedRecoveryFunctions.Count -ne 3) {
+  throw "The already-applied gateway recovery guards must each be defined once."
+}
+foreach ($function in $appliedRecoveryFunctions | Sort-Object { $_.Extent.StartOffset }) {
+  Invoke-Expression $function.Extent.Text
+}
+
+$ExpectedAccountId = "362544434697"
+$Region = "us-east-2"
+$StateBucket = "ai-job-apply-development-terraform-state-362544434697"
+$appliedGatewayRecoveryRequested = $true
+$appliedGatewayRecoveryReleaseSourceSha = "a6d0fba09082b8bc61ee7b604ee1d5c47bd71624"
+$appliedGatewayRecoveryBaselineOperatorSourceSha = "b4bfb38ddb8740a9c9fb8528a7e733e32f184c01"
+$appliedGatewayRecoveryStateLineage = "472ef790-b249-45ec-817f-718005980d9e"
+$appliedGatewayRecoveryBaselineStateSerial = 106
+$appliedGatewayRecoveryCurrentStateSerial = 107
+$appliedGatewayRecoveryBaselineSha256 = "6a6b281497f5f629e0ae1dc54052e2b0975d354ffc9aaa1d6f980368459e9d2b"
+$appliedGatewayRecoveryBaselineMetadataSha256 = "b219a07674552bed93ae492b3e96cdf8da0ebae1e1b1003830673adeec8daea1"
+$appliedGatewayRecoveryBaselineOperatorDeltaSha256 = "4ef5e0a265b982f11de846904374d7db437391bf6ad1637fc8ad501e20e1d3e9"
+$appliedGatewayRecoveryDocumentReceiptSha256 = "524bbf645621a0aa744c3e84f7deff5f8430830e87330267ed5ca7243f40023e"
+$appliedGatewayRecoveryPlanSha256 = "1d41366e7f40d51c09000d823f1c0b104c82deee5f177e2a782e5a92641c5fab"
+$appliedGatewayRecoveryPlanMetadataSha256 = "6a46db5c0f5cb4aadfe97542c0333733dcb0e35f9578a4da9b704ef428d3d837"
+$appliedGatewayRecoveryReceiptSha256 = "2ea5d284126fc25bc4532059f7780a92669670927391ada50c2f70d53d0f8d41"
+$appliedGatewayRecoveryParserQualifiedArn =
+  "arn:aws:lambda:us-east-2:362544434697:function:ai-job-apply-development-document-parser:1"
+$appliedGatewayRecoveryMigrationImage =
+  "362544434697.dkr.ecr.us-east-2.amazonaws.com/ai-job-apply/migration@sha256:9be2474047872b9dc3878301fe946becbb7653f4e4dc733235f6d424502563eb"
+$releaseCommit = $appliedGatewayRecoveryReleaseSourceSha
+$operatorCommit = "f" * 40
+$expectedAppliedBaselineDelta = "8" * 64
+$expectedAppliedReleaseDelta = "9" * 64
+$ReviewedBaselineToOperatorDeltaSha256 = $expectedAppliedBaselineDelta
+$ReviewedOperatorDeltaSha256 = $expectedAppliedReleaseDelta
+$operatorDeltaSha256 = $expectedAppliedReleaseDelta
+$ReviewedReceiptSha256 = $appliedGatewayRecoveryDocumentReceiptSha256
+$ReviewedBaselineSha256 = $appliedGatewayRecoveryBaselineSha256
+$ReviewedBaselineMetadataSha256 = $appliedGatewayRecoveryBaselineMetadataSha256
+$appliedRecoveryBaselinePath = "C:\ignored\baseline-complete-dark.tfplan"
+$appliedRecoveryBaseline = [pscustomobject]@{ variables = [pscustomobject]@{
+    document_parser_invocation_qualified_arn = [pscustomobject]@{ value = $appliedGatewayRecoveryParserQualifiedArn }
+    migration_image = [pscustomobject]@{ value = $appliedGatewayRecoveryMigrationImage }
+  } }
+$appliedRecoveryStateIdentity = [pscustomobject]@{
+  Lineage = $appliedGatewayRecoveryStateLineage
+  Serial = $appliedGatewayRecoveryCurrentStateSerial
+}
+
+function New-AppliedRecoveryBaselineMetadata([ValidateSet("3", "4")][string]$SchemaVersion = "3") {
+  $values = [ordered]@{
+    SchemaVersion = $SchemaVersion; Kind = "development-document-zero-drift-baseline"
+    Environment = "development"; AccountId = $ExpectedAccountId; Region = $Region
+    ReleaseSourceSha = $appliedGatewayRecoveryReleaseSourceSha
+    OperatorSourceSha = $appliedGatewayRecoveryBaselineOperatorSourceSha
+    OperatorDeltaSha256 = $appliedGatewayRecoveryBaselineOperatorDeltaSha256
+    StateLineage = $appliedGatewayRecoveryStateLineage
+    StateSerial = $appliedGatewayRecoveryBaselineStateSerial
+    Stage = "complete-dark"; ReceiptSha256 = $appliedGatewayRecoveryDocumentReceiptSha256
+    ParserQualifiedArn = $appliedGatewayRecoveryParserQualifiedArn
+    PlanPath = $appliedRecoveryBaselinePath; PlanSha256 = $appliedGatewayRecoveryBaselineSha256
+    Applyable = $false; MeaningfulChanges = 0; CreatedAt = "2026-08-15T01:01:39.9202835Z"
+  }
+  if ($SchemaVersion -ceq "4") { $values.MigrationImage = $appliedGatewayRecoveryMigrationImage }
+  return [pscustomobject]$values
+}
+
+$script:rejectedAppliedRecoveryDeltaPair = ""
+function Get-ReviewedOperatorDelta {
+  param([string]$ReleaseSha, [string]$OperatorSha, [string]$ReviewedSha256)
+  $pair = "$ReleaseSha->$OperatorSha"
+  if ($pair -ceq $script:rejectedAppliedRecoveryDeltaPair) { throw "The fixture delta pair is not ancestral." }
+  $expected = if ($ReleaseSha -ceq $appliedGatewayRecoveryReleaseSourceSha -and
+    $OperatorSha -ceq $appliedGatewayRecoveryBaselineOperatorSourceSha) {
+    $appliedGatewayRecoveryBaselineOperatorDeltaSha256
+  }
+  elseif ($ReleaseSha -ceq $appliedGatewayRecoveryBaselineOperatorSourceSha -and
+    $OperatorSha -ceq $operatorCommit) { $expectedAppliedBaselineDelta }
+  elseif ($ReleaseSha -ceq $appliedGatewayRecoveryReleaseSourceSha -and
+    $OperatorSha -ceq $operatorCommit) { $expectedAppliedReleaseDelta }
+  else { throw "The fixture delta pair is outside the already-applied recovery graph." }
+  if ($ReviewedSha256 -cne $expected) { throw "The fixture reviewed delta is missing or mismatched." }
+  return $expected
+}
+
+function Assert-AppliedRecoveryBaselineAccepted(
+  [object]$Metadata = (New-AppliedRecoveryBaselineMetadata),
+  [object]$Baseline = $appliedRecoveryBaseline,
+  [object]$StateIdentity = $appliedRecoveryStateIdentity,
+  [string]$RequestedStage = "complete-dark", [string]$AppliedStage = "complete-dark",
+  [ValidateSet("Plan", "Apply", "Verify")][string]$Operation = "Verify"
+) {
+  Assert-CompleteDarkAppliedGatewayRecoveryBaselineMetadata -Metadata $Metadata -Baseline $Baseline `
+    -ResolvedPlanPath $appliedRecoveryBaselinePath -PlanSha256 $appliedGatewayRecoveryBaselineSha256 `
+    -CurrentStateIdentity $StateIdentity -RequestedStage $RequestedStage `
+    -AppliedStage $AppliedStage -Operation $Operation
+}
+
+foreach ($schema in @("3", "4")) {
+  Assert-AppliedRecoveryBaselineAccepted -Metadata (New-AppliedRecoveryBaselineMetadata $schema)
+}
+foreach ($operation in @("Plan", "Apply")) {
+  $rejected = $false
+  try { Assert-AppliedRecoveryBaselineAccepted -Operation $operation } catch { $rejected = $true }
+  if (-not $rejected) { throw "Already-applied gateway recovery accepted Action $operation." }
+}
+foreach ($stageCase in @(
+    [pscustomobject]@{ Label = "requested ParserDark"; Requested = "parser-dark"; Applied = "complete-dark" },
+    [pscustomobject]@{ Label = "live ParserDark"; Requested = "complete-dark"; Applied = "parser-dark" }
+  )) {
+  $rejected = $false
+  try {
+    Assert-AppliedRecoveryBaselineAccepted -RequestedStage $stageCase.Requested -AppliedStage $stageCase.Applied
+  } catch { $rejected = $true }
+  if (-not $rejected) { throw "Already-applied gateway recovery accepted $($stageCase.Label)." }
+}
+foreach ($mutation in @(
+    [pscustomobject]@{ Label = "schema"; Property = "SchemaVersion"; Value = "2" },
+    [pscustomobject]@{ Label = "stage"; Property = "Stage"; Value = "parser-dark" },
+    [pscustomobject]@{ Label = "release source"; Property = "ReleaseSourceSha"; Value = ("1" * 40) },
+    [pscustomobject]@{ Label = "operator source"; Property = "OperatorSourceSha"; Value = ("2" * 40) },
+    [pscustomobject]@{ Label = "stored delta"; Property = "OperatorDeltaSha256"; Value = ("3" * 64) },
+    [pscustomobject]@{ Label = "document receipt"; Property = "ReceiptSha256"; Value = ("4" * 64) },
+    [pscustomobject]@{ Label = "parser pin"; Property = "ParserQualifiedArn"; Value = ("bad") },
+    [pscustomobject]@{ Label = "lineage"; Property = "StateLineage"; Value = "12345678-1234-1234-1234-123456789abc" },
+    [pscustomobject]@{ Label = "serial minus"; Property = "StateSerial"; Value = 105 },
+    [pscustomobject]@{ Label = "serial plus"; Property = "StateSerial"; Value = 107 }
+  )) {
+  $metadata = New-AppliedRecoveryBaselineMetadata
+  $metadata.($mutation.Property) = $mutation.Value
+  $rejected = $false
+  try { Assert-AppliedRecoveryBaselineAccepted -Metadata $metadata } catch { $rejected = $true }
+  if (-not $rejected) { throw "Already-applied gateway recovery accepted baseline $($mutation.Label) tampering." }
+}
+foreach ($state in @(
+    [pscustomobject]@{ Label = "serial minus"; Lineage = $appliedGatewayRecoveryStateLineage; Serial = 106 },
+    [pscustomobject]@{ Label = "serial plus"; Lineage = $appliedGatewayRecoveryStateLineage; Serial = 108 },
+    [pscustomobject]@{ Label = "lineage"; Lineage = "12345678-1234-1234-1234-123456789abc"; Serial = 107 }
+  )) {
+  $rejected = $false
+  try { Assert-AppliedRecoveryBaselineAccepted -StateIdentity $state } catch { $rejected = $true }
+  if (-not $rejected) { throw "Already-applied gateway recovery accepted current-state $($state.Label)." }
+}
+foreach ($binding in @("baseline-sha", "baseline-metadata-sha", "document-receipt", "release", "requested")) {
+  $saved = @{
+    BaselineSha = $ReviewedBaselineSha256; MetadataSha = $ReviewedBaselineMetadataSha256
+    ReceiptSha = $ReviewedReceiptSha256; Release = $releaseCommit; Requested = $appliedGatewayRecoveryRequested
+  }
+  try {
+    switch ($binding) {
+      "baseline-sha" { $script:ReviewedBaselineSha256 = "1" * 64 }
+      "baseline-metadata-sha" { $script:ReviewedBaselineMetadataSha256 = "2" * 64 }
+      "document-receipt" { $script:ReviewedReceiptSha256 = "3" * 64 }
+      "release" { $script:releaseCommit = "4" * 40 }
+      "requested" { $script:appliedGatewayRecoveryRequested = $false }
+    }
+    $rejected = $false
+    try { Assert-AppliedRecoveryBaselineAccepted } catch { $rejected = $true }
+    if (-not $rejected) { throw "Already-applied gateway recovery accepted wrong $binding binding." }
+  }
+  finally {
+    $script:ReviewedBaselineSha256 = $saved.BaselineSha
+    $script:ReviewedBaselineMetadataSha256 = $saved.MetadataSha
+    $script:ReviewedReceiptSha256 = $saved.ReceiptSha
+    $script:releaseCommit = $saved.Release
+    $script:appliedGatewayRecoveryRequested = $saved.Requested
+  }
+}
+foreach ($deltaCase in @("baseline", "release", "baseline-ancestry", "release-ancestry")) {
+  $savedBaselineDelta = $ReviewedBaselineToOperatorDeltaSha256
+  $savedReleaseDelta = $ReviewedOperatorDeltaSha256
+  try {
+    if ($deltaCase -ceq "baseline") { $script:ReviewedBaselineToOperatorDeltaSha256 = "5" * 64 }
+    elseif ($deltaCase -ceq "release") { $script:ReviewedOperatorDeltaSha256 = "6" * 64 }
+    elseif ($deltaCase -ceq "baseline-ancestry") {
+      $script:rejectedAppliedRecoveryDeltaPair = "$appliedGatewayRecoveryBaselineOperatorSourceSha->$operatorCommit"
+    }
+    else { $script:rejectedAppliedRecoveryDeltaPair = "$appliedGatewayRecoveryReleaseSourceSha->$operatorCommit" }
+    $rejected = $false
+    try { Assert-AppliedRecoveryBaselineAccepted } catch { $rejected = $true }
+    if (-not $rejected) { throw "Already-applied gateway recovery accepted $deltaCase delta tampering." }
+  }
+  finally {
+    $script:ReviewedBaselineToOperatorDeltaSha256 = $savedBaselineDelta
+    $script:ReviewedOperatorDeltaSha256 = $savedReleaseDelta
+    $script:rejectedAppliedRecoveryDeltaPair = ""
+  }
+}
+$badBaseline = $appliedRecoveryBaseline | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+$badBaseline.variables.document_parser_invocation_qualified_arn.value =
+  "arn:aws:lambda:us-east-2:362544434697:function:ai-job-apply-development-document-parser:2"
+$rejected = $false
+try { Assert-AppliedRecoveryBaselineAccepted -Baseline $badBaseline } catch { $rejected = $true }
+if (-not $rejected) { throw "Already-applied gateway recovery accepted a changed parser pin." }
+$badBaseline = $appliedRecoveryBaseline | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+$badBaseline.variables.migration_image.value = $badBaseline.variables.migration_image.value -replace "9be2", "0be2"
+$rejected = $false
+try { Assert-AppliedRecoveryBaselineAccepted -Baseline $badBaseline } catch { $rejected = $true }
+if (-not $rejected) { throw "Already-applied gateway recovery accepted a changed migration image." }
+
+$AppliedGatewayReceiptPath = "C:\ignored\receipt-b4bfb38ddb87-20260814-212048.json"
+$appliedPlanPath = "C:\ignored\release-b4bfb38ddb87.tfplan"
+$appliedPlanBaselineMetadataPath = "$appliedRecoveryBaselinePath.baseline.json"
+function New-AppliedGatewayMetadata {
+  return [pscustomobject][ordered]@{
+    SchemaVersion = "1"; Kind = "development-gateway-release-plan"; Environment = "development"
+    AccountId = $ExpectedAccountId; Region = $Region; StateBucket = $StateBucket; StateKey = "platform.tfstate"
+    StateLineage = $appliedGatewayRecoveryStateLineage; StateSerial = 106
+    SourceSha = $appliedGatewayRecoveryBaselineOperatorSourceSha
+    ReceiptSha256 = $appliedGatewayRecoveryReceiptSha256
+    BaselinePath = $appliedRecoveryBaselinePath; BaselineSha256 = $appliedGatewayRecoveryBaselineSha256
+    BaselineMetadataPath = $appliedPlanBaselineMetadataPath
+    BaselineMetadataSha256 = $appliedGatewayRecoveryBaselineMetadataSha256
+    BaselineMetadataSchemaVersion = "3"; BaselineStage = "complete-dark"
+    BaselineParserQualifiedArn = $appliedGatewayRecoveryParserQualifiedArn
+    BaselineDocumentReceiptSha256 = $appliedGatewayRecoveryDocumentReceiptSha256
+    BaselineStateLineage = $appliedGatewayRecoveryStateLineage; BaselineStateSerial = 106
+    BaselineMigrationImage = $appliedGatewayRecoveryMigrationImage; MigrationImage = $appliedGatewayRecoveryMigrationImage
+    PlanPath = $appliedPlanPath; PlanSha256 = $appliedGatewayRecoveryPlanSha256
+    ChangedResources = @("module.platform.aws_lambda_alias.gateway[0]", "module.platform.aws_lambda_function.gateway[0]")
+    CreatedAt = "2026-08-15T01:33:26.4464529Z"
+  }
+}
+Assert-AppliedGatewayRecoveryPlanMetadata -Metadata (New-AppliedGatewayMetadata) `
+  -ResolvedPlanPath $appliedPlanPath -ResolvedBaselinePath $appliedRecoveryBaselinePath `
+  -ResolvedBaselineMetadataPath $appliedPlanBaselineMetadataPath -ResolvedReceiptPath $AppliedGatewayReceiptPath
+foreach ($metadataCase in @("extra", "plan", "plan-sha", "receipt", "baseline", "baseline-meta", "source",
+    "state", "parser", "migration", "changes", "created")) {
+  $metadata = New-AppliedGatewayMetadata
+  switch ($metadataCase) {
+    "extra" { $metadata | Add-Member NoteProperty Unexpected $true }
+    "plan" { $metadata.PlanPath = "C:\ignored\other.tfplan" }
+    "plan-sha" { $metadata.PlanSha256 = "1" * 64 }
+    "receipt" { $metadata.ReceiptSha256 = "2" * 64 }
+    "baseline" { $metadata.BaselineSha256 = "3" * 64 }
+    "baseline-meta" { $metadata.BaselineMetadataSha256 = "4" * 64 }
+    "source" { $metadata.SourceSha = "5" * 40 }
+    "state" { $metadata.StateSerial = 107 }
+    "parser" { $metadata.BaselineParserQualifiedArn = $metadata.BaselineParserQualifiedArn -replace ':1$', ':2' }
+    "migration" { $metadata.MigrationImage = $metadata.MigrationImage -replace "9be2", "0be2" }
+    "changes" { $metadata.ChangedResources += "module.platform.aws_lambda_permission.gateway[0]" }
+    "created" { $metadata.CreatedAt = "invalid" }
+  }
+  $rejected = $false
+  try {
+    Assert-AppliedGatewayRecoveryPlanMetadata -Metadata $metadata -ResolvedPlanPath $appliedPlanPath `
+      -ResolvedBaselinePath $appliedRecoveryBaselinePath `
+      -ResolvedBaselineMetadataPath $appliedPlanBaselineMetadataPath `
+      -ResolvedReceiptPath $AppliedGatewayReceiptPath
+  } catch { $rejected = $true }
+  if (-not $rejected) { throw "Already-applied gateway recovery accepted $metadataCase plan metadata tampering." }
+}
+
+$appliedArtifact = [pscustomobject]@{
+  key = "lambda/gateway/b4bfb38/source/gateway-lambda.zip"; versionId = "gateway-version"
+  objectBase64Sha256 = ("A" * 43) + "="; artifactSha256 = "b" * 64
+}
+function New-AppliedGatewayState {
+  return @{
+    "module.platform.aws_lambda_function.gateway[0]" = [pscustomobject]@{
+      s3_key = $appliedArtifact.key; s3_object_version = $appliedArtifact.versionId
+      source_code_hash = $appliedArtifact.objectBase64Sha256
+      environment = [object[]]@([pscustomobject]@{ variables = [pscustomobject]@{
+            RELEASE_SHA = $appliedArtifact.artifactSha256
+            RETAINED_GATEWAY_VARIABLE = "preserved"
+          } })
+    }
+    "module.platform.aws_lambda_alias.gateway[0]" = [pscustomobject]@{
+      function_version = "16"; routing_config = @()
+    }
+  }
+}
+$script:liveGatewayAliasVersion = "16"
+$script:liveGatewayArtifact = $appliedArtifact
+function Invoke-AwsJson {
+  param([string[]]$Arguments)
+  $signature = $Arguments -join " "
+  if ($signature -match '^lambda get-alias ') {
+    return [pscustomobject]@{ FunctionVersion = $script:liveGatewayAliasVersion; RoutingConfig = [pscustomobject]@{} }
+  }
+  if ($signature -match '^lambda get-function ') {
+    return [pscustomobject]@{ Configuration = [pscustomobject]@{
+        Version = $script:liveGatewayAliasVersion; CodeSha256 = $script:liveGatewayArtifact.objectBase64Sha256
+        Environment = [pscustomobject]@{ Variables = [pscustomobject]@{ RELEASE_SHA = $script:liveGatewayArtifact.artifactSha256 } }
+        State = "Active"; LastUpdateStatus = "Successful"
+      } }
+  }
+  throw "Unexpected applied-gateway live call '$signature'."
+}
+$positiveAppliedGatewayState = New-AppliedGatewayState
+$positiveRawEnvironment = $positiveAppliedGatewayState[
+  "module.platform.aws_lambda_function.gateway[0]"
+].environment
+if ($positiveRawEnvironment.GetType().FullName -cne "System.Object[]" -or
+  [string]$positiveRawEnvironment[0].variables.RETAINED_GATEWAY_VARIABLE -cne "preserved") {
+  throw "The applied-gateway positive fixture does not preserve the raw Terraform Object[] environment shape and extra variables."
+}
+Assert-AppliedGatewayRecoveryStateAndLive -State $positiveAppliedGatewayState -Artifact $appliedArtifact
+
+foreach ($shapeCase in @(
+    "environment-absent", "environment-null", "environment-empty", "environment-scalar",
+    "environment-multiple", "environment-null-block", "environment-decorated-string",
+    "variables-absent", "variables-null", "variables-nonobject", "variables-decorated-string",
+    "release-absent", "release-null", "release-nonstring", "release-empty", "release-tampered")) {
+  $state = New-AppliedGatewayState
+  $functionState = $state["module.platform.aws_lambda_function.gateway[0]"]
+  switch ($shapeCase) {
+    "environment-absent" { $functionState.PSObject.Properties.Remove("environment") }
+    "environment-null" { $functionState.environment = $null }
+    "environment-empty" { $functionState.environment = [object[]]@() }
+    "environment-scalar" { $functionState.environment = [pscustomobject]@{
+        variables = [pscustomobject]@{ RELEASE_SHA = $appliedArtifact.artifactSha256 }
+      } }
+    "environment-multiple" { $functionState.environment = [object[]]@(
+        [pscustomobject]@{ variables = [pscustomobject]@{ RELEASE_SHA = $appliedArtifact.artifactSha256 } },
+        [pscustomobject]@{ variables = [pscustomobject]@{ RELEASE_SHA = $appliedArtifact.artifactSha256 } }
+      ) }
+    "environment-null-block" { $functionState.environment = [object[]]@($null) }
+    "environment-decorated-string" {
+      $decoratedEnvironment = "invalid-environment"
+      $decoratedEnvironment | Add-Member -NotePropertyName variables -NotePropertyValue ([pscustomobject]@{
+          RELEASE_SHA = $appliedArtifact.artifactSha256
+        })
+      $functionState.environment = [object[]]@($decoratedEnvironment)
+    }
+    "variables-absent" { $functionState.environment[0].PSObject.Properties.Remove("variables") }
+    "variables-null" { $functionState.environment[0].variables = $null }
+    "variables-nonobject" { $functionState.environment[0].variables = "invalid" }
+    "variables-decorated-string" {
+      $decoratedVariables = "invalid-variables"
+      $decoratedVariables | Add-Member -NotePropertyName RELEASE_SHA `
+        -NotePropertyValue $appliedArtifact.artifactSha256
+      $functionState.environment[0].variables = $decoratedVariables
+    }
+    "release-absent" { $functionState.environment[0].variables.PSObject.Properties.Remove("RELEASE_SHA") }
+    "release-null" { $functionState.environment[0].variables.RELEASE_SHA = $null }
+    "release-nonstring" { $functionState.environment[0].variables.RELEASE_SHA = 7 }
+    "release-empty" { $functionState.environment[0].variables.RELEASE_SHA = "" }
+    "release-tampered" { $functionState.environment[0].variables.RELEASE_SHA = "d" * 64 }
+  }
+  $rejected = $false
+  try { Assert-AppliedGatewayRecoveryStateAndLive -State $state -Artifact $appliedArtifact } catch { $rejected = $true }
+  if (-not $rejected) { throw "Already-applied gateway recovery accepted $shapeCase state environment tampering." }
+}
+
+foreach ($liveCase in @("missing-function", "state-key", "state-version", "state-hash",
+    "state-routing", "alias-version", "live-hash", "live-release")) {
+  $state = New-AppliedGatewayState
+  $script:liveGatewayAliasVersion = "16"
+  $script:liveGatewayArtifact = $appliedArtifact | ConvertTo-Json | ConvertFrom-Json
+  switch ($liveCase) {
+    "missing-function" { $state.Remove("module.platform.aws_lambda_function.gateway[0]") }
+    "state-key" { $state["module.platform.aws_lambda_function.gateway[0]"].s3_key += "-tampered" }
+    "state-version" { $state["module.platform.aws_lambda_function.gateway[0]"].s3_object_version += "-tampered" }
+    "state-hash" { $state["module.platform.aws_lambda_function.gateway[0]"].source_code_hash = ("C" * 43) + "=" }
+    "state-routing" { $state["module.platform.aws_lambda_alias.gateway[0]"].routing_config = @([pscustomobject]@{ weight = 0.1 }) }
+    "alias-version" { $script:liveGatewayAliasVersion = "17" }
+    "live-hash" { $script:liveGatewayArtifact.objectBase64Sha256 = ("E" * 43) + "=" }
+    "live-release" { $script:liveGatewayArtifact.artifactSha256 = "f" * 64 }
+  }
+  $rejected = $false
+  try { Assert-AppliedGatewayRecoveryStateAndLive -State $state -Artifact $appliedArtifact } catch { $rejected = $true }
+  if (-not $rejected) { throw "Already-applied gateway recovery accepted $liveCase state/live tampering." }
+}
+
+$recoveryReadOffset = $source.IndexOf('$script:appliedGatewayRecovery = Read-AppliedGatewayRecovery')
+$recoveryTemplateOffset = $source.IndexOf('$baseline = $script:appliedGatewayRecovery.Plan', $recoveryReadOffset)
+$zeroDriftOffset = $source.IndexOf('Invoke-ZeroDrift -Baseline $baseline', $recoveryTemplateOffset)
+if ($recoveryReadOffset -lt 0 -or $recoveryTemplateOffset -lt $recoveryReadOffset -or
+  $zeroDriftOffset -lt $recoveryTemplateOffset -or
+  $source.IndexOf('Assert-ExactGatewayReleasePlan -Plan $plan -Artifact $artifact') -lt 0 -or
+  $source.IndexOf('Assert-GatewayReleaseVariables -BaselineVariables $Baseline.variables') -lt 0 -or
+  $source.IndexOf('(Get-FileHash -LiteralPath $planPath -Algorithm SHA256)') -lt 0 -or
+  $source.IndexOf('(Get-FileHash -LiteralPath $metadataPath -Algorithm SHA256)') -lt 0 -or
+  $source.IndexOf('(Get-FileHash -LiteralPath $receiptPath -Algorithm SHA256)') -lt 0) {
+  throw "Already-applied gateway recovery does not hash, guard, and consume the exact applied plan before zero drift."
 }
 
 Write-Output "Development document staged operator tests passed."

@@ -95,6 +95,70 @@ foreach ($function in $baselineFunctions | Sort-Object { $_.Extent.StartOffset }
   Invoke-Expression $function.Extent.Text
 }
 
+$originalRepositoryRoot = $repositoryRoot
+$script:documentDeltaMode = "valid"
+$script:documentDeltaCatFileCalls = 0
+function git {
+  $arguments = @($args)
+  if ($arguments -contains "merge-base") {
+    $global:LASTEXITCODE = if ($script:documentDeltaMode -ceq "nonancestor") { 1 } else { 0 }
+    return
+  }
+  if ($arguments -contains "--name-status") {
+    $global:LASTEXITCODE = 0
+    switch ($script:documentDeltaMode) {
+      "valid" { return @(
+          "M`tbackend/services/jobs/src/persistence/catalog.ts",
+          "M`tbackend/services/jobs/src/persistence/catalog.test.ts"
+        ) }
+      "unapproved" { return "M`tbackend/services/jobs/src/persistence/unapproved.ts" }
+      "add" { return "A`tbackend/services/jobs/src/persistence/catalog.ts" }
+      "delete" { return "D`tbackend/services/jobs/src/persistence/catalog.ts" }
+      "rename" { return "R100`tbackend/services/jobs/src/persistence/catalog.ts`tbackend/services/jobs/src/persistence/catalog.test.ts" }
+      default { return "M`tbackend/services/jobs/src/persistence/catalog.ts" }
+    }
+  }
+  if ($arguments -contains "--numstat") {
+    $global:LASTEXITCODE = 0
+    if ($script:documentDeltaMode -ceq "binary") {
+      return "-`t-`tbackend/services/jobs/src/persistence/catalog.ts"
+    }
+    return "1`t1`tbackend/services/jobs/src/persistence/catalog.ts"
+  }
+  if ($arguments -contains "cat-file") {
+    $script:documentDeltaCatFileCalls++
+    $global:LASTEXITCODE = 0
+    if ($script:documentDeltaMode -ceq "gitlink") { return "commit" }
+    return "blob"
+  }
+  if ($arguments -contains "--full-index") {
+    $global:LASTEXITCODE = 0
+    return "fixture patch $($script:documentDeltaMode)"
+  }
+  $global:LASTEXITCODE = 1
+  throw "Unexpected mocked Git invocation: $($arguments -join ' ')"
+}
+try {
+  $repositoryRoot = "mock-repository-root"
+  $releaseSha = "1" * 40
+  $currentSha = "2" * 40
+  $deltaSha = Get-DocumentOperatorDeltaSha256 -ReleaseSha $releaseSha -OperatorSha $currentSha
+  if ($deltaSha -notmatch '^[a-f0-9]{64}$' -or $script:documentDeltaCatFileCalls -ne 4) {
+    throw "The exact two-file Jobs timestamp delta was not accepted as modified regular blobs."
+  }
+  foreach ($mode in @("unapproved", "add", "delete", "rename", "binary", "gitlink", "nonancestor")) {
+    $script:documentDeltaMode = $mode
+    $rejected = $false
+    try { $null = Get-DocumentOperatorDeltaSha256 -ReleaseSha $releaseSha -OperatorSha $currentSha } catch { $rejected = $true }
+    if (-not $rejected) { throw "The canonical document delta accepted the '$mode' fixture." }
+  }
+} finally {
+  Remove-Item -LiteralPath Function:\git -Force
+  $repositoryRoot = $originalRepositoryRoot
+  Remove-Variable -Name documentDeltaMode -Scope Script -ErrorAction SilentlyContinue
+  Remove-Variable -Name documentDeltaCatFileCalls -Scope Script -ErrorAction SilentlyContinue
+}
+
 $logTask = [pscustomobject]@{ taskArn = "arn:aws:ecs:us-east-2:111122223333:task/cluster/$('a' * 32)" }
 $logContainer = [pscustomobject]@{ name = "database-migration" }
 $logDefinition = [pscustomobject]@{ containerDefinitions = @([pscustomobject]@{

@@ -129,6 +129,95 @@ describe("PostgresJobCatalog active read parameters", () => {
     expect(searchCount).toBe(2);
   });
 
+  it("normalizes raw PostgreSQL timestamp strings before returning items and creating a cursor", async () => {
+    const row = {
+      id: "00000000-0000-7000-8000-000000000001",
+      companyId: "00000000-0000-7000-8000-000000000002",
+      companyName: "Synthetic Company",
+      companyVerifiedDomain: "example.test",
+      title: "Software Engineer",
+      locations: ["Remote - US"],
+      department: "Engineering",
+      firstObservedAt: "2026-08-10T20:00:00.000Z",
+      lastVerifiedAt: "2026-08-11T20:00:00.000Z",
+      expiresAt: "2026-09-10T20:00:00.000Z",
+      rankKey: "0.000000",
+    };
+    let queryCount = 0;
+    const transaction = (() => {
+      queryCount += 1;
+      return Promise.resolve(
+        queryCount === 1
+          ? [{ revision: "7" }]
+          : [row, { ...row, id: "00000000-0000-7000-8000-000000000003" }],
+      );
+    }) as unknown as postgres.TransactionSql;
+    const client = {
+      begin: async (_options: string, callback: (sql: postgres.TransactionSql) => unknown) =>
+        callback(transaction),
+    } as unknown as postgres.Sql;
+    const catalog = new PostgresJobCatalog(client, catalogOptions);
+
+    const page = await catalog.searchActiveJobs(
+      { pageSize: 1 },
+      new Date("2026-08-12T20:00:00.000Z"),
+    );
+
+    expect(page.items).toHaveLength(1);
+    expect(page.items[0]).toMatchObject({
+      firstObservedAt: new Date(row.firstObservedAt),
+      lastVerifiedAt: new Date(row.lastVerifiedAt),
+      expiresAt: new Date(row.expiresAt),
+    });
+    expect(page.items[0]?.firstObservedAt).toBeInstanceOf(Date);
+    expect(page.items[0]?.lastVerifiedAt).toBeInstanceOf(Date);
+    expect(page.items[0]?.expiresAt).toBeInstanceOf(Date);
+    expect(page.nextCursor).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+    const [body] = (page.nextCursor as string).split(".");
+    expect(JSON.parse(Buffer.from(body ?? "", "base64url").toString("utf8"))).toMatchObject({
+      lastVerifiedAt: row.lastVerifiedAt,
+      id: row.id,
+      rankKey: row.rankKey,
+    });
+  });
+
+  it.each([
+    ["invalid string", "not-a-timestamp"],
+    ["null", null],
+    ["object", { timestamp: "2026-08-11T20:00:00.000Z" }],
+  ])("rejects an %s raw PostgreSQL search timestamp", async (_label, invalidTimestamp) => {
+    const validRow = {
+      id: "00000000-0000-7000-8000-000000000001",
+      companyId: "00000000-0000-7000-8000-000000000002",
+      companyName: "Synthetic Company",
+      companyVerifiedDomain: null,
+      title: "Software Engineer",
+      locations: ["Remote - US"],
+      department: null,
+      firstObservedAt: "2026-08-10T20:00:00.000Z",
+      lastVerifiedAt: "2026-08-11T20:00:00.000Z",
+      expiresAt: "2026-09-10T20:00:00.000Z",
+      rankKey: "0.000000",
+    };
+
+    for (const field of ["firstObservedAt", "lastVerifiedAt", "expiresAt"] as const) {
+      let queryCount = 0;
+      const transaction = (() => {
+        queryCount += 1;
+        return Promise.resolve(
+          queryCount === 1 ? [{ revision: "7" }] : [{ ...validRow, [field]: invalidTimestamp }],
+        );
+      }) as unknown as postgres.TransactionSql;
+      const client = {
+        begin: async (_options: string, callback: (sql: postgres.TransactionSql) => unknown) =>
+          callback(transaction),
+      } as unknown as postgres.Sql;
+      const catalog = new PostgresJobCatalog(client, catalogOptions);
+
+      await expect(catalog.searchActiveJobs({ pageSize: 1 })).rejects.toThrow("job-search");
+    }
+  });
+
   it("rejects invalid search bounds before opening a query", async () => {
     let queryCount = 0;
     const client = {

@@ -212,9 +212,9 @@ interface ActiveJobSearchRow {
   title: string;
   locations: string[];
   department: string | null;
-  firstObservedAt: Date;
-  lastVerifiedAt: Date;
-  expiresAt: Date;
+  firstObservedAt: Date | string;
+  lastVerifiedAt: Date | string;
+  expiresAt: Date | string;
   rankKey: string;
 }
 
@@ -246,6 +246,17 @@ const JOB_SEARCH_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const JOB_SEARCH_RANK_PATTERN = /^\d+\.\d{6}$/;
 const JOB_SEARCH_CURSOR_MAXIMUM_AGE_MILLISECONDS = 15 * 60 * 1_000;
+
+function normalizeJobSearchTimestamp(value: unknown, field: string): Date {
+  if (!(value instanceof Date) && typeof value !== "string") {
+    throw new TypeError(`The job-search ${field} timestamp is invalid`);
+  }
+  const normalized = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+  if (!Number.isFinite(normalized.getTime())) {
+    throw new TypeError(`The job-search ${field} timestamp is invalid`);
+  }
+  return normalized;
+}
 
 export class InvalidJobSearchError extends Error {
   constructor(message = "The job search request is invalid") {
@@ -1147,7 +1158,12 @@ export class PostgresJobCatalog {
         id ASC
       LIMIT ${normalized.pageSize + 1}
     `;
-      const pageRows = rows.slice(0, normalized.pageSize);
+      const pageRows = rows.slice(0, normalized.pageSize).map((row) => ({
+        ...row,
+        firstObservedAt: normalizeJobSearchTimestamp(row.firstObservedAt, "first-observed"),
+        lastVerifiedAt: normalizeJobSearchTimestamp(row.lastVerifiedAt, "last-verified"),
+        expiresAt: normalizeJobSearchTimestamp(row.expiresAt, "expiry"),
+      }));
       const items = pageRows.map(
         (row): ActiveJobSummaryRecord => ({
           id: row.id,
