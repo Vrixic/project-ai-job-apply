@@ -8,6 +8,11 @@ import {
 } from "@ai-job-apply/documents-service";
 import { PostgresJobCatalog } from "@ai-job-apply/jobs-service";
 import {
+  deriveSavedJobCursorKeys,
+  PostgresSavedJobStore,
+  SavedJobsService,
+} from "@ai-job-apply/matching-service";
+import {
   createLogger,
   shutdownTelemetry,
   startLogDeliveryHeartbeat,
@@ -16,6 +21,7 @@ import { createDatabase, PostgresProfileStore } from "@ai-job-apply/profile-serv
 import { FastifyAdapter } from "@nestjs/platform-fastify";
 import { createGatewayApplication } from "./application.js";
 import { deriveJobSearchCursorKeys } from "./job-search-cursor-key.js";
+import { JobCatalogSavedJobResolver } from "./saved-job-catalog-resolver.js";
 
 const config = loadBackendConfig();
 const logger = createLogger({
@@ -28,6 +34,11 @@ const store = new PostgresProfileStore(database, { dispatchTarget: "lambda_durab
 const catalog = new PostgresJobCatalog(database.client, {
   searchCursorKeys: deriveJobSearchCursorKeys(config.DATABASE_URL),
 });
+const savedJobs = new SavedJobsService(
+  new PostgresSavedJobStore(database.client),
+  new JobCatalogSavedJobResolver(catalog),
+  deriveSavedJobCursorKeys(config.DATABASE_URL),
+);
 const documents =
   config.DOCUMENT_UPLOAD_BUCKET && config.DOCUMENT_UPLOAD_KMS_KEY_ARN
     ? new PostgresDocumentStore(
@@ -46,6 +57,7 @@ const verifier = createOidcVerifier({
 const app = await createGatewayApplication({
   store,
   catalog,
+  savedJobs,
   documents,
   verifier,
   releaseSha: config.RELEASE_SHA,

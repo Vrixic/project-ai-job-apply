@@ -148,4 +148,92 @@ describe("JobSearchForm", () => {
     );
     expect(submit?.disabled).toBe(false);
   });
+
+  it("saves an active result with a dedicated idempotency key and drops stale completion on sign-out", async () => {
+    const save = deferredResponse();
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ items: [firstJob] }))
+      .mockImplementationOnce(() => save.promise);
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<JobSearchForm authenticated />));
+    await act(async () =>
+      container
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    const saveButton = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Save job"),
+    );
+    await act(async () => saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    const [, init] = fetchMock.mock.calls[1] ?? [];
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/platform/saved-jobs");
+    expect(new Headers(init?.headers).get("idempotency-key")).toMatch(/^saved-job-/);
+    const signal = init?.signal;
+
+    await act(async () => root.render(<JobSearchForm authenticated={false} />));
+    expect(signal?.aborted).toBe(true);
+    await act(async () => save.resolve(jsonResponse({ id: "saved" }, 201)));
+    expect(container.textContent).not.toContain("Job saved to your private list");
+    expect(container.textContent).toContain("Sign in to search");
+  });
+
+  it("fails closed at render time for populated search fields, results, and save messages on sign-out", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ items: [firstJob] }))
+      .mockResolvedValueOnce(jsonResponse({ id: "saved" }, 201));
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<JobSearchForm authenticated />));
+    const keywords = container.querySelector<HTMLInputElement>('input[type="search"]');
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    await act(async () => {
+      valueSetter?.call(keywords, "private candidate query");
+      keywords?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () =>
+      container
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    const saveButton = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Save job"),
+    );
+    await act(async () => saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(container.textContent).toContain(firstJob.title);
+    expect(container.textContent).toContain("Job saved to your private list");
+    expect(keywords?.value).toBe("private candidate query");
+
+    await act(async () => root.render(<JobSearchForm authenticated={false} />));
+    expect(container.querySelector("form")).toBeNull();
+    expect(container.textContent).not.toContain("private candidate query");
+    expect(container.textContent).not.toContain(firstJob.title);
+    expect(container.textContent).not.toContain("Job saved to your private list");
+    expect(container.textContent).toContain("Sign in to search");
+  });
+
+  it("re-enables search after sign-out during a pending request and ignores its stale response", async () => {
+    const pending = deferredResponse();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(() => pending.promise),
+    );
+    await act(async () => root.render(<JobSearchForm authenticated />));
+    await act(async () =>
+      container
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(
+      true,
+    );
+
+    await act(async () => root.render(<JobSearchForm authenticated={false} />));
+    await act(async () => root.render(<JobSearchForm authenticated />));
+    expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(
+      false,
+    );
+    await act(async () => pending.resolve(jsonResponse({ items: [firstJob] })));
+    expect(container.textContent).not.toContain(firstJob.title);
+  });
 });

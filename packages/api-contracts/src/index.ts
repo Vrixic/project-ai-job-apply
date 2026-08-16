@@ -24,6 +24,11 @@ export type JobSearchRequest = components["schemas"]["JobSearchRequest"];
 export type JobSearchPage = components["schemas"]["JobSearchPage"];
 export type CanonicalJobSummary = components["schemas"]["CanonicalJobSummary"];
 export type CanonicalJobDetail = components["schemas"]["CanonicalJobDetail"];
+export type CreateSavedJobRequest = components["schemas"]["CreateSavedJobRequest"];
+export type SavedJobSearchRequest = components["schemas"]["SavedJobSearchRequest"];
+export type SavedJob = components["schemas"]["SavedJob"];
+export type SavedJobSnapshot = components["schemas"]["SavedJobSnapshot"];
+export type SavedJobPage = components["schemas"]["SavedJobPage"];
 export type ProblemDetails = components["schemas"]["ProblemDetails"];
 
 const ajv = new Ajv2020({ allErrors: true, strict: true });

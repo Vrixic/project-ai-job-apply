@@ -20,6 +20,12 @@
       "classification": "public_and_internal"
     },
     {
+      "name": "SavedJob",
+      "file": "saved-job.schema.json",
+      "owner": "matching",
+      "classification": "confidential"
+    },
+    {
       "name": "FieldDefinition",
       "file": "field-definition.schema.json",
       "owner": "validation",

@@ -1,13 +1,14 @@
 "use client";
 
 import type { CanonicalJobSummary, JobSearchPage } from "@ai-job-apply/api-contracts";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import {
   appendJobSearchPage,
   buildJobSearchRequest,
   type JobSearchFields,
   jobSearchFailureAction,
 } from "./job-search-state";
+import { SAVED_JOBS_CHANGED_EVENT } from "./saved-jobs-panel";
 
 const initialFields: JobSearchFields = {
   query: "",
@@ -36,7 +37,27 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
   const [items, setItems] = useState<CanonicalJobSummary[]>([]);
   const [cursor, setCursor] = useState<string>();
   const [searching, setSearching] = useState(false);
+  const [savingJobId, setSavingJobId] = useState<string>();
   const [message, setMessage] = useState<string>();
+  const authenticatedRef = useRef(authenticated);
+  const sessionGeneration = useRef(0);
+  const activeControllers = useRef(new Set<AbortController>());
+  authenticatedRef.current = authenticated;
+
+  useEffect(() => {
+    sessionGeneration.current += 1;
+    for (const controller of activeControllers.current) controller.abort();
+    activeControllers.current.clear();
+    setSearching(false);
+    setSavingJobId(undefined);
+    if (!authenticated) {
+      setFields(initialFields);
+      setItems([]);
+      setCursor(undefined);
+      setSubmittedFields(undefined);
+      setMessage(undefined);
+    }
+  }, [authenticated]);
 
   function update<Key extends keyof JobSearchFields>(key: Key, value: JobSearchFields[Key]) {
     setFields((current) => ({ ...current, [key]: value }));
@@ -47,11 +68,14 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
     nextCursor?: string,
     preserveMessage = false,
   ) {
+    if (!authenticatedRef.current) return;
+    const generation = sessionGeneration.current;
     setSearching(true);
     if (!preserveMessage) {
       setMessage(undefined);
     }
     const controller = new AbortController();
+    activeControllers.current.add(controller);
     const timeout = window.setTimeout(() => controller.abort(), 20_000);
     try {
       const response = await fetch("/api/platform/jobs/search", {
@@ -74,6 +98,7 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
         throw new Error(problem.message);
       }
       const page = (await response.json()) as JobSearchPage;
+      if (!authenticatedRef.current || generation !== sessionGeneration.current) return;
       setItems((current) => (nextCursor ? appendJobSearchPage(current, page) : page.items));
       setCursor(page.nextCursor);
       setMessage(
@@ -82,16 +107,18 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
           : `${page.items.length} job${page.items.length === 1 ? "" : "s"} loaded.`,
       );
     } catch (error) {
-      setMessage(
-        controller.signal.aborted
-          ? "Job search timed out. Try again after confirming the platform is available."
-          : error instanceof Error
-            ? error.message
-            : "Job search could not be completed",
-      );
+      if (generation === sessionGeneration.current)
+        setMessage(
+          controller.signal.aborted
+            ? "Job search timed out. Try again after confirming the platform is available."
+            : error instanceof Error
+              ? error.message
+              : "Job search could not be completed",
+        );
     } finally {
       window.clearTimeout(timeout);
-      setSearching(false);
+      activeControllers.current.delete(controller);
+      if (generation === sessionGeneration.current) setSearching(false);
     }
   }
 
@@ -102,6 +129,54 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
     setItems([]);
     setCursor(undefined);
     await search(nextFields);
+  }
+
+  async function saveJob(jobId: string) {
+    if (!authenticatedRef.current || savingJobId) return;
+    const generation = sessionGeneration.current;
+    const controller = new AbortController();
+    activeControllers.current.add(controller);
+    setSavingJobId(jobId);
+    setMessage(undefined);
+    try {
+      const response = await fetch("/api/platform/saved-jobs", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": `saved-job-${crypto.randomUUID()}`,
+        },
+        body: JSON.stringify({ jobId }),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        const problem = await readProblem(response);
+        throw new Error(problem.message);
+      }
+      if (!authenticatedRef.current || generation !== sessionGeneration.current) return;
+      setMessage("Job saved to your private list.");
+      window.dispatchEvent(new Event(SAVED_JOBS_CHANGED_EVENT));
+    } catch (error) {
+      if (!controller.signal.aborted && generation === sessionGeneration.current) {
+        setMessage(error instanceof Error ? error.message : "Job could not be saved");
+      }
+    } finally {
+      activeControllers.current.delete(controller);
+      if (generation === sessionGeneration.current) setSavingJobId(undefined);
+    }
+  }
+
+  if (!authenticated) {
+    return (
+      <section className="job-search" aria-labelledby="job-search-heading">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">Active job catalog</span>
+            <h2 id="job-search-heading">Search current jobs</h2>
+          </div>
+        </div>
+        <p>Sign in to search the candidate job catalog.</p>
+      </section>
+    );
   }
 
   return (
@@ -184,7 +259,6 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
         </button>
       </form>
 
-      {!authenticated && <p>Sign in to search the candidate job catalog.</p>}
       {message && <output aria-live="polite">{message}</output>}
       {items.length > 0 && (
         <ol className="job-results" aria-label="Job search results">
@@ -198,6 +272,14 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
                 </p>
                 <p>{job.locations.length > 0 ? job.locations.join(" · ") : "Location flexible"}</p>
                 <small>Verified {new Date(job.lastVerifiedAt).toLocaleDateString()}</small>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => void saveJob(job.id)}
+                  disabled={!authenticated || Boolean(savingJobId)}
+                >
+                  {savingJobId === job.id ? "Saving…" : "Save job"}
+                </button>
               </article>
             </li>
           ))}

@@ -53,4 +53,42 @@ describe("domain schema registry", () => {
     expect(validate({ ...base, status: "expired" })).toBe(true);
     expect(validate({ ...base, status: "removed" })).toBe(false);
   });
+
+  it("keeps saved-job ownership private and snapshots bounded to public job fields", async () => {
+    const schema = JSON.parse(
+      await readFile(new URL("../schemas/v1/saved-job.schema.json", import.meta.url), "utf8"),
+    ) as object;
+    const ajv = new Ajv2020({ strict: true });
+    const addFormats = addFormatsModule.default as unknown as (instance: Ajv2020) => Ajv2020;
+    addFormats(ajv);
+    const validate = ajv.compile(schema);
+    const savedJob = {
+      id: "019d04cf-1f80-7000-8000-000000000010",
+      ownerUserId: "019d04cf-1f80-7000-8000-000000000011",
+      requestedJobId: "019d04cf-1f80-7000-8000-000000000012",
+      resolvedCanonicalJobIdAtSave: "019d04cf-1f80-7000-8000-000000000012",
+      jobSnapshot: {
+        jobIdAtSave: "019d04cf-1f80-7000-8000-000000000012",
+        company: {
+          id: "019d04cf-1f80-7000-8000-000000000013",
+          name: "Synthetic Company",
+        },
+        title: "Synthetic Engineer",
+        locations: ["Remote - US"],
+        firstObservedAt: "2026-08-15T12:00:00.000Z",
+        lastVerifiedAt: "2026-08-15T12:00:00.000Z",
+        expiresAt: "2026-09-14T12:00:00.000Z",
+      },
+      savedAt: "2026-08-15T12:00:00.000Z",
+    };
+
+    expect(validate(savedJob)).toBe(true);
+    expect(
+      validate({
+        ...savedJob,
+        jobSnapshot: { ...savedJob.jobSnapshot, description: "must not be copied" },
+      }),
+    ).toBe(false);
+    expect(validate({ ...savedJob, recruiterResponse: "interview" })).toBe(false);
+  });
 });

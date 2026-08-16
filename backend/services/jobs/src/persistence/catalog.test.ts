@@ -8,6 +8,13 @@ const catalogOptions = {
 } as const;
 
 describe("PostgresJobCatalog active read parameters", () => {
+  it("returns only the opaque catalog revision used to invalidate dependent read cursors", async () => {
+    const client = (() => Promise.resolve([{ revision: "17" }])) as unknown as postgres.Sql;
+    const catalog = new PostgresJobCatalog(client, catalogOptions);
+
+    await expect(catalog.getCatalogRevision()).resolves.toBe("17");
+  });
+
   it("binds the freshness boundary as an ISO string for the bundled PostgreSQL client", async () => {
     const parameters: unknown[][] = [];
     const client = ((_: TemplateStringsArray, ...values: unknown[]) => {

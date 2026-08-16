@@ -3,6 +3,7 @@ import type {
   CreateProfileFactRequest,
   CreateResumeUploadRequest,
   CreateResumeUploadResponse,
+  CreateSavedJobRequest,
   CurrentUser,
   JobSearchPage,
   JobSearchRequest,
@@ -13,6 +14,9 @@ import type {
   PutJobPreferencesRequest,
   PutJobPreferencesResponse,
   ResumeDocumentCollection,
+  SavedJob,
+  SavedJobPage,
+  SavedJobSearchRequest,
   UpdateProfileFactRequest,
 } from "@ai-job-apply/api-contracts";
 import { compileComponentValidator, formatValidationErrors } from "@ai-job-apply/api-contracts";
@@ -28,6 +32,15 @@ import {
   type JobCatalogReader,
   JobSearchCatalogChangedError,
 } from "@ai-job-apply/jobs-service";
+import {
+  InvalidSavedJobCursorError,
+  SavedJobCollectionChangedError,
+  SavedJobIdempotencyConflictError,
+  SavedJobIdempotencyLimitError,
+  SavedJobLimitError,
+  type SavedJobs,
+  SavedJobTargetUnavailableError,
+} from "@ai-job-apply/matching-service";
 import { activeTraceparent, correlationId } from "@ai-job-apply/observability";
 import {
   IdempotencyConflictError,
@@ -39,6 +52,7 @@ import {
   type ArgumentsHost,
   Catch,
   Controller,
+  Delete,
   type DynamicModule,
   type ExceptionFilter,
   Get,
@@ -61,6 +75,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 
 const PROFILE_STORE = Symbol("PROFILE_STORE");
 const JOB_CATALOG = Symbol("JOB_CATALOG");
+const SAVED_JOBS = Symbol("SAVED_JOBS");
 const DOCUMENT_STORE = Symbol("DOCUMENT_STORE");
 const TOKEN_VERIFIER = Symbol("TOKEN_VERIFIER");
 const RELEASE_SHA = Symbol("RELEASE_SHA");
@@ -82,6 +97,9 @@ const SAFE_ROUTE_TEMPLATES = new Set([
   "/v1/resumes/uploads",
   "/v1/jobs/search",
   "/v1/jobs/:jobId",
+  "/v1/saved-jobs",
+  "/v1/saved-jobs/search",
+  "/v1/saved-jobs/:savedJobId",
   "/v1/operations/:operationId",
 ]);
 
@@ -119,6 +137,7 @@ class RequestIdentity {
       | "documents:read"
       | "documents:write"
       | "jobs:read"
+      | "jobs:write"
       | "profile:read"
       | "profile:write",
   ) {
@@ -132,7 +151,13 @@ class RequestIdentity {
 
   async resolve(
     request: AuthenticatedRequest,
-    requiredScope: "documents:read" | "documents:write" | "profile:read" | "profile:write",
+    requiredScope:
+      | "documents:read"
+      | "documents:write"
+      | "jobs:read"
+      | "jobs:write"
+      | "profile:read"
+      | "profile:write",
   ): Promise<CurrentUser> {
     const principal = await this.authorize(request, requiredScope);
     return this.store.resolveUser(principal, request.traceId ?? correlationId(undefined));
@@ -197,6 +222,36 @@ class ProblemDetailsFilter implements ExceptionFilter {
       code = "job_search_catalog_changed";
       title = "Job catalog changed";
       detail = exception.message;
+    } else if (exception instanceof SavedJobIdempotencyConflictError) {
+      status = HttpStatus.CONFLICT;
+      code = "idempotency_conflict";
+      title = "Idempotency key conflict";
+      detail = exception.message;
+    } else if (exception instanceof SavedJobLimitError) {
+      status = HttpStatus.CONFLICT;
+      code = "saved_job_limit_reached";
+      title = "Saved-job limit reached";
+      detail = exception.message;
+    } else if (exception instanceof SavedJobIdempotencyLimitError) {
+      status = HttpStatus.CONFLICT;
+      code = "saved_job_command_limit_reached";
+      title = "Saved-job command limit reached";
+      detail = exception.message;
+    } else if (exception instanceof SavedJobCollectionChangedError) {
+      status = HttpStatus.CONFLICT;
+      code = "saved_jobs_changed";
+      title = "Saved jobs changed";
+      detail = exception.message;
+    } else if (exception instanceof InvalidSavedJobCursorError) {
+      status = HttpStatus.BAD_REQUEST;
+      code = "invalid_saved_job_cursor";
+      title = "Invalid saved-job cursor";
+      detail = exception.message;
+    } else if (exception instanceof SavedJobTargetUnavailableError) {
+      status = HttpStatus.NOT_FOUND;
+      code = "saved_job_target_unavailable";
+      title = "Job is unavailable";
+      detail = exception.message;
     } else if (exception instanceof HttpException) {
       status = exception.getStatus();
       code =
@@ -240,6 +295,7 @@ class HealthController {
   constructor(
     @Inject(PROFILE_STORE) private readonly store: ProfileStore,
     @Inject(JOB_CATALOG) private readonly catalog: JobCatalogReader,
+    @Inject(SAVED_JOBS) private readonly savedJobs: SavedJobs,
     @Inject(RELEASE_SHA) private readonly releaseSha: string,
   ) {}
 
@@ -251,7 +307,7 @@ class HealthController {
   @Get("/health/ready")
   async readiness() {
     try {
-      await Promise.all([this.store.ping(), this.catalog.ping()]);
+      await Promise.all([this.store.ping(), this.catalog.ping(), this.savedJobs.ping()]);
       return { status: "ok", service: "gateway", releaseSha: this.releaseSha };
     } catch {
       throw new HttpException("PostgreSQL is unavailable", HttpStatus.SERVICE_UNAVAILABLE);
@@ -264,6 +320,8 @@ const validateCreateProfileFact = compileComponentValidator("CreateProfileFactRe
 const validateUpdateProfileFact = compileComponentValidator("UpdateProfileFactRequest");
 const validateCreateResumeUpload = compileComponentValidator("CreateResumeUploadRequest");
 const validateJobSearch = compileComponentValidator("JobSearchRequest");
+const validateCreateSavedJob = compileComponentValidator("CreateSavedJobRequest");
+const validateSavedJobSearch = compileComponentValidator("SavedJobSearchRequest");
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function requireIdempotencyKey(value: string | undefined): string {
@@ -283,6 +341,7 @@ class CandidateController {
     @Inject(RequestIdentity) private readonly identity: RequestIdentity,
     @Inject(PROFILE_STORE) private readonly store: ProfileStore,
     @Inject(JOB_CATALOG) private readonly catalog: JobCatalogReader,
+    @Inject(SAVED_JOBS) private readonly savedJobs: SavedJobs,
     @Inject(DOCUMENT_STORE) private readonly documents: DocumentStore,
   ) {}
 
@@ -446,6 +505,56 @@ class CandidateController {
     };
   }
 
+  @Post("/saved-jobs")
+  @HttpCode(HttpStatus.CREATED)
+  @Header("cache-control", "no-store")
+  async createSavedJob(
+    @Req() request: AuthenticatedRequest,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<SavedJob> {
+    const user = await this.identity.resolve(request, "jobs:write");
+    const commandKey = requireIdempotencyKey(idempotencyKey);
+    if (!validateCreateSavedJob(request.body)) {
+      throw new HttpException(
+        formatValidationErrors(validateCreateSavedJob.errors),
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return this.savedJobs.create(
+      user.id,
+      (request.body as CreateSavedJobRequest).jobId,
+      commandKey,
+    );
+  }
+
+  @Post("/saved-jobs/search")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async listSavedJobs(@Req() request: AuthenticatedRequest): Promise<SavedJobPage> {
+    const user = await this.identity.resolve(request, "jobs:read");
+    if (!validateSavedJobSearch(request.body)) {
+      throw new HttpException(
+        formatValidationErrors(validateSavedJobSearch.errors),
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return this.savedJobs.list(user.id, request.body as SavedJobSearchRequest);
+  }
+
+  @Delete("/saved-jobs/:savedJobId")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Header("cache-control", "no-store")
+  async deleteSavedJob(
+    @Req() request: AuthenticatedRequest,
+    @Param("savedJobId") savedJobId: string,
+  ): Promise<void> {
+    const user = await this.identity.resolve(request, "jobs:write");
+    if (!UUID_PATTERN.test(savedJobId)) {
+      throw new HttpException("Saved-job identifier is invalid", HttpStatus.BAD_REQUEST);
+    }
+    await this.savedJobs.delete(user.id, savedJobId);
+  }
+
   @Get("/resumes")
   async listResumes(@Req() request: AuthenticatedRequest): Promise<ResumeDocumentCollection> {
     const user = await this.identity.resolve(request, "documents:read");
@@ -491,6 +600,7 @@ class CandidateController {
 export interface AppModuleOptions {
   store: ProfileStore;
   catalog: JobCatalogReader;
+  savedJobs: SavedJobs;
   documents: DocumentStore;
   verifier: AccessTokenVerifier;
   releaseSha: string;
@@ -507,6 +617,7 @@ export class AppModule {
         RequestIdentity,
         { provide: PROFILE_STORE, useValue: options.store },
         { provide: JOB_CATALOG, useValue: options.catalog },
+        { provide: SAVED_JOBS, useValue: options.savedJobs },
         { provide: DOCUMENT_STORE, useValue: options.documents },
         { provide: TOKEN_VERIFIER, useValue: options.verifier },
         { provide: RELEASE_SHA, useValue: options.releaseSha },

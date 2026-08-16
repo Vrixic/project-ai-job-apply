@@ -164,6 +164,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/saved-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createSavedJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/saved-jobs/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["listSavedJobs"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/saved-jobs/{savedJobId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteSavedJob"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/operations/{operationId}": {
         parameters: {
             query?: never;
@@ -409,6 +457,50 @@ export interface components {
         };
         JobSearchPage: {
             items: components["schemas"]["CanonicalJobSummary"][];
+            nextCursor?: string;
+        };
+        CreateSavedJobRequest: {
+            /** Format: uuid */
+            jobId: string;
+        };
+        SavedJobSearchRequest: {
+            /** @default 20 */
+            pageSize: number;
+            cursor?: string;
+        };
+        SavedJob: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            requestedJobId: string;
+            snapshot: components["schemas"]["SavedJobSnapshot"];
+            availability: {
+                /** @constant */
+                state: "available";
+                currentJob: components["schemas"]["CanonicalJobSummary"];
+            } | {
+                /** @constant */
+                state: "unavailable";
+            };
+            /** Format: date-time */
+            savedAt: string;
+        };
+        SavedJobSnapshot: {
+            /** Format: uuid */
+            jobIdAtSave: string;
+            company: components["schemas"]["JobCompanySummary"];
+            title: string;
+            locations: string[];
+            department?: string;
+            /** Format: date-time */
+            firstObservedAt: string;
+            /** Format: date-time */
+            lastVerifiedAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        SavedJobPage: {
+            items: components["schemas"]["SavedJob"][];
             nextCursor?: string;
         };
         CanonicalJobDetail: {
@@ -852,6 +944,95 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    createSavedJob: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSavedJobRequest"];
+            };
+        };
+        responses: {
+            /** @description The active canonical job is saved for the authenticated owner */
+            201: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedJob"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    listSavedJobs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavedJobSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description One owner-scoped page of private saved jobs */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedJobPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    deleteSavedJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                savedJobId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The owner-scoped saved job is absent */
+            204: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     getOperation: {

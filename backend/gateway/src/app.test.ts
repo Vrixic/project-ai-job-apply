@@ -13,6 +13,9 @@ import type {
   PutJobPreferencesResponse,
   ResumeDocument,
   ResumeDocumentCollection,
+  SavedJob,
+  SavedJobPage,
+  SavedJobSearchRequest,
   UpdateProfileFactRequest,
 } from "@ai-job-apply/api-contracts";
 import type { AuthPrincipal } from "@ai-job-apply/auth";
@@ -24,6 +27,11 @@ import {
   type JobCatalogReader,
   JobSearchCatalogChangedError,
 } from "@ai-job-apply/jobs-service";
+import {
+  SavedJobIdempotencyLimitError,
+  SavedJobLimitError,
+  type SavedJobs,
+} from "@ai-job-apply/matching-service";
 import type { ProfileStore } from "@ai-job-apply/profile-service";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { v7 as uuidv7 } from "uuid";
@@ -201,6 +209,34 @@ class MemoryJobCatalog implements JobCatalogReader {
     return jobId === this.job.id ? this.job : null;
   }
 
+  async getCatalogRevision(): Promise<string> {
+    return "1";
+  }
+
+  async resolveActiveJobSummaries(jobIds: readonly string[]) {
+    return {
+      catalogRevision: "1",
+      items: jobIds.includes(this.job.id)
+        ? [
+            {
+              requestedJobId: this.job.id,
+              job: {
+                id: this.job.id,
+                company: this.job.company,
+                title: this.job.title,
+                locations: this.job.locations,
+                ...(this.job.department ? { department: this.job.department } : {}),
+                status: "active" as const,
+                firstObservedAt: this.job.firstObservedAt,
+                lastVerifiedAt: this.job.lastVerifiedAt,
+                expiresAt: this.job.expiresAt,
+              },
+            },
+          ]
+        : [],
+    };
+  }
+
   async searchActiveJobs(input: ActiveJobSearchInput) {
     this.lastSearchInput = input;
     if (this.catalogChanged) {
@@ -222,6 +258,45 @@ class MemoryJobCatalog implements JobCatalogReader {
       ],
       ...(input.cursor ? {} : { nextCursor: "opaque_cursor_v1.signature_v1" }),
     };
+  }
+
+  async ping(): Promise<void> {}
+}
+
+class MemorySavedJobs implements SavedJobs {
+  readonly items = new Map<string, SavedJob[]>();
+  createFailure: Error | undefined;
+
+  async create(ownerUserId: string, requestedJobId: string): Promise<SavedJob> {
+    if (this.createFailure) throw this.createFailure;
+    const saved: SavedJob = {
+      id: uuidv7(),
+      requestedJobId,
+      snapshot: {
+        jobIdAtSave: requestedJobId,
+        company: { id: uuidv7(), name: "Synthetic Company" },
+        title: "Software Engineer",
+        locations: ["Remote - US"],
+        firstObservedAt: "2026-08-11T12:00:00.000Z",
+        lastVerifiedAt: "2026-08-11T12:00:00.000Z",
+        expiresAt: "2026-09-10T12:00:00.000Z",
+      },
+      availability: { state: "unavailable" },
+      savedAt: "2026-08-15T12:00:00.000Z",
+    };
+    this.items.set(ownerUserId, [saved, ...(this.items.get(ownerUserId) ?? [])]);
+    return saved;
+  }
+
+  async list(ownerUserId: string, _input: SavedJobSearchRequest): Promise<SavedJobPage> {
+    return { items: this.items.get(ownerUserId) ?? [] };
+  }
+
+  async delete(ownerUserId: string, savedJobId: string): Promise<void> {
+    this.items.set(
+      ownerUserId,
+      (this.items.get(ownerUserId) ?? []).filter((item) => item.id !== savedJobId),
+    );
   }
 
   async ping(): Promise<void> {}
@@ -272,14 +347,16 @@ async function createApp() {
   const store = new MemoryProfileStore();
   const catalog = new MemoryJobCatalog();
   const documents = new MemoryDocumentStore();
+  const savedJobs = new MemorySavedJobs();
   const app = await createGatewayApplication({
     store,
     catalog,
+    savedJobs,
     documents,
     verifier: issuer.verifier,
     releaseSha: "test",
   });
-  return { app, issuer, catalog, store };
+  return { app, issuer, catalog, store, savedJobs };
 }
 
 describe("candidate API", () => {
@@ -287,6 +364,7 @@ describe("candidate API", () => {
   let issuer: Awaited<ReturnType<typeof createTestTokenIssuer>>;
   let catalog: MemoryJobCatalog;
   let store: MemoryProfileStore;
+  let savedJobs: MemorySavedJobs;
 
   beforeAll(async () => {
     const setup = await createApp();
@@ -294,6 +372,7 @@ describe("candidate API", () => {
     issuer = setup.issuer;
     catalog = setup.catalog;
     store = setup.store;
+    savedJobs = setup.savedJobs;
   });
 
   afterAll(async () => {
@@ -355,6 +434,7 @@ describe("candidate API", () => {
     const lambdaApp = await createGatewayApplication({
       store: new MemoryProfileStore(),
       catalog: new MemoryJobCatalog(),
+      savedJobs: new MemorySavedJobs(),
       documents: new MemoryDocumentStore(),
       verifier: principalBridge.verifier,
       releaseSha: "lambda-principal-bridge-test",
@@ -689,6 +769,81 @@ describe("candidate API", () => {
       title: "Job catalog changed",
     });
     expect(changed.json().detail).toContain("restart the search");
+  });
+
+  it("keeps saved-job mutations behind jobs:write and reads owner-scoped with jobs:read", async () => {
+    const readToken = await issuer.issue("candidate-saved-reader", { scope: "jobs:read" });
+    const writeToken = await issuer.issue("candidate-saved-writer", { scope: "jobs:write" });
+    const createPayload = { jobId: catalog.job.id };
+    const forbidden = await app.inject({
+      method: "POST",
+      url: "/v1/saved-jobs",
+      headers: {
+        authorization: `Bearer ${readToken}`,
+        "idempotency-key": "saved-job-gateway-forbidden-0001",
+      },
+      payload: createPayload,
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/saved-jobs",
+      headers: {
+        authorization: `Bearer ${writeToken}`,
+        "idempotency-key": "saved-job-gateway-create-0001",
+      },
+      payload: createPayload,
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.headers["cache-control"]).toBe("no-store");
+    expect(created.json()).toMatchObject({ requestedJobId: catalog.job.id });
+    expect(created.json()).not.toHaveProperty("ownerUserId");
+
+    const listed = await app.inject({
+      method: "POST",
+      url: "/v1/saved-jobs/search",
+      headers: { authorization: `Bearer ${readToken}` },
+      payload: { pageSize: 25 },
+    });
+    expect(listed.statusCode).toBe(200);
+    expect(listed.headers["cache-control"]).toBe("no-store");
+    expect(listed.json().items).toHaveLength(1);
+
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/v1/saved-jobs/${created.json().id}`,
+      headers: { authorization: `Bearer ${writeToken}` },
+    });
+    const repeated = await app.inject({
+      method: "DELETE",
+      url: `/v1/saved-jobs/${created.json().id}`,
+      headers: { authorization: `Bearer ${writeToken}` },
+    });
+    expect(deleted.statusCode).toBe(204);
+    expect(deleted.headers["cache-control"]).toBe("no-store");
+    expect(repeated.statusCode).toBe(204);
+    expect(repeated.headers["cache-control"]).toBe("no-store");
+
+    for (const [failure, code] of [
+      [new SavedJobLimitError(), "saved_job_limit_reached"],
+      [new SavedJobIdempotencyLimitError(), "saved_job_command_limit_reached"],
+    ] as const) {
+      savedJobs.createFailure = failure;
+      const limited = await app.inject({
+        method: "POST",
+        url: "/v1/saved-jobs",
+        headers: {
+          authorization: `Bearer ${writeToken}`,
+          "idempotency-key": `saved-job-gateway-limit-${code}`,
+        },
+        payload: createPayload,
+      });
+      expect(limited.statusCode).toBe(409);
+      expect(limited.headers["cache-control"]).toBe("no-store");
+      expect(limited.json()).toMatchObject({ code });
+    }
+    savedJobs.createFailure = undefined;
   });
 
   it("registers and lists resume uploads without proxying candidate bytes", async () => {

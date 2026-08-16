@@ -36,6 +36,18 @@ string before framework dispatch. The gateway returns only active canonical summ
 opaque continuation cursor; it does not log, audit, or emit search values and does not perform
 profile matching.
 
+Private saved jobs use `jobs:read` for owner-scoped pages and the distinct `jobs:write` permission
+for create/delete commands. Create accepts only an active public job target, returns one generic
+unavailable error for unknown or non-active targets, and stores both the requested target and the
+canonical identifier resolved at save time. Delete is idempotent and returns the same `204` for an
+unknown identifier or another owner's identifier. Saved snapshots remain visible when a posting
+leaves the active catalog without exposing internal lifecycle reasons. Matching, scoring, and
+explanations are not part of these routes.
+
+This is locally verified source only. The Auth0 API permission/grant, Terraform route inventory,
+migration-image composition, publication, deployment, and live acceptance remain a serialized
+later gate; do not release this source until the managed client has the exact `jobs:write` grant.
+
 The scale-to-zero migration adds a shared application factory and an API Gateway HTTP API payload
 2.0 Lambda entrypoint. The Lambda path accepts identity only from the exact validated authorizer
 context. The protected API Gateway route requires at least one exact platform scope, and Lambda

@@ -206,6 +206,40 @@ describe("API Gateway Lambda boundary", () => {
     expect(inject).toHaveBeenCalledOnce();
   });
 
+  it("allows only the exact saved-job create, list, and delete route shapes", async () => {
+    const principalBridge = createInvocationPrincipalBridge();
+    const inject = vi.fn().mockResolvedValue({
+      statusCode: 204,
+      body: "",
+      headers: { "cache-control": "no-store" },
+    });
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge,
+    });
+    const payload = JSON.stringify({ pageSize: 20 });
+    for (const path of ["/v1/saved-jobs", "/v1/saved-jobs/search"]) {
+      const response = await invoke(
+        handler,
+        routedEvent("POST", path, {
+          body: payload,
+          headers: {
+            authorization: "Bearer opaque-api-gateway-token",
+            "content-type": "application/json",
+          },
+        }),
+      );
+      expect(response.statusCode).toBe(204);
+    }
+    const savedPath = "/v1/saved-jobs/018f92b0-4ad7-7b1d-8f44-b7ae694c85c1";
+    expect((await invoke(handler, routedEvent("DELETE", savedPath))).statusCode).toBe(204);
+    expect((await invoke(handler, routedEvent("GET", savedPath))).statusCode).toBe(404);
+    expect((await invoke(handler, routedEvent("DELETE", `${savedPath}/`))).statusCode).toBe(404);
+    expect(inject).toHaveBeenCalledTimes(3);
+  });
+
   it.each([
     ["POST", "/v1/profile/facts"],
     ["PATCH", "/v1/profile/facts/018f92b0-4ad7-7b1d-8f44-b7ae694c85c1"],
