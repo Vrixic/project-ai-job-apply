@@ -63,3 +63,22 @@ decision, deployment, or AWS behavior. Its generated-synthetic fixtures prove on
 deterministic semantics. They are not the representative D1 matching set or accepted evaluation
 rubric required by D1-R2, so grounded product explanations and matching-quality acceptance remain
 open.
+
+## D1 evaluation candidate
+
+The versioned generated-synthetic
+[`d1-match-assessment-synthetic-v1`](../../../data/evals/matching/d1-match-assessment.v1.json)
+candidate exercises the same pure kernel across 36 launch-segment scenarios. Its 24 core cases
+cover all software/data/product and declared early/mid segment cells; 12 guardrails cover sparse,
+normalization, semantic-near, compensation, dual-conflict, and restricted-preference behavior. The
+strict evaluator requires exact results for all 36 cases, all 306 successful evidence tuples, all
+13 known-conflict exclusions, zero false exclusions across 21 non-conflict assessments, both
+restricted-preference refusals, deterministic replay, and all 15 reason codes.
+
+The web presentation resolves those codes and both gates through typed fixed copy; neither the
+kernel nor presentation interpolates candidate or job values into explanations. This establishes
+an executable source candidate only. Product has not approved the case representativeness, rubric,
+thresholds, copy, or conservative limitations, and QA has not accepted the set. It remains neither
+a statistical sample nor evidence for ranking, calibration, provider behavior, real users,
+deployment, eligibility, application outcomes, or production quality. See the
+[`v1 rubric`](../../../data/evals/rubrics/d1-match-assessment.v1.md).
