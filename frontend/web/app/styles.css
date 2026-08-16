@@ -57,6 +57,23 @@
   font-size: 0.9rem;
 }
 
+.job-report-control {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #e0e8e3;
+}
+
+.job-report-control summary {
+  color: #14633e;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.job-report-control output {
+  display: block;
+  margin-top: 12px;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -456,4 +473,10 @@ aside {
   .paired-fields {
     grid-template-columns: 1fr;
   }
+}
+
+.job-report-control form {
+  margin-top: 12px;
+  padding: 16px;
+  box-shadow: none;
 }

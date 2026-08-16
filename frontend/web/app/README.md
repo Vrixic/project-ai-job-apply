@@ -14,6 +14,13 @@ The D1 job-search panel posts bounded filters through `api/platform/jobs/search`
 active canonical summaries, and follows opaque keyset cursors. Search values never enter the
 gateway URL, and the panel makes no personalized-match claim.
 
+Each active search result also offers an authenticated fixed-reason report control through
+`api/platform/jobs/[jobId]/reports`. The BFF accepts only the existing exact report contract,
+authenticates the server-held session before reading a bounded streaming body, keeps one
+idempotency key for an ambiguous retry of the same job and reason, validates and redacts the
+upstream response, and never accepts free text or an owner identifier. A report is review evidence
+only and does not automatically change job or source state.
+
 `api/platform/saved-jobs` exposes strict server-side create, keyset-page, and delete forwarding.
 The candidate page keeps each distinct requested target owner-private, renders the bounded historical
 snapshot

@@ -100,6 +100,14 @@ only in a bounded JSON body to a narrow server-side BFF. Auth0 tokens remain ser
 strings are rejected, and pagination uses the API's opaque cursor. Results are explicitly
 non-personalized and do not use profile facts.
 
+Active search results expose a candidate report control backed by the existing authenticated
+`jobs:write` report contract. The web boundary permits only six fixed catalog-issue reasons, keeps
+candidate identity server-side, authenticates before consuming a timeout- and size-bounded
+streaming body, validates and redacts responses, and reuses one idempotency key when an ambiguous
+attempt is retried without changing the job or reason. It does not collect free text, reveal
+moderation state, or automatically suppress a job or source. This is source-only web behavior with
+no admin surface, permission grant, deployment, real-report use, or moderation-policy approval.
+
 The saved-job source slice adds a server-held-session BFF, per-result Save control, and a private
 owner-scoped list with removal. Historical bounded snapshots remain visible when a posting is no
 longer active, and each explicit requested target remains independent. The UI requests the
