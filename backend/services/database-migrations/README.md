@@ -7,8 +7,9 @@ another service's tables.
 ## Subfolders
 
 - `src/` — Fail-fast process orchestration, restore verifier, CLI entry points, and tests.
-- `restore-manifest.v1.json` — Canonical five-owner restore boundary: 39 regular relations and 14
-  checksum-bound migrations.
+- `restore-manifest.v1.json` — Canonical five-owner restore boundary: eight owned schemas (including
+  the empty-table `jobs_public` projection schema), 39 regular relations, and 15 checksum-bound
+  migrations.
 
 Adding a schema owner requires adding its independently checksum-verified runner here, including it
 in `Dockerfile.migration`, and updating restore verification. The container remains a bounded

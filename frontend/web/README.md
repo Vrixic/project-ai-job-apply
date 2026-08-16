@@ -113,3 +113,12 @@ status, clears and aborts state across authentication transitions, and states th
 currently contain the same four core capabilities. It has no upgrade, price, quota, checkout,
 payment-provider, or paid-feature behavior. Source composition and local tests are not an Auth0,
 Terraform, image-publication, AWS deployment, real-browser, or live-entitlement claim.
+
+The source-only `/jobs/{lowercase-uuidv7}` page reads the dedicated anonymous public projection
+without cookies or authorization, redirects reversible aliases temporarily to the current
+canonical identifier, and renders the employer description as plain text. Canonical metadata uses
+only the configured trusted application origin. Crawlers are denied globally by default; an exact
+gate may allow only `/jobs/` after separate publication review. No `JobPosting` JSON-LD, sitemap,
+Indexing API, application action, employer-original posting date, structured location assertion,
+or search-engine eligibility is claimed. No route, Lambda artifact, database identity, bootstrap
+boundary, Terraform change, or crawler policy is deployed by these source bytes.

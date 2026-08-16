@@ -73,6 +73,101 @@ describe("CanonicalJobDetail", () => {
   });
 });
 
+describe("PublicJobDetailResponse", () => {
+  const validate = compileComponentValidator("PublicJobDetailResponse");
+  const response = {
+    requestedJobId: "018f92b0-4ad7-7b1d-8f44-b7ae694c85c1",
+    canonicalJobId: "018f92b0-4ad7-7b1d-8f44-b7ae694c85c2",
+    isAlias: true,
+    job: {
+      id: "018f92b0-4ad7-7b1d-8f44-b7ae694c85c2",
+      companyName: "Synthetic Company",
+      title: "Software Engineer",
+      locations: ["Remote - US"],
+      department: "Engineering",
+      description: "A synthetic job used for public contract verification.",
+      firstObservedAt: "2026-08-11T12:00:00.000Z",
+      lastVerifiedAt: "2026-08-16T11:00:00.000Z",
+      expiresAt: "2026-09-10T12:00:00.000Z",
+      validThrough: "2026-09-01T12:00:00.000Z",
+    },
+  };
+
+  it("accepts only the anonymous public allowlist and reversible alias identity", () => {
+    expect(validate(response)).toBe(true);
+    expect(validate({ ...response, sources: [] })).toBe(false);
+    expect(
+      validate({ ...response, job: { ...response.job, canonicalUrl: "https://secret.test" } }),
+    ).toBe(false);
+  });
+
+  it("rejects non-v7 and uppercase identifiers", () => {
+    expect(validate({ ...response, requestedJobId: response.requestedJobId.toUpperCase() })).toBe(
+      false,
+    );
+    expect(validate({ ...response, canonicalJobId: randomUUID() })).toBe(false);
+  });
+
+  it("rejects hidden controls while preserving plain-text description line breaks", () => {
+    expect(validate({ ...response, job: { ...response.job, title: "Engineer\u0000Admin" } })).toBe(
+      false,
+    );
+    expect(validate({ ...response, job: { ...response.job, title: "Engineer\u202eAdmin" } })).toBe(
+      false,
+    );
+    expect(
+      validate({ ...response, job: { ...response.job, title: "Engineer\u{e0001}Admin" } }),
+    ).toBe(false);
+    expect(
+      validate({ ...response, job: { ...response.job, title: "Engineer\u{e0020}Admin" } }),
+    ).toBe(false);
+    expect(
+      validate({ ...response, job: { ...response.job, description: "Line one\nLine two" } }),
+    ).toBe(true);
+    expect(
+      validate({ ...response, job: { ...response.job, description: "Visible\u0001hidden" } }),
+    ).toBe(false);
+    expect(
+      validate({ ...response, job: { ...response.job, description: "Visible\u{e007f}hidden" } }),
+    ).toBe(false);
+    expect(validate({ ...response, job: { ...response.job, description: " \n\t " } })).toBe(false);
+    expect(
+      validate({
+        ...response,
+        job: { ...response.job, lastVerifiedAt: "2026-08-16T07:00:00-04:00" },
+      }),
+    ).toBe(false);
+  });
+
+  it("freezes anonymous routing and Lambda-owned cache/retry headers", () => {
+    const operation = contract.paths["/public/jobs/{jobId}"].get;
+    expect(operation.security).toEqual([]);
+    expect(operation.responses[200].headers?.["Cache-Control"].schema).toEqual({
+      type: "string",
+      enum: ["public, max-age=0, must-revalidate"],
+    });
+    expect(operation.responses[404].$ref).toBe("#/components/responses/PublicJobNotFound");
+    expect(operation.responses[503].$ref).toBe("#/components/responses/PublicJobUnavailable");
+    expect(operation.responses).not.toHaveProperty("429");
+    expect(
+      contract.components.responses.PublicJobBadRequest.headers["Cache-Control"].schema,
+    ).toEqual({ type: "string", enum: ["no-store"] });
+    expect(contract.components.responses.PublicJobNotFound.headers["Cache-Control"].schema).toEqual(
+      { type: "string", enum: ["public, max-age=0, must-revalidate"] },
+    );
+    expect(contract.components.responses.PublicJobUnavailable.headers).toEqual({
+      "Cache-Control": {
+        required: true,
+        schema: { type: "string", enum: ["no-store"] },
+      },
+      "Retry-After": {
+        required: true,
+        schema: { type: "integer", minimum: 1, maximum: 60 },
+      },
+    });
+  });
+});
+
 describe("job search contracts", () => {
   const validateRequest = compileComponentValidator("JobSearchRequest");
   const validatePage = compileComponentValidator("JobSearchPage");

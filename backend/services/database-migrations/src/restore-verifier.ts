@@ -286,27 +286,27 @@ function quoteQualifiedIdentifier(value: string): string {
   return `${quoteIdentifier(schema)}.${quoteIdentifier(relation)}`;
 }
 
-function quoteLiteral(value: string): string {
-  if (!IDENTIFIER_PATTERN.test(value)) {
-    throw new Error("Unsafe SQL literal");
-  }
-  return `'${value}'`;
-}
-
 export function buildRestoreVerificationQueries(manifest: RestoreManifest): {
+  readonly schemas: string;
   readonly relations: string;
   readonly migrations: readonly { owner: string; query: string }[];
   readonly counts: string;
 } {
-  const schemas = uniqueSorted(
-    manifest.contributors.flatMap((contributor) => contributor.schemas),
-    "Restore schemas",
-  );
+  const schemaQuery = `
+    SELECT namespace.nspname AS schema_name
+    FROM pg_namespace AS namespace
+    WHERE namespace.nspname NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
+      AND namespace.nspname NOT LIKE 'pg_temp_%'
+      AND namespace.nspname NOT LIKE 'pg_toast_temp_%'
+    ORDER BY namespace.nspname
+  `;
   const relations = `
     SELECT namespace.nspname AS schema_name, class.relname AS relation_name
     FROM pg_class AS class
     INNER JOIN pg_namespace AS namespace ON namespace.oid = class.relnamespace
-    WHERE namespace.nspname IN (${schemas.map(quoteLiteral).join(", ")})
+    WHERE namespace.nspname NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
+      AND namespace.nspname NOT LIKE 'pg_temp_%'
+      AND namespace.nspname NOT LIKE 'pg_toast_temp_%'
       AND class.relkind IN ('r', 'p')
     ORDER BY namespace.nspname, class.relname
   `;
@@ -323,7 +323,7 @@ export function buildRestoreVerificationQueries(manifest: RestoreManifest): {
         `(SELECT count(*)::text FROM ${quoteQualifiedIdentifier(relation)}) AS ${quoteIdentifier(`r${index}`)}`,
     )
     .join(", ")}`;
-  return deepFreeze({ relations, migrations, counts });
+  return deepFreeze({ schemas: schemaQuery, relations, migrations, counts });
 }
 
 function exactString(value: unknown, label: string): string {
@@ -339,6 +339,17 @@ async function collectRestoreSnapshot(
 ): Promise<RestoreVerificationResult> {
   const { manifest, sha256 } = source;
   const queries = buildRestoreVerificationQueries(manifest);
+  const schemaRows = await transaction.unsafe<{ schema_name: unknown }>(queries.schemas);
+  const actualSchemas = schemaRows.map((row, index) =>
+    exactString(row.schema_name, `Schema ${index} name`),
+  );
+  const expectedSchemas = uniqueSorted(
+    [...manifest.contributors.flatMap((contributor) => contributor.schemas), "public"],
+    "Restore schemas plus deliberately empty public",
+  );
+  if (JSON.stringify(actualSchemas) !== JSON.stringify(expectedSchemas)) {
+    throw new Error("Restore schema boundary mismatch");
+  }
   const relationRows = await transaction.unsafe<{
     schema_name: unknown;
     relation_name: unknown;
@@ -395,6 +406,7 @@ async function collectRestoreSnapshot(
     .update(
       JSON.stringify({
         manifestId: manifest.manifestId,
+        schemas: actualSchemas,
         migrations: migrationEvidence,
         relationCounts,
       }),

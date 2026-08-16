@@ -38,3 +38,10 @@ veteran, and legal answers are not collected by this page. A legacy saved prefer
 either sponsorship boolean is not displayed or resubmitted and blocks the full-replacement save
 until migration to the future dedicated restricted-data boundary. These are source and local-test
 claims only, not deployment or real-browser acceptance.
+
+`jobs/[jobId]` is a dynamic anonymous read-only page over the strict public Jobs projection. It
+uses generic not-found and outage states, a temporary canonical-alias redirect, trusted-origin
+canonical metadata, default `noindex`, and React text rendering. It contains no JSON-LD or apply
+action. The dynamically evaluated `robots.ts` denies the entire candidate application and, only
+behind the exact reviewed server-only indexing gate, adds a narrower `/jobs/` allow rule;
+authenticated and BFF paths remain denied.

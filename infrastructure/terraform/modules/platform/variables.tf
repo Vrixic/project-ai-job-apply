@@ -181,6 +181,90 @@ variable "gateway_lambda_reserved_concurrency" {
   }
 }
 
+variable "deploy_public_job_reader" {
+  description = "Provision the dark public-job Lambda; its anonymous route additionally requires every reviewed runtime activation gate."
+  type        = bool
+  default     = false
+
+  validation {
+    condition = !var.deploy_public_job_reader || (
+      var.deploy_applications &&
+      var.public_job_lambda_artifact_s3_key != "" &&
+      var.public_job_lambda_artifact_s3_object_version != "" &&
+      var.public_job_lambda_artifact_sha256 != "" &&
+      var.public_job_lambda_artifact_base64sha256 != "" &&
+      var.public_job_database_boundary_version == "0006_public_job_reader" &&
+      var.persistent_data_plane_enabled
+    )
+    error_message = "Public job reader deployment requires the existing API, persistent database, exact 0006 public-reader boundary, and immutable versioned artifact identity."
+  }
+}
+
+variable "public_job_database_boundary_version" {
+  description = "Exact applied Jobs migration that creates the dedicated public-reader database boundary."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.public_job_database_boundary_version == "" || var.public_job_database_boundary_version == "0006_public_job_reader"
+    error_message = "Public job database boundary must be empty or exactly 0006_public_job_reader."
+  }
+}
+
+variable "public_job_cluster_residual_accepted" {
+  description = "Explicit accountable acceptance or remediation of both public-reader cluster residuals: other connectable databases and cluster-global PUBLIC catalog/function capabilities. False keeps the anonymous route structurally absent."
+  type        = bool
+  default     = false
+}
+
+variable "public_job_lambda_artifact_s3_key" {
+  type    = string
+  default = ""
+}
+
+variable "public_job_lambda_artifact_s3_object_version" {
+  type    = string
+  default = ""
+}
+
+variable "public_job_lambda_artifact_sha256" {
+  type    = string
+  default = ""
+  validation {
+    condition     = var.public_job_lambda_artifact_sha256 == "" || can(regex("^[a-f0-9]{64}$", var.public_job_lambda_artifact_sha256))
+    error_message = "Public job Lambda artifact SHA-256 must be empty or 64 lowercase hexadecimal characters."
+  }
+}
+
+variable "public_job_lambda_artifact_base64sha256" {
+  type    = string
+  default = ""
+  validation {
+    condition     = var.public_job_lambda_artifact_base64sha256 == "" || can(regex("^[A-Za-z0-9+/]{43}=$", var.public_job_lambda_artifact_base64sha256))
+    error_message = "Public job Lambda artifact base64 SHA-256 must be empty or canonical."
+  }
+}
+
+variable "public_job_route_throttling_rate_limit" {
+  description = "Frozen prelaunch public-job route rate; must match the one-connection Lambda budget."
+  type        = number
+  default     = 1
+  validation {
+    condition     = var.public_job_route_throttling_rate_limit == 1
+    error_message = "Public job route rate limit is frozen at one request per second."
+  }
+}
+
+variable "public_job_route_throttling_burst_limit" {
+  description = "Frozen prelaunch public-job burst; must match reserved concurrency one."
+  type        = number
+  default     = 1
+  validation {
+    condition     = var.public_job_route_throttling_burst_limit == 1
+    error_message = "Public job route burst limit is frozen at one request."
+  }
+}
+
 variable "deploy_document_intake" {
   description = "Provision the private candidate-document quarantine bucket and managed malware scanning boundary."
   type        = bool

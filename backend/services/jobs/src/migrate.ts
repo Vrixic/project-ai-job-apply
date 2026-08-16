@@ -14,6 +14,7 @@ const migrationVersions = [
   "0003_duplicate_resolution_audit_guard",
   "0004_job_search",
   "0005_ingestion_orchestration",
+  "0006_public_job_reader",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -42,6 +43,16 @@ const expectedIngestionTriggerBodies = ingestionTriggerFunctions.map((functionNa
   if (!match?.[1]) throw new Error(`The ${functionName} trigger function source is invalid`);
   return match[1];
 });
+const publicReaderMigration = migrations.find(
+  (migration) => migration.version === "0006_public_job_reader",
+);
+if (!publicReaderMigration) throw new Error("The public reader migration source is missing");
+const publicReaderBodyMatch =
+  /CREATE FUNCTION jobs_public\.read_public_job_detail\(requested_job_id uuid\)[\s\S]*?AS \$function\$([\s\S]*?)\$function\$;/u.exec(
+    publicReaderMigration.sql,
+  );
+if (!publicReaderBodyMatch?.[1]) throw new Error("The public reader function source is invalid");
+const expectedPublicReaderBody = publicReaderBodyMatch[1];
 
 const client = postgres(databaseUrl, { max: 1, onnotice: () => undefined });
 try {
@@ -72,6 +83,10 @@ try {
       }
     }
 
+    // Reassert the no-password boundary on every verifier run. PostgreSQL intentionally masks
+    // role secrets from non-superuser catalog views, while ALTER ROLE has exact server semantics.
+    await transaction.unsafe("ALTER ROLE ai_job_apply_public_job_reader PASSWORD NULL");
+
     const [verification] = await transaction<
       {
         tableCount: number;
@@ -86,6 +101,17 @@ try {
         ingestionTriggerFunctionBodies: string[];
         ingestionIndexCount: number;
         ingestionForeignKeyCount: number;
+        publicSchemaCount: number;
+        publicReaderRoleCount: number;
+        publicReaderFunctionCount: number;
+        publicReaderFunctionBody: string | null;
+        publicReaderGrantCount: number;
+        publicReaderMembershipViolationCount: number;
+        publicReaderMembershipCount: number;
+        publicReaderDirectGrantViolationCount: number;
+        publicReaderOwnershipCount: number;
+        publicReaderSettingCount: number;
+        rdsIamRoleCount: number;
       }[]
     >`
       SELECT
@@ -269,6 +295,193 @@ try {
                AND attribute.attnum = key.attribute_number
             ) = expected.referenced_columns
         ) AS "ingestionForeignKeyCount"
+        , (
+          SELECT count(*)::int
+          FROM pg_namespace
+          WHERE nspname = 'jobs_public'
+            AND nspowner = (SELECT oid FROM pg_roles WHERE rolname = current_user)
+        ) AS "publicSchemaCount"
+        , (
+          SELECT count(*)::int
+          FROM pg_roles
+          WHERE rolname = 'ai_job_apply_public_job_reader'
+            AND rolcanlogin AND NOT rolinherit AND NOT rolsuper AND NOT rolcreatedb
+            AND NOT rolcreaterole AND NOT rolreplication AND NOT rolbypassrls
+            AND rolconnlimit = 1
+            AND (
+              NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'rds_iam')
+              OR pg_has_role('ai_job_apply_public_job_reader', 'rds_iam', 'MEMBER')
+            )
+        ) AS "publicReaderRoleCount"
+        , (
+          SELECT count(*)::int
+          FROM pg_proc function_definition
+          INNER JOIN pg_namespace namespace ON namespace.oid = function_definition.pronamespace
+          INNER JOIN pg_language language ON language.oid = function_definition.prolang
+          WHERE namespace.nspname = 'jobs_public'
+            AND function_definition.proname = 'read_public_job_detail'
+            AND function_definition.pronargs = 1
+            AND pg_get_function_identity_arguments(function_definition.oid) = 'requested_job_id uuid'
+            AND pg_get_function_result(function_definition.oid) =
+              'TABLE(id uuid, company_name text, title text, locations jsonb, department text, description text, status text, first_observed_at timestamp with time zone, last_verified_at timestamp with time zone, expires_at timestamp with time zone, valid_through timestamp with time zone)'
+            AND language.lanname = 'sql'
+            AND function_definition.provolatile = 's'
+            AND function_definition.prosecdef
+            AND function_definition.proisstrict
+            AND function_definition.proparallel = 's'
+            AND function_definition.proconfig = ARRAY['search_path=pg_catalog']::text[]
+        ) AS "publicReaderFunctionCount"
+        , (
+          SELECT function_definition.prosrc
+          FROM pg_proc function_definition
+          INNER JOIN pg_namespace namespace ON namespace.oid = function_definition.pronamespace
+          WHERE namespace.nspname = 'jobs_public'
+            AND function_definition.proname = 'read_public_job_detail'
+            AND function_definition.pronargs = 1
+        ) AS "publicReaderFunctionBody"
+        , (
+          SELECT count(*)::int
+          FROM (VALUES
+            (has_database_privilege(
+              'ai_job_apply_public_job_reader', current_database(), 'CONNECT'
+            )),
+            (NOT has_database_privilege(
+              'ai_job_apply_public_job_reader', current_database(), 'TEMPORARY'
+            )),
+            (NOT has_database_privilege(
+              'ai_job_apply_public_job_reader', current_database(), 'CREATE'
+            )),
+            (has_schema_privilege(
+              'ai_job_apply_public_job_reader', 'jobs_public', 'USAGE'
+            )),
+            (NOT has_schema_privilege(
+              'ai_job_apply_public_job_reader', 'jobs', 'USAGE'
+            )),
+            (NOT has_schema_privilege(
+              'ai_job_apply_public_job_reader', 'public', 'USAGE'
+            )),
+            (has_function_privilege(
+              'ai_job_apply_public_job_reader',
+              'jobs_public.read_public_job_detail(uuid)', 'EXECUTE'
+            )),
+            (NOT has_table_privilege(
+              'ai_job_apply_public_job_reader', 'jobs.canonical_jobs', 'SELECT'
+            ))
+          ) AS expected(granted)
+          WHERE granted
+        ) AS "publicReaderGrantCount"
+        , (
+          SELECT count(*)::int
+          FROM (
+            SELECT membership.roleid, membership.member
+            FROM pg_auth_members AS membership
+            INNER JOIN pg_roles AS granted_role ON granted_role.oid = membership.roleid
+            WHERE membership.member = 'ai_job_apply_public_job_reader'::regrole
+              AND NOT (
+                granted_role.rolname = 'rds_iam'
+                AND NOT membership.admin_option
+                AND NOT membership.inherit_option
+                AND NOT membership.set_option
+              )
+            UNION ALL
+            SELECT membership.roleid, membership.member
+            FROM pg_auth_members AS membership
+            WHERE membership.roleid = 'ai_job_apply_public_job_reader'::regrole
+          ) AS unexpected
+        ) AS "publicReaderMembershipViolationCount"
+        , (
+          SELECT count(*)::int
+          FROM pg_auth_members AS membership
+          WHERE membership.member = 'ai_job_apply_public_job_reader'::regrole
+            AND membership.roleid = (
+              SELECT oid FROM pg_roles WHERE rolname = 'rds_iam'
+            )
+            AND NOT membership.admin_option
+            AND NOT membership.inherit_option
+            AND NOT membership.set_option
+        ) AS "publicReaderMembershipCount"
+        , (
+          WITH reader AS (
+            SELECT oid FROM pg_roles WHERE rolname = 'ai_job_apply_public_job_reader'
+          ), direct_grants AS (
+            SELECT 'database'::text AS object_kind, database_definition.datname AS object_name,
+              privilege.privilege_type, privilege.is_grantable
+            FROM pg_database AS database_definition
+            CROSS JOIN LATERAL aclexplode(database_definition.datacl) AS privilege
+            WHERE privilege.grantee = (SELECT oid FROM reader)
+            UNION ALL
+            SELECT 'schema', namespace.nspname, privilege.privilege_type,
+              privilege.is_grantable
+            FROM pg_namespace AS namespace
+            CROSS JOIN LATERAL aclexplode(namespace.nspacl) AS privilege
+            WHERE privilege.grantee = (SELECT oid FROM reader)
+            UNION ALL
+            SELECT 'relation', namespace.nspname || '.' || class.relname,
+              privilege.privilege_type, privilege.is_grantable
+            FROM pg_class AS class
+            INNER JOIN pg_namespace AS namespace ON namespace.oid = class.relnamespace
+            CROSS JOIN LATERAL aclexplode(class.relacl) AS privilege
+            WHERE privilege.grantee = (SELECT oid FROM reader)
+            UNION ALL
+            SELECT 'function', namespace.nspname || '.' || function_definition.proname ||
+              '(' || pg_get_function_identity_arguments(function_definition.oid) || ')',
+              privilege.privilege_type, privilege.is_grantable
+            FROM pg_proc AS function_definition
+            INNER JOIN pg_namespace AS namespace ON namespace.oid = function_definition.pronamespace
+            CROSS JOIN LATERAL aclexplode(function_definition.proacl) AS privilege
+            WHERE privilege.grantee = (SELECT oid FROM reader)
+          )
+          SELECT count(*)::int
+          FROM direct_grants
+          WHERE is_grantable OR NOT (
+            (object_kind = 'database' AND object_name = current_database()
+              AND privilege_type = 'CONNECT')
+            OR (object_kind = 'schema' AND object_name = 'jobs_public'
+              AND privilege_type = 'USAGE')
+            OR (object_kind = 'function'
+              AND object_name = 'jobs_public.read_public_job_detail(requested_job_id uuid)'
+              AND privilege_type = 'EXECUTE')
+          )
+        ) AS "publicReaderDirectGrantViolationCount"
+        , (
+          WITH reader AS (
+            SELECT oid FROM pg_roles WHERE rolname = 'ai_job_apply_public_job_reader'
+          ), owned AS (
+            SELECT datname AS object_name FROM pg_database
+            WHERE datdba = (SELECT oid FROM reader)
+            UNION ALL
+            SELECT nspname FROM pg_namespace WHERE nspowner = (SELECT oid FROM reader)
+            UNION ALL
+            SELECT namespace.nspname || '.' || class.relname
+            FROM pg_class AS class
+            INNER JOIN pg_namespace AS namespace ON namespace.oid = class.relnamespace
+            WHERE class.relowner = (SELECT oid FROM reader)
+            UNION ALL
+            SELECT namespace.nspname || '.' || function_definition.proname
+            FROM pg_proc AS function_definition
+            INNER JOIN pg_namespace AS namespace ON namespace.oid = function_definition.pronamespace
+            WHERE function_definition.proowner = (SELECT oid FROM reader)
+            UNION ALL
+            SELECT namespace.nspname || '.' || type_definition.typname
+            FROM pg_type AS type_definition
+            INNER JOIN pg_namespace AS namespace ON namespace.oid = type_definition.typnamespace
+            WHERE type_definition.typowner = (SELECT oid FROM reader)
+            UNION ALL
+            SELECT oid::text FROM pg_largeobject_metadata
+            WHERE lomowner = (SELECT oid FROM reader)
+          )
+          SELECT count(*)::int FROM owned
+        ) AS "publicReaderOwnershipCount"
+        , (
+          SELECT count(*)::int
+          FROM pg_db_role_setting
+          WHERE setdatabase = (SELECT oid FROM pg_database WHERE datname = current_database())
+            AND setrole = 'ai_job_apply_public_job_reader'::regrole
+            AND setconfig = ARRAY['default_transaction_read_only=on']::text[]
+        ) AS "publicReaderSettingCount"
+        , (
+          SELECT count(*)::int FROM pg_roles WHERE rolname = 'rds_iam'
+        ) AS "rdsIamRoleCount"
     `;
     if (
       verification?.tableCount !== 11 ||
@@ -283,7 +496,17 @@ try {
       JSON.stringify(verification.ingestionTriggerFunctionBodies) !==
         JSON.stringify(expectedIngestionTriggerBodies) ||
       verification.ingestionIndexCount !== 3 ||
-      verification.ingestionForeignKeyCount !== 3
+      verification.ingestionForeignKeyCount !== 3 ||
+      verification.publicSchemaCount !== 1 ||
+      verification.publicReaderRoleCount !== 1 ||
+      verification.publicReaderFunctionCount !== 1 ||
+      verification.publicReaderFunctionBody !== expectedPublicReaderBody ||
+      verification.publicReaderGrantCount !== 8 ||
+      verification.publicReaderMembershipViolationCount !== 0 ||
+      verification.publicReaderMembershipCount !== verification.rdsIamRoleCount ||
+      verification.publicReaderDirectGrantViolationCount !== 0 ||
+      verification.publicReaderOwnershipCount !== 0 ||
+      verification.publicReaderSettingCount !== 1
     ) {
       throw new Error("Jobs database migration verification failed");
     }

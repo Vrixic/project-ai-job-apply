@@ -80,3 +80,15 @@ window.
 Run `pnpm --filter @ai-job-apply/gateway build:lambda` to produce the ignored deterministic ZIP,
 manifest, SHA-256, and CycloneDX SBOM under `dist/lambda/`. A local artifact is build evidence, not
 a published or deployed release.
+
+The source-only public-job reader uses a separate raw Lambda entrypoint and accepts only exact
+bodyless, queryless `GET /v1/public/jobs/{lowercase-uuidv7}` requests. It projects the Jobs-owned
+public allowlist, preserves reversible alias identity, uses bounded warm-process positive/negative
+LRU caching without stale-on-error, and emits generic absence or availability problems. It has no
+OIDC, candidate, saved-job, source URL, or mutation boundary. Its PostgreSQL client uses one
+connection, refreshed RDS IAM tokens, verified-host TLS, and the exact
+`ai_job_apply_public_job_reader` identity; it never receives the shared application database
+secret. The Lambda and route remain Terraform-default-off. The Jobs migration and local direct-SQL
+refusals are source-verified but unapplied. Reviewed bootstrap/migration apply, artifact publication,
+Terraform plan/apply, accountable cluster-residual acceptance, and live abuse/availability
+acceptance are mandatory before anonymous activation.

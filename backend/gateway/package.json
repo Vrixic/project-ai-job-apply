@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "build:lambda": "pnpm --filter @ai-job-apply/gateway... build && node ../../scripts/build-gateway-lambda.mjs",
+    "build:public-job-lambda": "pnpm --filter @ai-job-apply/gateway... build && node ../../scripts/build-public-job-lambda.mjs",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "dev": "node --watch --env-file-if-exists=../../.env --import tsx src/start.ts",
     "start": "node dist/src/start.js",
@@ -14,6 +15,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/rds-signer": "3.1106.0",
     "@aws-sdk/client-sqs": "3.1106.0",
     "@ai-job-apply/api-contracts": "workspace:*",
     "@ai-job-apply/auth": "workspace:*",
@@ -28,6 +30,7 @@
     "@nestjs/core": "11.1.28",
     "@nestjs/platform-fastify": "11.1.28",
     "fastify": "5.10.0",
+    "postgres": "3.4.9",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2"
   },

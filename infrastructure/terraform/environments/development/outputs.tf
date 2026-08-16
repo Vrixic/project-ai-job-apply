@@ -69,6 +69,18 @@ output "gateway_lambda_alias_arn" {
   value = module.platform.gateway_lambda_alias_arn
 }
 
+output "public_job_lambda_alias_arn" {
+  value = module.platform.public_job_lambda_alias_arn
+}
+
+output "public_job_lambda_function_name" {
+  value = module.platform.public_job_lambda_function_name
+}
+
+output "public_job_route_id" {
+  value = module.platform.public_job_route_id
+}
+
 output "gateway_lambda_function_name" {
   value = module.platform.gateway_lambda_function_name
 }

@@ -70,6 +70,20 @@ const lambdaGatewaySchema = baseSchema
 
 export type LambdaGatewayConfig = z.infer<typeof lambdaGatewaySchema>;
 
+const publicJobLambdaSchema = baseSchema.extend({
+  AWS_REGION: z.literal("us-east-2"),
+  PUBLIC_JOB_DATABASE_HOST: z.string().regex(/^[a-z0-9-]+(?:\.[a-z0-9-]+)+\.rds\.amazonaws\.com$/),
+  PUBLIC_JOB_DATABASE_PORT: z.coerce.number().pipe(z.literal(5432)).default(5432),
+  PUBLIC_JOB_DATABASE_NAME: z.literal("ai_job_apply"),
+  PUBLIC_JOB_DATABASE_USER: z.literal("ai_job_apply_public_job_reader"),
+  PUBLIC_JOB_CACHE_CAPACITY: z.coerce.number().int().min(1).max(256).default(128),
+  PUBLIC_JOB_CACHE_TTL_MS: z.coerce.number().int().min(1_000).max(30_000).default(15_000),
+  PUBLIC_JOB_NEGATIVE_CACHE_TTL_MS: z.coerce.number().int().min(250).max(5_000).default(2_000),
+  ...telemetrySchema,
+});
+
+export type PublicJobLambdaConfig = z.infer<typeof publicJobLambdaSchema>;
+
 export function loadBackendConfig(environment: NodeJS.ProcessEnv = process.env): BackendConfig {
   return backendSchema.parse(environment);
 }
@@ -78,4 +92,10 @@ export function loadLambdaGatewayConfig(
   environment: NodeJS.ProcessEnv = process.env,
 ): LambdaGatewayConfig {
   return lambdaGatewaySchema.parse(environment);
+}
+
+export function loadPublicJobLambdaConfig(
+  environment: NodeJS.ProcessEnv = process.env,
+): PublicJobLambdaConfig {
+  return publicJobLambdaSchema.parse(environment);
 }

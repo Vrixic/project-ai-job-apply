@@ -68,7 +68,18 @@ module "platform" {
   gateway_lambda_artifact_base64sha256 = var.gateway_lambda_artifact_base64sha256
   gateway_lambda_extension_layer_arn   = var.gateway_lambda_extension_layer_arn
   gateway_lambda_reserved_concurrency  = var.gateway_lambda_reserved_concurrency
-  deploy_document_intake               = var.deploy_document_intake
+  deploy_public_job_reader             = var.deploy_public_job_reader
+  public_job_database_boundary_version = var.public_job_database_boundary_version
+  public_job_cluster_residual_accepted = var.public_job_cluster_residual_accepted
+  public_job_lambda_artifact_s3_key    = var.public_job_lambda_artifact_s3_key
+  public_job_lambda_artifact_s3_object_version = (
+    var.public_job_lambda_artifact_s3_object_version
+  )
+  public_job_lambda_artifact_sha256       = var.public_job_lambda_artifact_sha256
+  public_job_lambda_artifact_base64sha256 = var.public_job_lambda_artifact_base64sha256
+  public_job_route_throttling_rate_limit  = var.public_job_route_throttling_rate_limit
+  public_job_route_throttling_burst_limit = var.public_job_route_throttling_burst_limit
+  deploy_document_intake                  = var.deploy_document_intake
   candidate_document_cors_allowed_origins = (
     var.candidate_document_cors_allowed_origins
   )

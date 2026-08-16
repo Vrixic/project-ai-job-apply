@@ -5,7 +5,8 @@ It does not authorize AWS mutation or activation.
 
 ## Invariants
 
-- The reviewed migration composition is exactly 5 owners, 39 regular relations, and 14 migrations.
+- The reviewed migration composition is exactly 5 owners, 8 owned schemas, 39 regular relations,
+  and 15 migrations. The empty-table `jobs_public` schema is still verified explicitly.
 - Only `synthetic-foundation-v1`, provider `other`, provenance `authorized_fixture`, and `.example.test`
   generated observations exist in the runtime artifact.
 - `deploy_ingestion_runtime`, `ingestion_runtime_enabled`, and

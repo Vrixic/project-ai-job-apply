@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "manifestId": "d1-profile-jobs-documents-matching-billing-v1",
+  "manifestId": "d1-profile-jobs-public-documents-matching-billing-v1",
   "contributors": [
     {
       "owner": "billing",
@@ -45,7 +45,7 @@
     },
     {
       "owner": "jobs",
-      "schemas": ["jobs"],
+      "schemas": ["jobs", "jobs_public"],
       "migrationLedger": "jobs.schema_migrations",
       "migrations": [
         {
@@ -67,6 +67,10 @@
         {
           "version": "0005_ingestion_orchestration",
           "checksum": "24e696a9881771a2840335f9f2b51ec6a98ae74936888d3b1f4517ec95a2a3f0"
+        },
+        {
+          "version": "0006_public_job_reader",
+          "checksum": "1542e326c97395c0aa7e2793d4043d5fce16fdbbef3159ee8024e3a9c706683c"
         }
       ],
       "relations": [

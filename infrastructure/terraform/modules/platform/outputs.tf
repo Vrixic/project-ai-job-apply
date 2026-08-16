@@ -85,6 +85,18 @@ output "gateway_lambda_function_name" {
   value = var.deploy_gateway_lambda ? aws_lambda_function.gateway[0].function_name : null
 }
 
+output "public_job_lambda_alias_arn" {
+  value = var.deploy_public_job_reader ? aws_lambda_alias.public_job[0].arn : null
+}
+
+output "public_job_lambda_function_name" {
+  value = var.deploy_public_job_reader ? aws_lambda_function.public_job[0].function_name : null
+}
+
+output "public_job_route_id" {
+  value = local.public_job_route_enabled ? aws_apigatewayv2_route.public_job[0].id : null
+}
+
 output "gateway_lambda_authorizer_id" {
   value = var.deploy_gateway_lambda ? aws_apigatewayv2_authorizer.gateway[0].id : null
 }
