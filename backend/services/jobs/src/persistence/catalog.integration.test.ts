@@ -55,10 +55,10 @@ describeWithDatabase("PostgresJobCatalog", () => {
     const first = await runMigrationVerifier();
     const replay = await runMigrationVerifier();
     expect(first.stdout.trim()).toBe(
-      "Jobs migrations through 0005_ingestion_orchestration applied and verified.",
+      "Jobs migrations through 0006_public_job_reader applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(
-      "Jobs migrations through 0005_ingestion_orchestration applied and verified.",
+      "Jobs migrations through 0006_public_job_reader applied and verified.",
     );
     await catalog.ping();
   });

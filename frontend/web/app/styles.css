@@ -6,6 +6,57 @@
   color: #14221a;
 }
 
+.public-job-page {
+  max-width: 800px;
+}
+
+.public-job-card {
+  padding: clamp(24px, 5vw, 48px);
+  border: 1px solid #cedbd3;
+  border-radius: 18px;
+  background: white;
+  box-shadow: 0 16px 40px rgb(30 70 50 / 8%);
+}
+
+.public-job-company {
+  color: #3b5849;
+  font-size: 1.15rem;
+}
+
+.public-job-facts {
+  display: grid;
+  gap: 14px;
+  margin: 28px 0;
+}
+
+.public-job-facts div {
+  display: grid;
+  gap: 4px;
+}
+
+.public-job-facts dt {
+  color: #506259;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.public-job-facts dd {
+  margin: 0;
+}
+
+.public-job-description {
+  white-space: pre-wrap;
+}
+
+.public-job-notice {
+  margin-top: 28px;
+  padding-top: 18px;
+  border-top: 1px solid #e0e8e3;
+  color: #506259;
+  font-size: 0.9rem;
+}
+
 * {
   box-sizing: border-box;
 }

@@ -53,20 +53,21 @@ reads aggregate those sources, every decision or reopen action is append-only au
 operator identifiers and reason codes, and ambiguous alias graphs fail closed. D1-007 owns any
 future authenticated admin API or user-facing reporting surface for this capability.
 
-`src/public-detail.ts` is the source-only public-detail projection kernel. It accepts only exact
-lowercase UUIDv7 job identifiers, reuses the Jobs-owned active-record port, independently enforces
-active and nonexpired display truth, and emits a fresh immutable allowlist containing only canonical
-job identity, public display text, and freshness/expiry timestamps. Unknown, terminal, expired, or
-otherwise unavailable targets collapse to one absence result; a reversible alias is represented
-separately from its canonical identity so a future presentation layer can redirect without exposing
-the duplicate graph. Reader failures and malformed records remain availability errors rather than
-being converted into a deindexing absence.
+`src/public-detail.ts` is the Jobs-owned public-detail projection kernel. It accepts only exact
+lowercase UUIDv7 job identifiers and emits a fresh immutable allowlist containing only canonical
+job identity, public display text, and freshness/expiry timestamps. Migration
+`0006_public_job_reader` adds the empty-table `jobs_public` schema, enforces active/current lifecycle
+eligibility inside the exact security-definer projection, and grants the dedicated login no Jobs
+table or other application-schema access. Unknown, terminal, expired, or otherwise unavailable
+targets collapse to one absence result; reversible alias identity remains explicit. Reader failures
+and malformed records remain availability errors rather than being converted into deindexing
+absence.
 
-This kernel does not add an anonymous API, public route, canonical origin, metadata, sitemap,
-structured data, cache policy, abuse boundary, deployment, or crawlable page. It does not expose
-source/provider/provenance metadata, source URLs, company identifiers or verified domains, hashes,
-raw content, candidate data, or lifecycle reasons. Those transport, policy, real-source, legal,
-security, and launch gates remain with D1-009.
+The Jobs-owned function does not expose source/provider/provenance metadata, source URLs, company
+identifiers or verified domains, hashes, raw content, candidate data, or lifecycle reasons. The
+anonymous transport, canonical page, cache/throttle, and crawler policy are separately owned by the
+gateway, web, and Terraform source in the same source-only D1-009A packet. No artifact publication,
+AWS/database apply, crawlability, real-source acceptance, or deployment is claimed.
 
 ## Planned additions
 

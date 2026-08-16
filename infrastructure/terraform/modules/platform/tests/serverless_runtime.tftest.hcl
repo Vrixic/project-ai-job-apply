@@ -47,6 +47,15 @@ mock_provider "aws" {
       invoke_arn = "arn:aws:apigateway:us-east-2:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-2:111122223333:function:mock:staging/invocations"
     }
   }
+
+  mock_resource "aws_db_instance" {
+    defaults = {
+      resource_id = "db-ABCDEFGHIJKLMNOPQRSTUVWX"
+      address     = "database.cluster.us-east-2.rds.amazonaws.com"
+      port        = 5432
+      db_name     = "ai_job_apply"
+    }
+  }
 }
 
 mock_provider "random" {}
@@ -447,6 +456,192 @@ run "disabled_runtime_is_dark_without_a_legacy_provider" {
     )
     error_message = "Dark recovery must disable every trigger without restoring a retired provider."
   }
+}
+
+run "public_job_reader_dark_deploy_has_no_anonymous_route" {
+  command = plan
+
+  variables {
+    deploy_public_job_reader                     = true
+    public_job_database_boundary_version         = "0006_public_job_reader"
+    public_job_lambda_artifact_s3_key            = "lambda/public-jobs/reader.zip"
+    public_job_lambda_artifact_s3_object_version = "public-reader-version"
+    public_job_lambda_artifact_sha256            = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    public_job_lambda_artifact_base64sha256      = "ZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWU="
+    serverless_runtime_enabled                   = false
+  }
+
+  assert {
+    condition = (
+      length(aws_lambda_function.public_job) == 1 &&
+      length(aws_apigatewayv2_route.public_job) == 0 &&
+      length(aws_lambda_permission.public_job_api) == 0
+    )
+    error_message = "A dark public reader must have no anonymous route or API invocation grant."
+  }
+
+  assert {
+    condition = (
+      aws_lambda_function.public_job[0].reserved_concurrent_executions == 1 &&
+      toset(keys(aws_lambda_function.public_job[0].environment[0].variables)) == toset([
+        "LOG_LEVEL",
+        "NODE_ENV",
+        "NODE_EXTRA_CA_CERTS",
+        "PUBLIC_JOB_CACHE_CAPACITY",
+        "PUBLIC_JOB_CACHE_TTL_MS",
+        "PUBLIC_JOB_DATABASE_HOST",
+        "PUBLIC_JOB_DATABASE_NAME",
+        "PUBLIC_JOB_DATABASE_PORT",
+        "PUBLIC_JOB_DATABASE_USER",
+        "PUBLIC_JOB_NEGATIVE_CACHE_TTL_MS",
+        "RELEASE_SHA"
+      ]) &&
+      aws_lambda_function.public_job[0].environment[0].variables.PUBLIC_JOB_DATABASE_USER == "ai_job_apply_public_job_reader" &&
+      aws_lambda_function.public_job[0].environment[0].variables.PUBLIC_JOB_CACHE_CAPACITY == "128" &&
+      aws_db_instance.postgres[0].iam_database_authentication_enabled
+    )
+    error_message = "The anonymous runtime must use only its exact IAM-authenticated database identity and one-connection budget."
+  }
+
+  assert {
+    condition = (
+      jsondecode(aws_iam_role_policy.public_job_lambda_vpc_guard[0].policy).Statement[0].Effect == "Deny" &&
+      toset(jsondecode(aws_iam_role_policy.public_job_lambda_vpc_guard[0].policy).Statement[0].Action) == toset([
+        "ec2:AssignPrivateIpAddresses",
+        "ec2:CreateNetworkInterface",
+        "ec2:DeleteNetworkInterface",
+        "ec2:DescribeNetworkInterfaces",
+        "ec2:DescribeSubnets",
+        "ec2:DetachNetworkInterface",
+        "ec2:UnassignPrivateIpAddresses"
+      ]) &&
+      jsondecode(aws_iam_role_policy.public_job_lambda_vpc_guard[0].policy).Statement[0].Condition.ArnEquals["lambda:SourceFunctionArn"] == local.public_job_function_arn
+    )
+    error_message = "Public-reader code must be denied the VPC-management permissions retained for the Lambda service."
+  }
+
+  assert {
+    condition = (
+      one([
+        for statement in data.aws_iam_policy_document.public_job_lambda[0].statement : statement
+        if statement.sid == "DecryptLambdaEnvironmentAtColdStart"
+      ]).effect == "Allow" &&
+      toset(one([
+        for statement in data.aws_iam_policy_document.public_job_lambda[0].statement : statement
+        if statement.sid == "DecryptLambdaEnvironmentAtColdStart"
+      ]).actions) == toset(["kms:Decrypt"]) &&
+      length(one([
+        for statement in data.aws_iam_policy_document.public_job_lambda[0].statement : statement
+        if statement.sid == "DecryptLambdaEnvironmentAtColdStart"
+      ]).resources) == 1 &&
+      one(data.aws_iam_policy_document.public_job_lambda_kms_code_guard[0].statement).sid == "DenyFunctionCodeEnvironmentDecrypt" &&
+      one(data.aws_iam_policy_document.public_job_lambda_kms_code_guard[0].statement).effect == "Deny" &&
+      toset(one(data.aws_iam_policy_document.public_job_lambda_kms_code_guard[0].statement).actions) == toset(["kms:Decrypt"]) &&
+      length(one(data.aws_iam_policy_document.public_job_lambda_kms_code_guard[0].statement).resources) == 1 &&
+      one(one(data.aws_iam_policy_document.public_job_lambda_kms_code_guard[0].statement).condition).test == "ArnEquals" &&
+      one(one(data.aws_iam_policy_document.public_job_lambda_kms_code_guard[0].statement).condition).variable == "lambda:SourceFunctionArn" &&
+      toset(one(one(data.aws_iam_policy_document.public_job_lambda_kms_code_guard[0].statement).condition).values) == toset([local.public_job_function_arn])
+    )
+    error_message = "Lambda service cold starts may decrypt the exact CMK environment while public-reader function code is explicitly denied KMS decryption."
+  }
+
+}
+
+run "public_job_reader_activation_is_exact_and_bounded" {
+  command = plan
+
+  variables {
+    deploy_public_job_reader                     = true
+    public_job_cluster_residual_accepted         = true
+    public_job_database_boundary_version         = "0006_public_job_reader"
+    public_job_lambda_artifact_s3_key            = "lambda/public-jobs/reader.zip"
+    public_job_lambda_artifact_s3_object_version = "public-reader-version"
+    public_job_lambda_artifact_sha256            = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    public_job_lambda_artifact_base64sha256      = "ZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWU="
+    serverless_runtime_enabled                   = true
+  }
+
+  assert {
+    condition = (
+      length(aws_apigatewayv2_route.public_job) == 1 &&
+      aws_apigatewayv2_route.public_job[0].route_key == "GET /v1/public/jobs/{jobId}" &&
+      aws_apigatewayv2_route.public_job[0].authorization_type == "NONE" &&
+      length(aws_lambda_permission.public_job_api) == 1
+    )
+    error_message = "Only the exact anonymous GET route may activate with the complete runtime gate."
+  }
+
+  assert {
+    condition = (
+      one(aws_apigatewayv2_stage.gateway[0].route_settings).throttling_rate_limit == 1 &&
+      one(aws_apigatewayv2_stage.gateway[0].route_settings).throttling_burst_limit == 1 &&
+      one(aws_apigatewayv2_stage.gateway[0].route_settings).detailed_metrics_enabled &&
+      length(aws_cloudwatch_metric_alarm.public_job_route_4xx) == 1 &&
+      length(aws_cloudwatch_metric_alarm.public_job_route_5xx) == 1
+    )
+    error_message = "The public route budget must match concurrency and expose edge 4xx/5xx alarms."
+  }
+}
+
+run "public_job_reader_route_stays_absent_without_cluster_residual_acceptance" {
+  command = plan
+
+  variables {
+    deploy_public_job_reader                     = true
+    public_job_cluster_residual_accepted         = false
+    public_job_database_boundary_version         = "0006_public_job_reader"
+    public_job_lambda_artifact_s3_key            = "lambda/public-jobs/reader.zip"
+    public_job_lambda_artifact_s3_object_version = "public-reader-version"
+    public_job_lambda_artifact_sha256            = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    public_job_lambda_artifact_base64sha256      = "ZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWU="
+    serverless_runtime_enabled                   = true
+    runtime_activation_allowed                   = true
+  }
+
+  assert {
+    condition = (
+      length(aws_lambda_function.public_job) == 1 &&
+      length(aws_apigatewayv2_route.public_job) == 0 &&
+      length(aws_lambda_permission.public_job_api) == 0 &&
+      length(aws_cloudwatch_metric_alarm.public_job_route_4xx) == 0 &&
+      length(aws_cloudwatch_metric_alarm.public_job_route_5xx) == 0
+    )
+    error_message = "The public-job route must remain structurally absent until both other-database CONNECT and cluster-global PUBLIC catalog/function residuals are accepted or remediated."
+  }
+}
+
+run "public_job_reader_rejects_a_larger_edge_burst" {
+  command = plan
+
+  variables {
+    public_job_route_throttling_burst_limit = 2
+  }
+
+  expect_failures = [var.public_job_route_throttling_burst_limit]
+}
+
+run "public_job_reader_rejects_a_larger_edge_rate" {
+  command = plan
+
+  variables {
+    public_job_route_throttling_rate_limit = 2
+  }
+
+  expect_failures = [var.public_job_route_throttling_rate_limit]
+}
+
+run "public_job_reader_requires_the_exact_database_boundary" {
+  command = plan
+
+  variables {
+    deploy_public_job_reader                     = true
+    public_job_lambda_artifact_s3_key            = "lambda/public-jobs/reader.zip"
+    public_job_lambda_artifact_s3_object_version = "public-reader-version"
+    public_job_lambda_artifact_sha256            = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    public_job_lambda_artifact_base64sha256      = "ZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWU="
+  }
+
+  expect_failures = [var.deploy_public_job_reader]
 }
 
 run "dormant_data_plane_removes_idle_cost_drivers" {

@@ -89,6 +89,52 @@ variable "gateway_lambda_reserved_concurrency" {
   default = 2
 }
 
+variable "deploy_public_job_reader" {
+  type    = bool
+  default = false
+}
+
+variable "public_job_database_boundary_version" {
+  type    = string
+  default = ""
+}
+
+variable "public_job_cluster_residual_accepted" {
+  description = "Accountable pre-activation acceptance or remediation of both other-database CONNECT and cluster-global PUBLIC catalog/function residuals."
+  type        = bool
+  default     = false
+}
+
+variable "public_job_lambda_artifact_s3_key" {
+  type    = string
+  default = ""
+}
+
+variable "public_job_lambda_artifact_s3_object_version" {
+  type    = string
+  default = ""
+}
+
+variable "public_job_lambda_artifact_sha256" {
+  type    = string
+  default = ""
+}
+
+variable "public_job_lambda_artifact_base64sha256" {
+  type    = string
+  default = ""
+}
+
+variable "public_job_route_throttling_rate_limit" {
+  type    = number
+  default = 1
+}
+
+variable "public_job_route_throttling_burst_limit" {
+  type    = number
+  default = 1
+}
+
 variable "deploy_document_intake" {
   type    = bool
   default = false

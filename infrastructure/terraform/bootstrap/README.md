@@ -32,3 +32,9 @@ transferred, or replacement repository; do not weaken the trust to a wildcard su
 The deployment boundary also permits same-account AWS Budgets and CUR 2.0 Data Export management.
 Apply bootstrap-policy changes from an isolated environment-specific bootstrap workspace before
 expecting the GitHub deployment role to plan or apply new billing controls.
+
+The workload boundary permits `rds-db:connect` only for the exact database username
+`ai_job_apply_public_job_reader`; the environment platform policy further narrows that maximum to
+its exact RDS resource ID. A separately reviewed bootstrap apply must land this boundary revision
+before any anonymous public-job route can be enabled. This source packet neither applies bootstrap
+nor activates public traffic.

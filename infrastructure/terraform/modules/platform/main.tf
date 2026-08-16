@@ -30,6 +30,15 @@ locals {
     ? aws_db_instance.postgres[0].identifier
     : "${var.name}-${var.environment}-dormant"
   )
+  public_job_route_enabled = (
+    var.deploy_public_job_reader &&
+    var.public_job_cluster_residual_accepted &&
+    var.serverless_runtime_enabled &&
+    var.runtime_activation_allowed &&
+    var.persistent_data_plane_enabled
+  )
+  public_job_function_name = "${var.name}-${var.environment}-public-job-reader"
+  public_job_function_arn  = "arn:aws:lambda:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:function:${local.public_job_function_name}"
 }
 
 data "aws_iam_policy_document" "platform_kms" {
@@ -806,6 +815,16 @@ resource "aws_apigatewayv2_integration" "gateway_lambda" {
   timeout_milliseconds   = 15000
 }
 
+resource "aws_apigatewayv2_integration" "public_job_lambda" {
+  count                  = local.public_job_route_enabled ? 1 : 0
+  api_id                 = aws_apigatewayv2_api.gateway[0].id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_alias.public_job[0].invoke_arn
+  integration_method     = "POST"
+  payload_format_version = "2.0"
+  timeout_milliseconds   = 10000
+}
+
 resource "aws_apigatewayv2_route" "gateway" {
   count              = var.serverless_runtime_enabled ? 1 : 0
   api_id             = aws_apigatewayv2_api.gateway[0].id
@@ -831,11 +850,29 @@ resource "aws_apigatewayv2_route" "gateway_lambda_public" {
   authorization_type = "NONE"
 }
 
+resource "aws_apigatewayv2_route" "public_job" {
+  count              = local.public_job_route_enabled ? 1 : 0
+  api_id             = aws_apigatewayv2_api.gateway[0].id
+  route_key          = "GET /v1/public/jobs/{jobId}"
+  target             = "integrations/${aws_apigatewayv2_integration.public_job_lambda[0].id}"
+  authorization_type = "NONE"
+}
+
 resource "aws_apigatewayv2_stage" "gateway" {
   count       = var.deploy_applications ? 1 : 0
   api_id      = aws_apigatewayv2_api.gateway[0].id
   name        = "$default"
   auto_deploy = true
+
+  dynamic "route_settings" {
+    for_each = local.public_job_route_enabled ? [1] : []
+    content {
+      route_key                = aws_apigatewayv2_route.public_job[0].route_key
+      detailed_metrics_enabled = true
+      throttling_rate_limit    = var.public_job_route_throttling_rate_limit
+      throttling_burst_limit   = var.public_job_route_throttling_burst_limit
+    }
+  }
 }
 
 resource "aws_ecs_task_definition" "migration" {
@@ -1143,7 +1180,7 @@ resource "aws_cloudwatch_dashboard" "operations" {
 }
 
 data "aws_iam_policy_document" "gateway_lambda_assume" {
-  count = var.deploy_gateway_lambda ? 1 : 0
+  count = var.deploy_gateway_lambda || var.deploy_public_job_reader ? 1 : 0
 
   statement {
     effect  = "Allow"
@@ -1153,6 +1190,108 @@ data "aws_iam_policy_document" "gateway_lambda_assume" {
       identifiers = ["lambda.amazonaws.com"]
     }
   }
+}
+
+resource "aws_iam_role" "public_job_lambda" {
+  count                = var.deploy_public_job_reader ? 1 : 0
+  name                 = "${var.name}-${var.environment}-public-job-reader"
+  assume_role_policy   = data.aws_iam_policy_document.gateway_lambda_assume[0].json
+  permissions_boundary = data.aws_iam_policy.workload_boundary.arn
+}
+
+data "aws_iam_policy_document" "public_job_lambda" {
+  count = var.deploy_public_job_reader ? 1 : 0
+
+  statement {
+    sid       = "WriteOwnedLogs"
+    effect    = "Allow"
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["${aws_cloudwatch_log_group.application.arn}:*"]
+  }
+  statement {
+    sid    = "ManageVpcInterfaces"
+    effect = "Allow"
+    actions = [
+      "ec2:AssignPrivateIpAddresses", "ec2:CreateNetworkInterface",
+      "ec2:DeleteNetworkInterface", "ec2:DescribeNetworkInterfaces",
+      "ec2:DescribeSubnets", "ec2:UnassignPrivateIpAddresses"
+    ]
+    resources = ["*"]
+  }
+  statement {
+    sid       = "ConnectAsExactPublicJobReader"
+    effect    = "Allow"
+    actions   = ["rds-db:connect"]
+    resources = ["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${aws_db_instance.postgres[0].resource_id}/ai_job_apply_public_job_reader"]
+  }
+  statement {
+    sid       = "DecryptLambdaEnvironmentAtColdStart"
+    effect    = "Allow"
+    actions   = ["kms:Decrypt"]
+    resources = [local.platform_kms_key_arn]
+  }
+  statement {
+    sid       = "WriteNativeTraces"
+    effect    = "Allow"
+    actions   = ["xray:PutTelemetryRecords", "xray:PutTraceSegments"]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "public_job_lambda" {
+  count  = var.deploy_public_job_reader ? 1 : 0
+  name   = "public-job-reader-runtime"
+  role   = aws_iam_role.public_job_lambda[0].id
+  policy = data.aws_iam_policy_document.public_job_lambda[0].json
+}
+
+resource "aws_iam_role_policy" "public_job_lambda_vpc_guard" {
+  count = var.deploy_public_job_reader ? 1 : 0
+  name  = "public-job-reader-vpc-code-guard"
+  role  = aws_iam_role.public_job_lambda[0].id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid    = "DenyFunctionCodeVpcMutation"
+      Effect = "Deny"
+      Action = [
+        "ec2:AssignPrivateIpAddresses",
+        "ec2:CreateNetworkInterface",
+        "ec2:DeleteNetworkInterface",
+        "ec2:DescribeNetworkInterfaces",
+        "ec2:DescribeSubnets",
+        "ec2:DetachNetworkInterface",
+        "ec2:UnassignPrivateIpAddresses"
+      ]
+      Resource = "*"
+      Condition = {
+        ArnEquals = { "lambda:SourceFunctionArn" = local.public_job_function_arn }
+      }
+    }]
+  })
+}
+
+data "aws_iam_policy_document" "public_job_lambda_kms_code_guard" {
+  count = var.deploy_public_job_reader ? 1 : 0
+
+  statement {
+    sid       = "DenyFunctionCodeEnvironmentDecrypt"
+    effect    = "Deny"
+    actions   = ["kms:Decrypt"]
+    resources = [local.platform_kms_key_arn]
+    condition {
+      test     = "ArnEquals"
+      variable = "lambda:SourceFunctionArn"
+      values   = [local.public_job_function_arn]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "public_job_lambda_kms_code_guard" {
+  count  = var.deploy_public_job_reader ? 1 : 0
+  name   = "public-job-reader-kms-code-guard"
+  role   = aws_iam_role.public_job_lambda[0].id
+  policy = data.aws_iam_policy_document.public_job_lambda_kms_code_guard[0].json
 }
 
 resource "aws_iam_role" "gateway_lambda" {
@@ -1407,6 +1546,170 @@ resource "aws_lambda_function" "gateway" {
     aws_iam_role_policy.gateway_lambda,
     aws_vpc_endpoint.secretsmanager
   ]
+}
+
+resource "aws_lambda_function" "public_job" {
+  count                          = var.deploy_public_job_reader ? 1 : 0
+  function_name                  = local.public_job_function_name
+  description                    = "Default-off anonymous read-only projection of current public job detail"
+  role                           = aws_iam_role.public_job_lambda[0].arn
+  runtime                        = "nodejs24.x"
+  architectures                  = ["x86_64"]
+  handler                        = "index.handler"
+  memory_size                    = 512
+  timeout                        = 10
+  reserved_concurrent_executions = 1
+  publish                        = true
+  s3_bucket                      = aws_s3_bucket.artifacts.bucket
+  s3_key                         = var.public_job_lambda_artifact_s3_key
+  s3_object_version              = var.public_job_lambda_artifact_s3_object_version
+  source_code_hash               = var.public_job_lambda_artifact_base64sha256
+  kms_key_arn                    = aws_kms_key.platform.arn
+
+  environment {
+    variables = {
+      NODE_ENV                         = "production"
+      NODE_EXTRA_CA_CERTS              = "/var/runtime/ca-cert.pem"
+      RELEASE_SHA                      = var.public_job_lambda_artifact_sha256
+      LOG_LEVEL                        = "info"
+      PUBLIC_JOB_DATABASE_HOST         = aws_db_instance.postgres[0].address
+      PUBLIC_JOB_DATABASE_PORT         = tostring(aws_db_instance.postgres[0].port)
+      PUBLIC_JOB_DATABASE_NAME         = aws_db_instance.postgres[0].db_name
+      PUBLIC_JOB_DATABASE_USER         = "ai_job_apply_public_job_reader"
+      PUBLIC_JOB_CACHE_CAPACITY        = "128"
+      PUBLIC_JOB_CACHE_TTL_MS          = "15000"
+      PUBLIC_JOB_NEGATIVE_CACHE_TTL_MS = "2000"
+    }
+  }
+
+  vpc_config {
+    subnet_ids         = aws_subnet.private[*].id
+    security_group_ids = [aws_security_group.application.id]
+  }
+  tracing_config { mode = "Active" }
+  logging_config {
+    log_format            = "JSON"
+    application_log_level = "INFO"
+    system_log_level      = "WARN"
+    log_group             = aws_cloudwatch_log_group.application.name
+  }
+  lifecycle { create_before_destroy = true }
+  depends_on = [
+    aws_iam_role_policy.public_job_lambda,
+    aws_iam_role_policy.public_job_lambda_vpc_guard,
+    aws_iam_role_policy.public_job_lambda_kms_code_guard
+  ]
+}
+
+resource "aws_lambda_alias" "public_job" {
+  count            = var.deploy_public_job_reader ? 1 : 0
+  name             = var.environment
+  description      = "Reviewed immutable ${var.environment} public-job reader release"
+  function_name    = aws_lambda_function.public_job[0].function_name
+  function_version = aws_lambda_function.public_job[0].version
+}
+
+resource "aws_lambda_permission" "public_job_api" {
+  count         = local.public_job_route_enabled ? 1 : 0
+  statement_id  = "AllowExactPublicJobRoute"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.public_job[0].function_name
+  qualifier     = aws_lambda_alias.public_job[0].name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.gateway[0].execution_arn}/${aws_apigatewayv2_stage.gateway[0].name}/GET/v1/public/jobs/*"
+}
+
+resource "aws_cloudwatch_metric_alarm" "public_job_lambda_errors" {
+  count               = var.deploy_public_job_reader ? 1 : 0
+  alarm_name          = "${var.name}-${var.environment}-public-job-lambda-errors"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Errors"
+  namespace           = "AWS/Lambda"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "Public job Lambda error; anonymous publication remains review-gated. Runbook: ${local.observability_runbook_url}"
+  dimensions          = { FunctionName = aws_lambda_function.public_job[0].function_name }
+}
+
+resource "aws_cloudwatch_metric_alarm" "public_job_lambda_throttles" {
+  count               = var.deploy_public_job_reader ? 1 : 0
+  alarm_name          = "${var.name}-${var.environment}-public-job-lambda-throttles"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Throttles"
+  namespace           = "AWS/Lambda"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "Public job Lambda reached its one-connection concurrency ceiling. Runbook: ${local.observability_runbook_url}"
+  dimensions          = { FunctionName = aws_lambda_function.public_job[0].function_name }
+}
+
+resource "aws_cloudwatch_metric_alarm" "public_job_lambda_duration" {
+  count               = var.deploy_public_job_reader ? 1 : 0
+  alarm_name          = "${var.name}-${var.environment}-public-job-lambda-duration"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "Duration"
+  namespace           = "AWS/Lambda"
+  period              = 60
+  extended_statistic  = "p95"
+  threshold           = 5000
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "Public job Lambda p95 duration exceeded five seconds. Runbook: ${local.observability_runbook_url}"
+  dimensions          = { FunctionName = aws_lambda_function.public_job[0].function_name }
+}
+
+resource "aws_cloudwatch_metric_alarm" "public_job_route_4xx" {
+  count               = local.public_job_route_enabled ? 1 : 0
+  alarm_name          = "${var.name}-${var.environment}-public-job-route-4xx"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "4xx"
+  namespace           = "AWS/ApiGateway"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 20
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "Anonymous public-job route 4xx volume, including managed edge throttling, exceeded the prelaunch boundary. Runbook: ${local.observability_runbook_url}"
+  dimensions = {
+    ApiId = aws_apigatewayv2_api.gateway[0].id
+    Stage = aws_apigatewayv2_stage.gateway[0].name
+    Route = aws_apigatewayv2_route.public_job[0].route_key
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "public_job_route_5xx" {
+  count               = local.public_job_route_enabled ? 1 : 0
+  alarm_name          = "${var.name}-${var.environment}-public-job-route-5xx"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "5xx"
+  namespace           = "AWS/ApiGateway"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "Anonymous public-job route emitted an integration 5xx. Runbook: ${local.observability_runbook_url}"
+  dimensions = {
+    ApiId = aws_apigatewayv2_api.gateway[0].id
+    Stage = aws_apigatewayv2_stage.gateway[0].name
+    Route = aws_apigatewayv2_route.public_job[0].route_key
+  }
 }
 
 resource "aws_lambda_alias" "gateway" {

@@ -81,6 +81,16 @@ describe.skipIf(!requested)("restored PostgreSQL aggregate verification", () => 
     expect(targetIdentity?.database_name).not.toBe(sourceIdentity?.database_name);
 
     for (const client of [source, restored]) {
+      const publicProjectionBoundary = await client.unsafe<{
+        schema_present: boolean;
+        function_present: boolean;
+      }>(`
+        SELECT
+          to_regnamespace('jobs_public') IS NOT NULL AS schema_present,
+          to_regprocedure('jobs_public.read_public_job_detail(uuid)') IS NOT NULL
+            AS function_present
+      `);
+      expect(publicProjectionBoundary).toEqual([{ schema_present: true, function_present: true }]);
       const fixture = await client.unsafe<{ fixture_count: number }>(`
         SELECT count(*)::int AS fixture_count
         FROM matching.saved_job_list_state
@@ -229,6 +239,24 @@ describe.skipIf(!requested)("restored PostgreSQL aggregate verification", () => 
       await restored.unsafe("DROP TABLE IF EXISTS jobs.restore_verifier_unreviewed_probe");
     }
 
+    try {
+      await restored.unsafe("CREATE SCHEMA restore_verifier_unreviewed_probe");
+      await expect(verifyRestoreDatabase(restored)).rejects.toThrow(
+        "Restore schema boundary mismatch",
+      );
+    } finally {
+      await restored.unsafe("DROP SCHEMA IF EXISTS restore_verifier_unreviewed_probe CASCADE");
+    }
+
+    try {
+      await restored.unsafe("CREATE TABLE public.restore_verifier_unreviewed_probe (id integer)");
+      await expect(verifyRestoreDatabase(restored)).rejects.toThrow(
+        "Restore relation boundary mismatch",
+      );
+    } finally {
+      await restored.unsafe("DROP TABLE IF EXISTS public.restore_verifier_unreviewed_probe");
+    }
+
     const expectedMatchingChecksum = loadCurrentRestoreManifest()
       .manifest.contributors.find((contributor) => contributor.owner === "matching")
       ?.migrations.find((migration) => migration.version === "0001_saved_jobs")?.checksum;
@@ -272,24 +300,22 @@ describe.skipIf(!requested)("restored PostgreSQL aggregate verification", () => 
         WHERE version = '0001_entitlement_projection'
       `);
     }
-    const expectedIngestionChecksum = loadCurrentRestoreManifest()
+    const expectedPublicReaderChecksum = loadCurrentRestoreManifest()
       .manifest.contributors.find((contributor) => contributor.owner === "jobs")
-      ?.migrations.find(
-        (migration) => migration.version === "0005_ingestion_orchestration",
-      )?.checksum;
-    expect(expectedIngestionChecksum).toMatch(/^[a-f0-9]{64}$/);
+      ?.migrations.find((migration) => migration.version === "0006_public_job_reader")?.checksum;
+    expect(expectedPublicReaderChecksum).toMatch(/^[a-f0-9]{64}$/);
     try {
       await restored.unsafe(`
         UPDATE jobs.schema_migrations SET checksum=repeat('f', 64)
-        WHERE version='0005_ingestion_orchestration'
+        WHERE version='0006_public_job_reader'
       `);
       await expect(verifyRestoreDatabase(restored)).rejects.toThrow(
         "Restore migration boundary mismatch for jobs",
       );
     } finally {
       await restored.unsafe(`
-        UPDATE jobs.schema_migrations SET checksum='${expectedIngestionChecksum}'
-        WHERE version='0005_ingestion_orchestration'
+        UPDATE jobs.schema_migrations SET checksum='${expectedPublicReaderChecksum}'
+        WHERE version='0006_public_job_reader'
       `);
     }
     expect(await verifyRestoreDatabase(restored)).toEqual(await verifyRestoreDatabase(source));

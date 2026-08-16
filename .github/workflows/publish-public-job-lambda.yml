@@ -1,0 +1,127 @@
+name: Publish public-job Lambda artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Isolated environment receiving the immutable dark artifact
+        required: true
+        default: development
+        type: choice
+        options: [development, staging]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: publish-${{ inputs.environment }}-public-job-lambda
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.24.0
+          run_install: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.12.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @ai-job-apply/gateway... build
+      - run: pnpm --filter @ai-job-apply/gateway test
+      - run: pnpm audit:dependencies
+
+      - name: Build reproducible public-reader artifact
+        id: artifact
+        shell: bash
+        env:
+          ARTIFACT_SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          pnpm --filter @ai-job-apply/gateway build:public-job-lambda
+          manifest="backend/gateway/dist/public-job-lambda/public-job-lambda.manifest.json"
+          first_sha="$(jq -r .artifactSha256 "$manifest")"
+          pnpm --filter @ai-job-apply/gateway build:public-job-lambda
+          second_sha="$(jq -r .artifactSha256 "$manifest")"
+          test "$first_sha" = "$second_sha"
+          test "$(jq -r .schemaVersion "$manifest")" = "2"
+          test "$(jq -r .sourceSha "$manifest")" = "$GITHUB_SHA"
+          test "$(jq -r .bomFormat backend/gateway/dist/public-job-lambda/public-job-lambda.cdx.json)" = "CycloneDX"
+          echo "sha256=$second_sha" >> "$GITHUB_OUTPUT"
+          echo "base64_sha256=$(jq -r .artifactBase64Sha256 "$manifest")" >> "$GITHUB_OUTPUT"
+
+      - name: Require configured immutable-artifact boundary
+        env:
+          ARTIFACT_BUCKET: ${{ vars.ARTIFACT_BUCKET }}
+          AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+        run: test -n "$ARTIFACT_BUCKET" && test -n "$AWS_DEPLOY_ROLE_ARN"
+
+      - name: Obtain short-lived AWS credentials
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-2
+          role-session-name: publish-${{ inputs.environment }}-public-job-${{ github.run_id }}
+          mask-aws-account-id: true
+
+      - name: Verify private versioned artifact bucket
+        env:
+          ARTIFACT_BUCKET: ${{ vars.ARTIFACT_BUCKET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(aws s3api get-bucket-versioning --bucket "$ARTIFACT_BUCKET" --query Status --output text)" = "Enabled"
+          test "$(aws s3api get-bucket-encryption --bucket "$ARTIFACT_BUCKET" --query 'ServerSideEncryptionConfiguration.Rules[0].ApplyServerSideEncryptionByDefault.SSEAlgorithm' --output text)" = "aws:kms"
+          test "$(aws s3api get-public-access-block --bucket "$ARTIFACT_BUCKET" --query 'PublicAccessBlockConfiguration.[BlockPublicAcls,IgnorePublicAcls,BlockPublicPolicy,RestrictPublicBuckets]' --output text)" = $'True\tTrue\tTrue\tTrue'
+
+      - name: Publish immutable dark-release evidence
+        id: publish
+        env:
+          ARTIFACT_BASE64_SHA256: ${{ steps.artifact.outputs.base64_sha256 }}
+          ARTIFACT_BUCKET: ${{ vars.ARTIFACT_BUCKET }}
+          ARTIFACT_SHA256: ${{ steps.artifact.outputs.sha256 }}
+          SOURCE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          directory="backend/gateway/dist/public-job-lambda"
+          prefix="lambda/public-jobs/$SOURCE_SHA/$ARTIFACT_SHA256"
+          for evidence in public-job-lambda.zip public-job-lambda.cdx.json public-job-lambda.manifest.json public-job-lambda.sha256; do
+            key="$prefix/$evidence"
+            if aws s3api head-object --bucket "$ARTIFACT_BUCKET" --key "$key" >/dev/null 2>&1; then
+              echo "Immutable key already exists; refusing a second object version." >&2
+              exit 1
+            fi
+          done
+          result="$(aws s3api put-object --bucket "$ARTIFACT_BUCKET" --key "$prefix/public-job-lambda.zip" --body "$directory/public-job-lambda.zip" --checksum-algorithm SHA256 --checksum-sha256 "$ARTIFACT_BASE64_SHA256" --if-none-match '*' --metadata "source-sha=$SOURCE_SHA,artifact-sha256=$ARTIFACT_SHA256" --output json)"
+          version="$(jq -r .VersionId <<<"$result")"
+          test -n "$version" && test "$version" != "null"
+          for evidence in public-job-lambda.cdx.json public-job-lambda.manifest.json public-job-lambda.sha256; do
+            aws s3api put-object --bucket "$ARTIFACT_BUCKET" --key "$prefix/$evidence" --body "$directory/$evidence" --if-none-match '*' --metadata "source-sha=$SOURCE_SHA,artifact-sha256=$ARTIFACT_SHA256" >/dev/null
+          done
+          echo "artifact_key=$prefix/public-job-lambda.zip" >> "$GITHUB_OUTPUT"
+          echo "object_version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Record source-only handoff
+        env:
+          ARTIFACT_KEY: ${{ steps.publish.outputs.artifact_key }}
+          ARTIFACT_SHA256: ${{ steps.artifact.outputs.sha256 }}
+          OBJECT_VERSION: ${{ steps.publish.outputs.object_version }}
+        run: |
+          {
+            echo "### Public-job Lambda dark artifact"
+            echo "- Source: \`$GITHUB_SHA\`"
+            echo "- Key: \`$ARTIFACT_KEY\`"
+            echo "- Version: \`$OBJECT_VERSION\`"
+            echo "- SHA-256: \`$ARTIFACT_SHA256\`"
+            echo "- Deployment or route activation: none"
+          } >> "$GITHUB_STEP_SUMMARY"

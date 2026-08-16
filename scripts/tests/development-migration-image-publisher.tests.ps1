@@ -270,6 +270,7 @@ foreach ($required in @(
     'jobs/dist/src/search-acceptance.js', 'jobs/dist/src/run-search-acceptance.js',
     'documents/dist/src/run-document-processing-acceptance.js',
     'runner/dist/src/restore-verifier-cli.js', 'runner/restore-manifest.v1.json',
+    'jobs/migrations/0006_public_job_reader.sql',
     'profile,jobs,documents,matching,billing', 'matching:["0001_saved_jobs.sql"]',
     'billing:["0001_entitlement_projection.sql"]',
     'manifest.contributors.length!==5', 'createRequire', './billing/package.json',
@@ -280,7 +281,7 @@ foreach ($required in @(
   )) {
   if (-not $source.Contains($required)) { throw "Migration image publisher guard is missing: $required" }
 }
-if (-not $source.Contains('for(const entrypoint of ["jobs/dist/src/search-acceptance.js","jobs/dist/src/run-search-acceptance.js","documents/dist/src/run-document-processing-acceptance.js","runner/dist/src/restore-verifier-cli.js","runner/restore-manifest.v1.json"])await access(entrypoint)')) {
+if (-not $source.Contains('for(const entrypoint of ["jobs/dist/src/search-acceptance.js","jobs/dist/src/run-search-acceptance.js","documents/dist/src/run-document-processing-acceptance.js","runner/dist/src/restore-verifier-cli.js","runner/restore-manifest.v1.json","jobs/migrations/0006_public_job_reader.sql"])await access(entrypoint)')) {
   throw "The migration runtime smoke gate does not require the exact acceptance entrypoint set."
 }
 foreach ($forbidden in @("terraform apply", "ecs run-task", "register-task-definition", "BatchDeleteImage")) {
@@ -295,6 +296,7 @@ foreach ($required in @(
   '@ai-job-apply/billing-service deploy --prod --legacy /migration/billing',
   'runner/dist/src/restore-verifier-cli.js',
   'runner/restore-manifest.v1.json',
+  'jobs/migrations/0006_public_job_reader.sql',
   'restore-verifier-package-smoke:ok',
   'file:///migration/billing/package.json',
   'expected exactly five generated .modules.yaml files'
@@ -309,6 +311,7 @@ foreach ($required in @(
   'profile,jobs,documents,matching,billing',
   'runner/dist/src/restore-verifier-cli.js',
   'runner/restore-manifest.v1.json',
+  'jobs:["0001_job_catalog.sql","0002_duplicate_resolution.sql","0003_duplicate_resolution_audit_guard.sql","0004_job_search.sql","0005_ingestion_orchestration.sql","0006_public_job_reader.sql"]',
   './billing/package.json',
   'matching:["0001_saved_jobs.sql"]',
   'billing:["0001_entitlement_projection.sql"]'

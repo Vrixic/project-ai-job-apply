@@ -164,6 +164,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/public/jobs/{jobId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPublicJob"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/saved-jobs": {
         parameters: {
             query?: never;
@@ -539,6 +555,28 @@ export interface components {
             validThrough?: string;
             sources: components["schemas"]["JobSourceSummary"][];
         };
+        PublicJobDetail: {
+            id: string;
+            companyName: string;
+            title: string;
+            locations: string[];
+            department?: string;
+            description: string;
+            /** Format: date-time */
+            firstObservedAt: string;
+            /** Format: date-time */
+            lastVerifiedAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /** Format: date-time */
+            validThrough?: string;
+        };
+        PublicJobDetailResponse: {
+            requestedJobId: string;
+            canonicalJobId: string;
+            isAlias: boolean;
+            job: components["schemas"]["PublicJobDetail"];
+        };
         EntitlementSummary: {
             /** @enum {string} */
             plan: "free" | "pro";
@@ -662,6 +700,37 @@ export interface components {
         /** @description The request body is not JSON */
         UnsupportedMediaType: {
             headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["ProblemDetails"];
+            };
+        };
+        /** @description The anonymous public job request shape is invalid */
+        PublicJobBadRequest: {
+            headers: {
+                "Cache-Control": "no-store";
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["ProblemDetails"];
+            };
+        };
+        /** @description The public job identifier is absent, inactive, or expired */
+        PublicJobNotFound: {
+            headers: {
+                "Cache-Control": "public, max-age=0, must-revalidate";
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["ProblemDetails"];
+            };
+        };
+        /** @description Public job detail cannot be read safely */
+        PublicJobUnavailable: {
+            headers: {
+                "Cache-Control": "no-store";
+                "Retry-After": number;
                 [name: string]: unknown;
             };
             content: {
@@ -1013,6 +1082,32 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getPublicJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                jobId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Public active canonical job detail without source or candidate data */
+            200: {
+                headers: {
+                    "Cache-Control": "public, max-age=0, must-revalidate";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicJobDetailResponse"];
+                };
+            };
+            400: components["responses"]["PublicJobBadRequest"];
+            404: components["responses"]["PublicJobNotFound"];
+            503: components["responses"]["PublicJobUnavailable"];
         };
     };
     createSavedJob: {

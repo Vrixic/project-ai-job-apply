@@ -47,6 +47,7 @@ delivery evidence; this section is not approval of Phase 1 or later behavior.
 |---|---|---|---|
 | `GET /health/live` | Public anonymous | Fixed minimal health response; method/path allowlist; no candidate state | Deployed `200` probes and direct Lambda boundary tests pass |
 | `GET /health/ready` | Public anonymous | Fixed minimal readiness response; method/path allowlist; no candidate state | Deployed `200` probes and direct Lambda boundary tests pass |
+| `GET /v1/public/jobs/{jobId}` | Public anonymous | Exact bodyless/queryless lowercase UUIDv7 route; dedicated IAM-authenticated application-schema-restricted database identity; allowlisted current job projection; bounded cache/throttle/alarms | Route, page, Lambda, migration, and direct application-database refusal source are locally verified and default-off; bootstrap/migration apply, cluster-residual acceptance, artifact publication, plan/apply, live abuse testing, and activation remain open |
 | `GET /v1/me` | Candidate | Valid Auth0 JWT with `profile:read`; resolved internal owner only | Auth and local gateway tests pass |
 | `GET /v1/me/job-preferences` | Candidate | `profile:read`; owner-scoped query | Local and deployed persistence/isolation evidence passes |
 | `PUT /v1/me/job-preferences` | Candidate | `profile:write`; strict schema/payload boundary; owner-scoped write | Local and deployed persistence/isolation evidence passes |
@@ -231,3 +232,22 @@ authorization, public API, admin/support, data-class, payment, extension/mobile 
 application-agent, browser-runtime, cloud-boundary, provider, jurisdiction, or external-side-effect
 change; after a serious incident or control failure; and at least annually while the product is
 public. Continuous automated scanning and internal tests run between independent assessments.
+
+## Anonymous public-job read boundary
+
+The source-defined public route requires one exact lowercase UUIDv7 path parameter and no query or
+body. It does not read or use cookies, bearer tokens, owner identifiers, or a client-supplied
+origin. It returns only the
+Jobs-owned public projection and generic problem details; malformed upstream data and database
+outages are availability failures, never absence. The dedicated Lambda has concurrency one,
+bounded internal caches, exact route throttling, and a PostgreSQL identity whose only direct
+application-function grant is the security-definer public-read function. It receives no shared
+database secret. Managed API
+Gateway edge throttles are infrastructure transport responses, not claimed as application
+ProblemDetails. Route activation remains default-off pending bootstrap, migration, artifact,
+Terraform, abuse, and independent public-surface review. Because RDS IAM authentication is not
+database-name scoped, and cluster-global PUBLIC catalog/function capabilities remain outside the
+application migration, the migration proves the role's least privilege only inside the application
+database. Accountable review must accept or remediate both the other-database CONNECT and
+catalog/function residuals, or isolate them through a separately reviewed cluster control, before
+activation. The database-local read-only setting is defense in depth rather than an immutable deny.

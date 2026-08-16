@@ -179,3 +179,28 @@ The implementation must block login and queued external effects before erasure, 
 owned store and provider, prevent ordinary recovery after confirmation, replay the deletion ledger
 before a restored database serves traffic, and expose an honest `backup-expired` state. A provider
 acknowledgement or expired backup window cannot be assumed from elapsed time alone.
+
+### Anonymous public job detail
+
+```mermaid
+flowchart LR
+  Browser[Anonymous browser or crawler] -->|exact GET, no identity| Web[Canonical Next job page]
+  Web -->|no cookies or authorization| Reader[Dedicated public-job Lambda]
+  Reader -->|IAM DB auth, one security-definer function| Jobs[(Jobs public projection)]
+```
+
+Only the requested/canonical public UUIDs, reversible-alias flag, company display name, title,
+locations, optional department, plain-text description, and bounded
+observation/verification/expiry timestamps cross this boundary. Candidate data, provider/source
+URLs and identifiers, raw snapshots, moderation/audit fields, verified domains, search cursors,
+and database credentials do not. Warm caches contain only the same projection or generic absence
+and never serve stale data after a read error. Crawlability remains off by default. The Lambda
+role's exact-key KMS decrypt grant supports automatic environment decryption only; an
+explicit source-function condition denies KMS decrypt calls from the anonymous function code.
+The migration
+proves table/schema/temp least privilege inside the application database and defaults the dedicated
+session to read-only, but it does not revoke PostgreSQL cluster-global PUBLIC catalog-function or
+other-database privileges. `public_job_cluster_residual_accepted` therefore remains false by
+default and keeps the route absent until accountable review accepts or remediates both residual
+classes, or approves a stronger cluster/proxy boundary. The database-local read-only setting is
+defense in depth rather than an immutable denial of those catalog capabilities.

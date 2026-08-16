@@ -20,6 +20,10 @@ function expectedRelations(source: RestoreManifestSource): string[] {
 
 function successfulExecutor(source: RestoreManifestSource, count = "0"): RestoreSqlExecutor {
   const relations = expectedRelations(source);
+  const schemas = [
+    ...source.manifest.contributors.flatMap((contributor) => contributor.schemas),
+    "public",
+  ].sort();
   return {
     async unsafe<T extends Record<string, unknown>>(query: string): Promise<T[]> {
       if (query.startsWith("SET LOCAL ")) {
@@ -43,6 +47,9 @@ function successfulExecutor(source: RestoreManifestSource, count = "0"): Restore
           }
           return { schema_name, relation_name } as unknown as T;
         });
+      }
+      if (query.includes("FROM pg_namespace AS namespace")) {
+        return schemas.map((schema_name) => ({ schema_name }) as unknown as T);
       }
       if (query.trimStart().startsWith("SELECT (SELECT count(*)::text")) {
         return [
@@ -71,7 +78,7 @@ describe("current restore manifest", () => {
   it("binds the exact current Profile, Jobs, Documents, Matching, and Billing bytes", async () => {
     const source = loadCurrentRestoreManifest();
 
-    expect(source.manifest.manifestId).toBe("d1-profile-jobs-documents-matching-billing-v1");
+    expect(source.manifest.manifestId).toBe("d1-profile-jobs-public-documents-matching-billing-v1");
     expect(source.manifest.contributors.map((contributor) => contributor.owner)).toEqual([
       "billing",
       "documents",
@@ -88,7 +95,7 @@ describe("current restore manifest", () => {
         (total, contributor) => total + contributor.migrations.length,
         0,
       ),
-    ).toBe(14);
+    ).toBe(15);
     expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 
     for (const contributor of source.manifest.contributors) {
@@ -225,11 +232,11 @@ describe("read-only aggregate restore verification", () => {
 
     expect(transactionModes).toEqual(["read only isolation level repeatable read"]);
     expect(result).toMatchObject({
-      manifestId: "d1-profile-jobs-documents-matching-billing-v1",
+      manifestId: "d1-profile-jobs-public-documents-matching-billing-v1",
       manifestSha256: source.sha256,
       ownerCount: 5,
       relationCount: 39,
-      migrationCount: 14,
+      migrationCount: 15,
     });
     expect(result.aggregateDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.keys(result)).toEqual([
@@ -256,6 +263,7 @@ describe("read-only aggregate restore verification", () => {
   it("builds SELECT-only SQL from the validated manifest", () => {
     const queries = buildRestoreVerificationQueries(loadCurrentRestoreManifest().manifest);
     const statements = [
+      queries.schemas,
       queries.relations,
       ...queries.migrations.map((item) => item.query),
       queries.counts,
@@ -320,6 +328,78 @@ describe("read-only aggregate restore verification", () => {
         source,
       ),
     ).rejects.toThrow("migration boundary mismatch for jobs");
+  });
+
+  it("rejects a missing owned schema even when that schema contains no relations", async () => {
+    const source = loadCurrentRestoreManifest();
+    const baseline = successfulExecutor(source);
+    const missingSchemaExecutor: RestoreSqlExecutor = {
+      async unsafe<T extends Record<string, unknown>>(query: string): Promise<T[]> {
+        const rows = await baseline.unsafe<T>(query);
+        if (query.includes("FROM pg_namespace AS namespace")) {
+          return rows.filter((row) => row.schema_name !== "jobs_public");
+        }
+        return rows;
+      },
+    };
+
+    await expect(
+      verifyRestoreDatabase(
+        {
+          async begin(_options, work) {
+            return work(missingSchemaExecutor);
+          },
+        },
+        source,
+      ),
+    ).rejects.toThrow("schema boundary mismatch");
+  });
+
+  it("rejects an unexpected non-system schema and a relation in permitted public", async () => {
+    const source = loadCurrentRestoreManifest();
+    const baseline = successfulExecutor(source);
+    const extraSchemaExecutor: RestoreSqlExecutor = {
+      async unsafe<T extends Record<string, unknown>>(query: string): Promise<T[]> {
+        const rows = await baseline.unsafe<T>(query);
+        if (query.includes("FROM pg_namespace AS namespace")) {
+          return [...rows, { schema_name: "restore_verifier_unreviewed" } as unknown as T];
+        }
+        return rows;
+      },
+    };
+    await expect(
+      verifyRestoreDatabase(
+        {
+          async begin(_options, work) {
+            return work(extraSchemaExecutor);
+          },
+        },
+        source,
+      ),
+    ).rejects.toThrow("schema boundary mismatch");
+
+    const publicRelationExecutor: RestoreSqlExecutor = {
+      async unsafe<T extends Record<string, unknown>>(query: string): Promise<T[]> {
+        if (query.includes("FROM pg_class AS class")) {
+          const rows = await baseline.unsafe<T>(query);
+          return [
+            ...rows,
+            { schema_name: "public", relation_name: "unreviewed_table" } as unknown as T,
+          ];
+        }
+        return baseline.unsafe<T>(query);
+      },
+    };
+    await expect(
+      verifyRestoreDatabase(
+        {
+          async begin(_options, work) {
+            return work(publicRelationExecutor);
+          },
+        },
+        source,
+      ),
+    ).rejects.toThrow("relation boundary mismatch");
   });
 
   it("changes the digest when aggregate counts differ", async () => {

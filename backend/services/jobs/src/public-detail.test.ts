@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ActiveJobRecord } from "./persistence/catalog.js";
 import {
+  PostgresPublicJobDetailReader,
   PublicJobDetailProjector,
   type PublicJobDetailReader,
   PublicJobDetailUnavailableError,
@@ -45,6 +46,46 @@ function reader(result: ActiveJobRecord | null) {
     getActiveJob: vi.fn<PublicJobDetailReader["getActiveJob"]>().mockResolvedValue(result),
   };
 }
+
+describe("PostgresPublicJobDetailReader", () => {
+  const row = {
+    id: requestedJobId,
+    companyName: "Synthetic Systems",
+    title: "Platform Engineer",
+    locations: ["Remote - US"],
+    department: "Engineering",
+    description: "Public generated-synthetic detail.",
+    status: "active",
+    firstObservedAt: new Date("2026-08-10T12:00:00.000Z"),
+    lastVerifiedAt: new Date("2026-08-16T11:00:00.000Z"),
+    expiresAt: new Date("2026-09-15T12:00:00.000Z"),
+    validThrough: null,
+  };
+
+  it("queries only the isolated public function and maps its singleton projection", async () => {
+    let query = "";
+    const sql = vi.fn((parts: TemplateStringsArray) => {
+      query = parts.join("?");
+      return Promise.resolve([row]);
+    });
+    const publicReader = new PostgresPublicJobDetailReader(sql as never);
+
+    await expect(publicReader.getActiveJob(requestedJobId, now)).resolves.toMatchObject({
+      id: requestedJobId,
+      company: { name: "Synthetic Systems" },
+      status: "active",
+    });
+    expect(query).toContain("FROM jobs_public.read_public_job_detail(?::uuid)");
+    expect(query).not.toMatch(/jobs\.(?:canonical_jobs|companies|job_sources)|raw_snapshot/i);
+  });
+
+  it("rejects an ambiguous function result", async () => {
+    const sql = vi.fn(() => Promise.resolve([row, row]));
+    const publicReader = new PostgresPublicJobDetailReader(sql as never);
+
+    await expect(publicReader.getActiveJob(requestedJobId, now)).rejects.toThrow("ambiguous");
+  });
+});
 
 describe("PublicJobDetailProjector", () => {
   it.each([
@@ -168,6 +209,49 @@ describe("PublicJobDetailProjector", () => {
   it("fails closed for a malformed future verification record", async () => {
     const catalog = reader(activeJob({ lastVerifiedAt: new Date(now.getTime() + 1) }));
     const projector = new PublicJobDetailProjector(catalog, () => now);
+
+    await expect(projector.get(requestedJobId)).rejects.toBeInstanceOf(
+      PublicJobDetailUnavailableError,
+    );
+  });
+
+  it("counts OpenAPI text bounds as Unicode code points", async () => {
+    const astral = "😀";
+    const exact = activeJob({
+      company: { id: canonicalJobId, name: astral.repeat(200) },
+      title: astral.repeat(240),
+      locations: [astral.repeat(240)],
+      department: astral.repeat(200),
+      description: astral.repeat(200_000),
+    });
+    await expect(
+      new PublicJobDetailProjector(reader(exact), () => now).get(requestedJobId),
+    ).resolves.toMatchObject({ kind: "available" });
+
+    for (const record of [
+      activeJob({ company: { id: canonicalJobId, name: astral.repeat(201) } }),
+      activeJob({ title: astral.repeat(241) }),
+      activeJob({ locations: [astral.repeat(241)] }),
+      activeJob({ department: astral.repeat(201) }),
+      activeJob({ description: astral.repeat(200_001) }),
+    ]) {
+      await expect(
+        new PublicJobDetailProjector(reader(record), () => now).get(requestedJobId),
+      ).rejects.toBeInstanceOf(PublicJobDetailUnavailableError);
+    }
+  });
+
+  it.each([
+    { title: "Engineer\u0000Administrator" },
+    { title: "Engineer\u202eAdministrator" },
+    { title: "Engineer\u{e0001}Administrator" },
+    { title: "Engineer\u{e0020}Administrator" },
+    { locations: ["Remote\u001fUS"] },
+    { description: "Public description\u0001with a hidden control" },
+    { description: "Public description\u{e007f}with a hidden control" },
+    { expiresAt: new Date("+012000-01-01T00:00:00.000Z") },
+  ])("fails closed on non-public projection values", async (overrides) => {
+    const projector = new PublicJobDetailProjector(reader(activeJob(overrides)), () => now);
 
     await expect(projector.get(requestedJobId)).rejects.toBeInstanceOf(
       PublicJobDetailUnavailableError,

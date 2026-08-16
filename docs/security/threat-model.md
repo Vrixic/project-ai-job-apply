@@ -96,3 +96,13 @@ Reassess for a new data class, provider, client permission, ATS/source, external
 jurisdiction, trust boundary, authentication/session design, public feature, material incident, or
 control failure. Capability-specific deltas are recorded in the
 [security/privacy approval plan](security-privacy-approval-plan.md).
+
+## D1-009A anonymous-read delta
+
+| Threat | Source control | Residual / release gate |
+|---|---|---|
+| UUID enumeration or scraping exhausts the database | Exact route shape, rate/burst one, Lambda concurrency one, bounded LRU/negative cache, route 4xx/5xx and Lambda alarms | Distributed scraping and managed-edge response shape require live abuse testing before activation |
+| Anonymous runtime compromise reaches candidate/private data, mutates VPC interfaces, or writes Jobs | Separate Lambda, no shared secret, RDS IAM exact resource/user, verified TLS, code-path denial of VPC-management calls, security-definer projection only, direct SQL write/cross-schema refusal tests inside the application database | RDS IAM tokens are not database-name scoped and cluster-global PUBLIC catalog/function capabilities remain; the read-only session default is not an immutable deny. Bootstrap/migration apply and accountable acceptance or remediation of both residual classes, or a separately guarded cluster-wide/dedicated-instance control, block route activation |
+| Host/header injection poisons canonical metadata | Origin-only server configuration; request headers never select canonical host | Approved public hostname ownership remains a human gate |
+| Employer text injects markup or structured-data claims | React text rendering, strict response schema/size, no dangerous HTML and no `JobPosting` JSON-LD | Employer-original date/location/application semantics remain unavailable and unclaimed |
+| Reversible alias is cached as permanent | Temporary redirect with current canonical metadata | Alias lifecycle acceptance must be rerun against deployed current data |

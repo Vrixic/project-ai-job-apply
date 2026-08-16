@@ -329,6 +329,12 @@ resource "aws_iam_policy" "workload_boundary" {
         Resource = "*"
       },
       {
+        Sid      = "ConnectExactPublicJobReader"
+        Effect   = "Allow"
+        Action   = ["rds-db:connect"]
+        Resource = "arn:aws:rds-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:dbuser:*/ai_job_apply_public_job_reader"
+      },
+      {
         Sid    = "ManageLambdaVpcInterfaces"
         Effect = "Allow"
         Action = [
