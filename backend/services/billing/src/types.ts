@@ -1,0 +1,69 @@
+import type { EntitlementPlan } from "@ai-job-apply/domain";
+
+export const coreCapabilities = Object.freeze([
+  "profile.manage",
+  "jobs.search",
+  "jobs.save",
+  "applications.history",
+] as const);
+export const maximumEntitlementVersion = Number.MAX_SAFE_INTEGER;
+export const maximumEntitlementOutboxAttempts = 5;
+
+export type EntitlementCapability = (typeof coreCapabilities)[number];
+export type EntitlementAccessState = "active" | "grace";
+
+interface EntitlementScheduleBase {
+  userId: string;
+  version: number;
+  plan: EntitlementPlan;
+}
+
+export interface ImplicitFreeEntitlementSchedule extends EntitlementScheduleBase {
+  version: 0;
+  plan: "free";
+}
+
+export interface StoredFreeEntitlementSchedule extends EntitlementScheduleBase {
+  accountId: string;
+  plan: "free";
+  effectiveAt: Date;
+}
+
+export interface StoredProEntitlementSchedule extends EntitlementScheduleBase {
+  accountId: string;
+  plan: "pro";
+  effectiveAt: Date;
+  accessThrough: Date;
+  graceThrough?: Date;
+}
+
+export type EntitlementSchedule =
+  | ImplicitFreeEntitlementSchedule
+  | StoredFreeEntitlementSchedule
+  | StoredProEntitlementSchedule;
+
+export type EntitlementEvaluation =
+  | {
+      valid: false;
+      reason: "invalid_clock" | "invalid_schedule";
+      grants: readonly [];
+    }
+  | {
+      valid: true;
+      plan: EntitlementPlan;
+      accessState: EntitlementAccessState;
+      grants: readonly EntitlementCapability[];
+      version: number;
+      evaluatedAt: string;
+      accessThrough?: string;
+      graceThrough?: string;
+    };
+
+export interface EntitlementReader {
+  readEntitlement(userId: string): Promise<EntitlementSchedule>;
+}
+
+export interface EntitlementAuthorizer {
+  evaluate(userId: string, now: Date): Promise<EntitlementEvaluation>;
+  allows(userId: string, capability: string, now: Date): Promise<boolean>;
+}

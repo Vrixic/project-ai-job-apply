@@ -91,4 +91,41 @@ describe("domain schema registry", () => {
     ).toBe(false);
     expect(validate({ ...savedJob, recruiterResponse: "interview" })).toBe(false);
   });
+
+  it("keeps entitlement accounts provider-neutral with exact Free and Pro schedules", async () => {
+    const schema = JSON.parse(
+      await readFile(
+        new URL("../schemas/v1/entitlement-account.schema.json", import.meta.url),
+        "utf8",
+      ),
+    ) as object;
+    const ajv = new Ajv2020({ strict: true });
+    const addFormats = addFormatsModule.default as unknown as (instance: Ajv2020) => Ajv2020;
+    addFormats(ajv);
+    const validate = ajv.compile(schema);
+    const base = {
+      schemaVersion: 1,
+      id: "019d04cf-1f80-7000-8000-000000000020",
+      userId: "019d04cf-1f80-7000-8000-000000000021",
+      version: 1,
+      effectiveAt: "2026-08-15T12:00:00.000Z",
+    };
+
+    expect(validate({ ...base, plan: "free" })).toBe(true);
+    expect(
+      validate({
+        ...base,
+        plan: "pro",
+        accessThrough: "2026-09-15T12:00:00.000Z",
+        graceThrough: "2026-09-18T12:00:00.000Z",
+      }),
+    ).toBe(true);
+    expect(validate({ ...base, plan: "free", accessThrough: "2026-09-15T12:00:00.000Z" })).toBe(
+      false,
+    );
+    expect(validate({ ...base, plan: "pro" })).toBe(false);
+    expect(validate({ ...base, plan: "pro", accessThrough: "not-a-date" })).toBe(false);
+    expect(validate({ ...base, plan: "pro", provider: "stripe" })).toBe(false);
+    expect(validate({ ...base, version: Number.MAX_SAFE_INTEGER + 1, plan: "free" })).toBe(false);
+  });
 });

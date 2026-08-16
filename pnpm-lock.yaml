@@ -103,6 +103,21 @@ importers:
         specifier: 14.0.1
         version: 14.0.1
 
+  backend/services/billing:
+    dependencies:
+      '@ai-job-apply/domain':
+        specifier: workspace:*
+        version: link:../../../packages/domain
+      '@ai-job-apply/event-contracts':
+        specifier: workspace:*
+        version: link:../../../packages/event-contracts
+      postgres:
+        specifier: 3.4.9
+        version: 3.4.9
+      uuid:
+        specifier: 14.0.1
+        version: 14.0.1
+
   backend/services/database-migrations: {}
 
   backend/services/documents:

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ai-job-apply.internal/domain/v1/entitlement-account.schema.json",
+  "title": "EntitlementAccountV1",
+  "type": "object",
+  "required": ["schemaVersion", "id", "userId", "version", "plan", "effectiveAt"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": { "type": "string", "format": "uuid" },
+    "userId": { "type": "string", "format": "uuid" },
+    "version": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+    "plan": { "type": "string", "enum": ["free", "pro"] },
+    "effectiveAt": { "type": "string", "format": "date-time" },
+    "accessThrough": { "type": "string", "format": "date-time" },
+    "graceThrough": { "type": "string", "format": "date-time" }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "plan": { "const": "free" },
+        "accessThrough": false,
+        "graceThrough": false
+      }
+    },
+    {
+      "properties": {
+        "plan": { "const": "pro" },
+        "accessThrough": { "type": "string", "format": "date-time" },
+        "graceThrough": { "type": "string", "format": "date-time" }
+      },
+      "required": ["accessThrough"]
+    }
+  ],
+  "additionalProperties": false
+}

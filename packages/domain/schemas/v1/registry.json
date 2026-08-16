@@ -26,6 +26,12 @@
       "classification": "confidential"
     },
     {
+      "name": "EntitlementAccount",
+      "file": "entitlement-account.schema.json",
+      "owner": "billing",
+      "classification": "confidential"
+    },
+    {
       "name": "FieldDefinition",
       "file": "field-definition.schema.json",
       "owner": "validation",
