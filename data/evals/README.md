@@ -13,3 +13,10 @@ Contains versioned, representative evaluation cases for matching, parsing, docum
 - `rubrics/` — Versioned scoring definitions.
 
 Cases use synthetic or consented/de-identified data and include expected outcomes, not only inputs.
+
+The first executable set is the
+[`D1 match-assessment set`](matching/d1-match-assessment.v1.json). It is generated-synthetic
+scenario coverage for the already selected US-English early/mid-career software, data, and product
+launch segment. It is not a statistical population sample, provider fixture, ranking or calibration
+set, or evidence about hiring outcomes. Its candidate rubric remains pending accountable Product
+and QA approval.

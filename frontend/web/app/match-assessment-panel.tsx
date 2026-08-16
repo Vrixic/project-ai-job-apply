@@ -2,26 +2,7 @@
 
 import type { MatchAssessment } from "@ai-job-apply/api-contracts";
 import { useEffect, useRef, useState } from "react";
-
-const reasonLabels: Record<MatchAssessment["evidence"][number]["reasonCode"], string> = {
-  work_mode_selected: "The job’s stated work mode is one you selected.",
-  work_mode_conflict: "The job’s stated work mode conflicts with your selections.",
-  work_mode_unavailable: "The job does not provide a usable work-mode value.",
-  employment_type_selected: "The job’s stated employment type is one you selected.",
-  employment_type_conflict: "The job’s stated employment type conflicts with your selections.",
-  employment_type_unavailable: "The job does not provide a usable employment-type value.",
-  target_role_exact_overlap: "The normalized job title exactly overlaps a target role.",
-  target_role_not_established: "A target-role match is not established.",
-  location_exact_overlap: "A normalized job location exactly overlaps a preferred location.",
-  location_not_established: "A location match is not established.",
-  compensation_semantics_unavailable:
-    "Compensation cannot be compared because cadence and base-versus-total meaning are unavailable.",
-  authorization_sponsorship_unavailable:
-    "Authorization and sponsorship are not assessed in this general-preferences boundary.",
-  seniority_semantics_unavailable: "Seniority is not yet represented by a comparable taxonomy.",
-  blocked_company_preferences_unavailable: "Blocked-company preferences are not available.",
-  qualification_evidence_unavailable: "Qualification evidence is not assessed by this baseline.",
-};
+import { matchAssessmentNonclaim, matchEvidenceCopy, matchGateCopy } from "./match-assessment-copy";
 
 function problemMessage(code: unknown): string {
   if (code === "match_preferences_required") {
@@ -119,27 +100,16 @@ export function MatchAssessmentPanel({ jobId }: { jobId: string }) {
         {message && <p>{message}</p>}
         {assessment && (
           <div className="match-assessment-result">
-            <strong>
-              {assessment.gate === "excluded"
-                ? "Known preference conflict"
-                : "Review the available evidence"}
-            </strong>
-            <p>
-              {assessment.gate === "excluded"
-                ? "At least one exact stated job attribute conflicts with your saved preferences."
-                : "No exact hard conflict was found in the currently comparable attributes."}
-            </p>
+            <strong>{matchGateCopy[assessment.gate].heading}</strong>
+            <p>{matchGateCopy[assessment.gate].summary}</p>
             <ul>
               {assessment.evidence.map((entry) => (
                 <li key={entry.constraint} data-state={entry.state}>
-                  <span>{entry.state.replace("_", " ")}</span> {reasonLabels[entry.reasonCode]}
+                  <span>{entry.state.replace("_", " ")}</span> {matchEvidenceCopy[entry.reasonCode]}
                 </li>
               ))}
             </ul>
-            <small>
-              This is deterministic evidence, not a score, eligibility decision, ranking, or
-              application outcome. Unknown evidence never counts as a conflict.
-            </small>
+            <small>{matchAssessmentNonclaim}</small>
           </div>
         )}
       </div>

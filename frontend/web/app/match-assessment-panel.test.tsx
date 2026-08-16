@@ -4,6 +4,7 @@ import type { MatchAssessment } from "@ai-job-apply/api-contracts";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { matchAssessmentNonclaim, matchEvidenceCopy, matchGateCopy } from "./match-assessment-copy";
 import { MatchAssessmentPanel } from "./match-assessment-panel";
 
 const JOB_ID = "019d04cf-1f80-7000-8000-000000000012";
@@ -106,6 +107,9 @@ describe("MatchAssessmentPanel", () => {
     expect(container.textContent).toContain("No exact hard conflict");
     expect(container.textContent).toContain("stated work mode is one you selected");
     expect(container.textContent).toContain("Unknown evidence never counts as a conflict");
+    expect(container.textContent).toContain(matchGateCopy.review_required.summary);
+    expect(container.textContent).toContain(matchEvidenceCopy.work_mode_selected);
+    expect(container.textContent).toContain(matchAssessmentNonclaim);
     expect(container.textContent).not.toMatch(/\b\d+%|eligible|strong match/i);
     expect(container.querySelectorAll("li")).toHaveLength(9);
   });

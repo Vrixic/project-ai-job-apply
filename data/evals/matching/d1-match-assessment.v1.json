@@ -1,0 +1,623 @@
+{
+  "schemaVersion": 1,
+  "evaluationSetId": "d1-match-assessment-synthetic-v1",
+  "classification": "generated_synthetic",
+  "approvalState": "pending_product_and_qa_review",
+  "representation": {
+    "geography": "US",
+    "language": "en-US",
+    "roleFamilies": ["software", "data", "product"],
+    "careerStages": ["early", "mid"],
+    "claim": "launch_segment_scenario_coverage_only"
+  },
+  "fixtures": [
+    {
+      "id": "software-early",
+      "roleFamily": "software",
+      "careerStage": "early",
+      "preferences": {
+        "id": "019d04cf-1f80-7000-8000-000000000101",
+        "version": 1,
+        "updatedAt": "2026-08-16T10:00:00.000Z",
+        "targetRoles": ["Software Engineer"],
+        "locations": ["New York, NY"],
+        "workModes": ["remote"],
+        "employmentTypes": ["full_time"]
+      },
+      "job": {
+        "id": "019d04cf-1f80-7000-8000-000000000201",
+        "catalogRevision": "101",
+        "eligibleThrough": "2026-09-16T10:00:00.000Z",
+        "title": "Software Engineer",
+        "locations": ["New York, NY"],
+        "workMode": "remote",
+        "employmentType": "full_time"
+      }
+    },
+    {
+      "id": "software-mid",
+      "roleFamily": "software",
+      "careerStage": "mid",
+      "preferences": {
+        "id": "019d04cf-1f80-7000-8000-000000000102",
+        "version": 1,
+        "updatedAt": "2026-08-16T10:00:00.000Z",
+        "targetRoles": ["Platform Engineer"],
+        "locations": ["Austin, TX"],
+        "workModes": ["hybrid"],
+        "employmentTypes": ["contract"]
+      },
+      "job": {
+        "id": "019d04cf-1f80-7000-8000-000000000202",
+        "catalogRevision": "102",
+        "eligibleThrough": "2026-09-16T10:00:00.000Z",
+        "title": "Platform Engineer",
+        "locations": ["Austin, TX"],
+        "workMode": "hybrid",
+        "employmentType": "contract"
+      }
+    },
+    {
+      "id": "data-early",
+      "roleFamily": "data",
+      "careerStage": "early",
+      "preferences": {
+        "id": "019d04cf-1f80-7000-8000-000000000103",
+        "version": 1,
+        "updatedAt": "2026-08-16T10:00:00.000Z",
+        "targetRoles": ["Data Analyst"],
+        "locations": ["Chicago, IL"],
+        "workModes": ["on_site"],
+        "employmentTypes": ["internship"]
+      },
+      "job": {
+        "id": "019d04cf-1f80-7000-8000-000000000203",
+        "catalogRevision": "103",
+        "eligibleThrough": "2026-09-16T10:00:00.000Z",
+        "title": "Data Analyst",
+        "locations": ["Chicago, IL"],
+        "workMode": "on_site",
+        "employmentType": "internship"
+      }
+    },
+    {
+      "id": "data-mid",
+      "roleFamily": "data",
+      "careerStage": "mid",
+      "preferences": {
+        "id": "019d04cf-1f80-7000-8000-000000000104",
+        "version": 1,
+        "updatedAt": "2026-08-16T10:00:00.000Z",
+        "targetRoles": ["Data Engineer"],
+        "locations": ["Remote - US"],
+        "workModes": ["remote"],
+        "employmentTypes": ["full_time"]
+      },
+      "job": {
+        "id": "019d04cf-1f80-7000-8000-000000000204",
+        "catalogRevision": "104",
+        "eligibleThrough": "2026-09-16T10:00:00.000Z",
+        "title": "Data Engineer",
+        "locations": ["Remote - US"],
+        "workMode": "remote",
+        "employmentType": "full_time"
+      }
+    },
+    {
+      "id": "product-early",
+      "roleFamily": "product",
+      "careerStage": "early",
+      "preferences": {
+        "id": "019d04cf-1f80-7000-8000-000000000105",
+        "version": 1,
+        "updatedAt": "2026-08-16T10:00:00.000Z",
+        "targetRoles": ["Associate Product Manager"],
+        "locations": ["Boston, MA"],
+        "workModes": ["hybrid"],
+        "employmentTypes": ["part_time"]
+      },
+      "job": {
+        "id": "019d04cf-1f80-7000-8000-000000000205",
+        "catalogRevision": "105",
+        "eligibleThrough": "2026-09-16T10:00:00.000Z",
+        "title": "Associate Product Manager",
+        "locations": ["Boston, MA"],
+        "workMode": "hybrid",
+        "employmentType": "part_time"
+      }
+    },
+    {
+      "id": "product-mid",
+      "roleFamily": "product",
+      "careerStage": "mid",
+      "preferences": {
+        "id": "019d04cf-1f80-7000-8000-000000000106",
+        "version": 1,
+        "updatedAt": "2026-08-16T10:00:00.000Z",
+        "targetRoles": ["Product Manager"],
+        "locations": ["Seattle, WA"],
+        "workModes": ["on_site"],
+        "employmentTypes": ["full_time"]
+      },
+      "job": {
+        "id": "019d04cf-1f80-7000-8000-000000000206",
+        "catalogRevision": "106",
+        "eligibleThrough": "2026-09-16T10:00:00.000Z",
+        "title": "Product Manager",
+        "locations": ["Seattle, WA"],
+        "workMode": "on_site",
+        "employmentType": "full_time"
+      }
+    }
+  ],
+  "expectations": [
+    {
+      "id": "aligned",
+      "outcome": "assessment",
+      "gate": "review_required",
+      "evidence": [
+        ["work_mode", "satisfied", "work_mode_selected"],
+        ["employment_type", "satisfied", "employment_type_selected"],
+        ["target_role", "satisfied", "target_role_exact_overlap"],
+        ["location", "satisfied", "location_exact_overlap"],
+        ["compensation", "unknown", "compensation_semantics_unavailable"],
+        ["authorization_sponsorship", "unknown", "authorization_sponsorship_unavailable"],
+        ["seniority", "unknown", "seniority_semantics_unavailable"],
+        ["blocked_company", "unknown", "blocked_company_preferences_unavailable"],
+        ["qualifications", "unknown", "qualification_evidence_unavailable"]
+      ]
+    },
+    {
+      "id": "work-conflict",
+      "outcome": "assessment",
+      "gate": "excluded",
+      "evidence": [
+        ["work_mode", "conflict", "work_mode_conflict"],
+        ["employment_type", "satisfied", "employment_type_selected"],
+        ["target_role", "satisfied", "target_role_exact_overlap"],
+        ["location", "satisfied", "location_exact_overlap"],
+        ["compensation", "unknown", "compensation_semantics_unavailable"],
+        ["authorization_sponsorship", "unknown", "authorization_sponsorship_unavailable"],
+        ["seniority", "unknown", "seniority_semantics_unavailable"],
+        ["blocked_company", "unknown", "blocked_company_preferences_unavailable"],
+        ["qualifications", "unknown", "qualification_evidence_unavailable"]
+      ]
+    },
+    {
+      "id": "employment-conflict",
+      "outcome": "assessment",
+      "gate": "excluded",
+      "evidence": [
+        ["work_mode", "satisfied", "work_mode_selected"],
+        ["employment_type", "conflict", "employment_type_conflict"],
+        ["target_role", "satisfied", "target_role_exact_overlap"],
+        ["location", "satisfied", "location_exact_overlap"],
+        ["compensation", "unknown", "compensation_semantics_unavailable"],
+        ["authorization_sponsorship", "unknown", "authorization_sponsorship_unavailable"],
+        ["seniority", "unknown", "seniority_semantics_unavailable"],
+        ["blocked_company", "unknown", "blocked_company_preferences_unavailable"],
+        ["qualifications", "unknown", "qualification_evidence_unavailable"]
+      ]
+    },
+    {
+      "id": "sparse",
+      "outcome": "assessment",
+      "gate": "review_required",
+      "evidence": [
+        ["work_mode", "unknown", "work_mode_unavailable"],
+        ["employment_type", "unknown", "employment_type_unavailable"],
+        ["target_role", "unknown", "target_role_not_established"],
+        ["location", "unknown", "location_not_established"],
+        ["compensation", "unknown", "compensation_semantics_unavailable"],
+        ["authorization_sponsorship", "unknown", "authorization_sponsorship_unavailable"],
+        ["seniority", "unknown", "seniority_semantics_unavailable"],
+        ["blocked_company", "unknown", "blocked_company_preferences_unavailable"],
+        ["qualifications", "unknown", "qualification_evidence_unavailable"]
+      ]
+    },
+    {
+      "id": "work-unknown",
+      "outcome": "assessment",
+      "gate": "review_required",
+      "evidence": [
+        ["work_mode", "unknown", "work_mode_unavailable"],
+        ["employment_type", "satisfied", "employment_type_selected"],
+        ["target_role", "satisfied", "target_role_exact_overlap"],
+        ["location", "satisfied", "location_exact_overlap"],
+        ["compensation", "unknown", "compensation_semantics_unavailable"],
+        ["authorization_sponsorship", "unknown", "authorization_sponsorship_unavailable"],
+        ["seniority", "unknown", "seniority_semantics_unavailable"],
+        ["blocked_company", "unknown", "blocked_company_preferences_unavailable"],
+        ["qualifications", "unknown", "qualification_evidence_unavailable"]
+      ]
+    },
+    {
+      "id": "employment-unknown",
+      "outcome": "assessment",
+      "gate": "review_required",
+      "evidence": [
+        ["work_mode", "satisfied", "work_mode_selected"],
+        ["employment_type", "unknown", "employment_type_unavailable"],
+        ["target_role", "satisfied", "target_role_exact_overlap"],
+        ["location", "satisfied", "location_exact_overlap"],
+        ["compensation", "unknown", "compensation_semantics_unavailable"],
+        ["authorization_sponsorship", "unknown", "authorization_sponsorship_unavailable"],
+        ["seniority", "unknown", "seniority_semantics_unavailable"],
+        ["blocked_company", "unknown", "blocked_company_preferences_unavailable"],
+        ["qualifications", "unknown", "qualification_evidence_unavailable"]
+      ]
+    },
+    {
+      "id": "title-not-established",
+      "outcome": "assessment",
+      "gate": "review_required",
+      "evidence": [
+        ["work_mode", "satisfied", "work_mode_selected"],
+        ["employment_type", "satisfied", "employment_type_selected"],
+        ["target_role", "unknown", "target_role_not_established"],
+        ["location", "satisfied", "location_exact_overlap"],
+        ["compensation", "unknown", "compensation_semantics_unavailable"],
+        ["authorization_sponsorship", "unknown", "authorization_sponsorship_unavailable"],
+        ["seniority", "unknown", "seniority_semantics_unavailable"],
+        ["blocked_company", "unknown", "blocked_company_preferences_unavailable"],
+        ["qualifications", "unknown", "qualification_evidence_unavailable"]
+      ]
+    },
+    {
+      "id": "location-not-established",
+      "outcome": "assessment",
+      "gate": "review_required",
+      "evidence": [
+        ["work_mode", "satisfied", "work_mode_selected"],
+        ["employment_type", "satisfied", "employment_type_selected"],
+        ["target_role", "satisfied", "target_role_exact_overlap"],
+        ["location", "unknown", "location_not_established"],
+        ["compensation", "unknown", "compensation_semantics_unavailable"],
+        ["authorization_sponsorship", "unknown", "authorization_sponsorship_unavailable"],
+        ["seniority", "unknown", "seniority_semantics_unavailable"],
+        ["blocked_company", "unknown", "blocked_company_preferences_unavailable"],
+        ["qualifications", "unknown", "qualification_evidence_unavailable"]
+      ]
+    },
+    {
+      "id": "dual-conflict",
+      "outcome": "assessment",
+      "gate": "excluded",
+      "evidence": [
+        ["work_mode", "conflict", "work_mode_conflict"],
+        ["employment_type", "conflict", "employment_type_conflict"],
+        ["target_role", "satisfied", "target_role_exact_overlap"],
+        ["location", "satisfied", "location_exact_overlap"],
+        ["compensation", "unknown", "compensation_semantics_unavailable"],
+        ["authorization_sponsorship", "unknown", "authorization_sponsorship_unavailable"],
+        ["seniority", "unknown", "seniority_semantics_unavailable"],
+        ["blocked_company", "unknown", "blocked_company_preferences_unavailable"],
+        ["qualifications", "unknown", "qualification_evidence_unavailable"]
+      ]
+    },
+    {
+      "id": "restricted-unavailable",
+      "outcome": "restricted_preference_requires_review"
+    }
+  ],
+  "cases": [
+    {
+      "id": "core-software-early-aligned",
+      "kind": "core",
+      "fixtureId": "software-early",
+      "scenario": "aligned",
+      "expectationId": "aligned"
+    },
+    {
+      "id": "core-software-early-work-conflict",
+      "kind": "core",
+      "fixtureId": "software-early",
+      "scenario": "work_conflict",
+      "jobPatch": { "workMode": "hybrid" },
+      "expectationId": "work-conflict"
+    },
+    {
+      "id": "core-software-early-employment-conflict",
+      "kind": "core",
+      "fixtureId": "software-early",
+      "scenario": "employment_conflict",
+      "jobPatch": { "employmentType": "contract" },
+      "expectationId": "employment-conflict"
+    },
+    {
+      "id": "core-software-early-sparse",
+      "kind": "core",
+      "fixtureId": "software-early",
+      "scenario": "sparse_semantic_near",
+      "jobPatch": {
+        "title": "Software Engineer I",
+        "locations": ["New York City, NY"],
+        "workMode": "unknown",
+        "employmentType": "unknown"
+      },
+      "expectationId": "sparse"
+    },
+
+    {
+      "id": "core-software-mid-aligned",
+      "kind": "core",
+      "fixtureId": "software-mid",
+      "scenario": "aligned",
+      "expectationId": "aligned"
+    },
+    {
+      "id": "core-software-mid-work-conflict",
+      "kind": "core",
+      "fixtureId": "software-mid",
+      "scenario": "work_conflict",
+      "jobPatch": { "workMode": "on_site" },
+      "expectationId": "work-conflict"
+    },
+    {
+      "id": "core-software-mid-employment-conflict",
+      "kind": "core",
+      "fixtureId": "software-mid",
+      "scenario": "employment_conflict",
+      "jobPatch": { "employmentType": "full_time" },
+      "expectationId": "employment-conflict"
+    },
+    {
+      "id": "core-software-mid-sparse",
+      "kind": "core",
+      "fixtureId": "software-mid",
+      "scenario": "sparse_semantic_near",
+      "jobPatch": {
+        "title": "Senior Platform Engineer",
+        "locations": ["Greater Austin Area"],
+        "workMode": "unknown",
+        "employmentType": "unknown"
+      },
+      "expectationId": "sparse"
+    },
+
+    {
+      "id": "core-data-early-aligned",
+      "kind": "core",
+      "fixtureId": "data-early",
+      "scenario": "aligned",
+      "expectationId": "aligned"
+    },
+    {
+      "id": "core-data-early-work-conflict",
+      "kind": "core",
+      "fixtureId": "data-early",
+      "scenario": "work_conflict",
+      "jobPatch": { "workMode": "remote" },
+      "expectationId": "work-conflict"
+    },
+    {
+      "id": "core-data-early-employment-conflict",
+      "kind": "core",
+      "fixtureId": "data-early",
+      "scenario": "employment_conflict",
+      "jobPatch": { "employmentType": "full_time" },
+      "expectationId": "employment-conflict"
+    },
+    {
+      "id": "core-data-early-sparse",
+      "kind": "core",
+      "fixtureId": "data-early",
+      "scenario": "sparse_semantic_near",
+      "jobPatch": {
+        "title": "Business Data Analyst",
+        "locations": ["Chicagoland"],
+        "workMode": "unknown",
+        "employmentType": "unknown"
+      },
+      "expectationId": "sparse"
+    },
+
+    {
+      "id": "core-data-mid-aligned",
+      "kind": "core",
+      "fixtureId": "data-mid",
+      "scenario": "aligned",
+      "expectationId": "aligned"
+    },
+    {
+      "id": "core-data-mid-work-conflict",
+      "kind": "core",
+      "fixtureId": "data-mid",
+      "scenario": "work_conflict",
+      "jobPatch": { "workMode": "hybrid" },
+      "expectationId": "work-conflict"
+    },
+    {
+      "id": "core-data-mid-employment-conflict",
+      "kind": "core",
+      "fixtureId": "data-mid",
+      "scenario": "employment_conflict",
+      "jobPatch": { "employmentType": "contract" },
+      "expectationId": "employment-conflict"
+    },
+    {
+      "id": "core-data-mid-sparse",
+      "kind": "core",
+      "fixtureId": "data-mid",
+      "scenario": "sparse_semantic_near",
+      "jobPatch": {
+        "title": "Data Platform Engineer",
+        "locations": ["United States"],
+        "workMode": "unknown",
+        "employmentType": "unknown"
+      },
+      "expectationId": "sparse"
+    },
+
+    {
+      "id": "core-product-early-aligned",
+      "kind": "core",
+      "fixtureId": "product-early",
+      "scenario": "aligned",
+      "expectationId": "aligned"
+    },
+    {
+      "id": "core-product-early-work-conflict",
+      "kind": "core",
+      "fixtureId": "product-early",
+      "scenario": "work_conflict",
+      "jobPatch": { "workMode": "on_site" },
+      "expectationId": "work-conflict"
+    },
+    {
+      "id": "core-product-early-employment-conflict",
+      "kind": "core",
+      "fixtureId": "product-early",
+      "scenario": "employment_conflict",
+      "jobPatch": { "employmentType": "full_time" },
+      "expectationId": "employment-conflict"
+    },
+    {
+      "id": "core-product-early-sparse",
+      "kind": "core",
+      "fixtureId": "product-early",
+      "scenario": "sparse_semantic_near",
+      "jobPatch": {
+        "title": "Product Manager",
+        "locations": ["Greater Boston"],
+        "workMode": "unknown",
+        "employmentType": "unknown"
+      },
+      "expectationId": "sparse"
+    },
+
+    {
+      "id": "core-product-mid-aligned",
+      "kind": "core",
+      "fixtureId": "product-mid",
+      "scenario": "aligned",
+      "expectationId": "aligned"
+    },
+    {
+      "id": "core-product-mid-work-conflict",
+      "kind": "core",
+      "fixtureId": "product-mid",
+      "scenario": "work_conflict",
+      "jobPatch": { "workMode": "remote" },
+      "expectationId": "work-conflict"
+    },
+    {
+      "id": "core-product-mid-employment-conflict",
+      "kind": "core",
+      "fixtureId": "product-mid",
+      "scenario": "employment_conflict",
+      "jobPatch": { "employmentType": "contract" },
+      "expectationId": "employment-conflict"
+    },
+    {
+      "id": "core-product-mid-sparse",
+      "kind": "core",
+      "fixtureId": "product-mid",
+      "scenario": "sparse_semantic_near",
+      "jobPatch": {
+        "title": "Technical Product Manager",
+        "locations": ["Seattle Metro"],
+        "workMode": "unknown",
+        "employmentType": "unknown"
+      },
+      "expectationId": "sparse"
+    },
+
+    {
+      "id": "guard-work-mode-unknown",
+      "kind": "guardrail",
+      "fixtureId": "software-early",
+      "scenario": "work_mode_unknown",
+      "jobPatch": { "workMode": "unknown" },
+      "expectationId": "work-unknown"
+    },
+    {
+      "id": "guard-work-mode-absent",
+      "kind": "guardrail",
+      "fixtureId": "software-early",
+      "scenario": "work_mode_absent",
+      "unsetJobFields": ["workMode"],
+      "expectationId": "work-unknown"
+    },
+    {
+      "id": "guard-employment-type-unknown",
+      "kind": "guardrail",
+      "fixtureId": "software-early",
+      "scenario": "employment_type_unknown",
+      "jobPatch": { "employmentType": "unknown" },
+      "expectationId": "employment-unknown"
+    },
+    {
+      "id": "guard-employment-type-absent",
+      "kind": "guardrail",
+      "fixtureId": "software-early",
+      "scenario": "employment_type_absent",
+      "unsetJobFields": ["employmentType"],
+      "expectationId": "employment-unknown"
+    },
+    {
+      "id": "guard-title-normalization",
+      "kind": "guardrail",
+      "fixtureId": "software-early",
+      "scenario": "title_nfkc_case_space",
+      "jobPatch": { "title": "  SOFTWARE ENGINEER  " },
+      "expectationId": "aligned"
+    },
+    {
+      "id": "guard-location-normalization",
+      "kind": "guardrail",
+      "fixtureId": "software-early",
+      "scenario": "location_nfkc_case_space",
+      "jobPatch": { "locations": ["  NEW YORK,   NY  "] },
+      "expectationId": "aligned"
+    },
+    {
+      "id": "guard-title-semantic-near",
+      "kind": "guardrail",
+      "fixtureId": "software-early",
+      "scenario": "title_semantic_near",
+      "jobPatch": { "title": "Software Engineer I" },
+      "expectationId": "title-not-established"
+    },
+    {
+      "id": "guard-location-semantic-near",
+      "kind": "guardrail",
+      "fixtureId": "software-early",
+      "scenario": "location_semantic_near",
+      "jobPatch": { "locations": ["New York City, NY"] },
+      "expectationId": "location-not-established"
+    },
+    {
+      "id": "guard-compensation-pair",
+      "kind": "guardrail",
+      "fixtureId": "software-early",
+      "scenario": "compensation_pair_unavailable",
+      "preferencePatch": { "salaryMinimum": 120000, "salaryCurrency": "USD" },
+      "expectationId": "aligned"
+    },
+    {
+      "id": "guard-dual-conflict",
+      "kind": "guardrail",
+      "fixtureId": "software-early",
+      "scenario": "dual_exact_conflict",
+      "jobPatch": { "workMode": "hybrid", "employmentType": "contract" },
+      "expectationId": "dual-conflict"
+    },
+    {
+      "id": "guard-legacy-sponsorship-true",
+      "kind": "guardrail",
+      "fixtureId": "software-early",
+      "scenario": "legacy_sponsorship_true",
+      "preferencePatch": { "requiresSponsorship": true },
+      "expectationId": "restricted-unavailable"
+    },
+    {
+      "id": "guard-legacy-sponsorship-false",
+      "kind": "guardrail",
+      "fixtureId": "software-early",
+      "scenario": "legacy_sponsorship_false",
+      "preferencePatch": { "requiresSponsorship": false },
+      "expectationId": "restricted-unavailable"
+    }
+  ]
+}
