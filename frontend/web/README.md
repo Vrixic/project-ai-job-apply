@@ -98,4 +98,11 @@ The first catalog-discovery slice adds a responsive, labelled search form and co
 summaries. The browser sends supported keywords and title, company, location, or freshness filters
 only in a bounded JSON body to a narrow server-side BFF. Auth0 tokens remain server-held, raw query
 strings are rejected, and pagination uses the API's opaque cursor. Results are explicitly
-non-personalized; saved jobs and profile matching remain separate future slices.
+non-personalized and do not use profile facts.
+
+The saved-job source slice adds a server-held-session BFF, per-result Save control, and a private
+owner-scoped list with removal. Historical bounded snapshots remain visible when a posting is no
+longer active, and each explicit requested target remains independent. The UI requests the
+distinct `jobs:write` permission but does not grant it: the managed Auth0/Terraform permission,
+deployment, and live browser acceptance remain later gates. No matching score, explanation, or
+application/post-submission state is shown or inferred.

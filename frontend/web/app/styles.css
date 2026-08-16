@@ -46,7 +46,8 @@ form,
 .result,
 aside,
 .profile-facts,
-.job-search {
+.job-search,
+.saved-jobs {
   margin-top: 32px;
   padding: 24px;
   border: 1px solid #cedbd3;
@@ -214,7 +215,8 @@ aside {
   background: #f8fbf9;
 }
 
-.job-search {
+.job-search,
+.saved-jobs {
   background: #f8fbf9;
 }
 
@@ -301,6 +303,10 @@ aside {
   border: 1px solid #8aa195;
   background: transparent;
   color: #14633e;
+}
+
+.job-results article > .secondary-button {
+  margin-top: 12px;
 }
 
 .compact-form {

@@ -746,6 +746,16 @@ describeWithDatabase("PostgresJobCatalog", () => {
       "greenhouse",
       "other",
     ]);
+    const collapsedBatch = await catalog.resolveActiveJobSummaries(
+      [first.job.id, second.job.id],
+      reviewedAt,
+    );
+    expect(collapsedBatch.items.map((item) => item.requestedJobId).sort()).toEqual(
+      [first.job.id, second.job.id].sort(),
+    );
+    expect(new Set(collapsedBatch.items.map((item) => item.job.id))).toEqual(
+      new Set([first.job.id]),
+    );
 
     const reopened = await catalog.reopenDuplicateCandidate({
       jobId: first.job.id,
@@ -759,6 +769,16 @@ describeWithDatabase("PostgresJobCatalog", () => {
     expect(await catalog.resolveCanonicalJobId(second.job.id)).toBe(second.job.id);
     expect((await catalog.getActiveJob(first.job.id, reviewedAt))?.sources).toHaveLength(1);
     expect((await catalog.getActiveJob(second.job.id, reviewedAt))?.sources).toHaveLength(1);
+    const reopenedBatch = await catalog.resolveActiveJobSummaries(
+      [first.job.id, second.job.id],
+      reviewedAt,
+    );
+    expect(reopenedBatch.items.map((item) => [item.requestedJobId, item.job.id]).sort()).toEqual(
+      [
+        [first.job.id, first.job.id],
+        [second.job.id, second.job.id],
+      ].sort(),
+    );
 
     const related = await catalog.reviewDuplicateCandidate({
       jobId: first.job.id,

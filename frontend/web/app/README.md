@@ -14,6 +14,13 @@ The D1 job-search panel posts bounded filters through `api/platform/jobs/search`
 active canonical summaries, and follows opaque keyset cursors. Search values never enter the
 gateway URL, and the panel makes no personalized-match claim.
 
+`api/platform/saved-jobs` exposes strict server-side create, keyset-page, and delete forwarding.
+The candidate page keeps each distinct requested target owner-private, renders the bounded historical
+snapshot
+when the current job is unavailable, and aborts/versions requests across refresh and authentication
+transitions. Source requests `jobs:write`, but the managed permission grant and deployment remain
+outside this packet; no matching or explanation behavior is implied.
+
 The local-only expanded onboarding page uses array-backed repeated editors for target roles and
 optional locations, preserving entry boundaries, commas, and line breaks while trimming entry
 edges and deduplicating exact entries. Work modes and employment types are explicit multi-choice

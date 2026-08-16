@@ -4,6 +4,7 @@ import {
   auth0CallbackResponse,
   getAuth0Client,
   isAuth0Configured,
+  requestedAuthScopes,
 } from "./auth0";
 
 const configuredEnvironment = {
@@ -24,6 +25,12 @@ describe("Auth0 web configuration", () => {
   it("accepts a complete localhost development configuration", () => {
     expect(isAuth0Configured(configuredEnvironment)).toBe(true);
     expect(getAuth0Client(configuredEnvironment)).toBeDefined();
+  });
+
+  it("requests distinct read and write permissions for candidate job state", () => {
+    expect(requestedAuthScopes.split(" ")).toEqual(
+      expect.arrayContaining(["jobs:read", "jobs:write"]),
+    );
   });
 
   it("rejects unsafe domains, weak session secrets, and non-local HTTP origins", () => {

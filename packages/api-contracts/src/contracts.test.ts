@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compileComponentValidator } from "./index.js";
+import { compileComponentValidator, contract } from "./index.js";
 
 describe("PutJobPreferencesRequest", () => {
   const validate = compileComponentValidator("PutJobPreferencesRequest");
@@ -120,6 +120,88 @@ describe("job search contracts", () => {
     expect(validatePage({ items: [{ ...summary, description: "not returned by search" }] })).toBe(
       false,
     );
+  });
+});
+
+describe("saved-job contracts", () => {
+  const validateCreate = compileComponentValidator("CreateSavedJobRequest");
+  const validateSearch = compileComponentValidator("SavedJobSearchRequest");
+  const validatePage = compileComponentValidator("SavedJobPage");
+  const savedJob = {
+    id: "018f92b0-4ad7-7b1d-8f44-b7ae694c85c3",
+    requestedJobId: "018f92b0-4ad7-7b1d-8f44-b7ae694c85c1",
+    snapshot: {
+      jobIdAtSave: "018f92b0-4ad7-7b1d-8f44-b7ae694c85c1",
+      company: {
+        id: "018f92b0-4ad7-7b1d-8f44-b7ae694c85c2",
+        name: "Synthetic Company",
+      },
+      title: "Software Engineer",
+      locations: ["Remote - US"],
+      firstObservedAt: "2026-08-11T12:00:00.000Z",
+      lastVerifiedAt: "2026-08-11T12:00:00.000Z",
+      expiresAt: "2026-09-10T12:00:00.000Z",
+    },
+    availability: {
+      state: "available",
+      currentJob: {
+        id: "018f92b0-4ad7-7b1d-8f44-b7ae694c85c1",
+        company: {
+          id: "018f92b0-4ad7-7b1d-8f44-b7ae694c85c2",
+          name: "Synthetic Company",
+        },
+        title: "Software Engineer",
+        locations: ["Remote - US"],
+        status: "active",
+        firstObservedAt: "2026-08-11T12:00:00.000Z",
+        lastVerifiedAt: "2026-08-11T12:00:00.000Z",
+        expiresAt: "2026-09-10T12:00:00.000Z",
+      },
+    },
+    savedAt: "2026-08-15T12:00:00.000Z",
+  };
+
+  it("accepts bounded owner-private commands and pages", () => {
+    expect(validateCreate({ jobId: savedJob.requestedJobId })).toBe(true);
+    expect(validateSearch({ pageSize: 25 })).toBe(true);
+    expect(validatePage({ items: [savedJob], nextCursor: "opaque_cursor.signature" })).toBe(true);
+  });
+
+  it("separates read and mutation permissions", () => {
+    expect(contract.paths["/jobs/search"].post.security).toEqual([{ oidc: ["jobs:read"] }]);
+    expect(contract.paths["/saved-jobs/search"].post.security).toEqual([{ oidc: ["jobs:read"] }]);
+    expect(contract.paths["/saved-jobs"].post.security).toEqual([{ oidc: ["jobs:write"] }]);
+    expect(contract.paths["/saved-jobs/{savedJobId}"].delete.security).toEqual([
+      { oidc: ["jobs:write"] },
+    ]);
+    expect(
+      contract.paths["/saved-jobs"].post.responses["201"].headers["Cache-Control"].schema.enum,
+    ).toEqual(["no-store"]);
+    expect(
+      contract.paths["/saved-jobs/{savedJobId}"].delete.responses["204"].headers["Cache-Control"]
+        .schema.enum,
+    ).toEqual(["no-store"]);
+  });
+
+  it("rejects owner injection, terminal snapshots, and post-submission outcomes", () => {
+    expect(validateCreate({ jobId: savedJob.requestedJobId, ownerUserId: savedJob.id })).toBe(
+      false,
+    );
+    expect(validateSearch({ pageSize: 26 })).toBe(false);
+    expect(
+      validatePage({
+        items: [
+          {
+            ...savedJob,
+            availability: {
+              state: "available",
+              currentJob: { ...savedJob.availability.currentJob, status: "expired" },
+            },
+          },
+        ],
+      }),
+    ).toBe(false);
+    expect(validatePage({ items: [{ ...savedJob, recruiterResponse: "interview" }] })).toBe(false);
   });
 });
 

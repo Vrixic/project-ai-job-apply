@@ -12,6 +12,11 @@ import {
   UnavailableDocumentStore,
 } from "@ai-job-apply/documents-service";
 import { PostgresJobCatalog } from "@ai-job-apply/jobs-service";
+import {
+  deriveSavedJobCursorKeys,
+  PostgresSavedJobStore,
+  SavedJobsService,
+} from "@ai-job-apply/matching-service";
 import { createLogger, initializeTelemetry } from "@ai-job-apply/observability";
 import {
   createDatabase,
@@ -28,6 +33,7 @@ import type {
 import { createGatewayApplication } from "./application.js";
 import { MAXIMUM_GATEWAY_BODY_BYTES } from "./gateway-boundary.js";
 import { deriveJobSearchCursorKeys } from "./job-search-cursor-key.js";
+import { JobCatalogSavedJobResolver } from "./saved-job-catalog-resolver.js";
 import { SqsOutboxNudgePublisher } from "./sqs-outbox-nudge-publisher.js";
 
 type JwtClaimValue = string | number | boolean | string[] | undefined;
@@ -96,6 +102,8 @@ const PROTECTED_EXACT_ROUTES = new Set([
   "GET /v1/resumes",
   "POST /v1/resumes/uploads",
   "POST /v1/jobs/search",
+  "POST /v1/saved-jobs",
+  "POST /v1/saved-jobs/search",
 ]);
 const OPERATION_PATH_PATTERN =
   /^\/v1\/operations\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -103,6 +111,8 @@ const JOB_PATH_PATTERN =
   /^\/v1\/jobs\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PROFILE_FACT_PATH_PATTERN =
   /^\/v1\/profile\/facts\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const SAVED_JOB_PATH_PATTERN =
+  /^\/v1\/saved-jobs\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
   "content-length",
@@ -132,6 +142,9 @@ function allowedRoute(method: string, path: string): AllowedRoute | undefined {
     return { acceptsBody: true, protected: true };
   }
   if (method === "GET" && (OPERATION_PATH_PATTERN.test(path) || JOB_PATH_PATTERN.test(path))) {
+    return { acceptsBody: false, protected: true };
+  }
+  if (method === "DELETE" && SAVED_JOB_PATH_PATTERN.test(path)) {
     return { acceptsBody: false, protected: true };
   }
   return undefined;
@@ -511,6 +524,11 @@ async function createConfiguredApplication(
   const catalog = new PostgresJobCatalog(database.client, {
     searchCursorKeys: deriveJobSearchCursorKeys(databaseUrl),
   });
+  const savedJobs = new SavedJobsService(
+    new PostgresSavedJobStore(database.client),
+    new JobCatalogSavedJobResolver(catalog),
+    deriveSavedJobCursorKeys(databaseUrl),
+  );
   const documents =
     config.DOCUMENT_UPLOAD_BUCKET && config.DOCUMENT_UPLOAD_KMS_KEY_ARN
       ? new PostgresDocumentStore(
@@ -524,6 +542,7 @@ async function createConfiguredApplication(
   return createGatewayApplication({
     store,
     catalog,
+    savedJobs,
     documents,
     verifier: principalBridge.verifier,
     releaseSha: config.RELEASE_SHA,

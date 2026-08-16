@@ -93,8 +93,18 @@ export interface ActiveJobSearchPage {
   nextCursor?: string;
 }
 
+export interface ActiveJobSummaryResolutionPage {
+  catalogRevision: string;
+  items: Array<{ requestedJobId: string; job: ActiveJobSummaryRecord }>;
+}
+
 export interface JobCatalogReader {
   ping(): Promise<void>;
+  getCatalogRevision(): Promise<string>;
+  resolveActiveJobSummaries(
+    jobIds: readonly string[],
+    now?: Date,
+  ): Promise<ActiveJobSummaryResolutionPage>;
   getActiveJob(jobId: string, now?: Date): Promise<ActiveJobRecord | null>;
   searchActiveJobs(input: ActiveJobSearchInput, now?: Date): Promise<ActiveJobSearchPage>;
 }
@@ -941,6 +951,90 @@ export class PostgresJobCatalog {
     if (!result?.catalogPresent) {
       throw new Error("Jobs catalog schema is unavailable");
     }
+  }
+
+  async getCatalogRevision(): Promise<string> {
+    const [state] = await this.client<{ revision: string }[]>`
+      SELECT revision::text AS revision
+      FROM jobs.catalog_search_state
+      WHERE singleton = true
+    `;
+    if (!state) throw new Error("The job catalog revision is unavailable");
+    return state.revision;
+  }
+
+  async resolveActiveJobSummaries(
+    jobIds: readonly string[],
+    now: Date = new Date(),
+  ): Promise<ActiveJobSummaryResolutionPage> {
+    if (jobIds.length < 1 || jobIds.length > 50) {
+      throw new Error("Active job summary resolution requires 1 to 50 identifiers");
+    }
+    if (!Number.isFinite(now.getTime())) throw new RangeError("Active job boundary is invalid");
+    const activeAt = now.toISOString();
+    return this.client.begin("read only isolation level repeatable read", async (transaction) => {
+      const [state] = await transaction<{ revision: string }[]>`
+        SELECT revision::text AS revision
+        FROM jobs.catalog_search_state
+        WHERE singleton = true
+      `;
+      if (!state) throw new Error("The job catalog revision is unavailable");
+      const rows = await transaction<Array<ActiveJobSearchRow & { requestedJobId: string }>>`
+        WITH RECURSIVE requested(requested_id) AS (
+          SELECT unnest(${jobIds as string[]}::uuid[])
+        ), resolution(requested_id, id, path) AS (
+          SELECT requested_id, requested_id, ARRAY[requested_id]
+          FROM requested
+          UNION ALL
+          SELECT resolution.requested_id, duplicate.canonical_job_id,
+            resolution.path || duplicate.canonical_job_id
+          FROM resolution
+          INNER JOIN jobs.duplicate_candidates AS duplicate
+            ON duplicate.resolution = 'exact'
+            AND CASE
+              WHEN duplicate.canonical_job_id = duplicate.job_id THEN duplicate.candidate_job_id
+              ELSE duplicate.job_id
+            END = resolution.id
+          WHERE NOT duplicate.canonical_job_id = ANY(resolution.path)
+        ), canonical AS (
+          SELECT DISTINCT ON (requested_id) requested_id, id
+          FROM resolution
+          ORDER BY requested_id, cardinality(path) DESC
+        )
+        SELECT canonical.requested_id AS "requestedJobId", job.id,
+          company.id AS "companyId", company.display_name AS "companyName",
+          company.verified_domain AS "companyVerifiedDomain", job.title, job.locations,
+          job.department, job.first_observed_at AS "firstObservedAt",
+          job.last_verified_at AS "lastVerifiedAt", job.expires_at AS "expiresAt",
+          '0'::text AS "rankKey"
+        FROM canonical
+        INNER JOIN jobs.canonical_jobs AS job ON job.id = canonical.id
+        INNER JOIN jobs.companies AS company ON company.id = job.company_id
+        WHERE job.status = 'active' AND job.expires_at > ${activeAt}
+          AND job.description IS NOT NULL
+      `;
+      return {
+        catalogRevision: state.revision,
+        items: rows.map((row) => ({
+          requestedJobId: row.requestedJobId,
+          job: {
+            id: row.id,
+            company: {
+              id: row.companyId,
+              name: row.companyName,
+              ...(row.companyVerifiedDomain ? { verifiedDomain: row.companyVerifiedDomain } : {}),
+            },
+            title: row.title,
+            locations: row.locations,
+            ...(row.department ? { department: row.department } : {}),
+            status: "active",
+            firstObservedAt: normalizeJobSearchTimestamp(row.firstObservedAt, "first-observed"),
+            lastVerifiedAt: normalizeJobSearchTimestamp(row.lastVerifiedAt, "last-verified"),
+            expiresAt: normalizeJobSearchTimestamp(row.expiresAt, "expiry"),
+          },
+        })),
+      };
+    });
   }
 
   async getActiveJob(jobId: string, now: Date = new Date()): Promise<ActiveJobRecord | null> {

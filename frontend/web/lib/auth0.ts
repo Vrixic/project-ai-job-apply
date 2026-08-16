@@ -13,6 +13,9 @@ type Environment = Record<string, string | undefined>;
 
 let auth0Client: Auth0Client | undefined;
 
+export const requestedAuthScopes =
+  "openid profile email offline_access documents:read documents:write jobs:read jobs:write profile:read profile:write";
+
 export class AuthConfigurationError extends Error {
   constructor(message = "Auth0 is not configured") {
     super(message);
@@ -70,8 +73,7 @@ export function getAuth0Client(environment: Environment = process.env): Auth0Cli
     appBaseUrl,
     authorizationParameters: {
       audience,
-      scope:
-        "openid profile email offline_access documents:read documents:write jobs:read profile:read profile:write",
+      scope: requestedAuthScopes,
     },
     enableAccessTokenEndpoint: false,
     logoutStrategy: "oidc",

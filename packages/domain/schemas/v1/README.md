@@ -7,3 +7,7 @@ owner and classification of each schema.
 `resume-document.schema.json` defines the normalized encrypted document-tree payload. Its block
 text is confidential PII and must remain in the documents object-store boundary; events and
 telemetry may carry only document/version identifiers and bounded counts.
+
+`saved-job.schema.json` defines the Matching-owned Confidential association. It preserves the
+owner, immutable requested target, resolved canonical identifier at save time, and a bounded public
+snapshot; descriptions, source payloads, profile data, and post-submission outcomes are forbidden.

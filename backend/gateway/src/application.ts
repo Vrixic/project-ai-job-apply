@@ -1,6 +1,7 @@
 import type { AccessTokenVerifier } from "@ai-job-apply/auth";
 import type { DocumentStore } from "@ai-job-apply/documents-service";
 import type { JobCatalogReader } from "@ai-job-apply/jobs-service";
+import type { SavedJobs } from "@ai-job-apply/matching-service";
 import type { ProfileStore } from "@ai-job-apply/profile-service";
 import { NestFactory } from "@nestjs/core";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
@@ -9,6 +10,7 @@ import { AppModule, applyRequestContext } from "./app.module.js";
 export interface GatewayApplicationOptions {
   store: ProfileStore;
   catalog: JobCatalogReader;
+  savedJobs: SavedJobs;
   documents: DocumentStore;
   verifier: AccessTokenVerifier;
   releaseSha: string;
@@ -26,6 +28,7 @@ export async function createGatewayApplication(
     AppModule.register({
       store: options.store,
       catalog: options.catalog,
+      savedJobs: options.savedJobs,
       documents: options.documents,
       verifier: options.verifier,
       releaseSha: options.releaseSha,
@@ -35,7 +38,7 @@ export async function createGatewayApplication(
   );
   app.enableCors({
     origin: false,
-    methods: ["GET", "POST", "PATCH", "PUT"],
+    methods: ["GET", "POST", "PATCH", "PUT", "DELETE"],
   });
   app.getHttpAdapter().getInstance().addHook("onRequest", applyRequestContext);
   await app.init();

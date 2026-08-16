@@ -19,6 +19,7 @@ import {
 } from "./preference-form-state";
 import { ProfileFactsForm } from "./profile-facts-form";
 import { ResumeUploadForm } from "./resume-upload-form";
+import { SavedJobsPanel } from "./saved-jobs-panel";
 
 const workModeOptions: ReadonlyArray<{ value: WorkMode; label: string }> = [
   { value: "remote", label: "Remote" },
@@ -687,6 +688,7 @@ export function FoundationForm({
         </>
       )}
       <JobSearchForm authenticated={authenticated} />
+      <SavedJobsPanel authenticated={authenticated} />
 
       {!authConfigured && (
         <aside>

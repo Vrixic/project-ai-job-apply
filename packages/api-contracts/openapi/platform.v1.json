@@ -329,6 +329,111 @@
         }
       }
     },
+    "/saved-jobs": {
+      "post": {
+        "operationId": "createSavedJob",
+        "security": [{ "oidc": ["jobs:write"] }],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": { "type": "string", "minLength": 16, "maxLength": 128 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateSavedJobRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The active canonical job is saved for the authenticated owner",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/SavedJob" } }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" }
+        }
+      }
+    },
+    "/saved-jobs/search": {
+      "post": {
+        "operationId": "listSavedJobs",
+        "security": [{ "oidc": ["jobs:read"] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/SavedJobSearchRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "One owner-scoped page of private saved jobs",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/SavedJobPage" } }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" }
+        }
+      }
+    },
+    "/saved-jobs/{savedJobId}": {
+      "delete": {
+        "operationId": "deleteSavedJob",
+        "security": [{ "oidc": ["jobs:write"] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "savedJobId",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The owner-scoped saved job is absent",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
     "/operations/{operationId}": {
       "get": {
         "operationId": "getOperation",
@@ -935,6 +1040,103 @@
             "type": "array",
             "maxItems": 25,
             "items": { "$ref": "#/components/schemas/CanonicalJobSummary" }
+          },
+          "nextCursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateSavedJobRequest": {
+        "type": "object",
+        "required": ["jobId"],
+        "properties": {
+          "jobId": { "type": "string", "format": "uuid" }
+        },
+        "additionalProperties": false
+      },
+      "SavedJobSearchRequest": {
+        "type": "object",
+        "properties": {
+          "pageSize": { "type": "integer", "minimum": 1, "maximum": 25, "default": 20 },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SavedJob": {
+        "type": "object",
+        "required": ["id", "requestedJobId", "snapshot", "availability", "savedAt"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "requestedJobId": { "type": "string", "format": "uuid" },
+          "snapshot": { "$ref": "#/components/schemas/SavedJobSnapshot" },
+          "availability": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": ["state", "currentJob"],
+                "properties": {
+                  "state": { "type": "string", "const": "available" },
+                  "currentJob": { "$ref": "#/components/schemas/CanonicalJobSummary" }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["state"],
+                "properties": { "state": { "type": "string", "const": "unavailable" } },
+                "additionalProperties": false
+              }
+            ]
+          },
+          "savedAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      },
+      "SavedJobSnapshot": {
+        "type": "object",
+        "required": [
+          "jobIdAtSave",
+          "company",
+          "title",
+          "locations",
+          "firstObservedAt",
+          "lastVerifiedAt",
+          "expiresAt"
+        ],
+        "properties": {
+          "jobIdAtSave": { "type": "string", "format": "uuid" },
+          "company": { "$ref": "#/components/schemas/JobCompanySummary" },
+          "title": { "type": "string", "minLength": 1, "maxLength": 240 },
+          "locations": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": { "type": "string", "minLength": 1, "maxLength": 240 }
+          },
+          "department": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "firstObservedAt": { "type": "string", "format": "date-time" },
+          "lastVerifiedAt": { "type": "string", "format": "date-time" },
+          "expiresAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      },
+      "SavedJobPage": {
+        "type": "object",
+        "required": ["items"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 25,
+            "items": { "$ref": "#/components/schemas/SavedJob" }
           },
           "nextCursor": {
             "type": "string",
