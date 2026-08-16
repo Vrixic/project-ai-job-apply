@@ -217,6 +217,27 @@ describe("job search contracts", () => {
       false,
     );
   });
+
+  it("declares a non-cacheable service-unavailable response", () => {
+    const responses = contract.paths["/jobs/search"].post.responses;
+    expect(Object.keys(responses).sort()).toEqual([
+      "200",
+      "400",
+      "401",
+      "403",
+      "409",
+      "413",
+      "415",
+      "503",
+    ]);
+    expect(responses["503"].$ref).toBe("#/components/responses/ServiceUnavailable");
+    expect(contract.components.responses.ServiceUnavailable.headers).toEqual({
+      "Cache-Control": {
+        required: true,
+        schema: { type: "string", enum: ["no-store"] },
+      },
+    });
+  });
 });
 
 describe("saved-job contracts", () => {

@@ -79,6 +79,22 @@ The route, Billing migration-image composition, BFF, and read-only UI are source
 No Auth0/Terraform route change, image publication, AWS deployment, provider/payment flow, price,
 quota, upgrade, paid-only feature, webhook, or live acceptance is included.
 
+## D1 local API assurance
+
+`pnpm --filter @ai-job-apply/gateway test:assurance` runs a bounded mixed-workload baseline through
+the real in-process Fastify application. It uses only fixed synthetic identities, catalog data,
+requests, and fault canaries. The matrix exercises liveness/readiness, two concurrent candidate
+owners, job search, job reporting, authentication/scope/input rejection, dependency-failure
+sanitization and isolation, and recovery. Its receipt retains aggregate counts only: request,
+expected-status, contract-failure, privacy-leak, transport-failure, and maximum in-flight totals.
+It never retains request bodies, response bodies, tokens, owner identifiers, or fault details.
+
+The configured concurrency is a deterministic harness bound, not a throughput target. This local
+in-process test does not establish latency, capacity, API Gateway or Lambda throttling, WAF/abuse
+controls, database behavior, alert delivery, deployment, RTO/RPO, independent security review, or
+human accessibility acceptance. Those require the exact deployed D1 candidate and separately
+authorized evidence.
+
 The scale-to-zero migration adds a shared application factory and an API Gateway HTTP API payload
 2.0 Lambda entrypoint. The Lambda path accepts identity only from the exact validated authorizer
 context. The protected API Gateway route requires at least one exact platform scope, and Lambda

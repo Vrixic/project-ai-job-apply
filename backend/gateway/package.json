@@ -11,6 +11,7 @@
     "dev": "node --watch --env-file-if-exists=../../.env --import tsx src/start.ts",
     "start": "node dist/src/start.js",
     "test": "vitest run src --exclude=dist/** --testTimeout=60000 --hookTimeout=60000",
+    "test:assurance": "vitest run src/d1-api-assurance-harness.test.ts --testTimeout=60000 --hookTimeout=60000",
     "test:integration": "vitest run --config vitest.integration.config.ts --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

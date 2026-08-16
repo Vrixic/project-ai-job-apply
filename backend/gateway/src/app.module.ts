@@ -45,6 +45,7 @@ import {
   type JobReports,
   JobReportTargetUnavailableError,
   JobSearchCatalogChangedError,
+  JobSearchServiceUnavailableError,
 } from "@ai-job-apply/jobs-service";
 import {
   InvalidSavedJobCursorError,
@@ -247,6 +248,11 @@ class ProblemDetailsFilter implements ExceptionFilter {
       status = HttpStatus.CONFLICT;
       code = "job_search_catalog_changed";
       title = "Job catalog changed";
+      detail = exception.message;
+    } else if (exception instanceof JobSearchServiceUnavailableError) {
+      status = HttpStatus.SERVICE_UNAVAILABLE;
+      code = "job_search_unavailable";
+      title = "Job search is unavailable";
       detail = exception.message;
     } else if (exception instanceof JobReportTargetUnavailableError) {
       status = HttpStatus.NOT_FOUND;
@@ -770,7 +776,19 @@ class CandidateController {
         HttpStatus.BAD_REQUEST,
       );
     }
-    const page = await this.catalog.searchActiveJobs(request.body as JobSearchRequest);
+    let page: Awaited<ReturnType<JobCatalogReader["searchActiveJobs"]>>;
+    try {
+      page = await this.catalog.searchActiveJobs(request.body as JobSearchRequest);
+    } catch (error) {
+      if (
+        error instanceof InvalidJobSearchError ||
+        error instanceof JobSearchCatalogChangedError ||
+        error instanceof JobSearchServiceUnavailableError
+      ) {
+        throw error;
+      }
+      throw new JobSearchServiceUnavailableError();
+    }
     return {
       items: page.items.map((job) => ({
         id: job.id,
