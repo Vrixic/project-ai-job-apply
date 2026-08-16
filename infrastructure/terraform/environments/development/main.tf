@@ -110,6 +110,21 @@ module "platform" {
   profile_readiness_lambda_extension_layer_arn          = var.profile_readiness_lambda_extension_layer_arn
   profile_readiness_execution_timeout_seconds           = var.profile_readiness_execution_timeout_seconds
   profile_readiness_retention_days                      = var.profile_readiness_retention_days
+  deploy_ingestion_runtime                              = var.deploy_ingestion_runtime
+  ingestion_runtime_enabled                             = var.ingestion_runtime_enabled
+  ingestion_synthetic_source_enabled                    = var.ingestion_synthetic_source_enabled
+  ingestion_durable_artifact_s3_key                     = var.ingestion_durable_artifact_s3_key
+  ingestion_durable_artifact_s3_object_version          = var.ingestion_durable_artifact_s3_object_version
+  ingestion_durable_artifact_sha256                     = var.ingestion_durable_artifact_sha256
+  ingestion_durable_artifact_base64sha256               = var.ingestion_durable_artifact_base64sha256
+  ingestion_runtime_artifact_s3_key                     = var.ingestion_runtime_artifact_s3_key
+  ingestion_runtime_artifact_s3_object_version          = var.ingestion_runtime_artifact_s3_object_version
+  ingestion_runtime_artifact_sha256                     = var.ingestion_runtime_artifact_sha256
+  ingestion_runtime_artifact_base64sha256               = var.ingestion_runtime_artifact_base64sha256
+  ingestion_lambda_extension_layer_arn                  = var.ingestion_lambda_extension_layer_arn
+  ingestion_synthetic_seed                              = var.ingestion_synthetic_seed
+  ingestion_execution_timeout_seconds                   = var.ingestion_execution_timeout_seconds
+  ingestion_retention_days                              = var.ingestion_retention_days
 }
 
 module "cost_controls" {

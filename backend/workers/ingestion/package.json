@@ -17,6 +17,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@ai-job-apply/jobs-service": "workspace:*"
+    "@ai-job-apply/jobs-service": "workspace:*",
+    "uuid": "14.0.1"
   }
 }

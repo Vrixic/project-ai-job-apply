@@ -22,6 +22,14 @@ describeWithDatabase("PostgresJobCatalog", () => {
   });
   const runId = crypto.randomUUID();
   const observedAt = new Date("2026-08-11T12:00:00.000Z");
+  const migrationExecutable = fileURLToPath(new URL("../../dist/src/migrate.js", import.meta.url));
+  const migrationEnvironment = { ...process.env, DATABASE_URL: databaseUrl };
+
+  async function runMigrationVerifier() {
+    return execFileAsync(process.execPath, [migrationExecutable], {
+      env: migrationEnvironment,
+    });
+  }
 
   function fixture(overrides: Partial<CatalogObservation> = {}): CatalogObservation {
     return {
@@ -44,27 +52,105 @@ describeWithDatabase("PostgresJobCatalog", () => {
   }
 
   beforeAll(async () => {
-    const migrationExecutable = fileURLToPath(
-      new URL("../../dist/src/migrate.js", import.meta.url),
-    );
-    const environment = { ...process.env, DATABASE_URL: databaseUrl };
-    const first = await execFileAsync(process.execPath, [migrationExecutable], {
-      env: environment,
-    });
-    const replay = await execFileAsync(process.execPath, [migrationExecutable], {
-      env: environment,
-    });
+    const first = await runMigrationVerifier();
+    const replay = await runMigrationVerifier();
     expect(first.stdout.trim()).toBe(
-      "Jobs migrations through 0004_job_search applied and verified.",
+      "Jobs migrations through 0005_ingestion_orchestration applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(
-      "Jobs migrations through 0004_job_search applied and verified.",
+      "Jobs migrations through 0005_ingestion_orchestration applied and verified.",
     );
     await catalog.ping();
   });
 
   afterAll(async () => {
     await catalog.close();
+  });
+
+  it("fails migration verification when a required ingestion integrity object is missing", async () => {
+    const cases = [
+      {
+        definition: async () => {
+          const [row] = await client<{ definition: string }[]>`
+            SELECT pg_get_triggerdef(oid) AS definition
+            FROM pg_trigger
+            WHERE tgrelid='jobs.ingestion_checkpoints'::regclass
+              AND tgname='ingestion_checkpoints_guard'
+          `;
+          return row?.definition;
+        },
+        drop: "DROP TRIGGER ingestion_checkpoints_guard ON jobs.ingestion_checkpoints",
+      },
+      {
+        definition: async () => {
+          const [row] = await client<{ definition: string }[]>`
+            SELECT pg_get_triggerdef(oid) AS definition
+            FROM pg_trigger
+            WHERE tgrelid='jobs.ingestion_checkpoints'::regclass
+              AND tgname='ingestion_checkpoints_append_event'
+          `;
+          return row?.definition;
+        },
+        drop: "DROP TRIGGER ingestion_checkpoints_append_event ON jobs.ingestion_checkpoints",
+      },
+      {
+        definition: async () => {
+          const [row] = await client<{ definition: string }[]>`
+            SELECT pg_get_indexdef(indexrelid) AS definition
+            FROM pg_index
+            WHERE indexrelid='jobs.ingestion_dispatches_pending_idx'::regclass
+          `;
+          return row?.definition;
+        },
+        drop: "DROP INDEX jobs.ingestion_dispatches_pending_idx",
+        replacement:
+          "CREATE INDEX ingestion_dispatches_pending_idx ON jobs.ingestion_dispatches (id)",
+      },
+      {
+        definition: async () => {
+          const [row] = await client<{ definition: string }[]>`
+            SELECT pg_get_constraintdef(oid, true) AS definition
+            FROM pg_constraint
+            WHERE conrelid='jobs.ingestion_dispatches'::regclass
+              AND conname='ingestion_dispatches_execution_id_checkpoint_revision_fkey'
+          `;
+          return row?.definition
+            ? `ALTER TABLE jobs.ingestion_dispatches ADD CONSTRAINT ingestion_dispatches_execution_id_checkpoint_revision_fkey ${row.definition}`
+            : undefined;
+        },
+        drop: "ALTER TABLE jobs.ingestion_dispatches DROP CONSTRAINT ingestion_dispatches_execution_id_checkpoint_revision_fkey",
+      },
+      {
+        definition: async () => {
+          const [row] = await client<{ definition: string }[]>`
+            SELECT pg_get_functiondef('jobs.guard_ingestion_dispatch()'::regprocedure) AS definition
+          `;
+          return row?.definition;
+        },
+        drop: "CREATE OR REPLACE FUNCTION jobs.guard_ingestion_dispatch() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END; $$",
+      },
+    ] as const;
+
+    for (const testCase of cases) {
+      const definition = await testCase.definition();
+      expect(definition).toBeTypeOf("string");
+      if (!definition) throw new Error("Required ingestion integrity definition is missing");
+      await client.unsafe(testCase.drop);
+      try {
+        if ("replacement" in testCase && testCase.replacement) {
+          await client.unsafe(testCase.replacement);
+        }
+        await expect(runMigrationVerifier()).rejects.toThrow();
+      } finally {
+        if ("replacement" in testCase && testCase.replacement) {
+          await client.unsafe(testCase.drop);
+        }
+        await client.unsafe(definition);
+      }
+      await expect(runMigrationVerifier()).resolves.toMatchObject({
+        stdout: expect.stringContaining("applied and verified"),
+      });
+    }
   });
 
   it("merges only exact identities and retains source provenance", async () => {

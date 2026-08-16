@@ -317,3 +317,108 @@ export const statusEvents = jobs.table(
   },
   (table) => [index("status_events_job_occurred_idx").on(table.jobId, table.occurredAt)],
 );
+
+export const ingestionCheckpoints = jobs.table(
+  "ingestion_checkpoints",
+  {
+    executionId: text("execution_id").primaryKey(),
+    schemaVersion: integer("schema_version").notNull(),
+    sourceId: text("source_id").notNull(),
+    adapterVersion: text("adapter_version").notNull(),
+    scheduledFor: timestamp("scheduled_for", { withTimezone: true }).notNull(),
+    state: text("state").notNull(),
+    revision: bigint("revision", { mode: "number" }).notNull(),
+    attempt: integer("attempt").notNull(),
+    withdrawalInferred: boolean("withdrawal_inferred").notNull(),
+    leaseId: uuid("lease_id"),
+    leasedAt: timestamp("leased_at", { withTimezone: true }),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    priorProgressUnknown: boolean("prior_progress_unknown"),
+    settledAttempt: integer("settled_attempt"),
+    settledLeaseId: uuid("settled_lease_id"),
+    settledAt: timestamp("settled_at", { withTimezone: true }),
+    settlementKey: text("settlement_key"),
+    progressKnown: boolean("progress_known"),
+    observationCount: integer("observation_count"),
+    createdCount: integer("created_count"),
+    updatedCount: integer("updated_count"),
+    retryReason: text("retry_reason"),
+    retryAt: timestamp("retry_at", { withTimezone: true }),
+    pauseReason: text("pause_reason"),
+    failureCode: text("failure_code"),
+    exhaustedDispatchId: uuid("exhausted_dispatch_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("ingestion_checkpoints_due_idx").on(
+      table.state,
+      table.retryAt,
+      table.leaseExpiresAt,
+      table.executionId,
+    ),
+  ],
+);
+
+export const ingestionRunEvents = jobs.table(
+  "ingestion_run_events",
+  {
+    executionId: text("execution_id")
+      .notNull()
+      .references(() => ingestionCheckpoints.executionId),
+    revision: bigint("revision", { mode: "number" }).notNull(),
+    state: text("state").notNull(),
+    attempt: integer("attempt").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    checkpoint: jsonb("checkpoint").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.executionId, table.revision] }),
+    index("ingestion_run_events_occurred_idx").on(
+      table.occurredAt,
+      table.executionId,
+      table.revision,
+    ),
+  ],
+);
+
+export const ingestionDispatches = jobs.table(
+  "ingestion_dispatches",
+  {
+    id: uuid("id").primaryKey(),
+    executionId: text("execution_id")
+      .notNull()
+      .references(() => ingestionCheckpoints.executionId),
+    generation: integer("generation").notNull(),
+    checkpointRevision: bigint("checkpoint_revision", { mode: "number" }).notNull(),
+    durableExecutionName: text("durable_execution_name").notNull(),
+    durableFunctionArn: text("durable_function_arn").notNull(),
+    activityFunctionArn: text("activity_function_arn").notNull(),
+    adapterConfigSha256: text("adapter_config_sha256").notNull(),
+    state: text("state").notNull(),
+    claimId: uuid("claim_id"),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    claimExpiresAt: timestamp("claim_expires_at", { withTimezone: true }),
+    publishAttempts: integer("publish_attempts").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+    lastErrorCode: text("last_error_code"),
+    durableExecutionArn: text("durable_execution_arn"),
+    durableExecutionId: text("durable_execution_id"),
+    terminalStatus: text("terminal_status"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("ingestion_dispatches_execution_generation_uq").on(
+      table.executionId,
+      table.generation,
+    ),
+    uniqueIndex("ingestion_dispatches_durable_name_uq").on(table.durableExecutionName),
+    foreignKey({
+      columns: [table.executionId, table.checkpointRevision],
+      foreignColumns: [ingestionRunEvents.executionId, ingestionRunEvents.revision],
+    }),
+    index("ingestion_dispatches_pending_idx").on(table.nextAttemptAt, table.createdAt, table.id),
+  ],
+);

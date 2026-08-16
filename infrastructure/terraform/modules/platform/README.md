@@ -38,3 +38,12 @@ retained serverless control plane. It defaults on for normal environments. A cal
 only after traffic is quiesced and database deletion protection has been removed by a separate
 reviewed apply. This generic switch is currently owned by synthetic staging under ADR-018; it is not
 a production retention policy.
+
+The optional D1 ingestion composition is separately deployable and remains dark by default:
+`deploy_ingestion_runtime`, `ingestion_runtime_enabled`, and
+`ingestion_synthetic_source_enabled` must be advanced deliberately in that order, and the shared
+`runtime_activation_allowed` lifecycle authority must permit trigger activation. Its work queue
+retains identifier-only nudges for four days. Its shared DLQ retains only value-free schedule,
+terminal-metadata, durable-identifier, and nudge-failure envelopes for fourteen days and has no
+automatic consumer or redrive. No
+real-provider adapter, event-source mapping, schedule, or source is enabled by repository defaults.

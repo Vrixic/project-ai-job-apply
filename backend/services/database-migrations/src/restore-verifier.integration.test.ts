@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadCurrentRestoreManifest, verifyRestoreDatabase } from "./restore-verifier.js";
 import { createRestoreClient, type PostgresRestoreClient } from "./restore-verifier-runtime.js";
@@ -93,6 +93,24 @@ describe.skipIf(!requested)("restored PostgreSQL aggregate verification", () => 
         WHERE user_id = '${fixtureOwnerId}'::uuid AND version = 1 AND plan = 'free'
       `);
       expect(billingFixture).toEqual([{ fixture_count: 1 }]);
+      const ingestionFixture = await client.unsafe<{
+        checkpoint_count: number;
+        dispatch_count: number;
+        event_count: number;
+      }>(`
+        SELECT
+          (SELECT count(*)::int FROM jobs.ingestion_checkpoints
+             WHERE source_id='synthetic-foundation-v1') AS checkpoint_count,
+          (SELECT count(*)::int FROM jobs.ingestion_dispatches AS dispatch
+             JOIN jobs.ingestion_checkpoints AS checkpoint USING (execution_id)
+             WHERE checkpoint.source_id='synthetic-foundation-v1') AS dispatch_count,
+          (SELECT count(*)::int FROM jobs.ingestion_run_events AS event
+             JOIN jobs.ingestion_checkpoints AS checkpoint USING (execution_id)
+             WHERE checkpoint.source_id='synthetic-foundation-v1') AS event_count
+      `);
+      expect(ingestionFixture).toEqual([
+        { checkpoint_count: 1, dispatch_count: 1, event_count: 1 },
+      ]);
     }
   });
 
@@ -109,6 +127,43 @@ describe.skipIf(!requested)("restored PostgreSQL aggregate verification", () => 
   });
 
   it("rejects target count, relation, and migration-ledger divergence", async () => {
+    const ingestionMismatchExecutionId = createHash("sha256")
+      .update(`restore-ingestion-${randomUUID()}`, "utf8")
+      .digest("hex");
+    const ingestionMismatchDispatchId = `019d09f8-65ab-7b65-8b90-${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+    try {
+      await restored.unsafe(
+        `INSERT INTO jobs.ingestion_checkpoints (
+           execution_id, schema_version, source_id, adapter_version, scheduled_for,
+           state, revision, attempt, withdrawal_inferred
+           ) VALUES ('${ingestionMismatchExecutionId}', 1,
+           'synthetic-foundation-v1', 'synthetic-ingestion-v1',
+           '2026-08-15T12:00:00.000Z', 'pending', 0, 1, false)`,
+      );
+      await restored.unsafe(
+        `INSERT INTO jobs.ingestion_dispatches (
+           id, execution_id, generation, checkpoint_revision, durable_execution_name,
+           durable_function_arn, activity_function_arn, adapter_config_sha256, state,
+           next_attempt_at
+         ) VALUES ('${ingestionMismatchDispatchId}', '${ingestionMismatchExecutionId}',
+           1, 0, '${ingestionMismatchExecutionId}',
+           'arn:aws:lambda:us-east-2:123456789012:function:synthetic-ingestion:7',
+           'arn:aws:lambda:us-east-2:123456789012:function:synthetic-ingestion-activity:9',
+           repeat('c', 64), 'pending', '2026-08-15T12:00:00.000Z')`,
+      );
+      expect((await verifyRestoreDatabase(restored)).aggregateDigest).not.toBe(
+        (await verifyRestoreDatabase(source)).aggregateDigest,
+      );
+    } finally {
+      await restored.unsafe(`DO $cleanup$
+        BEGIN
+          PERFORM set_config('session_replication_role', 'replica', true);
+          DELETE FROM jobs.ingestion_dispatches WHERE execution_id='${ingestionMismatchExecutionId}';
+          DELETE FROM jobs.ingestion_run_events WHERE execution_id='${ingestionMismatchExecutionId}';
+          DELETE FROM jobs.ingestion_checkpoints WHERE execution_id='${ingestionMismatchExecutionId}';
+        END
+        $cleanup$`);
+    }
     const matchingMismatchOwnerId = randomUUID();
     try {
       await restored.unsafe(`
@@ -165,6 +220,15 @@ describe.skipIf(!requested)("restored PostgreSQL aggregate verification", () => 
       await restored.unsafe("DROP TABLE IF EXISTS billing.restore_verifier_unreviewed_probe");
     }
 
+    try {
+      await restored.unsafe("CREATE TABLE jobs.restore_verifier_unreviewed_probe (id integer)");
+      await expect(verifyRestoreDatabase(restored)).rejects.toThrow(
+        "Restore relation boundary mismatch",
+      );
+    } finally {
+      await restored.unsafe("DROP TABLE IF EXISTS jobs.restore_verifier_unreviewed_probe");
+    }
+
     const expectedMatchingChecksum = loadCurrentRestoreManifest()
       .manifest.contributors.find((contributor) => contributor.owner === "matching")
       ?.migrations.find((migration) => migration.version === "0001_saved_jobs")?.checksum;
@@ -206,6 +270,26 @@ describe.skipIf(!requested)("restored PostgreSQL aggregate verification", () => 
         UPDATE billing.schema_migrations
         SET checksum = '${expectedBillingChecksum}'
         WHERE version = '0001_entitlement_projection'
+      `);
+    }
+    const expectedIngestionChecksum = loadCurrentRestoreManifest()
+      .manifest.contributors.find((contributor) => contributor.owner === "jobs")
+      ?.migrations.find(
+        (migration) => migration.version === "0005_ingestion_orchestration",
+      )?.checksum;
+    expect(expectedIngestionChecksum).toMatch(/^[a-f0-9]{64}$/);
+    try {
+      await restored.unsafe(`
+        UPDATE jobs.schema_migrations SET checksum=repeat('f', 64)
+        WHERE version='0005_ingestion_orchestration'
+      `);
+      await expect(verifyRestoreDatabase(restored)).rejects.toThrow(
+        "Restore migration boundary mismatch for jobs",
+      );
+    } finally {
+      await restored.unsafe(`
+        UPDATE jobs.schema_migrations SET checksum='${expectedIngestionChecksum}'
+        WHERE version='0005_ingestion_orchestration'
       `);
     }
     expect(await verifyRestoreDatabase(restored)).toEqual(await verifyRestoreDatabase(source));

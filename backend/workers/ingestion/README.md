@@ -22,6 +22,9 @@ gates.
   idempotent catalog-port calls, and aggregate-only results.
 - `synthetic.ts` — deterministic generated `.example.test` observations representing no provider,
   employer, tenant, or real job.
+- `orchestration-store.ts` — the storage-neutral coordinator that commits every schedule, claim,
+  settlement, pause, and retry through the Jobs-owned compare-and-swap port before returning a
+  transport disposition.
 
 An empty batch or source acquisition failure never proves that a stored job is closed. Unexpected
 adapter failures become a redacted retry result and do not call the catalog. Catalog contract or
@@ -42,16 +45,16 @@ aggregate counts; raw errors and job/source values are never retained in a check
 disposition. A thrown failure marks aggregate progress as unknown instead of falsely asserting that
 no earlier idempotent catalog write completed.
 
-A future persistence adapter must commit every `changed` checkpoint with an atomic compare-and-swap
+The Jobs persistence adapter commits every `changed` checkpoint with an atomic compare-and-swap
 against the command's expected revision before acting on its disposition. Losing that fence means
 discarding the proposed transition and reloading authoritative state. A transport must likewise
 never acknowledge, reschedule, or dead-letter work from an uncommitted transition.
 
-This package still does not provide durable checkpoint persistence, a scheduler, a queue consumer,
-a dead-letter queue, a Lambda durable workflow, Terraform, publication, deployment, or source
-activation. `retry`, `ack`, and `dead_letter` are protocol dispositions for a future reviewed
-transport adapter, not evidence that such transport exists. Jobs-owned retained run/audit truth and
-AWS composition remain separate future boundaries. Greenhouse, Lever, and Ashby remain disabled.
+The repository now includes a source-only, default-off durable Lambda/SQS/Terraform composition
+around this coordinator. That composition is not published, deployed, scheduled, mapped, or
+activated by this source packet. Its only source ID remains `synthetic-foundation-v1`, backed only
+by the `synthetic-ingestion-v1` generated-synthetic adapter. Greenhouse,
+Lever, Ashby, public network acquisition, and real-provider data remain absent and disabled.
 
 Run unit tests with `pnpm --filter @ai-job-apply/ingestion-worker test`. PostgreSQL integration
 requires an explicit `DATABASE_URL` and is separate from the default suite.

@@ -63,6 +63,10 @@
         {
           "version": "0004_job_search",
           "checksum": "08cfd97c93645e6feb9e9d795cae86d004f74e1f4d267626a2afe3ad633a769e"
+        },
+        {
+          "version": "0005_ingestion_orchestration",
+          "checksum": "24e696a9881771a2840335f9f2b51ec6a98ae74936888d3b1f4517ec95a2a3f0"
         }
       ],
       "relations": [
@@ -71,6 +75,9 @@
         "jobs.companies",
         "jobs.duplicate_candidates",
         "jobs.duplicate_resolution_events",
+        "jobs.ingestion_checkpoints",
+        "jobs.ingestion_dispatches",
+        "jobs.ingestion_run_events",
         "jobs.job_sources",
         "jobs.schema_migrations",
         "jobs.status_events"

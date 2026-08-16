@@ -231,6 +231,9 @@ importers:
       '@ai-job-apply/jobs-service':
         specifier: workspace:*
         version: link:../../services/jobs
+      uuid:
+        specifier: 14.0.1
+        version: 14.0.1
 
   backend/workflows:
     dependencies:
@@ -243,6 +246,12 @@ importers:
       '@ai-job-apply/event-contracts':
         specifier: workspace:*
         version: link:../../packages/event-contracts
+      '@ai-job-apply/ingestion-worker':
+        specifier: workspace:*
+        version: link:../workers/ingestion
+      '@ai-job-apply/jobs-service':
+        specifier: workspace:*
+        version: link:../services/jobs
       '@ai-job-apply/observability':
         specifier: workspace:*
         version: link:../../packages/observability
@@ -261,6 +270,9 @@ importers:
       pino:
         specifier: 10.3.1
         version: 10.3.1
+      uuid:
+        specifier: 14.0.1
+        version: 14.0.1
     devDependencies:
       '@aws/durable-execution-sdk-js-testing':
         specifier: 1.1.3

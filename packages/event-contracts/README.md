@@ -13,3 +13,7 @@ Defines append-only, schema-versioned events exchanged by backend services, work
 - `tests/` — Schema and redaction tests.
 
 Events carry identifiers and necessary facts, never unrestricted resumes, tokens, or sensitive form values.
+
+`jobs.ingestion.dispatch.nudge.v1` is the strict identifier-only SQS hint for a Jobs-owned durable
+ingestion dispatch. It carries no source payload or job values and includes a SHA-256 integrity
+binding over its exact identity, checkpoint revision, and workflow generation.

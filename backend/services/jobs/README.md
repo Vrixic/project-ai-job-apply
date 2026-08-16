@@ -8,10 +8,25 @@ Owns companies, canonical jobs, source observations, provenance, deduplication s
   lifecycle, freshness, and tombstone rules.
 - `src/persistence/` — The job-owned PostgreSQL schema and transactional catalog repository.
 - `migrations/` — Forward-only, checksum-verified jobs-schema migrations.
+- `src/persistence/ingestion-orchestration.ts` — Jobs-owned durable checkpoint, append-only run
+  event, and identifier-only dispatch persistence with revision fencing and bounded recovery.
 
 The persistence runtime accepts only `authorized_fixture` provenance by default. Production source
 adapters and explicit public contributions remain disabled until their separate legal and security
 gates pass.
+
+Migration `0005_ingestion_orchestration` adds three Jobs-owned relations. Schedule occurrences are
+immutable, checkpoint transitions advance exactly one revision under a database lock, every
+revision is copied into an append-only aggregate-only event ledger, and transport dispatches have
+one deterministic durable name per generation. Every dispatch also freezes the numeric durable and
+activity Lambda versions plus the generated-synthetic adapter/config manifest SHA-256 used by that
+generation. These tables retain operational truth; they do not store raw source responses, job
+values, URLs, candidate data, or arbitrary errors. An accepted
+durable execution is bound to the official qualified-function-ARN `/durable-execution/name/id`
+shape, including its opaque service-issued execution ID. A paused occurrence can create one new
+version-pinned generation only after the synthetic source is explicitly enabled again.
+An ambiguous nudge is retried with the same dispatch and durable name; bounded transport exhaustion
+is retained instead of inventing another generation.
 
 The active-job read model returns only active, unexpired canonical records and redacted source
 summaries. It excludes raw snapshots, exact source identity keys, content hashes, pending or
