@@ -313,6 +313,13 @@ export class JobSearchCatalogChangedError extends Error {
   }
 }
 
+export class JobSearchServiceUnavailableError extends Error {
+  constructor() {
+    super("Job search is temporarily unavailable");
+    this.name = "JobSearchServiceUnavailableError";
+  }
+}
+
 function normalizeOptionalSearchText(
   value: string | undefined,
   maximumLength: number,

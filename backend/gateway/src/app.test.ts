@@ -205,6 +205,7 @@ class MemoryProfileStore implements ProfileStore {
 class MemoryJobCatalog implements JobCatalogReader {
   lastSearchInput: ActiveJobSearchInput | undefined;
   catalogChanged = false;
+  searchFailure: Error | undefined;
   readonly job: ActiveJobRecord = {
     id: uuidv7(),
     company: {
@@ -282,6 +283,9 @@ class MemoryJobCatalog implements JobCatalogReader {
 
   async searchActiveJobs(input: ActiveJobSearchInput) {
     this.lastSearchInput = input;
+    if (this.searchFailure) {
+      throw this.searchFailure;
+    }
     if (this.catalogChanged) {
       throw new JobSearchCatalogChangedError();
     }
@@ -1296,6 +1300,24 @@ describe("candidate API", () => {
       title: "Job catalog changed",
     });
     expect(changed.json().detail).toContain("restart the search");
+
+    catalog.searchFailure = new Error(
+      "postgres password and candidate@example.test must not leave the boundary",
+    );
+    const unavailable = await app.inject({
+      method: "POST",
+      url: "/v1/jobs/search",
+      headers: { authorization: `Bearer ${jobToken}` },
+      payload,
+    });
+    catalog.searchFailure = undefined;
+    expect(unavailable.statusCode).toBe(503);
+    expect(unavailable.headers["cache-control"]).toBe("no-store");
+    expect(unavailable.json()).toMatchObject({
+      code: "job_search_unavailable",
+      title: "Job search is unavailable",
+    });
+    expect(unavailable.body).not.toMatch(/postgres password|candidate@/i);
   });
 
   it("returns only owner-self fixed match evidence through the exact read boundary", async () => {

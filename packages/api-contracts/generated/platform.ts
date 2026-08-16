@@ -929,6 +929,7 @@ export interface components {
         /** @description The requested capability is temporarily unavailable */
         ServiceUnavailable: {
             headers: {
+                "Cache-Control": "no-store";
                 [name: string]: unknown;
             };
             content: {
@@ -1245,6 +1246,7 @@ export interface operations {
             409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
         };
     };
     getCanonicalJob: {
