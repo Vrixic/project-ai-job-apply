@@ -135,6 +135,33 @@ warm-process owner-keyed cache can retain eligible Pro access only through its e
 boundary after a Billing-reader failure; Profile identity resolution still precedes the cache, so
 this does not prove availability through a total identity/database outage.
 
+### D1 owner-self match-assessment design
+
+This is a source and local-test boundary only. Jobs migration `0007`, the gateway release, and the
+web UI are not deployed or accepted through a managed-OIDC browser session.
+
+```mermaid
+flowchart LR
+  Candidate5[Candidate browser] -->|server-held session; job UUID only| MatchBFF[Web match BFF]
+  MatchBFF -->|validated jobs:read token| Gateway5[Candidate gateway]
+  Gateway5 -->|issuer + subject| ProfileIdentity5[Profile identity mapping]
+  ProfileIdentity5 -->|internal user UUID only| Gateway5
+  Gateway5 -->|internal UUID only| Preferences5[(Profile owner preferences)]
+  Gateway5 -->|requested job UUID + trusted time| Jobs5[(Jobs active match projection)]
+  Preferences5 --> Match5[Matching deterministic assessment]
+  Jobs5 --> Match5
+  Match5 -->|fixed codes + opaque identities/versions only| Gateway5
+  Gateway5 -->|no-store| MatchBFF
+  MatchBFF -->|fixed candidate-safe copy| Candidate5
+```
+
+Matching receives the owner-scoped preference snapshot and a Jobs allowlist containing no
+description, company, source, provenance, raw content, or lifecycle reason. The response contains
+no preference or job display values, restricted sponsorship value, score, rank, generated prose,
+eligibility decision, or application outcome. A legacy sponsorship field blocks assessment for
+review regardless of its boolean value. Unknown evidence never becomes a conflict, assessments are
+not persisted or cached, and target expiry is rechecked after both reads complete.
+
 ## Rights-flow design boundary
 
 Export and account deletion are not implemented by the Phase 0 slice. The following diagrams define

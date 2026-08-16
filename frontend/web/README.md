@@ -107,6 +107,15 @@ distinct `jobs:write` permission but does not grant it: the managed Auth0/Terraf
 deployment, and live browser acceptance remain later gates. No matching score, explanation, or
 application/post-submission state is shown or inferred.
 
+Available saved jobs now offer an on-demand deterministic match-evidence panel through a strict
+server-held-session BFF. The panel renders fixed constraint labels only, aborts and
+generation-fences requests across job changes, announces loading and result state, and discards a
+response whose requested identity does not match the panel. It explicitly distinguishes exact
+known conflicts from unknown evidence and does not render a score, rank, fit band, eligibility
+decision, generated prose, or application outcome. The API/BFF/UI source is locally verified only;
+database migration, artifact publication, deployment, managed-OIDC browser acceptance, and D1-R2
+matching-quality review remain open.
+
 The entitlement status slice uses the same server-held session to call one exact, bodyless
 `/api/platform/entitlements` BFF route. It renders only the current derived Free/Pro active or grace
 status, clears and aborts state across authentication transitions, and states that both plans

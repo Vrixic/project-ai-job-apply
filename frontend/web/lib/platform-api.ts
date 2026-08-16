@@ -31,10 +31,11 @@ function problem(status: number, code: string, title: string): Response {
       title,
       status,
       code,
+      traceId: crypto.randomUUID(),
     },
     {
       status,
-      headers: { "cache-control": "no-store" },
+      headers: { "cache-control": "no-store", "content-type": "application/problem+json" },
     },
   );
 }

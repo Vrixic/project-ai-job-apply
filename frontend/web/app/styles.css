@@ -362,6 +362,42 @@ aside {
   margin-top: 12px;
 }
 
+.match-assessment {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #e0e8e3;
+}
+
+.match-assessment-result {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 10px;
+  background: #f4f8f5;
+}
+
+.match-assessment-result p,
+.match-assessment-result ul {
+  margin: 0;
+}
+
+.match-assessment-result ul {
+  display: grid;
+  gap: 6px;
+  padding-left: 20px;
+}
+
+.match-assessment-result li > span {
+  display: inline-block;
+  min-width: 74px;
+  color: #385548;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .entitlement-summary {
   padding: 18px;
   border: 1px solid #cedbd3;

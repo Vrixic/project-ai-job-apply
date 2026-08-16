@@ -8,6 +8,7 @@ import type {
   EntitlementSummary,
   JobSearchPage,
   JobSearchRequest,
+  MatchAssessment,
   Operation,
   ProblemDetails,
   ProfileFact,
@@ -39,6 +40,11 @@ import {
 } from "@ai-job-apply/jobs-service";
 import {
   InvalidSavedJobCursorError,
+  MatchAssessmentServiceUnavailableError,
+  type MatchAssessments,
+  MatchAssessmentTargetUnavailableError,
+  MatchAssessmentUnavailableError,
+  MatchPreferencesRequiredError,
   SavedJobCollectionChangedError,
   SavedJobIdempotencyConflictError,
   SavedJobIdempotencyLimitError,
@@ -81,6 +87,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 const PROFILE_STORE = Symbol("PROFILE_STORE");
 const JOB_CATALOG = Symbol("JOB_CATALOG");
 const SAVED_JOBS = Symbol("SAVED_JOBS");
+const MATCH_ASSESSMENTS = Symbol("MATCH_ASSESSMENTS");
 const ENTITLEMENTS = Symbol("ENTITLEMENTS");
 const DOCUMENT_STORE = Symbol("DOCUMENT_STORE");
 const TOKEN_VERIFIER = Symbol("TOKEN_VERIFIER");
@@ -104,6 +111,7 @@ const SAFE_ROUTE_TEMPLATES = new Set([
   "/v1/resumes/uploads",
   "/v1/jobs/search",
   "/v1/jobs/:jobId",
+  "/v1/jobs/:jobId/match-assessment",
   "/v1/saved-jobs",
   "/v1/saved-jobs/search",
   "/v1/saved-jobs/:savedJobId",
@@ -260,6 +268,26 @@ class ProblemDetailsFilter implements ExceptionFilter {
       code = "saved_job_target_unavailable";
       title = "Job is unavailable";
       detail = exception.message;
+    } else if (exception instanceof MatchAssessmentTargetUnavailableError) {
+      status = HttpStatus.NOT_FOUND;
+      code = "match_job_unavailable";
+      title = "Job is unavailable";
+      detail = "The requested active job is unavailable";
+    } else if (exception instanceof MatchPreferencesRequiredError) {
+      status = HttpStatus.CONFLICT;
+      code = "match_preferences_required";
+      title = "Job preferences are required";
+      detail = exception.message;
+    } else if (exception instanceof MatchAssessmentUnavailableError) {
+      status = HttpStatus.CONFLICT;
+      code = "match_preferences_require_review";
+      title = "Job preferences require review";
+      detail = "Review and save job preferences before requesting an assessment";
+    } else if (exception instanceof MatchAssessmentServiceUnavailableError) {
+      status = HttpStatus.SERVICE_UNAVAILABLE;
+      code = "match_assessment_unavailable";
+      title = "Match assessment unavailable";
+      detail = "The match assessment is temporarily unavailable";
     } else if (exception instanceof EntitlementUnavailableError) {
       status = HttpStatus.SERVICE_UNAVAILABLE;
       code = "entitlement_unavailable";
@@ -341,7 +369,9 @@ const validateCreateResumeUpload = compileComponentValidator("CreateResumeUpload
 const validateJobSearch = compileComponentValidator("JobSearchRequest");
 const validateCreateSavedJob = compileComponentValidator("CreateSavedJobRequest");
 const validateSavedJobSearch = compileComponentValidator("SavedJobSearchRequest");
+const validateMatchAssessment = compileComponentValidator("MatchAssessment");
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_V7_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 function requireIdempotencyKey(value: string | undefined): string {
   if (!value || value.length < 16 || value.length > 128) {
@@ -360,7 +390,7 @@ const ENTITLEMENT_GRANTS = [
   "applications.history",
 ] as const;
 
-function exactEntitlementDate(value: string | undefined): value is string {
+function exactCanonicalDateTime(value: string | undefined): value is string {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) {
     return false;
   }
@@ -374,7 +404,7 @@ function projectEntitlement(evaluation: Awaited<ReturnType<EntitlementReadServic
     typeof evaluation.version !== "number" ||
     !Number.isSafeInteger(evaluation.version) ||
     evaluation.version < 0 ||
-    !exactEntitlementDate(evaluation.evaluatedAt) ||
+    !exactCanonicalDateTime(evaluation.evaluatedAt) ||
     !Array.isArray(evaluation.grants) ||
     evaluation.grants.length !== ENTITLEMENT_GRANTS.length ||
     !evaluation.grants.every((grant, index) => grant === ENTITLEMENT_GRANTS[index])
@@ -396,14 +426,14 @@ function projectEntitlement(evaluation: Awaited<ReturnType<EntitlementReadServic
     }
     return { ...base, plan: "free", accessState: "active" } as const;
   }
-  if (evaluation.plan !== "pro" || !exactEntitlementDate(evaluation.accessThrough)) {
+  if (evaluation.plan !== "pro" || !exactCanonicalDateTime(evaluation.accessThrough)) {
     throw new EntitlementUnavailableError();
   }
   const evaluatedAt = Date.parse(evaluation.evaluatedAt);
   const accessThrough = Date.parse(evaluation.accessThrough);
   if (evaluation.accessState === "grace") {
     if (
-      !exactEntitlementDate(evaluation.graceThrough) ||
+      !exactCanonicalDateTime(evaluation.graceThrough) ||
       evaluatedAt < accessThrough ||
       evaluatedAt >= Date.parse(evaluation.graceThrough)
     ) {
@@ -421,7 +451,7 @@ function projectEntitlement(evaluation: Awaited<ReturnType<EntitlementReadServic
     evaluation.accessState !== "active" ||
     evaluatedAt >= accessThrough ||
     (evaluation.graceThrough !== undefined &&
-      (!exactEntitlementDate(evaluation.graceThrough) ||
+      (!exactCanonicalDateTime(evaluation.graceThrough) ||
         accessThrough > Date.parse(evaluation.graceThrough)))
   ) {
     throw new EntitlementUnavailableError();
@@ -435,6 +465,25 @@ function projectEntitlement(evaluation: Awaited<ReturnType<EntitlementReadServic
   } as const;
 }
 
+function exactMatchAssessment(value: unknown, requestedJobId: string): value is MatchAssessment {
+  if (!validateMatchAssessment(value)) return false;
+  const assessment = value as MatchAssessment;
+  if (
+    assessment.requestedJobId !== requestedJobId ||
+    !exactCanonicalDateTime(assessment.preferenceUpdatedAt) ||
+    !exactCanonicalDateTime(assessment.assessedAt) ||
+    Date.parse(assessment.preferenceUpdatedAt) > Date.parse(assessment.assessedAt)
+  ) {
+    return false;
+  }
+  try {
+    const revision = BigInt(assessment.catalogRevision);
+    return revision >= 1n && revision <= 9_223_372_036_854_775_807n;
+  } catch {
+    return false;
+  }
+}
+
 @Controller("/v1")
 @UseFilters(ProblemDetailsFilter)
 class CandidateController {
@@ -443,6 +492,7 @@ class CandidateController {
     @Inject(PROFILE_STORE) private readonly store: ProfileStore,
     @Inject(JOB_CATALOG) private readonly catalog: JobCatalogReader,
     @Inject(SAVED_JOBS) private readonly savedJobs: SavedJobs,
+    @Inject(MATCH_ASSESSMENTS) private readonly matchAssessments: MatchAssessments,
     @Inject(ENTITLEMENTS) private readonly entitlements: EntitlementReadService,
     @Inject(DOCUMENT_STORE) private readonly documents: DocumentStore,
     @Inject(CLOCK) private readonly clock: () => Date,
@@ -601,6 +651,30 @@ class CandidateController {
     };
   }
 
+  @Get("/jobs/:jobId/match-assessment")
+  @Header("cache-control", "no-store")
+  async getJobMatchAssessment(
+    @Req() request: AuthenticatedRequest,
+    @Param("jobId") jobId: string,
+  ): Promise<MatchAssessment> {
+    if (
+      (request.query && Object.keys(request.query as Record<string, unknown>).length > 0) ||
+      request.body !== undefined ||
+      (request.headers["content-length"] !== undefined &&
+        request.headers["content-length"] !== "0") ||
+      request.headers["transfer-encoding"] !== undefined ||
+      !UUID_V7_PATTERN.test(jobId)
+    ) {
+      throw new HttpException("Match assessment input is invalid", HttpStatus.BAD_REQUEST);
+    }
+    const user = await this.identity.resolve(request, "jobs:read");
+    const assessment = await this.matchAssessments.assess(user.id, jobId);
+    if (!exactMatchAssessment(assessment, jobId)) {
+      throw new MatchAssessmentServiceUnavailableError();
+    }
+    return assessment as MatchAssessment;
+  }
+
   @Post("/jobs/search")
   @HttpCode(HttpStatus.OK)
   @Header("cache-control", "no-store")
@@ -725,6 +799,7 @@ export interface AppModuleOptions {
   store: ProfileStore;
   catalog: JobCatalogReader;
   savedJobs: SavedJobs;
+  matchAssessments: MatchAssessments;
   entitlements: EntitlementReadService;
   documents: DocumentStore;
   verifier: AccessTokenVerifier;
@@ -744,6 +819,7 @@ export class AppModule {
         { provide: PROFILE_STORE, useValue: options.store },
         { provide: JOB_CATALOG, useValue: options.catalog },
         { provide: SAVED_JOBS, useValue: options.savedJobs },
+        { provide: MATCH_ASSESSMENTS, useValue: options.matchAssessments },
         { provide: ENTITLEMENTS, useValue: options.entitlements },
         { provide: DOCUMENT_STORE, useValue: options.documents },
         { provide: TOKEN_VERIFIER, useValue: options.verifier },

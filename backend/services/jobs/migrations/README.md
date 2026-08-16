@@ -25,3 +25,6 @@ other service may modify these tables.
   catalog-function and other-database privileges are not a deny boundary. The migration does not
   harden those cluster-wide defaults, so accountable review or a stronger cluster/proxy boundary
   remains required before the anonymous route can be enabled.
+- `0007_matchable_job_attributes.sql` — Nullable, exact-enum work-mode and employment-type
+  attributes on the canonical job. Missing or explicit `unknown` values remain non-excluding;
+  the migration adds no compensation, authorization, seniority, qualification, or inferred data.

@@ -15,6 +15,7 @@ const migrationVersions = [
   "0004_job_search",
   "0005_ingestion_orchestration",
   "0006_public_job_reader",
+  "0007_matchable_job_attributes",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -112,6 +113,8 @@ try {
         publicReaderOwnershipCount: number;
         publicReaderSettingCount: number;
         rdsIamRoleCount: number;
+        matchableColumnCount: number;
+        matchableConstraintDefinitions: string[];
       }[]
     >`
       SELECT
@@ -482,6 +485,33 @@ try {
         , (
           SELECT count(*)::int FROM pg_roles WHERE rolname = 'rds_iam'
         ) AS "rdsIamRoleCount"
+        , (
+          SELECT count(*)::int
+          FROM pg_attribute AS attribute
+          INNER JOIN pg_type AS data_type ON data_type.oid = attribute.atttypid
+          WHERE attribute.attrelid = 'jobs.canonical_jobs'::regclass
+            AND attribute.attname IN ('work_mode', 'employment_type')
+            AND data_type.typname = 'text'
+            AND attribute.attnum > 0
+            AND NOT attribute.attisdropped
+            AND NOT attribute.attnotnull
+            AND NOT attribute.atthasdef
+            AND attribute.attgenerated = ''
+            AND attribute.attidentity = ''
+        ) AS "matchableColumnCount"
+        , ARRAY(
+          SELECT pg_get_constraintdef(constraint_definition.oid, true)
+          FROM pg_constraint AS constraint_definition
+          WHERE constraint_definition.conrelid = 'jobs.canonical_jobs'::regclass
+            AND constraint_definition.conname IN (
+              'canonical_jobs_work_mode_ck',
+              'canonical_jobs_employment_type_ck'
+            )
+            AND constraint_definition.contype = 'c'
+            AND constraint_definition.convalidated
+            AND NOT constraint_definition.connoinherit
+          ORDER BY constraint_definition.conname
+        ) AS "matchableConstraintDefinitions"
     `;
     if (
       verification?.tableCount !== 11 ||
@@ -506,9 +536,47 @@ try {
       verification.publicReaderMembershipCount !== verification.rdsIamRoleCount ||
       verification.publicReaderDirectGrantViolationCount !== 0 ||
       verification.publicReaderOwnershipCount !== 0 ||
-      verification.publicReaderSettingCount !== 1
+      verification.publicReaderSettingCount !== 1 ||
+      verification.matchableColumnCount !== 2 ||
+      JSON.stringify(verification.matchableConstraintDefinitions) !==
+        JSON.stringify([
+          "CHECK (employment_type IS NULL OR (employment_type = ANY (ARRAY['full_time'::text, 'part_time'::text, 'contract'::text, 'internship'::text, 'unknown'::text])))",
+          "CHECK (work_mode IS NULL OR (work_mode = ANY (ARRAY['remote'::text, 'hybrid'::text, 'on_site'::text, 'unknown'::text])))",
+        ])
     ) {
-      throw new Error("Jobs database migration verification failed");
+      throw new Error(
+        `Jobs database migration verification failed: ${JSON.stringify({
+          tableCount: verification?.tableCount,
+          migrationCount: verification?.migrationCount,
+          identityIndexCount: verification?.identityIndexCount,
+          moderationIndexCount: verification?.moderationIndexCount,
+          searchIndexCount: verification?.searchIndexCount,
+          searchColumnPresent: verification?.searchColumnPresent,
+          searchTriggerCount: verification?.searchTriggerCount,
+          ingestionTriggerCount: verification?.ingestionTriggerCount,
+          ingestionTriggerFunctionCount: verification?.ingestionTriggerFunctionCount,
+          ingestionTriggerBodiesMatch:
+            JSON.stringify(verification?.ingestionTriggerFunctionBodies) ===
+            JSON.stringify(expectedIngestionTriggerBodies),
+          ingestionIndexCount: verification?.ingestionIndexCount,
+          ingestionForeignKeyCount: verification?.ingestionForeignKeyCount,
+          publicSchemaCount: verification?.publicSchemaCount,
+          publicReaderRoleCount: verification?.publicReaderRoleCount,
+          publicReaderFunctionCount: verification?.publicReaderFunctionCount,
+          publicReaderFunctionBodyMatches:
+            verification?.publicReaderFunctionBody === expectedPublicReaderBody,
+          publicReaderGrantCount: verification?.publicReaderGrantCount,
+          publicReaderMembershipViolationCount: verification?.publicReaderMembershipViolationCount,
+          publicReaderMembershipCount: verification?.publicReaderMembershipCount,
+          rdsIamRoleCount: verification?.rdsIamRoleCount,
+          publicReaderDirectGrantViolationCount:
+            verification?.publicReaderDirectGrantViolationCount,
+          publicReaderOwnershipCount: verification?.publicReaderOwnershipCount,
+          publicReaderSettingCount: verification?.publicReaderSettingCount,
+          matchableColumnCount: verification?.matchableColumnCount,
+          matchableConstraintDefinitions: verification?.matchableConstraintDefinitions,
+        })}`,
+      );
     }
   });
   console.log(`Jobs migrations through ${migrationVersions.at(-1)} applied and verified.`);

@@ -14,6 +14,7 @@ import {
 import { PostgresJobCatalog } from "@ai-job-apply/jobs-service";
 import {
   deriveSavedJobCursorKeys,
+  MatchAssessmentService,
   PostgresSavedJobStore,
   SavedJobsService,
 } from "@ai-job-apply/matching-service";
@@ -44,6 +45,7 @@ const savedJobs = new SavedJobsService(
   new JobCatalogSavedJobResolver(catalog),
   deriveSavedJobCursorKeys(config.DATABASE_URL),
 );
+const matchAssessments = new MatchAssessmentService(store, catalog);
 const entitlements = new BillingEntitlementService(
   new PostgresBillingStore(database.client),
   new EntitlementCache({ capacity: 1_000, freshTtlMs: 5_000 }),
@@ -67,6 +69,7 @@ const app = await createGatewayApplication({
   store,
   catalog,
   savedJobs,
+  matchAssessments,
   entitlements,
   documents,
   verifier,

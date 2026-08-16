@@ -32,6 +32,13 @@ The active-job read model returns only active, unexpired canonical records and r
 summaries. It excludes raw snapshots, exact source identity keys, content hashes, pending or
 suspect records, and terminal tombstones.
 
+Migration `0007_matchable_job_attributes` adds nullable, exact-enum work-mode and employment-type
+columns to the canonical job. The matchable-job read port resolves reversible exact aliases inside
+one repeatable-read snapshot and returns only canonical identity, catalog revision, title,
+locations, those two optional attributes, and the earlier of expiry or source-valid-through. It
+independently requires an active, nonexpired, nonempty-description record. Missing and explicit
+`unknown` attributes remain unknown; Jobs does not infer candidate fit or read preferences.
+
 The D1 search read model uses PostgreSQL full-text search and stable keyset pagination over that
 same active catalog. It supports only honestly persisted title, company, location, and verification
 freshness filters, plus relevance or freshness ordering. Exact duplicate aliases resolve to one
@@ -74,4 +81,5 @@ AWS/database apply, crawlability, real-source acceptance, or deployment is claim
 - `src/api/` — Contribution and report commands.
 - Provider adapters will live behind the integrations boundary, not inside source-truth rules.
 
-This service determines source truth. Per-user ranking belongs to matching.
+This service determines source truth. Per-user constraint assessment and any future ranking belong
+to Matching.

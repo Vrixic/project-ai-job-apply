@@ -55,10 +55,10 @@ describeWithDatabase("PostgresJobCatalog", () => {
     const first = await runMigrationVerifier();
     const replay = await runMigrationVerifier();
     expect(first.stdout.trim()).toBe(
-      "Jobs migrations through 0006_public_job_reader applied and verified.",
+      "Jobs migrations through 0007_matchable_job_attributes applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(
-      "Jobs migrations through 0006_public_job_reader applied and verified.",
+      "Jobs migrations through 0007_matchable_job_attributes applied and verified.",
     );
     await catalog.ping();
   });
@@ -67,7 +67,7 @@ describeWithDatabase("PostgresJobCatalog", () => {
     await catalog.close();
   });
 
-  it("fails migration verification when a required ingestion integrity object is missing", async () => {
+  it("fails migration verification when a required Jobs integrity object is missing or changed", async () => {
     const cases = [
       {
         definition: async () => {
@@ -128,6 +128,36 @@ describeWithDatabase("PostgresJobCatalog", () => {
           return row?.definition;
         },
         drop: "CREATE OR REPLACE FUNCTION jobs.guard_ingestion_dispatch() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END; $$",
+      },
+      {
+        definition: async () => {
+          const [row] = await client<{ definition: string }[]>`
+            SELECT pg_get_constraintdef(oid, true) AS definition
+            FROM pg_constraint
+            WHERE conrelid='jobs.canonical_jobs'::regclass
+              AND conname='canonical_jobs_work_mode_ck'
+          `;
+          return row?.definition
+            ? `ALTER TABLE jobs.canonical_jobs ADD COLUMN work_mode text; ALTER TABLE jobs.canonical_jobs ADD CONSTRAINT canonical_jobs_work_mode_ck ${row.definition}`
+            : undefined;
+        },
+        drop: "ALTER TABLE jobs.canonical_jobs DROP COLUMN work_mode",
+      },
+      {
+        definition: async () => {
+          const [row] = await client<{ definition: string }[]>`
+            SELECT pg_get_constraintdef(oid, true) AS definition
+            FROM pg_constraint
+            WHERE conrelid='jobs.canonical_jobs'::regclass
+              AND conname='canonical_jobs_employment_type_ck'
+          `;
+          return row?.definition
+            ? `ALTER TABLE jobs.canonical_jobs ADD CONSTRAINT canonical_jobs_employment_type_ck ${row.definition}`
+            : undefined;
+        },
+        drop: "ALTER TABLE jobs.canonical_jobs DROP CONSTRAINT canonical_jobs_employment_type_ck",
+        replacement:
+          "ALTER TABLE jobs.canonical_jobs ADD CONSTRAINT canonical_jobs_employment_type_ck CHECK (employment_type IS NULL OR employment_type <> '')",
       },
     ] as const;
 
@@ -235,6 +265,115 @@ describeWithDatabase("PostgresJobCatalog", () => {
     expect(active?.sources[0]).not.toHaveProperty("rawSnapshot");
     expect(active?.sources[0]).not.toHaveProperty("externalJobId");
     expect(active?.sources[0]).not.toHaveProperty("atsTenant");
+  });
+
+  it("persists and resolves only active matchable attributes with reversible alias identity", async () => {
+    const eligibleThrough = new Date("2026-08-20T12:00:00.000Z");
+    const canonical = await catalog.recordObservation(
+      fixture({
+        sourceUrl: `https://jobs.example.test/${runId}/matchable-canonical`,
+        externalJobId: "matchable-canonical",
+        employerRequisitionId: `req-${runId}-matchable-canonical`,
+        workMode: "remote",
+        employmentType: "full_time",
+        validThrough: eligibleThrough,
+      }),
+    );
+    const replay = await catalog.recordObservation(
+      fixture({
+        sourceUrl: `https://jobs.example.test/${runId}/matchable-canonical`,
+        externalJobId: "matchable-canonical",
+        employerRequisitionId: `req-${runId}-matchable-canonical`,
+        workMode: "hybrid",
+        employmentType: "contract",
+        validThrough: eligibleThrough,
+      }),
+    );
+    const alias = await catalog.recordObservation(
+      fixture({
+        provider: "other",
+        sourceUrl: `https://mirror.example.test/${runId}/matchable-alias`,
+        atsTenant: `matchable-alias-${runId}`,
+        externalJobId: "matchable-alias",
+        employerRequisitionId: `req-${runId}-matchable-alias`,
+        workMode: "on_site",
+        employmentType: "part_time",
+      }),
+    );
+    await catalog.reviewDuplicateCandidate({
+      jobId: canonical.job.id,
+      candidateJobId: alias.job.id,
+      resolution: "exact",
+      canonicalJobId: canonical.job.id,
+      reviewedBy: "operator:synthetic-test",
+      reasonCode: "synthetic.matchable_alias",
+      reviewedAt: observedAt,
+    });
+
+    const resolved = await catalog.getMatchableJob(alias.job.id, observedAt);
+    expect(replay.job).toMatchObject({ workMode: "hybrid", employmentType: "contract" });
+    expect(resolved).toMatchObject({
+      requestedJobId: alias.job.id,
+      job: {
+        id: canonical.job.id,
+        title: "Software Engineer",
+        locations: ["Remote - US"],
+        workMode: "hybrid",
+        employmentType: "contract",
+        eligibleThrough: eligibleThrough.toISOString(),
+      },
+    });
+    expect(resolved?.job.catalogRevision).toMatch(/^[1-9][0-9]*$/);
+    expect(Object.keys(resolved?.job ?? {}).sort()).toEqual([
+      "catalogRevision",
+      "eligibleThrough",
+      "employmentType",
+      "id",
+      "locations",
+      "title",
+      "workMode",
+    ]);
+    await expect(catalog.getMatchableJob(alias.job.id, eligibleThrough)).resolves.toBeNull();
+    await catalog.setTerminalStatus(
+      canonical.job.id,
+      "blocked",
+      "synthetic_matchable_block",
+      observedAt,
+    );
+    await expect(catalog.getMatchableJob(alias.job.id, observedAt)).resolves.toBeNull();
+  });
+
+  it("rejects invalid matchable attributes at both domain and SQL boundaries", async () => {
+    await expect(
+      catalog.recordObservation(
+        fixture({
+          sourceUrl: `https://jobs.example.test/${runId}/matchable-invalid-domain`,
+          externalJobId: "matchable-invalid-domain",
+          employerRequisitionId: `req-${runId}-matchable-invalid-domain`,
+          workMode: "virtual" as "remote",
+        }),
+      ),
+    ).rejects.toThrow("matching attributes are invalid");
+
+    const created = await catalog.recordObservation(
+      fixture({
+        sourceUrl: `https://jobs.example.test/${runId}/matchable-invalid-sql`,
+        externalJobId: "matchable-invalid-sql",
+        employerRequisitionId: `req-${runId}-matchable-invalid-sql`,
+        workMode: "remote",
+        employmentType: "full_time",
+      }),
+    );
+    await expect(
+      client`UPDATE jobs.canonical_jobs SET work_mode='virtual' WHERE id=${created.job.id}`,
+    ).rejects.toThrow();
+    await expect(
+      client`UPDATE jobs.canonical_jobs SET employment_type='temporary' WHERE id=${created.job.id}`,
+    ).rejects.toThrow();
+    await expect(catalog.getById(created.job.id)).resolves.toMatchObject({
+      workMode: "remote",
+      employmentType: "full_time",
+    });
   });
 
   it("searches and filters active jobs with stable opaque keyset pagination", async () => {

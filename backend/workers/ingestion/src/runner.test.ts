@@ -29,6 +29,8 @@ function observation(overrides: Partial<SourceJobObservation> = {}): SourceJobOb
     atsTenant: "synthetic-tenant",
     externalJobId: "generated-1",
     verifiedCompanyDomain: "COMPANY.EXAMPLE.TEST",
+    workMode: "remote",
+    employmentType: "full_time",
     ...overrides,
   };
 }
@@ -123,6 +125,8 @@ describe("SourceNeutralIngestionRunner", () => {
       adapterVersion: "synthetic-ingestion-v1",
       sourceUrl: "https://jobs.example.test/generated/1",
       verifiedCompanyDomain: "company.example.test",
+      workMode: "remote",
+      employmentType: "full_time",
       observedAt,
     });
     expect(target.observations[0]).not.toHaveProperty("rawSnapshot");
@@ -142,7 +146,7 @@ describe("SourceNeutralIngestionRunner", () => {
     expect(target.observations).toEqual([]);
   });
 
-  it("rejects duplicate identities and unknown adapter fields before persistence", async () => {
+  it("rejects duplicate identities, unsupported fields, and invalid match attributes before persistence", async () => {
     const target = catalog();
     const duplicateRunner = new SourceNeutralIngestionRunner(
       registry(adapter({ kind: "success", observations: [observation(), observation()] })),
@@ -167,6 +171,19 @@ describe("SourceNeutralIngestionRunner", () => {
     await expect(
       unknownRunner.run("synthetic-foundation-v1", 1, new AbortController().signal),
     ).rejects.toThrow("unsupported field");
+
+    const invalidWorkMode = {
+      ...observation(),
+      workMode: "mostly_remote",
+    } as unknown as SourceJobObservation;
+    const invalidAttributeRunner = new SourceNeutralIngestionRunner(
+      registry(adapter({ kind: "success", observations: [invalidWorkMode] })),
+      target.port,
+      { clock: () => observedAt },
+    );
+    await expect(
+      invalidAttributeRunner.run("synthetic-foundation-v1", 1, new AbortController().signal),
+    ).rejects.toThrow("Job matching attributes are invalid");
     expect(target.observations).toEqual([]);
   });
 

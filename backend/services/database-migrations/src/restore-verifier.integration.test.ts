@@ -103,6 +103,15 @@ describe.skipIf(!requested)("restored PostgreSQL aggregate verification", () => 
         WHERE user_id = '${fixtureOwnerId}'::uuid AND version = 1 AND plan = 'free'
       `);
       expect(billingFixture).toEqual([{ fixture_count: 1 }]);
+      const matchableJobFixture = await client.unsafe<{ fixture_count: number }>(`
+        SELECT count(*)::int AS fixture_count
+        FROM jobs.canonical_jobs AS job
+        INNER JOIN jobs.job_sources AS source ON source.job_id = job.id
+        WHERE source.external_job_id = 'restore-matchable-0007'
+          AND job.work_mode = 'hybrid'
+          AND job.employment_type = 'contract'
+      `);
+      expect(matchableJobFixture).toEqual([{ fixture_count: 1 }]);
       const ingestionFixture = await client.unsafe<{
         checkpoint_count: number;
         dispatch_count: number;
@@ -300,22 +309,24 @@ describe.skipIf(!requested)("restored PostgreSQL aggregate verification", () => 
         WHERE version = '0001_entitlement_projection'
       `);
     }
-    const expectedPublicReaderChecksum = loadCurrentRestoreManifest()
+    const expectedMatchableAttributesChecksum = loadCurrentRestoreManifest()
       .manifest.contributors.find((contributor) => contributor.owner === "jobs")
-      ?.migrations.find((migration) => migration.version === "0006_public_job_reader")?.checksum;
-    expect(expectedPublicReaderChecksum).toMatch(/^[a-f0-9]{64}$/);
+      ?.migrations.find(
+        (migration) => migration.version === "0007_matchable_job_attributes",
+      )?.checksum;
+    expect(expectedMatchableAttributesChecksum).toMatch(/^[a-f0-9]{64}$/);
     try {
       await restored.unsafe(`
         UPDATE jobs.schema_migrations SET checksum=repeat('f', 64)
-        WHERE version='0006_public_job_reader'
+        WHERE version='0007_matchable_job_attributes'
       `);
       await expect(verifyRestoreDatabase(restored)).rejects.toThrow(
         "Restore migration boundary mismatch for jobs",
       );
     } finally {
       await restored.unsafe(`
-        UPDATE jobs.schema_migrations SET checksum='${expectedPublicReaderChecksum}'
-        WHERE version='0006_public_job_reader'
+        UPDATE jobs.schema_migrations SET checksum='${expectedMatchableAttributesChecksum}'
+        WHERE version='0007_matchable_job_attributes'
       `);
     }
     expect(await verifyRestoreDatabase(restored)).toEqual(await verifyRestoreDatabase(source));

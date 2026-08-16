@@ -41,12 +41,23 @@ for create/delete commands. Create accepts only an active public job target, ret
 unavailable error for unknown or non-active targets, and stores both the requested target and the
 canonical identifier resolved at save time. Delete is idempotent and returns the same `204` for an
 unknown identifier or another owner's identifier. Saved snapshots remain visible when a posting
-leaves the active catalog without exposing internal lifecycle reasons. Matching, scoring, and
+leaves the active catalog without exposing internal lifecycle reasons. Scoring and generated
 explanations are not part of these routes.
 
-This is locally verified source only. The Auth0 API permission/grant, Terraform route inventory,
-publication, deployment, and live acceptance remain a serialized later gate; do not release the
-saved-job surface until the managed client has the exact `jobs:write` grant.
+The exact bodyless and queryless `GET /v1/jobs/{jobId}/match-assessment` route reuses `jobs:read`,
+resolves the OIDC principal through Profile to one internal owner UUID, and supplies that UUID only
+to Matching. Matching reads the owner preference snapshot and a Jobs-owned active canonical
+projection; the gateway validates the complete fixed-code response before returning it with
+`Cache-Control: no-store`. Missing preferences or legacy restricted sponsorship fields require
+candidate review, unavailable targets return generic absence, and malformed/dependency failures
+return a generic `503` without reflecting profile, job, or database values.
+
+This is locally verified source only. The saved-job mutation permission/grant, publication,
+database migration, deployment, and live acceptance remain serialized later gates; do not release
+the mutation surface until the managed client has the exact `jobs:write` grant. The assessment read
+adds no Auth0 scope or Terraform route because the protected `$default` route already delegates to
+the Lambda method/path allowlist, but its new source and migration still require immutable release
+and managed-OIDC/browser acceptance.
 
 The provider-neutral entitlement read uses exact `profile:read` and accepts no owner identifier,
 query, or body. Profile resolves the validated issuer and subject to one internal UUID before the

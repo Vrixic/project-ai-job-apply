@@ -164,6 +164,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/jobs/{jobId}/match-assessment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getJobMatchAssessment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/public/jobs/{jobId}": {
         parameters: {
             query?: never;
@@ -534,6 +550,150 @@ export interface components {
         SavedJobPage: {
             items: components["schemas"]["SavedJob"][];
             nextCursor?: string;
+        };
+        MatchAssessment: {
+            /** @constant */
+            schemaVersion: 1;
+            requestedJobId: string;
+            canonicalJobId: string;
+            preferenceSetId: string;
+            preferenceVersion: number;
+            preferenceUpdatedAt: string;
+            catalogRevision: string;
+            assessedAt: string;
+            /** @enum {string} */
+            gate: "excluded" | "review_required";
+            evidence: [
+                components["schemas"]["MatchWorkModeSatisfied"] | components["schemas"]["MatchWorkModeConflict"] | components["schemas"]["MatchWorkModeUnknown"],
+                components["schemas"]["MatchEmploymentTypeSatisfied"] | components["schemas"]["MatchEmploymentTypeConflict"] | components["schemas"]["MatchEmploymentTypeUnknown"],
+                components["schemas"]["MatchTargetRoleSatisfied"] | components["schemas"]["MatchTargetRoleUnknown"],
+                components["schemas"]["MatchLocationSatisfied"] | components["schemas"]["MatchLocationUnknown"],
+                components["schemas"]["MatchCompensationUnknown"],
+                components["schemas"]["MatchAuthorizationUnknown"],
+                components["schemas"]["MatchSeniorityUnknown"],
+                components["schemas"]["MatchBlockedCompanyUnknown"],
+                components["schemas"]["MatchQualificationsUnknown"]
+            ];
+        } & unknown;
+        MatchWorkModeSatisfied: {
+            /** @constant */
+            constraint: "work_mode";
+            /** @constant */
+            state: "satisfied";
+            /** @constant */
+            reasonCode: "work_mode_selected";
+        };
+        MatchWorkModeConflict: {
+            /** @constant */
+            constraint: "work_mode";
+            /** @constant */
+            state: "conflict";
+            /** @constant */
+            reasonCode: "work_mode_conflict";
+        };
+        MatchWorkModeUnknown: {
+            /** @constant */
+            constraint: "work_mode";
+            /** @constant */
+            state: "unknown";
+            /** @constant */
+            reasonCode: "work_mode_unavailable";
+        };
+        MatchEmploymentTypeSatisfied: {
+            /** @constant */
+            constraint: "employment_type";
+            /** @constant */
+            state: "satisfied";
+            /** @constant */
+            reasonCode: "employment_type_selected";
+        };
+        MatchEmploymentTypeConflict: {
+            /** @constant */
+            constraint: "employment_type";
+            /** @constant */
+            state: "conflict";
+            /** @constant */
+            reasonCode: "employment_type_conflict";
+        };
+        MatchEmploymentTypeUnknown: {
+            /** @constant */
+            constraint: "employment_type";
+            /** @constant */
+            state: "unknown";
+            /** @constant */
+            reasonCode: "employment_type_unavailable";
+        };
+        MatchTargetRoleSatisfied: {
+            /** @constant */
+            constraint: "target_role";
+            /** @constant */
+            state: "satisfied";
+            /** @constant */
+            reasonCode: "target_role_exact_overlap";
+        };
+        MatchTargetRoleUnknown: {
+            /** @constant */
+            constraint: "target_role";
+            /** @constant */
+            state: "unknown";
+            /** @constant */
+            reasonCode: "target_role_not_established";
+        };
+        MatchLocationSatisfied: {
+            /** @constant */
+            constraint: "location";
+            /** @constant */
+            state: "satisfied";
+            /** @constant */
+            reasonCode: "location_exact_overlap";
+        };
+        MatchLocationUnknown: {
+            /** @constant */
+            constraint: "location";
+            /** @constant */
+            state: "unknown";
+            /** @constant */
+            reasonCode: "location_not_established";
+        };
+        MatchCompensationUnknown: {
+            /** @constant */
+            constraint: "compensation";
+            /** @constant */
+            state: "unknown";
+            /** @constant */
+            reasonCode: "compensation_semantics_unavailable";
+        };
+        MatchAuthorizationUnknown: {
+            /** @constant */
+            constraint: "authorization_sponsorship";
+            /** @constant */
+            state: "unknown";
+            /** @constant */
+            reasonCode: "authorization_sponsorship_unavailable";
+        };
+        MatchSeniorityUnknown: {
+            /** @constant */
+            constraint: "seniority";
+            /** @constant */
+            state: "unknown";
+            /** @constant */
+            reasonCode: "seniority_semantics_unavailable";
+        };
+        MatchBlockedCompanyUnknown: {
+            /** @constant */
+            constraint: "blocked_company";
+            /** @constant */
+            state: "unknown";
+            /** @constant */
+            reasonCode: "blocked_company_preferences_unavailable";
+        };
+        MatchQualificationsUnknown: {
+            /** @constant */
+            constraint: "qualifications";
+            /** @constant */
+            state: "unknown";
+            /** @constant */
+            reasonCode: "qualification_evidence_unavailable";
         };
         CanonicalJobDetail: {
             /** Format: uuid */
@@ -1082,6 +1242,89 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getJobMatchAssessment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                jobId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owner-self deterministic hard-constraint evidence for one active job */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchAssessment"];
+                };
+            };
+            /** @description The match-assessment request shape is invalid */
+            400: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication is required */
+            401: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The caller lacks jobs:read */
+            403: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The requested job is unavailable for assessment */
+            404: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Preferences are missing or require review */
+            409: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The assessment cannot be produced safely */
+            503: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     getPublicJob: {

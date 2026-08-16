@@ -19,6 +19,7 @@ import {
 import { PostgresJobCatalog } from "@ai-job-apply/jobs-service";
 import {
   deriveSavedJobCursorKeys,
+  MatchAssessmentService,
   PostgresSavedJobStore,
   SavedJobsService,
 } from "@ai-job-apply/matching-service";
@@ -115,6 +116,8 @@ const OPERATION_PATH_PATTERN =
   /^\/v1\/operations\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const JOB_PATH_PATTERN =
   /^\/v1\/jobs\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MATCH_ASSESSMENT_PATH_PATTERN =
+  /^\/v1\/jobs\/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/match-assessment$/;
 const PROFILE_FACT_PATH_PATTERN =
   /^\/v1\/profile\/facts\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SAVED_JOB_PATH_PATTERN =
@@ -148,6 +151,9 @@ function allowedRoute(method: string, path: string): AllowedRoute | undefined {
     return { acceptsBody: true, protected: true };
   }
   if (method === "GET" && (OPERATION_PATH_PATTERN.test(path) || JOB_PATH_PATTERN.test(path))) {
+    return { acceptsBody: false, protected: true };
+  }
+  if (method === "GET" && MATCH_ASSESSMENT_PATH_PATTERN.test(path)) {
     return { acceptsBody: false, protected: true };
   }
   if (method === "DELETE" && SAVED_JOB_PATH_PATTERN.test(path)) {
@@ -535,6 +541,7 @@ async function createConfiguredApplication(
     new JobCatalogSavedJobResolver(catalog),
     deriveSavedJobCursorKeys(databaseUrl),
   );
+  const matchAssessments = new MatchAssessmentService(store, catalog);
   const entitlements = new BillingEntitlementService(
     new PostgresBillingStore(database.client),
     new EntitlementCache({ capacity: 1_000, freshTtlMs: 5_000 }),
@@ -553,6 +560,7 @@ async function createConfiguredApplication(
     store,
     catalog,
     savedJobs,
+    matchAssessments,
     entitlements,
     documents,
     verifier: principalBridge.verifier,

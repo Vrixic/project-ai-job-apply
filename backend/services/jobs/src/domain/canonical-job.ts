@@ -15,6 +15,8 @@ export type JobSourceProvider = "greenhouse" | "lever" | "ashby" | "workday" | "
 
 export type JobProvenance = "permitted_api" | "authorized_fixture" | "explicit_ugc";
 export type DuplicateClassification = "exact" | "probable" | "related_repost" | "not_duplicate";
+export type JobWorkMode = "remote" | "hybrid" | "on_site" | "unknown";
+export type JobEmploymentType = "full_time" | "part_time" | "contract" | "internship" | "unknown";
 
 export type DuplicateResolution = Exclude<DuplicateClassification, "probable">;
 
@@ -32,6 +34,8 @@ export interface JobObservation {
   employerRequisitionId?: string;
   verifiedCompanyDomain?: string;
   department?: string;
+  workMode?: JobWorkMode;
+  employmentType?: JobEmploymentType;
   validThrough?: Date;
   adapterVersion?: string;
 }
@@ -176,6 +180,16 @@ export function canonicalizeObservation(observation: JobObservation): CanonicalO
     (observation.department?.length ?? 0) > 200
   ) {
     throw new Error("Job display field exceeds the canonical contract limit");
+  }
+  if (
+    (observation.workMode !== undefined &&
+      !["remote", "hybrid", "on_site", "unknown"].includes(observation.workMode)) ||
+    (observation.employmentType !== undefined &&
+      !["full_time", "part_time", "contract", "internship", "unknown"].includes(
+        observation.employmentType,
+      ))
+  ) {
+    throw new Error("Job matching attributes are invalid");
   }
   if (observation.locations.length === 0 || observation.locations.length > 20) {
     throw new Error("A job must have between one and twenty locations");

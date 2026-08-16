@@ -1,7 +1,9 @@
 import type {
   CatalogObservation,
+  JobEmploymentType,
   JobProvenance,
   JobSourceProvider,
+  JobWorkMode,
   RecordObservationResult,
 } from "@ai-job-apply/jobs-service";
 
@@ -19,6 +21,8 @@ export interface SourceJobObservation {
   employerRequisitionId?: string;
   verifiedCompanyDomain?: string;
   department?: string;
+  workMode?: JobWorkMode;
+  employmentType?: JobEmploymentType;
   validThrough?: Date;
 }
 

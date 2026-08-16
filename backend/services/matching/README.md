@@ -33,14 +33,15 @@ Create idempotency is retained for 24 hours; expired rows are removed lazily und
 owner-scoped transaction before another command is admitted. Replays inside that window return the
 original typed projection without reading a changed catalog.
 
-`migrations/0001_saved_jobs.sql` is locally runnable through `db:migrate`, but this packet does not
-add the service to the shared migration image, task definition, Terraform, or a deployed runtime.
+`migrations/0001_saved_jobs.sql` is locally runnable through `db:migrate` and is present in the
+source migration-image composition. No immutable image containing it is published or deployed.
 
-## Constraint assessment kernel
+## Constraint assessment vertical
 
-The implemented source-only assessment kernel consumes an immutable preference snapshot and a
-bounded Matching-owned job projection. It emits deterministic, value-free reason codes in a fixed
-order. Exact known work-mode or employment-type contradictions can set the gate to `excluded`.
+The implemented source-only assessment service reads the owner-self Profile preference snapshot
+and the bounded Jobs-owned active match projection, then applies the deterministic kernel. It emits
+value-free reason codes in a fixed order. Exact known work-mode or employment-type contradictions
+can set the gate to `excluded`.
 Missing or unknown job values never exclude. Exact normalized title and location overlap is only
 supporting evidence; non-overlap remains `unknown` rather than becoming a negative inference.
 
@@ -51,8 +52,14 @@ legacy sponsorship boolean, regardless of value, blocks the assessment without e
 that Restricted value. The kernel does not accept profile facts, protected or voluntary demographic
 data, descriptions, raw source material, or arbitrary explanation text.
 
-This packet adds no persistence, cache, API, UI, event, telemetry, scoring, ranking, fit band,
-generated prose, eligibility claim, deployment, or AWS behavior. Its inline fixtures prove only
-mechanical deterministic semantics. They are not the representative D1 matching set or accepted
-evaluation rubric required by D1-R2, so grounded product explanations and matching-quality
-acceptance remain open.
+The owner-self `jobs:read` API and saved-job UI expose this fixed evidence only on demand and never
+accept a client owner identifier. Responses bind the requested and canonical job identities,
+preference version, catalog revision, and trusted assessment time, are `no-store`, and fail closed
+if either dependency is malformed or the job expires during the read. No assessment is persisted,
+cached, emitted as an event, or used to reorder search results.
+
+This packet adds no scoring, ranking, fit band, generated prose, eligibility claim, application
+decision, deployment, or AWS behavior. Its generated-synthetic fixtures prove only mechanical
+deterministic semantics. They are not the representative D1 matching set or accepted evaluation
+rubric required by D1-R2, so grounded product explanations and matching-quality acceptance remain
+open.

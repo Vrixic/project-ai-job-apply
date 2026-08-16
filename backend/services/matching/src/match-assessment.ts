@@ -28,6 +28,7 @@ export interface MatchPreferenceSnapshot {
 export interface MatchableJobSnapshot {
   readonly id: string;
   readonly catalogRevision: string;
+  readonly eligibleThrough: string;
   readonly title: string;
   readonly locations: readonly string[];
   readonly workMode?: MatchWorkMode | "unknown";
@@ -125,8 +126,8 @@ function hasExactKeys(
 function isBoundedString(value: unknown, maximum: number): value is string {
   return (
     typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= maximum &&
+    Array.from(value).length > 0 &&
+    Array.from(value).length <= maximum &&
     value.trim().length > 0
   );
 }
@@ -234,12 +235,13 @@ function assertJob(value: unknown): asserts value is MatchableJobSnapshot {
     !isRecord(value) ||
     !hasExactKeys(
       value,
-      ["id", "catalogRevision", "title", "locations"],
+      ["id", "catalogRevision", "eligibleThrough", "title", "locations"],
       ["workMode", "employmentType"],
     ) ||
     typeof value.id !== "string" ||
     !UUID_V7_PATTERN.test(value.id) ||
     !isCatalogRevision(value.catalogRevision) ||
+    !isDateTime(value.eligibleThrough) ||
     !isBoundedString(value.title, 240) ||
     !isBoundedStrings(value.locations, 0, 20, 240) ||
     (Object.hasOwn(value, "workMode") && value.workMode === undefined) ||
