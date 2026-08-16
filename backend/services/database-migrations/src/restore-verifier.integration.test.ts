@@ -87,6 +87,12 @@ describe.skipIf(!requested)("restored PostgreSQL aggregate verification", () => 
         WHERE owner_user_id = '${fixtureOwnerId}'::uuid AND revision = 1
       `);
       expect(fixture).toEqual([{ fixture_count: 1 }]);
+      const billingFixture = await client.unsafe<{ fixture_count: number }>(`
+        SELECT count(*)::int AS fixture_count
+        FROM billing.entitlement_accounts
+        WHERE user_id = '${fixtureOwnerId}'::uuid AND version = 1 AND plan = 'free'
+      `);
+      expect(billingFixture).toEqual([{ fixture_count: 1 }]);
     }
   });
 
@@ -103,11 +109,11 @@ describe.skipIf(!requested)("restored PostgreSQL aggregate verification", () => 
   });
 
   it("rejects target count, relation, and migration-ledger divergence", async () => {
-    const mismatchOwnerId = randomUUID();
+    const matchingMismatchOwnerId = randomUUID();
     try {
       await restored.unsafe(`
         INSERT INTO matching.saved_job_list_state (owner_user_id, revision)
-        VALUES ('${mismatchOwnerId}'::uuid, 1)
+        VALUES ('${matchingMismatchOwnerId}'::uuid, 1)
       `);
       expect((await verifyRestoreDatabase(restored)).aggregateDigest).not.toBe(
         (await verifyRestoreDatabase(source)).aggregateDigest,
@@ -115,7 +121,29 @@ describe.skipIf(!requested)("restored PostgreSQL aggregate verification", () => 
     } finally {
       await restored.unsafe(`
         DELETE FROM matching.saved_job_list_state
-        WHERE owner_user_id = '${mismatchOwnerId}'::uuid
+        WHERE owner_user_id = '${matchingMismatchOwnerId}'::uuid
+      `);
+    }
+
+    const mismatchOwnerId = randomUUID();
+    const mismatchAccountId = randomUUID();
+    try {
+      await restored.unsafe(`
+        INSERT INTO billing.entitlement_accounts (
+          id, user_id, version, plan, effective_at, updated_at
+        ) VALUES (
+          '${mismatchAccountId}'::uuid, '${mismatchOwnerId}'::uuid, 1, 'free',
+          '2026-08-15T12:00:00.000Z'::timestamptz,
+          '2026-08-15T12:00:00.000Z'::timestamptz
+        )
+      `);
+      expect((await verifyRestoreDatabase(restored)).aggregateDigest).not.toBe(
+        (await verifyRestoreDatabase(source)).aggregateDigest,
+      );
+    } finally {
+      await restored.unsafe(`
+        DELETE FROM billing.entitlement_accounts
+        WHERE id = '${mismatchAccountId}'::uuid AND user_id = '${mismatchOwnerId}'::uuid
       `);
     }
 
@@ -128,10 +156,19 @@ describe.skipIf(!requested)("restored PostgreSQL aggregate verification", () => 
       await restored.unsafe("DROP TABLE IF EXISTS matching.restore_verifier_unreviewed_probe");
     }
 
-    const expectedChecksum = loadCurrentRestoreManifest()
+    try {
+      await restored.unsafe("CREATE TABLE billing.restore_verifier_unreviewed_probe (id integer)");
+      await expect(verifyRestoreDatabase(restored)).rejects.toThrow(
+        "Restore relation boundary mismatch",
+      );
+    } finally {
+      await restored.unsafe("DROP TABLE IF EXISTS billing.restore_verifier_unreviewed_probe");
+    }
+
+    const expectedMatchingChecksum = loadCurrentRestoreManifest()
       .manifest.contributors.find((contributor) => contributor.owner === "matching")
       ?.migrations.find((migration) => migration.version === "0001_saved_jobs")?.checksum;
-    expect(expectedChecksum).toMatch(/^[a-f0-9]{64}$/);
+    expect(expectedMatchingChecksum).toMatch(/^[a-f0-9]{64}$/);
     try {
       await restored.unsafe(`
         UPDATE matching.schema_migrations
@@ -144,8 +181,31 @@ describe.skipIf(!requested)("restored PostgreSQL aggregate verification", () => 
     } finally {
       await restored.unsafe(`
         UPDATE matching.schema_migrations
-        SET checksum = '${expectedChecksum}'
+        SET checksum = '${expectedMatchingChecksum}'
         WHERE version = '0001_saved_jobs'
+      `);
+    }
+
+    const expectedBillingChecksum = loadCurrentRestoreManifest()
+      .manifest.contributors.find((contributor) => contributor.owner === "billing")
+      ?.migrations.find(
+        (migration) => migration.version === "0001_entitlement_projection",
+      )?.checksum;
+    expect(expectedBillingChecksum).toMatch(/^[a-f0-9]{64}$/);
+    try {
+      await restored.unsafe(`
+        UPDATE billing.schema_migrations
+        SET checksum = repeat('f', 64)
+        WHERE version = '0001_entitlement_projection'
+      `);
+      await expect(verifyRestoreDatabase(restored)).rejects.toThrow(
+        "Restore migration boundary mismatch for billing",
+      );
+    } finally {
+      await restored.unsafe(`
+        UPDATE billing.schema_migrations
+        SET checksum = '${expectedBillingChecksum}'
+        WHERE version = '0001_entitlement_projection'
       `);
     }
     expect(await verifyRestoreDatabase(restored)).toEqual(await verifyRestoreDatabase(source));

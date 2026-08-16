@@ -703,4 +703,51 @@ describeWithDatabase("PostgresBillingStore", () => {
       )
     `).rejects.toThrow();
   });
+
+  it("fails readiness for a missing or stale ledger and a missing required relation", async () => {
+    const checksum = "05368bb42a9c6ed3007b61f80a980a921d1f02bbcac633a4ecfd0b4c7dcf0ba0";
+    const [ledger] = await client<{ appliedAt: Date }[]>`
+      SELECT applied_at AS "appliedAt"
+      FROM billing.schema_migrations
+      WHERE version = '0001_entitlement_projection'
+    `;
+    expect(ledger?.appliedAt).toBeInstanceOf(Date);
+
+    try {
+      await client`
+        UPDATE billing.schema_migrations SET checksum = ${"f".repeat(64)}
+        WHERE version = '0001_entitlement_projection'
+      `;
+      await expect(store.ping()).rejects.toThrow("Billing schema boundary is unavailable");
+    } finally {
+      await client`
+        UPDATE billing.schema_migrations SET checksum = ${checksum}
+        WHERE version = '0001_entitlement_projection'
+      `;
+    }
+
+    try {
+      await client`
+        DELETE FROM billing.schema_migrations WHERE version = '0001_entitlement_projection'
+      `;
+      await expect(store.ping()).rejects.toThrow("Billing schema boundary is unavailable");
+    } finally {
+      await client`
+        INSERT INTO billing.schema_migrations (version, checksum, applied_at)
+        VALUES ('0001_entitlement_projection', ${checksum}, ${ledger?.appliedAt as Date})
+      `;
+    }
+
+    try {
+      await client.unsafe(
+        "ALTER TABLE billing.entitlement_accounts RENAME TO entitlement_accounts_readiness_probe",
+      );
+      await expect(store.ping()).rejects.toThrow("Billing schema boundary is unavailable");
+    } finally {
+      await client.unsafe(
+        "ALTER TABLE billing.entitlement_accounts_readiness_probe RENAME TO entitlement_accounts",
+      );
+    }
+    await expect(store.ping()).resolves.toBeUndefined();
+  });
 });

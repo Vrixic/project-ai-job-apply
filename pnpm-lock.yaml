@@ -50,6 +50,9 @@ importers:
       '@ai-job-apply/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@ai-job-apply/billing-service':
+        specifier: workspace:*
+        version: link:../services/billing
       '@ai-job-apply/config':
         specifier: workspace:*
         version: link:../../packages/config

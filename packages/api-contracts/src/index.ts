@@ -29,6 +29,7 @@ export type SavedJobSearchRequest = components["schemas"]["SavedJobSearchRequest
 export type SavedJob = components["schemas"]["SavedJob"];
 export type SavedJobSnapshot = components["schemas"]["SavedJobSnapshot"];
 export type SavedJobPage = components["schemas"]["SavedJobPage"];
+export type EntitlementSummary = components["schemas"]["EntitlementSummary"];
 export type ProblemDetails = components["schemas"]["ProblemDetails"];
 
 const ajv = new Ajv2020({ allErrors: true, strict: true });

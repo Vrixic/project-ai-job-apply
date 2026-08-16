@@ -18,7 +18,8 @@ port and stable capability keys, never on a payment-provider payload or plan str
   idempotency, one account update, one append-only audit record, and one identifier-only outbox
   event in the same transaction. Outbox leases permit at most five delivery attempts; an explicit
   fifth failure or an expired fifth lease becomes a terminal failed record instead of an unbounded
-  retry loop.
+  retry loop. Its readiness probe binds the exact current migration checksum and all five required
+  Billing relations rather than treating a generic database connection as schema readiness.
 - `migrations/0001_entitlement_projection.sql` owns only opaque internal UUIDs and normalized
   schedules. It stores no provider, customer, price, currency, interval, payment method, tax,
   receipt, or storefront data.
@@ -30,9 +31,12 @@ The v1 single-row projection binds new commands to a trusted clock, rejects futu
 backdated mutations, and preserves exact historical idempotency replay before chronology checks,
 so a scheduled replacement cannot erase an active schedule before its boundary. Scheduled
 transitions require a later history model.
-No public mutation or provider adapter exists. The package and migration remain source-only until
-they are added to the reviewed migration composition, exposed through the authenticated read-only
-contract, deployed, and accepted with generated-synthetic evidence.
+No public mutation or provider adapter exists. The source composition appends Billing to the
+reviewed migration runner and five-owner restore manifest. `GET /v1/entitlements` resolves the
+authenticated Profile identity to an internal UUID and returns only a derived provider-neutral
+status through a bounded warm-process cache; Billing never receives the issuer, subject, email, or
+an owner identifier from client input. This source does not publish an image, add a cloud route or
+permission, deploy, or establish generated-synthetic acceptance.
 
 The outbox boundary persists and leases identifier-only records and terminalizes poison records;
 it does not include a network publisher, failed-row reconciliation/replay tooling, an external

@@ -7,3 +7,8 @@ The saved-job paths separate `jobs:read` list access from `jobs:write` mutation 
 an owner identifier, and return only bounded public snapshots plus `available` or `unavailable`.
 The unavailable state intentionally carries no internal lifecycle reason. Saved-job responses,
 including idempotent deletion, are private and declare `Cache-Control: no-store`.
+
+`GET /entitlements` is an owner-self read under the existing `profile:read` permission. It accepts
+no query, body, path owner, provider, or payment input and returns only the exact derived Free or
+Pro access projection with the four current core grants. Free, active Pro, and grace Pro are
+separate strict response shapes; every response is private and non-cacheable.

@@ -47,7 +47,8 @@ form,
 aside,
 .profile-facts,
 .job-search,
-.saved-jobs {
+.saved-jobs,
+.entitlement-status {
   margin-top: 32px;
   padding: 24px;
   border: 1px solid #cedbd3;
@@ -216,7 +217,8 @@ aside {
 }
 
 .job-search,
-.saved-jobs {
+.saved-jobs,
+.entitlement-status {
   background: #f8fbf9;
 }
 
@@ -307,6 +309,17 @@ aside {
 
 .job-results article > .secondary-button {
   margin-top: 12px;
+}
+
+.entitlement-summary {
+  padding: 18px;
+  border: 1px solid #cedbd3;
+  border-radius: 12px;
+  background: white;
+}
+
+.entitlement-summary p {
+  margin: 8px 0;
 }
 
 .compact-form {

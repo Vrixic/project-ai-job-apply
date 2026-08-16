@@ -1,4 +1,5 @@
 import type { AccessTokenVerifier } from "@ai-job-apply/auth";
+import type { EntitlementReadService } from "@ai-job-apply/billing-service";
 import type { DocumentStore } from "@ai-job-apply/documents-service";
 import type { JobCatalogReader } from "@ai-job-apply/jobs-service";
 import type { SavedJobs } from "@ai-job-apply/matching-service";
@@ -11,9 +12,11 @@ export interface GatewayApplicationOptions {
   store: ProfileStore;
   catalog: JobCatalogReader;
   savedJobs: SavedJobs;
+  entitlements: EntitlementReadService;
   documents: DocumentStore;
   verifier: AccessTokenVerifier;
   releaseSha: string;
+  clock?: () => Date;
   adapter?: FastifyAdapter;
 }
 
@@ -29,9 +32,11 @@ export async function createGatewayApplication(
       store: options.store,
       catalog: options.catalog,
       savedJobs: options.savedJobs,
+      entitlements: options.entitlements,
       documents: options.documents,
       verifier: options.verifier,
       releaseSha: options.releaseSha,
+      ...(options.clock ? { clock: options.clock } : {}),
     }),
     options.adapter ?? new FastifyAdapter(),
     { bufferLogs: false },

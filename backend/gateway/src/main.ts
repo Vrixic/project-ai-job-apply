@@ -1,5 +1,10 @@
 import "reflect-metadata";
 import { createOidcVerifier } from "@ai-job-apply/auth";
+import {
+  BillingEntitlementService,
+  EntitlementCache,
+  PostgresBillingStore,
+} from "@ai-job-apply/billing-service";
 import { loadBackendConfig } from "@ai-job-apply/config";
 import {
   PostgresDocumentStore,
@@ -39,6 +44,10 @@ const savedJobs = new SavedJobsService(
   new JobCatalogSavedJobResolver(catalog),
   deriveSavedJobCursorKeys(config.DATABASE_URL),
 );
+const entitlements = new BillingEntitlementService(
+  new PostgresBillingStore(database.client),
+  new EntitlementCache({ capacity: 1_000, freshTtlMs: 5_000 }),
+);
 const documents =
   config.DOCUMENT_UPLOAD_BUCKET && config.DOCUMENT_UPLOAD_KMS_KEY_ARN
     ? new PostgresDocumentStore(
@@ -58,6 +67,7 @@ const app = await createGatewayApplication({
   store,
   catalog,
   savedJobs,
+  entitlements,
   documents,
   verifier,
   releaseSha: config.RELEASE_SHA,

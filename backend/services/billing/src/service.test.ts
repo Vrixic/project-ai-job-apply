@@ -1,7 +1,11 @@
 import { v7 as uuidv7 } from "uuid";
 import { describe, expect, it, vi } from "vitest";
 import { EntitlementCache } from "./cache.js";
-import { BillingEntitlementService, type EntitlementMutationStore } from "./service.js";
+import {
+  BillingEntitlementService,
+  type BillingEntitlementStore,
+  type EntitlementMutationStore,
+} from "./service.js";
 import type { ApplyEntitlementChangeInput, ApplyEntitlementChangeResult } from "./store.js";
 import type { EntitlementReader, EntitlementSchedule } from "./types.js";
 
@@ -29,7 +33,8 @@ describe("BillingEntitlementService", () => {
       applyEntitlementChange: vi.fn(async () => result),
     };
     const cache = new EntitlementCache({ capacity: 10, freshTtlMs: 60_000 });
-    const service = new BillingEntitlementService({ ...reader, ...mutation }, cache);
+    const ping = vi.fn(async () => undefined);
+    const service = new BillingEntitlementService({ ...reader, ...mutation, ping }, cache);
     const now = new Date("2026-08-15T12:00:00.000Z");
     await service.evaluate(userId, now);
     expect(cache.size).toBe(1);
@@ -50,6 +55,8 @@ describe("BillingEntitlementService", () => {
     };
     await expect(service.applyEntitlementChange(input)).resolves.toEqual(result);
     expect(cache.size).toBe(0);
+    await expect(service.ping()).resolves.toBeUndefined();
+    expect(ping).toHaveBeenCalledOnce();
   });
 
   it("keeps the cached decision when the mutation rolls back", async () => {
@@ -65,7 +72,10 @@ describe("BillingEntitlementService", () => {
       }),
     };
     const cache = new EntitlementCache({ capacity: 10, freshTtlMs: 60_000 });
-    const service = new BillingEntitlementService({ ...reader, ...mutation }, cache);
+    const service = new BillingEntitlementService(
+      { ...reader, ...mutation, ping: vi.fn(async () => undefined) },
+      cache,
+    );
     const now = new Date("2026-08-15T12:00:00.000Z");
     await service.evaluate(userId, now);
 
@@ -95,9 +105,10 @@ describe("BillingEntitlementService", () => {
     const deferredMutation = new Promise<ApplyEntitlementChangeResult>((resolve) => {
       resolveMutation = resolve;
     });
-    const store: EntitlementReader & EntitlementMutationStore = {
+    const store: BillingEntitlementStore = {
       readEntitlement: vi.fn(),
       applyEntitlementChange: vi.fn(async () => deferredMutation),
+      ping: vi.fn(async () => undefined),
     };
     const service = new BillingEntitlementService(store, cache);
     const input: ApplyEntitlementChangeInput = {
@@ -167,7 +178,10 @@ describe("BillingEntitlementService", () => {
       applyEntitlementChange: vi.fn(async () => result),
     };
     const cache = new EntitlementCache({ capacity: 10, freshTtlMs: 60_000 });
-    const service = new BillingEntitlementService({ ...reader, ...mutation }, cache);
+    const service = new BillingEntitlementService(
+      { ...reader, ...mutation, ping: vi.fn(async () => undefined) },
+      cache,
+    );
     const now = new Date("2026-08-15T12:00:00.000Z");
 
     const pendingEvaluation = service.evaluate(userId, now);

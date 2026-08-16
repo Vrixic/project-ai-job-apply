@@ -68,11 +68,12 @@ function successfulExecutor(source: RestoreManifestSource, count = "0"): Restore
 }
 
 describe("current restore manifest", () => {
-  it("binds the exact current Profile, Jobs, Documents, and Matching migration bytes", async () => {
+  it("binds the exact current Profile, Jobs, Documents, Matching, and Billing bytes", async () => {
     const source = loadCurrentRestoreManifest();
 
-    expect(source.manifest.manifestId).toBe("d1-profile-jobs-documents-matching-v1");
+    expect(source.manifest.manifestId).toBe("d1-profile-jobs-documents-matching-billing-v1");
     expect(source.manifest.contributors.map((contributor) => contributor.owner)).toEqual([
+      "billing",
       "documents",
       "jobs",
       "matching",
@@ -81,13 +82,13 @@ describe("current restore manifest", () => {
     expect([...migrationRunners].map((runner) => runner.owner).sort()).toEqual(
       source.manifest.contributors.map((contributor) => contributor.owner),
     );
-    expect(expectedRelations(source)).toHaveLength(31);
+    expect(expectedRelations(source)).toHaveLength(36);
     expect(
       source.manifest.contributors.reduce(
         (total, contributor) => total + contributor.migrations.length,
         0,
       ),
-    ).toBe(12);
+    ).toBe(13);
     expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 
     for (const contributor of source.manifest.contributors) {
@@ -124,18 +125,19 @@ describe("current restore manifest", () => {
     const extended = createRestoreManifest(source.manifest, [future], "d1-with-future-v1");
 
     expect(extended.contributors.map((contributor) => contributor.owner)).toEqual([
+      "billing",
       "documents",
       "jobs",
       "matching",
       "profile",
       "recommendations",
     ]);
-    expect(source.manifest.contributors).toHaveLength(4);
+    expect(source.manifest.contributors).toHaveLength(5);
     expect(JSON.stringify(source.manifest.contributors)).toBe(existingContributors);
-    expect(extended.contributors.slice(0, 4)).toEqual(source.manifest.contributors);
+    expect(extended.contributors.slice(0, 5)).toEqual(source.manifest.contributors);
     expect(Object.isFrozen(extended)).toBe(true);
     expect(Object.isFrozen(extended.contributors)).toBe(true);
-    expect(Object.isFrozen(extended.contributors[3]?.migrations)).toBe(true);
+    expect(Object.isFrozen(extended.contributors[4]?.migrations)).toBe(true);
   });
 
   it.each([
@@ -223,11 +225,11 @@ describe("read-only aggregate restore verification", () => {
 
     expect(transactionModes).toEqual(["read only isolation level repeatable read"]);
     expect(result).toMatchObject({
-      manifestId: "d1-profile-jobs-documents-matching-v1",
+      manifestId: "d1-profile-jobs-documents-matching-billing-v1",
       manifestSha256: source.sha256,
-      ownerCount: 4,
-      relationCount: 31,
-      migrationCount: 12,
+      ownerCount: 5,
+      relationCount: 36,
+      migrationCount: 13,
     });
     expect(result.aggregateDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.keys(result)).toEqual([

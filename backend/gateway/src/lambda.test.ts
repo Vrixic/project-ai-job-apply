@@ -134,6 +134,50 @@ describe("API Gateway Lambda boundary", () => {
     expect(inject).toHaveBeenCalledWith(expect.objectContaining({ method: "GET", url: path }));
   });
 
+  it("allows only the exact bodyless entitlement GET boundary", async () => {
+    const principalBridge = createInvocationPrincipalBridge();
+    const inject = vi.fn().mockResolvedValue({
+      statusCode: 200,
+      body: '{"plan":"free"}',
+      headers: { "cache-control": "no-store", "content-type": "application/json" },
+    });
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge,
+    });
+
+    const accepted = await invoke(handler, routedEvent("GET", "/v1/entitlements"));
+    const query = await invoke(
+      handler,
+      routedEvent("GET", "/v1/entitlements", { rawQueryString: "owner=other" }),
+    );
+    const body = await invoke(
+      handler,
+      routedEvent("GET", "/v1/entitlements", {
+        body: "{}",
+        headers: {
+          authorization: "Bearer opaque-api-gateway-token",
+          "content-type": "application/json",
+        },
+      }),
+    );
+    const trailing = await invoke(handler, routedEvent("GET", "/v1/entitlements/"));
+    const post = await invoke(handler, routedEvent("POST", "/v1/entitlements"));
+
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.headers?.["cache-control"]).toBe("no-store");
+    expect(query.statusCode).toBe(400);
+    expect(body.statusCode).toBe(400);
+    expect(trailing.statusCode).toBe(404);
+    expect(post.statusCode).toBe(404);
+    expect(inject).toHaveBeenCalledOnce();
+    expect(inject).toHaveBeenCalledWith(
+      expect.objectContaining({ method: "GET", url: "/v1/entitlements" }),
+    );
+  });
+
   it("allows only a JSON body on the exact protected job-search route", async () => {
     const principalBridge = createInvocationPrincipalBridge();
     const inject = vi.fn().mockResolvedValue({

@@ -67,3 +67,7 @@ export interface EntitlementAuthorizer {
   evaluate(userId: string, now: Date): Promise<EntitlementEvaluation>;
   allows(userId: string, capability: string, now: Date): Promise<boolean>;
 }
+
+export interface EntitlementReadService extends EntitlementAuthorizer {
+  ping(): Promise<void>;
+}

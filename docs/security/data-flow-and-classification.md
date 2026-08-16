@@ -69,7 +69,7 @@ approve a diagram for:
 - ATS autofill/submission;
 - remote browser and user takeover;
 - outreach OAuth and sending;
-- billing/mobile/push; and
+- billing-provider/mobile/push; and
 - export, deletion, incident, and backup-restore paths in deployed environments.
 
 ### D1 resume intake and deterministic parsing design
@@ -108,6 +108,32 @@ documented covert-channel risk, so the processing triggers remain synthetic-only
 deployed boundary and DNS treatment receive accountable review. The coordinator has database
 access but never receives or parses source bytes. Event validation binds the exact AWS account,
 region, GuardDuty protection-plan ARN, bucket, key pattern, and object version.
+
+### D1 provider-neutral entitlement read design
+
+This is a source and local-test boundary only. No Auth0/Terraform route change, migration-image
+publication, AWS deployment, provider/payment integration, price, quota, paid-only feature,
+webhook, or real billing data is included.
+
+```mermaid
+flowchart LR
+  Candidate4[Candidate browser] -->|server-held session; bodyless self-read| EntitlementBFF[Web entitlement BFF]
+  EntitlementBFF -->|validated candidate token| Gateway4[Candidate gateway]
+  Gateway4 -->|issuer + subject| ProfileIdentity[Profile identity mapping]
+  ProfileIdentity -->|internal user UUID only| Gateway4
+  Gateway4 -->|internal UUID + server clock only| EntitlementRead[Billing entitlement evaluator/cache]
+  EntitlementRead -->|owner-scoped schedule read| BillingDB[(Billing schema)]
+  EntitlementRead -->|derived plan/state/grants/version/times only| Gateway4
+  Gateway4 -->|no-store derived status| EntitlementBFF
+  EntitlementBFF -->|no-store derived status| Candidate4
+```
+
+Billing never receives the identity-provider issuer, subject, email, browser-supplied owner, or
+payment/provider payload. The gateway exposes no Billing account ID or internal user ID. Invalid
+schedules, ownership mismatches, and unavailable Billing reads become one generic `503`. A bounded
+warm-process owner-keyed cache can retain eligible Pro access only through its exact access/grace
+boundary after a Billing-reader failure; Profile identity resolution still precedes the cache, so
+this does not prove availability through a total identity/database outage.
 
 ## Rights-flow design boundary
 

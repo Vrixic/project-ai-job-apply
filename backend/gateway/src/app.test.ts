@@ -20,6 +20,14 @@ import type {
 } from "@ai-job-apply/api-contracts";
 import type { AuthPrincipal } from "@ai-job-apply/auth";
 import { createTestTokenIssuer } from "@ai-job-apply/auth/testing";
+import {
+  BillingEntitlementService,
+  type BillingEntitlementStore,
+  EntitlementCache,
+  type EntitlementEvaluation,
+  type EntitlementReadService,
+  type EntitlementSchedule,
+} from "@ai-job-apply/billing-service";
 import { type DocumentStore, ResumeUploadRegistrationError } from "@ai-job-apply/documents-service";
 import {
   type ActiveJobRecord,
@@ -46,7 +54,7 @@ import {
 
 class MemoryProfileStore implements ProfileStore {
   resolveUserCalls = 0;
-  private user: CurrentUser | undefined;
+  private readonly users = new Map<string, CurrentUser>();
   private preferences: JobPreferenceSet | undefined;
   private readonly operations = new Map<string, Operation>();
   private readonly facts = new Map<string, ProfileFact>();
@@ -61,8 +69,12 @@ class MemoryProfileStore implements ProfileStore {
 
   async resolveUser(principal: AuthPrincipal): Promise<CurrentUser> {
     this.resolveUserCalls += 1;
-    this.user ??= { id: uuidv7(), ...(principal.email ? { email: principal.email } : {}) };
-    return this.user;
+    const key = `${principal.issuer}\0${principal.subject}`;
+    const existing = this.users.get(key);
+    if (existing) return existing;
+    const user = { id: uuidv7(), ...(principal.email ? { email: principal.email } : {}) };
+    this.users.set(key, user);
+    return user;
   }
 
   async getPreferences(): Promise<JobPreferenceSet | null> {
@@ -302,6 +314,88 @@ class MemorySavedJobs implements SavedJobs {
   async ping(): Promise<void> {}
 }
 
+class MemoryEntitlements implements EntitlementReadService {
+  readonly calls: Array<{ userId: string; now: Date }> = [];
+  readonly evaluations = new Map<string, EntitlementEvaluation>();
+  failure: Error | undefined;
+  pingFailure: Error | undefined;
+
+  async evaluate(userId: string, now: Date): Promise<EntitlementEvaluation> {
+    this.calls.push({ userId, now: new Date(now.getTime()) });
+    if (this.failure) throw this.failure;
+    return (
+      this.evaluations.get(userId) ?? {
+        valid: true,
+        plan: "free",
+        accessState: "active",
+        grants: ["profile.manage", "jobs.search", "jobs.save", "applications.history"],
+        version: 0,
+        evaluatedAt: now.toISOString(),
+      }
+    );
+  }
+
+  async allows(userId: string, capability: string, now: Date): Promise<boolean> {
+    const result = await this.evaluate(userId, now);
+    return result.valid && (result.grants as readonly string[]).includes(capability);
+  }
+
+  async ping(): Promise<void> {
+    if (this.pingFailure) throw this.pingFailure;
+  }
+}
+
+class SequenceBillingStore implements BillingEntitlementStore {
+  readonly schedules = new Map<string, EntitlementSchedule>();
+  readonly reads: string[] = [];
+  failReads = false;
+  nextKind: "pro" | "free" | "future" | "expired" = "pro";
+
+  async readEntitlement(userId: string): Promise<EntitlementSchedule> {
+    this.reads.push(userId);
+    if (this.failReads) throw new Error("synthetic Billing reader outage");
+    const existing = this.schedules.get(userId);
+    if (existing) return existing;
+    const kind = this.nextKind;
+    let schedule: EntitlementSchedule;
+    if (kind === "free") {
+      schedule = { userId, version: 0, plan: "free" };
+    } else {
+      schedule = {
+        accountId: uuidv7(),
+        userId,
+        version: 1,
+        plan: "pro",
+        effectiveAt: new Date(
+          kind === "future" ? "2026-08-16T12:30:00.000Z" : "2026-08-16T11:00:00.000Z",
+        ),
+        accessThrough: new Date(
+          kind === "expired"
+            ? "2026-08-16T11:15:00.000Z"
+            : kind === "future"
+              ? "2026-08-16T13:10:00.000Z"
+              : "2026-08-16T12:10:00.000Z",
+        ),
+        graceThrough: new Date(
+          kind === "expired"
+            ? "2026-08-16T11:30:00.000Z"
+            : kind === "future"
+              ? "2026-08-16T13:20:00.000Z"
+              : "2026-08-16T12:20:00.000Z",
+        ),
+      };
+    }
+    this.schedules.set(userId, schedule);
+    return schedule;
+  }
+
+  async applyEntitlementChange(): Promise<never> {
+    throw new Error("not used by read tests");
+  }
+
+  async ping(): Promise<void> {}
+}
+
 class MemoryDocumentStore implements DocumentStore {
   private readonly documents: ResumeDocument[] = [];
   private readonly responses = new Map<string, CreateResumeUploadResponse>();
@@ -348,15 +442,19 @@ async function createApp() {
   const catalog = new MemoryJobCatalog();
   const documents = new MemoryDocumentStore();
   const savedJobs = new MemorySavedJobs();
+  const entitlements = new MemoryEntitlements();
+  const now = new Date("2026-08-16T12:00:00.000Z");
   const app = await createGatewayApplication({
     store,
     catalog,
     savedJobs,
+    entitlements,
     documents,
     verifier: issuer.verifier,
     releaseSha: "test",
+    clock: () => new Date(now.getTime()),
   });
-  return { app, issuer, catalog, store, savedJobs };
+  return { app, issuer, catalog, store, savedJobs, entitlements, now };
 }
 
 describe("candidate API", () => {
@@ -365,6 +463,8 @@ describe("candidate API", () => {
   let catalog: MemoryJobCatalog;
   let store: MemoryProfileStore;
   let savedJobs: MemorySavedJobs;
+  let entitlements: MemoryEntitlements;
+  let now: Date;
 
   beforeAll(async () => {
     const setup = await createApp();
@@ -373,6 +473,8 @@ describe("candidate API", () => {
     catalog = setup.catalog;
     store = setup.store;
     savedJobs = setup.savedJobs;
+    entitlements = setup.entitlements;
+    now = setup.now;
   });
 
   afterAll(async () => {
@@ -383,6 +485,17 @@ describe("candidate API", () => {
     const response = await app.inject({ method: "GET", url: "/v1/me" });
     expect(response.statusCode).toBe(401);
     expect(response.json().code).toBe("authentication_required");
+  });
+
+  it("fails readiness when the Billing schema is unavailable", async () => {
+    entitlements.pingFailure = new Error("missing billing relation");
+    const unavailable = await app.inject({ method: "GET", url: "/health/ready" });
+    entitlements.pingFailure = undefined;
+    const ready = await app.inject({ method: "GET", url: "/health/ready" });
+
+    expect(unavailable.statusCode).toBe(503);
+    expect(unavailable.body).not.toContain("billing relation");
+    expect(ready.statusCode).toBe(200);
   });
 
   it("classifies internal failures without retaining messages, stacks, or unknown routes", () => {
@@ -435,6 +548,7 @@ describe("candidate API", () => {
       store: new MemoryProfileStore(),
       catalog: new MemoryJobCatalog(),
       savedJobs: new MemorySavedJobs(),
+      entitlements: new MemoryEntitlements(),
       documents: new MemoryDocumentStore(),
       verifier: principalBridge.verifier,
       releaseSha: "lambda-principal-bridge-test",
@@ -489,6 +603,270 @@ describe("candidate API", () => {
       expect(JSON.parse(response.body ?? "{}").id).toBeTypeOf("string");
     } finally {
       await lambdaApp.close();
+    }
+  });
+
+  it("resolves the full external identity tuple to distinct internal owners", async () => {
+    const identities = new MemoryProfileStore();
+    const base = {
+      subject: "same-subject",
+      audience: ["ai-job-apply-api"],
+      scopes: ["profile:read"],
+    };
+    const first = await identities.resolveUser({
+      ...base,
+      issuer: "https://issuer-a.example.test/",
+    });
+    const replay = await identities.resolveUser({
+      ...base,
+      issuer: "https://issuer-a.example.test/",
+    });
+    const otherIssuer = await identities.resolveUser({
+      ...base,
+      issuer: "https://issuer-b.example.test/",
+    });
+    const otherSubject = await identities.resolveUser({
+      ...base,
+      issuer: "https://issuer-a.example.test/",
+      subject: "other-subject",
+    });
+
+    expect(replay.id).toBe(first.id);
+    expect(otherIssuer.id).not.toBe(first.id);
+    expect(otherSubject.id).not.toBe(first.id);
+  });
+
+  it("returns only the authenticated owner's derived entitlement projection", async () => {
+    const firstToken = await issuer.issue("candidate-entitlement-a", { scope: "profile:read" });
+    const secondToken = await issuer.issue("candidate-entitlement-b", { scope: "profile:read" });
+    const wrongScope = await issuer.issue("candidate-entitlement-no-read", { scope: "jobs:read" });
+    const first = await app.inject({
+      method: "GET",
+      url: "/v1/entitlements",
+      headers: { authorization: `Bearer ${firstToken}` },
+    });
+    const firstOwner = entitlements.calls.at(-1)?.userId;
+    expect(firstOwner).toMatch(/^[a-f0-9-]{36}$/);
+    entitlements.evaluations.set(firstOwner as string, {
+      valid: true,
+      plan: "pro",
+      accessState: "grace",
+      grants: ["profile.manage", "jobs.search", "jobs.save", "applications.history"],
+      version: 7,
+      evaluatedAt: now.toISOString(),
+      accessThrough: "2026-08-15T12:00:00.000Z",
+      graceThrough: "2026-08-20T12:00:00.000Z",
+    });
+    const projected = await app.inject({
+      method: "GET",
+      url: "/v1/entitlements",
+      headers: { authorization: `Bearer ${firstToken}` },
+    });
+    const second = await app.inject({
+      method: "GET",
+      url: "/v1/entitlements",
+      headers: { authorization: `Bearer ${secondToken}` },
+    });
+    const forbidden = await app.inject({
+      method: "GET",
+      url: "/v1/entitlements",
+      headers: { authorization: `Bearer ${wrongScope}` },
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(first.headers["cache-control"]).toBe("no-store");
+    expect(first.json()).toEqual({
+      plan: "free",
+      accessState: "active",
+      grants: ["profile.manage", "jobs.search", "jobs.save", "applications.history"],
+      version: 0,
+      evaluatedAt: now.toISOString(),
+    });
+    expect(projected.json()).toEqual({
+      plan: "pro",
+      accessState: "grace",
+      grants: ["profile.manage", "jobs.search", "jobs.save", "applications.history"],
+      version: 7,
+      evaluatedAt: now.toISOString(),
+      accessThrough: "2026-08-15T12:00:00.000Z",
+      graceThrough: "2026-08-20T12:00:00.000Z",
+    });
+    expect(projected.body).not.toMatch(/userId|accountId|provider|price|quota|valid|reason/i);
+    expect(entitlements.calls.at(-1)?.userId).not.toBe(firstOwner);
+    expect(second.statusCode).toBe(200);
+    expect(forbidden.statusCode).toBe(403);
+
+    const callsBeforeInvalidInput = entitlements.calls.length;
+    const resolutionsBeforeInvalidInput = store.resolveUserCalls;
+    const query = await app.inject({
+      method: "GET",
+      url: "/v1/entitlements?owner=other",
+      headers: { authorization: `Bearer ${firstToken}` },
+    });
+    const body = await app.inject({
+      method: "GET",
+      url: "/v1/entitlements",
+      headers: { authorization: `Bearer ${firstToken}`, "content-type": "application/json" },
+      payload: { owner: "other" },
+    });
+    expect(query.statusCode).toBe(400);
+    expect(body.statusCode).toBe(400);
+    expect(entitlements.calls).toHaveLength(callsBeforeInvalidInput);
+    expect(store.resolveUserCalls).toBe(resolutionsBeforeInvalidInput);
+    expect(query.body).not.toContain("other");
+    expect(body.body).not.toContain("other");
+  });
+
+  it("collapses malformed and unavailable entitlement state to one privacy-safe 503", async () => {
+    const token = await issuer.issue("candidate-entitlement-failure", { scope: "profile:read" });
+    const authorization = { authorization: `Bearer ${token}` };
+    entitlements.failure = new Error(
+      "provider secret, account 018f92b0-4ad7-7b1d-8f44-b7ae694c85c1 and candidate@example.test",
+    );
+    const unavailable = await app.inject({
+      method: "GET",
+      url: "/v1/entitlements",
+      headers: authorization,
+    });
+    entitlements.failure = undefined;
+    const owner = entitlements.calls.at(-1)?.userId as string;
+    entitlements.evaluations.set(owner, { valid: false, reason: "invalid_schedule", grants: [] });
+    const malformed = await app.inject({
+      method: "GET",
+      url: "/v1/entitlements",
+      headers: authorization,
+    });
+
+    for (const response of [unavailable, malformed]) {
+      expect(response.statusCode).toBe(503);
+      expect(response.headers["cache-control"]).toBe("no-store");
+      expect(response.json()).toMatchObject({
+        code: "entitlement_unavailable",
+        title: "Entitlement status unavailable",
+      });
+      expect(response.body).not.toMatch(/provider secret|candidate@|018f92b0|invalid_schedule/i);
+    }
+    entitlements.evaluations.set(owner, {
+      valid: true,
+      plan: "enterprise",
+      accessState: "active",
+      grants: ["profile.manage", "jobs.search", "jobs.save", "applications.history"],
+      version: 1,
+      evaluatedAt: now.toISOString(),
+      accessThrough: "2026-09-16T12:00:00.000Z",
+    } as never);
+    const unknownPlan = await app.inject({
+      method: "GET",
+      url: "/v1/entitlements",
+      headers: authorization,
+    });
+    entitlements.evaluations.set(owner, {
+      valid: true,
+      plan: "pro",
+      accessState: "grace",
+      grants: ["profile.manage", "jobs.search", "jobs.save", "applications.history"],
+      version: 1,
+      evaluatedAt: now.toISOString(),
+      accessThrough: "2026-08-16T12:01:00.000Z",
+      graceThrough: "2026-08-16T12:02:00.000Z",
+    });
+    const prematureGrace = await app.inject({
+      method: "GET",
+      url: "/v1/entitlements",
+      headers: authorization,
+    });
+    entitlements.evaluations.set(owner, {
+      valid: true,
+      plan: "free",
+      accessState: "active",
+      grants: ["profile.manage", "jobs.search", "jobs.save", "applications.history"],
+      version: 1,
+      evaluatedAt: "2026-02-30T12:00:00.000Z",
+    });
+    const impossibleDate = await app.inject({
+      method: "GET",
+      url: "/v1/entitlements",
+      headers: authorization,
+    });
+    for (const response of [unknownPlan, prematureGrace, impossibleDate]) {
+      expect(response.statusCode).toBe(503);
+      expect(response.body).not.toMatch(/enterprise|invalid_schedule|12:01|02-30/i);
+    }
+    entitlements.evaluations.delete(owner);
+  });
+
+  it("uses only owner-keyed eligible Pro fallback after a Billing-reader failure", async () => {
+    const cacheStore = new SequenceBillingStore();
+    let cacheClock = new Date("2026-08-16T12:00:00.000Z");
+    const cacheApp = await createGatewayApplication({
+      store: new MemoryProfileStore(),
+      catalog: new MemoryJobCatalog(),
+      savedJobs: new MemorySavedJobs(),
+      entitlements: new BillingEntitlementService(
+        cacheStore,
+        new EntitlementCache({ capacity: 10, freshTtlMs: 1_000 }),
+      ),
+      documents: new MemoryDocumentStore(),
+      verifier: issuer.verifier,
+      releaseSha: "entitlement-cache-test",
+      clock: () => new Date(cacheClock.getTime()),
+    });
+    const kinds = ["pro", "free", "future", "expired"] as const;
+    const tokens: string[] = [];
+    try {
+      for (const kind of kinds) {
+        cacheStore.nextKind = kind;
+        const token = await issuer.issue(`candidate-entitlement-cache-${kind}`, {
+          scope: "profile:read",
+        });
+        tokens.push(token);
+        const initial = await cacheApp.inject({
+          method: "GET",
+          url: "/v1/entitlements",
+          headers: { authorization: `Bearer ${token}` },
+        });
+        expect(initial.statusCode).toBe(200);
+        expect(initial.json().plan).toBe(kind === "pro" ? "pro" : "free");
+      }
+
+      cacheStore.failReads = true;
+      cacheClock = new Date("2026-08-16T12:00:00.500Z");
+      for (const token of tokens) {
+        expect(
+          (
+            await cacheApp.inject({
+              method: "GET",
+              url: "/v1/entitlements",
+              headers: { authorization: `Bearer ${token}` },
+            })
+          ).statusCode,
+        ).toBe(200);
+      }
+
+      cacheClock = new Date("2026-08-16T12:00:02.000Z");
+      const afterFreshness = await Promise.all(
+        tokens.map((token) =>
+          cacheApp.inject({
+            method: "GET",
+            url: "/v1/entitlements",
+            headers: { authorization: `Bearer ${token}` },
+          }),
+        ),
+      );
+      expect(afterFreshness.map((response) => response.statusCode)).toEqual([200, 503, 503, 503]);
+
+      const uncachedToken = await issuer.issue("candidate-entitlement-cache-uncached", {
+        scope: "profile:read",
+      });
+      const uncached = await cacheApp.inject({
+        method: "GET",
+        url: "/v1/entitlements",
+        headers: { authorization: `Bearer ${uncachedToken}` },
+      });
+      expect(uncached.statusCode).toBe(503);
+      expect(uncached.body).not.toContain("synthetic Billing reader outage");
+    } finally {
+      await cacheApp.close();
     }
   });
 
@@ -772,8 +1150,8 @@ describe("candidate API", () => {
   });
 
   it("keeps saved-job mutations behind jobs:write and reads owner-scoped with jobs:read", async () => {
-    const readToken = await issuer.issue("candidate-saved-reader", { scope: "jobs:read" });
-    const writeToken = await issuer.issue("candidate-saved-writer", { scope: "jobs:write" });
+    const readToken = await issuer.issue("candidate-saved-owner", { scope: "jobs:read" });
+    const writeToken = await issuer.issue("candidate-saved-owner", { scope: "jobs:write" });
     const createPayload = { jobId: catalog.job.id };
     const forbidden = await app.inject({
       method: "POST",

@@ -270,8 +270,9 @@ foreach ($required in @(
     'jobs/dist/src/search-acceptance.js', 'jobs/dist/src/run-search-acceptance.js',
     'documents/dist/src/run-document-processing-acceptance.js',
     'runner/dist/src/restore-verifier-cli.js', 'runner/restore-manifest.v1.json',
-    'profile,jobs,documents,matching', 'matching:["0001_saved_jobs.sql"]',
-    'manifest.contributors.length!==4', 'createRequire',
+    'profile,jobs,documents,matching,billing', 'matching:["0001_saved_jobs.sql"]',
+    'billing:["0001_entitlement_projection.sql"]',
+    'manifest.contributors.length!==5', 'createRequire', './billing/package.json',
     'schemaVersion     = 2', 'indexDigest', 'platformDigest', 'rootfsDiffIdSetSha256',
     'compressedLayerSetSha256', 'imageUri = "$($boundary.RepositoryUri)@$($readback.PlatformDigest)"',
     'ReviewedReceiptSha256', '[IO.File]::Replace($temporary, $Path, $backup)',
@@ -290,10 +291,13 @@ $dockerfile = Get-Content -LiteralPath (Join-Path $repositoryRoot "Dockerfile.mi
 foreach ($required in @(
   '@ai-job-apply/matching-service build',
   '@ai-job-apply/matching-service deploy --prod --legacy /migration/matching',
+  '@ai-job-apply/billing-service build',
+  '@ai-job-apply/billing-service deploy --prod --legacy /migration/billing',
   'runner/dist/src/restore-verifier-cli.js',
   'runner/restore-manifest.v1.json',
   'restore-verifier-package-smoke:ok',
-  'expected exactly four generated .modules.yaml files'
+  'file:///migration/billing/package.json',
+  'expected exactly five generated .modules.yaml files'
 )) {
   if (-not $dockerfile.Contains($required)) {
     throw "The migration Dockerfile package boundary is missing: $required"
@@ -302,10 +306,12 @@ foreach ($required in @(
 $workflow = Get-Content -LiteralPath `
   (Join-Path $repositoryRoot ".github\workflows\publish-environment-images.yml") -Raw
 foreach ($required in @(
-  'profile,jobs,documents,matching',
+  'profile,jobs,documents,matching,billing',
   'runner/dist/src/restore-verifier-cli.js',
   'runner/restore-manifest.v1.json',
-  'matching:["0001_saved_jobs.sql"]'
+  './billing/package.json',
+  'matching:["0001_saved_jobs.sql"]',
+  'billing:["0001_entitlement_projection.sql"]'
 )) {
   if (-not $workflow.Contains($required)) {
     throw "The hosted migration runtime smoke boundary is missing: $required"

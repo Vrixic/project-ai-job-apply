@@ -7,7 +7,7 @@ another service's tables.
 ## Subfolders
 
 - `src/` — Fail-fast process orchestration, restore verifier, CLI entry points, and tests.
-- `restore-manifest.v1.json` — Canonical four-owner restore boundary: 31 regular relations and 12
+- `restore-manifest.v1.json` — Canonical five-owner restore boundary: 36 regular relations and 13
   checksum-bound migrations.
 
 Adding a schema owner requires adding its independently checksum-verified runner here, including it

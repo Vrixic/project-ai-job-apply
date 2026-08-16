@@ -212,6 +212,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/entitlements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getEntitlements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/operations/{operationId}": {
         parameters: {
             query?: never;
@@ -523,6 +539,50 @@ export interface components {
             validThrough?: string;
             sources: components["schemas"]["JobSourceSummary"][];
         };
+        EntitlementSummary: {
+            /** @enum {string} */
+            plan: "free" | "pro";
+            /** @enum {string} */
+            accessState: "active" | "grace";
+            grants: [
+                "profile.manage",
+                "jobs.search",
+                "jobs.save",
+                "applications.history"
+            ];
+            version: number;
+            /** Format: date-time */
+            evaluatedAt: string;
+            /** Format: date-time */
+            accessThrough?: string;
+            /** Format: date-time */
+            graceThrough?: string;
+        } & ({
+            /** @constant */
+            plan?: "free";
+            /** @constant */
+            accessState?: "active";
+            accessThrough?: never;
+            graceThrough?: never;
+        } | {
+            /** @constant */
+            plan?: "pro";
+            /** @constant */
+            accessState?: "active";
+            /** Format: date-time */
+            accessThrough: string;
+            /** Format: date-time */
+            graceThrough?: string;
+        } | {
+            /** @constant */
+            plan?: "pro";
+            /** @constant */
+            accessState?: "grace";
+            /** Format: date-time */
+            accessThrough: string;
+            /** Format: date-time */
+            graceThrough: string;
+        });
         ProfileReadiness: {
             completionPercent: number;
             missingFields: ("locations" | "salary")[];
@@ -601,6 +661,15 @@ export interface components {
         };
         /** @description The request body is not JSON */
         UnsupportedMediaType: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["ProblemDetails"];
+            };
+        };
+        /** @description The requested capability is temporarily unavailable */
+        ServiceUnavailable: {
             headers: {
                 [name: string]: unknown;
             };
@@ -1033,6 +1102,31 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    getEntitlements: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The authenticated candidate's derived provider-neutral entitlement status */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntitlementSummary"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["ServiceUnavailable"];
         };
     };
     getOperation: {
