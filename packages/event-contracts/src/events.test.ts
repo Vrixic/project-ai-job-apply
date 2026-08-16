@@ -34,6 +34,30 @@ describe("event schemas", () => {
     expect(validateEventData("constructor", {})).toBe(false);
   });
 
+  it("accepts an identifier-only entitlement change and rejects billing payload leakage", () => {
+    const data = {
+      entitlementAccountId: "019b4e12-7ea3-7c36-9357-aea35ab542cc",
+      userId: "019b4e12-7ea3-7c36-9357-aea35ab542cd",
+      version: 2,
+    };
+
+    expect(validateEventData(eventTypes.subscriptionEntitlementChanged, data)).toBe(true);
+    expect(
+      validateEventData(eventTypes.subscriptionEntitlementChanged, {
+        ...data,
+        plan: "pro",
+        provider: "stripe",
+        accessThrough: "2026-09-15T12:00:00.000Z",
+      }),
+    ).toBe(false);
+    expect(
+      validateEventData(eventTypes.subscriptionEntitlementChanged, {
+        ...data,
+        version: Number.MAX_SAFE_INTEGER + 1,
+      }),
+    ).toBe(false);
+  });
+
   it("accepts a versioned identifier-only outbox nudge", () => {
     const nudge = {
       schemaVersion: 1 as const,

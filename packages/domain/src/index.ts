@@ -7,6 +7,21 @@ import type {
 export type UserId = string & { readonly __brand: "UserId" };
 export type PreferenceSetId = string & { readonly __brand: "PreferenceSetId" };
 export type OperationId = string & { readonly __brand: "OperationId" };
+export type EntitlementPlan = "free" | "pro";
+
+interface EntitlementAccountBaseV1 {
+  schemaVersion: 1;
+  id: string;
+  userId: string;
+  version: number;
+  effectiveAt: string;
+}
+
+export type EntitlementAccountV1 = EntitlementAccountBaseV1 &
+  (
+    | { plan: "free"; accessThrough?: never; graceThrough?: never }
+    | { plan: "pro"; accessThrough: string; graceThrough?: string }
+  );
 
 export interface ExternalIdentity {
   issuer: string;

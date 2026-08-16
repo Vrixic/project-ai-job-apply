@@ -1,19 +1,23 @@
 import { Ajv2020, type ValidateFunction } from "ajv/dist/2020.js";
 import * as addFormatsModule from "ajv-formats";
+import documentScanResultSchema from "../schemas/document.scan-result.v1.json" with {
+  type: "json",
+};
+import outboxNudgeSchema from "../schemas/platform.outbox.nudge.v1.json" with { type: "json" };
 import preferencesUpdatedSchema from "../schemas/profile.preferences.updated.v1.json" with {
   type: "json",
 };
 import readinessCalculatedSchema from "../schemas/profile.readiness.calculated.v1.json" with {
   type: "json",
 };
-import outboxNudgeSchema from "../schemas/platform.outbox.nudge.v1.json" with { type: "json" };
-import documentScanResultSchema from "../schemas/document.scan-result.v1.json" with {
+import entitlementChangedSchema from "../schemas/subscription.entitlement_changed.v1.json" with {
   type: "json",
 };
 
 export const eventTypes = {
   profilePreferencesUpdated: "profile.preferences.updated.v1",
   profileReadinessCalculated: "profile.readiness.calculated.v1",
+  subscriptionEntitlementChanged: "subscription.entitlement_changed.v1",
 } as const;
 
 export const outboxNudgeSchemaVersion = 1 as const;
@@ -91,9 +95,20 @@ export interface ProfileReadinessCalculatedData {
   missingFields: Array<"locations" | "salary">;
 }
 
+export interface SubscriptionEntitlementChangedData {
+  entitlementAccountId: string;
+  userId: string;
+  version: number;
+}
+
 export type ProfilePreferencesUpdatedEvent = CloudEvent<
   typeof eventTypes.profilePreferencesUpdated,
   ProfilePreferencesUpdatedData
+>;
+
+export type SubscriptionEntitlementChangedEvent = CloudEvent<
+  typeof eventTypes.subscriptionEntitlementChanged,
+  SubscriptionEntitlementChangedData
 >;
 
 const ajv = new Ajv2020({ allErrors: true, strict: true });
@@ -103,6 +118,7 @@ addFormats(ajv);
 const validators = new Map<string, ValidateFunction<unknown>>([
   [eventTypes.profilePreferencesUpdated, ajv.compile(preferencesUpdatedSchema)],
   [eventTypes.profileReadinessCalculated, ajv.compile(readinessCalculatedSchema)],
+  [eventTypes.subscriptionEntitlementChanged, ajv.compile(entitlementChangedSchema)],
 ]);
 const outboxNudgeValidator = ajv.compile<OutboxNudgeV1>(outboxNudgeSchema);
 const documentScanResultValidator = ajv.compile<DocumentScanResultV1>(documentScanResultSchema);
