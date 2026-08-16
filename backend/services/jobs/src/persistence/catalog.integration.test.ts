@@ -90,6 +90,30 @@ describeWithDatabase("PostgresJobCatalog", () => {
     });
   });
 
+  it("persists SQL NULL when an observation omits its raw snapshot", async () => {
+    const withoutRawSnapshot = fixture({
+      sourceUrl: `https://jobs.example.test/${runId}/without-raw-snapshot`,
+      externalJobId: "without-raw-snapshot",
+      employerRequisitionId: `req-${runId}-without-raw-snapshot`,
+    });
+    delete withoutRawSnapshot.rawSnapshot;
+
+    const created = await catalog.recordObservation(withoutRawSnapshot);
+    const replayed = await catalog.recordObservation({
+      ...withoutRawSnapshot,
+      description: "The same synthetic observation remains snapshot-free after revalidation.",
+    });
+    const [source] = await client<{ rawSnapshotIsNull: boolean }[]>`
+      SELECT raw_snapshot IS NULL AS "rawSnapshotIsNull"
+      FROM jobs.job_sources
+      WHERE job_id = ${created.job.id}
+    `;
+
+    expect(created.outcome).toBe("created");
+    expect(replayed.outcome).toBe("exact_match_updated");
+    expect(source?.rawSnapshotIsNull).toBe(true);
+  });
+
   it("returns only the active redacted read model", async () => {
     const created = await catalog.recordObservation(
       fixture({

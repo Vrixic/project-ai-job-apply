@@ -725,7 +725,7 @@ export class PostgresJobCatalog {
               content_hash = ${observation.contentHash},
               adapter_version = ${observation.adapterVersion ?? null},
               raw_snapshot = CASE WHEN ${resolvedStatus} IN ('withdrawn', 'blocked')
-                THEN NULL ELSE ${rawSnapshot ? transaction.json(rawSnapshot) : null} END,
+                THEN NULL ELSE ${rawSnapshot ? transaction.json(rawSnapshot) : null}::jsonb END,
               last_observed_at = ${observation.observedAt},
               last_verified_at = ${observation.observedAt},
               valid_through = ${observation.validThrough ?? null},
@@ -746,7 +746,8 @@ export class PostgresJobCatalog {
             ${observation.verifiedCompanyDomain ?? null}, ${observation.canonicalUrl},
             ${observation.canonicalUrl}, ${observation.canonicalUrlHash},
             ${observation.contentHash}, ${observation.adapterVersion ?? null},
-            ${rawSnapshot ? transaction.json(rawSnapshot) : null}, ${observation.observedAt},
+            ${rawSnapshot ? transaction.json(rawSnapshot) : null}::jsonb,
+            ${observation.observedAt},
             ${observation.observedAt}, ${observation.observedAt},
             ${observation.validThrough ?? null}, ${observation.observedAt},
             ${observation.observedAt}

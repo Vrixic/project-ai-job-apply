@@ -2,6 +2,7 @@ packages:
   - "frontend/*"
   - "backend/gateway"
   - "backend/services/*"
+  - "backend/workers/*"
   - "backend/workflows"
   - "packages/*"
 
