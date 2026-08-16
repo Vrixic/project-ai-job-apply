@@ -53,6 +53,13 @@ export interface SourceRegistration {
 
 export type SourceRuntimeGate = (sourceId: string) => boolean;
 
+export interface SourceExecutionIdentity {
+  sourceId: string;
+  adapterVersion: string;
+}
+
+export type SourceExecutionGate = (identity: Readonly<SourceExecutionIdentity>) => Promise<boolean>;
+
 export interface JobCatalogIngestionPort {
   recordObservation(input: CatalogObservation): Promise<RecordObservationResult>;
 }

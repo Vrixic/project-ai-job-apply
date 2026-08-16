@@ -45,6 +45,12 @@ terminal handler accepts the official EventBridge envelope for any retained nume
 exact ingestion function, then binds account, Region, timestamps, function version, durable name,
 opaque execution ID, and stored dispatch before it may create a current-version recovery.
 
+The coordinator and activity share a Jobs-backed, exact source/adapter/config execution gate. A
+persisted moderation pause prevents new schedule/resume work, fails closed before an attempt or
+poll, and is rechecked around catalog writes. Terminal status reconciliation remains active while
+the source is paused. The gate has no resume operation and does not claim cancellation of a catalog
+write that was already issued when the pause committed.
+
 The production artifact and Terraform composition are source-ready but dark by default. Deployment,
 environment-wide runtime activation authority, ingestion mapping/schedule activation, and the
 `synthetic-foundation-v1` source gate are explicit ordered gates. This packet publishes or enables

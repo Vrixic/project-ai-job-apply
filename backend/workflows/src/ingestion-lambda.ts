@@ -9,6 +9,7 @@ import {
   GeneratedSyntheticIngestionAdapter,
   generatedSyntheticAdapterVersion,
   generatedSyntheticSourceId,
+  type SourceExecutionGate,
   SourceNeutralIngestionRunner,
   SourceRegistry,
 } from "@ai-job-apply/ingestion-worker";
@@ -19,6 +20,7 @@ import {
   type PersistedIngestionDispatch,
   PostgresIngestionOrchestrationStore,
   PostgresJobCatalog,
+  PostgresJobModerationStore,
 } from "@ai-job-apply/jobs-service";
 import { createLogger } from "@ai-job-apply/observability";
 import { resolveLambdaDatabaseUrl } from "@ai-job-apply/profile-service";
@@ -200,9 +202,58 @@ export class AwsIngestionDurableClient {
 interface IngestionRuntime {
   store: PostgresIngestionOrchestrationStore;
   coordinator: DurableIngestionCoordinator;
+  sourceExecutionGate: SourceExecutionGate;
 }
 
 let runtime: IngestionRuntime | undefined;
+
+export function createModeratedSourceExecutionGate(
+  moderation: Pick<PostgresJobModerationStore, "isSourcePaused">,
+  expected: Readonly<{
+    sourceId: string;
+    adapterVersion: string;
+    adapterConfigSha256: string;
+  }>,
+): SourceExecutionGate {
+  if (
+    expected.sourceId !== generatedSyntheticSourceId ||
+    expected.adapterVersion !== generatedSyntheticAdapterVersion ||
+    !/^[a-f0-9]{64}$/u.test(expected.adapterConfigSha256)
+  ) {
+    throw new Error("The moderated source execution identity is invalid");
+  }
+  return async (identity) => {
+    if (
+      identity.sourceId !== expected.sourceId ||
+      identity.adapterVersion !== expected.adapterVersion
+    ) {
+      return false;
+    }
+    try {
+      return !(await moderation.isSourcePaused({
+        kind: "source",
+        sourceId: expected.sourceId,
+        adapterVersion: expected.adapterVersion,
+        adapterConfigSha256: expected.adapterConfigSha256,
+      }));
+    } catch {
+      throw new Error("IngestionSourceControlUnavailable");
+    }
+  };
+}
+
+export async function generatedSyntheticSourceMayRun(
+  configuredEnabled: boolean,
+  sourceExecutionGate: SourceExecutionGate,
+): Promise<boolean> {
+  return (
+    configuredEnabled &&
+    (await sourceExecutionGate({
+      sourceId: generatedSyntheticSourceId,
+      adapterVersion: generatedSyntheticAdapterVersion,
+    }))
+  );
+}
 
 async function createRuntime(): Promise<IngestionRuntime> {
   const durableFunctionArn = process.env.INGESTION_DURABLE_FUNCTION_ARN;
@@ -231,6 +282,14 @@ async function createRuntime(): Promise<IngestionRuntime> {
   }
   const adapter = new GeneratedSyntheticIngestionAdapter(seed);
   const adapterConfigSha256 = generatedSyntheticConfigSha256(seed);
+  const sourceExecutionGate = createModeratedSourceExecutionGate(
+    new PostgresJobModerationStore(database),
+    {
+      sourceId: generatedSyntheticSourceId,
+      adapterVersion: generatedSyntheticAdapterVersion,
+      adapterConfigSha256,
+    },
+  );
   const registry = new SourceRegistry([
     {
       sourceId: generatedSyntheticSourceId,
@@ -245,19 +304,17 @@ async function createRuntime(): Promise<IngestionRuntime> {
       active: { id: "ingestion-unused", key: randomBytes(32) },
     },
   });
+  const runner = new SourceNeutralIngestionRunner(registry, catalog, { sourceExecutionGate });
   return {
     store,
-    coordinator: new DurableIngestionCoordinator(
-      store,
-      registry,
-      new SourceNeutralIngestionRunner(registry, catalog),
-      {
-        ...(durableFunctionArn ? { durableFunctionArn } : {}),
-        ...(activityFunctionArn ? { activityFunctionArn } : {}),
-        adapterConfigSha256,
-        durableExecutionStatusReader: new AwsIngestionDurableStatusReader(),
-      },
-    ),
+    sourceExecutionGate,
+    coordinator: new DurableIngestionCoordinator(store, registry, runner, {
+      ...(durableFunctionArn ? { durableFunctionArn } : {}),
+      ...(activityFunctionArn ? { activityFunctionArn } : {}),
+      adapterConfigSha256,
+      sourceExecutionGate,
+      durableExecutionStatusReader: new AwsIngestionDurableStatusReader(),
+    }),
   };
 }
 
@@ -384,7 +441,12 @@ export const coordinator: Handler<
   let scheduled = 0;
   let resumed = 0;
   const recovered = await current.coordinator.recoverTransport(generatedSyntheticSourceId);
-  if (process.env.INGESTION_SYNTHETIC_SOURCE_ENABLED === "true") {
+  if (
+    await generatedSyntheticSourceMayRun(
+      process.env.INGESTION_SYNTHETIC_SOURCE_ENABLED === "true",
+      current.sourceExecutionGate,
+    )
+  ) {
     resumed = await current.coordinator.resumePaused(generatedSyntheticSourceId);
     const result = await current.coordinator.schedule({
       sourceId: generatedSyntheticSourceId,

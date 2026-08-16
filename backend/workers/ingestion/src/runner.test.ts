@@ -146,6 +146,63 @@ describe("SourceNeutralIngestionRunner", () => {
     expect(target.observations).toEqual([]);
   });
 
+  it("fails closed before polling when the persisted source control is paused", async () => {
+    const sourceAdapter = adapter({ kind: "success", observations: [observation()] });
+    const target = catalog();
+    const sourceExecutionGate = vi.fn().mockResolvedValue(false);
+    const runner = new SourceNeutralIngestionRunner(registry(sourceAdapter), target.port, {
+      sourceExecutionGate,
+    });
+
+    await expect(
+      runner.run("synthetic-foundation-v1", 1, new AbortController().signal),
+    ).resolves.toEqual({
+      sourceId: "synthetic-foundation-v1",
+      status: "aborted",
+      observationCount: 0,
+      createdCount: 0,
+      updatedCount: 0,
+    });
+    expect(sourceExecutionGate).toHaveBeenCalledWith({
+      sourceId: "synthetic-foundation-v1",
+      adapterVersion: "synthetic-ingestion-v1",
+    });
+    expect(sourceAdapter.poll).not.toHaveBeenCalled();
+    expect(target.observations).toEqual([]);
+  });
+
+  it("rechecks source control after polling and every catalog write", async () => {
+    const sourceAdapter = adapter({
+      kind: "success",
+      observations: [
+        observation(),
+        observation({ sourceUrl: "https://jobs.example.test/2", externalJobId: "generated-2" }),
+      ],
+    });
+    const target = catalog(["created", "created"]);
+    const sourceExecutionGate = vi
+      .fn()
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValue(false);
+    const runner = new SourceNeutralIngestionRunner(registry(sourceAdapter), target.port, {
+      sourceExecutionGate,
+    });
+
+    await expect(
+      runner.run("synthetic-foundation-v1", 1, new AbortController().signal),
+    ).resolves.toEqual({
+      sourceId: "synthetic-foundation-v1",
+      status: "aborted",
+      observationCount: 1,
+      createdCount: 1,
+      updatedCount: 0,
+    });
+    expect(sourceExecutionGate).toHaveBeenCalledTimes(4);
+    expect(target.observations).toHaveLength(1);
+  });
+
   it("rejects duplicate identities, unsupported fields, and invalid match attributes before persistence", async () => {
     const target = catalog();
     const duplicateRunner = new SourceNeutralIngestionRunner(
