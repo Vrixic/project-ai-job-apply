@@ -52,6 +52,12 @@ projection; the gateway validates the complete fixed-code response before return
 candidate review, unavailable targets return generic absence, and malformed/dependency failures
 return a generic `503` without reflecting profile, job, or database values.
 
+`POST /v1/jobs/{jobId}/reports` requires `jobs:write`, resolves the managed OIDC principal through
+Profile to one internal UUID, rejects query parameters and unknown body fields, and passes only
+that UUID, the requested lowercase UUIDv7, one fixed reason code, and a bounded idempotency key to
+Jobs. The response is `no-store`; target absence and duplicate/idempotency outcomes expose no
+catalog lifecycle or owner details. No admin moderation route or audience is introduced.
+
 This is locally verified source only. The saved-job mutation permission/grant, publication,
 database migration, deployment, and live acceptance remain serialized later gates; do not release
 the mutation surface until the managed client has the exact `jobs:write` grant. The assessment read

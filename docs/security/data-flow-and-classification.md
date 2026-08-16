@@ -58,6 +58,25 @@ The Phase 0 slice does not call ATS, AI, email, calendar, billing, or browser-au
 | Audit evidence | Security/audit owner | Least-privilege security/support operations | Admin-access and retention approval |
 | Operational telemetry | Platform/observability owner | Approved monitoring provider and on-call roles | Redaction/access/retention verification |
 
+### D1 candidate job-report and moderation source boundary
+
+```mermaid
+flowchart LR
+  CandidateReport[Authenticated candidate] -->|job ID + fixed reason + idempotency key| GatewayReport[Gateway jobs:write route]
+  GatewayReport -->|internal owner UUID + fixed command| JobsReport[Jobs report store]
+  JobsReport -->|owner-isolated immutable row| JobsDB[(Jobs schema)]
+  JobsDB -->|fixed-code aggregate only| InternalReview[Future accountable moderation operator]
+  InternalReview -->|explicit block or exact source pause decision| ModerationLedger[Append-only moderation ledger]
+```
+
+The report contract contains no free text, provider identity, source URL, candidate values, or
+moderation outcome. Exact replay is owner-scoped, and aggregate review does not expose reporter
+identities. A report never changes lifecycle automatically. Only an explicit internal decision can
+block a job or persist a source pause; there is no source-resume operation in this slice. This is
+locally verified source only: no admin audience/API/UI, runtime source-gate wiring, real reports,
+retention/deletion approval, alerting policy, database apply, deployment, or live acceptance is
+claimed.
+
 ## Required delta data-flow diagrams
 
 The Phase 0 diagram is not evidence for an unimplemented capability. Before activation, add and

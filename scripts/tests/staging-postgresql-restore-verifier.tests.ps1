@@ -95,8 +95,8 @@ $boundary = Get-D1RestoreManifestBoundary $repositoryRoot
 if (
   [string]$boundary.ManifestId -cne "d1-profile-jobs-public-documents-matching-billing-v1" -or
   [int]$boundary.OwnerCount -ne 5 -or
-  [int]$boundary.RelationCount -ne 39 -or
-  [int]$boundary.MigrationCount -ne 16 -or
+  [int]$boundary.RelationCount -ne 42 -or
+  [int]$boundary.MigrationCount -ne 17 -or
   [string]$boundary.ManifestSha256 -cnotmatch "^[a-f0-9]{64}$"
 ) {
   throw "The current restore manifest boundary is unexpected."

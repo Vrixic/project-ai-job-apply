@@ -28,3 +28,6 @@ other service may modify these tables.
 - `0007_matchable_job_attributes.sql` — Nullable, exact-enum work-mode and employment-type
   attributes on the canonical job. Missing or explicit `unknown` values remain non-excluding;
   the migration adds no compensation, authorization, seniority, qualification, or inferred data.
+- `0008_job_reporting_and_moderation.sql` — Owner-isolated fixed-code job reports, strict internal
+  moderation cases, append-only decision evidence, explicit job blocking, and exact source-pause
+  state. Reports alone cannot mutate catalog lifecycle.

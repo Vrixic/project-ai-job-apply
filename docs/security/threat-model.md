@@ -107,3 +107,11 @@ control failure. Capability-specific deltas are recorded in the
 | Host/header injection poisons canonical metadata | Origin-only server configuration; request headers never select canonical host | Approved public hostname ownership remains a human gate |
 | Employer text injects markup or structured-data claims | React text rendering, strict response schema/size, no dangerous HTML and no `JobPosting` JSON-LD | Employer-original date/location/application semantics remain unavailable and unclaimed |
 | Reversible alias is cached as permanent | Temporary redirect with current canonical metadata | Alias lifecycle acceptance must be rerun against deployed current data |
+
+## D1-007 reporting/moderation source delta
+
+| Threat | Source control | Residual / release gate |
+|---|---|---|
+| Candidate reports leak identity or become unbounded free-form content | Owner UUID stays inside Jobs, the public contract accepts one fixed reason only, retained per-owner cap, aggregate review returns counts only | Retention/deletion and accountable support-access policy remain unapproved |
+| Reports automatically suppress legitimate jobs or sources | Reports are immutable evidence only; lifecycle changes require a separate explicit versioned moderation decision | No admin audience, workflow, alert threshold, or representative moderation-policy acceptance exists |
+| A compromised operator resumes a paused source or broadens ingestion | This slice supports only exact source-identity pause and no resume; runtime wiring remains absent | Any resume path requires separate legal/source/runtime authority and audited deployment evidence |

@@ -1,11 +1,13 @@
 import type {
   CanonicalJobDetail,
+  CreateJobReportRequest,
   CreateProfileFactRequest,
   CreateResumeUploadRequest,
   CreateResumeUploadResponse,
   CreateSavedJobRequest,
   CurrentUser,
   EntitlementSummary,
+  JobReport,
   JobSearchPage,
   JobSearchRequest,
   MatchAssessment,
@@ -35,7 +37,13 @@ import {
 } from "@ai-job-apply/documents-service";
 import {
   InvalidJobSearchError,
+  JobAlreadyReportedError,
   type JobCatalogReader,
+  JobReportIdempotencyConflictError,
+  JobReportLimitError,
+  JobReportServiceUnavailableError,
+  type JobReports,
+  JobReportTargetUnavailableError,
   JobSearchCatalogChangedError,
 } from "@ai-job-apply/jobs-service";
 import {
@@ -86,6 +94,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 
 const PROFILE_STORE = Symbol("PROFILE_STORE");
 const JOB_CATALOG = Symbol("JOB_CATALOG");
+const JOB_REPORTS = Symbol("JOB_REPORTS");
 const SAVED_JOBS = Symbol("SAVED_JOBS");
 const MATCH_ASSESSMENTS = Symbol("MATCH_ASSESSMENTS");
 const ENTITLEMENTS = Symbol("ENTITLEMENTS");
@@ -112,6 +121,7 @@ const SAFE_ROUTE_TEMPLATES = new Set([
   "/v1/jobs/search",
   "/v1/jobs/:jobId",
   "/v1/jobs/:jobId/match-assessment",
+  "/v1/jobs/:jobId/reports",
   "/v1/saved-jobs",
   "/v1/saved-jobs/search",
   "/v1/saved-jobs/:savedJobId",
@@ -238,6 +248,31 @@ class ProblemDetailsFilter implements ExceptionFilter {
       code = "job_search_catalog_changed";
       title = "Job catalog changed";
       detail = exception.message;
+    } else if (exception instanceof JobReportTargetUnavailableError) {
+      status = HttpStatus.NOT_FOUND;
+      code = "job_report_target_unavailable";
+      title = "Job is unavailable";
+      detail = "The requested active job is unavailable for reporting";
+    } else if (exception instanceof JobReportIdempotencyConflictError) {
+      status = HttpStatus.CONFLICT;
+      code = "idempotency_conflict";
+      title = "Idempotency key conflict";
+      detail = exception.message;
+    } else if (exception instanceof JobAlreadyReportedError) {
+      status = HttpStatus.CONFLICT;
+      code = "job_already_reported";
+      title = "Job already reported";
+      detail = exception.message;
+    } else if (exception instanceof JobReportLimitError) {
+      status = HttpStatus.CONFLICT;
+      code = "job_report_limit_reached";
+      title = "Job-report limit reached";
+      detail = exception.message;
+    } else if (exception instanceof JobReportServiceUnavailableError) {
+      status = HttpStatus.SERVICE_UNAVAILABLE;
+      code = "job_reporting_unavailable";
+      title = "Job reporting unavailable";
+      detail = "Job reporting is temporarily unavailable";
     } else if (exception instanceof SavedJobIdempotencyConflictError) {
       status = HttpStatus.CONFLICT;
       code = "idempotency_conflict";
@@ -336,6 +371,7 @@ class HealthController {
   constructor(
     @Inject(PROFILE_STORE) private readonly store: ProfileStore,
     @Inject(JOB_CATALOG) private readonly catalog: JobCatalogReader,
+    @Inject(JOB_REPORTS) private readonly jobReports: JobReports,
     @Inject(SAVED_JOBS) private readonly savedJobs: SavedJobs,
     @Inject(ENTITLEMENTS) private readonly entitlements: EntitlementReadService,
     @Inject(RELEASE_SHA) private readonly releaseSha: string,
@@ -352,6 +388,7 @@ class HealthController {
       await Promise.all([
         this.store.ping(),
         this.catalog.ping(),
+        this.jobReports.ping(),
         this.savedJobs.ping(),
         this.entitlements.ping(),
       ]);
@@ -370,6 +407,8 @@ const validateJobSearch = compileComponentValidator("JobSearchRequest");
 const validateCreateSavedJob = compileComponentValidator("CreateSavedJobRequest");
 const validateSavedJobSearch = compileComponentValidator("SavedJobSearchRequest");
 const validateMatchAssessment = compileComponentValidator("MatchAssessment");
+const validateCreateJobReport = compileComponentValidator("CreateJobReportRequest");
+const validateJobReport = compileComponentValidator("JobReport");
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const UUID_V7_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -484,6 +523,17 @@ function exactMatchAssessment(value: unknown, requestedJobId: string): value is 
   }
 }
 
+function exactJobReport(value: unknown, requestedJobId: string): value is JobReport {
+  if (!validateJobReport(value)) return false;
+  const report = value as JobReport;
+  return (
+    report.requestedJobId === requestedJobId &&
+    UUID_V7_PATTERN.test(report.id) &&
+    UUID_V7_PATTERN.test(report.canonicalJobId) &&
+    exactCanonicalDateTime(report.createdAt)
+  );
+}
+
 @Controller("/v1")
 @UseFilters(ProblemDetailsFilter)
 class CandidateController {
@@ -491,6 +541,7 @@ class CandidateController {
     @Inject(RequestIdentity) private readonly identity: RequestIdentity,
     @Inject(PROFILE_STORE) private readonly store: ProfileStore,
     @Inject(JOB_CATALOG) private readonly catalog: JobCatalogReader,
+    @Inject(JOB_REPORTS) private readonly jobReports: JobReports,
     @Inject(SAVED_JOBS) private readonly savedJobs: SavedJobs,
     @Inject(MATCH_ASSESSMENTS) private readonly matchAssessments: MatchAssessments,
     @Inject(ENTITLEMENTS) private readonly entitlements: EntitlementReadService,
@@ -675,6 +726,39 @@ class CandidateController {
     return assessment as MatchAssessment;
   }
 
+  @Post("/jobs/:jobId/reports")
+  @HttpCode(HttpStatus.CREATED)
+  @Header("cache-control", "no-store")
+  async createJobReport(
+    @Req() request: AuthenticatedRequest,
+    @Param("jobId") jobId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<JobReport> {
+    if (
+      (request.query && Object.keys(request.query as Record<string, unknown>).length > 0) ||
+      !UUID_V7_PATTERN.test(jobId) ||
+      !validateCreateJobReport(request.body)
+    ) {
+      throw new HttpException(
+        validateCreateJobReport.errors
+          ? formatValidationErrors(validateCreateJobReport.errors)
+          : "Job report input is invalid",
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const user = await this.identity.resolve(request, "jobs:write");
+    const created = await this.jobReports.report({
+      ownerUserId: user.id,
+      requestedJobId: jobId,
+      reason: (request.body as CreateJobReportRequest).reason,
+      idempotencyKey: requireIdempotencyKey(idempotencyKey),
+    });
+    if (!exactJobReport(created, jobId)) {
+      throw new JobReportServiceUnavailableError();
+    }
+    return created as JobReport;
+  }
+
   @Post("/jobs/search")
   @HttpCode(HttpStatus.OK)
   @Header("cache-control", "no-store")
@@ -798,6 +882,7 @@ class CandidateController {
 export interface AppModuleOptions {
   store: ProfileStore;
   catalog: JobCatalogReader;
+  jobReports: JobReports;
   savedJobs: SavedJobs;
   matchAssessments: MatchAssessments;
   entitlements: EntitlementReadService;
@@ -818,6 +903,7 @@ export class AppModule {
         RequestIdentity,
         { provide: PROFILE_STORE, useValue: options.store },
         { provide: JOB_CATALOG, useValue: options.catalog },
+        { provide: JOB_REPORTS, useValue: options.jobReports },
         { provide: SAVED_JOBS, useValue: options.savedJobs },
         { provide: MATCH_ASSESSMENTS, useValue: options.matchAssessments },
         { provide: ENTITLEMENTS, useValue: options.entitlements },

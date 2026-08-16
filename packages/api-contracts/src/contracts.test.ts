@@ -301,6 +301,70 @@ describe("saved-job contracts", () => {
   });
 });
 
+describe("job-report contracts", () => {
+  const validateRequest = compileComponentValidator("CreateJobReportRequest");
+  const validateReport = compileComponentValidator("JobReport");
+  const jobId = "019d04cf-1f80-7000-8000-000000000012";
+  const reportId = "019d04cf-1f80-7000-8000-000000000013";
+
+  it("accepts only fixed enum reports without candidate text or owner injection", () => {
+    for (const reason of [
+      "job_closed",
+      "job_not_found",
+      "job_inaccurate",
+      "suspected_scam",
+      "duplicate_listing",
+      "other_catalog_issue",
+    ]) {
+      expect(validateRequest({ reason })).toBe(true);
+      expect(
+        validateReport({
+          id: reportId,
+          requestedJobId: jobId,
+          canonicalJobId: jobId,
+          reason,
+          createdAt: "2026-08-16T18:00:00.000Z",
+        }),
+      ).toBe(true);
+    }
+    expect(validateRequest({ reason: "other", detail: "candidate-supplied text" })).toBe(false);
+    expect(validateRequest({ reason: "job_closed", ownerUserId: jobId })).toBe(false);
+    expect(
+      validateReport({
+        id: reportId,
+        requestedJobId: jobId,
+        canonicalJobId: jobId,
+        reason: "job_closed",
+        reporterUserId: jobId,
+        createdAt: "2026-08-16T18:00:00.000Z",
+      }),
+    ).toBe(false);
+  });
+
+  it("uses jobs:write, exact lowercase UUIDv7 identity, idempotency, and no-store", () => {
+    const operation = contract.paths["/jobs/{jobId}/reports"].post;
+    expect(operation.security).toEqual([{ oidc: ["jobs:write"] }]);
+    expect(operation.parameters[0]?.schema.pattern).toContain("-7");
+    expect(operation.parameters[1]).toMatchObject({
+      in: "header",
+      name: "Idempotency-Key",
+      required: true,
+    });
+    expect(operation.responses["201"].headers["Cache-Control"].schema.enum).toEqual(["no-store"]);
+    expect(Object.keys(operation.responses).sort()).toEqual([
+      "201",
+      "400",
+      "401",
+      "403",
+      "404",
+      "409",
+      "413",
+      "415",
+      "503",
+    ]);
+  });
+});
+
 describe("match-assessment contract", () => {
   const validate = compileComponentValidator("MatchAssessment");
   const value = {

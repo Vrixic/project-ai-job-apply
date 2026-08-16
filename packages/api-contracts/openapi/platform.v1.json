@@ -446,6 +446,61 @@
         }
       }
     },
+    "/jobs/{jobId}/reports": {
+      "post": {
+        "operationId": "createJobReport",
+        "security": [{ "oidc": ["jobs:write"] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "jobId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": { "type": "string", "minLength": 16, "maxLength": 128 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateJobReportRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The authenticated owner reported one active canonical job",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/JobReport" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
     "/public/jobs/{jobId}": {
       "get": {
         "operationId": "getPublicJob",
@@ -1291,6 +1346,55 @@
         "required": ["jobId"],
         "properties": {
           "jobId": { "type": "string", "format": "uuid" }
+        },
+        "additionalProperties": false
+      },
+      "CreateJobReportRequest": {
+        "type": "object",
+        "required": ["reason"],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "job_closed",
+              "job_not_found",
+              "job_inaccurate",
+              "suspected_scam",
+              "duplicate_listing",
+              "other_catalog_issue"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "JobReport": {
+        "type": "object",
+        "required": ["id", "requestedJobId", "canonicalJobId", "reason", "createdAt"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "requestedJobId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "canonicalJobId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "job_closed",
+              "job_not_found",
+              "job_inaccurate",
+              "suspected_scam",
+              "duplicate_listing",
+              "other_catalog_issue"
+            ]
+          },
+          "createdAt": { "type": "string", "format": "date-time" }
         },
         "additionalProperties": false
       },

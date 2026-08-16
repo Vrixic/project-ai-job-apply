@@ -28,6 +28,12 @@ binds requested/canonical job identity plus preference and catalog versions, and
 unknown evidence cannot. The contract contains no candidate values, job display values, score,
 rank, fit band, generated prose, eligibility, or application outcome.
 
+`POST /jobs/{jobId}/reports` is an authenticated `jobs:write` command with no owner field. It
+accepts one fixed reason enum and an idempotency key, resolves exact aliases to a canonical active
+job, and returns only opaque report and job identifiers, the reason code, and creation time. Free
+text, reporter identity, moderation state, source identity, and lifecycle reasons are excluded.
+Reports do not directly block, withdraw, pause, or otherwise mutate a job or source.
+
 `GET /entitlements` is an owner-self read under the existing `profile:read` permission. It accepts
 no query, body, path owner, provider, or payment input and returns only the exact derived Free or
 Pro access projection with the four current core grants. Free, active Pro, and grace Pro are
