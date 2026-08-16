@@ -3,6 +3,9 @@ import * as addFormatsModule from "ajv-formats";
 import documentScanResultSchema from "../schemas/document.scan-result.v1.json" with {
   type: "json",
 };
+import ingestionDispatchNudgeSchema from "../schemas/jobs.ingestion.dispatch.nudge.v1.json" with {
+  type: "json",
+};
 import outboxNudgeSchema from "../schemas/platform.outbox.nudge.v1.json" with { type: "json" };
 import preferencesUpdatedSchema from "../schemas/profile.preferences.updated.v1.json" with {
   type: "json",
@@ -22,6 +25,7 @@ export const eventTypes = {
 
 export const outboxNudgeSchemaVersion = 1 as const;
 export const documentScanResultSchemaVersion = 1 as const;
+export const ingestionDispatchNudgeSchemaVersion = 1 as const;
 
 export type DocumentScanStatus = "COMPLETED" | "FAILED" | "SKIPPED";
 export type DocumentScanResult =
@@ -58,6 +62,29 @@ export interface OutboxNudgeV1 {
 }
 
 export type OutboxNudgeIntegrityFields = Omit<OutboxNudgeV1, "integrity">;
+
+export interface IngestionDispatchNudgeV1 {
+  schemaVersion: typeof ingestionDispatchNudgeSchemaVersion;
+  dispatchId: string;
+  executionId: string;
+  checkpointRevision: number;
+  workflowGeneration: number;
+  integrity: { algorithm: "sha256"; digest: string };
+}
+
+export type IngestionDispatchNudgeIntegrityFields = Omit<IngestionDispatchNudgeV1, "integrity">;
+
+export function ingestionDispatchNudgeIntegrityInput(
+  fields: IngestionDispatchNudgeIntegrityFields,
+): string {
+  return JSON.stringify({
+    schemaVersion: fields.schemaVersion,
+    dispatchId: fields.dispatchId,
+    executionId: fields.executionId,
+    checkpointRevision: fields.checkpointRevision,
+    workflowGeneration: fields.workflowGeneration,
+  });
+}
 
 /** Returns the stable, value-free byte input covered by an outbox nudge digest. */
 export function outboxNudgeIntegrityInput(fields: OutboxNudgeIntegrityFields): string {
@@ -122,6 +149,9 @@ const validators = new Map<string, ValidateFunction<unknown>>([
 ]);
 const outboxNudgeValidator = ajv.compile<OutboxNudgeV1>(outboxNudgeSchema);
 const documentScanResultValidator = ajv.compile<DocumentScanResultV1>(documentScanResultSchema);
+const ingestionDispatchNudgeValidator = ajv.compile<IngestionDispatchNudgeV1>(
+  ingestionDispatchNudgeSchema,
+);
 
 export function validateEventData(type: string, data: unknown): boolean {
   const validator = validators.get(type);
@@ -134,4 +164,8 @@ export function validateOutboxNudge(value: unknown): value is OutboxNudgeV1 {
 
 export function validateDocumentScanResult(value: unknown): value is DocumentScanResultV1 {
   return documentScanResultValidator(value);
+}
+
+export function validateIngestionDispatchNudge(value: unknown): value is IngestionDispatchNudgeV1 {
+  return ingestionDispatchNudgeValidator(value);
 }

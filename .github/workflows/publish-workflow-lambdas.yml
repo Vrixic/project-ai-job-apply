@@ -53,7 +53,7 @@ jobs:
         run: |
           set -euo pipefail
           artifact_dir="backend/workflows/dist/lambda"
-          names=(workflow-ingress-lambda profile-readiness-durable-lambda profile-readiness-activity-lambda)
+          names=(workflow-ingress-lambda profile-readiness-durable-lambda profile-readiness-activity-lambda ingestion-durable-lambda ingestion-runtime-lambda)
 
           pnpm --filter @ai-job-apply/workflows build:lambda
           for name in "${names[@]}"; do
@@ -108,8 +108,8 @@ jobs:
         run: |
           set -euo pipefail
           artifact_dir="backend/workflows/dist/lambda"
-          names=(workflow-ingress-lambda profile-readiness-durable-lambda profile-readiness-activity-lambda)
-          output_names=(ingress durable activity)
+          names=(workflow-ingress-lambda profile-readiness-durable-lambda profile-readiness-activity-lambda ingestion-durable-lambda ingestion-runtime-lambda)
+          output_names=(ingress durable activity ingestion_durable ingestion_runtime)
 
           for index in "${!names[@]}"; do
             name="${names[$index]}"
@@ -170,6 +170,14 @@ jobs:
           INGRESS_KEY: ${{ steps.publish.outputs.ingress_key }}
           INGRESS_OBJECT_VERSION: ${{ steps.publish.outputs.ingress_object_version }}
           INGRESS_SHA256: ${{ steps.publish.outputs.ingress_sha256 }}
+          INGESTION_DURABLE_BASE64_SHA256: ${{ steps.publish.outputs.ingestion_durable_base64_sha256 }}
+          INGESTION_DURABLE_KEY: ${{ steps.publish.outputs.ingestion_durable_key }}
+          INGESTION_DURABLE_OBJECT_VERSION: ${{ steps.publish.outputs.ingestion_durable_object_version }}
+          INGESTION_DURABLE_SHA256: ${{ steps.publish.outputs.ingestion_durable_sha256 }}
+          INGESTION_RUNTIME_BASE64_SHA256: ${{ steps.publish.outputs.ingestion_runtime_base64_sha256 }}
+          INGESTION_RUNTIME_KEY: ${{ steps.publish.outputs.ingestion_runtime_key }}
+          INGESTION_RUNTIME_OBJECT_VERSION: ${{ steps.publish.outputs.ingestion_runtime_object_version }}
+          INGESTION_RUNTIME_SHA256: ${{ steps.publish.outputs.ingestion_runtime_sha256 }}
           TARGET_ENVIRONMENT: ${{ inputs.environment }}
         shell: bash
         run: |
@@ -178,7 +186,7 @@ jobs:
             echo
             echo "- Environment: \`$TARGET_ENVIRONMENT\`"
             echo "- Source commit: \`$GITHUB_SHA\`"
-            for label in INGRESS DURABLE ACTIVITY; do
+            for label in INGRESS DURABLE ACTIVITY INGESTION_DURABLE INGESTION_RUNTIME; do
               key_variable="${label}_KEY"
               version_variable="${label}_OBJECT_VERSION"
               sha_variable="${label}_SHA256"

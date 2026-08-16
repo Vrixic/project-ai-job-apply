@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   eventTypes,
+  ingestionDispatchNudgeIntegrityInput,
   outboxNudgeIntegrityInput,
   validateDocumentScanResult,
   validateEventData,
+  validateIngestionDispatchNudge,
   validateOutboxNudge,
 } from "./index.js";
 
@@ -83,6 +85,25 @@ describe("event schemas", () => {
         locations: ["New York, NY"],
       }),
     ).toBe(false);
+  });
+
+  it("accepts an exact identifier-only ingestion dispatch and rejects payload leakage", () => {
+    const nudge = {
+      schemaVersion: 1 as const,
+      dispatchId: "019d09f8-65ab-7b65-8b90-60d976b78f07",
+      executionId: "a".repeat(64),
+      checkpointRevision: 0,
+      workflowGeneration: 1,
+      integrity: { algorithm: "sha256" as const, digest: "b".repeat(64) },
+    };
+    expect(validateIngestionDispatchNudge(nudge)).toBe(true);
+    expect(ingestionDispatchNudgeIntegrityInput(nudge)).toBe(
+      `{"schemaVersion":1,"dispatchId":"019d09f8-65ab-7b65-8b90-60d976b78f07","executionId":"${"a".repeat(64)}","checkpointRevision":0,"workflowGeneration":1}`,
+    );
+    expect(
+      validateIngestionDispatchNudge({ ...nudge, sourceUrl: "https://jobs.example.test" }),
+    ).toBe(false);
+    expect(validateIngestionDispatchNudge({ ...nudge, workflowGeneration: 21 })).toBe(false);
   });
 
   it("accepts an identifier-only clean document scan result", () => {

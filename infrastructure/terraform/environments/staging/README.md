@@ -1,5 +1,13 @@
 # Staging Environment
 
+The D1 synthetic ingestion data plane uses the ordered gates
+`deploy_ingestion_runtime`, `ingestion_runtime_enabled`, and
+`ingestion_synthetic_source_enabled`. All three default false and must advance in that order. A
+future staged rollout must first
+review a deploy-only saved plan with both enable switches still false; this source packet does not
+authorize that plan or any AWS apply. The staging lifecycle must also be explicitly `active` before
+its shared runtime activation authority permits any ingestion trigger.
+
 Composes the same lean serverless platform in a separate AWS account and non-overlapping
 `us-east-2` network. Use it for release candidates, migration rehearsals, restore exercises,
 security acceptance, and launch preparation—not as continuously provisioned duplicate compute.

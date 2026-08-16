@@ -56,10 +56,10 @@ describeWithDatabase("source-neutral ingestion through PostgresJobCatalog", () =
       env: environment,
     });
     expect(first.stdout.trim()).toBe(
-      "Jobs migrations through 0004_job_search applied and verified.",
+      "Jobs migrations through 0005_ingestion_orchestration applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(
-      "Jobs migrations through 0004_job_search applied and verified.",
+      "Jobs migrations through 0005_ingestion_orchestration applied and verified.",
     );
     await catalog.ping();
   });

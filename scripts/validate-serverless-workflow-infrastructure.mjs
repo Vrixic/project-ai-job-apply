@@ -50,6 +50,142 @@ const staticAnalysisWorkflow = ".github/workflows/static-analysis.yml";
 const stagingLifecycleOperator = "scripts/operate-staging-runtime-lifecycle.ps1";
 const developmentMigrationOperator = "scripts/operate-development-document-migration.ps1";
 const candidateDocuments = "infrastructure/terraform/modules/platform/candidate-documents.tf";
+const ingestionWorkflow = "infrastructure/terraform/modules/platform/ingestion-workflow.tf";
+const ingestionBuilder = "scripts/build-ingestion-lambdas.mjs";
+
+for (const required of [
+  'variable "deploy_ingestion_runtime"',
+  'variable "ingestion_runtime_enabled"',
+  'variable "ingestion_synthetic_source_enabled"',
+  "var.deploy_ingestion_runtime && var.runtime_activation_allowed",
+  'toset(["coordinator", "starter", "activity", "terminal"])',
+  "default     = false",
+  "message_retention_seconds  = 345600",
+  "message_retention_seconds = 1209600",
+  'state               = var.ingestion_runtime_enabled ? "ENABLED" : "DISABLED"',
+  "enabled                 = var.ingestion_runtime_enabled",
+  "INGESTION_SYNTHETIC_SOURCE_ENABLED = tostring(var.ingestion_synthetic_source_enabled)",
+  "INGESTION_QUEUE_ARN                = aws_sqs_queue.ingestion_dispatch[0].arn",
+  'function_response_types = ["ReportBatchItemFailures"]',
+  "role                           = aws_iam_role.ingestion_runtime[each.key].arn",
+  'role                           = aws_iam_role.ingestion_runtime["activity"].arn',
+  'for_each = each.key == "coordinator" ? [1] : []',
+  'for_each = each.key == "starter" ? [1] : []',
+  'actions   = ["lambda:GetDurableExecution"]',
+  'resources = ["$' + '{local.ingestion_durable_arn}:*/durable-execution/*"]',
+  "KMSKeyArn",
+  "RetentionPeriodInDays = var.ingestion_retention_days",
+  'resources = ["$' + '{local.ingestion_durable_arn}:*"]',
+  'resources = ["$' + '{aws_lambda_function.ingestion_activity[0].arn}:*"]',
+  "maximum_event_age_in_seconds = 3600",
+  'resource "aws_cloudwatch_metric_alarm" "ingestion_runtime_throttles"',
+  'resource "aws_cloudwatch_metric_alarm" "ingestion_activity_throttles"',
+  'resource "aws_cloudwatch_metric_alarm" "ingestion_durable_throttles"',
+  'resource "aws_cloudwatch_metric_alarm" "ingestion_durable_timed_out"',
+  'metric_name         = "DurableExecutionTimedOut"',
+  'resource "aws_cloudwatch_metric_alarm" "ingestion_durable_duration"',
+  'metric_name         = "DurableExecutionDuration"',
+  "threshold           = var.ingestion_execution_timeout_seconds * 900",
+]) {
+  requireText(
+    ingestionWorkflow,
+    required,
+    `ingestion default-off boundary is missing: ${required}`,
+  );
+}
+requirePattern(
+  ingestionWorkflow,
+  /functionArn\s*=\s*\[\{ prefix = "\$\{local\.ingestion_durable_arn\}:" \}\]/u,
+  "terminal reconciliation must subscribe only to exact ingestion function versions",
+);
+for (const [pattern, reason] of [
+  [
+    /sid\s*=\s*"ExactIngestionCoordinatorQueueWrites"[\s\S]{0,500}actions\s*=\s*\["sqs:SendMessage"\][\s\S]{0,500}aws_iam_role\.ingestion_runtime\["coordinator"\]\.arn/u,
+    "coordinator SQS endpoint boundary is incomplete",
+  ],
+  [
+    /sid\s*=\s*"ExactIngestionStarterQueueReads"[\s\S]{0,700}"sqs:ReceiveMessage"[\s\S]{0,500}aws_iam_role\.ingestion_runtime\["starter"\]\.arn/u,
+    "starter SQS endpoint boundary is incomplete",
+  ],
+  [
+    /sid\s*=\s*"IngestionStarterInvokesDurableVersionsOnly"[\s\S]{0,500}lambda:InvokeFunction[\s\S]{0,500}ingestion_runtime\["starter"\]\.arn/u,
+    "starter Lambda endpoint boundary is incomplete",
+  ],
+  [
+    /sid\s*=\s*"IngestionCoordinatorReadsDurableMetadataOnly"[\s\S]{0,500}lambda:GetDurableExecution[\s\S]{0,500}:\*\/durable-execution\/\*[\s\S]{0,500}ingestion_runtime\["coordinator"\]\.arn/u,
+    "coordinator durable metadata endpoint boundary is incomplete",
+  ],
+  [
+    /sid\s*=\s*"AllowIngestionDurableRoleStateDecryption"[\s\S]{0,800}kms:EncryptionContext:aws:lambda:FunctionArn[\s\S]{0,300}local\.ingestion_durable_arn/u,
+    "durable role KMS encryption context is incomplete",
+  ],
+  [
+    /data "aws_iam_policy_document" "secrets_endpoint"[\s\S]{0,2200}ingestion_runtime\["coordinator"\]\.arn[\s\S]{0,300}ingestion_runtime\["starter"\]\.arn[\s\S]{0,300}ingestion_runtime\["activity"\]\.arn[\s\S]{0,300}ingestion_runtime\["terminal"\]\.arn/u,
+    "ingestion Secrets Manager endpoint principals are incomplete",
+  ],
+]) {
+  requirePattern(platform, pattern, reason);
+}
+const ingestionRuntimePolicy = section(
+  ingestionWorkflow,
+  'data "aws_iam_policy_document" "ingestion_runtime"',
+  'resource "aws_iam_role_policy" "ingestion_runtime"',
+);
+if ((ingestionRuntimePolicy.match(/kms:GenerateDataKey/gu) ?? []).length !== 1) {
+  failures.push(`${ingestionWorkflow}: only the coordinator may generate an SQS data key`);
+}
+for (const required of [
+  "kms:EncryptionContext:SecretARN",
+  "kms:EncryptionContext:aws:sqs:arn",
+  'each.key == "coordinator"',
+  'each.key == "starter"',
+]) {
+  if (!ingestionRuntimePolicy.includes(required)) {
+    failures.push(`${ingestionWorkflow}: ingestion runtime KMS boundary is missing ${required}`);
+  }
+}
+const ingestionDurablePolicy = section(
+  ingestionWorkflow,
+  'data "aws_iam_policy_document" "ingestion_durable"',
+  'resource "aws_iam_role_policy" "ingestion_durable"',
+);
+for (const required of [
+  "kms:EncryptionContext:aws:lambda:FunctionArn",
+  "kms:EncryptionContext:aws:sqs:arn",
+  "lambda.$" + "{data.aws_region.current.region}.amazonaws.com",
+  "sqs.$" + "{data.aws_region.current.region}.amazonaws.com",
+]) {
+  if (!ingestionDurablePolicy.includes(required)) {
+    failures.push(`${ingestionWorkflow}: ingestion durable KMS boundary is missing ${required}`);
+  }
+}
+for (const required of [
+  'sid       = "AllowEventBridgeIngestionQueueEncryption"',
+  'sid       = "AllowIngestionLambdaDurableStateEncryption"',
+  'sid       = "AllowIngestionDurableRoleStateDecryption"',
+  "local.ingestion_schedule_rule_arn, local.ingestion_terminal_rule_arn",
+  'variable = "kms:EncryptionContext:aws:lambda:FunctionArn"',
+  'data "aws_iam_policy_document" "secrets_endpoint"',
+  'data "aws_iam_policy_document" "outbox_sqs_endpoint"',
+  'data "aws_iam_policy_document" "outbox_lambda_endpoint"',
+  'sid       = "ExactIngestionCoordinatorQueueWrites"',
+  'sid    = "ExactIngestionStarterQueueReads"',
+  'sid       = "IngestionStarterInvokesDurableVersionsOnly"',
+  'sid       = "IngestionCoordinatorReadsDurableMetadataOnly"',
+]) {
+  requireText(platform, required, `ingestion EventBridge CMK boundary is missing: ${required}`);
+}
+for (const forbidden of ["greenhouse", "lever", "ashby", "http://", "https://"]) {
+  forbidText(
+    ingestionWorkflow,
+    forbidden,
+    `real-provider/network activation residue remains: ${forbidden}`,
+  );
+}
+for (const required of ["ingestion-durable-lambda", "ingestion-runtime-lambda"]) {
+  requireText(ingestionBuilder, required, `ingestion artifact builder is missing: ${required}`);
+  requireText(workflowPublisher, required, `workflow publisher is missing: ${required}`);
+}
 
 for (const required of [
   'ValidateSet("Status", "PlanTask", "ApplyTask", "PlanExecution", "Execute", "Recover", "Verify")',

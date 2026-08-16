@@ -70,10 +70,20 @@ export interface SucceededIngestionCheckpointV1 extends SettledIngestionCheckpoi
   state: "succeeded";
 }
 
-export interface DeadLetteredIngestionCheckpointV1 extends SettledIngestionCheckpointBase {
+export interface AttemptDeadLetteredIngestionCheckpointV1 extends SettledIngestionCheckpointBase {
   state: "dead_lettered";
   failureCode: "attempt_limit_exhausted" | "ingestion_attempt_failed" | "source_contract_rejected";
 }
+
+export interface RecoveryExhaustedIngestionCheckpointV1 extends IngestionCheckpointBase {
+  state: "dead_lettered";
+  failureCode: "recovery_generation_exhausted";
+  exhaustedDispatchId: string;
+}
+
+export type DeadLetteredIngestionCheckpointV1 =
+  | AttemptDeadLetteredIngestionCheckpointV1
+  | RecoveryExhaustedIngestionCheckpointV1;
 
 export type IngestionCheckpointV1 =
   | PendingIngestionCheckpointV1
@@ -344,6 +354,15 @@ function assertCheckpoint(value: unknown): asserts value is IngestionCheckpointV
   ) {
     return;
   }
+  if (
+    value.state === "dead_lettered" &&
+    value.failureCode === "recovery_generation_exhausted" &&
+    hasExactKeys(value, [...baseCheckpointKeys, "exhaustedDispatchId", "failureCode"]) &&
+    typeof value.exhaustedDispatchId === "string" &&
+    lowercaseUuidV7Pattern.test(value.exhaustedDispatchId)
+  ) {
+    return;
+  }
   if (!validSettledCheckpoint(value)) {
     throw new Error("The ingestion checkpoint is invalid");
   }
@@ -501,7 +520,20 @@ function dispositionForSettledCheckpoint(
     | SucceededIngestionCheckpointV1
     | DeadLetteredIngestionCheckpointV1,
 ): IngestionDispatchDisposition {
-  const base = aggregateDispositionBase(checkpoint);
+  const base =
+    checkpoint.state === "dead_lettered" &&
+    checkpoint.failureCode === "recovery_generation_exhausted"
+      ? {
+          schemaVersion: ingestionOrchestrationSchemaVersion,
+          executionId: checkpoint.executionId,
+          sourceId: checkpoint.sourceId,
+          withdrawalInferred: false as const,
+          progressKnown: false,
+          observationCount: 0,
+          createdCount: 0,
+          updatedCount: 0,
+        }
+      : aggregateDispositionBase(checkpoint);
   if (checkpoint.state === "retry_wait") {
     return frozen({
       ...base,
@@ -540,7 +572,9 @@ function pausedBeforeRun(
       ? true
       : checkpoint.state === "claimed"
         ? false
-        : checkpoint.progressKnown;
+        : "progressKnown" in checkpoint
+          ? checkpoint.progressKnown
+          : false;
   const key = settlementKey({
     expectedRevision: command.expectedRevision,
     leaseId: command.leaseId,
@@ -573,7 +607,9 @@ function claimedCheckpoint(
 ): ClaimedIngestionCheckpointV1 {
   const priorProgressUnknown =
     checkpoint.state === "claimed" ||
-    (checkpoint.state !== "pending" && checkpoint.progressKnown === false);
+    (checkpoint.state !== "pending" &&
+      "progressKnown" in checkpoint &&
+      checkpoint.progressKnown === false);
   return frozen({
     ...occurrenceFields(checkpoint),
     state: "claimed",
@@ -904,7 +940,7 @@ export function settleIngestionAttempt(
   });
 }
 
-function safeFailureCode(error: unknown): DeadLetteredIngestionCheckpointV1["failureCode"] {
+function safeFailureCode(error: unknown): AttemptDeadLetteredIngestionCheckpointV1["failureCode"] {
   return error instanceof SourceBatchContractError
     ? "source_contract_rejected"
     : "ingestion_attempt_failed";

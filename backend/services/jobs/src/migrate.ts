@@ -13,6 +13,7 @@ const migrationVersions = [
   "0002_duplicate_resolution",
   "0003_duplicate_resolution_audit_guard",
   "0004_job_search",
+  "0005_ingestion_orchestration",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -23,6 +24,24 @@ const migrations = await Promise.all(
     return { version, sql, checksum: createHash("sha256").update(sql).digest("hex") };
   }),
 );
+const ingestionTriggerFunctions = [
+  "guard_ingestion_checkpoint",
+  "append_ingestion_run_event",
+  "guard_ingestion_run_event",
+  "guard_ingestion_dispatch",
+] as const;
+const ingestionMigration = migrations.find(
+  (migration) => migration.version === "0005_ingestion_orchestration",
+);
+if (!ingestionMigration) throw new Error("The ingestion migration source is missing");
+const expectedIngestionTriggerBodies = ingestionTriggerFunctions.map((functionName) => {
+  const match = new RegExp(
+    `CREATE FUNCTION jobs\\.${functionName}\\(\\)\\s+RETURNS trigger[\\s\\S]*?AS \\$\\$([\\s\\S]*?)\\$\\$;`,
+    "u",
+  ).exec(ingestionMigration.sql);
+  if (!match?.[1]) throw new Error(`The ${functionName} trigger function source is invalid`);
+  return match[1];
+});
 
 const client = postgres(databaseUrl, { max: 1, onnotice: () => undefined });
 try {
@@ -62,6 +81,11 @@ try {
         searchIndexCount: number;
         searchColumnPresent: boolean;
         searchTriggerCount: number;
+        ingestionTriggerCount: number;
+        ingestionTriggerFunctionCount: number;
+        ingestionTriggerFunctionBodies: string[];
+        ingestionIndexCount: number;
+        ingestionForeignKeyCount: number;
       }[]
     >`
       SELECT
@@ -73,7 +97,10 @@ try {
           (to_regclass('jobs.duplicate_resolution_events') IS NOT NULL)::int +
           (to_regclass('jobs.status_events') IS NOT NULL)::int +
           (to_regclass('jobs.schema_migrations') IS NOT NULL)::int +
-          (to_regclass('jobs.catalog_search_state') IS NOT NULL)::int
+          (to_regclass('jobs.catalog_search_state') IS NOT NULL)::int +
+          (to_regclass('jobs.ingestion_checkpoints') IS NOT NULL)::int +
+          (to_regclass('jobs.ingestion_run_events') IS NOT NULL)::int +
+          (to_regclass('jobs.ingestion_dispatches') IS NOT NULL)::int
         )::int AS "tableCount",
         (
           SELECT count(*)::int FROM jobs.schema_migrations
@@ -121,15 +148,142 @@ try {
             'duplicate_candidates_search_revision'
           ) AND NOT tgisinternal
         ) AS "searchTriggerCount"
+        , (
+          SELECT count(*)::int
+          FROM pg_trigger trigger
+          JOIN (VALUES
+            ('jobs.ingestion_checkpoints'::regclass, 'ingestion_checkpoints_guard',
+              'jobs.guard_ingestion_checkpoint()'::regprocedure, 31::smallint),
+            ('jobs.ingestion_checkpoints'::regclass, 'ingestion_checkpoints_append_event',
+              'jobs.append_ingestion_run_event()'::regprocedure, 21::smallint),
+            ('jobs.ingestion_run_events'::regclass, 'ingestion_run_events_append_only',
+              'jobs.guard_ingestion_run_event()'::regprocedure, 31::smallint),
+            ('jobs.ingestion_dispatches'::regclass, 'ingestion_dispatches_guard',
+              'jobs.guard_ingestion_dispatch()'::regprocedure, 31::smallint)
+          ) expected(table_oid, trigger_name, function_oid, trigger_type)
+            ON expected.table_oid = trigger.tgrelid
+           AND expected.trigger_name = trigger.tgname
+           AND expected.function_oid = trigger.tgfoid
+           AND expected.trigger_type = trigger.tgtype
+          WHERE NOT trigger.tgisinternal AND trigger.tgenabled = 'O'
+        ) AS "ingestionTriggerCount"
+        , (
+          SELECT count(*)::int
+          FROM pg_proc function_definition
+          JOIN pg_namespace namespace ON namespace.oid = function_definition.pronamespace
+          JOIN pg_language language ON language.oid = function_definition.prolang
+          WHERE namespace.nspname = 'jobs'
+            AND function_definition.proname = ANY(${ingestionTriggerFunctions as unknown as string[]})
+            AND function_definition.pronargs = 0
+            AND language.lanname = 'plpgsql'
+            AND function_definition.provolatile = 'v'
+            AND NOT function_definition.prosecdef
+            AND function_definition.proconfig IS NULL
+        ) AS "ingestionTriggerFunctionCount"
+        , ARRAY(
+          SELECT function_definition.prosrc
+          FROM unnest(${ingestionTriggerFunctions as unknown as string[]}::text[])
+            WITH ORDINALITY expected(function_name, ordinal)
+          JOIN pg_proc function_definition ON function_definition.proname = expected.function_name
+          JOIN pg_namespace namespace ON namespace.oid = function_definition.pronamespace
+          WHERE namespace.nspname = 'jobs' AND function_definition.pronargs = 0
+          ORDER BY expected.ordinal
+        ) AS "ingestionTriggerFunctionBodies"
+        , (
+          SELECT count(*)::int
+          FROM pg_index index_definition
+          JOIN pg_class index_relation ON index_relation.oid = index_definition.indexrelid
+          JOIN (VALUES
+            ('jobs.ingestion_checkpoints'::regclass, 'ingestion_checkpoints_due_idx',
+              ARRAY['state', 'retry_at', 'lease_expires_at', 'execution_id']::name[],
+              '(state = ANY (ARRAY[''claimed''::text, ''retry_wait''::text, ''paused''::text]))'::text),
+            ('jobs.ingestion_run_events'::regclass, 'ingestion_run_events_occurred_idx',
+              ARRAY['occurred_at', 'execution_id', 'revision']::name[], NULL::text),
+            ('jobs.ingestion_dispatches'::regclass, 'ingestion_dispatches_pending_idx',
+              ARRAY['next_attempt_at', 'created_at', 'id']::name[],
+              '(state = ANY (ARRAY[''pending''::text, ''claimed''::text]))'::text)
+          ) expected(table_oid, index_name, key_columns, predicate)
+            ON expected.table_oid = index_definition.indrelid
+           AND expected.index_name = index_relation.relname
+          WHERE index_definition.indisvalid AND index_definition.indisready
+            AND NOT index_definition.indisunique
+            AND pg_get_expr(index_definition.indpred, index_definition.indrelid)
+              IS NOT DISTINCT FROM expected.predicate
+            AND (
+              SELECT array_agg(attribute.attname ORDER BY key.ordinality)
+              FROM unnest(index_definition.indkey) WITH ORDINALITY key(attribute_number, ordinality)
+              JOIN pg_attribute attribute
+                ON attribute.attrelid = index_definition.indrelid
+               AND attribute.attnum = key.attribute_number
+              WHERE key.ordinality <= index_definition.indnkeyatts
+            ) = expected.key_columns
+        ) AS "ingestionIndexCount"
+        , (
+          SELECT count(*)::int
+          FROM pg_constraint constraint_definition
+          JOIN (VALUES
+            (
+              'ingestion_dispatches_execution_id_fkey',
+              'jobs.ingestion_dispatches'::regclass,
+              'jobs.ingestion_checkpoints'::regclass,
+              ARRAY['execution_id']::name[], ARRAY['execution_id']::name[]
+            ),
+            (
+              'ingestion_dispatches_execution_id_checkpoint_revision_fkey',
+              'jobs.ingestion_dispatches'::regclass,
+              'jobs.ingestion_run_events'::regclass,
+              ARRAY['execution_id', 'checkpoint_revision']::name[],
+              ARRAY['execution_id', 'revision']::name[]
+            ),
+            (
+              'ingestion_checkpoints_exhausted_dispatch_fk',
+              'jobs.ingestion_checkpoints'::regclass,
+              'jobs.ingestion_dispatches'::regclass,
+              ARRAY['exhausted_dispatch_id']::name[], ARRAY['id']::name[]
+            )
+          ) expected(
+            constraint_name, table_oid, referenced_table_oid,
+            local_columns, referenced_columns
+          )
+            ON expected.constraint_name = constraint_definition.conname
+           AND expected.table_oid = constraint_definition.conrelid
+           AND expected.referenced_table_oid = constraint_definition.confrelid
+          WHERE constraint_definition.contype = 'f' AND constraint_definition.convalidated
+            AND NOT constraint_definition.condeferrable
+            AND NOT constraint_definition.condeferred
+            AND constraint_definition.confupdtype = 'a'
+            AND constraint_definition.confdeltype = 'a'
+            AND constraint_definition.confmatchtype = 's'
+            AND (
+              SELECT array_agg(attribute.attname ORDER BY key.ordinality)
+              FROM unnest(constraint_definition.conkey) WITH ORDINALITY key(attribute_number, ordinality)
+              JOIN pg_attribute attribute
+                ON attribute.attrelid = constraint_definition.conrelid
+               AND attribute.attnum = key.attribute_number
+            ) = expected.local_columns
+            AND (
+              SELECT array_agg(attribute.attname ORDER BY key.ordinality)
+              FROM unnest(constraint_definition.confkey) WITH ORDINALITY key(attribute_number, ordinality)
+              JOIN pg_attribute attribute
+                ON attribute.attrelid = constraint_definition.confrelid
+               AND attribute.attnum = key.attribute_number
+            ) = expected.referenced_columns
+        ) AS "ingestionForeignKeyCount"
     `;
     if (
-      verification?.tableCount !== 8 ||
+      verification?.tableCount !== 11 ||
       verification.migrationCount !== migrationVersions.length ||
       verification.identityIndexCount !== 3 ||
       verification.moderationIndexCount !== 2 ||
       verification.searchIndexCount !== 4 ||
       !verification.searchColumnPresent ||
-      verification.searchTriggerCount !== 3
+      verification.searchTriggerCount !== 3 ||
+      verification.ingestionTriggerCount !== 4 ||
+      verification.ingestionTriggerFunctionCount !== 4 ||
+      JSON.stringify(verification.ingestionTriggerFunctionBodies) !==
+        JSON.stringify(expectedIngestionTriggerBodies) ||
+      verification.ingestionIndexCount !== 3 ||
+      verification.ingestionForeignKeyCount !== 3
     ) {
       throw new Error("Jobs database migration verification failed");
     }

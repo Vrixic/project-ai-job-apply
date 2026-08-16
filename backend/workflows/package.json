@@ -11,7 +11,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "build:lambda": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-workflow-ingress-lambda.mjs && node ../../scripts/build-profile-readiness-lambdas.mjs",
+    "build:lambda": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-workflow-ingress-lambda.mjs && node ../../scripts/build-profile-readiness-lambdas.mjs && node ../../scripts/build-ingestion-lambdas.mjs",
+    "build:lambda:ingestion": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-ingestion-lambdas.mjs",
     "build:lambda:ingress": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-workflow-ingress-lambda.mjs",
     "build:lambda:profile": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-profile-readiness-lambdas.mjs",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
@@ -25,12 +26,15 @@
     "@ai-job-apply/config": "workspace:*",
     "@ai-job-apply/domain": "workspace:*",
     "@ai-job-apply/event-contracts": "workspace:*",
+    "@ai-job-apply/ingestion-worker": "workspace:*",
+    "@ai-job-apply/jobs-service": "workspace:*",
     "@ai-job-apply/observability": "workspace:*",
     "@ai-job-apply/profile-service": "workspace:*",
     "@aws-sdk/client-lambda": "3.1106.0",
     "@aws-sdk/client-sqs": "3.1106.0",
     "@aws/durable-execution-sdk-js": "2.1.0",
-    "pino": "10.3.1"
+    "pino": "10.3.1",
+    "uuid": "14.0.1"
   },
   "devDependencies": {
     "@aws/durable-execution-sdk-js-testing": "1.1.3",

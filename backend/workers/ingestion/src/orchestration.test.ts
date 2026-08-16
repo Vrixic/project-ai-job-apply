@@ -390,6 +390,36 @@ describe("source-neutral ingestion orchestration protocol", () => {
     });
   });
 
+  it("projects durable recovery exhaustion without fabricating attempt settlement fields", () => {
+    const exhausted = {
+      ...pending(),
+      state: "dead_lettered",
+      revision: 1,
+      failureCode: "recovery_generation_exhausted",
+      exhaustedDispatchId: "018f47a6-7b2c-7ee1-8c09-3ea174e80e62",
+    } as const;
+
+    expect(acquireIngestionAttempt(exhausted, claimCommand())).toEqual({
+      kind: "terminal",
+      changed: false,
+      checkpoint: exhausted,
+      disposition: {
+        schemaVersion: 1,
+        executionId: exhausted.executionId,
+        sourceId,
+        withdrawalInferred: false,
+        progressKnown: false,
+        observationCount: 0,
+        createdCount: 0,
+        updatedCount: 0,
+        action: "dead_letter",
+        status: "dead_lettered",
+        failureCode: "recovery_generation_exhausted",
+      },
+    });
+    expect(exhausted).not.toHaveProperty("settledLeaseId");
+  });
+
   it("rejects conflicting settlement replay and settlement outside the lease", () => {
     const active = claimed();
     const command = settleCommand(active);
@@ -665,6 +695,7 @@ describe("source-neutral ingestion orchestration protocol", () => {
     ).toThrow("checkpoint is invalid");
 
     const completed = settleIngestionAttempt(active, settleCommand(active), success()).checkpoint;
+    if (!("progressKnown" in completed)) throw new Error("Expected an attempt settlement");
     expect(() =>
       acquireIngestionAttempt({ ...completed, progressKnown: false }, claimCommand()),
     ).toThrow("checkpoint is invalid");

@@ -77,6 +77,59 @@ data "aws_iam_policy_document" "platform_kms" {
   }
 
   dynamic "statement" {
+    for_each = var.deploy_ingestion_runtime ? [1] : []
+    content {
+      sid       = "AllowIngestionLambdaDurableStateEncryption"
+      effect    = "Allow"
+      actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
+      resources = ["*"]
+      principals {
+        type        = "Service"
+        identifiers = ["lambda.amazonaws.com"]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "aws:SourceAccount"
+        values   = [data.aws_caller_identity.current.account_id]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "aws:SourceArn"
+        values   = [local.ingestion_durable_arn]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "kms:EncryptionContext:aws:lambda:FunctionArn"
+        values   = [local.ingestion_durable_arn]
+      }
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.deploy_ingestion_runtime ? [1] : []
+    content {
+      sid       = "AllowIngestionDurableRoleStateDecryption"
+      effect    = "Allow"
+      actions   = ["kms:Decrypt"]
+      resources = ["*"]
+      principals {
+        type        = "AWS"
+        identifiers = [aws_iam_role.ingestion_durable[0].arn]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "kms:ViaService"
+        values   = ["lambda.${data.aws_region.current.region}.amazonaws.com"]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "kms:EncryptionContext:aws:lambda:FunctionArn"
+        values   = [local.ingestion_durable_arn]
+      }
+    }
+  }
+
+  dynamic "statement" {
     for_each = local.document_processing_kms_enabled ? [1] : []
     content {
       sid    = "AllowEventBridgeDocumentScanQueueEncryption"
@@ -102,6 +155,30 @@ data "aws_iam_policy_document" "platform_kms" {
           "arn:aws:events:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:rule/${var.name}-${var.environment}-document-scan-results",
           "arn:aws:events:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:rule/${var.name}-${var.environment}-document-processing-reconciler"
         ]
+      }
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.deploy_ingestion_runtime ? [1] : []
+    content {
+      sid       = "AllowEventBridgeIngestionQueueEncryption"
+      effect    = "Allow"
+      actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
+      resources = ["*"]
+      principals {
+        type        = "Service"
+        identifiers = ["events.amazonaws.com"]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "aws:SourceAccount"
+        values   = [data.aws_caller_identity.current.account_id]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:SourceArn"
+        values   = [local.ingestion_schedule_rule_arn, local.ingestion_terminal_rule_arn]
       }
     }
   }
@@ -1188,7 +1265,7 @@ resource "aws_iam_role_policy" "gateway_lambda" {
 }
 
 resource "aws_security_group" "secrets_endpoint" {
-  count       = var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled ? 1 : 0
+  count       = var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
   name_prefix = "${var.name}-${var.environment}-secrets-endpoint-"
   description = "TLS from private application functions to the Secrets Manager endpoint"
   vpc_id      = aws_vpc.this.id
@@ -1202,7 +1279,7 @@ resource "aws_security_group" "secrets_endpoint" {
 }
 
 data "aws_iam_policy_document" "secrets_endpoint" {
-  count = var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled ? 1 : 0
+  count = var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
 
   statement {
     sid       = "ExactMigrationExecutionRoleDatabaseSecret"
@@ -1239,7 +1316,11 @@ data "aws_iam_policy_document" "secrets_endpoint" {
         var.deploy_serverless_outbox ? aws_iam_role.outbox_reconciler[0].arn : "",
         var.deploy_profile_readiness_durable ? aws_iam_role.profile_readiness_activity[0].arn : "",
         var.deploy_profile_readiness_durable ? aws_iam_role.profile_readiness_terminal[0].arn : "",
-        local.document_complete_dark_enabled ? local.document_processor_role_arn : ""
+        local.document_complete_dark_enabled ? local.document_processor_role_arn : "",
+        var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["coordinator"].arn : "",
+        var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["starter"].arn : "",
+        var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["activity"].arn : "",
+        var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["terminal"].arn : ""
       ])
     }
   }
@@ -1248,7 +1329,7 @@ data "aws_iam_policy_document" "secrets_endpoint" {
 resource "aws_vpc_endpoint" "secretsmanager" {
   count = (
     var.persistent_data_plane_enabled && (
-      var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled
+      var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime
     )
   ) ? 1 : 0
   vpc_id              = aws_vpc.this.id
@@ -1559,7 +1640,7 @@ resource "aws_iam_role_policy" "outbox_reconciler" {
 }
 
 data "aws_iam_policy_document" "outbox_sqs_endpoint" {
-  count = var.deploy_serverless_outbox || local.document_complete_dark_enabled ? 1 : 0
+  count = var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
 
   dynamic "statement" {
     for_each = var.deploy_serverless_outbox ? [1] : []
@@ -1603,10 +1684,43 @@ data "aws_iam_policy_document" "outbox_sqs_endpoint" {
       }
     }
   }
+
+  dynamic "statement" {
+    for_each = var.deploy_ingestion_runtime ? [1] : []
+    content {
+      sid       = "ExactIngestionCoordinatorQueueWrites"
+      effect    = "Allow"
+      actions   = ["sqs:SendMessage"]
+      resources = [aws_sqs_queue.ingestion_dispatch[0].arn]
+      principals {
+        type        = "AWS"
+        identifiers = [aws_iam_role.ingestion_runtime["coordinator"].arn]
+      }
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.deploy_ingestion_runtime ? [1] : []
+    content {
+      sid    = "ExactIngestionStarterQueueReads"
+      effect = "Allow"
+      actions = [
+        "sqs:ChangeMessageVisibility",
+        "sqs:DeleteMessage",
+        "sqs:GetQueueAttributes",
+        "sqs:ReceiveMessage"
+      ]
+      resources = [aws_sqs_queue.ingestion_dispatch[0].arn]
+      principals {
+        type        = "AWS"
+        identifiers = [aws_iam_role.ingestion_runtime["starter"].arn]
+      }
+    }
+  }
 }
 
 resource "aws_vpc_endpoint" "sqs" {
-  count               = (var.deploy_serverless_outbox || local.document_complete_dark_enabled) && var.persistent_data_plane_enabled ? 1 : 0
+  count               = (var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime) && var.persistent_data_plane_enabled ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.sqs"
   vpc_endpoint_type   = "Interface"
@@ -1622,7 +1736,7 @@ resource "aws_vpc_endpoint" "sqs" {
 }
 
 data "aws_iam_policy_document" "outbox_lambda_endpoint" {
-  count = var.deploy_serverless_outbox || local.document_complete_dark_enabled ? 1 : 0
+  count = var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
 
   dynamic "statement" {
     for_each = var.deploy_serverless_outbox ? [1] : []
@@ -1656,10 +1770,38 @@ data "aws_iam_policy_document" "outbox_lambda_endpoint" {
       }
     }
   }
+
+  dynamic "statement" {
+    for_each = var.deploy_ingestion_runtime ? [1] : []
+    content {
+      sid       = "IngestionStarterInvokesDurableVersionsOnly"
+      effect    = "Allow"
+      actions   = ["lambda:InvokeFunction"]
+      resources = ["${local.ingestion_durable_arn}:*"]
+      principals {
+        type        = "AWS"
+        identifiers = [aws_iam_role.ingestion_runtime["starter"].arn]
+      }
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.deploy_ingestion_runtime ? [1] : []
+    content {
+      sid       = "IngestionCoordinatorReadsDurableMetadataOnly"
+      effect    = "Allow"
+      actions   = ["lambda:GetDurableExecution"]
+      resources = ["${local.ingestion_durable_arn}:*/durable-execution/*"]
+      principals {
+        type        = "AWS"
+        identifiers = [aws_iam_role.ingestion_runtime["coordinator"].arn]
+      }
+    }
+  }
 }
 
 resource "aws_vpc_endpoint" "lambda" {
-  count               = (var.deploy_serverless_outbox || local.document_complete_dark_enabled) && var.persistent_data_plane_enabled ? 1 : 0
+  count               = (var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime) && var.persistent_data_plane_enabled ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.lambda"
   vpc_endpoint_type   = "Interface"

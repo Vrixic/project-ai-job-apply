@@ -83,6 +83,106 @@ variables {
   profile_readiness_activity_artifact_sha256            = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
   profile_readiness_activity_artifact_base64sha256      = "ZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGQ="
   profile_readiness_lambda_extension_layer_arn          = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
+  ingestion_durable_artifact_s3_key                     = "lambda/ingestion/durable.zip"
+  ingestion_durable_artifact_s3_object_version          = "ingestion-durable-version"
+  ingestion_durable_artifact_sha256                     = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  ingestion_durable_artifact_base64sha256               = "ZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWU="
+  ingestion_runtime_artifact_s3_key                     = "lambda/ingestion/runtime.zip"
+  ingestion_runtime_artifact_s3_object_version          = "ingestion-runtime-version"
+  ingestion_runtime_artifact_sha256                     = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  ingestion_runtime_artifact_base64sha256               = "ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY="
+  ingestion_lambda_extension_layer_arn                  = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
+}
+
+run "ingestion_data_plane_deploys_dark_with_ordered_source_gate" {
+  command = plan
+
+  variables {
+    deploy_ingestion_runtime = true
+  }
+
+  assert {
+    condition = (
+      !var.ingestion_runtime_enabled &&
+      !var.ingestion_synthetic_source_enabled &&
+      aws_cloudwatch_event_rule.ingestion_schedule[0].state == "DISABLED" &&
+      aws_cloudwatch_event_rule.ingestion_terminal[0].state == "DISABLED" &&
+      !aws_lambda_event_source_mapping.ingestion_dispatch[0].enabled
+    )
+    error_message = "A deployed ingestion data plane must remain dark until its ordered runtime and source gates are approved."
+  }
+
+  assert {
+    condition = (
+      aws_sqs_queue.ingestion_dispatch[0].message_retention_seconds == 345600 &&
+      aws_sqs_queue.ingestion_dead_letter[0].message_retention_seconds == 1209600 &&
+      var.ingestion_retention_days == 30 &&
+      aws_cloudwatch_event_target.ingestion_terminal[0].retry_policy[0].maximum_event_age_in_seconds == 3600
+    )
+    error_message = "Ingestion transport must retain work for four days and failure evidence in the DLQ for fourteen days."
+  }
+
+  assert {
+    condition = (
+      length(aws_vpc_endpoint.secretsmanager) == 1 &&
+      length(aws_vpc_endpoint.sqs) == 1 &&
+      length(aws_vpc_endpoint.lambda) == 1
+    )
+    error_message = "Every VPC ingestion AWS API call must be admitted only through the exact private endpoint role/action/resource boundary."
+  }
+
+  assert {
+    condition = (
+      contains(keys(aws_lambda_function.ingestion_runtime["starter"].environment[0].variables), "INGESTION_QUEUE_ARN") &&
+      length(aws_iam_role.ingestion_runtime) == 4
+    )
+    error_message = "Ingestion queue, durable reconciliation, and KMS state identities must remain exact."
+  }
+
+  assert {
+    condition = (
+      toset(keys(aws_iam_role.ingestion_runtime)) == toset(["coordinator", "starter", "activity", "terminal"])
+    )
+    error_message = "Every ingestion transport function requires a separate least-privilege execution role."
+  }
+
+  assert {
+    condition = (
+      jsondecode(aws_cloudwatch_event_rule.ingestion_terminal[0].event_pattern).detail.functionArn == [{ prefix = "${local.ingestion_durable_arn}:" }] &&
+      jsondecode(aws_cloudwatch_event_rule.ingestion_terminal[0].event_pattern).detail.status == ["FAILED", "STOPPED", "SUCCEEDED", "TIMED_OUT"]
+    )
+    error_message = "Terminal reconciliation must retain old version events and authenticate exact persisted function versions in the handler."
+  }
+
+  assert {
+    condition = (
+      length(aws_cloudwatch_metric_alarm.ingestion_runtime_throttles) == 3 &&
+      length(aws_cloudwatch_metric_alarm.ingestion_activity_throttles) == 1 &&
+      length(aws_cloudwatch_metric_alarm.ingestion_durable_throttles) == 1 &&
+      length(aws_cloudwatch_metric_alarm.ingestion_durable_timed_out) == 1 &&
+      length(aws_cloudwatch_metric_alarm.ingestion_durable_duration) == 1 &&
+      aws_cloudwatch_metric_alarm.ingestion_durable_duration[0].threshold == var.ingestion_execution_timeout_seconds * 900
+    )
+    error_message = "Ingestion must alarm on every Lambda throttle plus durable timeout and near-timeout duration signals."
+  }
+}
+
+run "ingestion_source_cannot_bypass_runtime_gate" {
+  command = plan
+  variables {
+    ingestion_synthetic_source_enabled = true
+  }
+  expect_failures = [var.ingestion_synthetic_source_enabled]
+}
+
+run "ingestion_runtime_requires_global_activation_authority" {
+  command = plan
+  variables {
+    deploy_ingestion_runtime   = true
+    ingestion_runtime_enabled  = true
+    runtime_activation_allowed = false
+  }
+  expect_failures = [var.ingestion_runtime_enabled]
 }
 
 run "enabled_runtime_couples_api_dispatch_and_workflow_triggers" {

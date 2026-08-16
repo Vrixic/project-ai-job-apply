@@ -33,7 +33,7 @@ engineering settings. At the reviewed source baseline:
 | CloudWatch application logs | 30-day Terraform retention | Matches the provisional detailed-log value for synthetic foundation telemetry only |
 | Lambda durable execution history | 30-day bounded history; PostgreSQL remains product truth | Operational execution history, not candidate audit-retention evidence |
 | RDS automated backups/PITR | Seven days in development; synthetic staging has the same setting only while active | Tested prelaunch recovery setting; not the provisional 35-day public backup policy |
-| SQS work queue / DLQ | 14 days / 4 days | Identifier-only transport retention; not product-record retention |
+| SQS work queue / DLQ | 4 days / 14 days | The work queue is identifier-only. The shared DLQ retains value-free schedule, terminal-metadata, durable-identifier, and failed-nudge envelopes; it has no automatic consumer/redrive and is not product-record retention. |
 | Security/audit record store | No separate 365-day product audit store is implemented | Blocks any claim that the provisional public audit schedule is enforced |
 | Product analytics | Optional product analytics is not active | No Phase 0 analytics-retention approval is implied |
 | Export and account-deletion workflow | Not implemented end to end | Blocks real candidate onboarding until implemented, deployed, and tested |
