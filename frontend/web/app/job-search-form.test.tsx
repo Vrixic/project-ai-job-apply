@@ -113,6 +113,7 @@ describe("JobSearchForm", () => {
     await act(async () => restarted.resolve(jsonResponse({ items: [restartedJob] })));
     expect(container.textContent).toContain(restartedJob.title);
     expect(container.textContent).not.toContain(firstJob.title);
+    expect(container.textContent).toContain("Report a catalog issue");
     expect(container.querySelector('[aria-live="polite"]')?.textContent).toBe("1 job loaded.");
     expect(submit?.disabled).toBe(false);
   });
