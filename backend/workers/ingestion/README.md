@@ -15,6 +15,9 @@ gates.
 - `contract.ts` — strict adapter, registry, catalog-port, and aggregate-result shapes.
 - `registry.ts` — immutable registration, duplicate rejection, and default-deny activation.
 - `backoff.ts` — bounded deterministic retry delay calculation without source values.
+- `orchestration.ts` — a provider-neutral protocol kernel for immutable schedule occurrences,
+  revision- and lease-fenced attempt transitions, deterministic bounded retry jitter, kill-switch
+  pause, and aggregate-only queue dispositions.
 - `runner.ts` — allowlisted observation mapping, Jobs-domain validation, batch collision checks,
   idempotent catalog-port calls, and aggregate-only results.
 - `synthetic.ts` — deterministic generated `.example.test` observations representing no provider,
@@ -24,6 +27,31 @@ An empty batch or source acquisition failure never proves that a stored job is c
 adapter failures become a redacted retry result and do not call the catalog. Catalog contract or
 identity failures propagate so durable orchestration can stop and alert instead of retrying an
 invalid payload forever.
+
+The orchestration kernel is a pure, storage-neutral transition boundary. Its execution identity is
+derived from the exact source, adapter version, and canonical UTC schedule slot. Claims require a
+bounded lowercase UUIDv7 lease plus the exact checkpoint revision; stale or competing claims and
+settlements fail closed. An expired claim can be replaced on the same attempt through a higher
+revision, fencing any late settlement from the crashed worker. Because the expired worker may have
+partially written before crashing, every replacement claim carries unknown prior progress and its
+later checkpoint and disposition never assert known aggregate totals. Duplicate exact claims and
+settlements are idempotent. Retry scheduling is bounded to five attempts with stable
+identifier-derived jitter, while abort or a disabled runtime gate pauses work without treating an
+empty or partial batch as withdrawal. Terminal output contains only fixed failure codes and
+aggregate counts; raw errors and job/source values are never retained in a checkpoint or
+disposition. A thrown failure marks aggregate progress as unknown instead of falsely asserting that
+no earlier idempotent catalog write completed.
+
+A future persistence adapter must commit every `changed` checkpoint with an atomic compare-and-swap
+against the command's expected revision before acting on its disposition. Losing that fence means
+discarding the proposed transition and reloading authoritative state. A transport must likewise
+never acknowledge, reschedule, or dead-letter work from an uncommitted transition.
+
+This package still does not provide durable checkpoint persistence, a scheduler, a queue consumer,
+a dead-letter queue, a Lambda durable workflow, Terraform, publication, deployment, or source
+activation. `retry`, `ack`, and `dead_letter` are protocol dispositions for a future reviewed
+transport adapter, not evidence that such transport exists. Jobs-owned retained run/audit truth and
+AWS composition remain separate future boundaries. Greenhouse, Lever, and Ashby remain disabled.
 
 Run unit tests with `pnpm --filter @ai-job-apply/ingestion-worker test`. PostgreSQL integration
 requires an explicit `DATABASE_URL` and is separate from the default suite.
