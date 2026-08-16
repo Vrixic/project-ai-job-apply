@@ -193,6 +193,12 @@ importers:
         specifier: 14.0.1
         version: 14.0.1
 
+  backend/workers/ingestion:
+    dependencies:
+      '@ai-job-apply/jobs-service':
+        specifier: workspace:*
+        version: link:../../services/jobs
+
   backend/workflows:
     dependencies:
       '@ai-job-apply/config':
