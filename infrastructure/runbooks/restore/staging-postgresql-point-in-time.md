@@ -25,9 +25,9 @@ identity-provider isolation.
 - Require an empty ECS application boundary, `200/200/401` health/access responses, enabled Lambda
   durable triggers, all current runtime alarms `OK`, and exact-input Terraform no drift.
 - Require the existing migration task definition, its digest-pinned `linux/amd64` image, and a
-  complete zero-finding ECR scan.
+  completed ECR scan with zero Critical and zero High findings.
 - Permit exactly one uniquely named target with `Project=ai-job-apply`, `Environment=staging`,
-  `ManagedBy=restore-drill`, `Purpose=phase0-isolated-restore`, and the current `StartedAt` tag.
+  `ManagedBy=restore-drill`, `Purpose=d1-current-isolated-restore`, and the current `StartedAt` tag.
 - Never change the source secret, application tasks/services, API/DNS, Terraform state, source
   database, migration journal, or any candidate row.
 - Never print or retain a database URL, password, endpoint, account/resource/task identifier,
@@ -76,9 +76,9 @@ The operator:
 
 1. repeats all source/application/no-drift guards;
 2. starts the immutable one-off Fargate verifier against the source-managed connection secret;
-3. runs one read-only PostgreSQL transaction that proves the expected tables and all three accepted
-   migration journal entries, hashes only ordered aggregate counts in memory, and emits one
-   sanitized digest event;
+3. runs one read-only PostgreSQL transaction that proves the canonical four-owner boundary of 31
+   regular relations and 12 checksum-bound migration journal entries, hashes only ordered
+   migration evidence and per-relation counts in memory, and emits one sanitized digest event;
 4. records the latest-restorable-point lag;
 5. saves only an ignored local target/context record;
 6. requests `use-latest-restorable-time` into the uniquely tagged target; and
@@ -92,6 +92,10 @@ Single-AZ, and deletion-protection-disabled only for guarded disposal.
 
 If the command is interrupted after AWS accepts the request, do not run `Start` again. Reauthenticate,
 run `Status`, inspect the exact target, then continue with `Verify` or the emergency cleanup gate.
+If the request outcome is ambiguous and the target is not yet visible, retain both context files;
+do not reset the exercise from a single not-found response. Escalate and repeat read-only status
+checks until AWS state is definitive. This procedure assumes one accountable writer and does not
+claim a distributed restore lock.
 
 ## Verify functional recovery
 
@@ -108,8 +112,7 @@ configuration. It then runs the same immutable read-only verifier while keeping 
 
 Require:
 
-- the expected tables;
-- the `0001_foundation`, `0002_serverless_outbox`, and `0003_retire_legacy_dispatch` journal entries;
+- the exact manifest-bound Profile, Jobs, Documents, and Matching relations and migration ledgers;
 - exact aggregate digest equality with the source baseline;
 - verifier exit code `0`;
 - zero forbidden credential/candidate/email/JWT patterns in the two verifier streams; and
@@ -131,8 +134,9 @@ deletion-protection-disabled, and has every exact current-drill tag. It deletes 
 skips a final snapshot, deletes its automated backups, waits for the instance to disappear, and
 requires zero target snapshots/backups and zero remaining restore targets.
 
-It then requires the source, application, eight alarms, and exact-input Terraform no-drift check
-to remain healthy before removing the one ignored local context.
+It then requires the exact original source identity, idle ECS runtime, all 10 reviewed managed
+runtime alarms, and exact-input Terraform no-drift check to remain healthy before removing the
+primary and recovery context files.
 
 If verification cannot pass, an accountable operator may remove the exact failed disposable copy
 with:
@@ -145,11 +149,25 @@ with:
   @restoreBoundary
 ```
 
-That switch relaxes only the verified-result prerequisite. It does not relax target identifier,
-source inequality, tags, private networking, encryption, availability, or deletion-protection
-guards. Record the failed exercise honestly and investigate before attempting another restore.
+That switch relaxes only the target-available and verified-result prerequisites needed for
+recovery after an interrupted or failed restore. It does not relax exact source/target/runtime
+identity, target tags, private networking, encryption, configuration, deletion-protection, AWS
+account, or final source/application/drift guards. Record the failed exercise honestly and
+investigate before attempting another restore.
 
 For an uninterrupted reviewed exercise,
 `.\scripts\operate-staging-postgresql-restore.ps1 -Action Exercise -Execute @restoreBoundary` runs
 Start, Verify, and Cleanup in sequence, stopping at the first failed gate and retaining the
 context/target for safe recovery.
+
+The verifier digest is an exact hash of the manifest, migration-ledger versions/checksums, and
+per-relation counts. It is not a row-value/content checksum and does not by itself detect
+same-count data corruption. Repository tests may prove the verifier with generated-synthetic data
+and a local PostgreSQL backup/restore; that evidence is not RDS PITR execution, deployment,
+production data authorization, or an RTO/RPO result. Matching composition and verifier packaging
+remain source changes until an immutable migration image and task definition are separately
+published, deployed, and exercised under this runbook.
+
+This PostgreSQL packet also does not prove versioned object/artifact recovery, durable
+outbox/workflow/event reconciliation after restore, deletion-ledger or account-deletion replay, or
+cross-region recovery. Those remain separate D1-010B or later acceptance gates.

@@ -39,8 +39,10 @@ both AWS environments accepted the steady-state serverless runtime.
   `infrastructure/runbooks/deployments/development-gateway-release.md`.
 
 Artifacts are published by the protected GitHub workflows. The migration-only container is built
-from `Dockerfile.migration` and runs the fail-fast profile/jobs/documents migration orchestrator;
-no gateway or general worker image exists.
+from `Dockerfile.migration` and runs the fail-fast profile/jobs/documents/matching migration
+orchestrator. Its source package also includes the strict restore-verifier CLI and canonical
+manifest; source inclusion does not claim image publication, task-definition deployment,
+migration execution, or AWS restore execution. No gateway or general worker image exists.
 
 ## Deployed verification and evidence
 
@@ -61,7 +63,9 @@ no gateway or general worker image exists.
   Organizations payer from silently including member-account spend. Its explicit dormant-staging
   mode verifies one completed UTC day has zero RDS instance-hours and VPC endpoint-hours.
 - `operate-platform-alerts.ps1` — Exercises environment-scoped synthetic alert delivery.
-- `operate-staging-postgresql-restore.ps1` — Runs the guarded, resumable staging PITR exercise.
+- `operate-staging-postgresql-restore.ps1` — Runs the guarded, resumable, single-writer staging
+  PITR exercise with strict source/target/runtime identity and aggregate-only evidence. The local
+  guard suite is source-only and makes no AWS execution or RTO/RPO claim.
 - `operate-staging-runtime-lifecycle.ps1` — Creates and applies checksum-reviewed, two-step
   staging activation/quiescence/dormancy plans while retaining the isolated control plane.
 - `operate-development-document-migration.ps1` — Reconstructs development Terraform inputs from

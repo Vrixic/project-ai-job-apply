@@ -3,10 +3,21 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "files": [
+    "dist",
+    "restore-manifest.v1.json"
+  ],
+  "exports": {
+    "./restore-verifier": {
+      "types": "./dist/src/restore-verifier.d.ts",
+      "default": "./dist/src/restore-verifier.js"
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
-    "test": "vitest run src --exclude=dist/**",
+    "test": "vitest run src --exclude=dist/** --exclude=src/**/*.integration.test.ts",
+    "test:restore-integration": "vitest run --config vitest.restore-integration.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   }
 }

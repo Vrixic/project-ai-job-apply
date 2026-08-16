@@ -269,6 +269,9 @@ foreach ($required in @(
     'oci-layout://', '--network none', '--read-only', '--cap-drop ALL', 'migration-runtime-smoke:ok',
     'jobs/dist/src/search-acceptance.js', 'jobs/dist/src/run-search-acceptance.js',
     'documents/dist/src/run-document-processing-acceptance.js',
+    'runner/dist/src/restore-verifier-cli.js', 'runner/restore-manifest.v1.json',
+    'profile,jobs,documents,matching', 'matching:["0001_saved_jobs.sql"]',
+    'manifest.contributors.length!==4', 'createRequire',
     'schemaVersion     = 2', 'indexDigest', 'platformDigest', 'rootfsDiffIdSetSha256',
     'compressedLayerSetSha256', 'imageUri = "$($boundary.RepositoryUri)@$($readback.PlatformDigest)"',
     'ReviewedReceiptSha256', '[IO.File]::Replace($temporary, $Path, $backup)',
@@ -276,11 +279,37 @@ foreach ($required in @(
   )) {
   if (-not $source.Contains($required)) { throw "Migration image publisher guard is missing: $required" }
 }
-if (-not $source.Contains('for(const entrypoint of ["jobs/dist/src/search-acceptance.js","jobs/dist/src/run-search-acceptance.js","documents/dist/src/run-document-processing-acceptance.js"])await access(entrypoint)')) {
+if (-not $source.Contains('for(const entrypoint of ["jobs/dist/src/search-acceptance.js","jobs/dist/src/run-search-acceptance.js","documents/dist/src/run-document-processing-acceptance.js","runner/dist/src/restore-verifier-cli.js","runner/restore-manifest.v1.json"])await access(entrypoint)')) {
   throw "The migration runtime smoke gate does not require the exact acceptance entrypoint set."
 }
 foreach ($forbidden in @("terraform apply", "ecs run-task", "register-task-definition", "BatchDeleteImage")) {
   if ($source.IndexOf($forbidden, [StringComparison]::OrdinalIgnoreCase) -ge 0) { throw "Forbidden operation: $forbidden" }
+}
+
+$dockerfile = Get-Content -LiteralPath (Join-Path $repositoryRoot "Dockerfile.migration") -Raw
+foreach ($required in @(
+  '@ai-job-apply/matching-service build',
+  '@ai-job-apply/matching-service deploy --prod --legacy /migration/matching',
+  'runner/dist/src/restore-verifier-cli.js',
+  'runner/restore-manifest.v1.json',
+  'restore-verifier-package-smoke:ok',
+  'expected exactly four generated .modules.yaml files'
+)) {
+  if (-not $dockerfile.Contains($required)) {
+    throw "The migration Dockerfile package boundary is missing: $required"
+  }
+}
+$workflow = Get-Content -LiteralPath `
+  (Join-Path $repositoryRoot ".github\workflows\publish-environment-images.yml") -Raw
+foreach ($required in @(
+  'profile,jobs,documents,matching',
+  'runner/dist/src/restore-verifier-cli.js',
+  'runner/restore-manifest.v1.json',
+  'matching:["0001_saved_jobs.sql"]'
+)) {
+  if (-not $workflow.Contains($required)) {
+    throw "The hosted migration runtime smoke boundary is missing: $required"
+  }
 }
 
 Write-Host "Development migration image publisher OCI guard tests passed."

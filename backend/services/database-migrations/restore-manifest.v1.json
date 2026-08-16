@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "manifestId": "d1-profile-jobs-documents-matching-v1",
+  "contributors": [
+    {
+      "owner": "documents",
+      "schemas": ["documents"],
+      "migrationLedger": "documents.schema_migrations",
+      "migrations": [
+        {
+          "version": "0001_resume_intake",
+          "checksum": "3ad053aa5f3aef419b1afc8bf30ebeabcdf8a3db2204c36e2ac3e38dddb52e1c"
+        },
+        {
+          "version": "0002_resume_processing",
+          "checksum": "6b534809a2b20764813500d07784f833897697b261b333c0abe3abf2f2795f32"
+        }
+      ],
+      "relations": [
+        "documents.audit_events",
+        "documents.idempotency_keys",
+        "documents.processing_dispositions",
+        "documents.processing_receipts",
+        "documents.resume_documents",
+        "documents.schema_migrations"
+      ]
+    },
+    {
+      "owner": "jobs",
+      "schemas": ["jobs"],
+      "migrationLedger": "jobs.schema_migrations",
+      "migrations": [
+        {
+          "version": "0001_job_catalog",
+          "checksum": "10b4f45240dab653d1df082c420ff7baf23c56b184f81cdfc63a187d736a470d"
+        },
+        {
+          "version": "0002_duplicate_resolution",
+          "checksum": "ac65db31d533363f84a4b6fc374bc4dff3e3302835734ca5fcc22fb05ff097e7"
+        },
+        {
+          "version": "0003_duplicate_resolution_audit_guard",
+          "checksum": "43af1b588abefb7d23ad50933f419d8a1fae1d33bef8eb0374e956299065a10f"
+        },
+        {
+          "version": "0004_job_search",
+          "checksum": "08cfd97c93645e6feb9e9d795cae86d004f74e1f4d267626a2afe3ad633a769e"
+        }
+      ],
+      "relations": [
+        "jobs.canonical_jobs",
+        "jobs.catalog_search_state",
+        "jobs.companies",
+        "jobs.duplicate_candidates",
+        "jobs.duplicate_resolution_events",
+        "jobs.job_sources",
+        "jobs.schema_migrations",
+        "jobs.status_events"
+      ]
+    },
+    {
+      "owner": "matching",
+      "schemas": ["matching"],
+      "migrationLedger": "matching.schema_migrations",
+      "migrations": [
+        {
+          "version": "0001_saved_jobs",
+          "checksum": "cd8cb5392a761671c4a232e4c8534cdbaa495dd9c1aff123095f201759cc1851"
+        }
+      ],
+      "relations": [
+        "matching.audit_events",
+        "matching.idempotency_keys",
+        "matching.saved_job_list_state",
+        "matching.saved_jobs",
+        "matching.schema_migrations"
+      ]
+    },
+    {
+      "owner": "profile",
+      "schemas": ["identity", "platform", "profile"],
+      "migrationLedger": "platform.schema_migrations",
+      "migrations": [
+        {
+          "version": "0001_foundation",
+          "checksum": "00f403331a96d9cb436a0e90f820bb1b1639ed12024f98391c2e652fc9d579bd"
+        },
+        {
+          "version": "0002_serverless_outbox",
+          "checksum": "87addfc0e802467eabb9de988afea4d6f463e955bc3819b00f342f608b8c6add"
+        },
+        {
+          "version": "0003_retire_legacy_dispatch",
+          "checksum": "9836face7436b1d76e80b46f772c7b20013803951079b8cf98514e2d79fe1e2d"
+        },
+        {
+          "version": "0004_profile_fact_versions",
+          "checksum": "7176b3992f60099fa24471281822cb23473e68c2f7457fbdb80ec8fbdf8ca227"
+        },
+        {
+          "version": "0005_resume_fact_proposals",
+          "checksum": "3c59bee0e4e43e768f7ca3832f5327dc07d784e3cba94f454283a83093ca524e"
+        }
+      ],
+      "relations": [
+        "identity.external_identities",
+        "identity.users",
+        "platform.audit_events",
+        "platform.idempotency_keys",
+        "platform.operations",
+        "platform.outbox_events",
+        "platform.schema_migrations",
+        "profile.job_preferences",
+        "profile.profile_fact_evidence",
+        "profile.profile_fact_versions",
+        "profile.profile_facts",
+        "profile.resume_fact_imports"
+      ]
+    }
+  ]
+}
