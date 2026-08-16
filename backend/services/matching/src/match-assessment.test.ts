@@ -26,6 +26,7 @@ function input(overrides?: {
     job: {
       id: uuidv7(),
       catalogRevision: "27",
+      eligibleThrough: "2026-09-16T12:00:00.000Z",
       title: "Software Engineer",
       locations: ["Remote - US"],
       workMode: "remote",
@@ -229,6 +230,24 @@ describe("assessMatch", () => {
     );
   });
 
+  it("applies contract string limits by Unicode code point", () => {
+    const boundary = "😀".repeat(100);
+    expect(
+      assessMatch(input({ preferences: { targetRoles: [boundary] }, job: { title: boundary } }))
+        .evidence,
+    ).toContainEqual({
+      constraint: "target_role",
+      state: "satisfied",
+      reasonCode: "target_role_exact_overlap",
+    });
+    expect(() => assessMatch(input({ preferences: { targetRoles: [`${boundary}😀`] } }))).toThrow(
+      MatchAssessmentInputRejectedError,
+    );
+    expect(() => assessMatch(input({ job: { title: "😀".repeat(241) } }))).toThrow(
+      MatchAssessmentInputRejectedError,
+    );
+  });
+
   it.each([true, false])(
     "fails closed without exposing a present legacy sponsorship value (%s)",
     (requiresSponsorship) => {
@@ -303,6 +322,8 @@ describe("assessMatch", () => {
     { job: { id: "00000000-0000-4000-8000-000000000000" } },
     { job: { catalogRevision: "0" } },
     { job: { catalogRevision: "9223372036854775808" } },
+    { job: { eligibleThrough: "2026-02-31T12:00:00.000Z" } },
+    { job: { eligibleThrough: "2026-09-16T12:00:00Z" } },
     { job: { title: "" } },
     { job: { locations: ["   "] } },
   ])("rejects malformed inputs with one fixed error %#", (overrides) => {

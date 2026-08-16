@@ -21,6 +21,13 @@ an owner identifier, and return only bounded public snapshots plus `available` o
 The unavailable state intentionally carries no internal lifecycle reason. Saved-job responses,
 including idempotent deletion, are private and declare `Cache-Control: no-store`.
 
+`GET /jobs/{jobId}/match-assessment` is an owner-self, bodyless, queryless read under the existing
+`jobs:read` permission. It returns exactly nine ordered, fixed-code constraint evidence entries,
+binds requested/canonical job identity plus preference and catalog versions, and is always
+`no-store`. Only exact known work-mode or employment-type contradictions can produce `excluded`;
+unknown evidence cannot. The contract contains no candidate values, job display values, score,
+rank, fit band, generated prose, eligibility, or application outcome.
+
 `GET /entitlements` is an owner-self read under the existing `profile:read` permission. It accepts
 no query, body, path owner, provider, or payment input and returns only the exact derived Free or
 Pro access projection with the four current core grants. Free, active Pro, and grace Pro are

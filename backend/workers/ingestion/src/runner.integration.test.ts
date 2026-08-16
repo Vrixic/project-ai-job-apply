@@ -24,6 +24,7 @@ interface PersistedFixtureRow {
   companyName: string;
   consecutiveVerificationFailures: number;
   externalJobId: string | null;
+  employmentType: string | null;
   firstObservedAt: Date;
   jobId: string;
   lastObservedAt: Date;
@@ -34,6 +35,7 @@ interface PersistedFixtureRow {
   sourceUrl: string;
   status: string;
   verifiedCompanyDomain: string | null;
+  workMode: string | null;
 }
 
 describeWithDatabase("source-neutral ingestion through PostgresJobCatalog", () => {
@@ -56,10 +58,10 @@ describeWithDatabase("source-neutral ingestion through PostgresJobCatalog", () =
       env: environment,
     });
     expect(first.stdout.trim()).toBe(
-      "Jobs migrations through 0005_ingestion_orchestration applied and verified.",
+      "Jobs migrations through 0007_matchable_job_attributes applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(
-      "Jobs migrations through 0005_ingestion_orchestration applied and verified.",
+      "Jobs migrations through 0007_matchable_job_attributes applied and verified.",
     );
     await catalog.ping();
   });
@@ -94,6 +96,7 @@ describeWithDatabase("source-neutral ingestion through PostgresJobCatalog", () =
           company.id AS "companyId",
           company.display_name AS "companyName",
           job.consecutive_verification_failures AS "consecutiveVerificationFailures",
+          job.employment_type AS "employmentType",
           source.external_job_id AS "externalJobId",
           source.first_observed_at AS "firstObservedAt",
           job.id AS "jobId",
@@ -104,7 +107,8 @@ describeWithDatabase("source-neutral ingestion through PostgresJobCatalog", () =
           source.raw_snapshot AS "rawSnapshot",
           source.source_url AS "sourceUrl",
           job.status,
-          source.verified_company_domain AS "verifiedCompanyDomain"
+          source.verified_company_domain AS "verifiedCompanyDomain",
+          job.work_mode AS "workMode"
         FROM jobs.job_sources AS source
         INNER JOIN jobs.canonical_jobs AS job ON job.id = source.job_id
         INNER JOIN jobs.companies AS company ON company.id = job.company_id
@@ -122,6 +126,7 @@ describeWithDatabase("source-neutral ingestion through PostgresJobCatalog", () =
             company.id AS "companyId",
             company.display_name AS "companyName",
             job.consecutive_verification_failures AS "consecutiveVerificationFailures",
+            job.employment_type AS "employmentType",
             source.external_job_id AS "externalJobId",
             source.first_observed_at AS "firstObservedAt",
             job.id AS "jobId",
@@ -132,7 +137,8 @@ describeWithDatabase("source-neutral ingestion through PostgresJobCatalog", () =
             source.raw_snapshot AS "rawSnapshot",
             source.source_url AS "sourceUrl",
             job.status,
-            source.verified_company_domain AS "verifiedCompanyDomain"
+            source.verified_company_domain AS "verifiedCompanyDomain",
+            job.work_mode AS "workMode"
           FROM jobs.job_sources AS source
           INNER JOIN jobs.canonical_jobs AS job ON job.id = source.job_id
           INNER JOIN jobs.companies AS company ON company.id = job.company_id
@@ -212,6 +218,7 @@ describeWithDatabase("source-neutral ingestion through PostgresJobCatalog", () =
           atsTenant,
           companyName,
           consecutiveVerificationFailures: 0,
+          employmentType: "full_time",
           firstObservedAt,
           lastObservedAt: secondObservedAt,
           lastVerifiedAt: secondObservedAt,
@@ -225,6 +232,7 @@ describeWithDatabase("source-neutral ingestion through PostgresJobCatalog", () =
           new RegExp(`^https://jobs\\.example\\.test/source-neutral/${seed}/`),
         );
       }
+      expect(rows.map((row) => row.workMode)).toEqual(["remote", "hybrid"]);
 
       const retryAdapter: IngestionSourceAdapter = {
         sourceId: generatedSyntheticSourceId,

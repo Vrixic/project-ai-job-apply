@@ -31,6 +31,7 @@ export type SavedJobSearchRequest = components["schemas"]["SavedJobSearchRequest
 export type SavedJob = components["schemas"]["SavedJob"];
 export type SavedJobSnapshot = components["schemas"]["SavedJobSnapshot"];
 export type SavedJobPage = components["schemas"]["SavedJobPage"];
+export type MatchAssessment = components["schemas"]["MatchAssessment"];
 export type EntitlementSummary = components["schemas"]["EntitlementSummary"];
 export type ProblemDetails = components["schemas"]["ProblemDetails"];
 

@@ -32,12 +32,14 @@ const sourceObservationKeys = new Set([
   "department",
   "description",
   "employerRequisitionId",
+  "employmentType",
   "externalJobId",
   "locations",
   "sourceUrl",
   "title",
   "validThrough",
   "verifiedCompanyDomain",
+  "workMode",
 ]);
 const retryReasons = new Set(["rate_limited", "source_unavailable", "timeout"]);
 
@@ -132,6 +134,8 @@ function catalogObservation(
       ? { verifiedCompanyDomain: source.verifiedCompanyDomain }
       : {}),
     ...(source.department ? { department: source.department } : {}),
+    ...(source.workMode ? { workMode: source.workMode } : {}),
+    ...(source.employmentType ? { employmentType: source.employmentType } : {}),
     ...(source.validThrough ? { validThrough: new Date(source.validThrough) } : {}),
   };
   const canonical = canonicalizeObservation(candidate);

@@ -8,9 +8,11 @@ import {
   defaultFreshnessDays,
   evaluateLifecycle,
   exactIdentityKeys,
+  type JobEmploymentType,
   type JobObservation,
   type JobProvenance,
   type JobStatus,
+  type JobWorkMode,
   normalizeText,
   suspectStaleFailureThreshold,
 } from "../domain/canonical-job.js";
@@ -24,6 +26,8 @@ export interface CatalogJobRecord {
   companyId: string;
   title: string;
   locations: string[];
+  workMode?: JobWorkMode;
+  employmentType?: JobEmploymentType;
   description?: string;
   status: JobStatus;
   firstObservedAt: Date;
@@ -98,6 +102,21 @@ export interface ActiveJobSummaryResolutionPage {
   items: Array<{ requestedJobId: string; job: ActiveJobSummaryRecord }>;
 }
 
+export interface MatchableJobSnapshotRecord {
+  id: string;
+  catalogRevision: string;
+  eligibleThrough: string;
+  title: string;
+  locations: string[];
+  workMode?: JobWorkMode;
+  employmentType?: JobEmploymentType;
+}
+
+export interface MatchableJobResolution {
+  requestedJobId: string;
+  job: MatchableJobSnapshotRecord;
+}
+
 export interface JobCatalogReader {
   ping(): Promise<void>;
   getCatalogRevision(): Promise<string>;
@@ -106,6 +125,7 @@ export interface JobCatalogReader {
     now?: Date,
   ): Promise<ActiveJobSummaryResolutionPage>;
   getActiveJob(jobId: string, now?: Date): Promise<ActiveJobRecord | null>;
+  getMatchableJob(jobId: string, now?: Date): Promise<MatchableJobResolution | null>;
   searchActiveJobs(input: ActiveJobSearchInput, now?: Date): Promise<ActiveJobSearchPage>;
 }
 
@@ -183,6 +203,8 @@ interface CatalogJobRow {
   companyId: string;
   title: string;
   locations: string[];
+  workMode: JobWorkMode | null;
+  employmentType: JobEmploymentType | null;
   description: string | null;
   status: JobStatus;
   firstObservedAt: Date;
@@ -226,6 +248,15 @@ interface ActiveJobSearchRow {
   lastVerifiedAt: Date | string;
   expiresAt: Date | string;
   rankKey: string;
+}
+
+interface MatchableJobRow {
+  id: string;
+  eligibleThrough: Date;
+  title: string;
+  locations: string[];
+  workMode: JobWorkMode | null;
+  employmentType: JobEmploymentType | null;
 }
 
 interface NormalizedJobSearchInput {
@@ -496,6 +527,8 @@ function mapJob(row: CatalogJobRow): CatalogJobRecord {
     companyId: row.companyId,
     title: row.title,
     locations: row.locations,
+    ...(row.workMode ? { workMode: row.workMode } : {}),
+    ...(row.employmentType ? { employmentType: row.employmentType } : {}),
     ...(row.description ? { description: row.description } : {}),
     status: row.status,
     firstObservedAt: row.firstObservedAt,
@@ -623,6 +656,8 @@ export class PostgresJobCatalog {
               normalized_locations = ${transaction.array(observation.normalizedLocations)},
               department = ${observation.department ?? null},
               normalized_department = ${observation.normalizedDepartment ?? null},
+              work_mode = ${observation.workMode ?? null},
+              employment_type = ${observation.employmentType ?? null},
               description = CASE WHEN ${nextStatus} IN ('withdrawn', 'blocked')
                 THEN NULL ELSE ${observation.description} END,
               description_hash = CASE WHEN ${nextStatus} IN ('withdrawn', 'blocked')
@@ -682,7 +717,8 @@ export class PostgresJobCatalog {
         await transaction`
           INSERT INTO jobs.canonical_jobs (
             id, company_id, title, normalized_title, locations, normalized_locations,
-            department, normalized_department, description, description_hash,
+            department, normalized_department, work_mode, employment_type,
+            description, description_hash,
             dedupe_fingerprint, status, status_reason, first_observed_at, last_verified_at,
             expires_at, valid_through, consecutive_verification_failures, created_at, updated_at
           ) VALUES (
@@ -690,6 +726,7 @@ export class PostgresJobCatalog {
             ${transaction.json(observation.locations)},
             ${transaction.array(observation.normalizedLocations)},
             ${observation.department ?? null}, ${observation.normalizedDepartment ?? null},
+            ${observation.workMode ?? null}, ${observation.employmentType ?? null},
             ${observation.description}, ${observation.contentHash}, ${observation.fuzzyFingerprint},
             'active', 'first_positive_verification', ${observation.observedAt},
             ${observation.observedAt}, ${observation.expiresAt},
@@ -1120,6 +1157,73 @@ export class PostgresJobCatalog {
     };
   }
 
+  async getMatchableJob(
+    jobId: string,
+    now: Date = new Date(),
+  ): Promise<MatchableJobResolution | null> {
+    if (!JOB_SEARCH_ID_PATTERN.test(jobId) || jobId !== jobId.toLocaleLowerCase("en-US")) {
+      throw new TypeError("The matchable-job identifier is invalid");
+    }
+    if (!Number.isFinite(now.getTime())) {
+      throw new TypeError("The matchable-job freshness boundary is invalid");
+    }
+    const activeAt = now.toISOString();
+    return this.client.begin("read only isolation level repeatable read", async (transaction) => {
+      const [state] = await transaction<{ revision: string }[]>`
+        SELECT revision::text AS revision
+        FROM jobs.catalog_search_state
+        WHERE singleton = true
+      `;
+      if (!state) throw new Error("The job catalog revision is unavailable");
+      const [row] = await transaction<MatchableJobRow[]>`
+        WITH RECURSIVE resolution(id, path) AS (
+          SELECT ${jobId}::uuid, ARRAY[${jobId}::uuid]
+          UNION ALL
+          SELECT duplicate.canonical_job_id, resolution.path || duplicate.canonical_job_id
+          FROM resolution
+          INNER JOIN jobs.duplicate_candidates AS duplicate
+            ON duplicate.resolution = 'exact'
+            AND CASE
+              WHEN duplicate.canonical_job_id = duplicate.job_id THEN duplicate.candidate_job_id
+              ELSE duplicate.job_id
+            END = resolution.id
+          WHERE NOT duplicate.canonical_job_id = ANY(resolution.path)
+        ), canonical AS (
+          SELECT id
+          FROM resolution
+          ORDER BY cardinality(path) DESC
+          LIMIT 1
+        )
+        SELECT job.id,
+          LEAST(job.expires_at, COALESCE(job.valid_through, 'infinity'::timestamptz))
+            AS "eligibleThrough",
+          job.title, job.locations,
+          job.work_mode AS "workMode", job.employment_type AS "employmentType"
+        FROM canonical
+        INNER JOIN jobs.canonical_jobs AS job ON job.id = canonical.id
+        WHERE job.status = 'active'
+          AND job.expires_at > ${activeAt}
+          AND (job.valid_through IS NULL OR job.valid_through > ${activeAt})
+          AND job.description IS NOT NULL
+          AND btrim(job.description) <> ''
+        LIMIT 1
+      `;
+      if (!row) return null;
+      return {
+        requestedJobId: jobId,
+        job: {
+          id: row.id,
+          catalogRevision: state.revision,
+          eligibleThrough: row.eligibleThrough.toISOString(),
+          title: row.title,
+          locations: [...row.locations],
+          ...(row.workMode ? { workMode: row.workMode } : {}),
+          ...(row.employmentType ? { employmentType: row.employmentType } : {}),
+        },
+      };
+    });
+  }
+
   async searchActiveJobs(
     input: ActiveJobSearchInput,
     now: Date = new Date(),
@@ -1444,6 +1548,8 @@ export class PostgresJobCatalog {
         company_id AS "companyId",
         title,
         locations,
+        work_mode AS "workMode",
+        employment_type AS "employmentType",
         description,
         status,
         first_observed_at AS "firstObservedAt",

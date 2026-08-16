@@ -18,6 +18,8 @@ describe("platform BFF", () => {
     );
 
     expect(response.status).toBe(401);
+    expect(response.headers.get("content-type")).toContain("application/problem+json");
+    expect(response.headers.get("cache-control")).toBe("no-store");
     expect(platformFetch).not.toHaveBeenCalled();
   });
 
@@ -74,6 +76,8 @@ describe("platform BFF", () => {
     );
 
     expect(response.status).toBe(503);
+    expect(response.headers.get("content-type")).toContain("application/problem+json");
+    expect(response.headers.get("cache-control")).toBe("no-store");
     expect(platformFetch).toHaveBeenCalledTimes(4);
     expect(await response.text()).not.toContain("sensitive upstream failure");
   });

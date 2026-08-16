@@ -25,6 +25,9 @@ describe("JobCatalogSavedJobResolver", () => {
       async getActiveJob(id) {
         return id === job.id ? job : null;
       },
+      async getMatchableJob() {
+        return null;
+      },
       async resolveActiveJobSummaries(ids) {
         return {
           catalogRevision: "19",

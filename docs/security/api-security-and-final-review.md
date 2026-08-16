@@ -53,6 +53,7 @@ delivery evidence; this section is not approval of Phase 1 or later behavior.
 | `PUT /v1/me/job-preferences` | Candidate | `profile:write`; strict schema/payload boundary; owner-scoped write | Local and deployed persistence/isolation evidence passes |
 | `GET /v1/operations/{operationId}` | Candidate | `profile:read`; operation owner predicate | Deployed two-account denial passes |
 | `GET /v1/jobs/{jobId}` | Candidate | `jobs:read`; active redacted canonical-job response | Implemented and deployed as later D1 work; not approved by D0-015 |
+| `GET /v1/jobs/{jobId}/match-assessment` | Candidate | `jobs:read`; bodyless/queryless lowercase UUIDv7; Profile-resolved owner; Jobs active projection; fixed value-free evidence; `no-store` | Implemented and locally verified as source only; Jobs `0007`, gateway/web deployment, managed-OIDC browser acceptance, D1-R2 quality review, and independent approval remain open |
 | `POST /v1/jobs/search` | Candidate | `jobs:read`; bounded JSON-only body; active redacted summaries; no query string, profile matching, or candidate-owned write | Migrated and deployed in synthetic development on immutable alias `17`; the 24-case direct boundary and zero drift pass. Real OIDC/browser and mutation-driven stale-cursor `409` acceptance remain open; not independently approved. |
 | `GET /v1/resumes` | Candidate | `documents:read`; candidate-owner predicate; metadata only | Implemented, deployed, and accepted for synthetic development intake; processing and independent approval remain open |
 | `POST /v1/resumes/uploads` | Candidate | `documents:write`; strict metadata schema; idempotency; candidate owner; no file bytes | Implemented, deployed, and accepted for synthetic development intake; not independently approved |
@@ -63,7 +64,8 @@ delivery evidence; this section is not approval of Phase 1 or later behavior.
 
 There is no current public administrator, support, provider-webhook, temporary-object-download,
 WebSocket, extension, mobile, ATS, AI, billing mutation/provider, outreach, or remote-browser API.
-The source-only candidate entitlement self-read is not a deployed billing/provider surface. The deployed D1
+The source-only candidate entitlement and match-assessment self-reads are not deployed provider,
+eligibility, ranking, or application-decision surfaces. The deployed D1
 upload grant is write-only. The scan consumer, parser, and coordinator are deployed CompleteDark,
 but their processing ingress remains disabled and no generated-synthetic or real-resume processing
 acceptance is claimed. The direct Lambda

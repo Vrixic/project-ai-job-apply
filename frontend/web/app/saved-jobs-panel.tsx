@@ -2,6 +2,7 @@
 
 import type { SavedJob, SavedJobPage } from "@ai-job-apply/api-contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { MatchAssessmentPanel } from "./match-assessment-panel";
 
 export const SAVED_JOBS_CHANGED_EVENT = "ai-job-apply:saved-jobs-changed";
 
@@ -175,6 +176,9 @@ export function SavedJobsPanel({ authenticated }: { authenticated: boolean }) {
                   <p>{job.locations.join(" · ")}</p>
                   {saved.availability.state === "unavailable" && (
                     <small>This posting is no longer available in the active catalog.</small>
+                  )}
+                  {saved.availability.state === "available" && (
+                    <MatchAssessmentPanel jobId={saved.requestedJobId} />
                   )}
                   <button
                     className="secondary-button"

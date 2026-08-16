@@ -178,6 +178,40 @@ describe("API Gateway Lambda boundary", () => {
     );
   });
 
+  it("allows only an exact lowercase UUIDv7 bodyless match-assessment route", async () => {
+    const inject = vi.fn().mockResolvedValue({
+      statusCode: 200,
+      body: "{}",
+      headers: { "cache-control": "no-store" },
+    });
+    const principalBridge = createInvocationPrincipalBridge();
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge,
+    });
+    const jobId = "019d04cf-1f80-7000-8000-000000000012";
+    const path = `/v1/jobs/${jobId}/match-assessment`;
+
+    expect((await invoke(handler, routedEvent("GET", path))).statusCode).toBe(200);
+    expect(
+      (await invoke(handler, routedEvent("GET", path, { rawQueryString: "owner=other" })))
+        .statusCode,
+    ).toBe(400);
+    expect((await invoke(handler, routedEvent("GET", path, { body: "{}" }))).statusCode).toBe(400);
+    expect((await invoke(handler, routedEvent("GET", path.toUpperCase()))).statusCode).toBe(404);
+    expect(
+      (
+        await invoke(
+          handler,
+          routedEvent("GET", "/v1/jobs/019d04cf-1f80-4000-8000-000000000012/match-assessment"),
+        )
+      ).statusCode,
+    ).toBe(404);
+    expect(inject).toHaveBeenCalledOnce();
+  });
+
   it("allows only a JSON body on the exact protected job-search route", async () => {
     const principalBridge = createInvocationPrincipalBridge();
     const inject = vi.fn().mockResolvedValue({

@@ -27,6 +27,8 @@ export function buildGeneratedSyntheticObservations(
       employerRequisitionId: `generated-${seed}-1`,
       verifiedCompanyDomain,
       department: "Synthetic Engineering",
+      workMode: "remote",
+      employmentType: "full_time",
       validThrough: new Date(validThrough),
     },
     {
@@ -41,6 +43,8 @@ export function buildGeneratedSyntheticObservations(
       employerRequisitionId: `generated-${seed}-2`,
       verifiedCompanyDomain,
       department: "Synthetic Reliability",
+      workMode: "hybrid",
+      employmentType: "full_time",
       validThrough: new Date(validThrough),
     },
   ];

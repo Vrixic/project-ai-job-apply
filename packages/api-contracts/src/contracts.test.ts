@@ -301,6 +301,116 @@ describe("saved-job contracts", () => {
   });
 });
 
+describe("match-assessment contract", () => {
+  const validate = compileComponentValidator("MatchAssessment");
+  const value = {
+    schemaVersion: 1,
+    requestedJobId: "019d04cf-1f80-7000-8000-000000000012",
+    canonicalJobId: "019d04cf-1f80-7000-8000-000000000013",
+    preferenceSetId: "019d04cf-1f80-7000-8000-000000000014",
+    preferenceVersion: 3,
+    preferenceUpdatedAt: "2026-08-16T11:00:00.000Z",
+    catalogRevision: "42",
+    assessedAt: "2026-08-16T12:00:00.000Z",
+    gate: "review_required",
+    evidence: [
+      { constraint: "work_mode", state: "satisfied", reasonCode: "work_mode_selected" },
+      {
+        constraint: "employment_type",
+        state: "satisfied",
+        reasonCode: "employment_type_selected",
+      },
+      {
+        constraint: "target_role",
+        state: "satisfied",
+        reasonCode: "target_role_exact_overlap",
+      },
+      { constraint: "location", state: "unknown", reasonCode: "location_not_established" },
+      {
+        constraint: "compensation",
+        state: "unknown",
+        reasonCode: "compensation_semantics_unavailable",
+      },
+      {
+        constraint: "authorization_sponsorship",
+        state: "unknown",
+        reasonCode: "authorization_sponsorship_unavailable",
+      },
+      {
+        constraint: "seniority",
+        state: "unknown",
+        reasonCode: "seniority_semantics_unavailable",
+      },
+      {
+        constraint: "blocked_company",
+        state: "unknown",
+        reasonCode: "blocked_company_preferences_unavailable",
+      },
+      {
+        constraint: "qualifications",
+        state: "unknown",
+        reasonCode: "qualification_evidence_unavailable",
+      },
+    ],
+  };
+
+  it("accepts only fixed-order, value-free evidence with a relationally correct gate", () => {
+    expect(validate(value)).toBe(true);
+    expect(
+      validate({
+        ...value,
+        gate: "excluded",
+        evidence: [
+          { constraint: "work_mode", state: "conflict", reasonCode: "work_mode_conflict" },
+          ...value.evidence.slice(1),
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects reordered, contradictory, unbounded, internal, and candidate-value evidence", () => {
+    expect(validate({ ...value, evidence: [...value.evidence].reverse() })).toBe(false);
+    expect(validate({ ...value, gate: "excluded" })).toBe(false);
+    expect(
+      validate({
+        ...value,
+        evidence: [
+          { constraint: "work_mode", state: "conflict", reasonCode: "work_mode_selected" },
+          ...value.evidence.slice(1),
+        ],
+      }),
+    ).toBe(false);
+    expect(validate({ ...value, score: 0.92 })).toBe(false);
+    expect(validate({ ...value, evidence: [...value.evidence, value.evidence[0]] })).toBe(false);
+    expect(
+      validate({
+        ...value,
+        evidence: value.evidence.map((item, index) =>
+          index === 0 ? { ...item, candidateValue: "remote" } : item,
+        ),
+      }),
+    ).toBe(false);
+  });
+
+  it("uses jobs:read, no-store, and exact lowercase UUIDv7 path identity", () => {
+    const operation = contract.paths["/jobs/{jobId}/match-assessment"].get;
+    expect(operation.security).toEqual([{ oidc: ["jobs:read"] }]);
+    expect(operation.parameters[0]?.schema.pattern).toContain("-7");
+    for (const response of Object.values(operation.responses)) {
+      expect(response.headers["Cache-Control"].schema.enum).toEqual(["no-store"]);
+    }
+    expect(Object.keys(operation.responses).sort()).toEqual([
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "409",
+      "503",
+    ]);
+  });
+});
+
 describe("entitlement read contract", () => {
   const validate = compileComponentValidator("EntitlementSummary");
   const common = {

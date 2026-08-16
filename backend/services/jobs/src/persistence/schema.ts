@@ -18,9 +18,11 @@ import {
 import type {
   DuplicateClassification,
   DuplicateResolution,
+  JobEmploymentType,
   JobProvenance,
   JobSourceProvider,
   JobStatus,
+  JobWorkMode,
 } from "../domain/canonical-job.js";
 
 const jobs = pgSchema("jobs");
@@ -64,6 +66,8 @@ export const canonicalJobs = jobs.table(
     normalizedLocations: text("normalized_locations").array().notNull(),
     department: text("department"),
     normalizedDepartment: text("normalized_department"),
+    workMode: text("work_mode").$type<JobWorkMode>(),
+    employmentType: text("employment_type").$type<JobEmploymentType>(),
     description: text("description"),
     descriptionHash: text("description_hash"),
     dedupeFingerprint: text("dedupe_fingerprint").notNull(),
@@ -99,6 +103,14 @@ export const canonicalJobs = jobs.table(
       sql`${table.status} IN ('expired', 'withdrawn', 'blocked') OR ${table.description} IS NOT NULL`,
     ),
     check("canonical_jobs_failure_count_ck", sql`${table.consecutiveVerificationFailures} >= 0`),
+    check(
+      "canonical_jobs_work_mode_ck",
+      sql`${table.workMode} IS NULL OR ${table.workMode} IN ('remote', 'hybrid', 'on_site', 'unknown')`,
+    ),
+    check(
+      "canonical_jobs_employment_type_ck",
+      sql`${table.employmentType} IS NULL OR ${table.employmentType} IN ('full_time', 'part_time', 'contract', 'internship', 'unknown')`,
+    ),
   ],
 );
 

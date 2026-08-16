@@ -329,6 +329,123 @@
         }
       }
     },
+    "/jobs/{jobId}/match-assessment": {
+      "get": {
+        "operationId": "getJobMatchAssessment",
+        "security": [{ "oidc": ["jobs:read"] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "jobId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Owner-self deterministic hard-constraint evidence for one active job",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/MatchAssessment" }
+              }
+            }
+          },
+          "400": {
+            "description": "The match-assessment request shape is invalid",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": { "$ref": "#/components/schemas/ProblemDetails" }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication is required",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": { "$ref": "#/components/schemas/ProblemDetails" }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller lacks jobs:read",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": { "$ref": "#/components/schemas/ProblemDetails" }
+              }
+            }
+          },
+          "404": {
+            "description": "The requested job is unavailable for assessment",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": { "$ref": "#/components/schemas/ProblemDetails" }
+              }
+            }
+          },
+          "409": {
+            "description": "Preferences are missing or require review",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": { "$ref": "#/components/schemas/ProblemDetails" }
+              }
+            }
+          },
+          "503": {
+            "description": "The assessment cannot be produced safely",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": { "$ref": "#/components/schemas/ProblemDetails" }
+              }
+            }
+          }
+        }
+      }
+    },
     "/public/jobs/{jobId}": {
       "get": {
         "operationId": "getPublicJob",
@@ -1263,6 +1380,259 @@
             "maxLength": 1024,
             "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
           }
+        },
+        "additionalProperties": false
+      },
+      "MatchAssessment": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "requestedJobId",
+          "canonicalJobId",
+          "preferenceSetId",
+          "preferenceVersion",
+          "preferenceUpdatedAt",
+          "catalogRevision",
+          "assessedAt",
+          "gate",
+          "evidence"
+        ],
+        "properties": {
+          "schemaVersion": { "type": "integer", "const": 1 },
+          "requestedJobId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "canonicalJobId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "preferenceSetId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "preferenceVersion": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+          "preferenceUpdatedAt": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+          },
+          "catalogRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          },
+          "assessedAt": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+          },
+          "gate": { "type": "string", "enum": ["excluded", "review_required"] },
+          "evidence": {
+            "type": "array",
+            "minItems": 9,
+            "maxItems": 9,
+            "prefixItems": [
+              {
+                "oneOf": [
+                  { "$ref": "#/components/schemas/MatchWorkModeSatisfied" },
+                  { "$ref": "#/components/schemas/MatchWorkModeConflict" },
+                  { "$ref": "#/components/schemas/MatchWorkModeUnknown" }
+                ]
+              },
+              {
+                "oneOf": [
+                  { "$ref": "#/components/schemas/MatchEmploymentTypeSatisfied" },
+                  { "$ref": "#/components/schemas/MatchEmploymentTypeConflict" },
+                  { "$ref": "#/components/schemas/MatchEmploymentTypeUnknown" }
+                ]
+              },
+              {
+                "oneOf": [
+                  { "$ref": "#/components/schemas/MatchTargetRoleSatisfied" },
+                  { "$ref": "#/components/schemas/MatchTargetRoleUnknown" }
+                ]
+              },
+              {
+                "oneOf": [
+                  { "$ref": "#/components/schemas/MatchLocationSatisfied" },
+                  { "$ref": "#/components/schemas/MatchLocationUnknown" }
+                ]
+              },
+              { "$ref": "#/components/schemas/MatchCompensationUnknown" },
+              { "$ref": "#/components/schemas/MatchAuthorizationUnknown" },
+              { "$ref": "#/components/schemas/MatchSeniorityUnknown" },
+              { "$ref": "#/components/schemas/MatchBlockedCompanyUnknown" },
+              { "$ref": "#/components/schemas/MatchQualificationsUnknown" }
+            ],
+            "items": false
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "evidence": {
+                  "type": "array",
+                  "contains": {
+                    "type": "object",
+                    "properties": { "state": { "const": "conflict" } },
+                    "required": ["state"]
+                  }
+                }
+              },
+              "required": ["evidence"]
+            },
+            "then": { "properties": { "gate": { "const": "excluded" } } },
+            "else": { "properties": { "gate": { "const": "review_required" } } }
+          }
+        ],
+        "additionalProperties": false
+      },
+      "MatchWorkModeSatisfied": {
+        "type": "object",
+        "required": ["constraint", "state", "reasonCode"],
+        "properties": {
+          "constraint": { "const": "work_mode" },
+          "state": { "const": "satisfied" },
+          "reasonCode": { "const": "work_mode_selected" }
+        },
+        "additionalProperties": false
+      },
+      "MatchWorkModeConflict": {
+        "type": "object",
+        "required": ["constraint", "state", "reasonCode"],
+        "properties": {
+          "constraint": { "const": "work_mode" },
+          "state": { "const": "conflict" },
+          "reasonCode": { "const": "work_mode_conflict" }
+        },
+        "additionalProperties": false
+      },
+      "MatchWorkModeUnknown": {
+        "type": "object",
+        "required": ["constraint", "state", "reasonCode"],
+        "properties": {
+          "constraint": { "const": "work_mode" },
+          "state": { "const": "unknown" },
+          "reasonCode": { "const": "work_mode_unavailable" }
+        },
+        "additionalProperties": false
+      },
+      "MatchEmploymentTypeSatisfied": {
+        "type": "object",
+        "required": ["constraint", "state", "reasonCode"],
+        "properties": {
+          "constraint": { "const": "employment_type" },
+          "state": { "const": "satisfied" },
+          "reasonCode": { "const": "employment_type_selected" }
+        },
+        "additionalProperties": false
+      },
+      "MatchEmploymentTypeConflict": {
+        "type": "object",
+        "required": ["constraint", "state", "reasonCode"],
+        "properties": {
+          "constraint": { "const": "employment_type" },
+          "state": { "const": "conflict" },
+          "reasonCode": { "const": "employment_type_conflict" }
+        },
+        "additionalProperties": false
+      },
+      "MatchEmploymentTypeUnknown": {
+        "type": "object",
+        "required": ["constraint", "state", "reasonCode"],
+        "properties": {
+          "constraint": { "const": "employment_type" },
+          "state": { "const": "unknown" },
+          "reasonCode": { "const": "employment_type_unavailable" }
+        },
+        "additionalProperties": false
+      },
+      "MatchTargetRoleSatisfied": {
+        "type": "object",
+        "required": ["constraint", "state", "reasonCode"],
+        "properties": {
+          "constraint": { "const": "target_role" },
+          "state": { "const": "satisfied" },
+          "reasonCode": { "const": "target_role_exact_overlap" }
+        },
+        "additionalProperties": false
+      },
+      "MatchTargetRoleUnknown": {
+        "type": "object",
+        "required": ["constraint", "state", "reasonCode"],
+        "properties": {
+          "constraint": { "const": "target_role" },
+          "state": { "const": "unknown" },
+          "reasonCode": { "const": "target_role_not_established" }
+        },
+        "additionalProperties": false
+      },
+      "MatchLocationSatisfied": {
+        "type": "object",
+        "required": ["constraint", "state", "reasonCode"],
+        "properties": {
+          "constraint": { "const": "location" },
+          "state": { "const": "satisfied" },
+          "reasonCode": { "const": "location_exact_overlap" }
+        },
+        "additionalProperties": false
+      },
+      "MatchLocationUnknown": {
+        "type": "object",
+        "required": ["constraint", "state", "reasonCode"],
+        "properties": {
+          "constraint": { "const": "location" },
+          "state": { "const": "unknown" },
+          "reasonCode": { "const": "location_not_established" }
+        },
+        "additionalProperties": false
+      },
+      "MatchCompensationUnknown": {
+        "type": "object",
+        "required": ["constraint", "state", "reasonCode"],
+        "properties": {
+          "constraint": { "const": "compensation" },
+          "state": { "const": "unknown" },
+          "reasonCode": { "const": "compensation_semantics_unavailable" }
+        },
+        "additionalProperties": false
+      },
+      "MatchAuthorizationUnknown": {
+        "type": "object",
+        "required": ["constraint", "state", "reasonCode"],
+        "properties": {
+          "constraint": { "const": "authorization_sponsorship" },
+          "state": { "const": "unknown" },
+          "reasonCode": { "const": "authorization_sponsorship_unavailable" }
+        },
+        "additionalProperties": false
+      },
+      "MatchSeniorityUnknown": {
+        "type": "object",
+        "required": ["constraint", "state", "reasonCode"],
+        "properties": {
+          "constraint": { "const": "seniority" },
+          "state": { "const": "unknown" },
+          "reasonCode": { "const": "seniority_semantics_unavailable" }
+        },
+        "additionalProperties": false
+      },
+      "MatchBlockedCompanyUnknown": {
+        "type": "object",
+        "required": ["constraint", "state", "reasonCode"],
+        "properties": {
+          "constraint": { "const": "blocked_company" },
+          "state": { "const": "unknown" },
+          "reasonCode": { "const": "blocked_company_preferences_unavailable" }
+        },
+        "additionalProperties": false
+      },
+      "MatchQualificationsUnknown": {
+        "type": "object",
+        "required": ["constraint", "state", "reasonCode"],
+        "properties": {
+          "constraint": { "const": "qualifications" },
+          "state": { "const": "unknown" },
+          "reasonCode": { "const": "qualification_evidence_unavailable" }
         },
         "additionalProperties": false
       },

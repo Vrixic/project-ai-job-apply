@@ -5,8 +5,8 @@ import {
   classifyDuplicate,
   evaluateLifecycle,
   exactIdentityKeys,
-  toMinimalTombstone,
   type JobObservation,
+  toMinimalTombstone,
 } from "./canonical-job.js";
 
 const observedAt = new Date("2026-08-11T12:00:00.000Z");
@@ -96,6 +96,18 @@ describe("canonical job domain", () => {
     const validThrough = new Date("2026-10-20T12:00:00.000Z");
     const canonical = canonicalizeObservation(observation({ validThrough }));
     expect(canonical.expiresAt).toEqual(validThrough);
+  });
+
+  it("preserves only exact source-neutral matchable attribute values", () => {
+    expect(
+      canonicalizeObservation(observation({ workMode: "hybrid", employmentType: "contract" })),
+    ).toMatchObject({ workMode: "hybrid", employmentType: "contract" });
+    expect(() => canonicalizeObservation(observation({ workMode: "virtual" as "remote" }))).toThrow(
+      "matching attributes are invalid",
+    );
+    expect(() =>
+      canonicalizeObservation(observation({ employmentType: "temporary" as "full_time" })),
+    ).toThrow("matching attributes are invalid");
   });
 
   it("rejects display fields that cannot satisfy the public catalog contract", () => {

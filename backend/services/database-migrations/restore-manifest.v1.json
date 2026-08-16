@@ -71,6 +71,10 @@
         {
           "version": "0006_public_job_reader",
           "checksum": "1542e326c97395c0aa7e2793d4043d5fce16fdbbef3159ee8024e3a9c706683c"
+        },
+        {
+          "version": "0007_matchable_job_attributes",
+          "checksum": "7cefb504ec1583009a47551af0b987fb6a504eb5ce000d8e51cc21232a3ef4f9"
         }
       ],
       "relations": [

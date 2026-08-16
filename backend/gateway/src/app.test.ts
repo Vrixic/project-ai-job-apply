@@ -5,6 +5,7 @@ import type {
   CreateResumeUploadResponse,
   CurrentUser,
   JobPreferenceSet,
+  MatchAssessment,
   Operation,
   ProfileFact,
   ProfileFactCollection,
@@ -36,6 +37,11 @@ import {
   JobSearchCatalogChangedError,
 } from "@ai-job-apply/jobs-service";
 import {
+  MatchAssessmentServiceUnavailableError,
+  type MatchAssessments,
+  MatchAssessmentTargetUnavailableError,
+  MatchAssessmentUnavailableError,
+  MatchPreferencesRequiredError,
   SavedJobIdempotencyLimitError,
   SavedJobLimitError,
   type SavedJobs,
@@ -225,6 +231,23 @@ class MemoryJobCatalog implements JobCatalogReader {
     return "1";
   }
 
+  async getMatchableJob(jobId: string) {
+    return jobId === this.job.id
+      ? {
+          requestedJobId: jobId,
+          job: {
+            id: this.job.id,
+            catalogRevision: "1",
+            eligibleThrough: this.job.expiresAt.toISOString(),
+            title: this.job.title,
+            locations: [...this.job.locations],
+            workMode: "remote" as const,
+            employmentType: "full_time" as const,
+          },
+        }
+      : null;
+  }
+
   async resolveActiveJobSummaries(jobIds: readonly string[]) {
     return {
       catalogRevision: "1",
@@ -312,6 +335,66 @@ class MemorySavedJobs implements SavedJobs {
   }
 
   async ping(): Promise<void> {}
+}
+
+class MemoryMatchAssessments implements MatchAssessments {
+  readonly calls: Array<{ ownerUserId: string; requestedJobId: string }> = [];
+  failure: Error | undefined;
+
+  async assess(ownerUserId: string, requestedJobId: string): Promise<MatchAssessment> {
+    this.calls.push({ ownerUserId, requestedJobId });
+    if (this.failure) throw this.failure;
+    return {
+      schemaVersion: 1,
+      requestedJobId,
+      canonicalJobId: requestedJobId,
+      preferenceSetId: uuidv7(),
+      preferenceVersion: 1,
+      preferenceUpdatedAt: "2026-08-16T11:00:00.000Z",
+      catalogRevision: "1",
+      assessedAt: "2026-08-16T12:00:00.000Z",
+      gate: "review_required",
+      evidence: [
+        { constraint: "work_mode", state: "satisfied", reasonCode: "work_mode_selected" },
+        {
+          constraint: "employment_type",
+          state: "satisfied",
+          reasonCode: "employment_type_selected",
+        },
+        {
+          constraint: "target_role",
+          state: "satisfied",
+          reasonCode: "target_role_exact_overlap",
+        },
+        { constraint: "location", state: "unknown", reasonCode: "location_not_established" },
+        {
+          constraint: "compensation",
+          state: "unknown",
+          reasonCode: "compensation_semantics_unavailable",
+        },
+        {
+          constraint: "authorization_sponsorship",
+          state: "unknown",
+          reasonCode: "authorization_sponsorship_unavailable",
+        },
+        {
+          constraint: "seniority",
+          state: "unknown",
+          reasonCode: "seniority_semantics_unavailable",
+        },
+        {
+          constraint: "blocked_company",
+          state: "unknown",
+          reasonCode: "blocked_company_preferences_unavailable",
+        },
+        {
+          constraint: "qualifications",
+          state: "unknown",
+          reasonCode: "qualification_evidence_unavailable",
+        },
+      ],
+    };
+  }
 }
 
 class MemoryEntitlements implements EntitlementReadService {
@@ -442,19 +525,21 @@ async function createApp() {
   const catalog = new MemoryJobCatalog();
   const documents = new MemoryDocumentStore();
   const savedJobs = new MemorySavedJobs();
+  const matchAssessments = new MemoryMatchAssessments();
   const entitlements = new MemoryEntitlements();
   const now = new Date("2026-08-16T12:00:00.000Z");
   const app = await createGatewayApplication({
     store,
     catalog,
     savedJobs,
+    matchAssessments,
     entitlements,
     documents,
     verifier: issuer.verifier,
     releaseSha: "test",
     clock: () => new Date(now.getTime()),
   });
-  return { app, issuer, catalog, store, savedJobs, entitlements, now };
+  return { app, issuer, catalog, store, savedJobs, matchAssessments, entitlements, now };
 }
 
 describe("candidate API", () => {
@@ -463,6 +548,7 @@ describe("candidate API", () => {
   let catalog: MemoryJobCatalog;
   let store: MemoryProfileStore;
   let savedJobs: MemorySavedJobs;
+  let matchAssessments: MemoryMatchAssessments;
   let entitlements: MemoryEntitlements;
   let now: Date;
 
@@ -473,6 +559,7 @@ describe("candidate API", () => {
     catalog = setup.catalog;
     store = setup.store;
     savedJobs = setup.savedJobs;
+    matchAssessments = setup.matchAssessments;
     entitlements = setup.entitlements;
     now = setup.now;
   });
@@ -548,6 +635,7 @@ describe("candidate API", () => {
       store: new MemoryProfileStore(),
       catalog: new MemoryJobCatalog(),
       savedJobs: new MemorySavedJobs(),
+      matchAssessments: new MemoryMatchAssessments(),
       entitlements: new MemoryEntitlements(),
       documents: new MemoryDocumentStore(),
       verifier: principalBridge.verifier,
@@ -802,6 +890,7 @@ describe("candidate API", () => {
       store: new MemoryProfileStore(),
       catalog: new MemoryJobCatalog(),
       savedJobs: new MemorySavedJobs(),
+      matchAssessments: new MemoryMatchAssessments(),
       entitlements: new BillingEntitlementService(
         cacheStore,
         new EntitlementCache({ capacity: 10, freshTtlMs: 1_000 }),
@@ -1147,6 +1236,139 @@ describe("candidate API", () => {
       title: "Job catalog changed",
     });
     expect(changed.json().detail).toContain("restart the search");
+  });
+
+  it("returns only owner-self fixed match evidence through the exact read boundary", async () => {
+    const firstToken = await issuer.issue("candidate-match-a", { scope: "jobs:read" });
+    const secondToken = await issuer.issue("candidate-match-b", { scope: "jobs:read" });
+    const wrongScope = await issuer.issue("candidate-match-no-read", { scope: "profile:read" });
+    const path = `/v1/jobs/${catalog.job.id}/match-assessment`;
+
+    const first = await app.inject({
+      method: "GET",
+      url: path,
+      headers: { authorization: `Bearer ${firstToken}` },
+    });
+    const second = await app.inject({
+      method: "GET",
+      url: path,
+      headers: { authorization: `Bearer ${secondToken}` },
+    });
+    const forbidden = await app.inject({
+      method: "GET",
+      url: path,
+      headers: { authorization: `Bearer ${wrongScope}` },
+    });
+    const invalidQuery = await app.inject({
+      method: "GET",
+      url: `${path}?owner=other`,
+      headers: { authorization: `Bearer ${firstToken}` },
+    });
+    const uppercase = await app.inject({
+      method: "GET",
+      url: `/v1/jobs/${catalog.job.id.toUpperCase()}/match-assessment`,
+      headers: { authorization: `Bearer ${firstToken}` },
+    });
+    const body = await app.inject({
+      method: "GET",
+      url: path,
+      headers: { authorization: `Bearer ${firstToken}`, "content-type": "application/json" },
+      payload: { owner: "other" },
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(first.headers["cache-control"]).toBe("no-store");
+    expect(first.json()).toMatchObject({
+      requestedJobId: catalog.job.id,
+      canonicalJobId: catalog.job.id,
+      gate: "review_required",
+    });
+    expect(first.json().evidence).toHaveLength(9);
+    expect(second.statusCode).toBe(200);
+    expect(matchAssessments.calls.at(-2)?.ownerUserId).not.toBe(
+      matchAssessments.calls.at(-1)?.ownerUserId,
+    );
+    expect(matchAssessments.calls.at(-1)?.requestedJobId).toBe(catalog.job.id);
+    expect(forbidden.statusCode).toBe(403);
+    expect(invalidQuery.statusCode).toBe(400);
+    expect(uppercase.statusCode).toBe(400);
+    expect(body.statusCode).toBe(400);
+  });
+
+  it.each([
+    [new MatchAssessmentTargetUnavailableError(), 404, "match_job_unavailable"],
+    [new MatchPreferencesRequiredError(), 409, "match_preferences_required"],
+    [new MatchAssessmentUnavailableError(), 409, "match_preferences_require_review"],
+    [new MatchAssessmentServiceUnavailableError(), 503, "match_assessment_unavailable"],
+  ] as const)(
+    "maps match-assessment failures to stable private problems",
+    async (failure, status, code) => {
+      matchAssessments.failure = failure;
+      const token = await issuer.issue(`candidate-match-${code}`, { scope: "jobs:read" });
+      const response = await app.inject({
+        method: "GET",
+        url: `/v1/jobs/${catalog.job.id}/match-assessment`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+      matchAssessments.failure = undefined;
+
+      expect(response.statusCode).toBe(status);
+      expect(response.headers["cache-control"]).toBe("no-store");
+      expect(response.json().code).toBe(code);
+      expect(response.body).not.toContain("candidate-match");
+    },
+  );
+
+  it("fails closed when a match-assessment implementation returns a malformed projection", async () => {
+    const original = matchAssessments.assess;
+    matchAssessments.assess = async () =>
+      ({
+        schemaVersion: 1,
+        requestedJobId: catalog.job.id,
+        canonicalJobId: catalog.job.id,
+        preferenceSetId: uuidv7(),
+        preferenceVersion: 1,
+        preferenceUpdatedAt: "2026-08-16T11:00:00.000Z",
+        catalogRevision: "1",
+        assessedAt: "2026-08-16T12:00:00.000Z",
+        gate: "review_required",
+        evidence: [],
+        privateCandidateValue: "must-not-leak",
+      }) as unknown as MatchAssessment;
+    const token = await issuer.issue("candidate-match-malformed", { scope: "jobs:read" });
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/jobs/${catalog.job.id}/match-assessment`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    matchAssessments.assess = original;
+
+    expect(response.statusCode).toBe(503);
+    expect(response.body).not.toContain("must-not-leak");
+  });
+
+  it("rejects impossible, future-ordered, and out-of-range match metadata", async () => {
+    const original = matchAssessments.assess;
+    const valid = await original.call(matchAssessments, uuidv7(), catalog.job.id);
+    const token = await issuer.issue("candidate-match-metadata", { scope: "jobs:read" });
+    try {
+      for (const malformed of [
+        { ...valid, requestedJobId: uuidv7() },
+        { ...valid, assessedAt: "2026-02-31T12:00:00.000Z" },
+        { ...valid, preferenceUpdatedAt: "2026-08-16T12:00:00.001Z" },
+        { ...valid, catalogRevision: "9223372036854775808" },
+      ]) {
+        matchAssessments.assess = async () => malformed as MatchAssessment;
+        const response = await app.inject({
+          method: "GET",
+          url: `/v1/jobs/${catalog.job.id}/match-assessment`,
+          headers: { authorization: `Bearer ${token}` },
+        });
+        expect(response.statusCode).toBe(503);
+      }
+    } finally {
+      matchAssessments.assess = original;
+    }
   });
 
   it("keeps saved-job mutations behind jobs:write and reads owner-scoped with jobs:read", async () => {
