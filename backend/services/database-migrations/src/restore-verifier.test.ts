@@ -89,13 +89,13 @@ describe("current restore manifest", () => {
     expect([...migrationRunners].map((runner) => runner.owner).sort()).toEqual(
       source.manifest.contributors.map((contributor) => contributor.owner),
     );
-    expect(expectedRelations(source)).toHaveLength(39);
+    expect(expectedRelations(source)).toHaveLength(42);
     expect(
       source.manifest.contributors.reduce(
         (total, contributor) => total + contributor.migrations.length,
         0,
       ),
-    ).toBe(16);
+    ).toBe(17);
     expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 
     for (const contributor of source.manifest.contributors) {
@@ -235,8 +235,8 @@ describe("read-only aggregate restore verification", () => {
       manifestId: "d1-profile-jobs-public-documents-matching-billing-v1",
       manifestSha256: source.sha256,
       ownerCount: 5,
-      relationCount: 39,
-      migrationCount: 16,
+      relationCount: 42,
+      migrationCount: 17,
     });
     expect(result.aggregateDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.keys(result)).toEqual([

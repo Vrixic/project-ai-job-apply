@@ -75,6 +75,10 @@
         {
           "version": "0007_matchable_job_attributes",
           "checksum": "7cefb504ec1583009a47551af0b987fb6a504eb5ce000d8e51cc21232a3ef4f9"
+        },
+        {
+          "version": "0008_job_reporting_and_moderation",
+          "checksum": "b32f746d91e4891583e26fd7c7a57f4017cb5a68402245b93a3c9e78bbb82d26"
         }
       ],
       "relations": [
@@ -86,7 +90,10 @@
         "jobs.ingestion_checkpoints",
         "jobs.ingestion_dispatches",
         "jobs.ingestion_run_events",
+        "jobs.job_reports",
         "jobs.job_sources",
+        "jobs.moderation_cases",
+        "jobs.moderation_events",
         "jobs.schema_migrations",
         "jobs.status_events"
       ]

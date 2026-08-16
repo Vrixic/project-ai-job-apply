@@ -55,10 +55,10 @@ describeWithDatabase("PostgresJobCatalog", () => {
     const first = await runMigrationVerifier();
     const replay = await runMigrationVerifier();
     expect(first.stdout.trim()).toBe(
-      "Jobs migrations through 0007_matchable_job_attributes applied and verified.",
+      "Jobs migrations through 0008_job_reporting_and_moderation applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(
-      "Jobs migrations through 0007_matchable_job_attributes applied and verified.",
+      "Jobs migrations through 0008_job_reporting_and_moderation applied and verified.",
     );
     await catalog.ping();
   });
@@ -128,6 +128,15 @@ describeWithDatabase("PostgresJobCatalog", () => {
           return row?.definition;
         },
         drop: "CREATE OR REPLACE FUNCTION jobs.guard_ingestion_dispatch() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END; $$",
+      },
+      {
+        definition: async () => {
+          const [row] = await client<{ definition: string }[]>`
+            SELECT pg_get_functiondef('jobs.guard_moderation_event()'::regprocedure) AS definition
+          `;
+          return row?.definition;
+        },
+        drop: "CREATE OR REPLACE FUNCTION jobs.guard_moderation_event() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END; $$",
       },
       {
         definition: async () => {

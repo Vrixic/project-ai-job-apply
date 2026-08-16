@@ -180,6 +180,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/jobs/{jobId}/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createJobReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/public/jobs/{jobId}": {
         parameters: {
             query?: never;
@@ -510,6 +526,19 @@ export interface components {
         CreateSavedJobRequest: {
             /** Format: uuid */
             jobId: string;
+        };
+        CreateJobReportRequest: {
+            /** @enum {string} */
+            reason: "job_closed" | "job_not_found" | "job_inaccurate" | "suspected_scam" | "duplicate_listing" | "other_catalog_issue";
+        };
+        JobReport: {
+            id: string;
+            requestedJobId: string;
+            canonicalJobId: string;
+            /** @enum {string} */
+            reason: "job_closed" | "job_not_found" | "job_inaccurate" | "suspected_scam" | "duplicate_listing" | "other_catalog_issue";
+            /** Format: date-time */
+            createdAt: string;
         };
         SavedJobSearchRequest: {
             /** @default 20 */
@@ -1325,6 +1354,43 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+        };
+    };
+    createJobReport: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                jobId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateJobReportRequest"];
+            };
+        };
+        responses: {
+            /** @description The authenticated owner reported one active canonical job */
+            201: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobReport"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
         };
     };
     getPublicJob: {

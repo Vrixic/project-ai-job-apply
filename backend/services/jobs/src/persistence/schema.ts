@@ -24,6 +24,12 @@ import type {
   JobStatus,
   JobWorkMode,
 } from "../domain/canonical-job.js";
+import type {
+  JobReportReason,
+  ModerationOpenReason,
+  ModerationResolution,
+  ModerationResolutionReason,
+} from "../reporting.js";
 
 const jobs = pgSchema("jobs");
 const tsvector = customType<{ data: string }>({ dataType: () => "tsvector" });
@@ -328,6 +334,101 @@ export const statusEvents = jobs.table(
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
   },
   (table) => [index("status_events_job_occurred_idx").on(table.jobId, table.occurredAt)],
+);
+
+export const jobReports = jobs.table(
+  "job_reports",
+  {
+    id: uuid("id").primaryKey(),
+    reporterUserId: uuid("reporter_user_id").notNull(),
+    requestedJobId: uuid("requested_job_id").notNull(),
+    canonicalJobId: uuid("canonical_job_id")
+      .notNull()
+      .references(() => canonicalJobs.id),
+    reason: text("reason").$type<JobReportReason>().notNull(),
+    idempotencyKeyHash: text("idempotency_key_hash").notNull(),
+    requestHash: text("request_hash").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("job_reports_owner_job_uq").on(table.reporterUserId, table.canonicalJobId),
+    uniqueIndex("job_reports_owner_idempotency_uq").on(
+      table.reporterUserId,
+      table.idempotencyKeyHash,
+    ),
+    index("job_reports_owner_created_idx").on(table.reporterUserId, table.createdAt, table.id),
+    index("job_reports_canonical_reason_created_idx").on(
+      table.canonicalJobId,
+      table.reason,
+      table.createdAt,
+      table.id,
+    ),
+    check(
+      "job_reports_reason_ck",
+      sql`${table.reason} IN ('job_closed', 'job_not_found', 'job_inaccurate', 'suspected_scam', 'duplicate_listing', 'other_catalog_issue')`,
+    ),
+  ],
+);
+
+export const moderationCases = jobs.table(
+  "moderation_cases",
+  {
+    id: uuid("id").primaryKey(),
+    targetKind: text("target_kind").$type<"job" | "source">().notNull(),
+    jobId: uuid("job_id").references(() => canonicalJobs.id),
+    sourceId: text("source_id"),
+    adapterVersion: text("adapter_version"),
+    adapterConfigSha256: text("adapter_config_sha256"),
+    status: text("status").$type<"open" | "resolved">().notNull(),
+    resolution: text("resolution").$type<ModerationResolution>(),
+    version: integer("version").notNull(),
+    openedBy: text("opened_by").notNull(),
+    openReasonCode: text("open_reason_code").$type<ModerationOpenReason>().notNull(),
+    openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
+    resolvedBy: text("resolved_by"),
+    resolutionReasonCode: text("resolution_reason_code").$type<ModerationResolutionReason>(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("moderation_cases_open_job_uq")
+      .on(table.jobId)
+      .where(sql`${table.status} = 'open' AND ${table.targetKind} = 'job'`),
+    uniqueIndex("moderation_cases_open_source_uq")
+      .on(table.sourceId, table.adapterVersion, table.adapterConfigSha256)
+      .where(sql`${table.status} = 'open' AND ${table.targetKind} = 'source'`),
+    index("moderation_cases_source_control_idx")
+      .on(
+        table.sourceId,
+        table.adapterVersion,
+        table.adapterConfigSha256,
+        table.resolvedAt,
+        table.id,
+      )
+      .where(sql`${table.status} = 'resolved' AND ${table.resolution} = 'pause_source'`),
+  ],
+);
+
+export const moderationEvents = jobs.table(
+  "moderation_events",
+  {
+    caseId: uuid("case_id")
+      .notNull()
+      .references(() => moderationCases.id),
+    version: integer("version").notNull(),
+    action: text("action").notNull(),
+    targetKind: text("target_kind").$type<"job" | "source">().notNull(),
+    jobId: uuid("job_id").references(() => canonicalJobs.id),
+    sourceId: text("source_id"),
+    adapterVersion: text("adapter_version"),
+    adapterConfigSha256: text("adapter_config_sha256"),
+    operatorId: text("operator_id").notNull(),
+    reasonCode: text("reason_code").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.caseId, table.version] }),
+    index("moderation_events_occurred_idx").on(table.occurredAt, table.caseId, table.version),
+  ],
 );
 
 export const ingestionCheckpoints = jobs.table(

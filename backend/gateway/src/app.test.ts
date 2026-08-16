@@ -5,6 +5,7 @@ import type {
   CreateResumeUploadResponse,
   CurrentUser,
   JobPreferenceSet,
+  JobReport,
   MatchAssessment,
   Operation,
   ProfileFact,
@@ -33,7 +34,14 @@ import { type DocumentStore, ResumeUploadRegistrationError } from "@ai-job-apply
 import {
   type ActiveJobRecord,
   type ActiveJobSearchInput,
+  type CreateJobReportCommand,
+  JobAlreadyReportedError,
   type JobCatalogReader,
+  JobReportIdempotencyConflictError,
+  JobReportLimitError,
+  JobReportServiceUnavailableError,
+  type JobReports,
+  JobReportTargetUnavailableError,
   JobSearchCatalogChangedError,
 } from "@ai-job-apply/jobs-service";
 import {
@@ -337,6 +345,31 @@ class MemorySavedJobs implements SavedJobs {
   async ping(): Promise<void> {}
 }
 
+class MemoryJobReports implements JobReports {
+  failure: Error | undefined;
+  pingFailure: Error | undefined;
+  lastCommand?: CreateJobReportCommand;
+  malformed: JobReport | undefined;
+
+  async ping(): Promise<void> {
+    if (this.pingFailure) throw this.pingFailure;
+  }
+
+  async report(command: CreateJobReportCommand): Promise<JobReport> {
+    this.lastCommand = command;
+    if (this.failure) throw this.failure;
+    return (
+      this.malformed ?? {
+        id: uuidv7(),
+        requestedJobId: command.requestedJobId,
+        canonicalJobId: command.requestedJobId,
+        reason: command.reason,
+        createdAt: "2026-08-16T12:00:00.000Z",
+      }
+    );
+  }
+}
+
 class MemoryMatchAssessments implements MatchAssessments {
   readonly calls: Array<{ ownerUserId: string; requestedJobId: string }> = [];
   failure: Error | undefined;
@@ -525,6 +558,7 @@ async function createApp() {
   const catalog = new MemoryJobCatalog();
   const documents = new MemoryDocumentStore();
   const savedJobs = new MemorySavedJobs();
+  const jobReports = new MemoryJobReports();
   const matchAssessments = new MemoryMatchAssessments();
   const entitlements = new MemoryEntitlements();
   const now = new Date("2026-08-16T12:00:00.000Z");
@@ -532,6 +566,7 @@ async function createApp() {
     store,
     catalog,
     savedJobs,
+    jobReports,
     matchAssessments,
     entitlements,
     documents,
@@ -539,7 +574,17 @@ async function createApp() {
     releaseSha: "test",
     clock: () => new Date(now.getTime()),
   });
-  return { app, issuer, catalog, store, savedJobs, matchAssessments, entitlements, now };
+  return {
+    app,
+    issuer,
+    catalog,
+    store,
+    savedJobs,
+    jobReports,
+    matchAssessments,
+    entitlements,
+    now,
+  };
 }
 
 describe("candidate API", () => {
@@ -548,6 +593,7 @@ describe("candidate API", () => {
   let catalog: MemoryJobCatalog;
   let store: MemoryProfileStore;
   let savedJobs: MemorySavedJobs;
+  let jobReports: MemoryJobReports;
   let matchAssessments: MemoryMatchAssessments;
   let entitlements: MemoryEntitlements;
   let now: Date;
@@ -559,6 +605,7 @@ describe("candidate API", () => {
     catalog = setup.catalog;
     store = setup.store;
     savedJobs = setup.savedJobs;
+    jobReports = setup.jobReports;
     matchAssessments = setup.matchAssessments;
     entitlements = setup.entitlements;
     now = setup.now;
@@ -582,6 +629,17 @@ describe("candidate API", () => {
 
     expect(unavailable.statusCode).toBe(503);
     expect(unavailable.body).not.toContain("billing relation");
+    expect(ready.statusCode).toBe(200);
+  });
+
+  it("fails readiness when the Jobs reporting migration is unavailable", async () => {
+    jobReports.pingFailure = new Error("missing private reporting relation");
+    const unavailable = await app.inject({ method: "GET", url: "/health/ready" });
+    jobReports.pingFailure = undefined;
+    const ready = await app.inject({ method: "GET", url: "/health/ready" });
+
+    expect(unavailable.statusCode).toBe(503);
+    expect(unavailable.body).not.toContain("private reporting relation");
     expect(ready.statusCode).toBe(200);
   });
 
@@ -635,6 +693,7 @@ describe("candidate API", () => {
       store: new MemoryProfileStore(),
       catalog: new MemoryJobCatalog(),
       savedJobs: new MemorySavedJobs(),
+      jobReports: new MemoryJobReports(),
       matchAssessments: new MemoryMatchAssessments(),
       entitlements: new MemoryEntitlements(),
       documents: new MemoryDocumentStore(),
@@ -890,6 +949,7 @@ describe("candidate API", () => {
       store: new MemoryProfileStore(),
       catalog: new MemoryJobCatalog(),
       savedJobs: new MemorySavedJobs(),
+      jobReports: new MemoryJobReports(),
       matchAssessments: new MemoryMatchAssessments(),
       entitlements: new BillingEntitlementService(
         cacheStore,
@@ -1369,6 +1429,126 @@ describe("candidate API", () => {
     } finally {
       matchAssessments.assess = original;
     }
+  });
+
+  it("accepts only owner-self enum job reports behind jobs:write", async () => {
+    const readToken = await issuer.issue("candidate-job-report-owner", { scope: "jobs:read" });
+    const writeToken = await issuer.issue("candidate-job-report-owner", { scope: "jobs:write" });
+    const forbidden = await app.inject({
+      method: "POST",
+      url: `/v1/jobs/${catalog.job.id}/reports`,
+      headers: {
+        authorization: `Bearer ${readToken}`,
+        "idempotency-key": "job-report-gateway-forbidden-0001",
+      },
+      payload: { reason: "job_closed" },
+    });
+    const created = await app.inject({
+      method: "POST",
+      url: `/v1/jobs/${catalog.job.id}/reports`,
+      headers: {
+        authorization: `Bearer ${writeToken}`,
+        "idempotency-key": "job-report-gateway-create-0001",
+      },
+      payload: { reason: "job_closed" },
+    });
+
+    expect(forbidden.statusCode).toBe(403);
+    expect(created.statusCode).toBe(201);
+    expect(created.headers["cache-control"]).toBe("no-store");
+    expect(created.json()).toMatchObject({
+      requestedJobId: catalog.job.id,
+      canonicalJobId: catalog.job.id,
+      reason: "job_closed",
+    });
+    expect(created.json()).not.toHaveProperty("ownerUserId");
+    expect(jobReports.lastCommand).toMatchObject({
+      requestedJobId: catalog.job.id,
+      reason: "job_closed",
+      idempotencyKey: "job-report-gateway-create-0001",
+    });
+    expect(jobReports.lastCommand?.ownerUserId).toMatch(/-7/);
+  });
+
+  it("rejects report query, owner injection, free text, malformed identity, and missing idempotency", async () => {
+    const token = await issuer.issue("candidate-job-report-invalid", { scope: "jobs:write" });
+    const headers = {
+      authorization: `Bearer ${token}`,
+      "idempotency-key": "job-report-gateway-invalid-0001",
+    };
+    for (const request of [
+      { url: `/v1/jobs/${catalog.job.id}/reports?source=user`, payload: { reason: "job_closed" } },
+      {
+        url: `/v1/jobs/${catalog.job.id}/reports`,
+        payload: { reason: "job_closed", ownerUserId: uuidv7() },
+      },
+      {
+        url: `/v1/jobs/${catalog.job.id}/reports`,
+        payload: { reason: "other", detail: "candidate text" },
+      },
+      { url: `/v1/jobs/${crypto.randomUUID()}/reports`, payload: { reason: "job_closed" } },
+    ]) {
+      const response = await app.inject({ method: "POST", headers, ...request });
+      expect(response.statusCode).toBe(400);
+      expect(response.headers["cache-control"]).toBe("no-store");
+    }
+    const missingKey = await app.inject({
+      method: "POST",
+      url: `/v1/jobs/${catalog.job.id}/reports`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { reason: "job_closed" },
+    });
+    expect(missingKey.statusCode).toBe(400);
+  });
+
+  it.each([
+    [new JobReportTargetUnavailableError(), 404, "job_report_target_unavailable"],
+    [new JobReportIdempotencyConflictError(), 409, "idempotency_conflict"],
+    [new JobAlreadyReportedError(), 409, "job_already_reported"],
+    [new JobReportLimitError(), 409, "job_report_limit_reached"],
+    [new JobReportServiceUnavailableError(), 503, "job_reporting_unavailable"],
+  ])("maps private job-report failures to stable problems", async (failure, status, code) => {
+    jobReports.failure = failure;
+    const token = await issuer.issue(`candidate-job-report-${code}`, { scope: "jobs:write" });
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/jobs/${catalog.job.id}/reports`,
+      headers: {
+        authorization: `Bearer ${token}`,
+        "idempotency-key": `job-report-gateway-${code}-0001`,
+      },
+      payload: { reason: "job_inaccurate" },
+    });
+    jobReports.failure = undefined;
+
+    expect(response.statusCode).toBe(status);
+    expect(response.json()).toMatchObject({ code, status });
+    expect(response.headers["cache-control"]).toBe("no-store");
+  });
+
+  it("fails closed when a report implementation adds private fields", async () => {
+    jobReports.malformed = {
+      id: uuidv7(),
+      requestedJobId: catalog.job.id,
+      canonicalJobId: catalog.job.id,
+      reason: "job_closed",
+      createdAt: "2026-08-16T12:00:00.000Z",
+      reporterUserId: uuidv7(),
+    } as unknown as JobReport;
+    const token = await issuer.issue("candidate-job-report-malformed", { scope: "jobs:write" });
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/jobs/${catalog.job.id}/reports`,
+      headers: {
+        authorization: `Bearer ${token}`,
+        "idempotency-key": "job-report-gateway-malformed-0001",
+      },
+      payload: { reason: "job_closed" },
+    });
+    jobReports.malformed = undefined;
+
+    expect(response.statusCode).toBe(503);
+    expect(response.body).not.toContain("reporterUserId");
   });
 
   it("keeps saved-job mutations behind jobs:write and reads owner-scoped with jobs:read", async () => {

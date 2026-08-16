@@ -16,7 +16,11 @@ import {
   S3ResumeUploadSigner,
   UnavailableDocumentStore,
 } from "@ai-job-apply/documents-service";
-import { PostgresJobCatalog } from "@ai-job-apply/jobs-service";
+import {
+  JobReportingService,
+  PostgresJobCatalog,
+  PostgresJobReportStore,
+} from "@ai-job-apply/jobs-service";
 import {
   deriveSavedJobCursorKeys,
   MatchAssessmentService,
@@ -536,6 +540,7 @@ async function createConfiguredApplication(
   const catalog = new PostgresJobCatalog(database.client, {
     searchCursorKeys: deriveJobSearchCursorKeys(databaseUrl),
   });
+  const jobReports = new JobReportingService(new PostgresJobReportStore(database.client));
   const savedJobs = new SavedJobsService(
     new PostgresSavedJobStore(database.client),
     new JobCatalogSavedJobResolver(catalog),
@@ -559,6 +564,7 @@ async function createConfiguredApplication(
   return createGatewayApplication({
     store,
     catalog,
+    jobReports,
     savedJobs,
     matchAssessments,
     entitlements,

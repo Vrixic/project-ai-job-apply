@@ -11,7 +11,11 @@ import {
   S3ResumeUploadSigner,
   UnavailableDocumentStore,
 } from "@ai-job-apply/documents-service";
-import { PostgresJobCatalog } from "@ai-job-apply/jobs-service";
+import {
+  JobReportingService,
+  PostgresJobCatalog,
+  PostgresJobReportStore,
+} from "@ai-job-apply/jobs-service";
 import {
   deriveSavedJobCursorKeys,
   MatchAssessmentService,
@@ -40,6 +44,7 @@ const store = new PostgresProfileStore(database, { dispatchTarget: "lambda_durab
 const catalog = new PostgresJobCatalog(database.client, {
   searchCursorKeys: deriveJobSearchCursorKeys(config.DATABASE_URL),
 });
+const jobReports = new JobReportingService(new PostgresJobReportStore(database.client));
 const savedJobs = new SavedJobsService(
   new PostgresSavedJobStore(database.client),
   new JobCatalogSavedJobResolver(catalog),
@@ -68,6 +73,7 @@ const verifier = createOidcVerifier({
 const app = await createGatewayApplication({
   store,
   catalog,
+  jobReports,
   savedJobs,
   matchAssessments,
   entitlements,

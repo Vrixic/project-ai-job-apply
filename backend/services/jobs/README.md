@@ -39,6 +39,16 @@ locations, those two optional attributes, and the earlier of expiry or source-va
 independently requires an active, nonexpired, nonempty-description record. Missing and explicit
 `unknown` attributes remain unknown; Jobs does not infer candidate fit or read preferences.
 
+Migration `0008_job_reporting_and_moderation` adds an owner-isolated, enum-only candidate report
+ledger plus Jobs-owned moderation cases and append-only decision events. Reports bind a requested
+job to its active canonical identity, use semantic idempotency, contain no free text, and never
+change job or source lifecycle automatically. The internal moderation port can explicitly block a
+job or persist an exact source-identity pause after an operator decision; a pause is a narrowing
+control and this slice provides no source-resume operation. Aggregate review exposes fixed reason
+counts only, never reporter identities. The candidate report API is locally verified source; no
+admin API/audience, moderation UI, report-triggered automation, retention/deletion policy,
+real-report processing, runtime source-gate wiring, migration apply, or deployment is claimed.
+
 The D1 search read model uses PostgreSQL full-text search and stable keyset pagination over that
 same active catalog. It supports only honestly persisted title, company, location, and verification
 freshness filters, plus relevance or freshness ordering. Exact duplicate aliases resolve to one
@@ -78,7 +88,7 @@ AWS/database apply, crawlability, real-source acceptance, or deployment is claim
 
 ## Planned additions
 
-- `src/api/` — Contribution and report commands.
+- `src/api/` — Contribution commands and any later accountable moderation administration API.
 - Provider adapters will live behind the integrations boundary, not inside source-truth rules.
 
 This service determines source truth. Per-user constraint assessment and any future ranking belong

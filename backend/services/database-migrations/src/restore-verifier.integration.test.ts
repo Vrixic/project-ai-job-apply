@@ -130,6 +130,31 @@ describe.skipIf(!requested)("restored PostgreSQL aggregate verification", () => 
       expect(ingestionFixture).toEqual([
         { checkpoint_count: 1, dispatch_count: 1, event_count: 1 },
       ]);
+      const reportingFixture = await client.unsafe<{
+        report_count: number;
+        moderation_case_count: number;
+        moderation_event_count: number;
+      }>(`
+        SELECT
+          (SELECT count(*)::int
+             FROM jobs.job_reports AS report
+             JOIN jobs.job_sources AS source ON source.job_id = report.canonical_job_id
+             WHERE source.external_job_id='restore-matchable-0007') AS report_count,
+          (SELECT count(*)::int FROM jobs.moderation_cases
+             WHERE source_id='synthetic-generated'
+               AND adapter_version='synthetic-v1'
+               AND adapter_config_sha256=repeat('d',64)
+               AND resolution='pause_source') AS moderation_case_count,
+          (SELECT count(*)::int
+             FROM jobs.moderation_events AS event
+             JOIN jobs.moderation_cases AS moderation_case ON moderation_case.id=event.case_id
+             WHERE moderation_case.source_id='synthetic-generated'
+               AND moderation_case.adapter_version='synthetic-v1'
+               AND moderation_case.adapter_config_sha256=repeat('d',64)) AS moderation_event_count
+      `);
+      expect(reportingFixture).toEqual([
+        { report_count: 1, moderation_case_count: 1, moderation_event_count: 2 },
+      ]);
     }
   });
 
@@ -309,24 +334,24 @@ describe.skipIf(!requested)("restored PostgreSQL aggregate verification", () => 
         WHERE version = '0001_entitlement_projection'
       `);
     }
-    const expectedMatchableAttributesChecksum = loadCurrentRestoreManifest()
+    const expectedReportingChecksum = loadCurrentRestoreManifest()
       .manifest.contributors.find((contributor) => contributor.owner === "jobs")
       ?.migrations.find(
-        (migration) => migration.version === "0007_matchable_job_attributes",
+        (migration) => migration.version === "0008_job_reporting_and_moderation",
       )?.checksum;
-    expect(expectedMatchableAttributesChecksum).toMatch(/^[a-f0-9]{64}$/);
+    expect(expectedReportingChecksum).toMatch(/^[a-f0-9]{64}$/);
     try {
       await restored.unsafe(`
         UPDATE jobs.schema_migrations SET checksum=repeat('f', 64)
-        WHERE version='0007_matchable_job_attributes'
+        WHERE version='0008_job_reporting_and_moderation'
       `);
       await expect(verifyRestoreDatabase(restored)).rejects.toThrow(
         "Restore migration boundary mismatch for jobs",
       );
     } finally {
       await restored.unsafe(`
-        UPDATE jobs.schema_migrations SET checksum='${expectedMatchableAttributesChecksum}'
-        WHERE version='0007_matchable_job_attributes'
+        UPDATE jobs.schema_migrations SET checksum='${expectedReportingChecksum}'
+        WHERE version='0008_job_reporting_and_moderation'
       `);
     }
     expect(await verifyRestoreDatabase(restored)).toEqual(await verifyRestoreDatabase(source));
