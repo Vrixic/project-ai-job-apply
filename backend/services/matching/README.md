@@ -1,6 +1,7 @@
 # Matching Service
 
-Owns candidate/job retrieval, hard-constraint filtering, feature scoring, ranking, calibration, explanations, and recommendation feedback.
+Owns candidate/job retrieval, hard-constraint filtering, feature scoring, ranking, calibration,
+explanations, and recommendation feedback.
 
 ## Planned subfolders
 
@@ -34,4 +35,24 @@ original typed projection without reading a changed catalog.
 
 `migrations/0001_saved_jobs.sql` is locally runnable through `db:migrate`, but this packet does not
 add the service to the shared migration image, task definition, Terraform, or a deployed runtime.
-It also does not implement hard-constraint evaluation, ranking, calibration, or explanations.
+
+## Constraint assessment kernel
+
+The implemented source-only assessment kernel consumes an immutable preference snapshot and a
+bounded Matching-owned job projection. It emits deterministic, value-free reason codes in a fixed
+order. Exact known work-mode or employment-type contradictions can set the gate to `excluded`.
+Missing or unknown job values never exclude. Exact normalized title and location overlap is only
+supporting evidence; non-overlap remains `unknown` rather than becoming a negative inference.
+
+Compensation remains unavailable because the current preference pair has no pay cadence or
+base-versus-total meaning and the current job projection has no typed compensation. Authorization,
+sponsorship, seniority, blocked-company, and qualification evidence also remain unavailable. A
+legacy sponsorship boolean, regardless of value, blocks the assessment without exposing or using
+that Restricted value. The kernel does not accept profile facts, protected or voluntary demographic
+data, descriptions, raw source material, or arbitrary explanation text.
+
+This packet adds no persistence, cache, API, UI, event, telemetry, scoring, ranking, fit band,
+generated prose, eligibility claim, deployment, or AWS behavior. Its inline fixtures prove only
+mechanical deterministic semantics. They are not the representative D1 matching set or accepted
+evaluation rubric required by D1-R2, so grounded product explanations and matching-quality
+acceptance remain open.
