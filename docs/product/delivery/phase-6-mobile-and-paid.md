@@ -26,7 +26,7 @@ cache, WAF, or ALB controls supported by evidence.
 | D6-002 | Implement mobile onboarding/profile corrections, job feed, search, save, hide, and report. | Ready | Unassigned | D1 | Open |
 | D6-003 | Implement push notifications, action inbox, application packet review/approval, and technical history through confirmed submission. | Ready | Unassigned | D3, D5 | Open |
 | D6-004 | Implement application-agent controls and desktop/remote-task handoff. | Ready | Unassigned | D3–D5 | Open |
-| D6-005 | Implement Stripe web subscription lifecycle and internal entitlement projection. | Ready | Unassigned | D0 billing contracts | Open |
+| D6-005 | Implement Stripe web subscription lifecycle and project provider events into the provider-neutral entitlement model. | Ready | Unassigned | D1-008 entitlement contract; D6-008 product/pricing decision; provider/legal review before activation | Stripe remains an adapter; feature code consumes only the internal entitlement projection. |
 | D6-006 | Implement StoreKit/Google Play subscription/receipt adapters where required by current policies. | Ready | Unassigned | Store/legal review | Open |
 | D6-007 | Implement grace periods, cancellation, paid-through access, reconciliation, restore purchase, receipts, and support adjustments. | Ready | Unassigned | D6-005, D6-006 | Open |
 | D6-008 | Implement one Pro product with transparent fair-use visibility and no hidden paid tiers. | Ready | Unassigned | Product/pricing decision | Open |
@@ -78,6 +78,7 @@ cache, WAF, or ALB controls supported by evidence.
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-08-15 | Corrected the nonexistent D0 billing-contract dependency: D0 accepted product and provider-neutral direction, D1-008 authors the executable internal entitlement contract, and D6 provider adapters consume it. This is a dependency correction only; D6 did not start and no provider or paid access was activated. | D6-005 | [D1 tasks](phase-1-web-and-job-catalog.md), [architecture billing model](../../PRODUCT_AND_SYSTEM_ARCHITECTURE.md#15-business-model-and-billing-architecture) |
 | 2026-07-28 | Assigned mobile, billing, and storefront delta approval to D6 without starting implementation. | D6-011 | [Legal review register](../foundation/legal-review-register.md), [security/privacy plan](../../security/security-privacy-approval-plan.md) |
 | 2026-07-28 | Accepted final public naming/domain approval as a D6 release gate without starting D6 implementation. | D6-012 | [Naming brief](../foundation/naming-brief.md), [ADR-009](../../adr/009-swappable-presentation-brand.md) |
 | 2026-07-28 | Assigned on-demand staging and evidence-based launch-capacity review to D6 without starting implementation. | D6-013 | [ADR-013](../../adr/013-lean-until-demand-cloud-runtime.md) |
@@ -91,6 +92,7 @@ cache, WAF, or ALB controls supported by evidence.
 
 | Date | Decision or change | Reason | Evidence |
 |---|---|---|---|
+| 2026-08-15 | Make D1-008 the owner of the first executable provider-neutral entitlement contract and require D6 provider adapters to consume it. | D0 accepted Free/Pro direction but did not create the billing contract previously named as a D6 dependency; correcting the dependency avoids coupling feature authorization directly to Stripe or store payloads. | [D1 tasks](phase-1-web-and-job-catalog.md), [architecture billing model](../../PRODUCT_AND_SYSTEM_ARCHITECTURE.md#15-business-model-and-billing-architecture) |
 | 2026-07-28 | Defer final public naming from D0 to D6 while retaining ApplyDash as the swappable development identity. | Naming is not a foundation dependency but must be settled before production OAuth, email, stores, billing, or public launch. | [Naming brief](../foundation/naming-brief.md) |
 | 2026-07-28 | Keep launch capacity lean unless staging/load/recovery evidence requires a specific control. | Scaling is a measured operational decision, not an automatic consequence of completing product phases. | [ADR-013](../../adr/013-lean-until-demand-cloud-runtime.md) |
 | 2026-07-29 | Perform real mobile identity/provider/device conformance in D6 rather than D0. | Conformance should test the actual mobile application and remains a blocking mobile-release gate, while current delivery stays focused on web. | [ADR-012 amendment](../../adr/012-auth0-initial-managed-identity.md) |
@@ -104,7 +106,7 @@ cache, WAF, or ALB controls supported by evidence.
 | ID | State | Risk or blocker | Owner | Next action |
 |---|---|---|---|---|
 | D6-R1 | Open | Store billing/linking rules vary by storefront and change over time. | Unassigned | Revalidate official policies immediately before implementation and release. |
-| D6-R2 | Open | Provider webhook delay/replay can create entitlement mismatch. | Unassigned | Use idempotent webhooks, internal projection, grace, and scheduled reconciliation. |
+| D6-R2 | Open | Provider webhook delay/replay can create entitlement mismatch. | Unassigned | Freeze D1-008's provider-neutral event/idempotency/reconciliation contract before implementing Stripe/store adapters; test delay, replay, out-of-order delivery, outage grace, and repair. |
 | D6-R3 | Open | Mobile scope can expand into unreliable embedded ATS automation. | Unassigned | Keep mobile focused on discovery, review, approval, confirmed-submission history, and secure handoff. |
 | D6-R4 | Open | ApplyDash and `applydash.ai` are provisional and may fail ownership, conflict, trademark, store, or linguistic review. | Product owner | Complete D6-012 before any public-release identity becomes irreversible. |
 | D6-R5 | Blocked | The current Auth0 Free subscription provides one tenant, so synthetic staging temporarily shares the development issuer and cannot prove identity-provider isolation. | Product owner; platform engineering | Before real-user staging or launch, upgrade Auth0 or migrate providers, provision dedicated staging/production tenants, cut over, and replay the applicable conformance matrix. |

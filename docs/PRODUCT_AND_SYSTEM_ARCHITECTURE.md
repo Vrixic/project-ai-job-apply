@@ -1631,15 +1631,16 @@ The living delivery tracker is authoritative. Current dependency order is:
 1. Publish, deploy, and execute the locally verified D1-002 generated-synthetic direct-dark
    acceptance packet while all document-processing triggers remain disabled; then stop for human
    review of ADR-023 and the separate activation sequence. Keep real resumes prohibited.
-2. Complete D1-005's mutation-driven stale-cursor acceptance against the deployed gateway and its
-   managed-OIDC/browser acceptance, then implement Matching-owned saved jobs, hard-constraint
-   evaluation, and grounded explanations without cross-owner database access.
-3. Implement D1 technical application history, reporting and moderation, provider-neutral
-   entitlements, crawlable job pages, and delivery-wide reliability/accessibility evidence with
-   synthetic data and fail-closed external integrations.
-4. Build source-neutral ingestion foundations, but keep Greenhouse, Lever, and Ashby production
-   ingestion disabled until their source-specific legal, provenance, revalidation, and takedown
-   conditions are approved and implemented.
+2. Complete D1-005's mutation-driven stale-cursor acceptance against the deployed gateway, add the
+   merged Matching-owned saved-job migration to the release composition, and run managed-OIDC/browser
+   acceptance; then implement hard-constraint evaluation and grounded explanations without cross-owner
+   database access.
+3. Resolve D1/D3 ownership before implementing technical application history; then implement reporting
+   and moderation, provider-neutral entitlements, crawlable job pages, and delivery-wide
+   reliability/accessibility evidence with synthetic data and fail-closed external integrations.
+4. Integrate the merged source-neutral ingestion foundation into bounded durable scheduling and deployed
+   acceptance, but keep Greenhouse, Lever, and Ashby production ingestion disabled until their
+   source-specific legal, provenance, revalidation, and takedown conditions are approved and implemented.
 5. Acquire authorized representative provider fixtures in D2, D3, and D4 after each owning
    adapter declares its supported variants; D0-007 owns the approved process and fail-closed gate,
    not premature provider selection.
