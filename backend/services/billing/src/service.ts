@@ -1,16 +1,20 @@
 import { CachedEntitlementAuthorizer, type EntitlementCache } from "./cache.js";
 import type { ApplyEntitlementChangeInput, ApplyEntitlementChangeResult } from "./store.js";
-import type { EntitlementAuthorizer, EntitlementEvaluation, EntitlementReader } from "./types.js";
+import type { EntitlementEvaluation, EntitlementReader, EntitlementReadService } from "./types.js";
 
 export interface EntitlementMutationStore {
   applyEntitlementChange(input: ApplyEntitlementChangeInput): Promise<ApplyEntitlementChangeResult>;
 }
 
-export class BillingEntitlementService implements EntitlementAuthorizer {
+export interface BillingEntitlementStore extends EntitlementReader, EntitlementMutationStore {
+  ping(): Promise<void>;
+}
+
+export class BillingEntitlementService implements EntitlementReadService {
   readonly #authorizer: CachedEntitlementAuthorizer;
 
   constructor(
-    private readonly store: EntitlementReader & EntitlementMutationStore,
+    private readonly store: BillingEntitlementStore,
     private readonly cache: EntitlementCache,
   ) {
     this.#authorizer = new CachedEntitlementAuthorizer(store, cache);
@@ -22,6 +26,10 @@ export class BillingEntitlementService implements EntitlementAuthorizer {
 
   allows(userId: string, capability: string, now: Date): Promise<boolean> {
     return this.#authorizer.allows(userId, capability, now);
+  }
+
+  ping(): Promise<void> {
+    return this.store.ping();
   }
 
   async applyEntitlementChange(

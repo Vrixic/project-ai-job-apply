@@ -17,6 +17,7 @@
     "@aws-sdk/client-sqs": "3.1106.0",
     "@ai-job-apply/api-contracts": "workspace:*",
     "@ai-job-apply/auth": "workspace:*",
+    "@ai-job-apply/billing-service": "workspace:*",
     "@ai-job-apply/config": "workspace:*",
     "@ai-job-apply/documents-service": "workspace:*",
     "@ai-job-apply/jobs-service": "workspace:*",

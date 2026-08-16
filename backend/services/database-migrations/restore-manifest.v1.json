@@ -1,7 +1,25 @@
 {
   "schemaVersion": 1,
-  "manifestId": "d1-profile-jobs-documents-matching-v1",
+  "manifestId": "d1-profile-jobs-documents-matching-billing-v1",
   "contributors": [
+    {
+      "owner": "billing",
+      "schemas": ["billing"],
+      "migrationLedger": "billing.schema_migrations",
+      "migrations": [
+        {
+          "version": "0001_entitlement_projection",
+          "checksum": "05368bb42a9c6ed3007b61f80a980a921d1f02bbcac633a4ecfd0b4c7dcf0ba0"
+        }
+      ],
+      "relations": [
+        "billing.entitlement_accounts",
+        "billing.entitlement_changes",
+        "billing.entitlement_command_receipts",
+        "billing.entitlement_outbox",
+        "billing.schema_migrations"
+      ]
+    },
     {
       "owner": "documents",
       "schemas": ["documents"],

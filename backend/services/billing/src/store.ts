@@ -629,7 +629,28 @@ export class PostgresBillingStore implements EntitlementReader {
   }
 
   async ping(): Promise<void> {
-    await this.client`SELECT 1`;
+    const [boundary] = await this.client<
+      Array<{ migrationCount: number; checksum: string | null; relationsReady: boolean }>
+    >`
+      SELECT
+        (SELECT count(*)::int FROM billing.schema_migrations) AS "migrationCount",
+        (SELECT checksum FROM billing.schema_migrations
+          WHERE version = '0001_entitlement_projection') AS checksum,
+        (
+          to_regclass('billing.entitlement_accounts') IS NOT NULL
+          AND to_regclass('billing.entitlement_changes') IS NOT NULL
+          AND to_regclass('billing.entitlement_command_receipts') IS NOT NULL
+          AND to_regclass('billing.entitlement_outbox') IS NOT NULL
+          AND to_regclass('billing.schema_migrations') IS NOT NULL
+        ) AS "relationsReady"
+    `;
+    if (
+      boundary?.migrationCount !== 1 ||
+      boundary.checksum !== "05368bb42a9c6ed3007b61f80a980a921d1f02bbcac633a4ecfd0b4c7dcf0ba0" ||
+      boundary.relationsReady !== true
+    ) {
+      throw new Error("Billing schema boundary is unavailable");
+    }
   }
 
   async close(): Promise<void> {

@@ -106,3 +106,10 @@ longer active, and each explicit requested target remains independent. The UI re
 distinct `jobs:write` permission but does not grant it: the managed Auth0/Terraform permission,
 deployment, and live browser acceptance remain later gates. No matching score, explanation, or
 application/post-submission state is shown or inferred.
+
+The entitlement status slice uses the same server-held session to call one exact, bodyless
+`/api/platform/entitlements` BFF route. It renders only the current derived Free/Pro active or grace
+status, clears and aborts state across authentication transitions, and states that both plans
+currently contain the same four core capabilities. It has no upgrade, price, quota, checkout,
+payment-provider, or paid-feature behavior. Source composition and local tests are not an Auth0,
+Terraform, image-publication, AWS deployment, real-browser, or live-entitlement claim.

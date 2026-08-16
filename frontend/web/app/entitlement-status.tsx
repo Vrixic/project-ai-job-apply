@@ -1,0 +1,152 @@
+"use client";
+
+import type { EntitlementSummary } from "@ai-job-apply/api-contracts";
+import { useEffect, useRef, useState } from "react";
+
+const expectedGrants = [
+  "profile.manage",
+  "jobs.search",
+  "jobs.save",
+  "applications.history",
+] as const;
+
+function isDateTime(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value) &&
+    Number.isFinite(Date.parse(value))
+  );
+}
+
+function isEntitlementSummary(value: unknown): value is EntitlementSummary {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as Record<string, unknown>;
+  if (
+    !Number.isSafeInteger(candidate.version) ||
+    (candidate.version as number) < 0 ||
+    !isDateTime(candidate.evaluatedAt) ||
+    !Array.isArray(candidate.grants) ||
+    candidate.grants.length !== expectedGrants.length ||
+    !candidate.grants.every((grant, index) => grant === expectedGrants[index])
+  ) {
+    return false;
+  }
+  const baseKeys = ["accessState", "evaluatedAt", "grants", "plan", "version"];
+  if (candidate.plan === "free" && candidate.accessState === "active") {
+    return Object.keys(candidate).sort().join(",") === baseKeys.sort().join(",");
+  }
+  if (candidate.plan !== "pro" || !isDateTime(candidate.accessThrough)) return false;
+  if (candidate.accessState === "active") {
+    const keys = [...baseKeys, "accessThrough"];
+    if (candidate.graceThrough !== undefined) {
+      if (!isDateTime(candidate.graceThrough)) return false;
+      keys.push("graceThrough");
+    }
+    return Object.keys(candidate).sort().join(",") === keys.sort().join(",");
+  }
+  return (
+    candidate.accessState === "grace" &&
+    isDateTime(candidate.graceThrough) &&
+    Object.keys(candidate).sort().join(",") ===
+      [...baseKeys, "accessThrough", "graceThrough"].sort().join(",")
+  );
+}
+
+export function EntitlementStatus({ authenticated }: { authenticated: boolean }) {
+  const [view, setView] = useState<
+    | { generation: number; status: "idle" | "loading" | "unavailable" }
+    | { generation: number; status: "ready"; summary: EntitlementSummary }
+  >({ generation: 0, status: authenticated ? "loading" : "idle" });
+  const requestGeneration = useRef(0);
+  const previousAuthentication = useRef(authenticated);
+  const controller = useRef<AbortController | undefined>(undefined);
+
+  if (previousAuthentication.current !== authenticated) {
+    previousAuthentication.current = authenticated;
+    requestGeneration.current += 1;
+  }
+  const visibleGeneration = requestGeneration.current;
+
+  useEffect(() => {
+    const generation = requestGeneration.current;
+    controller.current?.abort();
+    if (!authenticated) {
+      setView({ generation, status: "idle" });
+      return;
+    }
+    setView({ generation, status: "loading" });
+    const active = new AbortController();
+    controller.current = active;
+    void (async () => {
+      try {
+        const response = await fetch("/api/platform/entitlements", {
+          method: "GET",
+          cache: "no-store",
+          signal: active.signal,
+        });
+        if (!response.ok) throw new Error("entitlement unavailable");
+        const value: unknown = await response.json();
+        if (!isEntitlementSummary(value)) throw new Error("entitlement response invalid");
+        if (!active.signal.aborted && generation === requestGeneration.current) {
+          setView({ generation, status: "ready", summary: value });
+        }
+      } catch {
+        if (!active.signal.aborted && generation === requestGeneration.current) {
+          setView({ generation, status: "unavailable" });
+        }
+      }
+    })();
+    return () => {
+      requestGeneration.current += 1;
+      active.abort();
+      if (controller.current === active) controller.current = undefined;
+    };
+  }, [authenticated]);
+
+  if (!authenticated) {
+    return (
+      <section className="entitlement-status" aria-labelledby="entitlement-status-heading">
+        <h2 id="entitlement-status-heading">Access status</h2>
+        <p>Sign in to view your current access.</p>
+      </section>
+    );
+  }
+
+  const visibleView =
+    view.generation === visibleGeneration
+      ? view
+      : { generation: visibleGeneration, status: "loading" as const };
+  return (
+    <section className="entitlement-status" aria-labelledby="entitlement-status-heading">
+      <div className="section-heading">
+        <div>
+          <span className="eyebrow">Provider-neutral access</span>
+          <h2 id="entitlement-status-heading">Access status</h2>
+        </div>
+      </div>
+      <div aria-live="polite">
+        {visibleView.status === "loading" && <p>Loading access status…</p>}
+        {visibleView.status === "unavailable" && <p>Access status is temporarily unavailable.</p>}
+        {visibleView.status === "ready" && (
+          <div className="entitlement-summary">
+            <strong>{visibleView.summary.plan === "pro" ? "Pro" : "Free"} access</strong>
+            <p>
+              {visibleView.summary.accessState === "grace" && visibleView.summary.graceThrough ? (
+                <>
+                  Grace access is active through{" "}
+                  <time dateTime={visibleView.summary.graceThrough}>
+                    {visibleView.summary.graceThrough.replace("T", " ")}
+                  </time>
+                  .
+                </>
+              ) : (
+                "Core access is active."
+              )}
+            </p>
+            <small>Free and Pro currently include the same four core capabilities.</small>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}

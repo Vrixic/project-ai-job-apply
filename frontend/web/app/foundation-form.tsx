@@ -7,6 +7,7 @@ import type {
 } from "@ai-job-apply/api-contracts";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { isIsolationOperationEligible } from "../lib/isolation-operation";
+import { EntitlementStatus } from "./entitlement-status";
 import { JobSearchForm } from "./job-search-form";
 import {
   buildJobPreferenceRequest,
@@ -689,6 +690,7 @@ export function FoundationForm({
       )}
       <JobSearchForm authenticated={authenticated} />
       <SavedJobsPanel authenticated={authenticated} />
+      <EntitlementStatus authenticated={authenticated} />
 
       {!authConfigured && (
         <aside>

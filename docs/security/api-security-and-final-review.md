@@ -55,12 +55,14 @@ delivery evidence; this section is not approval of Phase 1 or later behavior.
 | `POST /v1/jobs/search` | Candidate | `jobs:read`; bounded JSON-only body; active redacted summaries; no query string, profile matching, or candidate-owned write | Migrated and deployed in synthetic development on immutable alias `17`; the 24-case direct boundary and zero drift pass. Real OIDC/browser and mutation-driven stale-cursor `409` acceptance remain open; not independently approved. |
 | `GET /v1/resumes` | Candidate | `documents:read`; candidate-owner predicate; metadata only | Implemented, deployed, and accepted for synthetic development intake; processing and independent approval remain open |
 | `POST /v1/resumes/uploads` | Candidate | `documents:write`; strict metadata schema; idempotency; candidate owner; no file bytes | Implemented, deployed, and accepted for synthetic development intake; not independently approved |
+| `GET /v1/entitlements` | Candidate | `profile:read`; no client owner/query/body; Profile-resolved UUID; derived provider-neutral status only; `no-store` | Implemented and locally verified as source only; migration-image publication, route deployment, synthetic acceptance, and independent approval remain open |
 | Exact S3 resume-upload POST grant | Temporary object access | Five-minute expiry; one quarantine key/type/size/hash/KMS key; no read or list | Implemented, deployed, and accepted for synthetic development quarantine intake only |
 | GuardDuty scan-result consumer | AWS service event | Exact account/region/protection-plan/bucket/key/version; identifier-only transform; encrypted queue; at-least-once receipt | Deployed CompleteDark with its mapping and processing rule disabled; generated-synthetic processing acceptance remains open |
 | Document parser invocation | Coordinator service | Exact numeric Lambda version; parser has no DB secret or general egress; exact clean S3 version only | Deployed CompleteDark behind the disabled processing boundary; retained/current parser identity and zero drift pass, while generated-synthetic processing acceptance remains open |
 
 There is no current public administrator, support, provider-webhook, temporary-object-download,
-WebSocket, extension, mobile, ATS, AI, billing, outreach, or remote-browser API. The deployed D1
+WebSocket, extension, mobile, ATS, AI, billing mutation/provider, outreach, or remote-browser API.
+The source-only candidate entitlement self-read is not a deployed billing/provider surface. The deployed D1
 upload grant is write-only. The scan consumer, parser, and coordinator are deployed CompleteDark,
 but their processing ingress remains disabled and no generated-synthetic or real-resume processing
 acceptance is claimed. The direct Lambda

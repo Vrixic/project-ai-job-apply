@@ -5,6 +5,11 @@ import {
   AuthenticationError,
   type AuthPrincipal,
 } from "@ai-job-apply/auth";
+import {
+  BillingEntitlementService,
+  EntitlementCache,
+  PostgresBillingStore,
+} from "@ai-job-apply/billing-service";
 import { loadLambdaGatewayConfig } from "@ai-job-apply/config";
 import {
   PostgresDocumentStore,
@@ -104,6 +109,7 @@ const PROTECTED_EXACT_ROUTES = new Set([
   "POST /v1/jobs/search",
   "POST /v1/saved-jobs",
   "POST /v1/saved-jobs/search",
+  "GET /v1/entitlements",
 ]);
 const OPERATION_PATH_PATTERN =
   /^\/v1\/operations\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -529,6 +535,10 @@ async function createConfiguredApplication(
     new JobCatalogSavedJobResolver(catalog),
     deriveSavedJobCursorKeys(databaseUrl),
   );
+  const entitlements = new BillingEntitlementService(
+    new PostgresBillingStore(database.client),
+    new EntitlementCache({ capacity: 1_000, freshTtlMs: 5_000 }),
+  );
   const documents =
     config.DOCUMENT_UPLOAD_BUCKET && config.DOCUMENT_UPLOAD_KMS_KEY_ARN
       ? new PostgresDocumentStore(
@@ -543,6 +553,7 @@ async function createConfiguredApplication(
     store,
     catalog,
     savedJobs,
+    entitlements,
     documents,
     verifier: principalBridge.verifier,
     releaseSha: config.RELEASE_SHA,

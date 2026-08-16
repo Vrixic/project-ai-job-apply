@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { compileComponentValidator, contract } from "./index.js";
 
@@ -202,6 +203,71 @@ describe("saved-job contracts", () => {
       }),
     ).toBe(false);
     expect(validatePage({ items: [{ ...savedJob, recruiterResponse: "interview" }] })).toBe(false);
+  });
+});
+
+describe("entitlement read contract", () => {
+  const validate = compileComponentValidator("EntitlementSummary");
+  const common = {
+    grants: ["profile.manage", "jobs.search", "jobs.save", "applications.history"],
+    version: 7,
+    evaluatedAt: "2026-08-16T12:00:00.000Z",
+  };
+
+  it("accepts only the three derived Free, active Pro, and grace Pro projections", () => {
+    expect(validate({ ...common, plan: "free", accessState: "active" })).toBe(true);
+    expect(
+      validate({
+        ...common,
+        plan: "pro",
+        accessState: "active",
+        accessThrough: "2026-09-16T12:00:00.000Z",
+      }),
+    ).toBe(true);
+    expect(
+      validate({
+        ...common,
+        plan: "pro",
+        accessState: "grace",
+        accessThrough: "2026-08-15T12:00:00.000Z",
+        graceThrough: "2026-08-20T12:00:00.000Z",
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects owner, provider, price, invalid-state, and malformed schedule projections", () => {
+    for (const candidate of [
+      { ...common, plan: "free", accessState: "grace", graceThrough: common.evaluatedAt },
+      { ...common, plan: "free", accessState: "active", accessThrough: common.evaluatedAt },
+      { ...common, plan: "pro", accessState: "active" },
+      { ...common, plan: "pro", accessState: "grace", accessThrough: common.evaluatedAt },
+      { ...common, plan: "free", accessState: "active", userId: randomUUID() },
+      { ...common, plan: "free", accessState: "active", provider: "synthetic" },
+      { ...common, plan: "free", accessState: "active", price: 0 },
+      {
+        ...common,
+        plan: "free",
+        accessState: "active",
+        grants: ["profile.manage", "jobs.search", "jobs.save"],
+      },
+      {
+        ...common,
+        plan: "free",
+        accessState: "active",
+        grants: ["jobs.search", "profile.manage", "jobs.save", "applications.history"],
+      },
+    ]) {
+      expect(validate(candidate)).toBe(false);
+    }
+  });
+
+  it("keeps self-entitlement reads private, exact, and non-cacheable", () => {
+    const operation = contract.paths["/entitlements"].get;
+    expect(operation.security).toEqual([{ oidc: ["profile:read"] }]);
+    expect(operation).not.toHaveProperty("parameters");
+    expect(operation).not.toHaveProperty("requestBody");
+    expect(operation.responses["200"].headers["Cache-Control"].schema.enum).toEqual(["no-store"]);
+    expect(Object.keys(operation.responses).sort()).toEqual(["200", "400", "401", "403", "503"]);
   });
 });
 

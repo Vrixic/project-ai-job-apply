@@ -45,8 +45,22 @@ leaves the active catalog without exposing internal lifecycle reasons. Matching,
 explanations are not part of these routes.
 
 This is locally verified source only. The Auth0 API permission/grant, Terraform route inventory,
-migration-image composition, publication, deployment, and live acceptance remain a serialized
-later gate; do not release this source until the managed client has the exact `jobs:write` grant.
+publication, deployment, and live acceptance remain a serialized later gate; do not release the
+saved-job surface until the managed client has the exact `jobs:write` grant.
+
+The provider-neutral entitlement read uses exact `profile:read` and accepts no owner identifier,
+query, or body. Profile resolves the validated issuer and subject to one internal UUID before the
+gateway calls Billing with only that UUID and one server clock instant. The response contains only
+the derived plan, active/grace state, exact current grants, version, evaluation time, and applicable
+access boundaries. Invalid schedules, owner mismatches, and unavailable Billing reads collapse to
+one generic `503`; private responses are `no-store`. One bounded owner-keyed cache is shared per
+warm process, and readiness verifies the exact Billing schema boundary. Because Profile identity
+resolution happens before Billing evaluation, cached Pro grace does not claim availability through
+a total identity/database outage.
+
+The route, Billing migration-image composition, BFF, and read-only UI are source behavior only.
+No Auth0/Terraform route change, image publication, AWS deployment, provider/payment flow, price,
+quota, upgrade, paid-only feature, webhook, or live acceptance is included.
 
 The scale-to-zero migration adds a shared application factory and an API Gateway HTTP API payload
 2.0 Lambda entrypoint. The Lambda path accepts identity only from the exact validated authorizer

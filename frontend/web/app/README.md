@@ -21,6 +21,12 @@ when the current job is unavailable, and aborts/versions requests across refresh
 transitions. Source requests `jobs:write`, but the managed permission grant and deployment remain
 outside this packet; no matching or explanation behavior is implied.
 
+`api/platform/entitlements` forwards one exact bodyless self-read with the server-held session and
+never forwards browser owner headers or query input. The access panel versions and aborts reads
+across authentication changes, validates the exact provider-neutral projection, and shows no prior
+account while a new session loads. Free and Pro currently have the same four core capabilities;
+the panel contains no payment, upgrade, price, quota, or paid-only feature behavior.
+
 The local-only expanded onboarding page uses array-backed repeated editors for target roles and
 optional locations, preserving entry boundaries, commas, and line breaks while trimming entry
 edges and deduplicating exact entries. Work modes and employment types are explicit multi-choice

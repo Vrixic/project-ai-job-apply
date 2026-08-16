@@ -5,6 +5,7 @@ import type {
   CreateResumeUploadResponse,
   CreateSavedJobRequest,
   CurrentUser,
+  EntitlementSummary,
   JobSearchPage,
   JobSearchRequest,
   Operation,
@@ -21,6 +22,10 @@ import type {
 } from "@ai-job-apply/api-contracts";
 import { compileComponentValidator, formatValidationErrors } from "@ai-job-apply/api-contracts";
 import { type AccessTokenVerifier, AuthenticationError, bearerToken } from "@ai-job-apply/auth";
+import {
+  type EntitlementReadService,
+  EntitlementUnavailableError,
+} from "@ai-job-apply/billing-service";
 import {
   DocumentIdempotencyConflictError,
   DocumentIntakeUnavailableError,
@@ -76,9 +81,11 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 const PROFILE_STORE = Symbol("PROFILE_STORE");
 const JOB_CATALOG = Symbol("JOB_CATALOG");
 const SAVED_JOBS = Symbol("SAVED_JOBS");
+const ENTITLEMENTS = Symbol("ENTITLEMENTS");
 const DOCUMENT_STORE = Symbol("DOCUMENT_STORE");
 const TOKEN_VERIFIER = Symbol("TOKEN_VERIFIER");
 const RELEASE_SHA = Symbol("RELEASE_SHA");
+const CLOCK = Symbol("CLOCK");
 
 interface AuthenticatedRequest extends FastifyRequest {
   traceId?: string;
@@ -100,6 +107,7 @@ const SAFE_ROUTE_TEMPLATES = new Set([
   "/v1/saved-jobs",
   "/v1/saved-jobs/search",
   "/v1/saved-jobs/:savedJobId",
+  "/v1/entitlements",
   "/v1/operations/:operationId",
 ]);
 
@@ -252,6 +260,11 @@ class ProblemDetailsFilter implements ExceptionFilter {
       code = "saved_job_target_unavailable";
       title = "Job is unavailable";
       detail = exception.message;
+    } else if (exception instanceof EntitlementUnavailableError) {
+      status = HttpStatus.SERVICE_UNAVAILABLE;
+      code = "entitlement_unavailable";
+      title = "Entitlement status unavailable";
+      detail = "Entitlement status is temporarily unavailable";
     } else if (exception instanceof HttpException) {
       status = exception.getStatus();
       code =
@@ -296,6 +309,7 @@ class HealthController {
     @Inject(PROFILE_STORE) private readonly store: ProfileStore,
     @Inject(JOB_CATALOG) private readonly catalog: JobCatalogReader,
     @Inject(SAVED_JOBS) private readonly savedJobs: SavedJobs,
+    @Inject(ENTITLEMENTS) private readonly entitlements: EntitlementReadService,
     @Inject(RELEASE_SHA) private readonly releaseSha: string,
   ) {}
 
@@ -307,7 +321,12 @@ class HealthController {
   @Get("/health/ready")
   async readiness() {
     try {
-      await Promise.all([this.store.ping(), this.catalog.ping(), this.savedJobs.ping()]);
+      await Promise.all([
+        this.store.ping(),
+        this.catalog.ping(),
+        this.savedJobs.ping(),
+        this.entitlements.ping(),
+      ]);
       return { status: "ok", service: "gateway", releaseSha: this.releaseSha };
     } catch {
       throw new HttpException("PostgreSQL is unavailable", HttpStatus.SERVICE_UNAVAILABLE);
@@ -334,6 +353,88 @@ function requireIdempotencyKey(value: string | undefined): string {
   return value;
 }
 
+const ENTITLEMENT_GRANTS = [
+  "profile.manage",
+  "jobs.search",
+  "jobs.save",
+  "applications.history",
+] as const;
+
+function exactEntitlementDate(value: string | undefined): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) {
+    return false;
+  }
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
+}
+
+function projectEntitlement(evaluation: Awaited<ReturnType<EntitlementReadService["evaluate"]>>) {
+  if (
+    evaluation.valid !== true ||
+    typeof evaluation.version !== "number" ||
+    !Number.isSafeInteger(evaluation.version) ||
+    evaluation.version < 0 ||
+    !exactEntitlementDate(evaluation.evaluatedAt) ||
+    !Array.isArray(evaluation.grants) ||
+    evaluation.grants.length !== ENTITLEMENT_GRANTS.length ||
+    !evaluation.grants.every((grant, index) => grant === ENTITLEMENT_GRANTS[index])
+  ) {
+    throw new EntitlementUnavailableError();
+  }
+  const base = {
+    grants: ["profile.manage", "jobs.search", "jobs.save", "applications.history"],
+    version: evaluation.version,
+    evaluatedAt: evaluation.evaluatedAt,
+  } satisfies Pick<EntitlementSummary, "grants" | "version" | "evaluatedAt">;
+  if (evaluation.plan === "free") {
+    if (
+      evaluation.accessState !== "active" ||
+      evaluation.accessThrough !== undefined ||
+      evaluation.graceThrough !== undefined
+    ) {
+      throw new EntitlementUnavailableError();
+    }
+    return { ...base, plan: "free", accessState: "active" } as const;
+  }
+  if (evaluation.plan !== "pro" || !exactEntitlementDate(evaluation.accessThrough)) {
+    throw new EntitlementUnavailableError();
+  }
+  const evaluatedAt = Date.parse(evaluation.evaluatedAt);
+  const accessThrough = Date.parse(evaluation.accessThrough);
+  if (evaluation.accessState === "grace") {
+    if (
+      !exactEntitlementDate(evaluation.graceThrough) ||
+      evaluatedAt < accessThrough ||
+      evaluatedAt >= Date.parse(evaluation.graceThrough)
+    ) {
+      throw new EntitlementUnavailableError();
+    }
+    return {
+      ...base,
+      plan: "pro",
+      accessState: "grace",
+      accessThrough: evaluation.accessThrough,
+      graceThrough: evaluation.graceThrough,
+    } as const;
+  }
+  if (
+    evaluation.accessState !== "active" ||
+    evaluatedAt >= accessThrough ||
+    (evaluation.graceThrough !== undefined &&
+      (!exactEntitlementDate(evaluation.graceThrough) ||
+        accessThrough > Date.parse(evaluation.graceThrough)))
+  ) {
+    throw new EntitlementUnavailableError();
+  }
+  return {
+    ...base,
+    plan: "pro",
+    accessState: "active",
+    accessThrough: evaluation.accessThrough,
+    ...(evaluation.graceThrough ? { graceThrough: evaluation.graceThrough } : {}),
+  } as const;
+}
+
 @Controller("/v1")
 @UseFilters(ProblemDetailsFilter)
 class CandidateController {
@@ -342,12 +443,35 @@ class CandidateController {
     @Inject(PROFILE_STORE) private readonly store: ProfileStore,
     @Inject(JOB_CATALOG) private readonly catalog: JobCatalogReader,
     @Inject(SAVED_JOBS) private readonly savedJobs: SavedJobs,
+    @Inject(ENTITLEMENTS) private readonly entitlements: EntitlementReadService,
     @Inject(DOCUMENT_STORE) private readonly documents: DocumentStore,
+    @Inject(CLOCK) private readonly clock: () => Date,
   ) {}
 
   @Get("/me")
   async me(@Req() request: AuthenticatedRequest): Promise<CurrentUser> {
     return this.identity.resolve(request, "profile:read");
+  }
+
+  @Get("/entitlements")
+  @Header("cache-control", "no-store")
+  async getEntitlements(@Req() request: AuthenticatedRequest): Promise<EntitlementSummary> {
+    if (
+      (request.query && Object.keys(request.query as Record<string, unknown>).length > 0) ||
+      request.body !== undefined ||
+      (request.headers["content-length"] !== undefined &&
+        request.headers["content-length"] !== "0") ||
+      request.headers["transfer-encoding"] !== undefined
+    ) {
+      throw new HttpException("Entitlement read input is invalid", HttpStatus.BAD_REQUEST);
+    }
+    const user = await this.identity.resolve(request, "profile:read");
+    try {
+      const evaluation = await this.entitlements.evaluate(user.id, this.clock());
+      return projectEntitlement(evaluation);
+    } catch {
+      throw new EntitlementUnavailableError();
+    }
   }
 
   @Get("/me/job-preferences")
@@ -601,9 +725,11 @@ export interface AppModuleOptions {
   store: ProfileStore;
   catalog: JobCatalogReader;
   savedJobs: SavedJobs;
+  entitlements: EntitlementReadService;
   documents: DocumentStore;
   verifier: AccessTokenVerifier;
   releaseSha: string;
+  clock?: () => Date;
 }
 
 @Module({})
@@ -618,9 +744,11 @@ export class AppModule {
         { provide: PROFILE_STORE, useValue: options.store },
         { provide: JOB_CATALOG, useValue: options.catalog },
         { provide: SAVED_JOBS, useValue: options.savedJobs },
+        { provide: ENTITLEMENTS, useValue: options.entitlements },
         { provide: DOCUMENT_STORE, useValue: options.documents },
         { provide: TOKEN_VERIFIER, useValue: options.verifier },
         { provide: RELEASE_SHA, useValue: options.releaseSha },
+        { provide: CLOCK, useValue: options.clock ?? (() => new Date()) },
       ],
     };
   }
