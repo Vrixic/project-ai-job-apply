@@ -7,6 +7,8 @@ import { type RetryBackoffPolicy, retryDelayForAttempt } from "./backoff.js";
 import type {
   IngestionRunResult,
   JobCatalogIngestionPort,
+  SourceExecutionGate,
+  SourceExecutionIdentity,
   SourceJobObservation,
   SourcePollResult,
 } from "./contract.js";
@@ -17,6 +19,7 @@ export const maximumSourceBatchSize = 100;
 export interface IngestionRunnerOptions {
   clock?: () => Date;
   backoffPolicy?: RetryBackoffPolicy;
+  sourceExecutionGate?: SourceExecutionGate;
 }
 
 export class SourceBatchContractError extends Error {
@@ -180,6 +183,7 @@ function validateBatch(
 export class SourceNeutralIngestionRunner {
   readonly #clock: () => Date;
   readonly #backoffPolicy: RetryBackoffPolicy | undefined;
+  readonly #sourceExecutionGate: SourceExecutionGate | undefined;
 
   constructor(
     private readonly registry: SourceRegistry,
@@ -188,11 +192,25 @@ export class SourceNeutralIngestionRunner {
   ) {
     this.#clock = options.clock ?? (() => new Date());
     this.#backoffPolicy = options.backoffPolicy;
+    this.#sourceExecutionGate = options.sourceExecutionGate;
+  }
+
+  async #executionEnabled(identity: Readonly<SourceExecutionIdentity>): Promise<boolean> {
+    if (!this.#sourceExecutionGate) return true;
+    const enabled = await this.#sourceExecutionGate(Object.freeze({ ...identity }));
+    if (typeof enabled !== "boolean") {
+      throw new Error("The source execution gate returned an invalid decision");
+    }
+    return enabled;
   }
 
   async run(sourceId: string, attempt: number, signal: AbortSignal): Promise<IngestionRunResult> {
     const registration = this.registry.requireEnabled(sourceId);
-    if (signal.aborted) {
+    const identity = Object.freeze({
+      sourceId: registration.sourceId,
+      adapterVersion: registration.adapter.adapterVersion,
+    });
+    if (signal.aborted || !(await this.#executionEnabled(identity))) {
       return {
         sourceId,
         status: "aborted",
@@ -220,7 +238,7 @@ export class SourceNeutralIngestionRunner {
     if (this.registry.requireEnabled(sourceId) !== registration) {
       throw new Error("The ingestion source registration changed during the run");
     }
-    if (signal.aborted) {
+    if (signal.aborted || !(await this.#executionEnabled(identity))) {
       return {
         sourceId,
         status: "aborted",
@@ -248,7 +266,7 @@ export class SourceNeutralIngestionRunner {
     let createdCount = 0;
     let updatedCount = 0;
     for (const observation of observations) {
-      if (signal.aborted) {
+      if (signal.aborted || !(await this.#executionEnabled(identity))) {
         return {
           sourceId,
           status: "aborted",
@@ -266,7 +284,7 @@ export class SourceNeutralIngestionRunner {
       if (this.registry.requireEnabled(sourceId) !== registration) {
         throw new Error("The ingestion source registration changed during the run");
       }
-      if (signal.aborted) {
+      if (signal.aborted || !(await this.#executionEnabled(identity))) {
         return {
           sourceId,
           status: "aborted",

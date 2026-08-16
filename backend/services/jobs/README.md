@@ -45,9 +45,13 @@ job to its active canonical identity, use semantic idempotency, contain no free 
 change job or source lifecycle automatically. The internal moderation port can explicitly block a
 job or persist an exact source-identity pause after an operator decision; a pause is a narrowing
 control and this slice provides no source-resume operation. Aggregate review exposes fixed reason
-counts only, never reporter identities. The candidate report API is locally verified source; no
-admin API/audience, moderation UI, report-triggered automation, retention/deletion policy,
-real-report processing, runtime source-gate wiring, migration apply, or deployment is claimed.
+counts only, never reporter identities. The source-only durable ingestion runtime now consumes the
+exact persisted pause as a fail-closed execution gate before schedule/resume, attempt execution,
+polling, and each subsequent catalog write. Terminal reconciliation stays active, and one already
+issued idempotent catalog write may finish before the next gate check. The candidate report API is
+locally verified source; no admin API/audience, moderation UI, report-triggered automation,
+source-resume operation, retention/deletion policy, real-report processing, migration apply, or
+deployment is claimed.
 
 The D1 search read model uses PostgreSQL full-text search and stable keyset pagination over that
 same active catalog. It supports only honestly persisted title, company, location, and verification

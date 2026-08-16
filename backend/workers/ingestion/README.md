@@ -45,6 +45,13 @@ aggregate counts; raw errors and job/source values are never retained in a check
 disposition. A thrown failure marks aggregate progress as unknown instead of falsely asserting that
 no earlier idempotent catalog write completed.
 
+The runtime also accepts one asynchronous fail-closed source-execution gate. The current durable
+composition binds it to the Jobs-owned exact source/adapter/config pause decision and rechecks it
+before polling and around every catalog write. A newly observed pause stops subsequent writes and
+settles the attempt as paused with truthful completed counts; one already issued idempotent write
+may finish. A paused occurrence cannot resume while that immutable control remains present, while
+terminal durable reconciliation continues independently.
+
 The Jobs persistence adapter commits every `changed` checkpoint with an atomic compare-and-swap
 against the command's expected revision before acting on its disposition. Losing that fence means
 discarding the proposed transition and reloading authoritative state. A transport must likewise

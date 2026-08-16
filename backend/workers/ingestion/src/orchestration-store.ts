@@ -4,6 +4,7 @@ import {
   type PersistedIngestionCheckpointV1,
 } from "@ai-job-apply/jobs-service";
 import { v7 as uuidv7 } from "uuid";
+import type { SourceExecutionGate } from "./contract.js";
 import {
   acquireIngestionAttempt,
   createIngestionScheduleOccurrence,
@@ -24,6 +25,7 @@ export interface DurableIngestionCoordinatorOptions {
   durableFunctionArn?: string;
   activityFunctionArn?: string;
   adapterConfigSha256?: string;
+  sourceExecutionGate?: SourceExecutionGate;
   durableExecutionStatusReader?: {
     getStatus(
       executionArn: string,
@@ -83,6 +85,7 @@ export class DurableIngestionCoordinator {
   readonly #durableFunctionArn: string | undefined;
   readonly #activityFunctionArn: string | undefined;
   readonly #adapterConfigSha256: string | undefined;
+  readonly #sourceExecutionGate: SourceExecutionGate | undefined;
   readonly #durableExecutionStatusReader: DurableIngestionCoordinatorOptions["durableExecutionStatusReader"];
 
   constructor(
@@ -104,7 +107,24 @@ export class DurableIngestionCoordinator {
     this.#durableFunctionArn = options.durableFunctionArn;
     this.#activityFunctionArn = options.activityFunctionArn;
     this.#adapterConfigSha256 = options.adapterConfigSha256;
+    this.#sourceExecutionGate = options.sourceExecutionGate;
     this.#durableExecutionStatusReader = options.durableExecutionStatusReader;
+  }
+
+  async #sourceEnabled(sourceId: string, adapterVersion: string): Promise<boolean> {
+    let registration: ReturnType<SourceRegistry["requireEnabled"]>;
+    try {
+      registration = this.registry.requireEnabled(sourceId);
+    } catch {
+      return false;
+    }
+    if (registration.adapter.adapterVersion !== adapterVersion) return false;
+    if (!this.#sourceExecutionGate) return true;
+    const enabled = await this.#sourceExecutionGate(Object.freeze({ sourceId, adapterVersion }));
+    if (typeof enabled !== "boolean") {
+      throw new Error("The source execution gate returned an invalid decision");
+    }
+    return enabled;
   }
 
   async schedule(input: {
@@ -138,6 +158,13 @@ export class DurableIngestionCoordinator {
   async resumePaused(sourceId: string): Promise<number> {
     if (!this.#durableFunctionArn || !this.#activityFunctionArn || !this.#adapterConfigSha256) {
       throw new Error("Exact ingestion runtime versions are required to resume");
+    }
+    const registration = this.registry.get(sourceId);
+    if (
+      !registration ||
+      !(await this.#sourceEnabled(sourceId, registration.adapter.adapterVersion))
+    ) {
+      return 0;
     }
     const dispatches = await this.store.ensurePausedResumeDispatches(
       sourceId,
@@ -209,16 +236,7 @@ export class DurableIngestionCoordinator {
         disposition: replay.disposition,
       };
     }
-    const enabled = (() => {
-      try {
-        return (
-          this.registry.requireEnabled(current.sourceId).adapter.adapterVersion ===
-          current.adapterVersion
-        );
-      } catch {
-        return false;
-      }
-    })();
+    const enabled = await this.#sourceEnabled(current.sourceId, current.adapterVersion);
     const transition = await this.store.transitionCheckpoint(
       executionId,
       current.revision,
@@ -314,16 +332,7 @@ export class DurableIngestionCoordinator {
     );
     let runResult: Awaited<ReturnType<SourceNeutralIngestionRunner["run"]>> | undefined;
     let runError: unknown;
-    const enabled = (() => {
-      try {
-        return (
-          this.registry.requireEnabled(checkpoint.sourceId).adapter.adapterVersion ===
-          checkpoint.adapterVersion
-        );
-      } catch {
-        return false;
-      }
-    })();
+    let enabled = await this.#sourceEnabled(checkpoint.sourceId, checkpoint.adapterVersion);
     if (enabled) {
       try {
         runResult = await this.runner.run(checkpoint.sourceId, checkpoint.attempt, input.signal);
@@ -332,6 +341,9 @@ export class DurableIngestionCoordinator {
       }
     } else {
       runError = new Error("IngestionAdapterVersionUnavailable");
+    }
+    if (enabled) {
+      enabled = await this.#sourceEnabled(checkpoint.sourceId, checkpoint.adapterVersion);
     }
     const transitioned = await this.store.transitionCheckpoint(
       input.executionId,

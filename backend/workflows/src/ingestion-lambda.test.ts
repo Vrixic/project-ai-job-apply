@@ -8,7 +8,9 @@ import {
   buildIngestionDispatchNudge,
   createIngestionStarterHandler,
   createIngestionTerminalHandler,
+  createModeratedSourceExecutionGate,
   generatedSyntheticConfigSha256,
+  generatedSyntheticSourceMayRun,
   hourlyIngestionScheduleSlot,
   publishClaimedIngestionDispatch,
   requireInvokedActivityVersionArn,
@@ -60,6 +62,56 @@ describe("ingestion Lambda transport", () => {
     expect(() => generatedSyntheticConfigSha256("candidate@example.test")).toThrow(
       "IngestionSyntheticConfigRejected",
     );
+  });
+
+  it("binds runtime execution to the exact persisted source-pause identity", async () => {
+    const isSourcePaused = vi
+      .fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true)
+      .mockRejectedValueOnce(new Error("raw database detail"));
+    const gate = createModeratedSourceExecutionGate(
+      { isSourcePaused },
+      {
+        sourceId: "synthetic-foundation-v1",
+        adapterVersion: "synthetic-ingestion-v1",
+        adapterConfigSha256,
+      },
+    );
+    const identity = {
+      sourceId: "synthetic-foundation-v1",
+      adapterVersion: "synthetic-ingestion-v1",
+    } as const;
+
+    await expect(gate(identity)).resolves.toBe(true);
+    await expect(gate(identity)).resolves.toBe(false);
+    await expect(gate(identity)).rejects.toThrow("IngestionSourceControlUnavailable");
+    await expect(gate({ ...identity, adapterVersion: "synthetic-ingestion-v2" })).resolves.toBe(
+      false,
+    );
+    expect(isSourcePaused).toHaveBeenCalledTimes(3);
+    expect(isSourcePaused).toHaveBeenCalledWith({
+      kind: "source",
+      sourceId: "synthetic-foundation-v1",
+      adapterVersion: "synthetic-ingestion-v1",
+      adapterConfigSha256,
+    });
+    expect(() =>
+      createModeratedSourceExecutionGate(
+        { isSourcePaused },
+        { ...identity, adapterConfigSha256: "not-a-digest" },
+      ),
+    ).toThrow("moderated source execution identity");
+  });
+
+  it("requires both static activation and the persisted source control before scheduling", async () => {
+    const sourceExecutionGate = vi.fn().mockResolvedValue(true);
+
+    await expect(generatedSyntheticSourceMayRun(false, sourceExecutionGate)).resolves.toBe(false);
+    expect(sourceExecutionGate).not.toHaveBeenCalled();
+    await expect(generatedSyntheticSourceMayRun(true, sourceExecutionGate)).resolves.toBe(true);
+    sourceExecutionGate.mockResolvedValue(false);
+    await expect(generatedSyntheticSourceMayRun(true, sourceExecutionGate)).resolves.toBe(false);
   });
 
   it("reconciles every five minutes while deriving one exact hourly occurrence", () => {

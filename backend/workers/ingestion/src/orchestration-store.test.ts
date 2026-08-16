@@ -210,6 +210,96 @@ describe("DurableIngestionCoordinator", () => {
     });
   });
 
+  it("keeps a persisted source pause closed across advance and resume", async () => {
+    const store = new MemoryStore();
+    const sourceRunner = runner({});
+    const sourceExecutionGate = vi.fn().mockResolvedValue(false);
+    const coordinator = new DurableIngestionCoordinator(store, registry(true), sourceRunner, {
+      leaseId: () => leaseId,
+      dispatchId: () => dispatchId,
+      durableFunctionArn,
+      activityFunctionArn,
+      adapterConfigSha256,
+      sourceExecutionGate,
+    });
+    await coordinator.schedule({
+      sourceId: "synthetic-foundation-v1",
+      adapterVersion: "synthetic-ingestion-v1",
+      scheduledFor: "2026-08-16T12:00:00.000Z",
+    });
+
+    await expect(coordinator.advance(store.checkpoint?.executionId ?? "")).resolves.toMatchObject({
+      action: "terminal",
+      disposition: { status: "paused", progressKnown: true, observationCount: 0 },
+    });
+    await expect(coordinator.resumePaused("synthetic-foundation-v1")).resolves.toBe(0);
+    expect(store.dispatch).toMatchObject({ generation: 1, state: "pending" });
+    expect(sourceRunner.run).not.toHaveBeenCalled();
+    expect(sourceExecutionGate).toHaveBeenCalledWith({
+      sourceId: "synthetic-foundation-v1",
+      adapterVersion: "synthetic-ingestion-v1",
+    });
+  });
+
+  it("settles paused with truthful partial counts when source control changes during a run", async () => {
+    const store = new MemoryStore();
+    let paused = false;
+    const sourceRunner = runner({
+      sourceId: "synthetic-foundation-v1",
+      status: "succeeded",
+      observationCount: 1,
+      createdCount: 1,
+      updatedCount: 0,
+    });
+    vi.mocked(sourceRunner.run).mockImplementation(async () => {
+      paused = true;
+      return {
+        sourceId: "synthetic-foundation-v1",
+        status: "succeeded",
+        observationCount: 1,
+        createdCount: 1,
+        updatedCount: 0,
+      };
+    });
+    const coordinator = new DurableIngestionCoordinator(store, registry(true), sourceRunner, {
+      leaseId: () => leaseId,
+      dispatchId: () => dispatchId,
+      leaseMilliseconds: 60_000,
+      durableFunctionArn,
+      activityFunctionArn,
+      adapterConfigSha256,
+      sourceExecutionGate: async () => !paused,
+    });
+    await coordinator.schedule({
+      sourceId: "synthetic-foundation-v1",
+      adapterVersion: "synthetic-ingestion-v1",
+      scheduledFor: "2026-08-16T12:00:00.000Z",
+    });
+    const scheduledExecutionId = store.checkpoint?.executionId ?? "";
+    const acquired = await coordinator.advance(scheduledExecutionId);
+    if (acquired.action !== "run") throw new Error("expected a runnable attempt");
+
+    await expect(
+      coordinator.runAndSettle({
+        executionId: scheduledExecutionId,
+        revision: acquired.revision,
+        leaseId: acquired.leaseId,
+        attempt: acquired.attempt,
+        leaseExpiresAt: acquired.leaseExpiresAt,
+        signal: new AbortController().signal,
+      }),
+    ).resolves.toMatchObject({
+      disposition: {
+        action: "ack",
+        status: "paused",
+        progressKnown: true,
+        observationCount: 1,
+        createdCount: 1,
+        updatedCount: 0,
+      },
+    });
+  });
+
   it("does not double-run an active claim and fences its eventual settlement", async () => {
     const store = new MemoryStore();
     const occurrence = createIngestionScheduleOccurrence({
