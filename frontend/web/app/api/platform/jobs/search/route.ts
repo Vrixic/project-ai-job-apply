@@ -1,5 +1,6 @@
 import { getAuth0Client } from "../../../../../lib/auth0";
 import { readJobSearchBffBody } from "../../../../../lib/job-search-bff";
+import { validateJobSearchResponse } from "../../../../../lib/job-search-response-bff";
 import { forwardPlatformRequest } from "../../../../../lib/platform-api";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +10,7 @@ export async function POST(request: Request): Promise<Response> {
   if ("failure" in decoded) {
     return decoded.failure;
   }
-  return forwardPlatformRequest(
+  const response = await forwardPlatformRequest(
     "/v1/jobs/search",
     {
       method: "POST",
@@ -23,4 +24,5 @@ export async function POST(request: Request): Promise<Response> {
       fetch,
     },
   );
+  return validateJobSearchResponse(response, request.signal);
 }
