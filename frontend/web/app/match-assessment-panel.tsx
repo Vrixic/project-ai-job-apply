@@ -4,6 +4,9 @@ import type { MatchAssessment } from "@ai-job-apply/api-contracts";
 import { useEffect, useRef, useState } from "react";
 import { matchAssessmentNonclaim, matchEvidenceCopy, matchGateCopy } from "./match-assessment-copy";
 
+const matchAssessmentTimeoutMilliseconds = 20_000;
+const matchAssessmentTimeoutMessage = "Match evidence request timed out. Try again.";
+
 function problemMessage(code: unknown): string {
   if (code === "match_preferences_required") {
     return "Save your job preferences before checking this evidence.";
@@ -23,28 +26,46 @@ export function MatchAssessmentPanel({ jobId }: { jobId: string }) {
   const [loading, setLoading] = useState(false);
   const requestVersion = useRef(0);
   const controller = useRef<AbortController | null>(null);
+  const timeout = useRef<number | undefined>(undefined);
   const activeJobId = useRef(jobId);
+  const requestInFlight = useRef(false);
 
   useEffect(() => {
     activeJobId.current = jobId;
     requestVersion.current += 1;
     controller.current?.abort();
     controller.current = null;
+    window.clearTimeout(timeout.current);
+    timeout.current = undefined;
+    requestInFlight.current = false;
     setAssessment(undefined);
     setMessage(undefined);
     setLoading(false);
     return () => {
       requestVersion.current += 1;
       controller.current?.abort();
+      controller.current = null;
+      window.clearTimeout(timeout.current);
+      timeout.current = undefined;
+      requestInFlight.current = false;
     };
   }, [jobId]);
 
   async function load() {
+    if (requestInFlight.current) return;
+    requestInFlight.current = true;
     const requestedJobId = jobId;
     const version = ++requestVersion.current;
     controller.current?.abort();
     const nextController = new AbortController();
     controller.current = nextController;
+    let timedOut = false;
+    const nextTimeout = window.setTimeout(() => {
+      timedOut = true;
+      if (timeout.current === nextTimeout) timeout.current = undefined;
+      nextController.abort();
+    }, matchAssessmentTimeoutMilliseconds);
+    timeout.current = nextTimeout;
     setLoading(true);
     setMessage(undefined);
     try {
@@ -65,6 +86,7 @@ export function MatchAssessmentPanel({ jobId }: { jobId: string }) {
       if (result.requestedJobId !== requestedJobId) {
         throw new Error("Match evidence is temporarily unavailable.");
       }
+      if (timedOut) throw new Error(matchAssessmentTimeoutMessage);
       if (
         version !== requestVersion.current ||
         activeJobId.current !== requestedJobId ||
@@ -74,14 +96,26 @@ export function MatchAssessmentPanel({ jobId }: { jobId: string }) {
       }
       setAssessment(result);
     } catch (error) {
-      if (version !== requestVersion.current || nextController.signal.aborted) return;
+      if (version !== requestVersion.current || activeJobId.current !== requestedJobId) return;
+      if (nextController.signal.aborted && !timedOut) return;
       setAssessment(undefined);
-      setMessage(error instanceof Error ? error.message : "Match evidence is unavailable.");
+      setMessage(
+        timedOut
+          ? matchAssessmentTimeoutMessage
+          : error instanceof Error
+            ? error.message
+            : "Match evidence is unavailable.",
+      );
     } finally {
-      if (version === requestVersion.current && !nextController.signal.aborted) {
-        setLoading(false);
+      window.clearTimeout(nextTimeout);
+      if (timeout.current === nextTimeout) timeout.current = undefined;
+      if (controller.current === nextController) {
+        controller.current = null;
+        requestInFlight.current = false;
+        if (version === requestVersion.current && activeJobId.current === requestedJobId) {
+          setLoading(false);
+        }
       }
-      if (controller.current === nextController) controller.current = null;
     }
   }
 

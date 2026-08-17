@@ -90,7 +90,96 @@ describe("MatchAssessmentPanel", () => {
   afterEach(async () => {
     await act(async () => root.unmount());
     container.remove();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
+  });
+
+  it("starts only after an explicit action and keeps rapid activation single-flight", async () => {
+    const pending = deferredResponse();
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(() => pending.promise);
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<MatchAssessmentPanel jobId={JOB_ID} />));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    const button = container.querySelector("button");
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [path, init] = fetchMock.mock.calls[0] ?? [];
+    expect(path).toBe(`/api/platform/jobs/${JOB_ID}/match-assessment`);
+    expect(new URL(String(path), "https://candidate.example").search).toBe("");
+    expect(init).toEqual(expect.objectContaining({ cache: "no-store" }));
+    expect(init?.body).toBeUndefined();
+    expect(init?.headers).toBeUndefined();
+    expect(container.querySelector("section")?.getAttribute("aria-busy")).toBe("true");
+    expect(button?.disabled).toBe(true);
+
+    await act(async () => pending.resolve(Response.json(assessment())));
+    expect(container.textContent).toContain("No exact hard conflict");
+  });
+
+  it("times out once without automatic retry and permits a later explicit retry", async () => {
+    vi.useFakeTimers();
+    let firstSignal: AbortSignal | undefined;
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockImplementationOnce((_input, init) => {
+        firstSignal = init?.signal ?? undefined;
+        return new Promise<Response>((_resolve, reject) => {
+          firstSignal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("The request was aborted", "AbortError")),
+            { once: true },
+          );
+        });
+      })
+      .mockResolvedValueOnce(Response.json(assessment()));
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<MatchAssessmentPanel jobId={JOB_ID} />));
+    await act(async () =>
+      container.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+    );
+
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+
+    expect(firstSignal?.aborted).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(container.querySelector("section")?.getAttribute("aria-busy")).toBe("false");
+    expect(container.textContent).toContain("Match evidence request timed out. Try again.");
+    expect(container.querySelector<HTMLButtonElement>("button")?.disabled).toBe(false);
+
+    await act(async () =>
+      container.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain("No exact hard conflict");
+  });
+
+  it("aborts and clears the active deadline when the panel unmounts", async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>((_input, init) => {
+        signal = init?.signal ?? undefined;
+        return new Promise<Response>(() => undefined);
+      }),
+    );
+    await act(async () => root.render(<MatchAssessmentPanel jobId={JOB_ID} />));
+    await act(async () =>
+      container.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+    );
+
+    expect(vi.getTimerCount()).toBe(1);
+    await act(async () => root.unmount());
+
+    expect(signal?.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(container.textContent).toBe("");
+    root = createRoot(container);
   });
 
   it("renders fixed evidence and explicit nonclaims without a score or eligibility claim", async () => {
