@@ -11,21 +11,37 @@ const savedJobsLoadTimeoutMessage = "Loading saved jobs timed out. Try again.";
 const savedJobDeleteTimeoutMessage =
   "Removing the saved job timed out. Retry to safely check the same saved job.";
 
+class SavedJobsRequestDeadlineError extends Error {}
+
 function startDeadline(controller: AbortController): {
   clear: () => void;
+  wait: Promise<never>;
   timedOut: () => boolean;
 } {
   let didTimeOut = false;
-  const timer = window.setTimeout(() => {
-    didTimeOut = true;
-    controller.abort();
-  }, savedJobsRequestTimeoutMilliseconds);
+  let rejectDeadline: ((reason?: unknown) => void) | undefined;
+  const wait = new Promise<never>((_resolve, reject) => {
+    rejectDeadline = reject;
+  });
   const clear = () => {
     window.clearTimeout(timer);
-    controller.signal.removeEventListener("abort", clear);
+    controller.signal.removeEventListener("abort", abort);
+    rejectDeadline = undefined;
   };
-  controller.signal.addEventListener("abort", clear, { once: true });
-  return { clear, timedOut: () => didTimeOut };
+  const abort = () => {
+    const reject = rejectDeadline;
+    clear();
+    reject?.(new Error("The saved-jobs request was cancelled"));
+  };
+  const timer = window.setTimeout(() => {
+    didTimeOut = true;
+    const reject = rejectDeadline;
+    rejectDeadline = undefined;
+    reject?.(new SavedJobsRequestDeadlineError("The saved-jobs request timed out"));
+    controller.abort();
+  }, savedJobsRequestTimeoutMilliseconds);
+  controller.signal.addEventListener("abort", abort, { once: true });
+  return { clear, wait, timedOut: () => didTimeOut };
 }
 
 async function problemMessage(response: Response): Promise<string> {
@@ -76,15 +92,18 @@ export function SavedJobsPanel({ authenticated }: { authenticated: boolean }) {
       setLoadFailed(false);
     }
     try {
-      const response = await fetch("/api/platform/saved-jobs/search", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ pageSize: 20, ...(nextCursor ? { cursor: nextCursor } : {}) }),
-        signal: controller.signal,
-      });
-      if (controller.signal.aborted) throw new Error("The saved-jobs request was aborted");
-      if (!response.ok) throw new Error(await problemMessage(response));
-      const page = (await response.json()) as SavedJobPage;
+      const read = async (): Promise<SavedJobPage> => {
+        const response = await fetch("/api/platform/saved-jobs/search", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ pageSize: 20, ...(nextCursor ? { cursor: nextCursor } : {}) }),
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) throw new Error("The saved-jobs request was aborted");
+        if (!response.ok) throw new Error(await problemMessage(response));
+        return (await response.json()) as SavedJobPage;
+      };
+      const page = await Promise.race([read(), deadline.wait]);
       if (
         controller.signal.aborted ||
         !authenticatedRef.current ||
@@ -171,12 +190,15 @@ export function SavedJobsPanel({ authenticated }: { authenticated: boolean }) {
     setDeletingId(savedJobId);
     setMessage(undefined);
     try {
-      const response = await fetch(`/api/platform/saved-jobs/${encodeURIComponent(savedJobId)}`, {
-        method: "DELETE",
-        signal: controller.signal,
-      });
-      if (controller.signal.aborted) throw new Error("The saved-job removal was aborted");
-      if (!response.ok) throw new Error(await problemMessage(response));
+      const read = async (): Promise<void> => {
+        const response = await fetch(`/api/platform/saved-jobs/${encodeURIComponent(savedJobId)}`, {
+          method: "DELETE",
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) throw new Error("The saved-job removal was aborted");
+        if (!response.ok) throw new Error(await problemMessage(response));
+      };
+      await Promise.race([read(), deadline.wait]);
       deadline.clear();
       if (
         controller.signal.aborted ||

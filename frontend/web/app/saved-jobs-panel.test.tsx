@@ -31,6 +31,20 @@ function deferredResponse() {
   return { promise, resolve };
 }
 
+function deferredValue<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
+
+function responseWithDeferredJson(value: Promise<unknown>, status = 200): Response {
+  const response = new Response(null, { status });
+  Object.defineProperty(response, "json", { value: () => value });
+  return response;
+}
+
 describe("SavedJobsPanel", () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -49,6 +63,7 @@ describe("SavedJobsPanel", () => {
     await act(async () => root.unmount());
     container.remove();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   it("renders retained unavailable snapshots and removes only the selected association", async () => {
@@ -96,28 +111,27 @@ describe("SavedJobsPanel", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
-  it("bounds a stalled list request and supports an explicit retry", async () => {
+  it("settles an abort-ignoring list fetch at the exact deadline and supports an explicit retry", async () => {
     vi.useFakeTimers();
+    let stalledSignal: AbortSignal | undefined;
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockImplementationOnce(
-        (_input, init) =>
-          new Promise<Response>((_resolve, reject) => {
-            init?.signal?.addEventListener(
-              "abort",
-              () => reject(new DOMException("private list abort", "AbortError")),
-              { once: true },
-            );
-          }),
-      )
+      .mockImplementationOnce((_input, init) => {
+        stalledSignal = init?.signal ?? undefined;
+        return new Promise<Response>(() => undefined);
+      })
       .mockResolvedValueOnce(Response.json({ items: [savedJob] }));
     vi.stubGlobal("fetch", fetchMock);
     await act(async () => root.render(<SavedJobsPanel authenticated />));
 
-    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    await act(async () => vi.advanceTimersByTimeAsync(19_999));
+    expect(container.textContent).toContain("Loading saved jobs…");
+    expect(container.textContent).not.toContain("timed out");
+
+    await act(async () => vi.advanceTimersByTimeAsync(1));
 
     expect(container.textContent).toContain("Loading saved jobs timed out. Try again.");
-    expect(container.textContent).not.toContain("private list abort");
+    expect(stalledSignal?.aborted).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(0);
     const retry = Array.from(container.querySelectorAll("button")).find((button) =>
@@ -130,22 +144,57 @@ describe("SavedJobsPanel", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it("settles a hostile list success body and ignores its late private result", async () => {
+    vi.useFakeTimers();
+    const staleBody = deferredValue<unknown>();
+    let staleSignal: AbortSignal | undefined;
+    const freshJob = {
+      ...savedJob,
+      id: "00000000-0000-7000-8000-000000000010",
+      snapshot: { ...savedJob.snapshot, title: "Fresh Engineer" },
+    };
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockImplementationOnce((_input, init) => {
+        staleSignal = init?.signal ?? undefined;
+        return Promise.resolve(responseWithDeferredJson(staleBody.promise));
+      })
+      .mockResolvedValueOnce(Response.json({ items: [freshJob] }));
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<SavedJobsPanel authenticated />));
+
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    expect(staleSignal?.aborted).toBe(true);
+    expect(container.textContent).toContain("Loading saved jobs timed out. Try again.");
+    const retry = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Retry saved jobs"),
+    );
+    await act(async () => retry?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(container.textContent).toContain("Fresh Engineer");
+
+    await act(async () =>
+      staleBody.resolve({
+        items: [{ ...savedJob, snapshot: { ...savedJob.snapshot, title: privateCanary } }],
+      }),
+    );
+    await act(async () => {});
+    expect(container.textContent).toContain("Fresh Engineer");
+    expect(container.textContent).not.toContain(privateCanary);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("keeps a saved job after delete timeout and retries the same idempotent target explicitly", async () => {
     vi.useFakeTimers();
+    const staleDelete = deferredResponse();
     const refresh = deferredResponse();
+    let staleDeleteSignal: AbortSignal | undefined;
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(Response.json({ items: [savedJob] }))
-      .mockImplementationOnce(
-        (_input, init) =>
-          new Promise<Response>((_resolve, reject) => {
-            init?.signal?.addEventListener(
-              "abort",
-              () => reject(new DOMException("private delete abort", "AbortError")),
-              { once: true },
-            );
-          }),
-      )
+      .mockImplementationOnce((_input, init) => {
+        staleDeleteSignal = init?.signal ?? undefined;
+        return staleDelete.promise;
+      })
       .mockResolvedValueOnce(new Response(null, { status: 204 }))
       .mockImplementationOnce(() => refresh.promise);
     vi.stubGlobal("fetch", fetchMock);
@@ -156,14 +205,18 @@ describe("SavedJobsPanel", () => {
     );
     await act(async () => remove?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 
-    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    await act(async () => vi.advanceTimersByTimeAsync(19_999));
+    expect(container.textContent).toContain("Removing…");
+    expect(container.textContent).not.toContain("timed out");
+
+    await act(async () => vi.advanceTimersByTimeAsync(1));
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(staleDeleteSignal?.aborted).toBe(true);
     expect(container.textContent).toContain("Synthetic Engineer");
     expect(container.textContent).toContain(
       "Removing the saved job timed out. Retry to safely check the same saved job.",
     );
-    expect(container.textContent).not.toContain("private delete abort");
     expect(remove?.disabled).toBe(false);
     expect(vi.getTimerCount()).toBe(0);
 
@@ -175,8 +228,49 @@ describe("SavedJobsPanel", () => {
     expect(fetchMock.mock.calls[2]?.[1]?.method).toBe("DELETE");
     expect(container.textContent).not.toContain("Synthetic Engineer");
     expect(vi.getTimerCount()).toBe(1);
+    await act(async () => staleDelete.resolve(new Response(null, { status: 204 })));
+    expect(container.textContent).not.toContain("Synthetic Engineer");
+    expect(container.textContent).not.toContain("Saved job removed.");
     await act(async () => refresh.resolve(Response.json({ items: [] })));
     await act(async () => vi.advanceTimersByTimeAsync(0));
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("settles a hostile delete problem body without replacing the timeout copy", async () => {
+    vi.useFakeTimers();
+    const staleProblem = deferredValue<unknown>();
+    let deleteSignal: AbortSignal | undefined;
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ items: [savedJob] }))
+      .mockImplementationOnce((_input, init) => {
+        deleteSignal = init?.signal ?? undefined;
+        return Promise.resolve(responseWithDeferredJson(staleProblem.promise, 503));
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<SavedJobsPanel authenticated />));
+    await act(async () => {});
+    const remove = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Remove"),
+    );
+    await act(async () => remove?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    expect(deleteSignal?.aborted).toBe(true);
+    expect(container.textContent).toContain(savedJob.snapshot.title);
+    expect(container.textContent).toContain(
+      "Removing the saved job timed out. Retry to safely check the same saved job.",
+    );
+    expect(vi.getTimerCount()).toBe(0);
+
+    await act(async () =>
+      staleProblem.resolve({ code: "saved_jobs_unavailable", detail: privateCanary }),
+    );
+    await act(async () => {});
+    expect(container.textContent).toContain(
+      "Removing the saved job timed out. Retry to safely check the same saved job.",
+    );
+    expect(container.textContent).not.toContain(privateCanary);
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -301,6 +395,7 @@ describe("SavedJobsPanel", () => {
   });
 
   it("aborts and clears private saved state when authentication changes", async () => {
+    vi.useFakeTimers();
     const deferred = deferredResponse();
     let signal: AbortSignal | undefined;
     vi.stubGlobal(
@@ -313,12 +408,14 @@ describe("SavedJobsPanel", () => {
     await act(async () => root.render(<SavedJobsPanel authenticated />));
     await act(async () => root.render(<SavedJobsPanel authenticated={false} />));
     expect(signal?.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
     await act(async () => deferred.resolve(Response.json({ items: [savedJob] })));
     expect(container.textContent).not.toContain("Synthetic Engineer");
     expect(container.textContent).toContain("Sign in");
   });
 
   it("aborts delete and drops an abort-ignoring stale completion on sign-out", async () => {
+    vi.useFakeTimers();
     const pendingDelete = deferredResponse();
     const fetchMock = vi
       .fn<typeof fetch>()
@@ -336,6 +433,7 @@ describe("SavedJobsPanel", () => {
     await act(async () => root.render(<SavedJobsPanel authenticated={false} />));
 
     expect(deleteSignal?.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
     await act(async () => pendingDelete.resolve(new Response(null, { status: 204 })));
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(container.textContent).toContain("Sign in to keep a private list of jobs.");
