@@ -372,6 +372,75 @@ async function installSyntheticBff(page, { failFirstSearch = false, deferredSear
   };
 }
 
+async function installSyntheticEntitlementBff(page) {
+  const entitlementRequests = [];
+  const retryGate = createGate();
+  const jsonHeaders = {
+    "cache-control": "no-store",
+    "content-type": "application/json; charset=utf-8",
+  };
+  await page.route("**/api/platform/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.pathname === "/api/platform/entitlements" && request.method() === "GET") {
+      entitlementRequests.push({
+        body: request.postData(),
+        method: request.method(),
+        url: request.url(),
+      });
+      const requestNumber = entitlementRequests.length;
+      if (requestNumber === 1) {
+        await route.fulfill({
+          status: 503,
+          headers: { ...jsonHeaders, "content-type": "application/problem+json" },
+          json: {
+            type: "urn:ai-job-apply:problem:entitlement_unavailable",
+            title: "Private entitlement failure",
+            status: 503,
+            code: "private_entitlement_failure",
+            detail: PRIVATE_CANARY,
+          },
+        });
+        return;
+      }
+      if (requestNumber === 2) {
+        retryGate.markStarted();
+        await withTimeout(retryGate.gate, "deferred entitlement retry release");
+        try {
+          await route.fulfill({
+            status: 200,
+            headers: jsonHeaders,
+            json: {
+              plan: "free",
+              accessState: "active",
+              grants: ["profile.manage", "jobs.search", "jobs.save", "applications.history"],
+              version: 1,
+              evaluatedAt: "2026-08-16T12:01:00.000Z",
+            },
+          });
+        } catch {
+          // An aborted retry is the expected result after the candidate signs out.
+        } finally {
+          retryGate.markCompleted();
+        }
+        return;
+      }
+      await route.fulfill({
+        status: 503,
+        headers: { ...jsonHeaders, "content-type": "application/problem+json" },
+        json: { status: 503, detail: PRIVATE_CANARY },
+      });
+      return;
+    }
+    if (url.pathname === "/api/platform/saved-jobs/search") {
+      await route.fulfill({ status: 200, headers: jsonHeaders, json: { items: [] } });
+      return;
+    }
+    await route.fulfill({ status: 404, headers: jsonHeaders, json: { code: "not_found" } });
+  });
+  return { entitlementRequests, retryGate };
+}
+
 async function installSyntheticSavedJobsBff(
   page,
   { deleteResponses = [], savedSearchResponses = [] } = {},
@@ -977,6 +1046,77 @@ async function runRedactionAndSessionScenario(browser, origin) {
   }
 }
 
+async function runEntitlementRecoveryAndSessionScenario(browser, origin) {
+  const recoveryContext = await browser.newContext({ serviceWorkers: "block" });
+  try {
+    const page = await recoveryContext.newPage();
+    const { entitlementRequests, retryGate } = await installSyntheticEntitlementBff(page);
+    const component = await mountCandidateCatalog(page, origin);
+    const entitlement = component.locator(".entitlement-status");
+    await entitlement
+      .getByText("Access status is temporarily unavailable.", { exact: true })
+      .waitFor();
+    assert.equal(entitlementRequests.length, 1);
+    assert(!(await entitlement.textContent()).includes(PRIVATE_CANARY));
+
+    const retry = entitlement.getByRole("button", { name: "Retry access status" });
+    await assertVisibleFocus(retry);
+    await retry.press("Enter");
+    await withTimeout(retryGate.started, "entitlement retry start");
+    assert.equal(entitlementRequests.length, 2);
+    for (const request of entitlementRequests) {
+      assert.equal(request.method, "GET");
+      assert.equal(request.body, null);
+      assert.equal(new URL(request.url).search, "");
+    }
+    await entitlement.getByText("Loading access status…", { exact: true }).waitFor();
+    assert.equal(await entitlement.getByRole("button", { name: "Retry access status" }).count(), 0);
+
+    retryGate.release();
+    await withTimeout(retryGate.completed, "entitlement retry completion");
+    await entitlement.getByText("Free access", { exact: true }).waitFor();
+    const entitlementText = await entitlement.textContent();
+    assert(!entitlementText.includes(PRIVATE_CANARY));
+    assert(!/upgrade|payment|price|quota/i.test(entitlementText));
+    assert.equal(entitlementRequests.length, 2);
+    await assertNoWcagViolations(page);
+  } finally {
+    await recoveryContext.close();
+  }
+
+  const staleContext = await browser.newContext({ serviceWorkers: "block" });
+  try {
+    const page = await staleContext.newPage();
+    const { entitlementRequests, retryGate } = await installSyntheticEntitlementBff(page);
+    const component = await mountCandidateCatalog(page, origin);
+    const entitlement = component.locator(".entitlement-status");
+    await entitlement
+      .getByText("Access status is temporarily unavailable.", { exact: true })
+      .waitFor();
+    await entitlement.getByRole("button", { name: "Retry access status" }).click();
+    await withTimeout(retryGate.started, "stale entitlement retry start");
+
+    await page.evaluate(() =>
+      window.mount({
+        story: "d1-candidate-surfaces/CandidateCatalog",
+        props: { authenticated: false },
+      }),
+    );
+    await entitlement.getByText("Sign in to view your current access.", { exact: true }).waitFor();
+    retryGate.release();
+    await withTimeout(retryGate.completed, "stale entitlement retry completion");
+    await settleBrowserRender(page);
+
+    assert.equal(entitlementRequests.length, 2);
+    const entitlementText = await entitlement.textContent();
+    assert(!entitlementText.includes("Free access"));
+    assert(!entitlementText.includes(PRIVATE_CANARY));
+    await assertNoWcagViolations(page);
+  } finally {
+    await staleContext.close();
+  }
+}
+
 async function runSavedJobsLifecycleScenario(browser, origin) {
   const context = await browser.newContext({ serviceWorkers: "block" });
   try {
@@ -1579,6 +1719,8 @@ try {
   process.stdout.write("PASS keyboard/focus/live-status/body-only/WCAG scenario\n");
   await runRedactionAndSessionScenario(browser, server.origin);
   process.stdout.write("PASS redaction/session-fencing/WCAG scenario\n");
+  await runEntitlementRecoveryAndSessionScenario(browser, server.origin);
+  process.stdout.write("PASS entitlement/manual-retry/redaction/session-fencing/WCAG scenario\n");
   await runSavedJobsLifecycleScenario(browser, server.origin);
   process.stdout.write("PASS saved-jobs lifecycle/reconciliation/focus/WCAG scenario\n");
   await runSavedJobsFaultRecoveryAndSessionScenario(browser, server.origin);

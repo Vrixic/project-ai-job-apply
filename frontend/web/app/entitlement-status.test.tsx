@@ -110,6 +110,93 @@ describe("EntitlementStatus", () => {
     expect(container.textContent).not.toContain("must-not-render");
   });
 
+  it("retries only after an explicit action and keeps the retry single-flight", async () => {
+    const retryResponse = deferredResponse();
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        Response.json(
+          {
+            title: "Private upstream entitlement title",
+            detail: "private-entitlement-canary",
+            code: "private_upstream_code",
+          },
+          { status: 503 },
+        ),
+      )
+      .mockImplementationOnce(() => retryResponse.promise);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await act(async () => root.render(<EntitlementStatus authenticated />));
+    await act(async () => {});
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("Access status is temporarily unavailable");
+    expect(container.textContent).not.toMatch(/private upstream|private-entitlement-canary/i);
+    const retry = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Retry access status",
+    );
+    expect(retry).toBeDefined();
+
+    await act(async () => {
+      retry?.click();
+      retry?.click();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain("Loading access status");
+    expect(container.textContent).not.toContain("Retry access status");
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/platform/entitlements");
+    expect(fetchMock.mock.calls[1]?.[1]).toEqual(
+      expect.objectContaining({ method: "GET", cache: "no-store" }),
+    );
+    expect(fetchMock.mock.calls[1]?.[1]?.body).toBeUndefined();
+    expect(fetchMock.mock.calls[1]?.[1]?.headers).toBeUndefined();
+
+    await act(async () =>
+      retryResponse.resolve(
+        Response.json({
+          plan: "free",
+          accessState: "active",
+          grants,
+          version: 1,
+          evaluatedAt: "2026-08-16T12:01:00.000Z",
+        }),
+      ),
+    );
+
+    expect(container.textContent).toContain("Free access");
+    expect(container.textContent).not.toMatch(/upgrade|payment|price|quota/i);
+  });
+
+  it("restores the same bounded failure after an unsuccessful retry", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ unexpected: true }))
+      .mockResolvedValueOnce(
+        Response.json(
+          { title: "private-title", detail: "private-detail", trace: "private-trace" },
+          { status: 503 },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await act(async () => root.render(<EntitlementStatus authenticated />));
+    await act(async () => {});
+    await act(async () => {
+      const retry = Array.from(container.querySelectorAll("button")).find(
+        (button) => button.textContent === "Retry access status",
+      );
+      retry?.click();
+    });
+    await act(async () => {});
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain("Access status is temporarily unavailable");
+    expect(container.textContent).toContain("Retry access status");
+    expect(container.textContent).not.toMatch(/private-title|private-detail|private-trace/i);
+  });
+
   it("rejects a non-RFC timestamp without rendering it", async () => {
     vi.stubGlobal(
       "fetch",
@@ -174,5 +261,94 @@ describe("EntitlementStatus", () => {
       ),
     );
     expect(container.textContent).toContain("Free access");
+  });
+
+  it("fences an in-flight retry across sign-out and sign-in", async () => {
+    const oldRetry = deferredResponse();
+    const newAccount = deferredResponse();
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ unavailable: true }))
+      .mockImplementationOnce(() => oldRetry.promise)
+      .mockImplementationOnce(() => newAccount.promise);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await act(async () => root.render(<EntitlementStatus authenticated />));
+    await act(async () => {});
+    await act(async () => {
+      const retry = Array.from(container.querySelectorAll("button")).find(
+        (button) => button.textContent === "Retry access status",
+      );
+      retry?.click();
+    });
+    const oldRetrySignal = fetchMock.mock.calls[1]?.[1]?.signal;
+
+    await act(async () => root.render(<EntitlementStatus authenticated={false} />));
+    expect(oldRetrySignal?.aborted).toBe(true);
+    expect(container.textContent).toContain("Sign in to view");
+    await act(async () => root.render(<EntitlementStatus authenticated />));
+
+    await act(async () =>
+      oldRetry.resolve(
+        Response.json({
+          plan: "pro",
+          accessState: "active",
+          grants,
+          version: 7,
+          evaluatedAt: "2026-08-16T12:02:00.000Z",
+          accessThrough: "2026-09-16T12:00:00.000Z",
+        }),
+      ),
+    );
+    expect(container.textContent).not.toContain("Pro access");
+
+    await act(async () =>
+      newAccount.resolve(
+        Response.json({
+          plan: "free",
+          accessState: "active",
+          grants,
+          version: 0,
+          evaluatedAt: "2026-08-16T12:03:00.000Z",
+        }),
+      ),
+    );
+    expect(container.textContent).toContain("Free access");
+  });
+
+  it("aborts an in-flight retry when the surface unmounts", async () => {
+    const retryResponse = deferredResponse();
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ unavailable: true }))
+      .mockImplementationOnce(() => retryResponse.promise);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await act(async () => root.render(<EntitlementStatus authenticated />));
+    await act(async () => {});
+    await act(async () => {
+      const retry = Array.from(container.querySelectorAll("button")).find(
+        (button) => button.textContent === "Retry access status",
+      );
+      retry?.click();
+    });
+    const retrySignal = fetchMock.mock.calls[1]?.[1]?.signal;
+
+    await act(async () => root.unmount());
+    expect(retrySignal?.aborted).toBe(true);
+    await act(async () =>
+      retryResponse.resolve(
+        Response.json({
+          plan: "pro",
+          accessState: "active",
+          grants,
+          version: 3,
+          evaluatedAt: "2026-08-16T12:04:00.000Z",
+          accessThrough: "2026-09-16T12:00:00.000Z",
+        }),
+      ),
+    );
+    expect(container.textContent).toBe("");
+    root = createRoot(container);
   });
 });

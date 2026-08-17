@@ -19,6 +19,15 @@ gate/reason language, explicit score/rank/eligibility/outcome nonclaim, bounded 
 loading announcement, and stale job-identity fencing. Both surfaces receive keyboard/focus and
 automated WCAG A/AA coverage in installed Chrome.
 
+The entitlement scenario mounts the production provider-neutral access status inside the candidate
+catalog. A generated-synthetic private upstream failure must collapse to fixed unavailable copy and
+must not retry until the candidate activates the keyboard-focusable retry control. The exact retry
+is bodyless and queryless, remains single-flight, announces loading and recovery, and renders only
+the existing bounded Free status after a valid response. A separate account transition aborts and
+fences a pending retry so neither the prior response nor its private canary can render. This evidence
+does not exercise a billing provider or claim pricing, quotas, paid-only features, or outage-based
+entitlement extension.
+
 The saved-jobs scenarios exercise the production search and private-list surfaces together. They
 prove the exact search-to-save association request, refresh into an available saved target,
 truthful unavailable-snapshot rendering, exact-association deletion, cursor-free reconciliation,
@@ -32,6 +41,7 @@ production dependency closure, or Next build output.
 
 This automated suite is not human accessibility acceptance and does not exercise managed OIDC, a
 deployed BFF/gateway, deployed security headers, assistive-technology combinations, visual
-regression, mobile browsers, backend persistence, AWS document processing, provider integrations,
-trigger activation, representative load, or real candidate data. It does not approve ADR-023 or
-satisfy legal, privacy, security, human accessibility, or real-candidate-onboarding review gates.
+regression, mobile browsers, backend persistence, database migrations, AWS document processing,
+provider integrations, trigger activation, representative load, or real candidate data. It does
+not approve ADR-023 or satisfy legal, privacy, security, human accessibility, or
+real-candidate-onboarding review gates.
