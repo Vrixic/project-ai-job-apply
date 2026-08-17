@@ -10,10 +10,12 @@ const emptyResumes = { documents: [] };
 
 function deferred<T>() {
   let resolve: (value: T) => void = () => undefined;
-  const promise = new Promise<T>((resolvePromise) => {
+  let reject: (error: unknown) => void = () => undefined;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
+    reject = rejectPromise;
   });
-  return { promise, resolve };
+  return { promise, reject, resolve };
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -82,7 +84,218 @@ describe("ResumeUploadForm upload ownership", () => {
   afterEach(async () => {
     await act(async () => root.unmount());
     container.remove();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
+  });
+
+  it("bounds an abort-ignoring initial read and retries it explicitly without claiming an empty list", async () => {
+    vi.useFakeTimers();
+    const stalled = deferred<Response>();
+    const signals: AbortSignal[] = [];
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockImplementationOnce((_input, init) => {
+        signals.push(init?.signal as AbortSignal);
+        return stalled.promise;
+      })
+      .mockImplementationOnce(async (_input, init) => {
+        signals.push(init?.signal as AbortSignal);
+        return jsonResponse(emptyResumes);
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await act(async () => root.render(<ResumeUploadForm authenticated />));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/platform/resumes");
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ cache: "no-store" });
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toBeUndefined();
+
+    await act(async () => vi.advanceTimersByTimeAsync(19_999));
+    expect(signals[0]?.aborted).toBe(false);
+    expect(container.textContent).toContain("Loading resumes");
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(signals[0]?.aborted).toBe(true);
+    expect(container.textContent).toContain("Loading resume status timed out");
+    expect(container.textContent).not.toContain("No resumes uploaded yet");
+    expect(vi.getTimerCount()).toBe(0);
+
+    const retry = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Retry resume status",
+    );
+    await act(async () => {
+      retry?.click();
+      retry?.click();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain("No resumes uploaded yet");
+    expect(container.textContent).not.toContain("timed out");
+    expect(vi.getTimerCount()).toBe(0);
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    expect(signals[1]?.aborted).toBe(false);
+  });
+
+  it("keeps the exact deadline active through a stalled success body", async () => {
+    vi.useFakeTimers();
+    const body = deferred<unknown>();
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (_input, init) => {
+        signal = init?.signal ?? undefined;
+        return { ok: true, json: () => body.promise } as Response;
+      }),
+    );
+
+    await act(async () => root.render(<ResumeUploadForm authenticated />));
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    expect(signal?.aborted).toBe(true);
+    expect(container.textContent).toContain("Loading resume status timed out");
+    expect(container.textContent).not.toContain("No resumes uploaded yet");
+    await act(async () => body.resolve(emptyResumes));
+    expect(container.textContent).toContain("Loading resume status timed out");
+  });
+
+  it("keeps the deadline active through a stalled problem body without rendering its canary", async () => {
+    vi.useFakeTimers();
+    const body = deferred<unknown>();
+    const response = new Response(null, { status: 503 });
+    vi.spyOn(response, "json").mockImplementation(async () => body.promise);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async () => response),
+    );
+
+    await act(async () => root.render(<ResumeUploadForm authenticated />));
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    expect(container.textContent).toContain("Loading resume status timed out");
+    await act(async () =>
+      body.resolve({
+        code: "platform_unavailable",
+        detail: "private-resume-status-canary",
+        title: "private-resume-status-canary",
+      }),
+    );
+    expect(container.textContent).toContain("Loading resume status timed out");
+    expect(container.textContent).not.toContain("private-resume-status-canary");
+  });
+
+  it("does not let an older initial list erase a locally completed upload", async () => {
+    const initialList = deferred<Response>();
+    let getCount = 0;
+    const uploaded = registeredResume(
+      "019c0000-0000-7000-8000-000000000104",
+      "revision-fenced.pdf",
+      "https://storage.example.test/revision-fenced",
+    );
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      if (input === "/api/platform/resumes" && (init?.method ?? "GET") === "GET") {
+        getCount += 1;
+        return getCount === 1
+          ? initialList.promise
+          : jsonResponse({ documents: [uploaded.document] });
+      }
+      if (input === "/api/platform/resumes" && init?.method === "POST") {
+        return jsonResponse(uploaded, 201);
+      }
+      if (input === "https://storage.example.test/revision-fenced") {
+        return new Response(null, { status: 204 });
+      }
+      throw new Error(`Unexpected request: ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await act(async () => root.render(<ResumeUploadForm authenticated />));
+    const form = await selectFile(
+      container,
+      syntheticPdf("revision-fenced.pdf", async () => new Uint8Array([1, 2, 3]).buffer),
+    );
+    await act(async () => submit(form));
+    await vi.waitFor(() => expect(container.textContent).toContain("revision-fenced.pdf"));
+
+    await act(async () => initialList.resolve(jsonResponse(emptyResumes)));
+    expect(container.textContent).toContain("revision-fenced.pdf");
+    expect(container.textContent).toContain("Resume processing is temporarily unavailable");
+    expect(container.textContent).not.toContain("No resumes uploaded yet");
+
+    const retry = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Retry resume status",
+    );
+    await act(async () => retry?.click());
+    expect(container.textContent).toContain("revision-fenced.pdf");
+    expect(container.textContent).not.toContain("temporarily unavailable");
+  });
+
+  it("retains the last-known document when a polling read times out", async () => {
+    vi.useFakeTimers();
+    const stalledPoll = deferred<Response>();
+    let pollSignal: AbortSignal | undefined;
+    const processing = registeredResume(
+      "019c0000-0000-7000-8000-000000000105",
+      "processing.pdf",
+      "https://storage.example.test/unused",
+    ).document;
+    processing.status = "scanning";
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ documents: [processing] }))
+      .mockImplementationOnce((_input, init) => {
+        pollSignal = init?.signal ?? undefined;
+        return stalledPoll.promise;
+      })
+      .mockResolvedValueOnce(jsonResponse({ documents: [{ ...processing, status: "parsed" }] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await act(async () => root.render(<ResumeUploadForm authenticated />));
+    await vi.waitFor(() => expect(container.textContent).toContain("processing.pdf"));
+    await act(async () => vi.advanceTimersByTimeAsync(2_000));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    expect(pollSignal?.aborted).toBe(true);
+    expect(container.textContent).toContain("processing.pdf");
+    expect(container.textContent).toContain("Loading resume status timed out");
+
+    const retry = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Retry resume status",
+    );
+    await act(async () => retry?.click());
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(container.textContent).toContain("parsed");
+    expect(container.textContent).not.toContain("timed out");
+  });
+
+  it("cleans and fences an abort-ignoring list read across sign-out", async () => {
+    vi.useFakeTimers();
+    const oldList = deferred<Response>();
+    let oldSignal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>((_input, init) => {
+        oldSignal = init?.signal ?? undefined;
+        return oldList.promise;
+      }),
+    );
+
+    await act(async () => root.render(<ResumeUploadForm authenticated />));
+    expect(vi.getTimerCount()).toBe(1);
+    await act(async () => root.render(<ResumeUploadForm authenticated={false} />));
+    expect(oldSignal?.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+    await act(async () =>
+      oldList.resolve(
+        jsonResponse({
+          documents: [
+            registeredResume(
+              "019c0000-0000-7000-8000-000000000106",
+              "private-old-session.pdf",
+              "https://storage.example.test/private",
+            ).document,
+          ],
+        }),
+      ),
+    );
+    expect(container.textContent).not.toMatch(
+      /private-old-session|temporarily unavailable|timed out/i,
+    );
   });
 
   it("owns one exact hash, registration, and storage chain across rapid submissions", async () => {

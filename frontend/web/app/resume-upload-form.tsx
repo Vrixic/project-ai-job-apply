@@ -12,6 +12,16 @@ import { candidateSafeProblemMessage } from "../lib/candidate-safe-problem";
 const MAXIMUM_RESUME_BYTES = 5 * 1024 * 1024;
 const PDF = "application/pdf" as const;
 const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document" as const;
+const resumeReadTimeoutMilliseconds = 20_000;
+const resumeReadTimeoutMessage = "Loading resume status timed out. Retry to check your resumes.";
+const resumeReadFailureMessage = "Resume processing is temporarily unavailable.";
+
+class ResumeReadTimeoutError extends Error {
+  constructor() {
+    super("The resume status request timed out");
+    this.name = "ResumeReadTimeoutError";
+  }
+}
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
@@ -109,6 +119,12 @@ interface ResumeUploadOwner {
   controller: AbortController;
 }
 
+interface ResumeReadOwner {
+  controller: AbortController;
+  rejectDeadline: ((reason?: unknown) => void) | undefined;
+  timeout: number | undefined;
+}
+
 export function ResumeUploadForm({
   authenticated,
   onDocumentParsed,
@@ -122,11 +138,14 @@ export function ResumeUploadForm({
   const [loading, setLoading] = useState(authenticated);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<string>();
+  const [readFailure, setReadFailure] = useState<string>();
   const authenticatedRef = useRef(authenticated);
   authenticatedRef.current = authenticated;
   const sessionGeneration = useRef(0);
+  const documentRevision = useRef(0);
   const activeControllers = useRef(new Set<AbortController>());
   const activeUpload = useRef<ResumeUploadOwner | undefined>(undefined);
+  const activeRead = useRef<ResumeReadOwner | undefined>(undefined);
   const pollingGeneration = useRef<number | undefined>(undefined);
   const pollingTargets = useRef(new ResumePollingTargets());
   const mounted = useRef(true);
@@ -161,11 +180,58 @@ export function ResumeUploadForm({
     activeControllers.current.clear();
   }, []);
 
+  const cancelActiveRead = useCallback((): void => {
+    const read = activeRead.current;
+    activeRead.current = undefined;
+    if (!read) return;
+    if (read.timeout !== undefined) window.clearTimeout(read.timeout);
+    read.timeout = undefined;
+    read.rejectDeadline?.(new Error("resume status request cancelled"));
+    read.rejectDeadline = undefined;
+    read.controller.abort();
+  }, []);
+
   const cancelActiveUpload = useCallback((): void => {
     const upload = activeUpload.current;
     activeUpload.current = undefined;
     upload?.controller.abort();
   }, []);
+
+  const readResumeCollection = useCallback(
+    async (controller: AbortController): Promise<ResumeDocumentCollection | undefined> => {
+      if (activeRead.current) return undefined;
+      const owner: ResumeReadOwner = {
+        controller,
+        rejectDeadline: undefined,
+        timeout: undefined,
+      };
+      const deadline = new Promise<never>((_resolve, reject) => {
+        owner.rejectDeadline = reject;
+      });
+      activeRead.current = owner;
+      owner.timeout = window.setTimeout(() => {
+        if (activeRead.current !== owner) return;
+        owner.timeout = undefined;
+        owner.rejectDeadline?.(new ResumeReadTimeoutError());
+        owner.rejectDeadline = undefined;
+        owner.controller.abort();
+      }, resumeReadTimeoutMilliseconds);
+      try {
+        return await Promise.race([
+          request<ResumeDocumentCollection>("/api/platform/resumes", {
+            signal: controller.signal,
+          }),
+          deadline,
+        ]);
+      } finally {
+        if (owner.timeout !== undefined) window.clearTimeout(owner.timeout);
+        owner.timeout = undefined;
+        owner.rejectDeadline = undefined;
+        if (activeRead.current === owner) activeRead.current = undefined;
+      }
+    },
+    [],
+  );
 
   const pollUntilTerminal = useCallback(
     async (documentIds: readonly string[], generation: number) => {
@@ -183,10 +249,15 @@ export function ResumeUploadForm({
           for (const delay of delays) {
             await waitForDelay(delay, controller.signal);
             if (!sessionIsCurrent(generation, controller.signal)) return;
-            const result = await request<ResumeDocumentCollection>("/api/platform/resumes", {
-              signal: controller.signal,
-            });
+            const revision = documentRevision.current;
+            const result = await readResumeCollection(controller);
+            if (!result) return;
             if (!sessionIsCurrent(generation, controller.signal)) return;
+            if (revision !== documentRevision.current) {
+              setReadFailure(resumeReadFailureMessage);
+              return;
+            }
+            setReadFailure(undefined);
             setDocuments(result.documents);
             let parsed = false;
             let terminalWithoutParsedFacts = false;
@@ -223,20 +294,76 @@ export function ResumeUploadForm({
           }
         }
       } catch (error) {
-        if (sessionIsCurrent(generation, controller.signal)) {
-          setMessage(error instanceof Error ? error.message : "Could not refresh resume status");
+        if (
+          sessionIsCurrent(
+            generation,
+            error instanceof ResumeReadTimeoutError ? undefined : controller.signal,
+          )
+        ) {
+          setReadFailure(
+            error instanceof ResumeReadTimeoutError
+              ? resumeReadTimeoutMessage
+              : resumeReadFailureMessage,
+          );
         }
       } finally {
         releaseSessionController(controller);
         if (pollingGeneration.current === generation) pollingGeneration.current = undefined;
       }
     },
-    [createSessionController, releaseSessionController, sessionIsCurrent],
+    [createSessionController, readResumeCollection, releaseSessionController, sessionIsCurrent],
+  );
+
+  const loadDocuments = useCallback(
+    async (generation: number): Promise<void> => {
+      if (!sessionIsCurrent(generation) || activeRead.current) return;
+      const controller = createSessionController(generation);
+      if (!controller) return;
+      const revision = documentRevision.current;
+      setLoading(true);
+      setReadFailure(undefined);
+      try {
+        const result = await readResumeCollection(controller);
+        if (!result || !sessionIsCurrent(generation, controller.signal)) return;
+        if (revision !== documentRevision.current) {
+          setReadFailure(resumeReadFailureMessage);
+          return;
+        }
+        setDocuments(result.documents);
+        const processingIds = recoverableResumeIds(result.documents);
+        void pollUntilTerminal(processingIds, generation);
+      } catch (error) {
+        if (
+          sessionIsCurrent(
+            generation,
+            error instanceof ResumeReadTimeoutError ? undefined : controller.signal,
+          )
+        ) {
+          setReadFailure(
+            error instanceof ResumeReadTimeoutError
+              ? resumeReadTimeoutMessage
+              : resumeReadFailureMessage,
+          );
+        }
+      } finally {
+        releaseSessionController(controller);
+        if (sessionIsCurrent(generation)) setLoading(false);
+      }
+    },
+    [
+      createSessionController,
+      pollUntilTerminal,
+      readResumeCollection,
+      releaseSessionController,
+      sessionIsCurrent,
+    ],
   );
 
   useEffect(() => {
     mounted.current = true;
     const generation = ++sessionGeneration.current;
+    documentRevision.current += 1;
+    cancelActiveRead();
     cancelActiveUpload();
     abortSessionRequests();
     pollingTargets.current.clear();
@@ -248,59 +375,34 @@ export function ResumeUploadForm({
       setLoading(false);
       setUploading(false);
       setMessage(undefined);
+      setReadFailure(undefined);
       if (fileInput.current) fileInput.current.value = "";
       return;
     }
 
-    const controller = createSessionController(generation);
-    if (!controller) return;
-    setLoading(true);
-    void (async () => {
-      try {
-        const result = await request<ResumeDocumentCollection>("/api/platform/resumes", {
-          signal: controller.signal,
-        });
-        if (!sessionIsCurrent(generation, controller.signal)) return;
-        setDocuments(result.documents);
-        const processingIds = recoverableResumeIds(result.documents);
-        void pollUntilTerminal(processingIds, generation);
-      } catch (error) {
-        if (sessionIsCurrent(generation, controller.signal)) {
-          setMessage(error instanceof Error ? error.message : "Could not load resumes");
-        }
-      } finally {
-        releaseSessionController(controller);
-        if (sessionIsCurrent(generation, controller.signal)) setLoading(false);
-      }
-    })();
+    void loadDocuments(generation);
 
     return () => {
       if (sessionGeneration.current === generation) sessionGeneration.current += 1;
+      cancelActiveRead();
       cancelActiveUpload();
       abortSessionRequests();
       pollingTargets.current.clear();
       pollingGeneration.current = undefined;
     };
-  }, [
-    abortSessionRequests,
-    authenticated,
-    cancelActiveUpload,
-    createSessionController,
-    pollUntilTerminal,
-    releaseSessionController,
-    sessionIsCurrent,
-  ]);
+  }, [abortSessionRequests, authenticated, cancelActiveRead, cancelActiveUpload, loadDocuments]);
 
   useEffect(
     () => () => {
       mounted.current = false;
       sessionGeneration.current += 1;
+      cancelActiveRead();
       cancelActiveUpload();
       abortSessionRequests();
       pollingTargets.current.clear();
       pollingGeneration.current = undefined;
     },
-    [abortSessionRequests, cancelActiveUpload],
+    [abortSessionRequests, cancelActiveRead, cancelActiveUpload],
   );
 
   async function upload(event: FormEvent<HTMLFormElement>) {
@@ -352,6 +454,7 @@ export function ResumeUploadForm({
       if (fileInput.current) {
         fileInput.current.value = "";
       }
+      documentRevision.current += 1;
       setDocuments((current) => [registered.document, ...current]);
       setMessage("Resume uploaded to quarantine. It will be scanned before any text is parsed.");
       void pollUntilTerminal([registered.document.id], generation);
@@ -373,6 +476,7 @@ export function ResumeUploadForm({
   const visibleLoading = authenticated && loading;
   const visibleUploading = authenticated && uploading;
   const visibleMessage = authenticated ? message : undefined;
+  const visibleReadFailure = authenticated ? readFailure : undefined;
 
   return (
     <section className="profile-facts" aria-labelledby="resume-upload-heading">
@@ -388,11 +492,11 @@ export function ResumeUploadForm({
         claims remain proposed until you review them; nothing is silently confirmed.
       </p>
 
-      {visibleLoading ? (
+      {visibleLoading && visibleDocuments.length === 0 ? (
         <p>Loading resumes…</p>
-      ) : visibleDocuments.length === 0 ? (
+      ) : visibleDocuments.length === 0 && !visibleReadFailure ? (
         <p>No resumes uploaded yet.</p>
-      ) : (
+      ) : visibleDocuments.length > 0 ? (
         <ul className="fact-list">
           {visibleDocuments.map((document) => (
             <li key={document.id}>
@@ -408,6 +512,19 @@ export function ResumeUploadForm({
             </li>
           ))}
         </ul>
+      ) : null}
+
+      {visibleReadFailure && !visibleLoading && (
+        <div>
+          <p role="status">{visibleReadFailure}</p>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => void loadDocuments(sessionGeneration.current)}
+          >
+            Retry resume status
+          </button>
+        </div>
       )}
 
       <form className="compact-form" onSubmit={upload}>
