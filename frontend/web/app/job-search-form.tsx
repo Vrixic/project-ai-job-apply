@@ -22,13 +22,21 @@ const initialFields: JobSearchFields = {
 
 async function readProblem(response: Response): Promise<{ code?: string; message: string }> {
   try {
-    const problem = (await response.json()) as { code?: string; detail?: string; title?: string };
+    const problem = (await response.json()) as { code?: unknown };
+    const code = typeof problem.code === "string" ? problem.code : undefined;
     return {
-      ...(problem.code ? { code: problem.code } : {}),
-      message: problem.detail ?? problem.title ?? "Job search could not be completed",
+      ...(code ? { code } : {}),
+      message:
+        code === "authentication_required" || code === "session_expired"
+          ? "Sign in again to search or save jobs."
+          : code === "forbidden"
+            ? "Your session is not allowed to search or save jobs."
+            : code === "invalid_request"
+              ? "Check the search filters and try again."
+              : "Job search is temporarily unavailable.",
     };
   } catch {
-    return { message: "Job search could not be completed" };
+    return { message: "Job search is temporarily unavailable." };
   }
 }
 
@@ -41,12 +49,15 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
   const [savingJobId, setSavingJobId] = useState<string>();
   const [message, setMessage] = useState<string>();
   const authenticatedRef = useRef(authenticated);
+  const keywordsRef = useRef<HTMLInputElement>(null);
+  const restoreKeywordsFocus = useRef(false);
   const sessionGeneration = useRef(0);
   const activeControllers = useRef(new Set<AbortController>());
   authenticatedRef.current = authenticated;
 
   useEffect(() => {
     sessionGeneration.current += 1;
+    restoreKeywordsFocus.current = false;
     for (const controller of activeControllers.current) controller.abort();
     activeControllers.current.clear();
     setSearching(false);
@@ -59,6 +70,13 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
       setMessage(undefined);
     }
   }, [authenticated]);
+
+  useEffect(() => {
+    if (!searching && restoreKeywordsFocus.current) {
+      restoreKeywordsFocus.current = false;
+      if (authenticatedRef.current) keywordsRef.current?.focus();
+    }
+  }, [searching]);
 
   function update<Key extends keyof JobSearchFields>(key: Key, value: JobSearchFields[Key]) {
     setFields((current) => ({ ...current, [key]: value }));
@@ -119,7 +137,10 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
     } finally {
       window.clearTimeout(timeout);
       activeControllers.current.delete(controller);
-      if (generation === sessionGeneration.current) setSearching(false);
+      if (generation === sessionGeneration.current) {
+        restoreKeywordsFocus.current = !nextCursor;
+        setSearching(false);
+      }
     }
   }
 
@@ -197,6 +218,7 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
           Keywords
           <span>Title, description, department, or company</span>
           <input
+            ref={keywordsRef}
             type="search"
             maxLength={200}
             value={fields.query}

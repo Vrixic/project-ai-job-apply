@@ -139,3 +139,14 @@ gate may allow only `/jobs/` after separate publication review. No `JobPosting` 
 Indexing API, application action, employer-original posting date, structured location assertion,
 or search-engine eligibility is claimed. No route, Lambda artifact, database identity, bootstrap
 boundary, Terraform change, or crawler policy is deployed by these source bytes.
+
+## D1 local browser assurance
+
+`pnpm test:d1-browser-assurance` runs generated-synthetic keyboard, focus, live-region, error
+redaction, session-fencing, request-transport, and automated WCAG A/AA checks against real candidate
+components. The bounded direct Playwright Core and axe-core harness lives under
+`scripts/tests/d1-browser-assurance`, outside this production web package and its deployment closure.
+
+The suite requires a local Chrome binary and never downloads one. It is not human accessibility
+acceptance and does not exercise managed OIDC, a deployed BFF/gateway, deployed security headers,
+assistive-technology combinations, visual regression, mobile browsers, or real candidate data.
