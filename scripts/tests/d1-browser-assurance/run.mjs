@@ -85,6 +85,28 @@ const syntheticJob = {
   expiresAt: "2026-09-16T12:00:00.000Z",
 };
 
+const SYNTHETIC_SAVED_JOB_ID = "00000000-0000-7000-8000-000000000020";
+const syntheticSavedJob = {
+  id: SYNTHETIC_SAVED_JOB_ID,
+  requestedJobId: SYNTHETIC_JOB_ID,
+  snapshot: {
+    jobIdAtSave: SYNTHETIC_JOB_ID,
+    company: syntheticJob.company,
+    title: syntheticJob.title,
+    locations: syntheticJob.locations,
+    firstObservedAt: syntheticJob.firstObservedAt,
+    lastVerifiedAt: syntheticJob.lastVerifiedAt,
+    expiresAt: syntheticJob.expiresAt,
+  },
+  availability: { state: "available", currentJob: syntheticJob },
+  savedAt: "2026-08-16T12:01:00.000Z",
+};
+
+const syntheticUnavailableSavedJob = {
+  ...syntheticSavedJob,
+  availability: { state: "unavailable" },
+};
+
 const syntheticResume = {
   id: SYNTHETIC_DOCUMENT_ID,
   fileName: "synthetic-browser-resume.pdf",
@@ -348,6 +370,88 @@ async function installSyntheticBff(page, { failFirstSearch = false, deferredSear
     releaseDeferredSearch,
     searchRequests,
   };
+}
+
+async function installSyntheticSavedJobsBff(
+  page,
+  { deleteResponses = [], savedSearchResponses = [] } = {},
+) {
+  const requests = { deletes: [], saves: [], searches: [] };
+  const jsonHeaders = {
+    "cache-control": "no-store",
+    "content-type": "application/json; charset=utf-8",
+  };
+  await page.route("**/api/platform/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const method = request.method();
+    if (path === "/api/platform/entitlements") {
+      await route.fulfill({
+        status: 200,
+        headers: jsonHeaders,
+        json: {
+          plan: "free",
+          accessState: "active",
+          grants: ["profile.manage", "jobs.search", "jobs.save", "applications.history"],
+          version: 0,
+          evaluatedAt: "2026-08-16T12:00:00.000Z",
+        },
+      });
+      return;
+    }
+    if (path === "/api/platform/jobs/search" && method === "POST") {
+      await route.fulfill({ status: 200, headers: jsonHeaders, json: { items: [syntheticJob] } });
+      return;
+    }
+    if (path === "/api/platform/saved-jobs" && method === "POST") {
+      requests.saves.push({ body: request.postData(), headers: request.headers() });
+      await route.fulfill({ status: 201, headers: jsonHeaders, json: syntheticSavedJob });
+      return;
+    }
+    if (path === "/api/platform/saved-jobs/search" && method === "POST") {
+      requests.searches.push({ body: request.postData(), headers: request.headers() });
+      const response = savedSearchResponses[requests.searches.length - 1];
+      assert(response, `Unexpected synthetic saved-jobs search ${requests.searches.length}`);
+      response.gate?.markStarted();
+      if (response.gate) {
+        await withTimeout(response.gate.gate, "deferred saved-jobs search release");
+      }
+      try {
+        await route.fulfill({
+          status: response.status ?? 200,
+          headers: {
+            ...jsonHeaders,
+            "content-type":
+              response.status && response.status >= 400
+                ? "application/problem+json; charset=utf-8"
+                : jsonHeaders["content-type"],
+          },
+          json: response.body,
+        });
+      } catch (error) {
+        if (!response.allowAborted) throw error;
+      } finally {
+        response.gate?.markCompleted();
+      }
+      return;
+    }
+    if (/^\/api\/platform\/saved-jobs\/[^/]+$/.test(path) && method === "DELETE") {
+      requests.deletes.push({ body: request.postData(), headers: request.headers(), path });
+      const response = deleteResponses[requests.deletes.length - 1];
+      assert(response, `Unexpected synthetic saved-job delete ${requests.deletes.length}`);
+      await route.fulfill({
+        status: response.status ?? 204,
+        headers:
+          response.status && response.status >= 400
+            ? { ...jsonHeaders, "content-type": "application/problem+json; charset=utf-8" }
+            : { "cache-control": "no-store" },
+        ...(response.body ? { json: response.body } : {}),
+      });
+      return;
+    }
+    await route.fulfill({ status: 404, headers: jsonHeaders, json: { code: "not_found" } });
+  });
+  return requests;
 }
 
 async function installSyntheticReportBff(page, responses) {
@@ -783,6 +887,15 @@ async function assertNoWcagViolations(page) {
   assert.deepEqual(violations, []);
 }
 
+async function waitForSavedJobsText(page, text) {
+  await page.waitForFunction((expected) => {
+    const section = document.querySelector(".saved-jobs");
+    return Boolean(
+      section && section.getClientRects().length > 0 && section.innerText.includes(expected),
+    );
+  }, text);
+}
+
 async function runKeyboardAndWcagScenario(browser, origin) {
   const context = await browser.newContext({ serviceWorkers: "block" });
   try {
@@ -860,6 +973,150 @@ async function runRedactionAndSessionScenario(browser, origin) {
     assert(!(await component.textContent()).includes(syntheticJob.title));
     await assertNoWcagViolations(page);
   } finally {
+    await context.close();
+  }
+}
+
+async function runSavedJobsLifecycleScenario(browser, origin) {
+  const context = await browser.newContext({ serviceWorkers: "block" });
+  try {
+    const page = await context.newPage();
+    const requests = await installSyntheticSavedJobsBff(page, {
+      deleteResponses: [{ status: 204 }],
+      savedSearchResponses: [
+        { body: { items: [] } },
+        { body: { items: [syntheticSavedJob] } },
+        { body: { items: [] } },
+      ],
+    });
+    const component = await mountCandidateCatalog(page, origin);
+    await waitForSavedJobsText(page, "No jobs saved yet.");
+
+    const keywords = component.getByRole("searchbox", { name: /^Keywords/ });
+    await keywords.fill("synthetic saved lifecycle");
+    await keywords.press("Enter");
+    const searchRegion = component.getByRole("region", { name: "Search current jobs" });
+    await searchRegion.getByRole("status").getByText("1 job loaded.", { exact: true }).waitFor();
+    await searchRegion.getByRole("button", { name: "Save job" }).press("Enter");
+    await searchRegion.getByText("Job saved to your private list.", { exact: true }).waitFor();
+    await component.getByRole("heading", { name: syntheticJob.title }).nth(1).waitFor();
+
+    assert.equal(requests.saves.length, 1);
+    assert.deepEqual(JSON.parse(requests.saves[0].body), { jobId: SYNTHETIC_JOB_ID });
+    assert.match(requests.saves[0].headers["idempotency-key"], /^saved-job-[0-9a-f-]{36}$/);
+    assert.equal(requests.searches.length, 2);
+    assert.deepEqual(
+      requests.searches.map(({ body }) => JSON.parse(body)),
+      [{ pageSize: 20 }, { pageSize: 20 }],
+    );
+
+    await component.getByRole("button", { name: "Remove" }).press("Enter");
+    await waitForSavedJobsText(page, "Saved job removed.");
+    assert.equal(await component.getByRole("button", { name: "Remove" }).count(), 0);
+    assert.equal(await page.locator(".saved-jobs output").getAttribute("aria-live"), "polite");
+    assert.equal(requests.deletes.length, 1);
+    assert.equal(requests.deletes[0].path, `/api/platform/saved-jobs/${SYNTHETIC_SAVED_JOB_ID}`);
+    assert.equal(requests.searches.length, 3);
+    assert.deepEqual(JSON.parse(requests.searches[2].body), { pageSize: 20 });
+    assert(
+      await component
+        .getByRole("heading", { name: "Saved jobs" })
+        .evaluate((element) => document.activeElement === element),
+    );
+    await assertNoWcagViolations(page);
+  } finally {
+    await context.close();
+  }
+}
+
+async function runSavedJobsFaultRecoveryAndSessionScenario(browser, origin) {
+  const context = await browser.newContext({ serviceWorkers: "block" });
+  const staleRefreshGate = createGate();
+  try {
+    const page = await context.newPage();
+    const requests = await installSyntheticSavedJobsBff(page, {
+      deleteResponses: [
+        {
+          status: 503,
+          body: { code: "saved_jobs_unavailable", detail: PRIVATE_CANARY },
+        },
+        { status: 204 },
+      ],
+      savedSearchResponses: [
+        { body: { items: [syntheticUnavailableSavedJob], nextCursor: "private.cursor" } },
+        {
+          status: 503,
+          body: { code: "saved_jobs_unavailable", detail: PRIVATE_CANARY },
+        },
+        {
+          body: {
+            items: [
+              {
+                ...syntheticUnavailableSavedJob,
+                id: "00000000-0000-7000-8000-000000000021",
+                snapshot: {
+                  ...syntheticUnavailableSavedJob.snapshot,
+                  title: "Recovered Synthetic Engineer",
+                },
+              },
+            ],
+          },
+        },
+        {
+          gate: staleRefreshGate,
+          allowAborted: true,
+          body: {
+            items: [
+              {
+                ...syntheticUnavailableSavedJob,
+                snapshot: { ...syntheticUnavailableSavedJob.snapshot, title: PRIVATE_CANARY },
+              },
+            ],
+          },
+        },
+      ],
+    });
+    const component = await mountCandidateCatalog(page, origin);
+    await waitForSavedJobsText(page, "This posting is no longer available in the active catalog.");
+    await component.getByRole("button", { name: "Load more saved jobs" }).waitFor();
+
+    await component.getByRole("button", { name: "Remove" }).press("Enter");
+    await waitForSavedJobsText(page, "Saved jobs are temporarily unavailable.");
+    assert(!(await component.textContent()).includes(PRIVATE_CANARY));
+    assert.equal(requests.deletes.length, 1);
+    assert.equal(await component.getByRole("heading", { name: syntheticJob.title }).count(), 1);
+
+    await component.getByRole("button", { name: "Remove" }).press("Enter");
+    await waitForSavedJobsText(page, "Saved jobs are temporarily unavailable.");
+    assert.equal(requests.deletes.length, 2);
+    assert.equal(await component.getByRole("heading", { name: syntheticJob.title }).count(), 0);
+    assert.equal(await component.getByRole("button", { name: "Load more saved jobs" }).count(), 0);
+    assert(!(await component.textContent()).includes(PRIVATE_CANARY));
+    assert.deepEqual(JSON.parse(requests.searches[1].body), { pageSize: 20 });
+
+    await page.evaluate(() => window.dispatchEvent(new Event("ai-job-apply:saved-jobs-changed")));
+    await waitForSavedJobsText(page, "Recovered Synthetic Engineer");
+    assert.equal(requests.searches.length, 3);
+    assert.deepEqual(JSON.parse(requests.searches[2].body), { pageSize: 20 });
+    assert(!(await component.textContent()).includes(PRIVATE_CANARY));
+
+    await page.evaluate(() => window.dispatchEvent(new Event("ai-job-apply:saved-jobs-changed")));
+    await withTimeout(staleRefreshGate.started, "deferred saved-jobs refresh start");
+    await page.evaluate(() =>
+      window.mount({
+        story: "d1-candidate-surfaces/CandidateCatalog",
+        props: { authenticated: false },
+      }),
+    );
+    await component.getByText("Sign in to keep a private list of jobs.").waitFor();
+    staleRefreshGate.release();
+    await withTimeout(staleRefreshGate.completed, "deferred saved-jobs refresh completion");
+    await settleBrowserRender(page);
+    assert(!(await component.textContent()).includes(PRIVATE_CANARY));
+    assert.equal(await component.getByRole("heading", { name: syntheticJob.title }).count(), 0);
+    await assertNoWcagViolations(page);
+  } finally {
+    staleRefreshGate.release();
     await context.close();
   }
 }
@@ -1322,6 +1579,10 @@ try {
   process.stdout.write("PASS keyboard/focus/live-status/body-only/WCAG scenario\n");
   await runRedactionAndSessionScenario(browser, server.origin);
   process.stdout.write("PASS redaction/session-fencing/WCAG scenario\n");
+  await runSavedJobsLifecycleScenario(browser, server.origin);
+  process.stdout.write("PASS saved-jobs lifecycle/reconciliation/focus/WCAG scenario\n");
+  await runSavedJobsFaultRecoveryAndSessionScenario(browser, server.origin);
+  process.stdout.write("PASS saved-jobs fault/redaction/recovery/session/WCAG scenario\n");
   await runOnboardingTruthAndWcagScenario(browser, server.origin);
   process.stdout.write("PASS onboarding/preferences/direct-facts/resume/WCAG scenario\n");
   await runOnboardingLegacyAndSessionScenario(browser, server.origin);

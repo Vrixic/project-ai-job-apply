@@ -21,6 +21,8 @@ const savedJob = {
   savedAt: "2026-08-15T12:00:00.000Z",
 } as const;
 
+const privateCanary = "synthetic-private-saved-jobs-canary-never-render";
+
 function deferredResponse() {
   let resolve!: (response: Response) => void;
   const promise = new Promise<Response>((next) => {
@@ -124,6 +126,7 @@ describe("SavedJobsPanel", () => {
             title: "Saved jobs unavailable",
             status: 503,
             code: "saved_jobs_unavailable",
+            detail: privateCanary,
           },
           { status: 503 },
         ),
@@ -138,8 +141,54 @@ describe("SavedJobsPanel", () => {
 
     expect(container.textContent).not.toContain("Synthetic Engineer");
     expect(container.textContent).not.toContain("Load more saved jobs");
-    expect(container.textContent).toContain("Saved jobs unavailable");
+    expect(container.textContent).toContain("Saved jobs are temporarily unavailable.");
+    expect(container.textContent).not.toContain(privateCanary);
     expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body))).toEqual({ pageSize: 20 });
+    expect(document.activeElement).toBe(container.querySelector("#saved-jobs-heading"));
+  });
+
+  it("renders bounded errors without exposing list or delete problem details", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        Response.json(
+          {
+            title: "Private upstream title",
+            detail: privateCanary,
+            code: "saved_jobs_unavailable",
+          },
+          { status: 503 },
+        ),
+      )
+      .mockResolvedValueOnce(Response.json({ items: [savedJob] }))
+      .mockResolvedValueOnce(
+        Response.json(
+          {
+            title: "Private delete title",
+            detail: privateCanary,
+            code: "saved_jobs_unavailable",
+          },
+          { status: 503 },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await act(async () => root.render(<SavedJobsPanel authenticated />));
+    await act(async () => {});
+    expect(container.textContent).toContain("Saved jobs are temporarily unavailable.");
+    expect(container.textContent).not.toContain(privateCanary);
+    expect(container.textContent).not.toContain("Private upstream title");
+
+    await act(async () => window.dispatchEvent(new Event(SAVED_JOBS_CHANGED_EVENT)));
+    await act(async () => {});
+    const remove = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Remove"),
+    );
+    await act(async () => remove?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(container.textContent).toContain("Saved jobs are temporarily unavailable.");
+    expect(container.textContent).not.toContain(privateCanary);
+    expect(container.textContent).not.toContain("Private delete title");
+    expect(container.textContent).toContain("Synthetic Engineer");
   });
 
   it("aborts and clears private saved state when authentication changes", async () => {

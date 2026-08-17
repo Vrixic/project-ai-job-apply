@@ -8,10 +8,17 @@ export const SAVED_JOBS_CHANGED_EVENT = "ai-job-apply:saved-jobs-changed";
 
 async function problemMessage(response: Response): Promise<string> {
   try {
-    const problem = (await response.json()) as { detail?: string; title?: string };
-    return problem.detail ?? problem.title ?? "Saved jobs could not be updated";
+    const problem = (await response.json()) as { code?: unknown };
+    const code = typeof problem.code === "string" ? problem.code : undefined;
+    return code === "authentication_required" || code === "session_expired"
+      ? "Sign in again to view or update saved jobs."
+      : code === "forbidden"
+        ? "Your session is not allowed to view or update saved jobs."
+        : code === "invalid_request"
+          ? "Check the saved-jobs request and try again."
+          : "Saved jobs are temporarily unavailable.";
   } catch {
-    return "Saved jobs could not be updated";
+    return "Saved jobs are temporarily unavailable.";
   }
 }
 
@@ -23,6 +30,7 @@ export function SavedJobsPanel({ authenticated }: { authenticated: boolean }) {
   const [message, setMessage] = useState<string>();
   const generation = useRef(0);
   const authenticatedRef = useRef(authenticated);
+  const headingRef = useRef<HTMLHeadingElement>(null);
   const activeControllers = useRef(new Set<AbortController>());
   const listController = useRef<AbortController | undefined>(undefined);
   const loadVersion = useRef(0);
@@ -124,6 +132,7 @@ export function SavedJobsPanel({ authenticated }: { authenticated: boolean }) {
       const restarted = await load(undefined, activeGeneration);
       if (!authenticatedRef.current || activeGeneration !== generation.current) return;
       if (restarted) setMessage("Saved job removed.");
+      headingRef.current?.focus();
     } catch (error) {
       if (authenticatedRef.current && activeGeneration === generation.current) {
         setMessage(error instanceof Error ? error.message : "Saved job could not be removed");
@@ -150,7 +159,9 @@ export function SavedJobsPanel({ authenticated }: { authenticated: boolean }) {
       <div className="section-heading">
         <div>
           <span className="eyebrow">Private candidate list</span>
-          <h2 id="saved-jobs-heading">Saved jobs</h2>
+          <h2 id="saved-jobs-heading" ref={headingRef} tabIndex={-1}>
+            Saved jobs
+          </h2>
         </div>
       </div>
       <p>
