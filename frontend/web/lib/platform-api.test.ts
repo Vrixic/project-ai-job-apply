@@ -1,5 +1,37 @@
 import { describe, expect, it, vi } from "vitest";
+import { validateJobReportResponse } from "./job-report-bff";
+import { validateMatchAssessmentResponse } from "./match-assessment-bff";
 import { forwardPlatformRequest } from "./platform-api";
+
+const privateCanary = "synthetic-private-upstream-detail-never-cross";
+
+const authenticated = {
+  getSession: async () => ({ user: { sub: "synthetic-user" } }),
+  getAccessToken: async () => ({ token: "synthetic-token" }),
+};
+
+function upstreamProblem(
+  status: number,
+  code: string,
+  overrides: Readonly<Record<string, unknown>> = {},
+  headers: Readonly<Record<string, string>> = {},
+): Response {
+  return new Response(
+    JSON.stringify({
+      type: `urn:ai-job-apply:problem:${code}`,
+      title: `Private title ${privateCanary}`,
+      status,
+      code,
+      traceId: `private-trace-${privateCanary}`,
+      detail: `Private detail ${privateCanary}`,
+      ...overrides,
+    }),
+    {
+      status,
+      headers: { "content-type": "application/problem+json", ...headers },
+    },
+  );
+}
 
 describe("platform BFF", () => {
   it("rejects missing sessions without contacting the platform API", async () => {
@@ -27,6 +59,7 @@ describe("platform BFF", () => {
     const platformFetch = vi.fn<typeof fetch>(async (_input, init) => {
       const headers = new Headers(init?.headers);
       expect(headers.get("authorization")).toBe("Bearer synthetic-token");
+      expect(init?.redirect).toBe("error");
       return new Response(JSON.stringify({ id: "candidate-id" }), {
         status: 200,
         headers: {
@@ -40,10 +73,7 @@ describe("platform BFF", () => {
       "/v1/me",
       { method: "GET" },
       {
-        auth0: {
-          getSession: async () => ({ user: { sub: "synthetic-user" } }),
-          getAccessToken: async () => ({ token: "synthetic-token" }),
-        },
+        auth0: authenticated,
         baseUrl: "http://localhost:4000",
         fetch: platformFetch,
       },
@@ -63,10 +93,7 @@ describe("platform BFF", () => {
       "/v1/me",
       { method: "GET" },
       {
-        auth0: {
-          getSession: async () => ({ user: { sub: "synthetic-user" } }),
-          getAccessToken: async () => ({ token: "synthetic-token" }),
-        },
+        auth0: authenticated,
         baseUrl: "http://localhost:4000",
         fetch: platformFetch,
         random: () => 1,
@@ -94,10 +121,7 @@ describe("platform BFF", () => {
       "/v1/profile/facts",
       { method: "GET" },
       {
-        auth0: {
-          getSession: async () => ({ user: { sub: "synthetic-user" } }),
-          getAccessToken: async () => ({ token: "synthetic-token" }),
-        },
+        auth0: authenticated,
         baseUrl: "http://localhost:4000",
         fetch: platformFetch,
         random: () => 1,
@@ -118,10 +142,7 @@ describe("platform BFF", () => {
       "/v1/me/job-preferences",
       { method: "PUT", body: "{}" },
       {
-        auth0: {
-          getSession: async () => ({ user: { sub: "synthetic-user" } }),
-          getAccessToken: async () => ({ token: "synthetic-token" }),
-        },
+        auth0: authenticated,
         baseUrl: "http://localhost:4000",
         fetch: platformFetch,
         retryDelaysMilliseconds: [1, 2, 3],
@@ -139,10 +160,7 @@ describe("platform BFF", () => {
       "/v1/jobs/search",
       { method: "POST", body: "{}" },
       {
-        auth0: {
-          getSession: async () => ({ user: { sub: "synthetic-user" } }),
-          getAccessToken: async () => ({ token: "synthetic-token" }),
-        },
+        auth0: authenticated,
         baseUrl: "http://localhost:4000",
         fetch: async (_input, init) => {
           observedSignal = init?.signal ?? undefined;
@@ -166,31 +184,301 @@ describe("platform BFF", () => {
       "/v1/me/job-preferences",
       { method: "GET" },
       {
-        auth0: {
-          getSession: async () => ({ user: { sub: "synthetic-user" } }),
-          getAccessToken: async () => ({ token: "synthetic-token" }),
-        },
+        auth0: authenticated,
         baseUrl: "http://localhost:4000",
         fetch: async () =>
-          new Response(
-            JSON.stringify({
-              type: "urn:ai-job-apply:problem:not_found",
-              title: "Not found",
-              status: 404,
-              code: "not_found",
-            }),
-            {
-              status: 404,
-              headers: {
-                "content-type": "application/problem+json",
-                "set-cookie": "must-not-cross-the-bff=1",
-              },
-            },
-          ),
+          upstreamProblem(404, "not_found", {}, { "set-cookie": "must-not-cross-the-bff=1" }),
       },
     );
 
     expect(response.status).toBe(404);
     expect(response.headers.get("set-cookie")).toBeNull();
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      type: "urn:ai-job-apply:problem:not_found",
+      title: "Not found",
+      status: 404,
+      code: "not_found",
+    });
+    expect(body.traceId).not.toBe(`private-trace-${privateCanary}`);
+    expect(body).not.toHaveProperty("detail");
+  });
+
+  it("projects an exact declared problem with fixed copy and a local trace", async () => {
+    const response = await forwardPlatformRequest(
+      "/v1/jobs/search",
+      { method: "POST", body: "{}" },
+      {
+        auth0: authenticated,
+        baseUrl: "http://localhost:4000",
+        fetch: async () =>
+          upstreamProblem(
+            409,
+            "job_search_catalog_changed",
+            {},
+            {
+              "set-cookie": `private=${privateCanary}`,
+              "x-correlation-id": privateCanary,
+            },
+          ),
+      },
+    );
+
+    expect(response.status).toBe(409);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect(response.headers.get("x-correlation-id")).toBeNull();
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      type: "urn:ai-job-apply:problem:job_search_catalog_changed",
+      title: "Job catalog changed",
+      status: 409,
+      code: "job_search_catalog_changed",
+    });
+    expect(body.traceId).not.toBe(`private-trace-${privateCanary}`);
+    expect(JSON.stringify(body)).not.toContain(privateCanary);
+    expect(body).not.toHaveProperty("detail");
+  });
+
+  it.each([
+    ["report", 404, "job_report_target_unavailable", "Job is unavailable"],
+    ["report", 409, "job_already_reported", "Job already reported"],
+    ["report", 409, "job_report_limit_reached", "Job-report limit reached"],
+    ["report", 503, "job_reporting_unavailable", "Job reporting unavailable"],
+    ["match", 404, "match_job_unavailable", "Job is unavailable"],
+    ["match", 409, "match_preferences_required", "Job preferences are required"],
+    ["match", 409, "match_preferences_require_review", "Job preferences require review"],
+    ["match", 503, "match_assessment_unavailable", "Match assessment unavailable"],
+  ])(
+    "preserves declared report and match controls without upstream values: %s %s %s",
+    async (surface, status, code, title) => {
+      const response = await forwardPlatformRequest(
+        surface === "report" ? "/v1/jobs/synthetic/reports" : "/v1/jobs/synthetic/match-assessment",
+        { method: "POST", body: "{}" },
+        {
+          auth0: authenticated,
+          baseUrl: "http://localhost:4000",
+          fetch: async () => upstreamProblem(status, code),
+        },
+      );
+      const downstream =
+        surface === "report"
+          ? await validateJobReportResponse(response.clone(), "synthetic", "job_closed")
+          : await validateMatchAssessmentResponse(response.clone(), "synthetic");
+
+      expect(response.status).toBe(status);
+      expect(downstream.status).toBe(status);
+      expect(await downstream.json()).toMatchObject({ status, code, title });
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body).toMatchObject({
+        type: `urn:ai-job-apply:problem:${code}`,
+        title,
+        status,
+        code,
+      });
+      expect(body.traceId).not.toBe(`private-trace-${privateCanary}`);
+      expect(JSON.stringify(body)).not.toContain(privateCanary);
+      expect(body).not.toHaveProperty("detail");
+    },
+  );
+
+  it.each([
+    ["unknown code", () => upstreamProblem(409, "private_database_conflict")],
+    [
+      "mismatched status",
+      () => upstreamProblem(409, "job_search_catalog_changed", { status: 400 }),
+    ],
+    [
+      "mismatched type",
+      () =>
+        upstreamProblem(409, "job_search_catalog_changed", {
+          type: "urn:ai-job-apply:problem:private_database_conflict",
+        }),
+    ],
+    [
+      "wrong content type",
+      () =>
+        new Response(privateCanary, {
+          status: 409,
+          headers: { "content-type": "text/plain" },
+        }),
+    ],
+    [
+      "malformed JSON",
+      () =>
+        new Response(`{${privateCanary}`, {
+          status: 409,
+          headers: { "content-type": "application/problem+json" },
+        }),
+    ],
+    [
+      "missing required fields",
+      () =>
+        new Response(JSON.stringify({ code: "job_search_catalog_changed" }), {
+          status: 409,
+          headers: { "content-type": "application/problem+json" },
+        }),
+    ],
+  ])("replaces an invalid upstream problem: %s", async (_label, responseFactory) => {
+    const response = await forwardPlatformRequest(
+      "/v1/jobs/search",
+      { method: "POST", body: "{}" },
+      {
+        auth0: authenticated,
+        baseUrl: "http://localhost:4000",
+        fetch: async () => responseFactory(),
+      },
+    );
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.text()).not.toContain(privateCanary);
+  });
+
+  it("cancels a problem whose declared content length is too large", async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(privateCanary));
+      },
+      cancel() {
+        cancelled = true;
+        return new Promise<void>(() => undefined);
+      },
+    });
+    const response = await forwardPlatformRequest(
+      "/v1/profile/facts",
+      { method: "POST", body: "{}" },
+      {
+        auth0: authenticated,
+        baseUrl: "http://localhost:4000",
+        fetch: async () =>
+          new Response(body, {
+            status: 409,
+            headers: {
+              "content-type": "application/problem+json",
+              "content-length": String(16 * 1024 + 1),
+            },
+          }),
+      },
+    );
+
+    expect(response.status).toBe(503);
+    expect(cancelled).toBe(true);
+    expect(await response.text()).not.toContain(privateCanary);
+  });
+
+  it("cancels a streamed problem that exceeds the byte bound", async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(16 * 1024 + 1));
+      },
+      cancel() {
+        cancelled = true;
+        return new Promise<void>(() => undefined);
+      },
+    });
+    const response = await forwardPlatformRequest(
+      "/v1/profile/facts",
+      { method: "POST", body: "{}" },
+      {
+        auth0: authenticated,
+        baseUrl: "http://localhost:4000",
+        fetch: async () =>
+          new Response(body, {
+            status: 409,
+            headers: { "content-type": "application/problem+json" },
+          }),
+      },
+    );
+
+    expect(response.status).toBe(503);
+    expect(cancelled).toBe(true);
+  });
+
+  it("times out and cancels a stalled upstream problem body", async () => {
+    let cancelled = false;
+    const response = await forwardPlatformRequest(
+      "/v1/profile/facts",
+      { method: "POST", body: "{}" },
+      {
+        auth0: authenticated,
+        baseUrl: "http://localhost:4000",
+        fetch: async () =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start() {},
+              cancel() {
+                cancelled = true;
+                return new Promise<void>(() => undefined);
+              },
+            }),
+            {
+              status: 409,
+              headers: { "content-type": "application/problem+json" },
+            },
+          ),
+        timeoutMilliseconds: 1,
+      },
+    );
+
+    expect(response.status).toBe(503);
+    expect(cancelled).toBe(true);
+  });
+
+  it("refuses upstream redirects instead of forwarding the server-held token", async () => {
+    const platformFetch = vi.fn<typeof fetch>(async (_input, init) => {
+      expect(init?.redirect).toBe("error");
+      throw new Error("redirect refused");
+    });
+    const response = await forwardPlatformRequest(
+      "/v1/me/job-preferences",
+      { method: "PUT", body: "{}" },
+      {
+        auth0: authenticated,
+        baseUrl: "http://localhost:4000",
+        fetch: platformFetch,
+      },
+    );
+
+    expect(response.status).toBe(503);
+    expect(platformFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not wait for hostile transient-body cancellation before retrying a read", async () => {
+    let cancellationRequested = false;
+    const platformFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start() {},
+            cancel() {
+              cancellationRequested = true;
+              return new Promise<void>(() => undefined);
+            },
+          }),
+          { status: 503 },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [] }), { status: 200 }));
+
+    const response = await forwardPlatformRequest(
+      "/v1/profile/facts",
+      { method: "GET" },
+      {
+        auth0: authenticated,
+        baseUrl: "http://localhost:4000",
+        fetch: platformFetch,
+        random: () => 1,
+        retryDelaysMilliseconds: [1],
+        sleep: async () => undefined,
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(platformFetch).toHaveBeenCalledTimes(2);
+    expect(cancellationRequested).toBe(true);
   });
 });
