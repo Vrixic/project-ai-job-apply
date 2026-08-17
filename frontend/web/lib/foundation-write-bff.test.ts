@@ -55,6 +55,16 @@ const validBodies: Record<FoundationWriteSchemaName, Record<string, unknown>> = 
     value: "TypeScript and JavaScript",
   },
 };
+const responsePreferenceSet = {
+  id: "019b4e12-7ea3-7c36-9357-aea35ab542c1",
+  ...validBodies.PutJobPreferencesRequest,
+  version: 1,
+  updatedAt: "2026-08-17T12:00:00.000Z",
+};
+const responsePutPreferences = {
+  preferences: responsePreferenceSet,
+  operationId: "019b4e12-7ea3-7c36-9357-aea35ab542c3",
+};
 const responseDocument = {
   id: "019b4e12-7ea3-7c36-9357-aea35ab542c2",
   ...validBodies.CreateResumeUploadRequest,
@@ -263,7 +273,7 @@ describe("foundation write request boundary", () => {
 
 describe("foundation write route composition", () => {
   it.each([
-    [getJobPreferences, "/v1/me/job-preferences", {}],
+    [getJobPreferences, "/v1/me/job-preferences", responsePreferenceSet],
     [getResumes, "/v1/resumes", { documents: [responseDocument] }],
     [
       getProfileFacts,
@@ -293,8 +303,8 @@ describe("foundation write route composition", () => {
       "PUT",
       "/v1/me/job-preferences",
       validBodies.PutJobPreferencesRequest,
-      204,
-      undefined,
+      200,
+      responsePutPreferences,
     ],
     [
       "resume upload",

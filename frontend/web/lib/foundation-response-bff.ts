@@ -6,6 +6,8 @@ const JSON_CONTENT_TYPE_PATTERN = /^application\/json(?:\s*;\s*charset=utf-8)?$/
 
 export type FoundationResponseSchemaName =
   | "EntitlementSummary"
+  | "JobPreferenceSet"
+  | "PutJobPreferencesResponse"
   | "SavedJob"
   | "SavedJobPage"
   | "ResumeDocumentCollection"
@@ -18,6 +20,8 @@ const validators = new Map<
   ReturnType<typeof compileComponentValidator>
 >([
   ["EntitlementSummary", compileComponentValidator("EntitlementSummary")],
+  ["JobPreferenceSet", compileComponentValidator("JobPreferenceSet")],
+  ["PutJobPreferencesResponse", compileComponentValidator("PutJobPreferencesResponse")],
   ["SavedJob", compileComponentValidator("SavedJob")],
   ["SavedJobPage", compileComponentValidator("SavedJobPage")],
   ["ResumeDocumentCollection", compileComponentValidator("ResumeDocumentCollection")],
@@ -25,6 +29,26 @@ const validators = new Map<
   ["ProfileFactCollection", compileComponentValidator("ProfileFactCollection")],
   ["ProfileFact", compileComponentValidator("ProfileFact")],
 ]);
+
+function projectFoundationValue(
+  schemaName: FoundationResponseSchemaName,
+  value: unknown,
+): unknown | undefined {
+  const validator = validators.get(schemaName);
+  if (schemaName !== "JobPreferenceSet") {
+    return validator?.(value) ? value : undefined;
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  if (!Object.hasOwn(value, "requiresSponsorship")) {
+    return validator?.(value) ? value : undefined;
+  }
+
+  const legacy = value as Record<string, unknown>;
+  if (typeof legacy.requiresSponsorship !== "boolean") return undefined;
+  const { requiresSponsorship, ...current } = legacy;
+  if (!validator?.(current)) return undefined;
+  return { ...current, requiresSponsorship };
+}
 
 function unavailable(): Response {
   return Response.json(
@@ -148,7 +172,8 @@ export async function validateFoundationResponse(
     }
     const decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
     const value: unknown = JSON.parse(decoded);
-    if (!validators.get(schemaName)?.(value)) {
+    const projected = projectFoundationValue(schemaName, value);
+    if (projected === undefined) {
       throw new Error("The response body does not match its contract");
     }
 
@@ -158,7 +183,7 @@ export async function validateFoundationResponse(
     });
     const correlationId = response.headers.get("x-correlation-id");
     if (correlationId) headers.set("x-correlation-id", correlationId);
-    return new Response(JSON.stringify(value), { status: expectedStatus, headers });
+    return new Response(JSON.stringify(projected), { status: expectedStatus, headers });
   } catch {
     return unavailable();
   }
