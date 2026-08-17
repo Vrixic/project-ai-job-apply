@@ -1,4 +1,5 @@
 import { getAuth0Client } from "../../../../lib/auth0";
+import { readFoundationWriteRequest } from "../../../../lib/foundation-write-bff";
 import { forwardPlatformRequest } from "../../../../lib/platform-api";
 
 export const dynamic = "force-dynamic";
@@ -16,16 +17,17 @@ export async function GET(): Promise<Response> {
 }
 
 export async function PUT(request: Request): Promise<Response> {
+  const decoded = await readFoundationWriteRequest(request, "PutJobPreferencesRequest");
+  if ("failure" in decoded) return decoded.failure;
   return forwardPlatformRequest(
     "/v1/me/job-preferences",
     {
       method: "PUT",
-      body: await request.text(),
+      body: decoded.body,
+      signal: request.signal,
       headers: {
         "content-type": "application/json",
-        ...(request.headers.get("idempotency-key")
-          ? { "idempotency-key": request.headers.get("idempotency-key") as string }
-          : {}),
+        "idempotency-key": decoded.idempotencyKey,
       },
     },
     {
