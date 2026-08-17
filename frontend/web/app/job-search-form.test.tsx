@@ -114,7 +114,40 @@ describe("JobSearchForm", () => {
     vi.unstubAllGlobals();
   });
 
-  it("announces loading and safely restarts a changed continuation without mixing pages", async () => {
+  it("keeps rapid initial search activation single-flight and cleans up its deadline", async () => {
+    vi.useFakeTimers();
+    const pending = deferredResponse();
+    let observedSignal: AbortSignal | undefined;
+    const fetchMock = vi.fn<typeof fetch>((_input, init) => {
+      observedSignal = init?.signal ?? undefined;
+      return pending.promise;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await act(async () => root.render(<JobSearchForm authenticated />));
+    const form = container.querySelector("form");
+    await act(async () => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith("/api/platform/jobs/search", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sort: "relevance", pageSize: 10 }),
+      signal: expect.any(AbortSignal),
+    });
+    expect(observedSignal?.aborted).toBe(false);
+
+    await act(async () => pending.resolve(jsonResponse({ items: [firstJob] })));
+
+    expect(container.textContent).toContain(firstJob.title);
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    expect(observedSignal?.aborted).toBe(false);
+  });
+
+  it("keeps rapid continuation activation single-flight and safely restarts a changed catalog", async () => {
     const initial = deferredResponse();
     const restarted = deferredResponse();
     const fetchMock = vi
@@ -156,7 +189,10 @@ describe("JobSearchForm", () => {
     const loadMore = Array.from(container.querySelectorAll("button")).find((button) =>
       button.textContent?.includes("Load more jobs"),
     );
-    await act(async () => loadMore?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    await act(async () => {
+      loadMore?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      loadMore?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(container.querySelector('[aria-live="polite"]')?.textContent).toContain(
@@ -175,16 +211,13 @@ describe("JobSearchForm", () => {
 
   it("aborts a stalled component request and announces the timeout", async () => {
     vi.useFakeTimers();
+    const pending = deferredResponse();
     let observedSignal: AbortSignal | undefined;
     vi.stubGlobal(
       "fetch",
       vi.fn<typeof fetch>((_input, init) => {
         observedSignal = init?.signal ?? undefined;
-        return new Promise<Response>((_resolve, reject) => {
-          observedSignal?.addEventListener("abort", () =>
-            reject(new DOMException("Aborted", "AbortError")),
-          );
-        });
+        return pending.promise;
       }),
     );
 
@@ -203,6 +236,8 @@ describe("JobSearchForm", () => {
       "Job search timed out",
     );
     expect(submit?.disabled).toBe(false);
+    await act(async () => pending.resolve(jsonResponse({ items: [firstJob] })));
+    expect(container.textContent).not.toContain(firstJob.title);
   });
 
   it("renders a fixed failure without exposing upstream problem details", async () => {
@@ -681,9 +716,13 @@ describe("JobSearchForm", () => {
 
   it("re-enables search after sign-out during a pending request and ignores its stale response", async () => {
     const pending = deferredResponse();
+    let observedSignal: AbortSignal | undefined;
     vi.stubGlobal(
       "fetch",
-      vi.fn<typeof fetch>(() => pending.promise),
+      vi.fn<typeof fetch>((_input, init) => {
+        observedSignal = init?.signal ?? undefined;
+        return pending.promise;
+      }),
     );
     await act(async () => root.render(<JobSearchForm authenticated />));
     await act(async () =>
@@ -696,11 +735,36 @@ describe("JobSearchForm", () => {
     );
 
     await act(async () => root.render(<JobSearchForm authenticated={false} />));
+    expect(observedSignal?.aborted).toBe(true);
     await act(async () => root.render(<JobSearchForm authenticated />));
     expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(
       false,
     );
     await act(async () => pending.resolve(jsonResponse({ items: [firstJob] })));
     expect(container.textContent).not.toContain(firstJob.title);
+  });
+
+  it("aborts a pending search on unmount and drops an abort-ignoring completion", async () => {
+    const pending = deferredResponse();
+    let observedSignal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>((_input, init) => {
+        observedSignal = init?.signal ?? undefined;
+        return pending.promise;
+      }),
+    );
+    await act(async () => root.render(<JobSearchForm authenticated />));
+    await act(async () =>
+      container
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+
+    await act(async () => root.unmount());
+    expect(observedSignal?.aborted).toBe(true);
+    await act(async () => pending.resolve(jsonResponse({ items: [firstJob] })));
+    expect(container.textContent).not.toContain(firstJob.title);
+    root = createRoot(container);
   });
 });
