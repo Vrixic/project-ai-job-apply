@@ -7,6 +7,7 @@ import type {
   ResumeDocumentCollection,
 } from "@ai-job-apply/api-contracts";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { candidateSafeProblemMessage } from "../lib/candidate-safe-problem";
 
 const MAXIMUM_RESUME_BYTES = 5 * 1024 * 1024;
 const PDF = "application/pdf" as const;
@@ -19,8 +20,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers: { "content-type": "application/json", ...init.headers },
   });
   if (!response.ok) {
-    const problem = (await response.json()) as { detail?: string; title?: string };
-    throw new Error(problem.detail ?? problem.title ?? "The resume request failed");
+    throw new Error(await candidateSafeProblemMessage(response, "resume"));
   }
   return (await response.json()) as T;
 }

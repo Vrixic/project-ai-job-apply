@@ -6,6 +6,10 @@ import type {
   PutJobPreferencesResponse,
 } from "@ai-job-apply/api-contracts";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import {
+  type CandidateProblemSurface,
+  candidateSafeProblemMessage,
+} from "../lib/candidate-safe-problem";
 import { isIsolationOperationEligible } from "../lib/isolation-operation";
 import { EntitlementStatus } from "./entitlement-status";
 import { JobSearchForm } from "./job-search-form";
@@ -37,7 +41,11 @@ const workModeValues = workModeOptions.map((option) => option.value);
 const employmentTypeValues = employmentTypeOptions.map((option) => option.value);
 type RepeatablePreferenceField = "targetRoles" | "locations";
 
-async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function apiRequest<T>(
+  path: string,
+  surface: CandidateProblemSurface,
+  init: RequestInit = {},
+): Promise<T> {
   const response = await fetch(path, {
     ...init,
     headers: {
@@ -46,8 +54,7 @@ async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
     },
   });
   if (!response.ok) {
-    const problem = (await response.json()) as { detail?: string; title?: string };
-    throw new Error(problem.detail ?? problem.title ?? "The request failed");
+    throw new Error(await candidateSafeProblemMessage(response, surface));
   }
   return (await response.json()) as T;
 }
@@ -134,8 +141,7 @@ export function FoundationForm({
           return;
         }
         if (!response.ok) {
-          const problem = (await response.json()) as { detail?: string; title?: string };
-          throw new Error(problem.detail ?? problem.title ?? "Could not load saved preferences");
+          throw new Error(await candidateSafeProblemMessage(response, "preferences"));
         }
         const preferences = (await response.json()) as JobPreferenceSet;
         const fields = hydrateJobPreferenceFields(preferences);
@@ -178,6 +184,7 @@ export function FoundationForm({
       try {
         const next = await apiRequest<Operation>(
           `/api/platform/operations/${encodeURIComponent(operationId)}`,
+          "operation",
           { signal: controller.signal },
         );
         if (!controller.signal.aborted && pollVersion === operationPollVersion.current) {
@@ -252,6 +259,7 @@ export function FoundationForm({
     try {
       const response = await apiRequest<PutJobPreferencesResponse>(
         "/api/platform/job-preferences",
+        "preferences",
         {
           method: "PUT",
           headers: { "idempotency-key": lastSubmission.current.idempotencyKey },
