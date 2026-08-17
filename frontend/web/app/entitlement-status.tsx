@@ -57,9 +57,11 @@ export function EntitlementStatus({ authenticated }: { authenticated: boolean })
     | { generation: number; status: "idle" | "loading" | "unavailable" }
     | { generation: number; status: "ready"; summary: EntitlementSummary }
   >({ generation: 0, status: authenticated ? "loading" : "idle" });
+  const [requestAttempt, setRequestAttempt] = useState(0);
   const requestGeneration = useRef(0);
   const previousAuthentication = useRef(authenticated);
   const controller = useRef<AbortController | undefined>(undefined);
+  const requestInFlight = useRef(false);
 
   if (previousAuthentication.current !== authenticated) {
     previousAuthentication.current = authenticated;
@@ -67,13 +69,16 @@ export function EntitlementStatus({ authenticated }: { authenticated: boolean })
   }
   const visibleGeneration = requestGeneration.current;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the attempt counter intentionally starts a candidate-requested retry.
   useEffect(() => {
     const generation = requestGeneration.current;
     controller.current?.abort();
     if (!authenticated) {
+      requestInFlight.current = false;
       setView({ generation, status: "idle" });
       return;
     }
+    requestInFlight.current = true;
     setView({ generation, status: "loading" });
     const active = new AbortController();
     controller.current = active;
@@ -94,14 +99,19 @@ export function EntitlementStatus({ authenticated }: { authenticated: boolean })
         if (!active.signal.aborted && generation === requestGeneration.current) {
           setView({ generation, status: "unavailable" });
         }
+      } finally {
+        if (controller.current === active) requestInFlight.current = false;
       }
     })();
     return () => {
       requestGeneration.current += 1;
       active.abort();
-      if (controller.current === active) controller.current = undefined;
+      if (controller.current === active) {
+        controller.current = undefined;
+        requestInFlight.current = false;
+      }
     };
-  }, [authenticated]);
+  }, [authenticated, requestAttempt]);
 
   if (!authenticated) {
     return (
@@ -116,6 +126,12 @@ export function EntitlementStatus({ authenticated }: { authenticated: boolean })
     view.generation === visibleGeneration
       ? view
       : { generation: visibleGeneration, status: "loading" as const };
+  const retry = () => {
+    if (requestInFlight.current || visibleView.status !== "unavailable") return;
+    requestInFlight.current = true;
+    setView({ generation: requestGeneration.current, status: "loading" });
+    setRequestAttempt((attempt) => attempt + 1);
+  };
   return (
     <section className="entitlement-status" aria-labelledby="entitlement-status-heading">
       <div className="section-heading">
@@ -126,7 +142,14 @@ export function EntitlementStatus({ authenticated }: { authenticated: boolean })
       </div>
       <div aria-live="polite">
         {visibleView.status === "loading" && <p>Loading access status…</p>}
-        {visibleView.status === "unavailable" && <p>Access status is temporarily unavailable.</p>}
+        {visibleView.status === "unavailable" && (
+          <div>
+            <p>Access status is temporarily unavailable.</p>
+            <button type="button" onClick={retry}>
+              Retry access status
+            </button>
+          </div>
+        )}
         {visibleView.status === "ready" && (
           <div className="entitlement-summary">
             <strong>{visibleView.summary.plan === "pro" ? "Pro" : "Free"} access</strong>
