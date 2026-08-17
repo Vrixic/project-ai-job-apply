@@ -134,6 +134,105 @@ describe("JobReportControl", () => {
     expect(changedHeaders.get("idempotency-key")).not.toBe(firstHeaders.get("idempotency-key"));
   });
 
+  it.each([
+    [400, "invalid_request"],
+    [401, "session_expired"],
+    [403, "forbidden"],
+    [404, "job_report_target_unavailable"],
+    [409, "idempotency_conflict"],
+    [409, "job_report_limit_reached"],
+    [413, "payload_too_large"],
+    [415, "unsupported_media_type"],
+  ])("rotates the key after a definitive %i %s response", async (status, code) => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            type: `urn:ai-job-apply:problem:${code}`,
+            title: "Fixed local title",
+            status,
+            code,
+            traceId: "trace-1",
+          },
+          status,
+        ),
+      )
+      .mockRejectedValueOnce(new TypeError("ambiguous network failure"));
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<JobReportControl jobId={JOB_ID} />));
+    await act(async () => selectValue(container, "job_closed"));
+    await act(async () => submit(container));
+    await act(async () => submit(container));
+
+    const firstHeaders = new Headers(fetchMock.mock.calls[0]?.[1]?.headers);
+    const nextHeaders = new Headers(fetchMock.mock.calls[1]?.[1]?.headers);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(nextHeaders.get("idempotency-key")).not.toBe(firstHeaders.get("idempotency-key"));
+  });
+
+  it.each(["job_reporting_unavailable", "platform_unavailable"])(
+    "retains the key after ambiguous 503 %s",
+    async (code) => {
+      const fetchMock = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(
+          jsonResponse(
+            {
+              type: `urn:ai-job-apply:problem:${code}`,
+              title: "Fixed local title",
+              status: 503,
+              code,
+              traceId: "trace-1",
+            },
+            503,
+          ),
+        )
+        .mockRejectedValueOnce(new TypeError("ambiguous network failure"));
+      vi.stubGlobal("fetch", fetchMock);
+      await act(async () => root.render(<JobReportControl jobId={JOB_ID} />));
+      await act(async () => selectValue(container, "job_closed"));
+      await act(async () => submit(container));
+      await act(async () => submit(container));
+
+      const firstHeaders = new Headers(fetchMock.mock.calls[0]?.[1]?.headers);
+      const retryHeaders = new Headers(fetchMock.mock.calls[1]?.[1]?.headers);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(retryHeaders.get("idempotency-key")).toBe(firstHeaders.get("idempotency-key"));
+    },
+  );
+
+  it("retains the key after the request deadline aborts", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockImplementationOnce(
+        (_input, init) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener(
+              "abort",
+              () => reject(new DOMException("The operation was aborted", "AbortError")),
+              { once: true },
+            );
+          }),
+      )
+      .mockRejectedValueOnce(new TypeError("ambiguous network failure"));
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<JobReportControl jobId={JOB_ID} />));
+    await act(async () => selectValue(container, "job_closed"));
+    await act(async () => {
+      submit(container);
+      await vi.advanceTimersByTimeAsync(20_000);
+    });
+    expect(container.textContent).toContain("Reporting timed out");
+    await act(async () => submit(container));
+
+    const firstHeaders = new Headers(fetchMock.mock.calls[0]?.[1]?.headers);
+    const retryHeaders = new Headers(fetchMock.mock.calls[1]?.[1]?.headers);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(retryHeaders.get("idempotency-key")).toBe(firstHeaders.get("idempotency-key"));
+  });
+
   it("treats an existing report as terminal without implying catalog suppression", async () => {
     vi.stubGlobal(
       "fetch",
