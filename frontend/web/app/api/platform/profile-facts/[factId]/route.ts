@@ -1,4 +1,5 @@
 import { getAuth0Client } from "../../../../../lib/auth0";
+import { readFoundationWriteRequest } from "../../../../../lib/foundation-write-bff";
 import { forwardPlatformRequest } from "../../../../../lib/platform-api";
 
 export const dynamic = "force-dynamic";
@@ -22,16 +23,18 @@ export async function PATCH(
     );
   }
 
+  const decoded = await readFoundationWriteRequest(request, "UpdateProfileFactRequest");
+  if ("failure" in decoded) return decoded.failure;
+
   return forwardPlatformRequest(
     `/v1/profile/facts/${encodeURIComponent(factId)}`,
     {
       method: "PATCH",
-      body: await request.text(),
+      body: decoded.body,
+      signal: request.signal,
       headers: {
         "content-type": "application/json",
-        ...(request.headers.get("idempotency-key")
-          ? { "idempotency-key": request.headers.get("idempotency-key") as string }
-          : {}),
+        "idempotency-key": decoded.idempotencyKey,
       },
     },
     {
