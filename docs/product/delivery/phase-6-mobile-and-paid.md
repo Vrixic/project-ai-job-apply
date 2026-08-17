@@ -4,7 +4,7 @@
 - Start: Not started
 - Completion: Not completed
 - Owners: Unassigned
-- Last updated: 2026-08-12
+- Last updated: 2026-08-17
 - Master tracker: [Delivery tracker](DELIVERY_TRACKER.md#d6--mobile-and-paid-launch)
 
 ## Objective
@@ -24,7 +24,7 @@ cache, WAF, or ALB controls supported by evidence.
 |---|---|---|---|---|---|
 | D6-001 | Provision the dedicated Auth0 Native Application and implement React Native/Expo identity, navigation, API layer, secure storage, and deep links. | Ready | Unassigned | Stable D1–D5 APIs; D0 identity baseline | The Phase 0 shell is locally verified only; real provider/device evidence is intentionally deferred here. |
 | D6-002 | Implement mobile onboarding/profile corrections, job feed, search, save, hide, and report. | Ready | Unassigned | D1 | Open |
-| D6-003 | Implement push notifications, action inbox, application packet review/approval, and technical history through confirmed submission. | Ready | Unassigned | D3, D5 | Open |
+| D6-003 | Render D3 Applications-owned packet review/approval and technical history through confirmed submission, and consume D5 Notifications-owned push/action-inbox contracts. | Ready | Unassigned | D3, D5; [ADR-024](../../adr/024-application-history-and-inbox-phase-ownership.md) | Mobile owns neither application lifecycle truth nor inbox delivery truth. |
 | D6-004 | Implement application-agent controls and desktop/remote-task handoff. | Ready | Unassigned | D3–D5 | Open |
 | D6-005 | Implement Stripe web subscription lifecycle and project provider events into the provider-neutral entitlement model. | Ready | Unassigned | D1-008 entitlement contract; D6-008 product/pricing decision; provider/legal review before activation | Stripe remains an adapter; feature code consumes only the internal entitlement projection. |
 | D6-006 | Implement StoreKit/Google Play subscription/receipt adapters where required by current policies. | Ready | Unassigned | Store/legal review | Open |
@@ -78,7 +78,8 @@ cache, WAF, or ALB controls supported by evidence.
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
-| 2026-08-15 | Corrected the nonexistent D0 billing-contract dependency: D0 accepted product and provider-neutral direction, D1-008 authors the executable internal entitlement contract, and D6 provider adapters consume it. This is a dependency correction only; D6 did not start and no provider or paid access was activated. | D6-005 | [D1 tasks](phase-1-web-and-job-catalog.md), [architecture billing model](../../PRODUCT_AND_SYSTEM_ARCHITECTURE.md#15-business-model-and-billing-architecture) |
+| 2026-08-17 | Clarified that mobile renders/consumes D3 Applications truth and D5 Notifications inbox/delivery truth rather than inheriting a D1 history or inbox owner. This allocation does not start D6. | D6-003 | [ADR-024](../../adr/024-application-history-and-inbox-phase-ownership.md) |
+| 2026-08-15 | Corrected the nonexistent D0 billing-contract dependency: D0 accepted product and provider-neutral direction, D1-008 authors the executable internal entitlement contract, and D6 provider adapters consume it. This is a dependency correction only; D6 did not start and no provider or paid access was activated. | D6-005 | [D1 tasks](phase-1-web-and-job-catalog.md), [architecture billing model](../../PRODUCT_AND_SYSTEM_ARCHITECTURE.md#15-billing-free-plus-one-paid-plan) |
 | 2026-07-28 | Assigned mobile, billing, and storefront delta approval to D6 without starting implementation. | D6-011 | [Legal review register](../foundation/legal-review-register.md), [security/privacy plan](../../security/security-privacy-approval-plan.md) |
 | 2026-07-28 | Accepted final public naming/domain approval as a D6 release gate without starting D6 implementation. | D6-012 | [Naming brief](../foundation/naming-brief.md), [ADR-009](../../adr/009-swappable-presentation-brand.md) |
 | 2026-07-28 | Assigned on-demand staging and evidence-based launch-capacity review to D6 without starting implementation. | D6-013 | [ADR-013](../../adr/013-lean-until-demand-cloud-runtime.md) |
@@ -92,7 +93,8 @@ cache, WAF, or ALB controls supported by evidence.
 
 | Date | Decision or change | Reason | Evidence |
 |---|---|---|---|
-| 2026-08-15 | Make D1-008 the owner of the first executable provider-neutral entitlement contract and require D6 provider adapters to consume it. | D0 accepted Free/Pro direction but did not create the billing contract previously named as a D6 dependency; correcting the dependency avoids coupling feature authorization directly to Stripe or store payloads. | [D1 tasks](phase-1-web-and-job-catalog.md), [architecture billing model](../../PRODUCT_AND_SYSTEM_ARCHITECTURE.md#15-business-model-and-billing-architecture) |
+| 2026-08-17 | Keep D6-003 dependent on D3/D5 owner contracts and prohibit mobile from owning a parallel lifecycle or inbox truth. | Cross-device presentation must preserve the same authoritative owner boundaries as web and backend workflows. | [ADR-024](../../adr/024-application-history-and-inbox-phase-ownership.md) |
+| 2026-08-15 | Make D1-008 the owner of the first executable provider-neutral entitlement contract and require D6 provider adapters to consume it. | D0 accepted Free/Pro direction but did not create the billing contract previously named as a D6 dependency; correcting the dependency avoids coupling feature authorization directly to Stripe or store payloads. | [D1 tasks](phase-1-web-and-job-catalog.md), [architecture billing model](../../PRODUCT_AND_SYSTEM_ARCHITECTURE.md#15-billing-free-plus-one-paid-plan) |
 | 2026-07-28 | Defer final public naming from D0 to D6 while retaining ApplyDash as the swappable development identity. | Naming is not a foundation dependency but must be settled before production OAuth, email, stores, billing, or public launch. | [Naming brief](../foundation/naming-brief.md) |
 | 2026-07-28 | Keep launch capacity lean unless staging/load/recovery evidence requires a specific control. | Scaling is a measured operational decision, not an automatic consequence of completing product phases. | [ADR-013](../../adr/013-lean-until-demand-cloud-runtime.md) |
 | 2026-07-29 | Perform real mobile identity/provider/device conformance in D6 rather than D0. | Conformance should test the actual mobile application and remains a blocking mobile-release gate, while current delivery stays focused on web. | [ADR-012 amendment](../../adr/012-auth0-initial-managed-identity.md) |

@@ -347,12 +347,16 @@ The same application workflow state and audit record must be used in every mode.
 
 ### 5.5 Application workflow history
 
-Canonical states:
+Jobs discovery and Matching-owned saved-job state precede an application but are not Applications
+workflow transitions. The Applications aggregate and its authoritative technical history begin
+only when the candidate or an authorized product flow explicitly creates/prepares an application.
+Source-owner job/saved facts may be referenced through versioned contracts; they never become
+application history.
+
+Canonical Applications states:
 
 ```text
-discovered
-  → saved
-  → preparing
+preparing
   → review_required
   → approved
   → submitting
@@ -1458,11 +1462,10 @@ scale-to-zero runtime with no obsolete always-on gateway/worker path.
 - Source-specific legal approval and deployed real-candidate privacy/security approval
 - Canonicalization, dedupe, lifecycle, freshness, reporting
 - Search, filters, saved jobs, basic explainable match
-- Application workflow history and in-app action inbox
 - Admin moderation and job/source controls
 - Free/Pro entitlement skeleton without aggressive paywalls
 
-Exit: users can find, trust, save, and track fresh jobs.
+Exit: users can find, trust, save, and report fresh jobs.
 
 ### Phase 2 — Extension and community loop
 
@@ -1483,12 +1486,15 @@ Exit: users expand catalog coverage without sharing private browsing data.
 - Resume AST, tailoring, render/diff, factuality checks
 - Cover letters and grounded custom answers
 - Application state machine and durable workflows
+- Applications-owned technical history and owner-scoped current-action/history reads through
+  confirmed submission
 - Extension-based autofill for Greenhouse, Lever, and Ashby
 - Review-by-exception UI and submission confirmation
 - Conservative generic fallback
 - ATS-, AI-, authorization-, signature-, sensitive-field-, and submission-specific approval
 
-Exit: a user can prepare, skim, approve, and submit on supported ATS sites with measured accuracy.
+Exit: a user can prepare, skim, approve, submit, confirm, and review authoritative technical
+history on supported ATS sites with measured accuracy.
 
 ### Phase 4 — Workday and remote preparation
 
@@ -1504,6 +1510,7 @@ Exit: remote preparation works safely for supported variants, with active-tab/ma
 
 ### Phase 5 — Personalized outreach and application notifications
 
+- Generic in-app action inbox projected from minimal versioned owner events, including Applications
 - Notification preference center and digests
 - Push/email transactional messaging
 - Permitted contact enrichment
@@ -1512,14 +1519,16 @@ Exit: remote preparation works safely for supported variants, with active-tab/ma
 - Delivery reconciliation, suppression, disconnect, and restrained follow-up workflow
 - Contact-source, anti-spam, send-only OAuth, legal, privacy, and security approval
 
-Exit: users receive relevant application notifications and can send truthful, approved outreach without inbox/calendar access or post-submission outcome tracking.
+Exit: users retain a generic in-app action record when external delivery fails, receive relevant
+application notifications, and can send truthful, approved outreach without inbox/calendar access
+or post-submission outcome tracking.
 
 ### Phase 6 — Mobile and paid launch
 
 - React Native candidate companion
 - Dedicated mobile OIDC client and device conformance for PKCE, secure credential storage,
   refresh rotation/replay, logout, revocation, cancellation, recovery, and lost-device behavior
-- Feed, save, review/approve, application history, alerts, and application agent
+- Feed, save, review/approve, D3 Applications history, D5 inbox/alerts, and application agent
 - Deep links and desktop handoff
 - Stripe plus StoreKit/Play receipt normalization
 - One Pro product, grace periods, self-service lifecycle
@@ -1635,9 +1644,10 @@ The living delivery tracker is authoritative. Current dependency order is:
    merged Matching-owned saved-job migration to the release composition, and run managed-OIDC/browser
    acceptance; then implement hard-constraint evaluation and grounded explanations without cross-owner
    database access.
-3. Resolve D1/D3 ownership before implementing technical application history; then implement reporting
-   and moderation, provider-neutral entitlements, crawlable job pages, and delivery-wide
-   reliability/accessibility evidence with synthetic data and fail-closed external integrations.
+3. Implement D1 reporting and moderation, provider-neutral entitlements, crawlable job pages, and
+   delivery-wide reliability/accessibility evidence with synthetic data and fail-closed external
+   integrations. Per ADR-024, defer Applications-owned technical history to D3 and the generic
+   Notifications-owned action inbox to D5.
 4. Integrate the merged source-neutral ingestion foundation into bounded durable scheduling and deployed
    acceptance, but keep Greenhouse, Lever, and Ashby production ingestion disabled until their
    source-specific legal, provenance, revalidation, and takedown conditions are approved and implemented.

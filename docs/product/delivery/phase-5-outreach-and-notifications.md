@@ -4,12 +4,14 @@
 - Start: Not started
 - Completion: Not completed
 - Owners: Unassigned
-- Last updated: 2026-07-28
+- Last updated: 2026-08-17
 - Master tracker: [Delivery tracker](DELIVERY_TRACKER.md#d5--personalized-outreach-and-application-notifications)
 
 ## Objective
 
-Deliver relevant application notifications and authorized, grounded candidate outreach without reading inboxes/calendars or tracking post-submission hiring outcomes.
+Deliver a generic in-app action inbox, relevant application notifications, and authorized,
+grounded candidate outreach without reading inboxes/calendars or tracking post-submission hiring
+outcomes.
 
 ## Deployment posture
 
@@ -21,7 +23,7 @@ rate limits, or measured volume; retain the in-app fallback regardless of capaci
 
 | ID | Task | State | Owner | Dependencies | Evidence or notes |
 |---|---|---|---|---|---|
-| D5-001 | Implement notification preferences, quiet hours, urgency, channel routing, deduplication, and in-app inbox. | Ready | Unassigned | D1 action inbox; D0 contracts | Open |
+| D5-001 | Implement the Notifications-owned generic action inbox, preferences, quiet hours, urgency, channel routing, and deduplication by consuming minimal versioned source-owner events. | Ready | Unassigned | D0 contracts; D3 Applications events and other owner events as their capabilities land; [ADR-024](../../adr/024-application-history-and-inbox-phase-ownership.md) | Inbox state is a derived projection and cannot authorize, cause, or prove a source transition. D5 has no D1 action-inbox dependency. |
 | D5-002 | Implement transactional email and push delivery with provider fallback/reconciliation. | Ready | Unassigned | D0 infrastructure | Open |
 | D5-003 | Implement permitted contact source/provider abstraction and provenance. | Ready | Unassigned | Legal/source review | Open |
 | D5-004 | Implement grounded referral/recruiter drafts with recipient, evidence, and truthfulness checks. | Ready | Unassigned | D3 fact graph; D5-003 | Open |
@@ -36,6 +38,10 @@ rate limits, or measured volume; retain the in-app fallback regardless of capaci
 
 - [ ] Notification routing consistently respects consent, preferences, quiet hours, urgency, and deduplication.
 - [ ] The in-app action record remains available when email/push delivery fails.
+- [ ] Inbox reads are owner scoped; duplicate, replayed, delayed, out-of-order, stale, or missing
+      owner events fail closed without changing or fabricating source truth.
+- [ ] Acknowledging, dismissing, expiring, or failing an inbox item never changes the source-owned
+      application or job fact.
 - [ ] Connected-account authorization is send-only, minimal, verified, encrypted, revocable, and deletion-aware.
 - [ ] Copyable outreach drafts remain available without a mailbox connection.
 - [ ] No inbox messages, calendars, recruiter responses, interviews, offers, rejections, or other hiring outcomes are read or stored.
@@ -48,12 +54,14 @@ rate limits, or measured volume; retain the in-app fallback regardless of capaci
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-08-17 | Accepted the Option A allocation of a D5-owned generic action inbox consuming minimal versioned Applications and other source-owner events without owning source truth. This governance change does not start D5 or authorize contracts, migrations, implementation, delivery providers, deployment, or real data. | D5-001 | [ADR-024](../../adr/024-application-history-and-inbox-phase-ownership.md), [approved D1 disposition](../foundation/d1-006-application-history-ownership-review-disposition.md) |
 | 2026-07-28 | Assigned outreach delta approval to D5 without starting implementation. | D5-010 | [Legal review register](../foundation/legal-review-register.md), [security/privacy plan](../../security/security-privacy-approval-plan.md) |
 
 ## Decisions and scope changes
 
 | Date | Decision or change | Reason | Evidence |
 |---|---|---|---|
+| 2026-08-17 | Make D5 the sole owner of the generic in-app action inbox and remove its former D1 inbox dependency. | A derived Notifications projection can preserve candidate actions and delivery fallback without becoming a parallel Applications lifecycle. | [ADR-024](../../adr/024-application-history-and-inbox-phase-ownership.md) |
 | 2026-07-28 | Removed inbox/calendar parsing and all post-submission status tracking; retained send-only approved outreach. | Focus the product on rapid, tailored, confirmed applications. | Updated architecture and delivery tracker |
 
 ## Risks and blockers
