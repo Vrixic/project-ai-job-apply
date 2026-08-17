@@ -1,11 +1,12 @@
 import { getAuth0Client } from "../../../../lib/auth0";
+import { validateFoundationResponse } from "../../../../lib/foundation-response-bff";
 import { readFoundationWriteRequest } from "../../../../lib/foundation-write-bff";
 import { forwardPlatformRequest } from "../../../../lib/platform-api";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(): Promise<Response> {
-  return forwardPlatformRequest(
+  const response = await forwardPlatformRequest(
     "/v1/me/job-preferences",
     { method: "GET" },
     {
@@ -14,12 +15,13 @@ export async function GET(): Promise<Response> {
       fetch,
     },
   );
+  return validateFoundationResponse(response, 200, "JobPreferenceSet");
 }
 
 export async function PUT(request: Request): Promise<Response> {
   const decoded = await readFoundationWriteRequest(request, "PutJobPreferencesRequest");
   if ("failure" in decoded) return decoded.failure;
-  return forwardPlatformRequest(
+  const response = await forwardPlatformRequest(
     "/v1/me/job-preferences",
     {
       method: "PUT",
@@ -36,4 +38,5 @@ export async function PUT(request: Request): Promise<Response> {
       fetch,
     },
   );
+  return validateFoundationResponse(response, 200, "PutJobPreferencesResponse", request.signal);
 }

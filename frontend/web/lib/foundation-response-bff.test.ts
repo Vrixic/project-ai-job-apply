@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET as getEntitlements } from "../app/api/platform/entitlements/route";
+import {
+  GET as getJobPreferences,
+  PUT as putJobPreferences,
+} from "../app/api/platform/job-preferences/route";
 import { PATCH as patchProfileFact } from "../app/api/platform/profile-facts/[factId]/route";
 import {
   GET as getProfileFacts,
@@ -30,6 +34,24 @@ const encoder = new TextEncoder();
 const idempotencyKey = "foundation-response-0001";
 const documentId = "019b4e12-7ea3-7c36-9357-aea35ab542c3";
 const factId = "019b4e12-7ea3-7c36-9357-aea35ab542c4";
+const preferenceSetId = "019b4e12-7ea3-7c36-9357-aea35ab542c8";
+const operationId = "019b4e12-7ea3-7c36-9357-aea35ab542c9";
+
+const preferenceFields = {
+  targetRoles: ["Software Engineer"],
+  locations: ["Remote - US"],
+  workModes: ["remote"],
+  employmentTypes: ["full_time"],
+  salaryMinimum: 120000,
+  salaryCurrency: "USD",
+};
+const preferenceSet = {
+  id: preferenceSetId,
+  version: 1,
+  updatedAt: "2026-08-17T12:00:00.000Z",
+  ...preferenceFields,
+};
+const putPreferenceResponse = { preferences: preferenceSet, operationId };
 
 const resumeDocument = {
   id: documentId,
@@ -127,6 +149,8 @@ const savedJobPage = {
 
 const validValues: Record<FoundationResponseSchemaName, unknown> = {
   EntitlementSummary: freeEntitlement,
+  JobPreferenceSet: preferenceSet,
+  PutJobPreferencesResponse: putPreferenceResponse,
   SavedJob: savedJob,
   SavedJobPage: savedJobPage,
   ResumeDocumentCollection: resumeCollection,
@@ -222,6 +246,56 @@ describe("foundation response boundary", () => {
       expect(await response.json()).toEqual(entitlement);
     },
   );
+
+  it.each([false, true])(
+    "accepts and reprojects the exact legacy sponsorship boolean %s for a preference GET",
+    async (requiresSponsorship) => {
+      const legacy = { ...preferenceSet, requiresSponsorship };
+      const response = await validateFoundationResponse(
+        jsonResponse(legacy),
+        200,
+        "JobPreferenceSet",
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(await response.json()).toEqual(legacy);
+    },
+  );
+
+  it.each([
+    { ...preferenceSet, privateDetail: "candidate-private-preference-field" },
+    { ...preferenceSet, id: "candidate-private-preference-id" },
+    { ...preferenceSet, version: 0, privateDetail: "candidate-private-preference-version" },
+    { ...preferenceSet, requiresSponsorship: "candidate-private-preference-legacy" },
+    { ...preferenceSet, workModes: ["candidate-private-preference-mode"] },
+  ])("rejects a private or malformed preference GET success", async (candidate) => {
+    const response = await validateFoundationResponse(
+      jsonResponse(candidate),
+      200,
+      "JobPreferenceSet",
+    );
+    const body = await response.clone().text();
+
+    await expectUnavailable(response);
+    expect(body).not.toContain("candidate-private-preference");
+  });
+
+  it("strictly rejects a private preference PUT success without the GET compatibility branch", async () => {
+    const privateCanary = "candidate-private-preference-put";
+    const response = await validateFoundationResponse(
+      jsonResponse({
+        ...putPreferenceResponse,
+        preferences: { ...preferenceSet, privateDetail: privateCanary },
+      }),
+      200,
+      "PutJobPreferencesResponse",
+    );
+    const body = await response.clone().text();
+
+    await expectUnavailable(response);
+    expect(body).not.toContain(privateCanary);
+  });
 
   it.each([
     { ...freeEntitlement, provider: "candidate-private-entitlement-provider" },
@@ -460,6 +534,13 @@ describe("foundation route response composition", () => {
       200,
       freeEntitlement,
     ],
+    ["job-preference GET", () => getJobPreferences(), 200, preferenceSet],
+    [
+      "job-preference PUT",
+      () => putJobPreferences(mutationRequest("PUT", preferenceFields)),
+      200,
+      putPreferenceResponse,
+    ],
     [
       "resume GET",
       () => getResumes(new Request("http://localhost/api/platform/resumes")),
@@ -564,6 +645,68 @@ describe("foundation route response composition", () => {
     expect(mocks.forwardPlatformRequest).toHaveBeenCalledWith(
       "/v1/entitlements",
       { method: "GET", signal: request.signal },
+      expect.objectContaining({ auth0: { synthetic: "auth0-client" } }),
+    );
+  });
+
+  it.each([false, true])(
+    "preserves legacy sponsorship boolean %s only on the exact preference GET response",
+    async (requiresSponsorship) => {
+      const legacy = { ...preferenceSet, requiresSponsorship };
+      mocks.forwardPlatformRequest.mockResolvedValueOnce(jsonResponse(legacy));
+
+      const response = await getJobPreferences();
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual(legacy);
+      expect(mocks.forwardPlatformRequest).toHaveBeenCalledWith(
+        "/v1/me/job-preferences",
+        { method: "GET" },
+        expect.objectContaining({ auth0: { synthetic: "auth0-client" } }),
+      );
+    },
+  );
+
+  it.each([
+    ["GET", () => getJobPreferences(), { ...preferenceSet, privateDetail: "private" }],
+    [
+      "PUT",
+      () => putJobPreferences(mutationRequest("PUT", preferenceFields)),
+      { ...putPreferenceResponse, privateDetail: "private" },
+    ],
+  ])("contains a private preference %s success", async (_method, run, invalid) => {
+    const privateCanary = "candidate-private-preference-route-success";
+    mocks.forwardPlatformRequest.mockResolvedValueOnce(
+      jsonResponse({ ...invalid, privateDetail: privateCanary }),
+    );
+
+    const response = await (run as () => Promise<Response>)();
+    const body = await response.text();
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(body).not.toContain(privateCanary);
+  });
+
+  it("preserves the exact preference PUT body, idempotency key, caller signal, and auth", async () => {
+    const request = mutationRequest("PUT", preferenceFields);
+    mocks.forwardPlatformRequest.mockResolvedValueOnce(jsonResponse(putPreferenceResponse));
+
+    const response = await putJobPreferences(request);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(putPreferenceResponse);
+    expect(mocks.forwardPlatformRequest).toHaveBeenCalledWith(
+      "/v1/me/job-preferences",
+      {
+        method: "PUT",
+        body: JSON.stringify(preferenceFields),
+        signal: request.signal,
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": idempotencyKey,
+        },
+      },
       expect.objectContaining({ auth0: { synthetic: "auth0-client" } }),
     );
   });
