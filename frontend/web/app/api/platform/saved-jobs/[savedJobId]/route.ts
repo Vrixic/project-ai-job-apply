@@ -4,6 +4,32 @@ import { savedJobIdentifier } from "../../../../../lib/saved-jobs-bff";
 
 export const dynamic = "force-dynamic";
 
+function unavailable(): Response {
+  return Response.json(
+    {
+      type: "urn:ai-job-apply:problem:platform_unavailable",
+      title: "The platform API is unavailable",
+      status: 503,
+      code: "platform_unavailable",
+    },
+    {
+      status: 503,
+      headers: {
+        "cache-control": "no-store",
+        "content-type": "application/problem+json",
+      },
+    },
+  );
+}
+
+function cancelBody(response: Response): void {
+  try {
+    void response.body?.cancel().catch(() => undefined);
+  } catch {
+    // A hostile or already-locked body must not replace the fixed boundary response.
+  }
+}
+
 export async function DELETE(
   request: Request,
   context: { params: Promise<{ savedJobId: string }> },
@@ -31,7 +57,7 @@ export async function DELETE(
       { status: 400, headers: { "cache-control": "no-store" } },
     );
   }
-  return forwardPlatformRequest(
+  const response = await forwardPlatformRequest(
     `/v1/saved-jobs/${savedJobId}`,
     { method: "DELETE", signal: request.signal },
     {
@@ -40,4 +66,10 @@ export async function DELETE(
       fetch,
     },
   );
+  if (!response.ok) return response;
+  if (response.status !== 204) {
+    cancelBody(response);
+    return unavailable();
+  }
+  return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
 }
