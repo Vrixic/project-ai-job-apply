@@ -15,6 +15,7 @@ import { ResumeUploadForm } from "./resume-upload-form";
 
 const emptyFacts = { facts: [], confirmedCount: 0, proposedCount: 0 };
 const emptyResumes = { documents: [] };
+const privateProblemCanary = "synthetic-private-onboarding-problem-never-render";
 
 function proposedFact(key = "stale_candidate_skill"): ProfileFact {
   return {
@@ -469,6 +470,60 @@ describe("coordinated onboarding flow", () => {
     expect(container.textContent).not.toContain("67%");
   });
 
+  it("shows fixed candidate-safe copy for preference load and save failures", async () => {
+    let preferenceReads = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (input, init) => {
+        const path = requestPath(input);
+        if (path === "/api/platform/job-preferences" && (init?.method ?? "GET") === "GET") {
+          preferenceReads += 1;
+          return jsonResponse(
+            {
+              code: "private_database_failure",
+              title: privateProblemCanary,
+              detail: privateProblemCanary,
+            },
+            503,
+          );
+        }
+        if (path === "/api/platform/job-preferences" && init?.method === "PUT") {
+          return jsonResponse(
+            { code: "invalid_request", title: privateProblemCanary, detail: privateProblemCanary },
+            400,
+          );
+        }
+        if (path === "/api/platform/resumes") return jsonResponse(emptyResumes);
+        if (path === "/api/platform/profile-facts") return jsonResponse(emptyFacts);
+        throw new Error(`Unexpected request: ${path}`);
+      }),
+    );
+
+    await act(async () => root.render(foundation()));
+    expect(preferenceReads).toBe(1);
+    expect(container.textContent).toContain("Job preferences are temporarily unavailable.");
+    expect(container.textContent).not.toContain(privateProblemCanary);
+
+    await act(async () => {
+      setControlValue(
+        labelledControl<HTMLTextAreaElement>(container, "Target role 1", "textarea"),
+        "Platform Engineer",
+      );
+      labelledControl<HTMLInputElement>(container, "Remote", 'input[type="checkbox"]').click();
+      labelledControl<HTMLInputElement>(container, "Full-time", 'input[type="checkbox"]').click();
+    });
+    const preferenceForm = container.querySelector<HTMLFormElement>(
+      'form[aria-label="Job preferences"]',
+    );
+    await act(async () =>
+      preferenceForm?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+
+    expect(container.textContent).toContain("Check your job preferences and try again.");
+    expect(container.textContent).not.toContain(privateProblemCanary);
+    expect(buttonNamed(container, "Save preferences").disabled).toBe(false);
+  });
+
   it("aborts and ignores an operation poll when the user signs out", async () => {
     vi.useFakeTimers();
     const operationId = "019c0000-0000-7000-8000-000000000019";
@@ -535,6 +590,57 @@ describe("coordinated onboarding flow", () => {
     );
 
     expect(container.textContent).not.toContain("Saved-preference check: succeeded");
+  });
+
+  it("shows fixed candidate-safe copy when the saved-preference operation fails", async () => {
+    vi.useFakeTimers();
+    const operationId = "019c0000-0000-7000-8000-00000000001a";
+    const preferences: JobPreferenceSet = {
+      id: "019c0000-0000-7000-8000-00000000001b",
+      version: 1,
+      updatedAt: "2026-08-15T12:00:00.000Z",
+      targetRoles: ["Engineer"],
+      locations: [],
+      workModes: ["remote"],
+      employmentTypes: ["full_time"],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (input, init) => {
+        const path = requestPath(input);
+        if (path === "/api/platform/job-preferences" && (init?.method ?? "GET") === "GET") {
+          return jsonResponse(preferences);
+        }
+        if (path === "/api/platform/job-preferences" && init?.method === "PUT") {
+          return jsonResponse({ preferences, operationId });
+        }
+        if (path === `/api/platform/operations/${operationId}`) {
+          return jsonResponse(
+            {
+              code: "private_database_failure",
+              title: privateProblemCanary,
+              detail: privateProblemCanary,
+            },
+            503,
+          );
+        }
+        if (path === "/api/platform/resumes") return jsonResponse(emptyResumes);
+        if (path === "/api/platform/profile-facts") return jsonResponse(emptyFacts);
+        throw new Error(`Unexpected request: ${path}`);
+      }),
+    );
+
+    await act(async () => root.render(foundation()));
+    const preferenceForm = container.querySelector<HTMLFormElement>(
+      'form[aria-label="Job preferences"]',
+    );
+    await act(async () =>
+      preferenceForm?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    await act(async () => vi.advanceTimersByTimeAsync(1_500));
+
+    expect(container.textContent).toContain("The saved check is temporarily unavailable.");
+    expect(container.textContent).not.toContain(privateProblemCanary);
   });
 
   it("reloads proposed facts after a resume reaches parsed and announces the result", async () => {
@@ -627,6 +733,114 @@ describe("coordinated onboarding flow", () => {
     await act(async () => staleInitialFacts.resolve(jsonResponse(emptyFacts)));
     expect(container.textContent).toContain("1 extracted fact is waiting for your review.");
     expect(container.textContent).toContain("Synthetic TypeScript");
+  });
+
+  it("shows fixed candidate-safe copy for profile-fact list and create failures", async () => {
+    let reads = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (input, init) => {
+        const path = requestPath(input);
+        if (path === "/api/platform/profile-facts" && (init?.method ?? "GET") === "GET") {
+          reads += 1;
+          return reads === 1
+            ? jsonResponse(
+                {
+                  code: "private_database_failure",
+                  title: privateProblemCanary,
+                  detail: privateProblemCanary,
+                },
+                503,
+              )
+            : jsonResponse(emptyFacts);
+        }
+        if (path === "/api/platform/profile-facts" && init?.method === "POST") {
+          return jsonResponse(
+            {
+              code: "private_database_failure",
+              title: privateProblemCanary,
+              detail: privateProblemCanary,
+            },
+            503,
+          );
+        }
+        throw new Error(`Unexpected request: ${path}`);
+      }),
+    );
+
+    await act(async () => root.render(profileFacts()));
+    expect(container.textContent).toContain("Profile facts are temporarily unavailable.");
+    expect(container.textContent).not.toContain(privateProblemCanary);
+
+    await act(async () => root.render(<ProfileFactsForm authenticated refreshVersion={1} />));
+    const factForm = Array.from(container.querySelectorAll<HTMLFormElement>("form")).find((form) =>
+      form.textContent?.includes("Fact category"),
+    );
+    if (!factForm) throw new Error("The fact form must be rendered");
+    await act(async () => {
+      setControlValue(
+        labelledControl<HTMLSelectElement>(factForm, "Fact category", "select"),
+        "skill",
+      );
+      setControlValue(
+        labelledControl<HTMLInputElement>(factForm, "Fact name", "input"),
+        "synthetic_private_fact",
+      );
+      setControlValue(
+        labelledControl<HTMLInputElement>(factForm, "Confirmed value", "input"),
+        "Synthetic private value",
+      );
+    });
+    await act(async () =>
+      factForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+
+    expect(container.textContent).toContain("Profile facts are temporarily unavailable.");
+    expect(container.textContent).not.toContain(privateProblemCanary);
+    expect(labelledControl<HTMLInputElement>(factForm, "Fact name", "input").value).toBe(
+      "synthetic_private_fact",
+    );
+    expect(factForm.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(
+      false,
+    );
+  });
+
+  it("keeps the fixed profile conflict flow and reloads the latest fact", async () => {
+    const proposal = proposedFact("conflicting_skill");
+    const latest = { ...proposal, value: "Latest synthetic value", version: 2 };
+    let reads = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (input, init) => {
+        const path = requestPath(input);
+        if (path === "/api/platform/profile-facts" && (init?.method ?? "GET") === "GET") {
+          reads += 1;
+          const fact = reads === 1 ? proposal : latest;
+          return jsonResponse({ facts: [fact], confirmedCount: 0, proposedCount: 1 });
+        }
+        if (path === `/api/platform/profile-facts/${proposal.id}` && init?.method === "PATCH") {
+          return jsonResponse(
+            {
+              code: "profile_fact_transition_conflict",
+              title: privateProblemCanary,
+              detail: privateProblemCanary,
+            },
+            409,
+          );
+        }
+        throw new Error(`Unexpected request: ${path}`);
+      }),
+    );
+
+    await act(async () => root.render(profileFacts()));
+    await act(async () => buttonNamed(container, `Confirm ${proposal.key}`).click());
+
+    expect(reads).toBe(2);
+    expect(container.textContent).toContain(
+      "This proposal changed after it was loaded. The latest version is shown; review it again.",
+    );
+    expect(container.textContent).toContain("Latest synthetic value");
+    expect(container.textContent).not.toContain(privateProblemCanary);
   });
 
   it("does not restore a created fact after sign-out during its POST", async () => {
@@ -830,6 +1044,104 @@ describe("coordinated onboarding flow", () => {
       value: "Synthetic TypeScript",
       sensitivity: "confidential",
     });
+  });
+
+  it("shows fixed candidate-safe copy for resume list and registration failures", async () => {
+    let reads = 0;
+    let registrationCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (input, init) => {
+        const path = requestPath(input);
+        if (path === "/api/platform/resumes" && (init?.method ?? "GET") === "GET") {
+          reads += 1;
+          return reads === 1
+            ? jsonResponse(
+                {
+                  code: "private_database_failure",
+                  title: privateProblemCanary,
+                  detail: privateProblemCanary,
+                },
+                503,
+              )
+            : jsonResponse(emptyResumes);
+        }
+        if (path === "/api/platform/resumes" && init?.method === "POST") {
+          registrationCalls += 1;
+          return jsonResponse(
+            {
+              code: "document_intake_unavailable",
+              title: privateProblemCanary,
+              detail: privateProblemCanary,
+            },
+            503,
+          );
+        }
+        throw new Error(`Unexpected request: ${path}`);
+      }),
+    );
+
+    await act(async () => root.render(resumeUpload()));
+    expect(container.textContent).toContain("Resume processing is temporarily unavailable.");
+    expect(container.textContent).not.toContain(privateProblemCanary);
+
+    await act(async () => root.render(resumeUpload(false)));
+    await act(async () => root.render(resumeUpload()));
+    const fileInput = labelledControl<HTMLInputElement>(
+      container,
+      "Resume file",
+      'input[type="file"]',
+    );
+    const file = new File([new Uint8Array([1, 2, 3])], "synthetic.pdf", {
+      type: "application/pdf",
+    });
+    Object.defineProperty(file, "arrayBuffer", {
+      configurable: true,
+      value: async () => new Uint8Array([1, 2, 3]).buffer,
+    });
+    Object.defineProperty(fileInput, "files", { configurable: true, value: [file] });
+    await act(async () => fileInput.dispatchEvent(new Event("change", { bubbles: true })));
+    const uploadForm = fileInput.closest("form");
+    await act(async () => {
+      uploadForm?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await vi.waitFor(() => expect(registrationCalls).toBe(1));
+    });
+
+    expect(container.textContent).toContain("Resume processing is temporarily unavailable.");
+    expect(container.textContent).not.toContain(privateProblemCanary);
+    expect(container.textContent).toContain("Selected file: synthetic.pdf");
+    expect(buttonNamed(container, "Upload resume").disabled).toBe(false);
+  });
+
+  it("shows fixed candidate-safe copy when resume status polling fails", async () => {
+    vi.useFakeTimers();
+    let reads = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async () => {
+        reads += 1;
+        return reads === 1
+          ? jsonResponse({ documents: [resumeDocument()] })
+          : jsonResponse(
+              {
+                code: "private_database_failure",
+                title: privateProblemCanary,
+                detail: privateProblemCanary,
+              },
+              503,
+            );
+      }),
+    );
+
+    await act(async () => root.render(resumeUpload()));
+    expect(container.textContent).toContain("synthetic-prior-account.pdf");
+    await act(async () => vi.advanceTimersByTimeAsync(2_000));
+
+    expect(reads).toBe(2);
+    expect(container.textContent).toContain("Resume processing is temporarily unavailable.");
+    expect(container.textContent).toContain("synthetic-prior-account.pdf");
+    expect(container.textContent).not.toContain(privateProblemCanary);
+    expect(buttonNamed(container, "Upload resume").disabled).toBe(true);
   });
 
   it("hides resume state immediately and ignores an initial load after sign-out", async () => {

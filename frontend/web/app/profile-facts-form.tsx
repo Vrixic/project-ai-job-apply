@@ -7,6 +7,7 @@ import type {
   UpdateProfileFactRequest,
 } from "@ai-job-apply/api-contracts";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { candidateSafeProblemMessage } from "../lib/candidate-safe-problem";
 
 const kinds: Array<{ value: CreateProfileFactRequest["kind"]; label: string }> = [
   { value: "identity", label: "Contact or identity" },
@@ -24,9 +25,8 @@ async function factRequest<T>(path: string, init: RequestInit = {}): Promise<T> 
     headers: { "content-type": "application/json", ...init.headers },
   });
   if (!response.ok) {
-    const problem = (await response.json()) as { detail?: string; title?: string };
     throw new FactRequestError(
-      problem.detail ?? problem.title ?? "The profile fact request failed",
+      await candidateSafeProblemMessage(response, "profile_facts"),
       response.status,
     );
   }
