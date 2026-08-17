@@ -45,6 +45,11 @@ const preferenceSaveTimeoutMilliseconds = 20_000;
 const preferenceSaveTimeoutMessage =
   "Saving preferences timed out. Retry to safely check the same preference update.";
 const preferenceSaveFailureMessage = "Job preferences are temporarily unavailable.";
+const operationPollIntervalMilliseconds = 1_500;
+const operationPollTimeoutMilliseconds = 20_000;
+const operationPollTimeoutMessage =
+  "The saved check timed out. Checking will continue automatically.";
+const operationPollFailureMessage = "The saved check is temporarily unavailable.";
 
 interface PreferenceSaveIntent {
   body: string;
@@ -54,6 +59,13 @@ interface PreferenceSaveIntent {
 interface PreferenceSaveOwner {
   generation: number;
   intent: PreferenceSaveIntent;
+  controller: AbortController;
+  timeout: number | undefined;
+  timedOut: boolean;
+}
+
+interface OperationPollOwner {
+  version: number;
   controller: AbortController;
   timeout: number | undefined;
   timedOut: boolean;
@@ -73,6 +85,13 @@ class PreferenceSaveTimeoutError extends Error {
   constructor() {
     super("The preference save timed out");
     this.name = "PreferenceSaveTimeoutError";
+  }
+}
+
+class OperationPollTimeoutError extends Error {
+  constructor() {
+    super("The saved-preference operation poll timed out");
+    this.name = "OperationPollTimeoutError";
   }
 }
 
@@ -134,12 +153,14 @@ export function FoundationForm({
   const [operationId, setOperationId] = useState<string>();
   const [operation, setOperation] = useState<Operation>();
   const [message, setMessage] = useState<string>();
+  const [operationPollMessage, setOperationPollMessage] = useState<string>();
   const authenticatedRef = useRef(authenticated);
   authenticatedRef.current = authenticated;
   const preferenceSessionGeneration = useRef(0);
   const preferenceSaveIntent = useRef<PreferenceSaveIntent | undefined>(undefined);
   const activePreferenceSave = useRef<PreferenceSaveOwner | undefined>(undefined);
   const operationPollVersion = useRef(0);
+  const activeOperationPoll = useRef<OperationPollOwner | undefined>(undefined);
   const preferenceRowSequence = useRef(0);
   const [preferenceRowIds, setPreferenceRowIds] = useState<
     Record<RepeatablePreferenceField, string[]>
@@ -288,6 +309,7 @@ export function FoundationForm({
 
   useEffect(() => {
     const pollVersion = ++operationPollVersion.current;
+    setOperationPollMessage(undefined);
     if (
       !authenticated ||
       !operationId ||
@@ -296,32 +318,78 @@ export function FoundationForm({
     ) {
       return;
     }
-    const controller = new AbortController();
-    let requestInFlight = false;
+
+    function isCurrentPoll(owner: OperationPollOwner): boolean {
+      return (
+        authenticatedRef.current &&
+        owner.version === operationPollVersion.current &&
+        activeOperationPoll.current === owner
+      );
+    }
+
+    function finishPoll(owner: OperationPollOwner): void {
+      window.clearTimeout(owner.timeout);
+      owner.timeout = undefined;
+      if (activeOperationPoll.current === owner) activeOperationPoll.current = undefined;
+    }
+
     const timer = window.setInterval(async () => {
-      if (requestInFlight) return;
-      requestInFlight = true;
+      if (activeOperationPoll.current) return;
+      let rejectDeadline: ((reason?: unknown) => void) | undefined;
+      const deadline = new Promise<never>((_resolve, reject) => {
+        rejectDeadline = reject;
+      });
+      const owner: OperationPollOwner = {
+        version: pollVersion,
+        controller: new AbortController(),
+        timeout: undefined,
+        timedOut: false,
+      };
+      activeOperationPoll.current = owner;
+      owner.timeout = window.setTimeout(() => {
+        if (!isCurrentPoll(owner)) return;
+        owner.timedOut = true;
+        owner.controller.abort();
+        rejectDeadline?.(new OperationPollTimeoutError());
+      }, operationPollTimeoutMilliseconds);
+
       try {
-        const next = await apiRequest<Operation>(
-          `/api/platform/operations/${encodeURIComponent(operationId)}`,
-          "operation",
-          { signal: controller.signal },
-        );
-        if (!controller.signal.aborted && pollVersion === operationPollVersion.current) {
+        const next = await Promise.race([
+          apiRequest<Operation>(
+            `/api/platform/operations/${encodeURIComponent(operationId)}`,
+            "operation",
+            { signal: owner.controller.signal },
+          ),
+          deadline,
+        ]);
+        if (isCurrentPoll(owner)) {
+          setOperationPollMessage(undefined);
           setOperation(next);
         }
       } catch (error) {
-        if (!controller.signal.aborted && pollVersion === operationPollVersion.current) {
-          setMessage(error instanceof Error ? error.message : "Could not read operation status");
+        if (isCurrentPoll(owner)) {
+          setOperationPollMessage(
+            owner.timedOut || error instanceof OperationPollTimeoutError
+              ? operationPollTimeoutMessage
+              : error instanceof ApiRequestError
+                ? error.message
+                : operationPollFailureMessage,
+          );
         }
       } finally {
-        requestInFlight = false;
+        finishPoll(owner);
       }
-    }, 1_500);
+    }, operationPollIntervalMilliseconds);
     return () => {
       operationPollVersion.current += 1;
-      controller.abort();
       window.clearInterval(timer);
+      const owner = activeOperationPoll.current;
+      if (owner?.version === pollVersion) {
+        activeOperationPoll.current = undefined;
+        window.clearTimeout(owner.timeout);
+        owner.timeout = undefined;
+        owner.controller.abort();
+      }
     };
   }, [authenticated, operationId, operation?.state]);
 
@@ -837,6 +905,7 @@ export function FoundationForm({
       {authenticated && operation && (
         <section className="result" aria-live="polite">
           <strong>Saved-preference check: {operation.state.replaceAll("_", " ")}</strong>
+          {operationPollMessage && <p>{operationPollMessage}</p>}
           {operation.result && (
             <>
               <p>
