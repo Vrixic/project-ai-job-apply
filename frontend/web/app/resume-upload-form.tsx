@@ -104,6 +104,11 @@ export class ResumePollingTargets {
   }
 }
 
+interface ResumeUploadOwner {
+  generation: number;
+  controller: AbortController;
+}
+
 export function ResumeUploadForm({
   authenticated,
   onDocumentParsed,
@@ -121,6 +126,7 @@ export function ResumeUploadForm({
   authenticatedRef.current = authenticated;
   const sessionGeneration = useRef(0);
   const activeControllers = useRef(new Set<AbortController>());
+  const activeUpload = useRef<ResumeUploadOwner | undefined>(undefined);
   const pollingGeneration = useRef<number | undefined>(undefined);
   const pollingTargets = useRef(new ResumePollingTargets());
   const mounted = useRef(true);
@@ -153,6 +159,12 @@ export function ResumeUploadForm({
   const abortSessionRequests = useCallback((): void => {
     for (const controller of activeControllers.current) controller.abort();
     activeControllers.current.clear();
+  }, []);
+
+  const cancelActiveUpload = useCallback((): void => {
+    const upload = activeUpload.current;
+    activeUpload.current = undefined;
+    upload?.controller.abort();
   }, []);
 
   const pollUntilTerminal = useCallback(
@@ -225,6 +237,7 @@ export function ResumeUploadForm({
   useEffect(() => {
     mounted.current = true;
     const generation = ++sessionGeneration.current;
+    cancelActiveUpload();
     abortSessionRequests();
     pollingTargets.current.clear();
     pollingGeneration.current = undefined;
@@ -263,6 +276,7 @@ export function ResumeUploadForm({
 
     return () => {
       if (sessionGeneration.current === generation) sessionGeneration.current += 1;
+      cancelActiveUpload();
       abortSessionRequests();
       pollingTargets.current.clear();
       pollingGeneration.current = undefined;
@@ -270,6 +284,7 @@ export function ResumeUploadForm({
   }, [
     abortSessionRequests,
     authenticated,
+    cancelActiveUpload,
     createSessionController,
     pollUntilTerminal,
     releaseSessionController,
@@ -280,20 +295,23 @@ export function ResumeUploadForm({
     () => () => {
       mounted.current = false;
       sessionGeneration.current += 1;
+      cancelActiveUpload();
       abortSessionRequests();
       pollingTargets.current.clear();
       pollingGeneration.current = undefined;
     },
-    [abortSessionRequests],
+    [abortSessionRequests, cancelActiveUpload],
   );
 
   async function upload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const selectedFile = file;
     const generation = sessionGeneration.current;
-    if (!selectedFile || !sessionIsCurrent(generation)) return;
+    if (!selectedFile || !sessionIsCurrent(generation) || activeUpload.current) return;
     const controller = createSessionController(generation);
     if (!controller) return;
+    const uploadOwner: ResumeUploadOwner = { generation, controller };
+    activeUpload.current = uploadOwner;
     setUploading(true);
     setMessage(undefined);
     try {
@@ -343,7 +361,10 @@ export function ResumeUploadForm({
       }
     } finally {
       releaseSessionController(controller);
-      if (sessionIsCurrent(generation, controller.signal)) setUploading(false);
+      if (activeUpload.current === uploadOwner) {
+        activeUpload.current = undefined;
+        if (sessionIsCurrent(generation, controller.signal)) setUploading(false);
+      }
     }
   }
 
