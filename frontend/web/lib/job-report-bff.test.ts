@@ -39,6 +39,18 @@ function streamRequest(body: ReadableStream<Uint8Array>, signal?: AbortSignal): 
   } as RequestInit & { duplex: "half" });
 }
 
+async function settleWithin<T>(promise: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const watchdog = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error("The BFF response did not settle")), 250);
+  });
+  try {
+    return await Promise.race([promise, watchdog]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 describe("job-report BFF", () => {
   it("accepts only the exact lowercase UUIDv7, fixed request, and bounded idempotency key", async () => {
     const candidate = request(
@@ -218,6 +230,93 @@ describe("job-report BFF", () => {
     expect(wrongMedia.status).toBe(503);
     expect(oversized.status).toBe(503);
     expect(stalled.status).toBe(503);
+  });
+
+  it("does not await hostile cancellation when response metadata is rejected", async () => {
+    let cancelled = false;
+    const hostile = new ReadableStream<Uint8Array>({
+      start() {},
+      cancel() {
+        cancelled = true;
+        return new Promise<void>(() => undefined);
+      },
+    });
+
+    const response = await settleWithin(
+      validateJobReportResponse(
+        new Response(hostile, {
+          status: 201,
+          headers: { "content-type": "text/plain" },
+        }),
+        JOB_ID,
+        "job_closed",
+      ),
+    );
+
+    expect(cancelled).toBe(true);
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toMatchObject({
+      status: 503,
+      code: "job_reporting_unavailable",
+      title: "Job reporting unavailable",
+    });
+  });
+
+  it("does not await hostile cancellation after a streamed response exceeds its bound", async () => {
+    let cancelled = false;
+    const hostile = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(16 * 1024 + 1));
+      },
+      cancel() {
+        cancelled = true;
+        return new Promise<void>(() => undefined);
+      },
+    });
+
+    const response = await settleWithin(
+      validateJobReportResponse(
+        new Response(hostile, {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        }),
+        JOB_ID,
+        "job_closed",
+      ),
+    );
+
+    expect(cancelled).toBe(true);
+    expect(response.status).toBe(503);
+    expect(await response.text()).not.toContain("response body is too large");
+  });
+
+  it("contains a hostile cancellation rejection when a response times out", async () => {
+    let cancelled = false;
+    const privateCanary = "private cancellation transport failure";
+    const hostile = new ReadableStream<Uint8Array>({
+      start() {},
+      cancel() {
+        cancelled = true;
+        return Promise.reject(new Error(privateCanary));
+      },
+    });
+
+    const response = await settleWithin(
+      validateJobReportResponse(
+        new Response(hostile, {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        }),
+        JOB_ID,
+        "job_closed",
+        5,
+      ),
+    );
+
+    expect(cancelled).toBe(true);
+    expect(response.status).toBe(503);
+    expect(await response.text()).not.toContain(privateCanary);
   });
 
   it("preserves only a declared upstream problem and removes its detail", async () => {

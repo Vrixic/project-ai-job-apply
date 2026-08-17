@@ -49,6 +49,15 @@ function problem(status: number, code: string, title: string): Response {
   );
 }
 
+function cancelBestEffort(cancellable: { cancel(): Promise<void> } | null): void {
+  if (!cancellable) return;
+  try {
+    void cancellable.cancel().catch(() => undefined);
+  } catch {
+    return;
+  }
+}
+
 export function matchAssessmentJobId(value: string): string | undefined {
   return UUID_V7_PATTERN.test(value) ? value : undefined;
 }
@@ -99,7 +108,7 @@ async function boundedBody(response: Response, timeoutMilliseconds: number): Pro
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;
-    void reader.cancel();
+    cancelBestEffort(reader);
   }, timeoutMilliseconds);
   try {
     while (true) {
@@ -108,7 +117,7 @@ async function boundedBody(response: Response, timeoutMilliseconds: number): Pro
       if (part.done) break;
       total += part.value.byteLength;
       if (total > MAXIMUM_RESPONSE_BYTES) {
-        await reader.cancel();
+        cancelBestEffort(reader);
         throw new Error("The response body is too large");
       }
       chunks.push(part.value);
@@ -139,7 +148,7 @@ export async function validateMatchAssessmentResponse(
     (declaredLength !== null &&
       (!/^\d+$/.test(declaredLength) || Number(declaredLength) > MAXIMUM_RESPONSE_BYTES))
   ) {
-    await response.body?.cancel();
+    cancelBestEffort(response.body);
     return problem(503, "match_assessment_unavailable", "Match assessment unavailable");
   }
   try {
