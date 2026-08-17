@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import type { MatchAssessment } from "@ai-job-apply/api-contracts";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -25,6 +26,59 @@ const restartedJob = {
   company: { ...firstJob.company, id: "00000000-0000-7000-8000-000000000004" },
   title: "Restarted Catalog Engineer",
 } as const;
+
+function assessment(jobId: string): MatchAssessment {
+  return {
+    schemaVersion: 1,
+    requestedJobId: jobId,
+    canonicalJobId: jobId,
+    preferenceSetId: "00000000-0000-7000-8000-000000000005",
+    preferenceVersion: 2,
+    preferenceUpdatedAt: "2026-08-16T11:00:00.000Z",
+    catalogRevision: "9",
+    assessedAt: "2026-08-16T12:00:00.000Z",
+    gate: "review_required",
+    evidence: [
+      { constraint: "work_mode", state: "satisfied", reasonCode: "work_mode_selected" },
+      {
+        constraint: "employment_type",
+        state: "unknown",
+        reasonCode: "employment_type_unavailable",
+      },
+      {
+        constraint: "target_role",
+        state: "unknown",
+        reasonCode: "target_role_not_established",
+      },
+      { constraint: "location", state: "unknown", reasonCode: "location_not_established" },
+      {
+        constraint: "compensation",
+        state: "unknown",
+        reasonCode: "compensation_semantics_unavailable",
+      },
+      {
+        constraint: "authorization_sponsorship",
+        state: "unknown",
+        reasonCode: "authorization_sponsorship_unavailable",
+      },
+      {
+        constraint: "seniority",
+        state: "unknown",
+        reasonCode: "seniority_semantics_unavailable",
+      },
+      {
+        constraint: "blocked_company",
+        state: "unknown",
+        reasonCode: "blocked_company_preferences_unavailable",
+      },
+      {
+        constraint: "qualifications",
+        state: "unknown",
+        reasonCode: "qualification_evidence_unavailable",
+      },
+    ],
+  };
+}
 
 function jsonResponse(body: unknown, status = 200): Response {
   return Response.json(body, { status });
@@ -180,6 +234,111 @@ describe("JobSearchForm", () => {
     );
     expect(container.textContent).not.toContain(privateCanary);
     expect(container.textContent).not.toContain("Private upstream title");
+  });
+
+  it("loads accepted match evidence only after an explicit click for the exact result card", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ items: [firstJob, restartedJob] }))
+      .mockResolvedValueOnce(jsonResponse(assessment(restartedJob.id)));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await act(async () => root.render(<JobSearchForm authenticated />));
+    await act(async () =>
+      container
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+
+    const cards = Array.from(container.querySelectorAll("article"));
+    expect(cards).toHaveLength(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(cards.map((card) => card.querySelector("h3")?.textContent)).toEqual([
+      firstJob.title,
+      restartedJob.title,
+    ]);
+    expect(cards[0]?.textContent).not.toContain("No exact hard conflict");
+    expect(cards[1]?.textContent).not.toContain("No exact hard conflict");
+
+    const secondMatchButton = Array.from(cards[1]?.querySelectorAll("button") ?? []).find(
+      (button) => button.textContent === "Check match evidence",
+    );
+    await act(async () =>
+      secondMatchButton?.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      `/api/platform/jobs/${restartedJob.id}/match-assessment`,
+    );
+    expect(cards[0]?.textContent).not.toContain("No exact hard conflict");
+    expect(cards[1]?.textContent).toContain("No exact hard conflict");
+    expect(cards[1]?.textContent).toContain("stated work mode is one you selected");
+    expect(cards.map((card) => card.querySelector("h3")?.textContent)).toEqual([
+      firstJob.title,
+      restartedJob.title,
+    ]);
+  });
+
+  it("drops pending match evidence when a changed search or sign-out unmounts its result", async () => {
+    const firstAssessment = deferredResponse();
+    const signedOutAssessment = deferredResponse();
+    let changedSearchSignal: AbortSignal | undefined;
+    let signOutSignal: AbortSignal | undefined;
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ items: [firstJob] }))
+      .mockImplementationOnce((_input, init) => {
+        changedSearchSignal = init?.signal ?? undefined;
+        return firstAssessment.promise;
+      })
+      .mockResolvedValueOnce(jsonResponse({ items: [restartedJob] }))
+      .mockResolvedValueOnce(jsonResponse(assessment(restartedJob.id)))
+      .mockImplementationOnce((_input, init) => {
+        signOutSignal = init?.signal ?? undefined;
+        return signedOutAssessment.promise;
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await act(async () => root.render(<JobSearchForm authenticated />));
+    const form = container.querySelector("form");
+    await act(async () =>
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    const firstMatchButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Check match evidence",
+    );
+    await act(async () =>
+      firstMatchButton?.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+    );
+    expect(container.textContent).toContain("Checking match evidence");
+
+    await act(async () =>
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    expect(changedSearchSignal?.aborted).toBe(true);
+    expect(container.textContent).toContain(restartedJob.title);
+    expect(container.textContent).not.toContain(firstJob.title);
+    await act(async () => firstAssessment.resolve(jsonResponse(assessment(firstJob.id))));
+    expect(container.textContent).not.toContain("No exact hard conflict");
+
+    const restartedMatchButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Check match evidence",
+    );
+    await act(async () =>
+      restartedMatchButton?.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+    );
+    expect(container.textContent).toContain("No exact hard conflict");
+    const refreshButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Refresh match evidence",
+    );
+    await act(async () => refreshButton?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+    await act(async () => root.render(<JobSearchForm authenticated={false} />));
+    expect(signOutSignal?.aborted).toBe(true);
+    await act(async () => signedOutAssessment.resolve(jsonResponse(assessment(restartedJob.id))));
+    expect(container.textContent).toContain("Sign in to search");
+    expect(container.textContent).not.toContain("No exact hard conflict");
   });
 
   it("saves an active result with a dedicated idempotency key and drops stale completion on sign-out", async () => {
