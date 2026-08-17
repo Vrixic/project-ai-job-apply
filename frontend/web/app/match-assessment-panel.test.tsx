@@ -73,6 +73,14 @@ function deferredResponse() {
   return { promise, resolve };
 }
 
+function deferredValue<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
+
 describe("MatchAssessmentPanel", () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -121,20 +129,14 @@ describe("MatchAssessmentPanel", () => {
     expect(container.textContent).toContain("No exact hard conflict");
   });
 
-  it("times out once without automatic retry and permits a later explicit retry", async () => {
+  it("settles an abort-ignoring fetch at the exact deadline without automatic retry", async () => {
     vi.useFakeTimers();
     let firstSignal: AbortSignal | undefined;
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockImplementationOnce((_input, init) => {
         firstSignal = init?.signal ?? undefined;
-        return new Promise<Response>((_resolve, reject) => {
-          firstSignal?.addEventListener(
-            "abort",
-            () => reject(new DOMException("The request was aborted", "AbortError")),
-            { once: true },
-          );
-        });
+        return new Promise<Response>(() => undefined);
       })
       .mockResolvedValueOnce(Response.json(assessment()));
     vi.stubGlobal("fetch", fetchMock);
@@ -143,7 +145,14 @@ describe("MatchAssessmentPanel", () => {
       container.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true })),
     );
 
-    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    await act(async () => vi.advanceTimersByTimeAsync(19_999));
+
+    expect(firstSignal?.aborted).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(container.querySelector("section")?.getAttribute("aria-busy")).toBe("true");
+    expect(container.textContent).not.toContain("Match evidence request timed out");
+
+    await act(async () => vi.advanceTimersByTimeAsync(1));
 
     expect(firstSignal?.aborted).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -156,6 +165,62 @@ describe("MatchAssessmentPanel", () => {
     );
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(container.textContent).toContain("No exact hard conflict");
+  });
+
+  it("settles an abort-ignoring body and prevents its late completion from clearing the retry", async () => {
+    vi.useFakeTimers();
+    const firstBody = deferredValue<MatchAssessment>();
+    const retryBody = deferredValue<MatchAssessment>();
+    let firstSignal: AbortSignal | undefined;
+    let retrySignal: AbortSignal | undefined;
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockImplementationOnce((_input, init) => {
+        firstSignal = init?.signal ?? undefined;
+        return Promise.resolve({
+          ok: true,
+          json: () => firstBody.promise,
+        } as Response);
+      })
+      .mockImplementationOnce((_input, init) => {
+        retrySignal = init?.signal ?? undefined;
+        return Promise.resolve({
+          ok: true,
+          json: () => retryBody.promise,
+        } as Response);
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<MatchAssessmentPanel jobId={JOB_ID} />));
+    await act(async () =>
+      container.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+    );
+
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+
+    expect(firstSignal?.aborted).toBe(true);
+    expect(container.textContent).toContain("Match evidence request timed out. Try again.");
+    expect(container.querySelector<HTMLButtonElement>("button")?.disabled).toBe(false);
+
+    await act(async () =>
+      container.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(retrySignal?.aborted).toBe(false);
+    expect(container.querySelector("section")?.getAttribute("aria-busy")).toBe("true");
+
+    await act(async () => firstBody.resolve(assessment({ gate: "excluded" })));
+
+    expect(container.querySelector("section")?.getAttribute("aria-busy")).toBe("true");
+    expect(container.querySelector<HTMLButtonElement>("button")?.disabled).toBe(true);
+    expect(container.textContent).not.toContain("Known preference conflict");
+    expect(container.textContent).not.toContain("Match evidence request timed out");
+
+    await act(async () => retryBody.resolve(assessment()));
+
+    expect(container.querySelector("section")?.getAttribute("aria-busy")).toBe("false");
+    expect(container.textContent).toContain("No exact hard conflict");
+    expect(retrySignal?.aborted).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("aborts and clears the active deadline when the panel unmounts", async () => {
