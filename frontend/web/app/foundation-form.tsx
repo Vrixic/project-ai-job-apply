@@ -1,9 +1,10 @@
 "use client";
 
-import type {
-  JobPreferenceSet,
-  Operation,
-  PutJobPreferencesResponse,
+import {
+  compileComponentValidator,
+  type JobPreferenceSet,
+  type Operation,
+  type PutJobPreferencesResponse,
 } from "@ai-job-apply/api-contracts";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -40,7 +41,35 @@ const employmentTypeOptions: ReadonlyArray<{ value: EmploymentType; label: strin
 const workModeValues = workModeOptions.map((option) => option.value);
 const employmentTypeValues = employmentTypeOptions.map((option) => option.value);
 type RepeatablePreferenceField = "targetRoles" | "locations";
+type LegacyJobPreferenceSet = JobPreferenceSet & { requiresSponsorship?: boolean };
 
+const validateJobPreferenceSet = compileComponentValidator("JobPreferenceSet");
+
+function parseJobPreferenceSet(value: unknown): LegacyJobPreferenceSet {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("The preference response is invalid");
+  }
+  if (Object.hasOwn(value, "requiresSponsorship")) {
+    const legacy = value as Record<string, unknown>;
+    if (typeof legacy.requiresSponsorship !== "boolean") {
+      throw new Error("The preference response is invalid");
+    }
+    const { requiresSponsorship, ...current } = legacy;
+    if (!validateJobPreferenceSet(current)) {
+      throw new Error("The preference response is invalid");
+    }
+    return { ...(current as JobPreferenceSet), requiresSponsorship };
+  }
+  if (!validateJobPreferenceSet(value)) {
+    throw new Error("The preference response is invalid");
+  }
+  return value as JobPreferenceSet;
+}
+
+const preferenceLoadTimeoutMilliseconds = 20_000;
+const preferenceLoadTimeoutMessage =
+  "Loading saved preferences timed out. Retry to check your current preferences.";
+const preferenceLoadFailureMessage = "Job preferences are temporarily unavailable.";
 const preferenceSaveTimeoutMilliseconds = 20_000;
 const preferenceSaveTimeoutMessage =
   "Saving preferences timed out. Retry to safely check the same preference update.";
@@ -54,6 +83,13 @@ const operationPollFailureMessage = "The saved check is temporarily unavailable.
 interface PreferenceSaveIntent {
   body: string;
   idempotencyKey: string;
+}
+
+interface PreferenceLoadOwner {
+  generation: number;
+  controller: AbortController;
+  timeout: number | undefined;
+  timedOut: boolean;
 }
 
 interface PreferenceSaveOwner {
@@ -85,6 +121,13 @@ class PreferenceSaveTimeoutError extends Error {
   constructor() {
     super("The preference save timed out");
     this.name = "PreferenceSaveTimeoutError";
+  }
+}
+
+class PreferenceLoadTimeoutError extends Error {
+  constructor() {
+    super("The preference load timed out");
+    this.name = "PreferenceLoadTimeoutError";
   }
 }
 
@@ -142,6 +185,7 @@ export function FoundationForm({
     emptyJobPreferenceFields(),
   );
   const [loadingPreferences, setLoadingPreferences] = useState(authenticated);
+  const [preferenceLoadFailed, setPreferenceLoadFailed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [renewingSession, setRenewingSession] = useState(false);
   const [checkingJobRead, setCheckingJobRead] = useState(false);
@@ -157,6 +201,7 @@ export function FoundationForm({
   const authenticatedRef = useRef(authenticated);
   authenticatedRef.current = authenticated;
   const preferenceSessionGeneration = useRef(0);
+  const activePreferenceLoad = useRef<PreferenceLoadOwner | undefined>(undefined);
   const preferenceSaveIntent = useRef<PreferenceSaveIntent | undefined>(undefined);
   const activePreferenceSave = useRef<PreferenceSaveOwner | undefined>(undefined);
   const operationPollVersion = useRef(0);
@@ -165,7 +210,17 @@ export function FoundationForm({
   const [preferenceRowIds, setPreferenceRowIds] = useState<
     Record<RepeatablePreferenceField, string[]>
   >({ targetRoles: ["target-role-initial"], locations: [] });
-  const preferenceControlsDisabled = loadingPreferences || saving || !authenticated;
+  const preferenceControlsDisabled =
+    loadingPreferences || preferenceLoadFailed || saving || !authenticated;
+
+  const cancelPreferenceLoad = useCallback((): void => {
+    const owner = activePreferenceLoad.current;
+    activePreferenceLoad.current = undefined;
+    if (!owner) return;
+    window.clearTimeout(owner.timeout);
+    owner.timeout = undefined;
+    owner.controller.abort();
+  }, []);
 
   const cancelPreferenceSave = useCallback((): void => {
     const owner = activePreferenceSave.current;
@@ -251,10 +306,99 @@ export function FoundationForm({
     });
   }, []);
 
+  const loadPreferences = useCallback(
+    async (generation: number): Promise<void> => {
+      if (!authenticatedRef.current || activePreferenceLoad.current) return;
+      const owner: PreferenceLoadOwner = {
+        generation,
+        controller: new AbortController(),
+        timeout: undefined,
+        timedOut: false,
+      };
+      activePreferenceLoad.current = owner;
+      setLoadingPreferences(true);
+      setPreferenceLoadFailed(false);
+      setMessage(undefined);
+
+      function ownsLoad(): boolean {
+        return (
+          authenticatedRef.current &&
+          owner.generation === preferenceSessionGeneration.current &&
+          activePreferenceLoad.current === owner
+        );
+      }
+
+      let rejectDeadline: ((reason?: unknown) => void) | undefined;
+      const deadline = new Promise<never>((_resolve, reject) => {
+        rejectDeadline = reject;
+      });
+      owner.timeout = window.setTimeout(() => {
+        if (!ownsLoad()) return;
+        owner.timedOut = true;
+        owner.controller.abort();
+        rejectDeadline?.(new PreferenceLoadTimeoutError());
+      }, preferenceLoadTimeoutMilliseconds);
+
+      try {
+        const result = await Promise.race([
+          (async () => {
+            const response = await fetch("/api/platform/job-preferences", {
+              cache: "no-store",
+              signal: owner.controller.signal,
+            });
+            if (response.status === 404) return undefined;
+            if (!response.ok) {
+              await candidateSafeProblemMessage(response, "preferences");
+              throw new Error(preferenceLoadFailureMessage);
+            }
+            return parseJobPreferenceSet(await response.json());
+          })(),
+          deadline,
+        ]);
+        if (!ownsLoad()) return;
+        if (!result) {
+          replacePreferenceFields(emptyJobPreferenceFields());
+          setMessage(undefined);
+          return;
+        }
+        const fields = hydrateJobPreferenceFields(result);
+        replacePreferenceFields(fields);
+        setMessage(
+          fields.legacySponsorshipPresent
+            ? "These saved preferences contain a legacy sponsorship answer. It is not shown here, and saving is unavailable until it moves to the restricted-data boundary."
+            : "Saved preferences loaded.",
+        );
+      } catch (error) {
+        if (!ownsLoad()) return;
+        setPreferenceLoadFailed(true);
+        setMessage(
+          owner.timedOut || error instanceof PreferenceLoadTimeoutError
+            ? preferenceLoadTimeoutMessage
+            : preferenceLoadFailureMessage,
+        );
+      } finally {
+        window.clearTimeout(owner.timeout);
+        owner.timeout = undefined;
+        if (activePreferenceLoad.current === owner) {
+          activePreferenceLoad.current = undefined;
+          if (
+            authenticatedRef.current &&
+            owner.generation === preferenceSessionGeneration.current
+          ) {
+            setLoadingPreferences(false);
+          }
+        }
+      }
+    },
+    [replacePreferenceFields],
+  );
+
   useEffect(() => {
     const generation = ++preferenceSessionGeneration.current;
+    cancelPreferenceLoad();
     cancelPreferenceSave();
     setSaving(false);
+    setPreferenceLoadFailed(false);
     setMessage(undefined);
     if (!authenticated) {
       replacePreferenceFields(emptyJobPreferenceFields());
@@ -264,48 +408,20 @@ export function FoundationForm({
       return;
     }
 
-    const controller = new AbortController();
-    async function loadPreferences() {
-      setLoadingPreferences(true);
-      try {
-        const response = await fetch("/api/platform/job-preferences", {
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        if (response.status === 404) {
-          replacePreferenceFields(emptyJobPreferenceFields());
-          setMessage(undefined);
-          return;
-        }
-        if (!response.ok) {
-          throw new Error(await candidateSafeProblemMessage(response, "preferences"));
-        }
-        const preferences = (await response.json()) as JobPreferenceSet;
-        const fields = hydrateJobPreferenceFields(preferences);
-        replacePreferenceFields(fields);
-        setMessage(
-          fields.legacySponsorshipPresent
-            ? "These saved preferences contain a legacy sponsorship answer. It is not shown here, and saving is unavailable until it moves to the restricted-data boundary."
-            : "Saved preferences loaded.",
-        );
-      } catch (error) {
-        if (!controller.signal.aborted) {
-          setMessage(error instanceof Error ? error.message : "Could not load saved preferences");
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoadingPreferences(false);
-        }
-      }
-    }
-    void loadPreferences();
+    void loadPreferences(generation);
     return () => {
       if (preferenceSessionGeneration.current === generation) {
+        cancelPreferenceLoad();
         cancelPreferenceSave();
-        controller.abort();
       }
     };
-  }, [authenticated, cancelPreferenceSave, replacePreferenceFields]);
+  }, [
+    authenticated,
+    cancelPreferenceLoad,
+    cancelPreferenceSave,
+    loadPreferences,
+    replacePreferenceFields,
+  ]);
 
   useEffect(() => {
     const pollVersion = ++operationPollVersion.current;
@@ -429,7 +545,7 @@ export function FoundationForm({
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (activePreferenceSave.current) return;
+    if (preferenceLoadFailed || loadingPreferences || activePreferenceSave.current) return;
     setMessage(undefined);
     const result = buildJobPreferenceRequest(preferenceFields);
     if (!result.ok) {
@@ -879,6 +995,14 @@ export function FoundationForm({
             <button type="submit" disabled={preferenceControlsDisabled}>
               {loadingPreferences ? "Loading…" : saving ? "Saving…" : "Save preferences"}
             </button>
+            {preferenceLoadFailed && !loadingPreferences && (
+              <button
+                type="button"
+                onClick={() => void loadPreferences(preferenceSessionGeneration.current)}
+              >
+                Retry loading preferences
+              </button>
+            )}
           </form>
 
           <ResumeUploadForm authenticated onDocumentParsed={handleDocumentParsed} />

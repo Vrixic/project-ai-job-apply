@@ -494,8 +494,9 @@ describe("coordinated onboarding flow", () => {
     expect(container.textContent).not.toContain("67%");
   });
 
-  it("shows fixed candidate-safe copy for preference load and save failures", async () => {
+  it("fails closed with fixed candidate-safe copy when preference loading fails", async () => {
     let preferenceReads = 0;
+    let preferenceWrites = 0;
     vi.stubGlobal(
       "fetch",
       vi.fn<typeof fetch>(async (input, init) => {
@@ -512,6 +513,7 @@ describe("coordinated onboarding flow", () => {
           );
         }
         if (path === "/api/platform/job-preferences" && init?.method === "PUT") {
+          preferenceWrites += 1;
           return jsonResponse(
             { code: "invalid_request", title: privateProblemCanary, detail: privateProblemCanary },
             400,
@@ -527,25 +529,16 @@ describe("coordinated onboarding flow", () => {
     expect(preferenceReads).toBe(1);
     expect(container.textContent).toContain("Job preferences are temporarily unavailable.");
     expect(container.textContent).not.toContain(privateProblemCanary);
-
-    await act(async () => {
-      setControlValue(
-        labelledControl<HTMLTextAreaElement>(container, "Target role 1", "textarea"),
-        "Platform Engineer",
-      );
-      labelledControl<HTMLInputElement>(container, "Remote", 'input[type="checkbox"]').click();
-      labelledControl<HTMLInputElement>(container, "Full-time", 'input[type="checkbox"]').click();
-    });
+    expect(container.textContent).toContain("Retry loading preferences");
+    expect(buttonNamed(container, "Save preferences").disabled).toBe(true);
     const preferenceForm = container.querySelector<HTMLFormElement>(
       'form[aria-label="Job preferences"]',
     );
     await act(async () =>
       preferenceForm?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
     );
-
-    expect(container.textContent).toContain("Check your job preferences and try again.");
+    expect(preferenceWrites).toBe(0);
     expect(container.textContent).not.toContain(privateProblemCanary);
-    expect(buttonNamed(container, "Save preferences").disabled).toBe(false);
   });
 
   it("aborts and ignores an operation poll when the user signs out", async () => {
