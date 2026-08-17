@@ -15,6 +15,21 @@ const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.doc
 const resumeReadTimeoutMilliseconds = 20_000;
 const resumeReadTimeoutMessage = "Loading resume status timed out. Retry to check your resumes.";
 const resumeReadFailureMessage = "Resume processing is temporarily unavailable.";
+const resumeRegistrationTimeoutMilliseconds = 20_000;
+const resumeRegistrationTimeoutMessage =
+  "Resume upload registration timed out. Try again to request a new upload grant.";
+const resumeStorageTimeoutMilliseconds = 60_000;
+const resumeStorageTimeoutMessage =
+  "Resume file upload timed out. Try again to request a new upload grant.";
+const resumeUploadFailureMessage =
+  "Could not upload the resume. Try again with a new upload grant.";
+
+class ResumeUploadCandidateError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ResumeUploadCandidateError";
+  }
+}
 
 class ResumeReadTimeoutError extends Error {
   constructor() {
@@ -30,7 +45,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers: { "content-type": "application/json", ...init.headers },
   });
   if (!response.ok) {
-    throw new Error(await candidateSafeProblemMessage(response, "resume"));
+    throw new ResumeUploadCandidateError(await candidateSafeProblemMessage(response, "resume"));
   }
   return (await response.json()) as T;
 }
@@ -39,7 +54,9 @@ function approvedMediaType(file: File): typeof PDF | typeof DOCX {
   const lowerName = file.name.toLowerCase();
   if (file.type === PDF && lowerName.endsWith(".pdf")) return PDF;
   if (file.type === DOCX && lowerName.endsWith(".docx")) return DOCX;
-  throw new Error("Choose a PDF or DOCX file whose extension and media type agree.");
+  throw new ResumeUploadCandidateError(
+    "Choose a PDF or DOCX file whose extension and media type agree.",
+  );
 }
 
 async function sha256(file: File): Promise<string> {
@@ -115,8 +132,11 @@ export class ResumePollingTargets {
 }
 
 interface ResumeUploadOwner {
-  generation: number;
   controller: AbortController;
+  generation: number;
+  rejectDeadline: ((reason?: unknown) => void) | undefined;
+  timeout: number | undefined;
+  timeoutMessage: string | undefined;
 }
 
 interface ResumeReadOwner {
@@ -194,7 +214,12 @@ export function ResumeUploadForm({
   const cancelActiveUpload = useCallback((): void => {
     const upload = activeUpload.current;
     activeUpload.current = undefined;
-    upload?.controller.abort();
+    if (!upload) return;
+    if (upload.timeout !== undefined) window.clearTimeout(upload.timeout);
+    upload.timeout = undefined;
+    upload.rejectDeadline?.(new Error("resume upload request cancelled"));
+    upload.rejectDeadline = undefined;
+    upload.controller.abort();
   }, []);
 
   const readResumeCollection = useCallback(
@@ -412,13 +437,44 @@ export function ResumeUploadForm({
     if (!selectedFile || !sessionIsCurrent(generation) || activeUpload.current) return;
     const controller = createSessionController(generation);
     if (!controller) return;
-    const uploadOwner: ResumeUploadOwner = { generation, controller };
+    const uploadOwner: ResumeUploadOwner = {
+      controller,
+      generation,
+      rejectDeadline: undefined,
+      timeout: undefined,
+      timeoutMessage: undefined,
+    };
     activeUpload.current = uploadOwner;
     setUploading(true);
     setMessage(undefined);
+    async function settleUploadStage<T>(
+      operation: () => Promise<T>,
+      timeoutMilliseconds: number,
+      timeoutMessage: string,
+    ): Promise<T> {
+      uploadOwner.timeoutMessage = undefined;
+      const deadline = new Promise<never>((_resolve, reject) => {
+        uploadOwner.rejectDeadline = reject;
+        uploadOwner.timeout = window.setTimeout(() => {
+          if (activeUpload.current !== uploadOwner) return;
+          uploadOwner.timeout = undefined;
+          uploadOwner.timeoutMessage = timeoutMessage;
+          uploadOwner.rejectDeadline?.(new Error(timeoutMessage));
+          uploadOwner.rejectDeadline = undefined;
+          uploadOwner.controller.abort();
+        }, timeoutMilliseconds);
+      });
+      try {
+        return await Promise.race([operation(), deadline]);
+      } finally {
+        if (uploadOwner.timeout !== undefined) window.clearTimeout(uploadOwner.timeout);
+        uploadOwner.timeout = undefined;
+        uploadOwner.rejectDeadline = undefined;
+      }
+    }
     try {
       if (selectedFile.size < 1 || selectedFile.size > MAXIMUM_RESUME_BYTES) {
-        throw new Error("Resume files must be between 1 byte and 5 MiB.");
+        throw new ResumeUploadCandidateError("Resume files must be between 1 byte and 5 MiB.");
       }
       const mediaType = approvedMediaType(selectedFile);
       const digest = await sha256(selectedFile);
@@ -429,26 +485,38 @@ export function ResumeUploadForm({
         sizeBytes: selectedFile.size,
         sha256: digest,
       };
-      const registered = await request<CreateResumeUploadResponse>("/api/platform/resumes", {
-        method: "POST",
-        headers: { "idempotency-key": `resume-upload-${crypto.randomUUID()}` },
-        body: JSON.stringify(metadata),
-        signal: controller.signal,
-      });
+      const registered = await settleUploadStage(
+        () =>
+          request<CreateResumeUploadResponse>("/api/platform/resumes", {
+            method: "POST",
+            headers: { "idempotency-key": `resume-upload-${crypto.randomUUID()}` },
+            body: JSON.stringify(metadata),
+            signal: controller.signal,
+          }),
+        resumeRegistrationTimeoutMilliseconds,
+        resumeRegistrationTimeoutMessage,
+      );
       if (!sessionIsCurrent(generation, controller.signal)) return;
       const form = new FormData();
       for (const [name, value] of Object.entries(registered.upload.fields)) {
         form.append(name, value);
       }
       form.append("file", selectedFile, selectedFile.name);
-      const uploaded = await fetch(registered.upload.url, {
-        method: registered.upload.method,
-        body: form,
-        signal: controller.signal,
-      });
+      const uploaded = await settleUploadStage(
+        () =>
+          fetch(registered.upload.url, {
+            method: registered.upload.method,
+            body: form,
+            signal: controller.signal,
+          }),
+        resumeStorageTimeoutMilliseconds,
+        resumeStorageTimeoutMessage,
+      );
       if (!sessionIsCurrent(generation, controller.signal)) return;
-      if (!uploaded.ok) {
-        throw new Error("The encrypted upload was not accepted. Retry with a new upload grant.");
+      if (uploaded.status !== 204) {
+        throw new ResumeUploadCandidateError(
+          "The encrypted upload was not accepted. Retry with a new upload grant.",
+        );
       }
       setFile(undefined);
       if (fileInput.current) {
@@ -459,14 +527,24 @@ export function ResumeUploadForm({
       setMessage("Resume uploaded to quarantine. It will be scanned before any text is parsed.");
       void pollUntilTerminal([registered.document.id], generation);
     } catch (error) {
-      if (sessionIsCurrent(generation, controller.signal)) {
-        setMessage(error instanceof Error ? error.message : "Could not upload the resume");
+      if (
+        mounted.current &&
+        authenticatedRef.current &&
+        generation === sessionGeneration.current &&
+        activeUpload.current === uploadOwner
+      ) {
+        setMessage(
+          uploadOwner.timeoutMessage ??
+            (error instanceof ResumeUploadCandidateError
+              ? error.message
+              : resumeUploadFailureMessage),
+        );
       }
     } finally {
       releaseSessionController(controller);
       if (activeUpload.current === uploadOwner) {
         activeUpload.current = undefined;
-        if (sessionIsCurrent(generation, controller.signal)) setUploading(false);
+        if (sessionIsCurrent(generation)) setUploading(false);
       }
     }
   }

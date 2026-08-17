@@ -67,6 +67,12 @@ function submit(form: HTMLFormElement): void {
   form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
 }
 
+async function flushAsyncWork(rounds = 12): Promise<void> {
+  await act(async () => {
+    for (let index = 0; index < rounds; index += 1) await Promise.resolve();
+  });
+}
+
 describe("ResumeUploadForm upload ownership", () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -181,6 +187,12 @@ describe("ResumeUploadForm upload ownership", () => {
 
   it("does not let an older initial list erase a locally completed upload", async () => {
     const initialList = deferred<Response>();
+    const settledJsonResponse = (body: unknown, status = 200) =>
+      ({
+        ok: status >= 200 && status < 300,
+        status,
+        json: () => Promise.resolve(body),
+      }) as Response;
     let getCount = 0;
     const uploaded = registeredResume(
       "019c0000-0000-7000-8000-000000000104",
@@ -192,10 +204,10 @@ describe("ResumeUploadForm upload ownership", () => {
         getCount += 1;
         return getCount === 1
           ? initialList.promise
-          : jsonResponse({ documents: [uploaded.document] });
+          : settledJsonResponse({ documents: [uploaded.document] });
       }
       if (input === "/api/platform/resumes" && init?.method === "POST") {
-        return jsonResponse(uploaded, 201);
+        return settledJsonResponse(uploaded, 201);
       }
       if (input === "https://storage.example.test/revision-fenced") {
         return new Response(null, { status: 204 });
@@ -205,14 +217,19 @@ describe("ResumeUploadForm upload ownership", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await act(async () => root.render(<ResumeUploadForm authenticated />));
+    await vi.waitFor(() => expect(getCount).toBe(1));
     const form = await selectFile(
       container,
       syntheticPdf("revision-fenced.pdf", async () => new Uint8Array([1, 2, 3]).buffer),
     );
     await act(async () => submit(form));
-    await vi.waitFor(() => expect(container.textContent).toContain("revision-fenced.pdf"));
+    await flushAsyncWork();
+    expect(container.textContent).toContain("Resume uploaded to quarantine");
 
-    await act(async () => initialList.resolve(jsonResponse(emptyResumes)));
+    await act(async () => {
+      initialList.resolve(settledJsonResponse(emptyResumes));
+      for (let index = 0; index < 12; index += 1) await Promise.resolve();
+    });
     expect(container.textContent).toContain("revision-fenced.pdf");
     expect(container.textContent).toContain("Resume processing is temporarily unavailable");
     expect(container.textContent).not.toContain("No resumes uploaded yet");
@@ -221,6 +238,7 @@ describe("ResumeUploadForm upload ownership", () => {
       (button) => button.textContent === "Retry resume status",
     );
     await act(async () => retry?.click());
+    await flushAsyncWork();
     expect(container.textContent).toContain("revision-fenced.pdf");
     expect(container.textContent).not.toContain("temporarily unavailable");
   });
@@ -367,6 +385,358 @@ describe("ResumeUploadForm upload ownership", () => {
     await act(async () => pendingStorage.resolve(new Response(null, { status: 204 })));
     expect(container.textContent).toContain("single-flight.pdf");
     expect(container.textContent).toContain("Resume uploaded to quarantine");
+  });
+
+  it("settles an abort-ignoring registration fetch at exactly 20 seconds and retries with a fresh chain", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(crypto.subtle, "digest").mockResolvedValue(new Uint8Array(32).buffer);
+    const registrations: RequestInit[] = [];
+    const storageUrls: string[] = [];
+    let registrationCount = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      if (input === "/api/platform/resumes" && (init?.method ?? "GET") === "GET") {
+        return jsonResponse(emptyResumes);
+      }
+      if (input === "/api/platform/resumes" && init?.method === "POST") {
+        registrations.push(init);
+        registrationCount += 1;
+        if (registrationCount === 1) return new Promise<Response>(() => undefined);
+        return jsonResponse(
+          registeredResume(
+            "019c0000-0000-7000-8000-000000000111",
+            "registration-retry.pdf",
+            "https://storage.example.test/registration-retry",
+          ),
+          201,
+        );
+      }
+      if (input === "https://storage.example.test/registration-retry") {
+        storageUrls.push(input);
+        return new Response(null, { status: 204 });
+      }
+      throw new Error(`Unexpected request: ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await act(async () => root.render(<ResumeUploadForm authenticated />));
+    const form = await selectFile(
+      container,
+      syntheticPdf("registration-retry.pdf", async () => new Uint8Array([1, 2, 3]).buffer),
+    );
+    await act(async () => submit(form));
+    await flushAsyncWork();
+    expect(registrations).toHaveLength(1);
+    const firstSignal = registrations[0]?.signal;
+    const firstKey = new Headers(registrations[0]?.headers).get("idempotency-key");
+
+    await act(async () => vi.advanceTimersByTimeAsync(19_999));
+    expect(firstSignal?.aborted).toBe(false);
+    expect(container.textContent).toContain("Encrypting and uploading");
+    expect(container.textContent).not.toContain("registration timed out");
+
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(firstSignal?.aborted).toBe(true);
+    expect(container.textContent).toContain(
+      "Resume upload registration timed out. Try again to request a new upload grant.",
+    );
+    expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(
+      false,
+    );
+    expect(vi.getTimerCount()).toBe(0);
+
+    await act(async () => submit(form));
+    await flushAsyncWork();
+    expect(registrations).toHaveLength(2);
+    const secondKey = new Headers(registrations[1]?.headers).get("idempotency-key");
+    expect(secondKey).not.toBe(firstKey);
+    expect(registrations[1]?.signal).not.toBe(firstSignal);
+    expect(storageUrls).toEqual(["https://storage.example.test/registration-retry"]);
+    expect(container.textContent).toContain("Resume uploaded to quarantine");
+  });
+
+  it("settles an abort-ignoring registration body and fences its late result from a newer retry", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(crypto.subtle, "digest").mockResolvedValue(new Uint8Array(32).buffer);
+    const firstBody = deferred<unknown>();
+    const secondBody = deferred<unknown>();
+    const registrations: RequestInit[] = [];
+    const storageUrls: string[] = [];
+    let registrationCount = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      if (input === "/api/platform/resumes" && (init?.method ?? "GET") === "GET") {
+        return jsonResponse(emptyResumes);
+      }
+      if (input === "/api/platform/resumes" && init?.method === "POST") {
+        registrations.push(init);
+        registrationCount += 1;
+        return {
+          ok: true,
+          json: () => (registrationCount === 1 ? firstBody.promise : secondBody.promise),
+        } as Response;
+      }
+      if (typeof input === "string" && input.startsWith("https://storage.example.test/")) {
+        storageUrls.push(input);
+        return new Response(null, { status: 204 });
+      }
+      throw new Error(`Unexpected request: ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await act(async () => root.render(<ResumeUploadForm authenticated />));
+    const form = await selectFile(
+      container,
+      syntheticPdf("late-registration.pdf", async () => new Uint8Array([1, 2, 3]).buffer),
+    );
+    await act(async () => submit(form));
+    await flushAsyncWork();
+    expect(registrations).toHaveLength(1);
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    expect(registrations[0]?.signal?.aborted).toBe(true);
+
+    await act(async () => submit(form));
+    await flushAsyncWork();
+    expect(registrations).toHaveLength(2);
+    expect(registrations[1]?.signal?.aborted).toBe(false);
+
+    await act(async () =>
+      firstBody.resolve(
+        registeredResume(
+          "019c0000-0000-7000-8000-000000000112",
+          "late-registration.pdf",
+          "https://storage.example.test/stale-registration",
+        ),
+      ),
+    );
+    expect(storageUrls).toHaveLength(0);
+    expect(container.textContent).toContain("Encrypting and uploading");
+    expect(container.textContent).not.toContain("registration timed out");
+
+    await act(async () =>
+      secondBody.resolve(
+        registeredResume(
+          "019c0000-0000-7000-8000-000000000113",
+          "late-registration.pdf",
+          "https://storage.example.test/current-registration",
+        ),
+      ),
+    );
+    expect(storageUrls).toEqual(["https://storage.example.test/current-registration"]);
+    expect(container.textContent).toContain("Resume uploaded to quarantine");
+  });
+
+  it("settles a hostile registration problem body without rendering its private values", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(crypto.subtle, "digest").mockResolvedValue(new Uint8Array(32).buffer);
+    const problemBody = deferred<unknown>();
+    let registrationSignal: AbortSignal | undefined;
+    const response = new Response(null, { status: 503 });
+    vi.spyOn(response, "json").mockImplementation(async () => problemBody.promise);
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      if (input === "/api/platform/resumes" && (init?.method ?? "GET") === "GET") {
+        return jsonResponse(emptyResumes);
+      }
+      if (input === "/api/platform/resumes" && init?.method === "POST") {
+        registrationSignal = init.signal ?? undefined;
+        return response;
+      }
+      throw new Error(`Unexpected request: ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await act(async () => root.render(<ResumeUploadForm authenticated />));
+    const form = await selectFile(
+      container,
+      syntheticPdf("problem-body.pdf", async () => new Uint8Array([1, 2, 3]).buffer),
+    );
+    await act(async () => submit(form));
+    await flushAsyncWork();
+    expect(registrationSignal).toBeDefined();
+
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    expect(registrationSignal?.aborted).toBe(true);
+    expect(container.textContent).toContain(
+      "Resume upload registration timed out. Try again to request a new upload grant.",
+    );
+    expect(vi.getTimerCount()).toBe(0);
+
+    await act(async () =>
+      problemBody.resolve({
+        code: "platform_unavailable",
+        detail: "private-registration-problem-canary",
+        title: "private-registration-problem-canary",
+      }),
+    );
+    expect(container.textContent).toContain("Resume upload registration timed out");
+    expect(container.textContent).not.toContain("private-registration-problem-canary");
+  });
+
+  it("settles direct storage at exactly 60 seconds and retries with a fresh key and grant", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(crypto.subtle, "digest").mockResolvedValue(new Uint8Array(32).buffer);
+    const registrations: RequestInit[] = [];
+    const storageCalls: Array<{ init: RequestInit; url: string }> = [];
+    let registrationCount = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      if (input === "/api/platform/resumes" && (init?.method ?? "GET") === "GET") {
+        return jsonResponse(emptyResumes);
+      }
+      if (input === "/api/platform/resumes" && init?.method === "POST") {
+        registrations.push(init);
+        registrationCount += 1;
+        return jsonResponse(
+          registeredResume(
+            `019c0000-0000-7000-8000-00000000011${registrationCount + 3}`,
+            "storage-retry.pdf",
+            `https://storage.example.test/storage-${registrationCount}`,
+          ),
+          201,
+        );
+      }
+      if (typeof input === "string" && input.startsWith("https://storage.example.test/storage-")) {
+        storageCalls.push({ init: init ?? {}, url: input });
+        if (input.endsWith("storage-1")) return new Promise<Response>(() => undefined);
+        return new Response(null, { status: 204 });
+      }
+      throw new Error(`Unexpected request: ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await act(async () => root.render(<ResumeUploadForm authenticated />));
+    const form = await selectFile(
+      container,
+      syntheticPdf("storage-retry.pdf", async () => new Uint8Array([1, 2, 3]).buffer),
+    );
+    await act(async () => submit(form));
+    await flushAsyncWork();
+    expect(storageCalls).toHaveLength(1);
+    const firstKey = new Headers(registrations[0]?.headers).get("idempotency-key");
+    const firstSignal = storageCalls[0]?.init.signal;
+    expect(storageCalls[0]).toMatchObject({
+      init: { body: expect.any(FormData), method: "POST" },
+      url: "https://storage.example.test/storage-1",
+    });
+
+    await act(async () => vi.advanceTimersByTimeAsync(59_999));
+    expect(firstSignal?.aborted).toBe(false);
+    expect(container.textContent).toContain("Encrypting and uploading");
+    expect(container.textContent).not.toContain("file upload timed out");
+
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(firstSignal?.aborted).toBe(true);
+    expect(container.textContent).toContain(
+      "Resume file upload timed out. Try again to request a new upload grant.",
+    );
+    expect(vi.getTimerCount()).toBe(0);
+
+    await act(async () => submit(form));
+    await flushAsyncWork();
+    expect(storageCalls).toHaveLength(2);
+    const secondKey = new Headers(registrations[1]?.headers).get("idempotency-key");
+    expect(secondKey).not.toBe(firstKey);
+    expect(storageCalls[1]?.url).toBe("https://storage.example.test/storage-2");
+    expect(storageCalls[1]?.init.signal).not.toBe(firstSignal);
+    expect(container.textContent).toContain("Resume uploaded to quarantine");
+  });
+
+  it("requires exact storage 204 and redacts an unexpected transport failure on explicit retry", async () => {
+    vi.spyOn(crypto.subtle, "digest").mockResolvedValue(new Uint8Array(32).buffer);
+    const registrations: RequestInit[] = [];
+    let registrationCount = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      if (input === "/api/platform/resumes" && (init?.method ?? "GET") === "GET") {
+        return jsonResponse(emptyResumes);
+      }
+      if (input === "/api/platform/resumes" && init?.method === "POST") {
+        registrations.push(init);
+        registrationCount += 1;
+        return jsonResponse(
+          registeredResume(
+            `019c0000-0000-7000-8000-00000000012${registrationCount}`,
+            "strict-storage.pdf",
+            `https://storage.example.test/strict-${registrationCount}`,
+          ),
+          201,
+        );
+      }
+      if (input === "https://storage.example.test/strict-1") {
+        return new Response(null, { status: 200 });
+      }
+      if (input === "https://storage.example.test/strict-2") {
+        throw new Error("private-storage-transport-canary");
+      }
+      throw new Error(`Unexpected request: ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await act(async () => root.render(<ResumeUploadForm authenticated />));
+    const form = await selectFile(
+      container,
+      syntheticPdf("strict-storage.pdf", async () => new Uint8Array([1, 2, 3]).buffer),
+    );
+    await act(async () => submit(form));
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain(
+        "The encrypted upload was not accepted. Retry with a new upload grant.",
+      ),
+    );
+    expect(container.textContent).not.toContain("Resume uploaded to quarantine");
+
+    await act(async () => submit(form));
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain(
+        "Could not upload the resume. Try again with a new upload grant.",
+      ),
+    );
+    expect(container.textContent).not.toContain("private-storage-transport-canary");
+    expect(new Headers(registrations[1]?.headers).get("idempotency-key")).not.toBe(
+      new Headers(registrations[0]?.headers).get("idempotency-key"),
+    );
+  });
+
+  it("clears registration ownership, deadline, and late completion on unmount", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(crypto.subtle, "digest").mockResolvedValue(new Uint8Array(32).buffer);
+    const registration = deferred<Response>();
+    let registrationSignal: AbortSignal | undefined;
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      if (input === "/api/platform/resumes" && (init?.method ?? "GET") === "GET") {
+        return jsonResponse(emptyResumes);
+      }
+      if (input === "/api/platform/resumes" && init?.method === "POST") {
+        registrationSignal = init.signal ?? undefined;
+        return registration.promise;
+      }
+      throw new Error(`Unexpected request: ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await act(async () => root.render(<ResumeUploadForm authenticated />));
+    const form = await selectFile(
+      container,
+      syntheticPdf("unmount.pdf", async () => new Uint8Array([1, 2, 3]).buffer),
+    );
+    await act(async () => submit(form));
+    await flushAsyncWork();
+    expect(registrationSignal).toBeDefined();
+    expect(vi.getTimerCount()).toBe(1);
+
+    await act(async () => root.unmount());
+    expect(registrationSignal?.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+    await act(async () =>
+      registration.resolve(
+        jsonResponse(
+          registeredResume(
+            "019c0000-0000-7000-8000-000000000130",
+            "private-unmounted.pdf",
+            "https://storage.example.test/private-unmounted",
+          ),
+          201,
+        ),
+      ),
+    );
+    expect(container.textContent).toBe("");
+    root = createRoot(container);
   });
 
   it("lets a new session own its upload while an aborted prior registration resolves late", async () => {
