@@ -38,6 +38,7 @@
     "lint": "biome lint .",
     "skills:validate": "node scripts/validate-skills.mjs",
     "test": "turbo run test",
+    "test:d1-browser-assurance": "node scripts/tests/d1-browser-assurance/run.mjs",
     "test:integration": "turbo run test:integration",
     "typecheck": "turbo run typecheck",
     "verify:d1-004-catalog-invariants": "pwsh -NoProfile -File scripts/verify-d1-004-catalog-invariants.ps1 -Mode All"
@@ -45,7 +46,9 @@
   "devDependencies": {
     "@biomejs/biome": "2.5.7",
     "@types/node": "24.10.1",
+    "axe-core": "4.13.0",
     "esbuild": "0.28.2",
+    "playwright-core": "1.62.1",
     "turbo": "2.10.9",
     "typescript": "5.9.3",
     "vitest": "4.1.10",

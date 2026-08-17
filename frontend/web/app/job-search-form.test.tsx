@@ -150,6 +150,38 @@ describe("JobSearchForm", () => {
     expect(submit?.disabled).toBe(false);
   });
 
+  it("renders a fixed failure without exposing upstream problem details", async () => {
+    const privateCanary = "synthetic-private-upstream-detail-never-render";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>().mockResolvedValue(
+        jsonResponse(
+          {
+            type: "urn:ai-job-apply:problem:job_search_unavailable",
+            title: "Private upstream title",
+            status: 503,
+            code: "job_search_unavailable",
+            detail: privateCanary,
+          },
+          503,
+        ),
+      ),
+    );
+
+    await act(async () => root.render(<JobSearchForm authenticated />));
+    await act(async () =>
+      container
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+
+    expect(container.querySelector('[aria-live="polite"]')?.textContent).toBe(
+      "Job search is temporarily unavailable.",
+    );
+    expect(container.textContent).not.toContain(privateCanary);
+    expect(container.textContent).not.toContain("Private upstream title");
+  });
+
   it("saves an active result with a dedicated idempotency key and drops stale completion on sign-out", async () => {
     const save = deferredResponse();
     const fetchMock = vi
