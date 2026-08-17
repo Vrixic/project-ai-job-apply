@@ -71,6 +71,115 @@ describe("SavedJobsPanel", () => {
     expect(container.textContent).not.toContain("Synthetic Engineer");
   });
 
+  it("makes rapid remove activation synchronously single-flight", async () => {
+    const pendingDelete = deferredResponse();
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ items: [savedJob] }))
+      .mockImplementationOnce(() => pendingDelete.promise)
+      .mockResolvedValueOnce(Response.json({ items: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<SavedJobsPanel authenticated />));
+    await act(async () => {});
+    const remove = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Remove"),
+    );
+
+    await act(async () => {
+      remove?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      remove?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1]?.[1]?.method).toBe("DELETE");
+    await act(async () => pendingDelete.resolve(new Response(null, { status: 204 })));
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("bounds a stalled list request and supports an explicit retry", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockImplementationOnce(
+        (_input, init) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener(
+              "abort",
+              () => reject(new DOMException("private list abort", "AbortError")),
+              { once: true },
+            );
+          }),
+      )
+      .mockResolvedValueOnce(Response.json({ items: [savedJob] }));
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<SavedJobsPanel authenticated />));
+
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+
+    expect(container.textContent).toContain("Loading saved jobs timed out. Try again.");
+    expect(container.textContent).not.toContain("private list abort");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+    const retry = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Retry saved jobs"),
+    );
+    await act(async () => retry?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain("Synthetic Engineer");
+    expect(container.textContent).not.toContain("Retry saved jobs");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("keeps a saved job after delete timeout and retries the same idempotent target explicitly", async () => {
+    vi.useFakeTimers();
+    const refresh = deferredResponse();
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ items: [savedJob] }))
+      .mockImplementationOnce(
+        (_input, init) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener(
+              "abort",
+              () => reject(new DOMException("private delete abort", "AbortError")),
+              { once: true },
+            );
+          }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockImplementationOnce(() => refresh.promise);
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<SavedJobsPanel authenticated />));
+    await act(async () => {});
+    const remove = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Remove"),
+    );
+    await act(async () => remove?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain("Synthetic Engineer");
+    expect(container.textContent).toContain(
+      "Removing the saved job timed out. Retry to safely check the same saved job.",
+    );
+    expect(container.textContent).not.toContain("private delete abort");
+    expect(remove?.disabled).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+
+    await act(async () => remove?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(`/api/platform/saved-jobs/${savedJob.id}`);
+    expect(fetchMock.mock.calls[2]?.[0]).toBe(`/api/platform/saved-jobs/${savedJob.id}`);
+    expect(fetchMock.mock.calls[1]?.[1]?.method).toBe("DELETE");
+    expect(fetchMock.mock.calls[2]?.[1]?.method).toBe("DELETE");
+    expect(container.textContent).not.toContain("Synthetic Engineer");
+    expect(vi.getTimerCount()).toBe(1);
+    await act(async () => refresh.resolve(Response.json({ items: [] })));
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("restarts pagination after delete and never reuses the invalidated cursor", async () => {
     const refreshedJob = {
       ...savedJob,
@@ -207,6 +316,31 @@ describe("SavedJobsPanel", () => {
     await act(async () => deferred.resolve(Response.json({ items: [savedJob] })));
     expect(container.textContent).not.toContain("Synthetic Engineer");
     expect(container.textContent).toContain("Sign in");
+  });
+
+  it("aborts delete and drops an abort-ignoring stale completion on sign-out", async () => {
+    const pendingDelete = deferredResponse();
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ items: [savedJob] }))
+      .mockImplementationOnce(() => pendingDelete.promise);
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<SavedJobsPanel authenticated />));
+    await act(async () => {});
+    const remove = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Remove"),
+    );
+    await act(async () => remove?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    const deleteSignal = fetchMock.mock.calls[1]?.[1]?.signal;
+
+    await act(async () => root.render(<SavedJobsPanel authenticated={false} />));
+
+    expect(deleteSignal?.aborted).toBe(true);
+    await act(async () => pendingDelete.resolve(new Response(null, { status: 204 })));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain("Sign in to keep a private list of jobs.");
+    expect(container.textContent).not.toContain("Saved job removed.");
+    expect(container.textContent).not.toContain("Synthetic Engineer");
   });
 
   it("aborts an older load-more request when a refresh replaces the list", async () => {
