@@ -4,27 +4,92 @@ import { compileComponentValidator, contract } from "./index.js";
 
 describe("PutJobPreferencesRequest", () => {
   const validate = compileComponentValidator("PutJobPreferencesRequest");
+  const minimalPreferences = {
+    targetRoles: ["Software Engineer"],
+    locations: [],
+    workModes: ["remote"],
+    employmentTypes: ["full_time"],
+  };
 
   it("accepts a minimal valid preference set", () => {
+    expect(validate(minimalPreferences)).toBe(true);
+  });
+
+  it("rejects response metadata and unknown post-submission fields", () => {
     expect(
       validate({
-        targetRoles: ["Software Engineer"],
-        locations: [],
-        workModes: ["remote"],
-        employmentTypes: ["full_time"],
+        ...minimalPreferences,
+        id: "019c0000-0000-7000-8000-000000000001",
+      }),
+    ).toBe(false);
+    expect(
+      validate({
+        ...minimalPreferences,
+        interviewStatus: "scheduled",
+      }),
+    ).toBe(false);
+  });
+
+  it("requires salary amount and currency together", () => {
+    expect(validate({ ...minimalPreferences, salaryMinimum: 100_000 })).toBe(false);
+    expect(validate({ ...minimalPreferences, salaryCurrency: "USD" })).toBe(false);
+    expect(validate({ ...minimalPreferences, salaryMinimum: 100_000, salaryCurrency: "USD" })).toBe(
+      true,
+    );
+  });
+});
+
+describe("job preference response contracts", () => {
+  const validateSet = compileComponentValidator("JobPreferenceSet");
+  const validateResponse = compileComponentValidator("PutJobPreferencesResponse");
+  const preferences = {
+    id: "019c0000-0000-7000-8000-000000000001",
+    version: 1,
+    updatedAt: "2026-08-17T12:00:00.000Z",
+    targetRoles: ["Software Engineer"],
+    locations: [],
+    workModes: ["remote"],
+    employmentTypes: ["full_time"],
+    salaryMinimum: 100_000,
+    salaryCurrency: "USD",
+  };
+
+  it("accepts the metadata-bearing set produced by the profile service", () => {
+    expect(validateSet(preferences)).toBe(true);
+    expect(
+      validateResponse({
+        preferences,
+        operationId: "019c0000-0000-7000-8000-000000000002",
       }),
     ).toBe(true);
   });
 
-  it("rejects unknown fields and incomplete salary values", () => {
+  it("requires valid response metadata without weakening field strictness", () => {
+    const { id: _id, ...withoutId } = preferences;
+    const { salaryCurrency: _salaryCurrency, ...withoutSalaryCurrency } = preferences;
+    expect(validateSet(withoutId)).toBe(false);
+    expect(validateSet({ ...preferences, id: "not-a-uuid" })).toBe(false);
+    expect(validateSet({ ...preferences, version: 0 })).toBe(false);
+    expect(validateSet({ ...preferences, updatedAt: "not-a-date" })).toBe(false);
+    expect(validateSet({ ...preferences, privateNote: "do not expose" })).toBe(false);
+    expect(validateSet(withoutSalaryCurrency)).toBe(false);
     expect(
-      validate({
-        targetRoles: ["Software Engineer"],
-        locations: [],
-        workModes: ["remote"],
-        employmentTypes: ["full_time"],
-        salaryMinimum: 100_000,
-        interviewStatus: "scheduled",
+      validateResponse({
+        preferences: { ...preferences, privateNote: "do not expose" },
+        operationId: "019c0000-0000-7000-8000-000000000002",
+      }),
+    ).toBe(false);
+    expect(
+      validateResponse({
+        preferences,
+        operationId: "not-a-uuid",
+      }),
+    ).toBe(false);
+    expect(
+      validateResponse({
+        preferences,
+        operationId: "019c0000-0000-7000-8000-000000000002",
+        internalTrace: "do not expose",
       }),
     ).toBe(false);
   });

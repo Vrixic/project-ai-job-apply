@@ -317,7 +317,7 @@ export interface components {
             /** Format: email */
             email?: string;
         };
-        PutJobPreferencesRequest: {
+        JobPreferenceFields: {
             targetRoles: string[];
             locations: string[];
             workModes: ("remote" | "hybrid" | "on_site")[];
@@ -326,7 +326,8 @@ export interface components {
             salaryCurrency?: string;
             requiresSponsorship?: boolean;
         };
-        JobPreferenceSet: components["schemas"]["PutJobPreferencesRequest"] & {
+        PutJobPreferencesRequest: components["schemas"]["JobPreferenceFields"];
+        JobPreferenceSet: components["schemas"]["JobPreferenceFields"] & {
             /** Format: uuid */
             id: string;
             version: number;
