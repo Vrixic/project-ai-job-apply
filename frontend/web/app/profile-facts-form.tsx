@@ -19,6 +19,32 @@ const kinds: Array<{ value: CreateProfileFactRequest["kind"]; label: string }> =
   { value: "preference", label: "Application preference" },
 ];
 
+const factMutationTimeoutMilliseconds = 20_000;
+const factMutationTimeoutMessage = "Saving timed out. Retry to safely check the same profile fact.";
+const factMutationFailureMessage = "Profile facts are temporarily unavailable.";
+
+interface FactMutationIntent {
+  method: "POST" | "PATCH";
+  path: string;
+  body: string;
+  idempotencyKey: string;
+}
+
+interface FactMutationOwner {
+  generation: number;
+  intent: FactMutationIntent;
+  controller: AbortController;
+  timeout: number | undefined;
+  timedOut: boolean;
+}
+
+class FactMutationTimeoutError extends Error {
+  constructor() {
+    super("The profile fact mutation timed out");
+    this.name = "FactMutationTimeoutError";
+  }
+}
+
 async function factRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
     ...init,
@@ -75,10 +101,101 @@ export function ProfileFactsForm({
   const [saving, setSaving] = useState(false);
   const [savingFactId, setSavingFactId] = useState<string>();
   const [message, setMessage] = useState<string>();
+  const authenticatedRef = useRef(authenticated);
+  authenticatedRef.current = authenticated;
   const lastRefreshVersion = useRef(0);
   const loadRequestVersion = useRef(0);
   const sessionGeneration = useRef(0);
   const sessionController = useRef<AbortController | undefined>(undefined);
+  const mutationIntent = useRef<FactMutationIntent | undefined>(undefined);
+  const activeMutation = useRef<FactMutationOwner | undefined>(undefined);
+
+  const cancelActiveMutation = useCallback((): void => {
+    const mutation = activeMutation.current;
+    activeMutation.current = undefined;
+    mutationIntent.current = undefined;
+    if (!mutation) return;
+    window.clearTimeout(mutation.timeout);
+    mutation.timeout = undefined;
+    mutation.controller.abort();
+  }, []);
+
+  function isActiveMutation(mutation: FactMutationOwner): boolean {
+    return activeMutation.current === mutation;
+  }
+
+  function ownsMutation(mutation: FactMutationOwner): boolean {
+    return (
+      authenticatedRef.current &&
+      mutation.generation === sessionGeneration.current &&
+      isActiveMutation(mutation)
+    );
+  }
+
+  function beginMutation(
+    method: FactMutationIntent["method"],
+    path: string,
+    body: string,
+  ): FactMutationOwner | undefined {
+    if (!authenticatedRef.current || activeMutation.current) return undefined;
+    const currentIntent = mutationIntent.current;
+    const intent =
+      currentIntent?.method === method && currentIntent.path === path && currentIntent.body === body
+        ? currentIntent
+        : {
+            method,
+            path,
+            body,
+            idempotencyKey: `profile-fact-${crypto.randomUUID()}`,
+          };
+    mutationIntent.current = intent;
+    const mutation: FactMutationOwner = {
+      generation: sessionGeneration.current,
+      intent,
+      controller: new AbortController(),
+      timeout: undefined,
+      timedOut: false,
+    };
+    activeMutation.current = mutation;
+    return mutation;
+  }
+
+  function clearMutationIntent(mutation: FactMutationOwner): void {
+    if (mutationIntent.current === mutation.intent) mutationIntent.current = undefined;
+  }
+
+  async function runMutation<T>(mutation: FactMutationOwner): Promise<T> {
+    let rejectDeadline: ((reason?: unknown) => void) | undefined;
+    const deadline = new Promise<never>((_resolve, reject) => {
+      rejectDeadline = reject;
+    });
+    mutation.timeout = window.setTimeout(() => {
+      if (activeMutation.current !== mutation) return;
+      mutation.timedOut = true;
+      mutation.controller.abort();
+      rejectDeadline?.(new FactMutationTimeoutError());
+    }, factMutationTimeoutMilliseconds);
+
+    try {
+      return await Promise.race([
+        factRequest<T>(mutation.intent.path, {
+          method: mutation.intent.method,
+          signal: mutation.controller.signal,
+          headers: { "idempotency-key": mutation.intent.idempotencyKey },
+          body: mutation.intent.body,
+        }),
+        deadline,
+      ]);
+    } finally {
+      window.clearTimeout(mutation.timeout);
+      mutation.timeout = undefined;
+    }
+  }
+
+  function mutationMessage(error: unknown, timedOut: boolean): string {
+    if (timedOut || error instanceof FactMutationTimeoutError) return factMutationTimeoutMessage;
+    return error instanceof FactRequestError ? error.message : factMutationFailureMessage;
+  }
 
   const load = useCallback(
     async (announceResumeResult: boolean, generation: number, signal: AbortSignal) => {
@@ -128,6 +245,7 @@ export function ProfileFactsForm({
 
   useEffect(() => {
     const generation = ++sessionGeneration.current;
+    cancelActiveMutation();
     sessionController.current?.abort();
     const controller = new AbortController();
     sessionController.current = controller;
@@ -144,9 +262,12 @@ export function ProfileFactsForm({
     setLoading(authenticated);
 
     return () => {
-      if (sessionGeneration.current === generation) controller.abort();
+      if (sessionGeneration.current === generation) {
+        cancelActiveMutation();
+        controller.abort();
+      }
     };
-  }, [authenticated]);
+  }, [authenticated, cancelActiveMutation]);
 
   useEffect(() => {
     const announceResumeResult = refreshVersion > lastRefreshVersion.current;
@@ -158,42 +279,41 @@ export function ProfileFactsForm({
 
   async function createFact(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (activeMutation.current) return;
     if (!kind) {
       setMessage("Choose a fact category before saving.");
       return;
     }
+    const body = JSON.stringify({
+      kind,
+      key: key.trim(),
+      value: value.trim(),
+      sensitivity: "confidential",
+    });
+    const mutation = beginMutation("POST", "/api/platform/profile-facts", body);
+    if (!mutation) return;
     setSaving(true);
     setMessage(undefined);
-    const generation = sessionGeneration.current;
-    const controller = sessionController.current;
-    if (!authenticated || !controller) {
-      setSaving(false);
-      return;
-    }
     try {
-      const created = await factRequest<ProfileFact>("/api/platform/profile-facts", {
-        method: "POST",
-        signal: controller.signal,
-        headers: { "idempotency-key": `profile-fact-${crypto.randomUUID()}` },
-        body: JSON.stringify({
-          kind,
-          key: key.trim(),
-          value: value.trim(),
-          sensitivity: "confidential",
-        }),
-      });
-      if (controller.signal.aborted || generation !== sessionGeneration.current) return;
+      const created = await runMutation<ProfileFact>(mutation);
+      if (!ownsMutation(mutation)) return;
+      clearMutationIntent(mutation);
       setFacts((current) => [...current, created]);
       setKind("");
       setKey("");
       setValue("");
       setMessage("Profile fact saved as confirmed user input.");
     } catch (error) {
-      if (!controller.signal.aborted && generation === sessionGeneration.current) {
-        setMessage(error instanceof Error ? error.message : "Could not save profile fact");
+      if (!ownsMutation(mutation)) return;
+      if (error instanceof FactRequestError && error.status < 500) {
+        clearMutationIntent(mutation);
       }
+      setMessage(mutationMessage(error, mutation.timedOut));
     } finally {
-      if (!controller.signal.aborted && generation === sessionGeneration.current) setSaving(false);
+      if (isActiveMutation(mutation)) {
+        activeMutation.current = undefined;
+        if (mutation.generation === sessionGeneration.current) setSaving(false);
+      }
     }
   }
 
@@ -201,40 +321,42 @@ export function ProfileFactsForm({
     fact: ProfileFact,
     command: Omit<UpdateProfileFactRequest, "expectedVersion">,
   ) {
+    if (activeMutation.current) return;
     const generation = sessionGeneration.current;
-    const controller = sessionController.current;
-    if (!authenticated || !controller) return;
+    const session = sessionController.current;
+    if (!authenticated || !session) return;
+    const path = `/api/platform/profile-facts/${encodeURIComponent(fact.id)}`;
+    const body = JSON.stringify({ expectedVersion: fact.version, ...command });
+    const mutation = beginMutation("PATCH", path, body);
+    if (!mutation) return;
     setSavingFactId(fact.id);
     setMessage(undefined);
     try {
-      const updated = await factRequest<ProfileFact>(
-        `/api/platform/profile-facts/${encodeURIComponent(fact.id)}`,
-        {
-          method: "PATCH",
-          signal: controller.signal,
-          headers: { "idempotency-key": `profile-fact-${crypto.randomUUID()}` },
-          body: JSON.stringify({ expectedVersion: fact.version, ...command }),
-        },
-      );
-      if (controller.signal.aborted || generation !== sessionGeneration.current) return;
+      const updated = await runMutation<ProfileFact>(mutation);
+      if (!ownsMutation(mutation)) return;
+      clearMutationIntent(mutation);
       setFacts((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       setEditing(undefined);
       setMessage("A new profile fact version was saved. Prior versions remain auditable.");
     } catch (error) {
-      if (controller.signal.aborted || generation !== sessionGeneration.current) return;
+      if (!ownsMutation(mutation)) return;
+      if (error instanceof FactRequestError && error.status < 500) {
+        clearMutationIntent(mutation);
+      }
       if (error instanceof FactRequestError && error.status === 409) {
-        await load(false, generation, controller.signal);
-        if (!controller.signal.aborted && generation === sessionGeneration.current) {
+        await load(false, generation, session.signal);
+        if (ownsMutation(mutation) && !session.signal.aborted) {
           setMessage(
             "This proposal changed after it was loaded. The latest version is shown; review it again.",
           );
         }
       } else {
-        setMessage(error instanceof Error ? error.message : "Could not update profile fact");
+        setMessage(mutationMessage(error, mutation.timedOut));
       }
     } finally {
-      if (!controller.signal.aborted && generation === sessionGeneration.current) {
-        setSavingFactId(undefined);
+      if (isActiveMutation(mutation)) {
+        activeMutation.current = undefined;
+        if (mutation.generation === sessionGeneration.current) setSavingFactId(undefined);
       }
     }
   }
