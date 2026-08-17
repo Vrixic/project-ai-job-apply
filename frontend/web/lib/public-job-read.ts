@@ -10,6 +10,8 @@ const maximumResponseBytes = 1_500_000;
 const validateResponse = compileComponentValidator("PublicJobDetailResponse");
 const validateProblem = compileComponentValidator("ProblemDetails");
 
+type RegisterCancellation = (cancel: (() => void) | undefined) => void;
+
 export type PublicJobReadResult =
   | Readonly<{ kind: "available"; detail: PublicJobDetailResponse }>
   | Readonly<{ kind: "absent" }>;
@@ -65,30 +67,92 @@ function isSemanticallyValid(value: PublicJobDetailResponse, now: Date) {
   );
 }
 
-async function readBoundedJson(response: Response, mediaType: string): Promise<unknown> {
+function cancelBody(body: ReadableStream<Uint8Array> | null): void {
+  if (!body) return;
+  try {
+    void body.cancel().catch(() => undefined);
+  } catch {
+    // Cancellation is best-effort and must never replace the fixed public failure boundary.
+  }
+}
+
+function cancelReader(reader: ReadableStreamDefaultReader<Uint8Array>): void {
+  try {
+    void reader.cancel().catch(() => undefined);
+  } catch {
+    // Cancellation is best-effort and must never replace the fixed public failure boundary.
+  }
+}
+
+async function readBoundedJson(
+  response: Response,
+  mediaType: string,
+  registerCancellation: RegisterCancellation,
+): Promise<unknown> {
+  registerCancellation(response.body ? () => cancelBody(response.body) : undefined);
   const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim();
   if (contentType !== mediaType) {
-    await response.body?.cancel();
+    cancelBody(response.body);
+    registerCancellation(undefined);
     throw new PublicJobPageUnavailableError();
   }
-  const declaredLength = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declaredLength) && declaredLength > maximumResponseBytes) {
-    await response.body?.cancel();
+
+  const declaredLengthHeader = response.headers.get("content-length");
+  let declaredLength: number | undefined;
+  if (response.headers.has("transfer-encoding")) {
+    cancelBody(response.body);
+    registerCancellation(undefined);
     throw new PublicJobPageUnavailableError();
   }
-  const reader = response.body?.getReader();
-  if (!reader) throw new PublicJobPageUnavailableError();
-  const chunks: Uint8Array[] = [];
-  let totalBytes = 0;
-  for (;;) {
-    const chunk = await reader.read();
-    if (chunk.done) break;
-    totalBytes += chunk.value.byteLength;
-    if (totalBytes > maximumResponseBytes) {
-      await reader.cancel();
+  if (declaredLengthHeader !== null) {
+    if (!/^\d+$/.test(declaredLengthHeader)) {
+      cancelBody(response.body);
+      registerCancellation(undefined);
       throw new PublicJobPageUnavailableError();
     }
-    chunks.push(chunk.value);
+    declaredLength = Number(declaredLengthHeader);
+    if (!Number.isSafeInteger(declaredLength) || declaredLength > maximumResponseBytes) {
+      cancelBody(response.body);
+      registerCancellation(undefined);
+      throw new PublicJobPageUnavailableError();
+    }
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    registerCancellation(undefined);
+    throw new PublicJobPageUnavailableError();
+  }
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  let complete = false;
+  let cancellationRequested = false;
+  const cancel = () => {
+    if (cancellationRequested) return;
+    cancellationRequested = true;
+    cancelReader(reader);
+  };
+  registerCancellation(cancel);
+  try {
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.done) {
+        complete = true;
+        break;
+      }
+      const nextTotalBytes = totalBytes + chunk.value.byteLength;
+      if (nextTotalBytes > maximumResponseBytes) {
+        throw new PublicJobPageUnavailableError();
+      }
+      totalBytes = nextTotalBytes;
+      chunks.push(chunk.value);
+    }
+  } finally {
+    registerCancellation(undefined);
+    if (!complete) cancel();
+  }
+  if (declaredLength !== undefined && totalBytes !== declaredLength) {
+    throw new PublicJobPageUnavailableError();
   }
   const bytes = new Uint8Array(totalBytes);
   let offset = 0;
@@ -125,40 +189,64 @@ export async function fetchPublicJobDetail(
       options.baseUrl ?? process.env.PLATFORM_API_BASE_URL ?? "http://localhost:4000",
     );
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), options.timeoutMilliseconds ?? 5_000);
+    let cancelActiveRead: (() => void) | undefined;
+    let rejectDeadline: ((reason?: unknown) => void) | undefined;
+    const deadline = new Promise<never>((_resolve, reject) => {
+      rejectDeadline = reject;
+    });
+    const timeout = setTimeout(() => {
+      controller.abort();
+      cancelActiveRead?.();
+      rejectDeadline?.(new PublicJobPageUnavailableError());
+    }, options.timeoutMilliseconds ?? 5_000);
     try {
-      const response = await (options.fetchImplementation ?? fetch)(
-        new URL(`/v1/public/jobs/${jobId}`, baseUrl),
-        {
-          method: "GET",
-          cache: "no-store",
-          credentials: "omit",
-          headers: { accept: "application/json" },
-          redirect: "error",
-          signal: controller.signal,
-        },
-      );
-      if (response.status === 404) {
-        const problem = await readBoundedJson(response, "application/problem+json");
-        if (!isExactNotFoundProblem(problem)) throw new PublicJobPageUnavailableError();
-        return Object.freeze({ kind: "absent" });
-      }
-      if (!response.ok) {
-        await response.body?.cancel();
-        throw new PublicJobPageUnavailableError();
-      }
-      const parsed = await readBoundedJson(response, "application/json");
-      const now = options.now?.() ?? new Date();
-      if (!Number.isFinite(now.getTime()) || !validateResponse(parsed)) {
-        throw new PublicJobPageUnavailableError();
-      }
-      const validated = parsed as PublicJobDetailResponse;
-      if (validated.requestedJobId !== jobId || !isSemanticallyValid(validated, now)) {
-        throw new PublicJobPageUnavailableError();
-      }
-      return Object.freeze({ kind: "available", detail: validated });
+      const read = async (): Promise<PublicJobReadResult> => {
+        const response = await (options.fetchImplementation ?? fetch)(
+          new URL(`/v1/public/jobs/${jobId}`, baseUrl),
+          {
+            method: "GET",
+            cache: "no-store",
+            credentials: "omit",
+            headers: { accept: "application/json" },
+            redirect: "error",
+            signal: controller.signal,
+          },
+        );
+        if (controller.signal.aborted) {
+          cancelBody(response.body);
+          throw new PublicJobPageUnavailableError();
+        }
+        const registerCancellation: RegisterCancellation = (cancel) => {
+          cancelActiveRead = cancel;
+        };
+        if (response.status === 404) {
+          const problem = await readBoundedJson(
+            response,
+            "application/problem+json",
+            registerCancellation,
+          );
+          if (!isExactNotFoundProblem(problem)) throw new PublicJobPageUnavailableError();
+          return Object.freeze({ kind: "absent" });
+        }
+        if (!response.ok) {
+          cancelBody(response.body);
+          throw new PublicJobPageUnavailableError();
+        }
+        const parsed = await readBoundedJson(response, "application/json", registerCancellation);
+        const now = options.now?.() ?? new Date();
+        if (!Number.isFinite(now.getTime()) || !validateResponse(parsed)) {
+          throw new PublicJobPageUnavailableError();
+        }
+        const validated = parsed as PublicJobDetailResponse;
+        if (validated.requestedJobId !== jobId || !isSemanticallyValid(validated, now)) {
+          throw new PublicJobPageUnavailableError();
+        }
+        return Object.freeze({ kind: "available", detail: validated });
+      };
+      return await Promise.race([read(), deadline]);
     } finally {
       clearTimeout(timeout);
+      cancelActiveRead = undefined;
     }
   } catch (error) {
     if (error instanceof PublicJobPageUnavailableError) throw error;
