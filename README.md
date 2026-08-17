@@ -78,8 +78,10 @@ triggers disabled, and bounded canonical search and filters are released in synt
 The generated-synthetic direct-dark document-processing acceptance packet is implemented and
 locally verified only; immutable image publication, deployment, AWS execution, and the
 separately human-reviewed activation sequence remain open. Stale-cursor acceptance, saved jobs,
-matching, reporting, application history, entitlements, and public job pages also remain open. Real provider
-ingestion, real candidate data, and production activation remain disabled behind their accountable
-release gates. Final public naming and the independent launch review remain D6 gates.
+matching, reporting, entitlements, and public job pages remain open in Phase 1. Under
+[ADR-024](docs/adr/024-application-history-and-inbox-phase-ownership.md), authoritative technical
+application history is assigned to D3 rather than D1. Real provider ingestion, real candidate data, and
+production activation remain disabled behind their accountable release gates. Final public naming
+and the independent launch review remain D6 gates.
 
 Delivery progress, actual start/completion dates, tasks, evidence, risks, and decisions are maintained in the [delivery tracker](docs/product/delivery/DELIVERY_TRACKER.md).
