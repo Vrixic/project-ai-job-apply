@@ -15,6 +15,99 @@ interface PlatformRequestDependencies {
 
 const defaultReadRetryDelaysMilliseconds = [250, 750, 1_500] as const;
 const transientReadStatuses = new Set([429, 500, 502, 503, 504]);
+const maximumProblemBytes = 16 * 1024;
+const problemContentTypePattern = /^application\/problem\+json(?:\s*;\s*charset=utf-8)?$/i;
+const jobReadAuthorizationProbePath = "/v1/jobs/00000000-0000-7000-8000-000000000000";
+
+interface DeclaredProblem {
+  code: string;
+  title: string;
+}
+
+const declaredProblems = new Map<string, Readonly<DeclaredProblem>>([
+  ["400:invalid_request", { code: "invalid_request", title: "Invalid request" }],
+  ["400:invalid_job_search", { code: "invalid_job_search", title: "Invalid job search" }],
+  [
+    "400:invalid_saved_job_cursor",
+    { code: "invalid_saved_job_cursor", title: "Invalid saved-job cursor" },
+  ],
+  [
+    "401:authentication_required",
+    { code: "authentication_required", title: "Authentication required" },
+  ],
+  ["403:forbidden", { code: "forbidden", title: "Forbidden" }],
+  ["404:not_found", { code: "not_found", title: "Not found" }],
+  [
+    "404:saved_job_target_unavailable",
+    { code: "saved_job_target_unavailable", title: "Job is unavailable" },
+  ],
+  [
+    "404:job_report_target_unavailable",
+    { code: "job_report_target_unavailable", title: "Job is unavailable" },
+  ],
+  ["404:match_job_unavailable", { code: "match_job_unavailable", title: "Job is unavailable" }],
+  ["409:idempotency_conflict", { code: "idempotency_conflict", title: "Idempotency key conflict" }],
+  ["409:version_conflict", { code: "version_conflict", title: "Profile fact changed" }],
+  [
+    "409:profile_fact_transition_conflict",
+    { code: "profile_fact_transition_conflict", title: "Profile fact transition conflict" },
+  ],
+  [
+    "409:resume_document_limit",
+    { code: "resume_document_limit", title: "Resume document limit reached" },
+  ],
+  [
+    "409:job_search_catalog_changed",
+    { code: "job_search_catalog_changed", title: "Job catalog changed" },
+  ],
+  ["409:job_already_reported", { code: "job_already_reported", title: "Job already reported" }],
+  [
+    "409:job_report_limit_reached",
+    { code: "job_report_limit_reached", title: "Job-report limit reached" },
+  ],
+  [
+    "409:match_preferences_required",
+    { code: "match_preferences_required", title: "Job preferences are required" },
+  ],
+  [
+    "409:match_preferences_require_review",
+    { code: "match_preferences_require_review", title: "Job preferences require review" },
+  ],
+  [
+    "409:saved_job_limit_reached",
+    { code: "saved_job_limit_reached", title: "Saved-job limit reached" },
+  ],
+  [
+    "409:saved_job_command_limit_reached",
+    { code: "saved_job_command_limit_reached", title: "Saved-job command limit reached" },
+  ],
+  ["409:saved_jobs_changed", { code: "saved_jobs_changed", title: "Saved jobs changed" }],
+  ["413:payload_too_large", { code: "payload_too_large", title: "Payload too large" }],
+  [
+    "415:unsupported_media_type",
+    { code: "unsupported_media_type", title: "Unsupported media type" },
+  ],
+  [
+    "503:document_intake_unavailable",
+    { code: "document_intake_unavailable", title: "Resume intake is unavailable" },
+  ],
+  [
+    "503:job_search_unavailable",
+    { code: "job_search_unavailable", title: "Job search is unavailable" },
+  ],
+  [
+    "503:job_reporting_unavailable",
+    { code: "job_reporting_unavailable", title: "Job reporting unavailable" },
+  ],
+  [
+    "503:match_assessment_unavailable",
+    { code: "match_assessment_unavailable", title: "Match assessment unavailable" },
+  ],
+  [
+    "503:entitlement_unavailable",
+    { code: "entitlement_unavailable", title: "Entitlement status unavailable" },
+  ],
+]);
 
 function sleep(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -38,6 +131,145 @@ function problem(status: number, code: string, title: string): Response {
       headers: { "cache-control": "no-store", "content-type": "application/problem+json" },
     },
   );
+}
+
+function cancelBody(response: Response): void {
+  try {
+    void response.body?.cancel().catch(() => undefined);
+  } catch {
+    // The response is already rejected; cancellation is best-effort cleanup only.
+  }
+}
+
+function cancelReader(reader: ReadableStreamDefaultReader<Uint8Array>): void {
+  try {
+    void reader.cancel().catch(() => undefined);
+  } catch {
+    // The response is already rejected; cancellation is best-effort cleanup only.
+  }
+}
+
+function statusOnlyProbeResponse(response: Response): Response {
+  try {
+    void response.body?.cancel().catch(() => undefined);
+  } catch {
+    // The local conformance probe uses only the status and must never wait for or expose this body.
+  }
+  return new Response(null, {
+    status: response.status,
+    headers: { "cache-control": "no-store" },
+  });
+}
+
+async function readChunk(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  signal: AbortSignal,
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  if (signal.aborted) {
+    cancelReader(reader);
+    throw new Error("The platform problem read was aborted");
+  }
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const settle = <Value>(callback: (value: Value) => void, value: Value) => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener("abort", onAbort);
+      callback(value);
+    };
+    const onAbort = () => {
+      cancelReader(reader);
+      settle(reject, new Error("The platform problem read was aborted"));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    void reader.read().then(
+      (value) => settle(resolve, value),
+      (error: unknown) => settle(reject, error),
+    );
+  });
+}
+
+async function readBoundedProblem(response: Response, signal: AbortSignal): Promise<unknown> {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!problemContentTypePattern.test(contentType)) {
+    cancelBody(response);
+    throw new Error("The platform problem content type is invalid");
+  }
+
+  const contentLength = response.headers.get("content-length");
+  if (contentLength !== null) {
+    const declaredLength = Number(contentLength);
+    if (
+      !Number.isSafeInteger(declaredLength) ||
+      declaredLength < 0 ||
+      declaredLength > maximumProblemBytes
+    ) {
+      cancelBody(response);
+      throw new Error("The platform problem content length is invalid");
+    }
+  }
+
+  if (!response.body) {
+    throw new Error("The platform problem body is missing");
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const chunk = await readChunk(reader, signal);
+      if (chunk.done) break;
+      size += chunk.value.byteLength;
+      if (size > maximumProblemBytes) {
+        cancelReader(reader);
+        throw new Error("The platform problem body is too large");
+      }
+      chunks.push(chunk.value);
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // An aborted hostile stream may retain a pending read; cancellation remains best-effort.
+    }
+  }
+
+  const body = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  const text = new TextDecoder("utf-8", { fatal: true }).decode(body);
+  return JSON.parse(text) as unknown;
+}
+
+async function projectPlatformProblem(response: Response, signal: AbortSignal): Promise<Response> {
+  try {
+    const value = await readBoundedProblem(response, signal);
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error("The platform problem is invalid");
+    }
+    const upstream = value as Record<string, unknown>;
+    if (
+      typeof upstream.code !== "string" ||
+      typeof upstream.type !== "string" ||
+      typeof upstream.title !== "string" ||
+      typeof upstream.traceId !== "string" ||
+      upstream.status !== response.status
+    ) {
+      throw new Error("The platform problem is invalid");
+    }
+    const declared = declaredProblems.get(`${response.status}:${upstream.code}`);
+    if (!declared || upstream.type !== `urn:ai-job-apply:problem:${declared.code}`) {
+      throw new Error("The platform problem is undeclared");
+    }
+    return problem(response.status, declared.code, declared.title);
+  } catch {
+    return problem(503, "platform_unavailable", "The platform API is unavailable");
+  }
 }
 
 function platformBaseUrl(value: string): URL {
@@ -98,6 +330,7 @@ export async function forwardPlatformRequest(
         response = await dependencies.fetch(new URL(path, baseUrl), {
           ...init,
           cache: "no-store",
+          redirect: "error",
           signal,
           headers: {
             ...init.headers,
@@ -115,12 +348,20 @@ export async function forwardPlatformRequest(
       if (delay === undefined || signal.aborted) {
         return problem(503, "platform_unavailable", "The platform API is unavailable");
       }
-      await response?.body?.cancel();
+      if (response) cancelBody(response);
       await wait(Math.round(delay / 2 + random() * (delay / 2)));
     }
 
     if (!response) {
       return problem(503, "platform_unavailable", "The platform API is unavailable");
+    }
+
+    if (path === jobReadAuthorizationProbePath && init.method?.toUpperCase() === "GET") {
+      return statusOnlyProbeResponse(response);
+    }
+
+    if (!response.ok) {
+      return await projectPlatformProblem(response, signal);
     }
 
     const headers = new Headers({ "cache-control": "no-store" });
