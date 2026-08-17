@@ -32,6 +32,16 @@ function proposedFact(key = "stale_candidate_skill"): ProfileFact {
   };
 }
 
+function confirmedDirectFact(key: string, value = "Synthetic confirmed value"): ProfileFact {
+  return {
+    ...proposedFact(key),
+    key,
+    value,
+    verification: "confirmed",
+    source: { type: "user", reference: "direct-entry" },
+  };
+}
+
 function resumeDocument(status: ResumeDocument["status"] = "scanning"): ResumeDocument {
   return {
     id: "019c0000-0000-7000-8000-000000000090",
@@ -100,6 +110,20 @@ function buttonNamed(container: HTMLElement, name: string): HTMLButtonElement {
   );
   if (!button) throw new Error(`Could not find button ${name}`);
   return button;
+}
+
+function directFactForm(container: HTMLElement): HTMLFormElement {
+  const form = Array.from(container.querySelectorAll<HTMLFormElement>("form")).find((candidate) =>
+    candidate.textContent?.includes("Fact category"),
+  );
+  if (!form) throw new Error("The direct fact form must be rendered");
+  return form;
+}
+
+function fillDirectFact(form: HTMLFormElement, key: string, value: string): void {
+  setControlValue(labelledControl<HTMLSelectElement>(form, "Fact category", "select"), "skill");
+  setControlValue(labelledControl<HTMLInputElement>(form, "Fact name", "input"), key);
+  setControlValue(labelledControl<HTMLInputElement>(form, "Confirmed value", "input"), value);
 }
 
 function foundation(authenticated = true) {
@@ -803,6 +827,223 @@ describe("coordinated onboarding flow", () => {
     expect(factForm.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(
       false,
     );
+  });
+
+  it("keeps rapid create and update activation in one mutation and clears its deadline", async () => {
+    vi.useFakeTimers();
+    const proposal = proposedFact("single_flight_proposal");
+    const pendingCreate = deferred<Response>();
+    let createSignal: AbortSignal | undefined;
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const path = requestPath(input);
+      if (path === "/api/platform/profile-facts" && (init?.method ?? "GET") === "GET") {
+        return jsonResponse({ facts: [proposal], confirmedCount: 0, proposedCount: 1 });
+      }
+      if (path === "/api/platform/profile-facts" && init?.method === "POST") {
+        createSignal = init.signal ?? undefined;
+        return pendingCreate.promise;
+      }
+      if (path === `/api/platform/profile-facts/${proposal.id}` && init?.method === "PATCH") {
+        throw new Error("A competing profile mutation must not start");
+      }
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await act(async () => root.render(profileFacts()));
+    const form = directFactForm(container);
+    await act(async () => fillDirectFact(form, "single_flight_create", "Synthetic value"));
+    await act(async () => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      buttonNamed(container, `Confirm ${proposal.key}`).click();
+    });
+
+    const mutations = fetchMock.mock.calls.filter(([, init]) => init?.method !== undefined);
+    expect(mutations).toHaveLength(1);
+    expect(mutations[0]?.[0]).toBe("/api/platform/profile-facts");
+    expect(mutations[0]?.[1]).toMatchObject({
+      method: "POST",
+      body: JSON.stringify({
+        kind: "skill",
+        key: "single_flight_create",
+        value: "Synthetic value",
+        sensitivity: "confidential",
+      }),
+    });
+    expect(new Headers(mutations[0]?.[1]?.headers).get("idempotency-key")).toMatch(
+      /^profile-fact-/,
+    );
+    expect(createSignal?.aborted).toBe(false);
+
+    await act(async () =>
+      pendingCreate.resolve(jsonResponse(confirmedDirectFact("single_flight_create"))),
+    );
+    expect(container.textContent).toContain("Profile fact saved as confirmed user input.");
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    expect(createSignal?.aborted).toBe(false);
+  });
+
+  it("reuses an ambiguous create intent and rotates it after a definitive rejection", async () => {
+    vi.useFakeTimers();
+    const stalled = deferred<Response>();
+    const mutationCalls: RequestInit[] = [];
+    let createCount = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const path = requestPath(input);
+      if (path === "/api/platform/profile-facts" && (init?.method ?? "GET") === "GET") {
+        return jsonResponse(emptyFacts);
+      }
+      if (path === "/api/platform/profile-facts" && init?.method === "POST") {
+        mutationCalls.push(init);
+        createCount += 1;
+        if (createCount === 1) return stalled.promise;
+        if (createCount === 2) {
+          return jsonResponse({ code: "invalid_request", detail: privateProblemCanary }, 400);
+        }
+        return jsonResponse(confirmedDirectFact("ambiguous_create"));
+      }
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await act(async () => root.render(profileFacts()));
+    const form = directFactForm(container);
+    await act(async () => fillDirectFact(form, "ambiguous_create", "Synthetic value"));
+    const submit = () =>
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+
+    await act(async () => submit());
+    const firstSignal = mutationCalls[0]?.signal;
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    expect(firstSignal?.aborted).toBe(true);
+    expect(container.textContent).toContain(
+      "Saving timed out. Retry to safely check the same profile fact.",
+    );
+
+    await act(async () => submit());
+    expect(container.textContent).toContain("Check the profile fact and try again.");
+    expect(mutationCalls).toHaveLength(2);
+    expect(mutationCalls[1]?.body).toBe(mutationCalls[0]?.body);
+    expect(new Headers(mutationCalls[1]?.headers).get("idempotency-key")).toBe(
+      new Headers(mutationCalls[0]?.headers).get("idempotency-key"),
+    );
+
+    await act(async () => submit());
+    expect(mutationCalls).toHaveLength(3);
+    expect(mutationCalls[2]?.body).toBe(mutationCalls[0]?.body);
+    expect(new Headers(mutationCalls[2]?.headers).get("idempotency-key")).not.toBe(
+      new Headers(mutationCalls[0]?.headers).get("idempotency-key"),
+    );
+    expect(container.textContent).toContain("Profile fact saved as confirmed user input.");
+    await act(async () => stalled.resolve(jsonResponse(confirmedDirectFact("stale_create"))));
+    expect(container.textContent).not.toContain("stale_create");
+  });
+
+  it("keeps competing profile reviews single-flight and reuses an ambiguous update intent", async () => {
+    vi.useFakeTimers();
+    const proposal = proposedFact("ambiguous_review");
+    const stalled = deferred<Response>();
+    const mutationCalls: RequestInit[] = [];
+    let patchCount = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (input, init) => {
+        const path = requestPath(input);
+        if (path === "/api/platform/profile-facts" && (init?.method ?? "GET") === "GET") {
+          return jsonResponse({ facts: [proposal], confirmedCount: 0, proposedCount: 1 });
+        }
+        if (path === `/api/platform/profile-facts/${proposal.id}` && init?.method === "PATCH") {
+          mutationCalls.push(init);
+          patchCount += 1;
+          return patchCount === 1
+            ? stalled.promise
+            : jsonResponse({ ...proposal, verification: "confirmed", version: 2 });
+        }
+        throw new Error(`Unexpected request: ${path}`);
+      }),
+    );
+
+    await act(async () => root.render(profileFacts()));
+    await act(async () => {
+      buttonNamed(container, `Confirm ${proposal.key}`).click();
+      buttonNamed(container, `Reject ${proposal.key}`).click();
+    });
+    expect(mutationCalls).toHaveLength(1);
+    expect(JSON.parse(String(mutationCalls[0]?.body))).toEqual({
+      expectedVersion: 1,
+      verification: "confirmed",
+    });
+
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    expect(mutationCalls[0]?.signal?.aborted).toBe(true);
+    expect(container.textContent).toContain("Saving timed out");
+    await act(async () => buttonNamed(container, `Confirm ${proposal.key}`).click());
+    expect(mutationCalls).toHaveLength(2);
+    expect(mutationCalls[1]?.body).toBe(mutationCalls[0]?.body);
+    expect(new Headers(mutationCalls[1]?.headers).get("idempotency-key")).toBe(
+      new Headers(mutationCalls[0]?.headers).get("idempotency-key"),
+    );
+    expect(container.textContent).toContain("Prior versions remain auditable");
+    await act(async () =>
+      stalled.resolve(jsonResponse({ ...proposal, verification: "rejected", version: 2 })),
+    );
+    expect(container.textContent).not.toContain("rejected · version 2");
+  });
+
+  it("prevents a stale session completion from clearing the next session's ambiguous intent", async () => {
+    const staleCreate = deferred<Response>();
+    const mutationCalls: RequestInit[] = [];
+    let createCount = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (input, init) => {
+        const path = requestPath(input);
+        if (path === "/api/platform/profile-facts" && (init?.method ?? "GET") === "GET") {
+          return jsonResponse(emptyFacts);
+        }
+        if (path === "/api/platform/profile-facts" && init?.method === "POST") {
+          mutationCalls.push(init);
+          createCount += 1;
+          if (createCount === 1) return staleCreate.promise;
+          if (createCount === 2) throw new TypeError(privateProblemCanary);
+          return jsonResponse(confirmedDirectFact("session_b_fact"));
+        }
+        throw new Error(`Unexpected request: ${path}`);
+      }),
+    );
+
+    await act(async () => root.render(profileFacts()));
+    let form = directFactForm(container);
+    await act(async () => fillDirectFact(form, "same_session_fact", "Synthetic value"));
+    await act(async () =>
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    const sessionAKey = new Headers(mutationCalls[0]?.headers).get("idempotency-key");
+
+    await act(async () => root.render(profileFacts(false)));
+    expect(mutationCalls[0]?.signal?.aborted).toBe(true);
+    await act(async () => root.render(profileFacts()));
+    form = directFactForm(container);
+    await act(async () => fillDirectFact(form, "same_session_fact", "Synthetic value"));
+    await act(async () =>
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    expect(container.textContent).toContain("Profile facts are temporarily unavailable.");
+    expect(container.textContent).not.toContain(privateProblemCanary);
+    const sessionBKey = new Headers(mutationCalls[1]?.headers).get("idempotency-key");
+    expect(sessionBKey).not.toBe(sessionAKey);
+
+    await act(async () =>
+      staleCreate.resolve(jsonResponse(confirmedDirectFact("stale_session_a_fact"))),
+    );
+    expect(container.textContent).not.toContain("stale_session_a_fact");
+    await act(async () =>
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    expect(new Headers(mutationCalls[2]?.headers).get("idempotency-key")).toBe(sessionBKey);
+    expect(mutationCalls[2]?.body).toBe(mutationCalls[1]?.body);
+    expect(container.textContent).toContain("Profile fact saved as confirmed user input.");
   });
 
   it("keeps the fixed profile conflict flow and reloads the latest fact", async () => {
