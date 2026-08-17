@@ -9,6 +9,7 @@ import {
   type JobSearchFields,
   jobSearchFailureAction,
 } from "./job-search-state";
+import { MatchAssessmentPanel } from "./match-assessment-panel";
 import { SAVED_JOBS_CHANGED_EVENT } from "./saved-jobs-panel";
 
 const initialFields: JobSearchFields = {
@@ -304,6 +305,7 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
                   {savingJobId === job.id ? "Saving…" : "Save job"}
                 </button>
                 <JobReportControl jobId={job.id} />
+                <MatchAssessmentPanel jobId={job.id} />
               </article>
             </li>
           ))}

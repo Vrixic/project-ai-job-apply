@@ -12,7 +12,10 @@ browser JavaScript. `proxy.ts` owns the Auth0 authorization-code callback and se
 
 The D1 job-search panel posts bounded filters through `api/platform/jobs/search`, renders only
 active canonical summaries, and follows opaque keyset cursors. Search values never enter the
-gateway URL, and the panel makes no personalized-match claim.
+gateway URL, and the search request, result ordering, and result inclusion make no
+personalized-match claim. Each result composes the existing owner-self match-evidence panel, which
+does not request private evidence until the candidate explicitly selects `Check match evidence`.
+The panel does not automatically filter or reorder results, produce a score, or gate saving.
 
 Each active search result also offers an authenticated fixed-reason report control through
 `api/platform/jobs/[jobId]/reports`. The BFF accepts only the existing exact report contract,
