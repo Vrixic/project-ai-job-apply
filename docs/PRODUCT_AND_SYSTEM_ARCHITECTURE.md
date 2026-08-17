@@ -691,7 +691,11 @@ Recommended initial policy:
 - Use source `validThrough` or explicit closed state when present.
 - Recheck high-interest jobs and jobs with pending applications more frequently.
 - Recheck official/API sources at their efficient change interval.
-- Mark a job `suspect_stale` after repeated fetch failures or community closed reports.
+- Repeated fetch failures may trigger source revalidation under the owning policy.
+- Candidate or community closed reports only prioritize source revalidation and human review;
+  reports alone never mutate job or source lifecycle state.
+- Transition lifecycle state only from independently verified source evidence or an authorized
+  administrative determination under the owning policy.
 - Unless the source provides a later valid date, remove a listing from active search 30 days after the last positive verification.
 - Reverify shortly before application preparation and again before submission.
 - Retain a minimal expired tombstone; purge raw snapshots on the retention schedule.
