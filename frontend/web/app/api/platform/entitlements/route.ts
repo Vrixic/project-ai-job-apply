@@ -1,5 +1,6 @@
 import { getAuth0Client } from "../../../../lib/auth0";
 import { validateEntitlementReadRequest } from "../../../../lib/entitlement-read-bff";
+import { validateFoundationResponse } from "../../../../lib/foundation-response-bff";
 import { forwardPlatformRequest } from "../../../../lib/platform-api";
 
 export const dynamic = "force-dynamic";
@@ -7,7 +8,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request): Promise<Response> {
   const failure = validateEntitlementReadRequest(request);
   if (failure) return failure;
-  return forwardPlatformRequest(
+  const response = await forwardPlatformRequest(
     "/v1/entitlements",
     { method: "GET", signal: request.signal },
     {
@@ -16,4 +17,5 @@ export async function GET(request: Request): Promise<Response> {
       fetch,
     },
   );
+  return validateFoundationResponse(response, 200, "EntitlementSummary", request.signal);
 }
