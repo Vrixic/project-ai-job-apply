@@ -6,6 +6,8 @@ const JSON_CONTENT_TYPE_PATTERN = /^application\/json(?:\s*;\s*charset=utf-8)?$/
 
 export type FoundationResponseSchemaName =
   | "EntitlementSummary"
+  | "SavedJob"
+  | "SavedJobPage"
   | "ResumeDocumentCollection"
   | "CreateResumeUploadResponse"
   | "ProfileFactCollection"
@@ -16,6 +18,8 @@ const validators = new Map<
   ReturnType<typeof compileComponentValidator>
 >([
   ["EntitlementSummary", compileComponentValidator("EntitlementSummary")],
+  ["SavedJob", compileComponentValidator("SavedJob")],
+  ["SavedJobPage", compileComponentValidator("SavedJobPage")],
   ["ResumeDocumentCollection", compileComponentValidator("ResumeDocumentCollection")],
   ["CreateResumeUploadResponse", compileComponentValidator("CreateResumeUploadResponse")],
   ["ProfileFactCollection", compileComponentValidator("ProfileFactCollection")],

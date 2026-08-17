@@ -6,6 +6,8 @@ import {
   POST as postProfileFact,
 } from "../app/api/platform/profile-facts/route";
 import { GET as getResumes, POST as postResume } from "../app/api/platform/resumes/route";
+import { POST as createSavedJob } from "../app/api/platform/saved-jobs/route";
+import { POST as searchSavedJobs } from "../app/api/platform/saved-jobs/search/route";
 import {
   type FoundationResponseSchemaName,
   validateFoundationResponse,
@@ -80,9 +82,53 @@ const graceProEntitlement = {
   accessState: "grace",
   graceThrough: "2026-09-24T12:00:00.000Z",
 };
+const savedJobSnapshot = {
+  jobIdAtSave: "019b4e12-7ea3-7c36-9357-aea35ab542c5",
+  company: {
+    id: "019b4e12-7ea3-7c36-9357-aea35ab542c6",
+    name: "Synthetic Company",
+    verifiedDomain: "example.test",
+  },
+  title: "Software Engineer",
+  locations: ["Remote - US"],
+  department: "Engineering",
+  firstObservedAt: "2026-08-01T12:00:00.000Z",
+  lastVerifiedAt: "2026-08-17T12:00:00.000Z",
+  expiresAt: "2026-09-17T12:00:00.000Z",
+};
+const savedJob = {
+  id: "019b4e12-7ea3-7c36-9357-aea35ab542c7",
+  requestedJobId: savedJobSnapshot.jobIdAtSave,
+  snapshot: savedJobSnapshot,
+  availability: {
+    state: "available",
+    currentJob: {
+      id: savedJobSnapshot.jobIdAtSave,
+      company: savedJobSnapshot.company,
+      title: savedJobSnapshot.title,
+      locations: savedJobSnapshot.locations,
+      department: savedJobSnapshot.department,
+      status: "active",
+      firstObservedAt: savedJobSnapshot.firstObservedAt,
+      lastVerifiedAt: savedJobSnapshot.lastVerifiedAt,
+      expiresAt: savedJobSnapshot.expiresAt,
+    },
+  },
+  savedAt: "2026-08-17T12:00:00.000Z",
+};
+const unavailableSavedJob = {
+  ...savedJob,
+  availability: { state: "unavailable" },
+};
+const savedJobPage = {
+  items: [savedJob, unavailableSavedJob],
+  nextCursor: "saved_jobs_cursor.signature",
+};
 
 const validValues: Record<FoundationResponseSchemaName, unknown> = {
   EntitlementSummary: freeEntitlement,
+  SavedJob: savedJob,
+  SavedJobPage: savedJobPage,
   ResumeDocumentCollection: resumeCollection,
   CreateResumeUploadResponse: resumeUploadResponse,
   ProfileFactCollection: factCollection,
@@ -127,7 +173,8 @@ describe("foundation response boundary", () => {
   it.each(Object.entries(validValues))(
     "accepts and projects an exact valid %s response",
     async (schemaName, value) => {
-      const expectedStatus = schemaName === "CreateResumeUploadResponse" ? 201 : 200;
+      const expectedStatus =
+        schemaName === "CreateResumeUploadResponse" || schemaName === "SavedJob" ? 201 : 200;
       const response = await validateFoundationResponse(
         jsonResponse(value, expectedStatus, { "x-correlation-id": "synthetic-correlation" }),
         expectedStatus,
@@ -193,6 +240,43 @@ describe("foundation response boundary", () => {
 
     await expectUnavailable(response);
     expect(body).not.toContain("candidate-private-entitlement");
+  });
+
+  it.each([
+    ["saved job", { ...savedJob, ownerId: "candidate-private-saved-job-owner" }, 201, "SavedJob"],
+    [
+      "saved-job page",
+      { ...savedJobPage, privateCursorState: "candidate-private-saved-job-cursor" },
+      200,
+      "SavedJobPage",
+    ],
+    [
+      "nested saved-job snapshot",
+      {
+        ...savedJobPage,
+        items: [
+          {
+            ...savedJob,
+            snapshot: {
+              ...savedJobSnapshot,
+              source: "candidate-private-saved-job-source",
+            },
+          },
+        ],
+      },
+      200,
+      "SavedJobPage",
+    ],
+  ])("rejects a contract-invalid or private %s success", async (_label, value, status, schema) => {
+    const response = await validateFoundationResponse(
+      jsonResponse(value, status as number),
+      status as number,
+      schema as FoundationResponseSchemaName,
+    );
+    const body = await response.clone().text();
+
+    await expectUnavailable(response);
+    expect(body).not.toContain("candidate-private-saved-job");
   });
 
   it.each([
@@ -425,6 +509,18 @@ describe("foundation route response composition", () => {
       200,
       profileFact,
     ],
+    [
+      "saved-job POST",
+      () => createSavedJob(mutationRequest("POST", { jobId: savedJob.requestedJobId })),
+      201,
+      savedJob,
+    ],
+    [
+      "saved-job search POST",
+      () => searchSavedJobs(mutationRequest("POST", { limit: 25 })),
+      200,
+      savedJobPage,
+    ],
   ])("validates the exact %s success status and schema", async (_label, run, status, value) => {
     mocks.forwardPlatformRequest.mockResolvedValueOnce(jsonResponse(value, status as number));
 
@@ -471,4 +567,54 @@ describe("foundation route response composition", () => {
       expect.objectContaining({ auth0: { synthetic: "auth0-client" } }),
     );
   });
+
+  it.each([
+    [
+      "saved-job create",
+      createSavedJob,
+      { jobId: savedJob.requestedJobId },
+      "/v1/saved-jobs",
+      "SavedJob",
+      201,
+    ],
+    [
+      "saved-job search",
+      searchSavedJobs,
+      { limit: 25 },
+      "/v1/saved-jobs/search",
+      "SavedJobPage",
+      200,
+    ],
+  ])(
+    "forwards the exact %s request and contains a private success",
+    async (_label, run, requestBody, path, _schema, status) => {
+      const privateCanary = "candidate-private-saved-job-route-success";
+      const request = mutationRequest("POST", requestBody);
+      const invalid =
+        status === 201
+          ? { ...savedJob, ownerId: privateCanary }
+          : { ...savedJobPage, privateCursorState: privateCanary };
+      mocks.forwardPlatformRequest.mockResolvedValueOnce(jsonResponse(invalid, status as number));
+
+      const response = await (run as (request: Request) => Promise<Response>)(request);
+      const body = await response.text();
+
+      expect(response.status).toBe(503);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(body).not.toContain(privateCanary);
+      expect(mocks.forwardPlatformRequest).toHaveBeenCalledWith(
+        path,
+        {
+          method: "POST",
+          body: JSON.stringify(requestBody),
+          signal: request.signal,
+          headers:
+            status === 201
+              ? { "content-type": "application/json", "idempotency-key": idempotencyKey }
+              : { "content-type": "application/json" },
+        },
+        expect.objectContaining({ auth0: { synthetic: "auth0-client" } }),
+      );
+    },
+  );
 });

@@ -1,4 +1,5 @@
 import { getAuth0Client } from "../../../../lib/auth0";
+import { validateFoundationResponse } from "../../../../lib/foundation-response-bff";
 import { forwardPlatformRequest } from "../../../../lib/platform-api";
 import { forwardIdempotencyKey, readSavedJobBody } from "../../../../lib/saved-jobs-bff";
 
@@ -19,7 +20,7 @@ export async function POST(request: Request): Promise<Response> {
       { status: 400, headers: { "cache-control": "no-store" } },
     );
   }
-  return forwardPlatformRequest(
+  const response = await forwardPlatformRequest(
     "/v1/saved-jobs",
     {
       method: "POST",
@@ -33,4 +34,5 @@ export async function POST(request: Request): Promise<Response> {
       fetch,
     },
   );
+  return validateFoundationResponse(response, 201, "SavedJob", request.signal);
 }
