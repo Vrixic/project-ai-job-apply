@@ -16,14 +16,18 @@ function jsonResponse(body: unknown, status = 201): Response {
   });
 }
 
-function deferredResponse() {
-  let resolve!: (response: Response) => void;
+function deferredValue<T>() {
+  let resolve!: (value: T) => void;
   let reject!: (error: unknown) => void;
-  const promise = new Promise<Response>((next, fail) => {
+  const promise = new Promise<T>((next, fail) => {
     resolve = next;
     reject = fail;
   });
   return { promise, resolve, reject };
+}
+
+function deferredResponse() {
+  return deferredValue<Response>();
 }
 
 function selectValue(container: HTMLElement, value: string) {
@@ -233,6 +237,107 @@ describe("JobReportControl", () => {
     expect(retryHeaders.get("idempotency-key")).toBe(firstHeaders.get("idempotency-key"));
   });
 
+  it("settles an abort-ignoring fetch at the exact deadline and retries the same intent explicitly", async () => {
+    vi.useFakeTimers();
+    const stalled = deferredResponse();
+    let stalledSignal: AbortSignal | undefined;
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockImplementationOnce((_input, init) => {
+        stalledSignal = init?.signal ?? undefined;
+        return stalled.promise;
+      })
+      .mockResolvedValueOnce(jsonResponse({ accepted: true }));
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<JobReportControl jobId={JOB_ID} />));
+    await act(async () => selectValue(container, "job_closed"));
+    await act(async () => submit(container));
+
+    await act(async () => vi.advanceTimersByTimeAsync(19_999));
+    expect(stalledSignal?.aborted).toBe(false);
+    expect(container.textContent).toContain("Reporting…");
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(stalledSignal?.aborted).toBe(true);
+    expect(container.textContent).toContain("Reporting timed out");
+    expect(vi.getTimerCount()).toBe(0);
+
+    await act(async () => submit(container));
+    const firstHeaders = new Headers(fetchMock.mock.calls[0]?.[1]?.headers);
+    const retryHeaders = new Headers(fetchMock.mock.calls[1]?.[1]?.headers);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(retryHeaders.get("idempotency-key")).toBe(firstHeaders.get("idempotency-key"));
+    expect(fetchMock.mock.calls[1]?.[1]?.body).toBe(fetchMock.mock.calls[0]?.[1]?.body);
+    expect(container.textContent).toContain("Report received for review");
+
+    await act(async () => stalled.resolve(jsonResponse({ accepted: true })));
+    expect(container.textContent).toContain("Report received for review");
+    expect(container.textContent).not.toContain("Reporting timed out");
+  });
+
+  it("fences a timed-out problem body from the active ambiguous retry intent", async () => {
+    vi.useFakeTimers();
+    const stalledProblem = deferredValue<unknown>();
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        json: () => stalledProblem.promise,
+      } as Response)
+      .mockRejectedValueOnce(new TypeError("ambiguous retry failure"))
+      .mockResolvedValueOnce(jsonResponse({ accepted: true }));
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<JobReportControl jobId={JOB_ID} />));
+    await act(async () => selectValue(container, "suspected_scam"));
+    await act(async () => submit(container));
+
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    expect(container.textContent).toContain("Reporting timed out");
+    await act(async () => submit(container));
+    expect(container.textContent).toContain("Retry to safely check the same report");
+
+    await act(async () =>
+      stalledProblem.resolve({
+        code: "job_report_limit_reached",
+        title: "private stale title",
+        detail: "private-stale-report-canary",
+      }),
+    );
+    expect(container.textContent).toContain("Retry to safely check the same report");
+    expect(container.textContent).not.toMatch(/limit reached|private stale|private-stale/i);
+
+    await act(async () => submit(container));
+    const firstKey = new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("idempotency-key");
+    expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get("idempotency-key")).toBe(
+      firstKey,
+    );
+    expect(new Headers(fetchMock.mock.calls[2]?.[1]?.headers).get("idempotency-key")).toBe(
+      firstKey,
+    );
+    expect(fetchMock.mock.calls[2]?.[1]?.body).toBe(fetchMock.mock.calls[0]?.[1]?.body);
+    expect(container.textContent).toContain("Report received for review");
+  });
+
+  it("clears the deadline after a successful response without later aborting it", async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (_input, init) => {
+        signal = init?.signal ?? undefined;
+        return jsonResponse({ accepted: true });
+      }),
+    );
+    await act(async () => root.render(<JobReportControl jobId={JOB_ID} />));
+    await act(async () => selectValue(container, "job_inaccurate"));
+    await act(async () => submit(container));
+
+    expect(container.textContent).toContain("Report received for review");
+    expect(vi.getTimerCount()).toBe(0);
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    expect(signal?.aborted).toBe(false);
+  });
+
   it("treats an existing report as terminal without implying catalog suppression", async () => {
     vi.stubGlobal(
       "fetch",
@@ -260,6 +365,7 @@ describe("JobReportControl", () => {
   });
 
   it("aborts on unmount and discards stale completion", async () => {
+    vi.useFakeTimers();
     const pending = deferredResponse();
     let observedSignal: AbortSignal | undefined;
     vi.stubGlobal(
@@ -272,8 +378,10 @@ describe("JobReportControl", () => {
     await act(async () => root.render(<JobReportControl jobId={JOB_ID} />));
     await act(async () => selectValue(container, "job_not_found"));
     await act(async () => submit(container));
+    expect(vi.getTimerCount()).toBe(1);
     await act(async () => root.render(null));
     expect(observedSignal?.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
     await act(async () => pending.resolve(jsonResponse({ accepted: true })));
     expect(container.textContent).toBe("");
   });

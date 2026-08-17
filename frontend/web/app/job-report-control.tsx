@@ -20,6 +20,18 @@ interface RetryIntent {
   idempotencyKey: string;
 }
 
+interface ReportAttempt {
+  controller: AbortController;
+  intent: RetryIntent;
+  rejectDeadline: ((reason?: unknown) => void) | undefined;
+  timedOut: boolean;
+  timeout: number | undefined;
+}
+
+class ReportRequestDeadlineError extends Error {}
+
+const reportRequestTimeoutMilliseconds = 20_000;
+
 function messageForProblem(code: string | undefined): string {
   switch (code) {
     case "job_already_reported":
@@ -54,7 +66,7 @@ export function JobReportControl({ jobId }: { jobId: string }) {
   const [submitted, setSubmitted] = useState(false);
   const [message, setMessage] = useState<string>();
   const retryIntent = useRef<RetryIntent | undefined>(undefined);
-  const activeController = useRef<AbortController | undefined>(undefined);
+  const activeAttempt = useRef<ReportAttempt | undefined>(undefined);
   const mounted = useRef(true);
   const submittingRef = useRef(false);
 
@@ -62,7 +74,17 @@ export function JobReportControl({ jobId }: { jobId: string }) {
     mounted.current = true;
     return () => {
       mounted.current = false;
-      activeController.current?.abort();
+      const attempt = activeAttempt.current;
+      activeAttempt.current = undefined;
+      retryIntent.current = undefined;
+      submittingRef.current = false;
+      if (attempt) {
+        if (attempt.timeout !== undefined) window.clearTimeout(attempt.timeout);
+        attempt.timeout = undefined;
+        attempt.controller.abort();
+        attempt.rejectDeadline?.(new Error("job report request cancelled"));
+        attempt.rejectDeadline = undefined;
+      }
     };
   }, []);
 
@@ -88,42 +110,70 @@ export function JobReportControl({ jobId }: { jobId: string }) {
     setSubmitting(true);
     setMessage(undefined);
     const controller = new AbortController();
-    activeController.current?.abort();
-    activeController.current = controller;
-    const timeout = window.setTimeout(() => controller.abort(), 20_000);
+    const attempt: ReportAttempt = {
+      controller,
+      intent,
+      rejectDeadline: undefined,
+      timedOut: false,
+      timeout: undefined,
+    };
+    const deadline = new Promise<never>((_resolve, reject) => {
+      attempt.rejectDeadline = reject;
+    });
+    attempt.timeout = window.setTimeout(() => {
+      attempt.timedOut = true;
+      attempt.timeout = undefined;
+      controller.abort();
+      attempt.rejectDeadline?.(new ReportRequestDeadlineError("job report request timed out"));
+      attempt.rejectDeadline = undefined;
+    }, reportRequestTimeoutMilliseconds);
+    activeAttempt.current?.controller.abort();
+    activeAttempt.current = attempt;
     try {
-      const response = await fetch(`/api/platform/jobs/${encodeURIComponent(jobId)}/reports`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "idempotency-key": intent.idempotencyKey,
-        },
-        body: JSON.stringify({ reason }),
-        signal: controller.signal,
-      });
+      const read = async (): Promise<{ code: string | undefined; response: Response }> => {
+        const response = await fetch(`/api/platform/jobs/${encodeURIComponent(jobId)}/reports`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "idempotency-key": intent.idempotencyKey,
+          },
+          body: JSON.stringify({ reason }),
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) throw new ReportRequestDeadlineError();
+        return { code: response.ok ? undefined : await problemCode(response), response };
+      };
+      const { code, response } = await Promise.race([read(), deadline]);
+      if (!mounted.current || activeAttempt.current !== attempt) return;
       if (!response.ok) {
-        const code = await problemCode(response);
-        if (response.status >= 400 && response.status < 500) retryIntent.current = undefined;
-        if (!mounted.current) return;
+        if (
+          response.status >= 400 &&
+          response.status < 500 &&
+          retryIntent.current === attempt.intent
+        ) {
+          retryIntent.current = undefined;
+        }
         if (code === "job_already_reported") setSubmitted(true);
         setMessage(messageForProblem(code));
         return;
       }
-      if (!mounted.current) return;
+      if (retryIntent.current === attempt.intent) retryIntent.current = undefined;
       setSubmitted(true);
       setMessage("Report received for review. Reporting does not automatically change this job.");
     } catch {
-      if (mounted.current) {
+      if (mounted.current && activeAttempt.current === attempt) {
         setMessage(
-          controller.signal.aborted
+          attempt.timedOut
             ? "Reporting timed out. Retry to safely check the same report."
             : "The report could not be submitted. Retry to safely check the same report.",
         );
       }
     } finally {
-      window.clearTimeout(timeout);
-      if (activeController.current === controller) activeController.current = undefined;
-      if (mounted.current) {
+      if (attempt.timeout !== undefined) window.clearTimeout(attempt.timeout);
+      attempt.timeout = undefined;
+      attempt.rejectDeadline = undefined;
+      if (activeAttempt.current === attempt) activeAttempt.current = undefined;
+      if (mounted.current && activeAttempt.current === undefined) {
         submittingRef.current = false;
         setSubmitting(false);
       }
