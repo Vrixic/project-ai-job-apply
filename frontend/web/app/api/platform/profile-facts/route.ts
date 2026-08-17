@@ -1,4 +1,5 @@
 import { getAuth0Client } from "../../../../lib/auth0";
+import { validateFoundationResponse } from "../../../../lib/foundation-response-bff";
 import { readFoundationWriteRequest } from "../../../../lib/foundation-write-bff";
 import { forwardPlatformRequest } from "../../../../lib/platform-api";
 
@@ -12,14 +13,19 @@ function dependencies() {
   };
 }
 
-export async function GET(): Promise<Response> {
-  return forwardPlatformRequest("/v1/profile/facts", { method: "GET" }, dependencies());
+export async function GET(request?: Request): Promise<Response> {
+  const response = await forwardPlatformRequest(
+    "/v1/profile/facts",
+    { method: "GET" },
+    dependencies(),
+  );
+  return validateFoundationResponse(response, 200, "ProfileFactCollection", request?.signal);
 }
 
 export async function POST(request: Request): Promise<Response> {
   const decoded = await readFoundationWriteRequest(request, "CreateProfileFactRequest");
   if ("failure" in decoded) return decoded.failure;
-  return forwardPlatformRequest(
+  const response = await forwardPlatformRequest(
     "/v1/profile/facts",
     {
       method: "POST",
@@ -32,4 +38,5 @@ export async function POST(request: Request): Promise<Response> {
     },
     dependencies(),
   );
+  return validateFoundationResponse(response, 201, "ProfileFact", request.signal);
 }

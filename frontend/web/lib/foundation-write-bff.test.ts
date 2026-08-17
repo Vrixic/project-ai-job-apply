@@ -55,6 +55,22 @@ const validBodies: Record<FoundationWriteSchemaName, Record<string, unknown>> = 
     value: "TypeScript and JavaScript",
   },
 };
+const responseDocument = {
+  id: "019b4e12-7ea3-7c36-9357-aea35ab542c2",
+  ...validBodies.CreateResumeUploadRequest,
+  status: "awaiting_upload",
+  createdAt: "2026-08-17T12:00:00.000Z",
+  updatedAt: "2026-08-17T12:00:00.000Z",
+};
+const responseFact = {
+  id: factId,
+  ...validBodies.CreateProfileFactRequest,
+  verification: "confirmed",
+  source: { type: "user", reference: "direct-entry" },
+  version: 1,
+  createdAt: "2026-08-17T12:00:00.000Z",
+  updatedAt: "2026-08-17T12:00:00.000Z",
+};
 
 function request(
   body: BodyInit | null,
@@ -247,11 +263,15 @@ describe("foundation write request boundary", () => {
 
 describe("foundation write route composition", () => {
   it.each([
-    [getJobPreferences, "/v1/me/job-preferences"],
-    [getResumes, "/v1/resumes"],
-    [getProfileFacts, "/v1/profile/facts"],
-  ])("leaves the existing authenticated GET forward unchanged", async (handler, path) => {
-    mocks.forwardPlatformRequest.mockResolvedValueOnce(new Response("{}", { status: 200 }));
+    [getJobPreferences, "/v1/me/job-preferences", {}],
+    [getResumes, "/v1/resumes", { documents: [responseDocument] }],
+    [
+      getProfileFacts,
+      "/v1/profile/facts",
+      { facts: [responseFact], confirmedCount: 1, proposedCount: 0 },
+    ],
+  ])("leaves the existing authenticated GET forward unchanged", async (handler, path, value) => {
+    mocks.forwardPlatformRequest.mockResolvedValueOnce(Response.json(value));
 
     const response = await handler();
 
@@ -273,6 +293,8 @@ describe("foundation write route composition", () => {
       "PUT",
       "/v1/me/job-preferences",
       validBodies.PutJobPreferencesRequest,
+      204,
+      undefined,
     ],
     [
       "resume upload",
@@ -280,6 +302,16 @@ describe("foundation write route composition", () => {
       "POST",
       "/v1/resumes/uploads",
       validBodies.CreateResumeUploadRequest,
+      201,
+      {
+        document: responseDocument,
+        upload: {
+          url: "https://uploads.example.test/synthetic",
+          method: "POST",
+          fields: { key: "synthetic/quarantine/object" },
+          expiresAt: "2099-08-17T12:00:00.000Z",
+        },
+      },
     ],
     [
       "profile fact create",
@@ -287,17 +319,23 @@ describe("foundation write route composition", () => {
       "POST",
       "/v1/profile/facts",
       validBodies.CreateProfileFactRequest,
+      201,
+      responseFact,
     ],
   ])(
     "forwards an exact validated %s mutation with the caller signal",
-    async (_label, handler, method, path, value) => {
-      mocks.forwardPlatformRequest.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    async (_label, handler, method, path, value, responseStatus, responseValue) => {
+      mocks.forwardPlatformRequest.mockResolvedValueOnce(
+        responseStatus === 204
+          ? new Response(null, { status: 204 })
+          : Response.json(responseValue, { status: responseStatus as number }),
+      );
       const body = JSON.stringify(value);
       const candidate = request(body, { method: method as string });
 
       const response = await (handler as (request: Request) => Promise<Response>)(candidate);
 
-      expect(response.status).toBe(204);
+      expect(response.status).toBe(responseStatus);
       expect(mocks.forwardPlatformRequest).toHaveBeenCalledTimes(1);
       const [forwardedPath, init, dependencies] = mocks.forwardPlatformRequest.mock.calls[0] ?? [];
       expect(forwardedPath).toBe(path);
@@ -318,13 +356,13 @@ describe("foundation write route composition", () => {
   );
 
   it("forwards an exact validated profile-fact correction", async () => {
-    mocks.forwardPlatformRequest.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    mocks.forwardPlatformRequest.mockResolvedValueOnce(Response.json(responseFact));
     const body = JSON.stringify(validBodies.UpdateProfileFactRequest);
     const candidate = request(body, { method: "PATCH" });
 
     const response = await patchProfileFact(candidate, { params: Promise.resolve({ factId }) });
 
-    expect(response.status).toBe(204);
+    expect(response.status).toBe(200);
     expect(mocks.forwardPlatformRequest).toHaveBeenCalledWith(
       `/v1/profile/facts/${factId}`,
       {

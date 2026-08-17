@@ -1,4 +1,5 @@
 import { getAuth0Client } from "../../../../../lib/auth0";
+import { validateFoundationResponse } from "../../../../../lib/foundation-response-bff";
 import { readFoundationWriteRequest } from "../../../../../lib/foundation-write-bff";
 import { forwardPlatformRequest } from "../../../../../lib/platform-api";
 
@@ -26,7 +27,7 @@ export async function PATCH(
   const decoded = await readFoundationWriteRequest(request, "UpdateProfileFactRequest");
   if ("failure" in decoded) return decoded.failure;
 
-  return forwardPlatformRequest(
+  const response = await forwardPlatformRequest(
     `/v1/profile/facts/${encodeURIComponent(factId)}`,
     {
       method: "PATCH",
@@ -43,4 +44,5 @@ export async function PATCH(
       fetch,
     },
   );
+  return validateFoundationResponse(response, 200, "ProfileFact", request.signal);
 }
