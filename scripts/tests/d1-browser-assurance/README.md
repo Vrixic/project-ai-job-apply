@@ -19,6 +19,13 @@ gate/reason language, explicit score/rank/eligibility/outcome nonclaim, bounded 
 loading announcement, and stale job-identity fencing. Both surfaces receive keyboard/focus and
 automated WCAG A/AA coverage in installed Chrome.
 
+The saved-jobs scenarios exercise the production search and private-list surfaces together. They
+prove the exact search-to-save association request, refresh into an available saved target,
+truthful unavailable-snapshot rendering, exact-association deletion, cursor-free reconciliation,
+bounded list/delete failure copy, recovery after a failed restart, focus restoration, live status,
+stale-response fencing on sign-out, and automated WCAG A/AA rules. Synthetic upstream detail and
+stale private state are canary-checked so neither can render.
+
 The harness lives outside `frontend/web`, and Playwright Core plus axe-core are root development-only
 tools. Neither the harness nor its dependencies belong to the production web package, pnpm
 production dependency closure, or Next build output.
@@ -26,5 +33,5 @@ production dependency closure, or Next build output.
 This automated suite is not human accessibility acceptance and does not exercise managed OIDC, a
 deployed BFF/gateway, deployed security headers, assistive-technology combinations, visual
 regression, mobile browsers, backend persistence, AWS document processing, provider integrations,
-trigger activation, or real candidate data. It does not approve ADR-023 or satisfy legal, privacy,
-security, or real-candidate-onboarding review gates.
+trigger activation, representative load, or real candidate data. It does not approve ADR-023 or
+satisfy legal, privacy, security, human accessibility, or real-candidate-onboarding review gates.
