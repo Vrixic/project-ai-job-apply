@@ -58,11 +58,11 @@ preference version, catalog revision, and trusted assessment time, are `no-store
 if either dependency is malformed or the job expires during the read. No assessment is persisted,
 cached, emitted as an event, or used to reorder search results.
 
-This packet adds no scoring, ranking, fit band, generated prose, eligibility claim, application
-decision, deployment, or AWS behavior. Its generated-synthetic fixtures prove only mechanical
-deterministic semantics. They are not the representative D1 matching set or accepted evaluation
-rubric required by D1-R2, so grounded product explanations and matching-quality acceptance remain
-open.
+This source vertical adds no scoring, ranking, fit band, generated prose, eligibility claim,
+application decision, deployment, or AWS behavior. Its component fixtures prove only mechanical
+deterministic semantics. The separate exact PR #312 v1 evaluation candidate below is the accepted
+generated-synthetic D1 baseline under D1-R2; that acceptance does not broaden these source claims
+or complete D1-005.
 
 ## D1 evaluation candidate
 
@@ -76,9 +76,12 @@ strict evaluator requires exact results for all 36 cases, all 306 successful evi
 restricted-preference refusals, deterministic replay, and all 15 reason codes.
 
 The web presentation resolves those codes and both gates through typed fixed copy; neither the
-kernel nor presentation interpolates candidate or job values into explanations. This establishes
-an executable source candidate only. Product has not approved the case representativeness, rubric,
-thresholds, copy, or conservative limitations, and QA has not accepted the set. It remains neither
-a statistical sample nor evidence for ranking, calibration, provider behavior, real users,
+kernel nor presentation interpolates candidate or job values into explanations. Vrij's Product
+approval and independent QA acceptance freeze the exact PR #312 v1 corpus, all-or-nothing rubric
+and evaluator thresholds, gate semantics, fixed copy, and documented conservative limitations;
+D1-R2 is closed. Any material input, expectation, taxonomy, threshold, semantic, or copy change
+requires a new version and renewed Product and QA review. The accepted baseline remains neither a
+statistical sample nor evidence for ranking, calibration, provider behavior, real users,
 deployment, eligibility, application outcomes, or production quality. See the
-[`v1 rubric`](../../../data/evals/rubrics/d1-match-assessment.v1.md).
+[`Product and QA acceptance`](../../../docs/product/delivery/evidence/d1-match-assessment-v1-product-qa-acceptance-2026-08-17.md)
+and [`v1 rubric`](../../../data/evals/rubrics/d1-match-assessment.v1.md).
