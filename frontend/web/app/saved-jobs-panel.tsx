@@ -6,6 +6,28 @@ import { MatchAssessmentPanel } from "./match-assessment-panel";
 
 export const SAVED_JOBS_CHANGED_EVENT = "ai-job-apply:saved-jobs-changed";
 
+const savedJobsRequestTimeoutMilliseconds = 20_000;
+const savedJobsLoadTimeoutMessage = "Loading saved jobs timed out. Try again.";
+const savedJobDeleteTimeoutMessage =
+  "Removing the saved job timed out. Retry to safely check the same saved job.";
+
+function startDeadline(controller: AbortController): {
+  clear: () => void;
+  timedOut: () => boolean;
+} {
+  let didTimeOut = false;
+  const timer = window.setTimeout(() => {
+    didTimeOut = true;
+    controller.abort();
+  }, savedJobsRequestTimeoutMilliseconds);
+  const clear = () => {
+    window.clearTimeout(timer);
+    controller.signal.removeEventListener("abort", clear);
+  };
+  controller.signal.addEventListener("abort", clear, { once: true });
+  return { clear, timedOut: () => didTimeOut };
+}
+
 async function problemMessage(response: Response): Promise<string> {
   try {
     const problem = (await response.json()) as { code?: unknown };
@@ -28,11 +50,19 @@ export function SavedJobsPanel({ authenticated }: { authenticated: boolean }) {
   const [loading, setLoading] = useState(authenticated);
   const [deletingId, setDeletingId] = useState<string>();
   const [message, setMessage] = useState<string>();
+  const [loadFailed, setLoadFailed] = useState(false);
   const generation = useRef(0);
   const authenticatedRef = useRef(authenticated);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const activeControllers = useRef(new Set<AbortController>());
   const listController = useRef<AbortController | undefined>(undefined);
+  const activeDelete = useRef<
+    | {
+        controller: AbortController;
+        generation: number;
+        savedJobId: string;
+      }
+    | undefined
+  >(undefined);
   const loadVersion = useRef(0);
   authenticatedRef.current = authenticated;
 
@@ -41,6 +71,10 @@ export function SavedJobsPanel({ authenticated }: { authenticated: boolean }) {
     listController.current?.abort();
     const controller = new AbortController();
     listController.current = controller;
+    const deadline = startDeadline(controller);
+    if (authenticatedRef.current && activeGeneration === generation.current) {
+      setLoadFailed(false);
+    }
     try {
       const response = await fetch("/api/platform/saved-jobs/search", {
         method: "POST",
@@ -48,9 +82,11 @@ export function SavedJobsPanel({ authenticated }: { authenticated: boolean }) {
         body: JSON.stringify({ pageSize: 20, ...(nextCursor ? { cursor: nextCursor } : {}) }),
         signal: controller.signal,
       });
+      if (controller.signal.aborted) throw new Error("The saved-jobs request was aborted");
       if (!response.ok) throw new Error(await problemMessage(response));
       const page = (await response.json()) as SavedJobPage;
       if (
+        controller.signal.aborted ||
         !authenticatedRef.current ||
         activeGeneration !== generation.current ||
         version !== loadVersion.current
@@ -59,23 +95,33 @@ export function SavedJobsPanel({ authenticated }: { authenticated: boolean }) {
       }
       setItems((current) => (nextCursor ? [...current, ...page.items] : page.items));
       setCursor(page.nextCursor);
+      setLoadFailed(false);
       setMessage(page.items.length === 0 && !nextCursor ? "No jobs saved yet." : undefined);
       return true;
     } catch (error) {
       if (
-        !controller.signal.aborted &&
+        authenticatedRef.current &&
         activeGeneration === generation.current &&
-        version === loadVersion.current
+        version === loadVersion.current &&
+        (deadline.timedOut() || !controller.signal.aborted)
       ) {
-        setMessage(error instanceof Error ? error.message : "Saved jobs could not be loaded");
+        setLoadFailed(true);
+        setMessage(
+          deadline.timedOut()
+            ? savedJobsLoadTimeoutMessage
+            : error instanceof Error
+              ? error.message
+              : "Saved jobs could not be loaded",
+        );
       }
       return false;
     } finally {
+      deadline.clear();
       if (listController.current === controller) listController.current = undefined;
       if (
-        !controller.signal.aborted &&
         activeGeneration === generation.current &&
-        version === loadVersion.current
+        version === loadVersion.current &&
+        (deadline.timedOut() || !controller.signal.aborted)
       ) {
         setLoading(false);
       }
@@ -88,6 +134,9 @@ export function SavedJobsPanel({ authenticated }: { authenticated: boolean }) {
     setCursor(undefined);
     setDeletingId(undefined);
     setMessage(undefined);
+    setLoadFailed(false);
+    activeDelete.current?.controller.abort();
+    activeDelete.current = undefined;
     if (!authenticated) {
       setLoading(false);
       return;
@@ -106,17 +155,19 @@ export function SavedJobsPanel({ authenticated }: { authenticated: boolean }) {
       loadVersion.current += 1;
       listController.current?.abort();
       listController.current = undefined;
-      for (const controller of activeControllers.current) controller.abort();
-      activeControllers.current.clear();
+      activeDelete.current?.controller.abort();
+      activeDelete.current = undefined;
       window.removeEventListener(SAVED_JOBS_CHANGED_EVENT, refresh);
     };
   }, [authenticated, load]);
 
   async function remove(savedJobId: string) {
-    if (!authenticatedRef.current || deletingId) return;
+    if (!authenticatedRef.current || activeDelete.current) return;
     const activeGeneration = generation.current;
     const controller = new AbortController();
-    activeControllers.current.add(controller);
+    const request = { controller, generation: activeGeneration, savedJobId };
+    activeDelete.current = request;
+    const deadline = startDeadline(controller);
     setDeletingId(savedJobId);
     setMessage(undefined);
     try {
@@ -124,8 +175,17 @@ export function SavedJobsPanel({ authenticated }: { authenticated: boolean }) {
         method: "DELETE",
         signal: controller.signal,
       });
+      if (controller.signal.aborted) throw new Error("The saved-job removal was aborted");
       if (!response.ok) throw new Error(await problemMessage(response));
-      if (!authenticatedRef.current || activeGeneration !== generation.current) return;
+      deadline.clear();
+      if (
+        controller.signal.aborted ||
+        !authenticatedRef.current ||
+        activeGeneration !== generation.current ||
+        activeDelete.current !== request
+      ) {
+        return;
+      }
       setItems((current) => current.filter((item) => item.id !== savedJobId));
       setCursor(undefined);
       setLoading(true);
@@ -134,12 +194,28 @@ export function SavedJobsPanel({ authenticated }: { authenticated: boolean }) {
       if (restarted) setMessage("Saved job removed.");
       headingRef.current?.focus();
     } catch (error) {
-      if (authenticatedRef.current && activeGeneration === generation.current) {
-        setMessage(error instanceof Error ? error.message : "Saved job could not be removed");
+      if (
+        authenticatedRef.current &&
+        activeGeneration === generation.current &&
+        activeDelete.current === request &&
+        (deadline.timedOut() || !controller.signal.aborted)
+      ) {
+        setMessage(
+          deadline.timedOut()
+            ? savedJobDeleteTimeoutMessage
+            : error instanceof Error
+              ? error.message
+              : "Saved job could not be removed",
+        );
       }
     } finally {
-      activeControllers.current.delete(controller);
-      if (authenticatedRef.current && activeGeneration === generation.current) {
+      deadline.clear();
+      if (activeDelete.current === request) activeDelete.current = undefined;
+      if (
+        authenticatedRef.current &&
+        activeGeneration === generation.current &&
+        activeDelete.current === undefined
+      ) {
         setDeletingId(undefined);
       }
     }
@@ -216,6 +292,18 @@ export function SavedJobsPanel({ authenticated }: { authenticated: boolean }) {
           disabled={loading}
         >
           {loading ? "Loading…" : "Load more saved jobs"}
+        </button>
+      )}
+      {loadFailed && !loading && (
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={() => {
+            setLoading(true);
+            void load(undefined, generation.current);
+          }}
+        >
+          Retry saved jobs
         </button>
       )}
       {message && <output aria-live="polite">{message}</output>}
