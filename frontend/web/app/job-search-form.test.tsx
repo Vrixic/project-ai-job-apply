@@ -5,6 +5,7 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { JobSearchForm } from "./job-search-form";
+import { SAVED_JOBS_CHANGED_EVENT } from "./saved-jobs-panel";
 
 const firstJob = {
   id: "00000000-0000-7000-8000-000000000001",
@@ -343,6 +344,8 @@ describe("JobSearchForm", () => {
 
   it("saves an active result with a dedicated idempotency key and drops stale completion on sign-out", async () => {
     const save = deferredResponse();
+    const changed = vi.fn();
+    window.addEventListener(SAVED_JOBS_CHANGED_EVENT, changed);
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(jsonResponse({ items: [firstJob] }))
@@ -368,6 +371,278 @@ describe("JobSearchForm", () => {
     await act(async () => save.resolve(jsonResponse({ id: "saved" }, 201)));
     expect(container.textContent).not.toContain("Job saved to your private list");
     expect(container.textContent).toContain("Sign in to search");
+    expect(changed).not.toHaveBeenCalled();
+    window.removeEventListener(SAVED_JOBS_CHANGED_EVENT, changed);
+  });
+
+  it("does not let a stale definitive response clear a newer session save intent", async () => {
+    let resolveStaleProblem!: (value: unknown) => void;
+    const staleProblem = new Promise<unknown>((resolve) => {
+      resolveStaleProblem = resolve;
+    });
+    let rejectNewSave!: (reason: unknown) => void;
+    const newSave = new Promise<Response>((_resolve, reject) => {
+      rejectNewSave = reject;
+    });
+    const changed = vi.fn();
+    window.addEventListener(SAVED_JOBS_CHANGED_EVENT, changed);
+    const staleDefinitiveResponse = {
+      ok: false,
+      status: 409,
+      json: () => staleProblem,
+    } as unknown as Response;
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ items: [firstJob] }))
+      .mockResolvedValueOnce(staleDefinitiveResponse)
+      .mockResolvedValueOnce(jsonResponse({ items: [firstJob] }))
+      .mockImplementationOnce(() => newSave)
+      .mockResolvedValueOnce(jsonResponse({ id: "saved" }, 201));
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<JobSearchForm authenticated />));
+    await act(async () =>
+      container
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    const firstSessionSave = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Save job"),
+    );
+    await act(async () =>
+      firstSessionSave?.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+    );
+    const [, firstSessionInit] = fetchMock.mock.calls[1] ?? [];
+
+    await act(async () => root.render(<JobSearchForm authenticated={false} />));
+    await act(async () => root.render(<JobSearchForm authenticated />));
+    await act(async () =>
+      container
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    const newSessionSave = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Save job"),
+    );
+    await act(async () =>
+      newSessionSave?.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+    );
+    const [, newSessionInit] = fetchMock.mock.calls[3] ?? [];
+    const newSessionKey = new Headers(newSessionInit?.headers).get("idempotency-key");
+    expect(newSessionKey).toMatch(/^saved-job-/);
+    expect(newSessionKey).not.toBe(new Headers(firstSessionInit?.headers).get("idempotency-key"));
+
+    await act(async () => resolveStaleProblem({ code: "idempotency_conflict" }));
+
+    expect(container.textContent).not.toContain("Job search is temporarily unavailable.");
+    expect(changed).not.toHaveBeenCalled();
+    expect(newSessionSave?.disabled).toBe(true);
+
+    await act(async () => rejectNewSave(new Error("new-session-private-transport-canary")));
+
+    expect(container.textContent).toContain(
+      "The job could not be saved. Retry to safely check the same saved job.",
+    );
+    expect(container.textContent).not.toContain("new-session-private-transport-canary");
+    await act(async () =>
+      newSessionSave?.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+    );
+    const [, newSessionRetryInit] = fetchMock.mock.calls[4] ?? [];
+    expect(new Headers(newSessionRetryInit?.headers).get("idempotency-key")).toBe(newSessionKey);
+    expect(newSessionRetryInit?.body).toBe(newSessionInit?.body);
+    expect(changed).toHaveBeenCalledTimes(1);
+    window.removeEventListener(SAVED_JOBS_CHANGED_EVENT, changed);
+  });
+
+  it("keeps rapid save activation single-flight and reuses the exact intent after timeout", async () => {
+    vi.useFakeTimers();
+    let firstSaveSignal: AbortSignal | undefined;
+    const changed = vi.fn();
+    window.addEventListener(SAVED_JOBS_CHANGED_EVENT, changed);
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ items: [firstJob] }))
+      .mockImplementationOnce((_input, init) => {
+        firstSaveSignal = init?.signal ?? undefined;
+        return new Promise<Response>((_resolve, reject) => {
+          firstSaveSignal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("The request was aborted", "AbortError")),
+            { once: true },
+          );
+        });
+      })
+      .mockResolvedValueOnce(jsonResponse({ id: "saved" }, 201));
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<JobSearchForm authenticated />));
+    await act(async () =>
+      container
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    const saveButton = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Save job"),
+    );
+
+    await act(async () => {
+      saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [, firstInit] = fetchMock.mock.calls[1] ?? [];
+    const firstKey = new Headers(firstInit?.headers).get("idempotency-key");
+    expect(firstKey).toMatch(/^saved-job-/);
+    expect(firstInit?.body).toBe(JSON.stringify({ jobId: firstJob.id }));
+
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+
+    expect(firstSaveSignal?.aborted).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain(
+      "Saving timed out. Retry to safely check the same saved job.",
+    );
+    expect(saveButton?.disabled).toBe(false);
+    expect(changed).not.toHaveBeenCalled();
+
+    await act(async () => saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const [, retryInit] = fetchMock.mock.calls[2] ?? [];
+    expect(new Headers(retryInit?.headers).get("idempotency-key")).toBe(firstKey);
+    expect(retryInit?.body).toBe(firstInit?.body);
+    expect(container.textContent).toContain("Job saved to your private list.");
+    expect(changed).toHaveBeenCalledTimes(1);
+    window.removeEventListener(SAVED_JOBS_CHANGED_EVENT, changed);
+  });
+
+  it("reuses one save intent across network and server ambiguity without leaking failures", async () => {
+    const changed = vi.fn();
+    window.addEventListener(SAVED_JOBS_CHANGED_EVENT, changed);
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ items: [firstJob] }))
+      .mockRejectedValueOnce(new Error("private-transport-canary"))
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            title: "private-title-canary",
+            detail: "private-detail-canary",
+            type: "private-type-canary",
+            traceId: "private-trace-canary",
+            code: "private-code-canary",
+          },
+          503,
+        ),
+      )
+      .mockResolvedValueOnce(jsonResponse({ id: "saved" }, 201));
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<JobSearchForm authenticated />));
+    await act(async () =>
+      container
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    const saveButton = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Save job"),
+    );
+
+    await act(async () => saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    const [, firstInit] = fetchMock.mock.calls[1] ?? [];
+    const firstKey = new Headers(firstInit?.headers).get("idempotency-key");
+    expect(container.textContent).toContain(
+      "The job could not be saved. Retry to safely check the same saved job.",
+    );
+    expect(container.textContent).not.toContain("private-transport-canary");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    await act(async () => saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    const [, serverRetryInit] = fetchMock.mock.calls[2] ?? [];
+    expect(new Headers(serverRetryInit?.headers).get("idempotency-key")).toBe(firstKey);
+    expect(serverRetryInit?.body).toBe(firstInit?.body);
+    expect(container.textContent).not.toMatch(/private-(?:title|detail|type|trace|code)-canary/);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+
+    await act(async () => saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    const [, finalRetryInit] = fetchMock.mock.calls[3] ?? [];
+    expect(new Headers(finalRetryInit?.headers).get("idempotency-key")).toBe(firstKey);
+    expect(finalRetryInit?.body).toBe(firstInit?.body);
+    expect(changed).toHaveBeenCalledTimes(1);
+    window.removeEventListener(SAVED_JOBS_CHANGED_EVENT, changed);
+  });
+
+  it("starts a fresh save intent after a definitive rejection", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ items: [firstJob] }))
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            title: "private-title-canary",
+            detail: "private-detail-canary",
+            type: "private-type-canary",
+            traceId: "private-trace-canary",
+            code: "idempotency_conflict",
+          },
+          409,
+        ),
+      )
+      .mockResolvedValueOnce(jsonResponse({ id: "saved" }, 201));
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<JobSearchForm authenticated />));
+    await act(async () =>
+      container
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    const saveButton = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Save job"),
+    );
+
+    await act(async () => saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    const [, rejectedInit] = fetchMock.mock.calls[1] ?? [];
+    const rejectedKey = new Headers(rejectedInit?.headers).get("idempotency-key");
+    expect(container.textContent).not.toMatch(/private-(?:title|detail|type|trace|code)-canary/);
+
+    await act(async () => saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    const [, retryInit] = fetchMock.mock.calls[2] ?? [];
+    expect(new Headers(retryInit?.headers).get("idempotency-key")).not.toBe(rejectedKey);
+    expect(retryInit?.body).toBe(rejectedInit?.body);
+    expect(container.textContent).toContain("Job saved to your private list.");
+  });
+
+  it("aborts and clears a pending save on unmount without dispatching stale success", async () => {
+    vi.useFakeTimers();
+    const save = deferredResponse();
+    const changed = vi.fn();
+    window.addEventListener(SAVED_JOBS_CHANGED_EVENT, changed);
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ items: [firstJob] }))
+      .mockImplementationOnce(() => save.promise);
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<JobSearchForm authenticated />));
+    await act(async () =>
+      container
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    const saveButton = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Save job"),
+    );
+    const timersBeforeSave = vi.getTimerCount();
+    await act(async () => saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    const saveSignal = fetchMock.mock.calls[1]?.[1]?.signal;
+
+    expect(vi.getTimerCount()).toBe(timersBeforeSave + 1);
+    await act(async () => root.unmount());
+
+    expect(saveSignal?.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(timersBeforeSave);
+    await act(async () => save.resolve(jsonResponse({ id: "saved" }, 201)));
+    expect(container.textContent).toBe("");
+    expect(changed).not.toHaveBeenCalled();
+    window.removeEventListener(SAVED_JOBS_CHANGED_EVENT, changed);
+    root = createRoot(container);
   });
 
   it("fails closed at render time for populated search fields, results, and save messages on sign-out", async () => {
