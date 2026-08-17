@@ -28,6 +28,8 @@ const restartedJob = {
   title: "Restarted Catalog Engineer",
 } as const;
 
+const saveJobTimeoutCopy = "Saving timed out. Retry to safely check the same saved job.";
+
 function assessment(jobId: string): MatchAssessment {
   return {
     schemaVersion: 1,
@@ -91,6 +93,20 @@ function deferredResponse() {
     resolve = next;
   });
   return { promise, resolve };
+}
+
+function deferredValue<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
+
+function responseWithDeferredJson(value: Promise<unknown>, status = 201): Response {
+  const response = new Response(null, { status });
+  Object.defineProperty(response, "json", { value: () => value });
+  return response;
 }
 
 describe("JobSearchForm", () => {
@@ -498,13 +514,7 @@ describe("JobSearchForm", () => {
       .mockResolvedValueOnce(jsonResponse({ items: [firstJob] }))
       .mockImplementationOnce((_input, init) => {
         firstSaveSignal = init?.signal ?? undefined;
-        return new Promise<Response>((_resolve, reject) => {
-          firstSaveSignal?.addEventListener(
-            "abort",
-            () => reject(new DOMException("The request was aborted", "AbortError")),
-            { once: true },
-          );
-        });
+        return new Promise<Response>(() => undefined);
       })
       .mockResolvedValueOnce(jsonResponse({ id: "saved" }, 201));
     vi.stubGlobal("fetch", fetchMock);
@@ -529,7 +539,14 @@ describe("JobSearchForm", () => {
     expect(firstKey).toMatch(/^saved-job-/);
     expect(firstInit?.body).toBe(JSON.stringify({ jobId: firstJob.id }));
 
-    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    await act(async () => vi.advanceTimersByTimeAsync(19_999));
+
+    expect(firstSaveSignal?.aborted).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(saveButton?.disabled).toBe(true);
+    expect(container.textContent).not.toContain("Saving timed out");
+
+    await act(async () => vi.advanceTimersByTimeAsync(1));
 
     expect(firstSaveSignal?.aborted).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -546,6 +563,114 @@ describe("JobSearchForm", () => {
     expect(new Headers(retryInit?.headers).get("idempotency-key")).toBe(firstKey);
     expect(retryInit?.body).toBe(firstInit?.body);
     expect(container.textContent).toContain("Job saved to your private list.");
+    expect(changed).toHaveBeenCalledTimes(1);
+    window.removeEventListener(SAVED_JOBS_CHANGED_EVENT, changed);
+  });
+
+  it("settles a hostile problem body without letting late A clear retry B", async () => {
+    vi.useFakeTimers();
+    const staleProblem = deferredValue<unknown>();
+    const retrySuccess = deferredValue<unknown>();
+    let staleSignal: AbortSignal | undefined;
+    let retrySignal: AbortSignal | undefined;
+    const changed = vi.fn();
+    window.addEventListener(SAVED_JOBS_CHANGED_EVENT, changed);
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ items: [firstJob] }))
+      .mockImplementationOnce((_input, init) => {
+        staleSignal = init?.signal ?? undefined;
+        return Promise.resolve(responseWithDeferredJson(staleProblem.promise, 503));
+      })
+      .mockImplementationOnce((_input, init) => {
+        retrySignal = init?.signal ?? undefined;
+        return Promise.resolve(responseWithDeferredJson(retrySuccess.promise));
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<JobSearchForm authenticated />));
+    await act(async () =>
+      container
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    const saveButton = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Save job"),
+    );
+    await act(async () => saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    const [, staleInit] = fetchMock.mock.calls[1] ?? [];
+    const key = new Headers(staleInit?.headers).get("idempotency-key");
+
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    expect(staleSignal?.aborted).toBe(true);
+    expect(container.textContent).toContain(saveJobTimeoutCopy);
+
+    await act(async () => saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    const [, retryInit] = fetchMock.mock.calls[2] ?? [];
+    expect(new Headers(retryInit?.headers).get("idempotency-key")).toBe(key);
+    expect(retryInit?.body).toBe(staleInit?.body);
+    expect(retrySignal?.aborted).toBe(false);
+    expect(saveButton?.disabled).toBe(true);
+
+    await act(async () =>
+      staleProblem.resolve({ code: "saved_jobs_unavailable", detail: "private-late-canary" }),
+    );
+
+    expect(saveButton?.disabled).toBe(true);
+    expect(container.textContent).not.toContain("private-late-canary");
+    expect(container.textContent).not.toContain(saveJobTimeoutCopy);
+    expect(changed).not.toHaveBeenCalled();
+
+    await act(async () => retrySuccess.resolve({ id: "saved" }));
+    expect(container.textContent).toContain("Job saved to your private list.");
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(retrySignal?.aborted).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+    window.removeEventListener(SAVED_JOBS_CHANGED_EVENT, changed);
+  });
+
+  it("settles a hostile success body at the deadline and reuses the exact intent", async () => {
+    vi.useFakeTimers();
+    const staleSuccess = deferredValue<unknown>();
+    let staleSignal: AbortSignal | undefined;
+    const changed = vi.fn();
+    window.addEventListener(SAVED_JOBS_CHANGED_EVENT, changed);
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ items: [firstJob] }))
+      .mockImplementationOnce((_input, init) => {
+        staleSignal = init?.signal ?? undefined;
+        return Promise.resolve(responseWithDeferredJson(staleSuccess.promise));
+      })
+      .mockResolvedValueOnce(jsonResponse({ id: "saved" }, 201));
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<JobSearchForm authenticated />));
+    await act(async () =>
+      container
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    const saveButton = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Save job"),
+    );
+    await act(async () => saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    const [, firstInit] = fetchMock.mock.calls[1] ?? [];
+
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    expect(staleSignal?.aborted).toBe(true);
+    expect(container.textContent).toContain(saveJobTimeoutCopy);
+    expect(changed).not.toHaveBeenCalled();
+
+    await act(async () => saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    const [, retryInit] = fetchMock.mock.calls[2] ?? [];
+    expect(new Headers(retryInit?.headers).get("idempotency-key")).toBe(
+      new Headers(firstInit?.headers).get("idempotency-key"),
+    );
+    expect(retryInit?.body).toBe(firstInit?.body);
+    expect(container.textContent).toContain("Job saved to your private list.");
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+
+    await act(async () => staleSuccess.resolve({ id: "stale-saved" }));
     expect(changed).toHaveBeenCalledTimes(1);
     window.removeEventListener(SAVED_JOBS_CHANGED_EVENT, changed);
   });

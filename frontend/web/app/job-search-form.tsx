@@ -32,6 +32,17 @@ interface SaveJobIntent {
   idempotencyKey: string;
 }
 
+interface SaveJobAttempt {
+  controller: AbortController;
+  generation: number;
+  intent: SaveJobIntent;
+  rejectDeadline: ((reason?: unknown) => void) | undefined;
+  timedOut: boolean;
+  timeout: number | undefined;
+}
+
+class SaveJobRequestDeadlineError extends Error {}
+
 interface JobSearchChain {
   generation: number;
   controller: AbortController | undefined;
@@ -77,10 +88,8 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
   const sessionGeneration = useRef(0);
   const activeControllers = useRef(new Set<AbortController>());
   const searchChain = useRef<JobSearchChain | undefined>(undefined);
-  const saveController = useRef<AbortController | undefined>(undefined);
-  const saveTimeout = useRef<number | undefined>(undefined);
+  const activeSave = useRef<SaveJobAttempt | undefined>(undefined);
   const saveIntent = useRef<SaveJobIntent | undefined>(undefined);
-  const saveInFlight = useRef(false);
   authenticatedRef.current = authenticated;
 
   useEffect(() => {
@@ -92,12 +101,14 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
     if (currentSearch) currentSearch.timeout = undefined;
     currentSearch?.controller?.abort();
     if (currentSearch) currentSearch.controller = undefined;
-    window.clearTimeout(saveTimeout.current);
-    saveTimeout.current = undefined;
-    saveController.current?.abort();
-    saveController.current = undefined;
+    const currentSave = activeSave.current;
+    activeSave.current = undefined;
+    if (currentSave?.timeout !== undefined) window.clearTimeout(currentSave.timeout);
+    if (currentSave) currentSave.timeout = undefined;
+    currentSave?.controller.abort();
+    currentSave?.rejectDeadline?.(new Error("saved job request cancelled"));
+    if (currentSave) currentSave.rejectDeadline = undefined;
     saveIntent.current = undefined;
-    saveInFlight.current = false;
     for (const controller of activeControllers.current) controller.abort();
     activeControllers.current.clear();
     setSearching(false);
@@ -117,12 +128,14 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
       if (pendingSearch) pendingSearch.timeout = undefined;
       pendingSearch?.controller?.abort();
       if (pendingSearch) pendingSearch.controller = undefined;
-      window.clearTimeout(saveTimeout.current);
-      saveTimeout.current = undefined;
-      saveController.current?.abort();
-      saveController.current = undefined;
+      const pendingSave = activeSave.current;
+      activeSave.current = undefined;
+      if (pendingSave?.timeout !== undefined) window.clearTimeout(pendingSave.timeout);
+      if (pendingSave) pendingSave.timeout = undefined;
+      pendingSave?.controller.abort();
+      pendingSave?.rejectDeadline?.(new Error("saved job request cancelled"));
+      if (pendingSave) pendingSave.rejectDeadline = undefined;
       saveIntent.current = undefined;
-      saveInFlight.current = false;
       for (const controller of activeControllers.current) controller.abort();
       activeControllers.current.clear();
     };
@@ -270,8 +283,7 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
   }
 
   async function saveJob(jobId: string) {
-    if (!authenticatedRef.current || saveInFlight.current) return;
-    saveInFlight.current = true;
+    if (!authenticatedRef.current || activeSave.current) return;
     const generation = sessionGeneration.current;
     const intent =
       saveIntent.current?.jobId === jobId
@@ -279,52 +291,65 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
         : { jobId, idempotencyKey: `saved-job-${crypto.randomUUID()}` };
     saveIntent.current = intent;
     const controller = new AbortController();
-    saveController.current?.abort();
-    saveController.current = controller;
+    const attempt: SaveJobAttempt = {
+      controller,
+      generation,
+      intent,
+      rejectDeadline: undefined,
+      timedOut: false,
+      timeout: undefined,
+    };
+    activeSave.current = attempt;
     activeControllers.current.add(controller);
     setSavingJobId(jobId);
     setMessage(undefined);
-    let timedOut = false;
     let rejectedMessage: string | undefined;
-    const timeout = window.setTimeout(() => {
-      timedOut = true;
-      if (saveTimeout.current === timeout) saveTimeout.current = undefined;
+    const deadline = new Promise<never>((_resolve, reject) => {
+      attempt.rejectDeadline = reject;
+    });
+    attempt.timeout = window.setTimeout(() => {
+      if (activeSave.current !== attempt) return;
+      attempt.timedOut = true;
+      attempt.timeout = undefined;
       controller.abort();
+      attempt.rejectDeadline?.(new SaveJobRequestDeadlineError("saved job request timed out"));
+      attempt.rejectDeadline = undefined;
     }, saveJobTimeoutMilliseconds);
-    saveTimeout.current = timeout;
     try {
-      const response = await fetch("/api/platform/saved-jobs", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "idempotency-key": intent.idempotencyKey,
-        },
-        body: JSON.stringify({ jobId: intent.jobId }),
-        signal: controller.signal,
-      });
-      if (controller.signal.aborted) {
-        if (timedOut) throw new Error("saved job request timed out");
+      const result = await Promise.race([
+        (async () => {
+          const response = await fetch("/api/platform/saved-jobs", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "idempotency-key": attempt.intent.idempotencyKey,
+            },
+            body: JSON.stringify({ jobId: attempt.intent.jobId }),
+            signal: controller.signal,
+          });
+          if (controller.signal.aborted) throw new SaveJobRequestDeadlineError();
+          if (!response.ok) return { response, problem: await readProblem(response) };
+          await response.json();
+          return { response, problem: undefined };
+        })(),
+        deadline,
+      ]);
+      if (
+        activeSave.current !== attempt ||
+        !authenticatedRef.current ||
+        attempt.generation !== sessionGeneration.current ||
+        saveIntent.current !== attempt.intent ||
+        controller.signal.aborted
+      ) {
         return;
       }
+      const { problem, response } = result;
       if (!response.ok) {
-        const problem = await readProblem(response);
-        rejectedMessage = problem.message;
-        if (
-          response.status < 500 &&
-          authenticatedRef.current &&
-          generation === sessionGeneration.current &&
-          saveIntent.current === intent
-        ) {
+        rejectedMessage = problem?.message;
+        if (response.status < 500 && saveIntent.current === attempt.intent) {
           saveIntent.current = undefined;
         }
         throw new Error("saved job request rejected");
-      }
-      if (
-        !authenticatedRef.current ||
-        generation !== sessionGeneration.current ||
-        saveIntent.current !== intent
-      ) {
-        return;
       }
       saveIntent.current = undefined;
       setMessage("Job saved to your private list.");
@@ -332,19 +357,22 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
     } catch {
       if (
         authenticatedRef.current &&
-        generation === sessionGeneration.current &&
-        (!controller.signal.aborted || timedOut)
+        attempt.generation === sessionGeneration.current &&
+        activeSave.current === attempt &&
+        (!controller.signal.aborted || attempt.timedOut)
       ) {
-        setMessage(timedOut ? saveJobTimeoutMessage : (rejectedMessage ?? saveJobFailureMessage));
+        setMessage(
+          attempt.timedOut ? saveJobTimeoutMessage : (rejectedMessage ?? saveJobFailureMessage),
+        );
       }
     } finally {
-      window.clearTimeout(timeout);
-      if (saveTimeout.current === timeout) saveTimeout.current = undefined;
+      if (attempt.timeout !== undefined) window.clearTimeout(attempt.timeout);
+      attempt.timeout = undefined;
+      attempt.rejectDeadline = undefined;
       activeControllers.current.delete(controller);
-      if (saveController.current === controller) {
-        saveController.current = undefined;
-        saveInFlight.current = false;
-        if (generation === sessionGeneration.current) setSavingJobId(undefined);
+      if (activeSave.current === attempt) {
+        activeSave.current = undefined;
+        if (attempt.generation === sessionGeneration.current) setSavingJobId(undefined);
       }
     }
   }
