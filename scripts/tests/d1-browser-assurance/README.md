@@ -11,6 +11,14 @@ fixed-Confidential direct facts, explicit versioned review of a resume-derived p
 resume type rejection, legacy sponsorship fail-closed behavior, account-transition fencing,
 keyboard focus, and automated WCAG rules. All values and document metadata are synthetic.
 
+The catalog assurance also mounts the production `JobReportControl` and `MatchAssessmentPanel`
+directly. It checks the report control's six fixed reasons, body-only request, idempotency-key reuse
+after ambiguous failures, key rotation after a reason change, bounded error copy, no automatic
+job/source suppression implication, and unmount fencing. The match panel checks its exact fixed
+gate/reason language, explicit score/rank/eligibility/outcome nonclaim, bounded error copy,
+loading announcement, and stale job-identity fencing. Both surfaces receive keyboard/focus and
+automated WCAG A/AA coverage in installed Chrome.
+
 The harness lives outside `frontend/web`, and Playwright Core plus axe-core are root development-only
 tools. Neither the harness nor its dependencies belong to the production web package, pnpm
 production dependency closure, or Next build output.
