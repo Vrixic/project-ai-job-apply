@@ -143,6 +143,20 @@ Indexing API, application action, employer-original posting date, structured loc
 or search-engine eligibility is claimed. No route, Lambda artifact, database identity, bootstrap
 boundary, Terraform change, or crawler policy is deployed by these source bytes.
 
+`pnpm test:d1-public-job-page-assurance` builds the production Next application and exercises that
+public page in a locally installed Chrome browser against a loopback-only, generated-synthetic
+public projection. It covers canonical metadata with indexing disabled, temporary alias
+redirection, generic handling of a generated-synthetic expired target and an invalid identifier,
+credentialless upstream reads, plain-text description rendering, default crawler denial,
+automated WCAG A/AA rules, and a bounded local request burst. The harness and its synthetic values
+remain outside the production web package; its typed expired-target stub does not prove backend
+lifecycle filtering.
+
+This local assurance is not a deployed route, gateway, Lambda, database, security-header, WAF,
+throttling, abuse-control, capacity, provider, or production-data check. It does not approve a
+public origin or brand, crawler activation, search-engine eligibility, legal publication,
+`JobPosting` JSON-LD, human accessibility, assistive-technology support, or a real job page.
+
 ## D1 local browser assurance
 
 `pnpm test:d1-browser-assurance` runs generated-synthetic keyboard, focus, live-region, error
