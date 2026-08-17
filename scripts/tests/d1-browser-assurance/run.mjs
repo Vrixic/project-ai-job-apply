@@ -12,8 +12,46 @@ import {
 
 const PRIVATE_CANARY = "synthetic-private-browser-canary-never-render";
 const SYNTHETIC_JOB_ID = "00000000-0000-7000-8000-000000000001";
+const SECOND_SYNTHETIC_JOB_ID = "00000000-0000-7000-8000-000000000009";
 const SYNTHETIC_DOCUMENT_ID = "00000000-0000-7000-8000-000000000003";
 const SYNTHETIC_PROPOSAL_ID = "00000000-0000-7000-8000-000000000004";
+const REPORT_REASONS = [
+  "job_closed",
+  "job_not_found",
+  "job_inaccurate",
+  "suspected_scam",
+  "duplicate_listing",
+  "other_catalog_issue",
+];
+const MATCH_REVIEW_HEADING = "Review the available evidence";
+const MATCH_REVIEW_SUMMARY =
+  "No exact hard conflict was found in the currently comparable attributes.";
+const MATCH_CONFLICT_HEADING = "Known preference conflict";
+const MATCH_CONFLICT_SUMMARY =
+  "At least one exact stated job attribute conflicts with your saved preferences.";
+const MATCH_NONCLAIM =
+  "This is deterministic evidence, not a score, eligibility decision, ranking, or application outcome. Unknown evidence never counts as a conflict.";
+const MATCH_REVIEW_EVIDENCE = [
+  { state: "satisfied", reason: "The job’s stated work mode is one you selected." },
+  { state: "satisfied", reason: "The job’s stated employment type is one you selected." },
+  { state: "satisfied", reason: "The normalized job title exactly overlaps a target role." },
+  { state: "unknown", reason: "A location match is not established." },
+  {
+    state: "unknown",
+    reason:
+      "Compensation cannot be compared because cadence and base-versus-total meaning are unavailable.",
+  },
+  {
+    state: "unknown",
+    reason: "Authorization and sponsorship are not assessed in this general-preferences boundary.",
+  },
+  {
+    state: "unknown",
+    reason: "Seniority is not yet represented by a comparable taxonomy.",
+  },
+  { state: "unknown", reason: "Blocked-company preferences are not available." },
+  { state: "unknown", reason: "Qualification evidence is not assessed by this baseline." },
+];
 const harnessRoot = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(harnessRoot, "../../..");
 const webRoot = resolve(repositoryRoot, "frontend/web");
@@ -85,6 +123,79 @@ const syntheticProposal = {
   createdAt: "2026-08-16T12:00:02.000Z",
   updatedAt: "2026-08-16T12:00:02.000Z",
 };
+
+function createGate() {
+  let release;
+  let markStarted;
+  let markCompleted;
+  const gate = new Promise((resolveGate) => {
+    release = resolveGate;
+  });
+  const started = new Promise((resolveStarted) => {
+    markStarted = resolveStarted;
+  });
+  const completed = new Promise((resolveCompleted) => {
+    markCompleted = resolveCompleted;
+  });
+  return { completed, gate, markCompleted, markStarted, release, started };
+}
+
+function syntheticMatchAssessment(jobId, { conflict = false } = {}) {
+  return {
+    schemaVersion: 1,
+    requestedJobId: jobId,
+    canonicalJobId: jobId,
+    preferenceSetId: "00000000-0000-7000-8000-000000000010",
+    preferenceVersion: 2,
+    preferenceUpdatedAt: "2026-08-16T11:00:00.000Z",
+    catalogRevision: "9",
+    assessedAt: "2026-08-16T12:00:00.000Z",
+    gate: conflict ? "excluded" : "review_required",
+    evidence: [
+      {
+        constraint: "work_mode",
+        state: conflict ? "conflict" : "satisfied",
+        reasonCode: conflict ? "work_mode_conflict" : "work_mode_selected",
+      },
+      {
+        constraint: "employment_type",
+        state: "satisfied",
+        reasonCode: "employment_type_selected",
+      },
+      {
+        constraint: "target_role",
+        state: "satisfied",
+        reasonCode: "target_role_exact_overlap",
+      },
+      { constraint: "location", state: "unknown", reasonCode: "location_not_established" },
+      {
+        constraint: "compensation",
+        state: "unknown",
+        reasonCode: "compensation_semantics_unavailable",
+      },
+      {
+        constraint: "authorization_sponsorship",
+        state: "unknown",
+        reasonCode: "authorization_sponsorship_unavailable",
+      },
+      {
+        constraint: "seniority",
+        state: "unknown",
+        reasonCode: "seniority_semantics_unavailable",
+      },
+      {
+        constraint: "blocked_company",
+        state: "unknown",
+        reasonCode: "blocked_company_preferences_unavailable",
+      },
+      {
+        constraint: "qualifications",
+        state: "unknown",
+        reasonCode: "qualification_evidence_unavailable",
+      },
+    ],
+  };
+}
 
 async function filesUnder(root) {
   const entries = await readdir(root, { withFileTypes: true });
@@ -237,6 +348,102 @@ async function installSyntheticBff(page, { failFirstSearch = false, deferredSear
     releaseDeferredSearch,
     searchRequests,
   };
+}
+
+async function installSyntheticReportBff(page, responses) {
+  const requests = [];
+  const headers = {
+    "cache-control": "no-store",
+    "content-type": "application/json; charset=utf-8",
+  };
+  await page.route("**/api/platform/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (!/^\/api\/platform\/jobs\/[^/]+\/reports$/.test(url.pathname)) {
+      await route.fulfill({ status: 404, headers, json: { code: "not_found" } });
+      return;
+    }
+    requests.push({
+      body: request.postData(),
+      headers: request.headers(),
+      method: request.method(),
+      url: request.url(),
+    });
+    const response = responses[requests.length - 1];
+    assert(response, `Unexpected synthetic report request ${requests.length}`);
+    if (response.kind === "abort") {
+      await route.abort("connectionfailed");
+      return;
+    }
+    if (response.gate) {
+      response.gate.markStarted();
+      await withTimeout(response.gate.gate, "deferred report response release");
+    }
+    try {
+      await route.fulfill({
+        status: response.status ?? 201,
+        headers: {
+          ...headers,
+          "content-type":
+            response.status && response.status >= 400
+              ? "application/problem+json; charset=utf-8"
+              : headers["content-type"],
+        },
+        json: response.body ?? { accepted: true },
+      });
+    } catch (error) {
+      if (!response.allowAborted) throw error;
+    } finally {
+      response.gate?.markCompleted();
+    }
+  });
+  return requests;
+}
+
+async function installSyntheticMatchBff(page, responses) {
+  const requests = [];
+  const headers = {
+    "cache-control": "no-store",
+    "content-type": "application/json; charset=utf-8",
+  };
+  await page.route("**/api/platform/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (!/^\/api\/platform\/jobs\/[^/]+\/match-assessment$/.test(url.pathname)) {
+      await route.fulfill({ status: 404, headers, json: { code: "not_found" } });
+      return;
+    }
+    requests.push({
+      body: request.postData(),
+      headers: request.headers(),
+      method: request.method(),
+      url: request.url(),
+    });
+    const response = responses[requests.length - 1];
+    assert(response, `Unexpected synthetic match request ${requests.length}`);
+    if (response.gate) {
+      response.gate.markStarted();
+      await withTimeout(response.gate.gate, "deferred match response release");
+    }
+    try {
+      await route.fulfill({
+        status: response.status ?? 200,
+        headers: {
+          ...headers,
+          "content-type":
+            response.status && response.status >= 400
+              ? "application/problem+json; charset=utf-8"
+              : headers["content-type"],
+        },
+        json: response.body,
+      });
+    } catch (error) {
+      if (!response.allowAborted) throw error;
+    } finally {
+      response.gate?.markCompleted();
+    }
+  });
+  return requests;
 }
 
 async function installSyntheticOnboardingBff(page, { legacySponsorship = false } = {}) {
@@ -504,6 +711,45 @@ async function mountCandidateCatalog(page, origin) {
     window.mount({ story: "d1-candidate-surfaces/CandidateCatalog", props: {} }),
   );
   return page.locator("#root");
+}
+
+async function mountCandidateSurface(page, origin, story, props) {
+  page.setDefaultTimeout(5_000);
+  page.setDefaultNavigationTimeout(5_000);
+  const response = await page.goto(origin);
+  assert(response, "Gallery document response is required");
+  assert.equal(response.headers()["cache-control"], "no-store");
+  assert.equal(response.headers()["x-content-type-options"], "nosniff");
+  await page.waitForFunction(() => typeof window.mount === "function");
+  await page.evaluate(
+    ({ storyName, storyProps }) => window.mount({ story: storyName, props: storyProps }),
+    { storyName: story, storyProps: props },
+  );
+  return page.locator("#root");
+}
+
+async function settleBrowserRender(page) {
+  await withTimeout(
+    page.evaluate(
+      () =>
+        new Promise((resolveFrame) =>
+          requestAnimationFrame(() => requestAnimationFrame(resolveFrame)),
+        ),
+    ),
+    "browser render settlement",
+    5_000,
+  );
+}
+
+async function assertVisibleFocus(locator) {
+  await locator.focus();
+  assert(await locator.evaluate((element) => document.activeElement === element));
+  const focusStyle = await locator.evaluate((element) => {
+    const style = window.getComputedStyle(element);
+    return { outlineStyle: style.outlineStyle, outlineWidth: style.outlineWidth };
+  });
+  assert.notEqual(focusStyle.outlineStyle, "none");
+  assert(Number.parseFloat(focusStyle.outlineWidth) > 0);
 }
 
 async function mountCandidateOnboarding(page, origin, authenticated = true) {
@@ -775,6 +1021,294 @@ async function runOnboardingLegacyAndSessionScenario(browser, origin) {
   }
 }
 
+async function runJobReportScenario(browser, origin) {
+  const retryContext = await browser.newContext({ serviceWorkers: "block" });
+  try {
+    const page = await retryContext.newPage();
+    const requests = await installSyntheticReportBff(page, [
+      { kind: "abort" },
+      { kind: "abort" },
+      { kind: "success" },
+    ]);
+    const component = await mountCandidateSurface(
+      page,
+      origin,
+      "d1-candidate-surfaces/CandidateJobReport",
+      { jobId: SYNTHETIC_JOB_ID },
+    );
+    const summary = component.getByText("Report a catalog issue", { exact: true });
+    await summary.waitFor();
+    await assertVisibleFocus(summary);
+    await summary.press("Enter");
+
+    const reason = component.getByLabel("Issue");
+    await reason.waitFor();
+    await assertVisibleFocus(reason);
+    assert.deepEqual(
+      await reason
+        .locator("option")
+        .evaluateAll((options) => options.slice(1).map((option) => option.value)),
+      REPORT_REASONS,
+    );
+    assert.equal(await reason.locator("option").count(), REPORT_REASONS.length + 1);
+
+    await reason.selectOption("suspected_scam");
+    const submit = component.getByRole("button", { name: "Submit report" });
+    await assertVisibleFocus(submit);
+    await submit.press("Enter");
+    const liveOutput = component.locator('output[aria-live="polite"]');
+    await liveOutput
+      .getByText("The report could not be submitted. Retry to safely check the same report.", {
+        exact: true,
+      })
+      .waitFor();
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].method, "POST");
+    assert.equal(
+      new URL(requests[0].url).pathname,
+      `/api/platform/jobs/${SYNTHETIC_JOB_ID}/reports`,
+    );
+    assert.equal(new URL(requests[0].url).search, "");
+    assert.equal(requests[0].body, '{"reason":"suspected_scam"}');
+    assert.equal(requests[0].headers["content-type"], "application/json");
+    assert.match(requests[0].headers["idempotency-key"], /^job-report-[0-9a-f-]{36}$/);
+
+    await assertVisibleFocus(submit);
+    await submit.press("Enter");
+    await liveOutput
+      .getByText("The report could not be submitted. Retry to safely check the same report.", {
+        exact: true,
+      })
+      .waitFor();
+    assert.equal(requests.length, 2);
+    assert.equal(requests[1].body, requests[0].body);
+    assert.equal(requests[1].headers["idempotency-key"], requests[0].headers["idempotency-key"]);
+
+    await reason.selectOption("duplicate_listing");
+    assert.equal(await liveOutput.count(), 0);
+    await assertVisibleFocus(submit);
+    await submit.press("Enter");
+    await component
+      .getByText("Report received for review. Reporting does not automatically change this job.", {
+        exact: true,
+      })
+      .waitFor();
+    assert.equal(requests.length, 3);
+    assert.equal(requests[2].body, '{"reason":"duplicate_listing"}');
+    assert.notEqual(requests[2].headers["idempotency-key"], requests[0].headers["idempotency-key"]);
+    await component
+      .getByText(
+        "Reports are reviewed. They do not automatically remove a job or pause a source.",
+        {
+          exact: true,
+        },
+      )
+      .waitFor();
+    const reportText = await component.textContent();
+    assert(
+      !/will (?:remove|suppress) (?:the |this )?job|will pause (?:the |this )?source/i.test(
+        reportText,
+      ),
+    );
+    await assertNoWcagViolations(page);
+  } finally {
+    await retryContext.close();
+  }
+
+  const redactionContext = await browser.newContext({ serviceWorkers: "block" });
+  try {
+    const page = await redactionContext.newPage();
+    await installSyntheticReportBff(page, [
+      {
+        kind: "problem",
+        status: 503,
+        body: { code: "private_internal_report_failure", detail: PRIVATE_CANARY },
+      },
+    ]);
+    const component = await mountCandidateSurface(
+      page,
+      origin,
+      "d1-candidate-surfaces/CandidateJobReport",
+      { jobId: SYNTHETIC_JOB_ID },
+    );
+    await component.getByText("Report a catalog issue", { exact: true }).click();
+    await component.getByLabel("Issue").selectOption("other_catalog_issue");
+    await component.getByRole("button", { name: "Submit report" }).press("Enter");
+    await component
+      .getByText("The report could not be submitted. Try again.", { exact: true })
+      .waitFor();
+    assert(!(await component.textContent()).includes(PRIVATE_CANARY));
+    await assertNoWcagViolations(page);
+  } finally {
+    await redactionContext.close();
+  }
+
+  const staleContext = await browser.newContext({ serviceWorkers: "block" });
+  const staleGate = createGate();
+  try {
+    const page = await staleContext.newPage();
+    await installSyntheticReportBff(page, [
+      {
+        kind: "success",
+        gate: staleGate,
+        allowAborted: true,
+        body: { accepted: true, detail: PRIVATE_CANARY },
+      },
+    ]);
+    const component = await mountCandidateSurface(
+      page,
+      origin,
+      "d1-candidate-surfaces/CandidateJobReport",
+      { jobId: SYNTHETIC_JOB_ID },
+    );
+    await component.getByText("Report a catalog issue", { exact: true }).click();
+    await component.getByLabel("Issue").selectOption("job_closed");
+    await component.getByRole("button", { name: "Submit report" }).press("Enter");
+    await withTimeout(staleGate.started, "deferred report request start");
+    await page.evaluate(() =>
+      window.mount({
+        story: "d1-candidate-surfaces/CandidateCatalog",
+        props: { authenticated: false },
+      }),
+    );
+    await component.getByText("Sign in to search the candidate job catalog.").waitFor();
+    staleGate.release();
+    await withTimeout(staleGate.completed, "deferred report request completion");
+    await settleBrowserRender(page);
+    const signedOutText = await component.textContent();
+    assert(!signedOutText.includes(PRIVATE_CANARY));
+    assert(!signedOutText.includes("Report received for review"));
+    assert.equal(await component.getByText("Report a catalog issue", { exact: true }).count(), 0);
+    await assertNoWcagViolations(page);
+  } finally {
+    staleGate.release();
+    await staleContext.close();
+  }
+}
+
+async function runMatchAssessmentScenario(browser, origin) {
+  const matchContext = await browser.newContext({ serviceWorkers: "block" });
+  const initialGate = createGate();
+  const staleGate = createGate();
+  try {
+    const page = await matchContext.newPage();
+    const requests = await installSyntheticMatchBff(page, [
+      {
+        gate: initialGate,
+        body: syntheticMatchAssessment(SYNTHETIC_JOB_ID),
+      },
+      {
+        gate: staleGate,
+        allowAborted: true,
+        body: { ...syntheticMatchAssessment(SYNTHETIC_JOB_ID), privateDetail: PRIVATE_CANARY },
+      },
+      {
+        body: syntheticMatchAssessment(SECOND_SYNTHETIC_JOB_ID, { conflict: true }),
+      },
+    ]);
+    const component = await mountCandidateSurface(
+      page,
+      origin,
+      "d1-candidate-surfaces/CandidateMatchAssessment",
+      { jobId: SYNTHETIC_JOB_ID },
+    );
+    const check = component.getByRole("button", { name: "Check match evidence" });
+    await assertVisibleFocus(check);
+    await check.press("Enter");
+    await withTimeout(initialGate.started, "initial match request start");
+    const matchRegion = component.getByRole("region", { name: "Match evidence" });
+    assert.equal(await matchRegion.getAttribute("aria-busy"), "true");
+    const matchLiveRegion = component.locator('div[aria-live="polite"]');
+    await matchLiveRegion.getByText("Checking match evidence…", { exact: true }).waitFor();
+    initialGate.release();
+    await withTimeout(initialGate.completed, "initial match request completion");
+    await component.getByText(MATCH_REVIEW_HEADING, { exact: true }).waitFor();
+    await component.getByText(MATCH_REVIEW_SUMMARY, { exact: true }).waitFor();
+    await component.getByText(MATCH_NONCLAIM, { exact: true }).waitFor();
+    const evidenceItems = component.locator(".match-assessment-result li");
+    assert.deepEqual(
+      await evidenceItems.allTextContents(),
+      MATCH_REVIEW_EVIDENCE.map(({ state, reason }) => `${state} ${reason}`),
+    );
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].method, "GET");
+    assert.equal(requests[0].body, null);
+    assert.equal(
+      new URL(requests[0].url).pathname,
+      `/api/platform/jobs/${SYNTHETIC_JOB_ID}/match-assessment`,
+    );
+    assert.equal(new URL(requests[0].url).search, "");
+    const positiveMatchCopy = (await component.textContent()).replace(MATCH_NONCLAIM, "");
+    assert(!/\b(?:score\w*|rank\w*|fit\w*|outcome\w*|eligib\w*)\b/i.test(positiveMatchCopy));
+    await assertNoWcagViolations(page);
+
+    const refresh = component.getByRole("button", { name: "Refresh match evidence" });
+    await refresh.press("Enter");
+    await withTimeout(staleGate.started, "stale match request start");
+    await page.evaluate(
+      ({ nextJobId }) =>
+        window.mount({
+          story: "d1-candidate-surfaces/CandidateMatchAssessment",
+          props: { jobId: nextJobId },
+        }),
+      { nextJobId: SECOND_SYNTHETIC_JOB_ID },
+    );
+    await component.getByRole("button", { name: "Check match evidence" }).waitFor();
+    assert.equal(await matchRegion.getAttribute("aria-busy"), "false");
+    assert.equal(await component.getByText(MATCH_REVIEW_HEADING, { exact: true }).count(), 0);
+    staleGate.release();
+    await withTimeout(staleGate.completed, "stale match request completion");
+    await settleBrowserRender(page);
+    assert(!(await component.textContent()).includes(PRIVATE_CANARY));
+    assert.equal(await component.getByText(MATCH_REVIEW_HEADING, { exact: true }).count(), 0);
+
+    await component.getByRole("button", { name: "Check match evidence" }).press("Enter");
+    await component.getByText(MATCH_CONFLICT_HEADING, { exact: true }).waitFor();
+    await component.getByText(MATCH_CONFLICT_SUMMARY, { exact: true }).waitFor();
+    const conflictItems = component.locator(".match-assessment-result li");
+    assert.deepEqual(await conflictItems.allTextContents(), [
+      "conflict The job’s stated work mode conflicts with your selections.",
+      ...MATCH_REVIEW_EVIDENCE.slice(1).map(({ state, reason }) => `${state} ${reason}`),
+    ]);
+    assert.equal(await component.locator('li[data-state="conflict"]').count(), 1);
+    assert.equal(requests.length, 3);
+    assert.equal(
+      new URL(requests[2].url).pathname,
+      `/api/platform/jobs/${SECOND_SYNTHETIC_JOB_ID}/match-assessment`,
+    );
+    await assertNoWcagViolations(page);
+  } finally {
+    initialGate.release();
+    staleGate.release();
+    await matchContext.close();
+  }
+
+  const redactionContext = await browser.newContext({ serviceWorkers: "block" });
+  try {
+    const page = await redactionContext.newPage();
+    await installSyntheticMatchBff(page, [
+      {
+        status: 503,
+        body: { code: "private_internal_match_failure", detail: PRIVATE_CANARY },
+      },
+    ]);
+    const component = await mountCandidateSurface(
+      page,
+      origin,
+      "d1-candidate-surfaces/CandidateMatchAssessment",
+      { jobId: SYNTHETIC_JOB_ID },
+    );
+    await component.getByRole("button", { name: "Check match evidence" }).press("Enter");
+    await component
+      .getByText("Match evidence is temporarily unavailable.", { exact: true })
+      .waitFor();
+    assert(!(await component.textContent()).includes(PRIVATE_CANARY));
+    await assertNoWcagViolations(page);
+  } finally {
+    await redactionContext.close();
+  }
+}
+
 await assertProductionBoundary();
 const chromePath = await findSystemChrome();
 const server = await startBrowserAssuranceServer({
@@ -792,6 +1326,10 @@ try {
   process.stdout.write("PASS onboarding/preferences/direct-facts/resume/WCAG scenario\n");
   await runOnboardingLegacyAndSessionScenario(browser, server.origin);
   process.stdout.write("PASS onboarding restricted-data/session-fencing/WCAG scenario\n");
+  await runJobReportScenario(browser, server.origin);
+  process.stdout.write("PASS report/retry/redaction/session-fencing/WCAG scenario\n");
+  await runMatchAssessmentScenario(browser, server.origin);
+  process.stdout.write("PASS match-evidence/copy/redaction/job-fencing/WCAG scenario\n");
 } finally {
   try {
     await browser?.close();
