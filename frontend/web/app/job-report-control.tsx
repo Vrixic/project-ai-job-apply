@@ -103,7 +103,7 @@ export function JobReportControl({ jobId }: { jobId: string }) {
       });
       if (!response.ok) {
         const code = await problemCode(response);
-        if (code === "idempotency_conflict") retryIntent.current = undefined;
+        if (response.status >= 400 && response.status < 500) retryIntent.current = undefined;
         if (!mounted.current) return;
         if (code === "job_already_reported") setSubmitted(true);
         setMessage(messageForProblem(code));
