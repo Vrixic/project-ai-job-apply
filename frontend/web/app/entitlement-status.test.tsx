@@ -32,6 +32,7 @@ describe("EntitlementStatus", () => {
   afterEach(async () => {
     await act(async () => root.unmount());
     container.remove();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -169,6 +170,100 @@ describe("EntitlementStatus", () => {
     expect(container.textContent).not.toMatch(/upgrade|payment|price|quota/i);
   });
 
+  it("settles an abort-ignoring fetch at the exact deadline and retries only explicitly", async () => {
+    vi.useFakeTimers();
+    const stalled = deferredResponse();
+    let stalledSignal: AbortSignal | undefined;
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockImplementationOnce((_input, init) => {
+        stalledSignal = init?.signal ?? undefined;
+        return stalled.promise;
+      })
+      .mockResolvedValueOnce(
+        Response.json({
+          plan: "free",
+          accessState: "active",
+          grants,
+          version: 1,
+          evaluatedAt: "2026-08-16T12:01:00.000Z",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await act(async () => root.render(<EntitlementStatus authenticated />));
+    await act(async () => vi.advanceTimersByTimeAsync(19_999));
+    expect(stalledSignal?.aborted).toBe(false);
+    expect(container.textContent).toContain("Loading access status");
+    expect(container.textContent).not.toContain("Retry access status");
+
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(stalledSignal?.aborted).toBe(true);
+    expect(container.textContent).toContain("Access status is temporarily unavailable");
+    expect(container.textContent).toContain("Retry access status");
+    expect(vi.getTimerCount()).toBe(0);
+
+    const retry = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Retry access status",
+    );
+    await act(async () => {
+      retry?.click();
+      retry?.click();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain("Free access");
+    expect(container.textContent).not.toMatch(/upgrade|payment|price|quota/i);
+  });
+
+  it("keeps the deadline active while the response body is parsed", async () => {
+    vi.useFakeTimers();
+    const body = deferredResponse();
+    let signal: AbortSignal | undefined;
+    const fetchMock = vi.fn<typeof fetch>(async (_input, init) => {
+      signal = init?.signal ?? undefined;
+      return {
+        ok: true,
+        json: () => body.promise,
+      } as unknown as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await act(async () => root.render(<EntitlementStatus authenticated />));
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+
+    expect(signal?.aborted).toBe(true);
+    expect(container.textContent).toContain("Access status is temporarily unavailable");
+    expect(container.textContent).toContain("Retry access status");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("clears the deadline after a successful complete response", async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (_input, init) => {
+        signal = init?.signal ?? undefined;
+        return Response.json({
+          plan: "free",
+          accessState: "active",
+          grants,
+          version: 0,
+          evaluatedAt: "2026-08-16T12:00:00.000Z",
+        });
+      }),
+    );
+
+    await act(async () => root.render(<EntitlementStatus authenticated />));
+    await act(async () => {});
+    expect(container.textContent).toContain("Free access");
+    expect(vi.getTimerCount()).toBe(0);
+
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    expect(signal?.aborted).toBe(false);
+    expect(container.textContent).toContain("Free access");
+  });
+
   it("restores the same bounded failure after an unsuccessful retry", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
@@ -218,6 +313,7 @@ describe("EntitlementStatus", () => {
   });
 
   it("never paints a stale account response across sign-out and sign-in", async () => {
+    vi.useFakeTimers();
     const oldAccount = deferredResponse();
     const newAccount = deferredResponse();
     const fetchMock = vi
@@ -230,10 +326,13 @@ describe("EntitlementStatus", () => {
       "Loading access status",
     );
     const oldSignal = fetchMock.mock.calls[0]?.[1]?.signal;
+    expect(vi.getTimerCount()).toBe(1);
     await act(async () => root.render(<EntitlementStatus authenticated={false} />));
     expect(oldSignal?.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
     expect(container.textContent).toContain("Sign in to view");
     await act(async () => root.render(<EntitlementStatus authenticated />));
+    expect(vi.getTimerCount()).toBe(1);
     expect(container.textContent).not.toContain("Pro access");
 
     await act(async () =>
@@ -261,6 +360,7 @@ describe("EntitlementStatus", () => {
       ),
     );
     expect(container.textContent).toContain("Free access");
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("fences an in-flight retry across sign-out and sign-in", async () => {
@@ -317,6 +417,7 @@ describe("EntitlementStatus", () => {
   });
 
   it("aborts an in-flight retry when the surface unmounts", async () => {
+    vi.useFakeTimers();
     const retryResponse = deferredResponse();
     const fetchMock = vi
       .fn<typeof fetch>()
@@ -333,9 +434,11 @@ describe("EntitlementStatus", () => {
       retry?.click();
     });
     const retrySignal = fetchMock.mock.calls[1]?.[1]?.signal;
+    expect(vi.getTimerCount()).toBe(1);
 
     await act(async () => root.unmount());
     expect(retrySignal?.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
     await act(async () =>
       retryResponse.resolve(
         Response.json({

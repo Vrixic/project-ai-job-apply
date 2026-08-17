@@ -9,6 +9,7 @@ const expectedGrants = [
   "jobs.save",
   "applications.history",
 ] as const;
+const entitlementReadTimeoutMilliseconds = 20_000;
 
 function isDateTime(value: unknown): value is string {
   return (
@@ -82,29 +83,49 @@ export function EntitlementStatus({ authenticated }: { authenticated: boolean })
     setView({ generation, status: "loading" });
     const active = new AbortController();
     controller.current = active;
+    let timedOut = false;
+    let rejectDeadline: ((reason?: unknown) => void) | undefined;
+    const deadline = new Promise<never>((_resolve, reject) => {
+      rejectDeadline = reject;
+    });
+    const timeout = window.setTimeout(() => {
+      timedOut = true;
+      active.abort();
+      rejectDeadline?.(new Error("entitlement read timed out"));
+    }, entitlementReadTimeoutMilliseconds);
     void (async () => {
       try {
-        const response = await fetch("/api/platform/entitlements", {
-          method: "GET",
-          cache: "no-store",
-          signal: active.signal,
-        });
-        if (!response.ok) throw new Error("entitlement unavailable");
-        const value: unknown = await response.json();
-        if (!isEntitlementSummary(value)) throw new Error("entitlement response invalid");
+        const read = async (): Promise<EntitlementSummary> => {
+          const response = await fetch("/api/platform/entitlements", {
+            method: "GET",
+            cache: "no-store",
+            signal: active.signal,
+          });
+          if (!response.ok) throw new Error("entitlement unavailable");
+          const value: unknown = await response.json();
+          if (!isEntitlementSummary(value)) throw new Error("entitlement response invalid");
+          return value;
+        };
+        const value = await Promise.race([read(), deadline]);
         if (!active.signal.aborted && generation === requestGeneration.current) {
           setView({ generation, status: "ready", summary: value });
         }
       } catch {
-        if (!active.signal.aborted && generation === requestGeneration.current) {
+        if (
+          (!active.signal.aborted || timedOut) &&
+          generation === requestGeneration.current &&
+          controller.current === active
+        ) {
           setView({ generation, status: "unavailable" });
         }
       } finally {
+        window.clearTimeout(timeout);
         if (controller.current === active) requestInFlight.current = false;
       }
     })();
     return () => {
       requestGeneration.current += 1;
+      window.clearTimeout(timeout);
       active.abort();
       if (controller.current === active) {
         controller.current = undefined;
