@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { GET as getEntitlements } from "../app/api/platform/entitlements/route";
 import { PATCH as patchProfileFact } from "../app/api/platform/profile-facts/[factId]/route";
 import {
   GET as getProfileFacts,
@@ -61,8 +62,27 @@ const profileFact = {
   updatedAt: "2026-08-17T12:00:00.000Z",
 };
 const factCollection = { facts: [profileFact], confirmedCount: 1, proposedCount: 0 };
+const freeEntitlement = {
+  plan: "free",
+  accessState: "active",
+  grants: ["profile.manage", "jobs.search", "jobs.save", "applications.history"],
+  version: 0,
+  evaluatedAt: "2026-08-17T12:00:00.000Z",
+};
+const activeProEntitlement = {
+  ...freeEntitlement,
+  plan: "pro",
+  version: 1,
+  accessThrough: "2026-09-17T12:00:00.000Z",
+};
+const graceProEntitlement = {
+  ...activeProEntitlement,
+  accessState: "grace",
+  graceThrough: "2026-09-24T12:00:00.000Z",
+};
 
 const validValues: Record<FoundationResponseSchemaName, unknown> = {
+  EntitlementSummary: freeEntitlement,
   ResumeDocumentCollection: resumeCollection,
   CreateResumeUploadResponse: resumeUploadResponse,
   ProfileFactCollection: factCollection,
@@ -139,6 +159,40 @@ describe("foundation response boundary", () => {
     expect(await validateFoundationResponse(upstream, 200, "ResumeDocumentCollection")).toBe(
       upstream,
     );
+  });
+
+  it.each([freeEntitlement, activeProEntitlement, graceProEntitlement])(
+    "accepts and reprojects an exact provider-neutral entitlement shape",
+    async (entitlement) => {
+      const response = await validateFoundationResponse(
+        jsonResponse(entitlement),
+        200,
+        "EntitlementSummary",
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(await response.json()).toEqual(entitlement);
+    },
+  );
+
+  it.each([
+    { ...freeEntitlement, provider: "candidate-private-entitlement-provider" },
+    { ...freeEntitlement, accessState: "grace" },
+    { ...activeProEntitlement, accessThrough: undefined },
+    { ...freeEntitlement, grants: ["profile.manage", "candidate-private-entitlement-grant"] },
+    { ...freeEntitlement, version: Number.MAX_SAFE_INTEGER + 1 },
+    { ...freeEntitlement, evaluatedAt: "not-a-date-candidate-private-entitlement" },
+  ])("rejects contract-invalid or private entitlement success bytes", async (entitlement) => {
+    const response = await validateFoundationResponse(
+      jsonResponse(entitlement),
+      200,
+      "EntitlementSummary",
+    );
+    const body = await response.clone().text();
+
+    await expectUnavailable(response);
+    expect(body).not.toContain("candidate-private-entitlement");
   });
 
   it.each([
@@ -314,6 +368,15 @@ describe("foundation response boundary", () => {
 describe("foundation route response composition", () => {
   it.each([
     [
+      "entitlement GET",
+      () =>
+        getEntitlements(
+          new Request("http://localhost/api/platform/entitlements", { method: "GET" }),
+        ),
+      200,
+      freeEntitlement,
+    ],
+    [
       "resume GET",
       () => getResumes(new Request("http://localhost/api/platform/resumes")),
       200,
@@ -384,5 +447,28 @@ describe("foundation route response composition", () => {
 
     expect(response.status).toBe(503);
     expect(body).not.toContain(privateCanary);
+  });
+
+  it("forwards the entitlement request signal and contains a private success", async () => {
+    const privateCanary = "candidate-private-entitlement-route-success";
+    const controller = new AbortController();
+    const request = new Request("http://localhost/api/platform/entitlements", {
+      signal: controller.signal,
+    });
+    mocks.forwardPlatformRequest.mockResolvedValueOnce(
+      jsonResponse({ ...freeEntitlement, provider: privateCanary }),
+    );
+
+    const response = await getEntitlements(request);
+    const body = await response.text();
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(body).not.toContain(privateCanary);
+    expect(mocks.forwardPlatformRequest).toHaveBeenCalledWith(
+      "/v1/entitlements",
+      { method: "GET", signal: request.signal },
+      expect.objectContaining({ auth0: { synthetic: "auth0-client" } }),
+    );
   });
 });

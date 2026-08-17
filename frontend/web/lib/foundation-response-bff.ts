@@ -5,6 +5,7 @@ const FOUNDATION_RESPONSE_TIMEOUT_MILLISECONDS = 10_000;
 const JSON_CONTENT_TYPE_PATTERN = /^application\/json(?:\s*;\s*charset=utf-8)?$/i;
 
 export type FoundationResponseSchemaName =
+  | "EntitlementSummary"
   | "ResumeDocumentCollection"
   | "CreateResumeUploadResponse"
   | "ProfileFactCollection"
@@ -14,6 +15,7 @@ const validators = new Map<
   FoundationResponseSchemaName,
   ReturnType<typeof compileComponentValidator>
 >([
+  ["EntitlementSummary", compileComponentValidator("EntitlementSummary")],
   ["ResumeDocumentCollection", compileComponentValidator("ResumeDocumentCollection")],
   ["CreateResumeUploadResponse", compileComponentValidator("CreateResumeUploadResponse")],
   ["ProfileFactCollection", compileComponentValidator("ProfileFactCollection")],
