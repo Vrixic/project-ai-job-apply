@@ -857,7 +857,7 @@
         },
         "additionalProperties": false
       },
-      "PutJobPreferencesRequest": {
+      "JobPreferenceFields": {
         "type": "object",
         "required": ["targetRoles", "locations", "workModes", "employmentTypes"],
         "properties": {
@@ -898,12 +898,17 @@
         "dependentRequired": {
           "salaryMinimum": ["salaryCurrency"],
           "salaryCurrency": ["salaryMinimum"]
-        },
-        "additionalProperties": false
+        }
+      },
+      "PutJobPreferencesRequest": {
+        "type": "object",
+        "allOf": [{ "$ref": "#/components/schemas/JobPreferenceFields" }],
+        "unevaluatedProperties": false
       },
       "JobPreferenceSet": {
+        "type": "object",
         "allOf": [
-          { "$ref": "#/components/schemas/PutJobPreferencesRequest" },
+          { "$ref": "#/components/schemas/JobPreferenceFields" },
           {
             "type": "object",
             "required": ["id", "version", "updatedAt"],
@@ -913,7 +918,8 @@
               "updatedAt": { "type": "string", "format": "date-time" }
             }
           }
-        ]
+        ],
+        "unevaluatedProperties": false
       },
       "PutJobPreferencesResponse": {
         "type": "object",
