@@ -41,6 +41,41 @@ const workModeValues = workModeOptions.map((option) => option.value);
 const employmentTypeValues = employmentTypeOptions.map((option) => option.value);
 type RepeatablePreferenceField = "targetRoles" | "locations";
 
+const preferenceSaveTimeoutMilliseconds = 20_000;
+const preferenceSaveTimeoutMessage =
+  "Saving preferences timed out. Retry to safely check the same preference update.";
+const preferenceSaveFailureMessage = "Job preferences are temporarily unavailable.";
+
+interface PreferenceSaveIntent {
+  body: string;
+  idempotencyKey: string;
+}
+
+interface PreferenceSaveOwner {
+  generation: number;
+  intent: PreferenceSaveIntent;
+  controller: AbortController;
+  timeout: number | undefined;
+  timedOut: boolean;
+}
+
+class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
+}
+
+class PreferenceSaveTimeoutError extends Error {
+  constructor() {
+    super("The preference save timed out");
+    this.name = "PreferenceSaveTimeoutError";
+  }
+}
+
 async function apiRequest<T>(
   path: string,
   surface: CandidateProblemSurface,
@@ -54,7 +89,10 @@ async function apiRequest<T>(
     },
   });
   if (!response.ok) {
-    throw new Error(await candidateSafeProblemMessage(response, surface));
+    throw new ApiRequestError(
+      await candidateSafeProblemMessage(response, surface),
+      response.status,
+    );
   }
   return (await response.json()) as T;
 }
@@ -96,14 +134,93 @@ export function FoundationForm({
   const [operationId, setOperationId] = useState<string>();
   const [operation, setOperation] = useState<Operation>();
   const [message, setMessage] = useState<string>();
-  const lastSubmission = useRef<{ body: string; idempotencyKey: string } | undefined>(undefined);
-  const saveRequestVersion = useRef(0);
+  const authenticatedRef = useRef(authenticated);
+  authenticatedRef.current = authenticated;
+  const preferenceSessionGeneration = useRef(0);
+  const preferenceSaveIntent = useRef<PreferenceSaveIntent | undefined>(undefined);
+  const activePreferenceSave = useRef<PreferenceSaveOwner | undefined>(undefined);
   const operationPollVersion = useRef(0);
   const preferenceRowSequence = useRef(0);
   const [preferenceRowIds, setPreferenceRowIds] = useState<
     Record<RepeatablePreferenceField, string[]>
   >({ targetRoles: ["target-role-initial"], locations: [] });
   const preferenceControlsDisabled = loadingPreferences || saving || !authenticated;
+
+  const cancelPreferenceSave = useCallback((): void => {
+    const owner = activePreferenceSave.current;
+    activePreferenceSave.current = undefined;
+    preferenceSaveIntent.current = undefined;
+    if (!owner) return;
+    window.clearTimeout(owner.timeout);
+    owner.timeout = undefined;
+    owner.controller.abort();
+  }, []);
+
+  function isActivePreferenceSave(owner: PreferenceSaveOwner): boolean {
+    return activePreferenceSave.current === owner;
+  }
+
+  function ownsPreferenceSave(owner: PreferenceSaveOwner): boolean {
+    return (
+      authenticatedRef.current &&
+      owner.generation === preferenceSessionGeneration.current &&
+      isActivePreferenceSave(owner)
+    );
+  }
+
+  function beginPreferenceSave(body: string): PreferenceSaveOwner | undefined {
+    if (!authenticatedRef.current || activePreferenceSave.current) return undefined;
+    const currentIntent = preferenceSaveIntent.current;
+    const intent =
+      currentIntent?.body === body
+        ? currentIntent
+        : {
+            body,
+            idempotencyKey: `preferences-${crypto.randomUUID()}`,
+          };
+    preferenceSaveIntent.current = intent;
+    const owner: PreferenceSaveOwner = {
+      generation: preferenceSessionGeneration.current,
+      intent,
+      controller: new AbortController(),
+      timeout: undefined,
+      timedOut: false,
+    };
+    activePreferenceSave.current = owner;
+    return owner;
+  }
+
+  function clearPreferenceSaveIntent(owner: PreferenceSaveOwner): void {
+    if (preferenceSaveIntent.current === owner.intent) preferenceSaveIntent.current = undefined;
+  }
+
+  async function runPreferenceSave(owner: PreferenceSaveOwner): Promise<PutJobPreferencesResponse> {
+    let rejectDeadline: ((reason?: unknown) => void) | undefined;
+    const deadline = new Promise<never>((_resolve, reject) => {
+      rejectDeadline = reject;
+    });
+    owner.timeout = window.setTimeout(() => {
+      if (!isActivePreferenceSave(owner)) return;
+      owner.timedOut = true;
+      owner.controller.abort();
+      rejectDeadline?.(new PreferenceSaveTimeoutError());
+    }, preferenceSaveTimeoutMilliseconds);
+
+    try {
+      return await Promise.race([
+        apiRequest<PutJobPreferencesResponse>("/api/platform/job-preferences", "preferences", {
+          method: "PUT",
+          signal: owner.controller.signal,
+          headers: { "idempotency-key": owner.intent.idempotencyKey },
+          body: owner.intent.body,
+        }),
+        deadline,
+      ]);
+    } finally {
+      window.clearTimeout(owner.timeout);
+      owner.timeout = undefined;
+    }
+  }
 
   const replacePreferenceFields = useCallback((fields: JobPreferenceFields) => {
     setPreferenceFields(fields);
@@ -114,14 +231,14 @@ export function FoundationForm({
   }, []);
 
   useEffect(() => {
-    saveRequestVersion.current += 1;
+    const generation = ++preferenceSessionGeneration.current;
+    cancelPreferenceSave();
     setSaving(false);
     setMessage(undefined);
     if (!authenticated) {
       replacePreferenceFields(emptyJobPreferenceFields());
       setOperationId(undefined);
       setOperation(undefined);
-      lastSubmission.current = undefined;
       setLoadingPreferences(false);
       return;
     }
@@ -136,7 +253,6 @@ export function FoundationForm({
         });
         if (response.status === 404) {
           replacePreferenceFields(emptyJobPreferenceFields());
-          lastSubmission.current = undefined;
           setMessage(undefined);
           return;
         }
@@ -146,7 +262,6 @@ export function FoundationForm({
         const preferences = (await response.json()) as JobPreferenceSet;
         const fields = hydrateJobPreferenceFields(preferences);
         replacePreferenceFields(fields);
-        lastSubmission.current = undefined;
         setMessage(
           fields.legacySponsorshipPresent
             ? "These saved preferences contain a legacy sponsorship answer. It is not shown here, and saving is unavailable until it moves to the restricted-data boundary."
@@ -163,8 +278,13 @@ export function FoundationForm({
       }
     }
     void loadPreferences();
-    return () => controller.abort();
-  }, [authenticated, replacePreferenceFields]);
+    return () => {
+      if (preferenceSessionGeneration.current === generation) {
+        cancelPreferenceSave();
+        controller.abort();
+      }
+    };
+  }, [authenticated, cancelPreferenceSave, replacePreferenceFields]);
 
   useEffect(() => {
     const pollVersion = ++operationPollVersion.current;
@@ -241,32 +361,22 @@ export function FoundationForm({
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (activePreferenceSave.current) return;
     setMessage(undefined);
     const result = buildJobPreferenceRequest(preferenceFields);
     if (!result.ok) {
+      preferenceSaveIntent.current = undefined;
       setMessage(result.message);
       return;
     }
-    setSaving(true);
-    const requestVersion = ++saveRequestVersion.current;
     const serializedBody = JSON.stringify(result.request);
-    if (!lastSubmission.current || lastSubmission.current.body !== serializedBody) {
-      lastSubmission.current = {
-        body: serializedBody,
-        idempotencyKey: `preferences-${crypto.randomUUID()}`,
-      };
-    }
+    const owner = beginPreferenceSave(serializedBody);
+    if (!owner) return;
+    setSaving(true);
     try {
-      const response = await apiRequest<PutJobPreferencesResponse>(
-        "/api/platform/job-preferences",
-        "preferences",
-        {
-          method: "PUT",
-          headers: { "idempotency-key": lastSubmission.current.idempotencyKey },
-          body: serializedBody,
-        },
-      );
-      if (requestVersion !== saveRequestVersion.current) return;
+      const response = await runPreferenceSave(owner);
+      if (!ownsPreferenceSave(owner)) return;
+      clearPreferenceSaveIntent(owner);
       replacePreferenceFields(hydrateJobPreferenceFields(response.preferences));
       setOperationId(response.operationId);
       setOperation({
@@ -278,11 +388,22 @@ export function FoundationForm({
       });
       setMessage("Preferences saved. Checking optional preference details.");
     } catch (error) {
-      if (requestVersion === saveRequestVersion.current) {
-        setMessage(error instanceof Error ? error.message : "Could not save preferences");
+      if (!ownsPreferenceSave(owner)) return;
+      if (error instanceof ApiRequestError && error.status < 500) {
+        clearPreferenceSaveIntent(owner);
       }
+      setMessage(
+        owner.timedOut || error instanceof PreferenceSaveTimeoutError
+          ? preferenceSaveTimeoutMessage
+          : error instanceof ApiRequestError
+            ? error.message
+            : preferenceSaveFailureMessage,
+      );
     } finally {
-      if (requestVersion === saveRequestVersion.current) setSaving(false);
+      if (isActivePreferenceSave(owner)) {
+        activePreferenceSave.current = undefined;
+        if (owner.generation === preferenceSessionGeneration.current) setSaving(false);
+      }
     }
   }
 
