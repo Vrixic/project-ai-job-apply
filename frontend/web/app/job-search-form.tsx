@@ -22,6 +22,7 @@ const initialFields: JobSearchFields = {
 };
 
 const saveJobTimeoutMilliseconds = 20_000;
+const jobSearchTimeoutMilliseconds = 20_000;
 const saveJobTimeoutMessage = "Saving timed out. Retry to safely check the same saved job.";
 const saveJobFailureMessage =
   "The job could not be saved. Retry to safely check the same saved job.";
@@ -30,6 +31,17 @@ interface SaveJobIntent {
   jobId: string;
   idempotencyKey: string;
 }
+
+interface JobSearchChain {
+  generation: number;
+  controller: AbortController | undefined;
+  timeout: number | undefined;
+}
+
+type JobSearchRequestResult =
+  | { action: "success"; page: JobSearchPage }
+  | { action: "restart" }
+  | { action: "error"; message: string };
 
 async function readProblem(response: Response): Promise<{ code?: string; message: string }> {
   try {
@@ -64,6 +76,7 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
   const restoreKeywordsFocus = useRef(false);
   const sessionGeneration = useRef(0);
   const activeControllers = useRef(new Set<AbortController>());
+  const searchChain = useRef<JobSearchChain | undefined>(undefined);
   const saveController = useRef<AbortController | undefined>(undefined);
   const saveTimeout = useRef<number | undefined>(undefined);
   const saveIntent = useRef<SaveJobIntent | undefined>(undefined);
@@ -73,6 +86,12 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
   useEffect(() => {
     sessionGeneration.current += 1;
     restoreKeywordsFocus.current = false;
+    const currentSearch = searchChain.current;
+    searchChain.current = undefined;
+    window.clearTimeout(currentSearch?.timeout);
+    if (currentSearch) currentSearch.timeout = undefined;
+    currentSearch?.controller?.abort();
+    if (currentSearch) currentSearch.controller = undefined;
     window.clearTimeout(saveTimeout.current);
     saveTimeout.current = undefined;
     saveController.current?.abort();
@@ -92,6 +111,12 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
     }
     return () => {
       sessionGeneration.current += 1;
+      const pendingSearch = searchChain.current;
+      searchChain.current = undefined;
+      window.clearTimeout(pendingSearch?.timeout);
+      if (pendingSearch) pendingSearch.timeout = undefined;
+      pendingSearch?.controller?.abort();
+      if (pendingSearch) pendingSearch.controller = undefined;
       window.clearTimeout(saveTimeout.current);
       saveTimeout.current = undefined;
       saveController.current?.abort();
@@ -114,42 +139,66 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
     setFields((current) => ({ ...current, [key]: value }));
   }
 
-  async function search(
+  async function requestSearchPage(
+    chain: JobSearchChain,
     requestFields: JobSearchFields,
     nextCursor?: string,
-    preserveMessage = false,
-  ) {
-    if (!authenticatedRef.current) return;
-    const generation = sessionGeneration.current;
-    setSearching(true);
-    if (!preserveMessage) {
-      setMessage(undefined);
+  ): Promise<"complete" | "restart"> {
+    if (
+      !authenticatedRef.current ||
+      chain.generation !== sessionGeneration.current ||
+      searchChain.current !== chain
+    ) {
+      return "complete";
     }
     const controller = new AbortController();
+    chain.controller = controller;
     activeControllers.current.add(controller);
-    const timeout = window.setTimeout(() => controller.abort(), 20_000);
-    try {
-      const response = await fetch("/api/platform/jobs/search", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(buildJobSearchRequest(requestFields, nextCursor)),
-        signal: controller.signal,
-      });
-      if (!response.ok) {
-        const problem = await readProblem(response);
-        if (
-          jobSearchFailureAction(response.status, problem.code, Boolean(nextCursor)) === "restart"
-        ) {
-          setItems([]);
-          setCursor(undefined);
-          setMessage("The catalog changed. Restarting this search with current jobs.");
-          await search(requestFields, undefined, true);
-          return;
-        }
-        throw new Error(problem.message);
+    let timedOut = false;
+    let rejectDeadline: ((reason?: unknown) => void) | undefined;
+    const deadline = new Promise<never>((_resolve, reject) => {
+      rejectDeadline = reject;
+    });
+    const timeout = window.setTimeout(() => {
+      if (searchChain.current === chain && chain.controller === controller) {
+        timedOut = true;
+        controller.abort();
+        rejectDeadline?.(new DOMException("Timed out", "AbortError"));
       }
-      const page = (await response.json()) as JobSearchPage;
-      if (!authenticatedRef.current || generation !== sessionGeneration.current) return;
+    }, jobSearchTimeoutMilliseconds);
+    chain.timeout = timeout;
+    const ownsSearch = () =>
+      authenticatedRef.current &&
+      chain.generation === sessionGeneration.current &&
+      searchChain.current === chain;
+
+    try {
+      const response = await Promise.race([
+        (async (): Promise<JobSearchRequestResult> => {
+          const searchResponse = await fetch("/api/platform/jobs/search", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(buildJobSearchRequest(requestFields, nextCursor)),
+            signal: controller.signal,
+          });
+          if (!searchResponse.ok) {
+            const problem = await readProblem(searchResponse);
+            return jobSearchFailureAction(
+              searchResponse.status,
+              problem.code,
+              Boolean(nextCursor),
+            ) === "restart"
+              ? { action: "restart" }
+              : { action: "error", message: problem.message };
+          }
+          return { action: "success", page: (await searchResponse.json()) as JobSearchPage };
+        })(),
+        deadline,
+      ]);
+      if (!ownsSearch()) return "complete";
+      if (response.action === "restart") return "restart";
+      if (response.action === "error") throw new Error(response.message);
+      const { page } = response;
       setItems((current) => (nextCursor ? appendJobSearchPage(current, page) : page.items));
       setCursor(page.nextCursor);
       setMessage(
@@ -158,18 +207,52 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
           : `${page.items.length} job${page.items.length === 1 ? "" : "s"} loaded.`,
       );
     } catch (error) {
-      if (generation === sessionGeneration.current)
+      if (ownsSearch()) {
         setMessage(
-          controller.signal.aborted
+          timedOut
             ? "Job search timed out. Try again after confirming the platform is available."
             : error instanceof Error
               ? error.message
               : "Job search could not be completed",
         );
+      }
     } finally {
       window.clearTimeout(timeout);
       activeControllers.current.delete(controller);
-      if (generation === sessionGeneration.current) {
+      if (chain.timeout === timeout) chain.timeout = undefined;
+      if (chain.controller === controller) chain.controller = undefined;
+    }
+    return "complete";
+  }
+
+  async function search(requestFields: JobSearchFields, nextCursor?: string) {
+    if (!authenticatedRef.current || searchChain.current) return;
+    const chain: JobSearchChain = {
+      generation: sessionGeneration.current,
+      controller: undefined,
+      timeout: undefined,
+    };
+    searchChain.current = chain;
+    setSearching(true);
+    setMessage(undefined);
+    try {
+      const action = await requestSearchPage(chain, requestFields, nextCursor);
+      if (
+        action === "restart" &&
+        authenticatedRef.current &&
+        chain.generation === sessionGeneration.current &&
+        searchChain.current === chain
+      ) {
+        setItems([]);
+        setCursor(undefined);
+        setMessage("The catalog changed. Restarting this search with current jobs.");
+        await requestSearchPage(chain, requestFields);
+      }
+    } finally {
+      if (searchChain.current === chain) {
+        searchChain.current = undefined;
+      }
+      if (chain.generation === sessionGeneration.current) {
         restoreKeywordsFocus.current = !nextCursor;
         setSearching(false);
       }
@@ -178,6 +261,7 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!authenticatedRef.current || searchChain.current) return;
     const nextFields = { ...fields };
     setSubmittedFields(nextFields);
     setItems([]);
