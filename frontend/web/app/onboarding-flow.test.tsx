@@ -4,6 +4,7 @@ import type {
   JobPreferenceSet,
   Operation,
   ProfileFact,
+  ProfileFactCollection,
   ResumeDocument,
 } from "@ai-job-apply/api-contracts";
 import React, { act } from "react";

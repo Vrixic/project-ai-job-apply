@@ -8,6 +8,7 @@ import type {
 } from "@ai-job-apply/api-contracts";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { candidateSafeProblemMessage } from "../lib/candidate-safe-problem";
+import { validateFoundationResponse } from "../lib/foundation-response-bff";
 
 const kinds: Array<{ value: CreateProfileFactRequest["kind"]; label: string }> = [
   { value: "identity", label: "Contact or identity" },
@@ -22,6 +23,8 @@ const kinds: Array<{ value: CreateProfileFactRequest["kind"]; label: string }> =
 const factMutationTimeoutMilliseconds = 20_000;
 const factMutationTimeoutMessage = "Saving timed out. Retry to safely check the same profile fact.";
 const factMutationFailureMessage = "Profile facts are temporarily unavailable.";
+const factLoadTimeoutMilliseconds = 20_000;
+const factLoadFailureMessage = "Profile facts are temporarily unavailable.";
 
 interface FactMutationIntent {
   method: "POST" | "PATCH";
@@ -38,10 +41,24 @@ interface FactMutationOwner {
   timedOut: boolean;
 }
 
+interface FactLoadOwner {
+  requestVersion: number;
+  controller: AbortController;
+  timeout: number | undefined;
+  timedOut: boolean;
+}
+
 class FactMutationTimeoutError extends Error {
   constructor() {
     super("The profile fact mutation timed out");
     this.name = "FactMutationTimeoutError";
+  }
+}
+
+class FactLoadTimeoutError extends Error {
+  constructor() {
+    super("The profile facts load timed out");
+    this.name = "FactLoadTimeoutError";
   }
 }
 
@@ -109,6 +126,7 @@ export function ProfileFactsForm({
   const sessionController = useRef<AbortController | undefined>(undefined);
   const mutationIntent = useRef<FactMutationIntent | undefined>(undefined);
   const activeMutation = useRef<FactMutationOwner | undefined>(undefined);
+  const activeLoad = useRef<FactLoadOwner | undefined>(undefined);
 
   const cancelActiveMutation = useCallback((): void => {
     const mutation = activeMutation.current;
@@ -118,6 +136,15 @@ export function ProfileFactsForm({
     window.clearTimeout(mutation.timeout);
     mutation.timeout = undefined;
     mutation.controller.abort();
+  }, []);
+
+  const cancelActiveLoad = useCallback((): void => {
+    const load = activeLoad.current;
+    activeLoad.current = undefined;
+    if (!load) return;
+    window.clearTimeout(load.timeout);
+    load.timeout = undefined;
+    load.controller.abort();
   }, []);
 
   function isActiveMutation(mutation: FactMutationOwner): boolean {
@@ -131,6 +158,90 @@ export function ProfileFactsForm({
       isActiveMutation(mutation)
     );
   }
+
+  const isActiveLoad = useCallback((load: FactLoadOwner): boolean => {
+    return activeLoad.current === load;
+  }, []);
+
+  const ownsLoad = useCallback(
+    (load: FactLoadOwner, generation: number, requestVersion: number): boolean => {
+      return (
+        authenticatedRef.current &&
+        generation === sessionGeneration.current &&
+        requestVersion === load.requestVersion &&
+        isActiveLoad(load)
+      );
+    },
+    [isActiveLoad],
+  );
+
+  const beginLoad = useCallback((): FactLoadOwner | undefined => {
+    if (!authenticatedRef.current) return undefined;
+    if (activeLoad.current) {
+      cancelActiveLoad();
+    }
+    const requestVersion = ++loadRequestVersion.current;
+    const load: FactLoadOwner = {
+      requestVersion,
+      controller: new AbortController(),
+      timeout: undefined,
+      timedOut: false,
+    };
+    activeLoad.current = load;
+    return load;
+  }, [cancelActiveLoad]);
+
+  const clearLoad = useCallback(
+    (load: FactLoadOwner): void => {
+      if (isActiveLoad(load)) activeLoad.current = undefined;
+    },
+    [isActiveLoad],
+  );
+
+  const runLoad = useCallback(async <T,>(load: FactLoadOwner): Promise<T> => {
+    let rejectDeadline: ((reason?: unknown) => void) | undefined;
+    const deadline = new Promise<never>((_resolve, reject) => {
+      rejectDeadline = reject;
+    });
+    let response: Response | undefined;
+    load.timeout = window.setTimeout(() => {
+      if (activeLoad.current !== load) return;
+      load.timedOut = true;
+      load.controller.abort();
+      rejectDeadline?.(new FactLoadTimeoutError());
+    }, factLoadTimeoutMilliseconds);
+
+    try {
+      const successfulLoad = (async (): Promise<T> => {
+        response = await fetch("/api/platform/profile-facts", {
+          signal: load.controller.signal,
+        });
+        const validatedResponse = response.ok
+          ? await validateFoundationResponse(
+              response,
+              200,
+              "ProfileFactCollection",
+              load.controller.signal,
+              factLoadTimeoutMilliseconds,
+            )
+          : response;
+        if (!validatedResponse.ok) {
+          throw new FactRequestError(
+            await candidateSafeProblemMessage(validatedResponse, "profile_facts"),
+            validatedResponse.status,
+          );
+        }
+        return (await validatedResponse.json()) as T;
+      })();
+      return (await Promise.race([successfulLoad, deadline])) as T;
+    } finally {
+      window.clearTimeout(load.timeout);
+      load.timeout = undefined;
+      if (response?.body) {
+        void Promise.resolve(response.body.cancel()).catch(() => undefined);
+      }
+    }
+  }, []);
 
   function beginMutation(
     method: FactMutationIntent["method"],
@@ -197,21 +308,22 @@ export function ProfileFactsForm({
     return error instanceof FactRequestError ? error.message : factMutationFailureMessage;
   }
 
+  const loadMessage = useCallback((error: unknown, timedOut: boolean): string => {
+    if (timedOut || error instanceof FactLoadTimeoutError) return factLoadFailureMessage;
+    return factLoadFailureMessage;
+  }, []);
+
   const load = useCallback(
     async (announceResumeResult: boolean, generation: number, signal: AbortSignal) => {
-      const requestVersion = ++loadRequestVersion.current;
+      const loadOwner = beginLoad();
+      if (!loadOwner) return;
+      const { requestVersion } = loadOwner;
+      const onAbort = () => loadOwner.controller.abort();
+      signal.addEventListener("abort", onAbort, { once: true });
       setLoading(true);
       try {
-        const collection = await factRequest<ProfileFactCollection>("/api/platform/profile-facts", {
-          signal,
-        });
-        if (
-          signal.aborted ||
-          generation !== sessionGeneration.current ||
-          requestVersion !== loadRequestVersion.current
-        ) {
-          return;
-        }
+        const collection = await runLoad<ProfileFactCollection>(loadOwner);
+        if (!ownsLoad(loadOwner, generation, requestVersion)) return;
         setFacts(collection.facts);
         if (announceResumeResult) {
           setMessage(
@@ -223,14 +335,12 @@ export function ProfileFactsForm({
           );
         }
       } catch (error) {
-        if (
-          !signal.aborted &&
-          generation === sessionGeneration.current &&
-          requestVersion === loadRequestVersion.current
-        ) {
-          setMessage(error instanceof Error ? error.message : "Could not load profile facts");
+        if (!signal.aborted && ownsLoad(loadOwner, generation, requestVersion)) {
+          setMessage(loadMessage(error, loadOwner.timedOut));
         }
       } finally {
+        signal.removeEventListener("abort", onAbort);
+        clearLoad(loadOwner);
         if (
           !signal.aborted &&
           generation === sessionGeneration.current &&
@@ -240,12 +350,13 @@ export function ProfileFactsForm({
         }
       }
     },
-    [],
+    [beginLoad, ownsLoad, runLoad, clearLoad, loadMessage],
   );
 
   useEffect(() => {
     const generation = ++sessionGeneration.current;
     cancelActiveMutation();
+    cancelActiveLoad();
     sessionController.current?.abort();
     const controller = new AbortController();
     sessionController.current = controller;
@@ -264,10 +375,11 @@ export function ProfileFactsForm({
     return () => {
       if (sessionGeneration.current === generation) {
         cancelActiveMutation();
+        cancelActiveLoad();
         controller.abort();
       }
     };
-  }, [authenticated, cancelActiveMutation]);
+  }, [authenticated, cancelActiveMutation, cancelActiveLoad]);
 
   useEffect(() => {
     const announceResumeResult = refreshVersion > lastRefreshVersion.current;

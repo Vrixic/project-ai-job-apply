@@ -1,4 +1,5 @@
 import { getAuth0Client } from "../../../../../lib/auth0";
+import { validateFoundationResponse } from "../../../../../lib/foundation-response-bff";
 import { forwardPlatformRequest } from "../../../../../lib/platform-api";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +34,7 @@ export async function GET(
     );
   }
 
-  return forwardPlatformRequest(
+  const response = await forwardPlatformRequest(
     `/v1/operations/${encodeURIComponent(operationId)}`,
     { method: "GET", signal: request.signal },
     {
@@ -42,4 +43,5 @@ export async function GET(
       fetch,
     },
   );
+  return validateFoundationResponse(response, 200, "Operation", request.signal);
 }

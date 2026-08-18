@@ -85,10 +85,11 @@ export function MatchAssessmentPanel({ jobId }: { jobId: string }) {
     });
     setLoading(true);
     setMessage(undefined);
+    let response: Response | undefined;
     try {
       const result = await Promise.race([
         (async () => {
-          const response = await fetch(
+          response = await fetch(
             `/api/platform/jobs/${encodeURIComponent(request.jobId)}/match-assessment`,
             { cache: "no-store", signal: nextController.signal },
           );
@@ -136,6 +137,9 @@ export function MatchAssessmentPanel({ jobId }: { jobId: string }) {
             : "Match evidence is unavailable.",
       );
     } finally {
+      if (response?.body) {
+        void Promise.resolve(response.body.cancel()).catch(() => undefined);
+      }
       window.clearTimeout(request.timeout);
       request.timeout = undefined;
       request.rejectDeadline = undefined;

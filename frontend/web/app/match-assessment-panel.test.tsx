@@ -81,6 +81,15 @@ function deferredValue<T>() {
   return { promise, resolve };
 }
 
+function responseWithDeferredJson(value: Promise<unknown>): Response {
+  const response = {
+    ok: true,
+    body: { cancel: vi.fn(() => Promise.resolve()) },
+    json: () => value,
+  } as unknown as Response;
+  return response;
+}
+
 describe("MatchAssessmentPanel", () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -177,10 +186,7 @@ describe("MatchAssessmentPanel", () => {
       .fn<typeof fetch>()
       .mockImplementationOnce((_input, init) => {
         firstSignal = init?.signal ?? undefined;
-        return Promise.resolve({
-          ok: true,
-          json: () => firstBody.promise,
-        } as Response);
+        return Promise.resolve(responseWithDeferredJson(firstBody.promise));
       })
       .mockImplementationOnce((_input, init) => {
         retrySignal = init?.signal ?? undefined;
@@ -198,6 +204,12 @@ describe("MatchAssessmentPanel", () => {
     await act(async () => vi.advanceTimersByTimeAsync(20_000));
 
     expect(firstSignal?.aborted).toBe(true);
+    const responseResult = await fetchMock.mock.results[0]?.value;
+    const maybeResponse = responseResult as Response;
+    expect(maybeResponse.body?.cancel).toBeDefined();
+    const cancel = maybeResponse.body?.cancel as ReturnType<typeof vi.fn> | undefined;
+    expect(cancel).toBeDefined();
+    expect(cancel).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain("Match evidence request timed out. Try again.");
     expect(container.querySelector<HTMLButtonElement>("button")?.disabled).toBe(false);
 
