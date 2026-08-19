@@ -37,10 +37,15 @@ function projectFoundationValue(
   value: unknown,
 ): unknown | undefined {
   const validator = validators.get(schemaName);
-  if (schemaName !== "JobPreferenceSet") {
+  if (schemaName !== "JobPreferenceSet" && schemaName !== "Operation") {
     return validator?.(value) ? value : undefined;
   }
   if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  if (schemaName === "Operation") {
+    const nextValue = { ...(value as Record<string, unknown>) };
+    delete nextValue.errorCode;
+    return validator?.(nextValue) ? nextValue : undefined;
+  }
   if (!Object.hasOwn(value, "requiresSponsorship")) {
     return validator?.(value) ? value : undefined;
   }

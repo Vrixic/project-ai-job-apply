@@ -50,6 +50,14 @@ const operation = {
   createdAt: "2026-08-17T12:00:00.000Z",
   updatedAt: "2026-08-17T12:00:00.000Z",
 };
+const operationWithoutErrorCode = {
+  id: operation.id,
+  kind: operation.kind,
+  state: operation.state,
+  result: operation.result,
+  createdAt: operation.createdAt,
+  updatedAt: operation.updatedAt,
+};
 
 const preferenceFields = {
   targetRoles: ["Software Engineer"],
@@ -165,13 +173,17 @@ const validValues: Record<FoundationResponseSchemaName, unknown> = {
   EntitlementSummary: freeEntitlement,
   JobPreferenceSet: preferenceSet,
   PutJobPreferencesResponse: putPreferenceResponse,
-  Operation: operation,
+  Operation: operationWithoutErrorCode,
   SavedJob: savedJob,
   SavedJobPage: savedJobPage,
   ResumeDocumentCollection: resumeCollection,
   CreateResumeUploadResponse: resumeUploadResponse,
   ProfileFactCollection: factCollection,
   ProfileFact: profileFact,
+};
+const validUpstreamValues: Record<FoundationResponseSchemaName, unknown> = {
+  ...validValues,
+  Operation: operation,
 };
 
 function jsonResponse(value: unknown, status = 200, headers: HeadersInit = {}): Response {
@@ -215,7 +227,11 @@ describe("foundation response boundary", () => {
       const expectedStatus =
         schemaName === "CreateResumeUploadResponse" || schemaName === "SavedJob" ? 201 : 200;
       const response = await validateFoundationResponse(
-        jsonResponse(value, expectedStatus, { "x-correlation-id": "synthetic-correlation" }),
+        jsonResponse(
+          validUpstreamValues[schemaName as FoundationResponseSchemaName],
+          expectedStatus,
+          { "x-correlation-id": "synthetic-correlation" },
+        ),
         expectedStatus,
         schemaName as FoundationResponseSchemaName,
       );
@@ -794,5 +810,24 @@ describe("foundation route response composition", () => {
       { method: "GET", signal: request.signal },
       expect.objectContaining({ auth0: { synthetic: "auth0-client" } }),
     );
+  });
+
+  it("projects an exact valid operation response without leaking errorCode", async () => {
+    const privateCanary = "candidate-private-operation-error-code";
+    mocks.forwardPlatformRequest.mockResolvedValueOnce(
+      jsonResponse({ ...operation, errorCode: privateCanary }),
+    );
+
+    const response = await getOperation(
+      new Request(`http://localhost/api/platform/operations/${operationId}`),
+      { params: Promise.resolve({ operationId }) },
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(body).toEqual(operationWithoutErrorCode);
+    expect(body).not.toHaveProperty("errorCode");
+    expect(JSON.stringify(body)).not.toContain(privateCanary);
   });
 });

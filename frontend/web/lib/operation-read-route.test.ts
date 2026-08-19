@@ -60,6 +60,47 @@ describe("operation read route", () => {
     );
   });
 
+  it("strips errorCode from operation success responses", async () => {
+    const privateCanary = "candidate-private-operation-error-code";
+    mocks.forwardPlatformRequest.mockResolvedValueOnce(
+      Response.json({
+        id: operationId,
+        kind: "profile_readiness",
+        state: "succeeded",
+        result: {
+          completionPercent: 100,
+          missingFields: [],
+          calculatedAt: "2026-08-17T12:00:00.000Z",
+        },
+        errorCode: privateCanary,
+        createdAt: "2026-08-17T12:00:00.000Z",
+        updatedAt: "2026-08-17T12:00:00.000Z",
+      }),
+    );
+    const request = new Request(`http://localhost/api/platform/operations/${operationId}`);
+
+    const response = await GET(request, context());
+    const body = await response.text();
+    const json = JSON.parse(body);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(json).toEqual({
+      id: operationId,
+      kind: "profile_readiness",
+      state: "succeeded",
+      result: {
+        completionPercent: 100,
+        missingFields: [],
+        calculatedAt: "2026-08-17T12:00:00.000Z",
+      },
+      createdAt: "2026-08-17T12:00:00.000Z",
+      updatedAt: "2026-08-17T12:00:00.000Z",
+    });
+    expect(json).not.toHaveProperty("errorCode");
+    expect(body).not.toContain(privateCanary);
+  });
+
   it("preserves an already-aborted caller signal", async () => {
     mocks.forwardPlatformRequest.mockResolvedValueOnce(
       Response.json(
