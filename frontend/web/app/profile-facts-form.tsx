@@ -6,8 +6,8 @@ import type {
   ProfileFactCollection,
   UpdateProfileFactRequest,
 } from "@ai-job-apply/api-contracts";
-import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { candidateSafeProblemMessage } from "../lib/candidate-safe-problem";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { validateFoundationResponse } from "../lib/foundation-response-bff";
 
 const kinds: Array<{ value: CreateProfileFactRequest["kind"]; label: string }> = [
@@ -216,6 +216,9 @@ export function ProfileFactsForm({
         response = await fetch("/api/platform/profile-facts", {
           signal: load.controller.signal,
         });
+        if (!response.ok) {
+          throw new FactRequestError(factLoadFailureMessage, response.status);
+        }
         const validatedResponse = response.ok
           ? await validateFoundationResponse(
               response,
@@ -226,10 +229,7 @@ export function ProfileFactsForm({
             )
           : response;
         if (!validatedResponse.ok) {
-          throw new FactRequestError(
-            await candidateSafeProblemMessage(validatedResponse, "profile_facts"),
-            validatedResponse.status,
-          );
+          throw new FactRequestError(factLoadFailureMessage, validatedResponse.status);
         }
         return (await validatedResponse.json()) as T;
       })();

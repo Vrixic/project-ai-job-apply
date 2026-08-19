@@ -72,6 +72,25 @@ function jsonResponse(body: unknown, status = 200): Response {
   return Response.json(body, { status });
 }
 
+function stalledProblemResponse(status = 503): Response {
+  const encoder = new TextEncoder();
+  return new Response(
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(`{"code":"private_database_failure","title":"${privateProblemCanary}"}`),
+        );
+      },
+    }),
+    {
+      status,
+      headers: {
+        "content-type": "application/problem+json",
+      },
+    },
+  );
+}
+
 function deferred<T>() {
   let resolve: (value: T) => void = () => undefined;
   const promise = new Promise<T>((resolvePromise) => {
@@ -834,6 +853,79 @@ describe("coordinated onboarding flow", () => {
     );
   });
 
+  it("does not parse stalled non-OK profile-fact failure bodies and keeps fixed copy", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (input, init) => {
+        const path = requestPath(input);
+        if (path === "/api/platform/profile-facts") {
+          return init?.method === "GET" || init?.method === undefined
+            ? stalledProblemResponse(503)
+            : jsonResponse(
+                {
+                  code: "private_database_failure",
+                  title: privateProblemCanary,
+                  detail: privateProblemCanary,
+                },
+                503,
+              );
+        }
+        throw new Error(`Unexpected request: ${path}`);
+      }),
+    );
+
+    await act(async () => root.render(profileFacts()));
+    expect(container.textContent).toContain("Profile facts are temporarily unavailable.");
+    expect(container.textContent).not.toContain(privateProblemCanary);
+  });
+
+  it("retries profile-fact loading with a fresh request after timeout and ignores stale completion", async () => {
+    vi.useFakeTimers();
+    const staleProfileLoad = deferred<Response>();
+    const staleFact = proposedFact("stale_profile_fact");
+    let readCount = 0;
+    let secondLoadSignal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (input, init) => {
+        const path = requestPath(input);
+        if (path === "/api/platform/profile-facts" && (init?.method ?? "GET") === "GET") {
+          readCount += 1;
+          if (readCount === 1) {
+            return staleProfileLoad.promise;
+          }
+          secondLoadSignal = init?.signal ?? undefined;
+          return jsonResponse(emptyFacts);
+        }
+        throw new Error(`Unexpected request: ${path}`);
+      }),
+    );
+
+    await act(async () => root.render(profileFacts()));
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+
+    expect(container.textContent).toContain("Profile facts are temporarily unavailable.");
+    expect(readCount).toBe(1);
+
+    await act(async () => root.render(<ProfileFactsForm authenticated refreshVersion={1} />));
+
+    expect(readCount).toBe(2);
+    expect(container.textContent).not.toContain("stale_profile_fact");
+    expect(secondLoadSignal?.aborted).toBe(false);
+    expect(container.textContent).toContain("No extracted facts are waiting for review.");
+
+    await act(async () =>
+      staleProfileLoad.resolve(
+        jsonResponse({
+          facts: [staleFact],
+          confirmedCount: 0,
+          proposedCount: 1,
+        }),
+      ),
+    );
+    expect(container.textContent).not.toContain("stale_profile_fact");
+  });
+
   it("keeps rapid create and update activation in one mutation and clears its deadline", async () => {
     vi.useFakeTimers();
     const proposal = proposedFact("single_flight_proposal");
@@ -927,7 +1019,10 @@ describe("coordinated onboarding flow", () => {
     );
 
     await act(async () => submit());
-    expect(container.textContent).toContain("Check the profile fact and try again.");
+    await vi.waitFor(() => expect(mutationCalls).toHaveLength(2));
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain("Check the profile fact and try again."),
+    );
     expect(mutationCalls).toHaveLength(2);
     expect(mutationCalls[1]?.body).toBe(mutationCalls[0]?.body);
     expect(new Headers(mutationCalls[1]?.headers).get("idempotency-key")).toBe(
@@ -1080,6 +1175,7 @@ describe("coordinated onboarding flow", () => {
 
     await act(async () => root.render(profileFacts()));
     await act(async () => buttonNamed(container, `Confirm ${proposal.key}`).click());
+    await vi.waitFor(() => expect(reads).toBe(2));
 
     expect(reads).toBe(2);
     expect(container.textContent).toContain(
