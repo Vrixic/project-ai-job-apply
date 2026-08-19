@@ -26,7 +26,20 @@ beforeEach(() => {
 
 describe("operation read route", () => {
   it("forwards the exact operation identity with the caller signal", async () => {
-    mocks.forwardPlatformRequest.mockResolvedValueOnce(Response.json({ state: "queued" }));
+    mocks.forwardPlatformRequest.mockResolvedValueOnce(
+      Response.json({
+        id: operationId,
+        kind: "profile_readiness",
+        state: "queued",
+        result: {
+          completionPercent: 100,
+          missingFields: [],
+          calculatedAt: "2026-08-17T12:00:00.000Z",
+        },
+        createdAt: "2026-08-17T12:00:00.000Z",
+        updatedAt: "2026-08-17T12:00:00.000Z",
+      }),
+    );
     const controller = new AbortController();
     const request = new Request(`http://localhost/api/platform/operations/${operationId}`, {
       signal: controller.signal,

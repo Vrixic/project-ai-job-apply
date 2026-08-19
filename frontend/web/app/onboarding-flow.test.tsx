@@ -4,7 +4,6 @@ import type {
   JobPreferenceSet,
   Operation,
   ProfileFact,
-  ProfileFactCollection,
   ResumeDocument,
 } from "@ai-job-apply/api-contracts";
 import React, { act } from "react";
@@ -27,6 +26,18 @@ function proposedFact(key = "stale_candidate_skill"): ProfileFact {
     verification: "proposed",
     sensitivity: "confidential",
     source: { type: "resume", reference: "resume:opaque" },
+    evidence: {
+      supportingSpans: [
+        {
+          documentId: "019c0000-0000-7000-8000-000000000090",
+          documentVersion: 1,
+          parserVersion: "synthetic-parser-v1",
+          blockIndex: 0,
+          startOffset: 0,
+          endOffset: 17,
+        },
+      ],
+    },
     version: 1,
     createdAt: "2026-08-15T12:00:00.000Z",
     updatedAt: "2026-08-15T12:00:00.000Z",

@@ -12,6 +12,7 @@ import {
 import { GET as getResumes, POST as postResume } from "../app/api/platform/resumes/route";
 import { POST as createSavedJob } from "../app/api/platform/saved-jobs/route";
 import { POST as searchSavedJobs } from "../app/api/platform/saved-jobs/search/route";
+import { GET as getOperation } from "../app/api/platform/operations/[operationId]/route";
 import {
   type FoundationResponseSchemaName,
   validateFoundationResponse,
@@ -36,6 +37,19 @@ const documentId = "019b4e12-7ea3-7c36-9357-aea35ab542c3";
 const factId = "019b4e12-7ea3-7c36-9357-aea35ab542c4";
 const preferenceSetId = "019b4e12-7ea3-7c36-9357-aea35ab542c8";
 const operationId = "019b4e12-7ea3-7c36-9357-aea35ab542c9";
+const operation = {
+  id: operationId,
+  kind: "profile_readiness",
+  state: "succeeded",
+  result: {
+    completionPercent: 100,
+    missingFields: [],
+    calculatedAt: "2026-08-17T12:00:00.000Z",
+  },
+  errorCode: "profile_readiness_pending",
+  createdAt: "2026-08-17T12:00:00.000Z",
+  updatedAt: "2026-08-17T12:00:00.000Z",
+};
 
 const preferenceFields = {
   targetRoles: ["Software Engineer"],
@@ -151,6 +165,7 @@ const validValues: Record<FoundationResponseSchemaName, unknown> = {
   EntitlementSummary: freeEntitlement,
   JobPreferenceSet: preferenceSet,
   PutJobPreferencesResponse: putPreferenceResponse,
+  Operation: operation,
   SavedJob: savedJob,
   SavedJobPage: savedJobPage,
   ResumeDocumentCollection: resumeCollection,
@@ -760,4 +775,24 @@ describe("foundation route response composition", () => {
       );
     },
   );
+
+  it("forwards the exact operation request and contains a private failure", async () => {
+    const request = new Request(`http://localhost/api/platform/operations/${operationId}`);
+    const privateCanary = "candidate-private-operation-route-success";
+    mocks.forwardPlatformRequest.mockResolvedValueOnce(
+      jsonResponse({ ...operation, privateCanary }),
+    );
+
+    const response = await getOperation(request, { params: Promise.resolve({ operationId }) });
+    const body = await response.text();
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(body).not.toContain(privateCanary);
+    expect(mocks.forwardPlatformRequest).toHaveBeenCalledWith(
+      `/v1/operations/${operationId}`,
+      { method: "GET", signal: request.signal },
+      expect.objectContaining({ auth0: { synthetic: "auth0-client" } }),
+    );
+  });
 });
