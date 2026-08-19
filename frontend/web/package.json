@@ -14,14 +14,14 @@
     "@ai-job-apply/api-contracts": "workspace:*",
     "@ai-job-apply/config": "workspace:*",
     "@auth0/nextjs-auth0": "4.26.0",
-    "next": "16.3.0",
+    "next": "16.3.1",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
   "devDependencies": {
-    "@types/node": "24.10.1",
+    "@types/node": "26.2.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
-    "jsdom": "29.1.1"
+    "jsdom": "30.0.1"
   }
 }
