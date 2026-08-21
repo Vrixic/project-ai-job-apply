@@ -31,6 +31,8 @@ if ($source -notmatch '\[string\]\$ReviewedBaselineToCurrentDeltaSha256 = ""' -o
     $source -notmatch '\[string\]\$ReviewedTaskPlanMetadataSha256 = ""' -or
     $source -notmatch 'PlanMetadataSha256\s+= \$taskMetadataSha256' -or
     $source -notmatch 'diff --name-status --find-renames --find-copies-harder' -or
+    $source -notmatch 'A detected copy destination is not one canonical added path' -or
+    $source -notmatch 'A detected copy source is not one retained regular blob' -or
     $source -notmatch '(?s)terraform "-chdir=\$terraformDirectory" apply.+?if \(\$LASTEXITCODE -ne 0\).+?Assert-CleanCurrentMainHead -ExpectedSha \$operatorSourceSha' -or
     $source -notmatch 'Assert-CleanCurrentMainHead -ExpectedSha \$head\s+if \(\$Action -in @\("PlanTask", "ApplyTask"\)\) \{ Assert-NoUntrackedTerraformInputs \}' -or
     $source -notmatch '(?s)\$operatorSourceSha = Assert-CallerToolsAndSource.+?Initialize-EncryptedBackend' -or
@@ -202,8 +204,12 @@ function git {
     if ($arguments -notcontains "--no-renames" -and $script:fullDeltaMode -ceq "rename") {
       return "R100`tdocs/product/delivery/evidence/old.md`tdocs/product/delivery/evidence/new.md"
     }
-    if ($arguments -notcontains "--no-renames" -and $script:fullDeltaMode -ceq "copy") {
+    if ($arguments -notcontains "--no-renames" -and
+        $script:fullDeltaMode -in @("copy", "copy-existing-destination", "copy-missing-source")) {
       return "C100`tdocs/product/delivery/evidence/old.md`tdocs/product/delivery/evidence/new.md"
+    }
+    if ($arguments -notcontains "--no-renames" -and $script:fullDeltaMode -ceq "copy-unbound") {
+      return "C100`tdocs/product/delivery/evidence/old.md`tdocs/product/delivery/evidence/unbound.md"
     }
     if ($script:fullDeltaMode -ceq "unsupported") { return "T`tscripts/operate-development-document-migration.ps1" }
     return $script:fullDeltaRecords
@@ -216,6 +222,14 @@ function git {
   }
   if ($arguments -contains "ls-tree") {
     $global:LASTEXITCODE = 0
+    $revision = [string]$arguments[([array]::IndexOf($arguments, "ls-tree") + 1)]
+    $path = [string]$arguments[-1]
+    if ($script:fullDeltaMode -in @("copy", "copy-missing-source") -and
+        $revision -ceq ("3" * 40) -and
+        $path -ceq "docs/product/delivery/evidence/new.md") { return }
+    if ($script:fullDeltaMode -ceq "copy-missing-source" -and
+        $revision -ceq ("3" * 40) -and
+        $path -ceq "docs/product/delivery/evidence/old.md") { return }
     if ($script:fullDeltaMode -ceq "symlink") { return "120000 blob $('a' * 40)`tfixture" }
     if ($script:fullDeltaMode -ceq "gitlink") { return "160000 commit $('a' * 40)`tfixture" }
     if ($script:fullDeltaMode -ceq "mode") { return "100600 blob $('a' * 40)`tfixture" }
@@ -244,6 +258,14 @@ try {
   if ($acceptedFullDelta -cne $reviewedFullDeltaSha) {
     throw "The independently reviewed full baseline-to-current delta was not accepted."
   }
+  $script:fullDeltaMode = "copy"
+  $acceptedCopyDelta = Get-ReviewedBaselineToCurrentDeltaSha256 `
+    -BaselineOperatorSha $baselineOperatorSha -CurrentOperatorSha $currentOperatorSha `
+    -ReviewedSha256 $reviewedFullDeltaSha
+  if ($acceptedCopyDelta -cne $reviewedFullDeltaSha) {
+    throw "A canonical added path detected heuristically as a retained regular-file copy was rejected."
+  }
+  $script:fullDeltaMode = "valid"
   foreach ($reviewed in @("", ("0" * 64))) {
     $rejected = $false
     try {
@@ -255,7 +277,8 @@ try {
   }
   foreach ($mode in @(
       "nonancestor", "detected-error", "records-error", "numstat-error", "patch-error", "binary",
-      "rename", "copy", "symlink", "gitlink", "mode", "ambiguous", "unsupported"
+      "rename", "copy-unbound", "copy-existing-destination", "copy-missing-source",
+      "symlink", "gitlink", "mode", "ambiguous", "unsupported"
     )) {
     $script:fullDeltaMode = $mode
     $rejected = $false

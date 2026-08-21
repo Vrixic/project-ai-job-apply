@@ -396,10 +396,19 @@ function Get-ReviewedBaselineToCurrentDeltaSha256 {
       "$BaselineOperatorSha..$CurrentOperatorSha" 2>$null
   )
   $detectedExit = $LASTEXITCODE
-  if ($detectedExit -ne 0 -or $detectedRecords.Count -eq 0 -or
-      @($detectedRecords | Where-Object { $_ -match '^[RC][0-9]*\t' }).Count -ne 0) {
-    throw "The baseline-to-current delta is unreadable or contains a rename or copy."
+  if ($detectedExit -ne 0 -or $detectedRecords.Count -eq 0) {
+    throw "The baseline-to-current delta is unreadable."
   }
+  if (@($detectedRecords | Where-Object { $_ -match '^R[0-9]*\t' }).Count -ne 0) {
+    throw "The baseline-to-current delta contains a rename."
+  }
+  if (@($detectedRecords | Where-Object {
+        $_ -notmatch '^(?:A|M|D)\t[^\t]+$' -and
+        $_ -notmatch '^C[0-9]+\t[^\t]+\t[^\t]+$'
+      }).Count -ne 0) {
+    throw "The detected baseline-to-current delta contains an unsupported record."
+  }
+  $detectedCopies = @($detectedRecords | Where-Object { $_ -match '^C[0-9]+\t' })
   $records = @(& git -C $repositoryRoot diff --name-status --no-renames "$BaselineOperatorSha..$CurrentOperatorSha" 2>$null)
   $recordsExit = $LASTEXITCODE
   $numstat = @(& git -C $repositoryRoot diff --numstat --no-renames "$BaselineOperatorSha..$CurrentOperatorSha" 2>$null)
@@ -424,6 +433,27 @@ function Get-ReviewedBaselineToCurrentDeltaSha256 {
           [string]$treeEntry[0] -notmatch '^(100644|100755) blob [a-f0-9]{40,64}\t') {
         throw "The baseline-to-current delta contains a missing, ambiguous, or non-regular path."
       }
+    }
+  }
+  foreach ($copyRecord in $detectedCopies) {
+    if ($copyRecord -notmatch '^C[0-9]+\t([^\t]+)\t([^\t]+)$') {
+      throw "The detected baseline-to-current copy record is malformed."
+    }
+    $sourcePath = $Matches[1]
+    $destinationPath = $Matches[2]
+    if (@($records | Where-Object { $_ -ceq "A`t$destinationPath" }).Count -ne 1) {
+      throw "A detected copy destination is not one canonical added path."
+    }
+    foreach ($revision in @($BaselineOperatorSha, $CurrentOperatorSha)) {
+      $sourceEntry = @(& git -C $repositoryRoot ls-tree $revision -- $sourcePath 2>$null)
+      if ($LASTEXITCODE -ne 0 -or $sourceEntry.Count -ne 1 -or
+          [string]$sourceEntry[0] -notmatch '^(100644|100755) blob [a-f0-9]{40,64}\t') {
+        throw "A detected copy source is not one retained regular blob."
+      }
+    }
+    $oldDestination = @(& git -C $repositoryRoot ls-tree $BaselineOperatorSha -- $destinationPath 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $oldDestination.Count -ne 0) {
+      throw "A detected copy destination already existed in the retained baseline."
     }
   }
   $patch = @(& git -C $repositoryRoot diff --full-index --binary --no-ext-diff --no-renames "$BaselineOperatorSha..$CurrentOperatorSha" 2>$null)
