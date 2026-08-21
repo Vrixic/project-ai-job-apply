@@ -35,8 +35,11 @@ The task release is deliberately review-separated:
 When an ancestor `CompleteDark` baseline is required, derive the review value independently from
 the exact merged commits before invoking `PlanTask`. Run this from clean `main == origin/main`,
 inspect the detected records and `numstat` before accepting the digest, and stop on any rename,
-copy, binary record, unsupported status, non-regular mode, or Git error. The operator independently
-repeats these checks; this review command does not authorize planning:
+binary record, unsupported status, non-regular mode, unbound copy detection, or Git error. Git copy
+detection is heuristic, so a detected copy is admitted only when the canonical no-renames delta
+records its destination exactly once as added, its source is a retained regular blob at both
+commits, and its destination did not exist at the baseline. The operator independently repeats
+these checks; this review command does not authorize planning:
 
 ```powershell
 $baselineOperatorSha = '9d290416c61847f1682157c08312cdb920d42107'
@@ -47,10 +50,19 @@ if ($LASTEXITCODE -ne 0) { throw 'Repository root resolution failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'The retained baseline operator is not an ancestor.' }
 $detected = @(& git -C $repo diff --name-status --find-renames --find-copies-harder `
     "$baselineOperatorSha..$currentOperatorSha")
-if ($LASTEXITCODE -ne 0 -or $detected.Count -eq 0 -or
-    @($detected | Where-Object { $_ -match '^[RC][0-9]*\t' }).Count -ne 0) {
-  throw 'The delta is unreadable, empty, renamed, or copied.'
+if ($LASTEXITCODE -ne 0 -or $detected.Count -eq 0) {
+  throw 'The detected delta is unreadable or empty.'
 }
+if (@($detected | Where-Object { $_ -match '^R[0-9]*\t' }).Count -ne 0) {
+  throw 'The detected delta contains a rename.'
+}
+if (@($detected | Where-Object {
+      $_ -notmatch '^(?:A|M|D)\t[^\t]+$' -and
+      $_ -notmatch '^C[0-9]+\t[^\t]+\t[^\t]+$'
+    }).Count -ne 0) {
+  throw 'The detected delta contains an unsupported record.'
+}
+$detectedCopies = @($detected | Where-Object { $_ -match '^C[0-9]+\t' })
 $records = @(& git -C $repo diff --name-status --no-renames `
     "$baselineOperatorSha..$currentOperatorSha")
 if ($LASTEXITCODE -ne 0) { throw 'The canonical name-status delta failed.' }
@@ -59,6 +71,38 @@ $numstat = @(& git -C $repo diff --numstat --no-renames `
 if ($LASTEXITCODE -ne 0 -or $numstat.Count -ne $records.Count -or
     @($numstat | Where-Object { $_ -match '^-\t-\t' }).Count -ne 0) {
   throw 'The canonical delta is binary or structurally ambiguous.'
+}
+foreach ($record in $records) {
+  if ($record -notmatch '^(A|M|D)\t([^\t]+)$') {
+    throw 'The canonical delta contains an unsupported record.'
+  }
+  $status = $Matches[1]
+  $path = $Matches[2]
+  $revision = if ($status -ceq 'D') { $baselineOperatorSha } else { $currentOperatorSha }
+  $entry = @(& git -C $repo ls-tree $revision -- $path)
+  if ($LASTEXITCODE -ne 0 -or $entry.Count -ne 1 -or
+      [string]$entry[0] -notmatch '^(100644|100755) blob [a-f0-9]{40,64}\t') {
+    throw 'A canonical delta path is not one regular blob.'
+  }
+}
+foreach ($copyRecord in $detectedCopies) {
+  $null = $copyRecord -match '^C[0-9]+\t([^\t]+)\t([^\t]+)$'
+  $sourcePath = $Matches[1]
+  $destinationPath = $Matches[2]
+  if (@($records | Where-Object { $_ -ceq "A`t$destinationPath" }).Count -ne 1) {
+    throw 'A detected copy destination is not one canonical added path.'
+  }
+  foreach ($revision in @($baselineOperatorSha, $currentOperatorSha)) {
+    $sourceEntry = @(& git -C $repo ls-tree $revision -- $sourcePath)
+    if ($LASTEXITCODE -ne 0 -or $sourceEntry.Count -ne 1 -or
+        [string]$sourceEntry[0] -notmatch '^(100644|100755) blob [a-f0-9]{40,64}\t') {
+      throw 'A detected copy source is not one retained regular blob.'
+    }
+  }
+  $oldDestination = @(& git -C $repo ls-tree $baselineOperatorSha -- $destinationPath)
+  if ($LASTEXITCODE -ne 0 -or $oldDestination.Count -ne 0) {
+    throw 'A detected copy destination already existed in the retained baseline.'
+  }
 }
 $patch = @(& git -C $repo diff --full-index --binary --no-ext-diff --no-renames `
     "$baselineOperatorSha..$currentOperatorSha")
@@ -92,8 +136,10 @@ as `ReviewedBaselineToCurrentDeltaSha256`; do not reuse a digest after the merge
    of clean `main == origin/main`, and both `PlanTask` and `ApplyTask` must receive the
    independently reviewed SHA-256 of the complete canonical baseline-operator-to-current Git
    delta. The delta admits only unambiguous added, modified, or deleted regular blobs, with no
-   rename, copy, binary, missing, symlink, gitlink, or mode ambiguity; a missing, unexpected, or
-   mismatched checksum fails closed. This does not broaden the document-dark recovery allowlist.
+   rename, binary, missing, symlink, gitlink, or mode ambiguity. A heuristic copy detection is
+   admitted only for one canonical added destination absent at the baseline and a regular-blob
+   source retained at both commits; a missing, unexpected, or mismatched checksum fails closed.
+   This does not broaden the document-dark recovery allowlist.
    Older Terraform state is not generally accepted. The sole stale-state handoff is the exact
    reviewed schema-3 CompleteDark baseline at operator `9d290416c61847f1682157c08312cdb920d42107`,
    plan SHA-256 `2143c836f9c55d2126efef55b314f167b35d593d64338791cb6c3837c6e2a6a4`,
