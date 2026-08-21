@@ -337,6 +337,7 @@ foreach ($required in @(
   'apk add --no-network ca-certificates-bundle libcrypto3 libssl3 zlib',
   'apk del apk-tools',
   'rm -rf /usr/local/lib/node_modules /opt/yarn-v1.22.22',
+  '/var/log/apk.log',
   'test ! -e /sbin/apk',
   'test -f /lib/apk/db/installed',
   'ENTRYPOINT ["/usr/local/bin/node"]'
