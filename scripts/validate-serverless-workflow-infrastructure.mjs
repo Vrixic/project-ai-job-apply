@@ -578,31 +578,55 @@ for (const required of [
     `migration image hardening is missing: ${required}`,
   );
 }
-for (const runtimeDockerfile of ["Dockerfile.migration", "Dockerfile.web"]) {
-  for (const required of [
-    "FROM node:24.18.0-alpine3.23@sha256:595398b0081eacda8e1c4c5b97b76cd1020e4d58a8ebcb4843b9bca1e79e7436 AS runtime-node",
-    "FROM scratch AS runtime",
-    "COPY --from=runtime-node /usr/local/bin/node /nodejs/bin/node",
-    "COPY --from=runtime-node /lib/ld-musl-x86_64.so.1 /lib/ld-musl-x86_64.so.1",
-    "COPY --from=runtime-node /usr/lib/libstdc++.so.6 /usr/lib/libstdc++.so.6",
-    "COPY --from=runtime-node /usr/lib/libgcc_s.so.1 /usr/lib/libgcc_s.so.1",
-    "COPY --from=runtime-node /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt",
-    "USER 65532:65532",
-    'ENTRYPOINT ["/nodejs/bin/node"]',
-  ]) {
-    requireText(
-      runtimeDockerfile,
-      required,
-      `${runtimeDockerfile} runtime hardening is missing: ${required}`,
-    );
-  }
-  forbidText(
-    runtimeDockerfile,
-    "gcr.io/distroless",
-    `${runtimeDockerfile} retains the vulnerable Debian runtime`,
+for (const required of [
+  "FROM node:24.18.0-alpine3.23@sha256:595398b0081eacda8e1c4c5b97b76cd1020e4d58a8ebcb4843b9bca1e79e7436 AS runtime",
+  "apk add --no-network ca-certificates-bundle libcrypto3 libssl3 zlib",
+  "apk del apk-tools",
+  "rm -rf /usr/local/lib/node_modules /opt/yarn-v1.22.22",
+  "test ! -e /sbin/apk",
+  "test -f /lib/apk/db/installed",
+  "USER 65532:65532",
+  'ENTRYPOINT ["/usr/local/bin/node"]',
+]) {
+  requireText(
+    "Dockerfile.migration",
+    required,
+    `Dockerfile.migration ECR-scannable runtime hardening is missing: ${required}`,
   );
-  forbidText(runtimeDockerfile, "/bin/sh", `${runtimeDockerfile} must remain shell-free`);
 }
+forbidText(
+  "Dockerfile.migration",
+  "FROM scratch AS runtime",
+  "Dockerfile.migration must retain Alpine package metadata for ECR scanning",
+);
+forbidText(
+  "Dockerfile.migration",
+  "gcr.io/distroless",
+  "Dockerfile.migration retains the vulnerable Debian runtime",
+);
+for (const required of [
+  "FROM node:24.18.0-alpine3.23@sha256:595398b0081eacda8e1c4c5b97b76cd1020e4d58a8ebcb4843b9bca1e79e7436 AS runtime-node",
+  "FROM scratch AS runtime",
+  "COPY --from=runtime-node /usr/local/bin/node /nodejs/bin/node",
+  "COPY --from=runtime-node /lib/ld-musl-x86_64.so.1 /lib/ld-musl-x86_64.so.1",
+  "COPY --from=runtime-node /usr/lib/libstdc++.so.6 /usr/lib/libstdc++.so.6",
+  "COPY --from=runtime-node /usr/lib/libgcc_s.so.1 /usr/lib/libgcc_s.so.1",
+  "COPY --from=runtime-node /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt",
+  "USER 65532:65532",
+  'ENTRYPOINT ["/nodejs/bin/node"]',
+]) {
+  requireText(
+    "Dockerfile.web",
+    required,
+    `Dockerfile.web runtime hardening is missing: ${required}`,
+  );
+}
+forbidText(
+  "Dockerfile.web",
+  "gcr.io/distroless",
+  "Dockerfile.web retains the vulnerable Debian runtime",
+);
+forbidText("Dockerfile.web", "/bin/sh", "Dockerfile.web must remain shell-free");
 
 const retiredExecutablePaths = [
   "backend/gateway/src/dark-conformance-bridge.ts",

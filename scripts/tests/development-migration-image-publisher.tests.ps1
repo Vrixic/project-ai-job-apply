@@ -68,7 +68,7 @@ function New-TestLayout {
   $configObject = [ordered]@{
     created = $created; architecture = "amd64"; os = "linux"
     config = [ordered]@{
-      User = "65532:65532"; WorkingDir = "/migration"; Entrypoint = @("/nodejs/bin/node")
+      User = "65532:65532"; WorkingDir = "/migration"; Entrypoint = @("/usr/local/bin/node")
       Cmd = @("runner/dist/src/main.js")
       Labels = [ordered]@{
         "org.opencontainers.image.revision" = $Revision
@@ -333,17 +333,20 @@ foreach ($required in @(
   'restore-verifier-package-smoke:ok',
   'file:///migration/billing/package.json',
   'expected exactly five generated .modules.yaml files',
-  'FROM node:24.18.0-alpine3.23@sha256:595398b0081eacda8e1c4c5b97b76cd1020e4d58a8ebcb4843b9bca1e79e7436 AS runtime-node',
-  'FROM scratch AS runtime',
-  'COPY --from=runtime-node /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt',
-  'ENTRYPOINT ["/nodejs/bin/node"]'
+  'FROM node:24.18.0-alpine3.23@sha256:595398b0081eacda8e1c4c5b97b76cd1020e4d58a8ebcb4843b9bca1e79e7436 AS runtime',
+  'apk add --no-network ca-certificates-bundle libcrypto3 libssl3 zlib',
+  'apk del apk-tools',
+  'rm -rf /usr/local/lib/node_modules /opt/yarn-v1.22.22',
+  'test ! -e /sbin/apk',
+  'test -f /lib/apk/db/installed',
+  'ENTRYPOINT ["/usr/local/bin/node"]'
 )) {
   if (-not $dockerfile.Contains($required)) {
     throw "The migration Dockerfile package boundary is missing: $required"
   }
 }
-if ($dockerfile.Contains('gcr.io/distroless') -or $dockerfile.Contains('/bin/sh')) {
-  throw "The migration runtime must remain a shell-free scratch image."
+if ($dockerfile.Contains('gcr.io/distroless') -or $dockerfile.Contains('FROM scratch AS runtime')) {
+  throw "The migration runtime must retain the pinned Alpine package metadata required by ECR scanning."
 }
 $workflow = Get-Content -LiteralPath `
   (Join-Path $repositoryRoot ".github\workflows\publish-environment-images.yml") -Raw
