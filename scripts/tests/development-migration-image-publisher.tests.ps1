@@ -266,7 +266,7 @@ try {
 foreach ($required in @(
     '[ValidateSet("LocalBuild", "Status", "Publish", "Verify")]',
     '$requiresCloud = $Action -ne "LocalBuild"', 'AwsContacted            = $false',
-    'VulnerabilityScanRun    = $false',
+    'VulnerabilityScanRun    = $false', 'pnpm contracts:generate',
     '--provenance=false', '--sbom=false', 'rewrite-timestamp=true', 'SOURCE_DATE_EPOCH=$commitEpoch',
     'Get-OciLayoutIdentity', 'Assert-DeterministicOciIdentity', 'Assert-PlatformHandoff',
     '(?:Image)?ScanNotFoundException',
