@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [ValidateSet("Status", "Publish", "Verify")]
+  [ValidateSet("LocalBuild", "Status", "Publish", "Verify")]
   [string]$Action = "Status",
 
   [string]$AwsProfile = "ai-job-apply-development-admin",
@@ -29,6 +29,9 @@ $ErrorActionPreference = "Stop"
 if ($Help) {
   @"
 Usage:
+  .\scripts\publish-development-migration-image.ps1 -Action LocalBuild `
+    -SourceSha MERGED_40_CHARACTER_COMMIT
+
   .\scripts\publish-development-migration-image.ps1 -Action Status `
     -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET
 
@@ -42,13 +45,13 @@ Usage:
     -ReceiptPath .terraform/development-migration-image/receipt-....json `
     -ReviewedReceiptSha256 64_CHARACTER_SHA256
 
-Status and Verify are read-only. Publish is the explicit GitHub Actions-budget fallback and is the
-only action that writes AWS state: one immutable ECR image tagged with the exact source commit. It
-tests and audits the migration owners, performs two clean linux/amd64 OCI exports, proves index,
-platform, config, compressed-layer, and rootfs byte identity, smoke-tests the second build, then
-publishes the exact platform and source index. It requires a COMPLETE platform ECR scan with zero
-Critical and High findings and emits a checksum-reviewed version-2 receipt whose imageUri uses the
-platform digest. It never runs a migration,
+LocalBuild performs the source-bound tests, dependency audit, two clean linux/amd64 OCI exports,
+byte-identity proof, and hardened runtime smoke without contacting AWS or claiming a vulnerability
+scan. Status and Verify are read-only. Publish is the explicit GitHub Actions-budget fallback and
+is the only action that writes AWS state: one immutable ECR image tagged with the exact source
+commit. It repeats the complete LocalBuild gate, publishes the exact platform and source index,
+requires a COMPLETE platform ECR scan with zero Critical and High findings, and emits a
+checksum-reviewed version-2 receipt whose imageUri uses the platform digest. It never runs a migration,
 registers a task definition, applies Terraform, or changes application traffic.
 
 Receipts and logs remain below the ignored development .terraform directory. Do not copy account
@@ -58,7 +61,8 @@ IDs, repository/KMS identifiers, image manifests, or command logs into shared ev
 }
 
 if ($Region -cne "us-east-2") { throw "Development image publication is restricted to us-east-2." }
-if ($ExpectedAccountId -notmatch '^[0-9]{12}$' -or [string]::IsNullOrWhiteSpace($StateBucket)) {
+if ($Action -ne "LocalBuild" -and
+    ($ExpectedAccountId -notmatch '^[0-9]{12}$' -or [string]::IsNullOrWhiteSpace($StateBucket))) {
   throw "The exact development account ID and encrypted Terraform state bucket are required."
 }
 
@@ -595,14 +599,23 @@ function Assert-PublicationReceipt {
 }
 
 function Assert-CallerToolsAndSource {
-  param([switch]$RequireExplicitSource, [switch]$RequireDocker)
-  $identity = Invoke-AwsJson -Arguments @("sts", "get-caller-identity", "--output", "json") -Operation "AWS caller validation"
-  if ([string]$identity.Account -cne $ExpectedAccountId -or
-      -not ([string]$identity.Arn).Contains(":assumed-role/")) {
-    throw "Use a temporary IAM Identity Center caller in the exact development account."
+  param(
+    [switch]$RequireExplicitSource,
+    [switch]$RequireDocker,
+    [switch]$RequireAws,
+    [switch]$RequireTerraform
+  )
+  if ($RequireAws) {
+    $identity = Invoke-AwsJson -Arguments @("sts", "get-caller-identity", "--output", "json") -Operation "AWS caller validation"
+    if ([string]$identity.Account -cne $ExpectedAccountId -or
+        -not ([string]$identity.Arn).Contains(":assumed-role/")) {
+      throw "Use a temporary IAM Identity Center caller in the exact development account."
+    }
   }
-  $version = & terraform version -json 2>$null | ConvertFrom-Json
-  if ($LASTEXITCODE -ne 0 -or [string]$version.terraform_version -cne "1.9.8") { throw "Terraform 1.9.8 is required." }
+  if ($RequireTerraform) {
+    $version = & terraform version -json 2>$null | ConvertFrom-Json
+    if ($LASTEXITCODE -ne 0 -or [string]$version.terraform_version -cne "1.9.8") { throw "Terraform 1.9.8 is required." }
+  }
   if ($RequireDocker) {
     & docker buildx version *> $null
     if ($LASTEXITCODE -ne 0) { throw "Docker Buildx is required for deterministic linux/amd64 publication." }
@@ -691,6 +704,80 @@ function Invoke-LocalGate {
   param([Parameter(Mandatory)][string]$Name, [Parameter(Mandatory)][scriptblock]$Command, [Parameter(Mandatory)][string]$LogPath)
   & $Command *> $LogPath
   if ($LASTEXITCODE -ne 0) { throw "$Name failed. Inspect the ignored local log." }
+}
+
+function Invoke-LocalMigrationImageBuild {
+  param(
+    [Parameter(Mandatory)][string]$ExpectedSourceSha,
+    [Parameter(Mandatory)][string]$ExpectedOperatorRoot,
+    [Parameter(Mandatory)][string]$ExpectedRepositoryRoot
+  )
+  $null = New-Item -ItemType Directory -Path $ExpectedOperatorRoot -Force
+  $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+  $testLog = Join-Path $ExpectedOperatorRoot "migration-tests-$timestamp.log"
+  $auditLog = Join-Path $ExpectedOperatorRoot "dependency-audit-$timestamp.log"
+  $buildOneLog = Join-Path $ExpectedOperatorRoot "build-one-$timestamp.log"
+  $buildTwoLog = Join-Path $ExpectedOperatorRoot "build-two-$timestamp.log"
+  $smokeLog = Join-Path $ExpectedOperatorRoot "runtime-smoke-$timestamp.log"
+  Invoke-LocalGate -Name "Migration owner tests" -LogPath $testLog -Command {
+    pnpm --filter @ai-job-apply/database-migrations test
+    if ($LASTEXITCODE -eq 0) { pnpm --filter @ai-job-apply/profile-service test }
+    if ($LASTEXITCODE -eq 0) { pnpm --filter @ai-job-apply/jobs-service test }
+    if ($LASTEXITCODE -eq 0) { pnpm --filter @ai-job-apply/documents-service test }
+  }
+  Invoke-LocalGate -Name "Dependency audit" -LogPath $auditLog -Command { pnpm audit:dependencies }
+
+  $commitEpoch = (& git -C $ExpectedRepositoryRoot show -s --format=%ct $ExpectedSourceSha 2>$null).Trim()
+  if ($commitEpoch -notmatch '^[0-9]{10,}$') { throw "The exact source commit timestamp could not be resolved." }
+  $created = [DateTimeOffset]::FromUnixTimeSeconds([long]$commitEpoch).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ")
+  $buildTag = "ai-job-apply-migration:local-$ExpectedSourceSha"
+  $layoutOne = Join-Path $ExpectedOperatorRoot "oci-$($ExpectedSourceSha.Substring(0, 12))-one-$timestamp"
+  $layoutTwo = Join-Path $ExpectedOperatorRoot "oci-$($ExpectedSourceSha.Substring(0, 12))-two-$timestamp"
+  foreach ($layout in @($layoutOne, $layoutTwo)) {
+    if (Test-Path -LiteralPath $layout) { throw "Refusing to replace a deterministic OCI build layout." }
+  }
+  $buildArguments = @(
+    "buildx", "build", "--no-cache", "--platform", "linux/amd64",
+    "--provenance=false", "--sbom=false", "--build-arg", "SOURCE_DATE_EPOCH=$commitEpoch",
+    "--build-arg", "BUILDKIT_MULTI_PLATFORM=1",
+    "--label", "org.opencontainers.image.revision=$ExpectedSourceSha",
+    "--label", "org.opencontainers.image.created=$created",
+    "--label", "org.opencontainers.image.title=ai-job-apply-migration",
+    "--file", (Join-Path $ExpectedRepositoryRoot "Dockerfile.migration")
+  )
+  Invoke-LocalGate -Name "First deterministic migration image build" -LogPath $buildOneLog -Command {
+    docker @buildArguments --output "type=oci,dest=$layoutOne,tar=false,rewrite-timestamp=true" --tag $buildTag $ExpectedRepositoryRoot
+  }
+  $identityOne = Get-OciLayoutIdentity -LayoutPath $layoutOne -ExpectedSourceSha $ExpectedSourceSha -ExpectedCreated $created
+  Invoke-LocalGate -Name "Second deterministic migration image build" -LogPath $buildTwoLog -Command {
+    docker @buildArguments --output "type=oci,dest=$layoutTwo,tar=false,rewrite-timestamp=true" --tag $buildTag $ExpectedRepositoryRoot
+  }
+  $identityTwo = Get-OciLayoutIdentity -LayoutPath $layoutTwo -ExpectedSourceSha $ExpectedSourceSha -ExpectedCreated $created
+  $null = Assert-DeterministicOciIdentity -First $identityOne -Second $identityTwo
+
+  $loadArchive = Join-Path $ExpectedOperatorRoot "oci-load-$($ExpectedSourceSha.Substring(0, 12))-$timestamp.tar"
+  try {
+    Invoke-LocalGate -Name "Deterministic migration image load" -LogPath $smokeLog -Command {
+      tar -cf $loadArchive -C $layoutTwo .
+      if ($LASTEXITCODE -eq 0) { docker load -i $loadArchive }
+    }
+    $smokeScript = 'import{access,readdir}from"node:fs/promises";import{createRequire}from"node:module";const{migrationRunners}=await import("./runner/dist/src/index.js");if(migrationRunners.map(x=>x.owner).join(",")!=="profile,jobs,documents,matching,billing")throw new Error("owner/order mismatch");for(const runner of migrationRunners)await access(runner.executable);for(const entrypoint of ["jobs/dist/src/search-acceptance.js","jobs/dist/src/run-search-acceptance.js","documents/dist/src/run-document-processing-acceptance.js","runner/dist/src/restore-verifier-cli.js","runner/restore-manifest.v1.json","jobs/migrations/0008_job_reporting_and_moderation.sql"])await access(entrypoint);const{loadCurrentRestoreManifest}=await import("./runner/dist/src/restore-verifier.js");const manifest=loadCurrentRestoreManifest().manifest;if(manifest.contributors.length!==5||manifest.contributors.flatMap(x=>x.schemas).length!==8||manifest.contributors.flatMap(x=>x.relations).length!==42||manifest.contributors.flatMap(x=>x.migrations).length!==17)throw new Error("restore manifest mismatch");createRequire(new URL("./profile/package.json",import.meta.url)).resolve("postgres");createRequire(new URL("./billing/package.json",import.meta.url)).resolve("postgres");const expected={profile:["0001_foundation.sql","0002_serverless_outbox.sql","0003_retire_legacy_dispatch.sql","0004_profile_fact_versions.sql","0005_resume_fact_proposals.sql"],jobs:["0001_job_catalog.sql","0002_duplicate_resolution.sql","0003_duplicate_resolution_audit_guard.sql","0004_job_search.sql","0005_ingestion_orchestration.sql","0006_public_job_reader.sql","0007_matchable_job_attributes.sql","0008_job_reporting_and_moderation.sql"],documents:["0001_resume_intake.sql","0002_resume_processing.sql"],matching:["0001_saved_jobs.sql"],billing:["0001_entitlement_projection.sql"]};for(const[owner,names]of Object.entries(expected)){const files=(await readdir(`./${owner}/migrations`)).filter(x=>x.endsWith(".sql")).sort();if(files.join(",")!==names.join(","))throw new Error(`${owner} SQL migration set mismatch`)}console.log("migration-runtime-smoke:ok")'
+    & docker run --rm --platform linux/amd64 --network none --read-only --cap-drop ALL `
+      --security-opt no-new-privileges --user 65532:65532 --entrypoint /nodejs/bin/node `
+      $buildTag --input-type=module -e $smokeScript *> $smokeLog
+    if ($LASTEXITCODE -ne 0) { throw "The deterministic migration runtime smoke test failed; inspect the ignored local log." }
+  } finally {
+    if (Test-Path -LiteralPath $loadArchive -PathType Leaf) { Remove-Item -LiteralPath $loadArchive -Force }
+  }
+
+  return [pscustomobject]@{
+    Timestamp         = $timestamp
+    Created           = $created
+    BuildTag          = $buildTag
+    LayoutPath        = $layoutTwo
+    Identity          = $identityTwo
+    EvidenceDirectory = $ExpectedOperatorRoot
+  }
 }
 
 function Get-EcrTagState {
@@ -797,7 +884,30 @@ function Read-AndValidateReceipt {
   return $receipt
 }
 
-$headSha = Assert-CallerToolsAndSource -RequireExplicitSource:($Action -ne "Status") -RequireDocker:($Action -eq "Publish")
+$requiresCloud = $Action -ne "LocalBuild"
+$headSha = Assert-CallerToolsAndSource -RequireExplicitSource:($Action -ne "Status") `
+  -RequireDocker:($Action -in @("LocalBuild", "Publish")) `
+  -RequireAws:$requiresCloud -RequireTerraform:$requiresCloud
+if ($Action -eq "LocalBuild") {
+  $localBuild = Invoke-LocalMigrationImageBuild -ExpectedSourceSha $SourceSha `
+    -ExpectedOperatorRoot $operatorRoot -ExpectedRepositoryRoot $repositoryRoot
+  [pscustomobject]@{
+    Outcome                 = "local-build-and-runtime-verified"
+    SourceSha               = $SourceSha
+    IndexDigest             = $localBuild.Identity.IndexDigest
+    PlatformDigest          = $localBuild.Identity.PlatformDigest
+    ConfigDigest            = $localBuild.Identity.ConfigDigest
+    Platform                = "linux/amd64"
+    DeterministicBuildCount = 2
+    RuntimeSmokePassed      = $true
+    VulnerabilityScanRun    = $false
+    EvidenceDirectory       = $localBuild.EvidenceDirectory
+    AwsContacted            = $false
+    TerraformChanged        = $false
+    MigrationExecuted       = $false
+  }
+  exit 0
+}
 Initialize-Backend
 $boundary = Resolve-RepositoryBoundary
 
@@ -818,63 +928,12 @@ if ($Action -eq "Status") {
 }
 
 if ($Action -eq "Publish") {
-  $null = New-Item -ItemType Directory -Path $operatorRoot -Force
-  $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-  $testLog = Join-Path $operatorRoot "migration-tests-$timestamp.log"
-  $auditLog = Join-Path $operatorRoot "dependency-audit-$timestamp.log"
-  $buildOneLog = Join-Path $operatorRoot "build-one-$timestamp.log"
-  $buildTwoLog = Join-Path $operatorRoot "build-two-$timestamp.log"
-  $smokeLog = Join-Path $operatorRoot "runtime-smoke-$timestamp.log"
-  Invoke-LocalGate -Name "Migration owner tests" -LogPath $testLog -Command {
-    pnpm --filter @ai-job-apply/database-migrations test
-    if ($LASTEXITCODE -eq 0) { pnpm --filter @ai-job-apply/profile-service test }
-    if ($LASTEXITCODE -eq 0) { pnpm --filter @ai-job-apply/jobs-service test }
-    if ($LASTEXITCODE -eq 0) { pnpm --filter @ai-job-apply/documents-service test }
-  }
-  Invoke-LocalGate -Name "Dependency audit" -LogPath $auditLog -Command { pnpm audit:dependencies }
-
-  $commitEpoch = (& git -C $repositoryRoot show -s --format=%ct $SourceSha 2>$null).Trim()
-  if ($commitEpoch -notmatch '^[0-9]{10,}$') { throw "The exact source commit timestamp could not be resolved." }
-  $created = [DateTimeOffset]::FromUnixTimeSeconds([long]$commitEpoch).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ")
-  $buildTag = "ai-job-apply-migration:local-$SourceSha"
-  $layoutOne = Join-Path $operatorRoot "oci-$($SourceSha.Substring(0, 12))-one-$timestamp"
-  $layoutTwo = Join-Path $operatorRoot "oci-$($SourceSha.Substring(0, 12))-two-$timestamp"
-  foreach ($layout in @($layoutOne, $layoutTwo)) {
-    if (Test-Path -LiteralPath $layout) { throw "Refusing to replace a deterministic OCI build layout." }
-  }
-  $buildArguments = @(
-    "buildx", "build", "--no-cache", "--platform", "linux/amd64",
-    "--provenance=false", "--sbom=false", "--build-arg", "SOURCE_DATE_EPOCH=$commitEpoch",
-    "--build-arg", "BUILDKIT_MULTI_PLATFORM=1",
-    "--label", "org.opencontainers.image.revision=$SourceSha",
-    "--label", "org.opencontainers.image.created=$created",
-    "--label", "org.opencontainers.image.title=ai-job-apply-migration",
-    "--file", (Join-Path $repositoryRoot "Dockerfile.migration")
-  )
-  Invoke-LocalGate -Name "First deterministic migration image build" -LogPath $buildOneLog -Command {
-    docker @buildArguments --output "type=oci,dest=$layoutOne,tar=false,rewrite-timestamp=true" --tag $buildTag $repositoryRoot
-  }
-  $identityOne = Get-OciLayoutIdentity -LayoutPath $layoutOne -ExpectedSourceSha $SourceSha -ExpectedCreated $created
-  Invoke-LocalGate -Name "Second deterministic migration image build" -LogPath $buildTwoLog -Command {
-    docker @buildArguments --output "type=oci,dest=$layoutTwo,tar=false,rewrite-timestamp=true" --tag $buildTag $repositoryRoot
-  }
-  $identityTwo = Get-OciLayoutIdentity -LayoutPath $layoutTwo -ExpectedSourceSha $SourceSha -ExpectedCreated $created
-  $null = Assert-DeterministicOciIdentity -First $identityOne -Second $identityTwo
-
-  $loadArchive = Join-Path $operatorRoot "oci-load-$($SourceSha.Substring(0, 12))-$timestamp.tar"
-  try {
-    Invoke-LocalGate -Name "Deterministic migration image load" -LogPath $smokeLog -Command {
-      tar -cf $loadArchive -C $layoutTwo .
-      if ($LASTEXITCODE -eq 0) { docker load -i $loadArchive }
-    }
-    $smokeScript = 'import{access,readdir}from"node:fs/promises";import{createRequire}from"node:module";const{migrationRunners}=await import("./runner/dist/src/index.js");if(migrationRunners.map(x=>x.owner).join(",")!=="profile,jobs,documents,matching,billing")throw new Error("owner/order mismatch");for(const runner of migrationRunners)await access(runner.executable);for(const entrypoint of ["jobs/dist/src/search-acceptance.js","jobs/dist/src/run-search-acceptance.js","documents/dist/src/run-document-processing-acceptance.js","runner/dist/src/restore-verifier-cli.js","runner/restore-manifest.v1.json","jobs/migrations/0008_job_reporting_and_moderation.sql"])await access(entrypoint);const{loadCurrentRestoreManifest}=await import("./runner/dist/src/restore-verifier.js");const manifest=loadCurrentRestoreManifest().manifest;if(manifest.contributors.length!==5||manifest.contributors.flatMap(x=>x.schemas).length!==8||manifest.contributors.flatMap(x=>x.relations).length!==42||manifest.contributors.flatMap(x=>x.migrations).length!==17)throw new Error("restore manifest mismatch");createRequire(new URL("./profile/package.json",import.meta.url)).resolve("postgres");createRequire(new URL("./billing/package.json",import.meta.url)).resolve("postgres");const expected={profile:["0001_foundation.sql","0002_serverless_outbox.sql","0003_retire_legacy_dispatch.sql","0004_profile_fact_versions.sql","0005_resume_fact_proposals.sql"],jobs:["0001_job_catalog.sql","0002_duplicate_resolution.sql","0003_duplicate_resolution_audit_guard.sql","0004_job_search.sql","0005_ingestion_orchestration.sql","0006_public_job_reader.sql","0007_matchable_job_attributes.sql","0008_job_reporting_and_moderation.sql"],documents:["0001_resume_intake.sql","0002_resume_processing.sql"],matching:["0001_saved_jobs.sql"],billing:["0001_entitlement_projection.sql"]};for(const[owner,names]of Object.entries(expected)){const files=(await readdir(`./${owner}/migrations`)).filter(x=>x.endsWith(".sql")).sort();if(files.join(",")!==names.join(","))throw new Error(`${owner} SQL migration set mismatch`)}console.log("migration-runtime-smoke:ok")'
-    & docker run --rm --platform linux/amd64 --network none --read-only --cap-drop ALL `
-      --security-opt no-new-privileges --user 65532:65532 --entrypoint /nodejs/bin/node `
-      $buildTag --input-type=module -e $smokeScript *> $smokeLog
-    if ($LASTEXITCODE -ne 0) { throw "The deterministic migration runtime smoke test failed; inspect the ignored local log." }
-  } finally {
-    if (Test-Path -LiteralPath $loadArchive -PathType Leaf) { Remove-Item -LiteralPath $loadArchive -Force }
-  }
+  $localBuild = Invoke-LocalMigrationImageBuild -ExpectedSourceSha $SourceSha `
+    -ExpectedOperatorRoot $operatorRoot -ExpectedRepositoryRoot $repositoryRoot
+  $timestamp = $localBuild.Timestamp
+  $created = $localBuild.Created
+  $layoutTwo = $localBuild.LayoutPath
+  $identityTwo = $localBuild.Identity
 
   if ([string]::IsNullOrWhiteSpace($ReceiptPath)) {
     $ReceiptPath = Join-Path $operatorRoot "receipt-$($SourceSha.Substring(0, 12)).json"

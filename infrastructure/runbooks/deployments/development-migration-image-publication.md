@@ -20,7 +20,20 @@ apply Terraform, register a task definition, execute a migration, or change appl
 
 ## Publish and review
 
-First run read-only status:
+When AWS or protected GitHub runners are unavailable, the exact merged source can still complete
+the non-publishing gate without cloud credentials:
+
+```powershell
+.\scripts\publish-development-migration-image.ps1 -Action LocalBuild `
+  -SourceSha MERGED_40_CHARACTER_COMMIT
+```
+
+`LocalBuild` requires clean `main` exactly equal to `origin/main`. It runs the same migration-owner
+tests, dependency audit, two deterministic OCI exports, byte-identity comparison, and hardened
+runtime smoke used by `Publish`, then records only ignored local logs/layouts. It does not contact
+AWS, run a vulnerability scan, publish an image, or satisfy the publication/scan/recovery gate.
+
+For publication, first run read-only status:
 
 ```powershell
 .\scripts\publish-development-migration-image.ps1 -Action Status `
