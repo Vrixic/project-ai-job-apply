@@ -751,7 +751,7 @@ function Set-VariablesFromPlan {
   $actual = @($properties | ForEach-Object { $_.Name })
   $unexpected = @($actual | Where-Object { $_ -notin $declared })
   $missing = @($declared | Where-Object { $_ -notin $actual })
-  $newDocumentDefaults = [ordered]@{
+  $compatibilityDefaults = [ordered]@{
     document_processing_deployment_stage          = "kms-prerequisite"
     document_parser_invocation_qualified_arn      = ""
     document_scan_mapping_enabled                 = $false
@@ -767,10 +767,19 @@ function Set-VariablesFromPlan {
     document_parser_artifact_base64sha256         = ""
     document_processor_extension_layer_arn        = ""
     document_parser_version                       = "resume-parser-v1"
+    deploy_public_job_reader                       = $false
+    public_job_database_boundary_version           = ""
+    public_job_cluster_residual_accepted           = $false
+    public_job_lambda_artifact_s3_key              = ""
+    public_job_lambda_artifact_s3_object_version   = ""
+    public_job_lambda_artifact_sha256              = ""
+    public_job_lambda_artifact_base64sha256        = ""
+    public_job_route_throttling_rate_limit         = 1
+    public_job_route_throttling_burst_limit        = 1
   }
-  $invalidMissing = @($missing | Where-Object { -not $newDocumentDefaults.Contains($_) })
+  $invalidMissing = @($missing | Where-Object { -not $compatibilityDefaults.Contains($_) })
   if ($unexpected.Count -ne 0 -or $invalidMissing.Count -ne 0) {
-    throw "The saved plan contains an unapproved Terraform input or omits a variable outside the exact document-processing compatibility set."
+    throw "The saved plan contains an unapproved Terraform input or omits a variable outside the exact compatibility set."
   }
 
   foreach ($property in $properties) {
@@ -779,7 +788,7 @@ function Set-VariablesFromPlan {
     [Environment]::SetEnvironmentVariable("TF_VAR_$($property.Name)", [string]$serialized, "Process")
   }
   foreach ($name in $missing) {
-    $value = $newDocumentDefaults[$name]
+    $value = $compatibilityDefaults[$name]
     $serialized = if ($value -is [bool]) { $value.ToString().ToLowerInvariant() } else { [string]$value }
     [Environment]::SetEnvironmentVariable("TF_VAR_$name", $serialized, "Process")
   }
@@ -925,16 +934,38 @@ function Get-CurrentTerraformStateIdentity {
 }
 
 function Assert-ExactCurrentBaselineVariableSet {
-  param([Parameter(Mandatory)][object]$Plan)
+  param(
+    [Parameter(Mandatory)][object]$Plan,
+    [switch]$AllowCompatibilityDefaults
+  )
   $declared = @(Get-DeclaredVariableNames | Sort-Object)
   $actual = @($Plan.variables.PSObject.Properties | ForEach-Object Name | Sort-Object)
-  if (($actual -join "|") -cne ($declared -join "|")) {
+  if (($actual -join "|") -ceq ($declared -join "|")) { return }
+  $unexpected = @($actual | Where-Object { $_ -notin $declared })
+  $missing = @($declared | Where-Object { $_ -notin $actual })
+  $historicalCompatibilityVariables = @(
+    "deploy_public_job_reader",
+    "public_job_database_boundary_version",
+    "public_job_cluster_residual_accepted",
+    "public_job_lambda_artifact_s3_key",
+    "public_job_lambda_artifact_s3_object_version",
+    "public_job_lambda_artifact_sha256",
+    "public_job_lambda_artifact_base64sha256",
+    "public_job_route_throttling_rate_limit",
+    "public_job_route_throttling_burst_limit"
+  )
+  $invalidMissing = @($missing | Where-Object { $_ -notin $historicalCompatibilityVariables })
+  if (-not $AllowCompatibilityDefaults -or $missing.Count -eq 0 -or
+      $unexpected.Count -ne 0 -or $invalidMissing.Count -ne 0) {
     throw "The retained baseline does not contain the exact current development Terraform variable set."
   }
 }
 
 function Assert-RetainedMigrationBaselinePlan {
-  param([Parameter(Mandatory)][object]$Plan)
+  param(
+    [Parameter(Mandatory)][object]$Plan,
+    [switch]$AllowCompatibilityDefaults
+  )
   if ($Plan.complete -isnot [bool] -or -not $Plan.complete -or
     $Plan.errored -isnot [bool] -or $Plan.errored -or
     $Plan.applyable -isnot [bool] -or $Plan.applyable -or
@@ -959,7 +990,8 @@ function Assert-RetainedMigrationBaselinePlan {
     throw "The retained migration baseline contains a meaningful output change."
   }
   Assert-AcceptedMigrationProviderDrift -Plan $Plan
-  Assert-ExactCurrentBaselineVariableSet -Plan $Plan
+  Assert-ExactCurrentBaselineVariableSet -Plan $Plan `
+    -AllowCompatibilityDefaults:$AllowCompatibilityDefaults
 }
 
 function Get-ExactStringPlanVariable {
@@ -1263,7 +1295,8 @@ function Read-RetainedMigrationBaseline {
     throw "The retained baseline metadata does not match the exact development migration handoff."
   }
   $plan = Get-PlanJson -Path $resolvedPlan
-  Assert-RetainedMigrationBaselinePlan -Plan $plan
+  Assert-RetainedMigrationBaselinePlan -Plan $plan `
+    -AllowCompatibilityDefaults:$allowExactCompleteDark107To108
   $stageProperty = $plan.variables.PSObject.Properties["document_processing_deployment_stage"]
   $parserArnProperty = $plan.variables.PSObject.Properties["document_parser_invocation_qualified_arn"]
   $stageValueProperty = if ($null -eq $stageProperty -or $null -eq $stageProperty.Value) {
