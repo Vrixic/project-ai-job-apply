@@ -16,7 +16,8 @@ foreach ($functionName in @(
     "Assert-RepositoryShape", "Resolve-OciBlobPath", "Get-OciLayoutIdentity",
     "Assert-DeterministicOciIdentity", "Assert-RemoteOciImage", "Assert-PlatformHandoff",
     "Assert-ExactPropertySet", "Test-CanonicalUtcTimestamp", "Get-CanonicalReceiptPropertyNames",
-    "Assert-ResumablePublicationReceipt", "Resolve-PublicationResumeMode", "Assert-PublicationReceipt"
+    "Assert-ResumablePublicationReceipt", "Resolve-PublicationResumeMode", "Assert-PublicationReceipt",
+    "Invoke-LocalMigrationImageBuild"
   )) {
   $functions = @($ast.FindAll({
         param($node)
@@ -263,6 +264,9 @@ try {
 }
 
 foreach ($required in @(
+    '[ValidateSet("LocalBuild", "Status", "Publish", "Verify")]',
+    '$requiresCloud = $Action -ne "LocalBuild"', 'AwsContacted            = $false',
+    'VulnerabilityScanRun    = $false',
     '--provenance=false', '--sbom=false', 'rewrite-timestamp=true', 'SOURCE_DATE_EPOCH=$commitEpoch',
     'Get-OciLayoutIdentity', 'Assert-DeterministicOciIdentity', 'Assert-PlatformHandoff',
     '(?:Image)?ScanNotFoundException',
@@ -280,6 +284,11 @@ foreach ($required in @(
     'TerraformChanged        = $false', 'MigrationExecuted       = $false'
   )) {
   if (-not $source.Contains($required)) { throw "Migration image publisher guard is missing: $required" }
+}
+$localBuildBranch = $source.IndexOf('if ($Action -eq "LocalBuild")', [StringComparison]::Ordinal)
+$backendInitialization = $source.LastIndexOf('Initialize-Backend', [StringComparison]::Ordinal)
+if ($localBuildBranch -lt 0 -or $backendInitialization -lt 0 -or $localBuildBranch -gt $backendInitialization) {
+  throw "LocalBuild must exit before Terraform-state and AWS-boundary initialization."
 }
 if (-not $source.Contains('for(const entrypoint of ["jobs/dist/src/search-acceptance.js","jobs/dist/src/run-search-acceptance.js","documents/dist/src/run-document-processing-acceptance.js","runner/dist/src/restore-verifier-cli.js","runner/restore-manifest.v1.json","jobs/migrations/0008_job_reporting_and_moderation.sql"])await access(entrypoint)')) {
   throw "The migration runtime smoke gate does not require the exact acceptance entrypoint set."

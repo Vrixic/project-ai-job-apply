@@ -27,9 +27,10 @@ both AWS environments accepted the steady-state serverless runtime.
   artifacts, publishes eight new conditional/versioned/KMS-bound objects, verifies exact checksums
   and metadata, and emits a checksum-reviewed ignored receipt without deploying either Lambda.
 - `publish-development-migration-image.ps1` — Provides the corresponding fail-closed development
-  fallback for the migration-only container: it resolves the Terraform-owned immutable KMS ECR
-  repository, proves two source-bound `linux/amd64` builds have identical configuration and rootfs
-  identities, publishes the exact commit tag, requires a completed zero-High/zero-Critical scan,
+  fallback for the migration-only container. Its cloud-independent `LocalBuild` action proves two
+  source-bound `linux/amd64` builds have identical configuration and rootfs identities and passes a
+  hardened runtime smoke. Publication separately resolves the Terraform-owned immutable KMS ECR
+  repository, publishes the exact commit tag, requires a completed zero-High/zero-Critical scan,
   and emits a checksum-reviewed ignored receipt without changing Terraform or executing a migration. See
   `infrastructure/runbooks/deployments/development-migration-image-publication.md`.
 - `operate-development-gateway-release.ps1` — Provides the source- and checksum-bound local gateway
