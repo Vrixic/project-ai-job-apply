@@ -4,6 +4,7 @@ import {
   GET as getJobPreferences,
   PUT as putJobPreferences,
 } from "../app/api/platform/job-preferences/route";
+import { GET as getOperation } from "../app/api/platform/operations/[operationId]/route";
 import { PATCH as patchProfileFact } from "../app/api/platform/profile-facts/[factId]/route";
 import {
   GET as getProfileFacts,
@@ -12,7 +13,6 @@ import {
 import { GET as getResumes, POST as postResume } from "../app/api/platform/resumes/route";
 import { POST as createSavedJob } from "../app/api/platform/saved-jobs/route";
 import { POST as searchSavedJobs } from "../app/api/platform/saved-jobs/search/route";
-import { GET as getOperation } from "../app/api/platform/operations/[operationId]/route";
 import {
   type FoundationResponseSchemaName,
   validateFoundationResponse,

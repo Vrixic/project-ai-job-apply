@@ -4,6 +4,7 @@ import type {
   JobPreferenceSet,
   Operation,
   ProfileFact,
+  ProfileFactCollection,
   ResumeDocument,
 } from "@ai-job-apply/api-contracts";
 import React, { act } from "react";
@@ -97,6 +98,26 @@ function deferred<T>() {
     resolve = resolvePromise;
   });
   return { promise, resolve };
+}
+
+function responseWithDeferredJson<T>(body: Promise<T>): Response {
+  const encoder = new TextEncoder();
+  let started = false;
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (started) return Promise.resolve();
+        started = true;
+        return body
+          .then((value) => {
+            controller.enqueue(encoder.encode(JSON.stringify(value)));
+            controller.close();
+          })
+          .catch((error) => controller.error(error as Error));
+      },
+    }),
+    { status: 200, headers: { "content-type": "application/json" } },
+  );
 }
 
 function requestPath(input: string | URL | Request): string {
@@ -851,6 +872,86 @@ describe("coordinated onboarding flow", () => {
     expect(factForm.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(
       false,
     );
+  });
+
+  it("shows fixed profile-facts load failure on a 20 second whole-response timeout", async () => {
+    vi.useFakeTimers();
+    const timeoutJson = deferred<ProfileFactCollection>();
+    let loadSignal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (_input, init) => {
+        loadSignal = init?.signal ?? undefined;
+        return responseWithDeferredJson(timeoutJson.promise);
+      }),
+    );
+
+    await act(async () => root.render(profileFacts()));
+    expect(container.textContent).toContain("Loading profile facts…");
+
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    expect(loadSignal?.aborted).toBe(true);
+    expect(container.textContent).toContain("Profile facts are temporarily unavailable.");
+    expect(container.textContent).not.toContain(privateProblemCanary);
+    await act(async () =>
+      timeoutJson.resolve({
+        facts: [proposedFact("stale_timeout_fact")],
+        confirmedCount: 0,
+        proposedCount: 1,
+      }),
+    );
+  });
+
+  it("rejects a profile-fact list success payload that fails schema validation", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async () =>
+        jsonResponse({
+          ...emptyFacts,
+          privateField: privateProblemCanary,
+        }),
+      ),
+    );
+
+    await act(async () => root.render(profileFacts()));
+    expect(container.textContent).toContain("Profile facts are temporarily unavailable.");
+    expect(container.textContent).not.toContain(privateProblemCanary);
+  });
+
+  it("ignores stale profile-facts load completions after sign out", async () => {
+    const initialLoad = deferred<Response>();
+    const laterLoad = deferred<Response>();
+    const proposal = proposedFact("stale_session_profile_fact");
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const path = requestPath(input);
+      if (path === "/api/platform/profile-facts") return initialLoad.promise;
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await act(async () => root.render(profileFacts()));
+    await act(async () => root.render(profileFacts(false)));
+
+    fetchMock.mockImplementationOnce(async (input) => {
+      const path = requestPath(input);
+      if (path === "/api/platform/profile-facts") return laterLoad.promise;
+      throw new Error(`Unexpected request: ${path}`);
+    });
+
+    await act(async () => root.render(profileFacts()));
+    await act(async () =>
+      initialLoad.resolve(
+        jsonResponse({
+          facts: [proposal],
+          confirmedCount: 0,
+          proposedCount: 1,
+        }),
+      ),
+    );
+    await act(async () => laterLoad.resolve(jsonResponse(emptyFacts)));
+
+    expect(container.textContent).toContain("No extracted facts are waiting for review.");
+    expect(container.textContent).not.toContain(proposal.key);
   });
 
   it("does not parse stalled non-OK profile-fact failure bodies and keeps fixed copy", async () => {

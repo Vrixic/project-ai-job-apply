@@ -6,8 +6,8 @@ import type {
   ProfileFactCollection,
   UpdateProfileFactRequest,
 } from "@ai-job-apply/api-contracts";
-import { candidateSafeProblemMessage } from "../lib/candidate-safe-problem";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { candidateSafeProblemMessage } from "../lib/candidate-safe-problem";
 import { validateFoundationResponse } from "../lib/foundation-response-bff";
 
 const kinds: Array<{ value: CreateProfileFactRequest["kind"]; label: string }> = [
