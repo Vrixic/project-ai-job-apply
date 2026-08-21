@@ -22,9 +22,17 @@ RUN pnpm contracts:generate \
 RUN node --input-type=module -e 'import{access}from"node:fs/promises";import{createRequire}from"node:module";process.chdir("/migration");for(const path of ["runner/dist/src/restore-verifier-cli.js","runner/dist/src/restore-verifier.js","runner/restore-manifest.v1.json","matching/dist/src/migrate.js","billing/dist/src/migrate.js","jobs/migrations/0008_job_reporting_and_moderation.sql"])await access(path);const{loadCurrentRestoreManifest}=await import("file:///migration/runner/dist/src/restore-verifier.js");const source=loadCurrentRestoreManifest();if(source.manifest.contributors.length!==5||source.manifest.contributors.flatMap(x=>x.schemas).length!==8||source.manifest.contributors.flatMap(x=>x.relations).length!==42||source.manifest.contributors.flatMap(x=>x.migrations).length!==17)throw new Error("restore manifest package mismatch");createRequire(new URL("file:///migration/profile/package.json")).resolve("postgres");createRequire(new URL("file:///migration/billing/package.json")).resolve("postgres");console.log("restore-verifier-package-smoke:ok")'
 RUN SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" node -e 'const fs=require("node:fs"),path=require("node:path");const raw=process.env.SOURCE_DATE_EPOCH;if(!/^[0-9]+$/.test(raw))throw new Error("SOURCE_DATE_EPOCH must be Unix seconds");const epoch=Number(raw),instant=new Date(epoch*1000);if(!Number.isSafeInteger(epoch)||Number.isNaN(instant.valueOf()))throw new Error("invalid SOURCE_DATE_EPOCH");const root="/migration",moduleFiles=[];const normalize=(entry)=>{const stat=fs.lstatSync(entry);if(stat.isDirectory()){for(const child of fs.readdirSync(entry).sort())normalize(path.join(entry,child));}if(stat.isSymbolicLink())fs.lutimesSync(entry,instant,instant);else fs.utimesSync(entry,instant,instant);};const discover=(entry)=>{const stat=fs.lstatSync(entry);if(!stat.isDirectory())return;for(const child of fs.readdirSync(entry).sort()){const candidate=path.join(entry,child);if(child===".modules.yaml")moduleFiles.push(candidate);else if(fs.lstatSync(candidate).isDirectory())discover(candidate);}};discover(root);if(moduleFiles.length!==5)throw new Error(`expected exactly five generated .modules.yaml files, found ${moduleFiles.length}`);for(const file of moduleFiles){const current=fs.readFileSync(file,"utf8"),matches=current.match(/^prunedAt:.*$/gm)||[];if(matches.length!==1)throw new Error(`expected exactly one prunedAt in ${file}`);fs.writeFileSync(file,current.replace(/^prunedAt:.*$/m,`prunedAt: ${instant.toUTCString()}`));}normalize(root);'
 
-FROM gcr.io/distroless/nodejs24-debian13:nonroot-amd64@sha256:b1386d556b478c420927eb212236bfb31be9834a4549850a060a6351f7fff514 AS runtime
+FROM node:24.18.0-alpine3.23@sha256:595398b0081eacda8e1c4c5b97b76cd1020e4d58a8ebcb4843b9bca1e79e7436 AS runtime-node
+
+FROM scratch AS runtime
 ENV NODE_ENV=production
 WORKDIR /migration
+COPY --from=runtime-node /usr/local/bin/node /nodejs/bin/node
+COPY --from=runtime-node /lib/ld-musl-x86_64.so.1 /lib/ld-musl-x86_64.so.1
+COPY --from=runtime-node /usr/lib/libstdc++.so.6 /usr/lib/libstdc++.so.6
+COPY --from=runtime-node /usr/lib/libgcc_s.so.1 /usr/lib/libgcc_s.so.1
+COPY --from=runtime-node /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build --chown=65532:65532 /migration /migration
 USER 65532:65532
+ENTRYPOINT ["/nodejs/bin/node"]
 CMD ["runner/dist/src/main.js"]

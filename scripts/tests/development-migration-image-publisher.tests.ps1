@@ -309,11 +309,18 @@ foreach ($required in @(
   'jobs/migrations/0008_job_reporting_and_moderation.sql',
   'restore-verifier-package-smoke:ok',
   'file:///migration/billing/package.json',
-  'expected exactly five generated .modules.yaml files'
+  'expected exactly five generated .modules.yaml files',
+  'FROM node:24.18.0-alpine3.23@sha256:595398b0081eacda8e1c4c5b97b76cd1020e4d58a8ebcb4843b9bca1e79e7436 AS runtime-node',
+  'FROM scratch AS runtime',
+  'COPY --from=runtime-node /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt',
+  'ENTRYPOINT ["/nodejs/bin/node"]'
 )) {
   if (-not $dockerfile.Contains($required)) {
     throw "The migration Dockerfile package boundary is missing: $required"
   }
+}
+if ($dockerfile.Contains('gcr.io/distroless') -or $dockerfile.Contains('/bin/sh')) {
+  throw "The migration runtime must remain a shell-free scratch image."
 }
 $workflow = Get-Content -LiteralPath `
   (Join-Path $repositoryRoot ".github\workflows\publish-environment-images.yml") -Raw
