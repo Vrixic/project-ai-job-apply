@@ -714,11 +714,15 @@ function Invoke-LocalMigrationImageBuild {
   )
   $null = New-Item -ItemType Directory -Path $ExpectedOperatorRoot -Force
   $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+  $contractsLog = Join-Path $ExpectedOperatorRoot "contract-generation-$timestamp.log"
   $testLog = Join-Path $ExpectedOperatorRoot "migration-tests-$timestamp.log"
   $auditLog = Join-Path $ExpectedOperatorRoot "dependency-audit-$timestamp.log"
   $buildOneLog = Join-Path $ExpectedOperatorRoot "build-one-$timestamp.log"
   $buildTwoLog = Join-Path $ExpectedOperatorRoot "build-two-$timestamp.log"
   $smokeLog = Join-Path $ExpectedOperatorRoot "runtime-smoke-$timestamp.log"
+  Invoke-LocalGate -Name "Contract generation" -LogPath $contractsLog -Command {
+    pnpm contracts:generate
+  }
   Invoke-LocalGate -Name "Migration owner tests" -LogPath $testLog -Command {
     pnpm --filter @ai-job-apply/database-migrations test
     if ($LASTEXITCODE -eq 0) { pnpm --filter @ai-job-apply/profile-service test }
