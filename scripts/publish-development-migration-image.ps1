@@ -101,6 +101,26 @@ function Get-TextSha256 {
   } finally { $algorithm.Dispose() }
 }
 
+function Get-DockerBuildxPluginPath {
+  $pluginJson = & docker info --format '{{json .ClientInfo.Plugins}}' 2>$null
+  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$pluginJson)) {
+    throw "Docker could not report its installed CLI plugins."
+  }
+  try { $plugins = @($pluginJson | ConvertFrom-Json) }
+  catch { throw "Docker returned invalid CLI plugin metadata." }
+  $buildxPlugins = @($plugins | Where-Object { [string]$_.Name -ceq "buildx" })
+  if ($buildxPlugins.Count -ne 1) {
+    throw "Exactly one Docker Buildx CLI plugin must be installed."
+  }
+  $pluginPath = [IO.Path]::GetFullPath([string]$buildxPlugins[0].Path)
+  $pluginName = [IO.Path]::GetFileName($pluginPath)
+  if ($pluginName -cnotmatch '^docker-buildx(?:\.exe)?$' -or
+      -not (Test-Path -LiteralPath $pluginPath -PathType Leaf)) {
+    throw "Docker reported an invalid Buildx CLI plugin path."
+  }
+  return $pluginPath
+}
+
 function ConvertTo-CanonicalUtcWholeSecond {
   param(
     [AllowNull()][object]$Value,
@@ -990,9 +1010,13 @@ if ($Action -eq "Publish") {
 
   if ($resumeMode -in @("new-publication", "resume-push", "resume-index")) {
     $registryHost = $boundary.RepositoryUri.Split('/')[0]
+    $buildxPluginPath = Get-DockerBuildxPluginPath
     $dockerAuthDirectory = Join-Path $operatorRoot ("docker-auth-{0}" -f [guid]::NewGuid().ToString("N"))
+    $dockerAuthPluginDirectory = Join-Path $dockerAuthDirectory "cli-plugins"
     $previousDockerConfig = $env:DOCKER_CONFIG
-    $null = New-Item -ItemType Directory -Path $dockerAuthDirectory
+    $null = New-Item -ItemType Directory -Path $dockerAuthPluginDirectory
+    Copy-Item -LiteralPath $buildxPluginPath -Destination `
+      (Join-Path $dockerAuthPluginDirectory ([IO.Path]::GetFileName($buildxPluginPath)))
     try {
       $env:DOCKER_CONFIG = $dockerAuthDirectory
       $password = & aws ecr get-login-password --region $Region 2>$null

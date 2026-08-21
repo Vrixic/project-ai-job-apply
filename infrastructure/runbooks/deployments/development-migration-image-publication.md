@@ -68,8 +68,10 @@ compressed-layer fingerprint, and the rootfs diff-ID fingerprint. Its `imageUri`
 `repository@platformDigest`, which is the only value suitable for the migration task.
 
 ECR authentication uses a unique temporary Docker configuration below the ignored operator
-directory. The operator removes it after the push so the short-lived registry token is not retained
-in the user's normal Docker configuration.
+directory. Before activating that isolated configuration, the operator copies only Docker's
+discovered Buildx plugin executable into its `cli-plugins` directory; it never copies the user's
+Docker configuration or credentials. The operator removes the directory after the push so the
+short-lived registry token is not retained in the user's normal Docker configuration.
 
 The default receipt path is deterministic for the source commit. If the client is interrupted
 after the push, rerunning the same command can finalize only an exact retained `publishing`
