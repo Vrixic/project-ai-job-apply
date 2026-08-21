@@ -58,6 +58,11 @@ platform-manifest, configuration, ordered compressed-layer, and ordered rootfs-d
 The second export then passes a networkless, read-only, non-root runtime/module/migration-file smoke
 test.
 
+The migration runtime uses the digest-pinned Alpine Node base and retains its accurate Alpine
+package database so ECR can complete the required operating-system scan. The build removes npm,
+Yarn, Corepack, and `apk` itself, while preserving the pinned TLS runtime libraries and CA bundle.
+Runtime execution remains numeric-non-root, read-only, capability-free, and no-new-privileges.
+
 Publication first installs the exact platform manifest under the immutable
 `MERGED_SHA-linux-amd64` handoff tag. Only after its manifest bytes, configuration, and compressed
 layers read back exactly does the operator install the exported OCI index under the full source SHA
