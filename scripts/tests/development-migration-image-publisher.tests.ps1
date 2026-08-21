@@ -10,6 +10,7 @@ if (@($errors).Count -ne 0) { throw "The development migration image publisher d
 
 foreach ($functionName in @(
     "Get-OptionalProperty", "Get-FileSha256", "Get-TextSha256",
+    "Get-DockerBuildxPluginPath",
     "ConvertTo-CanonicalUtcWholeSecond", "ConvertFrom-PublicationReceiptJson",
     "Resolve-OperatorPath", "Write-JsonFile",
     "Invoke-AwsScanJson",
@@ -282,9 +283,17 @@ foreach ($required in @(
     'schemaVersion     = 2', 'indexDigest', 'platformDigest', 'rootfsDiffIdSetSha256',
     'compressedLayerSetSha256', 'imageUri = "$($boundary.RepositoryUri)@$($readback.PlatformDigest)"',
     'ReviewedReceiptSha256', '[IO.File]::Replace($temporary, $Path, $backup)',
+    "docker info --format '{{json .ClientInfo.Plugins}}'", 'Exactly one Docker Buildx CLI plugin must be installed.',
+    '$dockerAuthPluginDirectory = Join-Path $dockerAuthDirectory "cli-plugins"',
+    'Copy-Item -LiteralPath $buildxPluginPath -Destination',
     'TerraformChanged        = $false', 'MigrationExecuted       = $false'
   )) {
   if (-not $source.Contains($required)) { throw "Migration image publisher guard is missing: $required" }
+}
+$pluginCopy = $source.IndexOf('Copy-Item -LiteralPath $buildxPluginPath -Destination', [StringComparison]::Ordinal)
+$isolatedDockerConfig = $source.IndexOf('$env:DOCKER_CONFIG = $dockerAuthDirectory', [StringComparison]::Ordinal)
+if ($pluginCopy -lt 0 -or $isolatedDockerConfig -lt 0 -or $pluginCopy -gt $isolatedDockerConfig) {
+  throw "Buildx must be copied into the isolated Docker configuration before it becomes active."
 }
 $localBuildBranch = $source.IndexOf('if ($Action -eq "LocalBuild")', [StringComparison]::Ordinal)
 $backendInitialization = $source.LastIndexOf('Initialize-Backend', [StringComparison]::Ordinal)
