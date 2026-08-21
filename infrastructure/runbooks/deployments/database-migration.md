@@ -146,7 +146,12 @@ as `ReviewedBaselineToCurrentDeltaSha256`; do not reuse a digest after the merge
    metadata SHA-256 `e0efc63e7c17685e363e23f15f7f1d39e83c46beff3f08fdb768bd67e78b8011`,
    lineage `472ef790-b249-45ec-817f-718005980d9e`, and serial `107`, and only when the
    current planning state is the same lineage at serial `108`. Every other retained baseline must
-   equal the current planning-state identity.
+   equal the current planning-state identity. That exact serial-107 plan predates the nine public-
+   job-reader inputs. Only this checksum-pinned stale-state handoff may omit those names; the
+   operator injects `deploy_public_job_reader = false`, residual acceptance `false`, empty boundary
+   and artifact strings, and rate/burst limits `1`/`1`. Any other missing or extra variable fails
+   closed, and the resulting plan must still contain only the migration task-definition
+   replacement. This compatibility does not authorize the public reader or route.
    Pass the verifier's exact `BaselineMetadataSha256` as mandatory
    `-AppliedPlanMetadataSha256`; the operator checks those bytes before parsing the sidecar and
    cross-binds its stage and parser pin to the exact saved-plan variables. Retained, task-release,

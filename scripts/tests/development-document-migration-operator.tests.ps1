@@ -33,6 +33,11 @@ if ($source -notmatch '\[string\]\$ReviewedBaselineToCurrentDeltaSha256 = ""' -o
     $source -notmatch 'diff --name-status --find-renames --find-copies-harder' -or
     $source -notmatch 'A detected copy destination is not one canonical added path' -or
     $source -notmatch 'A detected copy source is not one retained regular blob' -or
+    $source -notmatch 'deploy_public_job_reader\s+= \$false' -or
+    $source -notmatch 'public_job_cluster_residual_accepted\s+= \$false' -or
+    $source -notmatch 'public_job_database_boundary_version\s+= ""' -or
+    $source -notmatch 'public_job_route_throttling_rate_limit\s+= 1' -or
+    $source -notmatch 'public_job_route_throttling_burst_limit\s+= 1' -or
     $source -notmatch '(?s)terraform "-chdir=\$terraformDirectory" apply.+?if \(\$LASTEXITCODE -ne 0\).+?Assert-CleanCurrentMainHead -ExpectedSha \$operatorSourceSha' -or
     $source -notmatch 'Assert-CleanCurrentMainHead -ExpectedSha \$head\s+if \(\$Action -in @\("PlanTask", "ApplyTask"\)\) \{ Assert-NoUntrackedTerraformInputs \}' -or
     $source -notmatch '(?s)\$operatorSourceSha = Assert-CallerToolsAndSource.+?Initialize-EncryptedBackend' -or
@@ -1177,6 +1182,33 @@ $missingVariableRejected = $false
 try { Assert-RetainedMigrationBaselinePlan -Plan $missingVariablePlan }
 catch { $missingVariableRejected = $true }
 if (-not $missingVariableRejected) { throw "The retained migration baseline accepted a stale variable set." }
+
+$historicalPublicJobPlan = $retainedPlan | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+$publicJobCompatibilityVariables = @(
+  "deploy_public_job_reader",
+  "public_job_database_boundary_version",
+  "public_job_cluster_residual_accepted",
+  "public_job_lambda_artifact_s3_key",
+  "public_job_lambda_artifact_s3_object_version",
+  "public_job_lambda_artifact_sha256",
+  "public_job_lambda_artifact_base64sha256",
+  "public_job_route_throttling_rate_limit",
+  "public_job_route_throttling_burst_limit"
+)
+foreach ($name in $publicJobCompatibilityVariables) {
+  $historicalPublicJobPlan.variables.PSObject.Properties.Remove($name)
+}
+Assert-RetainedMigrationBaselinePlan -Plan $historicalPublicJobPlan -AllowCompatibilityDefaults
+
+$unapprovedHistoricalPlan = $historicalPublicJobPlan | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+$unapprovedHistoricalPlan.variables.PSObject.Properties.Remove("migration_image")
+$unapprovedHistoricalRejected = $false
+try {
+  Assert-RetainedMigrationBaselinePlan -Plan $unapprovedHistoricalPlan -AllowCompatibilityDefaults
+} catch { $unapprovedHistoricalRejected = $true }
+if (-not $unapprovedHistoricalRejected) {
+  throw "The retained migration baseline accepted a missing variable outside the exact compatibility set."
+}
 
 $stateMismatchRejected = $false
 try {
