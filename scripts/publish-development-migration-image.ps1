@@ -560,8 +560,14 @@ function Assert-RemoteOciImage {
       (Get-TextSha256 -Value ($compressed -join "`n")) -cne $ExpectedCompressedLayerSetSha256) {
     throw "The remote platform manifest does not bind the exact configuration and compressed layers."
   }
-  $scanStatus = [string]$Scan.imageScanStatus.status
-  $counts = $Scan.imageScanFindings.findingSeverityCounts
+  $scanStatusEnvelope = Get-OptionalProperty -Object $Scan -Name "imageScanStatus"
+  $findingsEnvelope = Get-OptionalProperty -Object $Scan -Name "imageScanFindings"
+  if ($null -eq $scanStatusEnvelope -or $null -eq $findingsEnvelope) {
+    throw "ECR did not return the required image scan status and findings envelopes."
+  }
+  $scanStatus = [string](Get-OptionalProperty -Object $scanStatusEnvelope -Name "status")
+  $counts = Get-OptionalProperty -Object $findingsEnvelope -Name "findingSeverityCounts"
+  if ($null -eq $counts) { $counts = [pscustomobject]@{} }
   $criticalValue = Get-OptionalProperty -Object $counts -Name "CRITICAL"
   $highValue = Get-OptionalProperty -Object $counts -Name "HIGH"
   $critical = if ($null -eq $criticalValue) { 0 } else { [int]$criticalValue }

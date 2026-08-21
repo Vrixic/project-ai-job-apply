@@ -63,6 +63,8 @@ Publication first installs the exact platform manifest under the immutable
 layers read back exactly does the operator install the exported OCI index under the full source SHA
 tag. The source tag must resolve to that exact index, containing exactly one `linux/amd64` child and
 no attestation descriptors. ECR scanning is polled on the platform digest, never the parent index.
+For a completed scan with no findings, ECR may omit the severity-count map; the operator accepts
+that documented empty map as zero while still requiring both the status and findings envelopes.
 The receipt separately records `indexDigest`, `platformDigest`, `configDigest`, the ordered
 compressed-layer fingerprint, and the rootfs diff-ID fingerprint. Its `imageUri` is
 `repository@platformDigest`, which is the only value suitable for the migration task.
