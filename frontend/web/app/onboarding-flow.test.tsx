@@ -4,6 +4,7 @@ import type {
   JobPreferenceSet,
   Operation,
   ProfileFact,
+  ProfileFactCollection,
   ResumeDocument,
 } from "@ai-job-apply/api-contracts";
 import React, { act } from "react";
@@ -26,6 +27,18 @@ function proposedFact(key = "stale_candidate_skill"): ProfileFact {
     verification: "proposed",
     sensitivity: "confidential",
     source: { type: "resume", reference: "resume:opaque" },
+    evidence: {
+      supportingSpans: [
+        {
+          documentId: "019c0000-0000-7000-8000-000000000090",
+          documentVersion: 1,
+          parserVersion: "synthetic-parser-v1",
+          blockIndex: 0,
+          startOffset: 0,
+          endOffset: 17,
+        },
+      ],
+    },
     version: 1,
     createdAt: "2026-08-15T12:00:00.000Z",
     updatedAt: "2026-08-15T12:00:00.000Z",
@@ -60,12 +73,51 @@ function jsonResponse(body: unknown, status = 200): Response {
   return Response.json(body, { status });
 }
 
+function stalledProblemResponse(status = 503): Response {
+  const encoder = new TextEncoder();
+  return new Response(
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(`{"code":"private_database_failure","title":"${privateProblemCanary}"}`),
+        );
+      },
+    }),
+    {
+      status,
+      headers: {
+        "content-type": "application/problem+json",
+      },
+    },
+  );
+}
+
 function deferred<T>() {
   let resolve: (value: T) => void = () => undefined;
   const promise = new Promise<T>((resolvePromise) => {
     resolve = resolvePromise;
   });
   return { promise, resolve };
+}
+
+function responseWithDeferredJson<T>(body: Promise<T>): Response {
+  const encoder = new TextEncoder();
+  let started = false;
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (started) return Promise.resolve();
+        started = true;
+        return body
+          .then((value) => {
+            controller.enqueue(encoder.encode(JSON.stringify(value)));
+            controller.close();
+          })
+          .catch((error) => controller.error(error as Error));
+      },
+    }),
+    { status: 200, headers: { "content-type": "application/json" } },
+  );
 }
 
 function requestPath(input: string | URL | Request): string {
@@ -822,6 +874,159 @@ describe("coordinated onboarding flow", () => {
     );
   });
 
+  it("shows fixed profile-facts load failure on a 20 second whole-response timeout", async () => {
+    vi.useFakeTimers();
+    const timeoutJson = deferred<ProfileFactCollection>();
+    let loadSignal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (_input, init) => {
+        loadSignal = init?.signal ?? undefined;
+        return responseWithDeferredJson(timeoutJson.promise);
+      }),
+    );
+
+    await act(async () => root.render(profileFacts()));
+    expect(container.textContent).toContain("Loading profile facts…");
+
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    expect(loadSignal?.aborted).toBe(true);
+    expect(container.textContent).toContain("Profile facts are temporarily unavailable.");
+    expect(container.textContent).not.toContain(privateProblemCanary);
+    await act(async () =>
+      timeoutJson.resolve({
+        facts: [proposedFact("stale_timeout_fact")],
+        confirmedCount: 0,
+        proposedCount: 1,
+      }),
+    );
+  });
+
+  it("rejects a profile-fact list success payload that fails schema validation", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async () =>
+        jsonResponse({
+          ...emptyFacts,
+          privateField: privateProblemCanary,
+        }),
+      ),
+    );
+
+    await act(async () => root.render(profileFacts()));
+    expect(container.textContent).toContain("Profile facts are temporarily unavailable.");
+    expect(container.textContent).not.toContain(privateProblemCanary);
+  });
+
+  it("ignores stale profile-facts load completions after sign out", async () => {
+    const initialLoad = deferred<Response>();
+    const laterLoad = deferred<Response>();
+    const proposal = proposedFact("stale_session_profile_fact");
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const path = requestPath(input);
+      if (path === "/api/platform/profile-facts") return initialLoad.promise;
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await act(async () => root.render(profileFacts()));
+    await act(async () => root.render(profileFacts(false)));
+
+    fetchMock.mockImplementationOnce(async (input) => {
+      const path = requestPath(input);
+      if (path === "/api/platform/profile-facts") return laterLoad.promise;
+      throw new Error(`Unexpected request: ${path}`);
+    });
+
+    await act(async () => root.render(profileFacts()));
+    await act(async () =>
+      initialLoad.resolve(
+        jsonResponse({
+          facts: [proposal],
+          confirmedCount: 0,
+          proposedCount: 1,
+        }),
+      ),
+    );
+    await act(async () => laterLoad.resolve(jsonResponse(emptyFacts)));
+
+    expect(container.textContent).toContain("No extracted facts are waiting for review.");
+    expect(container.textContent).not.toContain(proposal.key);
+  });
+
+  it("does not parse stalled non-OK profile-fact failure bodies and keeps fixed copy", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (input, init) => {
+        const path = requestPath(input);
+        if (path === "/api/platform/profile-facts") {
+          return init?.method === "GET" || init?.method === undefined
+            ? stalledProblemResponse(503)
+            : jsonResponse(
+                {
+                  code: "private_database_failure",
+                  title: privateProblemCanary,
+                  detail: privateProblemCanary,
+                },
+                503,
+              );
+        }
+        throw new Error(`Unexpected request: ${path}`);
+      }),
+    );
+
+    await act(async () => root.render(profileFacts()));
+    expect(container.textContent).toContain("Profile facts are temporarily unavailable.");
+    expect(container.textContent).not.toContain(privateProblemCanary);
+  });
+
+  it("retries profile-fact loading with a fresh request after timeout and ignores stale completion", async () => {
+    vi.useFakeTimers();
+    const staleProfileLoad = deferred<Response>();
+    const staleFact = proposedFact("stale_profile_fact");
+    let readCount = 0;
+    let secondLoadSignal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (input, init) => {
+        const path = requestPath(input);
+        if (path === "/api/platform/profile-facts" && (init?.method ?? "GET") === "GET") {
+          readCount += 1;
+          if (readCount === 1) {
+            return staleProfileLoad.promise;
+          }
+          secondLoadSignal = init?.signal ?? undefined;
+          return jsonResponse(emptyFacts);
+        }
+        throw new Error(`Unexpected request: ${path}`);
+      }),
+    );
+
+    await act(async () => root.render(profileFacts()));
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+
+    expect(container.textContent).toContain("Profile facts are temporarily unavailable.");
+    expect(readCount).toBe(1);
+
+    await act(async () => root.render(<ProfileFactsForm authenticated refreshVersion={1} />));
+
+    expect(readCount).toBe(2);
+    expect(container.textContent).not.toContain("stale_profile_fact");
+    expect(secondLoadSignal?.aborted).toBe(false);
+    expect(container.textContent).toContain("No extracted facts are waiting for review.");
+
+    await act(async () =>
+      staleProfileLoad.resolve(
+        jsonResponse({
+          facts: [staleFact],
+          confirmedCount: 0,
+          proposedCount: 1,
+        }),
+      ),
+    );
+    expect(container.textContent).not.toContain("stale_profile_fact");
+  });
+
   it("keeps rapid create and update activation in one mutation and clears its deadline", async () => {
     vi.useFakeTimers();
     const proposal = proposedFact("single_flight_proposal");
@@ -915,7 +1120,10 @@ describe("coordinated onboarding flow", () => {
     );
 
     await act(async () => submit());
-    expect(container.textContent).toContain("Check the profile fact and try again.");
+    await vi.waitFor(() => expect(mutationCalls).toHaveLength(2));
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain("Check the profile fact and try again."),
+    );
     expect(mutationCalls).toHaveLength(2);
     expect(mutationCalls[1]?.body).toBe(mutationCalls[0]?.body);
     expect(new Headers(mutationCalls[1]?.headers).get("idempotency-key")).toBe(
@@ -1068,6 +1276,7 @@ describe("coordinated onboarding flow", () => {
 
     await act(async () => root.render(profileFacts()));
     await act(async () => buttonNamed(container, `Confirm ${proposal.key}`).click());
+    await vi.waitFor(() => expect(reads).toBe(2));
 
     expect(reads).toBe(2);
     expect(container.textContent).toContain(

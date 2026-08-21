@@ -6,6 +6,7 @@ const JSON_CONTENT_TYPE_PATTERN = /^application\/json(?:\s*;\s*charset=utf-8)?$/
 
 export type FoundationResponseSchemaName =
   | "EntitlementSummary"
+  | "Operation"
   | "JobPreferenceSet"
   | "PutJobPreferencesResponse"
   | "SavedJob"
@@ -20,6 +21,7 @@ const validators = new Map<
   ReturnType<typeof compileComponentValidator>
 >([
   ["EntitlementSummary", compileComponentValidator("EntitlementSummary")],
+  ["Operation", compileComponentValidator("Operation")],
   ["JobPreferenceSet", compileComponentValidator("JobPreferenceSet")],
   ["PutJobPreferencesResponse", compileComponentValidator("PutJobPreferencesResponse")],
   ["SavedJob", compileComponentValidator("SavedJob")],
@@ -35,10 +37,15 @@ function projectFoundationValue(
   value: unknown,
 ): unknown | undefined {
   const validator = validators.get(schemaName);
-  if (schemaName !== "JobPreferenceSet") {
+  if (schemaName !== "JobPreferenceSet" && schemaName !== "Operation") {
     return validator?.(value) ? value : undefined;
   }
   if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  if (schemaName === "Operation") {
+    const nextValue = { ...(value as Record<string, unknown>) };
+    delete nextValue.errorCode;
+    return validator?.(nextValue) ? nextValue : undefined;
+  }
   if (!Object.hasOwn(value, "requiresSponsorship")) {
     return validator?.(value) ? value : undefined;
   }

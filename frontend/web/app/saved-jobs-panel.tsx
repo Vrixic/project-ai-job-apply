@@ -91,9 +91,10 @@ export function SavedJobsPanel({ authenticated }: { authenticated: boolean }) {
     if (authenticatedRef.current && activeGeneration === generation.current) {
       setLoadFailed(false);
     }
+    let response: Response | undefined;
     try {
       const read = async (): Promise<SavedJobPage> => {
-        const response = await fetch("/api/platform/saved-jobs/search", {
+        response = await fetch("/api/platform/saved-jobs/search", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ pageSize: 20, ...(nextCursor ? { cursor: nextCursor } : {}) }),
@@ -135,6 +136,9 @@ export function SavedJobsPanel({ authenticated }: { authenticated: boolean }) {
       }
       return false;
     } finally {
+      if (response?.body) {
+        void Promise.resolve(response.body.cancel()).catch(() => undefined);
+      }
       deadline.clear();
       if (listController.current === controller) listController.current = undefined;
       if (
@@ -187,11 +191,12 @@ export function SavedJobsPanel({ authenticated }: { authenticated: boolean }) {
     const request = { controller, generation: activeGeneration, savedJobId };
     activeDelete.current = request;
     const deadline = startDeadline(controller);
+    let response: Response | undefined;
     setDeletingId(savedJobId);
     setMessage(undefined);
     try {
       const read = async (): Promise<void> => {
-        const response = await fetch(`/api/platform/saved-jobs/${encodeURIComponent(savedJobId)}`, {
+        response = await fetch(`/api/platform/saved-jobs/${encodeURIComponent(savedJobId)}`, {
           method: "DELETE",
           signal: controller.signal,
         });
@@ -231,6 +236,9 @@ export function SavedJobsPanel({ authenticated }: { authenticated: boolean }) {
         );
       }
     } finally {
+      if (response?.body) {
+        void Promise.resolve(response.body.cancel()).catch(() => undefined);
+      }
       deadline.clear();
       if (activeDelete.current === request) activeDelete.current = undefined;
       if (

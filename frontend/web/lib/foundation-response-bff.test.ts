@@ -4,6 +4,7 @@ import {
   GET as getJobPreferences,
   PUT as putJobPreferences,
 } from "../app/api/platform/job-preferences/route";
+import { GET as getOperation } from "../app/api/platform/operations/[operationId]/route";
 import { PATCH as patchProfileFact } from "../app/api/platform/profile-facts/[factId]/route";
 import {
   GET as getProfileFacts,
@@ -36,6 +37,27 @@ const documentId = "019b4e12-7ea3-7c36-9357-aea35ab542c3";
 const factId = "019b4e12-7ea3-7c36-9357-aea35ab542c4";
 const preferenceSetId = "019b4e12-7ea3-7c36-9357-aea35ab542c8";
 const operationId = "019b4e12-7ea3-7c36-9357-aea35ab542c9";
+const operation = {
+  id: operationId,
+  kind: "profile_readiness",
+  state: "succeeded",
+  result: {
+    completionPercent: 100,
+    missingFields: [],
+    calculatedAt: "2026-08-17T12:00:00.000Z",
+  },
+  errorCode: "profile_readiness_pending",
+  createdAt: "2026-08-17T12:00:00.000Z",
+  updatedAt: "2026-08-17T12:00:00.000Z",
+};
+const operationWithoutErrorCode = {
+  id: operation.id,
+  kind: operation.kind,
+  state: operation.state,
+  result: operation.result,
+  createdAt: operation.createdAt,
+  updatedAt: operation.updatedAt,
+};
 
 const preferenceFields = {
   targetRoles: ["Software Engineer"],
@@ -151,12 +173,17 @@ const validValues: Record<FoundationResponseSchemaName, unknown> = {
   EntitlementSummary: freeEntitlement,
   JobPreferenceSet: preferenceSet,
   PutJobPreferencesResponse: putPreferenceResponse,
+  Operation: operationWithoutErrorCode,
   SavedJob: savedJob,
   SavedJobPage: savedJobPage,
   ResumeDocumentCollection: resumeCollection,
   CreateResumeUploadResponse: resumeUploadResponse,
   ProfileFactCollection: factCollection,
   ProfileFact: profileFact,
+};
+const validUpstreamValues: Record<FoundationResponseSchemaName, unknown> = {
+  ...validValues,
+  Operation: operation,
 };
 
 function jsonResponse(value: unknown, status = 200, headers: HeadersInit = {}): Response {
@@ -200,7 +227,11 @@ describe("foundation response boundary", () => {
       const expectedStatus =
         schemaName === "CreateResumeUploadResponse" || schemaName === "SavedJob" ? 201 : 200;
       const response = await validateFoundationResponse(
-        jsonResponse(value, expectedStatus, { "x-correlation-id": "synthetic-correlation" }),
+        jsonResponse(
+          validUpstreamValues[schemaName as FoundationResponseSchemaName],
+          expectedStatus,
+          { "x-correlation-id": "synthetic-correlation" },
+        ),
         expectedStatus,
         schemaName as FoundationResponseSchemaName,
       );
@@ -760,4 +791,43 @@ describe("foundation route response composition", () => {
       );
     },
   );
+
+  it("forwards the exact operation request and contains a private failure", async () => {
+    const request = new Request(`http://localhost/api/platform/operations/${operationId}`);
+    const privateCanary = "candidate-private-operation-route-success";
+    mocks.forwardPlatformRequest.mockResolvedValueOnce(
+      jsonResponse({ ...operation, privateCanary }),
+    );
+
+    const response = await getOperation(request, { params: Promise.resolve({ operationId }) });
+    const body = await response.text();
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(body).not.toContain(privateCanary);
+    expect(mocks.forwardPlatformRequest).toHaveBeenCalledWith(
+      `/v1/operations/${operationId}`,
+      { method: "GET", signal: request.signal },
+      expect.objectContaining({ auth0: { synthetic: "auth0-client" } }),
+    );
+  });
+
+  it("projects an exact valid operation response without leaking errorCode", async () => {
+    const privateCanary = "candidate-private-operation-error-code";
+    mocks.forwardPlatformRequest.mockResolvedValueOnce(
+      jsonResponse({ ...operation, errorCode: privateCanary }),
+    );
+
+    const response = await getOperation(
+      new Request(`http://localhost/api/platform/operations/${operationId}`),
+      { params: Promise.resolve({ operationId }) },
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(body).toEqual(operationWithoutErrorCode);
+    expect(body).not.toHaveProperty("errorCode");
+    expect(JSON.stringify(body)).not.toContain(privateCanary);
+  });
 });
