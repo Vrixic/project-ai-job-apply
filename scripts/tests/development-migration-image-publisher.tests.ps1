@@ -134,6 +134,18 @@ try {
   $scan = [pscustomobject]@{ imageScanStatus = [pscustomobject]@{ status = "COMPLETE" }; imageScanFindings = [pscustomobject]@{ findingSeverityCounts = [pscustomobject]@{} } }
   $remote = Assert-RemoteOciImage -IndexDetail $indexDetail -IndexImage $indexImage -PlatformImage $platformImage -Scan $scan -ExpectedTag $sourceSha -ExpectedIndexDigest $identity.IndexDigest -ExpectedPlatformDigest $identity.PlatformDigest -ExpectedConfigDigest $identity.ConfigDigest -ExpectedCompressedLayerSetSha256 $identity.CompressedLayerSetSha256
   if ($remote.PlatformDigest -cne $identity.PlatformDigest) { throw "canonical remote OCI rejected" }
+  $emptyCountsScan = [pscustomobject]@{
+    imageScanStatus = [pscustomobject]@{ status = "COMPLETE" }
+    imageScanFindings = [pscustomobject]@{}
+  }
+  $emptyCountsRemote = Assert-RemoteOciImage -IndexDetail $indexDetail -IndexImage $indexImage `
+    -PlatformImage $platformImage -Scan $emptyCountsScan -ExpectedTag $sourceSha `
+    -ExpectedIndexDigest $identity.IndexDigest -ExpectedPlatformDigest $identity.PlatformDigest `
+    -ExpectedConfigDigest $identity.ConfigDigest `
+    -ExpectedCompressedLayerSetSha256 $identity.CompressedLayerSetSha256
+  if ($emptyCountsRemote.Critical -ne 0 -or $emptyCountsRemote.High -ne 0) {
+    throw "an omitted zero-finding severity map was not accepted"
+  }
   $null = Assert-PlatformHandoff -BatchImage $platformImage -Identity $identity
   foreach ($mutation in @(
       @{ name = "index-confusion"; index = "sha256:" + ("1" * 64); platform = $identity.PlatformDigest; config = $identity.ConfigDigest; layers = $identity.CompressedLayerSetSha256; scan = $scan },
@@ -141,6 +153,8 @@ try {
       @{ name = "config-confusion"; index = $identity.IndexDigest; platform = $identity.PlatformDigest; config = "sha256:" + ("3" * 64); layers = $identity.CompressedLayerSetSha256; scan = $scan },
       @{ name = "layer-confusion"; index = $identity.IndexDigest; platform = $identity.PlatformDigest; config = $identity.ConfigDigest; layers = "4" * 64; scan = $scan },
       @{ name = "incomplete-scan"; index = $identity.IndexDigest; platform = $identity.PlatformDigest; config = $identity.ConfigDigest; layers = $identity.CompressedLayerSetSha256; scan = [pscustomobject]@{ imageScanStatus = [pscustomobject]@{ status = "IN_PROGRESS" }; imageScanFindings = [pscustomobject]@{ findingSeverityCounts = [pscustomobject]@{} } } },
+      @{ name = "missing-scan-status"; index = $identity.IndexDigest; platform = $identity.PlatformDigest; config = $identity.ConfigDigest; layers = $identity.CompressedLayerSetSha256; scan = [pscustomobject]@{ imageScanFindings = [pscustomobject]@{} } },
+      @{ name = "missing-scan-findings"; index = $identity.IndexDigest; platform = $identity.PlatformDigest; config = $identity.ConfigDigest; layers = $identity.CompressedLayerSetSha256; scan = [pscustomobject]@{ imageScanStatus = [pscustomobject]@{ status = "COMPLETE" } } },
       @{ name = "vulnerable-scan"; index = $identity.IndexDigest; platform = $identity.PlatformDigest; config = $identity.ConfigDigest; layers = $identity.CompressedLayerSetSha256; scan = [pscustomobject]@{ imageScanStatus = [pscustomobject]@{ status = "COMPLETE" }; imageScanFindings = [pscustomobject]@{ findingSeverityCounts = [pscustomobject]@{ HIGH = 1 } } } }
       @{ name = "critical-scan"; index = $identity.IndexDigest; platform = $identity.PlatformDigest; config = $identity.ConfigDigest; layers = $identity.CompressedLayerSetSha256; scan = [pscustomobject]@{ imageScanStatus = [pscustomobject]@{ status = "COMPLETE" }; imageScanFindings = [pscustomobject]@{ findingSeverityCounts = [pscustomobject]@{ CRITICAL = 1 } } } }
     )) {
