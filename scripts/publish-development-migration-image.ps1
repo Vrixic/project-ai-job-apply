@@ -724,10 +724,11 @@ function Invoke-LocalMigrationImageBuild {
     pnpm contracts:generate
   }
   Invoke-LocalGate -Name "Migration owner tests" -LogPath $testLog -Command {
-    pnpm --filter @ai-job-apply/database-migrations test
-    if ($LASTEXITCODE -eq 0) { pnpm --filter @ai-job-apply/profile-service test }
-    if ($LASTEXITCODE -eq 0) { pnpm --filter @ai-job-apply/jobs-service test }
-    if ($LASTEXITCODE -eq 0) { pnpm --filter @ai-job-apply/documents-service test }
+    pnpm turbo run test `
+      --filter=@ai-job-apply/database-migrations `
+      --filter=@ai-job-apply/profile-service `
+      --filter=@ai-job-apply/jobs-service `
+      --filter=@ai-job-apply/documents-service
   }
   Invoke-LocalGate -Name "Dependency audit" -LogPath $auditLog -Command { pnpm audit:dependencies }
 
