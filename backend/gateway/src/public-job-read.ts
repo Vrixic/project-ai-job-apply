@@ -2,11 +2,7 @@ import {
   compileComponentValidator,
   type PublicJobDetailResponse,
 } from "@ai-job-apply/api-contracts";
-import {
-  PublicJobDetailProjector,
-  type PublicJobDetailReader,
-  type PublicJobDetailResult,
-} from "@ai-job-apply/jobs-service";
+import type { PublicJobDetailResult } from "@ai-job-apply/jobs-service";
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
@@ -55,12 +51,6 @@ export interface PublicJobResultReader {
   get(jobId: string): Promise<PublicJobDetailResult>;
 }
 
-function isResultReader(
-  reader: PublicJobDetailReader | PublicJobResultReader,
-): reader is PublicJobResultReader {
-  return "get" in reader && typeof reader.get === "function";
-}
-
 function requireFiniteDate(clock: () => Date): Date {
   const now = clock();
   if (!(now instanceof Date) || !Number.isFinite(now.getTime())) {
@@ -95,7 +85,7 @@ export class PublicJobReadCache {
   private readonly clock: () => Date;
 
   constructor(
-    private readonly reader: PublicJobDetailReader | PublicJobResultReader,
+    private readonly reader: PublicJobResultReader,
     private readonly options: PublicJobReadCacheOptions,
   ) {
     if (
@@ -124,11 +114,8 @@ export class PublicJobReadCache {
     const pending = this.inFlight.get(jobId);
     if (pending) return pending;
 
-    const request = (
-      isResultReader(this.reader)
-        ? this.reader.get(jobId)
-        : new PublicJobDetailProjector(this.reader, () => new Date(now)).get(jobId)
-    )
+    const request = this.reader
+      .get(jobId)
       .then((result) => {
         const completedAt = requireFiniteDate(this.clock);
         const expiresAt = resultExpiry(result, completedAt, this.options);

@@ -1226,6 +1226,10 @@ $publicJobCompatibilityVariables = @(
   "public_job_lambda_artifact_s3_object_version",
   "public_job_lambda_artifact_sha256",
   "public_job_lambda_artifact_base64sha256",
+  "public_job_projection_artifact_s3_key",
+  "public_job_projection_artifact_s3_object_version",
+  "public_job_projection_artifact_sha256",
+  "public_job_projection_artifact_base64sha256",
   "public_job_route_throttling_rate_limit",
   "public_job_route_throttling_burst_limit"
 )

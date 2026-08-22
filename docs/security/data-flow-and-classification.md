@@ -252,7 +252,9 @@ and database credentials do not. Warm edge caches contain only the same projecti
 absence and never serve stale data after a read error. Crawlability remains off by default. The
 anonymous edge has no VPC attachment, database identity, RDS-IAM grant, or database secret and may
 invoke only the exact qualified private projection alias with an identifier-only message. The
-private projection retains the exact database role and code-path KMS/VPC guards. The migration
+edge and projection use distinct immutable artifacts; the edge build refuses database runtime and
+configuration markers. The private projection retains the exact database role and code-path
+KMS/VPC guards. The migration
 proves table/schema/temp least privilege inside the application database; remaining cluster-global
 catalog and other-database capabilities are contained behind the non-public fixed-query Lambda
 rather than exposed to an anonymous runtime compromise. `public_job_route_activation_allowed`

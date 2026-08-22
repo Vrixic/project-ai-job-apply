@@ -1,4 +1,4 @@
-import { loadPublicJobEdgeLambdaConfig } from "@ai-job-apply/config";
+import { loadPublicJobEdgeLambdaConfig } from "@ai-job-apply/config/public-job-edge";
 import type { PublicJobDetailResult } from "@ai-job-apply/jobs-service";
 import { initializeTelemetry } from "@ai-job-apply/observability";
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
@@ -8,7 +8,6 @@ import {
   PublicJobReadCache,
   publicJobUnavailableResponse,
 } from "./public-job-read.js";
-export { projectionHandler } from "./public-job-projection-lambda.js";
 
 const uuidV7Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const canonicalInstantPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;

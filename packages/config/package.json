@@ -11,6 +11,10 @@
     "./brand": {
       "types": "./dist/brand.d.ts",
       "default": "./dist/brand.js"
+    },
+    "./public-job-edge": {
+      "types": "./dist/public-job-edge.d.ts",
+      "default": "./dist/public-job-edge.js"
     }
   },
   "scripts": {

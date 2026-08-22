@@ -90,8 +90,9 @@ The Jobs-owned function does not expose source/provider/provenance metadata, sou
 identifiers or verified domains, hashes, raw content, candidate data, or lifecycle reasons. The
 anonymous no-VPC edge, private fixed-query Lambda, canonical page, cache/throttle, and crawler
 policy are separately owned by the gateway, web, and Terraform source. The edge has no database
-capability and invokes only the qualified private projection with a UUID-only request. No artifact publication,
-AWS/database apply, crawlability, real-source acceptance, or deployment is claimed.
+capability, its distinct artifact contains no database runtime, and it invokes only the qualified
+private projection with a UUID-only request. No artifact publication, AWS/database apply,
+crawlability, real-source acceptance, or deployment is claimed.
 
 ## Planned additions
 

@@ -1674,16 +1674,16 @@ resource "aws_lambda_function" "public_job_projection" {
   reserved_concurrent_executions = 1
   publish                        = true
   s3_bucket                      = aws_s3_bucket.artifacts.bucket
-  s3_key                         = var.public_job_lambda_artifact_s3_key
-  s3_object_version              = var.public_job_lambda_artifact_s3_object_version
-  source_code_hash               = var.public_job_lambda_artifact_base64sha256
+  s3_key                         = var.public_job_projection_artifact_s3_key
+  s3_object_version              = var.public_job_projection_artifact_s3_object_version
+  source_code_hash               = var.public_job_projection_artifact_base64sha256
   kms_key_arn                    = aws_kms_key.platform.arn
 
   environment {
     variables = {
       NODE_ENV                         = "production"
       NODE_EXTRA_CA_CERTS              = "/var/runtime/ca-cert.pem"
-      RELEASE_SHA                      = var.public_job_lambda_artifact_sha256
+      RELEASE_SHA                      = var.public_job_projection_artifact_sha256
       LOG_LEVEL                        = "info"
       PUBLIC_JOB_DATABASE_HOST         = aws_db_instance.postgres[0].address
       PUBLIC_JOB_DATABASE_PORT         = tostring(aws_db_instance.postgres[0].port)

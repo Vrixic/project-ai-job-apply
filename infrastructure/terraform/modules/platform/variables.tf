@@ -193,10 +193,14 @@ variable "deploy_public_job_reader" {
       var.public_job_lambda_artifact_s3_object_version != "" &&
       var.public_job_lambda_artifact_sha256 != "" &&
       var.public_job_lambda_artifact_base64sha256 != "" &&
+      var.public_job_projection_artifact_s3_key != "" &&
+      var.public_job_projection_artifact_s3_object_version != "" &&
+      var.public_job_projection_artifact_sha256 != "" &&
+      var.public_job_projection_artifact_base64sha256 != "" &&
       var.public_job_database_boundary_version == "0006_public_job_reader" &&
       var.persistent_data_plane_enabled
     )
-    error_message = "Public job reader deployment requires the existing API, persistent database, exact 0006 public-reader boundary, and immutable versioned artifact identity."
+    error_message = "Public job reader deployment requires the existing API, persistent database, exact 0006 public-reader boundary, and separate immutable versioned edge/projection artifact identities."
   }
 }
 
@@ -224,18 +228,21 @@ variable "public_job_route_activation_allowed" {
 }
 
 variable "public_job_lambda_artifact_s3_key" {
-  type    = string
-  default = ""
+  description = "Versioned artifact-bucket key for the anonymous public-job edge Lambda ZIP."
+  type        = string
+  default     = ""
 }
 
 variable "public_job_lambda_artifact_s3_object_version" {
-  type    = string
-  default = ""
+  description = "Immutable S3 object version for the anonymous public-job edge Lambda ZIP."
+  type        = string
+  default     = ""
 }
 
 variable "public_job_lambda_artifact_sha256" {
-  type    = string
-  default = ""
+  description = "Lowercase hexadecimal SHA-256 of the anonymous public-job edge Lambda ZIP."
+  type        = string
+  default     = ""
   validation {
     condition     = var.public_job_lambda_artifact_sha256 == "" || can(regex("^[a-f0-9]{64}$", var.public_job_lambda_artifact_sha256))
     error_message = "Public job Lambda artifact SHA-256 must be empty or 64 lowercase hexadecimal characters."
@@ -243,11 +250,44 @@ variable "public_job_lambda_artifact_sha256" {
 }
 
 variable "public_job_lambda_artifact_base64sha256" {
-  type    = string
-  default = ""
+  description = "Lambda-compatible base64 SHA-256 of the anonymous public-job edge Lambda ZIP."
+  type        = string
+  default     = ""
   validation {
     condition     = var.public_job_lambda_artifact_base64sha256 == "" || can(regex("^[A-Za-z0-9+/]{43}=$", var.public_job_lambda_artifact_base64sha256))
     error_message = "Public job Lambda artifact base64 SHA-256 must be empty or canonical."
+  }
+}
+
+variable "public_job_projection_artifact_s3_key" {
+  description = "Versioned artifact-bucket key for the private public-job projection Lambda ZIP."
+  type        = string
+  default     = ""
+}
+
+variable "public_job_projection_artifact_s3_object_version" {
+  description = "Immutable S3 object version for the private public-job projection Lambda ZIP."
+  type        = string
+  default     = ""
+}
+
+variable "public_job_projection_artifact_sha256" {
+  description = "Lowercase hexadecimal SHA-256 of the private public-job projection Lambda ZIP."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.public_job_projection_artifact_sha256 == "" || can(regex("^[a-f0-9]{64}$", var.public_job_projection_artifact_sha256))
+    error_message = "The public-job projection Lambda artifact SHA-256 must be empty or 64 lowercase hexadecimal characters."
+  }
+}
+
+variable "public_job_projection_artifact_base64sha256" {
+  description = "Lambda-compatible base64 SHA-256 of the private public-job projection Lambda ZIP."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.public_job_projection_artifact_base64sha256 == "" || can(regex("^[A-Za-z0-9+/]{43}=$", var.public_job_projection_artifact_base64sha256))
+    error_message = "The public-job projection Lambda base64 SHA-256 must be empty or canonical."
   }
 }
 

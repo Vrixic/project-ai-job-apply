@@ -142,6 +142,26 @@ variable "public_job_lambda_artifact_base64sha256" {
   default = ""
 }
 
+variable "public_job_projection_artifact_s3_key" {
+  type    = string
+  default = ""
+}
+
+variable "public_job_projection_artifact_s3_object_version" {
+  type    = string
+  default = ""
+}
+
+variable "public_job_projection_artifact_sha256" {
+  type    = string
+  default = ""
+}
+
+variable "public_job_projection_artifact_base64sha256" {
+  type    = string
+  default = ""
+}
+
 variable "public_job_route_throttling_rate_limit" {
   type    = number
   default = 1

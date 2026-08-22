@@ -57,6 +57,10 @@ security-definer function from Jobs migration `0006_public_job_reader`. This con
 cluster-global PostgreSQL residuals behind a non-public fixed-query service boundary instead of
 placing them in the anonymous runtime's compromise boundary.
 
+The edge and projection require separate immutable S3 object versions and checksums. The edge
+builder fails if its bundle contains the RDS signer, PostgreSQL client, database environment keys,
+or public-reader database role marker; those dependencies exist only in the projection artifact.
+
 The route additionally requires the explicit `public_job_route_activation_allowed` release flag,
 the global serverless runtime and lifecycle gates, and the persistent data plane. Its rate and burst
 remain frozen at one. Edge, projection, and route alarms are mandatory. The deprecated

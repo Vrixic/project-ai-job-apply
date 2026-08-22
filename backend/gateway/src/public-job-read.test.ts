@@ -1,4 +1,8 @@
-import type { PublicJobDetailReader, PublicJobSourceRecord } from "@ai-job-apply/jobs-service";
+import {
+  PublicJobDetailProjector,
+  type PublicJobDetailReader,
+  type PublicJobSourceRecord,
+} from "@ai-job-apply/jobs-service";
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { describe, expect, it, vi } from "vitest";
 import { createPublicJobReadHandler, PublicJobReadCache } from "./public-job-read.js";
@@ -50,7 +54,7 @@ function event(path = `/v1/public/jobs/${requestedId}`): APIGatewayProxyEventV2 
 }
 
 function cache(jobReader: PublicJobDetailReader, clock = () => now) {
-  return new PublicJobReadCache(jobReader, {
+  return new PublicJobReadCache(new PublicJobDetailProjector(jobReader, clock), {
     capacity: 2,
     positiveTtlMs: 10_000,
     negativeTtlMs: 1_000,
@@ -163,7 +167,7 @@ describe("PublicJobReadCache", () => {
     ]);
 
     let current = new Date(now.getTime() + 1_001);
-    const failing = new PublicJobReadCache(jobReader, {
+    const failing = new PublicJobReadCache(new PublicJobDetailProjector(jobReader, () => current), {
       capacity: 2,
       positiveTtlMs: 1_000,
       negativeTtlMs: 1,
@@ -181,7 +185,7 @@ describe("PublicJobReadCache", () => {
       value.validThrough = new Date(now.getTime() + 500);
       return value;
     });
-    const subject = new PublicJobReadCache(jobReader, {
+    const subject = new PublicJobReadCache(new PublicJobDetailProjector(jobReader, () => current), {
       capacity: 2,
       positiveTtlMs: 10_000,
       negativeTtlMs: 10,
@@ -208,7 +212,7 @@ describe("PublicJobReadCache", () => {
         .mockResolvedValueOnce(record(requestedId))
         .mockRejectedValueOnce(new Error("database unavailable")),
     );
-    const subject = new PublicJobReadCache(jobReader, {
+    const subject = new PublicJobReadCache(new PublicJobDetailProjector(jobReader, () => current), {
       capacity: 2,
       positiveTtlMs: 100,
       negativeTtlMs: 10,
@@ -228,7 +232,7 @@ describe("PublicJobReadCache", () => {
     const expiring = record();
     expiring.validThrough = new Date(now.getTime() + 100);
     const jobReader = reader(vi.fn().mockReturnValueOnce(pending).mockResolvedValueOnce(record()));
-    const subject = new PublicJobReadCache(jobReader, {
+    const subject = new PublicJobReadCache(new PublicJobDetailProjector(jobReader, () => current), {
       capacity: 2,
       positiveTtlMs: 10_000,
       negativeTtlMs: 10,

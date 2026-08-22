@@ -462,14 +462,18 @@ run "public_job_reader_dark_deploy_has_no_anonymous_route" {
   command = plan
 
   variables {
-    deploy_public_job_reader                     = true
-    public_job_route_activation_allowed          = true
-    public_job_database_boundary_version         = "0006_public_job_reader"
-    public_job_lambda_artifact_s3_key            = "lambda/public-jobs/reader.zip"
-    public_job_lambda_artifact_s3_object_version = "public-reader-version"
-    public_job_lambda_artifact_sha256            = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
-    public_job_lambda_artifact_base64sha256      = "ZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWU="
-    serverless_runtime_enabled                   = false
+    deploy_public_job_reader                         = true
+    public_job_route_activation_allowed              = true
+    public_job_database_boundary_version             = "0006_public_job_reader"
+    public_job_lambda_artifact_s3_key                = "lambda/public-jobs/reader.zip"
+    public_job_lambda_artifact_s3_object_version     = "public-reader-version"
+    public_job_lambda_artifact_sha256                = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    public_job_lambda_artifact_base64sha256          = "ZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWU="
+    public_job_projection_artifact_s3_key            = "lambda/public-jobs/projection.zip"
+    public_job_projection_artifact_s3_object_version = "public-projection-version"
+    public_job_projection_artifact_sha256            = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    public_job_projection_artifact_base64sha256      = "ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY="
+    serverless_runtime_enabled                       = false
   }
 
   assert {
@@ -499,8 +503,10 @@ run "public_job_reader_dark_deploy_has_no_anonymous_route" {
       ]) &&
       aws_lambda_function.public_job[0].environment[0].variables.PUBLIC_JOB_CACHE_CAPACITY == "128" &&
       aws_lambda_function.public_job[0].environment[0].variables.PUBLIC_JOB_PROJECTION_ARN == "${local.public_job_projection_function_arn}:${var.environment}" &&
+      aws_lambda_function.public_job[0].s3_key == "lambda/public-jobs/reader.zip" &&
       length(aws_lambda_function.public_job[0].vpc_config) == 0 &&
       aws_lambda_function.public_job_projection[0].handler == "index.projectionHandler" &&
+      aws_lambda_function.public_job_projection[0].s3_key == "lambda/public-jobs/projection.zip" &&
       aws_lambda_function.public_job_projection[0].environment[0].variables.PUBLIC_JOB_DATABASE_USER == "ai_job_apply_public_job_reader" &&
       length(aws_lambda_function.public_job_projection[0].vpc_config) == 1 &&
       aws_db_instance.postgres[0].iam_database_authentication_enabled
@@ -564,14 +570,18 @@ run "public_job_reader_activation_is_exact_and_bounded" {
   command = plan
 
   variables {
-    deploy_public_job_reader                     = true
-    public_job_route_activation_allowed          = true
-    public_job_database_boundary_version         = "0006_public_job_reader"
-    public_job_lambda_artifact_s3_key            = "lambda/public-jobs/reader.zip"
-    public_job_lambda_artifact_s3_object_version = "public-reader-version"
-    public_job_lambda_artifact_sha256            = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
-    public_job_lambda_artifact_base64sha256      = "ZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWU="
-    serverless_runtime_enabled                   = true
+    deploy_public_job_reader                         = true
+    public_job_route_activation_allowed              = true
+    public_job_database_boundary_version             = "0006_public_job_reader"
+    public_job_lambda_artifact_s3_key                = "lambda/public-jobs/reader.zip"
+    public_job_lambda_artifact_s3_object_version     = "public-reader-version"
+    public_job_lambda_artifact_sha256                = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    public_job_lambda_artifact_base64sha256          = "ZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWU="
+    public_job_projection_artifact_s3_key            = "lambda/public-jobs/projection.zip"
+    public_job_projection_artifact_s3_object_version = "public-projection-version"
+    public_job_projection_artifact_sha256            = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    public_job_projection_artifact_base64sha256      = "ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY="
+    serverless_runtime_enabled                       = true
   }
 
   assert {
@@ -600,16 +610,20 @@ run "public_job_reader_route_uses_the_remediated_edge_projection_boundary" {
   command = plan
 
   variables {
-    deploy_public_job_reader                     = true
-    public_job_cluster_residual_accepted         = false
-    public_job_route_activation_allowed          = true
-    public_job_database_boundary_version         = "0006_public_job_reader"
-    public_job_lambda_artifact_s3_key            = "lambda/public-jobs/reader.zip"
-    public_job_lambda_artifact_s3_object_version = "public-reader-version"
-    public_job_lambda_artifact_sha256            = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
-    public_job_lambda_artifact_base64sha256      = "ZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWU="
-    serverless_runtime_enabled                   = true
-    runtime_activation_allowed                   = true
+    deploy_public_job_reader                         = true
+    public_job_cluster_residual_accepted             = false
+    public_job_route_activation_allowed              = true
+    public_job_database_boundary_version             = "0006_public_job_reader"
+    public_job_lambda_artifact_s3_key                = "lambda/public-jobs/reader.zip"
+    public_job_lambda_artifact_s3_object_version     = "public-reader-version"
+    public_job_lambda_artifact_sha256                = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    public_job_lambda_artifact_base64sha256          = "ZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWU="
+    public_job_projection_artifact_s3_key            = "lambda/public-jobs/projection.zip"
+    public_job_projection_artifact_s3_object_version = "public-projection-version"
+    public_job_projection_artifact_sha256            = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    public_job_projection_artifact_base64sha256      = "ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY="
+    serverless_runtime_enabled                       = true
+    runtime_activation_allowed                       = true
   }
 
   assert {
@@ -651,11 +665,15 @@ run "public_job_reader_requires_the_exact_database_boundary" {
   command = plan
 
   variables {
-    deploy_public_job_reader                     = true
-    public_job_lambda_artifact_s3_key            = "lambda/public-jobs/reader.zip"
-    public_job_lambda_artifact_s3_object_version = "public-reader-version"
-    public_job_lambda_artifact_sha256            = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
-    public_job_lambda_artifact_base64sha256      = "ZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWU="
+    deploy_public_job_reader                         = true
+    public_job_lambda_artifact_s3_key                = "lambda/public-jobs/reader.zip"
+    public_job_lambda_artifact_s3_object_version     = "public-reader-version"
+    public_job_lambda_artifact_sha256                = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    public_job_lambda_artifact_base64sha256          = "ZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWU="
+    public_job_projection_artifact_s3_key            = "lambda/public-jobs/projection.zip"
+    public_job_projection_artifact_s3_object_version = "public-projection-version"
+    public_job_projection_artifact_sha256            = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    public_job_projection_artifact_base64sha256      = "ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY="
   }
 
   expect_failures = [var.deploy_public_job_reader]

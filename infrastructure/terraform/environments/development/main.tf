@@ -78,9 +78,15 @@ module "platform" {
   )
   public_job_lambda_artifact_sha256       = var.public_job_lambda_artifact_sha256
   public_job_lambda_artifact_base64sha256 = var.public_job_lambda_artifact_base64sha256
-  public_job_route_throttling_rate_limit  = var.public_job_route_throttling_rate_limit
-  public_job_route_throttling_burst_limit = var.public_job_route_throttling_burst_limit
-  deploy_document_intake                  = var.deploy_document_intake
+  public_job_projection_artifact_s3_key   = var.public_job_projection_artifact_s3_key
+  public_job_projection_artifact_s3_object_version = (
+    var.public_job_projection_artifact_s3_object_version
+  )
+  public_job_projection_artifact_sha256       = var.public_job_projection_artifact_sha256
+  public_job_projection_artifact_base64sha256 = var.public_job_projection_artifact_base64sha256
+  public_job_route_throttling_rate_limit      = var.public_job_route_throttling_rate_limit
+  public_job_route_throttling_burst_limit     = var.public_job_route_throttling_burst_limit
+  deploy_document_intake                      = var.deploy_document_intake
   candidate_document_cors_allowed_origins = (
     var.candidate_document_cors_allowed_origins
   )
