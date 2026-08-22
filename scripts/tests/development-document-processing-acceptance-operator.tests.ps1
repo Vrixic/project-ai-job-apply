@@ -43,8 +43,10 @@ foreach ($required in @(
     'TerraformZeroDriftClaim = $false',
     'development-document-operator-delta-v1',
     'sourceToOperatorDeltaSha256',
+    'Get-OperatorDeltaEvidence',
+    '$null = Assert-RecoveryDescriptor',
     "ConvertFrom-Json -DateKind String",
-    'The application-to-operator delta changes deployed application or infrastructure source.',
+    'The reviewed operator delta changes deployed application or infrastructure source.',
     '[Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Documents',
     'Assert-DocumentOperationalHealth -WaitForOk',
     '$scanAfter = $end.AddSeconds(30)',
@@ -99,7 +101,8 @@ function Import-OperatorFunction {
 
 . (Join-Path $repositoryRoot "scripts\lib\deployment-operator-guards.ps1")
 foreach ($name in @(
-    "Assert-ExactPropertySet", "ConvertFrom-OperatorJson", "Get-OptionalProperty", "Get-OptionalItems",
+    "Assert-ExactPropertySet", "ConvertFrom-OperatorJson", "Get-TextSha256", "Get-OperatorDeltaEvidence",
+    "Get-OptionalProperty", "Get-OptionalItems",
     "Test-CanonicalTimestamp", "New-TaskRequest", "Assert-TaskRequest",
     "Get-ExpectedAggregate", "New-GatewayEvent", "Assert-RecoveryDescriptor",
     "Test-ExactObjectAlreadyRemoved", "Assert-DocumentOperationalHealth", "Assert-PrivacySafeLogs",
@@ -108,6 +111,16 @@ foreach ($name in @(
     "Remove-ExactObjectVersion", "Remove-DescriptorObjects", "Assert-ReviewedRuntimeUnchanged"
   )) {
   Import-OperatorFunction -Name $name
+}
+
+$currentSource = (& git -C $repositoryRoot rev-parse HEAD).Trim()
+$sameSourceDelta = Get-OperatorDeltaEvidence -FromSha $currentSource -ToSha $currentSource
+if (
+  [string]$sameSourceDelta.FromSha -cne $currentSource -or
+  [string]$sameSourceDelta.ToSha -cne $currentSource -or
+  [string]$sameSourceDelta.Sha256 -notmatch '^[a-f0-9]{64}$'
+) {
+  throw "The reviewed operator delta evidence is not deterministic for an identical source."
 }
 
 $timestampJson = '{"createdAt":"2026-08-22T20:01:57.8939303+00:00"}'

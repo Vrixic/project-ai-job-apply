@@ -127,6 +127,43 @@ function Get-TextSha256 {
   }
 }
 
+function Get-OperatorDeltaEvidence {
+  param(
+    [Parameter(Mandatory)][string]$FromSha,
+    [Parameter(Mandatory)][string]$ToSha
+  )
+  & git -C $repositoryRoot merge-base --is-ancestor $FromSha $ToSha 2>$null
+  if ($LASTEXITCODE -ne 0) {
+    throw "The earlier reviewed source must be an ancestor of the later operator source."
+  }
+  $records = @(& git -C $repositoryRoot diff --name-status --no-renames "$FromSha..$ToSha" 2>$null)
+  if ($LASTEXITCODE -ne 0) { throw "The reviewed operator source delta is unreadable." }
+  $allowed = @(
+    '^docs/',
+    '^scripts/operate-development-document-processing-acceptance\.ps1$',
+    '^scripts/tests/development-document-processing-acceptance-operator\.tests\.ps1$',
+    '^infrastructure/runbooks/deployments/development-document-processing-acceptance\.md$'
+  )
+  foreach ($record in $records) {
+    $parts = $record -split "`t", 2
+    if ($parts.Count -ne 2 -or $parts[0] -notmatch '^[AM]$') {
+      throw "The reviewed operator delta contains an ambiguous change."
+    }
+    if (@($allowed | Where-Object { $parts[1] -match $_ }).Count -ne 1) {
+      throw "The reviewed operator delta changes deployed application or infrastructure source."
+    }
+  }
+  $patch = @(& git -C $repositoryRoot diff --full-index --binary --no-ext-diff --no-renames "$FromSha..$ToSha" 2>$null)
+  if ($LASTEXITCODE -ne 0) { throw "The canonical reviewed operator patch is unreadable." }
+  $payload = "development-document-operator-delta-v1`n$FromSha`n$ToSha`n--name-status--`n" +
+    (($records -join "`n") + "`n--patch--`n" + ($patch -join "`n") + "`n")
+  [pscustomobject]@{
+    FromSha = $FromSha
+    ToSha = $ToSha
+    Sha256 = Get-TextSha256 -Value $payload
+  }
+}
+
 function Get-OptionalProperty {
   param([AllowNull()][object]$Object, [Parameter(Mandatory)][string]$Name)
   if ($null -eq $Object) { return $null }
@@ -303,37 +340,9 @@ function Assert-CallerAndSource {
     if ($branch -cne 'main' -or $head -cne $origin -or $dirty.Count -ne 0) {
       throw "The operation requires clean main exactly matching origin/main."
     }
-    & git -C $repositoryRoot merge-base --is-ancestor $SourceSha $head 2>$null
-    if ($LASTEXITCODE -ne 0) {
-      throw "The deployed application source must be an ancestor of the reviewed operator source."
-    }
-    $records = @(& git -C $repositoryRoot diff --name-status --no-renames "$SourceSha..$head" 2>$null)
-    if ($LASTEXITCODE -ne 0) {
-      throw "The application-to-operator source delta is unreadable."
-    }
-    $allowed = @(
-      '^docs/',
-      '^scripts/operate-development-document-processing-acceptance\.ps1$',
-      '^scripts/tests/development-document-processing-acceptance-operator\.tests\.ps1$',
-      '^infrastructure/runbooks/deployments/development-document-processing-acceptance\.md$'
-    )
-    foreach ($record in $records) {
-      $parts = $record -split "`t", 2
-      if ($parts.Count -ne 2 -or $parts[0] -notmatch '^[AM]$') {
-        throw "The application-to-operator delta contains an ambiguous change."
-      }
-      if (@($allowed | Where-Object { $parts[1] -match $_ }).Count -ne 1) {
-        throw "The application-to-operator delta changes deployed application or infrastructure source."
-      }
-    }
-    $patch = @(& git -C $repositoryRoot diff --full-index --binary --no-ext-diff --no-renames "$SourceSha..$head" 2>$null)
-    if ($LASTEXITCODE -ne 0) {
-      throw "The canonical application-to-operator patch is unreadable."
-    }
-    $payload = "development-document-operator-delta-v1`n$SourceSha`n$head`n--name-status--`n" +
-      (($records -join "`n") + "`n--patch--`n" + ($patch -join "`n") + "`n")
+    $delta = Get-OperatorDeltaEvidence -FromSha $SourceSha -ToSha $head
     $script:operatorSourceSha = $head
-    $script:sourceToOperatorDeltaSha256 = Get-TextSha256 -Value $payload
+    $script:sourceToOperatorDeltaSha256 = $delta.Sha256
   }
 }
 
@@ -1537,7 +1546,7 @@ function Read-RecoveryDescriptor {
   finally {
     Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
   }
-  Assert-RecoveryDescriptor -Descriptor $descriptor -Receipt $Receipt -FixtureEvidence $FixtureEvidence
+  $null = Assert-RecoveryDescriptor -Descriptor $descriptor -Receipt $Receipt -FixtureEvidence $FixtureEvidence
   @($descriptor.documents)
 }
 
@@ -1720,6 +1729,17 @@ function Read-ExecutionPlan {
   )
   $requestPhases = @($plan.requests.phase)
   $expectedPhases = @($actions + 'recovery-cleanup')
+  $operatorBindingValid = (
+    [string]$plan.operatorSourceSha -ceq $script:operatorSourceSha -and
+    [string]$plan.sourceToOperatorDeltaSha256 -ceq $script:sourceToOperatorDeltaSha256
+  )
+  if (-not $operatorBindingValid -and $Action -in @('RecoverCleanup', 'Verify')) {
+    $originalOperatorDelta = Get-OperatorDeltaEvidence -FromSha $SourceSha -ToSha ([string]$plan.operatorSourceSha)
+    $null = Get-OperatorDeltaEvidence -FromSha ([string]$plan.operatorSourceSha) -ToSha $script:operatorSourceSha
+    $operatorBindingValid = (
+      [string]$plan.sourceToOperatorDeltaSha256 -ceq [string]$originalOperatorDelta.Sha256
+    )
+  }
   if (
     [int]$plan.schemaVersion -ne 1 -or
     [string]$plan.kind -cne 'development-document-processing-acceptance-plan' -or
@@ -1728,8 +1748,7 @@ function Read-ExecutionPlan {
     [string]$plan.accountId -cne $ExpectedAccountId -or
     [string]$plan.stateBucket -cne $StateBucket -or
     [string]$plan.sourceSha -cne $SourceSha -or
-    [string]$plan.operatorSourceSha -cne $script:operatorSourceSha -or
-    [string]$plan.sourceToOperatorDeltaSha256 -cne $script:sourceToOperatorDeltaSha256 -or
+    -not $operatorBindingValid -or
     [string]$plan.fixtureSetSha256 -notmatch '^[a-f0-9]{64}$' -or
     ($FixtureSetSha256 -and [string]$plan.fixtureSetSha256 -cne $FixtureSetSha256) -or
     [string]$plan.migrationReceiptSha256 -cne $ReviewedMigrationReceiptSha256 -or
@@ -1757,7 +1776,12 @@ function Read-ExecutionPlan {
 }
 
 function Read-AcceptanceReceipt {
-  param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Sha)
+  param(
+    [Parameter(Mandatory)][string]$Path,
+    [Parameter(Mandatory)][string]$Sha,
+    [Parameter(Mandatory)][string]$ExpectedOperatorSourceSha,
+    [Parameter(Mandatory)][string]$ExpectedSourceToOperatorDeltaSha256
+  )
   $resolved = Resolve-OperatorPath -Candidate $Path -AllowedRoot $operatorRoot -MustExist
   if ((Get-FileSha256 $resolved) -cne $Sha) {
     throw "The acceptance receipt checksum does not match review."
@@ -1776,8 +1800,8 @@ function Read-AcceptanceReceipt {
     [string]$receipt.kind -cne 'development-document-processing-acceptance' -or
     [string]$receipt.environment -cne 'development' -or
     [string]$receipt.sourceSha -cne $SourceSha -or
-    [string]$receipt.operatorSourceSha -cne $script:operatorSourceSha -or
-    [string]$receipt.sourceToOperatorDeltaSha256 -cne $script:sourceToOperatorDeltaSha256 -or
+    [string]$receipt.operatorSourceSha -cne $ExpectedOperatorSourceSha -or
+    [string]$receipt.sourceToOperatorDeltaSha256 -cne $ExpectedSourceToOperatorDeltaSha256 -or
     [string]$receipt.fixtureSetSha256 -cne $FixtureSetSha256 -or
     [string]$receipt.migrationReceiptSha256 -cne $ReviewedMigrationReceiptSha256 -or
     [string]$receipt.executionPlanSha256 -cne $ReviewedExecutionPlanSha256 -or
@@ -2218,7 +2242,11 @@ if ($Action -eq 'Execute') {
   exit 0
 }
 
-$receiptEvidence = Read-AcceptanceReceipt -Path $ReceiptPath -Sha $ReviewedReceiptSha256
+$receiptEvidence = Read-AcceptanceReceipt `
+  -Path $ReceiptPath `
+  -Sha $ReviewedReceiptSha256 `
+  -ExpectedOperatorSourceSha ([string]$planEvidence.Plan.operatorSourceSha) `
+  -ExpectedSourceToOperatorDeltaSha256 ([string]$planEvidence.Plan.sourceToOperatorDeltaSha256)
 $receipt = $receiptEvidence.Receipt
 if ([string]$receipt.runId -cne [string]$planEvidence.Plan.runId) {
   throw "The receipt run ID does not match the reviewed plan."
