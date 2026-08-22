@@ -164,6 +164,59 @@ function Get-OperatorDeltaEvidence {
   }
 }
 
+function Get-RecoveryOperatorDeltaEvidence {
+  param(
+    [Parameter(Mandatory)][string]$FromSha,
+    [Parameter(Mandatory)][string]$ToSha
+  )
+  & git -C $repositoryRoot merge-base --is-ancestor $FromSha $ToSha 2>$null
+  if ($LASTEXITCODE -ne 0) {
+    throw "The earlier reviewed source must be an ancestor of the recovery operator source."
+  }
+  $allRecords = @(& git -C $repositoryRoot diff --name-status --no-renames "$FromSha..$ToSha" 2>$null)
+  if ($LASTEXITCODE -ne 0) { throw "The recovery operator source delta is unreadable." }
+  $allowed = @(
+    '^docs/',
+    '^scripts/operate-development-document-processing-acceptance\.ps1$',
+    '^scripts/tests/development-document-processing-acceptance-operator\.tests\.ps1$',
+    '^infrastructure/runbooks/deployments/development-document-processing-acceptance\.md$'
+  )
+  $protectedDependencies = @(
+    'scripts/lib/deployment-operator-guards.ps1',
+    'scripts/lib/development-document-dark-guards.ps1',
+    'scripts/lib/development-document-processing-fixtures.mjs'
+  )
+  $records = @()
+  foreach ($record in $allRecords) {
+    $parts = $record -split "`t", 2
+    if ($parts.Count -ne 2) { throw "The recovery operator delta contains an ambiguous change." }
+    if ($parts[1] -in $protectedDependencies) {
+      throw "A recovery operator dependency changed after the reviewed source."
+    }
+    if (@($allowed | Where-Object { $parts[1] -match $_ }).Count -eq 1) {
+      if ($parts[0] -notmatch '^[AM]$') {
+        throw "The recovery operator packet contains an ambiguous change."
+      }
+      $records += $record
+    }
+  }
+  $pathspecs = @(
+    'docs',
+    'scripts/operate-development-document-processing-acceptance.ps1',
+    'scripts/tests/development-document-processing-acceptance-operator.tests.ps1',
+    'infrastructure/runbooks/deployments/development-document-processing-acceptance.md'
+  )
+  $patch = @(& git -C $repositoryRoot diff --full-index --binary --no-ext-diff --no-renames "$FromSha..$ToSha" -- @pathspecs 2>$null)
+  if ($LASTEXITCODE -ne 0) { throw "The canonical recovery operator patch is unreadable." }
+  $payload = "development-document-recovery-operator-delta-v1`n$FromSha`n$ToSha`n--name-status--`n" +
+    (($records -join "`n") + "`n--patch--`n" + ($patch -join "`n") + "`n")
+  [pscustomobject]@{
+    FromSha = $FromSha
+    ToSha = $ToSha
+    Sha256 = Get-TextSha256 -Value $payload
+  }
+}
+
 function Get-OptionalProperty {
   param([AllowNull()][object]$Object, [Parameter(Mandatory)][string]$Name)
   if ($null -eq $Object) { return $null }
@@ -340,7 +393,12 @@ function Assert-CallerAndSource {
     if ($branch -cne 'main' -or $head -cne $origin -or $dirty.Count -ne 0) {
       throw "The operation requires clean main exactly matching origin/main."
     }
-    $delta = Get-OperatorDeltaEvidence -FromSha $SourceSha -ToSha $head
+    $delta = if ($Action -in @('RecoverCleanup', 'Verify')) {
+      Get-RecoveryOperatorDeltaEvidence -FromSha $SourceSha -ToSha $head
+    }
+    else {
+      Get-OperatorDeltaEvidence -FromSha $SourceSha -ToSha $head
+    }
     $script:operatorSourceSha = $head
     $script:sourceToOperatorDeltaSha256 = $delta.Sha256
   }
@@ -1778,7 +1836,7 @@ function Read-ExecutionPlan {
   )
   if (-not $operatorBindingValid -and $Action -in @('RecoverCleanup', 'Verify')) {
     $originalOperatorDelta = Get-OperatorDeltaEvidence -FromSha $SourceSha -ToSha ([string]$plan.operatorSourceSha)
-    $null = Get-OperatorDeltaEvidence -FromSha ([string]$plan.operatorSourceSha) -ToSha $script:operatorSourceSha
+    $null = Get-RecoveryOperatorDeltaEvidence -FromSha ([string]$plan.operatorSourceSha) -ToSha $script:operatorSourceSha
     $operatorBindingValid = (
       [string]$plan.sourceToOperatorDeltaSha256 -ceq [string]$originalOperatorDelta.Sha256
     )

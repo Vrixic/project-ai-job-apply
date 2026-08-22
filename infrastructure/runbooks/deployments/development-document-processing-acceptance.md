@@ -22,9 +22,13 @@ roles, or network destinations. The only documents are produced by the reviewed 
   later change is documentation or this exact document-acceptance operator/test/runbook packet.
   The operator SHA and canonical allowed-delta SHA-256 are bound separately into the execution
   plan and receipt; application or infrastructure changes remain fail-closed.
-  `RecoverCleanup` and `Verify` may use a later clean reviewed operator only when the execution
-  operator is its ancestor and both source deltas contain only this exact operator packet or
-  documentation. Fresh execution still requires the plan's exact current operator revision.
+  `RecoverCleanup` and `Verify` may use a later clean reviewed operator when the execution
+  operator is its ancestor. Their canonical recovery delta includes only this exact operator
+  packet and documentation, rejects ambiguous changes within that packet, and separately rejects
+  any change to the operator guards or fixture generator. Unrelated application/infrastructure
+  commits may coexist on `main` because recovery invokes only the already reviewed deployed
+  runtime and revalidates its exact live identity before every mutation. Fresh planning and
+  execution retain the stricter whole-tree application/infrastructure refusal.
 - A temporary development IAM Identity Center session in the exact expected AWS account and
   `us-east-2`.
 - The encrypted, versioned development Terraform state bucket.
