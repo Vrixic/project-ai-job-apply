@@ -45,6 +45,7 @@ foreach ($required in @(
     'sourceToOperatorDeltaSha256',
     "ConvertFrom-Json -DateKind String",
     'The application-to-operator delta changes deployed application or infrastructure source.',
+    '[Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Documents',
     'Assert-DocumentOperationalHealth -WaitForOk',
     '$scanAfter = $end.AddSeconds(30)',
     '$handler.AllowAutoRedirect = $false',

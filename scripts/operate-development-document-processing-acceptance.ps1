@@ -1476,7 +1476,7 @@ function Invoke-ProfileReview {
 function Save-RecoveryDescriptor {
   param(
     [Parameter(Mandatory)][object]$Receipt,
-    [Parameter(Mandatory)][object[]]$Documents
+    [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Documents
   )
   Assert-ReviewedRuntimeUnchanged
   $descriptor = [ordered]@{
