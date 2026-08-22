@@ -90,8 +90,11 @@ eight requests: the seven fixed acceptance actions plus one separately tokenized
 - `DOCUMENT_PROCESSING_ACCEPTANCE_FIXTURE_MANIFEST`, the canonical four-entry JSON manifest
 - `DOCUMENT_PROCESSING_ACCEPTANCE_ISSUER`, bound to the exact deployed gateway issuer
 
-The task command is only `documents/dist/src/run-document-processing-acceptance.js`. Do not edit the
-plan or fixture files after review. The plan also checksum-binds the exact numeric gateway and
+The task command is only `documents/dist/src/run-document-processing-acceptance.js`. The ECS
+request omits `propagateTags`, which is the API's no-propagation representation; recovery of an
+older reviewed plan may normalize only the rejected historical literal `NONE` to omission. Do not
+edit the plan or fixture files after review. The plan also checksum-binds the exact numeric gateway
+and
 processor versions behind their unweighted aliases, their qualified ARNs, code hashes, alias and
 function revision IDs, and the processor's exact Terraform-bound parser numeric version, qualified
 ARN, code hash, and function revision ID. Execution and verification reject any alias routing,

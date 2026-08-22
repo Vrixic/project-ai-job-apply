@@ -784,7 +784,6 @@ function New-TaskRequest {
     platformVersion = '1.4.0'
     count = 1
     enableExecuteCommand = $false
-    propagateTags = 'NONE'
     networkConfiguration = [ordered]@{
       awsvpcConfiguration = [ordered]@{
         subnets = @($Runtime.Subnets)
@@ -2070,6 +2069,17 @@ $script:reviewedStateLineage = $planEvidence.Plan.stateLineage
 $script:reviewedStateSerial = $planEvidence.Plan.stateSerial
 $requestByPhase = @{}
 foreach ($entry in @($planEvidence.Plan.requests)) {
+  if ($entry.request.PSObject.Properties.Name -contains 'propagateTags') {
+    if (
+      $Action -notin @('RecoverCleanup', 'Verify') -or
+      [string]$entry.request.propagateTags -cne 'NONE'
+    ) {
+      throw "The reviewed execution plan contains an unsupported ECS tag-propagation request."
+    }
+    # ECS rejects the historical literal NONE. Omitting propagateTags is its documented
+    # no-propagation representation, so recovery may normalize only that exact reviewed value.
+    $entry.request.PSObject.Properties.Remove('propagateTags')
+  }
   $requestByPhase[[string]$entry.phase] = $entry.request
   Assert-TaskRequest -Request $entry.request -Runtime $runtime -Phase ([string]$entry.phase) -RunId ([string]$planEvidence.Plan.runId) -ManifestJson $planEvidence.Fixture.ManifestJson -ManifestDigest $FixtureSetSha256 -Issuer $runtime.Issuer
 }
