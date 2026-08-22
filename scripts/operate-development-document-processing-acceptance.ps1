@@ -2165,7 +2165,8 @@ $runtimeIdentityUnchanged = (
 $recoveryOnlyStateAdvance = (
   $Action -in @('RecoverCleanup', 'Verify') -and
   $runtimeIdentityUnchanged -and
-  [long]$identity.Serial -eq ([long]$planEvidence.Plan.stateSerial + 1)
+  [long]$identity.Serial -gt [long]$planEvidence.Plan.stateSerial -and
+  [long]$identity.Serial -le ([long]$planEvidence.Plan.stateSerial + 2)
 )
 if (
   -not $runtimeIdentityUnchanged -or
