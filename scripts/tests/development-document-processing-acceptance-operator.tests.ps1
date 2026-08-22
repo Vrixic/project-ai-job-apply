@@ -98,7 +98,8 @@ function Import-OperatorFunction {
 
 . (Join-Path $repositoryRoot "scripts\lib\deployment-operator-guards.ps1")
 foreach ($name in @(
-    "Assert-ExactPropertySet", "ConvertFrom-OperatorJson", "Test-CanonicalTimestamp", "New-TaskRequest", "Assert-TaskRequest",
+    "Assert-ExactPropertySet", "ConvertFrom-OperatorJson", "Get-OptionalProperty", "Get-OptionalItems",
+    "Test-CanonicalTimestamp", "New-TaskRequest", "Assert-TaskRequest",
     "Get-ExpectedAggregate", "New-GatewayEvent", "Assert-RecoveryDescriptor",
     "Test-ExactObjectAlreadyRemoved", "Assert-DocumentOperationalHealth", "Assert-PrivacySafeLogs",
     "Get-OptionalProperty", "New-DirectProcessorEvent", "Get-LambdaVersionIdentity",
@@ -278,6 +279,10 @@ if (
 $emptyHistory = [pscustomobject]@{ Versions = @(); DeleteMarkers = @() }
 if (-not (Test-ExactObjectAlreadyRemoved -History $emptyHistory -Key 'quarantine/id/source' -Version 'v1')) {
   throw "Exact object cleanup does not accept an already-proved zero history."
+}
+$omittedEmptyHistory = [pscustomobject]@{}
+if (-not (Test-ExactObjectAlreadyRemoved -History $omittedEmptyHistory -Key 'quarantine/id/source' -Version 'v1')) {
+  throw "Exact object cleanup does not accept AWS's omitted empty history fields."
 }
 $exactHistory = [pscustomobject]@{
   Versions = @([pscustomobject]@{ Key = 'quarantine/id/source'; VersionId = 'v1' })

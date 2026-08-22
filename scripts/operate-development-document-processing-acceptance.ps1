@@ -135,6 +135,16 @@ function Get-OptionalProperty {
   $property.Value
 }
 
+function Get-OptionalItems {
+  param(
+    [Parameter(Mandatory)][object]$Object,
+    [Parameter(Mandatory)][string]$Name
+  )
+  $value = Get-OptionalProperty -Object $Object -Name $Name
+  if ($null -eq $value) { return @() }
+  @($value)
+}
+
 function Test-EcsFaultInjectionDisabled {
   param([Parameter(Mandatory)][object]$TaskDefinition)
   $property = $TaskDefinition.PSObject.Properties['enableFaultInjection']
@@ -944,9 +954,11 @@ function New-DurableClaim {
   param([Parameter(Mandatory)][object]$Plan)
   $key = "operator-claims/development-document-processing-acceptance/$ReviewedExecutionPlanSha256.json"
   $history = Invoke-AwsJson -Arguments @('s3api', 'list-object-versions', '--bucket', $StateBucket, '--prefix', $key, '--output', 'json') -Operation 'Claim history validation'
+  $claimVersions = @(Get-OptionalItems -Object $history -Name 'Versions')
+  $claimMarkers = @(Get-OptionalItems -Object $history -Name 'DeleteMarkers')
   if (
-    @($history.Versions | Where-Object { [string]$_.Key -ceq $key }).Count -ne 0 -or
-    @($history.DeleteMarkers | Where-Object { [string]$_.Key -ceq $key }).Count -ne 0
+    @($claimVersions | Where-Object { [string]$_.Key -ceq $key }).Count -ne 0 -or
+    @($claimMarkers | Where-Object { [string]$_.Key -ceq $key }).Count -ne 0
   ) {
     throw "This execution plan already has durable claim history."
   }
@@ -1246,9 +1258,11 @@ function Register-And-UploadFixture {
     throw "The uploaded object version does not match its exact registration and digest."
   }
   $versions = Invoke-AwsJson -Arguments @('s3api', 'list-object-versions', '--bucket', $Runtime.CandidateDocumentBucket, '--prefix', $key, '--output', 'json') -Operation 'Uploaded object version history'
+  $uploadedVersions = @(Get-OptionalItems -Object $versions -Name 'Versions')
+  $uploadedMarkers = @(Get-OptionalItems -Object $versions -Name 'DeleteMarkers')
   if (
-    @($versions.Versions | Where-Object { [string]$_.Key -ceq $key }).Count -ne 1 -or
-    @($versions.DeleteMarkers | Where-Object { [string]$_.Key -ceq $key }).Count -ne 0
+    @($uploadedVersions | Where-Object { [string]$_.Key -ceq $key }).Count -ne 1 -or
+    @($uploadedMarkers | Where-Object { [string]$_.Key -ceq $key }).Count -ne 0
   ) {
     throw "The generated object key has unexpected version history."
   }
@@ -1370,8 +1384,8 @@ function Complete-NormalizedDescriptor {
   if ($Document.role -notin @('clean-pdf', 'clean-docx')) { return }
   $key = "normalized/$($Document.documentId)/$($Document.sha256)/resume-parser-v1/resume.json"
   $versions = Invoke-AwsJson -Arguments @('s3api', 'list-object-versions', '--bucket', $Runtime.CandidateDocumentBucket, '--prefix', $key, '--output', 'json') -Operation 'Normalized object version discovery'
-  $exact = @($versions.Versions | Where-Object { [string]$_.Key -ceq $key })
-  $markers = @($versions.DeleteMarkers | Where-Object { [string]$_.Key -ceq $key })
+  $exact = @(Get-OptionalItems -Object $versions -Name 'Versions' | Where-Object { [string]$_.Key -ceq $key })
+  $markers = @(Get-OptionalItems -Object $versions -Name 'DeleteMarkers' | Where-Object { [string]$_.Key -ceq $key })
   if ($exact.Count -eq 0 -and -not $Required) { return }
   if ($exact.Count -ne 1 -or $markers.Count -ne 0) {
     throw "The descriptor-bound normalized object version is missing or ambiguous."
@@ -1610,8 +1624,8 @@ function Remove-ExactObjectVersion {
   }
   $history = Invoke-AwsJson -Arguments @('s3api', 'list-object-versions', '--bucket', $Runtime.CandidateDocumentBucket, '--prefix', $Key, '--output', 'json') -Operation 'Post-cleanup object history'
   if (
-    @($history.Versions).Count -ne 0 -or
-    @($history.DeleteMarkers).Count -ne 0
+    @(Get-OptionalItems -Object $history -Name 'Versions').Count -ne 0 -or
+    @(Get-OptionalItems -Object $history -Name 'DeleteMarkers').Count -ne 0
   ) {
     throw "The exact generated object key was not reduced to zero versions."
   }
@@ -1623,8 +1637,8 @@ function Test-ExactObjectAlreadyRemoved {
     [Parameter(Mandatory)][string]$Key,
     [Parameter(Mandatory)][string]$Version
   )
-  $versions = @($History.Versions)
-  $markers = @($History.DeleteMarkers)
+  $versions = @(Get-OptionalItems -Object $History -Name 'Versions')
+  $markers = @(Get-OptionalItems -Object $History -Name 'DeleteMarkers')
   if ($versions.Count -eq 0 -and $markers.Count -eq 0) { return $true }
   if (
     $versions.Count -ne 1 -or
@@ -1641,8 +1655,8 @@ function Complete-SourceDescriptor {
   param([Parameter(Mandatory)][object]$Runtime, [Parameter(Mandatory)][object]$Document)
   if (-not [string]::IsNullOrWhiteSpace([string]$Document.sourceVersion)) { return }
   $history = Invoke-AwsJson -Arguments @('s3api', 'list-object-versions', '--bucket', $Runtime.CandidateDocumentBucket, '--prefix', $Document.sourceKey, '--output', 'json') -Operation 'Recovery source version discovery'
-  $exact = @($history.Versions | Where-Object { [string]$_.Key -ceq [string]$Document.sourceKey })
-  $markers = @($history.DeleteMarkers | Where-Object { [string]$_.Key -ceq [string]$Document.sourceKey })
+  $exact = @(Get-OptionalItems -Object $history -Name 'Versions' | Where-Object { [string]$_.Key -ceq [string]$Document.sourceKey })
+  $markers = @(Get-OptionalItems -Object $history -Name 'DeleteMarkers' | Where-Object { [string]$_.Key -ceq [string]$Document.sourceKey })
   if ($exact.Count -eq 0 -and $markers.Count -eq 0) { return }
   if ($exact.Count -ne 1 -or $markers.Count -ne 0) {
     throw "The descriptor-bound source object version is ambiguous."
