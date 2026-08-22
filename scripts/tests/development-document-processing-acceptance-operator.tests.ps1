@@ -47,6 +47,8 @@ foreach ($required in @(
     'Get-OperatorDeltaEvidence',
     'Get-RecoveryOperatorDeltaEvidence',
     'A recovery operator dependency changed after the reviewed source.',
+    '$recoveryOnlyStateAdvance',
+    '[long]$identity.Serial -eq ([long]$planEvidence.Plan.stateSerial + 1)',
     '$null = Assert-RecoveryDescriptor',
     "ConvertFrom-Json -DateKind String",
     'The reviewed operator delta changes deployed application or infrastructure source.',

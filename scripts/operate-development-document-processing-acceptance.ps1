@@ -2157,18 +2157,26 @@ if ($Action -eq 'PlanExecution') {
 
 $planEvidence = Read-ExecutionPlan -Path $ExecutionPlanPath -Sha $ReviewedExecutionPlanSha256 -RequireFresh:($Action -eq 'Execute')
 $currentRuntime = ConvertTo-ReviewedRuntimeIdentity -Runtime $runtime
+$runtimeIdentityUnchanged = (
+  [string]$planEvidence.Plan.stateLineage -ceq $identity.Lineage -and
+  [string]$planEvidence.Plan.migrationImage -ceq $migration.ImageUri -and
+  (ConvertTo-DeploymentCanonicalValue $planEvidence.Plan.runtime) -ceq (ConvertTo-DeploymentCanonicalValue $currentRuntime)
+)
+$recoveryOnlyStateAdvance = (
+  $Action -in @('RecoverCleanup', 'Verify') -and
+  $runtimeIdentityUnchanged -and
+  [long]$identity.Serial -eq ([long]$planEvidence.Plan.stateSerial + 1)
+)
 if (
-  [string]$planEvidence.Plan.stateLineage -cne $identity.Lineage -or
-  [long]$planEvidence.Plan.stateSerial -ne $identity.Serial -or
-  [string]$planEvidence.Plan.migrationImage -cne $migration.ImageUri -or
-  (ConvertTo-DeploymentCanonicalValue $planEvidence.Plan.runtime) -cne (ConvertTo-DeploymentCanonicalValue $currentRuntime)
+  -not $runtimeIdentityUnchanged -or
+  ([long]$planEvidence.Plan.stateSerial -ne $identity.Serial -and -not $recoveryOnlyStateAdvance)
 ) {
   throw "The reviewed execution plan no longer matches the exact dark runtime."
 }
 $script:reviewedRuntimeIdentity = $planEvidence.Plan.runtime
 $script:reviewedRuntimeImage = $migration.ImageUri
 $script:reviewedStateLineage = $planEvidence.Plan.stateLineage
-$script:reviewedStateSerial = $planEvidence.Plan.stateSerial
+$script:reviewedStateSerial = $identity.Serial
 $requestByPhase = @{}
 foreach ($entry in @($planEvidence.Plan.requests)) {
   if ($entry.request.PSObject.Properties.Name -contains 'propagateTags') {
@@ -2434,7 +2442,7 @@ $verifiedDocuments = @(Read-RecoveryDescriptor -Receipt $receipt -FixtureEvidenc
 $null = Assert-PrivacySafeLogs -Receipt $receipt -FixtureEvidence $planEvidence.Fixture -Documents $verifiedDocuments
 $health = Assert-DocumentOperationalHealth -WaitForOk
 $ending = Get-StateIdentity
-if ([string]$ending.Lineage -cne [string]$planEvidence.Plan.stateLineage -or [long]$ending.Serial -ne [long]$planEvidence.Plan.stateSerial) {
+if ([string]$ending.Lineage -cne [string]$planEvidence.Plan.stateLineage -or [long]$ending.Serial -ne [long]$script:reviewedStateSerial) {
   throw "Terraform state changed during document acceptance."
 }
 [pscustomobject]@{
