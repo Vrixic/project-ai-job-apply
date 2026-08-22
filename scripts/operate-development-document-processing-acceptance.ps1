@@ -2124,7 +2124,12 @@ foreach ($entry in @($planEvidence.Plan.requests)) {
     # no-propagation representation. ECS still binds the failed payload to its client token, so
     # recovery uses one deterministic versioned token for only that exact normalization.
     $entry.request.PSObject.Properties.Remove('propagateTags')
-    $entry.request.clientToken = "$($entry.request.clientToken)-v2"
+    $entry.request.clientToken = if ([string]$entry.phase -ceq 'recovery-cleanup') {
+      "doc-recover-$(([string]$planEvidence.Plan.runId).Replace('-', ''))-v2"
+    }
+    else {
+      "$($entry.request.clientToken)-v2"
+    }
   }
   $requestByPhase[[string]$entry.phase] = $entry.request
   Assert-TaskRequest -Request $entry.request -Runtime $runtime -Phase ([string]$entry.phase) -RunId ([string]$planEvidence.Plan.runId) -ManifestJson $planEvidence.Fixture.ManifestJson -ManifestDigest $FixtureSetSha256 -Issuer $runtime.Issuer
