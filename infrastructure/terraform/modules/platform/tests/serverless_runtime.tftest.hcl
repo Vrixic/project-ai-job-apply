@@ -747,3 +747,43 @@ run "migration_repository_is_dedicated_and_hardened" {
     error_message = "Database migrations require one dedicated immutable, scanned, KMS-encrypted repository."
   }
 }
+
+run "migration_task_has_private_image_and_log_paths" {
+  command = plan
+
+  variables {
+    migration_image = "111122223333.dkr.ecr.us-east-2.amazonaws.com/ai-job-apply/migration@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+
+  assert {
+    condition = (
+      length(aws_vpc_endpoint.migration_ecr_api) == 1 &&
+      length(aws_vpc_endpoint.migration_ecr_dkr) == 1 &&
+      length(aws_vpc_endpoint.migration_logs) == 1 &&
+      aws_vpc_endpoint.migration_ecr_api[0].private_dns_enabled &&
+      aws_vpc_endpoint.migration_ecr_dkr[0].private_dns_enabled &&
+      aws_vpc_endpoint.migration_logs[0].private_dns_enabled
+    )
+    error_message = "A private Fargate migration task requires private DNS endpoints for both ECR surfaces and CloudWatch Logs."
+  }
+
+  assert {
+    condition = (
+      length(aws_vpc_endpoint.migration_s3) == 1 &&
+      aws_vpc_endpoint.migration_s3[0].vpc_endpoint_type == "Gateway" &&
+      length(aws_vpc_endpoint.migration_s3[0].route_table_ids) == 1
+    )
+    error_message = "The no-public-IP migration task requires an S3 gateway path on its exact route table for regional ECR layers."
+  }
+
+  assert {
+    condition = (
+      length(aws_security_group.migration_aws_endpoints) == 1 &&
+      length(aws_security_group.migration_aws_endpoints[0].ingress) == 1 &&
+      one(aws_security_group.migration_aws_endpoints[0].ingress).from_port == 443 &&
+      one(aws_security_group.migration_aws_endpoints[0].ingress).to_port == 443 &&
+      length(one(aws_security_group.migration_aws_endpoints[0].ingress).security_groups) == 1
+    )
+    error_message = "Migration AWS interface endpoints must admit only TLS from the application security group."
+  }
+}

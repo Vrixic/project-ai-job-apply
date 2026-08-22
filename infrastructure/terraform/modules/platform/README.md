@@ -21,8 +21,10 @@ durable function's checkpoint KMS input.
 scan-on-push, and KMS encrypted. A nonempty `migration_image` creates a one-off Fargate task
 definition and must reference an exact digest in that repository. The task has no listener, uses
 the existing application security group, retrieves only `DATABASE_URL`, and exits after applying
-and verifying versioned PostgreSQL migrations. The ECS cluster itself has no continuously running
-service.
+and verifying versioned PostgreSQL migrations. With public IP assignment disabled, exact-role
+private endpoints provide ECR API/registry access, the regional ECR layer-bucket S3 path, Secrets
+Manager, and CloudWatch Logs without adding NAT or general internet egress. The ECS cluster itself
+has no continuously running service.
 
 The lean defaults keep PostgreSQL Single-AZ, Redis absent, and NAT absent until measured or launch
 evidence justifies expansion. Lambda concurrency and database-handler concurrency remain bounded
