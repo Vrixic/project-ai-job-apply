@@ -140,13 +140,19 @@ as `ReviewedBaselineToCurrentDeltaSha256`; do not reuse a digest after the merge
    admitted only for one canonical added destination absent at the baseline and a regular-blob
    source retained at both commits; a missing, unexpected, or mismatched checksum fails closed.
    This does not broaden the document-dark recovery allowlist.
-   Older Terraform state is not generally accepted. The sole stale-state handoff is the exact
+   Older Terraform state is not generally accepted. The historical stale-state handoff is the exact
    reviewed schema-3 CompleteDark baseline at operator `9d290416c61847f1682157c08312cdb920d42107`,
    plan SHA-256 `2143c836f9c55d2126efef55b314f167b35d593d64338791cb6c3837c6e2a6a4`,
    metadata SHA-256 `e0efc63e7c17685e363e23f15f7f1d39e83c46beff3f08fdb768bd67e78b8011`,
    lineage `472ef790-b249-45ec-817f-718005980d9e`, and serial `107`, and only when the
-   current planning state is the same lineage at serial `108`. Every other retained baseline must
-   equal the current planning-state identity. That exact serial-107 plan predates the nine public-
+   current planning state is the same lineage at serial `108`. A schema-5 CompleteDark baseline
+   may also advance by exactly one serial in the same lineage when its full document-to-migration-
+   to-operator Git chain validates, the complete document-baseline-operator-to-current delta has
+   an independent reviewed checksum, and the refresh-backed task plan remains limited to the
+   exact migration task replacement after overlaying the verified live gateway artifact. This is
+   the bounded handoff for a separately reviewed gateway apply; two or more serials, a different
+   lineage, ParserDark, a missing review, or any extra plan change fail closed. Every other retained
+   baseline must equal the current planning-state identity. The exact serial-107 plan predates the nine public-
    job-reader inputs. Only this checksum-pinned stale-state handoff may omit those names; the
    operator injects `deploy_public_job_reader = false`, residual acceptance `false`, empty boundary
    and artifact strings, and rate/burst limits `1`/`1`. Any other missing or extra variable fails
@@ -162,9 +168,10 @@ as `ReviewedBaselineToCurrentDeltaSha256`; do not reuse a digest after the merge
    all other attributes equal the exact planned value, and sensitivity remains all false;
    duplicates, removals, unknowns, broadened policy semantics, or any other drift fail closed. The
    task plan rejects every meaningful change except a create-before-destroy replacement of
-   `module.platform.aws_ecs_task_definition.migration[0]` caused only by the image digest and the
-   one state-only `module.platform.terraform_data.ingestion_activation_guard` create that serial
-   108 predates. The guard must have exactly `deploy = false`, `runtime = false`, and
+   `module.platform.aws_ecs_task_definition.migration[0]` caused only by the image digest. It also
+   accepts the one state-only `module.platform.terraform_data.ingestion_activation_guard` create
+   only when the retained state predates that guard; subsequent releases require the guard and its
+   outputs to remain no-op. A created guard must have exactly `deploy = false`, `runtime = false`, and
    `synthetic_only = false`; it cannot deploy or activate ingestion. Any different action, input,
    unknown/sensitive shape, replacement path, additional resource, or output change fails closed.
 2. Independently inspect the saved plan and its `.metadata.json` sidecar, then pass both printed
@@ -196,7 +203,11 @@ as `ReviewedBaselineToCurrentDeltaSha256`; do not reuse a digest after the merge
    created plan/sidecar bytes if any validation or write fails, and requires state lineage/serial
    to remain unchanged while producing the handoff. It reconstructs the exact saved-plan input
    set against variable declarations across every root Terraform `*.tf` file and rejects missing,
-   extra, or duplicate names. A schema-5 sidecar preserves the deployed document release and its
+   extra, or duplicate names. A schema-5 sidecar is also a valid next migration input: it preserves
+   and revalidates the deployed document release, its original operator delta, the intervening
+   migration release, and the later operator delta, then projects the original document binding
+   into the next task metadata so the following verifier cannot collapse the historical chain.
+   A newly emitted schema-5 sidecar preserves the deployed document release and its
    original operator delta separately from the checksum-reviewed migration release, reviewed
    baseline-to-release delta, and later verifier-only operator delta. It also binds the current Terraform variable inventory,
    account, region, state lineage/serial, document stage, parser-version pin, reviewed document-

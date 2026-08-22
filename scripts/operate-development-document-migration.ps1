@@ -351,10 +351,10 @@ function Get-DocumentOperatorDeltaSha256 {
     "scripts/operate-development-gateway-release.ps1", "scripts/tests/development-document-dark-guards.tests.ps1",
     "scripts/tests/development-document-dark-operator.tests.ps1", "scripts/tests/development-document-migration-operator.tests.ps1",
     "scripts/tests/development-gateway-release-guards.tests.ps1", "scripts/tests/development-gateway-release-operator.tests.ps1",
-    "scripts/validate-serverless-workflow-infrastructure.mjs",
+    "scripts/validate-serverless-workflow-infrastructure.mjs", "scripts/verify-development-gateway-lambda-boundary.ps1",
     "infrastructure/runbooks/deployments/development-document-dark-deployment.md",
     "infrastructure/runbooks/deployments/database-migration.md",
-    "infrastructure/runbooks/deployments/development-gateway-lambda-release.md"
+    "infrastructure/runbooks/deployments/development-gateway-release.md"
   )
   $records = @(& git -C $repositoryRoot diff --name-status --no-renames "$ReleaseSha..$OperatorSha" 2>$null)
   $numstat = @(& git -C $repositoryRoot diff --numstat --no-renames "$ReleaseSha..$OperatorSha" 2>$null)
@@ -1238,14 +1238,18 @@ function Assert-RetainedBaselinePlanningState {
   param(
     [Parameter(Mandatory)][object]$Metadata,
     [Parameter(Mandatory)][object]$State,
-    [switch]$AllowExactCompleteDark107To108
+    [switch]$AllowExactCompleteDark107To108,
+    [switch]$AllowSchemaFiveOneSerialAdvance
   )
 
-  if ([string]$Metadata.StateLineage -cne [string]$State.Lineage -or
-      ([long]$Metadata.StateSerial -ne [long]$State.Serial -and
-       (-not $AllowExactCompleteDark107To108 -or
-        [string]$Metadata.StateLineage -cne "472ef790-b249-45ec-817f-718005980d9e" -or
-        [long]$Metadata.StateSerial -ne 107 -or [long]$State.Serial -ne 108))) {
+  $sameLineage = [string]$Metadata.StateLineage -ceq [string]$State.Lineage
+  $exactState = $sameLineage -and [long]$Metadata.StateSerial -eq [long]$State.Serial
+  $legacyHandoff = $sameLineage -and $AllowExactCompleteDark107To108 -and
+    [string]$Metadata.StateLineage -ceq "472ef790-b249-45ec-817f-718005980d9e" -and
+    [long]$Metadata.StateSerial -eq 107 -and [long]$State.Serial -eq 108
+  $schemaFiveHandoff = $sameLineage -and $AllowSchemaFiveOneSerialAdvance -and
+    [long]$State.Serial -eq ([long]$Metadata.StateSerial + 1)
+  if (-not ($exactState -or $legacyHandoff -or $schemaFiveHandoff)) {
     throw "The retained baseline does not have an accepted lineage and serial handoff to current planning state."
   }
 }
@@ -1308,6 +1312,13 @@ function Read-RetainedMigrationBaseline {
   ) | Sort-Object
   $dualKeys = @($expectedKeys | Where-Object { $_ -cne "SourceSha" }) + @("OperatorDeltaSha256", "OperatorSourceSha", "ReleaseSourceSha") | Sort-Object
   $schema4Keys = @($dualKeys) + @("MigrationImage") | Sort-Object
+  $schema5Keys = @(
+    "AccountId", "Applyable", "BaselineToReleaseDeltaSha256", "CreatedAt",
+    "DocumentOperatorDeltaSha256", "DocumentOperatorSourceSha", "DocumentReleaseSourceSha",
+    "Environment", "Kind", "MeaningfulChanges", "MigrationImage", "OperatorDeltaSha256",
+    "OperatorSourceSha", "ParserQualifiedArn", "PlanPath", "PlanSha256", "ReceiptSha256",
+    "Region", "ReleaseSourceSha", "SchemaVersion", "Stage", "StateLineage", "StateSerial"
+  ) | Sort-Object
   $actualKeys = @($metadata.PSObject.Properties | ForEach-Object Name | Sort-Object)
   $metadataPlanPath = if ([string]::IsNullOrWhiteSpace([string]$metadata.PlanPath)) { "" } else {
     [IO.Path]::GetFullPath([string]$metadata.PlanPath)
@@ -1315,6 +1326,7 @@ function Read-RetainedMigrationBaseline {
   $schema = [string]$metadata.SchemaVersion
   $baselineToCurrentDeltaSha256 = ""
   $allowExactCompleteDark107To108 = $false
+  $allowSchemaFiveOneSerialAdvance = $false
   $schemaValid = $false
   if ($schema -ceq "1") {
     $schemaValid = (($actualKeys -join "|") -ceq ($expectedKeys -join "|") -and
@@ -1343,6 +1355,31 @@ function Read-RetainedMigrationBaseline {
         (Test-ExactCompleteDarkStaleStateHandoff -Schema $schema -Stage ([string]$metadata.Stage) `
           -BaselineOperatorSha ([string]$metadata.OperatorSourceSha) -PlanSha256 $PlanSha256 `
           -MetadataSha256 $sidecarSha256 -Metadata $metadata)
+    }
+  } elseif ($schema -ceq "5") {
+    $schemaValid = (($actualKeys -join "|") -ceq ($schema5Keys -join "|") -and
+      [string]$metadata.DocumentReleaseSourceSha -match '^[a-f0-9]{40}$' -and
+      [string]$metadata.DocumentOperatorSourceSha -match '^[a-f0-9]{40}$' -and
+      [string]$metadata.DocumentOperatorDeltaSha256 -ceq
+        (Get-DocumentOperatorDeltaSha256 -ReleaseSha ([string]$metadata.DocumentReleaseSourceSha) `
+          -OperatorSha ([string]$metadata.DocumentOperatorSourceSha)) -and
+      [string]$metadata.ReleaseSourceSha -match '^[a-f0-9]{40}$' -and
+      [string]$metadata.BaselineToReleaseDeltaSha256 -ceq
+        (Get-DocumentOperatorDeltaSha256 -ReleaseSha ([string]$metadata.DocumentOperatorSourceSha) `
+          -OperatorSha ([string]$metadata.ReleaseSourceSha)) -and
+      [string]$metadata.OperatorSourceSha -match '^[a-f0-9]{40}$' -and
+      [string]$metadata.OperatorDeltaSha256 -ceq
+        (Get-DocumentOperatorDeltaSha256 -ReleaseSha ([string]$metadata.ReleaseSourceSha) `
+          -OperatorSha ([string]$metadata.OperatorSourceSha)))
+    if ($schemaValid) {
+      if ([string]$metadata.Stage -cne "complete-dark") {
+        throw "Only a CompleteDark schema-5 retained baseline may cross the migration handoff."
+      }
+      $baselineToCurrentDeltaSha256 = Get-ReviewedBaselineToCurrentDeltaSha256 `
+        -BaselineOperatorSha ([string]$metadata.DocumentOperatorSourceSha) `
+        -CurrentOperatorSha $operatorSourceSha -ReviewedSha256 $ReviewedBaselineToCurrentDeltaSha256
+      $allowSchemaFiveOneSerialAdvance =
+        $ReviewedBaselineToCurrentDeltaSha256 -match '^[a-f0-9]{64}$'
     }
   }
   if (-not $schemaValid -or
@@ -1380,24 +1417,28 @@ function Read-RetainedMigrationBaseline {
     [string]$metadata.ParserQualifiedArn -cne [string]$parserArnValueProperty.Value) {
     throw "The retained baseline metadata stage or parser pin does not match the exact Terraform plan variables."
   }
-  if ($schema -ceq "4" -and
+  if ($schema -in @("4", "5") -and
       [string]$metadata.MigrationImage -cne (Get-ExactStringPlanVariable -Plan $plan -Name "migration_image")) {
-    throw "The retained schema-4 baseline migration image does not match its exact retained plan."
+    throw "The retained migration baseline image does not match its exact retained plan."
   }
   $planningState = $null
   if ($RequireCurrentState) {
     $planningState = Get-CurrentTerraformStateIdentity
     Assert-RetainedBaselinePlanningState -Metadata $metadata -State $planningState `
-      -AllowExactCompleteDark107To108:$allowExactCompleteDark107To108
+      -AllowExactCompleteDark107To108:$allowExactCompleteDark107To108 `
+      -AllowSchemaFiveOneSerialAdvance:$allowSchemaFiveOneSerialAdvance
   }
   return [pscustomobject]@{
     Plan = $plan; PlanPath = $resolvedPlan; PlanSha256 = $PlanSha256
     Metadata = $metadata; MetadataPath = $sidecarPath; MetadataSha256 = $sidecarSha256
-    ReleaseSourceSha = $(if ($schema -in @("3", "4")) { [string]$metadata.ReleaseSourceSha } else { $SourceSha })
-    OperatorSourceSha = $(if ($schema -in @("3", "4")) { [string]$metadata.OperatorSourceSha } else { $SourceSha })
-    OperatorDeltaSha256 = $(if ($schema -in @("3", "4")) { [string]$metadata.OperatorDeltaSha256 } else {
-      Get-DocumentOperatorDeltaSha256 -ReleaseSha $SourceSha -OperatorSha $SourceSha
-    })
+    ReleaseSourceSha = $(if ($schema -ceq "5") { [string]$metadata.DocumentReleaseSourceSha }
+      elseif ($schema -in @("3", "4")) { [string]$metadata.ReleaseSourceSha } else { $SourceSha })
+    OperatorSourceSha = $(if ($schema -ceq "5") { [string]$metadata.DocumentOperatorSourceSha }
+      elseif ($schema -in @("3", "4")) { [string]$metadata.OperatorSourceSha } else { $SourceSha })
+    OperatorDeltaSha256 = $(if ($schema -ceq "5") { [string]$metadata.DocumentOperatorDeltaSha256 }
+      elseif ($schema -in @("3", "4")) { [string]$metadata.OperatorDeltaSha256 } else {
+        Get-DocumentOperatorDeltaSha256 -ReleaseSha $SourceSha -OperatorSha $SourceSha
+      })
     CurrentOperatorSourceSha = $operatorSourceSha
     BaselineToCurrentDeltaSha256 = $baselineToCurrentDeltaSha256
     PlanningState = $planningState
@@ -1627,16 +1668,16 @@ function Assert-ExactTaskPlan {
   }
   Assert-AcceptedMigrationProviderDrift -Plan $Plan
   $changes = @(Get-MeaningfulChanges -Changes @($Plan.resource_changes))
-  if ($changes.Count -ne 2 -or
-      @($changes | Where-Object { [string]$_.address -ceq $migrationAddress }).Count -ne 1 -or
-      @($changes | Where-Object { [string]$_.address -ceq $ingestionActivationGuardAddress }).Count -ne 1) {
+  $migrationRecords = @($changes | Where-Object { [string]$_.address -ceq $migrationAddress })
+  $guardRecords = @($changes | Where-Object { [string]$_.address -ceq $ingestionActivationGuardAddress })
+  if ($changes.Count -notin @(1, 2) -or $migrationRecords.Count -ne 1 -or
+      $guardRecords.Count -ne ($changes.Count - 1)) {
     throw "The task plan may change only the migration task definition and default-off ingestion guard."
   }
-  $migrationRecord = @($changes | Where-Object { [string]$_.address -ceq $migrationAddress })[0]
-  $guardRecord = @($changes | Where-Object {
-      [string]$_.address -ceq $ingestionActivationGuardAddress
-    })[0]
-  Assert-ExactIngestionActivationGuardCreate -Record $guardRecord
+  $migrationRecord = $migrationRecords[0]
+  if ($guardRecords.Count -eq 1) {
+    Assert-ExactIngestionActivationGuardCreate -Record $guardRecords[0]
+  }
   $change = $migrationRecord.change
   $actions = @($change.actions)
   if ($actions.Count -ne 2 -or "create" -notin $actions -or "delete" -notin $actions) {
@@ -1702,14 +1743,17 @@ function Assert-ExactTaskPlan {
     ingestion_runtime_enabled          = $false
     ingestion_synthetic_source_enabled = $false
   }
-  $expectedOutputNames = @($expectedIngestionOutputs.Keys) + @("migration_task_definition_arn")
+  $expectedOutputNames = @("migration_task_definition_arn")
+  if ($guardRecords.Count -eq 1) {
+    $expectedOutputNames = @($expectedIngestionOutputs.Keys) + $expectedOutputNames
+  }
   $actualOutputNames = @($outputChanges | ForEach-Object Name)
   if ($outputChanges.Count -ne $expectedOutputNames.Count -or
       @(Compare-Object -CaseSensitive $expectedOutputNames $actualOutputNames).Count -ne 0) {
     throw "Only the migration task-definition and exact default-off ingestion outputs may change."
   }
 
-  foreach ($entry in $expectedIngestionOutputs.GetEnumerator()) {
+  foreach ($entry in @($expectedIngestionOutputs.GetEnumerator() | Where-Object { $guardRecords.Count -eq 1 })) {
     $output = $Plan.output_changes.PSObject.Properties[$entry.Key].Value
     $actualKeys = @($output.PSObject.Properties | ForEach-Object Name | Sort-Object)
     $expectedKeys = @(
@@ -1779,7 +1823,7 @@ function Read-TaskPlanMetadata {
       [string]$metadata.planningStateLineage -notmatch '^[a-f0-9-]{36}$' -or
       [long]$metadata.planningStateSerial -lt 1 -or
       [string]$metadata.appliedBaselineReceiptSha256 -notmatch '^[a-f0-9]{64}$' -or
-      [int]$metadata.meaningfulChanges -ne 2 -or [int]$metadata.destructiveChanges -ne 0 -or
+      [int]$metadata.meaningfulChanges -notin @(1, 2) -or [int]$metadata.destructiveChanges -ne 0 -or
       -not $createdAtValid -or
       [IO.Path]::GetFullPath([string]$metadata.taskPlanPath) -cne [IO.Path]::GetFullPath($PlanPath) -or
       [string]::IsNullOrWhiteSpace([string]$metadata.appliedPlanPath) -or
@@ -2266,6 +2310,7 @@ if ($Action -eq "PlanTask") {
   if ($planExit -ne 2) { throw "The migration task plan did not produce exactly one reviewable change. Inspect the ignored local plan log." }
   $planJson = Get-PlanJson -Path $taskPlan
   Assert-ExactTaskPlan -Plan $planJson
+  $taskChanges = @(Get-MeaningfulChanges -Changes @($planJson.resource_changes))
   Assert-CleanCurrentMainHead -ExpectedSha $operatorSourceSha
   Assert-NoUntrackedTerraformInputs
   Assert-ExactTerraformStateIdentity -Expected $baselineEvidence.PlanningState `
@@ -2298,7 +2343,7 @@ if ($Action -eq "PlanTask") {
     planningStateSerial = [long]$baselineEvidence.PlanningState.Serial
     taskPlanPath        = $taskPlan
     taskPlanSha256      = $sha256
-    meaningfulChanges   = 2
+    meaningfulChanges   = $taskChanges.Count
     destructiveChanges  = 0
     createdAt           = (Get-Date).ToUniversalTime().ToString("o")
   }
@@ -2311,7 +2356,7 @@ if ($Action -eq "PlanTask") {
     PlanSha256          = $sha256
     PlanMetadataPath    = $taskMetadataPath
     PlanMetadataSha256  = $taskMetadataSha256
-    ChangedResources    = @($migrationAddress, $ingestionActivationGuardAddress)
+    ChangedResources    = @($taskChanges | ForEach-Object { [string]$_.address } | Sort-Object)
     ArtifactDigest      = $artifact.Digest
     TriggeredTaskCount  = 0
   }
@@ -2327,6 +2372,10 @@ $taskMetadata = Read-TaskPlanMetadata -PlanPath $taskPlan -PlanSha256 $ReviewedT
   -MetadataSha256 $ReviewedTaskPlanMetadataSha256
 $taskPlanJson = Get-PlanJson -Path $taskPlan
 Assert-ExactTaskPlan -Plan $taskPlanJson
+$taskChanges = @(Get-MeaningfulChanges -Changes @($taskPlanJson.resource_changes))
+if ([int]$taskMetadata.meaningfulChanges -ne $taskChanges.Count) {
+  throw "The task-plan metadata meaningful-change count does not match the reviewed plan."
+}
 
 if ($Action -eq "ApplyTask") {
   if ($AppliedPlanMetadataSha256 -notmatch '^[a-f0-9]{64}$' -or

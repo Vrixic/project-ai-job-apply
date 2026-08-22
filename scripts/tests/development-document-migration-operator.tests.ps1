@@ -73,7 +73,9 @@ foreach ($schemaFiveMarker in @(
     'DocumentReleaseSourceSha',
     'DocumentOperatorSourceSha',
     'DocumentOperatorDeltaSha256',
-    'BaselineToReleaseDeltaSha256'
+    'BaselineToReleaseDeltaSha256',
+    'AllowSchemaFiveOneSerialAdvance',
+    'Only a CompleteDark schema-5 retained baseline may cross the migration handoff.'
   )) {
   if (-not $source.Contains($schemaFiveMarker)) {
     throw "The post-migration verifier does not preserve the reviewed split-source handoff."
@@ -1260,6 +1262,21 @@ $currentPlanningState = [pscustomobject]@{
 }
 Assert-RetainedBaselinePlanningState -Metadata $staleBaselineMetadata `
   -State $currentPlanningState -AllowExactCompleteDark107To108
+$schemaFiveState = [pscustomobject]@{ Lineage = $retainedState.Lineage; Serial = 200 }
+Assert-RetainedBaselinePlanningState `
+  -Metadata ([pscustomobject]@{ StateLineage = $retainedState.Lineage; StateSerial = 199 }) `
+  -State $schemaFiveState -AllowSchemaFiveOneSerialAdvance
+foreach ($stateCase in @(
+    @{ metadata = [pscustomobject]@{ StateLineage = $retainedState.Lineage; StateSerial = 198 }; state = $schemaFiveState },
+    @{ metadata = [pscustomobject]@{ StateLineage = "87654321-4321-4321-4321-cba987654321"; StateSerial = 199 }; state = $schemaFiveState }
+  )) {
+  $rejected = $false
+  try {
+    Assert-RetainedBaselinePlanningState -Metadata $stateCase.metadata -State $stateCase.state `
+      -AllowSchemaFiveOneSerialAdvance
+  } catch { $rejected = $true }
+  if (-not $rejected) { throw "The schema-5 state handoff accepted an unsafe serial or lineage." }
+}
 foreach ($stateCase in @(
     @{ metadata = $staleBaselineMetadata; state = $currentPlanningState; allow = $false },
     @{ metadata = [pscustomobject]@{ StateLineage = $staleBaselineMetadata.StateLineage; StateSerial = 106 }; state = $currentPlanningState; allow = $true },
@@ -1421,7 +1438,7 @@ try {
   $operatorSourceSha = $currentOperatorSha
   $fullRecords = @(
     "M`tscripts/operate-development-document-migration.ps1",
-    "A`tdocs/product/delivery/evidence/d1-new.md"
+    "M`tscripts/tests/development-document-migration-operator.tests.ps1"
   )
   $fullPatch = @("fixture complete-dark patch")
   $reviewedBaselineDelta = Get-TextSha256 ("development-operator-delta-v1`n$baselineOperatorSha`n$currentOperatorSha`n--name-status--`n" +
@@ -1444,8 +1461,9 @@ try {
     $arguments = @($args)
     if ($arguments -contains "merge-base") { $global:LASTEXITCODE = if ($script:ancestorGitMode -ceq "nonancestor") { 1 } else { 0 }; return }
     if ($arguments -contains "--name-status") { $global:LASTEXITCODE = 0; return $script:ancestorRecordsFixture }
-    if ($arguments -contains "--numstat") { $global:LASTEXITCODE = 0; return @("1`t1`tscripts/operate-development-document-migration.ps1", "1`t0`tdocs/product/delivery/evidence/d1-new.md") }
+    if ($arguments -contains "--numstat") { $global:LASTEXITCODE = 0; return @("1`t1`tscripts/operate-development-document-migration.ps1", "1`t0`tscripts/tests/development-document-migration-operator.tests.ps1") }
     if ($arguments -contains "ls-tree") { $global:LASTEXITCODE = 0; return "100644 blob $('a' * 40)`tfixture" }
+    if ($arguments -contains "cat-file") { $global:LASTEXITCODE = 0; return "blob" }
     if ($arguments -contains "--full-index") { $global:LASTEXITCODE = 0; return $script:ancestorPatchFixture }
     $global:LASTEXITCODE = 1
     throw "Unexpected retained-ancestor mocked Git invocation: $($arguments -join ' ')"
@@ -1570,6 +1588,73 @@ try {
         -ReviewedBaselineToCurrentDeltaSha256 $reviewedBaselineDelta
     } catch { $extraCurrentReviewRejected = $true }
     if (-not $extraCurrentReviewRejected) { throw "An exact-current schema-4 baseline accepted an unnecessary review hash." }
+
+    $documentReleaseSha = "7" * 40
+    $migrationReleaseSha = "a" * 40
+    $deltaPayload = {
+      param([string]$From, [string]$To)
+      Get-TextSha256 ("development-operator-delta-v1`n$From`n$To`n--name-status--`n" +
+        (($fullRecords -join "`n") + "`n--patch--`n" + ($fullPatch -join "`n") + "`n"))
+    }
+    $schemaFiveSidecar = [ordered]@{
+      SchemaVersion = "5"; Kind = "development-document-zero-drift-baseline"; Environment = "development"
+      AccountId = $ExpectedAccountId; Region = $Region
+      DocumentReleaseSourceSha = $documentReleaseSha; DocumentOperatorSourceSha = $baselineOperatorSha
+      DocumentOperatorDeltaSha256 = & $deltaPayload $documentReleaseSha $baselineOperatorSha
+      ReleaseSourceSha = $migrationReleaseSha
+      BaselineToReleaseDeltaSha256 = & $deltaPayload $baselineOperatorSha $migrationReleaseSha
+      OperatorSourceSha = $currentOperatorSha
+      OperatorDeltaSha256 = & $deltaPayload $migrationReleaseSha $currentOperatorSha
+      StateLineage = $retainedState.Lineage; StateSerial = $retainedState.Serial; Stage = "complete-dark"
+      ReceiptSha256 = "b" * 64; ParserQualifiedArn = $ancestorSidecar.ParserQualifiedArn
+      MigrationImage = $retainedMigrationImage; PlanPath = $retainedPath; PlanSha256 = $retainedSha
+      Applyable = $false; MeaningfulChanges = 0; CreatedAt = "2026-08-22T20:00:00.0000000Z"
+    }
+    [IO.File]::WriteAllText($sidecarPath, ($schemaFiveSidecar | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
+    $schemaFiveSidecarSha = Get-FileSha256 -Path $sidecarPath
+    $script:retainedStateFixture = [pscustomobject]@{
+      Lineage = $retainedState.Lineage
+      Serial = [long]$retainedState.Serial + 1
+    }
+    $schemaFiveEvidence = Read-RetainedMigrationBaseline -PlanPath $retainedPath `
+      -PlanSha256 $retainedSha -MetadataSha256 $schemaFiveSidecarSha `
+      -ReviewedBaselineToCurrentDeltaSha256 $reviewedBaselineDelta -RequireCurrentState
+    if ([string]$schemaFiveEvidence.ReleaseSourceSha -cne $documentReleaseSha -or
+        [string]$schemaFiveEvidence.OperatorSourceSha -cne $baselineOperatorSha -or
+        [string]$schemaFiveEvidence.OperatorDeltaSha256 -cne [string]$schemaFiveSidecar.DocumentOperatorDeltaSha256 -or
+        [string]$schemaFiveEvidence.CurrentOperatorSourceSha -cne $currentOperatorSha -or
+        [string]$schemaFiveEvidence.BaselineToCurrentDeltaSha256 -cne $reviewedBaselineDelta -or
+        [long]$schemaFiveEvidence.PlanningState.Serial -ne ([long]$retainedState.Serial + 1)) {
+      throw "The schema-5 baseline did not preserve and project its full reviewed handoff."
+    }
+    $schemaFiveMissingReviewRejected = $false
+    try {
+      $null = Read-RetainedMigrationBaseline -PlanPath $retainedPath -PlanSha256 $retainedSha `
+        -MetadataSha256 $schemaFiveSidecarSha -RequireCurrentState
+    } catch { $schemaFiveMissingReviewRejected = $true }
+    if (-not $schemaFiveMissingReviewRejected) { throw "A schema-5 baseline accepted a missing full-delta review." }
+
+    $tamperedSchemaFive = $schemaFiveSidecar | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+    $tamperedSchemaFive.BaselineToReleaseDeltaSha256 = "f" * 64
+    [IO.File]::WriteAllText($sidecarPath, ($tamperedSchemaFive | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
+    $tamperedSchemaFiveSha = Get-FileSha256 -Path $sidecarPath
+    $schemaFiveChainRejected = $false
+    try {
+      $null = Read-RetainedMigrationBaseline -PlanPath $retainedPath -PlanSha256 $retainedSha `
+        -MetadataSha256 $tamperedSchemaFiveSha `
+        -ReviewedBaselineToCurrentDeltaSha256 $reviewedBaselineDelta -RequireCurrentState
+    } catch { $schemaFiveChainRejected = $true }
+    if (-not $schemaFiveChainRejected) { throw "A schema-5 baseline accepted a tampered intermediate release delta." }
+
+    [IO.File]::WriteAllText($sidecarPath, ($schemaFiveSidecar | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
+    $script:retainedStateFixture.Serial = [long]$retainedState.Serial + 2
+    $schemaFiveSerialRejected = $false
+    try {
+      $null = Read-RetainedMigrationBaseline -PlanPath $retainedPath -PlanSha256 $retainedSha `
+        -MetadataSha256 $schemaFiveSidecarSha `
+        -ReviewedBaselineToCurrentDeltaSha256 $reviewedBaselineDelta -RequireCurrentState
+    } catch { $schemaFiveSerialRejected = $true }
+    if (-not $schemaFiveSerialRejected) { throw "A schema-5 baseline accepted more than one state-serial advance." }
   } finally {
     Remove-Item -LiteralPath Function:\git -Force
     Remove-Variable -Name ancestorGitMode -Scope Script -ErrorAction SilentlyContinue
@@ -1781,6 +1866,19 @@ $normalizedTaskPlan = [pscustomobject]@{
   }
 }
 Assert-ExactTaskPlan -Plan $normalizedTaskPlan
+$subsequentTaskPlan = $normalizedTaskPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$subsequentTaskPlan.resource_changes = @($subsequentTaskPlan.resource_changes[0])
+foreach ($name in @(
+    "ingestion_dead_letter_queue_arn", "ingestion_dispatch_queue_arn", "ingestion_durable_version_arn",
+    "ingestion_runtime_deployed", "ingestion_runtime_enabled", "ingestion_synthetic_source_enabled"
+  )) {
+  $subsequentTaskPlan.output_changes.PSObject.Properties.Remove($name)
+}
+Assert-ExactTaskPlan -Plan $subsequentTaskPlan
+$subsequentChanges = @(Get-MeaningfulChanges -Changes @($subsequentTaskPlan.resource_changes))
+if ($subsequentChanges.Count -ne 1 -or [string]$subsequentChanges[0].address -cne $migrationAddress) {
+  throw "A subsequent migration task-only release did not preserve its exact change evidence."
+}
 
 foreach ($mutation in @(
     "string-value", "boolean-value", "unknown", "sensitive", "action", "before", "missing", "extra"

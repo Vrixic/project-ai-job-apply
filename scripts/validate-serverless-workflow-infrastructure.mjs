@@ -209,6 +209,8 @@ for (const required of [
   'Get-ChildItem -LiteralPath $terraformDirectory -File -Filter "*.tf"',
   "The development Terraform variable inventory is empty or duplicated.",
   'SchemaVersion                    = "5"',
+  "AllowSchemaFiveOneSerialAdvance",
+  "Only a CompleteDark schema-5 retained baseline may cross the migration handoff.",
   "BaselineToReleaseDeltaSha256",
   '"--version-id", ([string]$gateway.s3_object_version)',
   'foreach ($propertyName in @("mountPoints", "portMappings", "systemControls", "volumesFrom"))',
