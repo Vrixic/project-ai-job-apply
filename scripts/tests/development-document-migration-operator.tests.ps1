@@ -68,6 +68,17 @@ if ($source -notmatch 'AggregateSuccessLogCount\s+= 6' -or
     $source -match 'AggregateSuccessLogCount\s+= 4') {
   throw "The development migration operator does not report the current six-event aggregate contract."
 }
+foreach ($schemaFiveMarker in @(
+    'SchemaVersion                    = "5"',
+    'DocumentReleaseSourceSha',
+    'DocumentOperatorSourceSha',
+    'DocumentOperatorDeltaSha256',
+    'BaselineToReleaseDeltaSha256'
+  )) {
+  if (-not $source.Contains($schemaFiveMarker)) {
+    throw "The post-migration verifier does not preserve the reviewed split-source handoff."
+  }
+}
 
 $pathFunctions = @($ast.FindAll({
       param($node)

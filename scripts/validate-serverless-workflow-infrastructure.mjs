@@ -49,6 +49,7 @@ const workflowPublisher = ".github/workflows/publish-workflow-lambdas.yml";
 const staticAnalysisWorkflow = ".github/workflows/static-analysis.yml";
 const stagingLifecycleOperator = "scripts/operate-staging-runtime-lifecycle.ps1";
 const developmentMigrationOperator = "scripts/operate-development-document-migration.ps1";
+const developmentGatewayReleaseOperator = "scripts/operate-development-gateway-release.ps1";
 const candidateDocuments = "infrastructure/terraform/modules/platform/candidate-documents.tf";
 const ingestionWorkflow = "infrastructure/terraform/modules/platform/ingestion-workflow.tf";
 const ingestionBuilder = "scripts/build-ingestion-lambdas.mjs";
@@ -207,6 +208,8 @@ for (const required of [
   "Test-EcsFaultInjectionDisabled",
   'Get-ChildItem -LiteralPath $terraformDirectory -File -Filter "*.tf"',
   "The development Terraform variable inventory is empty or duplicated.",
+  'SchemaVersion                    = "5"',
+  "BaselineToReleaseDeltaSha256",
   '"--version-id", ([string]$gateway.s3_object_version)',
   'foreach ($propertyName in @("mountPoints", "portMappings", "systemControls", "volumesFrom"))',
   '$property.Name -in @("ipc_mode", "pid_mode", "task_role_arn")',
@@ -230,6 +233,20 @@ for (const required of [
     developmentMigrationOperator,
     required,
     `development migration operator guard is missing: ${required}`,
+  );
+}
+for (const required of [
+  'Get-ChildItem -LiteralPath $terraformDirectory -File -Filter "*.tf"',
+  "The gateway baseline variable inventory is empty or duplicated.",
+  "DocumentReleaseSourceSha",
+  "DocumentOperatorSourceSha",
+  "DocumentOperatorDeltaSha256",
+  "BaselineToReleaseDeltaSha256",
+]) {
+  requireText(
+    developmentGatewayReleaseOperator,
+    required,
+    `development gateway release split-source handoff guard is missing: ${required}`,
   );
 }
 for (const forbidden of [

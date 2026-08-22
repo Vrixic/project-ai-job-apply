@@ -392,15 +392,39 @@ function Read-Baseline {
   }
   $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
   $plan = Read-Plan $planPath
-  $variableSource = Get-Content -LiteralPath (Join-Path $terraformDirectory "variables.tf") -Raw
-  $declaredVariables = @([regex]::Matches($variableSource, '(?m)^\s*variable\s+"([a-zA-Z0-9_]+)"\s*\{') | ForEach-Object { $_.Groups[1].Value })
+  $terraformFiles = @(Get-ChildItem -LiteralPath $terraformDirectory -File -Filter "*.tf" | Sort-Object Name)
+  $declaredVariables = @($terraformFiles | ForEach-Object {
+      $variableSource = Get-Content -LiteralPath $_.FullName -Raw
+      [regex]::Matches($variableSource, '(?m)^\s*variable\s+"([a-zA-Z0-9_]+)"\s*\{') |
+        ForEach-Object { $_.Groups[1].Value }
+    })
+  if ($terraformFiles.Count -eq 0 -or $declaredVariables.Count -eq 0 -or
+      @($declaredVariables | Sort-Object -Unique).Count -ne $declaredVariables.Count) {
+    throw "The gateway baseline variable inventory is empty or duplicated."
+  }
   $null = Assert-RetainedGatewayBaselinePlan $plan $declaredVariables
   $state = Get-StateIdentity
   $null = Assert-RetainedGatewayBaselineMetadata -Metadata $metadata -Plan $plan `
     -PlanPath $planPath -PlanSha256 $ReviewedBaselineSha256 -SourceSha $SourceSha `
     -AccountId $ExpectedAccountId -Region $Region `
     -ExpectedMigrationRepositoryUrl $boundary.MigrationRepositoryUrl -CurrentState $state
-  $documentReleaseSha = if ([string]$metadata.SchemaVersion -in @("3", "4")) {
+  $documentReleaseSha = if ([string]$metadata.SchemaVersion -ceq "5") {
+    if ([string]$metadata.DocumentReleaseSourceSha -cne 'a6d0fba09082b8bc61ee7b604ee1d5c47bd71624' -or
+      [string]$metadata.DocumentOperatorSourceSha -cne '9d290416c61847f1682157c08312cdb920d42107' -or
+      [string]$metadata.DocumentOperatorDeltaSha256 -cne
+        (Get-DocumentOperatorDeltaSha256 -ReleaseSha ([string]$metadata.DocumentReleaseSourceSha) `
+          -OperatorSha ([string]$metadata.DocumentOperatorSourceSha)) -or
+      [string]$metadata.ReleaseSourceSha -cne 'c310d537027e4a224149996b0714ee45ce6b104e' -or
+      [string]$metadata.BaselineToReleaseDeltaSha256 -cne
+        '9c1b4d52b1bfc7d3901a8d6131a77ff714f85d61fb549114e0165634e49eb4b6' -or
+      [string]$metadata.OperatorSourceSha -cne $SourceSha -or
+      [string]$metadata.OperatorDeltaSha256 -cne
+        (Get-DocumentOperatorDeltaSha256 -ReleaseSha ([string]$metadata.ReleaseSourceSha) `
+          -OperatorSha $SourceSha)) {
+      throw "The retained document baseline does not preserve the exact reviewed historical migration handoff."
+    }
+    [string]$metadata.DocumentReleaseSourceSha
+  } elseif ([string]$metadata.SchemaVersion -in @("3", "4")) {
     if ([string]$metadata.OperatorSourceSha -cne $SourceSha -or
       [string]$metadata.OperatorDeltaSha256 -cne
         (Get-DocumentOperatorDeltaSha256 -ReleaseSha ([string]$metadata.ReleaseSourceSha) -OperatorSha $SourceSha)) {

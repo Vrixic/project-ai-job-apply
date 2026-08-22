@@ -78,9 +78,13 @@ function Assert-RetainedGatewayBaselineMetadata {
   $v2Keys = @($v1Keys + "MigrationImage" | Sort-Object)
   $v3Keys = @($v1Keys | Where-Object { $_ -cne "SourceSha" }) + @("OperatorDeltaSha256", "OperatorSourceSha", "ReleaseSourceSha") | Sort-Object
   $v4Keys = @($v3Keys + "MigrationImage" | Sort-Object)
+  $v5Keys = @($v4Keys + @(
+      "BaselineToReleaseDeltaSha256", "DocumentOperatorDeltaSha256",
+      "DocumentOperatorSourceSha", "DocumentReleaseSourceSha"
+    ) | Sort-Object)
   $actualKeys = @($Metadata.PSObject.Properties | ForEach-Object Name | Sort-Object)
   $schemaVersion = [string]$Metadata.SchemaVersion
-  $expectedKeys = if ($schemaVersion -ceq "1") { $v1Keys } elseif ($schemaVersion -ceq "2") { $v2Keys } elseif ($schemaVersion -ceq "3") { $v3Keys } elseif ($schemaVersion -ceq "4") { $v4Keys } else { @() }
+  $expectedKeys = if ($schemaVersion -ceq "1") { $v1Keys } elseif ($schemaVersion -ceq "2") { $v2Keys } elseif ($schemaVersion -ceq "3") { $v3Keys } elseif ($schemaVersion -ceq "4") { $v4Keys } elseif ($schemaVersion -ceq "5") { $v5Keys } else { @() }
   $createdAt = [datetime]::MinValue
   $createdAtValid = [datetime]::TryParse([string]$Metadata.CreatedAt, [ref]$createdAt) -and
     $createdAt.Year -ge 2000 -and $createdAt.Year -le 2099
@@ -97,6 +101,14 @@ function Assert-RetainedGatewayBaselineMetadata {
   }
   $sourceBindingValid = if ($schemaVersion -in @("3", "4")) {
     [string]$Metadata.ReleaseSourceSha -match '^[a-f0-9]{40}$' -and
+      [string]$Metadata.OperatorSourceSha -ceq $SourceSha -and
+      [string]$Metadata.OperatorDeltaSha256 -match '^[a-f0-9]{64}$'
+  } elseif ($schemaVersion -ceq "5") {
+    [string]$Metadata.DocumentReleaseSourceSha -match '^[a-f0-9]{40}$' -and
+      [string]$Metadata.DocumentOperatorSourceSha -match '^[a-f0-9]{40}$' -and
+      [string]$Metadata.DocumentOperatorDeltaSha256 -match '^[a-f0-9]{64}$' -and
+      [string]$Metadata.ReleaseSourceSha -match '^[a-f0-9]{40}$' -and
+      [string]$Metadata.BaselineToReleaseDeltaSha256 -match '^[a-f0-9]{64}$' -and
       [string]$Metadata.OperatorSourceSha -ceq $SourceSha -and
       [string]$Metadata.OperatorDeltaSha256 -match '^[a-f0-9]{64}$'
   } else { [string]$Metadata.SourceSha -ceq $SourceSha }
@@ -121,7 +133,7 @@ function Assert-RetainedGatewayBaselineMetadata {
         [string]$parserQualifiedArn -cnotmatch "^arn:aws:lambda:$([regex]::Escape($Region)):$AccountId`:function:ai-job-apply-development-document-parser:[1-9][0-9]*$")) {
     throw "The retained baseline metadata does not match the exact document-to-gateway handoff."
   }
-  if ($schemaVersion -in @("2", "4") -and [string]$Metadata.MigrationImage -cne [string]$migrationImage) {
+  if ($schemaVersion -in @("2", "4", "5") -and [string]$Metadata.MigrationImage -cne [string]$migrationImage) {
     throw "The version-2 retained baseline metadata does not bind the exact migration image."
   }
   return $true

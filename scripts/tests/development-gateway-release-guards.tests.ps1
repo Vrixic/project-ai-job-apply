@@ -175,19 +175,38 @@ $baselineMetadataV4.SchemaVersion = "4"
 $baselineMetadataV4 | Add-Member MigrationImage $baselineMigrationImage
 $null = Assert-RetainedGatewayBaselineMetadata $baselineMetadataV4 $metadataPlan $baselinePath $baselineSha `
   $sourceSha $account "us-east-2" $repositoryUrl $currentState; $passed++
+$baselineMetadataV5 = Copy-Fixture $baselineMetadataV4
+$baselineMetadataV5.SchemaVersion = "5"
+$baselineMetadataV5 | Add-Member DocumentReleaseSourceSha ("d" * 40)
+$baselineMetadataV5 | Add-Member DocumentOperatorSourceSha ("e" * 40)
+$baselineMetadataV5 | Add-Member DocumentOperatorDeltaSha256 ("f" * 64)
+$baselineMetadataV5 | Add-Member BaselineToReleaseDeltaSha256 ("1" * 64)
+$null = Assert-RetainedGatewayBaselineMetadata $baselineMetadataV5 $metadataPlan $baselinePath $baselineSha `
+  $sourceSha $account "us-east-2" $repositoryUrl $currentState; $passed++
 foreach ($mutation in @("release", "operator", "delta", "schema", "extra")) {
   $badDualMetadata = Copy-Fixture $baselineMetadataV4
   switch ($mutation) {
     "release" { $badDualMetadata.ReleaseSourceSha = "not-a-sha" }
     "operator" { $badDualMetadata.OperatorSourceSha = "d" * 40 }
     "delta" { $badDualMetadata.OperatorDeltaSha256 = "not-a-digest" }
-    "schema" { $badDualMetadata.SchemaVersion = "5" }
+    "schema" { $badDualMetadata.SchemaVersion = "6" }
     "extra" { $badDualMetadata | Add-Member Unexpected "value" }
   }
   Assert-Rejected {
     Assert-RetainedGatewayBaselineMetadata $badDualMetadata $metadataPlan $baselinePath $baselineSha `
       $sourceSha $account "us-east-2" $repositoryUrl $currentState
   } "A dual-source baseline accepted $mutation tampering."
+}
+foreach ($property in @(
+    "DocumentReleaseSourceSha", "DocumentOperatorSourceSha",
+    "DocumentOperatorDeltaSha256", "BaselineToReleaseDeltaSha256"
+  )) {
+  $badSplitMetadata = Copy-Fixture $baselineMetadataV5
+  $badSplitMetadata.$property = "invalid"
+  Assert-Rejected {
+    Assert-RetainedGatewayBaselineMetadata $badSplitMetadata $metadataPlan $baselinePath $baselineSha `
+      $sourceSha $account "us-east-2" $repositoryUrl $currentState
+  } "A version-5 baseline accepted invalid $property."
 }
 $badMetadata = Copy-Fixture $baselineMetadata; $badMetadata.Applyable = $true
 Assert-Rejected { Assert-RetainedGatewayBaselineMetadata $badMetadata $metadataPlan $baselinePath $baselineSha $sourceSha $account "us-east-2" $repositoryUrl $currentState } "Applyable retained metadata was accepted."

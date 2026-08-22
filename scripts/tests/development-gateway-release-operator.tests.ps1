@@ -6,6 +6,17 @@ $operator = Get-Content -LiteralPath $operatorPath -Raw
 $tokens = $null; $errors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile($operatorPath, [ref]$tokens, [ref]$errors)
 if (@($errors).Count -ne 0) { throw "The gateway release operator does not parse: $($errors.Message -join '; ')." }
+foreach ($required in @(
+    'Get-ChildItem -LiteralPath $terraformDirectory -File -Filter "*.tf"',
+    'The gateway baseline variable inventory is empty or duplicated.',
+    'DocumentReleaseSourceSha', 'DocumentOperatorSourceSha',
+    'DocumentOperatorDeltaSha256', 'BaselineToReleaseDeltaSha256',
+    '9c1b4d52b1bfc7d3901a8d6131a77ff714f85d61fb549114e0165634e49eb4b6'
+  )) {
+  if (-not $operator.Contains($required)) {
+    throw "The gateway operator does not preserve the exact split-source migration handoff."
+  }
+}
 
 function Assert-Rejected {
   param([Parameter(Mandatory)][scriptblock]$Action, [Parameter(Mandatory)][string]$Message)

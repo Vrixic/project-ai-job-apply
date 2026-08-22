@@ -196,8 +196,9 @@ as `ReviewedBaselineToCurrentDeltaSha256`; do not reuse a digest after the merge
    created plan/sidecar bytes if any validation or write fails, and requires state lineage/serial
    to remain unchanged while producing the handoff. It reconstructs the exact saved-plan input
    set against variable declarations across every root Terraform `*.tf` file and rejects missing,
-   extra, or duplicate names. The schema-4 sidecar binds the exact release
-   source, current operator source and canonical delta, current Terraform variable inventory,
+   extra, or duplicate names. A schema-5 sidecar preserves the deployed document release and its
+   original operator delta separately from the checksum-reviewed migration release, reviewed
+   baseline-to-release delta, and later verifier-only operator delta. It also binds the current Terraform variable inventory,
    account, region, state lineage/serial, document stage, parser-version pin, reviewed document-
    publication receipt, immutable migration-image digest, plan path/hash, Terraform `1.9.8`,
    nonapplyable shape, zero meaningful resource/output changes, and only the bounded provider

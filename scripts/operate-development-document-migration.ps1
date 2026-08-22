@@ -318,7 +318,11 @@ function Assert-OperatorOnlyReleaseDelta {
 
   $allowed = @(
     "scripts/operate-development-document-migration.ps1",
+    "scripts/operate-development-gateway-release.ps1",
+    "scripts/lib/development-gateway-release-guards.ps1",
     "scripts/tests/development-document-migration-operator.tests.ps1",
+    "scripts/tests/development-gateway-release-guards.tests.ps1",
+    "scripts/tests/development-gateway-release-operator.tests.ps1",
     "scripts/validate-serverless-workflow-infrastructure.mjs",
     "infrastructure/runbooks/deployments/database-migration.md"
   )
@@ -1042,6 +1046,38 @@ function New-PostMigrationBaselineMetadata {
           -OperatorSha ([string]$TaskMetadata.appliedBaselineOperatorSourceSha))) {
     throw "The post-migration baseline does not preserve the exact stage, parser, receipt, and migration-image handoff."
   }
+  $hasReviewedReleaseHandoff =
+    [string](Get-OptionalProperty $TaskMetadata "appliedBaselineCurrentOperatorSourceSha") -ceq $SourceSha -and
+    [string](Get-OptionalProperty $TaskMetadata "appliedBaselineToCurrentDeltaSha256") -match '^[a-f0-9]{64}$' -and
+    [string]$TaskMetadata.appliedBaselineReleaseSourceSha -cne $SourceSha
+  if ($hasReviewedReleaseHandoff) {
+    return [ordered]@{
+      SchemaVersion                    = "5"
+      Kind                             = "development-document-zero-drift-baseline"
+      Environment                      = "development"
+      AccountId                        = $ExpectedAccountId
+      Region                           = $Region
+      DocumentReleaseSourceSha         = [string]$TaskMetadata.appliedBaselineReleaseSourceSha
+      DocumentOperatorSourceSha        = [string]$TaskMetadata.appliedBaselineOperatorSourceSha
+      DocumentOperatorDeltaSha256      = [string]$TaskMetadata.appliedBaselineOperatorDeltaSha256
+      ReleaseSourceSha                 = $SourceSha
+      BaselineToReleaseDeltaSha256     = [string]$TaskMetadata.appliedBaselineToCurrentDeltaSha256
+      OperatorSourceSha                = $operatorSourceSha
+      OperatorDeltaSha256              = Get-DocumentOperatorDeltaSha256 `
+        -ReleaseSha $SourceSha -OperatorSha $operatorSourceSha
+      StateLineage                     = [string]$State.Lineage
+      StateSerial                      = [long]$State.Serial
+      Stage                            = $stage
+      ReceiptSha256                    = [string]$TaskMetadata.appliedBaselineReceiptSha256
+      ParserQualifiedArn               = $parserQualifiedArn
+      MigrationImage                   = $planMigrationImage
+      PlanPath                         = [IO.Path]::GetFullPath($PlanPath)
+      PlanSha256                       = $PlanSha256
+      Applyable                        = $false
+      MeaningfulChanges                = 0
+      CreatedAt                        = (Get-Date).ToUniversalTime().ToString("o")
+    }
+  }
   return [ordered]@{
     SchemaVersion      = "4"
     Kind               = "development-document-zero-drift-baseline"
@@ -1075,12 +1111,21 @@ function Assert-PostMigrationBaselineMetadata {
     [Parameter(Mandatory)][object]$State,
     [Parameter(Mandatory)][object]$TaskMetadata
   )
-  $expectedKeys = @(
+  $v4Keys = @(
     "AccountId", "Applyable", "CreatedAt", "Environment", "Kind", "MeaningfulChanges",
     "MigrationImage", "ParserQualifiedArn", "PlanPath", "PlanSha256", "ReceiptSha256", "Region",
     "OperatorDeltaSha256", "OperatorSourceSha", "ReleaseSourceSha", "SchemaVersion", "Stage", "StateLineage", "StateSerial"
   ) | Sort-Object
+  $v5Keys = @(
+    "AccountId", "Applyable", "BaselineToReleaseDeltaSha256", "CreatedAt",
+    "DocumentOperatorDeltaSha256", "DocumentOperatorSourceSha", "DocumentReleaseSourceSha",
+    "Environment", "Kind", "MeaningfulChanges", "MigrationImage", "OperatorDeltaSha256",
+    "OperatorSourceSha", "ParserQualifiedArn", "PlanPath", "PlanSha256", "ReceiptSha256",
+    "Region", "ReleaseSourceSha", "SchemaVersion", "Stage", "StateLineage", "StateSerial"
+  ) | Sort-Object
   $actualKeys = @($Metadata.PSObject.Properties | ForEach-Object Name | Sort-Object)
+  $schemaVersion = [string]$Metadata.SchemaVersion
+  $expectedKeys = if ($schemaVersion -ceq "4") { $v4Keys } elseif ($schemaVersion -ceq "5") { $v5Keys } else { @() }
   $stage = Get-ExactStringPlanVariable -Plan $Plan -Name "document_processing_deployment_stage"
   $parserQualifiedArn = Get-ExactStringPlanVariable -Plan $Plan -Name "document_parser_invocation_qualified_arn"
   $planMigrationImage = Get-ExactStringPlanVariable -Plan $Plan -Name "migration_image"
@@ -1090,16 +1135,27 @@ function Assert-PostMigrationBaselineMetadata {
   $metadataPlanPath = if ([string]::IsNullOrWhiteSpace([string]$Metadata.PlanPath)) { "" } else {
     [IO.Path]::GetFullPath([string]$Metadata.PlanPath)
   }
+  $sourceBindingValid = if ($schemaVersion -ceq "5") {
+    [string]$Metadata.DocumentReleaseSourceSha -ceq [string]$TaskMetadata.appliedBaselineReleaseSourceSha -and
+      [string]$Metadata.DocumentOperatorSourceSha -ceq [string]$TaskMetadata.appliedBaselineOperatorSourceSha -and
+      [string]$Metadata.DocumentOperatorDeltaSha256 -ceq [string]$TaskMetadata.appliedBaselineOperatorDeltaSha256 -and
+      [string]$Metadata.ReleaseSourceSha -ceq $SourceSha -and
+      [string]$Metadata.BaselineToReleaseDeltaSha256 -ceq [string]$TaskMetadata.appliedBaselineToCurrentDeltaSha256 -and
+      [string]$Metadata.OperatorSourceSha -ceq $operatorSourceSha -and
+      [string]$Metadata.OperatorDeltaSha256 -ceq
+        (Get-DocumentOperatorDeltaSha256 -ReleaseSha $SourceSha -OperatorSha $operatorSourceSha)
+  } else {
+    [string]$Metadata.ReleaseSourceSha -ceq [string]$TaskMetadata.appliedBaselineReleaseSourceSha -and
+      [string]$Metadata.OperatorSourceSha -ceq $operatorSourceSha -and
+      [string]$Metadata.OperatorDeltaSha256 -ceq
+        (Get-DocumentOperatorDeltaSha256 -ReleaseSha ([string]$TaskMetadata.appliedBaselineReleaseSourceSha) `
+          -OperatorSha $operatorSourceSha)
+  }
   if (($actualKeys -join "|") -cne ($expectedKeys -join "|") -or
-      [string]$Metadata.SchemaVersion -cne "4" -or
       [string]$Metadata.Kind -cne "development-document-zero-drift-baseline" -or
       [string]$Metadata.Environment -cne "development" -or
       [string]$Metadata.AccountId -cne $ExpectedAccountId -or [string]$Metadata.Region -cne $Region -or
-      [string]$Metadata.ReleaseSourceSha -cne [string]$TaskMetadata.appliedBaselineReleaseSourceSha -or
-      [string]$Metadata.OperatorSourceSha -cne $operatorSourceSha -or
-      [string]$Metadata.OperatorDeltaSha256 -cne
-        (Get-DocumentOperatorDeltaSha256 -ReleaseSha ([string]$TaskMetadata.appliedBaselineReleaseSourceSha) `
-          -OperatorSha $operatorSourceSha) -or
+      -not $sourceBindingValid -or
       [string]$Metadata.StateLineage -cne [string]$State.Lineage -or
       [long]$Metadata.StateSerial -ne [long]$State.Serial -or
       [string]$Metadata.Stage -cne $stage -or
