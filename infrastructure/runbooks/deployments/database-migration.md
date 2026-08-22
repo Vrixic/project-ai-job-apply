@@ -161,9 +161,12 @@ as `ReviewedBaselineToCurrentDeltaSha256`; do not reuse a digest after the merge
    refresh only when valid unique IPv4 CIDRs grow by strict set addition, the prior set is retained,
    all other attributes equal the exact planned value, and sensitivity remains all false;
    duplicates, removals, unknowns, broadened policy semantics, or any other drift fail closed. The
-   task plan rejects every meaningful change except a
-   create-before-destroy replacement of `module.platform.aws_ecs_task_definition.migration[0]`
-   caused only by the image digest.
+   task plan rejects every meaningful change except a create-before-destroy replacement of
+   `module.platform.aws_ecs_task_definition.migration[0]` caused only by the image digest and the
+   one state-only `module.platform.terraform_data.ingestion_activation_guard` create that serial
+   108 predates. The guard must have exactly `deploy = false`, `runtime = false`, and
+   `synthetic_only = false`; it cannot deploy or activate ingestion. Any different action, input,
+   unknown/sensitive shape, replacement path, additional resource, or output change fails closed.
 2. Independently inspect the saved plan and its `.metadata.json` sidecar, then pass both printed
    SHA-256 values to `ApplyTask`. Task metadata binds the retained plan and sidecar paths/checksums,
    stage, the historical retained state identity, the exact current planning state identity,
