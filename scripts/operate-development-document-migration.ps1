@@ -1936,8 +1936,10 @@ function Assert-TaskResultAndLogs {
     -TaskDefinition $definition
   $expectedMessages = @(
     'Database migrations through 0005_resume_fact_proposals applied and verified.',
-    'Jobs migrations through 0004_job_search applied and verified.',
+    'Jobs migrations through 0008_job_reporting_and_moderation applied and verified.',
     'Documents migrations through 0002_resume_processing applied and verified.',
+    'Matching migrations through 0001_saved_jobs applied and verified.',
+    'Billing migrations through 0001_entitlement_projection applied and verified.',
     'All service-owned database migrations applied and verified.'
   )
   for ($attempt = 0; $attempt -lt 30; $attempt++) {
@@ -1961,7 +1963,7 @@ function Assert-TaskResultAndLogs {
     }
     Start-Sleep -Seconds 2
   }
-  throw "The exact four aggregate success events did not become visible within the bounded CloudWatch polling window."
+  throw "The exact six aggregate success events did not become visible within the bounded CloudWatch polling window."
 }
 
 function Read-ExecutionPlan {
@@ -2453,7 +2455,7 @@ if ($Action -eq "Execute") {
     ArtifactDigest            = $artifact.Digest
     ExecutedTaskCount         = 1
     ExitCode                  = 0
-    AggregateSuccessLogCount  = 4
+    AggregateSuccessLogCount  = 6
     ActiveMigrationTaskCount  = 0
     ContinuousEcsServiceCount = 0
   }
@@ -2500,7 +2502,7 @@ if ($Action -eq "Recover") {
     ExecutionPlanSha256       = $ReviewedExecutionPlanSha256
     ExecutedTaskCount         = 1
     ExitCode                  = 0
-    AggregateSuccessLogCount  = 4
+    AggregateSuccessLogCount  = 6
     ActiveMigrationTaskCount  = 0
     ContinuousEcsServiceCount = 0
   }
@@ -2596,7 +2598,7 @@ try {
   ArtifactDigest             = $artifact.Digest
   ExecutedTaskCount          = 1
   ExitCode                   = 0
-  AggregateSuccessLogCount   = 4
+  AggregateSuccessLogCount   = 6
   ActiveMigrationTaskCount   = 0
   ContinuousEcsServiceCount  = 0
   StateCustomerKmsEncrypted  = $true

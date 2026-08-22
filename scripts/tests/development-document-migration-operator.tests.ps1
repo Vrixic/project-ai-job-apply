@@ -46,15 +46,27 @@ if ($source -notmatch '\[string\]\$ReviewedBaselineToCurrentDeltaSha256 = ""' -o
   throw "PlanTask and ApplyTask do not preserve the reviewed baseline-to-current handoff and recheck current HEAD."
 }
 
-$currentJobsSuccessMarker =
-  "Jobs migrations through 0004_job_search applied and verified."
+$currentSuccessMarkers = @(
+  "Database migrations through 0005_resume_fact_proposals applied and verified.",
+  "Jobs migrations through 0008_job_reporting_and_moderation applied and verified.",
+  "Documents migrations through 0002_resume_processing applied and verified.",
+  "Matching migrations through 0001_saved_jobs applied and verified.",
+  "Billing migrations through 0001_entitlement_projection applied and verified.",
+  "All service-owned database migrations applied and verified."
+)
 $retiredJobsSuccessMarker =
   "Jobs migrations through 0003_duplicate_resolution_audit_guard applied and verified."
-if (-not $source.Contains($currentJobsSuccessMarker)) {
-  throw "The development migration operator does not require the current Jobs migration marker."
+foreach ($marker in $currentSuccessMarkers) {
+  if (-not $source.Contains($marker)) {
+    throw "The development migration operator does not require every current migration marker."
+  }
 }
 if ($source.Contains($retiredJobsSuccessMarker)) {
   throw "The development migration operator still accepts the retired Jobs migration marker."
+}
+if ($source -notmatch 'AggregateSuccessLogCount\s+= 6' -or
+    $source -match 'AggregateSuccessLogCount\s+= 4') {
+  throw "The development migration operator does not report the current six-event aggregate contract."
 }
 
 $pathFunctions = @($ast.FindAll({

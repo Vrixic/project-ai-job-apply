@@ -189,7 +189,7 @@ as `ReviewedBaselineToCurrentDeltaSha256`; do not reuse a digest after the merge
 4. `Execute` accepts only that checksum-reviewed descriptor, submits it through
    `--cli-input-json`, first conditionally creates an immutable customer-KMS execution claim in
    the versioned state bucket, writes a local receipt immediately, waits for `STOPPED`, and
-   requires the exact image digest, exit code `0`, no effective override, four aggregate-only
+   requires the exact image digest, exit code `0`, no effective override, six aggregate-only
    success messages, zero active migration tasks, and zero ECS services.
 5. `Verify` repeats the task/log/zero-compute checks and retains a refresh-backed zero-drift plan
    plus its adjacent `.baseline.json` sidecar. The operator rejects overwrites, removes only newly
@@ -205,7 +205,7 @@ as `ReviewedBaselineToCurrentDeltaSha256`; do not reuse a digest after the merge
 
 If the local waiter exits after a durable claim and ECS submission, never call `Execute` again.
 Use `Recover` with the exact submitted receipt and reviewed descriptor. It has no submission path;
-it accepts only the exact claimed task already stopped with exit `0`, the four aggregate success
+it accepts only the exact claimed task already stopped with exit `0`, the six aggregate success
 records, and zero remaining migration compute, then finalizes the existing receipt for `Verify`.
 
 Run `Get-Help` through the script's `-Help` switch for exact commands. Never reuse an execution

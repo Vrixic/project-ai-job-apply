@@ -215,9 +215,12 @@ for (const required of [
   "The ingestion activation guard is not the exact default-off state-only create.",
   '"ecs", "run-task", "--cli-input-json"',
   "aws ecs wait tasks-stopped",
-  "The exact four aggregate success events did not become visible within the bounded CloudWatch polling window.",
+  "The exact six aggregate success events did not become visible within the bounded CloudWatch polling window.",
   "Database migrations through 0005_resume_fact_proposals applied and verified.",
+  "Jobs migrations through 0008_job_reporting_and_moderation applied and verified.",
   "Documents migrations through 0002_resume_processing applied and verified.",
+  "Matching migrations through 0001_saved_jobs applied and verified.",
+  "Billing migrations through 0001_entitlement_projection applied and verified.",
   "Assert-DatabaseSafety",
   "Assert-RequestNetwork",
 ]) {
