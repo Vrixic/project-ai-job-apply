@@ -94,6 +94,8 @@ $script:reviewedRuntimeIdentity = $null
 $script:reviewedRuntimeImage = $null
 $script:reviewedStateLineage = $null
 $script:reviewedStateSerial = $null
+$script:operatorSourceSha = $null
+$script:sourceToOperatorDeltaSha256 = $null
 
 function Get-FileSha256 {
   param([Parameter(Mandatory)][string]$Path)
@@ -110,6 +112,18 @@ function Get-FileSha256Base64 {
   finally {
     $sha.Dispose()
     $stream.Dispose()
+  }
+}
+
+function Get-TextSha256 {
+  param([Parameter(Mandatory)][string]$Value)
+  $bytes = [Text.UTF8Encoding]::new($false).GetBytes($Value)
+  $sha = [Security.Cryptography.SHA256]::Create()
+  try {
+    ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-', '').ToLowerInvariant()
+  }
+  finally {
+    $sha.Dispose()
   }
 }
 
@@ -269,9 +283,40 @@ function Assert-CallerAndSource {
     $head = (& git -C $repositoryRoot rev-parse HEAD 2>$null).Trim()
     $origin = (& git -C $repositoryRoot rev-parse origin/main 2>$null).Trim()
     $dirty = @(& git -C $repositoryRoot status --porcelain 2>$null)
-    if ($branch -cne 'main' -or $head -cne $origin -or $dirty.Count -ne 0 -or $SourceSha -cne $head) {
-      throw "The operation requires clean main exactly matching origin/main and SourceSha."
+    if ($branch -cne 'main' -or $head -cne $origin -or $dirty.Count -ne 0) {
+      throw "The operation requires clean main exactly matching origin/main."
     }
+    & git -C $repositoryRoot merge-base --is-ancestor $SourceSha $head 2>$null
+    if ($LASTEXITCODE -ne 0) {
+      throw "The deployed application source must be an ancestor of the reviewed operator source."
+    }
+    $records = @(& git -C $repositoryRoot diff --name-status --no-renames "$SourceSha..$head" 2>$null)
+    if ($LASTEXITCODE -ne 0) {
+      throw "The application-to-operator source delta is unreadable."
+    }
+    $allowed = @(
+      '^docs/',
+      '^scripts/operate-development-document-processing-acceptance\.ps1$',
+      '^scripts/tests/development-document-processing-acceptance-operator\.tests\.ps1$',
+      '^infrastructure/runbooks/deployments/development-document-processing-acceptance\.md$'
+    )
+    foreach ($record in $records) {
+      $parts = $record -split "`t", 2
+      if ($parts.Count -ne 2 -or $parts[0] -notmatch '^[AM]$') {
+        throw "The application-to-operator delta contains an ambiguous change."
+      }
+      if (@($allowed | Where-Object { $parts[1] -match $_ }).Count -ne 1) {
+        throw "The application-to-operator delta changes deployed application or infrastructure source."
+      }
+    }
+    $patch = @(& git -C $repositoryRoot diff --full-index --binary --no-ext-diff --no-renames "$SourceSha..$head" 2>$null)
+    if ($LASTEXITCODE -ne 0) {
+      throw "The canonical application-to-operator patch is unreadable."
+    }
+    $payload = "development-document-operator-delta-v1`n$SourceSha`n$head`n--name-status--`n" +
+      (($records -join "`n") + "`n--patch--`n" + ($patch -join "`n") + "`n")
+    $script:operatorSourceSha = $head
+    $script:sourceToOperatorDeltaSha256 = Get-TextSha256 -Value $payload
   }
 }
 
@@ -1636,7 +1681,8 @@ function Read-ExecutionPlan {
   $plan = ConvertFrom-OperatorJson -Json (Get-Content -LiteralPath $resolved -Raw) -Description 'Execution plan'
   Assert-ExactPropertySet -Value $plan -Description 'Execution plan' -ExpectedNames @(
     'schemaVersion', 'kind', 'environment', 'region', 'accountId', 'stateBucket', 'stateLineage',
-    'stateSerial', 'sourceSha', 'fixtureSetSha256', 'fixtureDescriptorPath',
+    'stateSerial', 'sourceSha', 'operatorSourceSha', 'sourceToOperatorDeltaSha256',
+    'fixtureSetSha256', 'fixtureDescriptorPath',
     'fixtureDescriptorSha256', 'fixtureManifest', 'migrationReceiptSha256', 'migrationImage',
     'runId', 'createdAt', 'runtime', 'requests'
   )
@@ -1661,6 +1707,8 @@ function Read-ExecutionPlan {
     [string]$plan.accountId -cne $ExpectedAccountId -or
     [string]$plan.stateBucket -cne $StateBucket -or
     [string]$plan.sourceSha -cne $SourceSha -or
+    [string]$plan.operatorSourceSha -cne $script:operatorSourceSha -or
+    [string]$plan.sourceToOperatorDeltaSha256 -cne $script:sourceToOperatorDeltaSha256 -or
     [string]$plan.fixtureSetSha256 -notmatch '^[a-f0-9]{64}$' -or
     ($FixtureSetSha256 -and [string]$plan.fixtureSetSha256 -cne $FixtureSetSha256) -or
     [string]$plan.migrationReceiptSha256 -cne $ReviewedMigrationReceiptSha256 -or
@@ -1695,7 +1743,8 @@ function Read-AcceptanceReceipt {
   }
   $receipt = ConvertFrom-OperatorJson -Json (Get-Content -LiteralPath $resolved -Raw) -Description 'Acceptance receipt'
   Assert-ExactPropertySet -Value $receipt -Description 'Acceptance receipt' -ExpectedNames @(
-    'schemaVersion', 'kind', 'environment', 'sourceSha', 'fixtureSetSha256',
+    'schemaVersion', 'kind', 'environment', 'sourceSha', 'operatorSourceSha',
+    'sourceToOperatorDeltaSha256', 'fixtureSetSha256',
     'migrationReceiptSha256', 'executionPlanSha256', 'runId', 'phase', 'claimKey',
     'claimVersionId', 'claimChecksumSHA256', 'recoveryKey', 'recoveryVersionId',
     'recoveryChecksumSHA256', 'taskArns', 'resultSha256ByAction', 'persistentRows',
@@ -1706,6 +1755,8 @@ function Read-AcceptanceReceipt {
     [string]$receipt.kind -cne 'development-document-processing-acceptance' -or
     [string]$receipt.environment -cne 'development' -or
     [string]$receipt.sourceSha -cne $SourceSha -or
+    [string]$receipt.operatorSourceSha -cne $script:operatorSourceSha -or
+    [string]$receipt.sourceToOperatorDeltaSha256 -cne $script:sourceToOperatorDeltaSha256 -or
     [string]$receipt.fixtureSetSha256 -cne $FixtureSetSha256 -or
     [string]$receipt.migrationReceiptSha256 -cne $ReviewedMigrationReceiptSha256 -or
     [string]$receipt.executionPlanSha256 -cne $ReviewedExecutionPlanSha256 -or
@@ -1929,6 +1980,8 @@ if ($Action -eq 'PlanExecution') {
     stateLineage = $identity.Lineage
     stateSerial = $identity.Serial
     sourceSha = $SourceSha
+    operatorSourceSha = $script:operatorSourceSha
+    sourceToOperatorDeltaSha256 = $script:sourceToOperatorDeltaSha256
     fixtureSetSha256 = [string]$fixture.Descriptor.fixtureSetSha256
     fixtureDescriptorPath = $fixture.Path
     fixtureDescriptorSha256 = Get-FileSha256 $fixture.Path
@@ -1985,6 +2038,8 @@ if ($Action -eq 'Execute') {
     kind = 'development-document-processing-acceptance'
     environment = 'development'
     sourceSha = $SourceSha
+    operatorSourceSha = $script:operatorSourceSha
+    sourceToOperatorDeltaSha256 = $script:sourceToOperatorDeltaSha256
     fixtureSetSha256 = $FixtureSetSha256
     migrationReceiptSha256 = $ReviewedMigrationReceiptSha256
     executionPlanSha256 = $ReviewedExecutionPlanSha256

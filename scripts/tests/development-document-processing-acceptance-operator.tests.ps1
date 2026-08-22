@@ -41,6 +41,9 @@ foreach ($required in @(
     'GuardDutyServiceDetectionProved = $false',
     'ApiGatewayAuthorizerEnforcementProved = $false',
     'TerraformZeroDriftClaim = $false',
+    'development-document-operator-delta-v1',
+    'sourceToOperatorDeltaSha256',
+    'The application-to-operator delta changes deployed application or infrastructure source.',
     'Assert-DocumentOperationalHealth -WaitForOk',
     '$scanAfter = $end.AddSeconds(30)',
     '$handler.AllowAutoRedirect = $false',
@@ -57,6 +60,14 @@ foreach ($forbidden in @(
     'events put-events', 'send-message', 'Invoke-Expression', 'New-ZeroDriftEvidence'
   )) {
   if ($source.Contains($forbidden)) { throw "The operator contains forbidden activation surface: $forbidden" }
+}
+if (
+  -not $source.Contains("'^docs/'") -or
+  -not $source.Contains("'^scripts/operate-development-document-processing-acceptance\.ps1$'") -or
+  -not $source.Contains("'^scripts/tests/development-document-processing-acceptance-operator\.tests\.ps1$'") -or
+  -not $source.Contains("'^infrastructure/runbooks/deployments/development-document-processing-acceptance\.md$'")
+) {
+  throw "The application-to-operator delta allowlist is not exact."
 }
 $guardedMutationFunctions = @(
   'Submit-Task', 'New-DurableClaim', 'Invoke-LambdaJson', 'Invoke-PresignedPost',

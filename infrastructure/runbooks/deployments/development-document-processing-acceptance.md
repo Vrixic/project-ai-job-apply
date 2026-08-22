@@ -17,8 +17,11 @@ roles, or network destinations. The only documents are produced by the reviewed 
 
 ## Required inputs
 
-- A clean `main` exactly matching `origin/main`, with the merged source SHA supplied as
-  `-SourceSha`.
+- A clean `main` exactly matching `origin/main`. `-SourceSha` identifies the deployed application
+  revision bound by the migration-image receipt. It may be an ancestor of `main` only when every
+  later change is documentation or this exact document-acceptance operator/test/runbook packet.
+  The operator SHA and canonical allowed-delta SHA-256 are bound separately into the execution
+  plan and receipt; application or infrastructure changes remain fail-closed.
 - A temporary development IAM Identity Center session in the exact expected AWS account and
   `us-east-2`.
 - The encrypted, versioned development Terraform state bucket.
