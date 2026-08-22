@@ -547,6 +547,40 @@ function Test-DevelopmentDocumentEmptyArray {
   return $null -ne $Value -and $Value -is [System.Array] -and @($Value).Count -eq 0
 }
 
+function Assert-DevelopmentDocumentS3EndpointCidrRefresh {
+  param(
+    [Parameter(Mandatory)][object]$Before,
+    [Parameter(Mandatory)][object]$After,
+    [Parameter(Mandatory)][object]$Expected
+  )
+  $beforeCidrs = @($Before.cidr_blocks)
+  $afterCidrs = @($After.cidr_blocks)
+  if ($beforeCidrs.Count -eq 0 -or $afterCidrs.Count -le $beforeCidrs.Count -or
+      @($beforeCidrs | Sort-Object -Unique).Count -ne $beforeCidrs.Count -or
+      @($afterCidrs | Sort-Object -Unique).Count -ne $afterCidrs.Count) {
+    throw "The S3 endpoint CIDR refresh is empty, non-growing, or contains duplicates."
+  }
+  foreach ($cidr in @($beforeCidrs + $afterCidrs)) {
+    if ($cidr -isnot [string] -or [string]$cidr -cnotmatch '^([^/]+)/([0-9]{1,2})$') {
+      throw "The S3 endpoint CIDR refresh contains a non-IPv4-CIDR value."
+    }
+    $address = [Net.IPAddress]::None
+    if (-not [Net.IPAddress]::TryParse([string]$Matches[1], [ref]$address) -or
+        $address.AddressFamily -ne [Net.Sockets.AddressFamily]::InterNetwork -or
+        [int]$Matches[2] -lt 0 -or [int]$Matches[2] -gt 32) {
+      throw "The S3 endpoint CIDR refresh contains an invalid IPv4 CIDR."
+    }
+  }
+  if (@($beforeCidrs | Where-Object { $_ -notin $afterCidrs }).Count -ne 0 -or
+      @($afterCidrs | Where-Object { $_ -notin $beforeCidrs }).Count -ne
+        ($afterCidrs.Count - $beforeCidrs.Count) -or
+      (ConvertTo-DeploymentCanonicalValue $After -SortArrays) -cne
+        (ConvertTo-DeploymentCanonicalValue $Expected -SortArrays)) {
+    throw "The S3 endpoint CIDR refresh removes a prior range or differs from the exact planned value."
+  }
+  $After.cidr_blocks = $Before.cidr_blocks
+}
+
 function Assert-DevelopmentDocumentNullToEmptyObject {
   param([Parameter(Mandatory)][object]$Before, [Parameter(Mandatory)][object]$After,
     [Parameter(Mandatory)][string]$Name, [Parameter(Mandatory)][string]$Label)
@@ -638,6 +672,16 @@ function Assert-DevelopmentDocumentAcceptedDriftSensitivity {
           throw "Metric-filter sensitivity metadata is not the exact omitted-to-empty dimension normalization."
         }
         $afterTransform[0].PSObject.Properties.Remove("dimensions")
+      }
+      "cidr_blocks" {
+        $beforeCidrs = @($before.PSObject.Properties["cidr_blocks"].Value)
+        $afterCidrs = @($after.PSObject.Properties["cidr_blocks"].Value)
+        if ($beforeCidrs.Count -eq 0 -or $afterCidrs.Count -le $beforeCidrs.Count -or
+            @($beforeCidrs | Where-Object { $_ -isnot [bool] -or $_ }).Count -ne 0 -or
+            @($afterCidrs | Where-Object { $_ -isnot [bool] -or $_ }).Count -ne 0) {
+          throw "S3 endpoint CIDR sensitivity metadata is not the exact growing all-false shape."
+        }
+        $after.PSObject.Properties["cidr_blocks"].Value = $beforeCidrs
       }
       default { throw "Unknown accepted sensitivity normalization '$normalization'." }
     }
@@ -859,6 +903,21 @@ function Assert-DevelopmentDocumentAcceptedResourceDrift {
       }
       Assert-DevelopmentDocumentNullToEmptyObject $before $after tags "CompleteDark post-create tag drift"
       $sensitivity += "tags"
+    } elseif ($address -ceq "module.platform.aws_vpc_endpoint.candidate_documents_s3[0]") {
+      if ($null -eq $before.PSObject.Properties["tags"].Value -and
+          (Test-DevelopmentDocumentEmptyObject $after.PSObject.Properties["tags"].Value)) {
+        Assert-DevelopmentDocumentNullToEmptyObject $before $after tags "Resource tag drift"
+        $sensitivity += "tags"
+      } else {
+        if (-not (Test-DevelopmentDocumentEmptyObject $before.PSObject.Properties["tags"].Value) -or
+            -not (Test-DevelopmentDocumentEmptyObject $after.PSObject.Properties["tags"].Value)) {
+          throw "The S3 endpoint CIDR refresh changed the exact empty tag boundary."
+        }
+        $expected = $planned[$address]
+        if ($null -eq $expected) { throw "The S3 endpoint CIDR refresh lacks its exact planned value." }
+        Assert-DevelopmentDocumentS3EndpointCidrRefresh $before $after $expected
+        $sensitivity += "cidr_blocks"
+      }
     } elseif ($address -cin $tagOnly) {
       Assert-DevelopmentDocumentNullToEmptyObject $before $after tags "Resource tag drift"
       $sensitivity += "tags"

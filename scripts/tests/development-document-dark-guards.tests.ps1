@@ -897,6 +897,51 @@ $retainedFullDriftPlan.planned_values.root_module = $plannedDriftRoot
 $retainedFullDriftPlan.resource_drift = $driftRecords
 Assert-DevelopmentDocumentRetainedBaselinePlan -Plan $retainedFullDriftPlan
 
+$s3EndpointAddress = "module.platform.aws_vpc_endpoint.candidate_documents_s3[0]"
+$s3EndpointBeforeCidrs = @("192.0.2.0/24", "198.51.100.0/24")
+$s3EndpointAfterCidrs = @($s3EndpointBeforeCidrs + "203.0.113.0/24")
+$s3EndpointCidrDrift = New-DriftRecord $s3EndpointAddress "aws_vpc_endpoint" `
+  ([pscustomobject]@{ id = "s3-endpoint"; cidr_blocks = $s3EndpointBeforeCidrs; tags = [pscustomobject]@{} }) `
+  ([pscustomobject]@{ id = "s3-endpoint"; cidr_blocks = $s3EndpointAfterCidrs; tags = [pscustomobject]@{} }) `
+  ([pscustomobject]@{ cidr_blocks = @($false, $false); tags = [pscustomobject]@{} }) `
+  ([pscustomobject]@{ cidr_blocks = @($false, $false, $false); tags = [pscustomobject]@{} })
+$s3EndpointCidrRoot = [pscustomobject]@{ resources = @(
+    [pscustomobject]@{ address = "module.platform.aws_kms_key.platform"; values = [pscustomobject]@{ arn = $kmsArn } },
+    [pscustomobject]@{ address = $s3EndpointAddress; values = $s3EndpointCidrDrift.change.after }
+  ) }
+Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($s3EndpointCidrDrift) `
+  -RootModule $s3EndpointCidrRoot
+
+foreach ($mutation in @("removal", "duplicate", "invalid", "other", "planned", "sensitivity")) {
+  $record = $s3EndpointCidrDrift | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $root = $s3EndpointCidrRoot | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $plannedEndpoint = @($root.resources | Where-Object address -eq $s3EndpointAddress)[0]
+  switch ($mutation) {
+    "removal" {
+      $record.change.after.cidr_blocks = @("192.0.2.0/24", "203.0.113.0/24", "10.0.0.0/8")
+      $plannedEndpoint.values.cidr_blocks = $record.change.after.cidr_blocks
+    }
+    "duplicate" {
+      $record.change.after.cidr_blocks = @($s3EndpointBeforeCidrs + "192.0.2.0/24")
+      $plannedEndpoint.values.cidr_blocks = $record.change.after.cidr_blocks
+    }
+    "invalid" {
+      $record.change.after.cidr_blocks = @($s3EndpointBeforeCidrs + "999.0.0.0/24")
+      $plannedEndpoint.values.cidr_blocks = $record.change.after.cidr_blocks
+    }
+    "other" {
+      $record.change.after | Add-Member -NotePropertyName policy -NotePropertyValue "changed"
+      $plannedEndpoint.values = $record.change.after
+    }
+    "planned" { $plannedEndpoint.values.cidr_blocks = @($s3EndpointBeforeCidrs + "10.0.0.0/8") }
+    "sensitivity" { $record.change.after_sensitive.cidr_blocks[2] = $true }
+  }
+  $rejected = $false
+  try { Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($record) -RootModule $root }
+  catch { $rejected = $true }
+  if (-not $rejected) { throw "The S3 endpoint CIDR drift guard accepted '$mutation'." }
+}
+
 $defaultTags = [pscustomobject]@{ Environment = "development"; ManagedBy = "terraform"; Project = "ai-job-apply" }
 $processorRuntimeInline = @([pscustomobject]@{ name = "document-processor-runtime"; policy = $processorPolicy })
 $processorRoleDrift = New-DriftRecord "module.platform.aws_iam_role.document_processor[0]" "aws_iam_role" `

@@ -157,8 +157,11 @@ as `ReviewedBaselineToCurrentDeltaSha256`; do not reuse a digest after the merge
    cross-binds its stage and parser pin to the exact saved-plan variables. Retained, task-release,
    and post-migration plans accept only the same semantic, subset-safe provider-normalization
    records as the document-dark verifier, including the legacy forward-only RDS restore clock and
-   migration-task null-to-empty tag records; duplicates, unknowns, broadened policy semantics, or
-   any other drift fail closed. The task plan rejects every meaningful change except a
+   migration-task null-to-empty tag records. They also admit a provider-observed S3 endpoint CIDR
+   refresh only when valid unique IPv4 CIDRs grow by strict set addition, the prior set is retained,
+   all other attributes equal the exact planned value, and sensitivity remains all false;
+   duplicates, removals, unknowns, broadened policy semantics, or any other drift fail closed. The
+   task plan rejects every meaningful change except a
    create-before-destroy replacement of `module.platform.aws_ecs_task_definition.migration[0]`
    caused only by the image digest.
 2. Independently inspect the saved plan and its `.metadata.json` sidecar, then pass both printed
