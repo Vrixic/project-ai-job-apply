@@ -194,7 +194,9 @@ as `ReviewedBaselineToCurrentDeltaSha256`; do not reuse a digest after the merge
 5. `Verify` repeats the task/log/zero-compute checks and retains a refresh-backed zero-drift plan
    plus its adjacent `.baseline.json` sidecar. The operator rejects overwrites, removes only newly
    created plan/sidecar bytes if any validation or write fails, and requires state lineage/serial
-   to remain unchanged while producing the handoff. The schema-4 sidecar binds the exact release
+   to remain unchanged while producing the handoff. It reconstructs the exact saved-plan input
+   set against variable declarations across every root Terraform `*.tf` file and rejects missing,
+   extra, or duplicate names. The schema-4 sidecar binds the exact release
    source, current operator source and canonical delta, current Terraform variable inventory,
    account, region, state lineage/serial, document stage, parser-version pin, reviewed document-
    publication receipt, immutable migration-image digest, plan path/hash, Terraform `1.9.8`,

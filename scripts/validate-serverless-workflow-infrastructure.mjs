@@ -205,6 +205,8 @@ for (const required of [
   "Test-IgnorableMigrationTaskTagsRefresh",
   "Get-UnacceptedVerificationDrift",
   "Test-EcsFaultInjectionDisabled",
+  'Get-ChildItem -LiteralPath $terraformDirectory -File -Filter "*.tf"',
+  "The development Terraform variable inventory is empty or duplicated.",
   '"--version-id", ([string]$gateway.s3_object_version)',
   'foreach ($propertyName in @("mountPoints", "portMappings", "systemControls", "volumesFrom"))',
   '$property.Name -in @("ipc_mode", "pid_mode", "task_role_arn")',

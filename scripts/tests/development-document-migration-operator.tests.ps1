@@ -130,6 +130,15 @@ if ($baselineFunctions.Count -ne 45) { throw "The input, plan, and retained-hand
 foreach ($function in $baselineFunctions | Sort-Object { $_.Extent.StartOffset }) {
   Invoke-Expression $function.Extent.Text
 }
+$declaredVariables = @(Get-DeclaredVariableNames)
+foreach ($requiredVariable in @("migration_image", "deploy_ingestion_runtime", "ingestion_synthetic_source_enabled")) {
+  if (@($declaredVariables | Where-Object { $_ -ceq $requiredVariable }).Count -ne 1) {
+    throw "The migration operator does not inventory every root Terraform variable declaration."
+  }
+}
+if (@($declaredVariables | Sort-Object -Unique).Count -ne $declaredVariables.Count) {
+  throw "The migration operator accepted a duplicated root Terraform variable declaration."
+}
 
 $originalRepositoryRoot = $repositoryRoot
 $script:documentDeltaMode = "valid"

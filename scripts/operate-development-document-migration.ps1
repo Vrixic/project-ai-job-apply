@@ -725,10 +725,22 @@ function Get-PlanJson {
 }
 
 function Get-DeclaredVariableNames {
-  $source = Get-Content -LiteralPath (Join-Path $terraformDirectory "variables.tf") -Raw
-  return @([regex]::Matches($source, '(?m)^\s*variable\s+"([a-zA-Z0-9_]+)"\s*\{') | ForEach-Object {
-      $_.Groups[1].Value
+  $terraformFiles = @(
+    Get-ChildItem -LiteralPath $terraformDirectory -File -Filter "*.tf" | Sort-Object Name
+  )
+  if ($terraformFiles.Count -eq 0) {
+    throw "The development Terraform root contains no configuration files."
+  }
+  $declared = @($terraformFiles | ForEach-Object {
+      $source = Get-Content -LiteralPath $_.FullName -Raw
+      [regex]::Matches($source, '(?m)^\s*variable\s+"([a-zA-Z0-9_]+)"\s*\{') | ForEach-Object {
+        $_.Groups[1].Value
+      }
     })
+  if ($declared.Count -eq 0 -or @($declared | Sort-Object -Unique).Count -ne $declared.Count) {
+    throw "The development Terraform variable inventory is empty or duplicated."
+  }
+  return $declared
 }
 
 function ConvertTo-TerraformEnvironmentValue {
