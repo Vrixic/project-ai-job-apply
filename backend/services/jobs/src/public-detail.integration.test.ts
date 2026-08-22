@@ -12,10 +12,6 @@ const readerRole = "ai_job_apply_public_job_reader";
 
 describeWithDatabase("dedicated public job reader boundary", () => {
   const client = postgres(databaseUrl ?? "postgres://invalid", { max: 2 });
-  const readerDatabaseUrl = new URL(databaseUrl ?? "postgres://invalid");
-  readerDatabaseUrl.username = readerRole;
-  readerDatabaseUrl.password = "";
-  const readerClient = postgres(readerDatabaseUrl.toString(), { max: 1 });
   const migrationExecutable = fileURLToPath(new URL("../dist/src/migrate.js", import.meta.url));
   const companyId = uuidv7();
   const canonicalJobId = uuidv7();
@@ -143,7 +139,7 @@ describeWithDatabase("dedicated public job reader boundary", () => {
       }
       await client.unsafe("DROP ROLE rds_iam");
     }
-    await Promise.all([client.end(), readerClient.end()]);
+    await client.end();
   });
 
   it("projects the exact public fields for canonical and reversible alias identifiers", async () => {
@@ -293,12 +289,23 @@ describeWithDatabase("dedicated public job reader boundary", () => {
     ]);
   });
 
-  it("defaults direct application-database sessions to read-only", async () => {
-    const setting = await readerClient<{ default_transaction_read_only: string }[]>`
-      SHOW default_transaction_read_only
+  it("configures application-database reader sessions as read-only", async () => {
+    const settings = await client<{ setting: string }[]>`
+      SELECT unnest(role_setting.setconfig) AS setting
+      FROM pg_db_role_setting AS role_setting
+      WHERE role_setting.setrole = ${readerRole}::regrole
+        AND role_setting.setdatabase = (
+          SELECT oid FROM pg_database WHERE datname = current_database()
+        )
     `;
-    expect(setting).toEqual([{ default_transaction_read_only: "on" }]);
-    await expect(readerClient`SELECT lo_create(0)`).rejects.toMatchObject({ code: "25006" });
+    expect(settings).toContainEqual({ setting: "default_transaction_read_only=on" });
+    await expect(
+      client.begin(async (transaction) => {
+        await transaction.unsafe("SET TRANSACTION READ ONLY");
+        await transaction.unsafe(`SET LOCAL ROLE ${readerRole}`);
+        await transaction`SELECT lo_create(0)`;
+      }),
+    ).rejects.toMatchObject({ code: "25006" });
   });
 
   it("clears password drift and rejects unexpected direct role membership", async () => {
