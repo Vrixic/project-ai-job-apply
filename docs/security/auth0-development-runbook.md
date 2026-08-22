@@ -25,13 +25,16 @@ Create **Applications → APIs → Create API** with:
 | Token lifetime | `600` seconds |
 | Allow offline access | Enabled for the server-held web session |
 
-Add the permissions `jobs:read`, `profile:read`, and `profile:write`. Keep RBAC and access-token
-permission claims disabled until roles beyond candidate ownership exist; the gateway enforces the
-explicit OAuth scopes and resolves the exact issuer and subject to an internal UUID.
+Add the permissions `documents:read`, `documents:write`, `jobs:read`, `jobs:write`,
+`jobs:moderate`, `profile:read`, and `profile:write`. Keep RBAC and access-token permission claims
+disabled: the gateway enforces exact OAuth scopes, the candidate and moderation clients receive
+disjoint per-application grants, and the gateway derives a non-reversible opaque moderation audit
+identifier instead of persisting raw identity-provider claims.
 
 Set the API's **Settings → Application Access Policy → User-Delegated Access** to **Per-app
 authorization**. In **Application Access**, add or edit `ApplyDash Web Development`, grant only
-user-delegated access, and allow `jobs:read`, `profile:read`, and `profile:write`. Do not grant
+user-delegated access, and allow `documents:read`, `documents:write`, `jobs:read`, `jobs:write`,
+`profile:read`, and `profile:write`. Explicitly exclude `jobs:moderate`. Do not grant
 client access: the web application acts only on behalf of its authenticated user and does not use
 the Client Credentials flow. Update this per-application grant whenever the requested API scope
 set changes; defining a permission on the API does not expand an existing client grant.
@@ -64,11 +67,28 @@ grants.
 The application requests:
 
 ```text
-openid profile email offline_access jobs:read profile:read profile:write
+openid profile email offline_access documents:read documents:write jobs:read jobs:write profile:read profile:write
 ```
 
 Enable only the development database connection for this client. Universal Login remains the
 credential boundary; the platform must never collect an Auth0 password.
+
+### Moderation Regular Web Application
+
+Create a separate `ApplyDash Moderation Development` Regular Web Application. Use callback
+`http://localhost:3001/auth/callback`, logout/web origin `http://localhost:3001`, authorization
+code plus rotating refresh token, and no wildcard. In the Platform API's per-app authorization,
+grant this client user-delegated access to `jobs:moderate` only. Do not grant candidate, document,
+profile, or machine-to-machine scopes. The application requests exactly:
+
+```text
+openid profile offline_access jobs:moderate
+```
+
+Assign only accountable synthetic development moderators protected by MFA. Configure its secrets
+from `frontend/admin/.env.example`; never reuse the candidate web client ID, client secret, or
+session secret. This setup enables local synthetic acceptance only and is not a production admin
+access approval.
 
 ## Local secret configuration
 

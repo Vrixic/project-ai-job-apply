@@ -318,6 +318,51 @@ describe("API Gateway Lambda boundary", () => {
     expect(inject).toHaveBeenCalledTimes(3);
   });
 
+  it("allows only exact candidate-report and admin-moderation route shapes", async () => {
+    const principalBridge = createInvocationPrincipalBridge();
+    const inject = vi.fn(async () => ({ statusCode: 200, body: "{}", headers: {} }));
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge,
+    });
+    const jobId = "019d04cf-1f80-7000-8000-000000000012";
+    const caseId = "019d04cf-1f80-7000-8000-000000000013";
+    const bodyOptions = {
+      body: "{}",
+      headers: {
+        authorization: "Bearer opaque-api-gateway-token",
+        "content-type": "application/json",
+      },
+    };
+    for (const path of [
+      `/v1/jobs/${jobId}/reports`,
+      "/v1/admin/moderation/cases",
+      "/v1/admin/moderation/cases/search",
+      `/v1/admin/moderation/cases/${caseId}/resolve`,
+    ]) {
+      expect((await invoke(handler, routedEvent("POST", path, bodyOptions))).statusCode).toBe(200);
+    }
+    expect(
+      (
+        await invoke(
+          handler,
+          routedEvent("GET", `/v1/admin/moderation/jobs/${jobId}/report-summary`),
+        )
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await invoke(
+          handler,
+          routedEvent("POST", `/v1/jobs/${jobId.toUpperCase()}/reports`, bodyOptions),
+        )
+      ).statusCode,
+    ).toBe(404);
+    expect(inject).toHaveBeenCalledTimes(5);
+  });
+
   it.each([
     ["POST", "/v1/profile/facts"],
     ["PATCH", "/v1/profile/facts/018f92b0-4ad7-7b1d-8f44-b7ae694c85c1"],

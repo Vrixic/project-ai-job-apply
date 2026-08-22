@@ -56,7 +56,14 @@ return a generic `503` without reflecting profile, job, or database values.
 Profile to one internal UUID, rejects query parameters and unknown body fields, and passes only
 that UUID, the requested lowercase UUIDv7, one fixed reason code, and a bounded idempotency key to
 Jobs. The response is `no-store`; target absence and duplicate/idempotency outcomes expose no
-catalog lifecycle or owner details. No admin moderation route or audience is introduced.
+catalog lifecycle or owner details.
+
+The locally implemented admin boundary adds exact `jobs:moderate` routes for aggregate candidate
+report counts, signed keyset case pages, explicit case opening, and version-fenced resolution. It
+derives a stable opaque audit identifier from the validated issuer and subject without persisting
+or returning either raw identity-provider value. Candidate scopes cannot enter these routes, and
+responses omit operator identities. Job blocking and exact-source pausing remain deliberate human
+actions; reports never invoke either action automatically and no source-resume route exists.
 
 This is locally verified source only. The saved-job mutation permission/grant, publication,
 database migration, deployment, and live acceptance remain serialized later gates; do not release

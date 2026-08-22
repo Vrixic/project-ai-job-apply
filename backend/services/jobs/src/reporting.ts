@@ -152,6 +152,17 @@ export interface JobReportSummary {
   counts: Readonly<Record<JobReportReason, number>>;
 }
 
+export interface ModerationCaseSearchRequest {
+  status: "open" | "resolved";
+  pageSize?: number;
+  cursor?: string;
+}
+
+export interface ModerationCasePage {
+  items: readonly ModerationCase[];
+  nextCursor?: string;
+}
+
 export interface JobModerationStore {
   openCase(input: {
     target: ModerationTarget;
@@ -166,6 +177,7 @@ export interface JobModerationStore {
     reasonCode: ModerationResolutionReason;
   }): Promise<ModerationCase>;
   summarizeReports(canonicalJobId: string): Promise<JobReportSummary>;
+  searchCases(request: ModerationCaseSearchRequest): Promise<ModerationCasePage>;
   isSourcePaused(target: Extract<ModerationTarget, { kind: "source" }>): Promise<boolean>;
 }
 
@@ -180,5 +192,167 @@ export class ModerationTargetUnavailableError extends Error {
   constructor() {
     super("The moderation target is unavailable");
     this.name = "ModerationTargetUnavailableError";
+  }
+}
+
+export class InvalidModerationCursorError extends Error {
+  constructor() {
+    super("The moderation cursor is invalid");
+    this.name = "InvalidModerationCursorError";
+  }
+}
+
+export class ModerationServiceUnavailableError extends Error {
+  constructor() {
+    super("Moderation is temporarily unavailable");
+    this.name = "ModerationServiceUnavailableError";
+  }
+}
+
+function exactModerationTarget(target: ModerationTarget): ModerationTarget {
+  if (target.kind === "job") {
+    if (!UUID_V7_PATTERN.test(target.jobId)) {
+      throw new TypeError("The moderated job identifier is invalid");
+    }
+    return Object.freeze({ ...target });
+  }
+  if (
+    !/^[a-z0-9][a-z0-9-]{2,63}$/.test(target.sourceId) ||
+    !/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(target.adapterVersion) ||
+    !/^[a-f0-9]{64}$/.test(target.adapterConfigSha256)
+  ) {
+    throw new TypeError("The moderated source identity is invalid");
+  }
+  return Object.freeze({ ...target });
+}
+
+const moderationOpenReasons: readonly ModerationOpenReason[] = [
+  "candidate_reports",
+  "catalog_integrity",
+  "source_integrity",
+];
+const moderationResolutions: readonly ModerationResolution[] = [
+  "no_action",
+  "block_job",
+  "pause_source",
+];
+const moderationResolutionReasons: readonly ModerationResolutionReason[] = [
+  "insufficient_evidence",
+  "report_confirmed",
+  "catalog_policy_violation",
+  "source_integrity_failure",
+];
+
+export interface JobModeration {
+  ping(): Promise<void>;
+  openCase(input: {
+    target: ModerationTarget;
+    operatorId: string;
+    reasonCode: ModerationOpenReason;
+  }): Promise<ModerationCase>;
+  resolveCase(input: {
+    caseId: string;
+    expectedVersion: 0;
+    resolution: ModerationResolution;
+    operatorId: string;
+    reasonCode: ModerationResolutionReason;
+  }): Promise<ModerationCase>;
+  summarizeReports(canonicalJobId: string): Promise<JobReportSummary>;
+  searchCases(request: ModerationCaseSearchRequest): Promise<ModerationCasePage>;
+}
+
+export class JobModerationService implements JobModeration {
+  constructor(private readonly store: JobModerationStore) {}
+
+  ping(): Promise<void> {
+    return this.store
+      .isSourcePaused({
+        kind: "source",
+        sourceId: "readiness-probe",
+        adapterVersion: "v1",
+        adapterConfigSha256: "0".repeat(64),
+      })
+      .then(() => undefined);
+  }
+
+  async openCase(input: {
+    target: ModerationTarget;
+    operatorId: string;
+    reasonCode: ModerationOpenReason;
+  }): Promise<ModerationCase> {
+    if (!moderationOpenReasons.includes(input.reasonCode)) {
+      throw new TypeError("The moderation open reason is invalid");
+    }
+    try {
+      return await this.store.openCase({ ...input, target: exactModerationTarget(input.target) });
+    } catch (error) {
+      if (
+        error instanceof ModerationConflictError ||
+        error instanceof ModerationTargetUnavailableError
+      ) {
+        throw error;
+      }
+      throw new ModerationServiceUnavailableError();
+    }
+  }
+
+  async resolveCase(input: {
+    caseId: string;
+    expectedVersion: 0;
+    resolution: ModerationResolution;
+    operatorId: string;
+    reasonCode: ModerationResolutionReason;
+  }): Promise<ModerationCase> {
+    if (
+      !UUID_V7_PATTERN.test(input.caseId) ||
+      input.expectedVersion !== 0 ||
+      !moderationResolutions.includes(input.resolution) ||
+      !moderationResolutionReasons.includes(input.reasonCode)
+    ) {
+      throw new TypeError("The moderation resolution is invalid");
+    }
+    try {
+      return await this.store.resolveCase(input);
+    } catch (error) {
+      if (
+        error instanceof TypeError ||
+        error instanceof ModerationConflictError ||
+        error instanceof ModerationTargetUnavailableError
+      ) {
+        throw error;
+      }
+      throw new ModerationServiceUnavailableError();
+    }
+  }
+
+  async summarizeReports(canonicalJobId: string): Promise<JobReportSummary> {
+    if (!UUID_V7_PATTERN.test(canonicalJobId)) {
+      throw new TypeError("The summarized job identifier is invalid");
+    }
+    try {
+      return await this.store.summarizeReports(canonicalJobId);
+    } catch (error) {
+      if (error instanceof TypeError) throw error;
+      throw new ModerationServiceUnavailableError();
+    }
+  }
+
+  async searchCases(request: ModerationCaseSearchRequest): Promise<ModerationCasePage> {
+    const pageSize = request.pageSize ?? 25;
+    if (
+      (request.status !== "open" && request.status !== "resolved") ||
+      !Number.isInteger(pageSize) ||
+      pageSize < 1 ||
+      pageSize > 50 ||
+      (request.cursor !== undefined && !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(request.cursor))
+    ) {
+      throw new TypeError("The moderation search request is invalid");
+    }
+    try {
+      return await this.store.searchCases({ ...request, pageSize });
+    } catch (error) {
+      if (error instanceof InvalidModerationCursorError) throw error;
+      throw new ModerationServiceUnavailableError();
+    }
   }
 }

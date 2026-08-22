@@ -39,6 +39,7 @@ Each tenant contains:
 | Client/API | Auth0 shape | Required behavior |
 |---|---|---|
 | Next.js web | Regular Web Application | Server-held session; authorization code flow; API access through a BFF; no refresh token in browser storage |
+| Moderation admin | Separate Regular Web Application | Server-held session; only `jobs:moderate`; no candidate scopes or token in browser storage; MFA and accountable operator assignment required before deployment |
 | Expo mobile | Native Application | System browser; authorization code with PKCE; secure OS credential storage; rotating refresh token |
 | Chrome/Edge extension | Public client, finalized by conformance test | `chrome.identity.launchWebAuthFlow`; authorization code with PKCE; no client secret; minimum extension permissions |
 | Platform API | Auth0 API/resource server | Identifier `ai-job-apply-api`; RS256 access tokens; explicit platform scopes |

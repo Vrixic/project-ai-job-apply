@@ -34,6 +34,12 @@ job, and returns only opaque report and job identifiers, the reason code, and cr
 text, reporter identity, moderation state, source identity, and lifecycle reasons are excluded.
 Reports do not directly block, withdraw, pause, or otherwise mutate a job or source.
 
+The `/admin/moderation` routes require the separate `jobs:moderate` scope. Their strict fixed-code
+contracts expose aggregate report counts and redacted case state only, use signed opaque
+continuation cursors, and never accept or return an operator identity. Case resolution is fenced to
+version zero and records only `no_action`, `block_job`, or `pause_source`; target/action consistency
+is enforced by the gateway and Jobs owner.
+
 `GET /entitlements` is an owner-self read under the existing `profile:read` permission. It accepts
 no query, body, path owner, provider, or payment input and returns only the exact derived Free or
 Pro access projection with the four current core grants. Free, active Pro, and grace Pro are

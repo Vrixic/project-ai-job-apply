@@ -29,6 +29,7 @@ import type {
   ActiveJobSummaryResolutionPage,
   CreateJobReportCommand,
   JobCatalogReader,
+  JobModeration,
   JobReportServiceUnavailableError,
   JobReports,
   MatchableJobResolution,
@@ -273,6 +274,22 @@ class SyntheticAssuranceDocuments implements DocumentStore {
   async close(): Promise<void> {}
 }
 
+class SyntheticAssuranceModeration implements JobModeration {
+  async ping(): Promise<void> {}
+  async openCase(): Promise<never> {
+    return unused("JobModeration.openCase");
+  }
+  async resolveCase(): Promise<never> {
+    return unused("JobModeration.resolveCase");
+  }
+  async summarizeReports(): Promise<never> {
+    return unused("JobModeration.summarizeReports");
+  }
+  async searchCases(): Promise<never> {
+    return unused("JobModeration.searchCases");
+  }
+}
+
 export async function createSyntheticAssuranceApplication() {
   const issuer = await createTestTokenIssuer();
   const store = new SyntheticAssuranceProfileStore();
@@ -282,6 +299,7 @@ export async function createSyntheticAssuranceApplication() {
     store,
     catalog,
     jobReports,
+    moderation: new SyntheticAssuranceModeration(),
     savedJobs: new SyntheticAssuranceSavedJobs(),
     matchAssessments: new SyntheticAssuranceMatchAssessments(),
     entitlements: new SyntheticAssuranceEntitlements(),

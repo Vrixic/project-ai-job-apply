@@ -502,6 +502,160 @@
         }
       }
     },
+    "/admin/moderation/cases/search": {
+      "post": {
+        "operationId": "searchModerationCases",
+        "security": [{ "oidc": ["jobs:moderate"] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ModerationCaseSearchRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A bounded page of moderation cases without operator identities",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ModerationCasePage" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/admin/moderation/cases": {
+      "post": {
+        "operationId": "openModerationCase",
+        "security": [{ "oidc": ["jobs:moderate"] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/OpenModerationCaseRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "An explicit human-review moderation case was opened",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ModerationCase" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/admin/moderation/cases/{caseId}/resolve": {
+      "post": {
+        "operationId": "resolveModerationCase",
+        "security": [{ "oidc": ["jobs:moderate"] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "caseId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ResolveModerationCaseRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The version-fenced moderation decision was recorded",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ModerationCase" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/admin/moderation/jobs/{jobId}/report-summary": {
+      "get": {
+        "operationId": "getModerationJobReportSummary",
+        "security": [{ "oidc": ["jobs:moderate"] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "jobId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fixed-code aggregate report counts without candidate identities",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/JobReportSummary" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
     "/public/jobs/{jobId}": {
       "get": {
         "operationId": "getPublicJob",
@@ -1408,6 +1562,201 @@
             ]
           },
           "createdAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      },
+      "ModerationJobTarget": {
+        "type": "object",
+        "required": ["kind", "jobId"],
+        "properties": {
+          "kind": { "const": "job" },
+          "jobId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ModerationSourceTarget": {
+        "type": "object",
+        "required": ["kind", "sourceId", "adapterVersion", "adapterConfigSha256"],
+        "properties": {
+          "kind": { "const": "source" },
+          "sourceId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 64,
+            "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+          },
+          "adapterVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$"
+          },
+          "adapterConfigSha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ModerationTarget": {
+        "oneOf": [
+          { "$ref": "#/components/schemas/ModerationJobTarget" },
+          { "$ref": "#/components/schemas/ModerationSourceTarget" }
+        ]
+      },
+      "OpenModerationCaseRequest": {
+        "type": "object",
+        "required": ["target", "reasonCode"],
+        "properties": {
+          "target": { "$ref": "#/components/schemas/ModerationTarget" },
+          "reasonCode": {
+            "type": "string",
+            "enum": ["candidate_reports", "catalog_integrity", "source_integrity"]
+          }
+        },
+        "additionalProperties": false
+      },
+      "ResolveModerationCaseRequest": {
+        "type": "object",
+        "required": ["expectedVersion", "resolution", "reasonCode"],
+        "properties": {
+          "expectedVersion": { "const": 0 },
+          "resolution": {
+            "type": "string",
+            "enum": ["no_action", "block_job", "pause_source"]
+          },
+          "reasonCode": {
+            "type": "string",
+            "enum": [
+              "insufficient_evidence",
+              "report_confirmed",
+              "catalog_policy_violation",
+              "source_integrity_failure"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "ModerationCaseSearchRequest": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": { "type": "string", "enum": ["open", "resolved"] },
+          "pageSize": { "type": "integer", "minimum": 1, "maximum": 50, "default": 25 },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ModerationCase": {
+        "type": "object",
+        "required": ["id", "target", "status", "version", "openReasonCode", "openedAt"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "target": { "$ref": "#/components/schemas/ModerationTarget" },
+          "status": { "type": "string", "enum": ["open", "resolved"] },
+          "version": { "type": "integer", "enum": [0, 1] },
+          "openReasonCode": {
+            "type": "string",
+            "enum": ["candidate_reports", "catalog_integrity", "source_integrity"]
+          },
+          "openedAt": { "type": "string", "format": "date-time" },
+          "resolution": {
+            "type": "string",
+            "enum": ["no_action", "block_job", "pause_source"]
+          },
+          "resolutionReasonCode": {
+            "type": "string",
+            "enum": [
+              "insufficient_evidence",
+              "report_confirmed",
+              "catalog_policy_violation",
+              "source_integrity_failure"
+            ]
+          },
+          "resolvedAt": { "type": "string", "format": "date-time" }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "status": { "const": "open" },
+              "version": { "const": 0 },
+              "resolution": false,
+              "resolutionReasonCode": false,
+              "resolvedAt": false
+            }
+          },
+          {
+            "required": ["resolution", "resolutionReasonCode", "resolvedAt"],
+            "properties": {
+              "status": { "const": "resolved" },
+              "version": { "const": 1 }
+            }
+          }
+        ],
+        "additionalProperties": false
+      },
+      "ModerationCasePage": {
+        "type": "object",
+        "required": ["items"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 50,
+            "items": { "$ref": "#/components/schemas/ModerationCase" }
+          },
+          "nextCursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "JobReportSummary": {
+        "type": "object",
+        "required": ["canonicalJobId", "total", "counts"],
+        "properties": {
+          "canonicalJobId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "total": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+          "counts": {
+            "type": "object",
+            "required": [
+              "job_closed",
+              "job_not_found",
+              "job_inaccurate",
+              "suspected_scam",
+              "duplicate_listing",
+              "other_catalog_issue"
+            ],
+            "properties": {
+              "job_closed": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+              "job_not_found": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+              "job_inaccurate": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+              "suspected_scam": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+              "duplicate_listing": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+              "other_catalog_issue": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2147483647
+              }
+            },
+            "additionalProperties": false
+          }
         },
         "additionalProperties": false
       },

@@ -48,10 +48,12 @@ control and this slice provides no source-resume operation. Aggregate review exp
 counts only, never reporter identities. The source-only durable ingestion runtime now consumes the
 exact persisted pause as a fail-closed execution gate before schedule/resume, attempt execution,
 polling, and each subsequent catalog write. Terminal reconciliation stays active, and one already
-issued idempotent catalog write may finish before the next gate check. The candidate report API is
-locally verified source; no admin API/audience, moderation UI, report-triggered automation,
-source-resume operation, retention/deletion policy, real-report processing, migration apply, or
-deployment is claimed.
+issued idempotent catalog write may finish before the next gate check. The candidate report API and
+the dedicated `jobs:moderate` administration port are locally verified source. The privileged API
+provides signed keyset pagination, fixed-code aggregate report counts, explicit case opening, and
+version-fenced resolution while excluding operator identities from transport responses. Reports
+still do not trigger automation, and there is no source-resume operation, approved
+retention/deletion policy, real-report processing, migration apply, or deployment claim.
 
 The D1 search read model uses PostgreSQL full-text search and stable keyset pagination over that
 same active catalog. It supports only honestly persisted title, company, location, and verification

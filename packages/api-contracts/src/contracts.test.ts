@@ -451,6 +451,73 @@ describe("job-report contracts", () => {
   });
 });
 
+describe("admin moderation contracts", () => {
+  const validateOpen = compileComponentValidator("OpenModerationCaseRequest");
+  const validateResolve = compileComponentValidator("ResolveModerationCaseRequest");
+  const validateCase = compileComponentValidator("ModerationCase");
+  const jobId = "019d04cf-1f80-7000-8000-000000000020";
+  const caseId = "019d04cf-1f80-7000-8000-000000000021";
+
+  it("accepts only fixed targets, reasons, decisions, and redacted case projections", () => {
+    expect(
+      validateOpen({
+        target: { kind: "job", jobId },
+        reasonCode: "candidate_reports",
+      }),
+    ).toBe(true);
+    expect(
+      validateOpen({
+        target: {
+          kind: "source",
+          sourceId: "synthetic-generated",
+          adapterVersion: "v1",
+          adapterConfigSha256: "a".repeat(64),
+        },
+        reasonCode: "source_integrity",
+      }),
+    ).toBe(true);
+    expect(
+      validateOpen({
+        target: { kind: "job", jobId },
+        reasonCode: "candidate_reports",
+        operatorId: "browser-injected",
+      }),
+    ).toBe(false);
+    expect(
+      validateResolve({
+        expectedVersion: 0,
+        resolution: "block_job",
+        reasonCode: "report_confirmed",
+      }),
+    ).toBe(true);
+    expect(
+      validateCase({
+        id: caseId,
+        target: { kind: "job", jobId },
+        status: "open",
+        version: 0,
+        openReasonCode: "candidate_reports",
+        openedAt: "2026-08-22T12:00:00.000Z",
+        openedBy: "private-operator",
+      }),
+    ).toBe(false);
+  });
+
+  it("requires the dedicated moderation scope and private no-store responses", () => {
+    for (const path of [
+      "/admin/moderation/cases/search",
+      "/admin/moderation/cases",
+      "/admin/moderation/cases/{caseId}/resolve",
+      "/admin/moderation/jobs/{jobId}/report-summary",
+    ] as const) {
+      const operation = Object.values(contract.paths[path])[0];
+      expect(operation.security).toEqual([{ oidc: ["jobs:moderate"] }]);
+      const success = operation.responses["200"] ?? operation.responses["201"];
+      expect(success.headers["Cache-Control"].schema.enum).toEqual(["no-store"]);
+    }
+  });
+});
+
 describe("match-assessment contract", () => {
   const validate = compileComponentValidator("MatchAssessment");
   const value = {

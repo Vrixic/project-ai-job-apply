@@ -8,6 +8,7 @@ import {
   JobReportIdempotencyConflictError,
   JobReportLimitError,
   JobReportTargetUnavailableError,
+  InvalidModerationCursorError,
 } from "../reporting.js";
 import type { CatalogObservation } from "./catalog.js";
 import { createJobCatalogDatabase, PostgresJobCatalog } from "./catalog.js";
@@ -25,7 +26,10 @@ describeWithDatabase("Jobs reporting and moderation persistence", () => {
     searchCursorKeys: { active: { id: "reporting-test", key: Buffer.alloc(32, 8) } },
   });
   const reports = new PostgresJobReportStore(client);
-  const moderation = new PostgresJobModerationStore(client);
+  const moderation = new PostgresJobModerationStore(client, {
+    id: "reporting-test",
+    key: Buffer.alloc(32, 7),
+  });
   const runId = crypto.randomUUID();
   const now = new Date();
   const migrationExecutable = fileURLToPath(new URL("../../dist/src/migrate.js", import.meta.url));
@@ -213,6 +217,26 @@ describeWithDatabase("Jobs reporting and moderation persistence", () => {
     await expect(
       moderation.isSourcePaused({ ...source, adapterConfigSha256: "9".repeat(64) }),
     ).resolves.toBe(false);
+
+    const firstPage = await moderation.searchCases({ status: "resolved", pageSize: 1 });
+    expect(firstPage.items).toHaveLength(1);
+    expect(firstPage.nextCursor).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+    const nextCursor = firstPage.nextCursor;
+    if (!nextCursor) throw new Error("The first moderation page did not return a cursor");
+    const secondPage = await moderation.searchCases({
+      status: "resolved",
+      pageSize: 1,
+      cursor: nextCursor,
+    });
+    expect(secondPage.items).toHaveLength(1);
+    expect(secondPage.items[0]?.id).not.toBe(firstPage.items[0]?.id);
+    await expect(
+      moderation.searchCases({
+        status: "open",
+        pageSize: 1,
+        cursor: nextCursor,
+      }),
+    ).rejects.toBeInstanceOf(InvalidModerationCursorError);
 
     await expect(
       client`DELETE FROM jobs.moderation_events WHERE case_id = ${sourceCase.id}`,

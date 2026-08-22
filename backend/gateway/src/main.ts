@@ -12,8 +12,10 @@ import {
   UnavailableDocumentStore,
 } from "@ai-job-apply/documents-service";
 import {
+  JobModerationService,
   JobReportingService,
   PostgresJobCatalog,
+  PostgresJobModerationStore,
   PostgresJobReportStore,
 } from "@ai-job-apply/jobs-service";
 import {
@@ -30,7 +32,7 @@ import {
 import { createDatabase, PostgresProfileStore } from "@ai-job-apply/profile-service";
 import { FastifyAdapter } from "@nestjs/platform-fastify";
 import { createGatewayApplication } from "./application.js";
-import { deriveJobSearchCursorKeys } from "./job-search-cursor-key.js";
+import { deriveJobSearchCursorKeys, deriveModerationCursorKey } from "./job-search-cursor-key.js";
 import { JobCatalogSavedJobResolver } from "./saved-job-catalog-resolver.js";
 
 const config = loadBackendConfig();
@@ -45,6 +47,9 @@ const catalog = new PostgresJobCatalog(database.client, {
   searchCursorKeys: deriveJobSearchCursorKeys(config.DATABASE_URL),
 });
 const jobReports = new JobReportingService(new PostgresJobReportStore(database.client));
+const moderation = new JobModerationService(
+  new PostgresJobModerationStore(database.client, deriveModerationCursorKey(config.DATABASE_URL)),
+);
 const savedJobs = new SavedJobsService(
   new PostgresSavedJobStore(database.client),
   new JobCatalogSavedJobResolver(catalog),
@@ -74,6 +79,7 @@ const app = await createGatewayApplication({
   store,
   catalog,
   jobReports,
+  moderation,
   savedJobs,
   matchAssessments,
   entitlements,

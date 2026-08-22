@@ -37,6 +37,8 @@ import {
   type CreateJobReportCommand,
   JobAlreadyReportedError,
   type JobCatalogReader,
+  type JobModeration,
+  type ModerationCase as DomainModerationCase,
   JobReportIdempotencyConflictError,
   JobReportLimitError,
   JobReportServiceUnavailableError,
@@ -374,6 +376,63 @@ class MemoryJobReports implements JobReports {
   }
 }
 
+class MemoryModeration implements JobModeration {
+  readonly cases: DomainModerationCase[] = [];
+  lastOperatorId: string | undefined;
+
+  async ping(): Promise<void> {}
+  async openCase(input: Parameters<JobModeration["openCase"]>[0]): Promise<DomainModerationCase> {
+    this.lastOperatorId = input.operatorId;
+    const created: DomainModerationCase = {
+      id: uuidv7(),
+      target: input.target,
+      status: "open",
+      version: 0,
+      openedBy: input.operatorId,
+      openReasonCode: input.reasonCode,
+      openedAt: "2026-08-16T12:00:00.000Z",
+    };
+    this.cases.unshift(created);
+    return created;
+  }
+  async resolveCase(
+    input: Parameters<JobModeration["resolveCase"]>[0],
+  ): Promise<DomainModerationCase> {
+    this.lastOperatorId = input.operatorId;
+    const index = this.cases.findIndex((item) => item.id === input.caseId);
+    const current = this.cases[index];
+    if (!current) throw new Error("missing synthetic case");
+    const resolved: DomainModerationCase = {
+      ...current,
+      status: "resolved",
+      version: 1,
+      resolution: input.resolution,
+      resolvedBy: input.operatorId,
+      resolutionReasonCode: input.reasonCode,
+      resolvedAt: "2026-08-16T12:01:00.000Z",
+    };
+    this.cases[index] = resolved;
+    return resolved;
+  }
+  async summarizeReports(canonicalJobId: string) {
+    return {
+      canonicalJobId,
+      total: 2,
+      counts: {
+        job_closed: 1,
+        job_not_found: 0,
+        job_inaccurate: 0,
+        suspected_scam: 1,
+        duplicate_listing: 0,
+        other_catalog_issue: 0,
+      },
+    };
+  }
+  async searchCases(input: Parameters<JobModeration["searchCases"]>[0]) {
+    return { items: this.cases.filter((item) => item.status === input.status) };
+  }
+}
+
 class MemoryMatchAssessments implements MatchAssessments {
   readonly calls: Array<{ ownerUserId: string; requestedJobId: string }> = [];
   failure: Error | undefined;
@@ -563,6 +622,7 @@ async function createApp() {
   const documents = new MemoryDocumentStore();
   const savedJobs = new MemorySavedJobs();
   const jobReports = new MemoryJobReports();
+  const moderation = new MemoryModeration();
   const matchAssessments = new MemoryMatchAssessments();
   const entitlements = new MemoryEntitlements();
   const now = new Date("2026-08-16T12:00:00.000Z");
@@ -571,6 +631,7 @@ async function createApp() {
     catalog,
     savedJobs,
     jobReports,
+    moderation,
     matchAssessments,
     entitlements,
     documents,
@@ -587,6 +648,7 @@ async function createApp() {
     jobReports,
     matchAssessments,
     entitlements,
+    moderation,
     now,
   };
 }
@@ -600,6 +662,7 @@ describe("candidate API", () => {
   let jobReports: MemoryJobReports;
   let matchAssessments: MemoryMatchAssessments;
   let entitlements: MemoryEntitlements;
+  let moderation: MemoryModeration;
   let now: Date;
 
   beforeAll(async () => {
@@ -612,6 +675,7 @@ describe("candidate API", () => {
     jobReports = setup.jobReports;
     matchAssessments = setup.matchAssessments;
     entitlements = setup.entitlements;
+    moderation = setup.moderation;
     now = setup.now;
   });
 
@@ -698,6 +762,7 @@ describe("candidate API", () => {
       catalog: new MemoryJobCatalog(),
       savedJobs: new MemorySavedJobs(),
       jobReports: new MemoryJobReports(),
+      moderation: new MemoryModeration(),
       matchAssessments: new MemoryMatchAssessments(),
       entitlements: new MemoryEntitlements(),
       documents: new MemoryDocumentStore(),
@@ -954,6 +1019,7 @@ describe("candidate API", () => {
       catalog: new MemoryJobCatalog(),
       savedJobs: new MemorySavedJobs(),
       jobReports: new MemoryJobReports(),
+      moderation: new MemoryModeration(),
       matchAssessments: new MemoryMatchAssessments(),
       entitlements: new BillingEntitlementService(
         cacheStore,
@@ -1571,6 +1637,106 @@ describe("candidate API", () => {
 
     expect(response.statusCode).toBe(503);
     expect(response.body).not.toContain("reporterUserId");
+  });
+
+  it("keeps human moderation behind jobs:moderate and excludes operator identities", async () => {
+    const subject = "auth0|synthetic-moderator";
+    const moderateToken = await issuer.issue(subject, { scope: "jobs:moderate" });
+    const candidateToken = await issuer.issue("candidate-not-moderator", { scope: "jobs:write" });
+    const forbidden = await app.inject({
+      method: "POST",
+      url: "/v1/admin/moderation/cases",
+      headers: { authorization: `Bearer ${candidateToken}` },
+      payload: {
+        target: { kind: "job", jobId: catalog.job.id },
+        reasonCode: "candidate_reports",
+      },
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const opened = await app.inject({
+      method: "POST",
+      url: "/v1/admin/moderation/cases",
+      headers: { authorization: `Bearer ${moderateToken}` },
+      payload: {
+        target: { kind: "job", jobId: catalog.job.id },
+        reasonCode: "candidate_reports",
+      },
+    });
+    expect(opened.statusCode).toBe(201);
+    expect(opened.headers["cache-control"]).toBe("no-store");
+    expect(opened.json()).toMatchObject({
+      target: { kind: "job", jobId: catalog.job.id },
+      status: "open",
+      version: 0,
+    });
+    expect(opened.json()).not.toHaveProperty("openedBy");
+    expect(moderation.lastOperatorId).toMatch(/^oidc:[a-f0-9]{64}$/);
+    expect(moderation.lastOperatorId).not.toContain(subject);
+
+    const searched = await app.inject({
+      method: "POST",
+      url: "/v1/admin/moderation/cases/search",
+      headers: { authorization: `Bearer ${moderateToken}` },
+      payload: { status: "open", pageSize: 25 },
+    });
+    expect(searched.statusCode).toBe(200);
+    expect(searched.json().items).toHaveLength(1);
+    expect(JSON.stringify(searched.json())).not.toContain("openedBy");
+
+    const summary = await app.inject({
+      method: "GET",
+      url: `/v1/admin/moderation/jobs/${catalog.job.id}/report-summary`,
+      headers: { authorization: `Bearer ${moderateToken}` },
+    });
+    expect(summary.statusCode).toBe(200);
+    expect(summary.json()).toMatchObject({ canonicalJobId: catalog.job.id, total: 2 });
+
+    const resolved = await app.inject({
+      method: "POST",
+      url: `/v1/admin/moderation/cases/${opened.json().id}/resolve`,
+      headers: { authorization: `Bearer ${moderateToken}` },
+      payload: {
+        expectedVersion: 0,
+        resolution: "block_job",
+        reasonCode: "report_confirmed",
+      },
+    });
+    expect(resolved.statusCode).toBe(200);
+    expect(resolved.json()).toMatchObject({ status: "resolved", version: 1 });
+    expect(resolved.json()).not.toHaveProperty("resolvedBy");
+  });
+
+  it("rejects mismatched moderation reasons and actions before persistence", async () => {
+    const token = await issuer.issue("synthetic-moderator-invalid", { scope: "jobs:moderate" });
+    const headers = { authorization: `Bearer ${token}` };
+    const invalidOpen = await app.inject({
+      method: "POST",
+      url: "/v1/admin/moderation/cases",
+      headers,
+      payload: {
+        target: {
+          kind: "source",
+          sourceId: "synthetic-generated",
+          adapterVersion: "v1",
+          adapterConfigSha256: "1".repeat(64),
+        },
+        reasonCode: "candidate_reports",
+      },
+    });
+    expect(invalidOpen.statusCode).toBe(400);
+
+    const invalidResolution = await app.inject({
+      method: "POST",
+      url: `/v1/admin/moderation/cases/${uuidv7()}/resolve`,
+      headers,
+      payload: {
+        expectedVersion: 0,
+        resolution: "pause_source",
+        reasonCode: "report_confirmed",
+      },
+    });
+    expect(invalidResolution.statusCode).toBe(400);
   });
 
   it("keeps saved-job mutations behind jobs:write and reads owner-scoped with jobs:read", async () => {

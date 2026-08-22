@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import {
@@ -11,9 +11,12 @@ import {
   type JobReportReason,
   type JobReportStore,
   type JobReportSummary,
+  InvalidModerationCursorError,
   JobReportTargetUnavailableError,
   jobReportReasons,
   type ModerationCase,
+  type ModerationCasePage,
+  type ModerationCaseSearchRequest,
   ModerationConflictError,
   type ModerationOpenReason,
   type ModerationResolution,
@@ -28,6 +31,20 @@ const SOURCE_ID_PATTERN = /^[a-z0-9][a-z0-9-]{2,63}$/;
 const ADAPTER_VERSION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const OPERATOR_PATTERN = /^[A-Za-z0-9:_-]{3,200}$/;
+const MODERATION_CURSOR_KEY_ID_PATTERN = /^[A-Za-z0-9_-]{1,32}$/;
+
+export interface ModerationCursorKey {
+  id: string;
+  key: Uint8Array;
+}
+
+interface ModerationCursorPayload {
+  version: 1;
+  keyId: string;
+  status: "open" | "resolved";
+  openedAt: string;
+  id: string;
+}
 
 interface JobReportRow {
   id: string;
@@ -134,6 +151,77 @@ function assertOperator(operatorId: string): void {
 
 function isUniqueViolation(error: unknown): boolean {
   return (error as { code?: unknown })?.code === "23505";
+}
+
+function validateModerationCursorKey(key: ModerationCursorKey): void {
+  if (!MODERATION_CURSOR_KEY_ID_PATTERN.test(key.id) || key.key.byteLength < 32) {
+    throw new TypeError("The moderation cursor key is invalid");
+  }
+}
+
+function moderationCursorSignature(key: Uint8Array, body: string): Buffer {
+  return createHmac("sha256", key).update(body).digest();
+}
+
+function encodeModerationCursor(
+  status: "open" | "resolved",
+  openedAt: Date,
+  id: string,
+  key: ModerationCursorKey,
+): string {
+  const body = Buffer.from(
+    JSON.stringify({
+      version: 1,
+      keyId: key.id,
+      status,
+      openedAt: openedAt.toISOString(),
+      id,
+    } satisfies ModerationCursorPayload),
+  ).toString("base64url");
+  return `${body}.${moderationCursorSignature(key.key, body).toString("base64url")}`;
+}
+
+function decodeModerationCursor(
+  value: string | undefined,
+  status: "open" | "resolved",
+  keys: ReadonlyMap<string, Uint8Array>,
+): { openedAt: Date; id: string } | undefined {
+  if (value === undefined) return undefined;
+  const [body, encodedSignature, ...rest] = value.split(".");
+  if (!body || !encodedSignature || rest.length > 0) throw new InvalidModerationCursorError();
+  let payload: unknown;
+  let actual: Buffer;
+  try {
+    payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+    actual = Buffer.from(encodedSignature, "base64url");
+  } catch {
+    throw new InvalidModerationCursorError();
+  }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new InvalidModerationCursorError();
+  }
+  const candidate = payload as Partial<ModerationCursorPayload> & Record<string, unknown>;
+  const key = typeof candidate.keyId === "string" ? keys.get(candidate.keyId) : undefined;
+  if (!key) throw new InvalidModerationCursorError();
+  const expected = moderationCursorSignature(key, body);
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
+    throw new InvalidModerationCursorError();
+  }
+  if (
+    Object.keys(candidate).sort().join(",") !== "id,keyId,openedAt,status,version" ||
+    candidate.version !== 1 ||
+    candidate.status !== status ||
+    typeof candidate.openedAt !== "string" ||
+    typeof candidate.id !== "string" ||
+    !UUID_V7_PATTERN.test(candidate.id)
+  ) {
+    throw new InvalidModerationCursorError();
+  }
+  const openedAt = new Date(candidate.openedAt);
+  if (!Number.isFinite(openedAt.getTime()) || openedAt.toISOString() !== candidate.openedAt) {
+    throw new InvalidModerationCursorError();
+  }
+  return { openedAt, id: candidate.id };
 }
 
 export class PostgresJobReportStore implements JobReportStore {
@@ -254,7 +342,21 @@ export class PostgresJobReportStore implements JobReportStore {
 }
 
 export class PostgresJobModerationStore implements JobModerationStore {
-  constructor(private readonly client: postgres.Sql) {}
+  private readonly activeCursorKey?: ModerationCursorKey;
+  private readonly cursorKeys: ReadonlyMap<string, Uint8Array>;
+
+  constructor(
+    private readonly client: postgres.Sql,
+    cursorKey?: ModerationCursorKey,
+  ) {
+    if (cursorKey) {
+      validateModerationCursorKey(cursorKey);
+      this.activeCursorKey = { id: cursorKey.id, key: Buffer.from(cursorKey.key) };
+      this.cursorKeys = new Map([[cursorKey.id, Buffer.from(cursorKey.key)]]);
+    } else {
+      this.cursorKeys = new Map();
+    }
+  }
 
   async openCase(input: {
     target: ModerationTarget;
@@ -378,6 +480,51 @@ export class PostgresJobModerationStore implements JobModerationStore {
       canonicalJobId,
       total: Object.values(counts).reduce((total, count) => total + count, 0),
       counts: Object.freeze(counts),
+    });
+  }
+
+  async searchCases(request: ModerationCaseSearchRequest): Promise<ModerationCasePage> {
+    if (!this.activeCursorKey) throw new Error("The moderation cursor key is unavailable");
+    const pageSize = request.pageSize ?? 25;
+    if (
+      (request.status !== "open" && request.status !== "resolved") ||
+      !Number.isInteger(pageSize) ||
+      pageSize < 1 ||
+      pageSize > 50
+    ) {
+      throw new TypeError("The moderation search request is invalid");
+    }
+    const cursor = decodeModerationCursor(request.cursor, request.status, this.cursorKeys);
+    const rows = await this.client<ModerationCaseRow[]>`
+      SELECT id, target_kind AS "targetKind", job_id AS "jobId",
+        source_id AS "sourceId", adapter_version AS "adapterVersion",
+        adapter_config_sha256 AS "adapterConfigSha256", status, resolution, version,
+        opened_by AS "openedBy", open_reason_code AS "openReasonCode",
+        opened_at AS "openedAt", resolved_by AS "resolvedBy",
+        resolution_reason_code AS "resolutionReasonCode", resolved_at AS "resolvedAt"
+      FROM jobs.moderation_cases
+      WHERE status = ${request.status}
+        AND (
+          ${cursor?.openedAt ?? null}::timestamptz IS NULL
+          OR (opened_at, id) < (${cursor?.openedAt ?? null}::timestamptz, ${cursor?.id ?? null}::uuid)
+        )
+      ORDER BY opened_at DESC, id DESC
+      LIMIT ${pageSize + 1}
+    `;
+    const hasNext = rows.length > pageSize;
+    const selected = hasNext ? rows.slice(0, pageSize) : rows;
+    const items = Object.freeze(selected.map(moderationCase));
+    if (!hasNext) return Object.freeze({ items });
+    const last = selected.at(-1);
+    if (!last) return Object.freeze({ items });
+    return Object.freeze({
+      items,
+      nextCursor: encodeModerationCursor(
+        request.status,
+        last.openedAt,
+        last.id,
+        this.activeCursorKey,
+      ),
     });
   }
 

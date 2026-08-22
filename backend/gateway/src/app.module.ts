@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type {
   CanonicalJobDetail,
   CreateJobReportRequest,
@@ -8,15 +9,21 @@ import type {
   CurrentUser,
   EntitlementSummary,
   JobReport,
+  JobReportSummary,
   JobSearchPage,
   JobSearchRequest,
   MatchAssessment,
+  ModerationCase,
+  ModerationCasePage,
+  ModerationCaseSearchRequest,
+  OpenModerationCaseRequest,
   Operation,
   ProblemDetails,
   ProfileFact,
   ProfileFactCollection,
   PutJobPreferencesRequest,
   PutJobPreferencesResponse,
+  ResolveModerationCaseRequest,
   ResumeDocumentCollection,
   SavedJob,
   SavedJobPage,
@@ -37,8 +44,10 @@ import {
 } from "@ai-job-apply/documents-service";
 import {
   InvalidJobSearchError,
+  InvalidModerationCursorError,
   JobAlreadyReportedError,
   type JobCatalogReader,
+  type JobModeration,
   JobReportIdempotencyConflictError,
   JobReportLimitError,
   JobReportServiceUnavailableError,
@@ -46,6 +55,9 @@ import {
   JobReportTargetUnavailableError,
   JobSearchCatalogChangedError,
   JobSearchServiceUnavailableError,
+  ModerationConflictError,
+  ModerationServiceUnavailableError,
+  ModerationTargetUnavailableError,
 } from "@ai-job-apply/jobs-service";
 import {
   InvalidSavedJobCursorError,
@@ -96,6 +108,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 const PROFILE_STORE = Symbol("PROFILE_STORE");
 const JOB_CATALOG = Symbol("JOB_CATALOG");
 const JOB_REPORTS = Symbol("JOB_REPORTS");
+const JOB_MODERATION = Symbol("JOB_MODERATION");
 const SAVED_JOBS = Symbol("SAVED_JOBS");
 const MATCH_ASSESSMENTS = Symbol("MATCH_ASSESSMENTS");
 const ENTITLEMENTS = Symbol("ENTITLEMENTS");
@@ -123,6 +136,10 @@ const SAFE_ROUTE_TEMPLATES = new Set([
   "/v1/jobs/:jobId",
   "/v1/jobs/:jobId/match-assessment",
   "/v1/jobs/:jobId/reports",
+  "/v1/admin/moderation/cases",
+  "/v1/admin/moderation/cases/search",
+  "/v1/admin/moderation/cases/:caseId/resolve",
+  "/v1/admin/moderation/jobs/:jobId/report-summary",
   "/v1/saved-jobs",
   "/v1/saved-jobs/search",
   "/v1/saved-jobs/:savedJobId",
@@ -164,6 +181,7 @@ class RequestIdentity {
       | "documents:read"
       | "documents:write"
       | "jobs:read"
+      | "jobs:moderate"
       | "jobs:write"
       | "profile:read"
       | "profile:write",
@@ -182,12 +200,24 @@ class RequestIdentity {
       | "documents:read"
       | "documents:write"
       | "jobs:read"
+      | "jobs:moderate"
       | "jobs:write"
       | "profile:read"
       | "profile:write",
   ): Promise<CurrentUser> {
     const principal = await this.authorize(request, requiredScope);
     return this.store.resolveUser(principal, request.traceId ?? correlationId(undefined));
+  }
+
+  async operator(request: AuthenticatedRequest): Promise<string> {
+    const principal = await this.authorize(request, "jobs:moderate");
+    const digest = createHash("sha256")
+      .update("ai-job-apply/moderation-operator/v1\0")
+      .update(principal.issuer)
+      .update("\0")
+      .update(principal.subject)
+      .digest("hex");
+    return `oidc:${digest}`;
   }
 }
 
@@ -279,6 +309,26 @@ class ProblemDetailsFilter implements ExceptionFilter {
       code = "job_reporting_unavailable";
       title = "Job reporting unavailable";
       detail = "Job reporting is temporarily unavailable";
+    } else if (exception instanceof InvalidModerationCursorError) {
+      status = HttpStatus.BAD_REQUEST;
+      code = "invalid_moderation_cursor";
+      title = "Invalid moderation cursor";
+      detail = exception.message;
+    } else if (exception instanceof ModerationConflictError) {
+      status = HttpStatus.CONFLICT;
+      code = "moderation_case_changed";
+      title = "Moderation case changed";
+      detail = exception.message;
+    } else if (exception instanceof ModerationTargetUnavailableError) {
+      status = HttpStatus.NOT_FOUND;
+      code = "moderation_target_unavailable";
+      title = "Moderation target unavailable";
+      detail = exception.message;
+    } else if (exception instanceof ModerationServiceUnavailableError) {
+      status = HttpStatus.SERVICE_UNAVAILABLE;
+      code = "moderation_unavailable";
+      title = "Moderation unavailable";
+      detail = "Moderation is temporarily unavailable";
     } else if (exception instanceof SavedJobIdempotencyConflictError) {
       status = HttpStatus.CONFLICT;
       code = "idempotency_conflict";
@@ -378,6 +428,7 @@ class HealthController {
     @Inject(PROFILE_STORE) private readonly store: ProfileStore,
     @Inject(JOB_CATALOG) private readonly catalog: JobCatalogReader,
     @Inject(JOB_REPORTS) private readonly jobReports: JobReports,
+    @Inject(JOB_MODERATION) private readonly moderation: JobModeration,
     @Inject(SAVED_JOBS) private readonly savedJobs: SavedJobs,
     @Inject(ENTITLEMENTS) private readonly entitlements: EntitlementReadService,
     @Inject(RELEASE_SHA) private readonly releaseSha: string,
@@ -395,6 +446,7 @@ class HealthController {
         this.store.ping(),
         this.catalog.ping(),
         this.jobReports.ping(),
+        this.moderation.ping(),
         this.savedJobs.ping(),
         this.entitlements.ping(),
       ]);
@@ -415,6 +467,12 @@ const validateSavedJobSearch = compileComponentValidator("SavedJobSearchRequest"
 const validateMatchAssessment = compileComponentValidator("MatchAssessment");
 const validateCreateJobReport = compileComponentValidator("CreateJobReportRequest");
 const validateJobReport = compileComponentValidator("JobReport");
+const validateOpenModerationCase = compileComponentValidator("OpenModerationCaseRequest");
+const validateResolveModerationCase = compileComponentValidator("ResolveModerationCaseRequest");
+const validateModerationCaseSearch = compileComponentValidator("ModerationCaseSearchRequest");
+const validateModerationCase = compileComponentValidator("ModerationCase");
+const validateModerationCasePage = compileComponentValidator("ModerationCasePage");
+const validateJobReportSummary = compileComponentValidator("JobReportSummary");
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const UUID_V7_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -538,6 +596,143 @@ function exactJobReport(value: unknown, requestedJobId: string): value is JobRep
     UUID_V7_PATTERN.test(report.canonicalJobId) &&
     exactCanonicalDateTime(report.createdAt)
   );
+}
+
+function projectModerationCase(
+  value: Awaited<ReturnType<JobModeration["openCase"]>>,
+): ModerationCase {
+  const projected = {
+    id: value.id,
+    target: value.target,
+    status: value.status,
+    version: value.version,
+    openReasonCode: value.openReasonCode,
+    openedAt: value.openedAt,
+    ...(value.resolution ? { resolution: value.resolution } : {}),
+    ...(value.resolutionReasonCode ? { resolutionReasonCode: value.resolutionReasonCode } : {}),
+    ...(value.resolvedAt ? { resolvedAt: value.resolvedAt } : {}),
+  };
+  if (!validateModerationCase(projected)) throw new ModerationServiceUnavailableError();
+  return projected as ModerationCase;
+}
+
+function validOpenModerationRequest(value: OpenModerationCaseRequest): boolean {
+  return value.target.kind === "job"
+    ? value.reasonCode === "candidate_reports" || value.reasonCode === "catalog_integrity"
+    : value.reasonCode === "source_integrity";
+}
+
+function validModerationResolution(value: ResolveModerationCaseRequest): boolean {
+  return value.resolution === "no_action"
+    ? value.reasonCode === "insufficient_evidence"
+    : value.resolution === "block_job"
+      ? value.reasonCode === "report_confirmed" || value.reasonCode === "catalog_policy_violation"
+      : value.reasonCode === "source_integrity_failure";
+}
+
+@Controller("/v1/admin/moderation")
+@UseFilters(ProblemDetailsFilter)
+class AdminModerationController {
+  constructor(
+    @Inject(RequestIdentity) private readonly identity: RequestIdentity,
+    @Inject(JOB_MODERATION) private readonly moderation: JobModeration,
+  ) {}
+
+  @Post("/cases/search")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async searchCases(@Req() request: AuthenticatedRequest): Promise<ModerationCasePage> {
+    await this.identity.operator(request);
+    if (
+      (request.query && Object.keys(request.query as Record<string, unknown>).length > 0) ||
+      !validateModerationCaseSearch(request.body)
+    ) {
+      throw new HttpException(
+        formatValidationErrors(validateModerationCaseSearch.errors),
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const page = await this.moderation.searchCases(request.body as ModerationCaseSearchRequest);
+    const projected = {
+      items: page.items.map(projectModerationCase),
+      ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
+    };
+    if (!validateModerationCasePage(projected)) throw new ModerationServiceUnavailableError();
+    return projected as ModerationCasePage;
+  }
+
+  @Post("/cases")
+  @HttpCode(HttpStatus.CREATED)
+  @Header("cache-control", "no-store")
+  async openCase(@Req() request: AuthenticatedRequest): Promise<ModerationCase> {
+    const operatorId = await this.identity.operator(request);
+    if (
+      (request.query && Object.keys(request.query as Record<string, unknown>).length > 0) ||
+      !validateOpenModerationCase(request.body) ||
+      !validOpenModerationRequest(request.body as OpenModerationCaseRequest)
+    ) {
+      throw new HttpException(
+        validateOpenModerationCase.errors
+          ? formatValidationErrors(validateOpenModerationCase.errors)
+          : "The moderation target and reason do not match",
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const input = request.body as OpenModerationCaseRequest;
+    return projectModerationCase(
+      await this.moderation.openCase({
+        target: input.target,
+        operatorId,
+        reasonCode: input.reasonCode,
+      }),
+    );
+  }
+
+  @Post("/cases/:caseId/resolve")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async resolveCase(
+    @Req() request: AuthenticatedRequest,
+    @Param("caseId") caseId: string,
+  ): Promise<ModerationCase> {
+    const operatorId = await this.identity.operator(request);
+    if (
+      (request.query && Object.keys(request.query as Record<string, unknown>).length > 0) ||
+      !UUID_V7_PATTERN.test(caseId) ||
+      !validateResolveModerationCase(request.body) ||
+      !validModerationResolution(request.body as ResolveModerationCaseRequest)
+    ) {
+      throw new HttpException(
+        validateResolveModerationCase.errors
+          ? formatValidationErrors(validateResolveModerationCase.errors)
+          : "The moderation resolution is invalid",
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const input = request.body as ResolveModerationCaseRequest;
+    return projectModerationCase(
+      await this.moderation.resolveCase({ caseId, operatorId, ...input }),
+    );
+  }
+
+  @Get("/jobs/:jobId/report-summary")
+  @Header("cache-control", "no-store")
+  async getReportSummary(
+    @Req() request: AuthenticatedRequest,
+    @Param("jobId") jobId: string,
+  ): Promise<JobReportSummary> {
+    await this.identity.operator(request);
+    if (
+      (request.query && Object.keys(request.query as Record<string, unknown>).length > 0) ||
+      request.body !== undefined ||
+      !UUID_V7_PATTERN.test(jobId)
+    ) {
+      throw new HttpException("The report-summary input is invalid", HttpStatus.BAD_REQUEST);
+    }
+    const summary = await this.moderation.summarizeReports(jobId);
+    if (!validateJobReportSummary(summary)) throw new ModerationServiceUnavailableError();
+    return summary as JobReportSummary;
+  }
 }
 
 @Controller("/v1")
@@ -901,6 +1096,7 @@ export interface AppModuleOptions {
   store: ProfileStore;
   catalog: JobCatalogReader;
   jobReports: JobReports;
+  moderation: JobModeration;
   savedJobs: SavedJobs;
   matchAssessments: MatchAssessments;
   entitlements: EntitlementReadService;
@@ -916,12 +1112,13 @@ export class AppModule {
   static register(options: AppModuleOptions): DynamicModule {
     return {
       module: AppModule,
-      controllers: [HealthController, CandidateController],
+      controllers: [HealthController, CandidateController, AdminModerationController],
       providers: [
         RequestIdentity,
         { provide: PROFILE_STORE, useValue: options.store },
         { provide: JOB_CATALOG, useValue: options.catalog },
         { provide: JOB_REPORTS, useValue: options.jobReports },
+        { provide: JOB_MODERATION, useValue: options.moderation },
         { provide: SAVED_JOBS, useValue: options.savedJobs },
         { provide: MATCH_ASSESSMENTS, useValue: options.matchAssessments },
         { provide: ENTITLEMENTS, useValue: options.entitlements },

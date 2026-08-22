@@ -65,7 +65,7 @@ flowchart LR
   CandidateReport[Authenticated candidate] -->|job ID + fixed reason + idempotency key| GatewayReport[Gateway jobs:write route]
   GatewayReport -->|internal owner UUID + fixed command| JobsReport[Jobs report store]
   JobsReport -->|owner-isolated immutable row| JobsDB[(Jobs schema)]
-  JobsDB -->|fixed-code aggregate only| InternalReview[Future accountable moderation operator]
+  JobsDB -->|fixed-code aggregate only| InternalReview[Scoped human moderation console]
   InternalReview -->|explicit block or exact source pause decision| ModerationLedger[Append-only moderation ledger]
   ModerationLedger -->|exact source adapter config pause| IngestionGate[Fail-closed ingestion execution gate]
   IngestionGate -->|permit only while unpaused| SyntheticRuntime[Default-off synthetic ingestion runtime]
@@ -73,13 +73,17 @@ flowchart LR
 
 The report contract contains no free text, provider identity, source URL, candidate values, or
 moderation outcome. Exact replay is owner-scoped, and aggregate review does not expose reporter
-identities. A report never changes lifecycle automatically. Only an explicit internal decision can
-block a job or persist a source pause; there is no source-resume operation in this slice. This is
-locally verified source only. The durable synthetic runtime reads the exact pause before
+identities. The dedicated admin client requests only `jobs:moderate`; the gateway derives a stable
+opaque audit identifier from the validated issuer and subject and never exposes either raw claim
+or the derived identifier to the browser. A report never changes lifecycle automatically. Only an
+explicit version-fenced internal decision can block a job or persist a source pause; there is no
+source-resume operation in this slice. This is locally verified source only. The durable synthetic
+runtime reads the exact pause before
 schedule/resume, attempt execution, polling, and subsequent catalog writes while preserving
 terminal reconciliation. One already issued idempotent catalog write may finish before the next
-gate check. No admin audience/API/UI, source resume, real reports, retention/deletion approval,
-alerting policy, database apply, deployment, or live acceptance is claimed.
+gate check. The admin API/UI and dedicated scope are implemented locally, but no managed-OIDC admin
+grant, source resume, real reports, retention/deletion approval, alerting policy, database apply,
+deployment, or live acceptance is claimed.
 
 ## Required delta data-flow diagrams
 

@@ -833,7 +833,7 @@ resource "aws_apigatewayv2_route" "gateway" {
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.gateway[0].id
   authorization_scopes = concat(
-    ["jobs:read", "profile:read", "profile:write"],
+    ["jobs:moderate", "jobs:read", "jobs:write", "profile:read", "profile:write"],
     var.deploy_document_intake ? ["documents:read", "documents:write"] : []
   )
 }

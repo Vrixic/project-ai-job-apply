@@ -196,6 +196,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/moderation/cases/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["searchModerationCases"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/moderation/cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["openModerationCase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/moderation/cases/{caseId}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resolveModerationCase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/moderation/jobs/{jobId}/report-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getModerationJobReportSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/public/jobs/{jobId}": {
         parameters: {
             query?: never;
@@ -540,6 +604,86 @@ export interface components {
             reason: "job_closed" | "job_not_found" | "job_inaccurate" | "suspected_scam" | "duplicate_listing" | "other_catalog_issue";
             /** Format: date-time */
             createdAt: string;
+        };
+        ModerationJobTarget: {
+            /** @constant */
+            kind: "job";
+            jobId: string;
+        };
+        ModerationSourceTarget: {
+            /** @constant */
+            kind: "source";
+            sourceId: string;
+            adapterVersion: string;
+            adapterConfigSha256: string;
+        };
+        ModerationTarget: components["schemas"]["ModerationJobTarget"] | components["schemas"]["ModerationSourceTarget"];
+        OpenModerationCaseRequest: {
+            target: components["schemas"]["ModerationTarget"];
+            /** @enum {string} */
+            reasonCode: "candidate_reports" | "catalog_integrity" | "source_integrity";
+        };
+        ResolveModerationCaseRequest: {
+            /** @constant */
+            expectedVersion: 0;
+            /** @enum {string} */
+            resolution: "no_action" | "block_job" | "pause_source";
+            /** @enum {string} */
+            reasonCode: "insufficient_evidence" | "report_confirmed" | "catalog_policy_violation" | "source_integrity_failure";
+        };
+        ModerationCaseSearchRequest: {
+            /** @enum {string} */
+            status: "open" | "resolved";
+            /** @default 25 */
+            pageSize: number;
+            cursor?: string;
+        };
+        ModerationCase: {
+            id: string;
+            target: components["schemas"]["ModerationTarget"];
+            /** @enum {string} */
+            status: "open" | "resolved";
+            /** @enum {integer} */
+            version: 0 | 1;
+            /** @enum {string} */
+            openReasonCode: "candidate_reports" | "catalog_integrity" | "source_integrity";
+            /** Format: date-time */
+            openedAt: string;
+            /** @enum {string} */
+            resolution?: "no_action" | "block_job" | "pause_source";
+            /** @enum {string} */
+            resolutionReasonCode?: "insufficient_evidence" | "report_confirmed" | "catalog_policy_violation" | "source_integrity_failure";
+            /** Format: date-time */
+            resolvedAt?: string;
+        } & ({
+            /** @constant */
+            status?: "open";
+            /** @constant */
+            version?: 0;
+            resolution?: never;
+            resolutionReasonCode?: never;
+            resolvedAt?: never;
+        } | {
+            /** @constant */
+            status?: "resolved";
+            /** @constant */
+            version?: 1;
+        });
+        ModerationCasePage: {
+            items: components["schemas"]["ModerationCase"][];
+            nextCursor?: string;
+        };
+        JobReportSummary: {
+            canonicalJobId: string;
+            total: number;
+            counts: {
+                job_closed: number;
+                job_not_found: number;
+                job_inaccurate: number;
+                suspected_scam: number;
+                duplicate_listing: number;
+                other_catalog_issue: number;
+            };
         };
         SavedJobSearchRequest: {
             /** @default 20 */
@@ -1393,6 +1537,126 @@ export interface operations {
             409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    searchModerationCases: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModerationCaseSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description A bounded page of moderation cases without operator identities */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModerationCasePage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    openModerationCase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpenModerationCaseRequest"];
+            };
+        };
+        responses: {
+            /** @description An explicit human-review moderation case was opened */
+            201: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModerationCase"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    resolveModerationCase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                caseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveModerationCaseRequest"];
+            };
+        };
+        responses: {
+            /** @description The version-fenced moderation decision was recorded */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModerationCase"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getModerationJobReportSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                jobId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Fixed-code aggregate report counts without candidate identities */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobReportSummary"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             503: components["responses"]["ServiceUnavailable"];
         };
     };

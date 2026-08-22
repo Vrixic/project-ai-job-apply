@@ -17,8 +17,10 @@ import {
   UnavailableDocumentStore,
 } from "@ai-job-apply/documents-service";
 import {
+  JobModerationService,
   JobReportingService,
   PostgresJobCatalog,
+  PostgresJobModerationStore,
   PostgresJobReportStore,
 } from "@ai-job-apply/jobs-service";
 import {
@@ -42,7 +44,7 @@ import type {
 } from "aws-lambda";
 import { createGatewayApplication } from "./application.js";
 import { MAXIMUM_GATEWAY_BODY_BYTES } from "./gateway-boundary.js";
-import { deriveJobSearchCursorKeys } from "./job-search-cursor-key.js";
+import { deriveJobSearchCursorKeys, deriveModerationCursorKey } from "./job-search-cursor-key.js";
 import { JobCatalogSavedJobResolver } from "./saved-job-catalog-resolver.js";
 import { SqsOutboxNudgePublisher } from "./sqs-outbox-nudge-publisher.js";
 
@@ -112,6 +114,8 @@ const PROTECTED_EXACT_ROUTES = new Set([
   "GET /v1/resumes",
   "POST /v1/resumes/uploads",
   "POST /v1/jobs/search",
+  "POST /v1/admin/moderation/cases",
+  "POST /v1/admin/moderation/cases/search",
   "POST /v1/saved-jobs",
   "POST /v1/saved-jobs/search",
   "GET /v1/entitlements",
@@ -122,6 +126,12 @@ const JOB_PATH_PATTERN =
   /^\/v1\/jobs\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MATCH_ASSESSMENT_PATH_PATTERN =
   /^\/v1\/jobs\/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/match-assessment$/;
+const JOB_REPORT_PATH_PATTERN =
+  /^\/v1\/jobs\/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/reports$/;
+const MODERATION_RESOLUTION_PATH_PATTERN =
+  /^\/v1\/admin\/moderation\/cases\/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/resolve$/;
+const MODERATION_REPORT_SUMMARY_PATH_PATTERN =
+  /^\/v1\/admin\/moderation\/jobs\/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/report-summary$/;
 const PROFILE_FACT_PATH_PATTERN =
   /^\/v1\/profile\/facts\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SAVED_JOB_PATH_PATTERN =
@@ -159,6 +169,15 @@ function allowedRoute(method: string, path: string): AllowedRoute | undefined {
   }
   if (method === "GET" && MATCH_ASSESSMENT_PATH_PATTERN.test(path)) {
     return { acceptsBody: false, protected: true };
+  }
+  if (method === "GET" && MODERATION_REPORT_SUMMARY_PATH_PATTERN.test(path)) {
+    return { acceptsBody: false, protected: true };
+  }
+  if (
+    method === "POST" &&
+    (JOB_REPORT_PATH_PATTERN.test(path) || MODERATION_RESOLUTION_PATH_PATTERN.test(path))
+  ) {
+    return { acceptsBody: true, protected: true };
   }
   if (method === "DELETE" && SAVED_JOB_PATH_PATTERN.test(path)) {
     return { acceptsBody: false, protected: true };
@@ -541,6 +560,9 @@ async function createConfiguredApplication(
     searchCursorKeys: deriveJobSearchCursorKeys(databaseUrl),
   });
   const jobReports = new JobReportingService(new PostgresJobReportStore(database.client));
+  const moderation = new JobModerationService(
+    new PostgresJobModerationStore(database.client, deriveModerationCursorKey(databaseUrl)),
+  );
   const savedJobs = new SavedJobsService(
     new PostgresSavedJobStore(database.client),
     new JobCatalogSavedJobResolver(catalog),
@@ -565,6 +587,7 @@ async function createConfiguredApplication(
     store,
     catalog,
     jobReports,
+    moderation,
     savedJobs,
     matchAssessments,
     entitlements,
