@@ -7,13 +7,19 @@ import type {
   OpenModerationCaseRequest,
   ResolveModerationCaseRequest,
 } from "@ai-job-apply/api-contracts";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const reasonLabels = {
   candidate_reports: "Candidate reports",
   catalog_integrity: "Catalog integrity",
   source_integrity: "Source integrity",
 } as const;
+
+type PendingDecision = Readonly<{
+  caseId: string;
+  targetLabel: string;
+  request: ResolveModerationCaseRequest;
+}>;
 
 async function jsonRequest<T>(url: string, init: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -29,29 +35,47 @@ async function jsonRequest<T>(url: string, init: RequestInit): Promise<T> {
 export function ModerationConsole() {
   const [cases, setCases] = useState<ModerationCase[]>([]);
   const [status, setStatus] = useState<"open" | "resolved">("open");
+  const [targetKind, setTargetKind] = useState<"job" | "source">("job");
   const [message, setMessage] = useState("Loading moderation cases…");
   const [busy, setBusy] = useState(false);
   const [summary, setSummary] = useState<JobReportSummary>();
+  const [nextCursor, setNextCursor] = useState<string>();
+  const [pendingDecision, setPendingDecision] = useState<PendingDecision>();
+  const queueRequest = useRef<AbortController | undefined>(undefined);
+  const confirmButton = useRef<HTMLButtonElement>(null);
 
   const loadCases = useCallback(
-    async (requestedStatus = status) => {
+    async (requestedStatus = status, cursor?: string) => {
+      queueRequest.current?.abort();
+      const controller = new AbortController();
+      queueRequest.current = controller;
       setBusy(true);
       setMessage("Loading moderation cases…");
       try {
         const page = await jsonRequest<ModerationCasePage>("/api/moderation/cases/search", {
           method: "POST",
-          body: JSON.stringify({ status: requestedStatus, pageSize: 50 }),
+          body: JSON.stringify({
+            status: requestedStatus,
+            pageSize: 50,
+            ...(cursor && { cursor }),
+          }),
+          signal: controller.signal,
         });
-        setCases([...page.items]);
+        if (controller.signal.aborted) return;
+        setCases((current) => (cursor ? [...current, ...page.items] : [...page.items]));
+        setNextCursor(page.nextCursor);
         setMessage(
           page.items.length === 0
-            ? `No ${requestedStatus} cases.`
-            : `${page.items.length} cases loaded.`,
+            ? cursor
+              ? "No more cases."
+              : `No ${requestedStatus} cases.`
+            : `${page.items.length} ${cursor ? "more " : ""}cases loaded.`,
         );
       } catch (error) {
+        if (controller.signal.aborted) return;
         setMessage(error instanceof Error ? error.message : "The moderation request failed.");
       } finally {
-        setBusy(false);
+        if (queueRequest.current === controller) setBusy(false);
       }
     },
     [status],
@@ -59,7 +83,12 @@ export function ModerationConsole() {
 
   useEffect(() => {
     void loadCases();
+    return () => queueRequest.current?.abort();
   }, [loadCases]);
+
+  useEffect(() => {
+    if (pendingDecision) confirmButton.current?.focus();
+  }, [pendingDecision]);
 
   async function openCase(form: FormData) {
     setBusy(true);
@@ -105,6 +134,7 @@ export function ModerationConsole() {
         method: "POST",
         body: JSON.stringify(request),
       });
+      setPendingDecision(undefined);
       await loadCases();
       setMessage("Moderation decision recorded.");
     } catch (error) {
@@ -139,33 +169,55 @@ export function ModerationConsole() {
         <form action={openCase}>
           <label>
             Target type
-            <select name="kind" defaultValue="job">
+            <select
+              name="kind"
+              value={targetKind}
+              onChange={(event) => setTargetKind(event.target.value as "job" | "source")}
+            >
               <option value="job">Canonical job</option>
               <option value="source">Exact source configuration</option>
             </select>
           </label>
-          <label>
-            Job UUID <input name="jobId" autoComplete="off" />
-          </label>
-          <label>
-            Job review reason
-            <select name="jobReason" defaultValue="candidate_reports">
-              <option value="candidate_reports">Candidate reports</option>
-              <option value="catalog_integrity">Catalog integrity</option>
-            </select>
-          </label>
-          <details>
-            <summary>Exact source target</summary>
-            <label>
-              Source ID <input name="sourceId" autoComplete="off" />
-            </label>
-            <label>
-              Adapter version <input name="adapterVersion" autoComplete="off" />
-            </label>
-            <label>
-              Adapter config SHA-256 <input name="adapterConfigSha256" autoComplete="off" />
-            </label>
-          </details>
+          {targetKind === "job" ? (
+            <>
+              <label>
+                Job UUID
+                <input
+                  name="jobId"
+                  autoComplete="off"
+                  required
+                  pattern="[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
+                />
+              </label>
+              <label>
+                Job review reason
+                <select name="jobReason" defaultValue="candidate_reports">
+                  <option value="candidate_reports">Candidate reports</option>
+                  <option value="catalog_integrity">Catalog integrity</option>
+                </select>
+              </label>
+            </>
+          ) : (
+            <fieldset>
+              <legend>Exact source target</legend>
+              <p>All three values must match the deployed source configuration exactly.</p>
+              <label>
+                Source ID <input name="sourceId" autoComplete="off" required />
+              </label>
+              <label>
+                Adapter version <input name="adapterVersion" autoComplete="off" required />
+              </label>
+              <label>
+                Adapter config SHA-256
+                <input
+                  name="adapterConfigSha256"
+                  autoComplete="off"
+                  required
+                  pattern="[0-9a-f]{64}"
+                />
+              </label>
+            </fieldset>
+          )}
           <button disabled={busy} type="submit">
             Open case
           </button>
@@ -216,10 +268,17 @@ export function ModerationConsole() {
                   <button
                     disabled={busy}
                     onClick={() =>
-                      void resolveCase(item.id, {
-                        expectedVersion: 0,
-                        resolution: "no_action",
-                        reasonCode: "insufficient_evidence",
+                      setPendingDecision({
+                        caseId: item.id,
+                        targetLabel:
+                          item.target.kind === "job"
+                            ? item.target.jobId
+                            : `${item.target.sourceId} / ${item.target.adapterVersion}`,
+                        request: {
+                          expectedVersion: item.version,
+                          resolution: "no_action",
+                          reasonCode: "insufficient_evidence",
+                        },
                       })
                     }
                     type="button"
@@ -231,10 +290,14 @@ export function ModerationConsole() {
                       className="danger"
                       disabled={busy}
                       onClick={() =>
-                        void resolveCase(item.id, {
-                          expectedVersion: 0,
-                          resolution: "block_job",
-                          reasonCode: "report_confirmed",
+                        setPendingDecision({
+                          caseId: item.id,
+                          targetLabel: item.target.kind === "job" ? item.target.jobId : "",
+                          request: {
+                            expectedVersion: item.version,
+                            resolution: "block_job",
+                            reasonCode: "report_confirmed",
+                          },
                         })
                       }
                       type="button"
@@ -246,10 +309,17 @@ export function ModerationConsole() {
                       className="danger"
                       disabled={busy}
                       onClick={() =>
-                        void resolveCase(item.id, {
-                          expectedVersion: 0,
-                          resolution: "pause_source",
-                          reasonCode: "source_integrity_failure",
+                        setPendingDecision({
+                          caseId: item.id,
+                          targetLabel:
+                            item.target.kind === "source"
+                              ? `${item.target.sourceId} / ${item.target.adapterVersion}`
+                              : "",
+                          request: {
+                            expectedVersion: item.version,
+                            resolution: "pause_source",
+                            reasonCode: "source_integrity_failure",
+                          },
                         })
                       }
                       type="button"
@@ -264,6 +334,39 @@ export function ModerationConsole() {
             </li>
           ))}
         </ul>
+        {nextCursor ? (
+          <button disabled={busy} onClick={() => void loadCases(status, nextCursor)} type="button">
+            Load more cases
+          </button>
+        ) : null}
+        {pendingDecision ? (
+          <aside className="confirmation" aria-labelledby="decision-confirmation-heading">
+            <h3 id="decision-confirmation-heading">Confirm moderation decision</h3>
+            <p>
+              Record <strong>{pendingDecision.request.resolution.replaceAll("_", " ")}</strong> for
+              exact target <code>{pendingDecision.targetLabel}</code>?
+            </p>
+            <p>This writes an append-only audit event and cannot be edited in this console.</p>
+            <div className="actions">
+              <button
+                disabled={busy}
+                onClick={() => void resolveCase(pendingDecision.caseId, pendingDecision.request)}
+                ref={confirmButton}
+                type="button"
+              >
+                Confirm decision
+              </button>
+              <button
+                className="secondary"
+                disabled={busy}
+                onClick={() => setPendingDecision(undefined)}
+                type="button"
+              >
+                Cancel
+              </button>
+            </div>
+          </aside>
+        ) : null}
         {summary ? (
           <aside aria-label="Aggregate report summary">
             <h3>Aggregate reports: {summary.total}</h3>

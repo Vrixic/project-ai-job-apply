@@ -1,5 +1,5 @@
 import { getAuth0Client } from "./auth0";
-import { type ModerationBffDependencies } from "./moderation-bff";
+import type { ModerationBffDependencies } from "./moderation-bff";
 
 export function moderationDependencies(): ModerationBffDependencies {
   const auth0 = getAuth0Client();

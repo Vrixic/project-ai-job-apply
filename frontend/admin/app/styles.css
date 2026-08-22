@@ -66,13 +66,17 @@ label {
   gap: 6px;
   font-weight: 700;
 }
-details {
+fieldset {
   grid-column: 1 / -1;
+  margin: 0;
   padding: 12px;
   border: 1px solid #d8dee4;
 }
-details label {
+fieldset label {
   margin-top: 12px;
+}
+fieldset p {
+  color: #52616f;
 }
 input,
 select,
@@ -115,6 +119,15 @@ button:disabled {
 }
 .danger {
   background: #a33232;
+}
+.secondary {
+  border: 1px solid #697887;
+  background: white;
+  color: #17202a;
+}
+.confirmation {
+  margin-top: 16px;
+  border: 2px solid #a33232;
 }
 .queue-header {
   justify-content: space-between;

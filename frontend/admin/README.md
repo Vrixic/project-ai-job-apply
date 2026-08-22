@@ -10,8 +10,12 @@ The restricted internal console supports customer service, job/source moderation
   refusal, fixed problem projection, and operator-identity refusal.
 - `lib/moderation-bff.test.ts` — Scope/session, strict-input, routing, redaction, and fail-closed
   response coverage.
+- `../../scripts/tests/d1-admin-browser-assurance/` — Installed-Chrome generated-synthetic
+  coverage for queue pagination, stale-response fencing, explicit destructive confirmation, exact
+  source inputs, private-field non-rendering, focus, and automated WCAG A/AA rules.
 
-Admin access is least-privilege and audited. Sensitive values remain redacted, and break-glass actions require a reason and a time-limited grant.
+Admin access is least-privilege and audited. Sensitive values remain redacted. Break-glass access is
+not implemented or authorized by this slice.
 
 This slice supports fixed-code aggregate report review, open/resolved case queues, explicit job
 blocking, exact-source pausing, and no-action resolution. Candidate reports never automatically
