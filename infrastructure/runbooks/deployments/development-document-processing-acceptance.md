@@ -93,7 +93,10 @@ eight requests: the seven fixed acceptance actions plus one separately tokenized
 The task command is only `documents/dist/src/run-document-processing-acceptance.js`. The ECS
 request omits `propagateTags`, which is the API's no-propagation representation; recovery of an
 older reviewed plan may normalize only the rejected historical literal `NONE` to omission and use
-its deterministic `-v2` idempotency token because ECS binds the failed payload to the first token. Do not
+its deterministic `-v2` idempotency-token namespace because ECS binds the failed payload to the
+first token. Recovery permits at most three deterministic task-start attempts inside that namespace
+when ECS returns `TaskFailedToStart` with `ResourceInitializationError`; application/container
+failures are never retried. Do not
 edit the plan or fixture files after review. The plan also checksum-binds the exact numeric gateway
 and
 processor versions behind their unweighted aliases, their qualified ARNs, code hashes, alias and

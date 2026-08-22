@@ -907,6 +907,18 @@ function Wait-Task {
   }
   $task = @($described.tasks)[0]
   $containers = @($task.containers)
+  if ($containers.Count -eq 1 -and $containers[0].PSObject.Properties.Name -notcontains 'exitCode') {
+    if (
+      [string]$task.stopCode -ceq 'TaskFailedToStart' -and
+      [string]$task.stoppedReason -like 'ResourceInitializationError:*'
+    ) {
+      $startupFailure = [InvalidOperationException]::new(
+        "The $Phase task encountered a retryable ECS resource-initialization failure.")
+      $startupFailure.Data['RetryableEcsResourceInitialization'] = $true
+      throw $startupFailure
+    }
+    throw "The $Phase task stopped before its container produced an exit code."
+  }
   if (
     [string]$task.clusterArn -cne [string]$Request.cluster -or
     [string]$task.taskDefinitionArn -cne [string]$Request.taskDefinition -or
@@ -956,6 +968,38 @@ function Wait-Task {
     }
   }
   $result
+}
+
+function Invoke-RecoveryCleanupTask {
+  param(
+    [Parameter(Mandatory)][object]$Request,
+    [Parameter(Mandatory)][string]$RunId
+  )
+  $baseToken = [string]$Request.clientToken
+  for ($attempt = 1; $attempt -le 3; $attempt += 1) {
+    $attemptRequest = ConvertFrom-OperatorJson `
+      -Json (ConvertTo-Json $Request -Depth 30 -Compress) `
+      -Description 'Recovery cleanup retry request'
+    $attemptRequest.clientToken = "$baseToken-a$attempt"
+    if ([string]$attemptRequest.clientToken -notmatch '^[A-Za-z0-9_-]{1,64}$') {
+      throw "The recovery cleanup retry token is invalid."
+    }
+    try {
+      $arn = Submit-Task -Request $attemptRequest
+      $result = Wait-Task -Request $attemptRequest -TaskArn $arn -Phase 'cleanup' -RunId $RunId
+      return [pscustomobject]@{ Arn = $arn; Result = $result }
+    }
+    catch {
+      if (
+        $_.Exception.Data['RetryableEcsResourceInitialization'] -ne $true -or
+        $attempt -eq 3
+      ) {
+        throw
+      }
+      Start-Sleep -Seconds 5
+    }
+  }
+  throw "Recovery cleanup exhausted its bounded ECS startup attempts."
 }
 
 function New-DurableClaim {
@@ -2279,9 +2323,9 @@ if ($Action -eq 'RecoverCleanup') {
   Save-RecoveryDescriptor -Receipt $receipt -Documents @($documents)
   Assert-TriggersDark -State $runtime.State | Out-Null
   if (-not [bool]$receipt.databaseCleaned) {
-    $arn = Submit-Task -Request $requestByPhase.'recovery-cleanup'
-    $cleanup = Wait-Task -Request $requestByPhase.'recovery-cleanup' -TaskArn $arn -Phase 'cleanup' -RunId $receipt.runId
-    $receipt.taskArns.'recovery-cleanup' = $arn
+    $recoveryTask = Invoke-RecoveryCleanupTask -Request $requestByPhase.'recovery-cleanup' -RunId $receipt.runId
+    $cleanup = $recoveryTask.Result
+    $receipt.taskArns.'recovery-cleanup' = $recoveryTask.Arn
     $receipt.resultSha256ByAction.'recovery-cleanup' = [string]$cleanup.canonicalSha256
     $receipt.persistentRows = [int]$cleanup.persistentRows
     $receipt.databaseCleaned = $true
