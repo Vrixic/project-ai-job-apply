@@ -1722,9 +1722,56 @@ $normalizedTaskPlan = [pscustomobject]@{
     })
   output_changes = [pscustomobject]@{
     migration_task_definition_arn = [pscustomobject]@{ actions = @("update") }
+    ingestion_dead_letter_queue_arn = [pscustomobject]@{
+      actions = @("create"); before = $null; after = ""; after_unknown = $false
+      before_sensitive = $false; after_sensitive = $false
+    }
+    ingestion_dispatch_queue_arn = [pscustomobject]@{
+      actions = @("create"); before = $null; after = ""; after_unknown = $false
+      before_sensitive = $false; after_sensitive = $false
+    }
+    ingestion_durable_version_arn = [pscustomobject]@{
+      actions = @("create"); before = $null; after = ""; after_unknown = $false
+      before_sensitive = $false; after_sensitive = $false
+    }
+    ingestion_runtime_deployed = [pscustomobject]@{
+      actions = @("create"); before = $null; after = $false; after_unknown = $false
+      before_sensitive = $false; after_sensitive = $false
+    }
+    ingestion_runtime_enabled = [pscustomobject]@{
+      actions = @("create"); before = $null; after = $false; after_unknown = $false
+      before_sensitive = $false; after_sensitive = $false
+    }
+    ingestion_synthetic_source_enabled = [pscustomobject]@{
+      actions = @("create"); before = $null; after = $false; after_unknown = $false
+      before_sensitive = $false; after_sensitive = $false
+    }
   }
 }
 Assert-ExactTaskPlan -Plan $normalizedTaskPlan
+
+foreach ($mutation in @(
+    "string-value", "boolean-value", "unknown", "sensitive", "action", "before", "missing", "extra"
+  )) {
+  $outputPlan = $normalizedTaskPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  switch ($mutation) {
+    "string-value" { $outputPlan.output_changes.ingestion_dispatch_queue_arn.after = "unexpected" }
+    "boolean-value" { $outputPlan.output_changes.ingestion_runtime_enabled.after = $true }
+    "unknown" { $outputPlan.output_changes.ingestion_runtime_deployed.after_unknown = $true }
+    "sensitive" { $outputPlan.output_changes.ingestion_durable_version_arn.after_sensitive = $true }
+    "action" { $outputPlan.output_changes.ingestion_dead_letter_queue_arn.actions = @("update") }
+    "before" { $outputPlan.output_changes.ingestion_synthetic_source_enabled.before = $false }
+    "missing" { $outputPlan.output_changes.PSObject.Properties.Remove("ingestion_runtime_deployed") }
+    "extra" {
+      $outputPlan.output_changes | Add-Member -NotePropertyName unexpected_output -NotePropertyValue (
+        [pscustomobject]@{ actions = @("create") }
+      )
+    }
+  }
+  $rejected = $false
+  try { Assert-ExactTaskPlan -Plan $outputPlan } catch { $rejected = $true }
+  if (-not $rejected) { throw "The migration task plan accepted ingestion-output mutation '$mutation'." }
+}
 
 foreach ($mutation in @(
     "deploy", "runtime", "synthetic", "type", "action", "after", "unknown", "sensitive", "replacement"

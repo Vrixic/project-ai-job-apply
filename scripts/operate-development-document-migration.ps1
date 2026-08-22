@@ -1626,8 +1626,40 @@ function Assert-ExactTaskPlan {
       $actions = @($_.Value.actions)
       -not ($actions.Count -eq 1 -and $actions[0] -ceq "no-op")
     })
-  if ($outputChanges.Count -ne 1 -or $outputChanges[0].Name -cne "migration_task_definition_arn") {
-    throw "Only the migration task-definition output may change."
+  $expectedIngestionOutputs = [ordered]@{
+    ingestion_dead_letter_queue_arn    = ""
+    ingestion_dispatch_queue_arn       = ""
+    ingestion_durable_version_arn      = ""
+    ingestion_runtime_deployed         = $false
+    ingestion_runtime_enabled          = $false
+    ingestion_synthetic_source_enabled = $false
+  }
+  $expectedOutputNames = @($expectedIngestionOutputs.Keys) + @("migration_task_definition_arn")
+  $actualOutputNames = @($outputChanges | ForEach-Object Name)
+  if ($outputChanges.Count -ne $expectedOutputNames.Count -or
+      @(Compare-Object -CaseSensitive $expectedOutputNames $actualOutputNames).Count -ne 0) {
+    throw "Only the migration task-definition and exact default-off ingestion outputs may change."
+  }
+
+  foreach ($entry in $expectedIngestionOutputs.GetEnumerator()) {
+    $output = $Plan.output_changes.PSObject.Properties[$entry.Key].Value
+    $actualKeys = @($output.PSObject.Properties | ForEach-Object Name | Sort-Object)
+    $expectedKeys = @(
+      "actions", "after", "after_sensitive", "after_unknown", "before", "before_sensitive"
+    ) | Sort-Object
+    $afterMatches = if ($entry.Value -is [bool]) {
+      $output.after -is [bool] -and $output.after -eq $entry.Value
+    } else {
+      $output.after -is [string] -and [string]$output.after -ceq [string]$entry.Value
+    }
+    if (@(Compare-Object -CaseSensitive $expectedKeys $actualKeys).Count -ne 0 -or
+        (@($output.actions) -join ",") -cne "create" -or
+        $null -ne $output.before -or -not $afterMatches -or
+        $output.after_unknown -isnot [bool] -or $output.after_unknown -or
+        $output.before_sensitive -isnot [bool] -or $output.before_sensitive -or
+        $output.after_sensitive -isnot [bool] -or $output.after_sensitive) {
+      throw "An ingestion output is not the exact known default-off creation."
+    }
   }
 }
 
