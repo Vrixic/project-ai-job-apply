@@ -104,6 +104,11 @@ same bounded provider refresh drift accepted by the retained baseline guard.
 
 The standalone `Verify` action repeats the live alias, direct-boundary, and zero-drift checks with
 the same reviewed publication and baseline inputs. It performs no persistent application write.
+If the reviewed apply completed but a verifier-only defect stopped the parent operator, `Verify`
+may retain the applied release SHA as an ancestor of clean current `main` only when every
+intervening change is a modified regular text file in the exact gateway verifier/test/validator/
+runbook allowlist. Any application, Terraform, artifact, receipt, baseline, added/deleted/renamed,
+binary, missing, or non-blob change fails closed; do not regenerate or reapply the release plan.
 
 The first-release gate deliberately does not claim the `409 job_search_catalog_changed` deployed
 case. A genuine stale cursor expires after 15 minutes and requires a catalog revision after cursor

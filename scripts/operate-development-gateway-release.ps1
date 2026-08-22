@@ -134,6 +134,39 @@ function Write-ExclusiveJson {
     Move-Item -LiteralPath $temporary -Destination $Path -Force:$Replace
   } finally { if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force } }
 }
+function Assert-GatewayVerifySourceDelta {
+  param(
+    [Parameter(Mandatory)][string]$ReleaseSha,
+    [Parameter(Mandatory)][string]$OperatorSha
+  )
+  $allowed = @(
+    "scripts/operate-development-gateway-release.ps1",
+    "scripts/verify-development-gateway-lambda-boundary.ps1",
+    "scripts/tests/development-gateway-release-operator.tests.ps1",
+    "scripts/validate-serverless-workflow-infrastructure.mjs",
+    "infrastructure/runbooks/deployments/development-gateway-release.md"
+  )
+  & git -C $repositoryRoot merge-base --is-ancestor $ReleaseSha $OperatorSha 2>$null
+  if ($LASTEXITCODE -ne 0) { throw "The applied gateway release is not an ancestor of the verification operator." }
+  $records = @(& git -C $repositoryRoot diff --name-status --no-renames "$ReleaseSha..$OperatorSha" 2>$null)
+  $numstat = @(& git -C $repositoryRoot diff --numstat --no-renames "$ReleaseSha..$OperatorSha" 2>$null)
+  if ($LASTEXITCODE -ne 0 -or $records.Count -eq 0 -or $records.Count -ne $numstat.Count -or
+      @($numstat | Where-Object { $_ -match '^-\t-\t' }).Count -ne 0) {
+    throw "The gateway verification-only delta is empty, unreadable, or binary."
+  }
+  foreach ($record in $records) {
+    if ($record -notmatch '^M\t(.+)$' -or $Matches[1] -notin $allowed) {
+      throw "The applied gateway release differs from the verification operator outside the exact allowlist."
+    }
+    $path = $Matches[1]
+    foreach ($revision in @($ReleaseSha, $OperatorSha)) {
+      $type = (& git -C $repositoryRoot cat-file -t "$revision`:$path" 2>$null).Trim()
+      if ($LASTEXITCODE -ne 0 -or $type -cne "blob") {
+        throw "The gateway verification-only delta contains a missing or non-blob path."
+      }
+    }
+  }
+}
 function Assert-CallerAndSource {
   $identity = Invoke-AwsJson @("sts", "get-caller-identity", "--output", "json") "AWS caller validation"
   if ([string]$identity.Account -cne $ExpectedAccountId -or -not ([string]$identity.Arn).Contains(":assumed-role/")) {
@@ -149,8 +182,12 @@ function Assert-CallerAndSource {
   $origin = (& git -C $repositoryRoot rev-parse origin/main 2>$null).Trim()
   $dirty = @(& git -C $repositoryRoot status --porcelain 2>$null)
   if ($branch -cne "main" -or $head -cne $origin -or $dirty.Count -ne 0) { throw "The release requires clean main exactly matching origin/main." }
-  if ($Action -ne "Status" -and ($SourceSha -notmatch '^[a-f0-9]{40}$' -or $SourceSha -cne $head)) {
-    throw "SourceSha must equal the exact merged main checkout."
+  if ($Action -ne "Status") {
+    if ($SourceSha -notmatch '^[a-f0-9]{40}$') { throw "SourceSha must equal the exact merged main checkout." }
+    if ($SourceSha -cne $head) {
+      if ($Action -cne "Verify") { throw "SourceSha must equal the exact merged main checkout." }
+      Assert-GatewayVerifySourceDelta -ReleaseSha $SourceSha -OperatorSha $head
+    }
   }
   return $head
 }
@@ -170,9 +207,9 @@ function Get-DocumentOperatorDeltaSha256 {
     "scripts/operate-development-gateway-release.ps1", "scripts/tests/development-document-dark-guards.tests.ps1",
     "scripts/tests/development-document-dark-operator.tests.ps1", "scripts/tests/development-document-migration-operator.tests.ps1",
     "scripts/tests/development-gateway-release-guards.tests.ps1", "scripts/tests/development-gateway-release-operator.tests.ps1",
-    "scripts/validate-serverless-workflow-infrastructure.mjs",
+    "scripts/validate-serverless-workflow-infrastructure.mjs", "scripts/verify-development-gateway-lambda-boundary.ps1",
     "infrastructure/runbooks/deployments/development-document-dark-deployment.md", "infrastructure/runbooks/deployments/database-migration.md",
-    "infrastructure/runbooks/deployments/development-gateway-lambda-release.md"
+    "infrastructure/runbooks/deployments/development-gateway-release.md"
   )
   $records = @(& git -C $repositoryRoot diff --name-status --no-renames "$ReleaseSha..$OperatorSha" 2>$null)
   $numstat = @(& git -C $repositoryRoot diff --numstat --no-renames "$ReleaseSha..$OperatorSha" 2>$null)
@@ -525,8 +562,16 @@ function Invoke-ZeroDrift {
   } finally { Restore-TerraformVariables $saved }
   if ($exitCode -ne 0) { throw "The post-release Terraform plan is not zero drift. Inspect the ignored verification log." }
   $plan = Read-Plan $path
-  $variableSource = Get-Content -LiteralPath (Join-Path $terraformDirectory "variables.tf") -Raw
-  $declaredVariables = @([regex]::Matches($variableSource, '(?m)^\s*variable\s+"([a-zA-Z0-9_]+)"\s*\{') | ForEach-Object { $_.Groups[1].Value })
+  $terraformFiles = @(Get-ChildItem -LiteralPath $terraformDirectory -File -Filter "*.tf" | Sort-Object Name)
+  $declaredVariables = @($terraformFiles | ForEach-Object {
+      $variableSource = Get-Content -LiteralPath $_.FullName -Raw
+      [regex]::Matches($variableSource, '(?m)^\s*variable\s+"([a-zA-Z0-9_]+)"\s*\{') |
+        ForEach-Object { $_.Groups[1].Value }
+    })
+  if ($terraformFiles.Count -eq 0 -or $declaredVariables.Count -eq 0 -or
+      @($declaredVariables | Sort-Object -Unique).Count -ne $declaredVariables.Count) {
+    throw "The gateway drift variable inventory is empty or duplicated."
+  }
   $null = Assert-RetainedGatewayBaselinePlan $plan $declaredVariables
   $null = Assert-GatewayReleaseVariables $Baseline.Plan.variables $plan.variables $Artifact `
     $ExpectedAccountId $boundary.MigrationRepositoryUrl $Baseline.Metadata.ParserQualifiedArn

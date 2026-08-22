@@ -235,6 +235,11 @@ for (const required of [
     `development migration operator guard is missing: ${required}`,
   );
 }
+forbidText(
+  "scripts/verify-development-gateway-lambda-boundary.ps1",
+  "exit $LASTEXITCODE",
+  "development gateway wrapper must return to its parent operator",
+);
 for (const required of [
   'Get-ChildItem -LiteralPath $terraformDirectory -File -Filter "*.tf"',
   "The gateway baseline variable inventory is empty or duplicated.",
@@ -242,6 +247,8 @@ for (const required of [
   "DocumentOperatorSourceSha",
   "DocumentOperatorDeltaSha256",
   "BaselineToReleaseDeltaSha256",
+  "Assert-GatewayVerifySourceDelta",
+  "The gateway drift variable inventory is empty or duplicated.",
 ]) {
   requireText(
     developmentGatewayReleaseOperator,

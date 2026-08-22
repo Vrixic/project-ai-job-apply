@@ -11,4 +11,6 @@ Set-StrictMode -Version Latest
   -Environment development `
   -AwsProfile $AwsProfile `
   -AwsRegion $AwsRegion
-exit $LASTEXITCODE
+if ($LASTEXITCODE -ne 0) {
+  throw "The development gateway Lambda boundary verification failed."
+}

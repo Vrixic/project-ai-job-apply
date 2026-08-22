@@ -17,6 +17,14 @@ foreach ($required in @(
     throw "The gateway operator does not preserve the exact split-source migration handoff."
   }
 }
+foreach ($recoveryMarker in @(
+    "Assert-GatewayVerifySourceDelta", "The gateway verification-only delta is empty",
+    'if ($Action -cne "Verify")', "The gateway drift variable inventory is empty or duplicated."
+  )) {
+  if (-not $operator.Contains($recoveryMarker)) {
+    throw "The gateway operator does not preserve the verifier-only post-apply recovery path."
+  }
+}
 
 function Assert-Rejected {
   param([Parameter(Mandatory)][scriptblock]$Action, [Parameter(Mandatory)][string]$Message)
@@ -348,6 +356,12 @@ foreach ($wrapperName in @("verify-development-gateway-lambda-boundary.ps1", "ve
   if (@($errors).Count -ne 0) {
     throw "$wrapperName does not preserve the non-mutating generic verifier interface."
   }
+}
+$developmentWrapper = Get-Content -LiteralPath `
+  (Join-Path $repositoryRoot "scripts\verify-development-gateway-lambda-boundary.ps1") -Raw
+if ($developmentWrapper.Contains('exit $LASTEXITCODE') -or
+    -not $developmentWrapper.Contains('throw "The development gateway Lambda boundary verification failed."')) {
+  throw "The development gateway wrapper can still terminate its parent operator."
 }
 
 Write-Output "Development gateway release operator and search-boundary tests passed."
