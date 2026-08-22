@@ -68,7 +68,8 @@ function Assert-RetainedGatewayBaselineMetadata {
     [Parameter(Mandatory)][string]$AccountId,
     [Parameter(Mandatory)][string]$Region,
     [Parameter(Mandatory)][string]$ExpectedMigrationRepositoryUrl,
-    [Parameter(Mandatory)][object]$CurrentState
+    [Parameter(Mandatory)][object]$CurrentState,
+    [switch]$AllowOneSerialAdvance
   )
   $v1Keys = @(
     "AccountId", "Applyable", "CreatedAt", "Environment", "Kind", "MeaningfulChanges",
@@ -112,6 +113,10 @@ function Assert-RetainedGatewayBaselineMetadata {
       [string]$Metadata.OperatorSourceSha -ceq $SourceSha -and
       [string]$Metadata.OperatorDeltaSha256 -match '^[a-f0-9]{64}$'
   } else { [string]$Metadata.SourceSha -ceq $SourceSha }
+  $stateBindingValid = [string]$Metadata.StateLineage -ceq [string]$CurrentState.Lineage -and
+    ([long]$Metadata.StateSerial -eq [long]$CurrentState.Serial -or
+      ($AllowOneSerialAdvance -and
+        [long]$CurrentState.Serial -eq ([long]$Metadata.StateSerial + 1)))
   if ($expectedKeys.Count -eq 0 -or ($actualKeys -join "|") -cne ($expectedKeys -join "|") -or
       [string]$Metadata.Kind -cne "development-document-zero-drift-baseline" -or
       [string]$Metadata.Environment -cne "development" -or
@@ -122,8 +127,7 @@ function Assert-RetainedGatewayBaselineMetadata {
       $Metadata.Applyable -isnot [bool] -or $Metadata.Applyable -or
       [int]$Metadata.MeaningfulChanges -ne 0 -or
       [string]$CurrentState.Lineage -cnotmatch '^[a-f0-9-]{36}$' -or [long]$CurrentState.Serial -lt 1 -or
-      [string]$Metadata.StateLineage -cne [string]$CurrentState.Lineage -or
-      [long]$Metadata.StateSerial -ne [long]$CurrentState.Serial -or
+      -not $stateBindingValid -or
       [string]$stage -notin @("parser-dark", "complete-dark") -or
       [string]$Metadata.Stage -cne [string]$stage -or
       [string]$Metadata.ReceiptSha256 -cnotmatch '^[a-f0-9]{64}$' -or

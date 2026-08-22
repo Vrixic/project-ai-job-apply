@@ -249,6 +249,8 @@ for (const required of [
   "BaselineToReleaseDeltaSha256",
   "Assert-GatewayVerifySourceDelta",
   "The gateway drift variable inventory is empty or duplicated.",
+  "AllowOneSerialAdvance",
+  "Post-apply verification requires the exact reviewed gateway release plan",
 ]) {
   requireText(
     developmentGatewayReleaseOperator,

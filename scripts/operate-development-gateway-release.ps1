@@ -142,7 +142,9 @@ function Assert-GatewayVerifySourceDelta {
   $allowed = @(
     "scripts/operate-development-gateway-release.ps1",
     "scripts/verify-development-gateway-lambda-boundary.ps1",
+    "scripts/lib/development-gateway-release-guards.ps1",
     "scripts/tests/development-gateway-release-operator.tests.ps1",
+    "scripts/tests/development-gateway-release-guards.tests.ps1",
     "scripts/validate-serverless-workflow-infrastructure.mjs",
     "infrastructure/runbooks/deployments/development-gateway-release.md"
   )
@@ -444,7 +446,8 @@ function Read-Baseline {
   $null = Assert-RetainedGatewayBaselineMetadata -Metadata $metadata -Plan $plan `
     -PlanPath $planPath -PlanSha256 $ReviewedBaselineSha256 -SourceSha $SourceSha `
     -AccountId $ExpectedAccountId -Region $Region `
-    -ExpectedMigrationRepositoryUrl $boundary.MigrationRepositoryUrl -CurrentState $state
+    -ExpectedMigrationRepositoryUrl $boundary.MigrationRepositoryUrl -CurrentState $state `
+    -AllowOneSerialAdvance:($Action -ceq "Verify")
   $documentReleaseSha = if ([string]$metadata.SchemaVersion -ceq "5") {
     if ([string]$metadata.DocumentReleaseSourceSha -cne 'a6d0fba09082b8bc61ee7b604ee1d5c47bd71624' -or
       [string]$metadata.DocumentOperatorSourceSha -cne '9d290416c61847f1682157c08312cdb920d42107' -or
@@ -640,6 +643,42 @@ if ($Action -ceq "VerifyPublication") {
 $baseline = Read-Baseline
 
 if ($Action -ceq "Verify") {
+  $currentState = Get-StateIdentity
+  if ([long]$currentState.Serial -ne [long]$baseline.Metadata.StateSerial) {
+    if ([string]::IsNullOrWhiteSpace($PlanPath) -or $ReviewedPlanSha256 -notmatch '^[a-f0-9]{64}$') {
+      throw "Post-apply verification requires the exact reviewed gateway release plan and SHA-256."
+    }
+    $reviewedPath = Resolve-GatewayOperatorPath $PlanPath -MustExist -ReleaseOnly
+    if ((Get-FileSha256 $reviewedPath) -cne $ReviewedPlanSha256) {
+      throw "The post-apply gateway release plan checksum does not match review."
+    }
+    $reviewedMetadataPath = "$reviewedPath$metadataSuffix"
+    if (-not (Test-Path -LiteralPath $reviewedMetadataPath -PathType Leaf)) {
+      throw "The post-apply gateway release plan metadata is missing."
+    }
+    $reviewedMetadata = Get-Content -LiteralPath $reviewedMetadataPath -Raw | ConvertFrom-Json
+    Assert-ReviewedPlanMetadata $reviewedMetadata @{
+      SchemaVersion = "1"; Kind = "development-gateway-release-plan"; Environment = "development"
+      AccountId = $ExpectedAccountId; Region = $Region; StateBucket = $StateBucket; StateKey = "platform.tfstate"
+      StateLineage = [string]$baseline.Metadata.StateLineage; StateSerial = [long]$baseline.Metadata.StateSerial
+      SourceSha = $SourceSha; ReceiptSha256 = $ReviewedReceiptSha256
+      BaselinePath = $baseline.Path; BaselineSha256 = $ReviewedBaselineSha256
+      BaselineMetadataPath = $baseline.MetadataPath; BaselineMetadataSha256 = $ReviewedBaselineMetadataSha256
+      BaselineMetadataSchemaVersion = $baseline.MetadataSchemaVersion
+      BaselineStage = [string]$baseline.Metadata.Stage
+      BaselineParserQualifiedArn = [string]$baseline.Metadata.ParserQualifiedArn
+      BaselineDocumentReceiptSha256 = $baseline.DocumentReceiptSha256
+      BaselineStateLineage = [string]$baseline.Metadata.StateLineage
+      BaselineStateSerial = [long]$baseline.Metadata.StateSerial
+      BaselineMigrationImage = $baseline.MigrationImage
+      MigrationImage = [string](Get-GatewayPlanVariableValue $baseline.Plan.variables "migration_image")
+      PlanPath = $reviewedPath; PlanSha256 = $ReviewedPlanSha256
+    }
+    $reviewedPlan = Read-Plan $reviewedPath
+    $null = Assert-GatewayReleaseVariables $baseline.Plan.variables $reviewedPlan.variables $publication.Artifact `
+      $ExpectedAccountId $boundary.MigrationRepositoryUrl $baseline.Metadata.ParserQualifiedArn
+    $null = Assert-ExactGatewayReleasePlan $reviewedPlan $publication.Artifact
+  }
   Assert-LiveGateway $publication.Artifact
   & (Join-Path $PSScriptRoot "verify-development-gateway-lambda-boundary.ps1") -AwsProfile $AwsProfile -AwsRegion $Region | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "The direct development gateway/search boundary failed." }

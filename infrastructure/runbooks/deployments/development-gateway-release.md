@@ -109,6 +109,10 @@ may retain the applied release SHA as an ancestor of clean current `main` only w
 intervening change is a modified regular text file in the exact gateway verifier/test/validator/
 runbook allowlist. Any application, Terraform, artifact, receipt, baseline, added/deleted/renamed,
 binary, missing, or non-blob change fails closed; do not regenerate or reapply the release plan.
+Because a successful gateway apply advances the shared Terraform state, this recovery form also
+requires the exact checksum-reviewed gateway release plan. Its adjacent metadata must bind the
+retained baseline state, and the live state may have the same lineage with exactly one serial
+advance before immutable-alias, direct-boundary, and zero-drift verification all pass.
 
 The first-release gate deliberately does not claim the `409 job_search_catalog_changed` deployed
 case. A genuine stale cursor expires after 15 minutes and requires a catalog revision after cursor

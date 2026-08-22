@@ -183,6 +183,22 @@ $baselineMetadataV5 | Add-Member DocumentOperatorDeltaSha256 ("f" * 64)
 $baselineMetadataV5 | Add-Member BaselineToReleaseDeltaSha256 ("1" * 64)
 $null = Assert-RetainedGatewayBaselineMetadata $baselineMetadataV5 $metadataPlan $baselinePath $baselineSha `
   $sourceSha $account "us-east-2" $repositoryUrl $currentState; $passed++
+$advancedState = [pscustomobject]@{ Lineage = $lineage; Serial = 43 }
+$null = Assert-RetainedGatewayBaselineMetadata $baselineMetadataV5 $metadataPlan $baselinePath $baselineSha `
+  $sourceSha $account "us-east-2" $repositoryUrl $advancedState -AllowOneSerialAdvance; $passed++
+Assert-Rejected {
+  Assert-RetainedGatewayBaselineMetadata $baselineMetadataV5 $metadataPlan $baselinePath $baselineSha `
+    $sourceSha $account "us-east-2" $repositoryUrl $advancedState
+} "A one-serial state advance was accepted without the post-apply gate."
+foreach ($invalidState in @(
+    [pscustomobject]@{ Lineage = $lineage; Serial = 44 },
+    [pscustomobject]@{ Lineage = "87654321-4321-4321-4321-cba987654321"; Serial = 43 }
+  )) {
+  Assert-Rejected {
+    Assert-RetainedGatewayBaselineMetadata $baselineMetadataV5 $metadataPlan $baselinePath $baselineSha `
+      $sourceSha $account "us-east-2" $repositoryUrl $invalidState -AllowOneSerialAdvance
+  } "The post-apply baseline accepted more than one serial advance or a different lineage."
+}
 foreach ($mutation in @("release", "operator", "delta", "schema", "extra")) {
   $badDualMetadata = Copy-Fixture $baselineMetadataV4
   switch ($mutation) {
