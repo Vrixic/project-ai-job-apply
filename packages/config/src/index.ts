@@ -84,6 +84,21 @@ const publicJobLambdaSchema = baseSchema.extend({
 
 export type PublicJobLambdaConfig = z.infer<typeof publicJobLambdaSchema>;
 
+const publicJobEdgeLambdaSchema = baseSchema.extend({
+  AWS_REGION: z.literal("us-east-2"),
+  PUBLIC_JOB_PROJECTION_ARN: z
+    .string()
+    .regex(
+      /^arn:aws:lambda:us-east-2:[0-9]{12}:function:[a-zA-Z0-9-_]{1,64}:[a-zA-Z0-9-_]{1,128}$/,
+    ),
+  PUBLIC_JOB_CACHE_CAPACITY: z.coerce.number().int().min(1).max(256).default(128),
+  PUBLIC_JOB_CACHE_TTL_MS: z.coerce.number().int().min(1_000).max(30_000).default(15_000),
+  PUBLIC_JOB_NEGATIVE_CACHE_TTL_MS: z.coerce.number().int().min(250).max(5_000).default(2_000),
+  ...telemetrySchema,
+});
+
+export type PublicJobEdgeLambdaConfig = z.infer<typeof publicJobEdgeLambdaSchema>;
+
 export function loadBackendConfig(environment: NodeJS.ProcessEnv = process.env): BackendConfig {
   return backendSchema.parse(environment);
 }
@@ -98,4 +113,10 @@ export function loadPublicJobLambdaConfig(
   environment: NodeJS.ProcessEnv = process.env,
 ): PublicJobLambdaConfig {
   return publicJobLambdaSchema.parse(environment);
+}
+
+export function loadPublicJobEdgeLambdaConfig(
+  environment: NodeJS.ProcessEnv = process.env,
+): PublicJobEdgeLambdaConfig {
+  return publicJobEdgeLambdaSchema.parse(environment);
 }

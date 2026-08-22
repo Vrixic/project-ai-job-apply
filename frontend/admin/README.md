@@ -1,11 +1,15 @@
 # Admin Console
 
-The restricted internal console supports customer service, job/source moderation, contribution review, workflow diagnosis, provider status, entitlement support, privacy requests, and emergency feature/adapter controls.
+The restricted internal console currently supports only the Phase 1 job/source moderation slice
+described below. Later customer service, contribution, workflow, provider, entitlement, privacy,
+and emergency-control surfaces are not implemented or authorized by this application.
 
 ## Implemented Phase 1 moderation slice
 
 - `app/` — A responsive, non-indexable moderation console plus narrow same-origin BFF routes.
-- `lib/auth0.ts` — A dedicated server-held Auth0 session requesting only `jobs:moderate`.
+- `lib/auth0.ts` — A dedicated server-held Auth0 session requesting only `jobs:moderate`, requiring
+  an MFA `amr`, reauthentication after 15 minutes, and a one-hour absolute session. It does not
+  request offline access.
 - `lib/moderation-bff.ts` — Bounded strict request/response validation, token isolation, redirect
   refusal, fixed problem projection, and operator-identity refusal.
 - `lib/moderation-bff.test.ts` — Scope/session, strict-input, routing, redaction, and fail-closed

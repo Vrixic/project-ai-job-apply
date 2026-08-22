@@ -12,10 +12,20 @@ const requiredKeys = [
 type Environment = Record<string, string | undefined>;
 let auth0Client: Auth0Client | undefined;
 
-export const requestedAuthScopes = "openid profile offline_access jobs:moderate";
+export const requestedAuthScopes = "openid profile jobs:moderate";
+export const adminMfaAcr = "http://schemas.openid.net/pape/policies/2007/06/multi-factor";
+export const adminReauthenticationSeconds = 15 * 60;
+export const adminAbsoluteSessionSeconds = 60 * 60;
 
 export function isAuth0Configured(environment: Environment = process.env): boolean {
   return requiredKeys.every((key) => Boolean(environment[key]?.trim()));
+}
+
+export function requireAdminMfa<T extends { user: Record<string, unknown> }>(session: T): T {
+  if (!Array.isArray(session.user.amr) || !session.user.amr.includes("mfa")) {
+    throw new Error("Admin authentication did not prove MFA");
+  }
+  return session;
 }
 
 export function getAuth0Client(environment: Environment = process.env): Auth0Client {
@@ -44,7 +54,15 @@ export function getAuth0Client(environment: Environment = process.env): Auth0Cli
     authorizationParameters: {
       audience: environment.AUTH0_AUDIENCE?.trim() || "ai-job-apply-api",
       scope: requestedAuthScopes,
+      acr_values: adminMfaAcr,
+      max_age: adminReauthenticationSeconds,
     },
+    session: {
+      rolling: true,
+      inactivityDuration: adminReauthenticationSeconds,
+      absoluteDuration: adminAbsoluteSessionSeconds,
+    },
+    beforeSessionSaved: async (session) => requireAdminMfa(session),
     enableAccessTokenEndpoint: false,
     logoutStrategy: "oidc",
     onCallback: async (error) => {

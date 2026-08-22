@@ -60,6 +60,7 @@ Mark each `Reviewed`, `Reviewed with finding`, or `Not reviewed`.
 | [Ingestion worker boundary](../../../backend/workers/ingestion/README.md) | Not reviewed |
 | [Trust boundary](../../../backend/services/trust/README.md) | Not reviewed |
 | [Admin boundary](../../../frontend/admin/README.md) | Not reviewed |
+| [Conservative technical baseline](d1-moderation-implementation-baseline.md) | Not reviewed |
 | [API security/exposure baseline](../../security/api-security-and-final-review.md) | Not reviewed |
 | [D1 report data flow](../../security/data-flow-and-classification.md#d1-candidate-job-report-and-moderation-source-boundary) | Not reviewed |
 | [D1-007 threat delta](../../security/threat-model.md#d1-007-reportingmoderation-source-delta) | Not reviewed |

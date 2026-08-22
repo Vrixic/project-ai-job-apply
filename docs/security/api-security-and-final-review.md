@@ -242,15 +242,15 @@ The source-defined public route requires one exact lowercase UUIDv7 path paramet
 body. It does not read or use cookies, bearer tokens, owner identifiers, or a client-supplied
 origin. It returns only the
 Jobs-owned public projection and generic problem details; malformed upstream data and database
-outages are availability failures, never absence. The dedicated Lambda has concurrency one,
-bounded internal caches, exact route throttling, and a PostgreSQL identity whose only direct
-application-function grant is the security-definer public-read function. It receives no shared
-database secret. Managed API
+outages are availability failures, never absence. The no-VPC anonymous edge has concurrency one,
+bounded internal caches, exact route throttling, no database identity or secret, and permission to
+invoke only one qualified private projection alias with an identifier-only payload. The private
+projection has concurrency one and a PostgreSQL identity whose only direct application-function
+grant is the security-definer public-read function. Managed API
 Gateway edge throttles are infrastructure transport responses, not claimed as application
 ProblemDetails. Route activation remains default-off pending bootstrap, migration, artifact,
-Terraform, abuse, and independent public-surface review. Because RDS IAM authentication is not
-database-name scoped, and cluster-global PUBLIC catalog/function capabilities remain outside the
-application migration, the migration proves the role's least privilege only inside the application
-database. Accountable review must accept or remediate both the other-database CONNECT and
-catalog/function residuals, or isolate them through a separately reviewed cluster control, before
-activation. The database-local read-only setting is defense in depth rather than an immutable deny.
+Terraform, abuse, and independent public-surface review. RDS IAM's database-name and PostgreSQL
+cluster-global residuals remain on the private fixed-query projection, but are no longer reachable
+with the anonymous edge's role or network capabilities. The separate
+`public_job_route_activation_allowed` flag keeps the route structurally absent until release
+review.

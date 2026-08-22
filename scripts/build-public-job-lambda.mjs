@@ -11,7 +11,7 @@ const artifact = await buildLambdaArtifact({
   outputDirectory: path.join(repositoryRoot, "backend/gateway/dist/public-job-lambda"),
   artifactName: "public-job-lambda",
   applicationName: "@ai-job-apply/public-job-lambda",
-  handlers: ["index.handler"],
+  handlers: ["index.handler", "index.projectionHandler"],
   packageFilter: "@ai-job-apply/gateway...",
   external: [
     "@fastify/static",

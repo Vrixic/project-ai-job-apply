@@ -1,6 +1,29 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { describe, expect, it, vi } from "vitest";
-import { createLazyPublicJobHandler, publicJobPostgresOptions } from "./public-job-lambda.js";
+import {
+  createLazyPublicJobHandler,
+  LambdaPublicJobDetailReader,
+  parseProjectionResult,
+} from "./public-job-lambda.js";
+import { publicJobPostgresOptions } from "./public-job-projection-lambda.js";
+
+const jobId = "019c0000-0000-7000-8000-000000000001";
+const availableProjection = {
+  kind: "available",
+  requestedJobId: jobId,
+  canonicalJobId: jobId,
+  isAlias: false,
+  job: {
+    id: jobId,
+    companyName: "Company",
+    title: "Engineer",
+    locations: ["Remote"],
+    description: "Build reliable systems.",
+    firstObservedAt: "2026-08-20T00:00:00.000Z",
+    lastVerifiedAt: "2026-08-21T00:00:00.000Z",
+    expiresAt: "2026-09-21T00:00:00.000Z",
+  },
+} as const;
 
 describe("public job Lambda module", () => {
   it("exports a lazy handler without requiring runtime secrets at import", async () => {
@@ -66,12 +89,87 @@ describe("public job Lambda module", () => {
       connect_timeout: 2,
       password,
       connection: {
-        application_name: "public-job-reader",
+        application_name: "public-job-projection",
         default_transaction_read_only: true,
         idle_in_transaction_session_timeout: 5_000,
         lock_timeout: 1_000,
         statement_timeout: 2_000,
       },
     });
+  });
+
+  it("invokes only the qualified private projection with an identifier-only payload", async () => {
+    const send = vi.fn(async (_command: unknown) => ({
+      StatusCode: 200,
+      ExecutedVersion: "3",
+      Payload: new TextEncoder().encode(JSON.stringify({ kind: "absent" })),
+    }));
+    const reader = new LambdaPublicJobDetailReader(
+      { send } as never,
+      "arn:aws:lambda:us-east-2:111122223333:function:projection:development",
+    );
+    await expect(reader.get(jobId)).resolves.toEqual({ kind: "absent" });
+    expect(send).toHaveBeenCalledOnce();
+    const command = send.mock.calls[0]?.[0];
+    if (!command) throw new Error("Expected one projection invocation");
+    const input = (
+      command as {
+        input: { FunctionName: string; InvocationType: string; Payload: Uint8Array };
+      }
+    ).input;
+    expect(input).toMatchObject({
+      FunctionName: "arn:aws:lambda:us-east-2:111122223333:function:projection:development",
+      InvocationType: "RequestResponse",
+    });
+    expect(JSON.parse(new TextDecoder().decode(input.Payload))).toEqual({
+      schemaVersion: 1,
+      jobId,
+    });
+  });
+
+  it("rejects malformed, oversized, errored, and mutable projection responses", async () => {
+    expect(() =>
+      parseProjectionResult(new TextEncoder().encode('{"kind":"absent","extra":true}')),
+    ).toThrow();
+    expect(() => parseProjectionResult(new Uint8Array(256_001))).toThrow();
+    expect(() =>
+      parseProjectionResult(
+        new TextEncoder().encode(
+          JSON.stringify({
+            ...availableProjection,
+            isAlias: true,
+          }),
+        ),
+      ),
+    ).toThrow();
+    expect(() =>
+      parseProjectionResult(
+        new TextEncoder().encode(
+          JSON.stringify({
+            ...availableProjection,
+            job: { ...availableProjection.job, locations: [] },
+          }),
+        ),
+      ),
+    ).toThrow();
+    expect(
+      parseProjectionResult(new TextEncoder().encode(JSON.stringify(availableProjection))),
+    ).toEqual(availableProjection);
+    const failed = new LambdaPublicJobDetailReader(
+      { send: vi.fn(async () => ({ StatusCode: 200, FunctionError: "Unhandled" })) } as never,
+      "arn:aws:lambda:us-east-2:111122223333:function:projection:development",
+    );
+    await expect(failed.get(jobId)).rejects.toThrow("invocation failed");
+    const latest = new LambdaPublicJobDetailReader(
+      {
+        send: vi.fn(async () => ({
+          StatusCode: 200,
+          ExecutedVersion: "$LATEST",
+          Payload: new TextEncoder().encode(JSON.stringify({ kind: "absent" })),
+        })),
+      } as never,
+      "arn:aws:lambda:us-east-2:111122223333:function:projection:development",
+    );
+    await expect(latest.get(jobId)).rejects.toThrow("invocation failed");
   });
 });

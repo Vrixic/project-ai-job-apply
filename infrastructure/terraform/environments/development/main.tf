@@ -71,6 +71,7 @@ module "platform" {
   deploy_public_job_reader             = var.deploy_public_job_reader
   public_job_database_boundary_version = var.public_job_database_boundary_version
   public_job_cluster_residual_accepted = var.public_job_cluster_residual_accepted
+  public_job_route_activation_allowed  = var.public_job_route_activation_allowed
   public_job_lambda_artifact_s3_key    = var.public_job_lambda_artifact_s3_key
   public_job_lambda_artifact_s3_object_version = (
     var.public_job_lambda_artifact_s3_object_version

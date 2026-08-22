@@ -212,7 +212,13 @@ variable "public_job_database_boundary_version" {
 }
 
 variable "public_job_cluster_residual_accepted" {
-  description = "Explicit accountable acceptance or remediation of both public-reader cluster residuals: other connectable databases and cluster-global PUBLIC catalog/function capabilities. False keeps the anonymous route structurally absent."
+  description = "Deprecated compatibility input. The anonymous edge no longer has VPC, database, or RDS-IAM access; this value does not activate the route."
+  type        = bool
+  default     = false
+}
+
+variable "public_job_route_activation_allowed" {
+  description = "Explicit release authorization for the anonymous public-job route. False keeps the route structurally absent even when the isolated edge/projection pair is deployed."
   type        = bool
   default     = false
 }

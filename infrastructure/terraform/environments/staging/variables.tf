@@ -111,7 +111,13 @@ variable "public_job_database_boundary_version" {
 }
 
 variable "public_job_cluster_residual_accepted" {
-  description = "Accountable pre-activation acceptance or remediation of both other-database CONNECT and cluster-global PUBLIC catalog/function residuals."
+  description = "Deprecated compatibility input; the anonymous edge is isolated from the database regardless of this value."
+  type        = bool
+  default     = false
+}
+
+variable "public_job_route_activation_allowed" {
+  description = "Explicit release authorization for the isolated anonymous public-job route."
   type        = bool
   default     = false
 }

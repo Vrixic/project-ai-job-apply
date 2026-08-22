@@ -77,6 +77,14 @@ output "public_job_lambda_function_name" {
   value = module.platform.public_job_lambda_function_name
 }
 
+output "public_job_projection_lambda_alias_arn" {
+  value = module.platform.public_job_projection_lambda_alias_arn
+}
+
+output "public_job_projection_lambda_function_name" {
+  value = module.platform.public_job_projection_lambda_function_name
+}
+
 output "public_job_route_id" {
   value = module.platform.public_job_route_id
 }

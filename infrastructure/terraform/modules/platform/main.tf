@@ -32,13 +32,15 @@ locals {
   )
   public_job_route_enabled = (
     var.deploy_public_job_reader &&
-    var.public_job_cluster_residual_accepted &&
+    var.public_job_route_activation_allowed &&
     var.serverless_runtime_enabled &&
     var.runtime_activation_allowed &&
     var.persistent_data_plane_enabled
   )
-  public_job_function_name = "${var.name}-${var.environment}-public-job-reader"
-  public_job_function_arn  = "arn:aws:lambda:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:function:${local.public_job_function_name}"
+  public_job_function_name            = "${var.name}-${var.environment}-public-job-reader"
+  public_job_function_arn             = "arn:aws:lambda:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:function:${local.public_job_function_name}"
+  public_job_projection_function_name = "${var.name}-${var.environment}-public-job-projection"
+  public_job_projection_function_arn  = "arn:aws:lambda:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:function:${local.public_job_projection_function_name}"
 }
 
 data "aws_iam_policy_document" "platform_kms" {
@@ -1194,9 +1196,52 @@ data "aws_iam_policy_document" "gateway_lambda_assume" {
 
 resource "aws_iam_role" "public_job_lambda" {
   count                = var.deploy_public_job_reader ? 1 : 0
+  name                 = "${var.name}-${var.environment}-public-job-projection"
+  assume_role_policy   = data.aws_iam_policy_document.gateway_lambda_assume[0].json
+  permissions_boundary = data.aws_iam_policy.workload_boundary.arn
+}
+
+resource "aws_iam_role" "public_job_edge" {
+  count                = var.deploy_public_job_reader ? 1 : 0
   name                 = "${var.name}-${var.environment}-public-job-reader"
   assume_role_policy   = data.aws_iam_policy_document.gateway_lambda_assume[0].json
   permissions_boundary = data.aws_iam_policy.workload_boundary.arn
+}
+
+data "aws_iam_policy_document" "public_job_edge" {
+  count = var.deploy_public_job_reader ? 1 : 0
+
+  statement {
+    sid       = "WriteOwnedLogs"
+    effect    = "Allow"
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["${aws_cloudwatch_log_group.application.arn}:*"]
+  }
+  statement {
+    sid       = "InvokeExactPublicProjection"
+    effect    = "Allow"
+    actions   = ["lambda:InvokeFunction"]
+    resources = ["${local.public_job_projection_function_arn}:${var.environment}"]
+  }
+  statement {
+    sid       = "DecryptLambdaEnvironmentAtColdStart"
+    effect    = "Allow"
+    actions   = ["kms:Decrypt"]
+    resources = [local.platform_kms_key_arn]
+  }
+  statement {
+    sid       = "WriteNativeTraces"
+    effect    = "Allow"
+    actions   = ["xray:PutTelemetryRecords", "xray:PutTraceSegments"]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "public_job_edge" {
+  count  = var.deploy_public_job_reader ? 1 : 0
+  name   = "public-job-edge-runtime"
+  role   = aws_iam_role.public_job_edge[0].id
+  policy = data.aws_iam_policy_document.public_job_edge[0].json
 }
 
 data "aws_iam_policy_document" "public_job_lambda" {
@@ -1265,7 +1310,7 @@ resource "aws_iam_role_policy" "public_job_lambda_vpc_guard" {
       ]
       Resource = "*"
       Condition = {
-        ArnEquals = { "lambda:SourceFunctionArn" = local.public_job_function_arn }
+        ArnEquals = { "lambda:SourceFunctionArn" = local.public_job_projection_function_arn }
       }
     }]
   })
@@ -1282,7 +1327,7 @@ data "aws_iam_policy_document" "public_job_lambda_kms_code_guard" {
     condition {
       test     = "ArnEquals"
       variable = "lambda:SourceFunctionArn"
-      values   = [local.public_job_function_arn]
+      values   = [local.public_job_projection_function_arn]
     }
   }
 }
@@ -1292,6 +1337,29 @@ resource "aws_iam_role_policy" "public_job_lambda_kms_code_guard" {
   name   = "public-job-reader-kms-code-guard"
   role   = aws_iam_role.public_job_lambda[0].id
   policy = data.aws_iam_policy_document.public_job_lambda_kms_code_guard[0].json
+}
+
+data "aws_iam_policy_document" "public_job_edge_kms_code_guard" {
+  count = var.deploy_public_job_reader ? 1 : 0
+
+  statement {
+    sid       = "DenyFunctionCodeEnvironmentDecrypt"
+    effect    = "Deny"
+    actions   = ["kms:Decrypt"]
+    resources = [local.platform_kms_key_arn]
+    condition {
+      test     = "ArnEquals"
+      variable = "lambda:SourceFunctionArn"
+      values   = [local.public_job_function_arn]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "public_job_edge_kms_code_guard" {
+  count  = var.deploy_public_job_reader ? 1 : 0
+  name   = "public-job-edge-kms-code-guard"
+  role   = aws_iam_role.public_job_edge[0].id
+  policy = data.aws_iam_policy_document.public_job_edge_kms_code_guard[0].json
 }
 
 resource "aws_iam_role" "gateway_lambda" {
@@ -1551,13 +1619,58 @@ resource "aws_lambda_function" "gateway" {
 resource "aws_lambda_function" "public_job" {
   count                          = var.deploy_public_job_reader ? 1 : 0
   function_name                  = local.public_job_function_name
-  description                    = "Default-off anonymous read-only projection of current public job detail"
-  role                           = aws_iam_role.public_job_lambda[0].arn
+  description                    = "Default-off anonymous edge for identifier-only public job projection"
+  role                           = aws_iam_role.public_job_edge[0].arn
   runtime                        = "nodejs24.x"
   architectures                  = ["x86_64"]
   handler                        = "index.handler"
   memory_size                    = 512
   timeout                        = 10
+  reserved_concurrent_executions = 1
+  publish                        = true
+  s3_bucket                      = aws_s3_bucket.artifacts.bucket
+  s3_key                         = var.public_job_lambda_artifact_s3_key
+  s3_object_version              = var.public_job_lambda_artifact_s3_object_version
+  source_code_hash               = var.public_job_lambda_artifact_base64sha256
+  kms_key_arn                    = aws_kms_key.platform.arn
+
+  environment {
+    variables = {
+      NODE_ENV                         = "production"
+      RELEASE_SHA                      = var.public_job_lambda_artifact_sha256
+      LOG_LEVEL                        = "info"
+      PUBLIC_JOB_PROJECTION_ARN        = "${local.public_job_projection_function_arn}:${var.environment}"
+      PUBLIC_JOB_CACHE_CAPACITY        = "128"
+      PUBLIC_JOB_CACHE_TTL_MS          = "15000"
+      PUBLIC_JOB_NEGATIVE_CACHE_TTL_MS = "2000"
+    }
+  }
+
+  tracing_config { mode = "Active" }
+  logging_config {
+    log_format            = "JSON"
+    application_log_level = "INFO"
+    system_log_level      = "WARN"
+    log_group             = aws_cloudwatch_log_group.application.name
+  }
+  lifecycle { create_before_destroy = true }
+  depends_on = [
+    aws_iam_role_policy.public_job_edge,
+    aws_iam_role_policy.public_job_edge_kms_code_guard,
+    aws_lambda_alias.public_job_projection
+  ]
+}
+
+resource "aws_lambda_function" "public_job_projection" {
+  count                          = var.deploy_public_job_reader ? 1 : 0
+  function_name                  = local.public_job_projection_function_name
+  description                    = "Private VPC and database projection for current public job detail"
+  role                           = aws_iam_role.public_job_lambda[0].arn
+  runtime                        = "nodejs24.x"
+  architectures                  = ["x86_64"]
+  handler                        = "index.projectionHandler"
+  memory_size                    = 512
+  timeout                        = 8
   reserved_concurrent_executions = 1
   publish                        = true
   s3_bucket                      = aws_s3_bucket.artifacts.bucket
@@ -1599,6 +1712,14 @@ resource "aws_lambda_function" "public_job" {
     aws_iam_role_policy.public_job_lambda_vpc_guard,
     aws_iam_role_policy.public_job_lambda_kms_code_guard
   ]
+}
+
+resource "aws_lambda_alias" "public_job_projection" {
+  count            = var.deploy_public_job_reader ? 1 : 0
+  name             = var.environment
+  description      = "Reviewed immutable ${var.environment} private public-job projection release"
+  function_name    = aws_lambda_function.public_job_projection[0].function_name
+  function_version = aws_lambda_function.public_job_projection[0].version
 }
 
 resource "aws_lambda_alias" "public_job" {
@@ -1668,6 +1789,57 @@ resource "aws_cloudwatch_metric_alarm" "public_job_lambda_duration" {
   ok_actions          = [aws_sns_topic.operational_alerts.arn]
   alarm_description   = "Public job Lambda p95 duration exceeded five seconds. Runbook: ${local.observability_runbook_url}"
   dimensions          = { FunctionName = aws_lambda_function.public_job[0].function_name }
+}
+
+resource "aws_cloudwatch_metric_alarm" "public_job_projection_errors" {
+  count               = var.deploy_public_job_reader ? 1 : 0
+  alarm_name          = "${var.name}-${var.environment}-public-job-projection-errors"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Errors"
+  namespace           = "AWS/Lambda"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "Private public-job projection error; the edge must return availability failure. Runbook: ${local.observability_runbook_url}"
+  dimensions          = { FunctionName = aws_lambda_function.public_job_projection[0].function_name }
+}
+
+resource "aws_cloudwatch_metric_alarm" "public_job_projection_throttles" {
+  count               = var.deploy_public_job_reader ? 1 : 0
+  alarm_name          = "${var.name}-${var.environment}-public-job-projection-throttles"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Throttles"
+  namespace           = "AWS/Lambda"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "Private public-job projection reached its one-connection concurrency ceiling. Runbook: ${local.observability_runbook_url}"
+  dimensions          = { FunctionName = aws_lambda_function.public_job_projection[0].function_name }
+}
+
+resource "aws_cloudwatch_metric_alarm" "public_job_projection_duration" {
+  count               = var.deploy_public_job_reader ? 1 : 0
+  alarm_name          = "${var.name}-${var.environment}-public-job-projection-duration"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "Duration"
+  namespace           = "AWS/Lambda"
+  period              = 60
+  extended_statistic  = "p95"
+  threshold           = 5000
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "Private public-job projection p95 duration exceeded five seconds. Runbook: ${local.observability_runbook_url}"
+  dimensions          = { FunctionName = aws_lambda_function.public_job_projection[0].function_name }
 }
 
 resource "aws_cloudwatch_metric_alarm" "public_job_route_4xx" {

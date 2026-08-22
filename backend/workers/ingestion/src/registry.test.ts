@@ -72,8 +72,38 @@ describe("SourceRegistry", () => {
       () => new SourceRegistry([{ ...valid, sourceId: "INVALID", adapter: adapter() }]),
     ).toThrow("canonical source identifier");
     expect(() => new SourceRegistry([{ ...valid, provenance: "permitted_api" }])).toThrow(
-      "synthetic-only",
+      "default-off",
     );
+  });
+
+  it("admits the exact Greenhouse shape only as an immutable disabled candidate", () => {
+    const greenhouseAdapter: IngestionSourceAdapter = {
+      sourceId: "greenhouse-reviewed-board",
+      adapterVersion: "greenhouse-job-board-v1",
+      poll: vi.fn(async () => ({ kind: "success" as const, observations: [] })),
+    };
+    const registry = new SourceRegistry([
+      {
+        sourceId: "greenhouse-reviewed-board",
+        provider: "greenhouse",
+        provenance: "permitted_api",
+        adapter: greenhouseAdapter,
+      },
+    ]);
+    expect(registry.get("greenhouse-reviewed-board")).toMatchObject({ enabled: false });
+    expect(() => registry.requireEnabled("greenhouse-reviewed-board")).toThrow("disabled");
+    expect(
+      () =>
+        new SourceRegistry([
+          {
+            sourceId: "greenhouse-reviewed-board",
+            provider: "greenhouse",
+            provenance: "permitted_api",
+            adapter: greenhouseAdapter,
+            enabled: true,
+          },
+        ]),
+    ).toThrow("default-off");
   });
 
   it("rechecks a dynamic activation gate instead of caching its first decision", () => {

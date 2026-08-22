@@ -102,6 +102,68 @@ function enforceSyntheticSourceBoundary(source: SourceJobObservation): void {
   }
 }
 
+function enforceGreenhouseSourceBoundary(source: SourceJobObservation): void {
+  if (
+    typeof source.sourceUrl !== "string" ||
+    source.sourceUrl.length > 2_048 ||
+    !/^[\x21-\x7e]+$/.test(source.sourceUrl)
+  ) {
+    throw new SourceBatchContractError("The Greenhouse source URL is invalid");
+  }
+  let url: URL;
+  try {
+    url = new URL(source.sourceUrl);
+  } catch {
+    throw new SourceBatchContractError("The Greenhouse source URL is invalid");
+  }
+  if (
+    url.protocol !== "https:" ||
+    !new Set(["boards.greenhouse.io", "job-boards.greenhouse.io"]).has(url.hostname) ||
+    url.username ||
+    url.password ||
+    url.port ||
+    url.hash ||
+    url.search
+  ) {
+    throw new SourceBatchContractError(
+      "The Greenhouse source URL is outside the approved host boundary",
+    );
+  }
+  if (
+    typeof source.atsTenant !== "string" ||
+    !/^[a-z0-9][a-z0-9_-]{1,62}$/.test(source.atsTenant) ||
+    typeof source.externalJobId !== "string" ||
+    !/^[1-9][0-9]{0,19}$/.test(source.externalJobId) ||
+    typeof source.verifiedCompanyDomain !== "string" ||
+    source.verifiedCompanyDomain.length > 253 ||
+    !/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(
+      source.verifiedCompanyDomain,
+    )
+  ) {
+    throw new SourceBatchContractError("The Greenhouse source identity is invalid");
+  }
+  if (url.pathname !== `/${source.atsTenant}/jobs/${source.externalJobId}`) {
+    throw new SourceBatchContractError(
+      "The Greenhouse source URL does not match its board and job identity",
+    );
+  }
+}
+
+function enforceSourceBoundary(
+  source: SourceJobObservation,
+  registration: ReturnType<SourceRegistry["requireEnabled"]>,
+): void {
+  if (registration.provider === "other" && registration.provenance === "authorized_fixture") {
+    enforceSyntheticSourceBoundary(source);
+    return;
+  }
+  if (registration.provider === "greenhouse" && registration.provenance === "permitted_api") {
+    enforceGreenhouseSourceBoundary(source);
+    return;
+  }
+  throw new SourceBatchContractError("The source observation boundary is not implemented");
+}
+
 function catalogObservation(
   source: SourceJobObservation,
   registration: ReturnType<SourceRegistry["requireEnabled"]>,
@@ -117,7 +179,7 @@ function catalogObservation(
   if (source.validThrough !== undefined && !(source.validThrough instanceof Date)) {
     throw new SourceBatchContractError("Source validThrough must be a Date");
   }
-  enforceSyntheticSourceBoundary(source);
+  enforceSourceBoundary(source, registration);
   const candidate: CatalogObservation = {
     provider: registration.provider,
     provenance: registration.provenance,

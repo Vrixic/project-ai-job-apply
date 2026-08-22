@@ -48,23 +48,18 @@ terminal-metadata, durable-identifier, and nudge-failure envelopes for fourteen 
 automatic consumer or redrive. No
 real-provider adapter, event-source mapping, schedule, or source is enabled by repository defaults.
 
-`deploy_public_job_reader` can dark-provision one immutable public-reader Lambda with reserved
-concurrency one. Its anonymous route exists only when the global serverless runtime, lifecycle,
-and persistent-data gates are all active. The exact route has no authorizer, rate and burst are
-frozen at one, and route 4xx/5xx plus Lambda error/throttle/duration alarms are required. The role
-may connect only as `ai_job_apply_public_job_reader` to the exact RDS resource ID, receives no
-database secret, and explicitly denies function code the VPC-management permissions retained for
-the Lambda service. The role's exact-key KMS decrypt grant exists only for Lambda's automatic
-environment decryption; a source-function condition explicitly denies that action to function
-code. A versioned Jobs migration limits the identity's direct application-schema
-projection access to the security-definer public function. Provisioning refuses any value except the exact
-`public_job_database_boundary_version = "0006_public_job_reader"` attestation. Bootstrap-boundary
-application, database migration, artifact publication, plan review, and abuse acceptance remain
-separate prerequisites; defaults do not expose the route. RDS IAM tokens are not database-name
-scoped, so this packet proves least privilege only inside the application database. PostgreSQL's
-cluster-global PUBLIC catalog/function capabilities also remain outside this application migration;
-the read-only session default is defense in depth, not an immutable deny. Accountable review must
-accept or remediate both the other-database and catalog/function residuals, or approve a separately
-guarded cluster-wide/dedicated-instance control, before route activation. The explicit
-`public_job_cluster_residual_accepted` gate defaults false and keeps the route structurally absent
-even when the deploy and global runtime switches are otherwise enabled.
+`deploy_public_job_reader` can dark-provision an immutable anonymous edge and a separate private
+projection Lambda, each with reserved concurrency one. The edge has no VPC attachment, database
+identity, RDS-IAM grant, database secret, or KMS-decrypt code path. It may invoke only the exact
+qualified projection alias with an identifier-only request. Only the projection enters the VPC and
+may connect as `ai_job_apply_public_job_reader`; its sole application read is the fixed
+security-definer function from Jobs migration `0006_public_job_reader`. This contains the
+cluster-global PostgreSQL residuals behind a non-public fixed-query service boundary instead of
+placing them in the anonymous runtime's compromise boundary.
+
+The route additionally requires the explicit `public_job_route_activation_allowed` release flag,
+the global serverless runtime and lifecycle gates, and the persistent data plane. Its rate and burst
+remain frozen at one. Edge, projection, and route alarms are mandatory. The deprecated
+`public_job_cluster_residual_accepted` input is retained only for state compatibility and has no
+activation effect. Artifact publication, reviewed apply, abuse testing, truthful source fields,
+indexing approval, and public-surface acceptance remain separate gates; defaults expose no route.

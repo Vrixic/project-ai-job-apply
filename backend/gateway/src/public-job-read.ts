@@ -51,6 +51,16 @@ export interface PublicJobReadCacheOptions {
   clock?: () => Date;
 }
 
+export interface PublicJobResultReader {
+  get(jobId: string): Promise<PublicJobDetailResult>;
+}
+
+function isResultReader(
+  reader: PublicJobDetailReader | PublicJobResultReader,
+): reader is PublicJobResultReader {
+  return "get" in reader && typeof reader.get === "function";
+}
+
 function requireFiniteDate(clock: () => Date): Date {
   const now = clock();
   if (!(now instanceof Date) || !Number.isFinite(now.getTime())) {
@@ -85,7 +95,7 @@ export class PublicJobReadCache {
   private readonly clock: () => Date;
 
   constructor(
-    private readonly reader: PublicJobDetailReader,
+    private readonly reader: PublicJobDetailReader | PublicJobResultReader,
     private readonly options: PublicJobReadCacheOptions,
   ) {
     if (
@@ -114,8 +124,11 @@ export class PublicJobReadCache {
     const pending = this.inFlight.get(jobId);
     if (pending) return pending;
 
-    const request = new PublicJobDetailProjector(this.reader, () => new Date(now))
-      .get(jobId)
+    const request = (
+      isResultReader(this.reader)
+        ? this.reader.get(jobId)
+        : new PublicJobDetailProjector(this.reader, () => new Date(now)).get(jobId)
+    )
       .then((result) => {
         const completedAt = requireFiniteDate(this.clock);
         const expiresAt = resultExpiry(result, completedAt, this.options);

@@ -463,6 +463,7 @@ run "public_job_reader_dark_deploy_has_no_anonymous_route" {
 
   variables {
     deploy_public_job_reader                     = true
+    public_job_route_activation_allowed          = true
     public_job_database_boundary_version         = "0006_public_job_reader"
     public_job_lambda_artifact_s3_key            = "lambda/public-jobs/reader.zip"
     public_job_lambda_artifact_s3_object_version = "public-reader-version"
@@ -474,6 +475,10 @@ run "public_job_reader_dark_deploy_has_no_anonymous_route" {
   assert {
     condition = (
       length(aws_lambda_function.public_job) == 1 &&
+      length(aws_lambda_function.public_job_projection) == 1 &&
+      length(aws_cloudwatch_metric_alarm.public_job_projection_errors) == 1 &&
+      length(aws_cloudwatch_metric_alarm.public_job_projection_throttles) == 1 &&
+      length(aws_cloudwatch_metric_alarm.public_job_projection_duration) == 1 &&
       length(aws_apigatewayv2_route.public_job) == 0 &&
       length(aws_lambda_permission.public_job_api) == 0
     )
@@ -486,21 +491,21 @@ run "public_job_reader_dark_deploy_has_no_anonymous_route" {
       toset(keys(aws_lambda_function.public_job[0].environment[0].variables)) == toset([
         "LOG_LEVEL",
         "NODE_ENV",
-        "NODE_EXTRA_CA_CERTS",
         "PUBLIC_JOB_CACHE_CAPACITY",
         "PUBLIC_JOB_CACHE_TTL_MS",
-        "PUBLIC_JOB_DATABASE_HOST",
-        "PUBLIC_JOB_DATABASE_NAME",
-        "PUBLIC_JOB_DATABASE_PORT",
-        "PUBLIC_JOB_DATABASE_USER",
         "PUBLIC_JOB_NEGATIVE_CACHE_TTL_MS",
+        "PUBLIC_JOB_PROJECTION_ARN",
         "RELEASE_SHA"
       ]) &&
-      aws_lambda_function.public_job[0].environment[0].variables.PUBLIC_JOB_DATABASE_USER == "ai_job_apply_public_job_reader" &&
       aws_lambda_function.public_job[0].environment[0].variables.PUBLIC_JOB_CACHE_CAPACITY == "128" &&
+      aws_lambda_function.public_job[0].environment[0].variables.PUBLIC_JOB_PROJECTION_ARN == "${local.public_job_projection_function_arn}:${var.environment}" &&
+      length(aws_lambda_function.public_job[0].vpc_config) == 0 &&
+      aws_lambda_function.public_job_projection[0].handler == "index.projectionHandler" &&
+      aws_lambda_function.public_job_projection[0].environment[0].variables.PUBLIC_JOB_DATABASE_USER == "ai_job_apply_public_job_reader" &&
+      length(aws_lambda_function.public_job_projection[0].vpc_config) == 1 &&
       aws_db_instance.postgres[0].iam_database_authentication_enabled
     )
-    error_message = "The anonymous runtime must use only its exact IAM-authenticated database identity and one-connection budget."
+    error_message = "The anonymous edge must have no VPC/database identity and may call only the private one-connection projection."
   }
 
   assert {
@@ -515,7 +520,7 @@ run "public_job_reader_dark_deploy_has_no_anonymous_route" {
         "ec2:DetachNetworkInterface",
         "ec2:UnassignPrivateIpAddresses"
       ]) &&
-      jsondecode(aws_iam_role_policy.public_job_lambda_vpc_guard[0].policy).Statement[0].Condition.ArnEquals["lambda:SourceFunctionArn"] == local.public_job_function_arn
+      jsondecode(aws_iam_role_policy.public_job_lambda_vpc_guard[0].policy).Statement[0].Condition.ArnEquals["lambda:SourceFunctionArn"] == local.public_job_projection_function_arn
     )
     error_message = "Public-reader code must be denied the VPC-management permissions retained for the Lambda service."
   }
@@ -540,7 +545,15 @@ run "public_job_reader_dark_deploy_has_no_anonymous_route" {
       length(one(data.aws_iam_policy_document.public_job_lambda_kms_code_guard[0].statement).resources) == 1 &&
       one(one(data.aws_iam_policy_document.public_job_lambda_kms_code_guard[0].statement).condition).test == "ArnEquals" &&
       one(one(data.aws_iam_policy_document.public_job_lambda_kms_code_guard[0].statement).condition).variable == "lambda:SourceFunctionArn" &&
-      toset(one(one(data.aws_iam_policy_document.public_job_lambda_kms_code_guard[0].statement).condition).values) == toset([local.public_job_function_arn])
+      toset(one(one(data.aws_iam_policy_document.public_job_lambda_kms_code_guard[0].statement).condition).values) == toset([local.public_job_projection_function_arn]) &&
+      toset(one([
+        for statement in data.aws_iam_policy_document.public_job_edge[0].statement : statement
+        if statement.sid == "InvokeExactPublicProjection"
+      ]).resources) == toset(["${local.public_job_projection_function_arn}:${var.environment}"]) &&
+      length([
+        for statement in data.aws_iam_policy_document.public_job_edge[0].statement : statement
+        if contains(statement.actions, "rds-db:connect") || contains(statement.actions, "ec2:CreateNetworkInterface")
+      ]) == 0
     )
     error_message = "Lambda service cold starts may decrypt the exact CMK environment while public-reader function code is explicitly denied KMS decryption."
   }
@@ -552,7 +565,7 @@ run "public_job_reader_activation_is_exact_and_bounded" {
 
   variables {
     deploy_public_job_reader                     = true
-    public_job_cluster_residual_accepted         = true
+    public_job_route_activation_allowed          = true
     public_job_database_boundary_version         = "0006_public_job_reader"
     public_job_lambda_artifact_s3_key            = "lambda/public-jobs/reader.zip"
     public_job_lambda_artifact_s3_object_version = "public-reader-version"
@@ -583,12 +596,13 @@ run "public_job_reader_activation_is_exact_and_bounded" {
   }
 }
 
-run "public_job_reader_route_stays_absent_without_cluster_residual_acceptance" {
+run "public_job_reader_route_uses_the_remediated_edge_projection_boundary" {
   command = plan
 
   variables {
     deploy_public_job_reader                     = true
     public_job_cluster_residual_accepted         = false
+    public_job_route_activation_allowed          = true
     public_job_database_boundary_version         = "0006_public_job_reader"
     public_job_lambda_artifact_s3_key            = "lambda/public-jobs/reader.zip"
     public_job_lambda_artifact_s3_object_version = "public-reader-version"
@@ -601,12 +615,15 @@ run "public_job_reader_route_stays_absent_without_cluster_residual_acceptance" {
   assert {
     condition = (
       length(aws_lambda_function.public_job) == 1 &&
-      length(aws_apigatewayv2_route.public_job) == 0 &&
-      length(aws_lambda_permission.public_job_api) == 0 &&
-      length(aws_cloudwatch_metric_alarm.public_job_route_4xx) == 0 &&
-      length(aws_cloudwatch_metric_alarm.public_job_route_5xx) == 0
+      length(aws_lambda_function.public_job_projection) == 1 &&
+      length(aws_apigatewayv2_route.public_job) == 1 &&
+      length(aws_lambda_permission.public_job_api) == 1 &&
+      length(aws_cloudwatch_metric_alarm.public_job_route_4xx) == 1 &&
+      length(aws_cloudwatch_metric_alarm.public_job_route_5xx) == 1 &&
+      length(aws_lambda_function.public_job[0].vpc_config) == 0 &&
+      length(aws_lambda_function.public_job_projection[0].vpc_config) == 1
     )
-    error_message = "The public-job route must remain structurally absent until both other-database CONNECT and cluster-global PUBLIC catalog/function residuals are accepted or remediated."
+    error_message = "The route may activate only through the no-VPC edge and private fixed-query projection boundary."
   }
 }
 

@@ -3,12 +3,12 @@
 Owns the provider-independent worker contract that turns an explicitly enabled source adapter's
 bounded, normalized public-job batch into Jobs-owned catalog observations.
 
-The current foundation is synthetic-only. Its immutable registry is disabled by default and its
-default activation policy accepts only the neutral `other` provider with `authorized_fixture`
-provenance and a `synthetic-*` source identifier. It contains no network client, configured
-real-provider adapter, schedule, queue consumer, or deployed entrypoint. Real public feeds, public
-UGC, and real-provider data remain outside this package and disabled behind their owning approval
-gates.
+The durable deployed composition remains synthetic-only. The package also contains one dark-first
+Greenhouse Job Board adapter candidate. The registry admits its exact `greenhouse-*` /
+`permitted_api` shape only while disabled; attempting to enable it is rejected by the source
+activation policy. No real board token, company configuration, schedule, queue mapping, egress, or
+provider data is configured. Real public feeds, public UGC, and real-provider data remain disabled
+behind their owning approval gates.
 
 ## Implemented boundaries
 
@@ -22,6 +22,10 @@ gates.
   idempotent catalog-port calls, and aggregate-only results.
 - `synthetic.ts` — deterministic generated `.example.test` observations representing no provider,
   employer, tenant, or real job.
+- `greenhouse.ts` — fixed-host public Job Board GET adapter with redirect refusal, bounded timeout
+  and streaming response bytes, strict response mapping, plain-text conversion, tracking-query
+  removal, and reviewed company/domain inputs. It is tested only with generated responses and is
+  impossible to enable through the default registry policy.
 - `orchestration-store.ts` — the storage-neutral coordinator that commits every schedule, claim,
   settlement, pause, and retry through the Jobs-owned compare-and-swap port before returning a
   transport disposition.
@@ -59,9 +63,10 @@ never acknowledge, reschedule, or dead-letter work from an uncommitted transitio
 
 The repository now includes a source-only, default-off durable Lambda/SQS/Terraform composition
 around this coordinator. That composition is not published, deployed, scheduled, mapped, or
-activated by this source packet. Its only source ID remains `synthetic-foundation-v1`, backed only
-by the `synthetic-ingestion-v1` generated-synthetic adapter. Greenhouse,
-Lever, Ashby, public network acquisition, and real-provider data remain absent and disabled.
+activated by this source packet. Its only runnable source ID remains `synthetic-foundation-v1`,
+backed only by the `synthetic-ingestion-v1` generated-synthetic adapter. The Greenhouse adapter is
+source-present but default-denied; Lever, Ashby, real network acquisition/configuration, and
+real-provider data remain absent and disabled.
 
 Run unit tests with `pnpm --filter @ai-job-apply/ingestion-worker test`. PostgreSQL integration
 requires an explicit `DATABASE_URL` and is separate from the default suite.

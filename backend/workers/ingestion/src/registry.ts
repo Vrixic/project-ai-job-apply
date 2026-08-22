@@ -15,6 +15,15 @@ function permittedSyntheticRegistration(registration: Readonly<SourceRegistratio
   );
 }
 
+function permittedDarkGreenhouseRegistration(registration: Readonly<SourceRegistration>): boolean {
+  return (
+    registration.sourceId.startsWith("greenhouse-") &&
+    registration.provider === "greenhouse" &&
+    registration.provenance === "permitted_api" &&
+    registration.enabled !== true
+  );
+}
+
 function validateRegistration(registration: SourceRegistration): void {
   if (!sourceIdentifierPattern.test(registration.sourceId)) {
     throw new Error("A canonical source identifier is required");
@@ -25,8 +34,11 @@ function validateRegistration(registration: SourceRegistration): void {
   ) {
     throw new Error("The adapter descriptor does not match its source registration");
   }
-  if (!permittedSyntheticRegistration(registration)) {
-    throw new Error("The source is outside the synthetic-only activation policy");
+  if (
+    !permittedSyntheticRegistration(registration) &&
+    !permittedDarkGreenhouseRegistration(registration)
+  ) {
+    throw new Error("The source is outside the default-off activation policy");
   }
 }
 
