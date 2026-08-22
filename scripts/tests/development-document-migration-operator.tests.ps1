@@ -93,7 +93,7 @@ $baselineFunctions = @($ast.FindAll({
       $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
       $node.Name -in @(
         "ConvertTo-TerraformEnvironmentValue", "Get-MeaningfulChanges", "Assert-PlanWasApplied",
-        "Assert-ExactTaskPlan", "Assert-CurrentGatewayArtifactEvidence",
+        "Assert-ExactIngestionActivationGuardCreate", "Assert-ExactTaskPlan", "Assert-CurrentGatewayArtifactEvidence",
         "Assert-AcceptedMigrationProviderDrift", "Test-IgnorableRdsRestorableTimeRefresh",
         "Test-IgnorableMigrationTaskTagsRefresh", "Get-UnacceptedVerificationDrift", "Get-OptionalProperty",
         "Test-EcsFaultInjectionDisabled", "Assert-ReleaseSourceBinding",
@@ -114,7 +114,7 @@ $baselineFunctions = @($ast.FindAll({
         "Save-PostMigrationBaselineMetadata", "Remove-NewPostMigrationBaselineArtifacts"
       )
     }, $true))
-if ($baselineFunctions.Count -ne 44) { throw "The input, plan, and retained-handoff guards must each be defined once." }
+if ($baselineFunctions.Count -ne 45) { throw "The input, plan, and retained-handoff guards must each be defined once." }
 foreach ($function in $baselineFunctions | Sort-Object { $_.Extent.StartOffset }) {
   Invoke-Expression $function.Extent.Text
 }
@@ -1582,7 +1582,7 @@ try {
     appliedBaselineToCurrentDeltaSha256 = "d" * 64
     planningStateLineage = $retainedState.Lineage; planningStateSerial = 108
     taskPlanPath = $taskPlanFixturePath; taskPlanSha256 = $taskPlanFixtureSha
-    meaningfulChanges = 1; destructiveChanges = 0; createdAt = "2026-08-15T21:00:00.0000000Z"
+    meaningfulChanges = 2; destructiveChanges = 0; createdAt = "2026-08-15T21:00:00.0000000Z"
   }
   $StateBucket = "fixture-state-bucket"
   $taskMetadataFixturePath = "$taskPlanFixturePath.metadata.json"
@@ -1624,6 +1624,7 @@ if ($oneItemList -cne '["http://localhost:3000"]') {
 
 $MigrationImage = "example.invalid/migration@sha256:$('a' * 64)"
 $migrationAddress = "module.platform.aws_ecs_task_definition.migration[0]"
+$ingestionActivationGuardAddress = "module.platform.terraform_data.ingestion_activation_guard"
 $beforeContainer = [ordered]@{
   name = "database-migration"
   image = "example.invalid/migration@sha256:$('b' * 64)"
@@ -1701,12 +1702,64 @@ $normalizedTaskPlan = [pscustomobject]@{
           task_role_arn = $false
         }
       }
+    }, [pscustomobject]@{
+      address = $ingestionActivationGuardAddress
+      mode = "managed"
+      type = "terraform_data"
+      name = "ingestion_activation_guard"
+      change = [pscustomobject]@{
+        actions = @("create")
+        replace_paths = $null
+        before = $null
+        after = [pscustomobject]@{
+          input = [pscustomobject]@{ deploy = $false; runtime = $false; synthetic_only = $false }
+          triggers_replace = $null
+        }
+        after_unknown = [pscustomobject]@{ id = $true; input = [pscustomobject]@{}; output = $true }
+        before_sensitive = $false
+        after_sensitive = [pscustomobject]@{ input = [pscustomobject]@{}; output = [pscustomobject]@{} }
+      }
     })
   output_changes = [pscustomobject]@{
     migration_task_definition_arn = [pscustomobject]@{ actions = @("update") }
   }
 }
 Assert-ExactTaskPlan -Plan $normalizedTaskPlan
+
+foreach ($mutation in @(
+    "deploy", "runtime", "synthetic", "type", "action", "after", "unknown", "sensitive", "replacement"
+  )) {
+  $guardPlan = $normalizedTaskPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $guard = $guardPlan.resource_changes[1]
+  switch ($mutation) {
+    "deploy" { $guard.change.after.input.deploy = $true }
+    "runtime" { $guard.change.after.input.runtime = $true }
+    "synthetic" { $guard.change.after.input.synthetic_only = $true }
+    "type" { $guard.type = "aws_lambda_function" }
+    "action" { $guard.change.actions = @("update") }
+    "after" { $guard.change.after | Add-Member -NotePropertyName unexpected -NotePropertyValue $true }
+    "unknown" { $guard.change.after_unknown.output = $false }
+    "sensitive" { $guard.change.after_sensitive.output = [pscustomobject]@{ secret = $true } }
+    "replacement" { $guard.change.replace_paths = @(, @("input")) }
+  }
+  $rejected = $false
+  try { Assert-ExactTaskPlan -Plan $guardPlan } catch { $rejected = $true }
+  if (-not $rejected) { throw "The migration task plan accepted ingestion-guard mutation '$mutation'." }
+}
+
+foreach ($shape in @("missing", "extra")) {
+  $guardPlan = $normalizedTaskPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  if ($shape -ceq "missing") {
+    $guardPlan.resource_changes = @($guardPlan.resource_changes[0])
+  } else {
+    $guardPlan.resource_changes = @($guardPlan.resource_changes) + @(
+      [pscustomobject]@{ address = "module.platform.terraform_data.unexpected"; change = [pscustomobject]@{ actions = @("create") } }
+    )
+  }
+  $rejected = $false
+  try { Assert-ExactTaskPlan -Plan $guardPlan } catch { $rejected = $true }
+  if (-not $rejected) { throw "The migration task plan accepted a $shape resource shape." }
+}
 
 function Get-TaskPlanContainerFixture {
   param(

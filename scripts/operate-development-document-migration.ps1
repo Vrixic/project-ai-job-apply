@@ -160,6 +160,7 @@ $terraformRoot = [IO.Path]::GetFullPath((Join-Path $terraformDirectory ".terrafo
 $operatorRoot = Join-Path $terraformRoot "development-document-migration"
 $terraformDataDirectory = Join-Path $terraformRoot "development-document-migration-data"
 $migrationAddress = "module.platform.aws_ecs_task_definition.migration[0]"
+$ingestionActivationGuardAddress = "module.platform.terraform_data.ingestion_activation_guard"
 $migrationFamily = "ai-job-apply-development-database-migration"
 $repositoryName = "ai-job-apply/migration"
 $stateKey = "platform.tfstate"
@@ -1521,6 +1522,32 @@ function Get-UnacceptedVerificationDrift {
   } catch { return $records }
 }
 
+function Assert-ExactIngestionActivationGuardCreate {
+  param([Parameter(Mandatory)][object]$Record)
+
+  $expectedAfter = [ordered]@{
+    input = [ordered]@{ deploy = $false; runtime = $false; synthetic_only = $false }
+    triggers_replace = $null
+  }
+  $expectedUnknown = [ordered]@{ id = $true; input = [ordered]@{}; output = $true }
+  $expectedAfterSensitive = [ordered]@{ input = [ordered]@{}; output = [ordered]@{} }
+  if ([string]$Record.address -cne $ingestionActivationGuardAddress -or
+      [string]$Record.mode -cne "managed" -or [string]$Record.type -cne "terraform_data" -or
+      [string]$Record.name -cne "ingestion_activation_guard" -or
+      (@($Record.change.actions) -join ",") -cne "create" -or
+      $null -ne $Record.change.before -or
+      (ConvertTo-DeploymentCanonicalValue $Record.change.after -SortArrays) -cne
+        (ConvertTo-DeploymentCanonicalValue $expectedAfter -SortArrays) -or
+      (ConvertTo-OptionalTerraformMetadataCanonicalValue $Record.change "after_unknown") -cne
+        (ConvertTo-DeploymentCanonicalValue $expectedUnknown -SortArrays) -or
+      $Record.change.before_sensitive -isnot [bool] -or $Record.change.before_sensitive -or
+      (ConvertTo-OptionalTerraformMetadataCanonicalValue $Record.change "after_sensitive") -cne
+        (ConvertTo-DeploymentCanonicalValue $expectedAfterSensitive -SortArrays)) {
+    throw "The ingestion activation guard is not the exact default-off state-only create."
+  }
+  Assert-NoTerraformReplacementPaths $Record.change
+}
+
 function Assert-ExactTaskPlan {
   param([Parameter(Mandatory)][object]$Plan)
 
@@ -1532,10 +1559,17 @@ function Assert-ExactTaskPlan {
   }
   Assert-AcceptedMigrationProviderDrift -Plan $Plan
   $changes = @(Get-MeaningfulChanges -Changes @($Plan.resource_changes))
-  if ($changes.Count -ne 1 -or [string]$changes[0].address -cne $migrationAddress) {
-    throw "The task plan may change only the one-off migration task definition."
+  if ($changes.Count -ne 2 -or
+      @($changes | Where-Object { [string]$_.address -ceq $migrationAddress }).Count -ne 1 -or
+      @($changes | Where-Object { [string]$_.address -ceq $ingestionActivationGuardAddress }).Count -ne 1) {
+    throw "The task plan may change only the migration task definition and default-off ingestion guard."
   }
-  $change = $changes[0].change
+  $migrationRecord = @($changes | Where-Object { [string]$_.address -ceq $migrationAddress })[0]
+  $guardRecord = @($changes | Where-Object {
+      [string]$_.address -ceq $ingestionActivationGuardAddress
+    })[0]
+  Assert-ExactIngestionActivationGuardCreate -Record $guardRecord
+  $change = $migrationRecord.change
   $actions = @($change.actions)
   if ($actions.Count -ne 2 -or "create" -notin $actions -or "delete" -notin $actions) {
     throw "The migration task definition must be replaced create-before-destroy."
@@ -1645,7 +1679,7 @@ function Read-TaskPlanMetadata {
       [string]$metadata.planningStateLineage -notmatch '^[a-f0-9-]{36}$' -or
       [long]$metadata.planningStateSerial -lt 1 -or
       [string]$metadata.appliedBaselineReceiptSha256 -notmatch '^[a-f0-9]{64}$' -or
-      [int]$metadata.meaningfulChanges -ne 1 -or [int]$metadata.destructiveChanges -ne 0 -or
+      [int]$metadata.meaningfulChanges -ne 2 -or [int]$metadata.destructiveChanges -ne 0 -or
       -not $createdAtValid -or
       [IO.Path]::GetFullPath([string]$metadata.taskPlanPath) -cne [IO.Path]::GetFullPath($PlanPath) -or
       [string]::IsNullOrWhiteSpace([string]$metadata.appliedPlanPath) -or
@@ -2162,7 +2196,7 @@ if ($Action -eq "PlanTask") {
     planningStateSerial = [long]$baselineEvidence.PlanningState.Serial
     taskPlanPath        = $taskPlan
     taskPlanSha256      = $sha256
-    meaningfulChanges   = 1
+    meaningfulChanges   = 2
     destructiveChanges  = 0
     createdAt           = (Get-Date).ToUniversalTime().ToString("o")
   }
@@ -2175,7 +2209,7 @@ if ($Action -eq "PlanTask") {
     PlanSha256          = $sha256
     PlanMetadataPath    = $taskMetadataPath
     PlanMetadataSha256  = $taskMetadataSha256
-    ChangedResource     = $migrationAddress
+    ChangedResources    = @($migrationAddress, $ingestionActivationGuardAddress)
     ArtifactDigest      = $artifact.Digest
     TriggeredTaskCount  = 0
   }
