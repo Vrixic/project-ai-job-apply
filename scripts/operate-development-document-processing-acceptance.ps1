@@ -20,6 +20,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib\deployment-operator-guards.ps1")
+. (Join-Path $PSScriptRoot "lib\development-document-dark-guards.ps1")
 
 if ($Help) {
   @"

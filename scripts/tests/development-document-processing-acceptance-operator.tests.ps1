@@ -27,6 +27,7 @@ if (($parameterNames -join "|") -cne ($expectedParameters -join "|")) {
 
 foreach ($required in @(
     'ValidateSet("Status", "PlanExecution", "Execute", "RecoverCleanup", "Verify")',
+    '. (Join-Path $PSScriptRoot "lib\development-document-dark-guards.ps1")',
     'documents/dist/src/run-document-processing-acceptance.js',
     'DOCUMENT_PROCESSING_ACCEPTANCE_CONFIRM',
     'DOCUMENT_PROCESSING_ACCEPTANCE_ACTION',
