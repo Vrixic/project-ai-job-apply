@@ -43,6 +43,7 @@ foreach ($required in @(
     'TerraformZeroDriftClaim = $false',
     'development-document-operator-delta-v1',
     'sourceToOperatorDeltaSha256',
+    "ConvertFrom-Json -DateKind String",
     'The application-to-operator delta changes deployed application or infrastructure source.',
     'Assert-DocumentOperationalHealth -WaitForOk',
     '$scanAfter = $end.AddSeconds(30)',
@@ -97,7 +98,7 @@ function Import-OperatorFunction {
 
 . (Join-Path $repositoryRoot "scripts\lib\deployment-operator-guards.ps1")
 foreach ($name in @(
-    "Assert-ExactPropertySet", "Test-CanonicalTimestamp", "New-TaskRequest", "Assert-TaskRequest",
+    "Assert-ExactPropertySet", "ConvertFrom-OperatorJson", "Test-CanonicalTimestamp", "New-TaskRequest", "Assert-TaskRequest",
     "Get-ExpectedAggregate", "New-GatewayEvent", "Assert-RecoveryDescriptor",
     "Test-ExactObjectAlreadyRemoved", "Assert-DocumentOperationalHealth", "Assert-PrivacySafeLogs",
     "Get-OptionalProperty", "New-DirectProcessorEvent", "Get-LambdaVersionIdentity",
@@ -105,6 +106,12 @@ foreach ($name in @(
     "Remove-ExactObjectVersion", "Remove-DescriptorObjects", "Assert-ReviewedRuntimeUnchanged"
   )) {
   Import-OperatorFunction -Name $name
+}
+
+$timestampJson = '{"createdAt":"2026-08-22T20:01:57.8939303+00:00"}'
+$timestampObject = ConvertFrom-OperatorJson -Json $timestampJson -Description 'Timestamp fixture'
+if ($timestampObject.createdAt -isnot [string] -or -not (Test-CanonicalTimestamp $timestampObject.createdAt)) {
+  throw "Operator JSON parsing did not preserve a canonical timestamp string."
 }
 
 $script:containerName = "database-migration"

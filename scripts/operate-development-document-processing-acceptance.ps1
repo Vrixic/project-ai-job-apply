@@ -157,7 +157,14 @@ function Assert-ExactPropertySet {
 
 function ConvertFrom-OperatorJson {
   param([Parameter(Mandatory)][string]$Json, [Parameter(Mandatory)][string]$Description)
-  try { $Json | ConvertFrom-Json }
+  try {
+    if ((Get-Command ConvertFrom-Json).Parameters.ContainsKey('DateKind')) {
+      $Json | ConvertFrom-Json -DateKind String
+    }
+    else {
+      $Json | ConvertFrom-Json
+    }
+  }
   catch { throw "$Description is not valid JSON." }
 }
 
