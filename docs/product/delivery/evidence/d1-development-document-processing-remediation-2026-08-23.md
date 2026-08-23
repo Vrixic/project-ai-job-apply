@@ -161,10 +161,37 @@ acknowledged without telemetry. Source now emits only the already validated pars
 uppercase `reasonCode` in a value-free `document_processing_parser_rejected` event. An exact unit
 regression covers that boundary. Publication and a wholly fresh run remain open.
 
+Exact telemetry source `a09bf43747e3e639f692d0e09e96c50fd9847174` was published as a
+deterministic, zero-High/zero-Critical migration image and as immutable Documents artifacts. Saved
+plan SHA-256 `9fc6a7b0588cf82b3eb9127c0fe242319248eb5c7a41171a93a1c3613178e1c6`
+changed only the migration task definition and processor function/alias, advancing them to task
+revision 21, processor alias version 7, and state serial 130. Parser version 4 stayed pinned and
+unweighted. All document triggers and the anonymous public route stayed disabled, and no migration
+ran.
+
+The fresh run used execution-plan SHA-256
+`62fd81236d230a8b580f2f0e4378f16f95b79b86ca4a12ae023495d805fc3dc3`. It again stopped at
+processor response validation, but the new bounded event identified the retained parser result as
+`invalid_document` / `PDF_PARSE_REJECTED` without candidate content or object identity. Receipt
+SHA-256 `c37f286cad63a7fa3102d8d3e819e76f1542aaf1caa8ee8292225319cd39bc17`
+records `failed-cleaned`, zero persistent rows, database cleanup, exact object removal, and no
+acceptance claim.
+
+The deployed-only parser defect is now reproduced before publication. The AWS SDK download body is a
+Node `Buffer`; pdf.js rejects `Buffer` even though it is a `Uint8Array` subtype, while the earlier
+source harness supplied a plain `Uint8Array`. The S3 boundary now copies every bounded body into a
+true `Uint8Array`. The single-file Lambda bundle also embeds and initializes pdf.js's worker instead
+of relying on a worker file absent from the ZIP. The artifact builder now invokes an exported
+verification hook against a structurally valid PDF and fails the build unless the produced bundle
+extracts the exact expected text. A parser-boundary regression exercises a Buffer-backed AWS body.
+Documents unit tests pass 23/23, typecheck and Lambda build pass, and two consecutive parser artifact
+and bundle digests are identical. Publication and a wholly fresh run remain open.
+
 ## Remaining work
 
-Publish the value-free parser-rejection telemetry, dark-release the processor, then generate a wholly
-fresh reviewed plan and rerun the complete generated-synthetic direct-dark flow.
+Commit and publish the Buffer-normalization/embedded-worker parser remediation, dark-release the
+parser and its exact processor pin, then generate a wholly fresh reviewed plan and rerun the complete
+generated-synthetic direct-dark flow.
 Do not reuse a claimed plan. Require all seven functional phases, rollback proof, privacy-safe logs,
 zero persistent rows, exact object removal, zero running migration tasks, healthy alarms, disabled
 triggers, receipt verification, and a refresh-backed zero-drift plan before recording acceptance.

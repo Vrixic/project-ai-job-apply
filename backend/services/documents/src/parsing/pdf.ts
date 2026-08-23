@@ -47,6 +47,17 @@ export async function parsePdf(bytes: Uint8Array): Promise<ParsedTextBlock[]> {
         writable: true,
       });
     }
+    const workerGlobal = globalThis as typeof globalThis & {
+      pdfjsWorker?: { WorkerMessageHandler?: unknown };
+    };
+    if (!workerGlobal.pdfjsWorker?.WorkerMessageHandler) {
+      const { WorkerMessageHandler } = await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
+      Object.defineProperty(workerGlobal, "pdfjsWorker", {
+        value: { WorkerMessageHandler },
+        configurable: true,
+        writable: true,
+      });
+    }
     const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
     const loadingTask = getDocument({
       data: bytes,

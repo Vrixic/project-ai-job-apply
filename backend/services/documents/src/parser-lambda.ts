@@ -13,6 +13,14 @@ import {
   ParseLimitError,
   parseResume,
 } from "./parsing/index.js";
+import { parsePdf } from "./parsing/pdf.js";
+
+export async function verifyBundledPdfParser(bytes: Uint8Array): Promise<void> {
+  const blocks = await parsePdf(bytes);
+  if (blocks.length !== 1 || blocks[0]?.text.trim() !== "Bundled parser verification") {
+    throw new Error("BundledPdfParserVerificationFailed");
+  }
+}
 
 export interface DocumentParserInput {
   documentId: string;
@@ -97,7 +105,7 @@ async function exactBytes(body: unknown): Promise<Uint8Array> {
   if (bytes.byteLength > DOCUMENT_LIMITS.sourceBytes) {
     throw new InvalidDocumentError("SOURCE_SIZE");
   }
-  return bytes;
+  return new Uint8Array(bytes);
 }
 
 export function createDocumentParserHandler(

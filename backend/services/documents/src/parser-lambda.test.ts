@@ -102,7 +102,7 @@ describe("document parser Lambda boundary", () => {
         Metadata: { "document-id": request.documentId, sha256: request.sha256 },
       })
       .mockResolvedValueOnce({
-        Body: { transformToByteArray: async () => bytes },
+        Body: { transformToByteArray: async () => Buffer.from(bytes) },
       })
       .mockResolvedValueOnce({ VersionId: "normalized-version" });
     const handler = createDocumentParserHandler(

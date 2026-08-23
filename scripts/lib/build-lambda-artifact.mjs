@@ -98,7 +98,14 @@ async function zipBundle(bundle) {
   return complete;
 }
 
-async function verifyBundleExports(outputDirectory, artifactName, bundle, bundleSha256, handlers) {
+async function verifyBundleExports(
+  outputDirectory,
+  artifactName,
+  bundle,
+  bundleSha256,
+  handlers,
+  verifyBundle,
+) {
   const verificationPath = path.join(
     outputDirectory,
     `.${artifactName}.verify-${process.pid}-${bundleSha256}.mjs`,
@@ -120,6 +127,7 @@ async function verifyBundleExports(outputDirectory, artifactName, bundle, bundle
         );
       }
     }
+    await verifyBundle?.(bundleModule);
   } finally {
     await rm(verificationPath, { force: true });
   }
@@ -134,6 +142,7 @@ export async function buildLambdaArtifact({
   handlers,
   packageFilter,
   external = [],
+  verifyBundle,
 }) {
   const sourceSha = process.env.ARTIFACT_SOURCE_SHA ?? "local";
   if (!/^(?:local|[a-f0-9]{40})$/.test(sourceSha)) {
@@ -172,7 +181,14 @@ export async function buildLambdaArtifact({
 
   const bundle = Buffer.from(result.outputFiles[0].contents);
   const bundleSha256 = sha256(bundle);
-  await verifyBundleExports(outputDirectory, artifactName, bundle, bundleSha256, handlers);
+  await verifyBundleExports(
+    outputDirectory,
+    artifactName,
+    bundle,
+    bundleSha256,
+    handlers,
+    verifyBundle,
+  );
   const archive = await zipBundle(bundle);
   const artifactSha256 = sha256(archive);
   const components = componentInventory(repositoryRoot, packageFilter, result.metafile);
