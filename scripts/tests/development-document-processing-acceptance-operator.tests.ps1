@@ -139,6 +139,14 @@ if ($removeExactDefinition.Contains("'head-object'")) {
   throw "Exact cleanup must not require read access to a descriptor-bound quarantined version."
 }
 
+$waitTaskDefinition = @($ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Wait-Task'
+    }, $true))[0].Extent.Text
+if ($waitTaskDefinition.Contains("'runId'") -or $waitTaskDefinition.Contains('$result.runId')) {
+  throw "Acceptance task logs must not expose or require the generated run identifier."
+}
+
 function Import-OperatorFunction {
   param([Parameter(Mandatory)][string]$Name)
   $functionAst = @($ast.FindAll({

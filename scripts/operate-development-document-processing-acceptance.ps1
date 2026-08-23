@@ -993,8 +993,7 @@ function Wait-Task {
   param(
     [Parameter(Mandatory)][object]$Request,
     [Parameter(Mandatory)][string]$TaskArn,
-    [Parameter(Mandatory)][string]$Phase,
-    [Parameter(Mandatory)][string]$RunId
+    [Parameter(Mandatory)][string]$Phase
   )
   $null = & aws ecs wait tasks-stopped --cluster $Request.cluster --tasks $TaskArn 2>$null
   if ($LASTEXITCODE -ne 0) { throw "The $Phase task did not reach STOPPED." }
@@ -1041,7 +1040,7 @@ function Wait-Task {
   }
   $result = ConvertFrom-OperatorJson -Json $messages[0] -Description "$Phase aggregate result"
   $expectedNames = @(
-    'schemaVersion', 'kind', 'action', 'runId', 'documentCount', 'parsedCount', 'rejectedCount',
+    'schemaVersion', 'kind', 'action', 'documentCount', 'parsedCount', 'rejectedCount',
     'failedCount', 'securityHoldCount', 'receiptCount', 'dispositionCount', 'profileFactCount',
     'profileVersionCount', 'evidenceCount', 'persistentRows', 'rollbackProved', 'canonicalSha256'
   )
@@ -1050,7 +1049,6 @@ function Wait-Task {
     [int]$result.schemaVersion -ne 1 -or
     [string]$result.kind -cne 'development-document-processing-acceptance' -or
     [string]$result.action -cne $Phase -or
-    [string]$result.runId -cne $RunId -or
     [string]$result.canonicalSha256 -notmatch '^[a-f0-9]{64}$' -or
     $result.rollbackProved -isnot [bool]
   ) {
@@ -1102,7 +1100,7 @@ function Invoke-RecoveryCleanupTask {
     $attemptRequest.clientToken = New-RecoveryAttemptToken -RunId $RunId -InvocationId $invocationId -Attempt $attempt
     try {
       $arn = Submit-Task -Request $attemptRequest
-      $result = Wait-Task -Request $attemptRequest -TaskArn $arn -Phase 'cleanup' -RunId $RunId
+      $result = Wait-Task -Request $attemptRequest -TaskArn $arn -Phase 'cleanup'
       return [pscustomobject]@{ Arn = $arn; Result = $result }
     }
     catch {
@@ -2403,7 +2401,7 @@ if ($Action -eq 'Execute') {
     $receipt.taskArns.preflight = $arn
     Write-JsonFile -Path $receiptPath -Value $receipt -AllowReplace
     $script:acceptanceStage = 'preflight-result-validation'
-    $result = Wait-Task -Request $requestByPhase.preflight -TaskArn $arn -Phase 'preflight' -RunId $receipt.runId
+    $result = Wait-Task -Request $requestByPhase.preflight -TaskArn $arn -Phase 'preflight'
     $receipt.resultSha256ByAction.preflight = [string]$result.canonicalSha256
 
     $script:acceptanceStage = 'clean-pdf-registration'
@@ -2423,14 +2421,14 @@ if ($Action -eq 'Execute') {
     $arn = Submit-Task -Request $requestByPhase.clean
     $receipt.taskArns.clean = $arn
     Write-JsonFile -Path $receiptPath -Value $receipt -AllowReplace
-    $result = Wait-Task -Request $requestByPhase.clean -TaskArn $arn -Phase 'clean' -RunId $receipt.runId
+    $result = Wait-Task -Request $requestByPhase.clean -TaskArn $arn -Phase 'clean'
     $receipt.resultSha256ByAction.clean = [string]$result.canonicalSha256
 
     Invoke-ProfileReview -Runtime $runtime -RunId $receipt.runId
     $arn = Submit-Task -Request $requestByPhase.reviewed
     $receipt.taskArns.reviewed = $arn
     Write-JsonFile -Path $receiptPath -Value $receipt -AllowReplace
-    $result = Wait-Task -Request $requestByPhase.reviewed -TaskArn $arn -Phase 'reviewed' -RunId $receipt.runId
+    $result = Wait-Task -Request $requestByPhase.reviewed -TaskArn $arn -Phase 'reviewed'
     $receipt.resultSha256ByAction.reviewed = [string]$result.canonicalSha256
 
     $invalid = Register-And-UploadFixture -Runtime $runtime -FixtureEvidence $planEvidence.Fixture -RunId $receipt.runId -Role 'invalid-pdf' -Receipt $receipt -Documents $documents
@@ -2445,7 +2443,7 @@ if ($Action -eq 'Execute') {
     $arn = Submit-Task -Request $requestByPhase.terminal
     $receipt.taskArns.terminal = $arn
     Write-JsonFile -Path $receiptPath -Value $receipt -AllowReplace
-    $result = Wait-Task -Request $requestByPhase.terminal -TaskArn $arn -Phase 'terminal' -RunId $receipt.runId
+    $result = Wait-Task -Request $requestByPhase.terminal -TaskArn $arn -Phase 'terminal'
     $receipt.resultSha256ByAction.terminal = [string]$result.canonicalSha256
 
     $contradictionObservedAt = [DateTimeOffset]::UtcNow.ToString('o')
@@ -2453,13 +2451,13 @@ if ($Action -eq 'Execute') {
     $arn = Submit-Task -Request $requestByPhase.contradiction
     $receipt.taskArns.contradiction = $arn
     Write-JsonFile -Path $receiptPath -Value $receipt -AllowReplace
-    $result = Wait-Task -Request $requestByPhase.contradiction -TaskArn $arn -Phase 'contradiction' -RunId $receipt.runId
+    $result = Wait-Task -Request $requestByPhase.contradiction -TaskArn $arn -Phase 'contradiction'
     $receipt.resultSha256ByAction.contradiction = [string]$result.canonicalSha256
 
     $arn = Submit-Task -Request $requestByPhase.'rollback-probe'
     $receipt.taskArns.'rollback-probe' = $arn
     Write-JsonFile -Path $receiptPath -Value $receipt -AllowReplace
-    $result = Wait-Task -Request $requestByPhase.'rollback-probe' -TaskArn $arn -Phase 'rollback-probe' -RunId $receipt.runId
+    $result = Wait-Task -Request $requestByPhase.'rollback-probe' -TaskArn $arn -Phase 'rollback-probe'
     $receipt.resultSha256ByAction.'rollback-probe' = [string]$result.canonicalSha256
     $receipt.rollbackProved = [bool]$result.rollbackProved
   }
@@ -2480,7 +2478,7 @@ if ($Action -eq 'Execute') {
       $arn = Submit-Task -Request $requestByPhase.cleanup
       $receipt.taskArns.cleanup = $arn
       Write-JsonFile -Path $receiptPath -Value $receipt -AllowReplace
-      $cleanup = Wait-Task -Request $requestByPhase.cleanup -TaskArn $arn -Phase 'cleanup' -RunId $receipt.runId
+      $cleanup = Wait-Task -Request $requestByPhase.cleanup -TaskArn $arn -Phase 'cleanup'
       $receipt.resultSha256ByAction.cleanup = [string]$cleanup.canonicalSha256
       $receipt.persistentRows = [int]$cleanup.persistentRows
       $receipt.databaseCleaned = $true

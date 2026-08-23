@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DOCUMENT_PROCESSING_ACCEPTANCE_CONFIRMATION,
   parseDocumentProcessingAcceptanceEnvironment,
+  toPrivacySafeDocumentProcessingAcceptanceResult,
 } from "./document-processing-acceptance.js";
 import { documentProcessingAcceptanceFixtureSetSha256 } from "./document-processing-acceptance-manifest.js";
 
@@ -42,6 +43,35 @@ const fixtureManifestText = JSON.stringify(fixtureManifest);
 const issuer = "https://acceptance.invalid/";
 
 describe("document-processing acceptance environment", () => {
+  it("omits the generated run identifier from the task log result", () => {
+    const result = toPrivacySafeDocumentProcessingAcceptanceResult({
+      schemaVersion: 1,
+      kind: "development-document-processing-acceptance",
+      action: "clean",
+      runId,
+      documentCount: 2,
+      parsedCount: 2,
+      rejectedCount: 0,
+      failedCount: 0,
+      securityHoldCount: 0,
+      receiptCount: 2,
+      dispositionCount: 2,
+      profileFactCount: 3,
+      profileVersionCount: 3,
+      evidenceCount: 3,
+      persistentRows: 30,
+      rollbackProved: false,
+      canonicalSha256: "5".repeat(64),
+    });
+
+    expect(result).not.toHaveProperty("runId");
+    expect(result).toMatchObject({
+      action: "clean",
+      documentCount: 2,
+      canonicalSha256: "5".repeat(64),
+    });
+  });
+
   it("accepts every exact lifecycle action", () => {
     for (const action of [
       "preflight",

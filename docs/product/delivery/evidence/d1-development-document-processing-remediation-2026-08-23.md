@@ -261,14 +261,35 @@ descriptor-bound version returned by the unique history check; it still validate
 and requires zero versions and zero delete markers afterward. It no longer requires content-read
 permission. PowerShell 7 and Windows PowerShell 5.1 regressions prove cleanup performs no additional
 head read while preserving exact deletion and idempotent already-absent behavior. Exact recovery of
-the retained versions must complete before any fresh execution.
+the retained versions completed under committed operator source
+`9477e6a00b642c21852d5120e28a9f649f6fae0d`. The updated recovery receipt SHA-256 is
+`9dad04b9e7ba2ebc0753b7d789c37e921362f522bdec7364bd5a7cb198d6dffb`; it records zero
+persistent rows, database cleanup, exact object removal, no trigger activation, and no acceptance
+claim.
+
+A wholly fresh run then used execution-plan SHA-256
+`e5de1bf1e604cfaf33c01fa1b4edcee6c5c34db44a2e57d95ccfa208d6d68d67` and fixture-set
+SHA-256 `760702163334a95ab5eb4adcc917aa4e8998ea557226d88fbb53442ba28cb0d7` against unchanged
+state serial 133. It completed all seven actions, proved rollback, cleaned the database to zero rows,
+removed every exact object version, and kept all triggers disabled. Receipt SHA-256
+`c17b7b809809b551d250db4969024c22bc854da4b5b780fa1a4276125aa544ee` records the first
+functionally verified-and-cleaned run.
+
+Separate receipt verification nevertheless failed closed at the privacy-log gate. The ECS acceptance
+task's one-line aggregate included the generated run identifier even though its unique task/log-stream
+identity and exact reviewed environment already bind the run. The runtime result now passes through a
+typed privacy-safe projection before logging: action, aggregate counts, rollback result, and canonical
+digest remain, while `runId` is omitted. The canonical digest continues to bind the internal run ID,
+fixture set, profile digest, and document rows. The operator requires the reduced exact result schema.
+Documents unit tests pass 24/24, typecheck passes, and the PowerShell 7/5.1 operator regressions pass.
+No direct-dark acceptance claim is made until this source is published, rerun wholly fresh, and its
+receipt passes independent verification.
 
 ## Remaining work
 
-Commit the quarantine-compatible exact-cleanup correction, review its allowed operator delta, and run
-`RecoverCleanup` against receipt SHA-256
-`1ee20bf4de0fac04dbfc449477972d21e029c50cb770a170c479841187551676`. Then generate a wholly
-fresh reviewed plan and rerun the complete generated-synthetic direct-dark flow.
+Commit and publish the privacy-safe acceptance-task logging correction, dark-deploy only the resulting
+migration task revision, then generate a wholly fresh reviewed plan and rerun the complete
+generated-synthetic direct-dark flow.
 Do not reuse a claimed plan. Require all seven functional phases, rollback proof, privacy-safe logs,
 zero persistent rows, exact object removal, zero running migration tasks, healthy alarms, disabled
 triggers, receipt verification, and a refresh-backed zero-drift plan before recording acceptance.

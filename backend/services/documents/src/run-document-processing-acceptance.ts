@@ -2,6 +2,7 @@ import postgres from "postgres";
 import {
   executeDocumentProcessingAcceptance,
   parseDocumentProcessingAcceptanceEnvironment,
+  toPrivacySafeDocumentProcessingAcceptanceResult,
 } from "./document-processing-acceptance.js";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -17,7 +18,9 @@ const client = postgres(databaseUrl, {
 try {
   const input = parseDocumentProcessingAcceptanceEnvironment(process.env);
   const result = await executeDocumentProcessingAcceptance(client, input);
-  process.stdout.write(`${JSON.stringify(result)}\n`);
+  process.stdout.write(
+    `${JSON.stringify(toPrivacySafeDocumentProcessingAcceptanceResult(result))}\n`,
+  );
 } catch {
   process.stderr.write(
     "Document-processing synthetic acceptance action failed without emitting candidate values.\n",

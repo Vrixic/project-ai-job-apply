@@ -60,6 +60,19 @@ export interface DocumentProcessingAcceptanceResult {
   canonicalSha256: string;
 }
 
+export type PrivacySafeDocumentProcessingAcceptanceResult = Omit<
+  DocumentProcessingAcceptanceResult,
+  "runId"
+>;
+
+export function toPrivacySafeDocumentProcessingAcceptanceResult(
+  result: DocumentProcessingAcceptanceResult,
+): PrivacySafeDocumentProcessingAcceptanceResult {
+  const { runId, ...privacySafe } = result;
+  void runId;
+  return privacySafe;
+}
+
 interface DocumentRow {
   id: string;
   fileName: string;
