@@ -59,7 +59,7 @@ foreach ($required in @(
     '$script:acceptanceStage = "$Operation.runtime-revalidation"',
     '$script:acceptanceStage = "$Role.registration-response-validation"',
     '$script:acceptanceStage = "$Role.upload-binding-validation"',
-    '$expiresAtValue -ne $signedAtValue.AddSeconds(300)',
+    '$expiryMilliseconds -lt 300000 -or $expiryMilliseconds -ge 301000',
     "Document acceptance failed during guarded stage '",
     "'recovery-cleanup'",
     "delete-object",

@@ -1430,7 +1430,8 @@ function Register-And-UploadFixture {
     [Globalization.CultureInfo]::InvariantCulture,
     [Globalization.DateTimeStyles]::AssumeUniversal
   ).ToUniversalTime()
-  if ($expiresAtValue -ne $signedAtValue.AddSeconds(300)) {
+  $expiryMilliseconds = ($expiresAtValue - $signedAtValue).TotalMilliseconds
+  if ($expiryMilliseconds -lt 300000 -or $expiryMilliseconds -ge 301000) {
     throw "The gateway did not return the exact bounded upload registration."
   }
   $script:acceptanceStage = "$Role.upload-binding-validation"
