@@ -110,7 +110,7 @@ foreach ($name in @(
     "Assert-ExactPropertySet", "ConvertFrom-OperatorJson", "Get-TextSha256", "Get-OperatorDeltaEvidence",
     "Get-OptionalProperty", "Get-OptionalItems",
     "Test-CanonicalTimestamp", "New-TaskRequest", "Assert-TaskRequest",
-    "Get-ExpectedAggregate", "New-GatewayEvent", "Assert-RecoveryDescriptor",
+    "Get-ExpectedAggregate", "New-RecoveryAttemptToken", "New-GatewayEvent", "Assert-RecoveryDescriptor",
     "Test-ExactObjectAlreadyRemoved", "Assert-DocumentOperationalHealth", "Assert-PrivacySafeLogs",
     "Get-OptionalProperty", "New-DirectProcessorEvent", "Get-LambdaVersionIdentity",
     "Get-LambdaAliasIdentity", "Assert-PresignedUploadTarget", "Complete-SourceDescriptor",
@@ -172,6 +172,17 @@ if (
   [string]$recovery.overrides.containerOverrides[0].environment[1].value -cne "cleanup"
 ) {
   throw "Normal and recovery cleanup must bind distinct reviewed tokens to the same fixed action."
+}
+$recoveryTokenOne = New-RecoveryAttemptToken -RunId $runId -InvocationId '0123456789abcdef' -Attempt 1
+$recoveryTokenTwo = New-RecoveryAttemptToken -RunId $runId -InvocationId 'fedcba9876543210' -Attempt 1
+$recoveryTokenRetry = New-RecoveryAttemptToken -RunId $runId -InvocationId '0123456789abcdef' -Attempt 2
+if (
+  $recoveryTokenOne -cne 'doc-rcln-abcdef01abcd4abc8abcabcdef012345-0123456789abcdef-a1' -or
+  $recoveryTokenOne -ceq $recoveryTokenTwo -or
+  $recoveryTokenOne -ceq $recoveryTokenRetry -or
+  $recoveryTokenOne.Length -gt 64
+) {
+  throw "Recovery cleanup tokens do not isolate invocation and attempt idempotency."
 }
 
 $tampered = $request | ConvertTo-Json -Depth 30 | ConvertFrom-Json

@@ -1028,20 +1028,38 @@ function Wait-Task {
   $result
 }
 
+function New-RecoveryAttemptToken {
+  param(
+    [Parameter(Mandatory)][string]$RunId,
+    [Parameter(Mandatory)][string]$InvocationId,
+    [Parameter(Mandatory)][ValidateRange(1, 3)][int]$Attempt
+  )
+  $compactRunId = $RunId.Replace('-', '')
+  if ($compactRunId -notmatch '^[a-f0-9]{32}$' -or $InvocationId -notmatch '^[a-f0-9]{16}$') {
+    throw 'The recovery cleanup token identity is invalid.'
+  }
+  $token = "doc-rcln-$compactRunId-$InvocationId-a$Attempt"
+  if ($token -notmatch '^[A-Za-z0-9_-]{1,64}$') {
+    throw 'The recovery cleanup retry token is invalid.'
+  }
+  $token
+}
+
 function Invoke-RecoveryCleanupTask {
   param(
     [Parameter(Mandatory)][object]$Request,
     [Parameter(Mandatory)][string]$RunId
   )
-  $baseToken = [string]$Request.clientToken
+  # A reviewed recovery can be repeated after a transient startup failure or an
+  # infrastructure repair. A fresh invocation identity prevents ECS from
+  # idempotently returning an earlier failed task while keeping every other
+  # reviewed request field byte-for-byte unchanged.
+  $invocationId = ([guid]::NewGuid().ToString('N')).Substring(0, 16)
   for ($attempt = 1; $attempt -le 3; $attempt += 1) {
     $attemptRequest = ConvertFrom-OperatorJson `
       -Json (ConvertTo-Json $Request -Depth 30 -Compress) `
       -Description 'Recovery cleanup retry request'
-    $attemptRequest.clientToken = "$baseToken-a$attempt"
-    if ([string]$attemptRequest.clientToken -notmatch '^[A-Za-z0-9_-]{1,64}$') {
-      throw "The recovery cleanup retry token is invalid."
-    }
+    $attemptRequest.clientToken = New-RecoveryAttemptToken -RunId $RunId -InvocationId $invocationId -Attempt $attempt
     try {
       $arn = Submit-Task -Request $attemptRequest
       $result = Wait-Task -Request $attemptRequest -TaskArn $arn -Phase 'cleanup' -RunId $RunId
