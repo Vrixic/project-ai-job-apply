@@ -60,10 +60,8 @@ foreach ($required in @(
     '$script:acceptanceStage = "$Role.registration-response-validation"',
     '$script:acceptanceStage = "$Role.upload-binding-validation"',
     '$script:acceptanceStage = "$Role.upload-readback-request"',
-    '$script:acceptanceStage = "$Role.upload-readback-checksum"',
     "'x-amz-checksum-algorithm' -cne 'SHA256'",
     "'x-amz-checksum-sha256' -cne `$expectedChecksum",
-    '[string]$head.ChecksumSHA256 -cne $expectedChecksum',
     '$expiryMilliseconds -lt 300000 -or $expiryMilliseconds -ge 301000',
     "Document acceptance failed during guarded stage '",
     "and did not prove exact cleanup. Retain and review the receipt before RecoverCleanup.",
@@ -73,6 +71,9 @@ foreach ($required in @(
     "list-object-versions"
   )) {
   if (-not $source.Contains($required)) { throw "The operator omits required boundary text: $required" }
+}
+if ($source -match "Uploaded object readback[^\r\n]+checksum-mode") {
+  throw "Upload readback must not require candidate-document KMS decrypt permission."
 }
 if ($source.Contains('[long]$planEvidence.Plan.stateSerial +')) {
   throw "Recovery safety must depend on exact runtime identity, not an arbitrary state-serial distance."

@@ -46,8 +46,8 @@ receipt SHA-256 is
 
 The upload signer had bound the candidate-provided SHA-256 only as metadata. The implemented source
 remediation now adds exact `SHA256` POST checksum fields and policy conditions so S3 validates the
-uploaded bytes, requires that checksum in readback, and splits request, identity, checksum, and version
-history into privacy-safe guarded stages. Documents 22/22, Gateway 108/108, both package builds and
+uploaded bytes, and splits request, identity, and version history into privacy-safe guarded stages.
+Documents 22/22, Gateway 108/108, both package builds and
 typechecks, and focused PowerShell 7/5.1 operator suites pass. At that checkpoint, publication and the
 deployed rerun remained open.
 
@@ -60,6 +60,13 @@ replaced only the migration task definition, advancing it to revision 16. Exact 
 `ed4d36d4cd6fae87a0c4cd8d60cdfca1d80603031fdcee6d34753ab8a2359312` changed only the
 gateway function and alias, advancing the alias to version 23 without weighted routing. Development
 state is serial 125. No migration ran and no trigger or public route was enabled.
+
+The first checksum-bound dark run proved the signed upload was accepted, then failed specifically at
+the checksum-enabled `HeadObject` request. Exact recovery again proved zero rows and exact object
+removal with no acceptance claim. The operator now preserves least privilege: successful signed POST
+is the S3 byte-checksum proof, while standard metadata-only `HeadObject` proves version, size, media
+type, encryption key identity, and registration metadata without granting the human operator candidate
+document KMS decrypt permission. A fresh run remains open.
 
 ## Remaining work
 

@@ -1471,7 +1471,7 @@ function Register-And-UploadFixture {
   $script:acceptanceStage = "$Role.object-upload"
   Invoke-PresignedPost -Runtime $Runtime -Upload $upload -ExpectedKey $key -FilePath $fixture.Path -FileName ([string]$entry.fileName) -MediaType ([string]$entry.mediaType)
   $script:acceptanceStage = "$Role.upload-readback-request"
-  $head = Invoke-AwsJson -Arguments @('s3api', 'head-object', '--bucket', $Runtime.CandidateDocumentBucket, '--key', $key, '--checksum-mode', 'ENABLED', '--output', 'json') -Operation 'Uploaded object readback'
+  $head = Invoke-AwsJson -Arguments @('s3api', 'head-object', '--bucket', $Runtime.CandidateDocumentBucket, '--key', $key, '--output', 'json') -Operation 'Uploaded object readback'
   $script:acceptanceStage = "$Role.upload-readback-identity"
   if (
     -not $head.VersionId -or
@@ -1483,10 +1483,6 @@ function Register-And-UploadFixture {
     [string]$head.Metadata.sha256 -cne [string]$entry.sha256
   ) {
     throw "The uploaded object version does not match its exact registration and digest."
-  }
-  $script:acceptanceStage = "$Role.upload-readback-checksum"
-  if ([string]$head.ChecksumSHA256 -cne $expectedChecksum) {
-    throw "S3 did not validate and return the exact uploaded object checksum."
   }
   $script:acceptanceStage = "$Role.upload-version-history"
   $versions = Invoke-AwsJson -Arguments @('s3api', 'list-object-versions', '--bucket', $Runtime.CandidateDocumentBucket, '--prefix', $key, '--output', 'json') -Operation 'Uploaded object version history'
