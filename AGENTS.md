@@ -42,3 +42,8 @@ API change normally uses `evolve-platform-contracts`, `build-vertical-slice`, an
 
 Read the relevant source before answering repository-specific questions. Clearly distinguish
 implemented, locally verified, deployed, planned, and externally blocked behavior.
+
+## Local runtime hygiene
+
+When a Docker-dependent step is complete and no immediately following step needs Docker, stop the
+Docker Desktop engine and shut down WSL. Do not leave either runtime running unnecessarily.

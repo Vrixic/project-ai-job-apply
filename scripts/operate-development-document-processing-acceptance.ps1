@@ -606,6 +606,24 @@ function Get-LambdaAliasIdentity {
   }
 }
 
+function Assert-DocumentParserVersionBoundary {
+  param(
+    [Parameter(Mandatory)][string]$CurrentVersionArn,
+    [Parameter(Mandatory)][string]$PinnedVersionArn
+  )
+
+  $pattern = "^arn:aws:lambda:$Region`:$ExpectedAccountId`:function:ai-job-apply-development-document-parser:(?<version>[1-9][0-9]*)$"
+  $current = [regex]::Match($CurrentVersionArn, $pattern)
+  $pinned = [regex]::Match($PinnedVersionArn, $pattern)
+  if (
+    -not $current.Success -or
+    -not $pinned.Success -or
+    [long]$pinned.Groups['version'].Value -gt [long]$current.Groups['version'].Value
+  ) {
+    throw "The processor parser pin is not an exact retained-or-current document parser version."
+  }
+}
+
 function Get-ExactRuntime {
   param([Parameter(Mandatory)][string]$ExpectedImage)
   $state = Get-TerraformState
@@ -615,7 +633,7 @@ function Get-ExactRuntime {
   $securityGroup = [string](Get-StateOutput -State $state -Name 'application_security_group_id')
   $gatewayAliasArn = [string](Get-StateOutput -State $state -Name 'gateway_lambda_alias_arn')
   $processorAliasArn = [string](Get-StateOutput -State $state -Name 'document_processor_alias_arn')
-  $parserVersionArn = [string](Get-StateOutput -State $state -Name 'document_parser_version_arn')
+  $currentParserVersionArn = [string](Get-StateOutput -State $state -Name 'document_parser_version_arn')
   $bucket = [string](Get-StateOutput -State $state -Name 'candidate_document_bucket')
   $planIdentity = [string](Get-StateOutput -State $state -Name 'candidate_document_malware_protection_plan_id')
   if (
@@ -626,7 +644,7 @@ function Get-ExactRuntime {
     $securityGroup -notmatch '^sg-[a-f0-9]+$' -or
     $gatewayAliasArn -notmatch "^arn:aws:lambda:$Region`:$ExpectedAccountId`:function:ai-job-apply-development-gateway:development$" -or
     $processorAliasArn -notmatch "^arn:aws:lambda:$Region`:$ExpectedAccountId`:function:ai-job-apply-development-document-processor:development$" -or
-    $parserVersionArn -notmatch "^arn:aws:lambda:$Region`:$ExpectedAccountId`:function:ai-job-apply-development-document-parser:[1-9][0-9]*$" -or
+    $currentParserVersionArn -notmatch "^arn:aws:lambda:$Region`:$ExpectedAccountId`:function:ai-job-apply-development-document-parser:[1-9][0-9]*$" -or
     $bucket -notmatch "^ai-job-apply-development-candidate-docs-$ExpectedAccountId$" -or
     [string]::IsNullOrWhiteSpace($planIdentity)
   ) {
@@ -653,6 +671,10 @@ function Get-ExactRuntime {
   $gatewayVariables = $gatewayIdentity.Configuration.Environment.Variables
   $processorVariables = $processorIdentity.Configuration.Environment.Variables
   $parserQualifiedArn = [string]$processorVariables.DOCUMENT_PARSER_FUNCTION_ARN
+  Assert-DocumentParserVersionBoundary `
+    -CurrentVersionArn $currentParserVersionArn `
+    -PinnedVersionArn $parserQualifiedArn
+  $null = Get-LambdaVersionIdentity -QualifiedArn $currentParserVersionArn -Description 'Current document parser'
   $parserIdentity = Get-LambdaVersionIdentity -QualifiedArn $parserQualifiedArn -Description 'Document parser'
   $planArn = [string]$processorVariables.GUARDDUTY_PROTECTION_PLAN_ARN
   if (
@@ -662,8 +684,7 @@ function Get-ExactRuntime {
     [string]$gatewayVariables.DOCUMENT_UPLOAD_KMS_KEY_ARN -cne [string]$processorVariables.PLATFORM_KMS_KEY_ARN -or
     [string]$processorVariables.PLATFORM_KMS_KEY_ARN -notmatch "^arn:aws:kms:$Region`:$ExpectedAccountId`:key/" -or
     $planArn -notmatch "^arn:aws:guardduty:$Region`:$ExpectedAccountId`:malware-protection-plan/[A-Za-z0-9]+$" -or
-    ($planIdentity -cne $planArn -and -not $planArn.EndsWith("/$planIdentity", [StringComparison]::Ordinal)) -or
-    $parserQualifiedArn -cne $parserVersionArn
+    ($planIdentity -cne $planArn -and -not $planArn.EndsWith("/$planIdentity", [StringComparison]::Ordinal))
   ) {
     throw "The deployed aliases do not expose the exact nonsecret runtime identity."
   }

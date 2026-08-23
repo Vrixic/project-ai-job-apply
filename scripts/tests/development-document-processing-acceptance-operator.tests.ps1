@@ -118,10 +118,30 @@ foreach ($name in @(
     "Get-ExpectedAggregate", "New-RecoveryAttemptToken", "New-GatewayEvent", "Assert-RecoveryDescriptor",
     "Test-ExactObjectAlreadyRemoved", "Assert-DocumentOperationalHealth", "Assert-PrivacySafeLogs",
     "Get-OptionalProperty", "New-DirectProcessorEvent", "Get-LambdaVersionIdentity",
-    "Get-LambdaAliasIdentity", "Assert-PresignedUploadTarget", "Complete-SourceDescriptor",
+    "Get-LambdaAliasIdentity", "Assert-DocumentParserVersionBoundary", "Assert-PresignedUploadTarget", "Complete-SourceDescriptor",
     "Remove-ExactObjectVersion", "Remove-DescriptorObjects", "Assert-ReviewedRuntimeUnchanged"
   )) {
   Import-OperatorFunction -Name $name
+}
+
+$script:ExpectedAccountId = "123456789012"
+$script:Region = "us-east-2"
+$parserArn = "arn:aws:lambda:us-east-2:123456789012:function:ai-job-apply-development-document-parser"
+Assert-DocumentParserVersionBoundary -CurrentVersionArn "$parserArn`:3" -PinnedVersionArn "$parserArn`:2"
+Assert-DocumentParserVersionBoundary -CurrentVersionArn "$parserArn`:3" -PinnedVersionArn "$parserArn`:3"
+foreach ($invalidBoundary in @(
+    @("$parserArn`:2", "$parserArn`:3"),
+    @("$parserArn`:3", "arn:aws:lambda:us-east-2:123456789012:function:other-parser:2")
+  )) {
+  try {
+    Assert-DocumentParserVersionBoundary `
+      -CurrentVersionArn $invalidBoundary[0] `
+      -PinnedVersionArn $invalidBoundary[1]
+    throw "The invalid parser pin was accepted."
+  }
+  catch {
+    if ($_.Exception.Message -ceq "The invalid parser pin was accepted.") { throw }
+  }
 }
 
 $currentSource = (& git -C $repositoryRoot rev-parse HEAD).Trim()
