@@ -1307,7 +1307,8 @@ function Assert-PresignedUploadTarget {
   Assert-ExactPropertySet -Value $Upload.fields -Description 'Presigned upload fields' -ExpectedNames @(
     'Content-Type', 'Policy', 'X-Amz-Algorithm', 'X-Amz-Credential', 'X-Amz-Date',
     'X-Amz-Security-Token', 'X-Amz-Signature', 'bucket', 'key', 'success_action_status',
-    'x-amz-meta-document-id', 'x-amz-meta-sha256', 'x-amz-server-side-encryption',
+    'x-amz-checksum-algorithm', 'x-amz-checksum-sha256', 'x-amz-meta-document-id',
+    'x-amz-meta-sha256', 'x-amz-server-side-encryption',
     'x-amz-server-side-encryption-aws-kms-key-id'
   )
   $expectedUrl = "https://$($Runtime.CandidateDocumentBucket).s3.$Region.amazonaws.com/"
@@ -1329,6 +1330,8 @@ function Assert-PresignedUploadTarget {
     [string]$Upload.fields.'X-Amz-Date' -notmatch '^[0-9]{8}T[0-9]{6}Z$' -or
     [string]::IsNullOrWhiteSpace([string]$Upload.fields.'X-Amz-Security-Token') -or
     [string]$Upload.fields.'X-Amz-Signature' -notmatch '^[a-f0-9]{64}$' -or
+    [string]$Upload.fields.'x-amz-checksum-algorithm' -cne 'SHA256' -or
+    [string]$Upload.fields.'x-amz-checksum-sha256' -notmatch '^[A-Za-z0-9+/]{43}=$' -or
     [string]$Upload.fields.Policy -notmatch '^[A-Za-z0-9+/]+={0,2}$'
   ) {
     throw "The presigned upload target is outside the exact reviewed bucket and quarantine key."
@@ -1436,9 +1439,12 @@ function Register-And-UploadFixture {
   }
   $script:acceptanceStage = "$Role.upload-binding-validation"
   $key = "quarantine/$($document.id)/source"
+  $expectedChecksum = Convert-HexToBase64 -Hex ([string]$entry.sha256)
   if (
     [string]$upload.fields.key -cne $key -or
     [string]$upload.fields.'Content-Type' -cne [string]$entry.mediaType -or
+    [string]$upload.fields.'x-amz-checksum-algorithm' -cne 'SHA256' -or
+    [string]$upload.fields.'x-amz-checksum-sha256' -cne $expectedChecksum -or
     [string]$upload.fields.'x-amz-server-side-encryption' -cne 'aws:kms' -or
     [string]$upload.fields.'x-amz-server-side-encryption-aws-kms-key-id' -cne $Runtime.PlatformKmsKeyArn -or
     [string]$upload.fields.'x-amz-meta-document-id' -cne [string]$document.id -or
@@ -1464,9 +1470,9 @@ function Register-And-UploadFixture {
   Assert-PresignedUploadTarget -Runtime $Runtime -Upload $upload -ExpectedKey $key | Out-Null
   $script:acceptanceStage = "$Role.object-upload"
   Invoke-PresignedPost -Runtime $Runtime -Upload $upload -ExpectedKey $key -FilePath $fixture.Path -FileName ([string]$entry.fileName) -MediaType ([string]$entry.mediaType)
-  $script:acceptanceStage = "$Role.upload-readback"
+  $script:acceptanceStage = "$Role.upload-readback-request"
   $head = Invoke-AwsJson -Arguments @('s3api', 'head-object', '--bucket', $Runtime.CandidateDocumentBucket, '--key', $key, '--checksum-mode', 'ENABLED', '--output', 'json') -Operation 'Uploaded object readback'
-  $expectedChecksum = Convert-HexToBase64 -Hex ([string]$entry.sha256)
+  $script:acceptanceStage = "$Role.upload-readback-identity"
   if (
     -not $head.VersionId -or
     [long]$head.ContentLength -ne [long]$entry.sizeBytes -or
@@ -1474,11 +1480,15 @@ function Register-And-UploadFixture {
     [string]$head.ServerSideEncryption -cne 'aws:kms' -or
     [string]$head.SSEKMSKeyId -cne $Runtime.PlatformKmsKeyArn -or
     [string]$head.Metadata.'document-id' -cne [string]$document.id -or
-    [string]$head.Metadata.sha256 -cne [string]$entry.sha256 -or
-    ($head.ChecksumSHA256 -and [string]$head.ChecksumSHA256 -cne $expectedChecksum)
+    [string]$head.Metadata.sha256 -cne [string]$entry.sha256
   ) {
     throw "The uploaded object version does not match its exact registration and digest."
   }
+  $script:acceptanceStage = "$Role.upload-readback-checksum"
+  if ([string]$head.ChecksumSHA256 -cne $expectedChecksum) {
+    throw "S3 did not validate and return the exact uploaded object checksum."
+  }
+  $script:acceptanceStage = "$Role.upload-version-history"
   $versions = Invoke-AwsJson -Arguments @('s3api', 'list-object-versions', '--bucket', $Runtime.CandidateDocumentBucket, '--prefix', $key, '--output', 'json') -Operation 'Uploaded object version history'
   $uploadedVersions = @(Get-OptionalItems -Object $versions -Name 'Versions')
   $uploadedMarkers = @(Get-OptionalItems -Object $versions -Name 'DeleteMarkers')

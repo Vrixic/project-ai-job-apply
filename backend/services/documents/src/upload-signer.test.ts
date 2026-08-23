@@ -43,6 +43,8 @@ describe("S3ResumeUploadSigner", () => {
       fields: {
         key: `quarantine/${documentId}/source`,
         "Content-Type": "application/pdf",
+        "x-amz-checksum-algorithm": "SHA256",
+        "x-amz-checksum-sha256": "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo=",
         "x-amz-server-side-encryption": "aws:kms",
         "x-amz-server-side-encryption-aws-kms-key-id": kmsKeyArn,
         "x-amz-meta-document-id": documentId,
@@ -50,6 +52,12 @@ describe("S3ResumeUploadSigner", () => {
         success_action_status: "204",
       },
     });
+    expect(policy.conditions).toContainEqual(["eq", "$x-amz-checksum-algorithm", "SHA256"]);
+    expect(policy.conditions).toContainEqual([
+      "eq",
+      "$x-amz-checksum-sha256",
+      "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo=",
+    ]);
     expect(policy.conditions).toContainEqual(["content-length-range", 2048, 2048]);
     expect(JSON.stringify(policy.conditions)).not.toContain("starts-with");
   });

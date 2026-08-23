@@ -59,6 +59,11 @@ foreach ($required in @(
     '$script:acceptanceStage = "$Operation.runtime-revalidation"',
     '$script:acceptanceStage = "$Role.registration-response-validation"',
     '$script:acceptanceStage = "$Role.upload-binding-validation"',
+    '$script:acceptanceStage = "$Role.upload-readback-request"',
+    '$script:acceptanceStage = "$Role.upload-readback-checksum"',
+    "'x-amz-checksum-algorithm' -cne 'SHA256'",
+    "'x-amz-checksum-sha256' -cne `$expectedChecksum",
+    '[string]$head.ChecksumSHA256 -cne $expectedChecksum',
     '$expiryMilliseconds -lt 300000 -or $expiryMilliseconds -ge 301000',
     "Document acceptance failed during guarded stage '",
     "and did not prove exact cleanup. Retain and review the receipt before RecoverCleanup.",
@@ -300,6 +305,8 @@ $uploadFields = [pscustomobject]@{
   bucket = $runtime.CandidateDocumentBucket
   key = $expectedKey
   success_action_status = '204'
+  'x-amz-checksum-algorithm' = 'SHA256'
+  'x-amz-checksum-sha256' = 'u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7s='
   'x-amz-meta-document-id' = '11111111-1111-4111-8111-111111111111'
   'x-amz-meta-sha256' = ('b' * 64)
   'x-amz-server-side-encryption' = 'aws:kms'

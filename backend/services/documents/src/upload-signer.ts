@@ -1,6 +1,6 @@
+import type { ResumeUploadGrant } from "@ai-job-apply/api-contracts";
 import { S3Client } from "@aws-sdk/client-s3";
 import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
-import type { ResumeUploadGrant } from "@ai-job-apply/api-contracts";
 
 export const MAXIMUM_RESUME_BYTES = 5 * 1024 * 1024;
 export const RESUME_UPLOAD_TTL_SECONDS = 300;
@@ -52,9 +52,12 @@ export class S3ResumeUploadSigner implements ResumeUploadSigner {
     }
 
     const encryption = "aws:kms";
+    const checksumSha256 = Buffer.from(input.sha256, "hex").toString("base64");
     const fields = {
       key: input.objectKey,
       "Content-Type": input.mediaType,
+      "x-amz-checksum-algorithm": "SHA256",
+      "x-amz-checksum-sha256": checksumSha256,
       "x-amz-server-side-encryption": encryption,
       "x-amz-server-side-encryption-aws-kms-key-id": this.options.kmsKeyArn,
       "x-amz-meta-document-id": input.documentId,
@@ -68,6 +71,8 @@ export class S3ResumeUploadSigner implements ResumeUploadSigner {
       Conditions: [
         ["eq", "$key", input.objectKey],
         ["eq", "$Content-Type", input.mediaType],
+        ["eq", "$x-amz-checksum-algorithm", "SHA256"],
+        ["eq", "$x-amz-checksum-sha256", checksumSha256],
         ["eq", "$x-amz-server-side-encryption", encryption],
         ["eq", "$x-amz-server-side-encryption-aws-kms-key-id", this.options.kmsKeyArn],
         ["eq", "$x-amz-meta-document-id", input.documentId],

@@ -38,12 +38,25 @@ The recovered receipt SHA-256 is
 The ignored receipt, plans, fixture descriptors, object identities, account identifiers, and signed
 upload fields remain local and are not copied into shared evidence.
 
+A subsequent wholly fresh run reached `clean-pdf.upload-readback`. Its first cleanup attempt could
+not prove object removal, and exact recovery then proved zero persistent rows, database cleanup, and
+removal of every recorded object version with triggers disabled and no acceptance claim. The recovered
+receipt SHA-256 is
+`8f1b5b9fd73c5c884a5a49f603870095c19e2c02ec1fd3e2c27aea7c2cf6c53b`.
+
+The upload signer had bound the candidate-provided SHA-256 only as metadata. The implemented source
+remediation now adds exact `SHA256` POST checksum fields and policy conditions so S3 validates the
+uploaded bytes, requires that checksum in readback, and splits request, identity, checksum, and version
+history into privacy-safe guarded stages. Documents 22/22, Gateway 108/108, both package builds and
+typechecks, and focused PowerShell 7/5.1 operator suites pass. Publication and deployed rerun remain
+open.
+
 ## Remaining work
 
-Generate a wholly fresh reviewed plan and rerun the complete generated-synthetic direct-dark flow.
+Publish and dark-release the checksum-bound source, then generate a wholly fresh reviewed plan and
+rerun the complete generated-synthetic direct-dark flow.
 Do not reuse a claimed plan. Require all seven functional phases, rollback proof, privacy-safe logs,
 zero persistent rows, exact object removal, zero running migration tasks, healthy alarms, disabled
 triggers, receipt verification, and a refresh-backed zero-drift plan before recording acceptance.
 API Gateway routing, JWT/JWKS/authorizer enforcement, GuardDuty service delivery, trigger activation,
 managed OIDC, real resumes, and ADR-023 approval remain outside this dark acceptance claim.
-
