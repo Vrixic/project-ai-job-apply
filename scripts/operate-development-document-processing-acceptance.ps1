@@ -1379,7 +1379,7 @@ function Register-And-UploadFixture {
     [Parameter(Mandatory)][string]$RunId,
     [Parameter(Mandatory)][string]$Role,
     [Parameter(Mandatory)][object]$Receipt,
-    [Parameter(Mandatory)][Collections.ArrayList]$Documents
+    [Parameter(Mandatory)][AllowEmptyCollection()][Collections.ArrayList]$Documents
   )
   $script:acceptanceStage = "$Role.trigger-revalidation"
   Assert-TriggersDark -State $Runtime.State | Out-Null

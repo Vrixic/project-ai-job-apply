@@ -71,6 +71,9 @@ if ($source.Contains('[long]$planEvidence.Plan.stateSerial +')) {
 if ($source -notmatch 'function Remove-DescriptorObjects \{[\s\S]{0,250}\[AllowEmptyCollection\(\)\]\[object\[\]\]\$Documents') {
   throw "Descriptor cleanup must accept a reviewed receipt containing zero fixture objects."
 }
+if ($source -notmatch 'function Register-And-UploadFixture \{[\s\S]{0,500}\[AllowEmptyCollection\(\)\]\[Collections\.ArrayList\]\$Documents') {
+  throw "Fixture registration must accept the initially empty recovery document list."
+}
 foreach ($forbidden in @(
     'PlanTransition', 'ApplyTransition', 'terraform "-chdir=$terraformDirectory" apply',
     'document_scan_mapping_enabled = true', 'document_scan_event_rule_enabled = true',
