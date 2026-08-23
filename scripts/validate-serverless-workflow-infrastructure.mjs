@@ -319,6 +319,26 @@ for (const required of [
   );
 }
 requireText(platform, 'resource "aws_vpc_endpoint" "sts"', "private STS endpoint is missing");
+const migrationS3EndpointPolicy = section(
+  platform,
+  'data "aws_iam_policy_document" "migration_s3_endpoint"',
+  'resource "aws_vpc_endpoint" "migration_s3"',
+);
+for (const required of [
+  'actions   = ["s3:GetObject"]',
+  'resources = ["arn:aws:s3:::prod-${data.aws_region.current.region}-starport-layer-bucket/*"]',
+  'type        = "*"',
+  'identifiers = ["*"]',
+]) {
+  if (!migrationS3EndpointPolicy.includes(required)) {
+    failures.push(`${platform}: migration ECR layer endpoint policy is missing ${required}`);
+  }
+}
+for (const forbidden of ["s3:*", 'arn:aws:s3:::*']) {
+  if (migrationS3EndpointPolicy.includes(forbidden)) {
+    failures.push(`${platform}: migration ECR layer endpoint policy contains ${forbidden}`);
+  }
+}
 
 const parserExecutionPolicy = section(
   candidateDocuments,

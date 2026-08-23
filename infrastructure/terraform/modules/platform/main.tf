@@ -906,8 +906,11 @@ data "aws_iam_policy_document" "migration_s3_endpoint" {
     actions   = ["s3:GetObject"]
     resources = ["arn:aws:s3:::prod-${data.aws_region.current.region}-starport-layer-bucket/*"]
     principals {
-      type        = "AWS"
-      identifiers = [aws_iam_role.execution.arn]
+      # ECR returns presigned regional layer URLs whose GET is performed with an
+      # AWS-managed service identity, not the task execution role. The endpoint
+      # remains bounded to GetObject on only the regional ECR layer bucket.
+      type        = "*"
+      identifiers = ["*"]
     }
   }
 }
