@@ -51,18 +51,20 @@ history into privacy-safe guarded stages. Documents 22/22, Gateway 108/108, both
 typechecks, and focused PowerShell 7/5.1 operator suites pass. At that checkpoint, publication and the
 deployed rerun remained open.
 
-Exact source `7574059f2244bbe61e3555c9702777f3127332e2` is now published as a deterministic
-Linux/AMD64 migration image with a complete zero-High/zero-Critical scan and as four immutable,
-versioned, encrypted gateway release objects. Publication changed neither Terraform nor the active
-gateway alias, and no migration ran. Docker and WSL were shut down immediately afterward. The AWS SSO
-session expired before task-definition planning, so task/gateway plan and apply, fresh acceptance, and
-zero drift remain externally blocked until the authorized operator refreshes that short-lived session.
+After the authorized AWS SSO session was refreshed, exact current source
+`22199f9db4c72b5397368c88948a7f70aed62bb8` was published as a deterministic Linux/AMD64
+migration image with a complete zero-High/zero-Critical scan and as four immutable, versioned,
+encrypted gateway release objects. Docker and WSL were shut down immediately after image publication.
+Exact saved plan SHA-256 `547a3b57dfbc85dc046aee8a1e00e0c2f71fd93e4e01c4b41823738c1a5cb3f1`
+replaced only the migration task definition, advancing it to revision 16. Exact saved plan SHA-256
+`ed4d36d4cd6fae87a0c4cd8d60cdfca1d80603031fdcee6d34753ab8a2359312` changed only the
+gateway function and alias, advancing the alias to version 23 without weighted routing. Development
+state is serial 125. No migration ran and no trigger or public route was enabled.
 
 ## Remaining work
 
-Refresh the authorized short-lived AWS SSO session, dark-release the already-published checksum-bound
-source through exact reviewed task and gateway plans, then generate a wholly fresh reviewed plan and
-rerun the complete generated-synthetic direct-dark flow.
+Generate a wholly fresh reviewed plan against the checksum-bound dark release and rerun the complete
+generated-synthetic direct-dark flow.
 Do not reuse a claimed plan. Require all seven functional phases, rollback proof, privacy-safe logs,
 zero persistent rows, exact object removal, zero running migration tasks, healthy alarms, disabled
 triggers, receipt verification, and a refresh-backed zero-drift plan before recording acceptance.
