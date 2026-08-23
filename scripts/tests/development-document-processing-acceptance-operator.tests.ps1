@@ -57,6 +57,8 @@ foreach ($required in @(
     '$scanAfter = $end.AddSeconds(30)',
     '$handler.AllowAutoRedirect = $false',
     '$script:acceptanceStage = "$Operation.runtime-revalidation"',
+    '$script:acceptanceStage = "$Role.registration-response-validation"',
+    '$script:acceptanceStage = "$Role.upload-binding-validation"',
     "Document acceptance failed during guarded stage '",
     "'recovery-cleanup'",
     "delete-object",

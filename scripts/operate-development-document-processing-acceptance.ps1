@@ -1394,6 +1394,7 @@ function Register-And-UploadFixture {
   }
   $script:acceptanceStage = "$Role.gateway-registration"
   $created = Invoke-Gateway -Runtime $Runtime -RunId $RunId -Method 'POST' -Path '/v1/resumes/uploads' -Body $body -IdempotencyKey "document-acceptance-$($RunId.Replace('-', ''))-$Role" -ExpectedStatus 201
+  $script:acceptanceStage = "$Role.registration-response-validation"
   $document = $created.document
   $upload = $created.upload
   if (
@@ -1409,6 +1410,7 @@ function Register-And-UploadFixture {
   ) {
     throw "The gateway did not return the exact bounded upload registration."
   }
+  $script:acceptanceStage = "$Role.upload-binding-validation"
   $key = "quarantine/$($document.id)/source"
   if (
     [string]$upload.fields.key -cne $key -or
