@@ -334,7 +334,7 @@ for (const required of [
     failures.push(`${platform}: migration ECR layer endpoint policy is missing ${required}`);
   }
 }
-for (const forbidden of ["s3:*", 'arn:aws:s3:::*']) {
+for (const forbidden of ["s3:*", "arn:aws:s3:::*"]) {
   if (migrationS3EndpointPolicy.includes(forbidden)) {
     failures.push(`${platform}: migration ECR layer endpoint policy contains ${forbidden}`);
   }
