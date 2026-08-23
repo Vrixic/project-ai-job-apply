@@ -139,6 +139,7 @@ function Get-OperatorDeltaEvidence {
   $records = @(& git -C $repositoryRoot diff --name-status --no-renames "$FromSha..$ToSha" 2>$null)
   if ($LASTEXITCODE -ne 0) { throw "The reviewed operator source delta is unreadable." }
   $allowed = @(
+    '^AGENTS\.md$',
     '^docs/',
     '^scripts/operate-development-document-processing-acceptance\.ps1$',
     '^scripts/tests/development-document-processing-acceptance-operator\.tests\.ps1$',
@@ -176,6 +177,7 @@ function Get-RecoveryOperatorDeltaEvidence {
   $allRecords = @(& git -C $repositoryRoot diff --name-status --no-renames "$FromSha..$ToSha" 2>$null)
   if ($LASTEXITCODE -ne 0) { throw "The recovery operator source delta is unreadable." }
   $allowed = @(
+    '^AGENTS\.md$',
     '^docs/',
     '^scripts/operate-development-document-processing-acceptance\.ps1$',
     '^scripts/tests/development-document-processing-acceptance-operator\.tests\.ps1$',

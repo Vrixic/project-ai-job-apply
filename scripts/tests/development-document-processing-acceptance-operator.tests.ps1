@@ -77,6 +77,7 @@ foreach ($forbidden in @(
   if ($source.Contains($forbidden)) { throw "The operator contains forbidden activation surface: $forbidden" }
 }
 if (
+  -not $source.Contains("'^AGENTS\.md$'") -or
   -not $source.Contains("'^docs/'") -or
   -not $source.Contains("'^scripts/operate-development-document-processing-acceptance\.ps1$'") -or
   -not $source.Contains("'^scripts/tests/development-document-processing-acceptance-operator\.tests\.ps1$'") -or
