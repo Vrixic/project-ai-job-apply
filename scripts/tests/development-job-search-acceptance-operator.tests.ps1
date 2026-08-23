@@ -123,6 +123,7 @@ foreach ($bindingCase in @(
 foreach ($functionName in @(
     "Get-OptionalProperty", "Test-OptionalCollectionEmpty", "Get-OptionalCollection", "Test-EcsFaultInjectionDisabled", "Get-FileSha256Base64", "ConvertFrom-AcceptanceJson", "Assert-ExactPropertySet", "Test-CanonicalUtcTimestamp",
     "New-AcceptanceEnvironment", "New-RunTaskRequest", "Assert-RunTaskRequest",
+    "ConvertTo-ReviewedTaskOverrides",
     "Assert-PlanFresh", "Assert-PlanTimestamps", "Read-ExecutionPlan", "New-AuthorizerClaims", "New-SearchEvent",
     "Assert-SearchPageResponse", "Assert-StaleCursorResponse", "Read-AcceptanceReceipt",
     "Assert-DurableClaimEvidence", "Read-StateSnapshot", "Assert-TaskDefinition"
@@ -353,6 +354,22 @@ foreach ($phase in @("prepare", "mutate", "cleanup")) {
       $null = Assert-RunTaskRequest -Request $candidate -Runtime $runtime -Phase $phase -PlanRunId $runId -At $phaseAt
     }
   }
+}
+
+$reviewedRequest = New-RunTaskRequest -Runtime $runtime -Phase "prepare" -PlanRunId $runId -At $prepareAt `
+  -ClientToken "d1-search-prepare-$('f' * 32)" -StartedBy "d1-search-$($SourceSha.Substring(0, 12))"
+$reviewedRequestOverrides = $reviewedRequest.overrides | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+$ecsReadback = $reviewedRequestOverrides | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+$ecsReadback | Add-Member -NotePropertyName inferenceAcceleratorOverrides -NotePropertyValue @()
+$normalizedReadback = ConvertTo-ReviewedTaskOverrides -Overrides $ecsReadback
+if ($normalizedReadback.PSObject.Properties.Name -contains "inferenceAcceleratorOverrides" -or
+  (ConvertTo-DeploymentCanonicalValue -Value $normalizedReadback) -cne
+  (ConvertTo-DeploymentCanonicalValue -Value $reviewedRequestOverrides)) {
+  throw "The exact empty ECS readback default was not normalized."
+}
+$ecsReadback.inferenceAcceleratorOverrides = @([pscustomobject]@{ deviceName = "device-1"; deviceType = "eia1.medium" })
+Assert-TestRejected -Description "nonempty ECS inference accelerator override" -Operation {
+  $null = ConvertTo-ReviewedTaskOverrides -Overrides $ecsReadback
 }
 
 $null = Assert-PlanFresh -At $prepareAt -RequireFresh

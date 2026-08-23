@@ -725,6 +725,23 @@ function Submit-AcceptanceTask {
   return [string]$tasks[0].taskArn
 }
 
+function ConvertTo-ReviewedTaskOverrides {
+  param([Parameter(Mandatory)][object]$Overrides)
+
+  $normalized = ConvertFrom-AcceptanceJson `
+    -Json (ConvertTo-Json $Overrides -Depth 30 -Compress) `
+    -Description "ECS task override readback"
+  if ($normalized.PSObject.Properties.Name -contains "inferenceAcceleratorOverrides") {
+    if (@($normalized.inferenceAcceleratorOverrides).Count -ne 0) {
+      throw "ECS returned an unreviewed inference accelerator override."
+    }
+    # ECS adds this empty optional collection to describe-tasks responses even
+    # when it was omitted from the submitted and reviewed request.
+    $normalized.PSObject.Properties.Remove("inferenceAcceleratorOverrides")
+  }
+  return $normalized
+}
+
 function Wait-AcceptanceTask {
   param([Parameter(Mandatory)][object]$Request, [Parameter(Mandatory)][string]$TaskArn, [Parameter(Mandatory)][string]$Phase, [Parameter(Mandatory)][string]$PlanRunId)
   & aws ecs wait tasks-stopped --cluster ([string]$Request.cluster) --tasks $TaskArn --no-cli-pager 2>$null
@@ -735,9 +752,10 @@ function Wait-AcceptanceTask {
   if ($failures.Count -ne 0 -or $tasks.Count -ne 1) { throw "The $Phase task did not resolve exactly once." }
   $task = $tasks[0]
   $containers = @($task.containers)
+  $reviewedOverrides = ConvertTo-ReviewedTaskOverrides -Overrides $task.overrides
   if ([string]$task.taskDefinitionArn -cne [string]$Request.taskDefinition -or [string]$task.launchType -cne "FARGATE" -or [string]$task.lastStatus -cne "STOPPED" -or
       $containers.Count -ne 1 -or [string]$containers[0].name -cne $containerName -or [int]$containers[0].exitCode -ne 0 -or
-      (ConvertTo-DeploymentCanonicalValue -Value $task.overrides) -cne (ConvertTo-DeploymentCanonicalValue -Value $Request.overrides)) {
+      (ConvertTo-DeploymentCanonicalValue -Value $reviewedOverrides) -cne (ConvertTo-DeploymentCanonicalValue -Value $Request.overrides)) {
     throw "The $Phase task did not stop successfully with the exact reviewed override."
   }
   $taskId = ($TaskArn -split '/')[-1]
