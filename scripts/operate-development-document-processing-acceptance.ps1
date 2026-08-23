@@ -1275,10 +1275,17 @@ function Invoke-Gateway {
     [Parameter(Mandatory)][string]$Path,
     [AllowNull()][object]$Body = $null,
     [AllowNull()][string]$IdempotencyKey = $null,
+    [AllowNull()][string]$ResponseStage = $null,
     [Parameter(Mandatory)][int]$ExpectedStatus
   )
   $event = New-GatewayEvent -Runtime $Runtime -RunId $RunId -Method $Method -Path $Path -Body $Body -IdempotencyKey $IdempotencyKey
   $response = Invoke-LambdaJson -FunctionArn $Runtime.GatewayAliasArn -Payload $event -Operation 'Direct gateway invocation'
+  $script:acceptanceStage = if ([string]::IsNullOrWhiteSpace($ResponseStage)) {
+    'direct-gateway-http-response-validation'
+  }
+  else {
+    $ResponseStage
+  }
   $payload = $response.Payload
   if (
     [int]$payload.statusCode -ne $ExpectedStatus -or
@@ -1644,7 +1651,8 @@ function Invoke-ProfileReview {
     [Parameter(Mandatory)][string]$RunId
   )
   Assert-TriggersDark -State $Runtime.State | Out-Null
-  $collection = Invoke-Gateway -Runtime $Runtime -RunId $RunId -Method 'GET' -Path '/v1/profile/facts' -ExpectedStatus 200
+  $collection = Invoke-Gateway -Runtime $Runtime -RunId $RunId -Method 'GET' -Path '/v1/profile/facts' -ExpectedStatus 200 -ResponseStage 'profile-review-initial-read-response-validation'
+  $script:acceptanceStage = 'profile-review-initial-aggregate-validation'
   $facts = @($collection.facts)
   if ([int]$collection.proposedCount -ne 3 -or [int]$collection.confirmedCount -ne 0 -or $facts.Count -ne 3) {
     throw "The synthetic profile does not contain exactly three proposed facts."
@@ -1661,9 +1669,19 @@ function Invoke-ProfileReview {
   $postgres = @($facts | Where-Object {
       [string]$_.kind -ceq 'skill' -and [string]$_.key -ceq 'skill' -and [string]$_.value -ceq 'PostgreSQL'
     })
-  if ($email.Count -ne 1 -or $typeScript.Count -ne 1 -or $postgres.Count -ne 1) {
-    throw "The clean fixtures did not produce the exact expected synthetic facts."
+  if ($email.Count -ne 1) {
+    $script:acceptanceStage = 'profile-review-email-proposal-validation'
+    throw "The clean fixtures did not produce the exact expected synthetic email fact."
   }
+  if ($typeScript.Count -ne 1) {
+    $script:acceptanceStage = 'profile-review-typescript-proposal-validation'
+    throw "The clean fixtures did not produce the exact expected synthetic TypeScript fact."
+  }
+  if ($postgres.Count -ne 1) {
+    $script:acceptanceStage = 'profile-review-postgresql-proposal-validation'
+    throw "The clean fixtures did not produce the exact expected synthetic PostgreSQL fact."
+  }
+  $script:acceptanceStage = 'profile-review-proposal-envelope-validation'
   foreach ($fact in $facts) {
     if (
       [string]$fact.id -notmatch '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' -or
@@ -1681,10 +1699,13 @@ function Invoke-ProfileReview {
     [pscustomobject]@{ Fact = $postgres[0]; Body = [ordered]@{ expectedVersion = 1; verification = 'rejected' }; Key = 'postgresql-reject' }
   )
   foreach ($update in $updates) {
-    $updated = Invoke-Gateway -Runtime $Runtime -RunId $RunId -Method 'PATCH' -Path "/v1/profile/facts/$($update.Fact.id)" -Body $update.Body -IdempotencyKey "document-acceptance-$($RunId.Replace('-', ''))-$($update.Key)" -ExpectedStatus 200
+    $responseStage = "profile-review-$($update.Key)-response-validation"
+    $updated = Invoke-Gateway -Runtime $Runtime -RunId $RunId -Method 'PATCH' -Path "/v1/profile/facts/$($update.Fact.id)" -Body $update.Body -IdempotencyKey "document-acceptance-$($RunId.Replace('-', ''))-$($update.Key)" -ExpectedStatus 200 -ResponseStage $responseStage
+    $script:acceptanceStage = "profile-review-$($update.Key)-version-validation"
     if ([int]$updated.version -ne 2) { throw "The exact profile review did not create version 2." }
   }
-  $reviewed = Invoke-Gateway -Runtime $Runtime -RunId $RunId -Method 'GET' -Path '/v1/profile/facts' -ExpectedStatus 200
+  $reviewed = Invoke-Gateway -Runtime $Runtime -RunId $RunId -Method 'GET' -Path '/v1/profile/facts' -ExpectedStatus 200 -ResponseStage 'profile-review-final-read-response-validation'
+  $script:acceptanceStage = 'profile-review-final-state-validation'
   $reviewedFacts = @($reviewed.facts)
   $confirmed = @($reviewedFacts | Where-Object { [string]$_.verification -ceq 'confirmed' })
   $rejected = @($reviewedFacts | Where-Object { [string]$_.verification -ceq 'rejected' })

@@ -187,11 +187,48 @@ extracts the exact expected text. A parser-boundary regression exercises a Buffe
 Documents unit tests pass 23/23, typecheck and Lambda build pass, and two consecutive parser artifact
 and bundle digests are identical. Publication and a wholly fresh run remain open.
 
+Exact remediation source `6daa4215c2a52428b4dcecb5fc7ebc1fe1329094` was published as a
+deterministic Linux/AMD64 migration image with a complete zero-High/zero-Critical scan and as two
+deterministic Documents artifacts/eight immutable encrypted objects. Migration receipt SHA-256 is
+`4d71093f90655ece396c6b4d68c49601282120ab18aaac3da574fccf46f3a61a`; Documents receipt
+SHA-256 is `504bd706b28bf19991b4aea4fe891e834b9bc88eb0e809c50008d0eaed1acc3e`.
+Docker and WSL were stopped immediately after image publication.
+
+The dark release was intentionally split so the processor could not transiently publish while still
+pinned to retained parser version 4. Stage-one saved plan SHA-256
+`8c2141347759a49c56c32db78418f5ec62a18a946e262459301b1e2758aa05a7` replaced only the
+migration task definition and updated only the parser function/alias. Stage-two saved plan SHA-256
+`8766937760c33c4279dca98f8404860c4b706c1489ba0aebc1ce8a389c75d5f0` updated only the
+processor function/alias and substituted the exact parser version in the processor IAM and Lambda
+endpoint policies without changing their action sets. The deployed state is serial 133, migration
+task revision 22, parser version/alias 5, and processor version/alias 8. The processor pin exactly
+matches parser version 5; aliases have no weighted routing, and the mapping and both rules remain
+disabled. No migration ran and no public route was enabled.
+
+A wholly fresh run used execution-plan SHA-256
+`590746c916da790834ce900d720912dcb35b49f5db9e75e76f25438c47b0d0a2` and fixture-set
+SHA-256 `ed232bcf83dbdd86cc16067c4f42a88fcc495559abc5aa23811909198b9671c0`.
+It passed preflight and the complete clean-document phase: both clean fixtures produced bounded
+`document_processing_completed` events, and the acceptance task proved two parsed documents, three
+proposed facts, and the exact reviewed aggregate. The run then failed during the first profile-review
+gateway boundary before the reviewed-state task. Exactly one gateway alias invocation occurred with
+zero Lambda errors. Receipt SHA-256
+`e1fabad4703311a502661d294532dd8562e7a07110215e6e39aa1053322bb741` records
+`failed-cleaned`, zero persistent rows, database cleanup, exact object removal, and no acceptance
+claim. This proves the bundled parser blocker is closed but does not complete direct-dark acceptance.
+
+The operator previously collapsed initial profile read, aggregate, fixed synthetic proposal,
+mutation-response/version, and final-state validation into one generic gateway response stage. It now
+attributes each boundary with a fixed value-free stage name, including separate expected synthetic
+email, TypeScript, and PostgreSQL proposal checks. The source-only regression requires every new stage
+and does not expose values, identifiers, response bodies, or arbitrary paths. A fresh operator-delta
+run remains open to isolate the exact profile-review defect before correction.
+
 ## Remaining work
 
-Commit and publish the Buffer-normalization/embedded-worker parser remediation, dark-release the
-parser and its exact processor pin, then generate a wholly fresh reviewed plan and rerun the complete
-generated-synthetic direct-dark flow.
+Commit and verify the value-free profile-review stage attribution, compute the exact allowed operator
+delta from deployed source, then generate a wholly fresh reviewed plan and rerun the complete
+generated-synthetic direct-dark flow. Correct the isolated profile-review defect if the rerun fails.
 Do not reuse a claimed plan. Require all seven functional phases, rollback proof, privacy-safe logs,
 zero persistent rows, exact object removal, zero running migration tasks, healthy alarms, disabled
 triggers, receipt verification, and a refresh-backed zero-drift plan before recording acceptance.
