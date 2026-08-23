@@ -307,6 +307,10 @@ function assertDocumentPhase(
           row.status === "parsed" &&
           row.failureCode === null &&
           !row.securityHold) ||
+        ((fixture === "clean-pdf" || fixture === "clean-docx") &&
+          row.status === "rejected" &&
+          row.failureCode === "invalid_document" &&
+          !row.securityHold) ||
         (fixture === "invalid-pdf" &&
           row.status === "rejected" &&
           row.failureCode === "invalid_document" &&

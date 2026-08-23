@@ -112,12 +112,35 @@ permissions remain capped by the object-access role to the four reviewed read/ta
 normalized object grants only `s3:PutObject`. The KMS key and S3-only condition are unchanged. A
 regression asserts those exact actions/resources/conditions and keeps the serialized policy below a
 conservative 1,024-character ceiling. Documents unit tests pass 22/22, and typecheck and build pass.
-Publication, exact dark release, and a wholly fresh acceptance run for this remediation remain open.
+Exact source `4577fbcd32602cdb28bb4107a45a3f936bf88779` was published as a deterministic,
+zero-High/zero-Critical migration image and immutable document artifacts. Saved plan SHA-256
+`e052ed811d4356e94ea54de7181e0f32c5e07349ea64fdb76d5fc89d360c7661` changed only the
+migration task definition and processor function/alias, advancing them to task revision 18,
+processor version 5, and state serial 128. Live digest and no-weighted-routing checks pass; all
+triggers remain disabled and no migration ran.
+
+A new exact run used execution-plan SHA-256
+`8121b379f08ce82309652c18362cfc71e2f6474d330abe1d71788371488bbdb0`. STS accepted the
+minimized policy, but the retained Terraform-pinned parser version 2 rejected the generated clean PDF
+as `invalid_document`; no candidate value was emitted. Receipt SHA-256
+`48a73282629568dbb4851e3e13d06c3bb62c08702b9a31eeecd78dc43ef6bb48` records
+`cleanup-required` with no acceptance claim. The first exact recovery task also failed closed because
+cleanup admitted `invalid_document` only for the intentionally invalid fixture. Read-only, task-
+revision-18 diagnostics used the same authenticated run environment, forced PostgreSQL read-only,
+emitted only a static error-message digest and aggregate fixture disposition, and changed no row.
+
+Cleanup now admits an authenticated clean PDF or DOCX rejected as `invalid_document` while retaining
+the exact fixture manifest, identity, registration/idempotency/audit ownership, version, and unrelated-
+state refusal checks. The new real PostgreSQL regression covers that partial state and passes 7/7;
+Documents unit tests remain 22/22 and typecheck/build pass. A recovery-capable migration image must be
+published and used for bounded cleanup before any new execution. The next runtime plan must also repin
+the processor from retained parser version 2 to already published, unweighted parser version 4.
 
 ## Remaining work
 
-Publish and dark-release the packed-session-policy remediation, then generate a wholly fresh reviewed
-plan and rerun the complete generated-synthetic direct-dark flow.
+Publish the cleanup remediation, complete exact cleanup of the current receipt, repin the processor
+to parser version 4 through a saved dark plan, then generate a wholly fresh reviewed plan and rerun the
+complete generated-synthetic direct-dark flow.
 Do not reuse a claimed plan. Require all seven functional phases, rollback proof, privacy-safe logs,
 zero persistent rows, exact object removal, zero running migration tasks, healthy alarms, disabled
 triggers, receipt verification, and a refresh-backed zero-drift plan before recording acceptance.

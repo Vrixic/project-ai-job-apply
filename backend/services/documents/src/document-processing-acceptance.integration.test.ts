@@ -38,7 +38,7 @@ describeWithDatabase("document-processing acceptance SQL boundary", () => {
 
   afterAll(async () => client.end());
 
-  it.each(["identity-only", "one-upload"] as const)(
+  it.each(["identity-only", "one-upload", "one-clean-parser-rejection"] as const)(
     "recovers an exact %s partial run",
     async (scenario) => {
       const runId = crypto.randomUUID();
@@ -86,16 +86,19 @@ describeWithDatabase("document-processing acceptance SQL boundary", () => {
         ) VALUES (${crypto.randomUUID()}, ${userId}, 'identity.linked', 'user', ${userId},
           'acceptance', ${JSON.stringify({ issuer })}::jsonb)
       `;
-      if (scenario === "one-upload") {
+      if (scenario !== "identity-only") {
         const documentId = crypto.randomUUID();
         const fixture = required(fixtureManifest[0], "clean PDF manifest entry");
         await client`
           INSERT INTO documents.resume_documents (
-            id, user_id, file_name, media_type, size_bytes, sha256, source_object_key, status
+            id, user_id, file_name, media_type, size_bytes, sha256, source_object_key,
+            source_object_version, status, failure_code
           ) VALUES (
             ${documentId}, ${userId}, ${fixture.fileName}, ${fixture.mediaType},
             ${fixture.sizeBytes}, ${fixture.sha256}, ${`quarantine/${documentId}/source`},
-            'awaiting_upload'
+            ${scenario === "one-clean-parser-rejection" ? "source-version" : null},
+            ${scenario === "one-clean-parser-rejection" ? "rejected" : "awaiting_upload"},
+            ${scenario === "one-clean-parser-rejection" ? "invalid_document" : null}
           )
         `;
         await client`
@@ -109,6 +112,19 @@ describeWithDatabase("document-processing acceptance SQL boundary", () => {
           VALUES (${crypto.randomUUID()}, ${userId}, 'resume.upload.registered',
             ${documentId}, 'acceptance', '{}'::jsonb)
         `;
+        if (scenario === "one-clean-parser-rejection") {
+          await client`
+            INSERT INTO documents.audit_events
+              (id, user_id, action, document_id, trace_id, metadata)
+            VALUES
+              (${crypto.randomUUID()}, ${userId}, 'resume.scan.recorded', ${documentId},
+                'acceptance', '{}'::jsonb),
+              (${crypto.randomUUID()}, ${userId}, 'resume.parse.started', ${documentId},
+                'acceptance', '{}'::jsonb),
+              (${crypto.randomUUID()}, ${userId}, 'resume.processing.rejected', ${documentId},
+                'acceptance', '{}'::jsonb)
+          `;
+        }
       }
       const result = await executeDocumentProcessingAcceptance(client, {
         action: "cleanup",
