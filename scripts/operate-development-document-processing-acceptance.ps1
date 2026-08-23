@@ -1189,13 +1189,17 @@ function Invoke-LambdaJson {
     [Parameter(Mandatory)][object]$Payload,
     [Parameter(Mandatory)][string]$Operation
   )
+  $script:acceptanceStage = "$Operation.runtime-revalidation"
   Assert-ReviewedRuntimeUnchanged
   $requestPath = [IO.Path]::GetTempFileName()
   $responsePath = [IO.Path]::GetTempFileName()
   try {
+    $script:acceptanceStage = "$Operation.request-serialization"
     Write-JsonFile -Path $requestPath -Value $Payload -AllowReplace
+    $script:acceptanceStage = "$Operation.lambda-invocation"
     $raw = & aws lambda invoke --function-name $FunctionArn --invocation-type RequestResponse --cli-binary-format raw-in-base64-out --payload "fileb://$requestPath" $responsePath --output json 2>$null
     if ($LASTEXITCODE -ne 0) { throw "$Operation failed." }
+    $script:acceptanceStage = "$Operation.response-validation"
     $metadata = ConvertFrom-OperatorJson -Json ($raw -join "`n") -Description "$Operation metadata"
     if ([int]$metadata.StatusCode -ne 200 -or $metadata.PSObject.Properties['FunctionError']) {
       throw "$Operation returned a Lambda function error."
@@ -1377,7 +1381,9 @@ function Register-And-UploadFixture {
     [Parameter(Mandatory)][object]$Receipt,
     [Parameter(Mandatory)][Collections.ArrayList]$Documents
   )
+  $script:acceptanceStage = "$Role.trigger-revalidation"
   Assert-TriggersDark -State $Runtime.State | Out-Null
+  $script:acceptanceStage = "$Role.fixture-resolution"
   $fixture = Get-Fixture -FixtureEvidence $FixtureEvidence -Role $Role
   $entry = $fixture.Entry
   $body = [ordered]@{
@@ -1386,6 +1392,7 @@ function Register-And-UploadFixture {
     sizeBytes = [long]$entry.sizeBytes
     sha256 = [string]$entry.sha256
   }
+  $script:acceptanceStage = "$Role.gateway-registration"
   $created = Invoke-Gateway -Runtime $Runtime -RunId $RunId -Method 'POST' -Path '/v1/resumes/uploads' -Body $body -IdempotencyKey "document-acceptance-$($RunId.Replace('-', ''))-$Role" -ExpectedStatus 201
   $document = $created.document
   $upload = $created.upload
@@ -1425,10 +1432,13 @@ function Register-And-UploadFixture {
     normalizedKey = ''
     normalizedVersion = ''
   }
+  $script:acceptanceStage = "$Role.recovery-registration"
   $null = $Documents.Add($descriptor)
   Save-RecoveryDescriptor -Receipt $Receipt -Documents @($Documents)
   Assert-PresignedUploadTarget -Runtime $Runtime -Upload $upload -ExpectedKey $key | Out-Null
+  $script:acceptanceStage = "$Role.object-upload"
   Invoke-PresignedPost -Runtime $Runtime -Upload $upload -ExpectedKey $key -FilePath $fixture.Path -FileName ([string]$entry.fileName) -MediaType ([string]$entry.mediaType)
+  $script:acceptanceStage = "$Role.upload-readback"
   $head = Invoke-AwsJson -Arguments @('s3api', 'head-object', '--bucket', $Runtime.CandidateDocumentBucket, '--key', $key, '--checksum-mode', 'ENABLED', '--output', 'json') -Operation 'Uploaded object readback'
   $expectedChecksum = Convert-HexToBase64 -Hex ([string]$entry.sha256)
   if (
@@ -2323,6 +2333,7 @@ if ($Action -eq 'Execute') {
 
   $primaryFailure = $null
   $cleanupFailure = $null
+  $script:acceptanceStage = 'preflight-submission'
   try {
     $receipt.phase = 'running'
     Write-JsonFile -Path $receiptPath -Value $receipt -AllowReplace
@@ -2331,9 +2342,11 @@ if ($Action -eq 'Execute') {
     $arn = Submit-Task -Request $requestByPhase.preflight
     $receipt.taskArns.preflight = $arn
     Write-JsonFile -Path $receiptPath -Value $receipt -AllowReplace
+    $script:acceptanceStage = 'preflight-result-validation'
     $result = Wait-Task -Request $requestByPhase.preflight -TaskArn $arn -Phase 'preflight' -RunId $receipt.runId
     $receipt.resultSha256ByAction.preflight = [string]$result.canonicalSha256
 
+    $script:acceptanceStage = 'clean-pdf-registration'
     $cleanPdf = Register-And-UploadFixture -Runtime $runtime -FixtureEvidence $planEvidence.Fixture -RunId $receipt.runId -Role 'clean-pdf' -Receipt $receipt -Documents $documents
     $cleanPdfObservedAt = [DateTimeOffset]::UtcNow.ToString('o')
     Invoke-DirectProcessorScan -Runtime $runtime -Document $cleanPdf -RunId $receipt.runId -Ordinal 1 -ObservedAt $cleanPdfObservedAt -ScanResult 'NO_THREATS_FOUND'
@@ -2391,7 +2404,10 @@ if ($Action -eq 'Execute') {
     $receipt.rollbackProved = [bool]$result.rollbackProved
   }
   catch {
-    $primaryFailure = $_
+    $primaryFailure = [pscustomobject]@{
+      ErrorRecord = $_
+      Stage = [string]$script:acceptanceStage
+    }
   }
   finally {
     try {
@@ -2425,7 +2441,7 @@ if ($Action -eq 'Execute') {
   if ($null -ne $primaryFailure) {
     $receipt.phase = 'failed-cleaned'
     Write-JsonFile -Path $receiptPath -Value $receipt -AllowReplace
-    throw "Document acceptance failed after exact cleanup; no acceptance claim is made."
+    throw "Document acceptance failed during guarded stage '$($primaryFailure.Stage)' after exact cleanup; no acceptance claim is made."
   }
   if ($receipt.persistentRows -ne 0 -or -not $receipt.rollbackProved -or -not $receipt.databaseCleaned -or -not $receipt.objectsRemoved) {
     throw "Document acceptance did not prove rollback and zero persistent artifacts."

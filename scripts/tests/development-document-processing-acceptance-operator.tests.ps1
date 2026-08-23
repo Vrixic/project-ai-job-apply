@@ -56,6 +56,8 @@ foreach ($required in @(
     'Assert-DocumentOperationalHealth -WaitForOk',
     '$scanAfter = $end.AddSeconds(30)',
     '$handler.AllowAutoRedirect = $false',
+    '$script:acceptanceStage = "$Operation.runtime-revalidation"',
+    "Document acceptance failed during guarded stage '",
     "'recovery-cleanup'",
     "delete-object",
     "--version-id",
