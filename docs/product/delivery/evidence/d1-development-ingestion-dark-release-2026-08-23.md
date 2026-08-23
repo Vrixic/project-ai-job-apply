@@ -64,6 +64,20 @@ was available; the central audit policy rejected no new High-severity dependency
 - Sanitized deployment-receipt SHA-256:
   `bddea46a657ec922078ac7dbdf1d58280728ccb4d6e592670c48cbefa88746a2`.
 
+## Disabled-path runtime acceptance
+
+A valid schedule-shaped event was invoked directly against the exact coordinator alias while the
+synthetic source gate remained false. The deployed handler returned exact zero counts for scheduled,
+resumed, recovered, claimed, sent, and failed work. Both queues remained empty, the schedule rule
+and event-source mapping remained disabled, all fourteen alarms remained healthy, and Terraform
+state stayed at serial `145`.
+
+Disabled-path receipt SHA-256:
+`46b9437ac96c4dba9cd7171547c526f2c18011e2847fe0a4e623398c6e117e01`.
+
+This proves the deployed static source-disable path. It does not prove a live persisted moderation
+pause changing during an enabled run.
+
 Docker was not needed for this release. Docker remained stopped and WSL was shut down.
 
 ## Remaining D1-003 gates
@@ -71,6 +85,7 @@ Docker was not needed for this release. Docker remained stopped and WSL was shut
 - LR-D1-01 through LR-D1-03 provider/legal dispositions.
 - Exact reviewed Greenhouse, Lever, or Ashby company configuration with no credentials committed.
 - A separate activation record before enabling the runtime, schedule, mapping, or any source.
-- Generated-synthetic deployed execution and dynamic source-pause/kill-switch acceptance through a
-  guarded operator; this dark release intentionally invoked no ingestion handler.
+- Separately authorized enabled generated-synthetic execution and live persisted
+  source-pause/kill-switch acceptance. The accepted direct invocation covered only the static
+  disabled path and created no ingestion work.
 - Real-provider network/data use remains prohibited until the applicable approval is recorded.
