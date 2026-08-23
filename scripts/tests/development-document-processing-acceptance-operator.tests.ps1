@@ -75,6 +75,12 @@ foreach ($required in @(
 if ($source -match "Uploaded object readback[^\r\n]+checksum-mode") {
   throw "Upload readback must not require candidate-document KMS decrypt permission."
 }
+$versionHistoryOffset = $source.IndexOf('$script:acceptanceStage = "$Role.upload-version-history"')
+$versionReadbackOffset = $source.IndexOf('$script:acceptanceStage = "$Role.upload-readback-request"')
+if ($versionHistoryOffset -lt 0 -or $versionReadbackOffset -le $versionHistoryOffset -or
+    $source -notmatch 'head-object[^\r\n]+--version-id[^\r\n]+\$version') {
+  throw "Upload readback must discover one exact version before version-bound HeadObject."
+}
 if ($source.Contains('[long]$planEvidence.Plan.stateSerial +')) {
   throw "Recovery safety must depend on exact runtime identity, not an arbitrary state-serial distance."
 }

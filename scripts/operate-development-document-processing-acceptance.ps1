@@ -1470,11 +1470,23 @@ function Register-And-UploadFixture {
   Assert-PresignedUploadTarget -Runtime $Runtime -Upload $upload -ExpectedKey $key | Out-Null
   $script:acceptanceStage = "$Role.object-upload"
   Invoke-PresignedPost -Runtime $Runtime -Upload $upload -ExpectedKey $key -FilePath $fixture.Path -FileName ([string]$entry.fileName) -MediaType ([string]$entry.mediaType)
+  $script:acceptanceStage = "$Role.upload-version-history"
+  $versions = Invoke-AwsJson -Arguments @('s3api', 'list-object-versions', '--bucket', $Runtime.CandidateDocumentBucket, '--prefix', $key, '--output', 'json') -Operation 'Uploaded object version history'
+  $uploadedVersions = @(Get-OptionalItems -Object $versions -Name 'Versions')
+  $uploadedMarkers = @(Get-OptionalItems -Object $versions -Name 'DeleteMarkers')
+  $exactVersions = @($uploadedVersions | Where-Object { [string]$_.Key -ceq $key })
+  if (
+    $exactVersions.Count -ne 1 -or
+    @($uploadedMarkers | Where-Object { [string]$_.Key -ceq $key }).Count -ne 0
+  ) {
+    throw "The generated object key has unexpected version history."
+  }
+  $version = [string]$exactVersions[0].VersionId
   $script:acceptanceStage = "$Role.upload-readback-request"
-  $head = Invoke-AwsJson -Arguments @('s3api', 'head-object', '--bucket', $Runtime.CandidateDocumentBucket, '--key', $key, '--output', 'json') -Operation 'Uploaded object readback'
+  $head = Invoke-AwsJson -Arguments @('s3api', 'head-object', '--bucket', $Runtime.CandidateDocumentBucket, '--key', $key, '--version-id', $version, '--output', 'json') -Operation 'Uploaded object readback'
   $script:acceptanceStage = "$Role.upload-readback-identity"
   if (
-    -not $head.VersionId -or
+    [string]$head.VersionId -cne $version -or
     [long]$head.ContentLength -ne [long]$entry.sizeBytes -or
     [string]$head.ContentType -cne [string]$entry.mediaType -or
     [string]$head.ServerSideEncryption -cne 'aws:kms' -or
@@ -1484,17 +1496,7 @@ function Register-And-UploadFixture {
   ) {
     throw "The uploaded object version does not match its exact registration and digest."
   }
-  $script:acceptanceStage = "$Role.upload-version-history"
-  $versions = Invoke-AwsJson -Arguments @('s3api', 'list-object-versions', '--bucket', $Runtime.CandidateDocumentBucket, '--prefix', $key, '--output', 'json') -Operation 'Uploaded object version history'
-  $uploadedVersions = @(Get-OptionalItems -Object $versions -Name 'Versions')
-  $uploadedMarkers = @(Get-OptionalItems -Object $versions -Name 'DeleteMarkers')
-  if (
-    @($uploadedVersions | Where-Object { [string]$_.Key -ceq $key }).Count -ne 1 -or
-    @($uploadedMarkers | Where-Object { [string]$_.Key -ceq $key }).Count -ne 0
-  ) {
-    throw "The generated object key has unexpected version history."
-  }
-  $descriptor.sourceVersion = [string]$head.VersionId
+  $descriptor.sourceVersion = $version
   Save-RecoveryDescriptor -Receipt $Receipt -Documents @($Documents)
   $descriptor
 }

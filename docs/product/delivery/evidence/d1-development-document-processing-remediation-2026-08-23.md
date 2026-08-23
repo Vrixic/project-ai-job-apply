@@ -68,6 +68,12 @@ is the S3 byte-checksum proof, while standard metadata-only `HeadObject` proves 
 type, encryption key identity, and registration metadata without granting the human operator candidate
 document KMS decrypt permission. A fresh run remains open.
 
+A second fresh run showed that even standard unversioned `HeadObject` is denied while exact cleanup's
+version-bound readback succeeds. The operator now follows that stronger successful boundary during
+normal execution: list and prove exactly one version with no delete marker, then read and record that
+exact version. This removes reliance on current-key permission or resolution and keeps cleanup bound to
+the same reviewed version. A new fresh run remains open.
+
 ## Remaining work
 
 Generate a wholly fresh reviewed plan against the checksum-bound dark release and rerun the complete
