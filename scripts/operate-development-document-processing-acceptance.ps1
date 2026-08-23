@@ -950,6 +950,22 @@ function Get-ExpectedAggregate {
   }
 }
 
+function ConvertTo-ReviewedTaskOverrides {
+  param([Parameter(Mandatory)][object]$Overrides)
+  $normalized = ConvertFrom-OperatorJson `
+    -Json (ConvertTo-Json $Overrides -Depth 30 -Compress) `
+    -Description 'ECS task override readback'
+  if ($normalized.PSObject.Properties.Name -contains 'inferenceAcceleratorOverrides') {
+    if (@($normalized.inferenceAcceleratorOverrides).Count -ne 0) {
+      throw 'ECS returned an unreviewed inference accelerator override.'
+    }
+    # ECS adds this empty optional collection to describe-tasks responses even
+    # when it was omitted from the submitted and reviewed request.
+    $normalized.PSObject.Properties.Remove('inferenceAcceleratorOverrides')
+  }
+  $normalized
+}
+
 function Wait-Task {
   param(
     [Parameter(Mandatory)][object]$Request,
@@ -977,13 +993,14 @@ function Wait-Task {
     }
     throw "The $Phase task stopped before its container produced an exit code."
   }
+  $reviewedOverrides = ConvertTo-ReviewedTaskOverrides -Overrides $task.overrides
   if (
     [string]$task.clusterArn -cne [string]$Request.cluster -or
     [string]$task.taskDefinitionArn -cne [string]$Request.taskDefinition -or
     [string]$task.lastStatus -cne 'STOPPED' -or
     $containers.Count -ne 1 -or
     [int]$containers[0].exitCode -ne 0 -or
-    (ConvertTo-DeploymentCanonicalValue $task.overrides) -cne (ConvertTo-DeploymentCanonicalValue $Request.overrides) -or
+    (ConvertTo-DeploymentCanonicalValue $reviewedOverrides) -cne (ConvertTo-DeploymentCanonicalValue $Request.overrides) -or
     -not (Test-EcsFaultInjectionDisabled -TaskDefinition $task)
   ) {
     throw "The $Phase task did not stop successfully with the exact reviewed override."

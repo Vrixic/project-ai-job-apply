@@ -111,7 +111,7 @@ function Import-OperatorFunction {
 foreach ($name in @(
     "Assert-ExactPropertySet", "ConvertFrom-OperatorJson", "Get-TextSha256", "Get-OperatorDeltaEvidence",
     "Get-OptionalProperty", "Get-OptionalItems",
-    "Test-CanonicalTimestamp", "New-TaskRequest", "Assert-TaskRequest",
+    "Test-CanonicalTimestamp", "New-TaskRequest", "Assert-TaskRequest", "ConvertTo-ReviewedTaskOverrides",
     "Get-ExpectedAggregate", "New-RecoveryAttemptToken", "New-GatewayEvent", "Assert-RecoveryDescriptor",
     "Test-ExactObjectAlreadyRemoved", "Assert-DocumentOperationalHealth", "Assert-PrivacySafeLogs",
     "Get-OptionalProperty", "New-DirectProcessorEvent", "Get-LambdaVersionIdentity",
@@ -175,6 +175,20 @@ if (
 ) {
   throw "Normal and recovery cleanup must bind distinct reviewed tokens to the same fixed action."
 }
+$ecsReadback = $request.overrides | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+$ecsReadback | Add-Member -NotePropertyName inferenceAcceleratorOverrides -NotePropertyValue @()
+$normalizedReadback = ConvertTo-ReviewedTaskOverrides -Overrides $ecsReadback
+if (
+  $normalizedReadback.PSObject.Properties.Name -contains 'inferenceAcceleratorOverrides' -or
+  (ConvertTo-DeploymentCanonicalValue $normalizedReadback) -cne (ConvertTo-DeploymentCanonicalValue $request.overrides)
+) {
+  throw "The exact empty ECS readback default was not normalized."
+}
+$ecsReadback.inferenceAcceleratorOverrides = @([pscustomobject]@{ deviceName = 'device-1'; deviceType = 'eia1.medium' })
+$rejectedAccelerator = $false
+try { $null = ConvertTo-ReviewedTaskOverrides -Overrides $ecsReadback }
+catch { $rejectedAccelerator = $true }
+if (-not $rejectedAccelerator) { throw "An unreviewed ECS accelerator override was accepted." }
 $recoveryTokenOne = New-RecoveryAttemptToken -RunId $runId -InvocationId '0123456789abcdef' -Attempt 1
 $recoveryTokenTwo = New-RecoveryAttemptToken -RunId $runId -InvocationId 'fedcba9876543210' -Attempt 1
 $recoveryTokenRetry = New-RecoveryAttemptToken -RunId $runId -InvocationId '0123456789abcdef' -Attempt 2
