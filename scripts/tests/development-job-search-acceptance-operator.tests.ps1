@@ -121,7 +121,7 @@ foreach ($bindingCase in @(
 
 . $guardPath
 foreach ($functionName in @(
-    "Get-OptionalProperty", "Test-OptionalCollectionEmpty", "Test-EcsFaultInjectionDisabled", "Get-FileSha256Base64", "ConvertFrom-AcceptanceJson", "Assert-ExactPropertySet", "Test-CanonicalUtcTimestamp",
+    "Get-OptionalProperty", "Test-OptionalCollectionEmpty", "Get-OptionalCollection", "Test-EcsFaultInjectionDisabled", "Get-FileSha256Base64", "ConvertFrom-AcceptanceJson", "Assert-ExactPropertySet", "Test-CanonicalUtcTimestamp",
     "New-AcceptanceEnvironment", "New-RunTaskRequest", "Assert-RunTaskRequest",
     "Assert-PlanFresh", "Assert-PlanTimestamps", "Read-ExecutionPlan", "New-AuthorizerClaims", "New-SearchEvent",
     "Assert-SearchPageResponse", "Assert-StaleCursorResponse", "Read-AcceptanceReceipt",
@@ -156,6 +156,14 @@ $applicationLogGroup = "/ai-job-apply/development/application"
 $acceptanceCommand = @("jobs/dist/src/run-search-acceptance.js")
 $confirmation = "generated-synthetic-only"
 $operatorRoot = Join-Path ([IO.Path]::GetTempPath()) "applydash-search-acceptance-tests-$PID-$([guid]::NewGuid().ToString('N'))"
+
+$missingCollections = @(Get-OptionalCollection -Object ([pscustomobject]@{}) -Name "omitted")
+$emptyCollections = @(Get-OptionalCollection -Object ([pscustomobject]@{ empty = @() }) -Name "empty")
+$presentCollections = @(Get-OptionalCollection -Object ([pscustomobject]@{ present = @("one", "two") }) -Name "present")
+if ($missingCollections.Count -ne 0 -or $emptyCollections.Count -ne 0 -or
+  ($presentCollections -join "|") -cne "one|two") {
+  throw "Optional AWS response collections are not normalized without inventing entries."
+}
 
 $runId = "12345678-1234-4abc-8def-1234567890ab"
 $prepareAt = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")

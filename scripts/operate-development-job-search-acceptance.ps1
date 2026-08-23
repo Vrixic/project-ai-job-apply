@@ -139,6 +139,16 @@ function Test-OptionalCollectionEmpty {
   return $null -eq $value -or @($value).Count -eq 0
 }
 
+function Get-OptionalCollection {
+  param(
+    [AllowNull()][object]$Object,
+    [Parameter(Mandatory)][string]$Name
+  )
+
+  $value = Get-OptionalProperty -Object $Object -Name $Name
+  if ($null -ne $value) { return @($value) }
+}
+
 function Test-EcsFaultInjectionDisabled {
   param([Parameter(Mandatory)][object]$TaskDefinition)
 
@@ -394,7 +404,7 @@ function Assert-ZeroActiveTasks {
   $active = @()
   foreach ($status in @("RUNNING", "PENDING")) {
     $result = Invoke-AwsJson -Arguments @("ecs", "list-tasks", "--cluster", $ClusterArn, "--family", $migrationFamily, "--desired-status", $status, "--output", "json") -Operation "Active acceptance task validation"
-    $active += @($result.taskArns)
+    $active += @(Get-OptionalCollection -Object $result -Name "taskArns")
   }
   if ($active.Count -ne 0) { throw "Another database task is active; acceptance requires exclusive use of the one-off runtime." }
 }
@@ -709,8 +719,10 @@ function Submit-AcceptanceTask {
     Write-JsonFile -Path $temporary -Value $Request -AllowReplace
     $run = Invoke-AwsJson -Arguments @("ecs", "run-task", "--cli-input-json", "file://$temporary", "--output", "json") -Operation "Synthetic acceptance task submission"
   } finally { if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force } }
-  if (@($run.failures).Count -ne 0 -or @($run.tasks).Count -ne 1) { throw "ECS did not accept exactly one synthetic acceptance task." }
-  return [string]@($run.tasks)[0].taskArn
+  $failures = @(Get-OptionalCollection -Object $run -Name "failures")
+  $tasks = @(Get-OptionalCollection -Object $run -Name "tasks")
+  if ($failures.Count -ne 0 -or $tasks.Count -ne 1) { throw "ECS did not accept exactly one synthetic acceptance task." }
+  return [string]$tasks[0].taskArn
 }
 
 function Wait-AcceptanceTask {
@@ -718,8 +730,10 @@ function Wait-AcceptanceTask {
   & aws ecs wait tasks-stopped --cluster ([string]$Request.cluster) --tasks $TaskArn --no-cli-pager 2>$null
   if ($LASTEXITCODE -ne 0) { throw "The $Phase acceptance task did not stop within the bounded ECS waiter window." }
   $response = Invoke-AwsJson -Arguments @("ecs", "describe-tasks", "--cluster", [string]$Request.cluster, "--tasks", $TaskArn, "--output", "json") -Operation "The $Phase task-result validation"
-  if (@($response.failures).Count -ne 0 -or @($response.tasks).Count -ne 1) { throw "The $Phase task did not resolve exactly once." }
-  $task = @($response.tasks)[0]
+  $failures = @(Get-OptionalCollection -Object $response -Name "failures")
+  $tasks = @(Get-OptionalCollection -Object $response -Name "tasks")
+  if ($failures.Count -ne 0 -or $tasks.Count -ne 1) { throw "The $Phase task did not resolve exactly once." }
+  $task = $tasks[0]
   $containers = @($task.containers)
   if ([string]$task.taskDefinitionArn -cne [string]$Request.taskDefinition -or [string]$task.launchType -cne "FARGATE" -or [string]$task.lastStatus -cne "STOPPED" -or
       $containers.Count -ne 1 -or [string]$containers[0].name -cne $containerName -or [int]$containers[0].exitCode -ne 0 -or
@@ -731,7 +745,7 @@ function Wait-AcceptanceTask {
   $messages = @()
   for ($attempt = 0; $attempt -lt 30 -and $messages.Count -eq 0; $attempt++) {
     $logs = Invoke-AwsJson -Arguments @("logs", "get-log-events", "--log-group-name", $applicationLogGroup, "--log-stream-name", $logStream, "--start-from-head", "--limit", "10", "--output", "json") -Operation "The $Phase acceptance log validation"
-    $messages = @($logs.events | ForEach-Object { [string]$_.message } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $messages = @(Get-OptionalCollection -Object $logs -Name "events" | ForEach-Object { [string]$_.message } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     if ($messages.Count -eq 0) { Start-Sleep -Seconds 2 }
   }
   if ($messages.Count -ne 1) { throw "The $Phase task did not emit exactly one bounded result record." }
@@ -754,7 +768,9 @@ function New-DurableClaim {
   $planSha = $ReviewedExecutionPlanSha256
   $claimKey = "operator-claims/development-job-search-acceptance/$planSha.json"
   $history = Invoke-AwsJson -Arguments @("s3api", "list-object-versions", "--bucket", $StateBucket, "--prefix", $claimKey, "--output", "json") -Operation "Acceptance claim history validation"
-  if (@($history.Versions | Where-Object { [string]$_.Key -ceq $claimKey }).Count -ne 0 -or @($history.DeleteMarkers | Where-Object { [string]$_.Key -ceq $claimKey }).Count -ne 0) {
+  $versions = @(Get-OptionalCollection -Object $history -Name "Versions")
+  $deleteMarkers = @(Get-OptionalCollection -Object $history -Name "DeleteMarkers")
+  if (@($versions | Where-Object { [string]$_.Key -ceq $claimKey }).Count -ne 0 -or @($deleteMarkers | Where-Object { [string]$_.Key -ceq $claimKey }).Count -ne 0) {
     throw "The reviewed acceptance descriptor already has durable claim history; do not replay it."
   }
   $claim = [ordered]@{
