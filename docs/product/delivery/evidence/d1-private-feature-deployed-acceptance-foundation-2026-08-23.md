@@ -41,3 +41,18 @@ cross-schema fixture writer.
 
 Managed OIDC/API Gateway/browser, representative load, human accessibility, independent
 security/privacy, and broader product acceptance remain separate Phase 1 gates.
+
+## Deployed diagnostic and correction
+
+The first bounded deployed attempts proved the saved-job owner projection and cross-owner empty
+read, then consistently returned the stable `match_assessment_unavailable` response. Every attempt
+completed exact reverse cleanup, left zero active tasks, and deregistered its temporary task
+revision. A value-free staged diagnostic proved the Profile preference projection was exact and
+isolated the failure to a JavaScript `TypeError` in the Jobs matchable reader.
+
+The reader assumed the computed PostgreSQL `eligibleThrough` expression was always a JavaScript
+`Date`. The deployed driver boundary can return its canonical timestamp string instead. Source now
+uses the Jobs reader's existing strict timestamp normalizer before producing the public ISO value
+and explicitly types that database field as `Date | string`. A regression exercises the raw-string
+row shape. Jobs now passes 59/59 unit tests, typecheck, and build; repository formatting and
+changed-line checks pass. The correction is not yet published or accepted in development.

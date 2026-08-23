@@ -32,6 +32,41 @@ describe("PostgresJobCatalog active read parameters", () => {
     ]);
   });
 
+  it("normalizes a raw PostgreSQL matchable eligibility timestamp", async () => {
+    let queryCount = 0;
+    const transaction = (() => {
+      queryCount += 1;
+      return Promise.resolve(
+        queryCount === 1
+          ? [{ revision: "17" }]
+          : [
+              {
+                id: "00000000-0000-7000-8000-000000000000",
+                eligibleThrough: "2026-09-10T20:00:00.000Z",
+                title: "Software Engineer",
+                locations: ["Remote - US"],
+                workMode: null,
+                employmentType: null,
+              },
+            ],
+      );
+    }) as unknown as postgres.TransactionSql;
+    const client = {
+      begin: async (_options: string, callback: (sql: postgres.TransactionSql) => unknown) =>
+        callback(transaction),
+    } as unknown as postgres.Sql;
+    const catalog = new PostgresJobCatalog(client, catalogOptions);
+
+    await expect(
+      catalog.getMatchableJob(
+        "00000000-0000-7000-8000-000000000000",
+        new Date("2026-08-11T20:00:00.000Z"),
+      ),
+    ).resolves.toMatchObject({
+      job: { eligibleThrough: "2026-09-10T20:00:00.000Z" },
+    });
+  });
+
   it("rejects an invalid internal freshness boundary before opening a query", async () => {
     let queryCount = 0;
     const client = (() => {

@@ -252,7 +252,7 @@ interface ActiveJobSearchRow {
 
 interface MatchableJobRow {
   id: string;
-  eligibleThrough: Date;
+  eligibleThrough: Date | string;
   title: string;
   locations: string[];
   workMode: JobWorkMode | null;
@@ -1221,7 +1221,10 @@ export class PostgresJobCatalog {
         job: {
           id: row.id,
           catalogRevision: state.revision,
-          eligibleThrough: row.eligibleThrough.toISOString(),
+          eligibleThrough: normalizeJobSearchTimestamp(
+            row.eligibleThrough,
+            "matchable eligibility",
+          ).toISOString(),
           title: row.title,
           locations: [...row.locations],
           ...(row.workMode ? { workMode: row.workMode } : {}),
