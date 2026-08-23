@@ -2,8 +2,10 @@
 
 ## Outcome
 
-Phase 1 document processing is not yet accepted. The current generated-synthetic direct-dark run
-remains open, with every document trigger disabled and no real resume authorized.
+The generated-synthetic direct-dark document-processing gate is accepted on exact current source.
+Every processing trigger remains disabled and no real resume is authorized. Phase 1 remains in
+progress behind the separately recorded product, identity, accessibility, security/privacy, source,
+recovery, and accountable activation gates.
 
 Implemented and deployed remediation:
 
@@ -317,15 +319,45 @@ publication evidence and are now superseded by current `main`. The temporary dev
 expired before publication and its browser refresh window expired unapproved. Docker and WSL were
 then stopped. Publication and a wholly fresh run remain open.
 
+## Accepted current-source rerun
+
+After the temporary development IAM Identity Center session was refreshed, exact clean `main`
+revision `fee4d2315b9bd16396331abe4e9acc537fa749c5` was published through the guarded local fallback.
+The migration-only image passed two deterministic Linux/AMD64 builds, hardened runtime smoke,
+immutable readback, and an ECR `COMPLETE` scan with zero High or Critical findings. Its independently
+verified publication receipt has SHA-256
+`22c0b1b35b1581c07154999315b16b3baa186af9fcc986e05dae1cce1ad65015`. The eight processor/parser
+ZIP, manifest, SBOM, and checksum objects reproduced byte-for-byte, were written once to the exact
+versioned customer-KMS boundary, and passed independent readback. Their receipt SHA-256 is
+`2d3ba62bcfa24eda06236cbc4a8646367035d91163ef7baf7a144995a7253e4f`. Docker and WSL were stopped
+immediately after the container publication and were not used by the Lambda publisher.
+
+Saved Terraform plan SHA-256
+`ea8f674f8a2fa23237c749975eca4df7fd641dd26c507df40dafd05f48b44b06` changed exactly six addresses:
+the idle migration task definition, processor function and unweighted alias, and the three document
+metric-filter patterns. Its exact apply advanced development to state serial `135`, migration task
+revision `24`, and processor/alias version `9`; parser version `5` remained pinned. Direct live
+readback matched the immutable image and processor artifact, all three patterns use
+`$.message.event`, the mapping, GuardDuty result rule, and reconciler remain disabled, and zero
+migration tasks run. Pre-acceptance zero-drift plan SHA-256
+`c7ca27cb5cb88e05a43752e317951e760875ca2c818d50ab47c358d427b3e4d1` contains zero resource or
+output changes.
+
+A wholly fresh execution used reviewed plan SHA-256
+`931a805c9672af5392a85221efdc092062a05efea357bfbe2f50c05e209566d1` and fixture-set SHA-256
+`79972367783ced79f291c8f736a2802cabd2aef28bf5ec88f14cc6da88c859d8`. All seven functional actions
+passed, rollback was proved, persistent rows returned to zero, and every exact object version was
+removed. Sealed acceptance receipt SHA-256
+`b48c07d07a8e692252b6694a41e856e3d72d2678668e516c3e9417d4d07053a8` passed independent
+verification: three queues and eight alarms are healthy, the exact structured contradiction event is
+privacy-safe and filter-compatible, triggers remain disabled, no task remains, Terraform state did
+not change, and no real candidate data was used. Final refresh-backed zero-drift plan SHA-256
+`7235499c209795b53ac7b314559bb25b966c499c7491932d2871e7f18eade94b` contains zero resource or
+output changes.
+
 ## Remaining work
 
-Refresh the temporary development IAM Identity Center session, then publish clean current `main`,
-which contains the committed structured-telemetry correction, as both the migration image and
-Documents artifacts. Dark-deploy only the resulting task definition, processor function/alias, and
-three metric-filter pattern updates, then generate a wholly fresh reviewed plan and rerun the
-complete generated-synthetic direct-dark flow.
-Do not reuse a claimed plan. Require all seven functional phases, rollback proof, privacy-safe logs,
-zero persistent rows, exact object removal, zero running migration tasks, healthy alarms, disabled
-triggers, receipt verification, and a refresh-backed zero-drift plan before recording acceptance.
-API Gateway routing, JWT/JWKS/authorizer enforcement, GuardDuty service delivery, trigger activation,
-managed OIDC, real resumes, and ADR-023 approval remain outside this dark acceptance claim.
+The generated-synthetic direct-dark document-processing gate is accepted. API Gateway routing,
+JWT/JWKS/authorizer enforcement, GuardDuty service delivery, trigger activation, managed OIDC, real
+resumes, human review of ADR-023, and the wider Phase 1 product/accessibility/security/privacy gates
+remain outside this acceptance and open. No trigger or real-resume path is authorized by this record.
