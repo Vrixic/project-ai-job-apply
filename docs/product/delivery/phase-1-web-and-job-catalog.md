@@ -42,9 +42,11 @@ shared artifacts advance.
 
 ### Current release-preparation checkpoint
 
-Development is at state serial `145`. The current gateway and idle migration runtime use exact
-application source `eac06e17393a311ed7ac251a415601cb7eb7b4ee`; the ingestion artifacts use exact
-docs-only descendant `bb33b85bd2b99624b20594ca53d20d5934c107db`. Document processing remains
+Development is at state serial `146`. The current unweighted gateway alias `29` uses exact
+application source `fe68a8947ee1504099d8cbde867b83ab845b75f6`; the idle migration task remains at
+revision `28`, while private-feature acceptance used a temporary exact-source task definition that
+was deregistered during cleanup. The ingestion artifacts use exact docs-only descendant
+`bb33b85bd2b99624b20594ca53d20d5934c107db`. Document processing remains
 dark-deployed with its mapping and rules disabled, and its accepted fresh direct-dark run proves all
 seven actions, rollback, zero rows, exact object cleanup, privacy-safe telemetry, healthy alarms,
 independent verification, and zero drift. The split public edge/projection remains dark: the edge has
@@ -56,10 +58,12 @@ aliases, encrypted empty 4/14-day queues, a complete durable stack, fourteen hea
 schedule/terminal rules and SQS mapping, bounded concurrency, zero ECS services/tasks, and final zero
 drift. Both ingestion enable switches remain false. Greenhouse, Lever, and Ashby remain structurally
 disabled pending source-specific authority; no real company configuration, credential, request, or
-data is present. The admin client still requires managed tenant/client configuration and hosted
-acceptance. Saved-job/Matching deployed acceptance, managed-OIDC entitlement/browser acceptance, AWS recovery, representative deployed
-assurance, truthful public structured-data prerequisites, and accountable human/legal/security/
-accessibility decisions remain open; no Phase 1 completion is claimed. [Ingestion dark release](evidence/d1-development-ingestion-dark-release-2026-08-23.md), [Job-search acceptance](evidence/d1-development-job-search-stale-cursor-acceptance-2026-08-23.md), [Public-job dark release](evidence/d1-development-public-job-dark-release-2026-08-22.md), [Consolidated development release](evidence/d1-development-consolidated-release-2026-08-22.md)
+data is present. Saved-job/Matching deployed acceptance now passes owner isolation, conservative
+grounded explanation, missing-preference refusal, exact cleanup, healthy alarms, and zero drift.
+The admin client still requires managed tenant/client configuration and hosted acceptance.
+Managed-OIDC entitlement/browser acceptance, AWS recovery, representative deployed assurance,
+truthful public structured-data prerequisites, and accountable human/legal/security/accessibility
+decisions remain open; no Phase 1 completion is claimed. [Private-feature acceptance](evidence/d1-private-feature-deployed-acceptance-foundation-2026-08-23.md), [Ingestion dark release](evidence/d1-development-ingestion-dark-release-2026-08-23.md), [Job-search acceptance](evidence/d1-development-job-search-stale-cursor-acceptance-2026-08-23.md), [Public-job dark release](evidence/d1-development-public-job-dark-release-2026-08-22.md), [Consolidated development release](evidence/d1-development-consolidated-release-2026-08-22.md)
 
 ## Exit criteria
 
@@ -76,6 +80,7 @@ accessibility decisions remain open; no Phase 1 completion is claimed. [Ingestio
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-08-23 | Published corrected exact source `fe68a8947ee1504099d8cbde867b83ab845b75f6` as a deterministic zero-High/zero-Critical migration image and four immutable gateway objects. Saved plan SHA-256 `93957d628384e2b3127a01f7e6084ebfe82ca5fbc5b7d80a55b5cca4e1f75687` changed only the gateway function and unweighted alias, advancing development to serial `146` and alias `29`. The 24-case direct boundary passed. A fresh owner-local Jobs/Profile/Matching run proved saved-job counts `1/0`, owner `review_required` with nine grounded evidence items, exact missing-preference `409`, reverse cleanup with zero persistent fixture rows, zero active tasks, temporary task-definition deregistration, three healthy gateway alarms, and final zero-drift plan SHA-256 `6f7c8532ec17bc4f98439d040be1e7c86231f5d040696653dc38dcce1f3eff43`. Managed-OIDC/browser, representative load, deployed recovery, and human acceptance remain open. | D1-005, D1-010A | [Private-feature deployed acceptance](evidence/d1-private-feature-deployed-acceptance-foundation-2026-08-23.md) |
 | 2026-08-23 | Bounded deployed private-feature diagnostics proved the saved-job owner projection and cross-owner empty read, then isolated the stable Matching `503` to a JavaScript `TypeError` in the Jobs matchable reader. Every attempt completed owner-local reverse cleanup, left zero active tasks, and deregistered its temporary task revision. The reader incorrectly assumed the computed PostgreSQL `eligibleThrough` expression was always a `Date`; source now normalizes its deployed canonical-string row shape through the existing strict timestamp boundary. A focused regression plus all 59 Jobs unit cases, typecheck, build, formatting, and changed-line checks pass. Corrected image publication and a fresh full saved-job/Matching run remain open. | D1-005, D1-010A | [Private-feature acceptance foundation](evidence/d1-private-feature-deployed-acceptance-foundation-2026-08-23.md) |
 | 2026-08-23 | Implemented the owner-local generated-synthetic fixture boundary required for deployed private saved-job and conservative Matching acceptance. Profile alone owns two synthetic identities and one bounded preference set; Matching alone owns one saved projection and list revision; the existing Jobs-owned search fixture supplies public job data. Both new runners use strict inputs, aggregate-only output, advisory locks, exact contamination checks, and exact cleanup. The Matching setup correctly creates no API-mutation audit/idempotency residue. Profile 17 cases and Matching 79 cases pass with their existing opt-in integration skips; both typechecks/builds, publisher guard, formatting, and changed-line checks pass. This is source/local evidence only pending exact image publication, idle task-definition release, deployed owner-isolation/explanation reads, cleanup, and zero drift. | D1-005, D1-010A | [Private-feature acceptance foundation](evidence/d1-private-feature-deployed-acceptance-foundation-2026-08-23.md) |
 | 2026-08-23 | Invoked the exact dark-deployed ingestion coordinator with a valid schedule-shaped event while the synthetic source gate remained false. It returned zero scheduled/resumed/recovered/claimed/sent/failed work; queues stayed empty, triggers stayed disabled, fourteen alarms stayed healthy, and state stayed serial `145`. This accepts the deployed static disabled path, not enabled execution or live persisted source-pause behavior. Separately, exact gateway alias `28` returned the canonical D1 entitlement projection through generated-synthetic direct invocation: HTTP `200`, `no-store`, Free/version zero, and the exact four provider-neutral grants, with healthy alarms and unchanged state. Managed OIDC/API Gateway/browser acceptance remains open. | D1-003, D1-008, D1-010A | [Ingestion dark release](evidence/d1-development-ingestion-dark-release-2026-08-23.md), [Entitlement direct acceptance](evidence/d1-development-entitlement-direct-acceptance-2026-08-23.md) |

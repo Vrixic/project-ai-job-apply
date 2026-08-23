@@ -2,10 +2,11 @@
 
 ## Outcome
 
-Implemented the missing owner-local generated-synthetic fixture boundary needed to exercise the
-already deployed saved-job and conservative Matching read paths in development. This is source and
-local verification evidence only; no image was published, task definition changed, cloud task run,
-or acceptance claim made at this checkpoint.
+Implemented and deployed the owner-local generated-synthetic fixture boundary needed to exercise
+saved-job and conservative Matching reads in development. The corrected exact source was published
+as a deterministic scanned migration image and immutable gateway bundle. A bounded deployed run
+proved owner isolation, the conservative explanation contract, exact reverse cleanup, healthy
+gateway alarms, zero active tasks, and final Terraform zero drift.
 
 ## Ownership and cleanup boundary
 
@@ -30,14 +31,26 @@ cross-schema fixture writer.
   runner entrypoints in its package and runtime smoke checks.
 - Repository formatting and changed-line whitespace checks passed.
 
-## Remaining acceptance sequence
+## Deployed acceptance
 
-1. Commit and publish the exact merged source as the deterministic scanned migration image.
-2. Advance only the idle migration task definition to that immutable image.
-3. Run Jobs prepare, Profile prepare, Matching prepare, direct authenticated gateway reads for owner
-   isolation and the fixed conservative explanation, then Matching/Profile/Jobs cleanup.
-4. Require zero claimed fixture rows, zero active ECS tasks, healthy alarms, and final Terraform zero
-   drift before updating D1-005 deployment status.
+- Exact source `fe68a8947ee1504099d8cbde867b83ab845b75f6` was published as a deterministic
+  Linux/AMD64 migration image with immutable ECR readback and a complete zero-High/zero-Critical
+  scan. The existing idle migration task definition was not changed; the acceptance operator
+  registered a temporary exact-image clone and deregistered it during cleanup.
+- The same source was reproducibly packaged into four immutable, versioned, customer-KMS-encrypted
+  gateway objects. Saved plan SHA-256
+  `93957d628384e2b3127a01f7e6084ebfe82ca5fbc5b7d80a55b5cca4e1f75687` changed only the
+  gateway function and its unweighted alias. Development advanced to state serial `146` and exact
+  numeric gateway alias `29`.
+- The direct gateway boundary passed all 24 cases against the exact published bundle.
+- The wholly fresh private-feature run returned one saved job for the owner and zero for the other
+  identity. The owner's assessment returned `review_required` with nine grounded evidence items;
+  the identity without preferences returned the exact HTTP `409` boundary.
+- Matching, Profile, and Jobs cleanup completed in reverse ownership order with zero persistent
+  fixture rows. The temporary task definition was deregistered and zero database tasks remained.
+- All three gateway alarms were healthy. Refresh-backed plan SHA-256
+  `6f7c8532ec17bc4f98439d040be1e7c86231f5d040696653dc38dcce1f3eff43` contains zero
+  resource changes at state serial `146`.
 
 Managed OIDC/API Gateway/browser, representative load, human accessibility, independent
 security/privacy, and broader product acceptance remain separate Phase 1 gates.
@@ -55,4 +68,6 @@ The reader assumed the computed PostgreSQL `eligibleThrough` expression was alwa
 uses the Jobs reader's existing strict timestamp normalizer before producing the public ISO value
 and explicitly types that database field as `Date | string`. A regression exercises the raw-string
 row shape. Jobs now passes 59/59 unit tests, typecheck, and build; repository formatting and
-changed-line checks pass. The correction is not yet published or accepted in development.
+changed-line checks pass. The correction is published in both the exact acceptance image and live
+gateway alias `29`. The fresh deployed run above accepts the corrected Jobs reader through the
+saved-job/Matching composition and exact cleanup boundary.
