@@ -137,7 +137,7 @@ export class PostgresDocumentProcessorStore {
             id, user_id, action, document_id, trace_id, metadata
           ) VALUES (
             gen_random_uuid(), ${document.userId}, 'resume.processing.contradiction',
-            ${document.id}, ${event.eventId}, ${transaction.json({ version: document.version })}::jsonb
+            ${document.id}, ${event.eventId}, ${JSON.stringify({ version: document.version })}::jsonb
           )
         `;
         return { kind: "security_contradiction" };
@@ -157,7 +157,7 @@ export class PostgresDocumentProcessorStore {
           ) VALUES (
             gen_random_uuid(), ${document.userId}, 'resume.scan.recorded', ${document.id},
             ${event.eventId},
-            ${transaction.json({ version: document.version, scanResult: event.scanResult })}::jsonb
+            ${JSON.stringify({ version: document.version, scanResult: event.scanResult })}::jsonb
           )
         `;
       }
@@ -183,7 +183,7 @@ export class PostgresDocumentProcessorStore {
             ) VALUES (
               gen_random_uuid(), ${document.userId}, ${auditAction},
               ${document.id}, ${event.eventId},
-              ${transaction.json({ version: document.version, failureCode: terminal.failureCode })}::jsonb
+              ${JSON.stringify({ version: document.version, failureCode: terminal.failureCode })}::jsonb
             )
           `;
         }
@@ -214,7 +214,7 @@ export class PostgresDocumentProcessorStore {
             id, user_id, action, document_id, trace_id, metadata
           ) VALUES (
             gen_random_uuid(), ${document.userId}, 'resume.parse.started', ${document.id},
-            ${event.eventId}, ${transaction.json({ version: document.version })}::jsonb
+            ${event.eventId}, ${JSON.stringify({ version: document.version })}::jsonb
           )
         `;
       }
@@ -263,7 +263,7 @@ export class PostgresDocumentProcessorStore {
         ) VALUES (
           gen_random_uuid(), ${job.userId}, 'resume.processing.rejected', ${job.documentId},
           ${job.traceId},
-          ${transaction.json({ version: job.documentVersion, failureCode: result.failureCode })}::jsonb
+          ${JSON.stringify({ version: job.documentVersion, failureCode: result.failureCode })}::jsonb
         )
       `;
     });
@@ -320,7 +320,7 @@ export class PostgresDocumentProcessorStore {
         ) VALUES (
           gen_random_uuid(), ${job.userId}, 'resume.parse.completed', ${job.documentId},
           ${job.traceId},
-          ${transaction.json({
+          ${JSON.stringify({
             version: job.documentVersion,
             parserVersion: result.parserVersion,
             pageCount: result.pageCount,
@@ -349,7 +349,7 @@ export class PostgresDocumentProcessorStore {
           ) VALUES (
             gen_random_uuid(), ${row.userId}, 'resume.processing.failed', ${row.id},
             'document-processing-reconciler',
-            ${transaction.json({ version: row.version, failureCode: "scan_failed" })}::jsonb
+            ${JSON.stringify({ version: row.version, failureCode: "scan_failed" })}::jsonb
           )
         `;
       }
@@ -368,7 +368,7 @@ export class PostgresDocumentProcessorStore {
           ) VALUES (
             gen_random_uuid(), ${row.userId}, 'resume.processing.failed', ${row.id},
             'document-processing-reconciler',
-            ${transaction.json({ version: row.version, failureCode: "parse_failed" })}::jsonb
+            ${JSON.stringify({ version: row.version, failureCode: "parse_failed" })}::jsonb
           )
         `;
       }

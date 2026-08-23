@@ -80,6 +80,13 @@ optional false `DeleteMarker` field. Cleanup now reads that field optionally und
 still rejecting an explicit delete marker or wrong version. Exact recovery of that run remains the
 immediate prerequisite before processor diagnosis or another plan.
 
+Recovery completed with zero rows and exact object removal. The only processor application error was
+the privacy-safe `TypeError` code. Source inspection found that the processor audit paths still used
+the same PostgreSQL JSON wrapper plus explicit `::jsonb` pattern already proven defective in live
+gateway registration. All processor JSONB audit writes now bind explicit serialized JSON text. Focused
+Documents/Gateway verification, exact processor publication and dark release, and a fresh acceptance
+run remain open.
+
 ## Remaining work
 
 Generate a wholly fresh reviewed plan against the checksum-bound dark release and rerun the complete
