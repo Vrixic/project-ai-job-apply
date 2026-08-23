@@ -1841,7 +1841,10 @@ function Complete-SourceDescriptor {
 }
 
 function Remove-DescriptorObjects {
-  param([Parameter(Mandatory)][object]$Runtime, [Parameter(Mandatory)][object[]]$Documents)
+  param(
+    [Parameter(Mandatory)][object]$Runtime,
+    [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Documents
+  )
   foreach ($document in @($Documents)) {
     if (-not [string]::IsNullOrWhiteSpace([string]$document.normalizedKey)) {
       Remove-ExactObjectVersion -Runtime $Runtime -Key ([string]$document.normalizedKey) -Version ([string]$document.normalizedVersion)

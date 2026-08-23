@@ -66,6 +66,9 @@ foreach ($required in @(
 if ($source.Contains('[long]$planEvidence.Plan.stateSerial +')) {
   throw "Recovery safety must depend on exact runtime identity, not an arbitrary state-serial distance."
 }
+if ($source -notmatch 'function Remove-DescriptorObjects \{[\s\S]{0,250}\[AllowEmptyCollection\(\)\]\[object\[\]\]\$Documents') {
+  throw "Descriptor cleanup must accept a reviewed receipt containing zero fixture objects."
+}
 foreach ($forbidden in @(
     'PlanTransition', 'ApplyTransition', 'terraform "-chdir=$terraformDirectory" apply',
     'document_scan_mapping_enabled = true', 'document_scan_event_rule_enabled = true',
