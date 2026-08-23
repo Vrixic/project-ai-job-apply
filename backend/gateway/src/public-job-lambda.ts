@@ -188,7 +188,7 @@ export function createLazyPublicJobHandler(
 ): PublicJobHandler {
   let configured: PublicJobHandler | undefined;
   let initialization: Promise<PublicJobHandler> | undefined;
-  return async (event, context, callback) => {
+  return async (event, context) => {
     if (!configured) {
       try {
         initialization ??= initialize();
@@ -199,7 +199,7 @@ export function createLazyPublicJobHandler(
       }
     }
     try {
-      return await configured(event, context, callback);
+      return await configured(event, context);
     } catch {
       return publicJobUnavailableResponse(event.requestContext.requestId);
     }

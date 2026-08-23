@@ -65,11 +65,7 @@ function cache(jobReader: PublicJobDetailReader, clock = () => now) {
 describe("public job read boundary", () => {
   it("returns the exact canonical alias response without source data", async () => {
     const jobReader = reader(async () => record());
-    const result = await createPublicJobReadHandler(cache(jobReader))(
-      event(),
-      {} as never,
-      vi.fn(),
-    );
+    const result = await createPublicJobReadHandler(cache(jobReader))(event(), {} as never);
     expect(result.statusCode).toBe(200);
     expect(result.headers?.["cache-control"]).toBe("public, max-age=0, must-revalidate");
     expect(JSON.parse(result.body ?? "null")).toEqual({
@@ -108,11 +104,7 @@ describe("public job read boundary", () => {
       input.isBase64Encoded = isBase64Encoded;
       if (body === undefined) delete input.body;
       else input.body = body;
-      const result = await createPublicJobReadHandler(cache(jobReader))(
-        input,
-        {} as never,
-        vi.fn(),
-      );
+      const result = await createPublicJobReadHandler(cache(jobReader))(input, {} as never);
       expect(result.statusCode).toBe(400);
       expect(jobReader.getActiveJob).not.toHaveBeenCalled();
     },
@@ -122,7 +114,7 @@ describe("public job read boundary", () => {
     const jobReader = reader(async () => record());
     const input = event();
     input.routeKey = "GET /v1/jobs/{jobId}";
-    const result = await createPublicJobReadHandler(cache(jobReader))(input, {} as never, vi.fn());
+    const result = await createPublicJobReadHandler(cache(jobReader))(input, {} as never);
     expect(result.statusCode).toBe(400);
     expect(jobReader.getActiveJob).not.toHaveBeenCalled();
   });
@@ -131,14 +123,13 @@ describe("public job read boundary", () => {
     const missing = await createPublicJobReadHandler(cache(reader(async () => null)))(
       event(),
       {} as never,
-      vi.fn(),
     );
     expect(missing.statusCode).toBe(404);
     expect(missing.body).not.toContain(requestedId);
 
     const unavailable = await createPublicJobReadHandler(
       cache(reader(async () => Promise.reject(new Error("postgres password leaked")))),
-    )(event(), {} as never, vi.fn());
+    )(event(), {} as never);
     expect(unavailable.statusCode).toBe(503);
     expect(unavailable.headers?.["cache-control"]).toBe("no-store");
     expect(unavailable.body).not.toContain("postgres");
@@ -261,7 +252,7 @@ describe("PublicJobReadCache", () => {
           job: { id: canonicalId },
         }) as never,
     });
-    const result = await handler(event(), {} as never, vi.fn());
+    const result = await handler(event(), {} as never);
     expect(result.statusCode).toBe(503);
   });
 
@@ -292,7 +283,7 @@ describe("PublicJobReadCache", () => {
             job,
           }) as never,
       });
-      const result = await handler(event(), {} as never, vi.fn());
+      const result = await handler(event(), {} as never);
       expect(result.statusCode).toBe(503);
       expect(result.headers?.["cache-control"]).toBe("no-store");
       expect(result.body).not.toContain("private.example.test");

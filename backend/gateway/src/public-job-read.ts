@@ -6,14 +6,12 @@ import type { PublicJobDetailResult } from "@ai-job-apply/jobs-service";
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
-  Callback,
   Context,
 } from "aws-lambda";
 
 export type PublicJobHandler = (
   event: APIGatewayProxyEventV2,
   context: Context,
-  callback: Callback<APIGatewayProxyStructuredResultV2>,
 ) => Promise<APIGatewayProxyStructuredResultV2>;
 
 const publicJobPathPattern =

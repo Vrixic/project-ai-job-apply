@@ -10,6 +10,7 @@ describe("public job projection Lambda", () => {
   it("exports a private lazy handler without connecting during import", async () => {
     const module = await import("./public-job-projection-lambda.js");
     expect(module.projectionHandler).toBeTypeOf("function");
+    expect(module.projectionHandler).toHaveLength(2);
     expect(module.createConfiguredProjectionHandler).toBeTypeOf("function");
   });
 
@@ -17,10 +18,10 @@ describe("public job projection Lambda", () => {
     const configured = vi.fn(async () => ({ kind: "absent" as const }));
     const initialize = vi.fn(async () => configured);
     const handler = createLazyProjectionHandler(initialize);
-    await expect(handler({ schemaVersion: 1, jobId }, {} as never, vi.fn())).resolves.toEqual({
+    await expect(handler({ schemaVersion: 1, jobId }, {} as never)).resolves.toEqual({
       kind: "absent",
     });
-    await handler({ schemaVersion: 1, jobId }, {} as never, vi.fn());
+    await handler({ schemaVersion: 1, jobId }, {} as never);
     expect(initialize).toHaveBeenCalledTimes(1);
     expect(configured).toHaveBeenCalledTimes(2);
   });
@@ -32,25 +33,23 @@ describe("public job projection Lambda", () => {
       .mockRejectedValueOnce(new Error("private"))
       .mockResolvedValueOnce(configured);
     const handler = createLazyProjectionHandler(initialize);
-    await expect(handler({ schemaVersion: 1, jobId }, {} as never, vi.fn())).rejects.toThrow(
-      "private",
-    );
-    await expect(handler({ schemaVersion: 1, jobId }, {} as never, vi.fn())).resolves.toMatchObject(
-      { kind: "absent" },
-    );
+    await expect(handler({ schemaVersion: 1, jobId }, {} as never)).rejects.toThrow("private");
+    await expect(handler({ schemaVersion: 1, jobId }, {} as never)).resolves.toMatchObject({
+      kind: "absent",
+    });
   });
 
   it("accepts only an exact identifier-only internal event", async () => {
     const projector = { get: vi.fn(async () => ({ kind: "absent" as const })) };
     const handler = createProjectionHandler(projector);
-    await expect(handler({ schemaVersion: 1, jobId }, {} as never, vi.fn())).resolves.toEqual({
+    await expect(handler({ schemaVersion: 1, jobId }, {} as never)).resolves.toEqual({
       kind: "absent",
     });
     await expect(
-      handler({ schemaVersion: 1, jobId, query: "forbidden" }, {} as never, vi.fn()),
+      handler({ schemaVersion: 1, jobId, query: "forbidden" }, {} as never),
     ).rejects.toThrow("request is invalid");
     await expect(
-      handler({ schemaVersion: 1, jobId: jobId.toUpperCase() }, {} as never, vi.fn()),
+      handler({ schemaVersion: 1, jobId: jobId.toUpperCase() }, {} as never),
     ).rejects.toThrow("request is invalid");
     expect(projector.get).toHaveBeenCalledTimes(1);
   });

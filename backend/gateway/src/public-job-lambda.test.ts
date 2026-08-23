@@ -29,6 +29,7 @@ describe("public job Lambda module", () => {
   it("exports a lazy handler without requiring runtime secrets at import", async () => {
     const module = await import("./public-job-lambda.js");
     expect(module.handler).toBeTypeOf("function");
+    expect(module.handler).toHaveLength(2);
     expect(module.createConfiguredPublicJobHandler).toBeTypeOf("function");
   });
 
@@ -41,13 +42,13 @@ describe("public job Lambda module", () => {
     const event = {
       requestContext: { requestId: "request-id" },
     } as APIGatewayProxyEventV2;
-    const failed = await handler(event, {} as never, vi.fn());
+    const failed = await handler(event, {} as never);
     expect(failed).toMatchObject({
       statusCode: 503,
       headers: { "cache-control": "no-store", "retry-after": "5" },
     });
     expect(failed.body).not.toContain("secret");
-    await expect(handler(event, {} as never, vi.fn())).resolves.toMatchObject({ statusCode: 200 });
+    await expect(handler(event, {} as never)).resolves.toMatchObject({ statusCode: 200 });
     expect(initialize).toHaveBeenCalledTimes(2);
   });
 
@@ -56,8 +57,8 @@ describe("public job Lambda module", () => {
     const initialize = vi.fn(async () => configured);
     const handler = createLazyPublicJobHandler(initialize);
     const event = { requestContext: { requestId: "request-id" } } as APIGatewayProxyEventV2;
-    await expect(handler(event, {} as never, vi.fn())).resolves.toMatchObject({ statusCode: 503 });
-    await expect(handler(event, {} as never, vi.fn())).resolves.toMatchObject({ statusCode: 503 });
+    await expect(handler(event, {} as never)).resolves.toMatchObject({ statusCode: 503 });
+    await expect(handler(event, {} as never)).resolves.toMatchObject({ statusCode: 503 });
     expect(initialize).toHaveBeenCalledTimes(1);
     expect(configured).toHaveBeenCalledTimes(2);
   });

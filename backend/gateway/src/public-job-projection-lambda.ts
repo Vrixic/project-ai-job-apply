@@ -6,7 +6,7 @@ import {
 } from "@ai-job-apply/jobs-service";
 import { initializeTelemetry } from "@ai-job-apply/observability";
 import { Signer } from "@aws-sdk/rds-signer";
-import type { Callback, Context } from "aws-lambda";
+import type { Context } from "aws-lambda";
 import postgres from "postgres";
 
 const uuidV7Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -36,11 +36,7 @@ export function publicJobPostgresOptions(
   };
 }
 
-type ProjectionHandler = (
-  event: unknown,
-  context: Context,
-  callback: Callback<PublicJobDetailResult>,
-) => Promise<PublicJobDetailResult>;
+type ProjectionHandler = (event: unknown, context: Context) => Promise<PublicJobDetailResult>;
 
 export function createProjectionHandler(
   projector: Pick<PublicJobDetailProjector, "get">,
@@ -89,7 +85,7 @@ export function createLazyProjectionHandler(
 ): ProjectionHandler {
   let configured: ProjectionHandler | undefined;
   let initialization: Promise<ProjectionHandler> | undefined;
-  return async (event, context, callback) => {
+  return async (event, context) => {
     if (!configured) {
       initialization ??= initialize().catch((error) => {
         initialization = undefined;
@@ -97,7 +93,7 @@ export function createLazyProjectionHandler(
       });
       configured = await initialization;
     }
-    return configured(event, context, callback);
+    return configured(event, context);
   };
 }
 
