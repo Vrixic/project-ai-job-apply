@@ -2461,6 +2461,9 @@ if ($Action -eq 'Execute') {
   if ($null -ne $cleanupFailure) {
     $receipt.phase = 'cleanup-required'
     Write-JsonFile -Path $receiptPath -Value $receipt -AllowReplace
+    if ($null -ne $primaryFailure) {
+      throw "Document acceptance failed during guarded stage '$($primaryFailure.Stage)' and did not prove exact cleanup. Retain and review the receipt before RecoverCleanup."
+    }
     throw "Document acceptance did not prove exact database and object cleanup. Retain and review the receipt before RecoverCleanup."
   }
   $receipt.completedAt = [DateTimeOffset]::UtcNow.ToString('o')

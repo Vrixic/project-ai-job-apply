@@ -61,6 +61,7 @@ foreach ($required in @(
     '$script:acceptanceStage = "$Role.upload-binding-validation"',
     '$expiryMilliseconds -lt 300000 -or $expiryMilliseconds -ge 301000',
     "Document acceptance failed during guarded stage '",
+    "and did not prove exact cleanup. Retain and review the receipt before RecoverCleanup.",
     "'recovery-cleanup'",
     "delete-object",
     "--version-id",
