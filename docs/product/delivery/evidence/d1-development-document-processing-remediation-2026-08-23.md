@@ -308,14 +308,22 @@ JSON string; all three root-field document metric filters were structurally unab
 processor and reconciler now pass a single bounded object to each console method. The metric filters
 match `$.message.event`, and the verifier parses the outer record and requires the contradiction
 payload to contain exactly the one `event` property. Documents 24/24, typecheck, Terraform formatting,
-and PowerShell 7/5.1 regressions pass. Publication and a wholly fresh run remain open.
+and PowerShell 7/5.1 regressions pass. The correction is committed at
+`f4e4739d0cfef526e2f0e5d6e79ba358c6c52303`; the full repository gate passes, and the change is
+carried by current clean `main`. Before the subsequent D1-003 source catch-up, that exact commit also
+passed two-build deterministic Linux/AMD64 OCI identity, hardened runtime smoke, and two-build
+byte-identical Documents artifact preflight without contacting AWS. Those local artifacts are not
+publication evidence and are now superseded by current `main`. The temporary development SSO token
+expired before publication and its browser refresh window expired unapproved. Docker and WSL were
+then stopped. Publication and a wholly fresh run remain open.
 
 ## Remaining work
 
-Commit and publish the structured-telemetry correction as both the migration image and Documents
-artifacts. Dark-deploy only the resulting task definition, processor function/alias, and three metric
-filter pattern updates, then generate a wholly fresh reviewed plan and rerun the complete
-generated-synthetic direct-dark flow.
+Refresh the temporary development IAM Identity Center session, then publish clean current `main`,
+which contains the committed structured-telemetry correction, as both the migration image and
+Documents artifacts. Dark-deploy only the resulting task definition, processor function/alias, and
+three metric-filter pattern updates, then generate a wholly fresh reviewed plan and rerun the
+complete generated-synthetic direct-dark flow.
 Do not reuse a claimed plan. Require all seven functional phases, rollback proof, privacy-safe logs,
 zero persistent rows, exact object removal, zero running migration tasks, healthy alarms, disabled
 triggers, receipt verification, and a refresh-backed zero-drift plan before recording acceptance.
