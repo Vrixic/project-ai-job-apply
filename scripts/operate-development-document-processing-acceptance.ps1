@@ -1419,9 +1419,18 @@ function Register-And-UploadFixture {
     throw "The gateway did not return the exact bounded upload registration."
   }
   $script:acceptanceStage = "$Role.registration-expiry-bound"
-  if (
-    [DateTimeOffset]::Parse([string]$upload.expiresAt) -gt [DateTimeOffset]::UtcNow.AddMinutes(5)
-  ) {
+  $expiresAtValue = [DateTimeOffset]::Parse(
+    [string]$upload.expiresAt,
+    [Globalization.CultureInfo]::InvariantCulture,
+    [Globalization.DateTimeStyles]::AssumeUniversal
+  ).ToUniversalTime()
+  $signedAtValue = [DateTimeOffset]::ParseExact(
+    [string]$upload.fields.'X-Amz-Date',
+    "yyyyMMdd'T'HHmmss'Z'",
+    [Globalization.CultureInfo]::InvariantCulture,
+    [Globalization.DateTimeStyles]::AssumeUniversal
+  ).ToUniversalTime()
+  if ($expiresAtValue -ne $signedAtValue.AddSeconds(300)) {
     throw "The gateway did not return the exact bounded upload registration."
   }
   $script:acceptanceStage = "$Role.upload-binding-validation"
