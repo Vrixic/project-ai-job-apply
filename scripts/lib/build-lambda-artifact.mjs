@@ -110,8 +110,14 @@ async function verifyBundleExports(outputDirectory, artifactName, bundle, bundle
     const bundleModule = await import(moduleUrl.href);
     for (const handler of handlers) {
       const exportName = handler.split(".").at(-1);
-      if (!exportName || typeof bundleModule[exportName] !== "function") {
+      const exportedHandler = exportName ? bundleModule[exportName] : undefined;
+      if (!exportName || typeof exportedHandler !== "function") {
         throw new Error(`Lambda bundle does not export handler ${handler}`);
+      }
+      if (exportedHandler.length > 2) {
+        throw new Error(
+          `Lambda bundle handler ${handler} exposes a callback signature unsupported by Node.js 24`,
+        );
       }
     }
   } finally {

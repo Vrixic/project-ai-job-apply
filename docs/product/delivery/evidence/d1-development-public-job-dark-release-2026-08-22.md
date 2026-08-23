@@ -2,7 +2,7 @@
 
 Date: 2026-08-22  
 Environment: Development  
-Status: In progress; runtime correction awaits immutable publication and apply
+Status: In progress; corrected package build awaits immutable publication and apply
 
 ## Released boundary
 
@@ -38,15 +38,22 @@ runtime incompatibility before public activation. Lambda returned
 three-argument callback signatures. No handler logic, database read, API route, or user-visible
 response executed.
 
-The source correction removes the unused callback parameter from both async Lambda entrypoints and
-their shared handler type, forwards only event and context, and adds exact exported-handler arity
-regressions. Gateway type-check, all 108 gateway tests, formatting, and two deterministic public
-artifact builds pass. The corrected local artifact SHA-256 values are:
+The first source correction removed the unused callback parameter from both async Lambda
+entrypoints and their shared handler type, forwarded only event and context, and added exact
+source-export arity regressions. Gateway type-check and all 108 gateway tests passed. Revision
+`6e7b07ed320bb8d41f9ae45739aa1a631d7f4614` was then published and applied through exact
+two-function/two-alias plan SHA-256
+`1a8343cc5756d127d5b2081583db684f9434ed356a54e354886b93de68066f80`, advancing both public
+aliases to version `2` without exposing the route.
 
-- edge: `397acd4faf15a01c68c7510c61531b4fa152a7fb8b3bf3bdc2d228ef43e0919a`;
-- projection: `1ad5822471510f5e7d3a7be37002f81e002c075c751faa435f23aac7fd28f115`.
+The version `2` direct-dark replay returned the same pre-handler runtime error. Inspection proved
+that directly invoking the low-level bundler had packaged stale compiled `dist` output even though
+the TypeScript source and source-level tests were corrected. The owned package build command already
+compiles the dependency closure first. The shared artifact builder now additionally imports each
+completed bundle and fails if an exported Node.js 24 handler has arity greater than two. Two full
+package builds are deterministic, and the completed bundles report edge/projection arity `2`/`2`.
 
-These local hashes are build evidence only. Completion of this evidence requires committing the
-correction, rebuilding and publishing artifacts bound to that exact revision, applying a separately
+Completion of this evidence requires committing the packaging guard, rebuilding and publishing
+artifacts bound to that exact clean revision through the package command, applying a separately
 reviewed two-function/two-alias Terraform plan, repeating the direct-dark invocation, and proving
 zero drift. The anonymous route must remain absent throughout.
