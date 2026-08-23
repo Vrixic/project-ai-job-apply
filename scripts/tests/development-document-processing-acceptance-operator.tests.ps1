@@ -131,6 +131,14 @@ foreach ($name in $guardedMutationFunctions) {
   }
 }
 
+$removeExactDefinition = @($ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Remove-ExactObjectVersion'
+    }, $true))[0].Extent.Text
+if ($removeExactDefinition.Contains("'head-object'")) {
+  throw "Exact cleanup must not require read access to a descriptor-bound quarantined version."
+}
+
 function Import-OperatorFunction {
   param([Parameter(Mandatory)][string]$Name)
   $functionAst = @($ast.FindAll({
@@ -454,6 +462,7 @@ function global:Invoke-AwsJson {
       return [pscustomobject]@{ Versions = @(); DeleteMarkers = @() }
     }
     if ($Arguments[1] -ceq 'head-object') {
+      $script:objectHeadReads++
       return [pscustomobject]@{
         VersionId = 'source-version'
         ContentLength = 128
@@ -530,6 +539,7 @@ if (-not $weightedRejected) { throw "A weighted Lambda alias was accepted." }
 $script:reviewedRuntimeIdentity = $null
 $script:orphanProofMode = $true
 $script:objectPresent = $true
+$script:objectHeadReads = 0
 $orphan = [pscustomobject]@{
   sourceKey = $expectedKey
   sourceVersion = ''
@@ -544,8 +554,12 @@ Complete-SourceDescriptor -Runtime $runtime -Document $orphan
 if ([string]$orphan.sourceVersion -cne 'source-version') {
   throw "Cleanup could not recover the exact version of an uploaded source orphan."
 }
+$headReadsBeforeCleanup = $script:objectHeadReads
 Remove-DescriptorObjects -Runtime $runtime -Documents @($orphan)
 if ($script:objectPresent) { throw "Cleanup left the recovered exact source version orphaned." }
+if ($script:objectHeadReads -ne $headReadsBeforeCleanup) {
+  throw "Cleanup required read access to a descriptor-bound quarantined version."
+}
 $script:orphanProofMode = $false
 $health = Assert-DocumentOperationalHealth
 if ($health.QueueCount -ne 3 -or $health.AlarmCount -ne 8 -or -not $health.AllAlarmsOk) {

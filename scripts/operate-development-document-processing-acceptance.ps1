@@ -1871,7 +1871,6 @@ function Remove-ExactObjectVersion {
   $before = Invoke-AwsJson -Arguments @('s3api', 'list-object-versions', '--bucket', $Runtime.CandidateDocumentBucket, '--prefix', $Key, '--output', 'json') -Operation 'Pre-cleanup object history'
   if (Test-ExactObjectAlreadyRemoved -History $before -Key $Key -Version $Version) { return }
   Assert-ReviewedRuntimeUnchanged
-  $null = Invoke-AwsJson -Arguments @('s3api', 'head-object', '--bucket', $Runtime.CandidateDocumentBucket, '--key', $Key, '--version-id', $Version, '--output', 'json') -Operation 'Pre-cleanup object readback'
   $deleted = Invoke-AwsJson -Arguments @('s3api', 'delete-object', '--bucket', $Runtime.CandidateDocumentBucket, '--key', $Key, '--version-id', $Version, '--output', 'json') -Operation 'Exact versioned object cleanup'
   if (
     [string]$deleted.VersionId -cne $Version -or

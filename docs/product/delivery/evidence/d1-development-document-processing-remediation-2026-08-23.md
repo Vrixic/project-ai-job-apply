@@ -239,13 +239,36 @@ builder always serialized `body: null`; the gateway intentionally treats any bod
 as an invalid bodyless request and returns `400`. The operator now omits `body` entirely when no body
 is supplied while preserving exact compact JSON for POST/PATCH. An executable regression asserts the
 bodyless profile GET has no `body` property and the upload POST retains its exact JSON body. A fresh
-operator-delta run remains open.
+operator-delta run was generated from committed operator source
+`8533009fa7c992fd4b8f15e856d2e5303d908793`.
+
+The fresh plan used execution-plan SHA-256
+`cf991718a755a535e7337d36ae68ba6038fcc93e539deebdfd00f24e11b40dd5` and fixture-set SHA-256
+`4f95463c754a5831913f544292011a1b2e03fa0333132d8190001054746ab064`. All seven tasks and
+result actions completed, the database cleanup reported zero persistent rows, and rollback was
+proved. The run remained non-claiming because exact object cleanup stopped after deleting the first
+normalized version. Receipt SHA-256
+`1ee20bf4de0fac04dbfc449477972d21e029c50cb770a170c479841187551676` records
+`cleanup-required`, zero persistent rows, proved rollback, and database cleanup, but not complete
+object removal.
+
+Read-only inventory proved the remaining descriptor-bound versions were still uniquely listed. The
+source fixture later used for the contradiction phase and the harmless malware-disposition fixture
+were intentionally unreadable after receiving the synthetic threat tag. Cleanup incorrectly required
+`HeadObject` after exact version-history matching, so it was incompatible with the quarantine policy.
+The cleanup path now revalidates the full reviewed runtime identity and deletes only the exact
+descriptor-bound version returned by the unique history check; it still validates the delete response
+and requires zero versions and zero delete markers afterward. It no longer requires content-read
+permission. PowerShell 7 and Windows PowerShell 5.1 regressions prove cleanup performs no additional
+head read while preserving exact deletion and idempotent already-absent behavior. Exact recovery of
+the retained versions must complete before any fresh execution.
 
 ## Remaining work
 
-Commit and verify the bodyless-GET operator correction, compute the new exact allowed operator delta
-from deployed source, then generate a wholly fresh reviewed plan and rerun the complete
-generated-synthetic direct-dark flow.
+Commit the quarantine-compatible exact-cleanup correction, review its allowed operator delta, and run
+`RecoverCleanup` against receipt SHA-256
+`1ee20bf4de0fac04dbfc449477972d21e029c50cb770a170c479841187551676`. Then generate a wholly
+fresh reviewed plan and rerun the complete generated-synthetic direct-dark flow.
 Do not reuse a claimed plan. Require all seven functional phases, rollback proof, privacy-safe logs,
 zero persistent rows, exact object removal, zero running migration tasks, healthy alarms, disabled
 triggers, receipt verification, and a refresh-backed zero-drift plan before recording acceptance.
