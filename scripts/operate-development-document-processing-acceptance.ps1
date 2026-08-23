@@ -1397,15 +1397,29 @@ function Register-And-UploadFixture {
   $script:acceptanceStage = "$Role.registration-response-validation"
   $document = $created.document
   $upload = $created.upload
+  $script:acceptanceStage = "$Role.registration-document-identity"
+  if ([string]$document.id -notmatch '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$') {
+    throw "The gateway did not return the exact bounded upload registration."
+  }
+  $script:acceptanceStage = "$Role.registration-document-metadata"
   if (
-    [string]$document.id -notmatch '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' -or
     [string]$document.fileName -cne [string]$entry.fileName -or
     [string]$document.mediaType -cne [string]$entry.mediaType -or
     [long]$document.sizeBytes -ne [long]$entry.sizeBytes -or
-    [string]$document.sha256 -cne [string]$entry.sha256 -or
+    [string]$document.sha256 -cne [string]$entry.sha256
+  ) {
+    throw "The gateway did not return the exact bounded upload registration."
+  }
+  $script:acceptanceStage = "$Role.registration-upload-status"
+  if (
     [string]$document.status -cne 'awaiting_upload' -or
     [string]$upload.method -cne 'POST' -or
-    [string]$upload.url -notmatch '^https://' -or
+    [string]$upload.url -notmatch '^https://'
+  ) {
+    throw "The gateway did not return the exact bounded upload registration."
+  }
+  $script:acceptanceStage = "$Role.registration-expiry-bound"
+  if (
     [DateTimeOffset]::Parse([string]$upload.expiresAt) -gt [DateTimeOffset]::UtcNow.AddMinutes(5)
   ) {
     throw "The gateway did not return the exact bounded upload registration."
