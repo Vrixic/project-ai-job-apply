@@ -206,16 +206,19 @@ describe("exact document parser object capability", () => {
       RoleArn: "arn:aws:iam::362544434697:role/document-object-access",
       DurationSeconds: 900,
     });
-    const policy = JSON.parse(String(assumeInput.Policy)) as {
-      Statement: Array<{ Resource: string; Condition?: unknown }>;
+    const serializedPolicy = String(assumeInput.Policy);
+    const policy = JSON.parse(serializedPolicy) as {
+      Statement: Array<{ Action: string | string[]; Resource: string; Condition?: unknown }>;
     };
     expect(policy.Statement).toEqual([
       expect.objectContaining({
+        Action: "s3:GetObject*",
         Resource:
           "arn:aws:s3:::candidate-docs/quarantine/019b4e12-7ea3-7c36-9357-aea35ab542ca/source",
         Condition: { StringEquals: { "s3:VersionId": "source-version" } },
       }),
       expect.objectContaining({
+        Action: "s3:PutObject",
         Resource:
           "arn:aws:s3:::candidate-docs/normalized/019b4e12-7ea3-7c36-9357-aea35ab542ca/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/parser-v1/resume.json",
       }),
@@ -226,6 +229,7 @@ describe("exact document parser object capability", () => {
         },
       }),
     ]);
+    expect(serializedPolicy.length).toBeLessThan(1_024);
     expect(lambda.send).toHaveBeenCalledOnce();
   });
 });

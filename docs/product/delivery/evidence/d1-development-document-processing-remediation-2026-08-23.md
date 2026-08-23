@@ -84,13 +84,40 @@ Recovery completed with zero rows and exact object removal. The only processor a
 the privacy-safe `TypeError` code. Source inspection found that the processor audit paths still used
 the same PostgreSQL JSON wrapper plus explicit `::jsonb` pattern already proven defective in live
 gateway registration. All processor JSONB audit writes now bind explicit serialized JSON text. Focused
-Documents/Gateway verification, exact processor publication and dark release, and a fresh acceptance
-run remain open.
+Documents verification passes 22/22, typecheck and build pass, and a disposable PostgreSQL 16
+processor integration run passes 2/2 before its exact test database is removed.
+
+Exact source `3c04be7b46853b9d88b9556827838325b8f2cc65` was then published as a deterministic,
+scanned migration image and immutable versioned Documents/Gateway objects. Saved plan SHA-256
+`4ed399af691ca1f3cc1c1d3e897122108222e87226685005654062c0eaf6f70d` changed only the
+migration task definition and the parser, processor, and gateway functions plus their unweighted
+aliases. The apply advanced the migration task to revision 17, parser and processor aliases to version
+4, gateway alias to version 24, and state to serial 127. Live artifact digests match the publication
+receipts. The scan mapping and both rules remain disabled, activation remains unauthorized, the
+anonymous public route remains absent, and no migration ran.
+
+A wholly fresh plan bound the four fixed generated-synthetic fixtures, eight reviewed requests, and
+the exact dark runtime. Its execution-plan SHA-256 is
+`d66ff2124d01cbe44f387880f8dd5308df3f13f64e8fa8e262817862b7af9e96`. The run reached
+direct processor response validation and failed closed. Receipt SHA-256
+`21c5392a61de31e0e67c0b4a16192f20fb91b51cc66e105caf6d4d692721fa9b` records
+`failed-cleaned`, zero persistent rows, database cleanup, exact object removal, and no acceptance
+claim. The only value-free processor error was `PackedPolicyTooLargeException`: AWS STS rejected the
+per-object parser session policy's packed representation even though the plaintext policy stayed
+within its separate documented limit.
+
+The source remediation now preserves the exact source object and version plus exact normalized
+output while reducing packed-policy pressure. The source read uses `s3:GetObject*`, whose effective
+permissions remain capped by the object-access role to the four reviewed read/tag actions, and the
+normalized object grants only `s3:PutObject`. The KMS key and S3-only condition are unchanged. A
+regression asserts those exact actions/resources/conditions and keeps the serialized policy below a
+conservative 1,024-character ceiling. Documents unit tests pass 22/22, and typecheck and build pass.
+Publication, exact dark release, and a wholly fresh acceptance run for this remediation remain open.
 
 ## Remaining work
 
-Generate a wholly fresh reviewed plan against the checksum-bound dark release and rerun the complete
-generated-synthetic direct-dark flow.
+Publish and dark-release the packed-session-policy remediation, then generate a wholly fresh reviewed
+plan and rerun the complete generated-synthetic direct-dark flow.
 Do not reuse a claimed plan. Require all seven functional phases, rollback proof, privacy-safe logs,
 zero persistent rows, exact object removal, zero running migration tasks, healthy alarms, disabled
 triggers, receipt verification, and a refresh-backed zero-drift plan before recording acceptance.

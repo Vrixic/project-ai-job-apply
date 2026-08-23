@@ -70,18 +70,16 @@ export class AwsDocumentParserClient implements DocumentParserClient {
       Statement: [
         {
           Effect: "Allow",
-          Action: [
-            "s3:GetObject",
-            "s3:GetObjectVersion",
-            "s3:GetObjectTagging",
-            "s3:GetObjectVersionTagging",
-          ],
+          // The role policy caps this wildcard to the four reviewed read/tag actions. Keeping the
+          // exact object and version here preserves the capability boundary while avoiding STS's
+          // independent packed-session-policy limit for high-entropy object identities.
+          Action: "s3:GetObject*",
           Resource: `arn:aws:s3:::${this.bucketName}/${job.sourceObjectKey}`,
           Condition: { StringEquals: { "s3:VersionId": job.sourceObjectVersion } },
         },
         {
           Effect: "Allow",
-          Action: ["s3:PutObject", "s3:GetObject", "s3:GetObjectVersion"],
+          Action: "s3:PutObject",
           Resource: `arn:aws:s3:::${this.bucketName}/${normalizedKey}`,
         },
         {
