@@ -74,6 +74,12 @@ normal execution: list and prove exactly one version with no delete marker, then
 exact version. This removes reliance on current-key permission or resolution and keeps cleanup bound to
 the same reviewed version. A new fresh run remains open.
 
+The next fresh run passed upload readback and reached direct processor response validation. Its recovery
+then exposed an operator-only response-shape defect after exact version deletion: S3 can omit the
+optional false `DeleteMarker` field. Cleanup now reads that field optionally under StrictMode while
+still rejecting an explicit delete marker or wrong version. Exact recovery of that run remains the
+immediate prerequisite before processor diagnosis or another plan.
+
 ## Remaining work
 
 Generate a wholly fresh reviewed plan against the checksum-bound dark release and rerun the complete

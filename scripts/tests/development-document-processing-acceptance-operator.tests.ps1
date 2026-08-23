@@ -68,6 +68,7 @@ foreach ($required in @(
     "'recovery-cleanup'",
     "delete-object",
     "--version-id",
+    "Get-OptionalProperty -Object `$deleted -Name 'DeleteMarker'",
     "list-object-versions"
   )) {
   if (-not $source.Contains($required)) { throw "The operator omits required boundary text: $required" }
