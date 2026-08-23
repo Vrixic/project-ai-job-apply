@@ -129,6 +129,16 @@ function Get-OptionalProperty {
   return $property.Value
 }
 
+function Test-OptionalCollectionEmpty {
+  param(
+    [AllowNull()][object]$Object,
+    [Parameter(Mandatory)][string]$Name
+  )
+
+  $value = Get-OptionalProperty -Object $Object -Name $Name
+  return $null -eq $value -or @($value).Count -eq 0
+}
+
 function Test-EcsFaultInjectionDisabled {
   param([Parameter(Mandatory)][object]$TaskDefinition)
 
@@ -369,8 +379,11 @@ function Assert-TaskDefinition {
       $secrets.Count -ne 1 -or [string]$secrets[0].name -cne "DATABASE_URL" -or [string]$secrets[0].valueFrom -notmatch "^arn:aws:secretsmanager:$([regex]::Escape($Region)):$ExpectedAccountId`:secret:" -or
       [string]$container.logConfiguration.logDriver -cne "awslogs" -or [string]$container.logConfiguration.options.'awslogs-group' -cne $applicationLogGroup -or
       [string]$container.logConfiguration.options.'awslogs-region' -cne $Region -or [string]$container.logConfiguration.options.'awslogs-stream-prefix' -cne "database-migration" -or
-      @($container.portMappings).Count -ne 0 -or @($container.mountPoints).Count -ne 0 -or @($container.volumesFrom).Count -ne 0 -or
-      @($container.systemControls).Count -ne 0 -or @($container.resourceRequirements).Count -ne 0) {
+      -not (Test-OptionalCollectionEmpty -Object $container -Name "portMappings") -or
+      -not (Test-OptionalCollectionEmpty -Object $container -Name "mountPoints") -or
+      -not (Test-OptionalCollectionEmpty -Object $container -Name "volumesFrom") -or
+      -not (Test-OptionalCollectionEmpty -Object $container -Name "systemControls") -or
+      -not (Test-OptionalCollectionEmpty -Object $container -Name "resourceRequirements")) {
     throw "The database task container does not match the fixed immutable acceptance runtime."
   }
   return $task

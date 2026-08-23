@@ -121,7 +121,7 @@ foreach ($bindingCase in @(
 
 . $guardPath
 foreach ($functionName in @(
-    "Get-OptionalProperty", "Test-EcsFaultInjectionDisabled", "Get-FileSha256Base64", "ConvertFrom-AcceptanceJson", "Assert-ExactPropertySet", "Test-CanonicalUtcTimestamp",
+    "Get-OptionalProperty", "Test-OptionalCollectionEmpty", "Test-EcsFaultInjectionDisabled", "Get-FileSha256Base64", "ConvertFrom-AcceptanceJson", "Assert-ExactPropertySet", "Test-CanonicalUtcTimestamp",
     "New-AcceptanceEnvironment", "New-RunTaskRequest", "Assert-RunTaskRequest",
     "Assert-PlanFresh", "Assert-PlanTimestamps", "Read-ExecutionPlan", "New-AuthorizerClaims", "New-SearchEvent",
     "Assert-SearchPageResponse", "Assert-StaleCursorResponse", "Read-AcceptanceReceipt",
@@ -258,6 +258,11 @@ function Invoke-AwsJson {
         "fault-string" { $task.enableFaultInjection = "false" }
         "ipc" { $task.ipcMode = "host" }
         "pid" { $task.pidMode = "task" }
+        "omit-empty-container-collections" {
+          foreach ($propertyName in @("portMappings", "mountPoints", "volumesFrom", "systemControls", "resourceRequirements")) {
+            $task.containerDefinitions[0].PSObject.Properties.Remove($propertyName)
+          }
+        }
       }
       return [pscustomobject]@{ taskDefinition = $task }
     }
@@ -283,6 +288,8 @@ if (-not (Test-EcsFaultInjectionDisabled -TaskDefinition ([pscustomobject]@{})) 
   (Test-EcsFaultInjectionDisabled -TaskDefinition ([pscustomobject]@{ enableFaultInjection = "false" }))) {
   throw "The task fault-injection type boundary is not fail closed."
 }
+$null = Assert-TaskDefinition -TaskDefinitionArn $runtime.TaskDefinitionArn -ExpectedImage $runtime.Image
+$script:taskTamper = "omit-empty-container-collections"
 $null = Assert-TaskDefinition -TaskDefinitionArn $runtime.TaskDefinitionArn -ExpectedImage $runtime.Image
 foreach ($taskTamper in @("status", "fault-true", "fault-string", "ipc", "pid")) {
   $script:taskTamper = $taskTamper
