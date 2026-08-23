@@ -57,7 +57,7 @@ describe("PostgresDocumentStore", () => {
     ).resolves.toEqual(response);
   });
 
-  it("binds JSONB writes as structured values without the driver JSON wrapper", async () => {
+  it("binds JSONB writes as explicit JSON text without the driver JSON wrapper", async () => {
     const statements: Array<{ sql: string; values: unknown[] }> = [];
     const transaction = Object.assign(
       async (strings: TemplateStringsArray, ...values: unknown[]) => {
@@ -72,7 +72,9 @@ describe("PostgresDocumentStore", () => {
         return [];
       },
       {
-        json: <T>(value: T) => value,
+        json: () => {
+          throw new Error("the driver JSON wrapper must not be used");
+        },
       },
     );
     const client = {
@@ -114,8 +116,10 @@ describe("PostgresDocumentStore", () => {
     );
     expect(idempotencyInsert?.sql).toContain("?::jsonb");
     expect(auditInsert?.sql).toContain("?::jsonb");
-    expect(idempotencyInsert?.values.at(-1)).toEqual(response);
-    expect(auditInsert?.values.at(-1)).toEqual({
+    expect(typeof idempotencyInsert?.values.at(-1)).toBe("string");
+    expect(typeof auditInsert?.values.at(-1)).toBe("string");
+    expect(JSON.parse(String(idempotencyInsert?.values.at(-1)))).toEqual(response);
+    expect(JSON.parse(String(auditInsert?.values.at(-1)))).toEqual({
       version: 1,
       sizeBytes: 2048,
     });
