@@ -1095,6 +1095,24 @@ function Invoke-RecoveryCleanupTask {
   throw "Recovery cleanup exhausted its bounded ECS startup attempts."
 }
 
+function Add-RecoveryTaskEvidence {
+  param(
+    [Parameter(Mandatory)][object]$Receipt,
+    [Parameter(Mandatory)][string]$TaskArn,
+    [Parameter(Mandatory)][string]$ResultSha256
+  )
+  if (
+    $TaskArn -notmatch "^arn:aws:ecs:${Region}:${ExpectedAccountId}:task/ai-job-apply-development/[a-f0-9]{32}$" -or
+    $ResultSha256 -notmatch '^[a-f0-9]{64}$' -or
+    @($Receipt.taskArns.PSObject.Properties | ForEach-Object { $_.Name }) -contains 'recovery-cleanup' -or
+    @($Receipt.resultSha256ByAction.PSObject.Properties | ForEach-Object { $_.Name }) -contains 'recovery-cleanup'
+  ) {
+    throw 'The recovery cleanup task evidence is invalid or already present.'
+  }
+  $Receipt.taskArns | Add-Member -NotePropertyName 'recovery-cleanup' -NotePropertyValue $TaskArn
+  $Receipt.resultSha256ByAction | Add-Member -NotePropertyName 'recovery-cleanup' -NotePropertyValue $ResultSha256
+}
+
 function New-DurableClaim {
   param([Parameter(Mandatory)][object]$Plan)
   $key = "operator-claims/development-document-processing-acceptance/$ReviewedExecutionPlanSha256.json"
@@ -2431,8 +2449,7 @@ if ($Action -eq 'RecoverCleanup') {
   if (-not [bool]$receipt.databaseCleaned) {
     $recoveryTask = Invoke-RecoveryCleanupTask -Request $requestByPhase.'recovery-cleanup' -RunId $receipt.runId
     $cleanup = $recoveryTask.Result
-    $receipt.taskArns.'recovery-cleanup' = $recoveryTask.Arn
-    $receipt.resultSha256ByAction.'recovery-cleanup' = [string]$cleanup.canonicalSha256
+    Add-RecoveryTaskEvidence -Receipt $receipt -TaskArn $recoveryTask.Arn -ResultSha256 ([string]$cleanup.canonicalSha256)
     $receipt.persistentRows = [int]$cleanup.persistentRows
     $receipt.databaseCleaned = $true
     Write-JsonFile -Path $receiptEvidence.Path -Value $receipt -AllowReplace

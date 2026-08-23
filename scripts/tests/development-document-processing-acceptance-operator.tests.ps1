@@ -111,7 +111,7 @@ function Import-OperatorFunction {
 foreach ($name in @(
     "Assert-ExactPropertySet", "ConvertFrom-OperatorJson", "Get-TextSha256", "Get-OperatorDeltaEvidence",
     "Get-OptionalProperty", "Get-OptionalItems",
-    "Test-CanonicalTimestamp", "New-TaskRequest", "Assert-TaskRequest", "ConvertTo-ReviewedTaskOverrides",
+    "Test-CanonicalTimestamp", "New-TaskRequest", "Assert-TaskRequest", "ConvertTo-ReviewedTaskOverrides", "Add-RecoveryTaskEvidence",
     "Get-ExpectedAggregate", "New-RecoveryAttemptToken", "New-GatewayEvent", "Assert-RecoveryDescriptor",
     "Test-ExactObjectAlreadyRemoved", "Assert-DocumentOperationalHealth", "Assert-PrivacySafeLogs",
     "Get-OptionalProperty", "New-DirectProcessorEvent", "Get-LambdaVersionIdentity",
@@ -189,6 +189,22 @@ $rejectedAccelerator = $false
 try { $null = ConvertTo-ReviewedTaskOverrides -Overrides $ecsReadback }
 catch { $rejectedAccelerator = $true }
 if (-not $rejectedAccelerator) { throw "An unreviewed ECS accelerator override was accepted." }
+$recoveryEvidenceReceipt = [pscustomobject]@{
+  taskArns = [pscustomobject]@{}
+  resultSha256ByAction = [pscustomobject]@{}
+}
+$recoveryTaskArn = 'arn:aws:ecs:us-east-2:123456789012:task/ai-job-apply-development/0123456789abcdef0123456789abcdef'
+Add-RecoveryTaskEvidence -Receipt $recoveryEvidenceReceipt -TaskArn $recoveryTaskArn -ResultSha256 ('b' * 64)
+if (
+  [string]$recoveryEvidenceReceipt.taskArns.'recovery-cleanup' -cne $recoveryTaskArn -or
+  [string]$recoveryEvidenceReceipt.resultSha256ByAction.'recovery-cleanup' -cne ('b' * 64)
+) {
+  throw "Recovery cleanup evidence was not added to an empty parsed receipt object."
+}
+$rejectedDuplicateEvidence = $false
+try { Add-RecoveryTaskEvidence -Receipt $recoveryEvidenceReceipt -TaskArn $recoveryTaskArn -ResultSha256 ('b' * 64) }
+catch { $rejectedDuplicateEvidence = $true }
+if (-not $rejectedDuplicateEvidence) { throw "Duplicate recovery cleanup evidence was accepted." }
 $recoveryTokenOne = New-RecoveryAttemptToken -RunId $runId -InvocationId '0123456789abcdef' -Attempt 1
 $recoveryTokenTwo = New-RecoveryAttemptToken -RunId $runId -InvocationId 'fedcba9876543210' -Attempt 1
 $recoveryTokenRetry = New-RecoveryAttemptToken -RunId $runId -InvocationId '0123456789abcdef' -Attempt 2
