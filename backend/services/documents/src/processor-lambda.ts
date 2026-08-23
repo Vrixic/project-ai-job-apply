@@ -331,6 +331,13 @@ export function createDocumentProcessorHandler(
         }
         const result = await parser.parse(accepted.job);
         if (!result.ok) {
+          console.info(
+            JSON.stringify({
+              event: "document_processing_parser_rejected",
+              failureCode: result.failureCode,
+              reasonCode: result.reasonCode,
+            }),
+          );
           await store.rejectAfterParse(accepted.job, result);
           continue;
         }

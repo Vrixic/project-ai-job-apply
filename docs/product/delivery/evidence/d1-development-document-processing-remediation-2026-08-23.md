@@ -136,11 +136,35 @@ Documents unit tests remain 22/22 and typecheck/build pass. A recovery-capable m
 published and used for bounded cleanup before any new execution. The next runtime plan must also repin
 the processor from retained parser version 2 to already published, unweighted parser version 4.
 
+Exact source `a7b15f6f5bf8716e877b16b660d9f9109d79306b` was published as a deterministic,
+zero-High/zero-Critical migration image. One temporary task revision cloned revision 18 except for that
+reviewed image, cleaned the exact authenticated partial run with zero persistent rows, and was
+deregistered. The original operator then independently re-proved the empty database boundary and
+removed the descriptor-bound source version. Recovered receipt SHA-256
+`2a70574ae1ac456c96670eb28dc1bb0ee50b39c8c02e427428de53f688c5afe4` records zero rows,
+database clean, objects removed, triggers disabled, and no acceptance claim.
+
+Saved plan SHA-256 `d08e797d1389f9ed21efee657216ed803ba2969705c46dfdea6ccd25dcc5128b`
+then advanced the migration task to revision 20, processor alias to version 6, and state to serial 129.
+It changed only the task image, processor function/alias, and exact parser-version substitutions in
+the processor IAM and Lambda VPC-endpoint policies. The processor is pinned to unweighted parser
+version 4; no action/resource broadening, trigger, public route, or migration occurred.
+
+A fresh exact parser-4 run used execution-plan SHA-256
+`850fe0435bb53c70ea90b65b4ce10d0f2a2c10e23fc9ca86c3ce4c1c9b1c1162` and again stopped at
+processor response validation. Receipt SHA-256
+`2290477c0a49a05bed340c3167bc54d7c99d6a77bd4816c6503ec926c520792c` records
+`failed-cleaned`, zero persistent rows, database cleanup, exact object removal, and no acceptance
+claim. Lambda metrics prove two successful processor invocations with zero errors and one successful
+parser invocation; the parser completed in bounded time but returned a rejection that the processor
+acknowledged without telemetry. Source now emits only the already validated parser `failureCode` and
+uppercase `reasonCode` in a value-free `document_processing_parser_rejected` event. An exact unit
+regression covers that boundary. Publication and a wholly fresh run remain open.
+
 ## Remaining work
 
-Publish the cleanup remediation, complete exact cleanup of the current receipt, repin the processor
-to parser version 4 through a saved dark plan, then generate a wholly fresh reviewed plan and rerun the
-complete generated-synthetic direct-dark flow.
+Publish the value-free parser-rejection telemetry, dark-release the processor, then generate a wholly
+fresh reviewed plan and rerun the complete generated-synthetic direct-dark flow.
 Do not reuse a claimed plan. Require all seven functional phases, rollback proof, privacy-safe logs,
 zero persistent rows, exact object removal, zero running migration tasks, healthy alarms, disabled
 triggers, receipt verification, and a refresh-backed zero-drift plan before recording acceptance.

@@ -148,6 +148,60 @@ describe("document processor SQS boundary", () => {
     );
     error.mockRestore();
   });
+
+  it("emits only bounded parser-rejection telemetry before acknowledging", async () => {
+    const job = {
+      userId: "019b4e12-7ea3-7c36-9357-aea35ab542cb",
+      documentId: "019b4e12-7ea3-7c36-9357-aea35ab542ca",
+      documentVersion: 1,
+      sourceObjectKey: scan.objectKey,
+      sourceObjectVersion: scan.objectVersion,
+      mediaType: "application/pdf" as const,
+      sizeBytes: 123,
+      sha256: "a".repeat(64),
+      createdAt: "2026-08-12T12:00:00.000Z",
+      traceId: scan.eventId,
+    };
+    const store = {
+      acceptScan: vi.fn(async () => ({ kind: "process" as const, job })),
+      rejectAfterParse: vi.fn(async () => undefined),
+      completeParsed: vi.fn(),
+    };
+    const parser = {
+      parse: vi.fn(async () => ({
+        ok: false as const,
+        failureCode: "object_mismatch" as const,
+        reasonCode: "SOURCE_METADATA",
+      })),
+    };
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const handler = createDocumentProcessorHandler(
+      {
+        accountId: scan.accountId,
+        region: scan.region,
+        protectionPlanArn: scan.protectionPlanArn,
+        bucketName: scan.bucketName,
+      },
+      store,
+      parser,
+      { read: vi.fn() },
+    );
+
+    await expect(handler(event(scan))).resolves.toEqual({ batchItemFailures: [] });
+    expect(store.rejectAfterParse).toHaveBeenCalledWith(job, {
+      ok: false,
+      failureCode: "object_mismatch",
+      reasonCode: "SOURCE_METADATA",
+    });
+    expect(info).toHaveBeenCalledWith(
+      JSON.stringify({
+        event: "document_processing_parser_rejected",
+        failureCode: "object_mismatch",
+        reasonCode: "SOURCE_METADATA",
+      }),
+    );
+    info.mockRestore();
+  });
 });
 
 describe("exact document parser object capability", () => {
