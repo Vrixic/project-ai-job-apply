@@ -326,18 +326,16 @@ export function createDocumentProcessorHandler(
         const accepted = await store.acceptScan(scan);
         if (accepted.kind === "acknowledged") continue;
         if (accepted.kind === "security_contradiction") {
-          console.error(JSON.stringify({ event: "document_processing_security_contradiction" }));
+          console.error({ event: "document_processing_security_contradiction" });
           continue;
         }
         const result = await parser.parse(accepted.job);
         if (!result.ok) {
-          console.info(
-            JSON.stringify({
-              event: "document_processing_parser_rejected",
-              failureCode: result.failureCode,
-              reasonCode: result.reasonCode,
-            }),
-          );
+          console.info({
+            event: "document_processing_parser_rejected",
+            failureCode: result.failureCode,
+            reasonCode: result.reasonCode,
+          });
           await store.rejectAfterParse(accepted.job, result);
           continue;
         }
@@ -354,15 +352,13 @@ export function createDocumentProcessorHandler(
           throw new Error("DocumentParserCountMismatch");
         }
         const proposalCount = await store.completeParsed(accepted.job, result, normalized);
-        console.info(
-          JSON.stringify({
-            event: "document_processing_completed",
-            pageCount: result.pageCount,
-            characterCount: result.characterCount,
-            proposalCount,
-            parserVersion: result.parserVersion,
-          }),
-        );
+        console.info({
+          event: "document_processing_completed",
+          pageCount: result.pageCount,
+          characterCount: result.characterCount,
+          proposalCount,
+          parserVersion: result.parserVersion,
+        });
       } catch (error) {
         const candidate = error as { name?: unknown; message?: unknown };
         const rawCode =
@@ -373,7 +369,7 @@ export function createDocumentProcessorHandler(
           typeof rawCode === "string" && /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/u.test(rawCode)
             ? rawCode
             : "UnclassifiedError";
-        console.error(JSON.stringify({ event: "document_processing_record_failed", errorCode }));
+        console.error({ event: "document_processing_record_failed", errorCode });
         failures.push({ itemIdentifier: record.messageId });
       }
     }
@@ -414,21 +410,17 @@ export function createDocumentProcessingReconciler(
     }
     const counts = await store.failStuckDocuments();
     if (counts.scanTimedOut > 0 || counts.parseTimedOut > 0) {
-      console.error(
-        JSON.stringify({
-          event: "document_processing_timed_out",
-          scanTimedOut: counts.scanTimedOut,
-          parseTimedOut: counts.parseTimedOut,
-        }),
-      );
-    }
-    console.info(
-      JSON.stringify({
-        event: "document_processing_reconciled",
+      console.error({
+        event: "document_processing_timed_out",
         scanTimedOut: counts.scanTimedOut,
         parseTimedOut: counts.parseTimedOut,
-      }),
-    );
+      });
+    }
+    console.info({
+      event: "document_processing_reconciled",
+      scanTimedOut: counts.scanTimedOut,
+      parseTimedOut: counts.parseTimedOut,
+    });
   };
 }
 

@@ -2176,7 +2176,6 @@ function Assert-PrivacySafeLogs {
     )
   }
   $forbidden = @($forbidden | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
-  $contradictionMarker = '{"event":"document_processing_security_contradiction"}'
   $contradictionCount = 0
   $nextToken = $null
   $previousToken = $null
@@ -2196,7 +2195,14 @@ function Assert-PrivacySafeLogs {
         }
       }
       if ($message.IndexOf('document_processing_security_contradiction', [StringComparison]::Ordinal) -ge 0) {
-        if ([regex]::Matches($message, [regex]::Escape($contradictionMarker)).Count -ne 1) {
+        $structured = ConvertFrom-OperatorJson -Json $message -Description 'Structured contradiction log'
+        $payload = Get-OptionalProperty -Object $structured -Name 'message'
+        if (
+          $null -eq $payload -or
+          $payload -is [string] -or
+          (@($payload.PSObject.Properties.Name) -join '|') -cne 'event' -or
+          [string]$payload.event -cne 'document_processing_security_contradiction'
+        ) {
           throw "The security-contradiction telemetry event is not the exact value-free metric-filter input."
         }
         $contradictionCount += 1

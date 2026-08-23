@@ -285,10 +285,36 @@ Documents unit tests pass 24/24, typecheck passes, and the PowerShell 7/5.1 oper
 No direct-dark acceptance claim is made until this source is published, rerun wholly fresh, and its
 receipt passes independent verification.
 
+Exact privacy-remediation source `b5ec816e37d3a3117f438915727eacba76000921` was published as a
+deterministic Linux/AMD64 migration image with a complete zero-High/zero-Critical scan. Publication
+receipt SHA-256 is `9130ad65fef73b7e70940e61fcf1132d419eada1fcb8926599690aca89f0d407`.
+Only the migration task definition was replaced, advancing it to revision 23 and state serial 134;
+the exact image digest matches, triggers remain disabled, and zero-drift plan SHA-256 is
+`f0e984b8a5a82c8fd519961c2e3522b185bf50bf05ca654c50da3e921bbb1e23`. Docker and WSL were
+stopped immediately after publication.
+
+The wholly fresh run used execution-plan SHA-256
+`308c5d10b874c39407885dbb23c720a5773094bee455bf66133dea2a22b019db` and fixture-set SHA-256
+`38ca25353630bffacd3742aaceb4e8319c64483792f6b3f3adb93ef34e28f8a7`. It again completed all
+seven actions, proved rollback, cleaned the database to zero rows, removed every exact object version,
+and kept triggers disabled. Receipt SHA-256
+`7610b70e0d6739265a368154c4b71cc11b1536e388f276685d1e43cede8b2a45` is functionally
+verified-and-cleaned. Independent verification passed the privacy gate, then failed closed because the
+contradiction event did not have the exact root shape expected by its metric filter.
+
+The deployed processor used `console.error(JSON.stringify(...))` while Lambda advanced logging is
+configured for JSON. Lambda therefore stored an outer structured record whose `message` was an inner
+JSON string; all three root-field document metric filters were structurally unable to match. The
+processor and reconciler now pass a single bounded object to each console method. The metric filters
+match `$.message.event`, and the verifier parses the outer record and requires the contradiction
+payload to contain exactly the one `event` property. Documents 24/24, typecheck, Terraform formatting,
+and PowerShell 7/5.1 regressions pass. Publication and a wholly fresh run remain open.
+
 ## Remaining work
 
-Commit and publish the privacy-safe acceptance-task logging correction, dark-deploy only the resulting
-migration task revision, then generate a wholly fresh reviewed plan and rerun the complete
+Commit and publish the structured-telemetry correction as both the migration image and Documents
+artifacts. Dark-deploy only the resulting task definition, processor function/alias, and three metric
+filter pattern updates, then generate a wholly fresh reviewed plan and rerun the complete
 generated-synthetic direct-dark flow.
 Do not reuse a claimed plan. Require all seven functional phases, rollback proof, privacy-safe logs,
 zero persistent rows, exact object removal, zero running migration tasks, healthy alarms, disabled

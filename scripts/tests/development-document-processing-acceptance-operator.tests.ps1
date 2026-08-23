@@ -516,7 +516,7 @@ function global:Invoke-AwsJson {
         }) }
   }
   if ($Arguments[0] -ceq 'logs') {
-    $message = '2026-08-15 request ERROR {"event":"document_processing_security_contradiction"}'
+    $message = '{"timestamp":"2026-08-15T12:00:00.000Z","level":"ERROR","requestId":"redacted","message":{"event":"document_processing_security_contradiction"}}'
     if (-not [string]::IsNullOrWhiteSpace([string]$script:privacyLeak)) { $message += " $($script:privacyLeak)" }
     return [pscustomobject]@{
       events = @([pscustomobject]@{ message = $message })

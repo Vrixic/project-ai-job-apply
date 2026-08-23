@@ -143,9 +143,7 @@ describe("document processor SQS boundary", () => {
     );
     await expect(handler(event(scan))).resolves.toEqual({ batchItemFailures: [] });
     expect(parser.parse).not.toHaveBeenCalled();
-    expect(error).toHaveBeenCalledWith(
-      JSON.stringify({ event: "document_processing_security_contradiction" }),
-    );
+    expect(error).toHaveBeenCalledWith({ event: "document_processing_security_contradiction" });
     error.mockRestore();
   });
 
@@ -193,13 +191,11 @@ describe("document processor SQS boundary", () => {
       failureCode: "object_mismatch",
       reasonCode: "SOURCE_METADATA",
     });
-    expect(info).toHaveBeenCalledWith(
-      JSON.stringify({
-        event: "document_processing_parser_rejected",
-        failureCode: "object_mismatch",
-        reasonCode: "SOURCE_METADATA",
-      }),
-    );
+    expect(info).toHaveBeenCalledWith({
+      event: "document_processing_parser_rejected",
+      failureCode: "object_mismatch",
+      reasonCode: "SOURCE_METADATA",
+    });
     info.mockRestore();
   });
 });
@@ -349,20 +345,16 @@ describe("document processing timeout reconciler", () => {
       }),
     ).resolves.toBeUndefined();
     expect(store.failStuckDocuments).toHaveBeenCalledOnce();
-    expect(info).toHaveBeenCalledWith(
-      JSON.stringify({
-        event: "document_processing_reconciled",
-        scanTimedOut: 2,
-        parseTimedOut: 1,
-      }),
-    );
-    expect(error).toHaveBeenCalledWith(
-      JSON.stringify({
-        event: "document_processing_timed_out",
-        scanTimedOut: 2,
-        parseTimedOut: 1,
-      }),
-    );
+    expect(info).toHaveBeenCalledWith({
+      event: "document_processing_reconciled",
+      scanTimedOut: 2,
+      parseTimedOut: 1,
+    });
+    expect(error).toHaveBeenCalledWith({
+      event: "document_processing_timed_out",
+      scanTimedOut: 2,
+      parseTimedOut: 1,
+    });
     info.mockRestore();
     error.mockRestore();
   });

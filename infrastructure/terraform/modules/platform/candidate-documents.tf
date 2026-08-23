@@ -994,7 +994,7 @@ resource "aws_lambda_permission" "document_processing_reconciler" {
 resource "aws_cloudwatch_log_metric_filter" "document_security_contradiction" {
   count          = local.document_parser_dark_enabled ? 1 : 0
   name           = "${var.name}-${var.environment}-document-security-contradiction"
-  pattern        = "{ $.event = \"document_processing_security_contradiction\" }"
+  pattern        = "{ $.message.event = \"document_processing_security_contradiction\" }"
   log_group_name = aws_cloudwatch_log_group.application.name
   metric_transformation {
     name      = "DocumentSecurityContradictions"
@@ -1006,7 +1006,7 @@ resource "aws_cloudwatch_log_metric_filter" "document_security_contradiction" {
 resource "aws_cloudwatch_log_metric_filter" "document_processing_record_failed" {
   count          = local.document_parser_dark_enabled ? 1 : 0
   name           = "${var.name}-${var.environment}-document-processing-record-failed"
-  pattern        = "{ $.event = \"document_processing_record_failed\" }"
+  pattern        = "{ $.message.event = \"document_processing_record_failed\" }"
   log_group_name = aws_cloudwatch_log_group.application.name
   metric_transformation {
     name      = "DocumentProcessingRecordFailures"
@@ -1018,7 +1018,7 @@ resource "aws_cloudwatch_log_metric_filter" "document_processing_record_failed" 
 resource "aws_cloudwatch_log_metric_filter" "document_processing_timed_out" {
   count          = local.document_parser_dark_enabled ? 1 : 0
   name           = "${var.name}-${var.environment}-document-processing-timed-out"
-  pattern        = "{ $.event = \"document_processing_timed_out\" }"
+  pattern        = "{ $.message.event = \"document_processing_timed_out\" }"
   log_group_name = aws_cloudwatch_log_group.application.name
   metric_transformation {
     name      = "DocumentProcessingTimeouts"
