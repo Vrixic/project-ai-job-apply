@@ -224,11 +224,28 @@ email, TypeScript, and PostgreSQL proposal checks. The source-only regression re
 and does not expose values, identifiers, response bodies, or arbitrary paths. A fresh operator-delta
 run remains open to isolate the exact profile-review defect before correction.
 
+The exact allowed operator delta was committed at
+`db89aa0c9a962d1ae6814b6ce270742b8e93f75c` and independently bound in a new plan. Execution-plan
+SHA-256 `b6b0573249909eba39ca24b5025d061d69dc32195f076985cf5a3982b42db2a9` used fixture-set
+SHA-256 `75a7ae14a5f86da944206b53014b9a247e114df0b813c3da45a9e9b5b5e2db5d` against unchanged
+state serial 133. The run again passed preflight and clean processing, then the new attribution
+isolated `profile-review-initial-read-response-validation` before any review mutation. Receipt
+SHA-256 `c215bf228b72458cd02aa2ae901d61a81b46136328760e6f08b33bf69f40d2c7`
+records `failed-cleaned`, zero persistent rows, database cleanup, exact object removal, and no
+acceptance claim.
+
+The defect is in the acceptance operator rather than the deployed gateway or profile data. Its event
+builder always serialized `body: null`; the gateway intentionally treats any body property on a GET
+as an invalid bodyless request and returns `400`. The operator now omits `body` entirely when no body
+is supplied while preserving exact compact JSON for POST/PATCH. An executable regression asserts the
+bodyless profile GET has no `body` property and the upload POST retains its exact JSON body. A fresh
+operator-delta run remains open.
+
 ## Remaining work
 
-Commit and verify the value-free profile-review stage attribution, compute the exact allowed operator
-delta from deployed source, then generate a wholly fresh reviewed plan and rerun the complete
-generated-synthetic direct-dark flow. Correct the isolated profile-review defect if the rerun fails.
+Commit and verify the bodyless-GET operator correction, compute the new exact allowed operator delta
+from deployed source, then generate a wholly fresh reviewed plan and rerun the complete
+generated-synthetic direct-dark flow.
 Do not reuse a claimed plan. Require all seven functional phases, rollback proof, privacy-safe logs,
 zero persistent rows, exact object removal, zero running migration tasks, healthy alarms, disabled
 triggers, receipt verification, and a refresh-backed zero-drift plan before recording acceptance.

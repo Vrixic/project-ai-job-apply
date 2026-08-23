@@ -1227,7 +1227,7 @@ function New-GatewayEvent {
     $headers['idempotency-key'] = $IdempotencyKey
   }
   $requestId = "accept-$($RunId.Replace('-', ''))-$([guid]::NewGuid().ToString('N'))"
-  [ordered]@{
+  $event = [ordered]@{
     version = '2.0'
     routeKey = "$Method $Path"
     rawPath = $Path
@@ -1263,8 +1263,11 @@ function New-GatewayEvent {
       }
     }
     isBase64Encoded = $false
-    body = if ($null -eq $Body) { $null } else { $Body | ConvertTo-Json -Depth 20 -Compress }
   }
+  if ($null -ne $Body) {
+    $event.body = $Body | ConvertTo-Json -Depth 20 -Compress
+  }
+  $event
 }
 
 function Invoke-Gateway {

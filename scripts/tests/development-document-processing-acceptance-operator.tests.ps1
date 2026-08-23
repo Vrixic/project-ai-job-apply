@@ -311,6 +311,14 @@ if (
 ) {
   throw "The direct gateway event does not bind the exact generated identity and scopes."
 }
+$gatewayRead = New-GatewayEvent -Runtime $runtime -RunId $runId -Method "GET" -Path "/v1/profile/facts" -Body $null -IdempotencyKey $null
+if (
+  $gatewayRead.Contains('body') -or
+  -not $gateway.Contains('body') -or
+  [string]$gateway.body -cne '{"test":true}'
+) {
+  throw "The direct gateway event does not preserve the bodyless GET and JSON POST boundary."
+}
 $expectedKey = 'quarantine/11111111-1111-4111-8111-111111111111/source'
 $uploadFields = [pscustomobject]@{
   'Content-Type' = 'application/pdf'
