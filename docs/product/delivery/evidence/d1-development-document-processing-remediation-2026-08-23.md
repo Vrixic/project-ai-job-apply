@@ -48,12 +48,20 @@ The upload signer had bound the candidate-provided SHA-256 only as metadata. The
 remediation now adds exact `SHA256` POST checksum fields and policy conditions so S3 validates the
 uploaded bytes, requires that checksum in readback, and splits request, identity, checksum, and version
 history into privacy-safe guarded stages. Documents 22/22, Gateway 108/108, both package builds and
-typechecks, and focused PowerShell 7/5.1 operator suites pass. Publication and deployed rerun remain
-open.
+typechecks, and focused PowerShell 7/5.1 operator suites pass. At that checkpoint, publication and the
+deployed rerun remained open.
+
+Exact source `7574059f2244bbe61e3555c9702777f3127332e2` is now published as a deterministic
+Linux/AMD64 migration image with a complete zero-High/zero-Critical scan and as four immutable,
+versioned, encrypted gateway release objects. Publication changed neither Terraform nor the active
+gateway alias, and no migration ran. Docker and WSL were shut down immediately afterward. The AWS SSO
+session expired before task-definition planning, so task/gateway plan and apply, fresh acceptance, and
+zero drift remain externally blocked until the authorized operator refreshes that short-lived session.
 
 ## Remaining work
 
-Publish and dark-release the checksum-bound source, then generate a wholly fresh reviewed plan and
+Refresh the authorized short-lived AWS SSO session, dark-release the already-published checksum-bound
+source through exact reviewed task and gateway plans, then generate a wholly fresh reviewed plan and
 rerun the complete generated-synthetic direct-dark flow.
 Do not reuse a claimed plan. Require all seven functional phases, rollback proof, privacy-safe logs,
 zero persistent rows, exact object removal, zero running migration tasks, healthy alarms, disabled
