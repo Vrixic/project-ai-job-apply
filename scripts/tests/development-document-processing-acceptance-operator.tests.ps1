@@ -49,7 +49,6 @@ foreach ($required in @(
     'A recovery operator dependency changed after the reviewed source.',
     '$recoveryOnlyStateAdvance',
     '[long]$identity.Serial -gt [long]$planEvidence.Plan.stateSerial',
-    '[long]$identity.Serial -le ([long]$planEvidence.Plan.stateSerial + 2)',
     '$null = Assert-RecoveryDescriptor',
     "ConvertFrom-Json -DateKind String",
     'The reviewed operator delta changes deployed application or infrastructure source.',
@@ -63,6 +62,9 @@ foreach ($required in @(
     "list-object-versions"
   )) {
   if (-not $source.Contains($required)) { throw "The operator omits required boundary text: $required" }
+}
+if ($source.Contains('[long]$planEvidence.Plan.stateSerial +')) {
+  throw "Recovery safety must depend on exact runtime identity, not an arbitrary state-serial distance."
 }
 foreach ($forbidden in @(
     'PlanTransition', 'ApplyTransition', 'terraform "-chdir=$terraformDirectory" apply',

@@ -29,11 +29,10 @@ roles, or network destinations. The only documents are produced by the reviewed 
   commits may coexist on `main` because recovery invokes only the already reviewed deployed
   runtime and revalidates its exact live identity before every mutation. Fresh planning and
   execution retain the stricter whole-tree application/infrastructure refusal.
-- Recovery and read-only verification may tolerate at most two Terraform state-serial advances
-  after the reviewed execution plan, covering one refresh and one apply, only when the state
-  lineage, immutable migration image, and complete reviewed Lambda/task/bucket/trigger runtime
-  identity are unchanged. The operator binds every subsequent mutation and its closing check to
-  that current serial. Fresh execution still requires the exact reviewed serial.
+- Recovery and read-only verification may tolerate later Terraform state serials only when the
+  state lineage, immutable migration image, and complete reviewed Lambda/task/bucket/trigger
+  runtime identity are unchanged. The operator binds every subsequent mutation and its closing
+  check to that current serial. Fresh execution still requires the exact reviewed serial.
 - A temporary development IAM Identity Center session in the exact expected AWS account and
   `us-east-2`.
 - The encrypted, versioned development Terraform state bucket.
