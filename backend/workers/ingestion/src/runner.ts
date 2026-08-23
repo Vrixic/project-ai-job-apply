@@ -149,6 +149,66 @@ function enforceGreenhouseSourceBoundary(source: SourceJobObservation): void {
   }
 }
 
+function enforceLeverSourceBoundary(source: SourceJobObservation): void {
+  if (typeof source.sourceUrl !== "string" || source.sourceUrl.length > 2_048) {
+    throw new SourceBatchContractError("The Lever source URL is invalid");
+  }
+  let url: URL;
+  try {
+    url = new URL(source.sourceUrl);
+  } catch {
+    throw new SourceBatchContractError("The Lever source URL is invalid");
+  }
+  if (
+    url.protocol !== "https:" ||
+    !new Set(["jobs.lever.co", "jobs.eu.lever.co"]).has(url.hostname) ||
+    url.username ||
+    url.password ||
+    url.port ||
+    url.hash ||
+    url.search ||
+    typeof source.atsTenant !== "string" ||
+    !/^[a-z0-9][a-z0-9_-]{1,62}$/.test(source.atsTenant) ||
+    typeof source.externalJobId !== "string" ||
+    !/^[A-Za-z0-9][A-Za-z0-9-]{7,99}$/.test(source.externalJobId) ||
+    url.pathname !== `/${source.atsTenant}/${source.externalJobId}`
+  ) {
+    throw new SourceBatchContractError(
+      "The Lever source URL does not match its site and posting identity",
+    );
+  }
+}
+
+function enforceAshbySourceBoundary(source: SourceJobObservation): void {
+  if (typeof source.sourceUrl !== "string" || source.sourceUrl.length > 2_048) {
+    throw new SourceBatchContractError("The Ashby source URL is invalid");
+  }
+  let url: URL;
+  try {
+    url = new URL(source.sourceUrl);
+  } catch {
+    throw new SourceBatchContractError("The Ashby source URL is invalid");
+  }
+  if (
+    url.protocol !== "https:" ||
+    url.hostname !== "jobs.ashbyhq.com" ||
+    url.username ||
+    url.password ||
+    url.port ||
+    url.hash ||
+    url.search ||
+    typeof source.atsTenant !== "string" ||
+    !/^[A-Za-z0-9][A-Za-z0-9_-]{1,62}$/.test(source.atsTenant) ||
+    typeof source.externalJobId !== "string" ||
+    !/^[A-Za-z0-9][A-Za-z0-9-]{7,99}$/.test(source.externalJobId) ||
+    url.pathname !== `/${source.atsTenant}/${source.externalJobId}`
+  ) {
+    throw new SourceBatchContractError(
+      "The Ashby source URL does not match its board and posting identity",
+    );
+  }
+}
+
 function enforceSourceBoundary(
   source: SourceJobObservation,
   registration: ReturnType<SourceRegistry["requireEnabled"]>,
@@ -159,6 +219,14 @@ function enforceSourceBoundary(
   }
   if (registration.provider === "greenhouse" && registration.provenance === "permitted_api") {
     enforceGreenhouseSourceBoundary(source);
+    return;
+  }
+  if (registration.provider === "lever" && registration.provenance === "permitted_api") {
+    enforceLeverSourceBoundary(source);
+    return;
+  }
+  if (registration.provider === "ashby" && registration.provenance === "permitted_api") {
+    enforceAshbySourceBoundary(source);
     return;
   }
   throw new SourceBatchContractError("The source observation boundary is not implemented");

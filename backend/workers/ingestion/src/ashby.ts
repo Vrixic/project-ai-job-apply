@@ -1,0 +1,194 @@
+import type {
+  IngestionSourceAdapter,
+  SourceJobObservation,
+  SourcePollContext,
+  SourcePollResult,
+} from "./contract.js";
+import {
+  approvedCompanyConfiguration,
+  canonicalProviderText,
+  fetchPublicJson,
+  validateAcquisitionBounds,
+} from "./provider-http.js";
+
+const sourceIdPattern = /^ashby-[a-z0-9][a-z0-9-]{2,57}$/;
+const jobBoardPattern = /^[A-Za-z0-9][A-Za-z0-9_-]{1,62}$/;
+const postingIdPattern = /^[A-Za-z0-9][A-Za-z0-9-]{7,99}$/;
+const maximumJobs = 100;
+
+export const ashbyJobBoardAdapterVersion = "ashby-job-board-v1";
+
+type Fetch = typeof globalThis.fetch;
+
+export interface AshbyJobBoardAdapterOptions {
+  sourceId: string;
+  jobBoardName: string;
+  companyName: string;
+  verifiedCompanyDomain: string;
+  fetch?: Fetch;
+  requestTimeoutMs?: number;
+  maximumResponseBytes?: number;
+}
+
+function canonicalJobIdentity(
+  value: unknown,
+  jobBoardName: string,
+): Readonly<{ sourceUrl: string; externalJobId: string }> {
+  const raw = canonicalProviderText(value, "The Ashby job URL", 2_048);
+  const url = new URL(raw);
+  const segments = url.pathname.split("/").filter(Boolean);
+  if (
+    url.protocol !== "https:" ||
+    url.hostname !== "jobs.ashbyhq.com" ||
+    url.username ||
+    url.password ||
+    url.port ||
+    url.hash ||
+    segments.length !== 2 ||
+    segments[0] !== jobBoardName ||
+    !postingIdPattern.test(segments[1] as string)
+  ) {
+    throw new Error("The Ashby job URL does not match the approved board and posting identity");
+  }
+  url.search = "";
+  return Object.freeze({ sourceUrl: url.toString(), externalJobId: segments[1] as string });
+}
+
+function optionalText(value: unknown, label: string): string | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  return canonicalProviderText(value, label, 500);
+}
+
+function locations(job: Record<string, unknown>): readonly string[] {
+  const result = [canonicalProviderText(job.location, "The Ashby job location", 500)];
+  if (job.secondaryLocations !== undefined) {
+    if (!Array.isArray(job.secondaryLocations) || job.secondaryLocations.length > 24) {
+      throw new Error("The Ashby secondary locations are invalid");
+    }
+    for (const value of job.secondaryLocations) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        throw new Error("The Ashby secondary location is invalid");
+      }
+      result.push(
+        canonicalProviderText(
+          (value as Record<string, unknown>).location,
+          "The Ashby secondary location",
+          500,
+        ),
+      );
+    }
+  }
+  return [...new Set(result)];
+}
+
+function workMode(value: unknown): NonNullable<SourceJobObservation["workMode"]> {
+  if (value === "Remote") return "remote";
+  if (value === "Hybrid") return "hybrid";
+  if (value === "OnSite") return "on_site";
+  throw new Error("The Ashby workplace type is invalid");
+}
+
+function employmentType(value: unknown): SourceJobObservation["employmentType"] | undefined {
+  if (value === "FullTime") return "full_time";
+  if (value === "PartTime") return "part_time";
+  if (value === "Contract") return "contract";
+  if (value === "Intern") return "internship";
+  if (value === "Temporary") return undefined;
+  throw new Error("The Ashby employment type is invalid");
+}
+
+function parseJob(
+  value: unknown,
+  options: Readonly<{
+    jobBoardName: string;
+    companyName: string;
+    verifiedCompanyDomain: string;
+  }>,
+): SourceJobObservation | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("The Ashby job record is invalid");
+  }
+  const job = value as Record<string, unknown>;
+  if (typeof job.isListed !== "boolean") throw new Error("The Ashby listing state is invalid");
+  if (!job.isListed) return undefined;
+  const identity = canonicalJobIdentity(job.jobUrl, options.jobBoardName);
+  const department = optionalText(job.department, "The Ashby department");
+  const team = optionalText(job.team, "The Ashby team");
+  const mappedDepartment = department ?? team;
+  const mappedEmploymentType = employmentType(job.employmentType);
+  return {
+    companyName: options.companyName,
+    title: canonicalProviderText(job.title, "The Ashby job title", 500),
+    locations: locations(job),
+    description: canonicalProviderText(job.descriptionPlain, "The Ashby job description", 100_000),
+    sourceUrl: identity.sourceUrl,
+    atsTenant: options.jobBoardName,
+    externalJobId: identity.externalJobId,
+    verifiedCompanyDomain: options.verifiedCompanyDomain,
+    ...(mappedDepartment ? { department: mappedDepartment } : {}),
+    workMode: workMode(job.workplaceType),
+    ...(mappedEmploymentType ? { employmentType: mappedEmploymentType } : {}),
+  };
+}
+
+export class AshbyJobBoardAdapter implements IngestionSourceAdapter {
+  readonly sourceId: string;
+  readonly adapterVersion = ashbyJobBoardAdapterVersion;
+  readonly #jobBoardName: string;
+  readonly #companyName: string;
+  readonly #verifiedCompanyDomain: string;
+  readonly #fetch: Fetch;
+  readonly #requestTimeoutMs: number;
+  readonly #maximumResponseBytes: number;
+
+  constructor(options: AshbyJobBoardAdapterOptions) {
+    if (!sourceIdPattern.test(options.sourceId) || !jobBoardPattern.test(options.jobBoardName)) {
+      throw new Error("A canonical Ashby source and job board name are required");
+    }
+    const company = approvedCompanyConfiguration(
+      options.companyName,
+      options.verifiedCompanyDomain,
+    );
+    this.sourceId = options.sourceId;
+    this.#jobBoardName = options.jobBoardName;
+    this.#companyName = company.companyName;
+    this.#verifiedCompanyDomain = company.verifiedCompanyDomain;
+    this.#fetch = options.fetch ?? globalThis.fetch;
+    this.#requestTimeoutMs = options.requestTimeoutMs ?? 5_000;
+    this.#maximumResponseBytes = options.maximumResponseBytes ?? 1_000_000;
+    validateAcquisitionBounds(this.#requestTimeoutMs, this.#maximumResponseBytes, "Ashby");
+  }
+
+  async poll(context: SourcePollContext): Promise<SourcePollResult> {
+    const result = await fetchPublicJson({
+      fetch: this.#fetch,
+      url: `https://api.ashbyhq.com/posting-api/job-board/${this.#jobBoardName}?includeCompensation=false`,
+      signal: context.signal,
+      requestTimeoutMs: this.#requestTimeoutMs,
+      maximumResponseBytes: this.#maximumResponseBytes,
+      provider: "Ashby",
+    });
+    if (result.kind === "retry") return result;
+    if (!result.payload || typeof result.payload !== "object" || Array.isArray(result.payload)) {
+      throw new Error("The Ashby response is invalid");
+    }
+    const payload = result.payload as Record<string, unknown>;
+    if (
+      payload.apiVersion !== "1" ||
+      !Array.isArray(payload.jobs) ||
+      payload.jobs.length > maximumJobs
+    ) {
+      throw new Error("The Ashby job batch exceeds its bounded size or version");
+    }
+    const observations = payload.jobs
+      .map((job) =>
+        parseJob(job, {
+          jobBoardName: this.#jobBoardName,
+          companyName: this.#companyName,
+          verifiedCompanyDomain: this.#verifiedCompanyDomain,
+        }),
+      )
+      .filter((job): job is SourceJobObservation => job !== undefined);
+    return { kind: "success", observations };
+  }
+}

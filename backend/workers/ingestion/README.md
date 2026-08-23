@@ -3,12 +3,12 @@
 Owns the provider-independent worker contract that turns an explicitly enabled source adapter's
 bounded, normalized public-job batch into Jobs-owned catalog observations.
 
-The durable deployed composition remains synthetic-only. The package also contains one dark-first
-Greenhouse Job Board adapter candidate. The registry admits its exact `greenhouse-*` /
-`permitted_api` shape only while disabled; attempting to enable it is rejected by the source
-activation policy. No real board token, company configuration, schedule, queue mapping, egress, or
-provider data is configured. Real public feeds, public UGC, and real-provider data remain disabled
-behind their owning approval gates.
+The durable deployed composition remains synthetic-only. The package also contains dark-first
+Greenhouse Job Board, Lever Postings, and Ashby Job Board adapter candidates. The registry admits
+each provider's exact `permitted_api` shape only while disabled; attempting to enable any candidate
+is rejected by the source activation policy. No real board/site token, company configuration,
+schedule, queue mapping, egress, or provider data is configured. Real public feeds, public UGC, and
+real-provider data remain disabled behind their owning approval gates.
 
 ## Implemented boundaries
 
@@ -26,6 +26,12 @@ behind their owning approval gates.
   and streaming response bytes, strict response mapping, plain-text conversion, tracking-query
   removal, and reviewed company/domain inputs. It is tested only with generated responses and is
   impossible to enable through the default registry policy.
+- `lever.ts` — fixed global/EU Postings GET adapter with paired API/hosted-job hosts, bounded
+  pagination and overflow refusal, plaintext-only descriptions, tracking-query removal, and exact
+  site/posting identity. It never calls Lever's application endpoint.
+- `ashby.ts` — fixed public Job Board GET adapter with exact API version, listed-only projection,
+  bounded locations and response size, documented work-mode/employment mapping, and exact
+  board/posting identity. It requests no compensation data and never calls an authenticated API.
 - `orchestration-store.ts` — the storage-neutral coordinator that commits every schedule, claim,
   settlement, pause, and retry through the Jobs-owned compare-and-swap port before returning a
   transport disposition.
@@ -64,9 +70,9 @@ never acknowledge, reschedule, or dead-letter work from an uncommitted transitio
 The repository now includes a source-only, default-off durable Lambda/SQS/Terraform composition
 around this coordinator. That composition is not published, deployed, scheduled, mapped, or
 activated by this source packet. Its only runnable source ID remains `synthetic-foundation-v1`,
-backed only by the `synthetic-ingestion-v1` generated-synthetic adapter. The Greenhouse adapter is
-source-present but default-denied; Lever, Ashby, real network acquisition/configuration, and
-real-provider data remain absent and disabled.
+backed only by the `synthetic-ingestion-v1` generated-synthetic adapter. All three provider adapters
+are source-present but default-denied; real network acquisition/configuration and real-provider data
+remain absent and disabled.
 
 Run unit tests with `pnpm --filter @ai-job-apply/ingestion-worker test`. PostgreSQL integration
 requires an explicit `DATABASE_URL` and is separate from the default suite.

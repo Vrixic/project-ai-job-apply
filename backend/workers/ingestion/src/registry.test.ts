@@ -76,31 +76,57 @@ describe("SourceRegistry", () => {
     );
   });
 
-  it("admits the exact Greenhouse shape only as an immutable disabled candidate", () => {
-    const greenhouseAdapter: IngestionSourceAdapter = {
-      sourceId: "greenhouse-reviewed-board",
-      adapterVersion: "greenhouse-job-board-v1",
+  it.each([
+    ["greenhouse", "greenhouse-reviewed-board", "greenhouse-job-board-v1"],
+    ["lever", "lever-reviewed-site", "lever-postings-v1"],
+    ["ashby", "ashby-reviewed-board", "ashby-job-board-v1"],
+  ] as const)(
+    "admits the exact %s shape only as an immutable disabled candidate",
+    (provider, sourceId, adapterVersion) => {
+      const providerAdapter: IngestionSourceAdapter = {
+        sourceId,
+        adapterVersion,
+        poll: vi.fn(async () => ({ kind: "success" as const, observations: [] })),
+      };
+      const registry = new SourceRegistry([
+        {
+          sourceId,
+          provider,
+          provenance: "permitted_api",
+          adapter: providerAdapter,
+        },
+      ]);
+      expect(registry.get(sourceId)).toMatchObject({ enabled: false });
+      expect(() => registry.requireEnabled(sourceId)).toThrow("disabled");
+      expect(
+        () =>
+          new SourceRegistry([
+            {
+              sourceId,
+              provider,
+              provenance: "permitted_api",
+              adapter: providerAdapter,
+              enabled: true,
+            },
+          ]),
+      ).toThrow("default-off");
+    },
+  );
+
+  it("rejects provider/source-prefix mismatches for every dark ATS candidate", () => {
+    const providerAdapter: IngestionSourceAdapter = {
+      sourceId: "lever-reviewed-site",
+      adapterVersion: "lever-postings-v1",
       poll: vi.fn(async () => ({ kind: "success" as const, observations: [] })),
     };
-    const registry = new SourceRegistry([
-      {
-        sourceId: "greenhouse-reviewed-board",
-        provider: "greenhouse",
-        provenance: "permitted_api",
-        adapter: greenhouseAdapter,
-      },
-    ]);
-    expect(registry.get("greenhouse-reviewed-board")).toMatchObject({ enabled: false });
-    expect(() => registry.requireEnabled("greenhouse-reviewed-board")).toThrow("disabled");
     expect(
       () =>
         new SourceRegistry([
           {
-            sourceId: "greenhouse-reviewed-board",
-            provider: "greenhouse",
+            sourceId: "lever-reviewed-site",
+            provider: "ashby",
             provenance: "permitted_api",
-            adapter: greenhouseAdapter,
-            enabled: true,
+            adapter: providerAdapter,
           },
         ]),
     ).toThrow("default-off");

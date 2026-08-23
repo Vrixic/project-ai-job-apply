@@ -15,10 +15,11 @@ function permittedSyntheticRegistration(registration: Readonly<SourceRegistratio
   );
 }
 
-function permittedDarkGreenhouseRegistration(registration: Readonly<SourceRegistration>): boolean {
+function permittedDarkAtsRegistration(registration: Readonly<SourceRegistration>): boolean {
+  const provider = registration.provider;
   return (
-    registration.sourceId.startsWith("greenhouse-") &&
-    registration.provider === "greenhouse" &&
+    (provider === "greenhouse" || provider === "lever" || provider === "ashby") &&
+    registration.sourceId.startsWith(`${provider}-`) &&
     registration.provenance === "permitted_api" &&
     registration.enabled !== true
   );
@@ -36,7 +37,7 @@ function validateRegistration(registration: SourceRegistration): void {
   }
   if (
     !permittedSyntheticRegistration(registration) &&
-    !permittedDarkGreenhouseRegistration(registration)
+    !permittedDarkAtsRegistration(registration)
   ) {
     throw new Error("The source is outside the default-off activation policy");
   }
