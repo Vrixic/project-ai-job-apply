@@ -3,6 +3,7 @@ import type postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import {
   type CreateJobReportCommand,
+  InvalidModerationCursorError,
   JobAlreadyReportedError,
   type JobModerationStore,
   type JobReport,
@@ -11,7 +12,6 @@ import {
   type JobReportReason,
   type JobReportStore,
   type JobReportSummary,
-  InvalidModerationCursorError,
   JobReportTargetUnavailableError,
   jobReportReasons,
   type ModerationCase,
@@ -52,7 +52,7 @@ interface JobReportRow {
   canonicalJobId: string;
   reason: JobReportReason;
   requestHash: string;
-  createdAt: Date;
+  createdAt: Date | string;
 }
 
 interface ModerationCaseRow {
@@ -67,10 +67,24 @@ interface ModerationCaseRow {
   version: 0 | 1;
   openedBy: string;
   openReasonCode: ModerationOpenReason;
-  openedAt: Date;
+  openedAt: Date | string;
   resolvedBy: string | null;
   resolutionReasonCode: ModerationResolutionReason | null;
-  resolvedAt: Date | null;
+  resolvedAt: Date | string | null;
+}
+
+const POSTGRES_TIMESTAMP_PATTERN =
+  /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}(?::?\d{2})?)$/u;
+
+function persistenceTimestamp(value: Date | string): string {
+  if (!(value instanceof Date) && !POSTGRES_TIMESTAMP_PATTERN.test(value)) {
+    throw new Error("The persisted moderation timestamp is malformed");
+  }
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(parsed.getTime())) {
+    throw new Error("The persisted moderation timestamp is malformed");
+  }
+  return parsed.toISOString();
 }
 
 function sha256(value: string): string {
@@ -87,7 +101,7 @@ function report(row: JobReportRow): JobReport {
     requestedJobId: row.requestedJobId,
     canonicalJobId: row.canonicalJobId,
     reason: row.reason,
-    createdAt: row.createdAt.toISOString(),
+    createdAt: persistenceTimestamp(row.createdAt),
   });
 }
 
@@ -119,11 +133,11 @@ function moderationCase(row: ModerationCaseRow): ModerationCase {
     version: row.version,
     openedBy: row.openedBy,
     openReasonCode: row.openReasonCode,
-    openedAt: row.openedAt.toISOString(),
+    openedAt: persistenceTimestamp(row.openedAt),
     ...(row.resolution ? { resolution: row.resolution } : {}),
     ...(row.resolvedBy ? { resolvedBy: row.resolvedBy } : {}),
     ...(row.resolutionReasonCode ? { resolutionReasonCode: row.resolutionReasonCode } : {}),
-    ...(row.resolvedAt ? { resolvedAt: row.resolvedAt.toISOString() } : {}),
+    ...(row.resolvedAt ? { resolvedAt: persistenceTimestamp(row.resolvedAt) } : {}),
   });
 }
 
@@ -165,7 +179,7 @@ function moderationCursorSignature(key: Uint8Array, body: string): Buffer {
 
 function encodeModerationCursor(
   status: "open" | "resolved",
-  openedAt: Date,
+  openedAt: Date | string,
   id: string,
   key: ModerationCursorKey,
 ): string {
@@ -174,7 +188,7 @@ function encodeModerationCursor(
       version: 1,
       keyId: key.id,
       status,
-      openedAt: openedAt.toISOString(),
+      openedAt: persistenceTimestamp(openedAt),
       id,
     } satisfies ModerationCursorPayload),
   ).toString("base64url");
