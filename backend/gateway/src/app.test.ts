@@ -1759,7 +1759,7 @@ describe("candidate API", () => {
       url: "/v1/saved-jobs",
       headers: {
         authorization: `Bearer ${writeToken}`,
-        "idempotency-key": "saved-job-gateway-create-0001",
+        "idempotency-key": ["saved-job-gateway-create-0001"],
       },
       payload: createPayload,
     });

@@ -476,14 +476,15 @@ const validateJobReportSummary = compileComponentValidator("JobReportSummary");
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const UUID_V7_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
-function requireIdempotencyKey(value: string | undefined): string {
-  if (!value || value.length < 16 || value.length > 128) {
+function requireIdempotencyKey(value: unknown): string {
+  const key = Array.isArray(value) && value.length === 1 ? value[0] : value;
+  if (typeof key !== "string" || key.length < 16 || key.length > 128) {
     throw new HttpException(
-      "Idempotency-Key must contain 16 to 128 characters",
+      "Exactly one Idempotency-Key containing 16 to 128 characters is required",
       HttpStatus.BAD_REQUEST,
     );
   }
-  return value;
+  return key;
 }
 
 const ENTITLEMENT_GRANTS = [

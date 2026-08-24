@@ -285,6 +285,19 @@ describe("SavedJobsService", () => {
     expect(store.records).toHaveLength(0);
   });
 
+  it("rejects a non-scalar idempotency key before PostgreSQL I/O", async () => {
+    const store = new PostgresSavedJobStore({} as postgres.Sql);
+
+    await expect(
+      store.findCreateReplay(
+        uuidv7(),
+        uuidv7(),
+        ["saved-job-array-key-0001"] as unknown as string,
+        new Date("2026-08-24T00:00:00.000Z"),
+      ),
+    ).rejects.toThrow("Saved-job idempotency key is invalid");
+  });
+
   it.each([
     {
       expectedCode: "SAVED_JOB_FIND_REPLAY",

@@ -367,6 +367,16 @@ function assertIdentifiers(ownerUserId: string, identifier: string): void {
   }
 }
 
+function assertIdempotencyKey(idempotencyKey: unknown): asserts idempotencyKey is string {
+  if (
+    typeof idempotencyKey !== "string" ||
+    idempotencyKey.length < 16 ||
+    idempotencyKey.length > 128
+  ) {
+    throw new Error("Saved-job idempotency key is invalid");
+  }
+}
+
 export class PostgresSavedJobStore implements SavedJobStore {
   private readonly maximumSavedJobs: number;
   private readonly maximumIdempotencyKeys: number;
@@ -400,8 +410,10 @@ export class PostgresSavedJobStore implements SavedJobStore {
     occurredAt: Date,
   ): Promise<SavedJobRecord | null> {
     assertIdentifiers(ownerUserId, requestedJobId);
+    assertIdempotencyKey(idempotencyKey);
     const occurredAtMilliseconds = occurredAt.getTime();
     if (!Number.isFinite(occurredAtMilliseconds)) throw new Error("Saved-job clock is invalid");
+    const timestamp = new Date(occurredAtMilliseconds).toISOString();
     const [row] = await this.client<SavedJobReplayRow[]>`
       SELECT request_hash AS "requestHash", saved_job_id AS id,
         owner_user_id AS "ownerUserId", requested_job_id AS "requestedJobId",
@@ -415,8 +427,9 @@ export class PostgresSavedJobStore implements SavedJobStore {
         snapshot_last_verified_at AS "snapshotLastVerifiedAt",
         snapshot_expires_at AS "snapshotExpiresAt", saved_at AS "savedAt"
       FROM matching.idempotency_keys
-      WHERE owner_user_id = ${ownerUserId} AND idempotency_key = ${idempotencyKey}
-        AND idempotency_expires_at > ${new Date(occurredAtMilliseconds)}
+      WHERE owner_user_id = ${ownerUserId}::uuid
+        AND idempotency_key = ${idempotencyKey}::text
+        AND idempotency_expires_at > ${timestamp}::timestamptz
     `;
     if (!row) return null;
     if (row.requestHash !== requestHash(requestedJobId)) {
@@ -433,12 +446,11 @@ export class PostgresSavedJobStore implements SavedJobStore {
     occurredAt: Date,
   ): Promise<SavedJobRecord> {
     assertIdentifiers(ownerUserId, requestedJobId);
-    if (idempotencyKey.length < 16 || idempotencyKey.length > 128) {
-      throw new Error("Saved-job idempotency key is invalid");
-    }
+    assertIdempotencyKey(idempotencyKey);
     const occurredAtMilliseconds = occurredAt.getTime();
     if (!Number.isFinite(occurredAtMilliseconds)) throw new Error("Saved-job clock is invalid");
     const timestamp = new Date(occurredAtMilliseconds);
+    const timestampIso = timestamp.toISOString();
     let stage: SavedJobPersistenceStage = "BEGIN";
     try {
       return await this.client.begin(async (transaction) => {
@@ -458,8 +470,9 @@ export class PostgresSavedJobStore implements SavedJobStore {
           snapshot_last_verified_at AS "snapshotLastVerifiedAt",
           snapshot_expires_at AS "snapshotExpiresAt", saved_at AS "savedAt"
         FROM matching.idempotency_keys
-        WHERE owner_user_id = ${ownerUserId} AND idempotency_key = ${idempotencyKey}
-          AND idempotency_expires_at > ${timestamp}
+        WHERE owner_user_id = ${ownerUserId}::uuid
+          AND idempotency_key = ${idempotencyKey}::text
+          AND idempotency_expires_at > ${timestampIso}::timestamptz
       `;
         if (replay) {
           if (replay.requestHash !== requestHash(requestedJobId)) {
