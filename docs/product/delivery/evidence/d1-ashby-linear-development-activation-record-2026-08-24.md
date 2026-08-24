@@ -1,7 +1,7 @@
 # D1 Ashby Linear development activation record — 2026-08-24
 
 - Record ID: `D1-ATS-DEV-2026-08-24-01`
-- State: `Accepted for bounded development activation`
+- State: `Activation executed; default-off restoration complete; terminal settlement release pending`
 - Governing decision: [ADR-025](../../../adr/025-public-ats-feed-activation-governance.md)
 - Environment: development, repository-bound AWS account, `us-east-2`
 - Exact repository commit at acceptance: `38ec7e97e54d05870aafc43d092ad0c407bdeed3`
@@ -175,6 +175,68 @@ It changes no subnet, shared route, gateway/public-job/document/database/ECS/app
 candidate data, public route, or indexing switch. This record authorizes only that saved retry plan,
 immediate default-off restoration planning, bounded acceptance, and restoration.
 
+## Corrected live retry, restoration, and terminal settlement
+
+The exact reviewed retry plan was applied unchanged. At `2026-08-24T08:14:27Z`, coordinator
+version `9` scheduled, claimed, and sent exactly one occurrence. Starter version `9` and activity
+version `8` completed without an activity error. Durable version `5` execution
+`3043b5f16a21941ec011a4385812c7710bd7f4390af8d8de7273bf31f363df61` succeeded from
+`2026-08-24T08:14:30.021Z` through `2026-08-24T08:14:35.426Z`. This is a bounded real request to
+the accepted public Ashby Linear board through provider-only NAT. The coordinator's immediate
+idempotency check returned all zero counts, and both dispatch/DLQ queues were empty before the
+terminal handler exhausted its retries. No response body or job value is retained in this record.
+
+The terminal handler rejected AWS's successful terminal event because the implementation required
+an empty `resources` array while the real event correctly contained the exact numeric durable
+function ARN. The encrypted function DLQ retained that metadata-only event. Its body SHA-256 is
+`6fe09cf3ae2a17834eb56d69cd077b0c1635060d38816aa6743db0661394e8e9`; its envelope/detail keys
+exactly match the accepted event contract; its only resource and `detail.functionArn` are the same
+durable version `5`; and it contains no provider response or candidate data.
+
+The pre-generated restoration plan SHA-256
+`494ef21adb838fd1fef426fe1e84a7d678c99e093348566e61c04c50055c0e39` then applied successfully:
+both rules and the queue mapping are disabled, provider/runtime/egress/synthetic authority is
+false/false/false/false, source count is zero, the activity returned to the shared dark network,
+and the NAT, EIP, and provider default routes were removed. The retained provider subnets and empty
+route tables have no default route. Durable version `6` and the matching default-off activity/runtime
+versions were published without broadening any shared route.
+
+Source `eb39435fc0859299e0f83974461caa236d49ca1c` corrects and regression-tests the exact AWS
+`resources` binding. Its deterministic durable/runtime artifacts, SHA-256
+`081195a01c909a33344a8df62900830f97cb0003da1fe04480c6c4bd7d8128e9` and
+`f7b7badfb52ca9ac2ee971fa2f203b81250182ca874c9bf11c2d83ead9a38826`, passed eight-object
+version/checksum/metadata/CMK readback. Saved plan SHA-256
+`54b7c4d9020ffbe3734f3533beda603295f71b7c89a623c98f46f7d6f1ef84b2` changed only the dark
+ingestion artifact/version chain and advanced it to activity `10`, runtime aliases `11`, and durable
+version `7`. Replaying the preserved event then passed event validation and idempotently recorded
+the successful terminal transition, but recovery configuration was still required after success;
+the empty default-off source list correctly supplied no active adapter configuration, so replay
+failed closed and the DLQ item remained preserved.
+
+Source `8913304166f8a270a12d1dc4e35255834a4fe5a4` now returns immediately after a successful terminal
+transition and requires active adapter configuration only for failed-terminal recovery. All workflow
+tests `44/44`, typecheck, formatting, lint, and two deterministic builds pass. Its exact durable and
+runtime artifact SHA-256 values are
+`c41cde65c9dcae9ceb269b8da2405a6cdd7f95c41c18a29baaf77293fad5b0c9` and
+`fb1bace48080353fcfbf2288661d5e7d423cd24ca7797e27dd4a479ca2aa6be1`; all eight immutable objects
+passed exact-version checksum, source metadata, customer-KMS, and bucket-key readback. Final
+default-off planning is temporarily blocked only by an expired development IAM Identity Center
+session. No final artifact apply, terminal replay deletion, database aggregate inspection,
+positive-removal exercise, or zero-drift claim is made yet.
+
+Exact source `5cbf71e404ef9334c5ca9d7f91fe048ddc2af82e` supersedes that release candidate for
+the final dark deployment while retaining both terminal-settlement corrections. It adds explicit
+identity-only Ashby withdrawal for `isListed: false` and Jobs migration
+`0011_positive_source_withdrawal`. Empty or failed polls cannot infer removal; exact source
+identity, stale/idempotent safety, all-active-source exact-cluster withdrawal, raw/public-truth
+clearing, manual-terminal preservation, and reason-bounded relisting are enforced. The composed
+20-migration manifest SHA-256 is
+`e08967c746fcd2a5a7471f038382c879eb3df7d6d1ee001508a9efaeed402945`. Ingestion unit
+`77/77`, Jobs unit `63/63`, migration unit `35/35`, Jobs PostgreSQL `41/41`, ingestion PostgreSQL
+`1/1`, fresh distinct-target restore `4/4`, infrastructure validation, all 31 type-check tasks, all
+32 test tasks, and all 19 build tasks pass. This is source/local acceptance only: no final migration
+image, Jobs `0011` apply, Lambda artifact deployment, or cloud withdrawal exercise is claimed yet.
+
 ## Activation and acceptance sequence
 
 | Gate | State | Evidence |
@@ -186,22 +248,24 @@ immediate default-off restoration planning, bounded acceptance, and restoration.
 | Immutable dark artifacts/readback | true | Existing provider-capable dark-release evidence |
 | Saved plan inside reviewed activation allowlist | true | Exact replacement plan above |
 | Plan identity inserted and apply accepted | true | This reviewed record |
-| Provider authority/source/runtime applied | true, then restored | First bounded attempt reached serial `168`; current serial `172` is default-off |
-| Bounded provider request/provenance | false | Pending |
+| Provider authority/source/runtime applied | true, then restored | Corrected retry ran once; rules/mapping/gates/NAT are now default-off |
+| Bounded provider request/provenance | true | Durable version `5` succeeded through the accepted Ashby adapter and provider-only NAT |
 | Canonical persistence/deduplication/public truth | false | Pending |
-| Positive revalidation/removal and failed-poll safety | false | Pending |
+| Positive revalidation/removal and failed-poll safety | source/local true; deployed false | Exact source `5cbf71e404ef9334c5ca9d7f91fe048ddc2af82e`; Jobs `0011`; focused PostgreSQL and restore gates pass; cloud apply/exercise pending |
 | Exact persisted pause blocks new work | false | Pending for this live source |
 | Retention or exact cleanup disposition | false | Pending |
-| Alarms/queues/tasks/log redaction | partial | First failure was aggregate-only and its exact identifier-only DLQ item was removed; final retry evidence pending |
-| Default-off restoration and zero drift | partial | Safety boundary restored through serial `172`; final retry restoration and zero drift pending |
+| Alarms/queues/tasks/log redaction | partial | Runtime logs are aggregate-only; one metadata-only successful terminal event remains preserved in the encrypted DLQ pending corrected replay |
+| Default-off restoration and zero drift | partial | Rules/mapping/gates/NAT are restored dark; final settlement artifact deployment and refresh-backed zero drift remain |
 | Product/source-quality residual acceptance | false | Pending |
 
 ## Current disposition
 
 - Decision: exact bounded development activation, inspection, and restoration accepted.
-- Apply authority: only retry saved plan SHA-256
-  `2dbc709aa527b235207bcc357592458e47e555c58407e13c38591fe3c4fdc52c`; any refreshed or changed
-  plan requires a new review. The original accepted plan was consumed once and is no longer valid.
+- Apply authority: the activation and restoration plans were consumed once and are no longer valid.
+  Only a reviewed default-off plan built from the final clean descendant of implementation source
+  `5cbf71e404ef9334c5ca9d7f91fe048ddc2af82e`, its Jobs `0011` migration, terminal replay,
+  aggregate-only inspection, and required acceptance exercises remain authorized here; any new
+  provider activation requires a new review.
 - Public route/indexing: prohibited by unchanged false gates.
 - Production/candidate/application authority: none.
 - Source after the bounded attempt: default recommendation is disabled until public-route and
