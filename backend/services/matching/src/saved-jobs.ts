@@ -454,7 +454,7 @@ export class PostgresSavedJobStore implements SavedJobStore {
             ${id}, ${ownerUserId}, ${requestedJobId}, ${resolvedJob.id},
             ${boundedSnapshot.company.id}, ${boundedSnapshot.company.name},
             ${boundedSnapshot.company.verifiedDomain ?? null}, ${boundedSnapshot.title},
-            ${boundedSnapshot.locations}, ${boundedSnapshot.department ?? null},
+            ${transaction.array(boundedSnapshot.locations)}, ${boundedSnapshot.department ?? null},
             ${boundedSnapshot.firstObservedAt}, ${boundedSnapshot.lastVerifiedAt},
             ${boundedSnapshot.expiresAt}, ${timestamp}, ${timestamp}
           )
@@ -499,7 +499,7 @@ export class PostgresSavedJobStore implements SavedJobStore {
           ${created.requestedJobId}, ${created.resolvedCanonicalJobIdAtSave},
           ${created.snapshot.company.id}, ${created.snapshot.company.name},
           ${created.snapshot.company.verifiedDomain ?? null}, ${created.snapshot.title},
-          ${created.snapshot.locations}, ${created.snapshot.department ?? null},
+          ${transaction.array(created.snapshot.locations)}, ${created.snapshot.department ?? null},
           ${created.snapshot.firstObservedAt}, ${created.snapshot.lastVerifiedAt},
           ${created.snapshot.expiresAt}, ${created.savedAt}, ${timestamp},
           ${new Date(timestamp.getTime() + SAVED_JOB_IDEMPOTENCY_RETENTION_HOURS * 60 * 60 * 1_000)}

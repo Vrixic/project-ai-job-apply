@@ -286,7 +286,11 @@ describe("D1 deployed saved-job lifecycle conformance", () => {
     expect(result.status).toBe(503);
     expect(await result.json()).toMatchObject({
       state: "workload_inconclusive",
-      metrics: { cleanupAttempted: true, cleanupSucceeded: true },
+      metrics: {
+        failureStage: "idempotent_replay",
+        cleanupAttempted: true,
+        cleanupSucceeded: true,
+      },
     });
     expect(current).toBeUndefined();
   });

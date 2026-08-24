@@ -536,6 +536,7 @@ export async function runD1SavedJobLifecycleWorkload(
   let targetJobId: string | undefined;
   let savedJobId: string | undefined;
   let cleanupDeletes = 0;
+  let failureStage = "baseline";
   try {
     const baseline = await collectWriteBaseline(baseUrl, token, dependencies);
     if (!baseline) {
@@ -567,6 +568,7 @@ export async function runD1SavedJobLifecycleWorkload(
       path: "/v1/saved-jobs",
       token,
     };
+    failureStage = "create";
     const created = await issue(baseUrl, createProfile, dependencies);
     if (created.status === 403) {
       discardBody(created);
@@ -596,6 +598,7 @@ export async function runD1SavedJobLifecycleWorkload(
     }
     savedJobId = createdValue.id;
 
+    failureStage = "idempotent_replay";
     const replay = await issue(baseUrl, createProfile, dependencies);
     if (replay.status !== 201 || replay.headers.get("cache-control") !== "no-store") {
       discardBody(replay);
@@ -610,6 +613,7 @@ export async function runD1SavedJobLifecycleWorkload(
       throw new Error("replay contract failed");
     }
 
+    failureStage = "idempotency_conflict";
     const conflict = await issue(
       baseUrl,
       {
@@ -632,15 +636,18 @@ export async function runD1SavedJobLifecycleWorkload(
       throw new Error("conflict contract failed");
     }
 
+    failureStage = "write_visibility";
     const afterWrite = await collectWriteBaseline(baseUrl, token, dependencies);
     if (!afterWrite || afterWrite.savedJobIdsByRequestedJobId.get(targetJobId) !== savedJobId) {
       throw new Error("write visibility failed");
     }
+    failureStage = "delete";
     if (!(await deleteSavedJob(baseUrl, token, savedJobId, dependencies))) {
       throw new Error("delete failed");
     }
     cleanupDeletes = 1;
     savedJobId = undefined;
+    failureStage = "cleanup_visibility";
     const afterCleanup = await collectWriteBaseline(baseUrl, token, dependencies);
     if (!afterCleanup || afterCleanup.savedJobIdsByRequestedJobId.has(targetJobId)) {
       throw new Error("cleanup visibility failed");
@@ -677,6 +684,7 @@ export async function runD1SavedJobLifecycleWorkload(
       "The D1 saved-job workload could not be completed",
       {
         profile: "d1_deployed_saved_job_lifecycle_v1",
+        failureStage,
         cleanupAttempted: Boolean(targetJobId),
         cleanupSucceeded,
       },
