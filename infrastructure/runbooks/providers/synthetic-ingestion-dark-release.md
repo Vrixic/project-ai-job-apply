@@ -1,17 +1,26 @@
-# Synthetic ingestion dark release
+# Ingestion dark release
 
-This runbook describes source review for the D1 generated-synthetic durable ingestion data plane.
-It does not authorize AWS mutation or activation.
+This runbook describes source review for the D1 durable ingestion data plane. The same runtime can
+host the generated-synthetic source and explicitly configured Greenhouse, Lever, or Ashby public
+GET sources, but a dark release keeps every source and transport trigger disabled. This runbook
+does not itself authorize AWS mutation or source activation.
 
 ## Invariants
 
-- The reviewed migration composition is exactly 5 owners, 8 owned schemas, 39 regular relations,
-  and 15 migrations. The empty-table `jobs_public` schema is still verified explicitly.
-- Only `synthetic-foundation-v1`, provider `other`, provenance `authorized_fixture`, and `.example.test`
-  generated observations exist in the runtime artifact.
+- The reviewed migration composition is exactly 5 owners, 8 owned schemas, 42 regular relations,
+  and 18 migrations. The empty-table `jobs_public` schema is still verified explicitly.
+- The dark runtime artifact contains the generated-synthetic adapter and bounded public GET
+  adapters for Greenhouse, Lever, and Ashby. Dark deployment supplies an empty provider-source
+  list, keeps provider activation authority false, and therefore performs no provider request.
+- Generated observations remain limited to `synthetic-foundation-v1`, provider `other`, provenance
+  `authorized_fixture`, and `.example.test` identities unless a separately reviewed exact provider
+  source is activated.
 - `deploy_ingestion_runtime`, `ingestion_runtime_enabled`, and
   `ingestion_synthetic_source_enabled` are ordered gates and default false; the shared
   `runtime_activation_allowed` lifecycle authority must also permit any ingestion trigger.
+- `ingestion_provider_activation_allowed` defaults false and `ingestion_provider_sources` defaults
+  empty. Provider authority additionally requires private application networking/NAT and at least
+  one exact enabled source; provider configuration alone never enables a schedule or queue mapping.
 - The dispatch queue mapping, five-minute reconciliation rule, and terminal rule remain disabled
   until an approved activation record exists. The coordinator derives one idempotent occurrence
   per canonical UTC hour, so reconciliation cadence does not multiply source polling. An exact
@@ -59,24 +68,26 @@ It does not authorize AWS mutation or activation.
 ## Source verification
 
 1. Build both immutable ingestion Lambda archives and record each SHA-256, S3 version, file count,
-   handler export, and dependency audit receipt.
+   handler export, source commit, and dependency audit receipt.
 2. Run the Jobs migration and ingestion integration suite against an isolated PostgreSQL 16
    database. Prove exact replay, competing revision refusal, append-only events, dispatch reclaim,
-   bounded recovery, and cleanup of only the generated fixture.
+   bounded recovery, provider-source identifier persistence, and cleanup of only the generated
+   fixture.
 3. Review a saved Terraform plan. The first approved plan may set only
-   `deploy_ingestion_runtime=true`; both enable switches must remain false.
+   `deploy_ingestion_runtime=true`; both runtime/source enable switches and provider activation
+   authority must remain false, and the provider-source list must remain empty.
 4. Confirm the resulting aliases reference exact numeric versions, each transport Lambda has its
    own least-privilege role, both rules and the SQS mapping are disabled, EventBridge and durable
    state use exact platform-CMK grants, and queue retention is 4/14 days.
 
 ## Stop conditions
 
-Stop before apply or activation if any real-provider code/data appears, an artifact is not versioned
-and digest-bound, a gate is enabled out of order, queue content contains candidate or source
-payloads, PostgreSQL
-evidence is incomplete, the plan has unrelated drift, or the separately owned external/audited
-source-control gate is absent. A Lambda environment value is immutable for an in-flight version and
-is not the future real-time provider kill switch.
+Stop before apply or activation if provider authority or a provider source appears unexpectedly, a
+source contains credentials/private data, an artifact is not versioned and digest-bound, a gate is
+enabled out of order, queue content contains candidate or source payloads, PostgreSQL evidence is
+incomplete, the plan has unrelated drift, or the exact source configuration and accountable
+activation record are absent. A Lambda environment value is immutable for an in-flight version and
+is not the real-time persisted source-pause control.
 
-This source packet does not prove artifact publication, Terraform apply, AWS execution, provider
-authorization, dynamic kill-switch operation, or production ingestion.
+This source packet does not prove artifact publication, Terraform apply, AWS execution, exact
+provider activation, dynamic persisted source-pause operation, or production ingestion.

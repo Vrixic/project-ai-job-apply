@@ -48,7 +48,7 @@ Every alert and privileged admin operation should link to a relevant runbook.
 - [Development document-processing acceptance](deployments/development-document-processing-acceptance.md) —
   Executes the generated-synthetic direct-dark document lifecycle with exact runtime, claim,
   privacy, recovery, and cleanup guards while all document-processing triggers remain disabled.
-- [Synthetic ingestion dark release](providers/synthetic-ingestion-dark-release.md) — Verifies the
-  generated-synthetic-only durable ingestion source packet, its three default-off switches, and
-  the shared lifecycle activation authority without authorizing publication, AWS mutation,
-  provider activation, or real data.
+- [Ingestion dark release](providers/synthetic-ingestion-dark-release.md) — Verifies the durable
+  ingestion packet, its generated-synthetic and bounded public ATS adapters, provider/source
+  default-off controls, and shared lifecycle activation authority without authorizing publication,
+  AWS mutation, provider activation, or real data.
