@@ -35,7 +35,7 @@ variable "ingestion_provider_activation_allowed" {
 }
 
 variable "ingestion_provider_private_egress" {
-  description = "Create provider-only private subnets and NAT egress for an explicitly authorized ATS source."
+  description = "Create bounded NAT egress in the deployed provider-only private subnets for an explicitly authorized ATS source."
   type        = bool
   default     = false
 }
@@ -211,7 +211,7 @@ resource "terraform_data" "ingestion_activation_guard" {
 }
 
 resource "aws_subnet" "ingestion_provider" {
-  count                   = var.ingestion_provider_private_egress ? length(local.azs) : 0
+  count                   = var.deploy_ingestion_runtime ? length(local.azs) : 0
   vpc_id                  = aws_vpc.this.id
   availability_zone       = local.azs[count.index]
   cidr_block              = local.ingestion_provider_cidrs[count.index]
@@ -234,17 +234,20 @@ resource "aws_nat_gateway" "ingestion_provider" {
 }
 
 resource "aws_route_table" "ingestion_provider" {
-  count  = var.ingestion_provider_private_egress ? length(local.azs) : 0
+  count  = var.deploy_ingestion_runtime ? length(local.azs) : 0
   vpc_id = aws_vpc.this.id
 
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.ingestion_provider[var.high_availability ? count.index : 0].id
+  dynamic "route" {
+    for_each = var.ingestion_provider_private_egress ? [1] : []
+    content {
+      cidr_block     = "0.0.0.0/0"
+      nat_gateway_id = aws_nat_gateway.ingestion_provider[var.high_availability ? count.index : 0].id
+    }
   }
 }
 
 resource "aws_route_table_association" "ingestion_provider" {
-  count          = var.ingestion_provider_private_egress ? length(local.azs) : 0
+  count          = var.deploy_ingestion_runtime ? length(local.azs) : 0
   subnet_id      = aws_subnet.ingestion_provider[count.index].id
   route_table_id = aws_route_table.ingestion_provider[count.index].id
 }

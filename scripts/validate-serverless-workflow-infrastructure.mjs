@@ -72,6 +72,8 @@ for (const required of [
   "INGESTION_PROVIDER_SOURCES",
   "INGESTION_QUEUE_ARN",
   "var.ingestion_provider_private_egress",
+  'count                   = var.deploy_ingestion_runtime ? length(local.azs) : 0',
+  'for_each = var.ingestion_provider_private_egress ? [1] : []',
   "var.ingestion_provider_activation_allowed || alltrue",
   'contains(["greenhouse", "lever", "ashby"], source.provider)',
   'function_response_types = ["ReportBatchItemFailures"]',

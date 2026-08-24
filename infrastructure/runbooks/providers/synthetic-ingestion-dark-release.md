@@ -20,10 +20,12 @@ does not itself authorize AWS mutation or source activation.
   `runtime_activation_allowed` lifecycle authority must also permit any ingestion trigger.
 - `ingestion_provider_activation_allowed` and `ingestion_provider_private_egress` default false,
   and `ingestion_provider_sources` defaults empty. Provider authority additionally requires
-  provider-only private subnets/NAT and at least one exact enabled source. Only the provider-fetch
-  activity moves onto those subnets; the coordinator, starter, terminal handler, and shared
-  application private subnets retain no default internet route. Provider configuration alone never
-  enables a schedule or queue mapping.
+  NAT in the deployed provider-only private subnets and at least one exact enabled source. Only the
+  provider-fetch activity moves onto those subnets; the coordinator, starter, terminal handler,
+  and shared application private subnets retain no default internet route. Restoration deletes the
+  cost-bearing NAT/EIP/default routes but retains the free isolated subnets and empty route tables,
+  because immutable Lambda versions retain their exact VPC attachment. Provider configuration
+  alone never enables a schedule or queue mapping.
 - The dispatch queue mapping, five-minute reconciliation rule, and terminal rule remain disabled
   until an approved activation record exists. The coordinator derives one idempotent occurrence
   per canonical UTC hour, so reconciliation cadence does not multiply source polling. An exact

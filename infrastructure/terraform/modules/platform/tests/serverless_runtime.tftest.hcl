@@ -206,9 +206,11 @@ run "provider_sources_remain_dark_without_activation_authority" {
       !var.ingestion_provider_activation_allowed &&
       jsondecode(aws_lambda_function.ingestion_activity[0].environment[0].variables.INGESTION_PROVIDER_SOURCES)[0].enabled == false &&
       length(aws_nat_gateway.this) == 0 &&
-      length(aws_nat_gateway.ingestion_provider) == 0
+      length(aws_nat_gateway.ingestion_provider) == 0 &&
+      length(aws_subnet.ingestion_provider) == 2 &&
+      length(aws_route_table.ingestion_provider) == 2
     )
-    error_message = "Reviewed provider configuration must stay disabled and must not create public egress without activation authority."
+    error_message = "Reviewed provider configuration must stay disabled in durable provider-only subnets whose route tables have no public egress without activation authority."
   }
 }
 
