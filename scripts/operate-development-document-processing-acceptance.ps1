@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [ValidateSet("Status", "PlanExecution", "Execute", "ServiceDetection", "RecoverCleanup", "Verify")]
+  [ValidateSet("Status", "PlanExecution", "Execute", "ServiceDetection", "ObjectRecovery", "RecoverCleanup", "Verify")]
   [string]$Action = "Status",
   [string]$AwsProfile = "ai-job-apply-development-admin",
   [string]$Region = "us-east-2",
@@ -44,6 +44,12 @@ Usage:
     -MigrationReceiptPath VERIFIED_IMAGE_RECEIPT -ReviewedMigrationReceiptSha256 SHA256 `
     -ExecutionPlanPath REVIEWED_EXECUTION_PLAN -ReviewedExecutionPlanSha256 SHA256
 
+  .\scripts\operate-development-document-processing-acceptance.ps1 -Action ObjectRecovery `
+    -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET -SourceSha MERGED_SHA `
+    -FixtureSetSha256 REVIEWED_FIXTURE_SET_SHA256 `
+    -MigrationReceiptPath VERIFIED_IMAGE_RECEIPT -ReviewedMigrationReceiptSha256 SHA256 `
+    -ExecutionPlanPath REVIEWED_EXECUTION_PLAN -ReviewedExecutionPlanSha256 SHA256
+
   .\scripts\operate-development-document-processing-acceptance.ps1 -Action RecoverCleanup `
     -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET -SourceSha MERGED_SHA `
     -FixtureSetSha256 REVIEWED_FIXTURE_SET_SHA256 `
@@ -64,6 +70,9 @@ with exact bounded events. The direct gateway invocation fabricates an already-v
 context, so it does not prove API Gateway routing, JWT/JWKS validation, or authorizer enforcement.
 The ServiceDetection action separately proves only that the already-active exact GuardDuty malware
 protection plan scans one generated clean PDF version and writes its managed NO_THREATS_FOUND tag.
+The ObjectRecovery action then creates an exact delete marker, reads only the descriptor-bound prior
+version, restores it as a checksum/KMS/metadata-bound new version, requires a fresh managed clean
+scan, removes the marker and superseded version, and finally cleans the generated row and object.
 It leaves the EventBridge rule, SQS mapping, reconciler, processor, and parser disabled and therefore
 does not prove or authorize their delivery/activation. Those claims remain behind ADR-023 and a
 separate human-authorized activation operator.
@@ -350,7 +359,7 @@ function Invoke-AwsJson {
 }
 
 function Assert-ActionInputs {
-  $releaseActions = @('PlanExecution', 'Execute', 'ServiceDetection', 'RecoverCleanup', 'Verify')
+  $releaseActions = @('PlanExecution', 'Execute', 'ServiceDetection', 'ObjectRecovery', 'RecoverCleanup', 'Verify')
   if ($Action -in $releaseActions) {
     $migrationInputs = @($MigrationReceiptPath, $ReviewedMigrationReceiptSha256) |
       Where-Object { [string]::IsNullOrWhiteSpace($_) }
@@ -358,7 +367,7 @@ function Assert-ActionInputs {
       throw "$Action requires the exact source and migration image receipt pair."
     }
   }
-  if ($Action -in @('Execute', 'ServiceDetection', 'RecoverCleanup', 'Verify')) {
+  if ($Action -in @('Execute', 'ServiceDetection', 'ObjectRecovery', 'RecoverCleanup', 'Verify')) {
     $executionInputs = @($FixtureSetSha256, $ExecutionPlanPath, $ReviewedExecutionPlanSha256) |
       Where-Object { [string]::IsNullOrWhiteSpace($_) }
     if ($FixtureSetSha256 -notmatch '^[a-f0-9]{64}$' -or @($executionInputs).Count -ne 0) {
@@ -1613,6 +1622,199 @@ function Wait-GuardDutyServiceScan {
   throw "GuardDuty did not attach a terminal managed scan tag within the bounded window."
 }
 
+function Remove-RecoveryObjectVersion {
+  param(
+    [Parameter(Mandatory)][object]$Runtime,
+    [Parameter(Mandatory)][string]$Key,
+    [Parameter(Mandatory)][string]$Version,
+    [Parameter(Mandatory)][bool]$DeleteMarker
+  )
+  Assert-ReviewedRuntimeUnchanged
+  $deleted = Invoke-AwsJson -Arguments @(
+    's3api', 'delete-object', '--bucket', $Runtime.CandidateDocumentBucket,
+    '--key', $Key, '--version-id', $Version, '--output', 'json'
+  ) -Operation 'Object-recovery exact version cleanup'
+  $actualMarker = Get-OptionalProperty -Object $deleted -Name 'DeleteMarker'
+  if (
+    [string]$deleted.VersionId -cne $Version -or
+    ($DeleteMarker -and $actualMarker -ne $true) -or
+    (-not $DeleteMarker -and $actualMarker -eq $true)
+  ) {
+    throw "Object-recovery exact version cleanup returned an invalid identity."
+  }
+}
+
+function Invoke-VersionedObjectRecovery {
+  param(
+    [Parameter(Mandatory)][object]$Runtime,
+    [Parameter(Mandatory)][object]$Document
+  )
+  Assert-TriggersDark -State $Runtime.State | Out-Null
+  Assert-ReviewedRuntimeUnchanged
+  $originalVersion = [string]$Document.sourceVersion
+  if (
+    [string]$Document.sourceKey -notmatch '^quarantine/[0-9a-f-]{36}/source$' -or
+    [string]::IsNullOrWhiteSpace($originalVersion) -or
+    [string]$Document.sha256 -notmatch '^[a-f0-9]{64}$'
+  ) {
+    throw "Object recovery requires the exact generated descriptor-bound source version."
+  }
+
+  $deleteMarkerVersion = ''
+  $restoredVersion = ''
+  $temporary = [IO.Path]::GetTempFileName()
+  try {
+    $script:acceptanceStage = 'clean-pdf.object-recovery-delete-marker'
+    Assert-ReviewedRuntimeUnchanged
+    $marker = Invoke-AwsJson -Arguments @(
+      's3api', 'delete-object', '--bucket', $Runtime.CandidateDocumentBucket,
+      '--key', $Document.sourceKey, '--output', 'json'
+    ) -Operation 'Object-recovery delete marker creation'
+    $deleteMarkerVersion = [string]$marker.VersionId
+    if (
+      (Get-OptionalProperty -Object $marker -Name 'DeleteMarker') -ne $true -or
+      [string]::IsNullOrWhiteSpace($deleteMarkerVersion)
+    ) {
+      throw "Object recovery did not create one exact delete marker."
+    }
+
+    $history = Invoke-AwsJson -Arguments @(
+      's3api', 'list-object-versions', '--bucket', $Runtime.CandidateDocumentBucket,
+      '--prefix', $Document.sourceKey, '--output', 'json'
+    ) -Operation 'Object-recovery deleted-state validation'
+    $versions = @(Get-OptionalItems -Object $history -Name 'Versions' | Where-Object {
+        [string]$_.Key -ceq [string]$Document.sourceKey
+      })
+    $markers = @(Get-OptionalItems -Object $history -Name 'DeleteMarkers' | Where-Object {
+        [string]$_.Key -ceq [string]$Document.sourceKey
+      })
+    if (
+      $versions.Count -ne 1 -or [string]$versions[0].VersionId -cne $originalVersion -or
+      [bool]$versions[0].IsLatest -or $markers.Count -ne 1 -or
+      [string]$markers[0].VersionId -cne $deleteMarkerVersion -or -not [bool]$markers[0].IsLatest
+    ) {
+      throw "Object recovery did not observe the exact retained-version/delete-marker boundary."
+    }
+
+    $script:acceptanceStage = 'clean-pdf.object-recovery-prior-version-read'
+    $raw = & aws s3api get-object --bucket $Runtime.CandidateDocumentBucket `
+      --key $Document.sourceKey --version-id $originalVersion --checksum-mode ENABLED `
+      $temporary --output json 2>$null
+    if ($LASTEXITCODE -ne 0) {
+      throw "Object recovery could not read the exact retained generated version."
+    }
+    $readback = ConvertFrom-OperatorJson -Json ($raw -join "`n") `
+      -Description 'Object-recovery retained version readback'
+    if (
+      [string]$readback.VersionId -cne $originalVersion -or
+      (Get-FileSha256 $temporary) -cne [string]$Document.sha256
+    ) {
+      throw "Object recovery retained bytes do not match the descriptor digest."
+    }
+
+    $script:acceptanceStage = 'clean-pdf.object-recovery-version-write'
+    Assert-ReviewedRuntimeUnchanged
+    $restored = Invoke-AwsJson -Arguments @(
+      's3api', 'put-object', '--bucket', $Runtime.CandidateDocumentBucket,
+      '--key', $Document.sourceKey, '--body', $temporary,
+      '--content-type', $Document.mediaType,
+      '--metadata', "document-id=$($Document.documentId),sha256=$($Document.sha256)",
+      '--server-side-encryption', 'aws:kms', '--ssekms-key-id', $Runtime.PlatformKmsKeyArn,
+      '--checksum-algorithm', 'SHA256', '--checksum-sha256', (Convert-HexToBase64 $Document.sha256),
+      '--output', 'json'
+    ) -Operation 'Object-recovery restored version write'
+    $restoredVersion = [string]$restored.VersionId
+    if (
+      [string]::IsNullOrWhiteSpace($restoredVersion) -or
+      [string]$restored.ChecksumSHA256 -cne (Convert-HexToBase64 $Document.sha256) -or
+      [string]$restored.ServerSideEncryption -cne 'aws:kms' -or
+      [string]$restored.SSEKMSKeyId -cne [string]$Runtime.PlatformKmsKeyArn
+    ) {
+      throw "Object recovery did not create the exact checksum-bound restored version."
+    }
+
+    $restoredDocument = [pscustomobject]@{
+      sourceKey = [string]$Document.sourceKey
+      sourceVersion = $restoredVersion
+    }
+    $script:acceptanceStage = 'clean-pdf.object-recovery-guardduty-rescan'
+    $rescan = Wait-GuardDutyServiceScan -Runtime $Runtime -Document $restoredDocument
+
+    Remove-RecoveryObjectVersion -Runtime $Runtime -Key $Document.sourceKey `
+      -Version $deleteMarkerVersion -DeleteMarker $true
+    $deleteMarkerVersion = ''
+    Remove-RecoveryObjectVersion -Runtime $Runtime -Key $Document.sourceKey `
+      -Version $originalVersion -DeleteMarker $false
+    $originalVersion = ''
+    $Document.sourceVersion = $restoredVersion
+
+    $history = Invoke-AwsJson -Arguments @(
+      's3api', 'list-object-versions', '--bucket', $Runtime.CandidateDocumentBucket,
+      '--prefix', $Document.sourceKey, '--output', 'json'
+    ) -Operation 'Object-recovery reconciled version validation'
+    $versions = @(Get-OptionalItems -Object $history -Name 'Versions' | Where-Object {
+        [string]$_.Key -ceq [string]$Document.sourceKey
+      })
+    $markers = @(Get-OptionalItems -Object $history -Name 'DeleteMarkers' | Where-Object {
+        [string]$_.Key -ceq [string]$Document.sourceKey
+      })
+    if (
+      $versions.Count -ne 1 -or [string]$versions[0].VersionId -cne $restoredVersion -or
+      -not [bool]$versions[0].IsLatest -or $markers.Count -ne 0
+    ) {
+      throw "Object recovery did not reconcile to one exact current restored version."
+    }
+    [pscustomobject]@{
+      PriorVersionRecovered = $true
+      DeleteMarkerRemoved = $true
+      SupersededVersionRemoved = $true
+      RestoredVersionRescanned = ([string]$rescan.ScanResult -ceq 'NO_THREATS_FOUND')
+    }
+  }
+  catch {
+    $failure = $_
+    try {
+      $history = Invoke-AwsJson -Arguments @(
+        's3api', 'list-object-versions', '--bucket', $Runtime.CandidateDocumentBucket,
+        '--prefix', $Document.sourceKey, '--output', 'json'
+      ) -Operation 'Object-recovery failure reconciliation'
+      $versions = @(Get-OptionalItems -Object $history -Name 'Versions' | Where-Object {
+          [string]$_.Key -ceq [string]$Document.sourceKey
+        })
+      $markers = @(Get-OptionalItems -Object $history -Name 'DeleteMarkers' | Where-Object {
+          [string]$_.Key -ceq [string]$Document.sourceKey
+        })
+      $originalPresent = @($versions | Where-Object {
+          [string]$_.VersionId -ceq $originalVersion
+        }).Count -eq 1
+      if ($originalPresent -and -not [string]::IsNullOrWhiteSpace($restoredVersion)) {
+        $restoredPresent = @($versions | Where-Object {
+            [string]$_.VersionId -ceq $restoredVersion
+          }).Count -eq 1
+        if ($restoredPresent) {
+          Remove-RecoveryObjectVersion -Runtime $Runtime -Key $Document.sourceKey `
+            -Version $restoredVersion -DeleteMarker $false
+        }
+      }
+      foreach ($entry in @($markers)) {
+        Remove-RecoveryObjectVersion -Runtime $Runtime -Key $Document.sourceKey `
+          -Version ([string]$entry.VersionId) -DeleteMarker $true
+      }
+      if ($originalPresent) { $Document.sourceVersion = $originalVersion }
+      elseif (-not [string]::IsNullOrWhiteSpace($restoredVersion)) {
+        $Document.sourceVersion = $restoredVersion
+      }
+    }
+    catch {
+      throw "Object recovery failed and could not reconcile its exact generated versions for cleanup."
+    }
+    throw $failure
+  }
+  finally {
+    Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+  }
+}
+
 function New-DirectProcessorEvent {
   param(
     [Parameter(Mandatory)][object]$Runtime,
@@ -2375,7 +2577,7 @@ if ($Action -eq 'PlanExecution') {
   exit 0
 }
 
-$planEvidence = Read-ExecutionPlan -Path $ExecutionPlanPath -Sha $ReviewedExecutionPlanSha256 -RequireFresh:($Action -in @('Execute', 'ServiceDetection'))
+$planEvidence = Read-ExecutionPlan -Path $ExecutionPlanPath -Sha $ReviewedExecutionPlanSha256 -RequireFresh:($Action -in @('Execute', 'ServiceDetection', 'ObjectRecovery'))
 $currentRuntime = ConvertTo-ReviewedRuntimeIdentity -Runtime $runtime
 $runtimeIdentityUnchanged = (
   [string]$planEvidence.Plan.stateLineage -ceq $identity.Lineage -and
@@ -2421,9 +2623,11 @@ foreach ($entry in @($planEvidence.Plan.requests)) {
   Assert-TaskRequest -Request $entry.request -Runtime $runtime -Phase ([string]$entry.phase) -RunId ([string]$planEvidence.Plan.runId) -ManifestJson $planEvidence.Fixture.ManifestJson -ManifestDigest $FixtureSetSha256 -Issuer $runtime.Issuer
 }
 
-if ($Action -eq 'ServiceDetection') {
+if ($Action -in @('ServiceDetection', 'ObjectRecovery')) {
+  $objectRecoveryRequested = $Action -ceq 'ObjectRecovery'
   $null = Assert-DocumentOperationalHealth
-  $ReceiptPath = Join-Path $operatorRoot "service-detection-receipt-$($SourceSha.Substring(0, 12))-$ReviewedExecutionPlanSha256.json"
+  $receiptPrefix = if ($objectRecoveryRequested) { 'object-recovery-receipt' } else { 'service-detection-receipt' }
+  $ReceiptPath = Join-Path $operatorRoot "$receiptPrefix-$($SourceSha.Substring(0, 12))-$ReviewedExecutionPlanSha256.json"
   $receiptPath = Resolve-OperatorPath -Candidate $ReceiptPath -AllowedRoot $operatorRoot
   $receipt = [ordered]@{
     schemaVersion = 1
@@ -2465,6 +2669,7 @@ if ($Action -eq 'ServiceDetection') {
   $primaryFailure = $null
   $cleanupFailure = $null
   $service = $null
+  $objectRecovery = $null
   try {
     $receipt.phase = 'service-detection-running'
     Write-JsonFile -Path $receiptPath -Value $receipt -AllowReplace
@@ -2472,6 +2677,10 @@ if ($Action -eq 'ServiceDetection') {
       -RunId $receipt.runId -Role 'clean-pdf' -Receipt $receipt -Documents $documents
     $script:acceptanceStage = 'clean-pdf.guardduty-service-detection'
     $service = Wait-GuardDutyServiceScan -Runtime $runtime -Document $document
+    if ($objectRecoveryRequested) {
+      $objectRecovery = Invoke-VersionedObjectRecovery -Runtime $runtime -Document $document
+      Save-RecoveryDescriptor -Receipt $receipt -Documents @($documents)
+    }
   }
   catch {
     $primaryFailure = [pscustomobject]@{
@@ -2505,35 +2714,46 @@ if ($Action -eq 'ServiceDetection') {
   if ($null -ne $cleanupFailure) {
     $receipt.phase = 'cleanup-required'
     Write-JsonFile -Path $receiptPath -Value $receipt -AllowReplace
-    throw "GuardDuty service detection did not prove exact cleanup. Retain and review the receipt before RecoverCleanup."
+    throw "$Action did not prove exact cleanup. Retain and review the receipt before RecoverCleanup."
   }
   $receipt.completedAt = [DateTimeOffset]::UtcNow.ToString('o')
   if ($null -ne $primaryFailure) {
     $receipt.phase = 'failed-cleaned'
     Write-JsonFile -Path $receiptPath -Value $receipt -AllowReplace
-    throw "GuardDuty service detection failed during guarded stage '$($primaryFailure.Stage)' after exact cleanup; no acceptance claim is made."
+    throw "$Action failed during guarded stage '$($primaryFailure.Stage)' after exact cleanup; no acceptance claim is made."
   }
   if (
     $null -eq $service -or [string]$service.ScanResult -cne 'NO_THREATS_FOUND' -or
+    ($objectRecoveryRequested -and (
+      $null -eq $objectRecovery -or -not [bool]$objectRecovery.PriorVersionRecovered -or
+      -not [bool]$objectRecovery.DeleteMarkerRemoved -or
+      -not [bool]$objectRecovery.SupersededVersionRemoved -or
+      -not [bool]$objectRecovery.RestoredVersionRescanned
+    )) -or
     $receipt.persistentRows -ne 0 -or -not $receipt.databaseCleaned -or -not $receipt.objectsRemoved
   ) {
-    throw "GuardDuty service detection did not prove one clean managed scan and zero persistent artifacts."
+    throw "$Action did not prove its exact managed-scan/recovery boundary and zero persistent artifacts."
   }
-  $receipt.phase = 'service-detection-verified'
+  $receipt.phase = if ($objectRecoveryRequested) { 'object-recovery-verified' } else { 'service-detection-verified' }
   Write-JsonFile -Path $receiptPath -Value $receipt -AllowReplace
   [pscustomobject]@{
-    Outcome = 'guardduty-service-detection-verified-and-cleaned'
+    Outcome = if ($objectRecoveryRequested) {
+      'versioned-object-recovery-verified-and-cleaned'
+    } else { 'guardduty-service-detection-verified-and-cleaned' }
     ReceiptPath = $receiptPath
     ReceiptSha256 = Get-FileSha256 $receiptPath
     ProtectionPlanStatus = $service.ProtectionPlanStatus
     TaggingStatus = $service.TaggingStatus
     ScanResult = $service.ScanResult
-    ScannedObjectCount = 1
+    ScannedObjectCount = if ($objectRecoveryRequested) { 2 } else { 1 }
     PersistentRows = 0
     DatabaseCleaned = $true
     ObjectsRemoved = $true
     TriggerActivation = $false
     GuardDutyServiceDetectionProved = $true
+    VersionedObjectRecoveryProved = $objectRecoveryRequested
+    DeleteMarkerRecoveryProved = $objectRecoveryRequested
+    RestoredVersionRescanProved = $objectRecoveryRequested
     EventBridgeDeliveryProved = $false
     SqsDeliveryProved = $false
     EventSourceMappingProved = $false

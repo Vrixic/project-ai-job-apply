@@ -74,6 +74,7 @@ pwsh -NoProfile -File scripts/operate-development-document-processing-acceptance
 
 Continue only when the mapping is `Disabled`, the scan-result rule is `DISABLED`, the reconciler is
 `DISABLED`, and `ActivationAuthorized` is false. `PlanExecution`, `Execute`, `ServiceDetection`,
+`ObjectRecovery`,
 `RecoverCleanup`, and `Verify` repeat this live guard. No operator action can enable a trigger.
 
 ## 2. Produce the review-only execution plan
@@ -222,7 +223,39 @@ rows, exact object removal, and `TriggerActivation=false`. This proves GuardDuty
 and managed tagging only. EventBridge delivery, SQS delivery, event-source mapping, processor/parser
 activation, API Gateway/JWT enforcement, and real resumes remain unproved and unauthorized.
 
-## 6. Read-only verification and retained evidence
+## 6. Prove exact versioned-object recovery
+
+Use another fresh reviewed execution plan and the same exact inputs as service detection, changing
+only the action:
+
+```powershell
+pwsh -NoProfile -File scripts/operate-development-document-processing-acceptance.ps1 `
+  -Action ObjectRecovery `
+  -ExpectedAccountId <account-id> `
+  -StateBucket <state-bucket> `
+  -SourceSha <merged-sha> `
+  -FixtureSetSha256 <reviewed-fixture-sha256> `
+  -MigrationReceiptPath <verified-image-receipt> `
+  -ReviewedMigrationReceiptSha256 <receipt-sha256> `
+  -ExecutionPlanPath <reviewed-execution-plan> `
+  -ReviewedExecutionPlanSha256 <execution-plan-sha256>
+```
+
+The action first requires GuardDuty's managed clean tag on one generated PDF version. It then
+creates one exact delete marker, proves the descriptor-bound prior version remains, reads that exact
+version and verifies its SHA-256, writes a new checksum/KMS/metadata-bound version, and requires a
+fresh GuardDuty `NO_THREATS_FOUND` result for the restored version. It removes only the generated
+delete marker and superseded version, proves one current restored version, and finally uses the
+normal owner-safe database and exact-version cleanup to reach zero rows and zero object history.
+
+Accept only `versioned-object-recovery-verified-and-cleaned`, two managed clean scans, all three
+recovery booleans true, zero persistent rows, exact object removal, and
+`TriggerActivation=false`. A partial recovery is reconciled back to one descriptor-bound version
+before normal cleanup; otherwise the checksum-bound receipt remains for `RecoverCleanup`. This
+proves same-region versioned-object recovery for generated data only, not cross-region replication,
+real candidate recovery, EventBridge/SQS delivery, processor/parser activation, or an RTO/RPO.
+
+## 7. Read-only verification and retained evidence
 
 ```powershell
 pwsh -NoProfile -File scripts/operate-development-document-processing-acceptance.ps1 `
@@ -255,8 +288,8 @@ deployment Apply verification and its checksum-bound zero-drift baseline for tha
 Retain only checksums and privacy-safe aggregate fields in delivery evidence. For direct-dark
 `Execute`, state explicitly that the run used generated synthetic data and direct Lambda
 invocations, kept all triggers disabled, and did not prove GuardDuty service scanning. For
-`ServiceDetection`, retain its separate checksum and aggregate result and do not infer any trigger
-delivery. Neither action proves EventBridge/SQS delivery, event-source mapping, reconciler behavior,
+`ServiceDetection` or `ObjectRecovery`, retain its separate checksum and aggregate result and do not
+infer any trigger delivery. None of these actions proves EventBridge/SQS delivery, event-source mapping, reconciler behavior,
 API Gateway routing, JWT/JWKS validation, authorizer enforcement, a generated alarm transition, or
 an independently reconstructed Terraform
 zero-drift plan, real candidate

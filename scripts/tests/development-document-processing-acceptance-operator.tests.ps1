@@ -26,7 +26,7 @@ if (($parameterNames -join "|") -cne ($expectedParameters -join "|")) {
 }
 
 foreach ($required in @(
-    'ValidateSet("Status", "PlanExecution", "Execute", "ServiceDetection", "RecoverCleanup", "Verify")',
+    'ValidateSet("Status", "PlanExecution", "Execute", "ServiceDetection", "ObjectRecovery", "RecoverCleanup", "Verify")',
     '. (Join-Path $PSScriptRoot "lib\development-document-dark-guards.ps1")',
     'documents/dist/src/run-document-processing-acceptance.js',
     'DOCUMENT_PROCESSING_ACCEPTANCE_CONFIRM',
@@ -40,6 +40,10 @@ foreach ($required in @(
     'TypeScript (reviewed synthetic)',
     'GuardDutyServiceDetectionProved = $false',
     'GuardDutyServiceDetectionProved = $true',
+    'VersionedObjectRecoveryProved = $objectRecoveryRequested',
+    'DeleteMarkerRecoveryProved = $objectRecoveryRequested',
+    'RestoredVersionRescanProved = $objectRecoveryRequested',
+    "'versioned-object-recovery-verified-and-cleaned'",
     "'guardduty', 'get-malware-protection-plan'",
     "'GuardDutyMalwareScanStatus'",
     "'NO_THREATS_FOUND'",
@@ -124,7 +128,8 @@ if (
 }
 $guardedMutationFunctions = @(
   'Submit-Task', 'New-DurableClaim', 'Invoke-LambdaJson', 'Invoke-PresignedPost',
-  'Set-ExactScanTag', 'Save-RecoveryDescriptor', 'Remove-ExactObjectVersion'
+  'Set-ExactScanTag', 'Save-RecoveryDescriptor', 'Remove-ExactObjectVersion',
+  'Remove-RecoveryObjectVersion', 'Invoke-VersionedObjectRecovery'
 )
 foreach ($name in $guardedMutationFunctions) {
   $definition = @($ast.FindAll({
@@ -174,7 +179,7 @@ foreach ($name in @(
     "Get-OptionalProperty", "New-DirectProcessorEvent", "Get-LambdaVersionIdentity",
     "Get-LambdaAliasIdentity", "Assert-DocumentParserVersionBoundary", "Assert-PresignedUploadTarget", "Complete-SourceDescriptor",
     "Remove-ExactObjectVersion", "Remove-DescriptorObjects", "Assert-ReviewedRuntimeUnchanged",
-    "Wait-GuardDutyServiceScan"
+    "Wait-GuardDutyServiceScan", "Remove-RecoveryObjectVersion", "Invoke-VersionedObjectRecovery"
   )) {
   Import-OperatorFunction -Name $name
 }
