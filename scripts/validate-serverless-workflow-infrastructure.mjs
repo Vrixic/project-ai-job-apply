@@ -71,7 +71,7 @@ for (const required of [
   "INGESTION_PROVIDER_ACTIVATION_ALLOWED",
   "INGESTION_PROVIDER_SOURCES",
   "INGESTION_QUEUE_ARN",
-  "var.private_application_networking",
+  "var.ingestion_provider_private_egress",
   "var.ingestion_provider_activation_allowed || alltrue",
   'contains(["greenhouse", "lever", "ashby"], source.provider)',
   'function_response_types = ["ReportBatchItemFailures"]',
@@ -79,6 +79,8 @@ for (const required of [
   'role                           = aws_iam_role.ingestion_runtime["activity"].arn',
   'for_each = each.key == "coordinator" ? [1] : []',
   'for_each = each.key == "starter" ? [1] : []',
+  'for_each = contains(["coordinator", "terminal"], each.key) ? [1] : []',
+  'target_arn = aws_sqs_queue.ingestion_dead_letter[0].arn',
   'actions   = ["lambda:GetDurableExecution"]',
   'resources = ["$' + '{local.ingestion_durable_arn}:*/durable-execution/*"]',
   "KMSKeyArn",
@@ -86,6 +88,7 @@ for (const required of [
   'resources = ["$' + '{local.ingestion_durable_arn}:*"]',
   'resources = ["$' + '{aws_lambda_function.ingestion_activity[0].arn}:*"]',
   "maximum_event_age_in_seconds = 3600",
+  'Description  = "Immutable ${var.ingestion_durable_artifact_sha256}; activity ${aws_lambda_function.ingestion_activity[0].qualified_arn}"',
   'resource "aws_cloudwatch_metric_alarm" "ingestion_runtime_throttles"',
   'resource "aws_cloudwatch_metric_alarm" "ingestion_activity_throttles"',
   'resource "aws_cloudwatch_metric_alarm" "ingestion_durable_throttles"',
@@ -139,14 +142,17 @@ const ingestionRuntimePolicy = section(
   'data "aws_iam_policy_document" "ingestion_runtime"',
   'resource "aws_iam_role_policy" "ingestion_runtime"',
 );
-if ((ingestionRuntimePolicy.match(/kms:GenerateDataKey/gu) ?? []).length !== 1) {
-  failures.push(`${ingestionWorkflow}: only the coordinator may generate an SQS data key`);
+if ((ingestionRuntimePolicy.match(/kms:GenerateDataKey/gu) ?? []).length !== 2) {
+  failures.push(
+    `${ingestionWorkflow}: dispatch and asynchronous-failure SQS data-key boundaries are incomplete`,
+  );
 }
 for (const required of [
   "kms:EncryptionContext:SecretARN",
   "kms:EncryptionContext:aws:sqs:arn",
   'each.key == "coordinator"',
   'each.key == "starter"',
+  'contains(["coordinator", "terminal"], each.key)',
 ]) {
   if (!ingestionRuntimePolicy.includes(required)) {
     failures.push(`${ingestionWorkflow}: ingestion runtime KMS boundary is missing ${required}`);

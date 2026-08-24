@@ -126,9 +126,12 @@ run "ingestion_data_plane_deploys_dark_with_ordered_source_gate" {
       aws_sqs_queue.ingestion_dispatch[0].message_retention_seconds == 345600 &&
       aws_sqs_queue.ingestion_dead_letter[0].message_retention_seconds == 1209600 &&
       var.ingestion_retention_days == 30 &&
-      aws_cloudwatch_event_target.ingestion_terminal[0].retry_policy[0].maximum_event_age_in_seconds == 3600
+      aws_cloudwatch_event_target.ingestion_terminal[0].retry_policy[0].maximum_event_age_in_seconds == 3600 &&
+      length(aws_lambda_function.ingestion_runtime["coordinator"].dead_letter_config) == 1 &&
+      length(aws_lambda_function.ingestion_runtime["terminal"].dead_letter_config) == 1 &&
+      length(aws_lambda_function.ingestion_runtime["starter"].dead_letter_config) == 0
     )
-    error_message = "Ingestion transport must retain work for four days and failure evidence in the DLQ for fourteen days."
+    error_message = "Ingestion transport must retain work for four days and every asynchronous failure payload in the DLQ for fourteen days."
   }
 
   assert {

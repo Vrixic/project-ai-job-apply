@@ -346,6 +346,30 @@ data "aws_iam_policy_document" "ingestion_runtime" {
     }
   }
   dynamic "statement" {
+    for_each = contains(["coordinator", "terminal"], each.key) ? [1] : []
+    content {
+      actions   = ["sqs:SendMessage"]
+      resources = [aws_sqs_queue.ingestion_dead_letter[0].arn]
+    }
+  }
+  dynamic "statement" {
+    for_each = contains(["coordinator", "terminal"], each.key) ? [1] : []
+    content {
+      actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
+      resources = [local.platform_kms_key_arn]
+      condition {
+        test     = "StringEquals"
+        variable = "kms:ViaService"
+        values   = ["sqs.${data.aws_region.current.region}.amazonaws.com"]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "kms:EncryptionContext:aws:sqs:arn"
+        values   = [aws_sqs_queue.ingestion_dead_letter[0].arn]
+      }
+    }
+  }
+  dynamic "statement" {
     for_each = each.key == "coordinator" ? [1] : []
     content {
       actions   = ["lambda:GetDurableExecution"]
@@ -412,6 +436,12 @@ resource "aws_lambda_function" "ingestion_runtime" {
   source_code_hash               = var.ingestion_runtime_artifact_base64sha256
   layers                         = [var.ingestion_lambda_extension_layer_arn]
   kms_key_arn                    = aws_kms_key.platform.arn
+  dynamic "dead_letter_config" {
+    for_each = contains(["coordinator", "terminal"], each.key) ? [1] : []
+    content {
+      target_arn = aws_sqs_queue.ingestion_dead_letter[0].arn
+    }
+  }
   environment {
     variables = {
       NODE_ENV                              = "production"
@@ -629,7 +659,7 @@ resource "aws_cloudformation_stack" "ingestion_durable" {
         Properties = {
           FunctionName = { Ref = "DurableFunction" }
           CodeSha256   = var.ingestion_durable_artifact_base64sha256
-          Description  = "Immutable ${var.ingestion_durable_artifact_sha256}"
+          Description  = "Immutable ${var.ingestion_durable_artifact_sha256}; activity ${aws_lambda_function.ingestion_activity[0].qualified_arn}"
         }
       }
       DurableAlias = {
