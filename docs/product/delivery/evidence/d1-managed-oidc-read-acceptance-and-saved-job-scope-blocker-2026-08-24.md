@@ -4,7 +4,8 @@
 - Environment: isolated development
 - Status: read profile accepted; saved-job create remains under bounded deployed diagnosis
 - Correction sources: `e28f739`, `a6dfae43cd98dd0cab546ef37af84aee0b649bf8`,
-  `9421e22bc9c9278191536f9dad396ae25538130f`
+  `9421e22bc9c9278191536f9dad396ae25538130f`,
+  `5cea6782e7c3e0fe3ffc669b84c1f4536c4af6de`
 
 ## Read result
 
@@ -93,17 +94,27 @@ immutable gateway alias `32` at state serial `192`; its saved plan changed only 
 function and alias, and the refresh-backed post-release plan has zero changes with SHA-256
 `f2a2cd2b79722e9bfb7864900c77775ad7c66af4df2472316aba774fda3ec671`.
 
+The alias-`32` rerun again returned `failureStage=create` with cleanup successful, while the safe
+error remained the original `TypeError` / `ERR_INVALID_ARG_TYPE` rather than any transaction-stage
+code. This proves the exception occurs before the atomic create transaction begins. Exact source
+`5cea6782e7c3e0fe3ffc669b84c1f4536c4af6de` extends the same value-free classification to the only
+three remaining boundaries: replay lookup, catalog lookup, and persistence entry. Matching unit 83
+and typecheck pass. The deterministic artifact is deployed on immutable alias `33` at state serial
+`193`; its plan changed only the gateway function and alias, and post-release zero drift SHA-256 is
+`e5a229bef7f62ab5129a9baaa42107f7726c83a05a3379df3fc6326bc2a4c211`.
+
 ## Verification and next action
 
-- Saved-job persistence: Matching unit 80 passed plus PostgreSQL integration 5/5.
+- Saved-job persistence: Matching unit 83 passed; the unchanged transaction path retains its prior
+  real PostgreSQL integration 5/5 acceptance.
 - Workload diagnostics: focused web 9/9 and affected type checks passed.
-- Diagnostic release: deterministic double build, immutable publication/readback, alias `32`,
+- Diagnostic release: deterministic double build, immutable publication/readback, alias `33`,
   exact two-resource plan, and zero drift passed. Its direct boundary check remains to be rerun
   after the temporary AWS session is refreshed.
 - The newest read AWS metric bucket is inconclusive because the next workload shared its minute;
   it is not recorded as a false pass.
 
-Rerun only the saved-job lifecycle against alias `32`. If it fails, retain the displayed aggregate
+Rerun only the saved-job lifecycle against alias `33`. If it fails, retain the displayed aggregate
 result and use the exact bounded CloudWatch window only to read the value-free persistence stage.
 Correct that exact stage and repeat until the lifecycle passes, then corroborate its timestamps
 with `-WorkloadProfile D1SavedJob`. Finally wait for a quiet CloudWatch minute, repeat the read
