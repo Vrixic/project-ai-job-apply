@@ -128,8 +128,9 @@ request, and returns only provider, source ID, adapter version, and configuratio
 ```
 
 After exact values are supplied, engineering will create that ignored JSON file, run the preflight,
-and prepare the attributable activation record and bounded plan. No source is activated merely by
-validation.
+and complete the [exact activation record](../foundation/d1-provider-source-activation-record-template.md)
+before preparing a bounded plan. No source is activated merely by validation or by completing the
+template.
 
 ### Real-candidate boundary
 
