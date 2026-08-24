@@ -726,7 +726,7 @@ describe("ingestion Lambda transport", () => {
       account: "123456789012",
       time: "2026-08-16T12:00:05Z",
       region: "us-east-2",
-      resources: [],
+      resources: [retainedDurableFunctionArn],
       detail: {
         durableExecutionArn: executionArn,
         durableExecutionName: executionName,
@@ -757,6 +757,12 @@ describe("ingestion Lambda transport", () => {
     await expect(
       handler({ ...event, detail: { ...event.detail, unexpected: "raw" } }),
     ).rejects.toThrow("IngestionTerminalEventRejected");
+    await expect(handler({ ...event, resources: [] })).rejects.toThrow(
+      "IngestionTerminalEventRejected",
+    );
+    await expect(handler({ ...event, resources: [durableFunctionArn] })).rejects.toThrow(
+      "IngestionTerminalEventRejected",
+    );
     await expect(
       handler({
         ...event,

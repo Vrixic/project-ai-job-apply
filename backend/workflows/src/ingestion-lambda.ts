@@ -1007,7 +1007,7 @@ interface IngestionTerminalEvent {
   account: string;
   time: string;
   region: string;
-  resources: [];
+  resources: [string];
   source: "aws.lambda";
   "detail-type": "Durable Execution Status Change";
   detail: {
@@ -1122,7 +1122,7 @@ export function createIngestionTerminalHandler(
       envelopeTime.getTime() < now.getTime() - 2 * 60 * 60 * 1_000 ||
       envelopeTime.getTime() > now.getTime() + 5 * 60 * 1_000 ||
       !Array.isArray(event.resources) ||
-      event.resources.length !== 0 ||
+      event.resources.length !== 1 ||
       !record(event.detail) ||
       !hasExactKeys(event.detail, [
         "durableExecutionArn",
@@ -1142,6 +1142,7 @@ export function createIngestionTerminalHandler(
       !detail ||
       !isExactNumericLambdaVersionArn(detail.functionArn) ||
       !functionArnMatchesScope(detail.functionArn, config.account, config.region) ||
+      event.resources[0] !== detail.functionArn ||
       !/^[a-f0-9]{64}$/u.test(detail.durableExecutionName) ||
       !["FAILED", "STOPPED", "SUCCEEDED", "TIMED_OUT"].includes(detail.status) ||
       !matchesDurableExecutionArn(
