@@ -8,7 +8,7 @@ another service's tables.
 
 - `src/` — Fail-fast process orchestration, restore verifier, CLI entry points, and tests.
 - `restore-manifest.v1.json` — Canonical five-owner restore boundary: eight owned schemas (including
-  the empty-table `jobs_public` projection schema), 42 regular relations, and 17 checksum-bound
+  the empty-table `jobs_public` projection schema), 42 regular relations, and 18 checksum-bound
   migrations.
 
 Adding a schema owner requires adding its independently checksum-verified runner here, including it
