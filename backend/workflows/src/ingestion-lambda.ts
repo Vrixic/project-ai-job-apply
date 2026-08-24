@@ -1164,6 +1164,7 @@ export function createIngestionTerminalHandler(
       detail.durableExecutionArn,
       detail.functionArn,
     );
+    if (detail.status === "SUCCEEDED") return { handled: true };
     const currentAdapterConfigSha256 =
       typeof config.currentAdapterConfigSha256 === "function"
         ? await config.currentAdapterConfigSha256(dispatch.executionId)
