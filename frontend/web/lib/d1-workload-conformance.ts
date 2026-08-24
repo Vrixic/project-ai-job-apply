@@ -568,6 +568,20 @@ export async function runD1SavedJobLifecycleWorkload(
       token,
     };
     const created = await issue(baseUrl, createProfile, dependencies);
+    if (created.status === 403) {
+      discardBody(created);
+      return response(
+        403,
+        "write_scope_required",
+        "The managed session lacks jobs:write. Update the Auth0 web application grant, then sign out and sign in again.",
+        {
+          profile: "d1_deployed_saved_job_lifecycle_v1",
+          failureStage: "create_authorization",
+          observedStatus: 403,
+          cleanupRequired: false,
+        },
+      );
+    }
     if (created.status !== 201 || created.headers.get("cache-control") !== "no-store") {
       discardBody(created);
       throw new Error("create failed");

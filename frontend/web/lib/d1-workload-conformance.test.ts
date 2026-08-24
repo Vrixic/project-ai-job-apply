@@ -291,6 +291,40 @@ describe("D1 deployed saved-job lifecycle conformance", () => {
     expect(current).toBeUndefined();
   });
 
+  it("reports a missing write grant without claiming or attempting cleanup", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      if (url.pathname === "/v1/jobs/search") return privateJson({ items: catalogJobs });
+      if (url.pathname === "/v1/saved-jobs/search") return privateJson({ items: [] });
+      if (url.pathname === "/v1/saved-jobs" && init?.method === "POST") {
+        return privateJson(
+          {
+            type: "urn:ai-job-apply:problem:insufficient_scope",
+            title: "Insufficient scope",
+            status: 403,
+            code: "insufficient_scope",
+            traceId: "synthetic-trace",
+          },
+          403,
+        );
+      }
+      return privateJson({}, 500);
+    });
+
+    const result = await runD1SavedJobLifecycleWorkload(lifecycleRequest(), dependencies(fetch));
+    expect(result.status).toBe(403);
+    expect(await result.json()).toMatchObject({
+      state: "write_scope_required",
+      metrics: {
+        profile: "d1_deployed_saved_job_lifecycle_v1",
+        failureStage: "create_authorization",
+        observedStatus: 403,
+        cleanupRequired: false,
+      },
+    });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
   it("requires its distinct explicit confirmation before traffic", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>();
     const result = await runD1SavedJobLifecycleWorkload(

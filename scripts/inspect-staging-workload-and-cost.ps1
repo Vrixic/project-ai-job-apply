@@ -11,6 +11,8 @@ param(
   [ValidatePattern("^[a-z0-9.-]+$")]
   [string]$StateBucket = "",
   [string]$RuntimePlanPath = "",
+  [ValidateSet("Phase0", "D1Read", "D1SavedJob")]
+  [string]$WorkloadProfile = "Phase0",
   [string]$AwsProfile = "",
   [string]$Region = "us-east-2",
   [switch]$Help
@@ -30,6 +32,7 @@ Usage:
     -RuntimePlanPath .terraform/APPLIED_PLAN.tfplan
   .\scripts\inspect-staging-workload-and-cost.ps1 -Action Measure `
     -StartTime <ISO-8601> -EndTime <ISO-8601> `
+    -WorkloadProfile Phase0 `
     -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
     -RuntimePlanPath .terraform/APPLIED_PLAN.tfplan
 
@@ -38,6 +41,10 @@ budget, and CUR 2.0 Data Export availability. Measure accepts only a workload re
 returns aggregate API Gateway, Lambda, empty ECS application boundary, RDS, queue, alarm, log, and
 no-drift evidence. RuntimePlanPath is an already applied saved plan used only to recover the exact
 non-secret immutable artifact inputs for fresh read-only steady-state verification.
+
+WorkloadProfile selects the fixed aggregate request floor: Phase0 requires 552 requests and 100
+expected 4xx responses, D1Read requires 254 requests and 50 expected 401 responses, and
+D1SavedJob requires 10 requests and one expected 409 response.
 
 Both actions are read-only. No account identifier, endpoint, resource ARN, trace, log message,
 identity, token, preference, operation identifier, or raw provider record is printed.
@@ -461,6 +468,16 @@ function Convert-WorkloadWindow {
   if ($end -le $start -or ($end - $start).TotalMinutes -gt 15 -or $end -gt [DateTime]::UtcNow.AddMinutes(1)) {
     throw "The workload window must be positive, no more than 15 minutes, and not in the future."
   }
+  if ($WorkloadProfile -ne "Phase0") {
+    $metricStart = [DateTime]::new(
+      $start.Year, $start.Month, $start.Day, $start.Hour, $start.Minute, 0, [DateTimeKind]::Utc
+    )
+    $metricEnd = [DateTime]::new(
+      $end.Year, $end.Month, $end.Day, $end.Hour, $end.Minute, 0, [DateTimeKind]::Utc
+    )
+    if ($metricEnd -lt $end) { $metricEnd = $metricEnd.AddMinutes(1) }
+    return [pscustomobject]@{ Start = $metricStart; End = $metricEnd }
+  }
   return [pscustomobject]@{
     Start = $start.AddMinutes(-1)
     End   = $end.AddMinutes(3)
@@ -574,23 +591,46 @@ $taskInventory = Invoke-AwsJson @(
 $activeServices = @(Get-Collection $serviceInventory "serviceArns").Count
 $runningTasks = @(Get-Collection $taskInventory "taskArns").Count
 
-if (
-  [int]$requestCount.Sum -lt 552 -or [int]$clientErrors.Sum -lt 100 -or
-  [int]$serverErrors.Sum -ne 0 -or [int]$lambdaErrors -ne 0 -or
-  [int]$lambdaThrottles -ne 0 -or [decimal]$queueAge.Maximum -ne 0 -or
-  [decimal]$queueVisible.Maximum -ne 0 -or [decimal]$deadLetters.Maximum -ne 0 -or
-  [decimal]$durableDeadLetters.Maximum -ne 0 -or $logs.ErrorMatches -ne 0 -or
-  $logs.ForbiddenMatches -ne 0 -or $healthyAlarms -ne 10 -or $activeServices -ne 0 -or
-  $runningTasks -ne 0
-) { throw "The $Environment serverless workload did not pass aggregate AWS acceptance." }
+$minimumApiRequests = switch ($WorkloadProfile) {
+  "D1Read" { 254 }
+  "D1SavedJob" { 10 }
+  default { 552 }
+}
+$minimumExpected4xx = switch ($WorkloadProfile) {
+  "D1Read" { 50 }
+  "D1SavedJob" { 1 }
+  default { 100 }
+}
+
+$failedChecks = @()
+if ([int]$requestCount.Sum -lt $minimumApiRequests) { $failedChecks += "api_request_floor" }
+if ([int]$clientErrors.Sum -lt $minimumExpected4xx) { $failedChecks += "expected_4xx_floor" }
+if ([int]$serverErrors.Sum -ne 0) { $failedChecks += "api_5xx" }
+if ([int]$lambdaErrors -ne 0) { $failedChecks += "lambda_errors" }
+if ([int]$lambdaThrottles -ne 0) { $failedChecks += "lambda_throttles" }
+if ([decimal]$queueAge.Maximum -ne 0) { $failedChecks += "event_queue_age" }
+if ([decimal]$queueVisible.Maximum -ne 0) { $failedChecks += "event_queue_visible" }
+if ([decimal]$deadLetters.Maximum -ne 0) { $failedChecks += "event_dead_letters" }
+if ([decimal]$durableDeadLetters.Maximum -ne 0) { $failedChecks += "durable_dead_letters" }
+if ($logs.ErrorMatches -ne 0) { $failedChecks += "error_logs" }
+if ($logs.ForbiddenMatches -ne 0) { $failedChecks += "forbidden_log_content" }
+if ($healthyAlarms -ne 10) { $failedChecks += "alarm_health" }
+if ($activeServices -ne 0) { $failedChecks += "active_ecs_services" }
+if ($runningTasks -ne 0) { $failedChecks += "running_ecs_tasks" }
+if ($failedChecks.Count -ne 0) {
+  throw "The $Environment serverless workload did not pass aggregate AWS acceptance: $($failedChecks -join ', ')."
+}
 
 [pscustomobject]@{
   Environment              = $Environment
+  WorkloadProfile          = $WorkloadProfile
   WindowMinutes            = [Math]::Round(($window.End - $window.Start).TotalMinutes, 2)
   ApiRequests              = [int]$requestCount.Sum
-  ApiRequestsAtLeast552    = [int]$requestCount.Sum -ge 552
+  MinimumApiRequests       = $minimumApiRequests
+  ApiRequestsMeetMinimum   = [int]$requestCount.Sum -ge $minimumApiRequests
   Api4xx                   = [int]$clientErrors.Sum
-  Expected4xxAtLeast100    = [int]$clientErrors.Sum -ge 100
+  MinimumExpected4xx       = $minimumExpected4xx
+  Expected4xxMeetMinimum   = [int]$clientErrors.Sum -ge $minimumExpected4xx
   Api5xx                   = [int]$serverErrors.Sum
   ApiLatencyAverageMs      = $latency.Average
   ApiLatencyMaximumMs      = $latency.Maximum

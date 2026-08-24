@@ -38,10 +38,12 @@ export function D1WorkloadPanel({ authenticated }: { authenticated: boolean }) {
         message?: string;
         metrics?: Record<string, unknown>;
       };
+      if (result.metrics) {
+        setMetrics(result.metrics);
+      }
       if (!response.ok || !result.metrics) {
         throw new Error(result.message ?? "The D1 workload failed");
       }
-      setMetrics(result.metrics);
       setMessage(
         writeProfile
           ? "The saved-job lifecycle passed and its saved association was removed. Retain only the aggregate metrics shown below."

@@ -99,4 +99,32 @@ describe("D1WorkloadPanel", () => {
     );
     expect(container.textContent).toContain("saved association was removed");
   });
+
+  it("retains aggregate diagnostics when the saved-job write grant is missing", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      Response.json(
+        {
+          state: "write_scope_required",
+          message:
+            "The managed session lacks jobs:write. Update the Auth0 web application grant, then sign out and sign in again.",
+          metrics: {
+            profile: "d1_deployed_saved_job_lifecycle_v1",
+            failureStage: "create_authorization",
+            observedStatus: 403,
+            cleanupRequired: false,
+          },
+        },
+        { status: 403 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<D1WorkloadPanel authenticated />));
+    const button = container.querySelectorAll("button")[1] as HTMLButtonElement;
+    await act(async () => button.click());
+    await act(async () => {});
+    expect(container.textContent).toContain("managed session lacks jobs:write");
+    expect(container.textContent).toContain('"failureStage": "create_authorization"');
+    expect(container.textContent).toContain('"cleanupRequired": false');
+  });
 });

@@ -6,6 +6,7 @@ param(
   [ValidatePattern("^[0-9]{12}$")][string]$ExpectedAccountId = "",
   [ValidatePattern("^[a-z0-9.-]+$")][string]$StateBucket = "",
   [string]$RuntimePlanPath = "",
+  [ValidateSet("Phase0", "D1Read", "D1SavedJob")][string]$WorkloadProfile = "Phase0",
   [string]$AwsProfile = "ai-job-apply-development-admin",
   [string]$Region = "us-east-2",
   [switch]$Help
@@ -18,6 +19,7 @@ $arguments = @{
   Action            = $Action
   StartTime         = $StartTime
   EndTime           = $EndTime
+  WorkloadProfile   = $WorkloadProfile
   AwsProfile        = $AwsProfile
   Region            = $Region
   Help              = $Help

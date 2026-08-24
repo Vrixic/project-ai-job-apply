@@ -81,6 +81,11 @@ Then:
 7. Retain only the displayed aggregate metrics and exact start/end timestamps for both runs.
 8. Stop the local server with Ctrl+C.
 
+If the lifecycle returns `write_scope_required`, the Platform API permission exists but the web
+application's per-app user-delegated grant does not include `jobs:write`. Add that exact grant in
+Auth0, sign out to discard the old server-held token, sign in again, and then rerun the lifecycle.
+The aggregate failure result states `cleanupRequired=false`; do not attempt a blind delete.
+
 The launcher restores all prior process-scoped environment values on exit. It does not change
 Auth0, AWS, Terraform, the database, or product data.
 
@@ -92,12 +97,16 @@ and already-applied ignored steady-state plan:
 ```powershell
 .\scripts\inspect-development-workload-and-cost.ps1 `
   -Action Measure `
+  -WorkloadProfile D1Read `
   -StartTime "<startedAt>" `
   -EndTime "<endedAt>" `
   -ExpectedAccountId "<DEVELOPMENT_ACCOUNT_ID>" `
   -StateBucket "<DEVELOPMENT_STATE_BUCKET>" `
   -RuntimePlanPath ".terraform/development-provider-activation/zero-drift-eb617045e98a-20260824-152628.tfplan"
 ```
+
+Use `-WorkloadProfile D1SavedJob` with the lifecycle timestamps. The legacy/default `Phase0`
+profile has different fixed request floors and cannot corroborate either D1 workload.
 
 Require zero API `5xx`, Lambda errors/throttles, queue/DLQ backlog, forbidden log-pattern matches,
 or alarm failures; require idle ECS and refresh-backed zero drift. Do not retain account/resource
