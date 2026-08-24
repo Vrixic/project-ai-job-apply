@@ -9,10 +9,29 @@ canonical Next job page. Complete on-site or hybrid projections emit guarded `Jo
 incomplete or remote projections emit none. The page may show the exact external application link,
 but does not submit an application or claim confirmation.
 
-This is source and local generated-synthetic evidence only. Jobs migration
-`0010_public_job_truth_fields` is not published or applied in AWS, the public route remains absent,
-indexing remains disabled, and no provider configuration, provider request/data, real job, real
-candidate, or application occurred.
+Migration source `db6fe0b1682da0a69d2a2aeb8a28d1655b5060df` is merged on `main`. Its
+nineteen-migration image was built twice reproducibly for Linux/AMD64, runtime-smoked, immutably
+published, read back, and scanned `COMPLETE` with zero High/Critical findings. A checksum-bound
+Terraform plan changed only the idle migration task definition, advanced development to state
+serial `150` and task revision `39`, and a single no-override Fargate task applied and verified Jobs
+`0010_public_job_truth_fields`. The task exited `0`, emitted exactly six aggregate migration success
+markers, and returned the retained cluster to zero tasks and zero services. A fresh refresh-backed
+plan then proved zero drift with provider authority, provider sources, ingestion runtime, synthetic
+source, public route, and indexing disabled.
+
+The first affected dark Lambda release advanced ingestion and public runtimes without enabling a
+route or trigger. Live verification then found that the public edge's defensive parser and response
+projection had not yet allowlisted/carried the new optional truth fields. The route was absent, so
+no user traffic was affected. Correction source `d2586e4628f024b89bf05ad3494a6c335034ebc1`
+adds exact validation and response projection for work mode, employment type, provider publication
+time, HTTPS application URL, and structured physical addresses. All 108 Gateway cases and Gateway
+typecheck pass. Its edge/projection ZIPs built twice reproducibly, were immutably published with
+all sidecars and exact-version customer-KMS readback, and a saved four-update/zero-delete plan
+advanced only the two functions and two unweighted aliases. Final development state is serial `154`
+with both public aliases at version `5`. Direct projection returns exact absence; direct
+edge-to-projection returns the canonical cache-bounded `404`; the public route count is zero; all six
+public alarms are `OK`; ECS is idle; and the final refresh-backed plan is zero drift. No provider
+request/data, real job, real candidate, or application occurred.
 
 ## Source semantics
 
@@ -60,16 +79,27 @@ candidate, or application occurred.
 - Serverless infrastructure source validation passed.
 - Production-Next installed-Chrome assurance: 5/5 scenarios, including both JSON-LD suppression and
   exact generated-synthetic application-link/`JobPosting` rendering with automated WCAG A/AA rules.
+- Exact migration-image index digest: `sha256:1c7fee0911bffa322348179f967c9bda8573a863b4d3db2e43918d5a2c3a66ba`;
+  platform digest: `sha256:4842cba2540187c597684e26606f5afe6c4a76cc6ca874af7ab3b479ea46bb76`.
+- Applied migration plan SHA-256: `115e4097ac72c08bc6fd4f5d4abdbd4f3ad301d536ee419bb34525d4048bb6d7`.
+- Post-apply zero-drift plan SHA-256:
+  `0bb7b9b7aff8d2c69395abbeebae837f12aa5e8ac09d0c0a7731983c55c6f4c0`.
+- Initial affected ingestion/public artifact plan SHA-256:
+  `651f0e80740e44b0381fefe2cd76057f2e8035eefad6fdf0e9866f76f3d32d39`; ingestion aliases are
+  exact unweighted version `3` with all dark gates false, empty queues, fourteen healthy alarms,
+  and zero ECS services/tasks.
+- Corrected public artifact plan SHA-256:
+  `0f79c14fbf38655cf39d4db09a6e626f65b047115e919f300bb9fe6f206cf818`; edge SHA-256
+  `30e478a168a7d331d7fa3480e286a5ec495d49068f0aef35827a6e5436b7f029`; projection SHA-256
+  `1a53fe74f9374918f0ce0631430662f5286b3f76542bebccf7933cee5aef19a1`.
+- Final state-154 zero-drift plan SHA-256:
+  `3e540da9a4427730b5637fed7614350131a0e8e4cb8b78b6a59154f1da3d8ec8`.
 
 ## Remaining gates
 
-1. Commit a stable exact source, deterministically build and immutably publish the nineteen-migration
-   image and affected Lambda/web artifacts, then scan and read back their exact identities.
-2. Apply Jobs `0010` through a reviewed development migration plan and release the affected dark
-   runtime while keeping provider authority, sources, triggers, public route, and indexing disabled.
-3. Obtain exact company/board inputs and record activation authority, then run bounded Ashby network,
+1. Obtain exact company/board inputs and record activation authority, then run bounded Ashby network,
    persistence, revalidation, takedown, source-pause, and cleanup acceptance.
-4. Run public abuse/load, lifecycle/alias/cache, security/privacy/accessibility, and product acceptance
+2. Run public abuse/load, lifecycle/alias/cache, security/privacy/accessibility, and product acceptance
    before enabling the route or any crawler/indexing surface.
-5. Greenhouse and Lever structured data remain suppressed unless their supported provider contracts
+3. Greenhouse and Lever structured data remain suppressed unless their supported provider contracts
    later supply equivalent original-publication and location truth.
