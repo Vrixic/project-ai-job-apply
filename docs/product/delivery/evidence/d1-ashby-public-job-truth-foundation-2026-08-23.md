@@ -33,6 +33,18 @@ edge-to-projection returns the canonical cache-bounded `404`; the public route c
 public alarms are `OK`; ECS is idle; and the final refresh-backed plan is zero drift. No provider
 request/data, real job, real candidate, or application occurred.
 
+Generated-synthetic acceptance source `7bbc61d3b7344ea032a2faf77eda6e3a5ea64c88` then extended
+the existing exact-cleanup search fixture with two internally consistent on-site/hybrid jobs. Both
+carry full-time employment, provider publication time, an exact `.example.test` HTTPS application
+URL, and a country/locality/region physical address. Its final Linux/AMD64 image built twice
+reproducibly, passed hardened runtime smoke and immutable readback, and scanned `COMPLETE` with
+zero High/Critical findings. Saved one-resource plans advanced only the idle migration task
+definition to revision `41`; no migration ran. A bounded deployed run returned both jobs through
+gateway search, private projection, and edge alias version `5`, preserved all five optional truth
+fields, and then removed all three owned fixture rows through exact cleanup. Final state serial
+`156` has no persistent fixture rows, no provider authority or sources, disabled ingestion
+runtime/triggers, no public route, idle ECS, twenty healthy ingestion/public alarms, and zero drift.
+
 ## Source semantics
 
 - The [Ashby public job posting API](https://developers.ashbyhq.com/docs/public-job-posting-api)
@@ -94,6 +106,16 @@ request/data, real job, real candidate, or application occurred.
   `1a53fe74f9374918f0ce0631430662f5286b3f76542bebccf7933cee5aef19a1`.
 - Final state-154 zero-drift plan SHA-256:
   `3e540da9a4427730b5637fed7614350131a0e8e4cb8b78b6a59154f1da3d8ec8`.
+- Final acceptance image index digest:
+  `sha256:4a897054bcced7a0f92b14febd025f68571f12113567acfd8f3a5dabf527a914`;
+  platform digest: `sha256:ebde3daab4a1efa3e4e0cd56df3aa2da1d4e42f5e26d578ad813bb1647175515`.
+- Final idle task-definition plan SHA-256:
+  `1b139a54d4c07861eeae7b49a51cae73c84d044aeb278c7a1da8fb76ff18d7e2`.
+- Deployed generated-synthetic available-job acceptance: two distinct jobs, five truth fields per
+  job, cleanup affected exactly three owned jobs, zero persistent fixture rows, absent public route,
+  and zero active ECS tasks/services.
+- Final state-156 zero-drift plan SHA-256:
+  `7a52a89fd196b2daae45ff0d519924f337deb4e5b61bfa7a1c77a857ad8f1786`.
 
 ## Remaining gates
 
