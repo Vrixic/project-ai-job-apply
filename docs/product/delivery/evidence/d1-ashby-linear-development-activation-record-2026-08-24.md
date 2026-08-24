@@ -245,6 +245,49 @@ idempotent database settlement remain enforced. Focused terminal tests pass `20/
 typecheck passes, and scoped formatting plus whitespace checks pass. The final clean descendant must
 be rebuilt and deployed before the preserved event is replayed or deleted.
 
+## Final dark release and aggregate acceptance
+
+Exact clean source `eb617045e98a0a5db70f0b6250e27d0d6102622b` adds the final recovery correction
+found during aggregate inspection. The original pre-acquisition durable version `3` failure was
+still a started dispatch with a pending checkpoint because its real terminal event predated the
+function DLQ and could not be retained. For any failed terminal event whose exact source has since
+been removed from configuration, the handler now records the terminal dispatch and uses the domain
+coordinator to persist `source_disabled` pause with zero observations. It creates no recovery
+dispatch and performs no provider request. Full workflow `44/44`, ingestion `77/77`, focused
+terminal `20/20`, coordinator `8/8`, workflow typecheck, formatting, lint, and two deterministic
+source-bound builds pass.
+
+The exact-source migration image was built twice, runtime-smoked, immutably read back, and scanned
+`COMPLETE` with zero High/Critical findings. Its Jobs `0011` migration was already applied and
+verified through the composed 20-migration runner. The exact-source durable/runtime artifact
+SHA-256 values are `57d1db2f8e5c1dc54e20ecb8e4be3fda77c36df1b9dfd2ffb5f85a88d6d186d1`
+and `6f2c6676d9dda948483d8125953660892efc3f01f56f2437a0e22cbea69cfea2`; all eight
+objects passed immutable exact-version checksum, customer-KMS, metadata, and readback checks.
+Refresh-backed saved plan SHA-256
+`69f9bc1ffa57f4ff328b7d5f10187a584f8b05c42cc2cf22b0ad2642baa408c2` contained only
+the 13 allowlisted durable/Lambda/task-definition/policy/propagation records and preserved every
+activation gate false. It applied successfully.
+
+The preserved successful version `5` terminal event then returned exact `{handled:true}` and its
+single matching encrypted-DLQ message was deleted. Control-plane readback independently confirmed
+the historic version `3` execution failed with `IngestionActivityDispatchRejected` before provider
+acquisition. Corrected terminal alias `13` reconciled that exact event and persisted the disabled
+source pause. Final aggregate-only, read-only inspection emits no job value and proves:
+
+- two checkpoints: one succeeded, one paused, zero active;
+- two terminal dispatches, zero pending/claimed/nudged/started dispatches;
+- 32 observations and 32 active canonical jobs from exact permitted-API Ashby provenance;
+- all 32 records have non-empty descriptions, publication dates, exact HTTPS application URLs,
+  structured locations, and successful isolated public-reader projection;
+- zero withdrawn sources because the bounded response contained no unlisted item;
+- zero retained raw snapshots and no candidate data or provider response body.
+
+Final development state serial `190` has durable version `9`, activity alias `12`, unweighted
+coordinator/starter/terminal aliases `13`, both rules and the queue mapping disabled, both ingestion
+queues empty, all 14 ingestion alarms `OK`, the durable stack `UPDATE_COMPLETE`, and ECS at zero
+tasks/services. The final refresh-backed plan reconstructed all 86 variables, retained all five
+dark gates, and returned zero resource/output changes.
+
 ## Activation and acceptance sequence
 
 | Gate | State | Evidence |
@@ -258,26 +301,22 @@ be rebuilt and deployed before the preserved event is replayed or deleted.
 | Plan identity inserted and apply accepted | true | This reviewed record |
 | Provider authority/source/runtime applied | true, then restored | Corrected retry ran once; rules/mapping/gates/NAT are now default-off |
 | Bounded provider request/provenance | true | Durable version `5` succeeded through the accepted Ashby adapter and provider-only NAT |
-| Canonical persistence/deduplication/public truth | false | Pending |
-| Positive revalidation/removal and failed-poll safety | source/local true; deployed false | Exact source `5cbf71e404ef9334c5ca9d7f91fe048ddc2af82e`; Jobs `0011`; focused PostgreSQL and restore gates pass; cloud apply/exercise pending |
-| Exact persisted pause blocks new work | false | Pending for this live source |
-| Retention or exact cleanup disposition | false | Pending |
-| Alarms/queues/tasks/log redaction | partial | Runtime logs are aggregate-only; one metadata-only successful terminal event remains preserved in the encrypted DLQ pending corrected replay |
-| Default-off restoration and zero drift | partial | Rules/mapping/gates/NAT are restored dark; final settlement artifact deployment and refresh-backed zero drift remain |
-| Product/source-quality residual acceptance | false | Pending |
+| Canonical persistence/deduplication/public truth | true | Aggregate read-only acceptance: 32/32 canonical/public records with every required truth field |
+| Positive revalidation/removal and failed-poll safety | deployed/local true; live removal not applicable | Positive observation succeeded; Jobs `0011` and failed/empty-poll safety pass PostgreSQL; no live unlisted item existed |
+| Exact persisted pause blocks new work | true | Historic pre-acquisition failure reconciled to one `source_disabled` checkpoint; zero active/nonterminal work |
+| Retention or exact cleanup disposition | true | Zero retained raw snapshots; provider response body and candidate data absent |
+| Alarms/queues/tasks/log redaction | true | Aggregate/metadata-only logs, two empty queues, 14 alarms `OK`, ECS idle |
+| Default-off restoration and zero drift | true | State `190`; all gates false, triggers disabled, NAT absent, 86-variable zero drift |
+| Product/source-quality residual acceptance | false | Accountable review of the 32-record outcome remains pending |
 
 ## Current disposition
 
 - Decision: exact bounded development activation, inspection, and restoration accepted.
-- Apply authority: the activation and restoration plans were consumed once and are no longer valid.
-  Only a reviewed default-off plan built from the final clean descendant of implementation sources
-  `5cbf71e404ef9334c5ca9d7f91fe048ddc2af82e` and
-  `e45d24345ab4e9d2b87aa91495558b49661156cc`, its Jobs `0011` migration, terminal replay,
-  aggregate-only inspection, and required acceptance exercises remain authorized here; any new
-  provider activation requires a new review.
+- Apply authority: all activation, restoration, and final-dark saved plans were consumed once and
+  are no longer valid. Any new provider activation requires a new attributable review.
 - Public route/indexing: prohibited by unchanged false gates.
 - Production/candidate/application authority: none.
-- Source after the bounded attempt: default recommendation is disabled until public-route and
-  source-quality acceptance.
+- Source after the bounded attempt: default-off pending accountable source-quality/public-route
+  acceptance; no background work or provider egress exists.
 - Correction/takedown owner: pending final D1P acceptance; no public route exists.
 - Supersedes: none.
