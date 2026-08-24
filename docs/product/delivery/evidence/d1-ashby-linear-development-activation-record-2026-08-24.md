@@ -237,6 +237,14 @@ clearing, manual-terminal preservation, and reason-bounded relisting are enforce
 32 test tasks, and all 19 build tasks pass. This is source/local acceptance only: no final migration
 image, Jobs `0011` apply, Lambda artifact deployment, or cloud withdrawal exercise is claimed yet.
 
+Source `e45d24345ab4e9d2b87aa91495558b49661156cc` then closes a recovery-window mismatch found
+while staging the preserved replay: exact terminal events now remain replayable for the encrypted
+DLQ's configured 14-day retention instead of only two hours. The five-minute future bound and exact
+account, region, resource, numeric function version, execution identity, timestamp coherence, and
+idempotent database settlement remain enforced. Focused terminal tests pass `20/20`, workflow
+typecheck passes, and scoped formatting plus whitespace checks pass. The final clean descendant must
+be rebuilt and deployed before the preserved event is replayed or deleted.
+
 ## Activation and acceptance sequence
 
 | Gate | State | Evidence |
@@ -262,8 +270,9 @@ image, Jobs `0011` apply, Lambda artifact deployment, or cloud withdrawal exerci
 
 - Decision: exact bounded development activation, inspection, and restoration accepted.
 - Apply authority: the activation and restoration plans were consumed once and are no longer valid.
-  Only a reviewed default-off plan built from the final clean descendant of implementation source
-  `5cbf71e404ef9334c5ca9d7f91fe048ddc2af82e`, its Jobs `0011` migration, terminal replay,
+  Only a reviewed default-off plan built from the final clean descendant of implementation sources
+  `5cbf71e404ef9334c5ca9d7f91fe048ddc2af82e` and
+  `e45d24345ab4e9d2b87aa91495558b49661156cc`, its Jobs `0011` migration, terminal replay,
   aggregate-only inspection, and required acceptance exercises remain authorized here; any new
   provider activation requires a new review.
 - Public route/indexing: prohibited by unchanged false gates.
