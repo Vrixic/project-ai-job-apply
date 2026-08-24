@@ -1,8 +1,10 @@
 import type { CanonicalJobSummary } from "@ai-job-apply/api-contracts";
+import type postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { describe, expect, it } from "vitest";
 import { deriveSavedJobCursorKeys, SavedJobCollectionChangedError } from "./saved-job-cursor.js";
 import {
+  PostgresSavedJobStore,
   type SavedJobCatalogResolver,
   type SavedJobRecord,
   type SavedJobRecordPage,
@@ -281,5 +283,29 @@ describe("SavedJobsService", () => {
     await expect(service.list(owner, { pageSize: 20 })).rejects.toThrow("clock is invalid");
     await expect(service.delete(owner, uuidv7())).rejects.toThrow("clock is invalid");
     expect(store.records).toHaveLength(0);
+  });
+
+  it("classifies unexpected PostgreSQL create failures without retaining their details", async () => {
+    const client = {
+      begin: async () => {
+        throw new TypeError("private database and candidate details");
+      },
+    } as unknown as postgres.Sql;
+    const store = new PostgresSavedJobStore(client);
+    const requested = uuidv7();
+
+    await expect(
+      store.create(
+        uuidv7(),
+        requested,
+        job(requested),
+        "saved-job-classification-0001",
+        new Date("2026-08-24T21:30:00.000Z"),
+      ),
+    ).rejects.toMatchObject({
+      name: "SavedJobPersistenceError",
+      code: "SAVED_JOB_BEGIN",
+      message: "Saved-job persistence failed",
+    });
   });
 });

@@ -102,6 +102,29 @@ export class SavedJobIdempotencyLimitError extends Error {
   }
 }
 
+type SavedJobPersistenceStage =
+  | "BEGIN"
+  | "LOCK"
+  | "REPLAY_LOOKUP"
+  | "EXPIRED_CLEANUP"
+  | "IDEMPOTENCY_COUNT"
+  | "EXISTING_LOOKUP"
+  | "SAVED_JOB_COUNT"
+  | "SAVED_JOB_INSERT"
+  | "REVISION_UPDATE"
+  | "AUDIT_INSERT"
+  | "IDEMPOTENCY_INSERT";
+
+class SavedJobPersistenceError extends Error {
+  readonly code: `SAVED_JOB_${SavedJobPersistenceStage}`;
+
+  constructor(stage: SavedJobPersistenceStage, cause: unknown) {
+    super("Saved-job persistence failed", { cause });
+    this.name = "SavedJobPersistenceError";
+    this.code = `SAVED_JOB_${stage}`;
+  }
+}
+
 function requestHash(requestedJobId: string): string {
   return createHash("sha256")
     .update(JSON.stringify({ jobId: requestedJobId }))
@@ -381,9 +404,13 @@ export class PostgresSavedJobStore implements SavedJobStore {
     const occurredAtMilliseconds = occurredAt.getTime();
     if (!Number.isFinite(occurredAtMilliseconds)) throw new Error("Saved-job clock is invalid");
     const timestamp = new Date(occurredAtMilliseconds);
-    return this.client.begin(async (transaction) => {
-      await transaction`SELECT pg_advisory_xact_lock(hashtext(${`matching:saved:${ownerUserId}`}))`;
-      const [replay] = await transaction<SavedJobReplayRow[]>`
+    let stage: SavedJobPersistenceStage = "BEGIN";
+    try {
+      return await this.client.begin(async (transaction) => {
+        stage = "LOCK";
+        await transaction`SELECT pg_advisory_xact_lock(hashtext(${`matching:saved:${ownerUserId}`}))`;
+        stage = "REPLAY_LOOKUP";
+        const [replay] = await transaction<SavedJobReplayRow[]>`
         SELECT request_hash AS "requestHash", saved_job_id AS id,
           owner_user_id AS "ownerUserId", requested_job_id AS "requestedJobId",
           resolved_canonical_job_id_at_save AS "resolvedCanonicalJobIdAtSave",
@@ -399,25 +426,28 @@ export class PostgresSavedJobStore implements SavedJobStore {
         WHERE owner_user_id = ${ownerUserId} AND idempotency_key = ${idempotencyKey}
           AND idempotency_expires_at > ${timestamp}
       `;
-      if (replay) {
-        if (replay.requestHash !== requestHash(requestedJobId)) {
-          throw new SavedJobIdempotencyConflictError();
+        if (replay) {
+          if (replay.requestHash !== requestHash(requestedJobId)) {
+            throw new SavedJobIdempotencyConflictError();
+          }
+          return record(replay);
         }
-        return record(replay);
-      }
-      await transaction`
+        stage = "EXPIRED_CLEANUP";
+        await transaction`
         DELETE FROM matching.idempotency_keys
         WHERE owner_user_id = ${ownerUserId} AND idempotency_expires_at <= ${timestamp}
       `;
-      const [idempotencyUsage] = await transaction<{ count: string }[]>`
+        stage = "IDEMPOTENCY_COUNT";
+        const [idempotencyUsage] = await transaction<{ count: string }[]>`
         SELECT count(*)::text AS count
         FROM matching.idempotency_keys
         WHERE owner_user_id = ${ownerUserId}
       `;
-      if (Number(idempotencyUsage?.count ?? 0) >= this.maximumIdempotencyKeys) {
-        throw new SavedJobIdempotencyLimitError(this.maximumIdempotencyKeys);
-      }
-      const [existing] = await transaction<SavedJobRow[]>`
+        if (Number(idempotencyUsage?.count ?? 0) >= this.maximumIdempotencyKeys) {
+          throw new SavedJobIdempotencyLimitError(this.maximumIdempotencyKeys);
+        }
+        stage = "EXISTING_LOOKUP";
+        const [existing] = await transaction<SavedJobRow[]>`
         SELECT id, owner_user_id AS "ownerUserId", requested_job_id AS "requestedJobId",
           resolved_canonical_job_id_at_save AS "resolvedCanonicalJobIdAtSave",
           snapshot_company_id AS "snapshotCompanyId",
@@ -431,19 +461,21 @@ export class PostgresSavedJobStore implements SavedJobStore {
         FROM matching.saved_jobs
         WHERE owner_user_id = ${ownerUserId} AND requested_job_id = ${requestedJobId}
       `;
-      let created = existing ? record(existing) : undefined;
-      if (!created) {
-        const [savedJobUsage] = await transaction<{ count: string }[]>`
+        let created = existing ? record(existing) : undefined;
+        if (!created) {
+          stage = "SAVED_JOB_COUNT";
+          const [savedJobUsage] = await transaction<{ count: string }[]>`
           SELECT count(*)::text AS count
           FROM matching.saved_jobs
           WHERE owner_user_id = ${ownerUserId}
         `;
-        if (Number(savedJobUsage?.count ?? 0) >= this.maximumSavedJobs) {
-          throw new SavedJobLimitError(this.maximumSavedJobs);
-        }
-        const id = uuidv7();
-        const boundedSnapshot = snapshot(resolvedJob);
-        const [inserted] = await transaction<SavedJobRow[]>`
+          if (Number(savedJobUsage?.count ?? 0) >= this.maximumSavedJobs) {
+            throw new SavedJobLimitError(this.maximumSavedJobs);
+          }
+          const id = uuidv7();
+          const boundedSnapshot = snapshot(resolvedJob);
+          stage = "SAVED_JOB_INSERT";
+          const [inserted] = await transaction<SavedJobRow[]>`
           INSERT INTO matching.saved_jobs (
             id, owner_user_id, requested_job_id, resolved_canonical_job_id_at_save,
             snapshot_company_id, snapshot_company_name, snapshot_verified_domain,
@@ -469,15 +501,17 @@ export class PostgresSavedJobStore implements SavedJobStore {
             snapshot_last_verified_at AS "snapshotLastVerifiedAt",
             snapshot_expires_at AS "snapshotExpiresAt", saved_at AS "savedAt"
         `;
-        if (!inserted) throw new Error("Saved job insert returned no row");
-        created = record(inserted);
-        await transaction`
+          if (!inserted) throw new Error("Saved job insert returned no row");
+          created = record(inserted);
+          stage = "REVISION_UPDATE";
+          await transaction`
           INSERT INTO matching.saved_job_list_state (owner_user_id, revision)
           VALUES (${ownerUserId}, 2)
           ON CONFLICT (owner_user_id) DO UPDATE
           SET revision = matching.saved_job_list_state.revision + 1
         `;
-        await transaction`
+          stage = "AUDIT_INSERT";
+          await transaction`
           INSERT INTO matching.audit_events (
             id, owner_user_id, saved_job_id, requested_job_id,
             resolved_canonical_job_id_at_save, action, occurred_at
@@ -486,8 +520,9 @@ export class PostgresSavedJobStore implements SavedJobStore {
             ${resolvedJob.id}, 'saved', ${timestamp}
           )
         `;
-      }
-      await transaction`
+        }
+        stage = "IDEMPOTENCY_INSERT";
+        await transaction`
         INSERT INTO matching.idempotency_keys (
           owner_user_id, idempotency_key, request_hash, saved_job_id, requested_job_id,
           resolved_canonical_job_id_at_save, snapshot_company_id, snapshot_company_name,
@@ -505,8 +540,18 @@ export class PostgresSavedJobStore implements SavedJobStore {
           ${new Date(timestamp.getTime() + SAVED_JOB_IDEMPOTENCY_RETENTION_HOURS * 60 * 60 * 1_000)}
         )
       `;
-      return created;
-    });
+        return created;
+      });
+    } catch (error) {
+      if (
+        error instanceof SavedJobIdempotencyConflictError ||
+        error instanceof SavedJobLimitError ||
+        error instanceof SavedJobIdempotencyLimitError
+      ) {
+        throw error;
+      }
+      throw new SavedJobPersistenceError(stage, error);
+    }
   }
 
   async getOwnerRevision(ownerUserId: string): Promise<string> {
