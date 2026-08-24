@@ -46,9 +46,9 @@ not part of foundational approval, and deferral does not authorize the capabilit
 
 | ID | Delivery | Area | Required review | State | Release consequence |
 |---|---|---|---|---|---|
-| LR-D1-01 | D1 | Greenhouse public Job Board API | Terms, attribution, storage, redistribution, revalidation | Not started | No production ingestion |
-| LR-D1-02 | D1 | Lever Postings API | Terms, attribution, storage, redistribution, revalidation | Not started | No production ingestion |
-| LR-D1-03 | D1 | Ashby public Job Postings API | Terms, attribution, storage, redistribution, revalidation | Not started | No production ingestion |
+| LR-D1-01 | D1 | Greenhouse public Job Board API | Terms, attribution, storage, redistribution, revalidation | Removed | Separate counsel approval removed as a D1 gate by [ADR-025](../../adr/025-public-ats-feed-activation-governance.md); exact product/source-engineering activation evidence remains required and no legal conclusion is claimed |
+| LR-D1-02 | D1 | Lever Postings API | Terms, attribution, storage, redistribution, revalidation | Removed | Separate counsel approval removed as a D1 gate by [ADR-025](../../adr/025-public-ats-feed-activation-governance.md); exact product/source-engineering activation evidence remains required and no legal conclusion is claimed |
+| LR-D1-03 | D1 | Ashby public Job Postings API | Terms, attribution, storage, redistribution, revalidation | Removed | Separate counsel approval removed as a D1 gate by [ADR-025](../../adr/025-public-ats-feed-activation-governance.md); exact product/source-engineering activation evidence remains required and no legal conclusion is claimed |
 | LR-D1-04 | D1 | Real candidate onboarding | Final notice, rights, analytics and deployed privacy controls | Not started | Synthetic accounts only |
 | LR-D2-01 | D2 | User-contributed listings | Contribution license, provenance, takedown, appeal, contributor privacy | Not started | No public UGC |
 | LR-D2-02 | D2 | Chrome/Edge extension | Minimum permissions, browsing-data disclosures, store terms | Not started | No store release |

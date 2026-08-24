@@ -11,9 +11,9 @@ Owns companies, canonical jobs, source observations, provenance, deduplication s
 - `src/persistence/ingestion-orchestration.ts` — Jobs-owned durable checkpoint, append-only run
   event, and identifier-only dispatch persistence with revision fencing and bounded recovery.
 
-The persistence runtime accepts only `authorized_fixture` provenance by default. Production source
-adapters and explicit public contributions remain disabled until their separate legal and security
-gates pass.
+The catalog persistence runtime accepts only `authorized_fixture` provenance by default. The
+source-neutral ingestion runtime may explicitly allow the three bounded `permitted_api` adapters;
+public contributions remain disabled until their separate D2 gates pass.
 
 Migration `0005_ingestion_orchestration` adds three Jobs-owned relations. Schedule occurrences are
 immutable, checkpoint transitions advance exactly one revision under a database lock, every
@@ -54,6 +54,11 @@ provides signed keyset pagination, fixed-code aggregate report counts, explicit 
 version-fenced resolution while excluding operator identities from transport responses. Reports
 still do not trigger automation, and there is no source-resume operation, approved
 retention/deletion policy, real-report processing, migration apply, or deployment claim.
+
+Migration `0009_provider_ingestion_sources` aligns Jobs-owned durable checkpoint persistence with
+the existing bounded source-neutral identifier contract. It permits Greenhouse, Lever, and Ashby
+source IDs without weakening adapter-version, transition, dispatch, aggregate-only, or pause
+invariants; actual providers remain independently default-off.
 
 The D1 search read model uses PostgreSQL full-text search and stable keyset pagination over that
 same active catalog. It supports only honestly persisted title, company, location, and verification

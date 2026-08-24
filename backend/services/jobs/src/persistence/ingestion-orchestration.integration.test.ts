@@ -52,6 +52,40 @@ describeWithDatabase("PostgresIngestionOrchestrationStore", () => {
     });
   });
 
+  it("persists bounded provider source identifiers without weakening the checkpoint shape", async () => {
+    for (const [sourceId, adapterVersion] of [
+      ["greenhouse-reviewed-board", "greenhouse-job-board-v1"],
+      ["lever-reviewed-site", "lever-postings-v1"],
+      ["ashby-reviewed-board", "ashby-job-board-v1"],
+    ] as const) {
+      await expect(
+        client.begin(async (transaction) => {
+          const providerExecutionId = createHash("sha256")
+            .update(`${sourceId}:${adapterVersion}`, "utf8")
+            .digest("hex");
+          await transaction.unsafe(
+            `INSERT INTO jobs.ingestion_checkpoints (
+               execution_id, schema_version, source_id, adapter_version, scheduled_for,
+               state, revision, attempt, withdrawal_inferred
+             ) VALUES ($1, 1, $2, $3, $4, 'pending', 0, 1, false)`,
+            [providerExecutionId, sourceId, adapterVersion, scheduledFor],
+          );
+          const [persisted] = await transaction<
+            {
+              sourceId: string;
+              adapterVersion: string;
+            }[]
+          >`
+            SELECT source_id AS "sourceId", adapter_version AS "adapterVersion"
+            FROM jobs.ingestion_checkpoints WHERE execution_id=${providerExecutionId}
+          `;
+          expect(persisted).toEqual({ sourceId, adapterVersion });
+          throw new Error("rollback-provider-source-contract-test");
+        }),
+      ).rejects.toThrow("rollback-provider-source-contract-test");
+    }
+  });
+
   afterAll(async () => {
     await client.begin(async (transaction) => {
       await transaction.unsafe("SET LOCAL session_replication_role = replica");

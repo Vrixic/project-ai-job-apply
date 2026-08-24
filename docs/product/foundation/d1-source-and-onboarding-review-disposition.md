@@ -1,16 +1,18 @@
 # D1 Source and Real-Candidate Onboarding Disposition Worksheet
 
-- Status: Prepared template; no review or approval recorded
+- Status: Provider counsel rows superseded by ADR-025; LR-D1-04 template remains open
 - Prepared: 2026-08-16
 - Related brief: [D1 source and onboarding review brief](d1-source-and-onboarding-review-brief.md)
-- LR-D1-01 state: `Not started`
-- LR-D1-02 state: `Not started`
-- LR-D1-03 state: `Not started`
+- LR-D1-01 state: `Removed` by ADR-025; no legal approval claimed
+- LR-D1-02 state: `Removed` by ADR-025; no legal approval claimed
+- LR-D1-03 state: `Removed` by ADR-025; no legal approval claimed
 - LR-D1-04 state: `Not started`
 
-This worksheet becomes a review record only when accountable reviewers complete it against one
-immutable candidate and provide attributable signatures or external records. Repository authors
-must not fill legal conclusions or independent-security conclusions on a reviewer's behalf.
+ADR-025 supersedes this worksheet as the activation authority for LR-D1-01 through LR-D1-03. Their
+questions remain a risk reference for exact product/source-engineering activation records, but no
+counsel signature or legal conclusion is required or claimed for those three bounded public GET
+adapters. This worksheet becomes a real-candidate review record only when accountable reviewers
+complete LR-D1-04 against one immutable candidate and provide attributable records.
 
 ## Disposition vocabulary
 
@@ -244,9 +246,9 @@ retention/notice controls. Synthetic evidence cannot set the final activation ce
 
 | Row | Final result | Effective date | Scope | Release-blocking conditions open | Revalidation/expiry | Signed record |
 |---|---|---|---|---|---|---|
-| LR-D1-01 | `Not started` | — | None | All | Pending | Pending |
-| LR-D1-02 | `Not started` | — | None | All | Pending | Pending |
-| LR-D1-03 | `Not started` | — | None | All | Pending | Pending |
+| LR-D1-01 | `Removed` | 2026-08-23 | Superseded by ADR-025 source activation | Exact product/source record remains | Per activation | [ADR-025](../../adr/025-public-ats-feed-activation-governance.md) |
+| LR-D1-02 | `Removed` | 2026-08-23 | Superseded by ADR-025 source activation | Exact product/source record remains | Per activation | [ADR-025](../../adr/025-public-ats-feed-activation-governance.md) |
+| LR-D1-03 | `Removed` | 2026-08-23 | Superseded by ADR-025 source activation | Exact product/source record remains | Per activation | [ADR-025](../../adr/025-public-ats-feed-activation-governance.md) |
 | LR-D1-04 legal/privacy | `Not started` | — | None | All | Pending | Pending |
 | LR-D1-04 security/privacy | `Not started` | — | None | All | Pending | Pending |
 
@@ -254,9 +256,9 @@ retention/notice controls. Synthetic evidence cannot set the final activation ce
 
 | Role | Decision acknowledged | Name/signature or attributable record | UTC date |
 |---|---|---|---|
-| LR-D1-01 legal/privacy counsel | Pending | Pending | Pending |
-| LR-D1-02 legal/privacy counsel | Pending | Pending | Pending |
-| LR-D1-03 legal/privacy counsel | Pending | Pending | Pending |
+| LR-D1-01 legal/privacy counsel | Not required by ADR-025 | ADR-025 | 2026-08-23 |
+| LR-D1-02 legal/privacy counsel | Not required by ADR-025 | ADR-025 | 2026-08-23 |
+| LR-D1-03 legal/privacy counsel | Not required by ADR-025 | ADR-025 | 2026-08-23 |
 | LR-D1-04 legal/privacy counsel | Pending | Pending | Pending |
 | LR-D1-04 independent security/privacy reviewer | Pending | Pending | Pending |
 | Product-risk owner | No residual risk accepted | Pending | Pending |

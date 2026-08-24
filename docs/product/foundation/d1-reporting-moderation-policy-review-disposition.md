@@ -97,10 +97,10 @@ linked approved row and separately governed implementation/release evidence exis
 | Human operator may block a job through a privileged interface | `false` | D1P-01/D1P-03 plus implemented/tested manual boundary |
 | Human operator may pause one exact source/adapter/configuration | `false` | D1P-01/D1P-04 plus current source authority and tested manual boundary |
 | Any source-resume/reactivation operation may be designed | `false` | Explicit D1P-04 conclusion |
-| Any source-resume/reactivation operation may execute | `false` | D1P-04, exact LR-D1 approval, implementation, deployment, two-person evidence if required |
+| Any source-resume/reactivation operation may execute | `false` | D1P-04, exact ADR-025 activation record, implementation, deployment, and two-person evidence if required |
 | Individual reporter identity may be viewed by ordinary moderation | `false` | Explicit D1P-02 and D1P-06 necessity/authorization |
 | Real candidate reports may be processed | `false` | LR-D1-04 plus D1P-01 through D1P-07 and deployed acceptance |
-| Real provider source may be activated | `false` | Applicable LR-D1 row plus source-specific implementation/release evidence |
+| Real provider source may be activated | `false` | Exact ADR-025 company activation record plus source-specific implementation/release evidence |
 | D1 policy may govern D2 public UGC or contributor reputation | `false` | Prohibited; D2-specific review required |
 
 ## D1P-01 — Administrative audience, identity, scopes, and predicates
@@ -211,9 +211,9 @@ Copy one row per proposed rule. Do not use `Approved` until all cells are exact.
 
 | Source | LR-D1 row | Current disposition | Resume/activation authorized |
 |---|---|---|---:|
-| Greenhouse | LR-D1-01 | Not started | `false` |
-| Lever | LR-D1-02 | Not started | `false` |
-| Ashby | LR-D1-03 | Not started | `false` |
+| Greenhouse | ADR-025 / former LR-D1-01 | Counsel gate removed; exact company record pending | `false` |
+| Lever | ADR-025 / former LR-D1-02 | Counsel gate removed; exact company record pending | `false` |
+| Ashby | ADR-025 / former LR-D1-03 | Counsel gate removed; exact company record pending | `false` |
 | Synthetic foundation | Not a production approval | Generated-synthetic/default-off only | `false` for production |
 
 ## D1P-05 — Alerts and escalation

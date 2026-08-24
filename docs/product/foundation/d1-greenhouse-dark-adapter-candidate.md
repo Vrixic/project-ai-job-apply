@@ -1,7 +1,7 @@
 # D1 Greenhouse Dark Adapter Candidate
 
-- State: Implemented and generated-synthetic verified; activation prohibited
-- Provider gate: LR-D1-01 remains `Not started`
+- State: Implemented and generated-synthetic verified; default off
+- Provider counsel gate: LR-D1-01 removed by ADR-025; exact source activation still pending
 - Runtime/source/schedule flags: `false`
 - Real board token, employer data, and network execution: absent
 - Adapter version: `greenhouse-job-board-v1`
@@ -21,8 +21,8 @@ not inferred because the selected response does not establish those semantics. E
 not close jobs. HTTP 429, unavailable responses, and timeouts become fixed retry reasons without
 retaining URLs or payload values.
 
-The immutable registry accepts the exact Greenhouse/permitted-API descriptor only when disabled.
-Any `enabled: true` registration fails construction. Activation requires a separate source-specific
-change after LR-D1-01, exact board/company configuration review, egress review, immutable artifact
-publication, deployed synthetic/provider-contract acceptance, pause-gate verification, and a new
-reviewed release flag. This document grants none of those authorities.
+The immutable registry rejects an enabled Greenhouse/permitted-API descriptor by default and admits
+it only when the runtime supplies explicit provider authority. Activation requires exact
+board/company configuration, private NAT egress, immutable artifact publication, deployed bounded
+provider acceptance, pause-gate verification, and an attributable ADR-025 source activation record.
+This document grants none of those authorities.

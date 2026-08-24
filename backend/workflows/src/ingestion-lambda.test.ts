@@ -12,6 +12,7 @@ import {
   generatedSyntheticConfigSha256,
   generatedSyntheticSourceMayRun,
   hourlyIngestionScheduleSlot,
+  parseProviderSourceConfigurations,
   publishClaimedIngestionDispatch,
   requireInvokedActivityVersionArn,
   requireScheduledEvent,
@@ -64,6 +65,76 @@ describe("ingestion Lambda transport", () => {
     );
   });
 
+  it("parses exact provider configurations and refuses activation without authority", () => {
+    const configurations = [
+      {
+        schemaVersion: 1,
+        provider: "greenhouse",
+        sourceId: "greenhouse-approved-board",
+        enabled: true,
+        boardToken: "approved_board",
+        companyName: "Approved Company",
+        verifiedCompanyDomain: "approved.example",
+      },
+      {
+        schemaVersion: 1,
+        provider: "lever",
+        sourceId: "lever-approved-site",
+        enabled: false,
+        site: "approved-site",
+        region: "eu",
+        companyName: "Approved EU Company",
+        verifiedCompanyDomain: "eu.approved.example",
+      },
+      {
+        schemaVersion: 1,
+        provider: "ashby",
+        sourceId: "ashby-approved-board",
+        enabled: false,
+        jobBoardName: "approved-board",
+        companyName: "Approved Ashby Company",
+        verifiedCompanyDomain: "ashby.approved.example",
+      },
+    ];
+    expect(() => parseProviderSourceConfigurations(JSON.stringify(configurations), false)).toThrow(
+      "IngestionProviderConfigurationRejected",
+    );
+    const parsed = parseProviderSourceConfigurations(JSON.stringify(configurations), true);
+    expect(parsed).toHaveLength(3);
+    expect(parsed.map((source) => source.registration.provider)).toEqual([
+      "greenhouse",
+      "lever",
+      "ashby",
+    ]);
+    expect(new Set(parsed.map((source) => source.adapterConfigSha256)).size).toBe(3);
+    expect(parsed.every((source) => /^[a-f0-9]{64}$/u.test(source.adapterConfigSha256))).toBe(true);
+    expect(() =>
+      parseProviderSourceConfigurations(
+        JSON.stringify([{ ...configurations[0], unexpected: "field" }]),
+        true,
+      ),
+    ).toThrow("IngestionProviderConfigurationRejected");
+    expect(() => parseProviderSourceConfigurations("not-json", true)).toThrow(
+      "IngestionProviderConfigurationRejected",
+    );
+    expect(() =>
+      parseProviderSourceConfigurations(
+        JSON.stringify(
+          Array.from({ length: 9 }, (_, index) => ({
+            schemaVersion: 1,
+            provider: "ashby",
+            sourceId: `ashby-board-${index}`,
+            enabled: false,
+            jobBoardName: `board-${index}`,
+            companyName: `Company ${index}`,
+            verifiedCompanyDomain: `company-${index}.example`,
+          })),
+        ),
+        false,
+      ),
+    ).toThrow("IngestionProviderConfigurationRejected");
+  });
+
   it("binds runtime execution to the exact persisted source-pause identity", async () => {
     const isSourcePaused = vi
       .fn()
@@ -102,6 +173,34 @@ describe("ingestion Lambda transport", () => {
         { ...identity, adapterConfigSha256: "not-a-digest" },
       ),
     ).toThrow("moderated source execution identity");
+  });
+
+  it("binds each configured provider to its own persisted pause identity", async () => {
+    const isSourcePaused = vi.fn().mockResolvedValue(false);
+    const gate = createModeratedSourceExecutionGate({ isSourcePaused }, [
+      {
+        sourceId: "greenhouse-approved-board",
+        adapterVersion: "greenhouse-job-board-v1",
+        adapterConfigSha256: "b".repeat(64),
+      },
+      {
+        sourceId: "lever-approved-site",
+        adapterVersion: "lever-postings-v1",
+        adapterConfigSha256: "c".repeat(64),
+      },
+    ]);
+    await expect(
+      gate({ sourceId: "lever-approved-site", adapterVersion: "lever-postings-v1" }),
+    ).resolves.toBe(true);
+    await expect(
+      gate({ sourceId: "ashby-absent-board", adapterVersion: "ashby-job-board-v1" }),
+    ).resolves.toBe(false);
+    expect(isSourcePaused).toHaveBeenCalledWith({
+      kind: "source",
+      sourceId: "lever-approved-site",
+      adapterVersion: "lever-postings-v1",
+      adapterConfigSha256: "c".repeat(64),
+    });
   });
 
   it("requires both static activation and the persisted source control before scheduling", async () => {

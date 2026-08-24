@@ -31,3 +31,6 @@ other service may modify these tables.
 - `0008_job_reporting_and_moderation.sql` — Owner-isolated fixed-code job reports, strict internal
   moderation cases, append-only decision evidence, explicit job blocking, and exact source-pause
   state. Reports alone cannot mutate catalog lifecycle.
+- `0009_provider_ingestion_sources.sql` — Expands the existing durable checkpoint source identifier
+  from the generated-synthetic prefix to the source-neutral bounded identifier contract. It changes
+  no job values, dispatch shape, transition semantics, retention, or candidate-data boundary.

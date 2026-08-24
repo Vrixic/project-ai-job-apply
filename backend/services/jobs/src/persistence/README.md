@@ -12,7 +12,8 @@ merges when a deterministic exact identity matches.
 - `catalog.integration.test.ts` — Migration replay, deduplication, reversible resolution,
   topology, isolation, and tombstone evidence.
 
-The repository defaults to `authorized_fixture` provenance. Enabling a real API or public UGC
-provenance requires the applicable legal/security approval and an explicit runtime configuration.
+The repository defaults to `authorized_fixture` provenance. Enabling a bounded public ATS API
+requires ADR-025's exact product/source activation record and explicit runtime configuration;
+public UGC remains governed separately by D2.
 Duplicate resolution is not a public API. D1-007 must add its authenticated authorization and audit
 surface without bypassing this repository boundary.

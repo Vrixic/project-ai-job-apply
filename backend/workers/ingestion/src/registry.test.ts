@@ -81,7 +81,7 @@ describe("SourceRegistry", () => {
     ["lever", "lever-reviewed-site", "lever-postings-v1"],
     ["ashby", "ashby-reviewed-board", "ashby-job-board-v1"],
   ] as const)(
-    "admits the exact %s shape only as an immutable disabled candidate",
+    "admits the exact %s shape as disabled and requires explicit activation authority",
     (provider, sourceId, adapterVersion) => {
       const providerAdapter: IngestionSourceAdapter = {
         sourceId,
@@ -110,6 +110,20 @@ describe("SourceRegistry", () => {
             },
           ]),
       ).toThrow("default-off");
+      const enabled = new SourceRegistry(
+        [
+          {
+            sourceId,
+            provider,
+            provenance: "permitted_api",
+            adapter: providerAdapter,
+            enabled: true,
+          },
+        ],
+        () => true,
+        { providerActivationAllowed: true },
+      );
+      expect(enabled.requireEnabled(sourceId)).toMatchObject({ enabled: true, provider });
     },
   );
 

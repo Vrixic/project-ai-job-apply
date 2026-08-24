@@ -41,14 +41,20 @@ only after traffic is quiesced and database deletion protection has been removed
 reviewed apply. This generic switch is currently owned by synthetic staging under ADR-018; it is not
 a production retention policy.
 
-The optional D1 ingestion composition is separately deployable and remains dark by default:
-`deploy_ingestion_runtime`, `ingestion_runtime_enabled`, and
-`ingestion_synthetic_source_enabled` must be advanced deliberately in that order, and the shared
-`runtime_activation_allowed` lifecycle authority must permit trigger activation. Its work queue
+The optional D1 source-neutral ingestion composition is separately deployable and remains dark by
+default: `deploy_ingestion_runtime`, `ingestion_runtime_enabled`, and the selected source enable
+flags must be advanced deliberately, and the shared `runtime_activation_allowed` lifecycle
+authority must permit trigger activation. Greenhouse, Lever, and Ashby use a bounded structured
+`ingestion_provider_sources` list. Enabling any provider also requires
+`ingestion_provider_activation_allowed=true` and `private_application_networking=true`, which
+provides the private Lambda activity with NAT egress; configuration supplies no arbitrary endpoint
+or credential. Each source is independently default-off and remains subject to its exact persisted
+pause tuple. Its work queue
 retains identifier-only nudges for four days. Its shared DLQ retains only value-free schedule,
 terminal-metadata, durable-identifier, and nudge-failure envelopes for fourteen days and has no
 automatic consumer or redrive. No
-real-provider adapter, event-source mapping, schedule, or source is enabled by repository defaults.
+real-provider configuration, event-source mapping, schedule, or source is enabled by repository
+defaults.
 
 `deploy_public_job_reader` can dark-provision an immutable anonymous edge and a separate private
 projection Lambda, each with reserved concurrency one. The edge has no VPC attachment, database

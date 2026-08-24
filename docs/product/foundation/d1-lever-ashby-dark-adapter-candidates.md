@@ -1,7 +1,7 @@
 # D1 Lever and Ashby Dark Adapter Candidates
 
-- State: Implemented and generated-synthetic verified; activation prohibited
-- Provider gates: LR-D1-02 and LR-D1-03 remain `Not started`
+- State: Implemented and generated-synthetic verified; default off
+- Provider counsel gates: LR-D1-02 and LR-D1-03 removed by ADR-025; exact source activation pending
 - Runtime/source/schedule flags: `false`
 - Real site/board configuration, employer data, and network execution: absent
 - Adapter versions: `lever-postings-v1` and `ashby-job-board-v1`
@@ -27,11 +27,11 @@ opaque posting ID. Work mode and supported employment types are mapped only from
 enums. `Temporary` is deliberately left unclassified because the canonical D1 contract has no
 truthful temporary category. Compensation is not requested or stored.
 
-The immutable registry admits each exact provider/`permitted_api` descriptor only while disabled.
-Any `enabled: true` registration fails construction. Activation requires a separate
-provider-specific change after the corresponding legal review row, exact company configuration and
-egress review, immutable artifact publication, deployed contract acceptance, pause-gate proof, and
-a new reviewed release flag. This document grants none of those authorities.
+The immutable registry rejects each enabled provider/`permitted_api` descriptor by default and
+admits it only when the runtime supplies explicit provider authority. Activation requires exact
+company configuration, private NAT egress, immutable artifact publication, deployed bounded
+provider acceptance, pause-gate proof, and an attributable ADR-025 source activation record. This
+document grants none of those authorities.
 
 Provider contract references:
 

@@ -184,6 +184,77 @@ run "ingestion_source_cannot_bypass_runtime_gate" {
   expect_failures = [var.ingestion_synthetic_source_enabled]
 }
 
+run "provider_sources_remain_dark_without_activation_authority" {
+  command = plan
+  variables {
+    deploy_ingestion_runtime = true
+    ingestion_provider_sources = [{
+      provider                = "greenhouse"
+      source_id               = "greenhouse-approved-board"
+      enabled                 = false
+      tenant                  = "approved_board"
+      company_name            = "Approved Company"
+      verified_company_domain = "approved.example"
+    }]
+  }
+
+  assert {
+    condition = (
+      !var.ingestion_provider_activation_allowed &&
+      jsondecode(aws_lambda_function.ingestion_activity[0].environment[0].variables.INGESTION_PROVIDER_SOURCES)[0].enabled == false &&
+      length(aws_nat_gateway.this) == 0
+    )
+    error_message = "Reviewed provider configuration must stay disabled and must not create public egress without activation authority."
+  }
+}
+
+run "enabled_provider_requires_explicit_authority_and_private_egress" {
+  command = plan
+  variables {
+    deploy_ingestion_runtime              = true
+    ingestion_provider_activation_allowed = false
+    ingestion_provider_sources = [{
+      provider                = "lever"
+      source_id               = "lever-approved-site"
+      enabled                 = true
+      tenant                  = "approved-site"
+      region                  = "eu"
+      company_name            = "Approved EU Company"
+      verified_company_domain = "eu.approved.example"
+    }]
+  }
+  expect_failures = [terraform_data.ingestion_activation_guard]
+}
+
+run "authorized_provider_activation_is_exact_bounded_and_egress_capable" {
+  command = plan
+  variables {
+    deploy_ingestion_runtime              = true
+    ingestion_runtime_enabled             = true
+    runtime_activation_allowed            = true
+    private_application_networking        = true
+    ingestion_provider_activation_allowed = true
+    ingestion_provider_sources = [{
+      provider                = "ashby"
+      source_id               = "ashby-approved-board"
+      enabled                 = true
+      tenant                  = "approved-board"
+      company_name            = "Approved Ashby Company"
+      verified_company_domain = "ashby.approved.example"
+    }]
+  }
+
+  assert {
+    condition = (
+      length(aws_nat_gateway.this) == 1 &&
+      aws_cloudwatch_event_rule.ingestion_schedule[0].state == "ENABLED" &&
+      jsondecode(aws_lambda_function.ingestion_activity[0].environment[0].variables.INGESTION_PROVIDER_SOURCES)[0].provider == "ashby" &&
+      jsondecode(aws_lambda_function.ingestion_activity[0].environment[0].variables.INGESTION_PROVIDER_SOURCES)[0].enabled == true
+    )
+    error_message = "An authorized provider must receive only its exact reviewed configuration behind bounded NAT egress and the ordered runtime gate."
+  }
+}
+
 run "ingestion_runtime_requires_global_activation_authority" {
   command = plan
   variables {

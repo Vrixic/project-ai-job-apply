@@ -58,6 +58,8 @@ for (const required of [
   'variable "deploy_ingestion_runtime"',
   'variable "ingestion_runtime_enabled"',
   'variable "ingestion_synthetic_source_enabled"',
+  'variable "ingestion_provider_activation_allowed"',
+  'variable "ingestion_provider_sources"',
   "var.deploy_ingestion_runtime && var.runtime_activation_allowed",
   'toset(["coordinator", "starter", "activity", "terminal"])',
   "default     = false",
@@ -65,8 +67,13 @@ for (const required of [
   "message_retention_seconds = 1209600",
   'state               = var.ingestion_runtime_enabled ? "ENABLED" : "DISABLED"',
   "enabled                 = var.ingestion_runtime_enabled",
-  "INGESTION_SYNTHETIC_SOURCE_ENABLED = tostring(var.ingestion_synthetic_source_enabled)",
-  "INGESTION_QUEUE_ARN                = aws_sqs_queue.ingestion_dispatch[0].arn",
+  "INGESTION_SYNTHETIC_SOURCE_ENABLED",
+  "INGESTION_PROVIDER_ACTIVATION_ALLOWED",
+  "INGESTION_PROVIDER_SOURCES",
+  "INGESTION_QUEUE_ARN",
+  "var.private_application_networking",
+  "var.ingestion_provider_activation_allowed || alltrue",
+  'contains(["greenhouse", "lever", "ashby"], source.provider)',
   'function_response_types = ["ReportBatchItemFailures"]',
   "role                           = aws_iam_role.ingestion_runtime[each.key].arn",
   'role                           = aws_iam_role.ingestion_runtime["activity"].arn',
@@ -176,7 +183,7 @@ for (const required of [
 ]) {
   requireText(platform, required, `ingestion EventBridge CMK boundary is missing: ${required}`);
 }
-for (const forbidden of ["greenhouse", "lever", "ashby", "http://", "https://"]) {
+for (const forbidden of ["http://", "https://"]) {
   forbidText(
     ingestionWorkflow,
     forbidden,
@@ -224,7 +231,7 @@ for (const required of [
   "aws ecs wait tasks-stopped",
   "The exact six aggregate success events did not become visible within the bounded CloudWatch polling window.",
   "Database migrations through 0005_resume_fact_proposals applied and verified.",
-  "Jobs migrations through 0008_job_reporting_and_moderation applied and verified.",
+  "Jobs migrations through 0009_provider_ingestion_sources applied and verified.",
   "Documents migrations through 0002_resume_processing applied and verified.",
   "Matching migrations through 0001_saved_jobs applied and verified.",
   "Billing migrations through 0001_entitlement_projection applied and verified.",

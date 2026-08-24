@@ -1,15 +1,18 @@
 # D1 Source and Real-Candidate Onboarding Review Brief
 
-- Status: Review ready; LR-D1-01 through LR-D1-04 remain `Not started`
+- Status: Provider counsel rows LR-D1-01 through LR-D1-03 removed by ADR-025; LR-D1-04 remains
+  `Not started`
 - Prepared: 2026-08-16
 - Engineering input baseline: `4374bf89d1b73534997d210e62750b898c634d85`
 - Accountable reviewers: Legal/privacy counsel and independent security/privacy reviewer; individuals
   unassigned
 - Disposition record: [D1 review disposition worksheet](d1-source-and-onboarding-review-disposition.md)
 
-This brief asks accountable reviewers to decide the narrow D1 activation conditions for three job
-sources and real-candidate onboarding. It is an engineering input, not legal advice, provider
-permission, privacy/security approval, or authority to process real data.
+This brief preserves the risk questions and field boundary for three job sources and
+real-candidate onboarding. [ADR-025](../../adr/025-public-ats-feed-activation-governance.md) removes
+separate counsel approval as a Phase 1 gate for the bounded public GET sources; their exact
+product/source-engineering activation record is still required. LR-D1-04 remains an independent
+real-candidate gate. This document is not legal advice or authority to process real candidate data.
 
 ## Review objective and stop boundary
 
@@ -17,19 +20,19 @@ Record a separate attributable disposition for:
 
 | ID | Capability | Release consequence while open |
 |---|---|---|
-| LR-D1-01 | Greenhouse public Job Board API ingestion | No Greenhouse production ingestion |
-| LR-D1-02 | Lever Postings API or an approved Lever job-board feed | No Lever production ingestion |
-| LR-D1-03 | Ashby public Job Postings API or an approved dedicated partner feed | No Ashby production ingestion |
+| LR-D1-01 | Greenhouse public Job Board API ingestion | Counsel gate removed by ADR-025; exact company activation record still required |
+| LR-D1-02 | Lever Postings API or an approved Lever job-board feed | Counsel gate removed by ADR-025; exact company activation record still required |
+| LR-D1-03 | Ashby public Job Postings API or an approved dedicated partner feed | Counsel gate removed by ADR-025; exact company activation record still required |
 | LR-D1-04 | Real candidate onboarding | Synthetic accounts and generated-synthetic documents only |
 
-All four rows are `Not started`. Preparing or merging these documents does not move a row to
-`Not reviewed` or `Approved`. Only the completed, attributable worksheet may support a later
-register and delivery-record update.
+LR-D1-01 through LR-D1-03 are `Removed`, not `Approved`; no counsel conclusion is claimed. Their
+risk questions remain useful inputs to the required source activation record. LR-D1-04 remains
+`Not started`, and only its completed attributable worksheet may support real-candidate use.
 
-Until the applicable row is approved and every recorded condition is closed:
+Until the applicable ADR-025 product/source activation record or LR-D1-04 disposition is accepted
+and every recorded condition is closed:
 
-- do not add or enable a real-provider registry entry, adapter, credential, endpoint, schedule,
-  queue mapping, or network allowlist;
+- do not enable a real-provider registry entry, endpoint schedule, queue mapping, or network path;
 - do not retrieve a representative provider fixture or real response for testing;
 - do not put real candidate identity, preferences, facts, resumes, saves, reports, or related
   metadata into development, CI, shared staging, or production;
@@ -40,10 +43,11 @@ Until the applicable row is approved and every recorded condition is closed:
 
 ## Current repository facts
 
-The source-neutral worker currently has no real-provider adapter or network client. Its immutable
-registry accepts only a `synthetic-*` source identifier with provider `other` and provenance
-`authorized_fixture`. The durable source composition and every source/runtime trigger are default
-off. See the [worker boundary](../../../backend/workers/ingestion/README.md),
+The source-neutral worker has fixed-host public GET adapters for Greenhouse, Lever, and Ashby. The
+Lambda runtime accepts only an exact bounded structured company list, and Terraform requires
+explicit provider authority plus private NAT egress before any provider can be enabled. Every
+provider and runtime trigger remains default off, and repository environments configure an empty
+provider list. See the [worker boundary](../../../backend/workers/ingestion/README.md),
 [source contract](../../../backend/workers/ingestion/src/contract.ts), and
 [dark-release runbook](../../../infrastructure/runbooks/providers/synthetic-ingestion-dark-release.md).
 
@@ -53,9 +57,10 @@ explicit source-pause decision is fail closed and this slice has no source-resum
 the [Jobs boundary](../../../backend/services/jobs/README.md) and
 [canonical job schema](../../../packages/domain/schemas/v1/canonical-job.schema.json).
 
-The retained catalog observation does not currently link each `jobs.job_sources` row to the
-runtime `sourceId`, adapter-configuration digest, or exact approval record. That linkage must be
-designed, contracted, migrated, and independently verified before any real source activation.
+The Jobs-owned orchestration checkpoint and dispatch retain the exact runtime `sourceId`, adapter
+version, and configuration digest used for an occurrence, while every catalog observation retains
+provider, provenance, ATS tenant, external identity, canonical URL, and observation timestamps.
+The accountable activation record remains a release artifact rather than candidate/job content.
 
 For onboarding, managed web identity and some candidate-owned profile/document foundations have
 synthetic development evidence. Real resumes remain prohibited. The end-to-end export and account

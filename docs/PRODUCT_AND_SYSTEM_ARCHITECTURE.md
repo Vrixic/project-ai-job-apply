@@ -1463,7 +1463,8 @@ scale-to-zero runtime with no obsolete always-on gateway/worker path.
 
 - Auth, onboarding, resume parsing/confirmation, preferences
 - Job ingestion from permitted Greenhouse, Lever, and Ashby public feeds
-- Source-specific legal approval and deployed real-candidate privacy/security approval
+- Source-specific product/engineering activation approval under ADR-025 and deployed real-candidate
+  privacy/security approval
 - Canonicalization, dedupe, lifecycle, freshness, reporting
 - Search, filters, saved jobs, basic explainable match
 - Admin moderation and job/source controls
@@ -1652,9 +1653,11 @@ The living delivery tracker is authoritative. Current dependency order is:
    delivery-wide reliability/accessibility evidence with synthetic data and fail-closed external
    integrations. Per ADR-024, defer Applications-owned technical history to D3 and the generic
    Notifications-owned action inbox to D5.
-4. Integrate the merged source-neutral ingestion foundation into bounded durable scheduling and deployed
-   acceptance, but keep Greenhouse, Lever, and Ashby production ingestion disabled until their
-   source-specific legal, provenance, revalidation, and takedown conditions are approved and implemented.
+4. Integrate the merged source-neutral ingestion foundation into bounded durable scheduling and
+   deployed acceptance. Under ADR-025, Greenhouse, Lever, and Ashby do not require a separate
+   counsel gate, but each exact company configuration stays disabled until product/source
+   engineering accepts its provenance, cadence, revalidation, takedown, egress, and kill-switch
+   evidence.
 5. Acquire authorized representative provider fixtures in D2, D3, and D4 after each owning
    adapter declares its supported variants; D0-007 owns the approved process and fail-closed gate,
    not premature provider selection.

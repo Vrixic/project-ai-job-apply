@@ -29,7 +29,7 @@ describe("ingestion orchestration persistence contract", () => {
     );
   });
 
-  it("rejects excess keys, non-synthetic sources, and malformed settled aggregates", () => {
+  it("rejects excess keys, malformed source IDs, and malformed settled aggregates", () => {
     const base = {
       schemaVersion: 1,
       executionId,
@@ -42,9 +42,7 @@ describe("ingestion orchestration persistence contract", () => {
       withdrawalInferred: false,
     };
     expect(() => assertPersistedIngestionCheckpoint({ ...base, secret: "value" })).toThrow();
-    expect(() =>
-      assertPersistedIngestionCheckpoint({ ...base, sourceId: "greenhouse-live" }),
-    ).toThrow();
+    expect(() => assertPersistedIngestionCheckpoint({ ...base, sourceId: "Greenhouse" })).toThrow();
     expect(() =>
       assertPersistedIngestionCheckpoint({
         ...base,
@@ -62,7 +60,7 @@ describe("ingestion orchestration persistence contract", () => {
     ).toThrow();
   });
 
-  it("aligns synthetic source and adapter boundaries with the worker contract", () => {
+  it("aligns source and adapter boundaries with the worker contract", () => {
     const base = {
       schemaVersion: 1,
       executionId,
@@ -77,6 +75,13 @@ describe("ingestion orchestration persistence contract", () => {
     expect(base.sourceId).toHaveLength(64);
     expect(base.adapterVersion).toHaveLength(100);
     expect(() => assertPersistedIngestionCheckpoint(base)).not.toThrow();
+    for (const sourceId of [
+      "greenhouse-reviewed-board",
+      "lever-reviewed-site",
+      "ashby-reviewed-board",
+    ]) {
+      expect(() => assertPersistedIngestionCheckpoint({ ...base, sourceId })).not.toThrow();
+    }
     expect(() =>
       assertPersistedIngestionCheckpoint({ ...base, sourceId: `${base.sourceId}a` }),
     ).toThrow();

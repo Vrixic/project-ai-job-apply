@@ -186,7 +186,7 @@ function isPublishErrorCode(value: unknown): boolean {
 }
 const versionedLambdaArnPattern =
   /^arn:(aws|aws-us-gov|aws-cn):lambda:[a-z0-9-]+:[0-9]{12}:function:[A-Za-z0-9_-]{1,64}:[1-9][0-9]*$/u;
-const syntheticSourceIdentifierPattern = /^synthetic-[a-z0-9][a-z0-9-]{0,53}$/u;
+const sourceIdentifierPattern = /^[a-z0-9][a-z0-9-]{2,63}$/u;
 const adapterVersionPattern = /^[a-z0-9][a-z0-9._-]{2,99}$/u;
 
 function canonicalTimestamp(value: unknown): value is string {
@@ -240,7 +240,7 @@ export function assertPersistedIngestionCheckpoint(
     typeof item.executionId !== "string" ||
     !executionIdPattern.test(item.executionId) ||
     typeof item.sourceId !== "string" ||
-    !syntheticSourceIdentifierPattern.test(item.sourceId) ||
+    !sourceIdentifierPattern.test(item.sourceId) ||
     typeof item.adapterVersion !== "string" ||
     !adapterVersionPattern.test(item.adapterVersion) ||
     !canonicalTimestamp(item.scheduledFor) ||
@@ -1156,7 +1156,7 @@ export class PostgresIngestionOrchestrationStore implements IngestionOrchestrati
     adapterConfigSha256: string,
   ): Promise<readonly PersistedIngestionDispatch[]> {
     if (
-      !syntheticSourceIdentifierPattern.test(sourceId) ||
+      !sourceIdentifierPattern.test(sourceId) ||
       dispatchIds.length < 1 ||
       dispatchIds.length > 25 ||
       new Set(dispatchIds).size !== dispatchIds.length ||
@@ -1221,7 +1221,7 @@ export class PostgresIngestionOrchestrationStore implements IngestionOrchestrati
   }
 
   async recoverTransportDispatches(sourceId: string): Promise<IngestionTransportRecoveryResult> {
-    if (!syntheticSourceIdentifierPattern.test(sourceId)) {
+    if (!sourceIdentifierPattern.test(sourceId)) {
       throw new Error("The ingestion transport recovery request is invalid");
     }
     return this.client.begin(async (transaction) => {
@@ -1279,7 +1279,7 @@ export class PostgresIngestionOrchestrationStore implements IngestionOrchestrati
     limit: number,
   ): Promise<readonly PersistedIngestionDispatch[]> {
     if (
-      !syntheticSourceIdentifierPattern.test(sourceId) ||
+      !sourceIdentifierPattern.test(sourceId) ||
       !Number.isSafeInteger(limit) ||
       limit < 1 ||
       limit > 25

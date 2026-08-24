@@ -1,5 +1,5 @@
 variable "deploy_ingestion_runtime" {
-  description = "Create the synthetic-only durable ingestion data plane. This does not activate it."
+  description = "Create the source-neutral durable ingestion data plane. This does not activate it."
   type        = bool
   default     = false
 }
@@ -25,6 +25,41 @@ variable "ingestion_synthetic_source_enabled" {
   validation {
     condition     = !var.ingestion_synthetic_source_enabled || var.ingestion_runtime_enabled
     error_message = "The synthetic source cannot be enabled while the ingestion runtime is disabled."
+  }
+}
+
+variable "ingestion_provider_activation_allowed" {
+  description = "Authorize only explicitly configured public ATS sources after accountable review."
+  type        = bool
+  default     = false
+}
+
+variable "ingestion_provider_sources" {
+  description = "Reviewed public ATS company/tenant configurations. Every entry remains independently default-off."
+  type = list(object({
+    provider                = string
+    source_id               = string
+    enabled                 = bool
+    tenant                  = string
+    region                  = optional(string, "global")
+    company_name            = string
+    verified_company_domain = string
+  }))
+  default = []
+
+  validation {
+    condition = length(var.ingestion_provider_sources) <= 8 && length(jsonencode(var.ingestion_provider_sources)) <= 1800 && length(distinct([
+      for source in var.ingestion_provider_sources : source.source_id
+      ])) == length(var.ingestion_provider_sources) && alltrue([
+      for source in var.ingestion_provider_sources :
+      contains(["greenhouse", "lever", "ashby"], source.provider) &&
+      can(regex("^${source.provider}-[a-z0-9][a-z0-9-]{2,57}$", source.source_id)) &&
+      can(regex("^[A-Za-z0-9][A-Za-z0-9_-]{1,62}$", source.tenant)) &&
+      can(regex("^[^[:cntrl:]]{1,500}$", source.company_name)) &&
+      can(regex("^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$", lower(source.verified_company_domain))) &&
+      (source.provider == "lever" ? contains(["global", "eu"], source.region) : source.region == "global")
+    ])
+    error_message = "Provider sources must be unique, bounded, exact Greenhouse/Lever/Ashby company configurations."
   }
 }
 
@@ -89,13 +124,33 @@ locals {
   ingestion_durable_version_arn = var.deploy_ingestion_runtime ? aws_cloudformation_stack.ingestion_durable[0].outputs["DurableVersionArn"] : ""
   ingestion_schedule_rule_arn   = "arn:aws:events:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:rule/${var.name}-${var.environment}-ingestion-schedule"
   ingestion_terminal_rule_arn   = "arn:aws:events:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:rule/${var.name}-${var.environment}-ingestion-terminal"
+  ingestion_provider_sources_json = jsonencode([
+    for source in var.ingestion_provider_sources : merge({
+      schemaVersion         = 1
+      provider              = source.provider
+      sourceId              = source.source_id
+      enabled               = source.enabled
+      companyName           = source.company_name
+      verifiedCompanyDomain = lower(source.verified_company_domain)
+      }, source.provider == "greenhouse" ? {
+      boardToken = source.tenant
+      } : source.provider == "lever" ? {
+      site   = source.tenant
+      region = source.region
+      } : {
+      jobBoardName = source.tenant
+    })
+  ])
 }
 
 resource "terraform_data" "ingestion_activation_guard" {
   input = {
-    deploy         = var.deploy_ingestion_runtime
-    runtime        = var.ingestion_runtime_enabled
-    synthetic_only = var.ingestion_synthetic_source_enabled
+    deploy                        = var.deploy_ingestion_runtime
+    runtime                       = var.ingestion_runtime_enabled
+    synthetic_only                = var.ingestion_synthetic_source_enabled
+    provider_activation_allowed   = var.ingestion_provider_activation_allowed
+    provider_source_count         = length(var.ingestion_provider_sources)
+    provider_configuration_sha256 = sha256(local.ingestion_provider_sources_json)
   }
 
   lifecycle {
@@ -117,6 +172,20 @@ resource "terraform_data" "ingestion_activation_guard" {
         && var.ingestion_retention_days == 30
       )
       error_message = "A deployed ingestion runtime requires exact immutable artifacts, a numeric extension layer, and a canonical synthetic seed."
+    }
+    precondition {
+      condition = !var.ingestion_provider_activation_allowed || (
+        var.ingestion_runtime_enabled &&
+        var.private_application_networking &&
+        length([for source in var.ingestion_provider_sources : source if source.enabled]) > 0
+      )
+      error_message = "Provider activation requires the enabled ingestion runtime, private NAT egress, and at least one exact enabled source."
+    }
+    precondition {
+      condition = var.ingestion_provider_activation_allowed || alltrue([
+        for source in var.ingestion_provider_sources : !source.enabled
+      ])
+      error_message = "A provider source cannot be enabled without explicit provider activation authority."
     }
   }
 }
@@ -269,7 +338,7 @@ resource "aws_iam_role_policy" "ingestion_runtime" {
 resource "aws_lambda_function" "ingestion_runtime" {
   for_each                       = var.deploy_ingestion_runtime ? local.ingestion_runtime_handlers : {}
   function_name                  = "${var.name}-${var.environment}-ingestion-${each.key}"
-  description                    = "Synthetic-only default-off ingestion ${each.key}"
+  description                    = "Source-neutral default-off ingestion ${each.key}"
   role                           = aws_iam_role.ingestion_runtime[each.key].arn
   runtime                        = "nodejs24.x"
   architectures                  = ["x86_64"]
@@ -286,17 +355,19 @@ resource "aws_lambda_function" "ingestion_runtime" {
   kms_key_arn                    = aws_kms_key.platform.arn
   environment {
     variables = {
-      NODE_ENV                           = "production"
-      RELEASE_SHA                        = var.ingestion_runtime_artifact_sha256
-      DATABASE_SECRET_ID                 = aws_secretsmanager_secret.database_url.arn
-      AWS_ACCOUNT_ID                     = data.aws_caller_identity.current.account_id
-      INGESTION_QUEUE_URL                = aws_sqs_queue.ingestion_dispatch[0].url
-      INGESTION_QUEUE_ARN                = aws_sqs_queue.ingestion_dispatch[0].arn
-      INGESTION_DURABLE_FUNCTION_ARN     = local.ingestion_durable_version_arn
-      INGESTION_ACTIVITY_FUNCTION_ARN    = aws_lambda_function.ingestion_activity[0].qualified_arn
-      INGESTION_SCHEDULE_RULE_ARN        = local.ingestion_schedule_rule_arn
-      INGESTION_SYNTHETIC_SOURCE_ENABLED = tostring(var.ingestion_synthetic_source_enabled)
-      INGESTION_SYNTHETIC_SEED           = var.ingestion_synthetic_seed
+      NODE_ENV                              = "production"
+      RELEASE_SHA                           = var.ingestion_runtime_artifact_sha256
+      DATABASE_SECRET_ID                    = aws_secretsmanager_secret.database_url.arn
+      AWS_ACCOUNT_ID                        = data.aws_caller_identity.current.account_id
+      INGESTION_QUEUE_URL                   = aws_sqs_queue.ingestion_dispatch[0].url
+      INGESTION_QUEUE_ARN                   = aws_sqs_queue.ingestion_dispatch[0].arn
+      INGESTION_DURABLE_FUNCTION_ARN        = local.ingestion_durable_version_arn
+      INGESTION_ACTIVITY_FUNCTION_ARN       = aws_lambda_function.ingestion_activity[0].qualified_arn
+      INGESTION_SCHEDULE_RULE_ARN           = local.ingestion_schedule_rule_arn
+      INGESTION_SYNTHETIC_SOURCE_ENABLED    = tostring(var.ingestion_synthetic_source_enabled)
+      INGESTION_SYNTHETIC_SEED              = var.ingestion_synthetic_seed
+      INGESTION_PROVIDER_ACTIVATION_ALLOWED = tostring(var.ingestion_provider_activation_allowed)
+      INGESTION_PROVIDER_SOURCES            = local.ingestion_provider_sources_json
     }
   }
   vpc_config {
@@ -317,7 +388,7 @@ resource "aws_lambda_function" "ingestion_runtime" {
 resource "aws_lambda_function" "ingestion_activity" {
   count                          = var.deploy_ingestion_runtime ? 1 : 0
   function_name                  = "${var.name}-${var.environment}-ingestion-activity"
-  description                    = "Synthetic-only default-off ingestion activity"
+  description                    = "Source-neutral default-off ingestion activity"
   role                           = aws_iam_role.ingestion_runtime["activity"].arn
   runtime                        = "nodejs24.x"
   architectures                  = ["x86_64"]
@@ -334,12 +405,14 @@ resource "aws_lambda_function" "ingestion_activity" {
   kms_key_arn                    = aws_kms_key.platform.arn
   environment {
     variables = {
-      NODE_ENV                           = "production"
-      RELEASE_SHA                        = var.ingestion_runtime_artifact_sha256
-      DATABASE_SECRET_ID                 = aws_secretsmanager_secret.database_url.arn
-      AWS_ACCOUNT_ID                     = data.aws_caller_identity.current.account_id
-      INGESTION_SYNTHETIC_SOURCE_ENABLED = tostring(var.ingestion_synthetic_source_enabled)
-      INGESTION_SYNTHETIC_SEED           = var.ingestion_synthetic_seed
+      NODE_ENV                              = "production"
+      RELEASE_SHA                           = var.ingestion_runtime_artifact_sha256
+      DATABASE_SECRET_ID                    = aws_secretsmanager_secret.database_url.arn
+      AWS_ACCOUNT_ID                        = data.aws_caller_identity.current.account_id
+      INGESTION_SYNTHETIC_SOURCE_ENABLED    = tostring(var.ingestion_synthetic_source_enabled)
+      INGESTION_SYNTHETIC_SEED              = var.ingestion_synthetic_seed
+      INGESTION_PROVIDER_ACTIVATION_ALLOWED = tostring(var.ingestion_provider_activation_allowed)
+      INGESTION_PROVIDER_SOURCES            = local.ingestion_provider_sources_json
     }
   }
   vpc_config {
@@ -787,6 +860,8 @@ resource "aws_cloudwatch_metric_alarm" "ingestion_durable_duration" {
 output "ingestion_runtime_deployed" { value = var.deploy_ingestion_runtime }
 output "ingestion_runtime_enabled" { value = var.ingestion_runtime_enabled }
 output "ingestion_synthetic_source_enabled" { value = var.ingestion_synthetic_source_enabled }
+output "ingestion_provider_activation_allowed" { value = var.ingestion_provider_activation_allowed }
+output "ingestion_provider_source_count" { value = length(var.ingestion_provider_sources) }
 output "ingestion_durable_version_arn" { value = local.ingestion_durable_version_arn }
 output "ingestion_dispatch_queue_arn" { value = var.deploy_ingestion_runtime ? aws_sqs_queue.ingestion_dispatch[0].arn : "" }
 output "ingestion_dead_letter_queue_arn" { value = var.deploy_ingestion_runtime ? aws_sqs_queue.ingestion_dead_letter[0].arn : "" }

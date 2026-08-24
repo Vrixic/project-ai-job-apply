@@ -30,7 +30,7 @@ The profile-readiness workflow has no human-review callback or reversible extern
 success/expiry is therefore tested with a conformance-only fixture; production callback handling
 will be added only with an application final-review workflow.
 
-## D1 synthetic ingestion source packet
+## D1 source-neutral ingestion packet
 
 `ingestion-durable.ts` and `ingestion-lambda.ts` provide an identifier-only durable orchestrator,
 database activity, disabled schedule coordinator, SQS starter, and terminal recovery handler. The
@@ -51,8 +51,14 @@ poll, and is rechecked around catalog writes. Terminal status reconciliation rem
 the source is paused. The gate has no resume operation and does not claim cancellation of a catalog
 write that was already issued when the pause committed.
 
-The production artifact and Terraform composition are source-ready but dark by default. Deployment,
-environment-wide runtime activation authority, ingestion mapping/schedule activation, and the
-`synthetic-foundation-v1` source gate are explicit ordered gates. This packet publishes or enables
-none of them and contains no real-provider adapter, credential, network client, real data, or
-provider-specific schedule.
+The runtime composes the generated-synthetic source plus an optional bounded list of exact
+Greenhouse, Lever, and Ashby company configurations. Each provider gets its own adapter instance,
+configuration digest, durable coordinator, enable flag, and persisted pause identity while sharing
+the identifier-only schedule/queue transport. Configuration accepts no arbitrary base URL or
+credential. Provider execution requires explicit provider authority, and Terraform requires
+private NAT egress before that authority can be enabled.
+
+The production artifact and Terraform composition remain dark by default. Deployment,
+environment-wide runtime activation, schedule/queue mapping, provider authority, and each source's
+enable flag are ordered independent gates. Repository environment defaults supply an empty provider
+list and enable none of them.

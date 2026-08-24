@@ -5,10 +5,17 @@ import {
   validateIngestionDispatchNudge,
 } from "@ai-job-apply/event-contracts";
 import {
+  AshbyJobBoardAdapter,
+  ashbyJobBoardAdapterVersion,
   DurableIngestionCoordinator,
   GeneratedSyntheticIngestionAdapter,
+  GreenhouseJobBoardAdapter,
   generatedSyntheticAdapterVersion,
   generatedSyntheticSourceId,
+  greenhouseJobBoardAdapterVersion,
+  LeverPostingsAdapter,
+  leverPostingsAdapterVersion,
+  type SourceRegistration,
   type SourceExecutionGate,
   SourceNeutralIngestionRunner,
   SourceRegistry,
@@ -73,6 +80,209 @@ export function generatedSyntheticConfigSha256(seed: string): string {
       "utf8",
     )
     .digest("hex");
+}
+
+export type ProviderSourceConfiguration =
+  | {
+      schemaVersion: 1;
+      provider: "greenhouse";
+      sourceId: string;
+      enabled: boolean;
+      boardToken: string;
+      companyName: string;
+      verifiedCompanyDomain: string;
+    }
+  | {
+      schemaVersion: 1;
+      provider: "lever";
+      sourceId: string;
+      enabled: boolean;
+      site: string;
+      region: "global" | "eu";
+      companyName: string;
+      verifiedCompanyDomain: string;
+    }
+  | {
+      schemaVersion: 1;
+      provider: "ashby";
+      sourceId: string;
+      enabled: boolean;
+      jobBoardName: string;
+      companyName: string;
+      verifiedCompanyDomain: string;
+    };
+
+interface ConfiguredIngestionSource {
+  registration: SourceRegistration;
+  adapterConfigSha256: string;
+}
+
+function providerConfigurationDigest(configuration: ProviderSourceConfiguration): string {
+  const fields =
+    configuration.provider === "greenhouse"
+      ? [configuration.boardToken]
+      : configuration.provider === "lever"
+        ? [configuration.site, configuration.region]
+        : [configuration.jobBoardName];
+  return createHash("sha256")
+    .update(
+      [
+        "schemaVersion=1",
+        `sourceId=${configuration.sourceId}`,
+        `provider=${configuration.provider}`,
+        `adapterVersion=${
+          configuration.provider === "greenhouse"
+            ? greenhouseJobBoardAdapterVersion
+            : configuration.provider === "lever"
+              ? leverPostingsAdapterVersion
+              : ashbyJobBoardAdapterVersion
+        }`,
+        "provenance=permitted_api",
+        `companyName=${configuration.companyName.normalize("NFC").trim()}`,
+        `verifiedCompanyDomain=${configuration.verifiedCompanyDomain.toLowerCase()}`,
+        ...fields,
+        "maximumObservations=100",
+        "requestTimeoutMs=5000",
+        "maximumResponseBytes=1000000",
+        "",
+      ].join("\n"),
+      "utf8",
+    )
+    .digest("hex");
+}
+
+export function parseProviderSourceConfigurations(
+  value: string,
+  providerActivationAllowed: boolean,
+): readonly ConfiguredIngestionSource[] {
+  if (Buffer.byteLength(value, "utf8") > 1_800) {
+    throw new Error("IngestionProviderConfigurationRejected");
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error("IngestionProviderConfigurationRejected");
+  }
+  if (!Array.isArray(parsed) || parsed.length > 8) {
+    throw new Error("IngestionProviderConfigurationRejected");
+  }
+  const seen = new Set<string>();
+  return Object.freeze(
+    parsed.map((candidate): ConfiguredIngestionSource => {
+      if (
+        !record(candidate) ||
+        candidate.schemaVersion !== 1 ||
+        typeof candidate.enabled !== "boolean"
+      ) {
+        throw new Error("IngestionProviderConfigurationRejected");
+      }
+      const provider = candidate.provider;
+      const expectedKeys =
+        provider === "greenhouse"
+          ? [
+              "schemaVersion",
+              "provider",
+              "sourceId",
+              "enabled",
+              "boardToken",
+              "companyName",
+              "verifiedCompanyDomain",
+            ]
+          : provider === "lever"
+            ? [
+                "schemaVersion",
+                "provider",
+                "sourceId",
+                "enabled",
+                "site",
+                "region",
+                "companyName",
+                "verifiedCompanyDomain",
+              ]
+            : provider === "ashby"
+              ? [
+                  "schemaVersion",
+                  "provider",
+                  "sourceId",
+                  "enabled",
+                  "jobBoardName",
+                  "companyName",
+                  "verifiedCompanyDomain",
+                ]
+              : [];
+      if (
+        expectedKeys.length === 0 ||
+        !hasExactKeys(candidate, expectedKeys) ||
+        typeof candidate.sourceId !== "string" ||
+        typeof candidate.companyName !== "string" ||
+        typeof candidate.verifiedCompanyDomain !== "string" ||
+        (candidate.enabled && !providerActivationAllowed) ||
+        seen.has(candidate.sourceId)
+      ) {
+        throw new Error("IngestionProviderConfigurationRejected");
+      }
+      seen.add(candidate.sourceId);
+      const companyName = candidate.companyName.normalize("NFC").trim();
+      const verifiedCompanyDomain = candidate.verifiedCompanyDomain
+        .normalize("NFC")
+        .trim()
+        .toLowerCase();
+      let configuration: ProviderSourceConfiguration;
+      let adapter: SourceRegistration["adapter"];
+      if (provider === "greenhouse" && typeof candidate.boardToken === "string") {
+        configuration = {
+          schemaVersion: 1,
+          provider,
+          sourceId: candidate.sourceId,
+          enabled: candidate.enabled,
+          boardToken: candidate.boardToken,
+          companyName,
+          verifiedCompanyDomain,
+        };
+        adapter = new GreenhouseJobBoardAdapter(configuration);
+      } else if (
+        provider === "lever" &&
+        typeof candidate.site === "string" &&
+        (candidate.region === "global" || candidate.region === "eu")
+      ) {
+        configuration = {
+          schemaVersion: 1,
+          provider,
+          sourceId: candidate.sourceId,
+          enabled: candidate.enabled,
+          site: candidate.site,
+          region: candidate.region,
+          companyName,
+          verifiedCompanyDomain,
+        };
+        adapter = new LeverPostingsAdapter(configuration);
+      } else if (provider === "ashby" && typeof candidate.jobBoardName === "string") {
+        configuration = {
+          schemaVersion: 1,
+          provider,
+          sourceId: candidate.sourceId,
+          enabled: candidate.enabled,
+          jobBoardName: candidate.jobBoardName,
+          companyName,
+          verifiedCompanyDomain,
+        };
+        adapter = new AshbyJobBoardAdapter(configuration);
+      } else {
+        throw new Error("IngestionProviderConfigurationRejected");
+      }
+      return Object.freeze({
+        registration: Object.freeze({
+          sourceId: configuration.sourceId,
+          provider: configuration.provider,
+          provenance: "permitted_api" as const,
+          enabled: configuration.enabled,
+          adapter,
+        }),
+        adapterConfigSha256: providerConfigurationDigest(configuration),
+      });
+    }),
+  );
 }
 
 interface LambdaInvoker {
@@ -201,7 +411,8 @@ export class AwsIngestionDurableClient {
 
 interface IngestionRuntime {
   store: PostgresIngestionOrchestrationStore;
-  coordinator: DurableIngestionCoordinator;
+  coordinators: ReadonlyMap<string, DurableIngestionCoordinator>;
+  configuredSources: readonly ConfiguredIngestionSource[];
   sourceExecutionGate: SourceExecutionGate;
 }
 
@@ -209,32 +420,41 @@ let runtime: IngestionRuntime | undefined;
 
 export function createModeratedSourceExecutionGate(
   moderation: Pick<PostgresJobModerationStore, "isSourcePaused">,
-  expected: Readonly<{
-    sourceId: string;
-    adapterVersion: string;
-    adapterConfigSha256: string;
-  }>,
+  expectedInput:
+    | Readonly<{
+        sourceId: string;
+        adapterVersion: string;
+        adapterConfigSha256: string;
+      }>
+    | readonly Readonly<{
+        sourceId: string;
+        adapterVersion: string;
+        adapterConfigSha256: string;
+      }>[],
 ): SourceExecutionGate {
-  if (
-    expected.sourceId !== generatedSyntheticSourceId ||
-    expected.adapterVersion !== generatedSyntheticAdapterVersion ||
-    !/^[a-f0-9]{64}$/u.test(expected.adapterConfigSha256)
-  ) {
-    throw new Error("The moderated source execution identity is invalid");
+  const expectedValues = Array.isArray(expectedInput) ? expectedInput : [expectedInput];
+  const expected = new Map<string, (typeof expectedValues)[number]>();
+  for (const value of expectedValues) {
+    const key = `${value.sourceId}\0${value.adapterVersion}`;
+    if (
+      !/^[a-z0-9][a-z0-9-]{2,63}$/u.test(value.sourceId) ||
+      !/^[a-z0-9][a-z0-9._-]{2,99}$/u.test(value.adapterVersion) ||
+      !/^[a-f0-9]{64}$/u.test(value.adapterConfigSha256) ||
+      expected.has(key)
+    ) {
+      throw new Error("The moderated source execution identity is invalid");
+    }
+    expected.set(key, value);
   }
   return async (identity) => {
-    if (
-      identity.sourceId !== expected.sourceId ||
-      identity.adapterVersion !== expected.adapterVersion
-    ) {
-      return false;
-    }
+    const value = expected.get(`${identity.sourceId}\0${identity.adapterVersion}`);
+    if (!value) return false;
     try {
       return !(await moderation.isSourcePaused({
         kind: "source",
-        sourceId: expected.sourceId,
-        adapterVersion: expected.adapterVersion,
-        adapterConfigSha256: expected.adapterConfigSha256,
+        sourceId: value.sourceId,
+        adapterVersion: value.adapterVersion,
+        adapterConfigSha256: value.adapterConfigSha256,
       }));
     } catch {
       throw new Error("IngestionSourceControlUnavailable");
@@ -275,46 +495,69 @@ async function createRuntime(): Promise<IngestionRuntime> {
   );
   const database = createJobCatalogDatabase(databaseUrl, { maxConnections: 1 });
   const store = new PostgresIngestionOrchestrationStore(database);
-  const enabled = process.env.INGESTION_SYNTHETIC_SOURCE_ENABLED === "true";
+  const syntheticEnabled = process.env.INGESTION_SYNTHETIC_SOURCE_ENABLED === "true";
+  const providerActivationAllowed = process.env.INGESTION_PROVIDER_ACTIVATION_ALLOWED === "true";
   const seed = process.env.INGESTION_SYNTHETIC_SEED;
   if (!seed || !/^[a-z0-9]{8,64}$/u.test(seed)) {
     throw new Error("INGESTION_SYNTHETIC_SEED is required and must be canonical");
   }
-  const adapter = new GeneratedSyntheticIngestionAdapter(seed);
-  const adapterConfigSha256 = generatedSyntheticConfigSha256(seed);
+  const syntheticAdapter = new GeneratedSyntheticIngestionAdapter(seed);
+  const configuredSources: ConfiguredIngestionSource[] = [
+    {
+      registration: {
+        sourceId: generatedSyntheticSourceId,
+        provider: "other",
+        provenance: "authorized_fixture",
+        enabled: syntheticEnabled,
+        adapter: syntheticAdapter,
+      },
+      adapterConfigSha256: generatedSyntheticConfigSha256(seed),
+    },
+    ...parseProviderSourceConfigurations(
+      process.env.INGESTION_PROVIDER_SOURCES ?? "[]",
+      providerActivationAllowed,
+    ),
+  ];
   const sourceExecutionGate = createModeratedSourceExecutionGate(
     new PostgresJobModerationStore(database),
-    {
-      sourceId: generatedSyntheticSourceId,
-      adapterVersion: generatedSyntheticAdapterVersion,
+    configuredSources.map(({ registration, adapterConfigSha256 }) => ({
+      sourceId: registration.sourceId,
+      adapterVersion: registration.adapter.adapterVersion,
       adapterConfigSha256,
-    },
+    })),
   );
-  const registry = new SourceRegistry([
-    {
-      sourceId: generatedSyntheticSourceId,
-      provider: "other",
-      provenance: "authorized_fixture",
-      enabled,
-      adapter,
-    },
-  ]);
+  const registry = new SourceRegistry(
+    configuredSources.map(({ registration }) => registration),
+    () => true,
+    { providerActivationAllowed },
+  );
   const catalog = new PostgresJobCatalog(database, {
+    acceptedProvenance: new Set<"authorized_fixture" | "permitted_api">([
+      "authorized_fixture",
+      ...(providerActivationAllowed ? (["permitted_api"] as const) : []),
+    ]),
     searchCursorKeys: {
       active: { id: "ingestion-unused", key: randomBytes(32) },
     },
   });
   const runner = new SourceNeutralIngestionRunner(registry, catalog, { sourceExecutionGate });
+  const coordinators = new Map(
+    configuredSources.map(({ registration, adapterConfigSha256 }) => [
+      registration.sourceId,
+      new DurableIngestionCoordinator(store, registry, runner, {
+        ...(durableFunctionArn ? { durableFunctionArn } : {}),
+        ...(activityFunctionArn ? { activityFunctionArn } : {}),
+        adapterConfigSha256,
+        sourceExecutionGate,
+        durableExecutionStatusReader: new AwsIngestionDurableStatusReader(),
+      }),
+    ]),
+  );
   return {
     store,
     sourceExecutionGate,
-    coordinator: new DurableIngestionCoordinator(store, registry, runner, {
-      ...(durableFunctionArn ? { durableFunctionArn } : {}),
-      ...(activityFunctionArn ? { activityFunctionArn } : {}),
-      adapterConfigSha256,
-      sourceExecutionGate,
-      durableExecutionStatusReader: new AwsIngestionDurableStatusReader(),
-    }),
+    coordinators,
+    configuredSources: Object.freeze(configuredSources),
   };
 }
 
@@ -440,20 +683,27 @@ export const coordinator: Handler<
   const current = await getRuntime();
   let scheduled = 0;
   let resumed = 0;
-  const recovered = await current.coordinator.recoverTransport(generatedSyntheticSourceId);
-  if (
-    await generatedSyntheticSourceMayRun(
-      process.env.INGESTION_SYNTHETIC_SOURCE_ENABLED === "true",
-      current.sourceExecutionGate,
-    )
-  ) {
-    resumed = await current.coordinator.resumePaused(generatedSyntheticSourceId);
-    const result = await current.coordinator.schedule({
-      sourceId: generatedSyntheticSourceId,
-      adapterVersion: generatedSyntheticAdapterVersion,
-      scheduledFor: hourlyIngestionScheduleSlot(event.time),
-    });
-    scheduled = result.created ? 1 : 0;
+  let recovered = 0;
+  for (const source of current.configuredSources) {
+    const sourceId = source.registration.sourceId;
+    const sourceCoordinator = current.coordinators.get(sourceId);
+    if (!sourceCoordinator) throw new Error("IngestionSourceRuntimeUnavailable");
+    recovered += await sourceCoordinator.recoverTransport(sourceId);
+    if (
+      source.registration.enabled === true &&
+      (await current.sourceExecutionGate({
+        sourceId,
+        adapterVersion: source.registration.adapter.adapterVersion,
+      }))
+    ) {
+      resumed += await sourceCoordinator.resumePaused(sourceId);
+      const result = await sourceCoordinator.schedule({
+        sourceId,
+        adapterVersion: source.registration.adapter.adapterVersion,
+        scheduledFor: hourlyIngestionScheduleSlot(event.time),
+      });
+      scheduled += result.created ? 1 : 0;
+    }
   }
   const queueUrl = process.env.INGESTION_QUEUE_URL;
   if (!queueUrl) throw new Error("INGESTION_QUEUE_URL is required");
@@ -635,14 +885,21 @@ export const activity: Handler<unknown, IngestionActivityResultV1> = async (even
   const activityArn = requireInvokedActivityVersionArn(context);
   const current = await getRuntime();
   const dispatch = await current.store.getDispatch(event.dispatchId);
-  assertIngestionActivityDispatch(
-    dispatch,
-    event,
-    activityArn,
-    generatedSyntheticConfigSha256(process.env.INGESTION_SYNTHETIC_SEED ?? ""),
-  );
+  const checkpoint = dispatch ? await current.store.getCheckpoint(dispatch.executionId) : undefined;
+  const source = checkpoint
+    ? current.configuredSources.find(
+        (candidate) => candidate.registration.sourceId === checkpoint.sourceId,
+      )
+    : undefined;
+  const sourceCoordinator = source
+    ? current.coordinators.get(source.registration.sourceId)
+    : undefined;
+  if (!checkpoint || !source || !sourceCoordinator) {
+    throw new Error("IngestionActivityDispatchRejected");
+  }
+  assertIngestionActivityDispatch(dispatch, event, activityArn, source.adapterConfigSha256);
   if (event.action === "advance") {
-    const result = await current.coordinator.advance(event.executionId);
+    const result = await sourceCoordinator.advance(event.executionId);
     if (result.action === "run") {
       return {
         schemaVersion: 1,
@@ -681,7 +938,7 @@ export const activity: Handler<unknown, IngestionActivityResultV1> = async (even
   if (remaining <= 0) controller.abort();
   const timeout = remaining > 0 ? setTimeout(() => controller.abort(), remaining) : undefined;
   try {
-    const result = await current.coordinator.runAndSettle({
+    const result = await sourceCoordinator.runAndSettle({
       executionId: event.executionId,
       revision: event.revision,
       leaseId: event.leaseId,
@@ -796,7 +1053,7 @@ export function createIngestionTerminalHandler(
     region: string;
     currentDurableFunctionArn: string;
     currentActivityFunctionArn: string;
-    currentAdapterConfigSha256: string;
+    currentAdapterConfigSha256: string | ((executionId: string) => Promise<string | undefined>);
     now?: () => Date;
     dispatchId?: () => string;
   },
@@ -808,7 +1065,8 @@ export function createIngestionTerminalHandler(
       !/^[a-z0-9-]+$/u.test(config.region) ||
       !isExactNumericLambdaVersionArn(config.currentDurableFunctionArn) ||
       !isExactNumericLambdaVersionArn(config.currentActivityFunctionArn) ||
-      !/^[a-f0-9]{64}$/u.test(config.currentAdapterConfigSha256) ||
+      (typeof config.currentAdapterConfigSha256 !== "function" &&
+        !/^[a-f0-9]{64}$/u.test(config.currentAdapterConfigSha256)) ||
       !Number.isFinite(now.getTime())
     ) {
       throw new Error("IngestionTerminalConfigurationRejected");
@@ -879,13 +1137,20 @@ export function createIngestionTerminalHandler(
       detail.durableExecutionArn,
       detail.functionArn,
     );
+    const currentAdapterConfigSha256 =
+      typeof config.currentAdapterConfigSha256 === "function"
+        ? await config.currentAdapterConfigSha256(dispatch.executionId)
+        : config.currentAdapterConfigSha256;
+    if (!currentAdapterConfigSha256 || !/^[a-f0-9]{64}$/u.test(currentAdapterConfigSha256)) {
+      throw new Error("IngestionTerminalConfigurationRejected");
+    }
     await store.ensureRecoveryDispatch(
       dispatch.executionId,
       dispatch.generation,
       (config.dispatchId ?? uuidv7)(),
       config.currentDurableFunctionArn,
       config.currentActivityFunctionArn,
-      config.currentAdapterConfigSha256,
+      currentAdapterConfigSha256,
     );
     return { handled: true };
   };
@@ -896,15 +1161,20 @@ export const terminal: Handler<unknown, { handled: boolean }> = async (event) =>
   const region = process.env.AWS_REGION;
   const durableArn = process.env.INGESTION_DURABLE_FUNCTION_ARN;
   const activityArn = process.env.INGESTION_ACTIVITY_FUNCTION_ARN;
-  const seed = process.env.INGESTION_SYNTHETIC_SEED;
-  if (!account || !region || !durableArn || !activityArn || !seed) {
+  if (!account || !region || !durableArn || !activityArn) {
     throw new Error("Exact ingestion terminal environment is required");
   }
-  return createIngestionTerminalHandler((await getRuntime()).store, {
+  const current = await getRuntime();
+  return createIngestionTerminalHandler(current.store, {
     account,
     region,
     currentDurableFunctionArn: durableArn,
     currentActivityFunctionArn: activityArn,
-    currentAdapterConfigSha256: generatedSyntheticConfigSha256(seed),
+    currentAdapterConfigSha256: async (executionId) => {
+      const checkpoint = await current.store.getCheckpoint(executionId);
+      return current.configuredSources.find(
+        (source) => source.registration.sourceId === checkpoint?.sourceId,
+      )?.adapterConfigSha256;
+    },
   })(event);
 };

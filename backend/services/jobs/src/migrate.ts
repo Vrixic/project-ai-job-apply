@@ -17,6 +17,7 @@ const migrationVersions = [
   "0006_public_job_reader",
   "0007_matchable_job_attributes",
   "0008_job_reporting_and_moderation",
+  "0009_provider_ingestion_sources",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -121,6 +122,7 @@ try {
         ingestionTriggerFunctionBodies: string[];
         ingestionIndexCount: number;
         ingestionForeignKeyCount: number;
+        ingestionSourceConstraintDefinitions: string[];
         publicSchemaCount: number;
         publicReaderRoleCount: number;
         publicReaderFunctionCount: number;
@@ -324,6 +326,15 @@ try {
                AND attribute.attnum = key.attribute_number
             ) = expected.referenced_columns
         ) AS "ingestionForeignKeyCount"
+        , ARRAY(
+          SELECT pg_get_constraintdef(constraint_definition.oid, true)
+          FROM pg_constraint AS constraint_definition
+          WHERE constraint_definition.conrelid = 'jobs.ingestion_checkpoints'::regclass
+            AND constraint_definition.conname = 'ingestion_checkpoints_contract_ck'
+            AND constraint_definition.contype = 'c'
+            AND constraint_definition.convalidated
+            AND NOT constraint_definition.connoinherit
+        ) AS "ingestionSourceConstraintDefinitions"
         , (
           SELECT count(*)::int
           FROM pg_namespace
@@ -607,6 +618,10 @@ try {
         JSON.stringify(expectedIngestionTriggerBodies) ||
       verification.ingestionIndexCount !== 3 ||
       verification.ingestionForeignKeyCount !== 3 ||
+      JSON.stringify(verification.ingestionSourceConstraintDefinitions) !==
+        JSON.stringify([
+          "CHECK (schema_version = 1 AND source_id ~ '^[a-z0-9][a-z0-9-]{2,63}$'::text AND adapter_version ~ '^[a-z0-9][a-z0-9._-]{2,99}$'::text AND revision >= 0 AND revision <= '9007199254740991'::bigint AND attempt >= 1 AND attempt <= 5 AND withdrawal_inferred = false AND updated_at >= created_at)",
+        ]) ||
       verification.publicSchemaCount !== 1 ||
       verification.publicReaderRoleCount !== 1 ||
       verification.publicReaderFunctionCount !== 1 ||
@@ -645,6 +660,7 @@ try {
             JSON.stringify(expectedIngestionTriggerBodies),
           ingestionIndexCount: verification?.ingestionIndexCount,
           ingestionForeignKeyCount: verification?.ingestionForeignKeyCount,
+          ingestionSourceConstraintDefinitions: verification?.ingestionSourceConstraintDefinitions,
           publicSchemaCount: verification?.publicSchemaCount,
           publicReaderRoleCount: verification?.publicReaderRoleCount,
           publicReaderFunctionCount: verification?.publicReaderFunctionCount,

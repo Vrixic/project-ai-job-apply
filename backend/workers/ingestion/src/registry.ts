@@ -15,17 +15,23 @@ function permittedSyntheticRegistration(registration: Readonly<SourceRegistratio
   );
 }
 
-function permittedDarkAtsRegistration(registration: Readonly<SourceRegistration>): boolean {
+function permittedAtsRegistration(
+  registration: Readonly<SourceRegistration>,
+  providerActivationAllowed: boolean,
+): boolean {
   const provider = registration.provider;
   return (
     (provider === "greenhouse" || provider === "lever" || provider === "ashby") &&
     registration.sourceId.startsWith(`${provider}-`) &&
     registration.provenance === "permitted_api" &&
-    registration.enabled !== true
+    (registration.enabled !== true || providerActivationAllowed)
   );
 }
 
-function validateRegistration(registration: SourceRegistration): void {
+function validateRegistration(
+  registration: SourceRegistration,
+  providerActivationAllowed: boolean,
+): void {
   if (!sourceIdentifierPattern.test(registration.sourceId)) {
     throw new Error("A canonical source identifier is required");
   }
@@ -37,7 +43,7 @@ function validateRegistration(registration: SourceRegistration): void {
   }
   if (
     !permittedSyntheticRegistration(registration) &&
-    !permittedDarkAtsRegistration(registration)
+    !permittedAtsRegistration(registration, providerActivationAllowed)
   ) {
     throw new Error("The source is outside the default-off activation policy");
   }
@@ -50,13 +56,14 @@ export class SourceRegistry {
   constructor(
     registrations: readonly SourceRegistration[],
     runtimeGate: SourceRuntimeGate = () => true,
+    options: Readonly<{ providerActivationAllowed?: boolean }> = {},
   ) {
     this.#runtimeGate = runtimeGate;
     if (registrations.length > maximumRegisteredSources) {
       throw new Error("The source registry exceeds its bounded size");
     }
     for (const registration of registrations) {
-      validateRegistration(registration);
+      validateRegistration(registration, options.providerActivationAllowed === true);
       if (this.#registrations.has(registration.sourceId)) {
         throw new Error("Source identifiers must be unique");
       }

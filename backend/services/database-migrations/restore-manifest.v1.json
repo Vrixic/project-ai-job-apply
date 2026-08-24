@@ -79,6 +79,10 @@
         {
           "version": "0008_job_reporting_and_moderation",
           "checksum": "b32f746d91e4891583e26fd7c7a57f4017cb5a68402245b93a3c9e78bbb82d26"
+        },
+        {
+          "version": "0009_provider_ingestion_sources",
+          "checksum": "781b9e7119c09e92bdaef6e2132aa3db9f9fc9d0c0331a44a54ee195db26531f"
         }
       ],
       "relations": [

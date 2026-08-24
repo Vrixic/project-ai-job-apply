@@ -3,12 +3,13 @@
 Owns the provider-independent worker contract that turns an explicitly enabled source adapter's
 bounded, normalized public-job batch into Jobs-owned catalog observations.
 
-The durable deployed composition remains synthetic-only. The package also contains dark-first
-Greenhouse Job Board, Lever Postings, and Ashby Job Board adapter candidates. The registry admits
-each provider's exact `permitted_api` shape only while disabled; attempting to enable any candidate
-is rejected by the source activation policy. No real board/site token, company configuration,
-schedule, queue mapping, egress, or provider data is configured. Real public feeds, public UGC, and
-real-provider data remain disabled behind their owning approval gates.
+The durable runtime is source-neutral and supports explicitly configured Greenhouse Job Board,
+Lever Postings, and Ashby Job Board sources. Repository and environment defaults configure none of
+them and keep provider activation disabled. The registry rejects an enabled provider unless the
+runtime supplies explicit provider-activation authority; every source also has its own `enabled`
+flag and exact Jobs-owned `sourceId + adapterVersion + adapterConfigSha256` pause gate. No real
+board/site identifier, company configuration, schedule, queue mapping, egress, or provider data is
+configured by default. Public UGC remains outside this worker and belongs to D2.
 
 ## Implemented boundaries
 
@@ -24,8 +25,8 @@ real-provider data remain disabled behind their owning approval gates.
   employer, tenant, or real job.
 - `greenhouse.ts` — fixed-host public Job Board GET adapter with redirect refusal, bounded timeout
   and streaming response bytes, strict response mapping, plain-text conversion, tracking-query
-  removal, and reviewed company/domain inputs. It is tested only with generated responses and is
-  impossible to enable through the default registry policy.
+  removal, and reviewed company/domain inputs. It is tested with generated responses and remains
+  impossible to enable through the default registry policy without explicit runtime authority.
 - `lever.ts` — fixed global/EU Postings GET adapter with paired API/hosted-job hosts, bounded
   pagination and overflow refusal, plaintext-only descriptions, tracking-query removal, and exact
   site/posting identity. It never calls Lever's application endpoint.
@@ -67,12 +68,13 @@ against the command's expected revision before acting on its disposition. Losing
 discarding the proposed transition and reloading authoritative state. A transport must likewise
 never acknowledge, reschedule, or dead-letter work from an uncommitted transition.
 
-The repository now includes a source-only, default-off durable Lambda/SQS/Terraform composition
-around this coordinator. That composition is not published, deployed, scheduled, mapped, or
-activated by this source packet. Its only runnable source ID remains `synthetic-foundation-v1`,
-backed only by the `synthetic-ingestion-v1` generated-synthetic adapter. All three provider adapters
-are source-present but default-denied; real network acquisition/configuration and real-provider data
-remain absent and disabled.
+The repository includes a source-neutral, default-off durable Lambda/SQS/Terraform composition
+around this coordinator. Greenhouse, Lever, and Ashby configuration is an exact bounded structured
+list, not an arbitrary URL or credential. Provider execution additionally requires the global
+runtime gate, explicit provider authority, and private application networking with NAT egress.
+Each source is independently enabled and pauseable; changing its company/tenant configuration
+changes its immutable configuration digest. The development environment currently has no provider
+configuration or real-provider data and remains disabled.
 
 Run unit tests with `pnpm --filter @ai-job-apply/ingestion-worker test`. PostgreSQL integration
 requires an explicit `DATABASE_URL` and is separate from the default suite.

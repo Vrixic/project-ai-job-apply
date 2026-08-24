@@ -334,24 +334,24 @@ describe.skipIf(!requested)("restored PostgreSQL aggregate verification", () => 
         WHERE version = '0001_entitlement_projection'
       `);
     }
-    const expectedReportingChecksum = loadCurrentRestoreManifest()
+    const expectedProviderSourceChecksum = loadCurrentRestoreManifest()
       .manifest.contributors.find((contributor) => contributor.owner === "jobs")
       ?.migrations.find(
-        (migration) => migration.version === "0008_job_reporting_and_moderation",
+        (migration) => migration.version === "0009_provider_ingestion_sources",
       )?.checksum;
-    expect(expectedReportingChecksum).toMatch(/^[a-f0-9]{64}$/);
+    expect(expectedProviderSourceChecksum).toMatch(/^[a-f0-9]{64}$/);
     try {
       await restored.unsafe(`
         UPDATE jobs.schema_migrations SET checksum=repeat('f', 64)
-        WHERE version='0008_job_reporting_and_moderation'
+        WHERE version='0009_provider_ingestion_sources'
       `);
       await expect(verifyRestoreDatabase(restored)).rejects.toThrow(
         "Restore migration boundary mismatch for jobs",
       );
     } finally {
       await restored.unsafe(`
-        UPDATE jobs.schema_migrations SET checksum='${expectedReportingChecksum}'
-        WHERE version='0008_job_reporting_and_moderation'
+        UPDATE jobs.schema_migrations SET checksum='${expectedProviderSourceChecksum}'
+        WHERE version='0009_provider_ingestion_sources'
       `);
     }
     expect(await verifyRestoreDatabase(restored)).toEqual(await verifyRestoreDatabase(source));
