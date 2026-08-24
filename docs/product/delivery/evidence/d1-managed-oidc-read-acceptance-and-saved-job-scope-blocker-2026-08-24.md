@@ -2,8 +2,9 @@
 
 - Date: 2026-08-24
 - Environment: isolated development
-- Status: read profile accepted; saved-job persistence correction deployed; lifecycle rerun pending
-- Correction sources: `e28f739`, `a6dfae43cd98dd0cab546ef37af84aee0b649bf8`
+- Status: read profile accepted; saved-job create remains under bounded deployed diagnosis
+- Correction sources: `e28f739`, `a6dfae43cd98dd0cab546ef37af84aee0b649bf8`,
+  `9421e22bc9c9278191536f9dad396ae25538130f`
 
 ## Read result
 
@@ -79,18 +80,34 @@ A checksum-bound Terraform plan changed only the gateway function and immutable 
 development to alias `31` and state serial `191`; the refresh-backed plan is zero drift. Docker
 Desktop and all WSL distributions were stopped after PostgreSQL verification.
 
+The first alias-`31` rerun still failed at `failureStage=create`; cleanup was attempted and
+succeeded. The bounded gateway window contained one `POST /v1/saved-jobs` `500`, while safe error
+classification remained `TypeError` / `ERR_INVALID_ARG_TYPE`. This proves the typed-array change
+is live but was not the complete root cause; no saved association remains.
+
+Source `9421e22bc9c9278191536f9dad396ae25538130f` adds value-free stage classification around each
+atomic create-transaction step. It retains no SQL, values, identifiers, messages, or stack traces,
+preserves the existing domain errors, and leaves transaction semantics unchanged. Matching unit
+80 plus real PostgreSQL integration 5/5 pass. The exact deterministic artifact is deployed on
+immutable gateway alias `32` at state serial `192`; its saved plan changed only the gateway
+function and alias, and the refresh-backed post-release plan has zero changes with SHA-256
+`f2a2cd2b79722e9bfb7864900c77775ad7c66af4df2472316aba774fda3ec671`.
+
 ## Verification and next action
 
-- Saved-job persistence: Matching unit 79 passed plus PostgreSQL integration 5/5.
+- Saved-job persistence: Matching unit 80 passed plus PostgreSQL integration 5/5.
 - Workload diagnostics: focused web 9/9 and affected type checks passed.
-- Release artifact: Gateway 108/108, dependency audit, deterministic double build, immutable
-  publication/readback, alias `31`, direct boundary, and zero drift passed.
+- Diagnostic release: deterministic double build, immutable publication/readback, alias `32`,
+  exact two-resource plan, and zero drift passed. Its direct boundary check remains to be rerun
+  after the temporary AWS session is refreshed.
 - The newest read AWS metric bucket is inconclusive because the next workload shared its minute;
   it is not recorded as a false pass.
 
-Rerun only the saved-job lifecycle against alias `31` and corroborate its timestamps with
-`-WorkloadProfile D1SavedJob`. Then wait for a quiet CloudWatch minute, repeat the read profile, and
-corroborate that distinct window.
+Rerun only the saved-job lifecycle against alias `32`. If it fails, retain the displayed aggregate
+result and use the exact bounded CloudWatch window only to read the value-free persistence stage.
+Correct that exact stage and repeat until the lifecycle passes, then corroborate its timestamps
+with `-WorkloadProfile D1SavedJob`. Finally wait for a quiet CloudWatch minute, repeat the read
+profile, and corroborate that distinct window.
 
 No token, identity, preference, job identifier, saved-job identifier, request identifier, response
 body, or real candidate data is retained here.
