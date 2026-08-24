@@ -22,6 +22,19 @@ const availableProjection = {
     firstObservedAt: "2026-08-20T00:00:00.000Z",
     lastVerifiedAt: "2026-08-21T00:00:00.000Z",
     expiresAt: "2026-09-21T00:00:00.000Z",
+    workMode: "on_site",
+    employmentType: "full_time",
+    datePosted: "2026-08-01T00:00:00.000Z",
+    applicationUrl: "https://jobs.ashbyhq.com/reviewed/job/application",
+    structuredLocations: [
+      {
+        address: {
+          addressCountry: "USA",
+          addressRegion: "New York",
+          addressLocality: "New York",
+        },
+      },
+    ],
   },
 } as const;
 
@@ -139,6 +152,31 @@ describe("public job Lambda module", () => {
           JSON.stringify({
             ...availableProjection,
             isAlias: true,
+          }),
+        ),
+      ),
+    ).toThrow();
+    expect(() =>
+      parseProjectionResult(
+        new TextEncoder().encode(
+          JSON.stringify({
+            ...availableProjection,
+            job: { ...availableProjection.job, applicationUrl: "http://example.test/apply" },
+          }),
+        ),
+      ),
+    ).toThrow();
+    expect(() =>
+      parseProjectionResult(
+        new TextEncoder().encode(
+          JSON.stringify({
+            ...availableProjection,
+            job: {
+              ...availableProjection.job,
+              structuredLocations: [
+                { address: { addressCountry: "USA", privateNote: "must not cross" } },
+              ],
+            },
           }),
         ),
       ),

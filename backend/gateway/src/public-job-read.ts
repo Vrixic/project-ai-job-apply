@@ -31,6 +31,11 @@ const publicJobKeys = new Set([
   "lastVerifiedAt",
   "expiresAt",
   "validThrough",
+  "workMode",
+  "employmentType",
+  "datePosted",
+  "applicationUrl",
+  "structuredLocations",
 ]);
 
 type CachedResult = Readonly<{
@@ -234,6 +239,21 @@ export function createPublicJobReadHandler(
           ...(result.job.validThrough === undefined
             ? {}
             : { validThrough: result.job.validThrough }),
+          ...(result.job.workMode === undefined ? {} : { workMode: result.job.workMode }),
+          ...(result.job.employmentType === undefined
+            ? {}
+            : { employmentType: result.job.employmentType }),
+          ...(result.job.datePosted === undefined ? {} : { datePosted: result.job.datePosted }),
+          ...(result.job.applicationUrl === undefined
+            ? {}
+            : { applicationUrl: result.job.applicationUrl }),
+          ...(result.job.structuredLocations === undefined
+            ? {}
+            : {
+                structuredLocations: result.job.structuredLocations.map((location) => ({
+                  address: { ...location.address },
+                })),
+              }),
         },
       };
       if (!validatePublicJobDetailResponse(body)) {

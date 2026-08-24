@@ -16,13 +16,26 @@ function record(id = canonicalId): PublicJobSourceRecord {
     id,
     company: { name: "Synthetic Company" },
     title: "Software Engineer",
-    locations: ["Remote - US"],
+    locations: ["New York, NY"],
     description: "A synthetic public description.",
     status: "active",
     firstObservedAt: new Date("2026-08-10T12:00:00.000Z"),
     lastVerifiedAt: new Date("2026-08-16T11:00:00.000Z"),
     expiresAt: new Date("2026-08-20T12:00:00.000Z"),
     validThrough: new Date("2026-08-18T12:00:00.000Z"),
+    workMode: "on_site",
+    employmentType: "full_time",
+    datePosted: new Date("2026-08-01T12:00:00.000Z"),
+    applicationUrl: "https://jobs.ashbyhq.com/reviewed/job/application",
+    structuredLocations: [
+      {
+        address: {
+          addressCountry: "USA",
+          addressRegion: "New York",
+          addressLocality: "New York",
+        },
+      },
+    ],
   };
 }
 
@@ -76,12 +89,25 @@ describe("public job read boundary", () => {
         id: canonicalId,
         companyName: "Synthetic Company",
         title: "Software Engineer",
-        locations: ["Remote - US"],
+        locations: ["New York, NY"],
         description: "A synthetic public description.",
         firstObservedAt: "2026-08-10T12:00:00.000Z",
         lastVerifiedAt: "2026-08-16T11:00:00.000Z",
         expiresAt: "2026-08-20T12:00:00.000Z",
         validThrough: "2026-08-18T12:00:00.000Z",
+        workMode: "on_site",
+        employmentType: "full_time",
+        datePosted: "2026-08-01T12:00:00.000Z",
+        applicationUrl: "https://jobs.ashbyhq.com/reviewed/job/application",
+        structuredLocations: [
+          {
+            address: {
+              addressCountry: "USA",
+              addressRegion: "New York",
+              addressLocality: "New York",
+            },
+          },
+        ],
       },
     });
   });

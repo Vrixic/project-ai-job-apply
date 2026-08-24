@@ -24,7 +24,16 @@ const jobKeys = new Set([
   "lastVerifiedAt",
   "expiresAt",
   "validThrough",
+  "workMode",
+  "employmentType",
+  "datePosted",
+  "applicationUrl",
+  "structuredLocations",
 ]);
+const structuredLocationKeys = new Set(["address"]);
+const structuredAddressKeys = new Set(["addressCountry", "addressLocality", "addressRegion"]);
+const workModes = new Set(["remote", "hybrid", "on_site", "unknown"]);
+const employmentTypes = new Set(["full_time", "part_time", "contract", "internship", "unknown"]);
 
 function exactKeys(value: object, allowed: ReadonlySet<string>): boolean {
   return Object.keys(value).every((key) => allowed.has(key));
@@ -68,6 +77,38 @@ function canonicalInstant(value: unknown): value is string {
   );
 }
 
+function validApplicationUrl(value: unknown): value is string {
+  if (typeof value !== "string" || value.length > 4_096 || !value.startsWith("https://")) {
+    return false;
+  }
+  try {
+    const parsed = new URL(value);
+    return (
+      parsed.protocol === "https:" &&
+      parsed.hostname.length > 0 &&
+      parsed.username === "" &&
+      parsed.password === ""
+    );
+  } catch {
+    return false;
+  }
+}
+
+function validStructuredLocation(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const location = value as Record<string, unknown>;
+  if (!exactKeys(location, structuredLocationKeys)) return false;
+  const address = location.address;
+  if (!address || typeof address !== "object" || Array.isArray(address)) return false;
+  const fields = address as Record<string, unknown>;
+  return (
+    exactKeys(fields, structuredAddressKeys) &&
+    boundedText(fields.addressCountry, 100) &&
+    (fields.addressLocality === undefined || boundedText(fields.addressLocality, 200)) &&
+    (fields.addressRegion === undefined || boundedText(fields.addressRegion, 200))
+  );
+}
+
 function validProjectedJob(value: unknown, canonicalJobId: string): boolean {
   if (!value || typeof value !== "object" || Array.isArray(value) || !exactKeys(value, jobKeys)) {
     return false;
@@ -86,7 +127,16 @@ function validProjectedJob(value: unknown, canonicalJobId: string): boolean {
     !canonicalInstant(job.firstObservedAt) ||
     !canonicalInstant(job.lastVerifiedAt) ||
     !canonicalInstant(job.expiresAt) ||
-    (job.validThrough !== undefined && !canonicalInstant(job.validThrough))
+    (job.validThrough !== undefined && !canonicalInstant(job.validThrough)) ||
+    (job.workMode !== undefined && !workModes.has(job.workMode as string)) ||
+    (job.employmentType !== undefined && !employmentTypes.has(job.employmentType as string)) ||
+    (job.datePosted !== undefined && !canonicalInstant(job.datePosted)) ||
+    (job.applicationUrl !== undefined && !validApplicationUrl(job.applicationUrl)) ||
+    (job.structuredLocations !== undefined &&
+      (!Array.isArray(job.structuredLocations) ||
+        job.structuredLocations.length < 1 ||
+        job.structuredLocations.length > 20 ||
+        job.structuredLocations.some((location) => !validStructuredLocation(location))))
   ) {
     return false;
   }
@@ -94,10 +144,13 @@ function validProjectedJob(value: unknown, canonicalJobId: string): boolean {
   const lastVerifiedAt = Date.parse(job.lastVerifiedAt);
   const expiresAt = Date.parse(job.expiresAt);
   const validThrough = job.validThrough === undefined ? undefined : Date.parse(job.validThrough);
+  const datePosted = job.datePosted === undefined ? undefined : Date.parse(job.datePosted);
   return (
     firstObservedAt <= lastVerifiedAt &&
     lastVerifiedAt <= expiresAt &&
-    (validThrough === undefined || (firstObservedAt <= validThrough && validThrough <= expiresAt))
+    (validThrough === undefined ||
+      (firstObservedAt <= validThrough && validThrough <= expiresAt)) &&
+    (datePosted === undefined || datePosted <= firstObservedAt)
   );
 }
 
