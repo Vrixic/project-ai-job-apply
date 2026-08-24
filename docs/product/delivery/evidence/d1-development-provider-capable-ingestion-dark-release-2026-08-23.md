@@ -20,7 +20,8 @@ This supersedes the synthetic-only runtime recorded in
 [the earlier dark-release evidence](d1-development-ingestion-dark-release-2026-08-23.md). It closes
 the provider-capable publication, Jobs `0009` migration, and dark-deployment gaps. D1-003 remains
 in progress pending exact company inputs, an explicit activation record, bounded live-provider
-acceptance, live persisted source-pause acceptance, and final human acceptance.
+acceptance, and final human acceptance. The generic persisted source-pause gate was subsequently
+accepted in [the 2026-08-24 enabled-run evidence](d1-development-source-pause-acceptance-2026-08-24.md).
 
 ## Source verification and immutable artifacts
 
@@ -99,7 +100,9 @@ step required them.
   schedule, or mapping.
 - Run bounded live-provider acceptance and prove provenance, canonicalization, expiry, queue/alarm
   behavior, and exact cleanup without exposing provider or candidate data in evidence.
-- Prove that a live persisted source pause prevents new work during an enabled run.
+- Closed 2026-08-24: a persisted exact generated-synthetic pause prevented all new work during a
+  bounded enabled run and the environment was restored default-off with zero drift. Live-provider
+  quality and source-specific acceptance remain separate.
 - Complete final accountable human acceptance at the end of Phase 1.
 
 Greenhouse, Lever, and Ashby do not require a separate Phase 1 counsel approval under ADR-025.
