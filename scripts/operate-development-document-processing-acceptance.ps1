@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [ValidateSet("Status", "PlanExecution", "Execute", "RecoverCleanup", "Verify")]
+  [ValidateSet("Status", "PlanExecution", "Execute", "ServiceDetection", "RecoverCleanup", "Verify")]
   [string]$Action = "Status",
   [string]$AwsProfile = "ai-job-apply-development-admin",
   [string]$Region = "us-east-2",
@@ -38,6 +38,12 @@ Usage:
     -MigrationReceiptPath VERIFIED_IMAGE_RECEIPT -ReviewedMigrationReceiptSha256 SHA256 `
     -ExecutionPlanPath REVIEWED_EXECUTION_PLAN -ReviewedExecutionPlanSha256 SHA256
 
+  .\scripts\operate-development-document-processing-acceptance.ps1 -Action ServiceDetection `
+    -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET -SourceSha MERGED_SHA `
+    -FixtureSetSha256 REVIEWED_FIXTURE_SET_SHA256 `
+    -MigrationReceiptPath VERIFIED_IMAGE_RECEIPT -ReviewedMigrationReceiptSha256 SHA256 `
+    -ExecutionPlanPath REVIEWED_EXECUTION_PLAN -ReviewedExecutionPlanSha256 SHA256
+
   .\scripts\operate-development-document-processing-acceptance.ps1 -Action RecoverCleanup `
     -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET -SourceSha MERGED_SHA `
     -FixtureSetSha256 REVIEWED_FIXTURE_SET_SHA256 `
@@ -56,9 +62,11 @@ This operator proves the generated-synthetic document flow while the mapping, Gu
 reconciler remain disabled. It invokes the deployed gateway and processor aliases synchronously
 with exact bounded events. The direct gateway invocation fabricates an already-validated authorizer
 context, so it does not prove API Gateway routing, JWT/JWKS validation, or authorizer enforcement.
-It also does not prove GuardDuty service detection, EventBridge delivery, SQS delivery, or
-event-source mapping activation. Those claims remain behind ADR-023 and a separate human-authorized
-activation operator.
+The ServiceDetection action separately proves only that the already-active exact GuardDuty malware
+protection plan scans one generated clean PDF version and writes its managed NO_THREATS_FOUND tag.
+It leaves the EventBridge rule, SQS mapping, reconciler, processor, and parser disabled and therefore
+does not prove or authorize their delivery/activation. Those claims remain behind ADR-023 and a
+separate human-authorized activation operator.
 No action accepts document bytes, filenames, object IDs, subjects, arbitrary commands, containers,
 roles, routes, or network destinations.
 "@
@@ -342,7 +350,7 @@ function Invoke-AwsJson {
 }
 
 function Assert-ActionInputs {
-  $releaseActions = @('PlanExecution', 'Execute', 'RecoverCleanup', 'Verify')
+  $releaseActions = @('PlanExecution', 'Execute', 'ServiceDetection', 'RecoverCleanup', 'Verify')
   if ($Action -in $releaseActions) {
     $migrationInputs = @($MigrationReceiptPath, $ReviewedMigrationReceiptSha256) |
       Where-Object { [string]::IsNullOrWhiteSpace($_) }
@@ -350,7 +358,7 @@ function Assert-ActionInputs {
       throw "$Action requires the exact source and migration image receipt pair."
     }
   }
-  if ($Action -in @('Execute', 'RecoverCleanup', 'Verify')) {
+  if ($Action -in @('Execute', 'ServiceDetection', 'RecoverCleanup', 'Verify')) {
     $executionInputs = @($FixtureSetSha256, $ExecutionPlanPath, $ReviewedExecutionPlanSha256) |
       Where-Object { [string]::IsNullOrWhiteSpace($_) }
     if ($FixtureSetSha256 -notmatch '^[a-f0-9]{64}$' -or @($executionInputs).Count -ne 0) {
@@ -358,7 +366,7 @@ function Assert-ActionInputs {
     }
   }
   elseif (-not [string]::IsNullOrWhiteSpace($FixtureSetSha256)) {
-    throw "Only execution, recovery, and verification accept a fixture-set digest."
+    throw "Only execution, service detection, recovery, and verification accept a fixture-set digest."
   }
   if ($Action -in @('RecoverCleanup', 'Verify')) {
     $receiptInputs = @($ReceiptPath, $ReviewedReceiptSha256) |
@@ -1546,6 +1554,65 @@ function Set-ExactScanTag {
   }
 }
 
+function Wait-GuardDutyServiceScan {
+  param(
+    [Parameter(Mandatory)][object]$Runtime,
+    [Parameter(Mandatory)][object]$Document,
+    [ValidateRange(60, 900)][int]$TimeoutSeconds = 900
+  )
+  Assert-TriggersDark -State $Runtime.State | Out-Null
+  Assert-ReviewedRuntimeUnchanged
+  $planId = ([string]$Runtime.ProtectionPlanArn -split '/')[-1]
+  if ($planId -notmatch '^[A-Za-z0-9]+$') {
+    throw "The GuardDuty malware protection plan identity is invalid."
+  }
+  $plan = Invoke-AwsJson -Arguments @(
+    'guardduty', 'get-malware-protection-plan', '--malware-protection-plan-id', $planId,
+    '--output', 'json'
+  ) -Operation 'GuardDuty malware protection plan validation'
+  $prefixes = @($plan.ProtectedResource.S3Bucket.ObjectPrefixes)
+  if (
+    [string]$plan.Status -cne 'ACTIVE' -or
+    [string]$plan.ProtectedResource.S3Bucket.BucketName -cne $Runtime.CandidateDocumentBucket -or
+    $prefixes.Count -ne 1 -or [string]$prefixes[0] -cne 'quarantine/' -or
+    [string]$plan.Actions.Tagging.Status -cne 'ENABLED'
+  ) {
+    throw "The GuardDuty malware protection plan is not the exact active tagging boundary."
+  }
+
+  $deadline = [DateTimeOffset]::UtcNow.AddSeconds($TimeoutSeconds)
+  do {
+    Assert-TriggersDark -State $Runtime.State | Out-Null
+    Assert-ReviewedRuntimeUnchanged
+    $readback = Invoke-AwsJson -Arguments @(
+      's3api', 'get-object-tagging', '--bucket', $Runtime.CandidateDocumentBucket,
+      '--key', $Document.sourceKey, '--version-id', $Document.sourceVersion, '--output', 'json'
+    ) -Operation 'GuardDuty managed scan tag readback'
+    $tags = @($readback.TagSet)
+    $scanTags = @($tags | Where-Object { [string]$_.Key -ceq 'GuardDutyMalwareScanStatus' })
+    if ($scanTags.Count -gt 1 -or $tags.Count -gt 1) {
+      throw "The scanned object version has unexpected tags."
+    }
+    if ($scanTags.Count -eq 1) {
+      $status = [string]$scanTags[0].Value
+      if ($status -ceq 'NO_THREATS_FOUND') {
+        return [pscustomobject]@{
+          ProtectionPlanStatus = 'ACTIVE'
+          TaggingStatus = 'ENABLED'
+          ScanResult = 'NO_THREATS_FOUND'
+        }
+      }
+      if ($status -in @('THREATS_FOUND', 'UNSUPPORTED', 'ACCESS_DENIED', 'FAILED')) {
+        throw "GuardDuty returned a non-clean terminal result for the generated clean fixture."
+      }
+      throw "GuardDuty returned an unknown managed scan result."
+    }
+    if ([DateTimeOffset]::UtcNow -ge $deadline) { break }
+    Start-Sleep -Seconds 5
+  } while ($true)
+  throw "GuardDuty did not attach a terminal managed scan tag within the bounded window."
+}
+
 function New-DirectProcessorEvent {
   param(
     [Parameter(Mandatory)][object]$Runtime,
@@ -2308,7 +2375,7 @@ if ($Action -eq 'PlanExecution') {
   exit 0
 }
 
-$planEvidence = Read-ExecutionPlan -Path $ExecutionPlanPath -Sha $ReviewedExecutionPlanSha256 -RequireFresh:($Action -eq 'Execute')
+$planEvidence = Read-ExecutionPlan -Path $ExecutionPlanPath -Sha $ReviewedExecutionPlanSha256 -RequireFresh:($Action -in @('Execute', 'ServiceDetection'))
 $currentRuntime = ConvertTo-ReviewedRuntimeIdentity -Runtime $runtime
 $runtimeIdentityUnchanged = (
   [string]$planEvidence.Plan.stateLineage -ceq $identity.Lineage -and
@@ -2352,6 +2419,127 @@ foreach ($entry in @($planEvidence.Plan.requests)) {
   }
   $requestByPhase[[string]$entry.phase] = $entry.request
   Assert-TaskRequest -Request $entry.request -Runtime $runtime -Phase ([string]$entry.phase) -RunId ([string]$planEvidence.Plan.runId) -ManifestJson $planEvidence.Fixture.ManifestJson -ManifestDigest $FixtureSetSha256 -Issuer $runtime.Issuer
+}
+
+if ($Action -eq 'ServiceDetection') {
+  $null = Assert-DocumentOperationalHealth
+  $ReceiptPath = Join-Path $operatorRoot "service-detection-receipt-$($SourceSha.Substring(0, 12))-$ReviewedExecutionPlanSha256.json"
+  $receiptPath = Resolve-OperatorPath -Candidate $ReceiptPath -AllowedRoot $operatorRoot
+  $receipt = [ordered]@{
+    schemaVersion = 1
+    kind = 'development-document-processing-acceptance'
+    environment = 'development'
+    sourceSha = $SourceSha
+    operatorSourceSha = $script:operatorSourceSha
+    sourceToOperatorDeltaSha256 = $script:sourceToOperatorDeltaSha256
+    fixtureSetSha256 = $FixtureSetSha256
+    migrationReceiptSha256 = $ReviewedMigrationReceiptSha256
+    executionPlanSha256 = $ReviewedExecutionPlanSha256
+    runId = [string]$planEvidence.Plan.runId
+    phase = 'claiming'
+    claimKey = ''
+    claimVersionId = ''
+    claimChecksumSHA256 = ''
+    recoveryKey = ''
+    recoveryVersionId = ''
+    recoveryChecksumSHA256 = ''
+    taskArns = [ordered]@{}
+    resultSha256ByAction = [ordered]@{}
+    persistentRows = -1
+    rollbackProved = $false
+    databaseCleaned = $false
+    objectsRemoved = $false
+    startedAt = [DateTimeOffset]::UtcNow.ToString('o')
+    completedAt = ''
+  }
+  Write-JsonFile -Path $receiptPath -Value $receipt
+  $claim = New-DurableClaim -Plan $planEvidence.Plan
+  $receipt.phase = 'claimed'
+  $receipt.claimKey = $claim.Key
+  $receipt.claimVersionId = $claim.VersionId
+  $receipt.claimChecksumSHA256 = $claim.ChecksumSHA256
+  $documents = [Collections.ArrayList]::new()
+  Save-RecoveryDescriptor -Receipt $receipt -Documents @($documents)
+  Write-JsonFile -Path $receiptPath -Value $receipt -AllowReplace
+
+  $primaryFailure = $null
+  $cleanupFailure = $null
+  $service = $null
+  try {
+    $receipt.phase = 'service-detection-running'
+    Write-JsonFile -Path $receiptPath -Value $receipt -AllowReplace
+    $document = Register-And-UploadFixture -Runtime $runtime -FixtureEvidence $planEvidence.Fixture `
+      -RunId $receipt.runId -Role 'clean-pdf' -Receipt $receipt -Documents $documents
+    $script:acceptanceStage = 'clean-pdf.guardduty-service-detection'
+    $service = Wait-GuardDutyServiceScan -Runtime $runtime -Document $document
+  }
+  catch {
+    $primaryFailure = [pscustomobject]@{
+      ErrorRecord = $_
+      Stage = [string]$script:acceptanceStage
+    }
+  }
+  finally {
+    try {
+      Assert-TriggersDark -State $runtime.State | Out-Null
+      foreach ($document in @($documents)) {
+        Complete-SourceDescriptor -Runtime $runtime -Document $document
+        Complete-NormalizedDescriptor -Runtime $runtime -Document $document
+      }
+      Save-RecoveryDescriptor -Receipt $receipt -Documents @($documents)
+      $arn = Submit-Task -Request $requestByPhase.cleanup
+      $receipt.taskArns.cleanup = $arn
+      Write-JsonFile -Path $receiptPath -Value $receipt -AllowReplace
+      $cleanup = Wait-Task -Request $requestByPhase.cleanup -TaskArn $arn -Phase 'cleanup'
+      $receipt.resultSha256ByAction.cleanup = [string]$cleanup.canonicalSha256
+      $receipt.persistentRows = [int]$cleanup.persistentRows
+      $receipt.databaseCleaned = $true
+      Write-JsonFile -Path $receiptPath -Value $receipt -AllowReplace
+      Remove-DescriptorObjects -Runtime $runtime -Documents @($documents)
+      $receipt.objectsRemoved = $true
+    }
+    catch {
+      $cleanupFailure = $_
+    }
+  }
+  if ($null -ne $cleanupFailure) {
+    $receipt.phase = 'cleanup-required'
+    Write-JsonFile -Path $receiptPath -Value $receipt -AllowReplace
+    throw "GuardDuty service detection did not prove exact cleanup. Retain and review the receipt before RecoverCleanup."
+  }
+  $receipt.completedAt = [DateTimeOffset]::UtcNow.ToString('o')
+  if ($null -ne $primaryFailure) {
+    $receipt.phase = 'failed-cleaned'
+    Write-JsonFile -Path $receiptPath -Value $receipt -AllowReplace
+    throw "GuardDuty service detection failed during guarded stage '$($primaryFailure.Stage)' after exact cleanup; no acceptance claim is made."
+  }
+  if (
+    $null -eq $service -or [string]$service.ScanResult -cne 'NO_THREATS_FOUND' -or
+    $receipt.persistentRows -ne 0 -or -not $receipt.databaseCleaned -or -not $receipt.objectsRemoved
+  ) {
+    throw "GuardDuty service detection did not prove one clean managed scan and zero persistent artifacts."
+  }
+  $receipt.phase = 'service-detection-verified'
+  Write-JsonFile -Path $receiptPath -Value $receipt -AllowReplace
+  [pscustomobject]@{
+    Outcome = 'guardduty-service-detection-verified-and-cleaned'
+    ReceiptPath = $receiptPath
+    ReceiptSha256 = Get-FileSha256 $receiptPath
+    ProtectionPlanStatus = $service.ProtectionPlanStatus
+    TaggingStatus = $service.TaggingStatus
+    ScanResult = $service.ScanResult
+    ScannedObjectCount = 1
+    PersistentRows = 0
+    DatabaseCleaned = $true
+    ObjectsRemoved = $true
+    TriggerActivation = $false
+    GuardDutyServiceDetectionProved = $true
+    EventBridgeDeliveryProved = $false
+    SqsDeliveryProved = $false
+    EventSourceMappingProved = $false
+    RealCandidateData = $false
+  }
+  exit 0
 }
 
 if ($Action -eq 'Execute') {

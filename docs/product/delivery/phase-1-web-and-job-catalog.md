@@ -74,17 +74,16 @@ shared artifacts advance.
 
 ### Current release-preparation checkpoint
 
-Development is at state serial `163`. The current unweighted gateway alias `30` uses exact
-application source `b215f38316ffd7d25de982168bd2c9cb1a65f6fb`; the idle migration task is now
-revision `41`, while private-feature acceptance used a temporary exact-source task definition that
-was deregistered during cleanup. The provider-capable ingestion artifacts and migration image use
-exact application sources `db6fe0b1682da0a69d2a2aeb8a28d1655b5060df` and
-`d2586e4628f024b89bf05ad3494a6c335034ebc1`. Document processing remains
-dark-deployed with its mapping and rules disabled, and its accepted fresh direct-dark run proves all
-seven actions, rollback, zero rows, exact object cleanup, privacy-safe telemetry, healthy alarms,
-independent verification, and zero drift. The split public edge/projection remains dark: the edge has
-no VPC/database capability, only the private projection has exact database access, direct invocation
-returns the generic absent response, and the public route remains absent. Both public aliases are
+Development is at state serial `190`. The current unweighted gateway alias `30` uses exact
+application source `b215f38316ffd7d25de982168bd2c9cb1a65f6fb`; the idle migration task is revision
+`43` and uses exact source `eb617045e98a0a5db70f0b6250e27d0d6102622b`. The same exact-source
+release supplies durable ingestion version `9`, activity alias version `12`, and coordinator,
+starter, and terminal alias version `13`, all unweighted. Document processing remains dark-deployed
+with its mapping and rules disabled, and its accepted fresh direct-dark run proves all seven actions,
+rollback, zero rows, exact object cleanup, privacy-safe telemetry, healthy alarms, independent
+verification, and zero drift. The split public edge/projection remains dark: the edge has no
+VPC/database capability, only the private projection has exact database access, direct invocation
+returns the generic absent response, and the public route remains absent. Both public aliases remain
 exact unweighted version `5`.
 
 Current source advances the local data boundary to nineteen migrations through Jobs
@@ -96,35 +95,39 @@ source-to-distinct-target restore passes 4/4 and production-Next installed-Chrom
 and verified, affected ingestion/public artifacts are reproducibly published and exact-version
 read back, and the final correction is dark-deployed with zero drift.
 
-The deployed ingestion runtime is the provider-capable successor with exact independently enabled
-Greenhouse, Lever, and Ashby configurations, per-source immutable configuration digests and pause
-gates, explicit provider authority, private-NAT activation enforcement, and Jobs migration `0009`
-for source-neutral checkpoint persistence. It is published, migrated, and dark-deployed with five
-exact numeric unweighted aliases at version `2`, encrypted empty 4/14-day queues, a complete durable
-stack, fourteen healthy alarms, disabled schedule/terminal rules and SQS mapping, bounded
-concurrency, zero ECS services/tasks, and final zero drift. Provider authority, both ingestion enable
-switches, and the configured provider-source count remain false/false/false/zero. Greenhouse, Lever,
-and Ashby remain structurally disabled pending source-engineering activation. Exact default-off
-configuration `ashby-linear-v1` now passes production preflight and has an attributable bounded-plan
-record; no enabled cloud configuration, credential, provider request, or provider data is present. Saved-job/Matching
-deployed acceptance now passes owner isolation, conservative grounded explanation,
-missing-preference refusal, exact cleanup, healthy alarms, and zero drift.
-After the bounded persisted-pause acceptance and exact restoration, the current coordinator,
-starter, terminal, and activity aliases are unweighted version `5`, the durable exact version is
-`3`, and the final schedule/terminal rules and SQS mapping are disabled with both queues empty. The direct public
+The deployed ingestion runtime is the provider-capable successor with independently gated
+Greenhouse, Lever, and Ashby configurations, immutable configuration digests, exact source pauses,
+explicit provider authority, isolated private-NAT activation, Jobs `0009` checkpoint persistence,
+and Jobs `0011` identity-only positive withdrawal. One attributable `ashby-linear-v1` activation
+made one bounded fixed-host public GET and persisted 32 exact-provenance observations and canonical
+jobs. Terminal replay settled the successful execution exactly once; the historic pre-acquisition
+failure now settles into immutable `source_disabled` pause without recovery work. Aggregate-only
+inspection proves one succeeded and one paused checkpoint, zero active/nonterminal work, 32
+truth-complete publicly readable jobs, and zero retained raw snapshots. The environment is restored
+with provider authority, both runtime gates, private egress, public routing, and configured sources
+all false/false/false/false/zero; schedule and terminal rules plus the queue mapping are disabled,
+both queues are empty, all fourteen ingestion alarms are `OK`, ECS is idle, and the refresh-backed
+86-variable plan has zero drift. No live positive withdrawal is claimed because the bounded provider
+response contained no unlisted item.
+
+Saved-job/Matching deployed acceptance passes owner isolation, conservative grounded explanation,
+missing-preference refusal, exact cleanup, healthy alarms, and zero drift. The direct public
 edge-to-projection path returns canonical `404`, six public alarms are healthy, and the public API
 route count remains zero. The admin client still requires managed tenant/client configuration and
-hosted acceptance. Exact source `ca454964164cc30b6450e484a92f7bd1ef5b47ea` now provides a
-guarded local configurator that refuses candidate-client ID/secret reuse, generates a distinct
-session secret, prints no secret, and aligns the runbook with the implemented
-authorization-code-only, no-offline-access scope boundary. It creates no Auth0 application or
-grant. The
-managed-OIDC/AWS/API Gateway preflight and fixed D1 deployed-read runner source pass; one approved
-synthetic login/execution plus exact-window corroboration remains before any authenticated workload
-claim. AWS recovery, broader populated-fixture write/failure assurance, bounded live-provider and
-public-route acceptance, and accountable
-human/security/accessibility decisions remain open;
-no Phase 1 completion is claimed. [Persisted source-pause acceptance](evidence/d1-development-source-pause-acceptance-2026-08-24.md), [Managed-OIDC read workload](evidence/d1-managed-oidc-read-workload-foundation-2026-08-23.md), [Private-feature acceptance](evidence/d1-private-feature-deployed-acceptance-foundation-2026-08-23.md), [Provider-capable ingestion dark release](evidence/d1-development-provider-capable-ingestion-dark-release-2026-08-23.md), [Job-search acceptance](evidence/d1-development-job-search-stale-cursor-acceptance-2026-08-23.md), [Public-job dark release](evidence/d1-development-public-job-dark-release-2026-08-22.md), [Consolidated development release](evidence/d1-development-consolidated-release-2026-08-22.md)
+hosted acceptance. Exact source `ca454964164cc30b6450e484a92f7bd1ef5b47ea` provides a guarded
+local configurator that refuses candidate-client ID/secret reuse, generates a distinct session
+secret, prints no secret, and aligns the runbook with the implemented authorization-code-only,
+no-offline-access scope boundary; it creates no Auth0 application or grant. The managed-OIDC/AWS/API
+Gateway preflight and fixed D1 deployed-read runner source pass; one approved synthetic
+login/execution plus exact-window corroboration remains before any authenticated workload claim.
+AWS recovery, broader populated-fixture write/failure assurance, public-route acceptance, and
+accountable human/security/accessibility decisions remain open; no Phase 1 completion is claimed.
+[Ashby Linear activation](evidence/d1-ashby-linear-development-activation-record-2026-08-24.md),
+[Persisted source-pause acceptance](evidence/d1-development-source-pause-acceptance-2026-08-24.md),
+[Managed-OIDC read workload](evidence/d1-managed-oidc-read-workload-foundation-2026-08-23.md),
+[Private-feature acceptance](evidence/d1-private-feature-deployed-acceptance-foundation-2026-08-23.md),
+[Job-search acceptance](evidence/d1-development-job-search-stale-cursor-acceptance-2026-08-23.md),
+[Public-job dark release](evidence/d1-development-public-job-dark-release-2026-08-22.md)
 
 ## Exit criteria
 
@@ -141,12 +144,14 @@ no Phase 1 completion is claimed. [Persisted source-pause acceptance](evidence/d
 
 ### Provider activation input list
 
-The first configuration is now selected and production-preflighted default-off: provider `ashby`,
-source `ashby-linear-v1`, company/domain `Linear` / `linear.app`, board `linear`, adapter
+The first configuration is selected and has completed its bounded development activation: provider
+`ashby`, source `ashby-linear-v1`, company/domain `Linear` / `linear.app`, board `linear`, adapter
 `ashby-job-board-v1`, and configuration SHA-256
 `9936706e3f704eee9c1f27ff20842edecb1d15fd231d85ca7b73322808fd0522`. Its
-[activation record](evidence/d1-ashby-linear-development-activation-record-2026-08-24.md) authorizes
-bounded plan preparation only; no apply, request, or route authority exists yet.
+[activation record](evidence/d1-ashby-linear-development-activation-record-2026-08-24.md) records the
+one permitted request, aggregate persistence/public-truth result, exact terminal reconciliation,
+and completed default-off restoration. It grants no continuing source, provider-egress, public-route,
+or production authority.
 
 For any later configuration, one exact company/board tuple is enough to begin bounded acceptance.
 Provide the following values; do not include credentials, tokens with private access, candidate

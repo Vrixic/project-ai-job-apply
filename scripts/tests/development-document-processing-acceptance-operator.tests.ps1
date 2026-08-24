@@ -26,7 +26,7 @@ if (($parameterNames -join "|") -cne ($expectedParameters -join "|")) {
 }
 
 foreach ($required in @(
-    'ValidateSet("Status", "PlanExecution", "Execute", "RecoverCleanup", "Verify")',
+    'ValidateSet("Status", "PlanExecution", "Execute", "ServiceDetection", "RecoverCleanup", "Verify")',
     '. (Join-Path $PSScriptRoot "lib\development-document-dark-guards.ps1")',
     'documents/dist/src/run-document-processing-acceptance.js',
     'DOCUMENT_PROCESSING_ACCEPTANCE_CONFIRM',
@@ -39,6 +39,11 @@ foreach ($required in @(
     'candidate-$compact@example.test',
     'TypeScript (reviewed synthetic)',
     'GuardDutyServiceDetectionProved = $false',
+    'GuardDutyServiceDetectionProved = $true',
+    "'guardduty', 'get-malware-protection-plan'",
+    "'GuardDutyMalwareScanStatus'",
+    "'NO_THREATS_FOUND'",
+    'EventBridgeDeliveryProved = $false',
     'ApiGatewayAuthorizerEnforcementProved = $false',
     'TerraformZeroDriftClaim = $false',
     'development-document-operator-delta-v1',
@@ -168,7 +173,8 @@ foreach ($name in @(
     "Test-ExactObjectAlreadyRemoved", "Assert-DocumentOperationalHealth", "Assert-PrivacySafeLogs",
     "Get-OptionalProperty", "New-DirectProcessorEvent", "Get-LambdaVersionIdentity",
     "Get-LambdaAliasIdentity", "Assert-DocumentParserVersionBoundary", "Assert-PresignedUploadTarget", "Complete-SourceDescriptor",
-    "Remove-ExactObjectVersion", "Remove-DescriptorObjects", "Assert-ReviewedRuntimeUnchanged"
+    "Remove-ExactObjectVersion", "Remove-DescriptorObjects", "Assert-ReviewedRuntimeUnchanged",
+    "Wait-GuardDutyServiceScan"
   )) {
   Import-OperatorFunction -Name $name
 }
@@ -224,6 +230,7 @@ $runtime = [pscustomobject]@{
   CandidateDocumentBucket = "ai-job-apply-development-candidate-docs-123456789012"
   ProtectionPlanArn = "arn:aws:guardduty:us-east-2:123456789012:malware-protection-plan/plan1"
   PlatformKmsKeyArn = "arn:aws:kms:us-east-2:123456789012:key/01234567-89ab-4def-8123-456789abcdef"
+  State = [pscustomobject]@{}
 }
 $runId = "abcdef01-abcd-4abc-8abc-abcdef012345"
 $digest = "a" * 64
@@ -460,8 +467,27 @@ $alarmNames = @(
 $topicArn = 'arn:aws:sns:us-east-2:123456789012:ai-job-apply-development-operational-alerts'
 function global:Get-TerraformState { [pscustomobject]@{} }
 function global:Get-StateOutput { param($State, $Name) $topicArn }
+function global:Assert-TriggersDark { param($State) [pscustomobject]@{ MappingState = 'Disabled'; GuardDutyRuleState = 'DISABLED'; ReconcilerState = 'DISABLED' } }
 function global:Invoke-AwsJson {
   param([string[]]$Arguments, [string]$Operation)
+  if ($Arguments[0] -ceq 'guardduty' -and $Arguments[1] -ceq 'get-malware-protection-plan') {
+    return [pscustomobject]@{
+      Status = 'ACTIVE'
+      ProtectedResource = [pscustomobject]@{
+        S3Bucket = [pscustomobject]@{
+          BucketName = $runtime.CandidateDocumentBucket
+          ObjectPrefixes = @('quarantine/')
+        }
+      }
+      Actions = [pscustomobject]@{ Tagging = [pscustomobject]@{ Status = 'ENABLED' } }
+    }
+  }
+  if ($Arguments[0] -ceq 's3api' -and $Arguments[1] -ceq 'get-object-tagging') {
+    return [pscustomobject]@{
+      VersionId = 'source-version'
+      TagSet = @([pscustomobject]@{ Key = 'GuardDutyMalwareScanStatus'; Value = 'NO_THREATS_FOUND' })
+    }
+  }
   if ($script:orphanProofMode -and $Arguments[0] -ceq 's3api') {
     if ($Arguments[1] -ceq 'list-object-versions') {
       if ($script:objectPresent) {
@@ -545,6 +571,18 @@ catch { $weightedRejected = $true }
 $script:weightedAlias = $false
 if (-not $weightedRejected) { throw "A weighted Lambda alias was accepted." }
 $script:reviewedRuntimeIdentity = $null
+$managedScanDocument = [pscustomobject]@{
+  sourceKey = $expectedKey
+  sourceVersion = 'source-version'
+}
+$managedScan = Wait-GuardDutyServiceScan -Runtime $runtime -Document $managedScanDocument -TimeoutSeconds 60
+if (
+  [string]$managedScan.ProtectionPlanStatus -cne 'ACTIVE' -or
+  [string]$managedScan.TaggingStatus -cne 'ENABLED' -or
+  [string]$managedScan.ScanResult -cne 'NO_THREATS_FOUND'
+) {
+  throw "The managed GuardDuty scan boundary was not accepted."
+}
 $script:orphanProofMode = $true
 $script:objectPresent = $true
 $script:objectHeadReads = 0

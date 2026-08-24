@@ -2,9 +2,11 @@
 
 Use this runbook to prove the deployed document intake, parser, proposal, review, contradiction,
 rollback, and cleanup path with generated synthetic data while every production ingestion trigger
-remains disabled. This runbook does not authorize or prove GuardDuty service detection, EventBridge
-delivery, SQS delivery, the Lambda event-source mapping, or the timeout reconciler. Activation
-remains a separate human decision under [ADR-023](../../../docs/adr/023-isolate-untrusted-document-parsing.md).
+remains disabled. Its separate `ServiceDetection` action proves only the already-active exact
+GuardDuty protection plan's managed scan/tag behavior for one generated clean object. Neither path
+authorizes or proves EventBridge delivery, SQS delivery, the Lambda event-source mapping, the
+processor/parser trigger path, or the timeout reconciler. Activation remains a separate human
+decision under [ADR-023](../../../docs/adr/023-isolate-untrusted-document-parsing.md).
 The direct gateway calls fabricate the exact context an already successful JWT authorizer would
 provide; they do not traverse API Gateway and do not prove route selection, JWT/JWKS validation, or
 authorizer enforcement.
@@ -71,8 +73,8 @@ pwsh -NoProfile -File scripts/operate-development-document-processing-acceptance
 ```
 
 Continue only when the mapping is `Disabled`, the scan-result rule is `DISABLED`, the reconciler is
-`DISABLED`, and `ActivationAuthorized` is false. `PlanExecution`, `Execute`, `RecoverCleanup`, and
-`Verify` repeat this live guard. No operator action can enable a trigger.
+`DISABLED`, and `ActivationAuthorized` is false. `PlanExecution`, `Execute`, `ServiceDetection`,
+`RecoverCleanup`, and `Verify` repeat this live guard. No operator action can enable a trigger.
 
 ## 2. Produce the review-only execution plan
 
@@ -188,7 +190,39 @@ delete markers. If database cleanup already succeeded, recovery skips the server
 an exact object version was already removed, zero history is accepted and recovery continues with
 the remaining descriptor-bound versions. Recovery never makes an acceptance claim.
 
-## 5. Read-only verification and retained evidence
+## 5. Prove GuardDuty service detection without trigger activation
+
+Use a fresh reviewed execution plan that has not been claimed by `Execute` or another
+`ServiceDetection` run:
+
+```powershell
+pwsh -NoProfile -File scripts/operate-development-document-processing-acceptance.ps1 `
+  -Action ServiceDetection `
+  -ExpectedAccountId <account-id> `
+  -StateBucket <state-bucket> `
+  -SourceSha <merged-sha> `
+  -FixtureSetSha256 <reviewed-fixture-sha256> `
+  -MigrationReceiptPath <verified-image-receipt> `
+  -ReviewedMigrationReceiptSha256 <receipt-sha256> `
+  -ExecutionPlanPath <reviewed-execution-plan> `
+  -ReviewedExecutionPlanSha256 <execution-plan-sha256>
+```
+
+The action revalidates the exact active malware-protection plan, protected bucket and
+`quarantine/` prefix, and enabled managed tagging. It registers and uploads only the reviewed clean
+PDF, then polls only that exact object version for GuardDuty's managed
+`GuardDutyMalwareScanStatus=NO_THREATS_FOUND` tag for at most fifteen minutes. It never writes a scan
+tag itself and never invokes the processor or parser. Whether the scan succeeds or fails, the
+operator runs the existing owner-safe database cleanup and removes only the descriptor-bound object
+version. An interrupted cleanup remains recoverable through `RecoverCleanup` and the checksum-bound
+receipt.
+
+Accept only `guardduty-service-detection-verified-and-cleaned`, one scanned object, zero persistent
+rows, exact object removal, and `TriggerActivation=false`. This proves GuardDuty service scanning
+and managed tagging only. EventBridge delivery, SQS delivery, event-source mapping, processor/parser
+activation, API Gateway/JWT enforcement, and real resumes remain unproved and unauthorized.
+
+## 6. Read-only verification and retained evidence
 
 ```powershell
 pwsh -NoProfile -File scripts/operate-development-document-processing-acceptance.ps1 `
@@ -218,10 +252,12 @@ deliberately makes no Terraform zero-drift claim because
 it does not accept or reconstruct the full reviewed live variable set. Retain the separately reviewed
 deployment Apply verification and its checksum-bound zero-drift baseline for that claim.
 
-Retain only checksums and privacy-safe aggregate fields in delivery evidence. State explicitly that
-the run used generated synthetic data and direct Lambda invocations, kept all triggers disabled,
-and did not prove GuardDuty service scanning, EventBridge/SQS delivery, event-source mapping,
-reconciler behavior, API Gateway routing, JWT/JWKS validation, authorizer enforcement, a generated
-alarm transition, an independently reconstructed Terraform
+Retain only checksums and privacy-safe aggregate fields in delivery evidence. For direct-dark
+`Execute`, state explicitly that the run used generated synthetic data and direct Lambda
+invocations, kept all triggers disabled, and did not prove GuardDuty service scanning. For
+`ServiceDetection`, retain its separate checksum and aggregate result and do not infer any trigger
+delivery. Neither action proves EventBridge/SQS delivery, event-source mapping, reconciler behavior,
+API Gateway routing, JWT/JWKS validation, authorizer enforcement, a generated alarm transition, or
+an independently reconstructed Terraform
 zero-drift plan, real candidate
 resumes, staging, production, scale, or ADR-023 acceptance.
