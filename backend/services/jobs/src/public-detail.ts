@@ -1,4 +1,9 @@
 import type postgres from "postgres";
+import type {
+  JobEmploymentType,
+  JobStructuredLocation,
+  JobWorkMode,
+} from "./domain/canonical-job.js";
 
 const canonicalJobIdPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -30,6 +35,11 @@ export interface PublicJobSourceRecord {
   lastVerifiedAt: Date;
   expiresAt: Date;
   validThrough?: Date;
+  workMode?: JobWorkMode;
+  employmentType?: JobEmploymentType;
+  datePosted?: Date;
+  applicationUrl?: string;
+  structuredLocations?: readonly JobStructuredLocation[];
 }
 
 export interface PublicJobDetail {
@@ -43,6 +53,11 @@ export interface PublicJobDetail {
   lastVerifiedAt: string;
   expiresAt: string;
   validThrough?: string;
+  workMode?: JobWorkMode;
+  employmentType?: JobEmploymentType;
+  datePosted?: string;
+  applicationUrl?: string;
+  structuredLocations?: readonly JobStructuredLocation[];
 }
 
 export type PublicJobDetailResult =
@@ -116,6 +131,52 @@ function isValidDate(value: unknown): value is Date {
   );
 }
 
+function isSafeApplicationUrl(value: unknown): value is string {
+  if (typeof value !== "string" || value.length > 4_096) return false;
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      !url.username &&
+      !url.password &&
+      !url.port &&
+      !url.hash &&
+      url.toString() === value
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isStructuredLocations(value: unknown): value is readonly JobStructuredLocation[] {
+  return (
+    Array.isArray(value) &&
+    value.length >= 1 &&
+    value.length <= 20 &&
+    value.every((location) => {
+      if (!location || typeof location !== "object" || Array.isArray(location)) return false;
+      const locationRecord = location as Record<string, unknown>;
+      if (Object.keys(locationRecord).length !== 1) return false;
+      const address = locationRecord.address;
+      if (!address || typeof address !== "object" || Array.isArray(address)) return false;
+      const addressRecord = address as Record<string, unknown>;
+      if (
+        Object.keys(addressRecord).some(
+          (key) => !["addressCountry", "addressLocality", "addressRegion"].includes(key),
+        ) ||
+        !isSafeDisplayText(addressRecord.addressCountry, 100) ||
+        (addressRecord.addressLocality !== undefined &&
+          !isSafeDisplayText(addressRecord.addressLocality, 200)) ||
+        (addressRecord.addressRegion !== undefined &&
+          !isSafeDisplayText(addressRecord.addressRegion, 200))
+      ) {
+        return false;
+      }
+      return true;
+    })
+  );
+}
+
 type PublicJobProjection =
   | Readonly<{ kind: "available"; job: Readonly<PublicJobDetail> }>
   | Readonly<{ kind: "absent" }>
@@ -138,7 +199,17 @@ function projectPublicJob(record: PublicJobSourceRecord, now: Date): PublicJobPr
     !isValidDate(record.firstObservedAt) ||
     !isValidDate(record.lastVerifiedAt) ||
     !isValidDate(record.expiresAt) ||
-    (record.validThrough !== undefined && !isValidDate(record.validThrough))
+    (record.validThrough !== undefined && !isValidDate(record.validThrough)) ||
+    (record.datePosted !== undefined && !isValidDate(record.datePosted)) ||
+    (record.applicationUrl !== undefined && !isSafeApplicationUrl(record.applicationUrl)) ||
+    (record.structuredLocations !== undefined &&
+      !isStructuredLocations(record.structuredLocations)) ||
+    (record.workMode !== undefined &&
+      !["remote", "hybrid", "on_site", "unknown"].includes(record.workMode)) ||
+    (record.employmentType !== undefined &&
+      !["full_time", "part_time", "contract", "internship", "unknown"].includes(
+        record.employmentType,
+      ))
   ) {
     return { kind: "malformed" };
   }
@@ -148,12 +219,14 @@ function projectPublicJob(record: PublicJobSourceRecord, now: Date): PublicJobPr
   const lastVerifiedTime = record.lastVerifiedAt.getTime();
   const expiresTime = record.expiresAt.getTime();
   const validThroughTime = record.validThrough?.getTime();
+  const datePostedTime = record.datePosted?.getTime();
   if (
     firstObservedTime > lastVerifiedTime ||
     lastVerifiedTime > nowTime ||
     expiresTime < lastVerifiedTime ||
     (validThroughTime !== undefined &&
-      (validThroughTime < firstObservedTime || validThroughTime > expiresTime))
+      (validThroughTime < firstObservedTime || validThroughTime > expiresTime)) ||
+    (datePostedTime !== undefined && datePostedTime > firstObservedTime)
   ) {
     return { kind: "malformed" };
   }
@@ -167,6 +240,9 @@ function projectPublicJob(record: PublicJobSourceRecord, now: Date): PublicJobPr
   }
 
   const locations = Object.freeze([...record.locations]);
+  const structuredLocations = record.structuredLocations?.map((location) =>
+    Object.freeze({ address: Object.freeze({ ...location.address }) }),
+  );
   return Object.freeze({
     kind: "available" as const,
     job: Object.freeze({
@@ -182,6 +258,13 @@ function projectPublicJob(record: PublicJobSourceRecord, now: Date): PublicJobPr
       ...(record.validThrough === undefined
         ? {}
         : { validThrough: record.validThrough.toISOString() }),
+      ...(record.workMode === undefined ? {} : { workMode: record.workMode }),
+      ...(record.employmentType === undefined ? {} : { employmentType: record.employmentType }),
+      ...(record.datePosted === undefined ? {} : { datePosted: record.datePosted.toISOString() }),
+      ...(record.applicationUrl === undefined ? {} : { applicationUrl: record.applicationUrl }),
+      ...(structuredLocations === undefined
+        ? {}
+        : { structuredLocations: Object.freeze(structuredLocations) }),
     }),
   });
 }
@@ -198,6 +281,11 @@ interface PublicJobDetailRow {
   lastVerifiedAt: Date;
   expiresAt: Date;
   validThrough: Date | null;
+  workMode: JobWorkMode | null;
+  employmentType: JobEmploymentType | null;
+  datePosted: Date | null;
+  applicationUrl: string | null;
+  structuredLocations: JobStructuredLocation[] | null;
 }
 
 export class PostgresPublicJobDetailReader implements PublicJobDetailReader {
@@ -216,7 +304,12 @@ export class PostgresPublicJobDetailReader implements PublicJobDetailReader {
         first_observed_at AS "firstObservedAt",
         last_verified_at AS "lastVerifiedAt",
         expires_at AS "expiresAt",
-        valid_through AS "validThrough"
+        valid_through AS "validThrough",
+        work_mode AS "workMode",
+        employment_type AS "employmentType",
+        date_posted AS "datePosted",
+        application_url AS "applicationUrl",
+        structured_locations AS "structuredLocations"
       FROM jobs_public.read_public_job_detail(${jobId}::uuid)
     `;
     if (rows.length > 1) {
@@ -236,6 +329,11 @@ export class PostgresPublicJobDetailReader implements PublicJobDetailReader {
       lastVerifiedAt: row.lastVerifiedAt,
       expiresAt: row.expiresAt,
       ...(row.validThrough === null ? {} : { validThrough: row.validThrough }),
+      ...(row.workMode === null ? {} : { workMode: row.workMode }),
+      ...(row.employmentType === null ? {} : { employmentType: row.employmentType }),
+      ...(row.datePosted === null ? {} : { datePosted: row.datePosted }),
+      ...(row.applicationUrl === null ? {} : { applicationUrl: row.applicationUrl }),
+      ...(row.structuredLocations === null ? {} : { structuredLocations: row.structuredLocations }),
     };
   }
 }

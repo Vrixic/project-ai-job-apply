@@ -10,6 +10,7 @@ import { chromium } from "playwright-core";
 const HOST = "127.0.0.1";
 const CANONICAL_JOB_ID = "0198be31-2e40-7000-8000-000000000001";
 const ALIAS_JOB_ID = "0198be31-2e40-7000-8000-000000000002";
+const STRUCTURED_JOB_ID = "0198be31-2e40-7000-8000-000000000004";
 const SYNTHETIC_EXPIRED_TARGET = Object.freeze({
   jobId: "0198be31-2e40-7000-8000-000000000003",
   expiresAt: "2026-08-16T12:00:00.000Z",
@@ -57,6 +58,31 @@ const canonicalDetail = Object.freeze({
     lastVerifiedAt: "2026-08-16T12:00:00.000Z",
     expiresAt: "2099-08-17T12:00:00.000Z",
     validThrough: "2099-08-16T12:00:00.000Z",
+  },
+});
+
+const structuredDetail = Object.freeze({
+  requestedJobId: STRUCTURED_JOB_ID,
+  canonicalJobId: STRUCTURED_JOB_ID,
+  isAlias: false,
+  job: {
+    ...canonicalDetail.job,
+    id: STRUCTURED_JOB_ID,
+    title: "Synthetic On-site Platform Engineer",
+    locations: ["New York, NY"],
+    workMode: "on_site",
+    employmentType: "full_time",
+    datePosted: "2026-08-09T12:00:00.000Z",
+    applicationUrl: `https://jobs.ashbyhq.com/generated-synthetic/${STRUCTURED_JOB_ID}/application`,
+    structuredLocations: [
+      {
+        address: {
+          addressCountry: "US",
+          addressRegion: "NY",
+          addressLocality: "New York",
+        },
+      },
+    ],
   },
 });
 
@@ -153,6 +179,10 @@ function startSyntheticPublicApi() {
           requestedJobId: ALIAS_JOB_ID,
           isAlias: true,
         });
+        return;
+      }
+      if (match[1] === STRUCTURED_JOB_ID) {
+        writeJson(response, 200, "application/json", structuredDetail);
         return;
       }
       if (match[1] === SYNTHETIC_EXPIRED_TARGET.jobId) {
@@ -253,6 +283,66 @@ async function runCanonicalBrowserScenario(browser) {
   }
 }
 
+async function runTruthfulStructuredDataScenario(browser) {
+  const context = await browser.newContext({ serviceWorkers: "block" });
+  const unexpectedNetwork = [];
+  await context.route("**/*", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.hostname !== HOST || Number(url.port) !== webPort) {
+      unexpectedNetwork.push(url.origin);
+      await route.abort("blockedbyclient");
+      return;
+    }
+    await route.continue();
+  });
+  try {
+    const page = await context.newPage();
+    const response = await page.goto(`${webOrigin}/jobs/${STRUCTURED_JOB_ID}`, {
+      waitUntil: "networkidle",
+    });
+    assert.equal(response?.status(), 200);
+    await page
+      .getByRole("heading", { level: 1, name: "Synthetic On-site Platform Engineer" })
+      .waitFor();
+    const applicationLink = page.getByRole("link", { name: "Apply on the employer's site" });
+    assert.equal(await applicationLink.getAttribute("href"), structuredDetail.job.applicationUrl);
+    assert.deepEqual(
+      new Set((await applicationLink.getAttribute("rel"))?.split(" ")),
+      new Set(["external", "nofollow"]),
+    );
+    const scripts = page.locator('script[type="application/ld+json"]');
+    assert.equal(await scripts.count(), 1);
+    const jobPosting = JSON.parse((await scripts.textContent()) ?? "null");
+    assert.deepEqual(jobPosting, {
+      "@context": "https://schema.org",
+      "@type": "JobPosting",
+      title: structuredDetail.job.title,
+      description: structuredDetail.job.description,
+      datePosted: structuredDetail.job.datePosted,
+      hiringOrganization: {
+        "@type": "Organization",
+        name: structuredDetail.job.companyName,
+      },
+      jobLocation: [
+        {
+          "@type": "Place",
+          address: {
+            "@type": "PostalAddress",
+            ...structuredDetail.job.structuredLocations[0].address,
+          },
+        },
+      ],
+      employmentType: "FULL_TIME",
+      validThrough: structuredDetail.job.validThrough,
+    });
+    assert.equal(await page.evaluate(() => globalThis.__d1PublicJobCanary), undefined);
+    await assertNoWcagViolations(page);
+    assert.deepEqual(unexpectedNetwork, []);
+  } finally {
+    await context.close();
+  }
+}
+
 async function runRoutingAndCrawlerScenario() {
   assert(Date.parse(SYNTHETIC_EXPIRED_TARGET.expiresAt) <= Date.now());
   const alias = await fetch(`${webOrigin}/jobs/${ALIAS_JOB_ID}`, { redirect: "manual" });
@@ -329,6 +419,8 @@ try {
   browser = await chromium.launch({ executablePath: chromePath, headless: true });
   await runCanonicalBrowserScenario(browser);
   process.stdout.write("PASS canonical/noindex/plain-text/WCAG scenario\n");
+  await runTruthfulStructuredDataScenario(browser);
+  process.stdout.write("PASS provider-truth application-link/JobPosting/WCAG scenario\n");
   await runRoutingAndCrawlerScenario();
   process.stdout.write("PASS alias/expired-target/invalid/robots scenario\n");
   await runBoundedLocalBurst();
@@ -337,6 +429,7 @@ try {
   assert.deepEqual(syntheticApi.violations, []);
   assert(syntheticApi.requests.some(({ pathname }) => pathname.endsWith(CANONICAL_JOB_ID)));
   assert(syntheticApi.requests.some(({ pathname }) => pathname.endsWith(ALIAS_JOB_ID)));
+  assert(syntheticApi.requests.some(({ pathname }) => pathname.endsWith(STRUCTURED_JOB_ID)));
   assert(
     syntheticApi.requests.some(({ pathname }) => pathname.endsWith(SYNTHETIC_EXPIRED_TARGET.jobId)),
   );

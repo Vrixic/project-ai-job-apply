@@ -293,6 +293,7 @@ foreach ($required in @(
     'matching/dist/src/run-private-feature-acceptance.js',
     'runner/dist/src/restore-verifier-cli.js', 'runner/restore-manifest.v1.json',
     'jobs/migrations/0009_provider_ingestion_sources.sql',
+    'jobs/migrations/0010_public_job_truth_fields.sql',
     'profile,jobs,documents,matching,billing', 'matching:["0001_saved_jobs.sql"]',
     'billing:["0001_entitlement_projection.sql"]',
     'manifest.contributors.length!==5', 'createRequire', './billing/package.json',
@@ -316,7 +317,7 @@ $backendInitialization = $source.LastIndexOf('Initialize-Backend', [StringCompar
 if ($localBuildBranch -lt 0 -or $backendInitialization -lt 0 -or $localBuildBranch -gt $backendInitialization) {
   throw "LocalBuild must exit before Terraform-state and AWS-boundary initialization."
 }
-if (-not $source.Contains('for(const entrypoint of ["profile/dist/src/run-private-feature-acceptance.js","jobs/dist/src/search-acceptance.js","jobs/dist/src/run-search-acceptance.js","documents/dist/src/run-document-processing-acceptance.js","matching/dist/src/run-private-feature-acceptance.js","runner/dist/src/restore-verifier-cli.js","runner/restore-manifest.v1.json","jobs/migrations/0009_provider_ingestion_sources.sql"])await access(entrypoint)')) {
+if (-not $source.Contains('for(const entrypoint of ["profile/dist/src/run-private-feature-acceptance.js","jobs/dist/src/search-acceptance.js","jobs/dist/src/run-search-acceptance.js","documents/dist/src/run-document-processing-acceptance.js","matching/dist/src/run-private-feature-acceptance.js","runner/dist/src/restore-verifier-cli.js","runner/restore-manifest.v1.json","jobs/migrations/0009_provider_ingestion_sources.sql","jobs/migrations/0010_public_job_truth_fields.sql"])await access(entrypoint)')) {
   throw "The migration runtime smoke gate does not require the exact acceptance entrypoint set."
 }
 foreach ($forbidden in @("terraform apply", "ecs run-task", "register-task-definition", "BatchDeleteImage")) {
@@ -334,6 +335,7 @@ foreach ($required in @(
   'profile/dist/src/run-private-feature-acceptance.js',
   'matching/dist/src/run-private-feature-acceptance.js',
   'jobs/migrations/0009_provider_ingestion_sources.sql',
+  'jobs/migrations/0010_public_job_truth_fields.sql',
   'restore-verifier-package-smoke:ok',
   'file:///migration/billing/package.json',
   'expected exactly five generated .modules.yaml files',

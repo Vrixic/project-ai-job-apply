@@ -2,6 +2,7 @@ import type {
   CatalogObservation,
   JobEmploymentType,
   JobProvenance,
+  JobStructuredLocation,
   JobSourceProvider,
   JobWorkMode,
   RecordObservationResult,
@@ -23,6 +24,9 @@ export interface SourceJobObservation {
   department?: string;
   workMode?: JobWorkMode;
   employmentType?: JobEmploymentType;
+  datePosted?: Date;
+  applicationUrl?: string;
+  structuredLocations?: readonly JobStructuredLocation[];
   validThrough?: Date;
 }
 

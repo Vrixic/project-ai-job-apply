@@ -110,6 +110,40 @@ describe("canonical job domain", () => {
     ).toThrow("matching attributes are invalid");
   });
 
+  it("accepts only bounded provider-truth fields safe for public projection", () => {
+    expect(
+      canonicalizeObservation(
+        observation({
+          datePosted: new Date("2026-08-10T12:00:00.000Z"),
+          applicationUrl: "https://jobs.example.test/opening/42/application",
+          structuredLocations: [
+            {
+              address: {
+                addressCountry: "US",
+                addressRegion: "NY",
+                addressLocality: "New York",
+              },
+            },
+          ],
+        }),
+      ),
+    ).toMatchObject({
+      datePosted: new Date("2026-08-10T12:00:00.000Z"),
+      applicationUrl: "https://jobs.example.test/opening/42/application",
+    });
+    expect(() =>
+      canonicalizeObservation(
+        observation({ applicationUrl: "http://jobs.example.test/opening/42/application" }),
+      ),
+    ).toThrow("must use HTTPS");
+    expect(() => canonicalizeObservation(observation({ structuredLocations: [] }))).toThrow(
+      "Structured job locations",
+    );
+    expect(() =>
+      canonicalizeObservation(observation({ datePosted: new Date("2026-08-12T12:00:00.000Z") })),
+    ).toThrow("no later than observation");
+  });
+
   it("rejects display fields that cannot satisfy the public catalog contract", () => {
     expect(() => canonicalizeObservation(observation({ companyName: "c".repeat(201) }))).toThrow(
       "canonical contract limit",

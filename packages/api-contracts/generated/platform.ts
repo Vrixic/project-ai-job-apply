@@ -904,6 +904,22 @@ export interface components {
             expiresAt: string;
             /** Format: date-time */
             validThrough?: string;
+            /** @enum {string} */
+            workMode?: "remote" | "hybrid" | "on_site" | "unknown";
+            /** @enum {string} */
+            employmentType?: "full_time" | "part_time" | "contract" | "internship" | "unknown";
+            /** Format: date-time */
+            datePosted?: string;
+            /** Format: uri */
+            applicationUrl?: string;
+            structuredLocations?: components["schemas"]["PublicJobStructuredLocation"][];
+        };
+        PublicJobStructuredLocation: {
+            address: {
+                addressCountry: string;
+                addressLocality?: string;
+                addressRegion?: string;
+            };
         };
         PublicJobDetailResponse: {
             requestedJobId: string;

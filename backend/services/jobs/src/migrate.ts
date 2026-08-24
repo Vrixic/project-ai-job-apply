@@ -18,6 +18,7 @@ const migrationVersions = [
   "0007_matchable_job_attributes",
   "0008_job_reporting_and_moderation",
   "0009_provider_ingestion_sources",
+  "0010_public_job_truth_fields",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -47,7 +48,7 @@ const expectedIngestionTriggerBodies = ingestionTriggerFunctions.map((functionNa
   return match[1];
 });
 const publicReaderMigration = migrations.find(
-  (migration) => migration.version === "0006_public_job_reader",
+  (migration) => migration.version === "0010_public_job_truth_fields",
 );
 if (!publicReaderMigration) throw new Error("The public reader migration source is missing");
 const publicReaderBodyMatch =
@@ -363,7 +364,7 @@ try {
             AND function_definition.pronargs = 1
             AND pg_get_function_identity_arguments(function_definition.oid) = 'requested_job_id uuid'
             AND pg_get_function_result(function_definition.oid) =
-              'TABLE(id uuid, company_name text, title text, locations jsonb, department text, description text, status text, first_observed_at timestamp with time zone, last_verified_at timestamp with time zone, expires_at timestamp with time zone, valid_through timestamp with time zone)'
+              'TABLE(id uuid, company_name text, title text, locations jsonb, department text, description text, status text, first_observed_at timestamp with time zone, last_verified_at timestamp with time zone, expires_at timestamp with time zone, valid_through timestamp with time zone, work_mode text, employment_type text, date_posted timestamp with time zone, application_url text, structured_locations jsonb)'
             AND language.lanname = 'sql'
             AND function_definition.provolatile = 's'
             AND function_definition.prosecdef

@@ -31,13 +31,16 @@ export class SourceBatchContractError extends Error {
 
 const sourceObservationKeys = new Set([
   "atsTenant",
+  "applicationUrl",
   "companyName",
+  "datePosted",
   "department",
   "description",
   "employerRequisitionId",
   "employmentType",
   "externalJobId",
   "locations",
+  "structuredLocations",
   "sourceUrl",
   "title",
   "validThrough",
@@ -247,6 +250,9 @@ function catalogObservation(
   if (source.validThrough !== undefined && !(source.validThrough instanceof Date)) {
     throw new SourceBatchContractError("Source validThrough must be a Date");
   }
+  if (source.datePosted !== undefined && !(source.datePosted instanceof Date)) {
+    throw new SourceBatchContractError("Source datePosted must be a Date");
+  }
   enforceSourceBoundary(source, registration);
   const candidate: CatalogObservation = {
     provider: registration.provider,
@@ -269,6 +275,15 @@ function catalogObservation(
     ...(source.department ? { department: source.department } : {}),
     ...(source.workMode ? { workMode: source.workMode } : {}),
     ...(source.employmentType ? { employmentType: source.employmentType } : {}),
+    ...(source.datePosted ? { datePosted: new Date(source.datePosted) } : {}),
+    ...(source.applicationUrl ? { applicationUrl: source.applicationUrl } : {}),
+    ...(source.structuredLocations
+      ? {
+          structuredLocations: source.structuredLocations.map((location) => ({
+            address: { ...location.address },
+          })),
+        }
+      : {}),
     ...(source.validThrough ? { validThrough: new Date(source.validThrough) } : {}),
   };
   const canonical = canonicalizeObservation(candidate);

@@ -675,6 +675,22 @@ export class PostgresJobCatalog {
               last_verified_at = ${observation.observedAt},
               expires_at = ${observation.expiresAt},
               valid_through = ${observation.validThrough ?? null},
+              date_posted = COALESCE(
+                LEAST(date_posted, ${observation.datePosted ?? null}),
+                date_posted,
+                ${observation.datePosted ?? null}
+              ),
+              application_url = COALESCE(${observation.applicationUrl ?? null}, application_url),
+              structured_locations = COALESCE(
+                ${
+                  observation.structuredLocations
+                    ? transaction.json(
+                        observation.structuredLocations as unknown as postgres.JSONValue,
+                      )
+                    : null
+                }::jsonb,
+                structured_locations
+              ),
               consecutive_verification_failures = 0,
               updated_at = ${observation.observedAt}
           WHERE id = ${existing.id}
@@ -727,7 +743,8 @@ export class PostgresJobCatalog {
             department, normalized_department, work_mode, employment_type,
             description, description_hash,
             dedupe_fingerprint, status, status_reason, first_observed_at, last_verified_at,
-            expires_at, valid_through, consecutive_verification_failures, created_at, updated_at
+            expires_at, valid_through, date_posted, application_url, structured_locations,
+            consecutive_verification_failures, created_at, updated_at
           ) VALUES (
             ${jobId}, ${company.id}, ${observation.title}, ${observation.normalizedTitle},
             ${transaction.json(observation.locations)},
@@ -737,7 +754,14 @@ export class PostgresJobCatalog {
             ${observation.description}, ${observation.contentHash}, ${observation.fuzzyFingerprint},
             'active', 'first_positive_verification', ${observation.observedAt},
             ${observation.observedAt}, ${observation.expiresAt},
-            ${observation.validThrough ?? null}, 0, ${observation.observedAt},
+            ${observation.validThrough ?? null}, ${observation.datePosted ?? null},
+            ${observation.applicationUrl ?? null},
+            ${
+              observation.structuredLocations
+                ? transaction.json(observation.structuredLocations as unknown as postgres.JSONValue)
+                : null
+            }::jsonb,
+            0, ${observation.observedAt},
             ${observation.observedAt}
           )
         `;
@@ -783,6 +807,15 @@ export class PostgresJobCatalog {
               last_observed_at = ${observation.observedAt},
               last_verified_at = ${observation.observedAt},
               valid_through = ${observation.validThrough ?? null},
+              date_posted = ${observation.datePosted ?? null},
+              application_url = ${observation.applicationUrl ?? null},
+              structured_locations = ${
+                observation.structuredLocations
+                  ? transaction.json(
+                      observation.structuredLocations as unknown as postgres.JSONValue,
+                    )
+                  : null
+              }::jsonb,
               updated_at = ${observation.observedAt}
           WHERE id = ${sourceId}
         `;
@@ -792,7 +825,8 @@ export class PostgresJobCatalog {
             id, job_id, provider, provenance, ats_tenant, external_job_id,
             employer_requisition_id, verified_company_domain, source_url, canonical_url,
             canonical_url_hash, content_hash, adapter_version, raw_snapshot, first_observed_at,
-            last_observed_at, last_verified_at, valid_through, created_at, updated_at
+            last_observed_at, last_verified_at, valid_through, date_posted,
+            application_url, structured_locations, created_at, updated_at
           ) VALUES (
             ${sourceId}, ${jobId}, ${observation.provider}, ${observation.provenance},
             ${observation.atsTenant ?? null}, ${observation.externalJobId ?? null},
@@ -803,7 +837,14 @@ export class PostgresJobCatalog {
             ${rawSnapshot ? transaction.json(rawSnapshot) : null}::jsonb,
             ${observation.observedAt},
             ${observation.observedAt}, ${observation.observedAt},
-            ${observation.validThrough ?? null}, ${observation.observedAt},
+            ${observation.validThrough ?? null}, ${observation.datePosted ?? null},
+            ${observation.applicationUrl ?? null},
+            ${
+              observation.structuredLocations
+                ? transaction.json(observation.structuredLocations as unknown as postgres.JSONValue)
+                : null
+            }::jsonb,
+            ${observation.observedAt},
             ${observation.observedAt}
           )
         `;

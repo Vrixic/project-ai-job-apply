@@ -54,15 +54,37 @@ function canonicalJobIdentity(
   return Object.freeze({ sourceUrl: url.toString(), externalJobId: segments[1] as string });
 }
 
-function optionalText(value: unknown, label: string): string | undefined {
+function canonicalApplicationUrl(
+  value: unknown,
+  jobBoardName: string,
+  externalJobId: string,
+): string {
+  const raw = canonicalProviderText(value, "The Ashby application URL", 2_048);
+  const url = new URL(raw);
+  if (
+    url.protocol !== "https:" ||
+    url.hostname !== "jobs.ashbyhq.com" ||
+    url.username ||
+    url.password ||
+    url.port ||
+    url.hash ||
+    url.pathname !== `/${jobBoardName}/${externalJobId}/application`
+  ) {
+    throw new Error("The Ashby application URL does not match the approved posting identity");
+  }
+  url.search = "";
+  return url.toString();
+}
+
+function optionalText(value: unknown, label: string, maxLength = 500): string | undefined {
   if (value === undefined || value === null || value === "") return undefined;
-  return canonicalProviderText(value, label, 500);
+  return canonicalProviderText(value, label, maxLength);
 }
 
 function locations(job: Record<string, unknown>): readonly string[] {
   const result = [canonicalProviderText(job.location, "The Ashby job location", 500)];
   if (job.secondaryLocations !== undefined) {
-    if (!Array.isArray(job.secondaryLocations) || job.secondaryLocations.length > 24) {
+    if (!Array.isArray(job.secondaryLocations) || job.secondaryLocations.length > 19) {
       throw new Error("The Ashby secondary locations are invalid");
     }
     for (const value of job.secondaryLocations) {
@@ -79,6 +101,62 @@ function locations(job: Record<string, unknown>): readonly string[] {
     }
   }
   return [...new Set(result)];
+}
+
+function postalAddress(
+  value: unknown,
+): NonNullable<SourceJobObservation["structuredLocations"]>[number] | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("The Ashby postal address is invalid");
+  }
+  const address = value as Record<string, unknown>;
+  const country = optionalText(address.addressCountry, "The Ashby address country", 100);
+  if (!country) return undefined;
+  const locality = optionalText(address.addressLocality, "The Ashby address locality", 200);
+  const region = optionalText(address.addressRegion, "The Ashby address region", 200);
+  return {
+    address: {
+      addressCountry: country,
+      ...(locality ? { addressLocality: locality } : {}),
+      ...(region ? { addressRegion: region } : {}),
+    },
+  };
+}
+
+function structuredLocations(
+  job: Record<string, unknown>,
+): NonNullable<SourceJobObservation["structuredLocations"]> {
+  const result: NonNullable<SourceJobObservation["structuredLocations"]>[number][] = [];
+  if (job.address !== undefined) {
+    if (!job.address || typeof job.address !== "object" || Array.isArray(job.address)) {
+      throw new Error("The Ashby primary address is invalid");
+    }
+    const primary = postalAddress((job.address as Record<string, unknown>).postalAddress);
+    if (primary) result.push(primary);
+  }
+  if (job.secondaryLocations !== undefined) {
+    for (const value of job.secondaryLocations as unknown[]) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        throw new Error("The Ashby secondary location is invalid");
+      }
+      const secondary = postalAddress((value as Record<string, unknown>).address);
+      if (secondary) result.push(secondary);
+    }
+  }
+  return result;
+}
+
+function publishedAt(value: unknown): Date {
+  const raw = canonicalProviderText(value, "The Ashby publication timestamp", 100);
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(raw)) {
+    throw new Error("The Ashby publication timestamp is invalid");
+  }
+  const parsed = new Date(raw);
+  if (!Number.isFinite(parsed.getTime())) {
+    throw new Error("The Ashby publication timestamp is invalid");
+  }
+  return parsed;
 }
 
 function workMode(value: unknown): NonNullable<SourceJobObservation["workMode"]> {
@@ -112,6 +190,7 @@ function parseJob(
   if (typeof job.isListed !== "boolean") throw new Error("The Ashby listing state is invalid");
   if (!job.isListed) return undefined;
   const identity = canonicalJobIdentity(job.jobUrl, options.jobBoardName);
+  const mappedStructuredLocations = structuredLocations(job);
   const department = optionalText(job.department, "The Ashby department");
   const team = optionalText(job.team, "The Ashby team");
   const mappedDepartment = department ?? team;
@@ -122,6 +201,15 @@ function parseJob(
     locations: locations(job),
     description: canonicalProviderText(job.descriptionPlain, "The Ashby job description", 100_000),
     sourceUrl: identity.sourceUrl,
+    applicationUrl: canonicalApplicationUrl(
+      job.applyUrl,
+      options.jobBoardName,
+      identity.externalJobId,
+    ),
+    datePosted: publishedAt(job.publishedAt),
+    ...(mappedStructuredLocations.length > 0
+      ? { structuredLocations: mappedStructuredLocations }
+      : {}),
     atsTenant: options.jobBoardName,
     externalJobId: identity.externalJobId,
     verifiedCompanyDomain: options.verifiedCompanyDomain,

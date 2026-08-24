@@ -22,6 +22,7 @@ import type {
   JobProvenance,
   JobSourceProvider,
   JobStatus,
+  JobStructuredLocation,
   JobWorkMode,
 } from "../domain/canonical-job.js";
 import type {
@@ -83,6 +84,9 @@ export const canonicalJobs = jobs.table(
     lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }).notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     validThrough: timestamp("valid_through", { withTimezone: true }),
+    datePosted: timestamp("date_posted", { withTimezone: true }),
+    applicationUrl: text("application_url"),
+    structuredLocations: jsonb("structured_locations").$type<JobStructuredLocation[]>(),
     consecutiveVerificationFailures: integer("consecutive_verification_failures")
       .notNull()
       .default(0),
@@ -143,6 +147,9 @@ export const jobSources = jobs.table(
     lastObservedAt: timestamp("last_observed_at", { withTimezone: true }).notNull(),
     lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }).notNull(),
     validThrough: timestamp("valid_through", { withTimezone: true }),
+    datePosted: timestamp("date_posted", { withTimezone: true }),
+    applicationUrl: text("application_url"),
+    structuredLocations: jsonb("structured_locations").$type<JobStructuredLocation[]>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

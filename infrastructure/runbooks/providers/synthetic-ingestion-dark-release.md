@@ -8,7 +8,7 @@ does not itself authorize AWS mutation or source activation.
 ## Invariants
 
 - The reviewed migration composition is exactly 5 owners, 8 owned schemas, 42 regular relations,
-  and 18 migrations. The empty-table `jobs_public` schema is still verified explicitly.
+  and 19 migrations. The empty-table `jobs_public` schema is still verified explicitly.
 - The dark runtime artifact contains the generated-synthetic adapter and bounded public GET
   adapters for Greenhouse, Lever, and Ashby. Dark deployment supplies an empty provider-source
   list, keeps provider activation authority false, and therefore performs no provider request.

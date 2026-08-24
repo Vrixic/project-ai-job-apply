@@ -2212,6 +2212,48 @@
             "type": "string",
             "format": "date-time",
             "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+          },
+          "workMode": {
+            "type": "string",
+            "enum": ["remote", "hybrid", "on_site", "unknown"]
+          },
+          "employmentType": {
+            "type": "string",
+            "enum": ["full_time", "part_time", "contract", "internship", "unknown"]
+          },
+          "datePosted": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+          },
+          "applicationUrl": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 4096,
+            "pattern": "^https://"
+          },
+          "structuredLocations": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": { "$ref": "#/components/schemas/PublicJobStructuredLocation" }
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicJobStructuredLocation": {
+        "type": "object",
+        "required": ["address"],
+        "properties": {
+          "address": {
+            "type": "object",
+            "required": ["addressCountry"],
+            "properties": {
+              "addressCountry": { "type": "string", "minLength": 1, "maxLength": 100 },
+              "addressLocality": { "type": "string", "minLength": 1, "maxLength": 200 },
+              "addressRegion": { "type": "string", "minLength": 1, "maxLength": 200 }
+            },
+            "additionalProperties": false
           }
         },
         "additionalProperties": false

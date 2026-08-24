@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ActiveJobRecord } from "./persistence/catalog.js";
 import {
   PostgresPublicJobDetailReader,
   PublicJobDetailProjector,
   type PublicJobDetailReader,
+  type PublicJobSourceRecord,
   PublicJobDetailUnavailableError,
 } from "./public-detail.js";
 
@@ -11,14 +11,10 @@ const requestedJobId = "018f6f6e-7b2a-7c00-8000-000000000001";
 const canonicalJobId = "018f6f6e-7b2a-7c00-8000-000000000002";
 const now = new Date("2026-08-16T12:00:00.000Z");
 
-function activeJob(overrides: Partial<ActiveJobRecord> = {}): ActiveJobRecord {
+function activeJob(overrides: Partial<PublicJobSourceRecord> = {}): PublicJobSourceRecord {
   return {
     id: requestedJobId,
-    company: {
-      id: "018f6f6e-7b2a-7c00-8000-000000000003",
-      name: "Synthetic Systems",
-      verifiedDomain: "synthetic.example.test",
-    },
+    company: { name: "Synthetic Systems" },
     title: "Platform Engineer",
     locations: ["Remote - US"],
     department: "Engineering",
@@ -28,20 +24,11 @@ function activeJob(overrides: Partial<ActiveJobRecord> = {}): ActiveJobRecord {
     lastVerifiedAt: new Date("2026-08-16T11:00:00.000Z"),
     expiresAt: new Date("2026-09-15T12:00:00.000Z"),
     validThrough: new Date("2026-09-01T12:00:00.000Z"),
-    sources: [
-      {
-        provider: "other",
-        provenance: "authorized_fixture",
-        canonicalUrl: "https://jobs.synthetic.example.test/roles/123",
-        firstObservedAt: new Date("2026-08-10T12:00:00.000Z"),
-        lastVerifiedAt: new Date("2026-08-16T11:00:00.000Z"),
-      },
-    ],
     ...overrides,
   };
 }
 
-function reader(result: ActiveJobRecord | null) {
+function reader(result: PublicJobSourceRecord | null) {
   return {
     getActiveJob: vi.fn<PublicJobDetailReader["getActiveJob"]>().mockResolvedValue(result),
   };
@@ -60,6 +47,11 @@ describe("PostgresPublicJobDetailReader", () => {
     lastVerifiedAt: new Date("2026-08-16T11:00:00.000Z"),
     expiresAt: new Date("2026-09-15T12:00:00.000Z"),
     validThrough: null,
+    workMode: null,
+    employmentType: null,
+    datePosted: null,
+    applicationUrl: null,
+    structuredLocations: null,
   };
 
   it("queries only the isolated public function and maps its singleton projection", async () => {
@@ -167,10 +159,58 @@ describe("PublicJobDetailProjector", () => {
     expect(Object.isFrozen(result.job)).toBe(true);
     expect(Object.isFrozen(result.job.locations)).toBe(true);
 
-    source.locations[0] = "Changed after projection";
+    (source.locations as string[])[0] = "Changed after projection";
     source.firstObservedAt.setUTCFullYear(2030);
     expect(result.job.locations).toEqual(["Remote - US"]);
     expect(result.job.firstObservedAt).toBe("2026-08-10T12:00:00.000Z");
+  });
+
+  it("projects immutable provider truth fields without source identity", async () => {
+    const source = activeJob({
+      workMode: "on_site",
+      employmentType: "full_time",
+      datePosted: new Date("2026-08-01T12:00:00.000Z"),
+      applicationUrl: "https://jobs.ashbyhq.com/reviewed/job/application",
+      structuredLocations: [
+        {
+          address: {
+            addressLocality: "New York",
+            addressRegion: "New York",
+            addressCountry: "USA",
+          },
+        },
+      ],
+    });
+    const result = await new PublicJobDetailProjector(reader(source), () => now).get(
+      requestedJobId,
+    );
+    expect(result).toMatchObject({
+      kind: "available",
+      job: {
+        workMode: "on_site",
+        employmentType: "full_time",
+        datePosted: "2026-08-01T12:00:00.000Z",
+        applicationUrl: "https://jobs.ashbyhq.com/reviewed/job/application",
+        structuredLocations: [
+          {
+            address: {
+              addressLocality: "New York",
+              addressRegion: "New York",
+              addressCountry: "USA",
+            },
+          },
+        ],
+      },
+    });
+    if (result.kind !== "available" || !result.job.structuredLocations) {
+      throw new Error("Expected structured public job truth");
+    }
+    expect(Object.isFrozen(result.job.structuredLocations)).toBe(true);
+    expect(Object.isFrozen(result.job.structuredLocations[0]?.address)).toBe(true);
+    const originalLocation = source.structuredLocations?.[0];
+    if (!originalLocation) throw new Error("Expected mutable source fixture");
+    originalLocation.address.addressCountry = "Changed";
+    expect(result.job.structuredLocations[0]?.address.addressCountry).toBe("USA");
   });
 
   it("separates a reversible alias request from its canonical identity", async () => {
@@ -196,7 +236,7 @@ describe("PublicJobDetailProjector", () => {
     { validThrough: new Date(now), name: "exact source validity expiry" },
     { status: "blocked", name: "non-active lifecycle" },
     { description: "   ", name: "empty description" },
-  ] as Array<{ name: string } & Partial<ActiveJobRecord>>)(
+  ] as Array<{ name: string } & Partial<PublicJobSourceRecord>>)(
     "returns generic absence for an unavailable $name record",
     async ({ name: _name, ...overrides }) => {
       const catalog = reader(activeJob(overrides));
@@ -218,7 +258,7 @@ describe("PublicJobDetailProjector", () => {
   it("counts OpenAPI text bounds as Unicode code points", async () => {
     const astral = "😀";
     const exact = activeJob({
-      company: { id: canonicalJobId, name: astral.repeat(200) },
+      company: { name: astral.repeat(200) },
       title: astral.repeat(240),
       locations: [astral.repeat(240)],
       department: astral.repeat(200),
@@ -229,7 +269,7 @@ describe("PublicJobDetailProjector", () => {
     ).resolves.toMatchObject({ kind: "available" });
 
     for (const record of [
-      activeJob({ company: { id: canonicalJobId, name: astral.repeat(201) } }),
+      activeJob({ company: { name: astral.repeat(201) } }),
       activeJob({ title: astral.repeat(241) }),
       activeJob({ locations: [astral.repeat(241)] }),
       activeJob({ department: astral.repeat(201) }),

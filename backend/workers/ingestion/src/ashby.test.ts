@@ -10,11 +10,22 @@ function job(overrides: Record<string, unknown> = {}) {
   return {
     title: "Platform Engineer",
     location: "Remote",
-    secondaryLocations: [{ location: "New York, NY" }],
+    secondaryLocations: [
+      {
+        location: "New York, NY",
+        address: {
+          addressLocality: "New York",
+          addressRegion: "New York",
+          addressCountry: "USA",
+        },
+      },
+    ],
     department: "Engineering",
     team: "Platform",
     isListed: true,
     workplaceType: "Remote",
+    publishedAt: "2026-08-22T12:00:00.000Z",
+    address: { postalAddress: { addressCountry: "USA" } },
     descriptionPlain: "Build and maintain systems.",
     employmentType: "FullTime",
     jobUrl: "https://jobs.ashbyhq.com/reviewed-board/12345678-abcd-4abc-8abc-1234567890ab",
@@ -52,6 +63,19 @@ describe("AshbyJobBoardAdapter", () => {
           locations: ["Remote", "New York, NY"],
           description: "Build and maintain systems.",
           sourceUrl: "https://jobs.ashbyhq.com/reviewed-board/12345678-abcd-4abc-8abc-1234567890ab",
+          applicationUrl:
+            "https://jobs.ashbyhq.com/reviewed-board/12345678-abcd-4abc-8abc-1234567890ab/application",
+          datePosted: new Date("2026-08-22T12:00:00.000Z"),
+          structuredLocations: [
+            { address: { addressCountry: "USA" } },
+            {
+              address: {
+                addressLocality: "New York",
+                addressRegion: "New York",
+                addressCountry: "USA",
+              },
+            },
+          ],
           atsTenant: "reviewed-board",
           externalJobId: "12345678-abcd-4abc-8abc-1234567890ab",
           verifiedCompanyDomain: "company.example",
@@ -100,5 +124,44 @@ describe("AshbyJobBoardAdapter", () => {
         }),
     );
     await expect(adapter(tooMany).poll(context())).rejects.toThrow("bounded size");
+  });
+
+  it("rejects application, publication, and structured-location fields outside the board contract", async () => {
+    const invalidApplication = vi.fn<typeof globalThis.fetch>(
+      async () =>
+        new Response(
+          JSON.stringify({
+            apiVersion: "1",
+            jobs: [
+              job({ applyUrl: "https://jobs.ashbyhq.com/reviewed-board/foreign/application" }),
+            ],
+          }),
+          { headers: { "content-type": "application/json" } },
+        ),
+    );
+    await expect(adapter(invalidApplication).poll(context())).rejects.toThrow(
+      "approved posting identity",
+    );
+
+    const invalidPublication = vi.fn<typeof globalThis.fetch>(
+      async () =>
+        new Response(JSON.stringify({ apiVersion: "1", jobs: [job({ publishedAt: "recent" })] }), {
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    await expect(adapter(invalidPublication).poll(context())).rejects.toThrow(
+      "publication timestamp",
+    );
+
+    const invalidSecondaryLocation = vi.fn<typeof globalThis.fetch>(
+      async () =>
+        new Response(
+          JSON.stringify({ apiVersion: "1", jobs: [job({ secondaryLocations: [null] })] }),
+          { headers: { "content-type": "application/json" } },
+        ),
+    );
+    await expect(adapter(invalidSecondaryLocation).poll(context())).rejects.toThrow(
+      "secondary location",
+    );
   });
 });

@@ -1,3 +1,4 @@
+// biome-ignore-all lint/security/noDangerouslySetInnerHtml: JobPosting is strict validated data serialized as JSON with HTML-opening characters escaped.
 import type { PublicJobDetailResponse } from "@ai-job-apply/api-contracts";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
@@ -45,6 +46,47 @@ export function buildPublicJobMetadata(
   };
 }
 
+const structuredEmploymentType = {
+  full_time: "FULL_TIME",
+  part_time: "PART_TIME",
+  contract: "CONTRACTOR",
+  internship: "INTERN",
+} as const;
+
+export function buildJobPostingStructuredData(detail: PublicJobDetailResponse) {
+  const { job } = detail;
+  if (
+    !job.datePosted ||
+    !job.applicationUrl ||
+    !job.structuredLocations?.length ||
+    (job.workMode !== "on_site" && job.workMode !== "hybrid")
+  ) {
+    return undefined;
+  }
+  return {
+    "@context": "https://schema.org",
+    "@type": "JobPosting",
+    title: job.title,
+    description: job.description,
+    datePosted: job.datePosted,
+    hiringOrganization: {
+      "@type": "Organization",
+      name: job.companyName,
+    },
+    jobLocation: job.structuredLocations.map((location) => ({
+      "@type": "Place",
+      address: {
+        "@type": "PostalAddress",
+        ...location.address,
+      },
+    })),
+    ...(job.employmentType && job.employmentType !== "unknown"
+      ? { employmentType: structuredEmploymentType[job.employmentType] }
+      : {}),
+    ...(job.validThrough ? { validThrough: job.validThrough } : {}),
+  } as const;
+}
+
 export async function generateMetadata({ params }: PublicJobPageProps): Promise<Metadata> {
   const { jobId } = await params;
   const result = await getPublicJobDetail(jobId);
@@ -62,8 +104,17 @@ export default async function PublicJobPage({ params }: PublicJobPageProps) {
   if (result.detail.isAlias) redirect(canonicalPath(result.detail.canonicalJobId));
 
   const { job } = result.detail;
+  const structuredData = buildJobPostingStructuredData(result.detail);
   return (
     <main className="public-job-page">
+      {structuredData ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(structuredData).replaceAll("<", "\\u003c"),
+          }}
+        />
+      ) : null}
       <article className="public-job-card">
         <header>
           <p className="eyebrow">Current public job detail</p>
@@ -94,6 +145,13 @@ export default async function PublicJobPage({ params }: PublicJobPageProps) {
           This page is a read-only, last-verified snapshot. Confirm current details with the
           employer before applying.
         </p>
+        {job.applicationUrl ? (
+          <p>
+            <a href={job.applicationUrl} rel="external nofollow">
+              Apply on the employer&apos;s site
+            </a>
+          </p>
+        ) : null}
       </article>
     </main>
   );

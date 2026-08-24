@@ -63,10 +63,10 @@ describeWithDatabase("dedicated public job reader boundary", () => {
     const first = await runMigrationVerifier();
     const replay = await runMigrationVerifier();
     expect(first.stdout.trim()).toBe(
-      "Jobs migrations through 0009_provider_ingestion_sources applied and verified.",
+      "Jobs migrations through 0010_public_job_truth_fields applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(
-      "Jobs migrations through 0009_provider_ingestion_sources applied and verified.",
+      "Jobs migrations through 0010_public_job_truth_fields applied and verified.",
     );
 
     await client`
@@ -83,7 +83,8 @@ describeWithDatabase("dedicated public job reader boundary", () => {
           id, company_id, title, normalized_title, locations, normalized_locations,
           department, normalized_department, description, description_hash,
           dedupe_fingerprint, status, status_reason, first_observed_at, last_verified_at,
-          expires_at, valid_through
+          expires_at, valid_through, work_mode, employment_type, date_posted,
+          application_url, structured_locations
         ) VALUES (
           ${id}, ${companyId}, ${title}, ${title.toLowerCase()},
           ${client.json(["Remote, US"])}::jsonb, ${["remote, us"] as string[]},
@@ -91,7 +92,18 @@ describeWithDatabase("dedicated public job reader boundary", () => {
           ${`public-${id}`}, 'active', NULL, '2026-08-14T12:00:00.000Z'::timestamptz,
           '2026-08-15T11:00:00.000Z'::timestamptz,
           '2099-09-15T12:00:00.000Z'::timestamptz,
-          '2099-09-01T12:00:00.000Z'::timestamptz
+          '2099-09-01T12:00:00.000Z'::timestamptz,
+          'on_site', 'full_time', '2026-08-01T12:00:00.000Z'::timestamptz,
+          'https://jobs.ashbyhq.com/reviewed/job/application',
+          ${client.json([
+            {
+              address: {
+                addressLocality: "New York",
+                addressRegion: "New York",
+                addressCountry: "USA",
+              },
+            },
+          ])}::jsonb
         )
       `;
     }
@@ -155,6 +167,8 @@ describeWithDatabase("dedicated public job reader boundary", () => {
     expect(Object.keys(canonical[0] ?? {}).sort()).toEqual(
       [
         "company_name",
+        "application_url",
+        "date_posted",
         "department",
         "description",
         "expires_at",
@@ -162,9 +176,12 @@ describeWithDatabase("dedicated public job reader boundary", () => {
         "id",
         "last_verified_at",
         "locations",
+        "employment_type",
         "status",
+        "structured_locations",
         "title",
         "valid_through",
+        "work_mode",
       ].sort(),
     );
     expect(canonical[0]).toMatchObject({
@@ -173,6 +190,19 @@ describeWithDatabase("dedicated public job reader boundary", () => {
       title: "Canonical <script>alert(1)</script> role",
       locations: ["Remote, US"],
       status: "active",
+      work_mode: "on_site",
+      employment_type: "full_time",
+      date_posted: new Date("2026-08-01T12:00:00.000Z"),
+      application_url: "https://jobs.ashbyhq.com/reviewed/job/application",
+      structured_locations: [
+        {
+          address: {
+            addressLocality: "New York",
+            addressRegion: "New York",
+            addressCountry: "USA",
+          },
+        },
+      ],
     });
     expect(canonical[0]).not.toHaveProperty("verified_domain");
     expect(canonical[0]).not.toHaveProperty("status_reason");
@@ -311,7 +341,7 @@ describeWithDatabase("dedicated public job reader boundary", () => {
   it("clears password drift and rejects unexpected direct role membership", async () => {
     await client.unsafe(`ALTER ROLE ${readerRole} PASSWORD 'synthetic-password-drift'`);
     await expect(runMigrationVerifier()).resolves.toMatchObject({
-      stdout: expect.stringContaining("0009_provider_ingestion_sources applied and verified"),
+      stdout: expect.stringContaining("0010_public_job_truth_fields applied and verified"),
     });
     const [afterPasswordRepair] = await client<{ passwordIsNull: boolean }[]>`
       SELECT rolpassword IS NULL AS "passwordIsNull"
@@ -328,7 +358,7 @@ describeWithDatabase("dedicated public job reader boundary", () => {
       await client.unsafe("DROP ROLE public_job_reader_unexpected_group");
     }
     await expect(runMigrationVerifier()).resolves.toMatchObject({
-      stdout: expect.stringContaining("0009_provider_ingestion_sources applied and verified"),
+      stdout: expect.stringContaining("0010_public_job_truth_fields applied and verified"),
     });
 
     await client.unsafe(`GRANT rds_iam TO ${readerRole} WITH ADMIN TRUE, INHERIT FALSE, SET FALSE`);
@@ -340,7 +370,7 @@ describeWithDatabase("dedicated public job reader boundary", () => {
       );
     }
     await expect(runMigrationVerifier()).resolves.toMatchObject({
-      stdout: expect.stringContaining("0009_provider_ingestion_sources applied and verified"),
+      stdout: expect.stringContaining("0010_public_job_truth_fields applied and verified"),
     });
 
     await client.unsafe("CREATE ROLE public_job_reader_secondary_grantor NOLOGIN");
@@ -366,7 +396,7 @@ describeWithDatabase("dedicated public job reader boundary", () => {
       await client.unsafe("DROP ROLE public_job_reader_secondary_grantor");
     }
     await expect(runMigrationVerifier()).resolves.toMatchObject({
-      stdout: expect.stringContaining("0009_provider_ingestion_sources applied and verified"),
+      stdout: expect.stringContaining("0010_public_job_truth_fields applied and verified"),
     });
   });
 
@@ -389,7 +419,7 @@ describeWithDatabase("dedicated public job reader boundary", () => {
       );
     }
     await expect(runMigrationVerifier()).resolves.toMatchObject({
-      stdout: expect.stringContaining("0009_provider_ingestion_sources applied and verified"),
+      stdout: expect.stringContaining("0010_public_job_truth_fields applied and verified"),
     });
   });
 

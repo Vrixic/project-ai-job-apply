@@ -83,6 +83,10 @@
         {
           "version": "0009_provider_ingestion_sources",
           "checksum": "781b9e7119c09e92bdaef6e2132aa3db9f9fc9d0c0331a44a54ee195db26531f"
+        },
+        {
+          "version": "0010_public_job_truth_fields",
+          "checksum": "6f118c779690205bf278510ad93435be892ed57613476a2bee34dacca86ff569"
         }
       ],
       "relations": [

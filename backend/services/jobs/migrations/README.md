@@ -34,3 +34,6 @@ other service may modify these tables.
 - `0009_provider_ingestion_sources.sql` — Expands the existing durable checkpoint source identifier
   from the generated-synthetic prefix to the source-neutral bounded identifier contract. It changes
   no job values, dispatch shape, transition semantics, retention, or candidate-data boundary.
+- `0010_public_job_truth_fields.sql` — Adds optional provider-original publication time, exact
+  application URL, and country-bearing structured locations to Jobs-owned source/canonical truth,
+  then extends the least-privilege public projection without exposing provenance or source identity.

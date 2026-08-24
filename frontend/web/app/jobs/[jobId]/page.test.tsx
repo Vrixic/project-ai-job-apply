@@ -21,7 +21,11 @@ vi.mock("next/navigation", () => ({
   redirect: mocks.redirect,
 }));
 
-import PublicJobPage, { buildPublicJobMetadata, generateMetadata } from "./page.js";
+import PublicJobPage, {
+  buildJobPostingStructuredData,
+  buildPublicJobMetadata,
+  generateMetadata,
+} from "./page.js";
 
 beforeAll(() => vi.stubGlobal("React", React));
 afterAll(() => vi.unstubAllGlobals());
@@ -69,6 +73,49 @@ describe("public job page", () => {
     expect(markup).toContain("&lt;script&gt;");
     expect(markup).not.toContain("application/ld+json");
     expect(markup).not.toContain("dangerouslySetInnerHTML");
+  });
+
+  it("emits JobPosting only for complete non-remote provider truth", async () => {
+    const canonical: PublicJobDetailResponse = {
+      ...detail,
+      requestedJobId: canonicalId,
+      isAlias: false,
+      job: {
+        ...detail.job,
+        workMode: "on_site",
+        employmentType: "full_time",
+        datePosted: "2026-08-01T12:00:00.000Z",
+        applicationUrl:
+          "https://jobs.ashbyhq.com/reviewed-board/12345678-abcd-4abc-8abc-1234567890ab/application",
+        structuredLocations: [
+          {
+            address: {
+              addressLocality: "New York",
+              addressRegion: "New York",
+              addressCountry: "USA",
+            },
+          },
+        ],
+      },
+    };
+    expect(buildJobPostingStructuredData(canonical)).toMatchObject({
+      "@type": "JobPosting",
+      datePosted: "2026-08-01T12:00:00.000Z",
+      employmentType: "FULL_TIME",
+    });
+    mocks.getPublicJobDetail.mockResolvedValue({ kind: "available", detail: canonical });
+    const markup = renderToStaticMarkup(
+      await PublicJobPage({ params: Promise.resolve({ jobId: canonicalId }) }),
+    );
+    expect(markup).toContain('type="application/ld+json"');
+    expect(markup).toContain("Apply on the employer&#x27;s site");
+    expect(markup).toContain("\\u003cCompany>");
+    expect(
+      buildJobPostingStructuredData({
+        ...canonical,
+        job: { ...canonical.job, workMode: "remote" },
+      }),
+    ).toBeUndefined();
   });
 
   it("uses generic not-found only for typed absence", async () => {

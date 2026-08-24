@@ -53,6 +53,8 @@ function isSemanticallyValid(value: PublicJobDetailResponse, now: Date) {
     value.job.validThrough === undefined
       ? undefined
       : parseCanonicalInstant(value.job.validThrough);
+  const datePosted =
+    value.job.datePosted === undefined ? undefined : parseCanonicalInstant(value.job.datePosted);
   return (
     value.job.id === value.canonicalJobId &&
     value.isAlias === (value.requestedJobId !== value.canonicalJobId) &&
@@ -60,6 +62,7 @@ function isSemanticallyValid(value: PublicJobDetailResponse, now: Date) {
     lastVerifiedAt <= now.getTime() &&
     expiresAt > now.getTime() &&
     expiresAt >= lastVerifiedAt &&
+    (datePosted === undefined || datePosted <= firstObservedAt) &&
     (validThrough === undefined ||
       (validThrough > now.getTime() &&
         validThrough >= firstObservedAt &&

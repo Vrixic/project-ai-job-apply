@@ -18,6 +18,16 @@ export type DuplicateClassification = "exact" | "probable" | "related_repost" | 
 export type JobWorkMode = "remote" | "hybrid" | "on_site" | "unknown";
 export type JobEmploymentType = "full_time" | "part_time" | "contract" | "internship" | "unknown";
 
+export interface JobPostalAddress {
+  addressCountry: string;
+  addressLocality?: string;
+  addressRegion?: string;
+}
+
+export interface JobStructuredLocation {
+  address: JobPostalAddress;
+}
+
 export type DuplicateResolution = Exclude<DuplicateClassification, "probable">;
 
 export interface JobObservation {
@@ -36,6 +46,9 @@ export interface JobObservation {
   department?: string;
   workMode?: JobWorkMode;
   employmentType?: JobEmploymentType;
+  datePosted?: Date;
+  applicationUrl?: string;
+  structuredLocations?: JobStructuredLocation[];
   validThrough?: Date;
   adapterVersion?: string;
 }
@@ -150,6 +163,17 @@ export function canonicalizeJobUrl(value: string): string {
   return url.toString();
 }
 
+function canonicalizeApplicationUrl(value: string): string {
+  const url = new URL(value);
+  if (url.protocol !== "https:") {
+    throw new Error("Application URL must use HTTPS");
+  }
+  if (url.port) {
+    throw new Error("Application URL must use the standard HTTPS origin");
+  }
+  return canonicalizeJobUrl(value);
+}
+
 export function exactIdentityKeys(observation: CanonicalObservation): string[] {
   const keys: string[] = [];
   if (observation.atsTenant && observation.externalJobId) {
@@ -172,6 +196,13 @@ export function canonicalizeObservation(observation: JobObservation): CanonicalO
   }
   if (observation.validThrough && !Number.isFinite(observation.validThrough.getTime())) {
     throw new Error("validThrough must be a valid date");
+  }
+  if (
+    observation.datePosted &&
+    (!Number.isFinite(observation.datePosted.getTime()) ||
+      observation.datePosted.getTime() > observation.observedAt.getTime())
+  ) {
+    throw new Error("datePosted must be a valid provider date no later than observation");
   }
   if (
     observation.companyName.length > 200 ||
@@ -197,6 +228,12 @@ export function canonicalizeObservation(observation: JobObservation): CanonicalO
   if (observation.sourceUrl.length > 4_096) {
     throw new Error("Job source URL exceeds the supported limit");
   }
+  if (
+    observation.structuredLocations &&
+    (observation.structuredLocations.length < 1 || observation.structuredLocations.length > 20)
+  ) {
+    throw new Error("Structured job locations exceed the supported limit");
+  }
   const normalizedCompanyName = normalizeText(observation.companyName);
   const normalizedTitle = normalizeText(observation.title);
   const normalizedLocations = [...new Set(observation.locations.map(normalizeText))].sort();
@@ -215,6 +252,32 @@ export function canonicalizeObservation(observation: JobObservation): CanonicalO
   if (canonicalUrl.length > 4_096) {
     throw new Error("Canonical job source URL exceeds the supported limit");
   }
+  const applicationUrl = observation.applicationUrl
+    ? canonicalizeApplicationUrl(observation.applicationUrl)
+    : undefined;
+  if (applicationUrl && applicationUrl.length > 4_096) {
+    throw new Error("Canonical application URL exceeds the supported limit");
+  }
+  const structuredLocations = observation.structuredLocations?.map((location) => {
+    const addressCountry = location.address.addressCountry.normalize("NFC").trim();
+    const addressLocality = location.address.addressLocality?.normalize("NFC").trim();
+    const addressRegion = location.address.addressRegion?.normalize("NFC").trim();
+    if (
+      !addressCountry ||
+      addressCountry.length > 100 ||
+      (addressLocality !== undefined && (!addressLocality || addressLocality.length > 200)) ||
+      (addressRegion !== undefined && (!addressRegion || addressRegion.length > 200))
+    ) {
+      throw new Error("Structured job location is invalid");
+    }
+    return {
+      address: {
+        addressCountry,
+        ...(addressLocality ? { addressLocality } : {}),
+        ...(addressRegion ? { addressRegion } : {}),
+      },
+    };
+  });
   const normalizedDepartment = observation.department
     ? normalizeText(observation.department)
     : undefined;
@@ -241,6 +304,8 @@ export function canonicalizeObservation(observation: JobObservation): CanonicalO
 
   return {
     ...observation,
+    ...(applicationUrl ? { applicationUrl } : {}),
+    ...(structuredLocations ? { structuredLocations } : {}),
     ...(verifiedCompanyDomain ? { verifiedCompanyDomain } : {}),
     normalizedCompanyName,
     normalizedTitle,

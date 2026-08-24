@@ -55,10 +55,10 @@ describeWithDatabase("PostgresJobCatalog", () => {
     const first = await runMigrationVerifier();
     const replay = await runMigrationVerifier();
     expect(first.stdout.trim()).toBe(
-      "Jobs migrations through 0009_provider_ingestion_sources applied and verified.",
+      "Jobs migrations through 0010_public_job_truth_fields applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(
-      "Jobs migrations through 0009_provider_ingestion_sources applied and verified.",
+      "Jobs migrations through 0010_public_job_truth_fields applied and verified.",
     );
     await catalog.ping();
   });
@@ -237,6 +237,58 @@ describeWithDatabase("PostgresJobCatalog", () => {
     expect(created.outcome).toBe("created");
     expect(replayed.outcome).toBe("exact_match_updated");
     expect(source?.rawSnapshotIsNull).toBe(true);
+  });
+
+  it("persists provider-original public truth on both source and canonical records", async () => {
+    const datePosted = new Date("2026-08-01T12:00:00.000Z");
+    const applicationUrl = `https://jobs.example.test/${runId}/public-truth/application`;
+    const structuredLocations = [
+      {
+        address: {
+          addressLocality: "New York",
+          addressRegion: "New York",
+          addressCountry: "USA",
+        },
+      },
+    ];
+    const created = await catalog.recordObservation(
+      fixture({
+        sourceUrl: `https://jobs.example.test/${runId}/public-truth`,
+        externalJobId: "public-truth",
+        employerRequisitionId: `req-${runId}-public-truth`,
+        datePosted,
+        applicationUrl,
+        structuredLocations,
+      }),
+    );
+    const [row] = await client<
+      Array<{
+        canonicalDatePosted: Date;
+        canonicalApplicationUrl: string;
+        canonicalStructuredLocations: typeof structuredLocations;
+        sourceDatePosted: Date;
+        sourceApplicationUrl: string;
+        sourceStructuredLocations: typeof structuredLocations;
+      }>
+    >`
+      SELECT job.date_posted AS "canonicalDatePosted",
+        job.application_url AS "canonicalApplicationUrl",
+        job.structured_locations AS "canonicalStructuredLocations",
+        source.date_posted AS "sourceDatePosted",
+        source.application_url AS "sourceApplicationUrl",
+        source.structured_locations AS "sourceStructuredLocations"
+      FROM jobs.canonical_jobs AS job
+      INNER JOIN jobs.job_sources AS source ON source.job_id=job.id
+      WHERE job.id=${created.job.id}
+    `;
+    expect(row).toEqual({
+      canonicalDatePosted: datePosted,
+      canonicalApplicationUrl: applicationUrl,
+      canonicalStructuredLocations: structuredLocations,
+      sourceDatePosted: datePosted,
+      sourceApplicationUrl: applicationUrl,
+      sourceStructuredLocations: structuredLocations,
+    });
   });
 
   it("returns only the active redacted read model", async () => {
