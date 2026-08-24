@@ -102,6 +102,35 @@ no Phase 1 completion is claimed. [Persisted source-pause acceptance](evidence/d
 
 ## Current product decisions and requested lists
 
+### Provider activation input list
+
+One exact company/board configuration is enough to begin bounded live-provider acceptance. Send
+the following values; do not include credentials, tokens with private access, candidate data, or a
+caller-selected URL:
+
+1. Common to every provider: provider (`greenhouse`, `lever`, or `ashby`), stable source ID, exact
+   company display name, and verified company domain as a hostname only.
+2. Greenhouse: the public board token from
+   `boards-api.greenhouse.io/v1/boards/{board_token}/jobs`.
+3. Lever: the public site name and region (`global` or `eu`).
+4. Ashby: the public job-board name from
+   `api.ashbyhq.com/posting-api/job-board/{job_board_name}`.
+5. Activation record: accountable operator and acknowledgement of the current bounded cadence
+   (five-minute reconciliation producing at most one hourly occurrence), exact provenance,
+   positive revalidation/removal behavior, and no resume after a pause.
+
+The source configuration must begin with `enabled: false`. The committed default-off preflight uses
+the production parser, refuses unknown/duplicate/oversized/authority-bearing input, makes no network
+request, and returns only provider, source ID, adapter version, and configuration SHA-256:
+
+```powershell
+.\scripts\validate-d1-provider-source-configuration.ps1 -Path .\infrastructure\terraform\environments\development\.terraform\development-provider-input-preflight\provider-source.json
+```
+
+After exact values are supplied, engineering will create that ignored JSON file, run the preflight,
+and prepare the attributable activation record and bounded plan. No source is activated merely by
+validation.
+
 ### Real-candidate boundary
 
 “Real candidate” means an actual person rather than a generated test identity. In D1 that includes

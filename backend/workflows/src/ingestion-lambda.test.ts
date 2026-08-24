@@ -13,6 +13,7 @@ import {
   generatedSyntheticSourceMayRun,
   hourlyIngestionScheduleSlot,
   parseProviderSourceConfigurations,
+  preflightProviderSourceConfigurations,
   publishClaimedIngestionDispatch,
   requireInvokedActivityVersionArn,
   requireScheduledEvent,
@@ -131,6 +132,37 @@ describe("ingestion Lambda transport", () => {
           })),
         ),
         false,
+      ),
+    ).toThrow("IngestionProviderConfigurationRejected");
+  });
+
+  it("preflights only default-off provider configurations with safe activation metadata", () => {
+    const configuration = [
+      {
+        schemaVersion: 1,
+        provider: "lever",
+        sourceId: "lever-reviewed-site",
+        enabled: false,
+        site: "reviewed-site",
+        region: "global",
+        companyName: "Reviewed Company",
+        verifiedCompanyDomain: "reviewed.example",
+      },
+    ];
+    const result = preflightProviderSourceConfigurations(JSON.stringify(configuration));
+    expect(result).toEqual([
+      {
+        provider: "lever",
+        sourceId: "lever-reviewed-site",
+        adapterVersion: "lever-postings-v1",
+        adapterConfigSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      },
+    ]);
+    expect(result[0]).not.toHaveProperty("companyName");
+    expect(result[0]).not.toHaveProperty("verifiedCompanyDomain");
+    expect(() =>
+      preflightProviderSourceConfigurations(
+        JSON.stringify([{ ...configuration[0], enabled: true }]),
       ),
     ).toThrow("IngestionProviderConfigurationRejected");
   });

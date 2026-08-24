@@ -15,9 +15,9 @@ import {
   greenhouseJobBoardAdapterVersion,
   LeverPostingsAdapter,
   leverPostingsAdapterVersion,
-  type SourceRegistration,
   type SourceExecutionGate,
   SourceNeutralIngestionRunner,
+  type SourceRegistration,
   SourceRegistry,
 } from "@ai-job-apply/ingestion-worker";
 import {
@@ -114,6 +114,13 @@ export type ProviderSourceConfiguration =
 
 interface ConfiguredIngestionSource {
   registration: SourceRegistration;
+  adapterConfigSha256: string;
+}
+
+export interface ProviderSourcePreflightDescriptor {
+  provider: ProviderSourceConfiguration["provider"];
+  sourceId: string;
+  adapterVersion: string;
   adapterConfigSha256: string;
 }
 
@@ -280,6 +287,25 @@ export function parseProviderSourceConfigurations(
           adapter,
         }),
         adapterConfigSha256: providerConfigurationDigest(configuration),
+      });
+    }),
+  );
+}
+
+export function preflightProviderSourceConfigurations(
+  value: string,
+): readonly ProviderSourcePreflightDescriptor[] {
+  return Object.freeze(
+    parseProviderSourceConfigurations(value, false).map((source) => {
+      const provider = source.registration.provider;
+      if (provider !== "greenhouse" && provider !== "lever" && provider !== "ashby") {
+        throw new Error("IngestionProviderConfigurationRejected");
+      }
+      return Object.freeze({
+        provider,
+        sourceId: source.registration.sourceId,
+        adapterVersion: source.registration.adapter.adapterVersion,
+        adapterConfigSha256: source.adapterConfigSha256,
       });
     }),
   );
