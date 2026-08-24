@@ -1,10 +1,11 @@
 # D1 Ashby Linear development activation record — 2026-08-24
 
 - Record ID: `D1-ATS-DEV-2026-08-24-01`
-- State: `Accepted for bounded development planning`
+- State: `Accepted for bounded development activation`
 - Governing decision: [ADR-025](../../../adr/025-public-ats-feed-activation-governance.md)
 - Environment: development, repository-bound AWS account, `us-east-2`
 - Exact repository commit at acceptance: `38ec7e97e54d05870aafc43d092ad0c407bdeed3`
+- Exact reviewed planning source: `da313e024773f0e9ea718c6dba507b9a8e812c45`
 - Created and accepted at: `2026-08-24T07:03:49Z`
 - Accountable product/source owner: Vrij, repository owner
 - Authorized operator: Vrij through a temporary development IAM Identity Center administrator
@@ -15,8 +16,7 @@
 The repository owner instructed engineering to use its recommended first provider and proceed,
 after explicitly removing separate Phase 1 legal approval for Greenhouse, Lever, and Ashby. This
 record selects the smallest suitable recommended source: Linear's public Ashby board. It authorizes
-only a bounded development plan for the exact configuration below. It does not authorize an apply
-until the saved plan identity and allowlist are inserted into this record and reviewed.
+only the bounded development activation, inspection, and restoration sequence recorded below.
 
 The source starts disabled. No credential, private token, candidate datum, application action,
 caller-selected URL, or provider response body is stored here. The official public response
@@ -53,8 +53,10 @@ source ID, adapter version, and configuration digest.
 | Current coordinator/starter/activity/terminal aliases | Numeric unweighted version `5` |
 | Current durable version | Numeric version `3` |
 | Baseline Terraform state/plan | Serial `163`; zero-drift SHA-256 `b2dc337487cdeee97390d737591faee2be30adb1a12f455de77c25a7a00d19c6` |
-| Activation plan SHA-256 and allowlist | Pending; apply prohibited |
-| Restoration plan SHA-256 | Pending; apply prohibited |
+| Activation plan SHA-256 | `ad458952929d95a94299671879d1bfdfcd83c1571a7aff61525dcebc6aee01a5` |
+| Activation plan creation | `2026-08-24T07:19:44Z`; refreshed serial `163` baseline |
+| Activation allowlist | Exact ingestion resources and provider-only egress resources listed below |
+| Restoration plan | Must be generated from the post-activation serial before manual invocation; exact inverse/default-off boundary accepted below |
 
 ## Rejected first plan and egress remediation
 
@@ -75,6 +77,33 @@ back before the provider-only network is removed.
 Development and staging Terraform validation, recursive formatting, all platform module tests
 `28/28`, and the development baseline/operator regressions in PowerShell 7 and Windows PowerShell
 5.1 pass. No rejected-plan action was applied and development remains at serial `163`.
+
+## Accepted isolated activation plan
+
+The replacement saved plan has `9 add`, `14 update`, `1 create-before-delete` replacement, and one
+read-only data refresh. Its 24 non-no-op addresses are limited to:
+
+- two provider-only subnets, two provider-only route tables, two associations, one provider NAT,
+  and one EIP;
+- the activity function plus its alias, and the coordinator/starter/terminal functions plus their
+  aliases, whose exact version/configuration references advance together;
+- the ingestion durable stack and its exact IAM policy document/policy;
+- the ingestion schedule, terminal rule, queue mapping, and activation guard; and
+- the ingestion IAM propagation delay, whose only delete is its create-before-delete replacement.
+
+Machine review proves all 86 variables are present; shared
+`private_application_networking=false`; provider-only egress/runtime/provider authority are true;
+synthetic source and public-job route authority are false; and the only source is the exact enabled
+`ashby-linear-v1` configuration above. There are zero shared-private-route changes and zero
+unexpected addresses. The plan changes no gateway/public-job/document/database/ECS/application
+route, artifact identity, candidate data, public route, indexing switch, or non-ingestion runtime.
+
+The post-activation restoration must use the same 86-variable baseline with runtime, provider
+authority, provider-only egress, and every source disabled/empty. Its reviewed plan may only reverse
+the accepted activation addresses, publish the necessary default-off function/durable versions,
+and remove the provider-only network after the activity returns to shared private subnets. It must
+leave shared private route tables unchanged. Generate and checksum that plan immediately after the
+activation apply and before manual workload invocation; if it contains anything else, stop.
 
 ## Bounded operating contract
 
@@ -102,8 +131,8 @@ Development and staging Terraform validation, recursive formatting, all platform
 | Default-off production preflight | true | Exact safe descriptor above |
 | Accountable owner accepted bounded planning | true | This record |
 | Immutable dark artifacts/readback | true | Existing provider-capable dark-release evidence |
-| Saved plan inside reviewed activation allowlist | false | Pending |
-| Plan identity inserted and apply accepted | false | Pending |
+| Saved plan inside reviewed activation allowlist | true | Exact replacement plan above |
+| Plan identity inserted and apply accepted | true | This reviewed record |
 | Provider authority/source/runtime applied | false | Pending |
 | Bounded provider request/provenance | false | Pending |
 | Canonical persistence/deduplication/public truth | false | Pending |
@@ -116,9 +145,10 @@ Development and staging Terraform validation, recursive formatting, all platform
 
 ## Current disposition
 
-- Decision: exact default-off configuration and bounded plan preparation accepted.
-- Apply authority: none until this record contains the reviewed saved-plan SHA-256, plan metadata,
-  expected resource allowlist, and explicit apply acceptance.
+- Decision: exact bounded development activation, inspection, and restoration accepted.
+- Apply authority: only saved plan SHA-256
+  `ad458952929d95a94299671879d1bfdfcd83c1571a7aff61525dcebc6aee01a5`; any refreshed or changed
+  plan requires a new review.
 - Public route/indexing: prohibited by unchanged false gates.
 - Production/candidate/application authority: none.
 - Source after the bounded attempt: default recommendation is disabled until public-route and
