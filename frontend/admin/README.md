@@ -21,6 +21,20 @@ and emergency-control surfaces are not implemented or authorized by this applica
 Admin access is least-privilege and audited. Sensitive values remain redacted. Break-glass access is
 not implemented or authorized by this slice.
 
+## Local managed OIDC configuration
+
+Create a dedicated Auth0 Regular Web Application with callback
+`http://localhost:3001/auth/callback`, delegated `jobs:moderate` access only, and MFA required for
+every assigned synthetic moderator. Do not enable refresh-token grants or reuse candidate-web
+credentials. From the repository root, write the ignored local environment file with:
+
+```powershell
+.\scripts\configure-auth0-admin-local.ps1 -Auth0Domain "YOUR_TENANT.us.auth0.com" -ClientId "YOUR_DEDICATED_MODERATION_CLIENT_ID" -PlatformApiBaseUrl "https://YOUR_API_ID.execute-api.us-east-2.amazonaws.com"
+```
+
+The command prompts securely for the dedicated client secret and does not print it. The complete
+tenant setup and acceptance procedure is in `../../docs/security/auth0-development-runbook.md`.
+
 This slice supports fixed-code aggregate report review, open/resolved case queues, explicit job
 blocking, exact-source pausing, and no-action resolution. Candidate reports never automatically
 change catalog state. Source resume, free-form evidence, automated thresholds, general support,

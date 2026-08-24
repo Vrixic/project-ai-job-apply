@@ -77,18 +77,26 @@ credential boundary; the platform must never collect an Auth0 password.
 
 Create a separate `ApplyDash Moderation Development` Regular Web Application. Use callback
 `http://localhost:3001/auth/callback`, logout/web origin `http://localhost:3001`, authorization
-code plus rotating refresh token, and no wildcard. In the Platform API's per-app authorization,
+code only, no refresh-token grant, and no wildcard. In the Platform API's per-app authorization,
 grant this client user-delegated access to `jobs:moderate` only. Do not grant candidate, document,
 profile, or machine-to-machine scopes. The application requests exactly:
 
 ```text
-openid profile offline_access jobs:moderate
+openid profile jobs:moderate
 ```
 
 Assign only accountable synthetic development moderators protected by MFA. Configure its secrets
-from `frontend/admin/.env.example`; never reuse the candidate web client ID, client secret, or
-session secret. This setup enables local synthetic acceptance only and is not a production admin
-access approval.
+with `scripts/configure-auth0-admin-local.ps1`; the operator refuses candidate web client ID or
+client-secret reuse, generates a distinct session secret, writes only the ignored admin environment
+file, and prints no secret. This setup enables local synthetic acceptance only and is not a
+production admin access approval.
+
+```powershell
+.\scripts\configure-auth0-admin-local.ps1 -Auth0Domain "YOUR_TENANT.us.auth0.com" -ClientId "YOUR_DEDICATED_MODERATION_CLIENT_ID" -PlatformApiBaseUrl "https://YOUR_API_ID.execute-api.us-east-2.amazonaws.com"
+```
+
+Enter the dedicated moderation client secret only at the secure prompt. Do not pass it on the
+command line or copy it into evidence.
 
 ## Local secret configuration
 
