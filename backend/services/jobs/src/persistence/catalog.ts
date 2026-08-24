@@ -1,8 +1,9 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import {
   type CanonicalObservation,
+  canonicalizeJobUrl,
   canonicalizeObservation,
   type DuplicateResolution,
   defaultFreshnessDays,
@@ -19,6 +20,16 @@ import {
 
 export interface CatalogObservation extends JobObservation {
   rawSnapshot?: postgres.JSONValue;
+}
+
+export interface CatalogWithdrawal {
+  provider: JobObservation["provider"];
+  provenance: JobProvenance;
+  sourceUrl: string;
+  atsTenant: string;
+  externalJobId: string;
+  adapterVersion: string;
+  withdrawnAt: Date;
 }
 
 export interface CatalogJobRecord {
@@ -135,6 +146,11 @@ export interface RecordObservationResult {
   probableDuplicateJobIds: string[];
 }
 
+export interface RecordWithdrawalResult {
+  outcome: "not_found" | "stale_ignored" | "source_withdrawn" | "already_withdrawn";
+  canonicalJobWithdrawn: boolean;
+}
+
 export interface DuplicateCandidateRecord {
   jobId: string;
   candidateJobId: string;
@@ -193,9 +209,17 @@ interface ExistingJobRow {
   id: string;
   companyId: string;
   status: JobStatus;
+  statusReason: string;
   firstObservedAt: Date;
   expiresAt: Date;
   consecutiveVerificationFailures: number;
+}
+
+interface WithdrawalSourceRow {
+  id: string;
+  jobId: string;
+  withdrawnAt: Date | null;
+  lastVerifiedAt: Date;
 }
 
 interface CatalogJobRow {
@@ -580,6 +604,29 @@ async function findExactMatches(
   return matches;
 }
 
+async function resolveCanonicalJobIdWithClient(
+  client: postgres.Sql | postgres.TransactionSql,
+  jobId: string,
+): Promise<string> {
+  const [resolved] = await client<{ id: string }[]>`
+    WITH RECURSIVE resolution(id, path) AS (
+      SELECT ${jobId}::uuid, ARRAY[${jobId}::uuid]
+      UNION ALL
+      SELECT duplicate.canonical_job_id, resolution.path || duplicate.canonical_job_id
+      FROM resolution
+      INNER JOIN jobs.duplicate_candidates AS duplicate
+        ON duplicate.resolution = 'exact'
+        AND CASE
+          WHEN duplicate.canonical_job_id = duplicate.job_id THEN duplicate.candidate_job_id
+          ELSE duplicate.job_id
+        END = resolution.id
+      WHERE NOT duplicate.canonical_job_id = ANY(resolution.path)
+    )
+    SELECT id FROM resolution ORDER BY cardinality(path) DESC LIMIT 1
+  `;
+  return resolved?.id ?? jobId;
+}
+
 export class PostgresJobCatalog {
   private readonly acceptedProvenance: ReadonlySet<JobProvenance>;
   private readonly activeCursorKey: JobSearchCursorKey;
@@ -621,7 +668,11 @@ export class PostgresJobCatalog {
       }
 
       const exactMatches = await findExactMatches(transaction, observation);
-      const matchedJobIds = [...new Set(exactMatches.map((match) => match.jobId))];
+      const matchedJobIdSet = new Set<string>();
+      for (const match of exactMatches) {
+        matchedJobIdSet.add(await resolveCanonicalJobIdWithClient(transaction, match.jobId));
+      }
+      const matchedJobIds = [...matchedJobIdSet];
       if (matchedJobIds.length > 1) {
         throw new Error("Conflicting exact job identities require manual resolution");
       }
@@ -634,11 +685,13 @@ export class PostgresJobCatalog {
       let resolvedStatus: JobStatus;
 
       if (matchedJobId) {
+        await transaction`SELECT pg_advisory_xact_lock(hashtext(${`jobs:source-lifecycle:${matchedJobId}`}))`;
         const [existing] = await transaction<ExistingJobRow[]>`
           SELECT
             id,
             company_id AS "companyId",
             status,
+            status_reason AS "statusReason",
             first_observed_at AS "firstObservedAt",
             expires_at AS "expiresAt",
             consecutive_verification_failures AS "consecutiveVerificationFailures"
@@ -649,12 +702,19 @@ export class PostgresJobCatalog {
         if (!existing) {
           throw new Error("Exact source identity points to a missing canonical job");
         }
-        const nextStatus = evaluateLifecycle({
-          currentStatus: existing.status,
-          now: observation.observedAt,
-          expiresAt: observation.expiresAt,
-          positiveVerification: true,
-        });
+        const nextStatus =
+          existing.status === "withdrawn" && existing.statusReason === "positive_source_withdrawal"
+            ? "active"
+            : evaluateLifecycle({
+                currentStatus: existing.status,
+                now: observation.observedAt,
+                expiresAt: observation.expiresAt,
+                positiveVerification: true,
+              });
+        const nextStatusReason =
+          nextStatus === existing.status && ["withdrawn", "blocked"].includes(nextStatus)
+            ? existing.statusReason
+            : "positive_verification";
         await transaction`
           UPDATE jobs.canonical_jobs
           SET title = ${observation.title},
@@ -671,7 +731,7 @@ export class PostgresJobCatalog {
                 THEN NULL ELSE ${observation.contentHash} END,
               dedupe_fingerprint = ${observation.fuzzyFingerprint},
               status = ${nextStatus},
-              status_reason = 'positive_verification',
+              status_reason = ${nextStatusReason},
               last_verified_at = ${observation.observedAt},
               expires_at = ${observation.expiresAt},
               valid_through = ${observation.validThrough ?? null},
@@ -804,6 +864,7 @@ export class PostgresJobCatalog {
               adapter_version = ${observation.adapterVersion ?? null},
               raw_snapshot = CASE WHEN ${resolvedStatus} IN ('withdrawn', 'blocked')
                 THEN NULL ELSE ${rawSnapshot ? transaction.json(rawSnapshot) : null}::jsonb END,
+              withdrawn_at = NULL,
               last_observed_at = ${observation.observedAt},
               last_verified_at = ${observation.observedAt},
               valid_through = ${observation.validThrough ?? null},
@@ -855,6 +916,150 @@ export class PostgresJobCatalog {
         throw new Error("Canonical job disappeared during observation transaction");
       }
       return { outcome, job, probableDuplicateJobIds };
+    });
+  }
+
+  async recordWithdrawal(input: CatalogWithdrawal): Promise<RecordWithdrawalResult> {
+    if (!this.acceptedProvenance.has(input.provenance)) {
+      throw new Error(`Provenance ${input.provenance} is not enabled for this runtime`);
+    }
+    if (
+      !(input.withdrawnAt instanceof Date) ||
+      !Number.isFinite(input.withdrawnAt.getTime()) ||
+      typeof input.sourceUrl !== "string" ||
+      input.sourceUrl.length > 4_096 ||
+      typeof input.atsTenant !== "string" ||
+      !input.atsTenant ||
+      input.atsTenant.length > 200 ||
+      typeof input.externalJobId !== "string" ||
+      !input.externalJobId ||
+      input.externalJobId.length > 200 ||
+      typeof input.adapterVersion !== "string" ||
+      !/^[a-z0-9][a-z0-9._-]{2,99}$/.test(input.adapterVersion)
+    ) {
+      throw new Error("The positive source withdrawal is invalid");
+    }
+    const canonicalUrl = canonicalizeJobUrl(input.sourceUrl);
+    const canonicalUrlHash = createHash("sha256").update(canonicalUrl).digest("hex");
+    const identityKeys = [
+      `ats:${input.provider}:${normalizeText(input.atsTenant)}:${normalizeText(input.externalJobId)}`,
+      `url:${canonicalUrlHash}`,
+    ].sort();
+
+    return this.client.begin(async (transaction) => {
+      for (const identityKey of identityKeys) {
+        await transaction`SELECT pg_advisory_xact_lock(hashtext(${`jobs:${identityKey}`}))`;
+      }
+      const [source] = await transaction<WithdrawalSourceRow[]>`
+        SELECT
+          source.id,
+          source.job_id AS "jobId",
+          source.withdrawn_at AS "withdrawnAt",
+          source.last_verified_at AS "lastVerifiedAt"
+        FROM jobs.job_sources AS source
+        WHERE source.provider = ${input.provider}
+          AND source.provenance = ${input.provenance}
+          AND source.ats_tenant = ${input.atsTenant}
+          AND source.external_job_id = ${input.externalJobId}
+          AND source.canonical_url_hash = ${canonicalUrlHash}
+        FOR UPDATE OF source
+      `;
+      if (!source) {
+        return { outcome: "not_found", canonicalJobWithdrawn: false };
+      }
+      const canonicalJobId = await resolveCanonicalJobIdWithClient(transaction, source.jobId);
+      await transaction`SELECT pg_advisory_xact_lock(hashtext(${`jobs:source-lifecycle:${canonicalJobId}`}))`;
+      const [canonicalJob] = await transaction<Array<{ status: JobStatus; statusReason: string }>>`
+        SELECT status, status_reason AS "statusReason"
+        FROM jobs.canonical_jobs
+        WHERE id = ${canonicalJobId}
+        FOR UPDATE
+      `;
+      if (!canonicalJob) {
+        throw new Error("The positive source withdrawal canonical job is missing");
+      }
+      if (input.withdrawnAt < source.lastVerifiedAt) {
+        return {
+          outcome: "stale_ignored",
+          canonicalJobWithdrawn: canonicalJob.status === "withdrawn",
+        };
+      }
+      if (source.withdrawnAt && source.withdrawnAt.getTime() === input.withdrawnAt.getTime()) {
+        return {
+          outcome: "already_withdrawn",
+          canonicalJobWithdrawn: canonicalJob.status === "withdrawn",
+        };
+      }
+
+      await transaction`
+        UPDATE jobs.job_sources
+        SET withdrawn_at = ${input.withdrawnAt},
+            raw_snapshot = NULL,
+            adapter_version = ${input.adapterVersion},
+            last_observed_at = GREATEST(last_observed_at, ${input.withdrawnAt}),
+            last_verified_at = GREATEST(last_verified_at, ${input.withdrawnAt}),
+            updated_at = GREATEST(updated_at, ${input.withdrawnAt})
+        WHERE id = ${source.id}
+      `;
+      const [{ activeSourceCount } = { activeSourceCount: 0 }] = await transaction<
+        Array<{ activeSourceCount: number }>
+      >`
+        WITH RECURSIVE canonical_members(id) AS (
+          SELECT ${canonicalJobId}::uuid
+          UNION
+          SELECT CASE
+            WHEN duplicate.canonical_job_id = duplicate.job_id THEN duplicate.candidate_job_id
+            ELSE duplicate.job_id
+          END
+          FROM jobs.duplicate_candidates AS duplicate
+          INNER JOIN canonical_members AS member ON duplicate.canonical_job_id = member.id
+          WHERE duplicate.resolution = 'exact'
+        )
+        SELECT count(*)::int AS "activeSourceCount"
+        FROM jobs.job_sources
+        WHERE job_id IN (SELECT id FROM canonical_members) AND withdrawn_at IS NULL
+      `;
+      const canonicalJobWithdrawn = activeSourceCount === 0 && canonicalJob.status !== "blocked";
+      if (canonicalJobWithdrawn && canonicalJob.status !== "withdrawn") {
+        await transaction`
+          UPDATE jobs.canonical_jobs
+          SET status = 'withdrawn',
+              status_reason = 'positive_source_withdrawal',
+              description = NULL,
+              description_hash = NULL,
+              updated_at = GREATEST(updated_at, ${input.withdrawnAt})
+          WHERE id = ${canonicalJobId}
+        `;
+        await transaction`
+          UPDATE jobs.job_sources
+          SET raw_snapshot = NULL,
+              updated_at = GREATEST(updated_at, ${input.withdrawnAt})
+          WHERE job_id IN (
+            WITH RECURSIVE canonical_members(id) AS (
+              SELECT ${canonicalJobId}::uuid
+              UNION
+              SELECT CASE
+                WHEN duplicate.canonical_job_id = duplicate.job_id
+                  THEN duplicate.candidate_job_id
+                ELSE duplicate.job_id
+              END
+              FROM jobs.duplicate_candidates AS duplicate
+              INNER JOIN canonical_members AS member ON duplicate.canonical_job_id = member.id
+              WHERE duplicate.resolution = 'exact'
+            )
+            SELECT id FROM canonical_members
+          )
+        `;
+        await transaction`
+          INSERT INTO jobs.status_events (
+            id, job_id, from_status, to_status, reason, occurred_at
+          ) VALUES (
+            ${uuidv7()}, ${canonicalJobId}, ${canonicalJob.status}, 'withdrawn',
+            'positive_source_withdrawal', ${input.withdrawnAt}
+          )
+        `;
+      }
+      return { outcome: "source_withdrawn", canonicalJobWithdrawn };
     });
   }
 
@@ -1168,6 +1373,7 @@ export class PostgresJobCatalog {
       INNER JOIN jobs.companies AS company ON company.id = job.company_id
       INNER JOIN jobs.job_sources AS source
         ON source.job_id IN (SELECT id FROM canonical_members)
+       AND source.withdrawn_at IS NULL
       WHERE job.id = ${canonicalJobId}
         AND job.status = 'active'
         AND job.expires_at > ${activeAt}
@@ -1458,23 +1664,7 @@ export class PostgresJobCatalog {
   }
 
   async resolveCanonicalJobId(jobId: string): Promise<string> {
-    const [resolved] = await this.client<{ id: string }[]>`
-      WITH RECURSIVE resolution(id, path) AS (
-        SELECT ${jobId}::uuid, ARRAY[${jobId}::uuid]
-        UNION ALL
-        SELECT duplicate.canonical_job_id, resolution.path || duplicate.canonical_job_id
-        FROM resolution
-        INNER JOIN jobs.duplicate_candidates AS duplicate
-          ON duplicate.resolution = 'exact'
-          AND CASE
-            WHEN duplicate.canonical_job_id = duplicate.job_id THEN duplicate.candidate_job_id
-            ELSE duplicate.job_id
-          END = resolution.id
-        WHERE NOT duplicate.canonical_job_id = ANY(resolution.path)
-      )
-      SELECT id FROM resolution ORDER BY cardinality(path) DESC LIMIT 1
-    `;
-    return resolved?.id ?? jobId;
+    return resolveCanonicalJobIdWithClient(this.client, jobId);
   }
 
   private async applyDuplicateResolution(input: {

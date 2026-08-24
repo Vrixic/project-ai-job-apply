@@ -146,6 +146,7 @@ export const jobSources = jobs.table(
     firstObservedAt: timestamp("first_observed_at", { withTimezone: true }).notNull(),
     lastObservedAt: timestamp("last_observed_at", { withTimezone: true }).notNull(),
     lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }).notNull(),
+    withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
     validThrough: timestamp("valid_through", { withTimezone: true }),
     datePosted: timestamp("date_posted", { withTimezone: true }),
     applicationUrl: text("application_url"),
@@ -155,6 +156,7 @@ export const jobSources = jobs.table(
   },
   (table) => [
     index("job_sources_job_id_idx").on(table.jobId),
+    index("job_sources_active_job_idx").on(table.jobId).where(sql`${table.withdrawnAt} IS NULL`),
     uniqueIndex("job_sources_ats_identity_uq")
       .on(table.provider, table.atsTenant, table.externalJobId)
       .where(sql`${table.atsTenant} IS NOT NULL AND ${table.externalJobId} IS NOT NULL`),
@@ -171,6 +173,10 @@ export const jobSources = jobs.table(
     check(
       "job_sources_provenance_ck",
       sql`${table.provenance} IN ('permitted_api', 'authorized_fixture', 'explicit_ugc')`,
+    ),
+    check(
+      "job_sources_withdrawn_at_ck",
+      sql`${table.withdrawnAt} IS NULL OR (${table.withdrawnAt} >= ${table.firstObservedAt} AND ${table.withdrawnAt} <= ${table.lastVerifiedAt})`,
     ),
   ],
 );

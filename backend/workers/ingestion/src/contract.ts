@@ -1,11 +1,13 @@
 import type {
   CatalogObservation,
+  CatalogWithdrawal,
   JobEmploymentType,
   JobProvenance,
-  JobStructuredLocation,
   JobSourceProvider,
+  JobStructuredLocation,
   JobWorkMode,
   RecordObservationResult,
+  RecordWithdrawalResult,
 } from "@ai-job-apply/jobs-service";
 
 export const sourceIdentifierPattern = /^[a-z0-9][a-z0-9-]{2,63}$/;
@@ -30,6 +32,12 @@ export interface SourceJobObservation {
   validThrough?: Date;
 }
 
+export interface SourceJobWithdrawal {
+  sourceUrl: string;
+  atsTenant: string;
+  externalJobId: string;
+}
+
 export interface SourcePollContext {
   observedAt: Date;
   signal: AbortSignal;
@@ -38,7 +46,11 @@ export interface SourcePollContext {
 export type SourceRetryReason = "rate_limited" | "source_unavailable" | "timeout";
 
 export type SourcePollResult =
-  | { kind: "success"; observations: readonly SourceJobObservation[] }
+  | {
+      kind: "success";
+      observations: readonly SourceJobObservation[];
+      withdrawals?: readonly SourceJobWithdrawal[];
+    }
   | { kind: "retry"; reason: SourceRetryReason; retryAfterMs?: number };
 
 export interface IngestionSourceAdapter {
@@ -66,6 +78,7 @@ export type SourceExecutionGate = (identity: Readonly<SourceExecutionIdentity>) 
 
 export interface JobCatalogIngestionPort {
   recordObservation(input: CatalogObservation): Promise<RecordObservationResult>;
+  recordWithdrawal?(input: CatalogWithdrawal): Promise<RecordWithdrawalResult>;
 }
 
 export interface IngestionRunSuccess {

@@ -194,6 +194,7 @@ export class LeverPostingsAdapter implements IngestionSourceAdapter {
           verifiedCompanyDomain: this.#verifiedCompanyDomain,
         }),
       ),
+      withdrawals: [],
     };
   }
 }

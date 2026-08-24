@@ -37,3 +37,6 @@ other service may modify these tables.
 - `0010_public_job_truth_fields.sql` — Adds optional provider-original publication time, exact
   application URL, and country-bearing structured locations to Jobs-owned source/canonical truth,
   then extends the least-privilege public projection without exposing provenance or source identity.
+- `0011_positive_source_withdrawal.sql` — Records explicit provider withdrawal per exact source so
+  a canonical job is removed only after every source is positively withdrawn; empty and failed
+  polls remain non-evidence.

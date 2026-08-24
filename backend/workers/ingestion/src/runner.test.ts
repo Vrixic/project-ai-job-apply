@@ -1,4 +1,8 @@
-import type { CatalogObservation, RecordObservationResult } from "@ai-job-apply/jobs-service";
+import type {
+  CatalogObservation,
+  CatalogWithdrawal,
+  RecordObservationResult,
+} from "@ai-job-apply/jobs-service";
 import { describe, expect, it, vi } from "vitest";
 import type {
   IngestionSourceAdapter,
@@ -80,14 +84,21 @@ function recordResult(outcome: RecordObservationResult["outcome"]): RecordObserv
 function catalog(outcomes: RecordObservationResult["outcome"][] = ["created"]): {
   port: JobCatalogIngestionPort;
   observations: CatalogObservation[];
+  withdrawals: CatalogWithdrawal[];
 } {
   const observations: CatalogObservation[] = [];
+  const withdrawals: CatalogWithdrawal[] = [];
   return {
     observations,
+    withdrawals,
     port: {
       async recordObservation(value) {
         observations.push(value);
         return recordResult(outcomes[observations.length - 1] ?? "exact_match_updated");
+      },
+      async recordWithdrawal(value) {
+        withdrawals.push(value);
+        return { outcome: "source_withdrawn", canonicalJobWithdrawn: true };
       },
     },
   };
@@ -132,6 +143,108 @@ describe("SourceNeutralIngestionRunner", () => {
     expect(target.observations[0]).not.toHaveProperty("rawSnapshot");
     expect(JSON.stringify(result)).not.toContain("Generated Engineer");
     expect(JSON.stringify(result)).not.toContain("jobs.example.test");
+  });
+
+  it("records exact Ashby withdrawals as aggregate-only updates", async () => {
+    const target = catalog();
+    const externalJobId = "12345678-abcd-4abc-8abc-1234567890ab";
+    const sourceAdapter: IngestionSourceAdapter = {
+      sourceId: "ashby-reviewed-board",
+      adapterVersion: "ashby-job-board-v1",
+      poll: async () => ({
+        kind: "success",
+        observations: [],
+        withdrawals: [
+          {
+            sourceUrl: `https://jobs.ashbyhq.com/reviewed-board/${externalJobId}`,
+            atsTenant: "reviewed-board",
+            externalJobId,
+          },
+        ],
+      }),
+    };
+    const sourceRegistry = new SourceRegistry(
+      [
+        {
+          sourceId: "ashby-reviewed-board",
+          provider: "ashby",
+          provenance: "permitted_api",
+          adapter: sourceAdapter,
+          enabled: true,
+        },
+      ],
+      () => true,
+      { providerActivationAllowed: true },
+    );
+    const runner = new SourceNeutralIngestionRunner(sourceRegistry, target.port, {
+      clock: () => observedAt,
+    });
+
+    await expect(
+      runner.run("ashby-reviewed-board", 1, new AbortController().signal),
+    ).resolves.toEqual({
+      sourceId: "ashby-reviewed-board",
+      status: "succeeded",
+      observationCount: 1,
+      createdCount: 0,
+      updatedCount: 1,
+    });
+    expect(target.observations).toEqual([]);
+    expect(target.withdrawals).toEqual([
+      {
+        provider: "ashby",
+        provenance: "permitted_api",
+        sourceUrl: `https://jobs.ashbyhq.com/reviewed-board/${externalJobId}`,
+        atsTenant: "reviewed-board",
+        externalJobId,
+        adapterVersion: "ashby-job-board-v1",
+        withdrawnAt: observedAt,
+      },
+    ]);
+  });
+
+  it("rejects overlapping observation and withdrawal identities before persistence", async () => {
+    const target = catalog();
+    const externalJobId = "12345678-abcd-4abc-8abc-1234567890ab";
+    const sourceUrl = `https://jobs.ashbyhq.com/reviewed-board/${externalJobId}`;
+    const sourceAdapter: IngestionSourceAdapter = {
+      sourceId: "ashby-reviewed-board",
+      adapterVersion: "ashby-job-board-v1",
+      poll: async () => ({
+        kind: "success",
+        observations: [
+          observation({
+            sourceUrl,
+            atsTenant: "reviewed-board",
+            externalJobId,
+            verifiedCompanyDomain: "company.example",
+          }),
+        ],
+        withdrawals: [{ sourceUrl, atsTenant: "reviewed-board", externalJobId }],
+      }),
+    };
+    const sourceRegistry = new SourceRegistry(
+      [
+        {
+          sourceId: "ashby-reviewed-board",
+          provider: "ashby",
+          provenance: "permitted_api",
+          adapter: sourceAdapter,
+          enabled: true,
+        },
+      ],
+      () => true,
+      { providerActivationAllowed: true },
+    );
+    const runner = new SourceNeutralIngestionRunner(sourceRegistry, target.port, {
+      clock: () => observedAt,
+    });
+
+    await expect(
+      runner.run("ashby-reviewed-board", 1, new AbortController().signal),
+    ).rejects.toThrow("duplicate exact identity");
+    expect(target.observations).toEqual([]);
+    expect(target.withdrawals).toEqual([]);
   });
 
   it("does not poll or persist a default-disabled source", async () => {

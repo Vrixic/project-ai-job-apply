@@ -19,6 +19,7 @@ const migrationVersions = [
   "0008_job_reporting_and_moderation",
   "0009_provider_ingestion_sources",
   "0010_public_job_truth_fields",
+  "0011_positive_source_withdrawal",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -114,6 +115,9 @@ try {
         tableCount: number;
         migrationCount: number;
         identityIndexCount: number;
+        sourceWithdrawalColumnCount: number;
+        sourceWithdrawalIndexCount: number;
+        sourceWithdrawalConstraintDefinitions: string[];
         moderationIndexCount: number;
         searchIndexCount: number;
         searchColumnPresent: boolean;
@@ -173,6 +177,51 @@ try {
               'job_sources_canonical_url_hash_uq'
             )
         ) AS "identityIndexCount",
+        (
+          SELECT count(*)::int
+          FROM pg_attribute AS attribute
+          INNER JOIN pg_type AS data_type ON data_type.oid = attribute.atttypid
+          WHERE attribute.attrelid = 'jobs.job_sources'::regclass
+            AND attribute.attname = 'withdrawn_at'
+            AND data_type.typname = 'timestamptz'
+            AND attribute.attnum > 0
+            AND NOT attribute.attisdropped
+            AND NOT attribute.attnotnull
+            AND NOT attribute.atthasdef
+            AND attribute.attgenerated = ''
+            AND attribute.attidentity = ''
+        ) AS "sourceWithdrawalColumnCount",
+        (
+          SELECT count(*)::int
+          FROM pg_index AS index_definition
+          INNER JOIN pg_class AS index_relation
+            ON index_relation.oid = index_definition.indexrelid
+          WHERE index_definition.indrelid = 'jobs.job_sources'::regclass
+            AND index_relation.relname = 'job_sources_active_job_idx'
+            AND index_definition.indisvalid
+            AND index_definition.indisready
+            AND NOT index_definition.indisunique
+            AND pg_get_expr(index_definition.indpred, index_definition.indrelid) =
+              '(withdrawn_at IS NULL)'::text
+            AND (
+              SELECT array_agg(attribute.attname ORDER BY key.ordinality)
+              FROM unnest(index_definition.indkey) WITH ORDINALITY
+                key(attribute_number, ordinality)
+              INNER JOIN pg_attribute AS attribute
+                ON attribute.attrelid = index_definition.indrelid
+               AND attribute.attnum = key.attribute_number
+              WHERE key.ordinality <= index_definition.indnkeyatts
+            ) = ARRAY['job_id']::name[]
+        ) AS "sourceWithdrawalIndexCount",
+        ARRAY(
+          SELECT pg_get_constraintdef(constraint_definition.oid, true)
+          FROM pg_constraint AS constraint_definition
+          WHERE constraint_definition.conrelid = 'jobs.job_sources'::regclass
+            AND constraint_definition.conname = 'job_sources_withdrawn_at_ck'
+            AND constraint_definition.contype = 'c'
+            AND constraint_definition.convalidated
+            AND NOT constraint_definition.connoinherit
+        ) AS "sourceWithdrawalConstraintDefinitions",
         (
           SELECT count(*)::int FROM pg_indexes
           WHERE schemaname = 'jobs'
@@ -609,6 +658,12 @@ try {
       verification?.tableCount !== 14 ||
       verification.migrationCount !== migrationVersions.length ||
       verification.identityIndexCount !== 3 ||
+      verification.sourceWithdrawalColumnCount !== 1 ||
+      verification.sourceWithdrawalIndexCount !== 1 ||
+      JSON.stringify(verification.sourceWithdrawalConstraintDefinitions) !==
+        JSON.stringify([
+          "CHECK (withdrawn_at IS NULL OR withdrawn_at >= first_observed_at AND withdrawn_at <= last_verified_at)",
+        ]) ||
       verification.moderationIndexCount !== 2 ||
       verification.searchIndexCount !== 4 ||
       !verification.searchColumnPresent ||
@@ -650,6 +705,10 @@ try {
           tableCount: verification?.tableCount,
           migrationCount: verification?.migrationCount,
           identityIndexCount: verification?.identityIndexCount,
+          sourceWithdrawalColumnCount: verification?.sourceWithdrawalColumnCount,
+          sourceWithdrawalIndexCount: verification?.sourceWithdrawalIndexCount,
+          sourceWithdrawalConstraintDefinitions:
+            verification?.sourceWithdrawalConstraintDefinitions,
           moderationIndexCount: verification?.moderationIndexCount,
           searchIndexCount: verification?.searchIndexCount,
           searchColumnPresent: verification?.searchColumnPresent,

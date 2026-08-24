@@ -60,6 +60,7 @@ export class GeneratedSyntheticIngestionAdapter implements IngestionSourceAdapte
     return {
       kind: "success",
       observations: buildGeneratedSyntheticObservations(this.seed, observedAt),
+      withdrawals: [],
     };
   }
 }

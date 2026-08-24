@@ -59,6 +59,7 @@ describe("LeverPostingsAdapter", () => {
           workMode: "remote",
         },
       ],
+      withdrawals: [],
     });
     expect(fetch).toHaveBeenCalledWith(
       "https://api.lever.co/v0/postings/reviewed-site?mode=json&skip=0&limit=100",

@@ -1,6 +1,7 @@
 import type {
   IngestionSourceAdapter,
   SourceJobObservation,
+  SourceJobWithdrawal,
   SourcePollContext,
   SourcePollResult,
 } from "./contract.js";
@@ -175,6 +176,10 @@ function employmentType(value: unknown): SourceJobObservation["employmentType"] 
   throw new Error("The Ashby employment type is invalid");
 }
 
+type ParsedAshbyJob =
+  | { kind: "observation"; observation: SourceJobObservation }
+  | { kind: "withdrawal"; withdrawal: SourceJobWithdrawal };
+
 function parseJob(
   value: unknown,
   options: Readonly<{
@@ -182,40 +187,56 @@ function parseJob(
     companyName: string;
     verifiedCompanyDomain: string;
   }>,
-): SourceJobObservation | undefined {
+): ParsedAshbyJob {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("The Ashby job record is invalid");
   }
   const job = value as Record<string, unknown>;
   if (typeof job.isListed !== "boolean") throw new Error("The Ashby listing state is invalid");
-  if (!job.isListed) return undefined;
   const identity = canonicalJobIdentity(job.jobUrl, options.jobBoardName);
+  if (!job.isListed) {
+    return {
+      kind: "withdrawal",
+      withdrawal: {
+        sourceUrl: identity.sourceUrl,
+        atsTenant: options.jobBoardName,
+        externalJobId: identity.externalJobId,
+      },
+    };
+  }
   const mappedStructuredLocations = structuredLocations(job);
   const department = optionalText(job.department, "The Ashby department");
   const team = optionalText(job.team, "The Ashby team");
   const mappedDepartment = department ?? team;
   const mappedEmploymentType = employmentType(job.employmentType);
   return {
-    companyName: options.companyName,
-    title: canonicalProviderText(job.title, "The Ashby job title", 500),
-    locations: locations(job),
-    description: canonicalProviderText(job.descriptionPlain, "The Ashby job description", 100_000),
-    sourceUrl: identity.sourceUrl,
-    applicationUrl: canonicalApplicationUrl(
-      job.applyUrl,
-      options.jobBoardName,
-      identity.externalJobId,
-    ),
-    datePosted: publishedAt(job.publishedAt),
-    ...(mappedStructuredLocations.length > 0
-      ? { structuredLocations: mappedStructuredLocations }
-      : {}),
-    atsTenant: options.jobBoardName,
-    externalJobId: identity.externalJobId,
-    verifiedCompanyDomain: options.verifiedCompanyDomain,
-    ...(mappedDepartment ? { department: mappedDepartment } : {}),
-    workMode: workMode(job.workplaceType),
-    ...(mappedEmploymentType ? { employmentType: mappedEmploymentType } : {}),
+    kind: "observation",
+    observation: {
+      companyName: options.companyName,
+      title: canonicalProviderText(job.title, "The Ashby job title", 500),
+      locations: locations(job),
+      description: canonicalProviderText(
+        job.descriptionPlain,
+        "The Ashby job description",
+        100_000,
+      ),
+      sourceUrl: identity.sourceUrl,
+      applicationUrl: canonicalApplicationUrl(
+        job.applyUrl,
+        options.jobBoardName,
+        identity.externalJobId,
+      ),
+      datePosted: publishedAt(job.publishedAt),
+      ...(mappedStructuredLocations.length > 0
+        ? { structuredLocations: mappedStructuredLocations }
+        : {}),
+      atsTenant: options.jobBoardName,
+      externalJobId: identity.externalJobId,
+      verifiedCompanyDomain: options.verifiedCompanyDomain,
+      ...(mappedDepartment ? { department: mappedDepartment } : {}),
+      workMode: workMode(job.workplaceType),
+      ...(mappedEmploymentType ? { employmentType: mappedEmploymentType } : {}),
+    },
   };
 }
 
@@ -268,15 +289,17 @@ export class AshbyJobBoardAdapter implements IngestionSourceAdapter {
     ) {
       throw new Error("The Ashby job batch exceeds its bounded size or version");
     }
-    const observations = payload.jobs
-      .map((job) =>
-        parseJob(job, {
-          jobBoardName: this.#jobBoardName,
-          companyName: this.#companyName,
-          verifiedCompanyDomain: this.#verifiedCompanyDomain,
-        }),
-      )
-      .filter((job): job is SourceJobObservation => job !== undefined);
-    return { kind: "success", observations };
+    const parsed = payload.jobs.map((job) =>
+      parseJob(job, {
+        jobBoardName: this.#jobBoardName,
+        companyName: this.#companyName,
+        verifiedCompanyDomain: this.#verifiedCompanyDomain,
+      }),
+    );
+    return {
+      kind: "success",
+      observations: parsed.flatMap((job) => (job.kind === "observation" ? [job.observation] : [])),
+      withdrawals: parsed.flatMap((job) => (job.kind === "withdrawal" ? [job.withdrawal] : [])),
+    };
   }
 }

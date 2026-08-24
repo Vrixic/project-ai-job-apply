@@ -96,7 +96,7 @@ if (
   [string]$boundary.ManifestId -cne "d1-profile-jobs-public-documents-matching-billing-v1" -or
   [int]$boundary.OwnerCount -ne 5 -or
   [int]$boundary.RelationCount -ne 42 -or
-  [int]$boundary.MigrationCount -ne 19 -or
+  [int]$boundary.MigrationCount -ne 20 -or
   [string]$boundary.ManifestSha256 -cnotmatch "^[a-f0-9]{64}$"
 ) {
   throw "The current restore manifest boundary is unexpected."

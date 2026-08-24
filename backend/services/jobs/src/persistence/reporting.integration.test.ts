@@ -4,11 +4,11 @@ import { promisify } from "node:util";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  InvalidModerationCursorError,
   JobAlreadyReportedError,
   JobReportIdempotencyConflictError,
   JobReportLimitError,
   JobReportTargetUnavailableError,
-  InvalidModerationCursorError,
 } from "../reporting.js";
 import type { CatalogObservation } from "./catalog.js";
 import { createJobCatalogDatabase, PostgresJobCatalog } from "./catalog.js";
@@ -57,7 +57,7 @@ describeWithDatabase("Jobs reporting and moderation persistence", () => {
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });
     expect(result.stdout.trim()).toBe(
-      "Jobs migrations through 0010_public_job_truth_fields applied and verified.",
+      "Jobs migrations through 0011_positive_source_withdrawal applied and verified.",
     );
     await reports.ping();
   });

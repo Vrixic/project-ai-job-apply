@@ -66,6 +66,11 @@ The public projection exposes those allowlisted fields without source identity o
 web emits `JobPosting` JSON-LD only for complete non-remote provider truth; ambiguous timestamps,
 remote eligibility, and missing addresses remain unclassified and unindexed.
 
+Migration `0011_positive_source_withdrawal` adds source-level positive withdrawal state. Empty or
+failed provider polls never infer removal; a canonical job is withdrawn only when every exact
+source is positively withdrawn, and only that provider-owned withdrawal reason may be reversed by
+a later positive observation.
+
 The D1 search read model uses PostgreSQL full-text search and stable keyset pagination over that
 same active catalog. It supports only honestly persisted title, company, location, and verification
 freshness filters, plus relevance or freshness ordering. Exact duplicate aliases resolve to one

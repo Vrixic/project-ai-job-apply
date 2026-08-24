@@ -1,7 +1,9 @@
 import {
   type CatalogObservation,
+  type CatalogWithdrawal,
+  canonicalizeJobUrl,
   canonicalizeObservation,
-  exactIdentityKeys,
+  normalizeText,
 } from "@ai-job-apply/jobs-service";
 import { type RetryBackoffPolicy, retryDelayForAttempt } from "./backoff.js";
 import type {
@@ -10,6 +12,7 @@ import type {
   SourceExecutionGate,
   SourceExecutionIdentity,
   SourceJobObservation,
+  SourceJobWithdrawal,
   SourcePollResult,
 } from "./contract.js";
 import type { SourceRegistry } from "./registry.js";
@@ -47,6 +50,7 @@ const sourceObservationKeys = new Set([
   "verifiedCompanyDomain",
   "workMode",
 ]);
+const sourceWithdrawalKeys = new Set(["atsTenant", "externalJobId", "sourceUrl"]);
 const retryReasons = new Set(["rate_limited", "source_unavailable", "timeout"]);
 
 function exactKeys(value: object, allowed: ReadonlySet<string>, label: string): void {
@@ -182,7 +186,9 @@ function enforceLeverSourceBoundary(source: SourceJobObservation): void {
   }
 }
 
-function enforceAshbySourceBoundary(source: SourceJobObservation): void {
+function enforceAshbySourceBoundary(
+  source: Pick<SourceJobObservation, "sourceUrl" | "atsTenant" | "externalJobId">,
+): void {
   if (typeof source.sourceUrl !== "string" || source.sourceUrl.length > 2_048) {
     throw new SourceBatchContractError("The Ashby source URL is invalid");
   }
@@ -210,6 +216,43 @@ function enforceAshbySourceBoundary(source: SourceJobObservation): void {
       "The Ashby source URL does not match its board and posting identity",
     );
   }
+}
+
+function catalogWithdrawal(
+  source: SourceJobWithdrawal,
+  registration: ReturnType<SourceRegistry["requireEnabled"]>,
+  withdrawnAt: Date,
+): CatalogWithdrawal {
+  if (!source || typeof source !== "object" || Array.isArray(source)) {
+    throw new SourceBatchContractError("A source withdrawal must be an object");
+  }
+  exactKeys(source, sourceWithdrawalKeys, "The source withdrawal");
+  if (registration.provider !== "ashby" || registration.provenance !== "permitted_api") {
+    throw new SourceBatchContractError("The source withdrawal boundary is not implemented");
+  }
+  enforceAshbySourceBoundary(source);
+  return {
+    provider: registration.provider,
+    provenance: registration.provenance,
+    sourceUrl: canonicalizeJobUrl(source.sourceUrl),
+    atsTenant: source.atsTenant,
+    externalJobId: source.externalJobId,
+    adapterVersion: registration.adapter.adapterVersion,
+    withdrawnAt: new Date(withdrawnAt),
+  };
+}
+
+function identityKeys(
+  provider: ReturnType<SourceRegistry["requireEnabled"]>["provider"],
+  source: Pick<SourceJobObservation, "sourceUrl" | "atsTenant" | "externalJobId">,
+): string[] {
+  const keys = [`url:${canonicalizeJobUrl(source.sourceUrl)}`];
+  if (source.atsTenant && source.externalJobId) {
+    keys.push(
+      `ats:${provider}:${normalizeText(source.atsTenant)}:${normalizeText(source.externalJobId)}`,
+    );
+  }
+  return keys;
 }
 
 function enforceSourceBoundary(
@@ -300,22 +343,25 @@ function validateBatch(
   result: SourcePollResult,
   registration: ReturnType<SourceRegistry["requireEnabled"]>,
   observedAt: Date,
-): CatalogObservation[] {
+): { observations: CatalogObservation[]; withdrawals: CatalogWithdrawal[] } {
   if (!result || typeof result !== "object" || result.kind !== "success") {
     throw new SourceBatchContractError("The source returned an invalid success batch");
   }
-  exactKeys(result, new Set(["kind", "observations"]), "The source success result");
-  if (!Array.isArray(result.observations)) {
+  exactKeys(result, new Set(["kind", "observations", "withdrawals"]), "The source success result");
+  if (
+    !Array.isArray(result.observations) ||
+    (result.withdrawals !== undefined && !Array.isArray(result.withdrawals))
+  ) {
     throw new SourceBatchContractError("The source returned an invalid success batch");
   }
-  if (result.observations.length > maximumSourceBatchSize) {
+  const sourceWithdrawals = result.withdrawals ?? [];
+  if (result.observations.length + sourceWithdrawals.length > maximumSourceBatchSize) {
     throw new SourceBatchContractError("The source batch exceeds its bounded size");
   }
   const identities = new Set<string>();
-  return result.observations.map((source) => {
+  const observations = result.observations.map((source) => {
     const observation = catalogObservation(source, registration, observedAt);
-    const canonical = canonicalizeObservation(observation);
-    for (const identity of exactIdentityKeys(canonical)) {
+    for (const identity of identityKeys(registration.provider, observation)) {
       if (identities.has(identity)) {
         throw new SourceBatchContractError("A source batch contains a duplicate exact identity");
       }
@@ -323,6 +369,17 @@ function validateBatch(
     }
     return observation;
   });
+  const withdrawals = sourceWithdrawals.map((source) => {
+    const withdrawal = catalogWithdrawal(source, registration, observedAt);
+    for (const identity of identityKeys(registration.provider, withdrawal)) {
+      if (identities.has(identity)) {
+        throw new SourceBatchContractError("A source batch contains a duplicate exact identity");
+      }
+      identities.add(identity);
+    }
+    return withdrawal;
+  });
+  return { observations, withdrawals };
 }
 
 export class SourceNeutralIngestionRunner {
@@ -407,10 +464,10 @@ export class SourceNeutralIngestionRunner {
         retryAfterMs: retryDelayForAttempt(attempt, result.retryAfterMs, this.#backoffPolicy),
       };
     }
-    const observations = validateBatch(result, registration, observedAt);
+    const batch = validateBatch(result, registration, observedAt);
     let createdCount = 0;
     let updatedCount = 0;
-    for (const observation of observations) {
+    for (const observation of batch.observations) {
       if (signal.aborted || !(await this.#executionEnabled(identity))) {
         return {
           sourceId,
@@ -439,10 +496,41 @@ export class SourceNeutralIngestionRunner {
         };
       }
     }
+    for (const withdrawal of batch.withdrawals) {
+      if (signal.aborted || !(await this.#executionEnabled(identity))) {
+        return {
+          sourceId,
+          status: "aborted",
+          observationCount: createdCount + updatedCount,
+          createdCount,
+          updatedCount,
+        };
+      }
+      if (this.registry.requireEnabled(sourceId) !== registration) {
+        throw new Error("The ingestion source registration changed during the run");
+      }
+      if (!this.catalog.recordWithdrawal) {
+        throw new Error("The job catalog does not support positive source withdrawal");
+      }
+      await this.catalog.recordWithdrawal(withdrawal);
+      updatedCount += 1;
+      if (this.registry.requireEnabled(sourceId) !== registration) {
+        throw new Error("The ingestion source registration changed during the run");
+      }
+      if (signal.aborted || !(await this.#executionEnabled(identity))) {
+        return {
+          sourceId,
+          status: "aborted",
+          observationCount: createdCount + updatedCount,
+          createdCount,
+          updatedCount,
+        };
+      }
+    }
     return {
       sourceId,
       status: "succeeded",
-      observationCount: observations.length,
+      observationCount: batch.observations.length + batch.withdrawals.length,
       createdCount,
       updatedCount,
     };

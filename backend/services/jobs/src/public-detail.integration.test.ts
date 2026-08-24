@@ -63,10 +63,10 @@ describeWithDatabase("dedicated public job reader boundary", () => {
     const first = await runMigrationVerifier();
     const replay = await runMigrationVerifier();
     expect(first.stdout.trim()).toBe(
-      "Jobs migrations through 0010_public_job_truth_fields applied and verified.",
+      "Jobs migrations through 0011_positive_source_withdrawal applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(
-      "Jobs migrations through 0010_public_job_truth_fields applied and verified.",
+      "Jobs migrations through 0011_positive_source_withdrawal applied and verified.",
     );
 
     await client`
@@ -341,7 +341,7 @@ describeWithDatabase("dedicated public job reader boundary", () => {
   it("clears password drift and rejects unexpected direct role membership", async () => {
     await client.unsafe(`ALTER ROLE ${readerRole} PASSWORD 'synthetic-password-drift'`);
     await expect(runMigrationVerifier()).resolves.toMatchObject({
-      stdout: expect.stringContaining("0010_public_job_truth_fields applied and verified"),
+      stdout: expect.stringContaining("0011_positive_source_withdrawal applied and verified"),
     });
     const [afterPasswordRepair] = await client<{ passwordIsNull: boolean }[]>`
       SELECT rolpassword IS NULL AS "passwordIsNull"
@@ -358,7 +358,7 @@ describeWithDatabase("dedicated public job reader boundary", () => {
       await client.unsafe("DROP ROLE public_job_reader_unexpected_group");
     }
     await expect(runMigrationVerifier()).resolves.toMatchObject({
-      stdout: expect.stringContaining("0010_public_job_truth_fields applied and verified"),
+      stdout: expect.stringContaining("0011_positive_source_withdrawal applied and verified"),
     });
 
     await client.unsafe(`GRANT rds_iam TO ${readerRole} WITH ADMIN TRUE, INHERIT FALSE, SET FALSE`);
@@ -370,7 +370,7 @@ describeWithDatabase("dedicated public job reader boundary", () => {
       );
     }
     await expect(runMigrationVerifier()).resolves.toMatchObject({
-      stdout: expect.stringContaining("0010_public_job_truth_fields applied and verified"),
+      stdout: expect.stringContaining("0011_positive_source_withdrawal applied and verified"),
     });
 
     await client.unsafe("CREATE ROLE public_job_reader_secondary_grantor NOLOGIN");
@@ -396,7 +396,7 @@ describeWithDatabase("dedicated public job reader boundary", () => {
       await client.unsafe("DROP ROLE public_job_reader_secondary_grantor");
     }
     await expect(runMigrationVerifier()).resolves.toMatchObject({
-      stdout: expect.stringContaining("0010_public_job_truth_fields applied and verified"),
+      stdout: expect.stringContaining("0011_positive_source_withdrawal applied and verified"),
     });
   });
 
@@ -419,7 +419,7 @@ describeWithDatabase("dedicated public job reader boundary", () => {
       );
     }
     await expect(runMigrationVerifier()).resolves.toMatchObject({
-      stdout: expect.stringContaining("0010_public_job_truth_fields applied and verified"),
+      stdout: expect.stringContaining("0011_positive_source_withdrawal applied and verified"),
     });
   });
 

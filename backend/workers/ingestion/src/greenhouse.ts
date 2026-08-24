@@ -246,6 +246,7 @@ export class GreenhouseJobBoardAdapter implements IngestionSourceAdapter {
           verifiedCompanyDomain: this.#verifiedCompanyDomain,
         }),
       ),
+      withdrawals: [],
     };
   }
 }

@@ -46,12 +46,23 @@ function adapter(fetch: typeof globalThis.fetch) {
 }
 
 describe("AshbyJobBoardAdapter", () => {
-  it("uses only the fixed public job-board GET and omits unlisted postings", async () => {
+  it("uses only the fixed public job-board GET and emits identity-only unlisted withdrawals", async () => {
+    const withdrawnId = "22345678-abcd-4abc-8abc-1234567890ab";
     const fetch = vi.fn<typeof globalThis.fetch>(
       async () =>
-        new Response(JSON.stringify({ apiVersion: "1", jobs: [job(), job({ isListed: false })] }), {
-          headers: { "content-type": "application/json" },
-        }),
+        new Response(
+          JSON.stringify({
+            apiVersion: "1",
+            jobs: [
+              job(),
+              {
+                isListed: false,
+                jobUrl: `https://jobs.ashbyhq.com/reviewed-board/${withdrawnId}`,
+              },
+            ],
+          }),
+          { headers: { "content-type": "application/json" } },
+        ),
     );
 
     await expect(adapter(fetch).poll(context())).resolves.toEqual({
@@ -82,6 +93,13 @@ describe("AshbyJobBoardAdapter", () => {
           department: "Engineering",
           workMode: "remote",
           employmentType: "full_time",
+        },
+      ],
+      withdrawals: [
+        {
+          sourceUrl: `https://jobs.ashbyhq.com/reviewed-board/${withdrawnId}`,
+          atsTenant: "reviewed-board",
+          externalJobId: withdrawnId,
         },
       ],
     });

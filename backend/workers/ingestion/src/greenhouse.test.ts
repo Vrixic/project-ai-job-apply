@@ -52,6 +52,7 @@ describe("GreenhouseJobBoardAdapter", () => {
           department: "Engineering",
         },
       ],
+      withdrawals: [],
     });
     expect(fetch).toHaveBeenCalledWith(
       "https://boards-api.greenhouse.io/v1/boards/reviewed_board/jobs?content=true",

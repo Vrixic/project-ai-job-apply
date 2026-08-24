@@ -87,6 +87,10 @@
         {
           "version": "0010_public_job_truth_fields",
           "checksum": "6f118c779690205bf278510ad93435be892ed57613476a2bee34dacca86ff569"
+        },
+        {
+          "version": "0011_positive_source_withdrawal",
+          "checksum": "e08967c746fcd2a5a7471f038382c879eb3df7d6d1ee001508a9efaeed402945"
         }
       ],
       "relations": [

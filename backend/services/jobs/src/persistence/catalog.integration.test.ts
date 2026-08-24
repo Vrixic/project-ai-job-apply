@@ -6,7 +6,7 @@ import {
   buildJobSearchAcceptanceFixture,
   executeJobSearchAcceptance,
 } from "../search-acceptance.js";
-import type { CatalogObservation } from "./catalog.js";
+import type { CatalogObservation, CatalogWithdrawal } from "./catalog.js";
 import { createJobCatalogDatabase, PostgresJobCatalog } from "./catalog.js";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -51,14 +51,26 @@ describeWithDatabase("PostgresJobCatalog", () => {
     };
   }
 
+  function withdrawal(source: CatalogObservation, withdrawnAt: Date): CatalogWithdrawal {
+    return {
+      provider: source.provider,
+      provenance: source.provenance,
+      sourceUrl: source.sourceUrl,
+      atsTenant: source.atsTenant as string,
+      externalJobId: source.externalJobId as string,
+      adapterVersion: source.adapterVersion as string,
+      withdrawnAt,
+    };
+  }
+
   beforeAll(async () => {
     const first = await runMigrationVerifier();
     const replay = await runMigrationVerifier();
     expect(first.stdout.trim()).toBe(
-      "Jobs migrations through 0010_public_job_truth_fields applied and verified.",
+      "Jobs migrations through 0011_positive_source_withdrawal applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(
-      "Jobs migrations through 0010_public_job_truth_fields applied and verified.",
+      "Jobs migrations through 0011_positive_source_withdrawal applied and verified.",
     );
     await catalog.ping();
   });
@@ -237,6 +249,130 @@ describeWithDatabase("PostgresJobCatalog", () => {
     expect(created.outcome).toBe("created");
     expect(replayed.outcome).toBe("exact_match_updated");
     expect(source?.rawSnapshotIsNull).toBe(true);
+  });
+
+  it("withdraws a sole positive source idempotently and reactivates only from that reason", async () => {
+    const source = fixture({
+      sourceUrl: `https://jobs.example.test/${runId}/positive-withdrawal-sole`,
+      atsTenant: `positive-withdrawal-sole-${runId}`,
+      externalJobId: "positive-withdrawal-sole",
+      employerRequisitionId: `req-${runId}-positive-withdrawal-sole`,
+    });
+    const created = await catalog.recordObservation(source);
+    const withdrawnAt = new Date(observedAt.getTime() + 1_000);
+    const input = withdrawal(source, withdrawnAt);
+
+    await expect(catalog.recordWithdrawal(input)).resolves.toEqual({
+      outcome: "source_withdrawn",
+      canonicalJobWithdrawn: true,
+    });
+    await expect(catalog.recordWithdrawal(input)).resolves.toEqual({
+      outcome: "already_withdrawn",
+      canonicalJobWithdrawn: true,
+    });
+    expect(await catalog.getById(created.job.id)).toMatchObject({ status: "withdrawn" });
+    expect(await catalog.getById(created.job.id)).not.toHaveProperty("description");
+    const [withdrawnSource] = await client<
+      Array<{ withdrawnAt: Date | null; rawSnapshot: Record<string, unknown> | null }>
+    >`
+      SELECT withdrawn_at AS "withdrawnAt", raw_snapshot AS "rawSnapshot"
+      FROM jobs.job_sources WHERE job_id = ${created.job.id}
+    `;
+    expect(withdrawnSource).toEqual({ withdrawnAt, rawSnapshot: null });
+    const [{ publicCount } = { publicCount: -1 }] = await client<Array<{ publicCount: number }>>`
+      SELECT count(*)::int AS "publicCount"
+      FROM jobs_public.read_public_job_detail(${created.job.id}::uuid)
+    `;
+    expect(publicCount).toBe(0);
+    const [{ eventCount } = { eventCount: -1 }] = await client<Array<{ eventCount: number }>>`
+      SELECT count(*)::int AS "eventCount" FROM jobs.status_events
+      WHERE job_id = ${created.job.id} AND reason = 'positive_source_withdrawal'
+    `;
+    expect(eventCount).toBe(1);
+
+    const relistedAt = new Date(withdrawnAt.getTime() + 1_000);
+    const relisted = await catalog.recordObservation({ ...source, observedAt: relistedAt });
+    expect(relisted.job).toMatchObject({ status: "active", description: source.description });
+    const [relistedSource] = await client<Array<{ withdrawnAt: Date | null }>>`
+      SELECT withdrawn_at AS "withdrawnAt"
+      FROM jobs.job_sources WHERE job_id = ${created.job.id}
+    `;
+    expect(relistedSource?.withdrawnAt).toBeNull();
+    await expect(catalog.recordWithdrawal(input)).resolves.toEqual({
+      outcome: "stale_ignored",
+      canonicalJobWithdrawn: false,
+    });
+    expect(await catalog.getById(created.job.id)).toMatchObject({ status: "active" });
+  });
+
+  it("keeps a canonical job active until every exact source is positively withdrawn", async () => {
+    const firstSource = fixture({
+      sourceUrl: `https://jobs.example.test/${runId}/positive-withdrawal-first`,
+      atsTenant: `positive-withdrawal-first-${runId}`,
+      externalJobId: "positive-withdrawal-first",
+      employerRequisitionId: `req-${runId}-positive-withdrawal-first`,
+    });
+    const secondSource = fixture({
+      sourceUrl: `https://jobs.example.test/${runId}/positive-withdrawal-second`,
+      atsTenant: `positive-withdrawal-second-${runId}`,
+      externalJobId: "positive-withdrawal-second",
+      employerRequisitionId: `req-${runId}-positive-withdrawal-second`,
+    });
+    const created = await catalog.recordObservation(firstSource);
+    const alias = await catalog.recordObservation(secondSource);
+    await catalog.reviewDuplicateCandidate({
+      jobId: created.job.id,
+      candidateJobId: alias.job.id,
+      resolution: "exact",
+      canonicalJobId: created.job.id,
+      reviewedBy: "operator:synthetic-test",
+      reasonCode: "synthetic.positive_withdrawal_cluster",
+      reviewedAt: observedAt,
+    });
+    const withdrawnAt = new Date(observedAt.getTime() + 1_000);
+
+    await expect(catalog.recordWithdrawal(withdrawal(firstSource, withdrawnAt))).resolves.toEqual({
+      outcome: "source_withdrawn",
+      canonicalJobWithdrawn: false,
+    });
+    expect(await catalog.getById(created.job.id)).toMatchObject({ status: "active" });
+    await expect(catalog.recordWithdrawal(withdrawal(secondSource, withdrawnAt))).resolves.toEqual({
+      outcome: "source_withdrawn",
+      canonicalJobWithdrawn: true,
+    });
+    expect(await catalog.getById(created.job.id)).toMatchObject({ status: "withdrawn" });
+
+    const relistedAt = new Date(withdrawnAt.getTime() + 1_000);
+    const relisted = await catalog.recordObservation({ ...secondSource, observedAt: relistedAt });
+    expect(relisted.job).toMatchObject({ id: created.job.id, status: "active" });
+    const active = await catalog.getActiveJob(alias.job.id, relistedAt);
+    expect(active?.sources.map((source) => source.canonicalUrl)).toEqual([secondSource.sourceUrl]);
+  });
+
+  it("does not reactivate a manually withdrawn canonical job", async () => {
+    const source = fixture({
+      sourceUrl: `https://jobs.example.test/${runId}/manual-withdrawal`,
+      atsTenant: `manual-withdrawal-${runId}`,
+      externalJobId: "manual-withdrawal",
+      employerRequisitionId: `req-${runId}-manual-withdrawal`,
+    });
+    const created = await catalog.recordObservation(source);
+    await catalog.setTerminalStatus(
+      created.job.id,
+      "withdrawn",
+      "operator_confirmed_withdrawal",
+      observedAt,
+    );
+    const replay = await catalog.recordObservation({
+      ...source,
+      observedAt: new Date(observedAt.getTime() + 1_000),
+    });
+    expect(replay.job.status).toBe("withdrawn");
+    const [row] = await client<Array<{ statusReason: string }>>`
+      SELECT status_reason AS "statusReason"
+      FROM jobs.canonical_jobs WHERE id = ${created.job.id}
+    `;
+    expect(row?.statusReason).toBe("operator_confirmed_withdrawal");
   });
 
   it("persists provider-original public truth on both source and canonical records", async () => {
