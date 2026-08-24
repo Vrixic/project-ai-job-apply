@@ -797,6 +797,7 @@ function Set-VariablesFromPlan {
     public_job_projection_artifact_base64sha256    = ""
     public_job_route_throttling_rate_limit         = 1
     public_job_route_throttling_burst_limit        = 1
+    ingestion_provider_private_egress              = $false
   }
   $invalidMissing = @($missing | Where-Object { -not $compatibilityDefaults.Contains($_) })
   if ($unexpected.Count -ne 0 -or $invalidMissing.Count -ne 0) {

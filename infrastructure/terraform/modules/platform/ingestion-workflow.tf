@@ -34,6 +34,12 @@ variable "ingestion_provider_activation_allowed" {
   default     = false
 }
 
+variable "ingestion_provider_private_egress" {
+  description = "Create provider-only private subnets and NAT egress for an explicitly authorized ATS source."
+  type        = bool
+  default     = false
+}
+
 variable "ingestion_provider_sources" {
   description = "Reviewed public ATS company/tenant configurations. Every entry remains independently default-off."
   type = list(object({
@@ -124,6 +130,12 @@ locals {
   ingestion_durable_version_arn = var.deploy_ingestion_runtime ? aws_cloudformation_stack.ingestion_durable[0].outputs["DurableVersionArn"] : ""
   ingestion_schedule_rule_arn   = "arn:aws:events:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:rule/${var.name}-${var.environment}-ingestion-schedule"
   ingestion_terminal_rule_arn   = "arn:aws:events:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:rule/${var.name}-${var.environment}-ingestion-terminal"
+  ingestion_provider_cidrs      = [cidrsubnet(var.vpc_cidr, 4, 2), cidrsubnet(var.vpc_cidr, 4, 3)]
+  ingestion_activity_subnet_ids = (
+    var.ingestion_provider_private_egress
+    ? aws_subnet.ingestion_provider[*].id
+    : aws_subnet.private[*].id
+  )
   ingestion_provider_sources_json = jsonencode([
     for source in var.ingestion_provider_sources : merge({
       schemaVersion         = 1
@@ -176,10 +188,10 @@ resource "terraform_data" "ingestion_activation_guard" {
     precondition {
       condition = !var.ingestion_provider_activation_allowed || (
         var.ingestion_runtime_enabled &&
-        var.private_application_networking &&
+        var.ingestion_provider_private_egress &&
         length([for source in var.ingestion_provider_sources : source if source.enabled]) > 0
       )
-      error_message = "Provider activation requires the enabled ingestion runtime, private NAT egress, and at least one exact enabled source."
+      error_message = "Provider activation requires the enabled ingestion runtime, provider-only private NAT egress, and at least one exact enabled source."
     }
     precondition {
       condition = var.ingestion_provider_activation_allowed || alltrue([
@@ -187,7 +199,54 @@ resource "terraform_data" "ingestion_activation_guard" {
       ])
       error_message = "A provider source cannot be enabled without explicit provider activation authority."
     }
+
+    precondition {
+      condition = !var.ingestion_provider_private_egress || (
+        var.ingestion_provider_activation_allowed &&
+        length([for source in var.ingestion_provider_sources : source if source.enabled]) > 0
+      )
+      error_message = "Provider-only NAT egress cannot exist without exact enabled provider authority."
+    }
   }
+}
+
+resource "aws_subnet" "ingestion_provider" {
+  count                   = var.ingestion_provider_private_egress ? length(local.azs) : 0
+  vpc_id                  = aws_vpc.this.id
+  availability_zone       = local.azs[count.index]
+  cidr_block              = local.ingestion_provider_cidrs[count.index]
+  map_public_ip_on_launch = false
+  tags = {
+    Name = "${var.name}-${var.environment}-ingestion-provider-${count.index + 1}"
+  }
+}
+
+resource "aws_eip" "ingestion_provider_nat" {
+  count  = var.ingestion_provider_private_egress ? (var.high_availability ? length(local.azs) : 1) : 0
+  domain = "vpc"
+}
+
+resource "aws_nat_gateway" "ingestion_provider" {
+  count         = var.ingestion_provider_private_egress ? (var.high_availability ? length(local.azs) : 1) : 0
+  allocation_id = aws_eip.ingestion_provider_nat[count.index].id
+  subnet_id     = aws_subnet.public[count.index].id
+  depends_on    = [aws_internet_gateway.this]
+}
+
+resource "aws_route_table" "ingestion_provider" {
+  count  = var.ingestion_provider_private_egress ? length(local.azs) : 0
+  vpc_id = aws_vpc.this.id
+
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.ingestion_provider[var.high_availability ? count.index : 0].id
+  }
+}
+
+resource "aws_route_table_association" "ingestion_provider" {
+  count          = var.ingestion_provider_private_egress ? length(local.azs) : 0
+  subnet_id      = aws_subnet.ingestion_provider[count.index].id
+  route_table_id = aws_route_table.ingestion_provider[count.index].id
 }
 
 data "aws_iam_policy_document" "ingestion_assume" {
@@ -416,7 +475,7 @@ resource "aws_lambda_function" "ingestion_activity" {
     }
   }
   vpc_config {
-    subnet_ids         = aws_subnet.private[*].id
+    subnet_ids         = local.ingestion_activity_subnet_ids
     security_group_ids = [aws_security_group.application.id]
   }
   tracing_config { mode = "Active" }
@@ -861,6 +920,7 @@ output "ingestion_runtime_deployed" { value = var.deploy_ingestion_runtime }
 output "ingestion_runtime_enabled" { value = var.ingestion_runtime_enabled }
 output "ingestion_synthetic_source_enabled" { value = var.ingestion_synthetic_source_enabled }
 output "ingestion_provider_activation_allowed" { value = var.ingestion_provider_activation_allowed }
+output "ingestion_provider_private_egress" { value = var.ingestion_provider_private_egress }
 output "ingestion_provider_source_count" { value = length(var.ingestion_provider_sources) }
 output "ingestion_durable_version_arn" { value = local.ingestion_durable_version_arn }
 output "ingestion_dispatch_queue_arn" { value = var.deploy_ingestion_runtime ? aws_sqs_queue.ingestion_dispatch[0].arn : "" }

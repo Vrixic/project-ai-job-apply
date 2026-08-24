@@ -202,7 +202,8 @@ run "provider_sources_remain_dark_without_activation_authority" {
     condition = (
       !var.ingestion_provider_activation_allowed &&
       jsondecode(aws_lambda_function.ingestion_activity[0].environment[0].variables.INGESTION_PROVIDER_SOURCES)[0].enabled == false &&
-      length(aws_nat_gateway.this) == 0
+      length(aws_nat_gateway.this) == 0 &&
+      length(aws_nat_gateway.ingestion_provider) == 0
     )
     error_message = "Reviewed provider configuration must stay disabled and must not create public egress without activation authority."
   }
@@ -232,8 +233,8 @@ run "authorized_provider_activation_is_exact_bounded_and_egress_capable" {
     deploy_ingestion_runtime              = true
     ingestion_runtime_enabled             = true
     runtime_activation_allowed            = true
-    private_application_networking        = true
     ingestion_provider_activation_allowed = true
+    ingestion_provider_private_egress     = true
     ingestion_provider_sources = [{
       provider                = "ashby"
       source_id               = "ashby-approved-board"
@@ -246,13 +247,25 @@ run "authorized_provider_activation_is_exact_bounded_and_egress_capable" {
 
   assert {
     condition = (
-      length(aws_nat_gateway.this) == 1 &&
+      length(aws_nat_gateway.this) == 0 &&
+      length(aws_nat_gateway.ingestion_provider) == 1 &&
+      length(aws_subnet.ingestion_provider) == 2 &&
+      !var.private_application_networking &&
       aws_cloudwatch_event_rule.ingestion_schedule[0].state == "ENABLED" &&
       jsondecode(aws_lambda_function.ingestion_activity[0].environment[0].variables.INGESTION_PROVIDER_SOURCES)[0].provider == "ashby" &&
       jsondecode(aws_lambda_function.ingestion_activity[0].environment[0].variables.INGESTION_PROVIDER_SOURCES)[0].enabled == true
     )
-    error_message = "An authorized provider must receive only its exact reviewed configuration behind bounded NAT egress and the ordered runtime gate."
+    error_message = "An authorized provider must receive its exact reviewed configuration in provider-activity-only NAT subnets without adding shared-private egress."
   }
+}
+
+run "provider_egress_cannot_exist_without_exact_activation" {
+  command = plan
+  variables {
+    deploy_ingestion_runtime          = true
+    ingestion_provider_private_egress = true
+  }
+  expect_failures = [terraform_data.ingestion_activation_guard]
 }
 
 run "ingestion_runtime_requires_global_activation_authority" {

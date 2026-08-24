@@ -14,6 +14,10 @@ variable "ingestion_provider_activation_allowed" {
   type    = bool
   default = false
 }
+variable "ingestion_provider_private_egress" {
+  type    = bool
+  default = false
+}
 variable "ingestion_provider_sources" {
   type = list(object({
     provider                = string
@@ -79,6 +83,7 @@ output "ingestion_runtime_deployed" { value = module.platform.ingestion_runtime_
 output "ingestion_runtime_enabled" { value = module.platform.ingestion_runtime_enabled }
 output "ingestion_synthetic_source_enabled" { value = module.platform.ingestion_synthetic_source_enabled }
 output "ingestion_provider_activation_allowed" { value = module.platform.ingestion_provider_activation_allowed }
+output "ingestion_provider_private_egress" { value = module.platform.ingestion_provider_private_egress }
 output "ingestion_provider_source_count" { value = module.platform.ingestion_provider_source_count }
 output "ingestion_durable_version_arn" { value = module.platform.ingestion_durable_version_arn }
 output "ingestion_dispatch_queue_arn" { value = module.platform.ingestion_dispatch_queue_arn }

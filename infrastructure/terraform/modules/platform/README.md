@@ -46,10 +46,12 @@ default: `deploy_ingestion_runtime`, `ingestion_runtime_enabled`, and the select
 flags must be advanced deliberately, and the shared `runtime_activation_allowed` lifecycle
 authority must permit trigger activation. Greenhouse, Lever, and Ashby use a bounded structured
 `ingestion_provider_sources` list. Enabling any provider also requires
-`ingestion_provider_activation_allowed=true` and `private_application_networking=true`, which
-provides the private Lambda activity with NAT egress; configuration supplies no arbitrary endpoint
-or credential. Each source is independently default-off and remains subject to its exact persisted
-pause tuple. Its work queue
+`ingestion_provider_activation_allowed=true` and `ingestion_provider_private_egress=true`. The
+latter creates provider-only private subnets and NAT routes and moves only the ingestion runtime
+provider-fetch activity onto them; the coordinator, starter, terminal handler, and shared private
+application subnets retain no default internet route.
+Configuration supplies no arbitrary endpoint or credential. Each source is independently
+default-off and remains subject to its exact persisted pause tuple. Its work queue
 retains identifier-only nudges for four days. Its shared DLQ retains only value-free schedule,
 terminal-metadata, durable-identifier, and nudge-failure envelopes for fourteen days and has no
 automatic consumer or redrive. No

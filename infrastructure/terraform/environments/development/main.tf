@@ -132,6 +132,7 @@ module "platform" {
   ingestion_runtime_enabled                             = var.ingestion_runtime_enabled
   ingestion_synthetic_source_enabled                    = var.ingestion_synthetic_source_enabled
   ingestion_provider_activation_allowed                 = var.ingestion_provider_activation_allowed
+  ingestion_provider_private_egress                     = var.ingestion_provider_private_egress
   ingestion_provider_sources                            = var.ingestion_provider_sources
   ingestion_durable_artifact_s3_key                     = var.ingestion_durable_artifact_s3_key
   ingestion_durable_artifact_s3_object_version          = var.ingestion_durable_artifact_s3_object_version
