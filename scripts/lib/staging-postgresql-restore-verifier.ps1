@@ -73,7 +73,7 @@ function Assert-D1RestoreAwsCallerBoundary {
     [string]$Identity.Arn -cnotmatch `
       "^arn:aws:sts::$ExpectedAccountId`:assumed-role/[A-Za-z0-9+=,.@_-]+/[A-Za-z0-9+=,.@_-]+$"
   ) {
-    throw "Use the exact temporary staging IAM Identity Center account session."
+    throw "Use the exact temporary environment IAM Identity Center account session."
   }
 }
 
@@ -529,5 +529,5 @@ function Read-D1RestoreContextFile {
       continue
     }
   }
-  throw "No valid staging restore context or recovery copy is available."
+  throw "No valid environment restore context or recovery copy is available."
 }

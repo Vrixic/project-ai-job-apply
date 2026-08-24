@@ -17,7 +17,7 @@ claim, or authorization to restore real candidate data into a shared environment
   automated backups with a latest restorable point.
 - Require stable gateway and worker services, healthy endpoints, managed alarms in `OK`, and a
   refresh-backed no-drift plan before the exercise.
-- Use a unique target identifier and explicit `Purpose=phase0-isolated-restore`,
+- Use a unique target identifier and explicit `Purpose=d1-current-isolated-restore`,
   `ManagedBy=restore-drill`, and start-time tags.
 - Never update the managed database secret, application task definitions, ECS services, DNS,
   Terraform state, or the source database.
@@ -27,14 +27,48 @@ claim, or authorization to restore real candidate data into a shared environment
 Stop if the exact account, region, source, target, backup, network, encryption, or caller identity
 is ambiguous.
 
+## Guarded operator
+
+From the repository root, bind the exact development account, encrypted Terraform state bucket,
+and an already applied current-runtime plan below the ignored development `.terraform` directory:
+
+```powershell
+$restoreBoundary = @{
+  ExpectedAccountId = 'DEVELOPMENT_ACCOUNT_ID'
+  StateBucket = 'DEVELOPMENT_TERRAFORM_STATE_BUCKET'
+  RuntimePlanPath = '.terraform\APPLIED_CURRENT_RUNTIME.tfplan'
+}
+
+.\scripts\operate-development-postgresql-restore.ps1 -Action Status @restoreBoundary
+```
+
+`Status` is read-only. It requires the exact development account, source database, immutable
+digest-pinned verifier image, healthy serverless runtime, current alarms, zero disposable targets,
+and refresh-backed zero drift. It creates no database, task, context, or backup.
+
+After separate approval of the exact output, execute the resumable sequence with one action at a
+time:
+
+```powershell
+.\scripts\operate-development-postgresql-restore.ps1 -Action Start -Execute @restoreBoundary
+.\scripts\operate-development-postgresql-restore.ps1 -Action Verify -Execute @restoreBoundary
+.\scripts\operate-development-postgresql-restore.ps1 -Action Cleanup -Execute @restoreBoundary
+```
+
+`Exercise -Execute` performs those actions in sequence, but the explicit sequence is preferred for
+reviewed Phase 1 evidence. `Cleanup -AllowUnverifiedCleanup -Execute` is emergency recovery only for
+the exact authenticated disposable target; it never weakens account, tag, source, network, or
+target-identity guards.
+
 ## Establish the source baseline
 
 1. Resolve the existing immutable database-migration task definition, application subnets, and
    application security group from encrypted Terraform state.
 2. Require the task image to be digest-pinned, scanned, and compatible with `linux/amd64`.
 3. Run a read-only one-off Fargate verifier against the source connection secret. It must:
-   - find the eight expected foundation tables;
-   - find exactly one `0001_foundation` migration journal entry;
+   - find the exact five-owner/eight-schema/42-relation D1 manifest;
+   - find all twenty expected migration journal entries through Jobs
+     `0011_positive_source_withdrawal`;
    - query only aggregate row counts; and
    - emit one aggregate result for in-memory hashing.
 4. Retain only the table/journal pass state and aggregate digest comparison value in operator
@@ -70,8 +104,8 @@ After the target becomes available:
 2. Run the same immutable one-off verifier. Keep the Terraform-managed source `DATABASE_URL` in
    Secrets Manager; pass only the non-secret restored hostname as `RESTORE_HOST`, and replace the
    hostname in memory inside the task.
-3. Require all eight expected tables, one migration journal entry, and an exact aggregate digest
-   match with the source baseline.
+3. Require the exact five-owner/eight-schema/42-relation/twenty-migration manifest and an exact
+   aggregate digest match with the source baseline.
 4. Measure functional recovery through the successful verifier exit.
 5. Inspect only the two verifier streams in memory. Require zero credential/candidate-field,
    email, and JWT pattern matches, and retain only aggregate event/match counts.
@@ -94,7 +128,7 @@ returns not found, and require no manual snapshot or automated-backup artifact f
 Finally require:
 
 - the source RDS instance remains available with its backup retention and latest restorable point;
-- gateway and worker remain stable at the lean one-task baseline;
+- gateway and durable Lambda triggers remain stable while ECS has no application service or task;
 - live/readiness return `200` and an unauthenticated protected request returns `401`;
 - managed alarms report `OK`; and
 - a refresh-backed Terraform plan reconstructed from the exact live inputs reports no drift.

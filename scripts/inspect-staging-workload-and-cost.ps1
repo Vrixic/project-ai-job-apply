@@ -74,7 +74,31 @@ $allowedVariableNames = @(
   "profile_readiness_activity_artifact_base64sha256",
   "profile_readiness_lambda_extension_layer_arn",
   "profile_readiness_execution_timeout_seconds", "profile_readiness_retention_days",
-  "serverless_runtime_enabled"
+  "serverless_runtime_enabled", "deploy_document_intake",
+  "candidate_document_cors_allowed_origins", "document_processing_deployment_stage",
+  "document_scan_mapping_enabled", "document_scan_event_rule_enabled",
+  "document_security_health_rules_enabled", "document_parser_artifact_s3_key",
+  "document_parser_artifact_s3_object_version", "document_parser_artifact_sha256",
+  "document_parser_artifact_base64sha256", "document_parser_version",
+  "document_parser_invocation_qualified_arn", "document_processor_artifact_s3_key",
+  "document_processor_artifact_s3_object_version", "document_processor_artifact_sha256",
+  "document_processor_artifact_base64sha256", "document_processor_extension_layer_arn",
+  "deploy_ingestion_runtime", "ingestion_runtime_enabled",
+  "ingestion_synthetic_source_enabled", "ingestion_synthetic_seed",
+  "ingestion_provider_activation_allowed", "ingestion_provider_private_egress",
+  "ingestion_provider_sources", "ingestion_execution_timeout_seconds",
+  "ingestion_retention_days", "ingestion_lambda_extension_layer_arn",
+  "ingestion_durable_artifact_s3_key", "ingestion_durable_artifact_s3_object_version",
+  "ingestion_durable_artifact_sha256", "ingestion_durable_artifact_base64sha256",
+  "ingestion_runtime_artifact_s3_key", "ingestion_runtime_artifact_s3_object_version",
+  "ingestion_runtime_artifact_sha256", "ingestion_runtime_artifact_base64sha256",
+  "deploy_public_job_reader", "public_job_database_boundary_version",
+  "public_job_cluster_residual_accepted", "public_job_route_activation_allowed",
+  "public_job_route_throttling_rate_limit", "public_job_route_throttling_burst_limit",
+  "public_job_projection_artifact_s3_key", "public_job_projection_artifact_s3_object_version",
+  "public_job_projection_artifact_sha256", "public_job_projection_artifact_base64sha256",
+  "public_job_lambda_artifact_s3_key", "public_job_lambda_artifact_s3_object_version",
+  "public_job_lambda_artifact_sha256", "public_job_lambda_artifact_base64sha256"
 )
 $applicationLogGroup = "/ai-job-apply/$Environment/application"
 
@@ -164,7 +188,7 @@ function Get-RuntimeStatus {
       $value = $property.Value.value
       $serialized = if ($value -is [bool]) { $value.ToString().ToLowerInvariant() }
         elseif ($value -is [string]) { $value }
-        else { $value | ConvertTo-Json -Compress -Depth 20 }
+        else { ConvertTo-Json -InputObject $value -Compress -Depth 20 }
       [Environment]::SetEnvironmentVariable($environmentName, [string]$serialized, "Process")
       $names.Add($environmentName)
     }

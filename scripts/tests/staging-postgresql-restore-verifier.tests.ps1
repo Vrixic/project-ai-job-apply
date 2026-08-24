@@ -4,6 +4,9 @@ Set-StrictMode -Version Latest
 $repositoryRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $helperPath = Join-Path $repositoryRoot "scripts\lib\staging-postgresql-restore-verifier.ps1"
 $operatorPath = Join-Path $repositoryRoot "scripts\operate-staging-postgresql-restore.ps1"
+$developmentOperatorPath = Join-Path $repositoryRoot `
+  "scripts\operate-development-postgresql-restore.ps1"
+$inspectorPath = Join-Path $repositoryRoot "scripts\inspect-staging-workload-and-cost.ps1"
 $packagePath = Join-Path $repositoryRoot "package.json"
 . $helperPath
 $helperSource = Get-Content -LiteralPath $helperPath -Raw
@@ -90,6 +93,16 @@ if (@($errors).Count -ne 0) { throw "The restore verifier helper did not parse."
 $errors = $null
 [void][Management.Automation.Language.Parser]::ParseFile($operatorPath, [ref]$null, [ref]$errors)
 if (@($errors).Count -ne 0) { throw "The staging restore operator did not parse." }
+$errors = $null
+[void][Management.Automation.Language.Parser]::ParseFile(
+  $developmentOperatorPath,
+  [ref]$null,
+  [ref]$errors
+)
+if (@($errors).Count -ne 0) { throw "The development restore wrapper did not parse." }
+$errors = $null
+[void][Management.Automation.Language.Parser]::ParseFile($inspectorPath, [ref]$null, [ref]$errors)
+if (@($errors).Count -ne 0) { throw "The shared workload inspector did not parse." }
 
 $boundary = Get-D1RestoreManifestBoundary $repositoryRoot
 if (
@@ -241,6 +254,41 @@ finally {
 }
 
 $operator = Get-Content -LiteralPath $operatorPath -Raw
+$developmentOperator = Get-Content -LiteralPath $developmentOperatorPath -Raw
+$inspector = Get-Content -LiteralPath $inspectorPath -Raw
+foreach ($required in @(
+  '"candidate_document_cors_allowed_origins"',
+  '"ingestion_provider_sources"',
+  '"public_job_route_activation_allowed"',
+  'ConvertTo-Json -InputObject $value -Compress -Depth 20'
+)) {
+  if (-not $inspector.Contains($required)) {
+    throw "The current D1 workload inspector is missing '$required'."
+  }
+}
+foreach ($required in @(
+  'Environment            = "development"',
+  'operate-staging-postgresql-restore.ps1',
+  'Execute                = $Execute',
+  'AllowUnverifiedCleanup = $AllowUnverifiedCleanup'
+)) {
+  if (-not $developmentOperator.Contains($required)) {
+    throw "The development operator is missing the required '$required' boundary."
+  }
+}
+foreach ($required in @(
+  '[ValidateSet("development", "staging")]',
+  '$sourceIdentifier = "ai-job-apply-$Environment"',
+  '$tags["Environment"] -cne $Environment',
+  '$runtimeInspector -Environment $Environment',
+  '"d1-current-$Environment-restore-$Mode"',
+  '"ai-job-apply-development-document-parser-errors"',
+  '$severity.PSObject.Properties["CRITICAL"]'
+)) {
+  if (-not $operator.Contains($required)) {
+    throw "The environment-neutral restore operator is missing '$required'."
+  }
+}
 foreach ($required in @(
   '$runtime "source" ([string]$source.Endpoint.Address)',
   '$runtime "target" ([string]$target.Endpoint.Address)',
@@ -365,6 +413,7 @@ function New-BehaviorDatabase {
   }
 }
 
+$script:Environment = "staging"
 $script:sourceIdentifier = "ai-job-apply-staging"
 $script:targetPrefix = "ai-job-apply-staging-restore-"
 $script:restoreManifestBoundary = $boundary

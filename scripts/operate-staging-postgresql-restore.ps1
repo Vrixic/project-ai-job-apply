@@ -2,7 +2,9 @@
 param(
   [ValidateSet("Status", "Start", "Verify", "Cleanup", "Exercise")]
   [string]$Action = "Status",
-  [string]$AwsProfile = "ai-job-apply-staging-admin",
+  [ValidateSet("development", "staging")]
+  [string]$Environment = "staging",
+  [string]$AwsProfile = "",
   [string]$Region = "us-east-2",
   [ValidatePattern("^[0-9]{12}$")]
   [string]$ExpectedAccountId = "",
@@ -16,20 +18,24 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+if ([string]::IsNullOrWhiteSpace($AwsProfile)) {
+  $AwsProfile = "ai-job-apply-$Environment-admin"
+}
+
 if ($Help) {
   @"
 Usage:
   `$runtimeBoundary = @{
-    ExpectedAccountId = "STAGING_ACCOUNT_ID"
-    StateBucket = "STAGING_TERRAFORM_STATE_BUCKET"
+    ExpectedAccountId = "ENVIRONMENT_ACCOUNT_ID"
+    StateBucket = "ENVIRONMENT_TERRAFORM_STATE_BUCKET"
     RuntimePlanPath = ".terraform/APPLIED_STEADY_STATE_PLAN.tfplan"
   }
-  .\scripts\operate-staging-postgresql-restore.ps1 -Action Status @runtimeBoundary
-  .\scripts\operate-staging-postgresql-restore.ps1 -Action Start -Execute @runtimeBoundary
-  .\scripts\operate-staging-postgresql-restore.ps1 -Action Verify -Execute @runtimeBoundary
-  .\scripts\operate-staging-postgresql-restore.ps1 -Action Cleanup -Execute @runtimeBoundary
-  .\scripts\operate-staging-postgresql-restore.ps1 -Action Exercise -Execute @runtimeBoundary
-  .\scripts\operate-staging-postgresql-restore.ps1 -Action Cleanup `
+  .\scripts\operate-$Environment-postgresql-restore.ps1 -Action Status @runtimeBoundary
+  .\scripts\operate-$Environment-postgresql-restore.ps1 -Action Start -Execute @runtimeBoundary
+  .\scripts\operate-$Environment-postgresql-restore.ps1 -Action Verify -Execute @runtimeBoundary
+  .\scripts\operate-$Environment-postgresql-restore.ps1 -Action Cleanup -Execute @runtimeBoundary
+  .\scripts\operate-$Environment-postgresql-restore.ps1 -Action Exercise -Execute @runtimeBoundary
+  .\scripts\operate-$Environment-postgresql-restore.ps1 -Action Cleanup `
     -AllowUnverifiedCleanup -Execute @runtimeBoundary
 
 Status is read-only. Start runs the immutable read-only source verifier, requests one uniquely
@@ -37,11 +43,11 @@ tagged latest-point-in-time restore, and waits for it to become available. Verif
 read-only verifier against the isolated copy and requires an exact aggregate digest match.
 Cleanup deletes only the verified, uniquely tagged disposable target and its automated backups,
 then proves source/application health and Terraform no drift. Exercise runs Start, Verify, and
-Cleanup in sequence. State is retained in the ignored staging Terraform data directory so an
+Cleanup in sequence. State is retained in the ignored $Environment Terraform data directory so an
 interrupted exercise can resume safely.
 
-Every action requires the exact staging ExpectedAccountId, StateBucket, and an already applied
-RuntimePlanPath below the ignored staging `.terraform` directory for steady-state/no-drift proof.
+Every action requires the exact $Environment ExpectedAccountId, StateBucket, and an already applied
+RuntimePlanPath below the ignored $Environment `.terraform` directory for steady-state/no-drift proof.
 All state-changing actions require -Execute. AllowUnverifiedCleanup is an emergency cleanup gate
 for an exact failed disposable target; it never weakens target identity, tag, network, or source
 guards.
@@ -50,15 +56,15 @@ guards.
 }
 
 if ($Region -ne "us-east-2") {
-  throw "The D1 current-restore staging environment is restricted to us-east-2."
+  throw "The D1 current-restore $Environment environment is restricted to us-east-2."
 }
 
-$environmentDirectory = (Resolve-Path "infrastructure/terraform/environments/staging").Path
+$environmentDirectory = (Resolve-Path "infrastructure/terraform/environments/$Environment").Path
 $terraformDataDirectory = Join-Path $environmentDirectory ".terraform"
-$contextPath = Join-Path $terraformDataDirectory "applydash-staging-restore-context.json"
-$sourceIdentifier = "ai-job-apply-staging"
-$targetPrefix = "ai-job-apply-staging-restore-"
-$applicationLogGroup = "/ai-job-apply/staging/application"
+$contextPath = Join-Path $terraformDataDirectory "applydash-$Environment-restore-context.json"
+$sourceIdentifier = "ai-job-apply-$Environment"
+$targetPrefix = "ai-job-apply-$Environment-restore-"
+$applicationLogGroup = "/ai-job-apply/$Environment/application"
 $runtimeInspector = Join-Path $PSScriptRoot "inspect-staging-workload-and-cost.ps1"
 $repositoryRoot = Split-Path $PSScriptRoot -Parent
 . (Join-Path $PSScriptRoot "lib/staging-postgresql-restore-verifier.ps1")
@@ -74,7 +80,7 @@ function Invoke-AwsJson {
   $raw = & aws @CommandArguments 2>$null
   if ($LASTEXITCODE -ne 0) {
     $operation = ($CommandArguments | Select-Object -First 2) -join " "
-    throw "The AWS '$operation' operation failed. Refresh the staging SSO session and retry."
+    throw "The AWS '$operation' operation failed. Refresh the $Environment SSO session and retry."
   }
   if (-not $raw) {
     return $null
@@ -117,7 +123,7 @@ function Get-SourceDatabase {
     ).DBInstances
   )
   if ($databases.Count -ne 1) {
-    throw "The exact Terraform-managed staging source database is unavailable."
+    throw "The exact Terraform-managed $Environment source database is unavailable."
   }
   return $databases[0]
 }
@@ -203,7 +209,7 @@ function Assert-SourceIdentityUnchanged {
   $beforeBoundary = Get-SourceIdentityBoundaryJson $Before
   $afterBoundary = Get-SourceIdentityBoundaryJson $After
   if ($afterBoundary -cne $beforeBoundary) {
-    throw "The staging source database changed during restore preparation."
+    throw "The $Environment source database changed during restore preparation."
   }
 }
 
@@ -242,7 +248,7 @@ function New-RestoreRequest {
     NetworkType                     = [string]$Source.NetworkType
     Tags                            = @(
       [ordered]@{ Key = "Project"; Value = "ai-job-apply" },
-      [ordered]@{ Key = "Environment"; Value = "staging" },
+      [ordered]@{ Key = "Environment"; Value = $Environment },
       [ordered]@{ Key = "ManagedBy"; Value = "restore-drill" },
       [ordered]@{ Key = "Purpose"; Value = "d1-current-isolated-restore" },
       [ordered]@{ Key = "StartedAt"; Value = $StartedAt }
@@ -266,7 +272,7 @@ function Assert-SourceContextBoundary {
       [string]$Context.source_boundary_sha256 -or
     (Get-D1RestoreStringSha256 $requestJson) -cne [string]$Context.restore_request_sha256
   ) {
-    throw "The staging source or restore request changed after the source baseline."
+    throw "The $Environment source or restore request changed after the source baseline."
   }
 }
 
@@ -284,10 +290,10 @@ function Assert-SourceBoundary {
     [int]$Source.BackupRetentionPeriod -ne 7 -or
     $null -eq $Source.LatestRestorableTime -or
     $tags["Project"] -cne "ai-job-apply" -or
-    $tags["Environment"] -cne "staging" -or
+    $tags["Environment"] -cne $Environment -or
     $tags["ManagedBy"] -cne "terraform"
   ) {
-    throw "The staging source database does not match the reviewed restore boundary."
+    throw "The $Environment source database does not match the reviewed restore boundary."
   }
   if (
     @($Source.VpcSecurityGroups).Count -ne 1 -or
@@ -296,7 +302,7 @@ function Assert-SourceBoundary {
     [string]$Source.DBParameterGroups[0].ParameterApplyStatus -cne "in-sync" -or
     [string]$Source.OptionGroupMemberships[0].Status -cne "in-sync"
   ) {
-    throw "The staging source database network or parameter boundary is not stable."
+    throw "The $Environment source database network or parameter boundary is not stable."
   }
 }
 
@@ -314,13 +320,13 @@ function Get-DisposableTargets {
 function Assert-ApplicationBaseline {
   if ($ExpectedAccountId -notmatch "^[0-9]{12}$" -or [string]::IsNullOrWhiteSpace($StateBucket) -or
       [string]::IsNullOrWhiteSpace($RuntimePlanPath)) {
-    throw "The exact staging account, state bucket, and applied runtime plan are required."
+    throw "The exact $Environment account, state bucket, and applied runtime plan are required."
   }
-  $statusJson = & $runtimeInspector -Environment staging -Action Status `
+  $statusJson = & $runtimeInspector -Environment $Environment -Action Status `
     -ExpectedAccountId $ExpectedAccountId -StateBucket $StateBucket `
     -RuntimePlanPath $RuntimePlanPath -AwsProfile $AwsProfile -Region $Region 2>$null
   if ($LASTEXITCODE -ne 0) {
-    throw "The staging application baseline did not pass."
+    throw "The $Environment application baseline did not pass."
   }
   $status = $statusJson | ConvertFrom-Json
   if (
@@ -329,21 +335,59 @@ function Assert-ApplicationBaseline {
     -not [bool]$status.TriggersEnabled -or
     -not [bool]$status.EcsRuntimeIdle
   ) {
-    throw "The staging application baseline is not healthy."
+    throw "The $Environment application baseline is not healthy."
   }
 
   $alarmNames = @(
-    "ai-job-apply-staging-outbox-reconciler-errors",
-    "ai-job-apply-staging-outbox-starter-errors",
-    "ai-job-apply-staging-outbox-starter-throttles",
-    "ai-job-apply-staging-profile-readiness-activity-errors",
-    "ai-job-apply-staging-profile-readiness-dead-letter",
-    "ai-job-apply-staging-profile-readiness-durable-failed",
-    "ai-job-apply-staging-profile-readiness-durable-timed-out",
-    "ai-job-apply-staging-gateway-lambda-errors",
-    "ai-job-apply-staging-gateway-lambda-throttles",
-    "ai-job-apply-staging-gateway-lambda-duration"
+    "ai-job-apply-$Environment-outbox-reconciler-errors",
+    "ai-job-apply-$Environment-outbox-starter-errors",
+    "ai-job-apply-$Environment-outbox-starter-throttles",
+    "ai-job-apply-$Environment-profile-readiness-activity-errors",
+    "ai-job-apply-$Environment-profile-readiness-dead-letter",
+    "ai-job-apply-$Environment-profile-readiness-durable-failed",
+    "ai-job-apply-$Environment-profile-readiness-durable-timed-out",
+    "ai-job-apply-$Environment-gateway-lambda-errors",
+    "ai-job-apply-$Environment-gateway-lambda-throttles",
+    "ai-job-apply-$Environment-gateway-lambda-duration"
   )
+  if ($Environment -ceq "development") {
+    $alarmNames += @(
+      "ai-job-apply-development-alert-delivery-canary",
+      "ai-job-apply-development-application-errors",
+      "ai-job-apply-development-database-cpu",
+      "ai-job-apply-development-database-free-storage",
+      "ai-job-apply-development-dead-letter-messages",
+      "ai-job-apply-development-document-parser-errors",
+      "ai-job-apply-development-document-processing-record-failed",
+      "ai-job-apply-development-document-processing-timed-out",
+      "ai-job-apply-development-document-processor-errors",
+      "ai-job-apply-development-document-scan-delivery-dlq",
+      "ai-job-apply-development-document-scan-dlq",
+      "ai-job-apply-development-document-scan-queue-age",
+      "ai-job-apply-development-document-security-contradiction",
+      "ai-job-apply-development-event-queue-age",
+      "ai-job-apply-development-ingestion-activity-errors",
+      "ai-job-apply-development-ingestion-activity-throttles",
+      "ai-job-apply-development-ingestion-coordinator-errors",
+      "ai-job-apply-development-ingestion-coordinator-throttles",
+      "ai-job-apply-development-ingestion-dead-letter",
+      "ai-job-apply-development-ingestion-dispatch-age",
+      "ai-job-apply-development-ingestion-durable-duration",
+      "ai-job-apply-development-ingestion-durable-failed",
+      "ai-job-apply-development-ingestion-durable-throttles",
+      "ai-job-apply-development-ingestion-durable-timed-out",
+      "ai-job-apply-development-ingestion-starter-errors",
+      "ai-job-apply-development-ingestion-starter-throttles",
+      "ai-job-apply-development-ingestion-terminal-errors",
+      "ai-job-apply-development-ingestion-terminal-throttles",
+      "ai-job-apply-development-public-job-lambda-duration",
+      "ai-job-apply-development-public-job-lambda-errors",
+      "ai-job-apply-development-public-job-lambda-throttles",
+      "ai-job-apply-development-public-job-projection-duration",
+      "ai-job-apply-development-public-job-projection-errors",
+      "ai-job-apply-development-public-job-projection-throttles"
+    )
+  }
   $alarms = @(
     (
       Invoke-AwsJson (
@@ -354,7 +398,7 @@ function Assert-ApplicationBaseline {
   )
   $actualAlarmNames = @($alarms.AlarmName | Sort-Object)
   if (
-    $alarms.Count -ne 10 -or
+    $alarms.Count -ne $alarmNames.Count -or
     ($actualAlarmNames -join "`n") -cne ((@($alarmNames | Sort-Object)) -join "`n") -or
     @($alarms | Where-Object {
       [string]$_.StateValue -cne "OK" -or
@@ -363,24 +407,24 @@ function Assert-ApplicationBaseline {
       @($_.OKActions).Count -ne 1
     }).Count -ne 0
   ) {
-    throw "All managed staging runtime alarms must be OK."
+    throw "All managed $Environment runtime alarms must be OK."
   }
   return [pscustomobject]@{
     EcsRuntimeIdle = $true
-    ManagedRuntimeAlarmsOk = 10
+    ManagedRuntimeAlarmsOk = $alarmNames.Count
   }
 }
 
 function Assert-TerraformNoDrift {
-  $resultJson = & $runtimeInspector -Environment staging -Action Status `
+  $resultJson = & $runtimeInspector -Environment $Environment -Action Status `
     -ExpectedAccountId $ExpectedAccountId -StateBucket $StateBucket `
     -RuntimePlanPath $RuntimePlanPath -AwsProfile $AwsProfile -Region $Region 2>$null
   if ($LASTEXITCODE -ne 0) {
-    throw "The exact-input staging Terraform no-drift check failed."
+    throw "The exact-input $Environment Terraform no-drift check failed."
   }
   $result = $resultJson | ConvertFrom-Json
   if (-not [bool]$result.NoDrift) {
-    throw "The staging Terraform state is not drift free."
+    throw "The $Environment Terraform state is not drift free."
   }
 }
 
@@ -400,7 +444,7 @@ function Get-MigrationRuntime {
     $subnetIds.Count -ne 2 -or
     -not $securityGroupId
   ) {
-    throw "The encrypted staging state did not expose the exact verifier runtime."
+    throw "The encrypted $Environment state did not expose the exact verifier runtime."
   }
 
   $taskDefinition = (
@@ -429,7 +473,7 @@ function Get-MigrationRuntime {
     @($containers[0].secrets).Count -ne 1 -or
     [string]$containers[0].secrets[0].name -cne "DATABASE_URL"
   ) {
-    throw "The staging verifier task definition does not match the reviewed runtime."
+    throw "The $Environment verifier task definition does not match the reviewed runtime."
   }
   $logConfiguration = $containers[0].logConfiguration
   if (
@@ -438,11 +482,11 @@ function Get-MigrationRuntime {
     [string]$logConfiguration.options."awslogs-region" -cne $Region -or
     -not [string]$logConfiguration.options."awslogs-stream-prefix"
   ) {
-    throw "The staging verifier task definition does not match the reviewed log boundary."
+    throw "The $Environment verifier task definition does not match the reviewed log boundary."
   }
   $image = [string]$containers[0].image
   if ($image -cnotmatch "^[^@]+@sha256:[a-f0-9]{64}$") {
-    throw "The staging verifier image must be digest pinned."
+    throw "The $Environment verifier image must be digest pinned."
   }
 
   $imageParts = $image -split "@", 2
@@ -450,7 +494,7 @@ function Get-MigrationRuntime {
   $digest = [string]$imageParts[1]
   $slashIndex = $repositoryUri.IndexOf("/")
   if ($slashIndex -lt 1) {
-    throw "The staging verifier repository could not be resolved."
+    throw "The $Environment verifier repository could not be resolved."
   }
   $repositoryName = $repositoryUri.Substring($slashIndex + 1)
   $scan = Invoke-AwsJson @(
@@ -464,12 +508,18 @@ function Get-MigrationRuntime {
     "json"
   )
   $severity = $scan.imageScanFindings.findingSeverityCounts
+  $critical = if ($null -ne $severity.PSObject.Properties["CRITICAL"]) {
+    [int]$severity.CRITICAL
+  } else { 0 }
+  $high = if ($null -ne $severity.PSObject.Properties["HIGH"]) {
+    [int]$severity.HIGH
+  } else { 0 }
   if (
     [string]$scan.imageScanStatus.status -cne "COMPLETE" -or
-    [int]$severity.CRITICAL -ne 0 -or
-    [int]$severity.HIGH -ne 0
+    $critical -ne 0 -or
+    $high -ne 0
   ) {
-    throw "The immutable staging verifier image scan is not clean."
+    throw "The immutable $Environment verifier image scan is not clean."
   }
 
   return [pscustomobject]@{
@@ -519,7 +569,7 @@ function Invoke-DatabaseVerifier {
     "--overrides",
     $overrides,
     "--started-by",
-    "d1-current-staging-restore-$Mode",
+    "d1-current-$Environment-restore-$Mode",
     "--output",
     "json"
   )
@@ -573,7 +623,7 @@ function Invoke-DatabaseVerifier {
     [string]$task.clusterArn -cne [string]$Runtime.ClusterArn -or
     [string]$task.launchType -cne "FARGATE" -or
     [string]$task.lastStatus -cne "STOPPED" -or
-    [string]$task.startedBy -cne "d1-current-staging-restore-$Mode" -or
+    [string]$task.startedBy -cne "d1-current-$Environment-restore-$Mode" -or
     $taskOverrides.Count -ne 1 -or
     [string]$taskOverrides[0].name -cne "database-migration" -or
     @($taskOverrides[0].command).Count -ne 1 -or
@@ -643,7 +693,7 @@ function Save-RestoreContext {
   param([object]$Context)
 
   if (-not (Test-Path -LiteralPath $terraformDataDirectory)) {
-    throw "The staging Terraform backend must already be initialized."
+    throw "The $Environment Terraform backend must already be initialized."
   }
   Save-D1RestoreContextFile $Context $contextPath $restoreManifestBoundary
 }
@@ -653,7 +703,7 @@ function Get-RestoreContext {
     -not (Test-Path -LiteralPath $contextPath -PathType Leaf) -and
     -not (Test-Path -LiteralPath "$contextPath.previous" -PathType Leaf)
   ) {
-    throw "The ignored staging restore context is absent. Run Start first."
+    throw "The ignored $Environment restore context is absent. Run Start first."
   }
   return Read-D1RestoreContextFile $contextPath $restoreManifestBoundary
 }
@@ -756,7 +806,7 @@ function Assert-TargetBoundary {
   $tags = Get-ResourceTags ([string]$Target.DBInstanceArn)
   if (
     $tags["Project"] -cne "ai-job-apply" -or
-    $tags["Environment"] -cne "staging" -or
+    $tags["Environment"] -cne $Environment -or
     $tags["ManagedBy"] -cne "restore-drill" -or
     $tags["Purpose"] -cne "d1-current-isolated-restore" -or
     $tags["StartedAt"] -cne [string]$Context.started_at
@@ -800,10 +850,10 @@ function Invoke-StartRestore {
     (Test-Path -LiteralPath $contextPath -PathType Leaf) -or
     (Test-Path -LiteralPath "$contextPath.previous" -PathType Leaf)
   ) {
-    throw "A staging restore context already exists. Resume or clean up that exercise."
+    throw "A $Environment restore context already exists. Resume or clean up that exercise."
   }
   if (@(Get-DisposableTargets).Count -ne 0) {
-    throw "A disposable staging restore target already exists."
+    throw "A disposable $Environment restore target already exists."
   }
   $source = Get-SourceDatabase
   Assert-SourceBoundary $source
@@ -866,7 +916,7 @@ function Invoke-StartRestore {
   Assert-SourceIdentityUnchanged $source $freshSource
   Assert-SourceContextBoundary $freshSource $context
   if (@(Get-DisposableTargets).Count -ne 0) {
-    throw "A disposable staging restore target appeared during restore preparation."
+    throw "A disposable $Environment restore target appeared during restore preparation."
   }
   Assert-CurrentAwsCaller
   Save-RestoreContext $context
@@ -894,11 +944,11 @@ function Invoke-StartRestore {
       @("failed", "incompatible-restore", "incompatible-network", "storage-full") `
         -ccontains [string]$target.DBInstanceStatus
     ) {
-      throw "The disposable staging restore entered a failure state."
+      throw "The disposable $Environment restore entered a failure state."
     }
   } while ((Get-Date) -lt $deadline)
   if ($null -eq $target -or [string]$target.DBInstanceStatus -cne "available") {
-    throw "The disposable staging restore did not become available within 60 minutes."
+    throw "The disposable $Environment restore did not become available within 60 minutes."
   }
   $context.restore_available_seconds = [int]([DateTime]::UtcNow - $requestTime).TotalSeconds
   $target = Wait-TargetBoundary $source $context
@@ -910,7 +960,7 @@ function Invoke-StartRestore {
   Save-RestoreContext $context
 
   return [pscustomobject]@{
-    Environment                = "staging"
+    Environment                = $Environment
     SourceManifestId           = [string]$context.source_manifest_id
     SourceManifestSha256       = [string]$context.source_manifest_sha256
     SourceOwners               = [int]$context.source_owner_count
@@ -970,7 +1020,7 @@ function Invoke-VerifyRestore {
   Assert-D1RestoreContextBoundary $context $restoreManifestBoundary
   Save-RestoreContext $context
   return [pscustomobject]@{
-    Environment               = "staging"
+    Environment               = $Environment
     TargetManifestId          = [string]$verification.ManifestId
     TargetManifestSha256      = [string]$verification.ManifestSha256
     TargetOwners              = [int]$verification.OwnerCount
@@ -1025,7 +1075,7 @@ function Invoke-CleanupRestore {
     $remaining = Get-TargetDatabase ([string]$context.target_identifier)
   } while ($null -ne $remaining -and (Get-Date) -lt $deadline)
   if ($null -ne $remaining) {
-    throw "The disposable staging restore target was not deleted within 30 minutes."
+    throw "The disposable $Environment restore target was not deleted within 30 minutes."
   }
 
   $artifactDeadline = (Get-Date).AddMinutes(10)
@@ -1056,10 +1106,10 @@ function Invoke-CleanupRestore {
     (Get-Date) -lt $artifactDeadline
   )
   if ($snapshots.Count -ne 0 -or $backups.Count -ne 0) {
-    throw "The disposable staging restore left a snapshot or automated-backup artifact."
+    throw "The disposable $Environment restore left a snapshot or automated-backup artifact."
   }
   if (@(Get-DisposableTargets).Count -ne 0) {
-    throw "A disposable staging restore target remains after cleanup."
+    throw "A disposable $Environment restore target remains after cleanup."
   }
   $finalSource = Get-SourceDatabase
   Assert-SourceBoundary $finalSource
@@ -1082,7 +1132,7 @@ function Invoke-CleanupRestore {
   }
 
   return [pscustomobject]@{
-    Environment             = "staging"
+    Environment             = $Environment
     TargetDeleted           = $true
     RemainingRestoreTargets = 0
     RemainingSnapshots      = 0
@@ -1109,7 +1159,7 @@ switch ($Action) {
       (Test-Path -LiteralPath "$contextPath.previous" -PathType Leaf)
     )
     [pscustomobject]@{
-      Environment               = "staging"
+      Environment               = $Environment
       SourceAvailable           = $true
       SourcePrivate             = $true
       SourceEncrypted           = $true
@@ -1143,7 +1193,7 @@ switch ($Action) {
     $verify = Invoke-VerifyRestore
     $cleanup = Invoke-CleanupRestore
     [pscustomobject]@{
-      Environment               = "staging"
+      Environment               = $Environment
       RestorePointLagSeconds    = $start.RestorePointLagSeconds
       RestoreAvailableSeconds   = $start.RestoreAvailableSeconds
       FunctionalRecoverySeconds = $verify.FunctionalRecoverySeconds
