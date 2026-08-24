@@ -22,8 +22,8 @@ describe("JobCatalogSavedJobResolver", () => {
       async getCatalogRevision() {
         return "19";
       },
-      async getActiveJob(id) {
-        return id === job.id ? job : null;
+      async getActiveJob() {
+        throw new Error("the saved-job resolver must use the bounded summary reader");
       },
       async getMatchableJob() {
         return null;

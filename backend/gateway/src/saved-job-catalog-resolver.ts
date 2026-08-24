@@ -6,8 +6,10 @@ export class JobCatalogSavedJobResolver implements SavedJobCatalogResolver {
   constructor(private readonly catalog: JobCatalogReader) {}
 
   async getActiveJobSummary(jobId: string, activeAt: Date): Promise<CanonicalJobSummary | null> {
-    const job = await this.catalog.getActiveJob(jobId, activeAt);
-    if (!job) return null;
+    const resolved = await this.catalog.resolveActiveJobSummaries([jobId], activeAt);
+    const item = resolved.items.find((candidate) => candidate.requestedJobId === jobId);
+    if (!item) return null;
+    const { job } = item;
     return {
       id: job.id,
       company: job.company,

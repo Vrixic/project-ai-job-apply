@@ -1271,7 +1271,7 @@ export class PostgresJobCatalog {
       if (!state) throw new Error("The job catalog revision is unavailable");
       const rows = await transaction<Array<ActiveJobSearchRow & { requestedJobId: string }>>`
         WITH RECURSIVE requested(requested_id) AS (
-          SELECT unnest(${jobIds as string[]}::uuid[])
+          SELECT unnest(${transaction.array([...jobIds])}::uuid[])
         ), resolution(requested_id, id, path) AS (
           SELECT requested_id, requested_id, ARRAY[requested_id]
           FROM requested
