@@ -56,6 +56,26 @@ source ID, adapter version, and configuration digest.
 | Activation plan SHA-256 and allowlist | Pending; apply prohibited |
 | Restoration plan SHA-256 | Pending; apply prohibited |
 
+## Rejected first plan and egress remediation
+
+The first saved activation plan, SHA-256
+`515f06bae5a4d10e14c276268fd9c832e1837c3d479cbc5035b907f956608d13`, was rejected before apply.
+Its provider/runtime changes were exact, but `private_application_networking=true` would have added
+default NAT routes to both shared private route tables. The gateway, public projection, and other
+private Lambdas share those subnets and their application security group permits outbound traffic;
+the plan therefore broadened internet egress beyond ingestion.
+
+Exact merged remediation `741440a151632291cec93448290e4d3b3c4c8e69` adds a separate default-false
+`ingestion_provider_private_egress` gate. Only an exact authorized enabled provider may create its
+two dedicated private subnets, route tables, and bounded NAT. Only the provider-fetch ingestion
+activity moves to those subnets; coordinator, starter, terminal, gateway, public projection, and
+all shared private subnets retain no default internet route. Disabling the gate moves the activity
+back before the provider-only network is removed.
+
+Development and staging Terraform validation, recursive formatting, all platform module tests
+`28/28`, and the development baseline/operator regressions in PowerShell 7 and Windows PowerShell
+5.1 pass. No rejected-plan action was applied and development remains at serial `163`.
+
 ## Bounded operating contract
 
 | Control | Accepted exact behavior |
