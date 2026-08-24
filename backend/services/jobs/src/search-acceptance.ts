@@ -73,6 +73,11 @@ interface FixtureRow {
   lastVerifiedAt: Date;
   expiresAt: Date;
   validThrough: Date | null;
+  workMode: string | null;
+  employmentType: string | null;
+  datePosted: Date | null;
+  applicationUrl: string | null;
+  structuredLocations: unknown;
   consecutiveVerificationFailures: number;
   jobCreatedAt: Date;
   jobUpdatedAt: Date;
@@ -93,6 +98,9 @@ interface FixtureRow {
   sourceLastObservedAt: Date;
   sourceLastVerifiedAt: Date;
   sourceValidThrough: Date | null;
+  sourceDatePosted: Date | null;
+  sourceApplicationUrl: string | null;
+  sourceStructuredLocations: unknown;
   sourceCreatedAt: Date;
   sourceUpdatedAt: Date;
 }
@@ -108,6 +116,21 @@ interface FixtureStatusEventRow {
 
 type FixturePhase = "prepared" | "mutated";
 type ExpectedFixturePhase = FixturePhase | "prepared-or-mutated";
+
+function canonicalJson(value: unknown): string {
+  const normalize = (candidate: unknown): unknown => {
+    if (Array.isArray(candidate)) return candidate.map(normalize);
+    if (typeof candidate === "object" && candidate !== null) {
+      return Object.fromEntries(
+        Object.entries(candidate as Record<string, unknown>)
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([key, entry]) => [key, normalize(entry)]),
+      );
+    }
+    return candidate;
+  };
+  return JSON.stringify(normalize(value));
+}
 
 function exactInstant(value: string, name: string): Date {
   if (!INSTANT_PATTERN.test(value)) {
@@ -180,18 +203,21 @@ export function buildJobSearchAcceptanceFixture(
       matchesQuery: true,
       title: "Synthetic Search Fixture Alpha",
       description: `${queryToken} generated synthetic pagination fixture alpha.`,
+      publicTruth: true,
     },
     {
       slug: "bravo" as const,
       matchesQuery: true,
       title: "Synthetic Search Fixture Bravo",
       description: `${queryToken} generated synthetic pagination fixture bravo.`,
+      publicTruth: true,
     },
     {
       slug: "sentinel" as const,
       matchesQuery: false,
       title: "Synthetic Catalog Revision Sentinel",
       description: "Generated synthetic catalog revision sentinel for bounded acceptance.",
+      publicTruth: false,
     },
   ];
   return {
@@ -217,6 +243,23 @@ export function buildJobSearchAcceptanceFixture(
         employerRequisitionId: `d1-search-${runId}-${definition.slug}`,
         verifiedCompanyDomain,
         department: "Synthetic Acceptance",
+        ...(definition.publicTruth
+          ? {
+              workMode: definition.slug === "alpha" ? ("on_site" as const) : ("hybrid" as const),
+              employmentType: "full_time" as const,
+              datePosted: new Date(observedAt.getTime() - 7 * 24 * 60 * 60 * 1_000),
+              applicationUrl: `https://jobs.example.test/d1-search-acceptance/${runId}/${definition.slug}/application`,
+              structuredLocations: [
+                {
+                  address: {
+                    addressCountry: "US",
+                    addressLocality: "Synthetic City",
+                    addressRegion: "NY",
+                  },
+                },
+              ],
+            }
+          : {}),
         adapterVersion: ACCEPTANCE_ADAPTER_VERSION,
       }),
     })),
@@ -275,6 +318,11 @@ async function readFixtureRows(
       job.last_verified_at AS "lastVerifiedAt",
       job.expires_at AS "expiresAt",
       job.valid_through AS "validThrough",
+      job.work_mode AS "workMode",
+      job.employment_type AS "employmentType",
+      job.date_posted AS "datePosted",
+      job.application_url AS "applicationUrl",
+      job.structured_locations AS "structuredLocations",
       job.consecutive_verification_failures AS "consecutiveVerificationFailures",
       job.created_at AS "jobCreatedAt",
       job.updated_at AS "jobUpdatedAt",
@@ -295,6 +343,9 @@ async function readFixtureRows(
       source.last_observed_at AS "sourceLastObservedAt",
       source.last_verified_at AS "sourceLastVerifiedAt",
       source.valid_through AS "sourceValidThrough",
+      source.date_posted AS "sourceDatePosted",
+      source.application_url AS "sourceApplicationUrl",
+      source.structured_locations AS "sourceStructuredLocations",
       source.created_at AS "sourceCreatedAt",
       source.updated_at AS "sourceUpdatedAt"
     FROM jobs.canonical_jobs AS job
@@ -389,6 +440,15 @@ async function assertExactFixture(
       !sameInstant(row.lastVerifiedAt, rowMutableAt) ||
       !sameInstant(row.expiresAt, observation.expiresAt) ||
       row.validThrough !== null ||
+      row.workMode !== (observation.workMode ?? null) ||
+      row.employmentType !== (observation.employmentType ?? null) ||
+      (row.datePosted === null) !== (observation.datePosted === undefined) ||
+      (row.datePosted !== null &&
+        observation.datePosted !== undefined &&
+        !sameInstant(row.datePosted, observation.datePosted)) ||
+      row.applicationUrl !== (observation.applicationUrl ?? null) ||
+      canonicalJson(row.structuredLocations) !==
+        canonicalJson(observation.structuredLocations ?? null) ||
       row.consecutiveVerificationFailures !== 0 ||
       !sameInstant(row.jobCreatedAt, observedAt) ||
       !sameInstant(row.jobUpdatedAt, rowMutableAt) ||
@@ -409,6 +469,13 @@ async function assertExactFixture(
       !sameInstant(row.sourceLastObservedAt, rowMutableAt) ||
       !sameInstant(row.sourceLastVerifiedAt, rowMutableAt) ||
       row.sourceValidThrough !== null ||
+      (row.sourceDatePosted === null) !== (observation.datePosted === undefined) ||
+      (row.sourceDatePosted !== null &&
+        observation.datePosted !== undefined &&
+        !sameInstant(row.sourceDatePosted, observation.datePosted)) ||
+      row.sourceApplicationUrl !== (observation.applicationUrl ?? null) ||
+      canonicalJson(row.sourceStructuredLocations) !==
+        canonicalJson(observation.structuredLocations ?? null) ||
       !sameInstant(row.sourceCreatedAt, observedAt) ||
       !sameInstant(row.sourceUpdatedAt, rowMutableAt)
     ) {
@@ -504,17 +571,27 @@ async function prepareFixture(
     await transaction`
       INSERT INTO jobs.canonical_jobs (
         id, company_id, title, normalized_title, locations, normalized_locations,
-        department, normalized_department, description, description_hash,
+        department, normalized_department, work_mode, employment_type,
+        description, description_hash,
         dedupe_fingerprint, status, status_reason, first_observed_at, last_verified_at,
-        expires_at, valid_through, consecutive_verification_failures, created_at, updated_at
+        expires_at, valid_through, date_posted, application_url, structured_locations,
+        consecutive_verification_failures, created_at, updated_at
       ) VALUES (
         ${jobId}, ${fixture.companyId}, ${observation.title}, ${observation.normalizedTitle},
         ${transaction.json(observation.locations)},
         ${transaction.array(observation.normalizedLocations)},
         ${observation.department ?? null}, ${observation.normalizedDepartment ?? null},
+        ${observation.workMode ?? null}, ${observation.employmentType ?? null},
         ${observation.description}, ${observation.contentHash}, ${observation.fuzzyFingerprint},
         'active', ${SEEDED_REASON}, ${observation.observedAt}, ${observation.observedAt},
-        ${observation.expiresAt}, ${observation.validThrough ?? null}, 0,
+        ${observation.expiresAt}, ${observation.validThrough ?? null},
+        ${observation.datePosted ?? null}, ${observation.applicationUrl ?? null},
+        ${
+          observation.structuredLocations
+            ? transaction.json(observation.structuredLocations as unknown as postgres.JSONValue)
+            : null
+        }::jsonb,
+        0,
         ${observation.observedAt}, ${observation.observedAt}
       )
     `;
@@ -523,7 +600,7 @@ async function prepareFixture(
         id, job_id, provider, provenance, external_job_id, employer_requisition_id,
         verified_company_domain, source_url, canonical_url, canonical_url_hash, content_hash,
         adapter_version, raw_snapshot, first_observed_at, last_observed_at, last_verified_at,
-        valid_through, created_at, updated_at
+        valid_through, date_posted, application_url, structured_locations, created_at, updated_at
       ) VALUES (
         ${job.sourceId}, ${jobId}, 'other', 'authorized_fixture',
         ${observation.externalJobId ?? null}, ${observation.employerRequisitionId ?? null},
@@ -531,7 +608,14 @@ async function prepareFixture(
         ${observation.canonicalUrl}, ${observation.canonicalUrlHash}, ${observation.contentHash},
         ${ACCEPTANCE_ADAPTER_VERSION}, NULL, ${observation.observedAt},
         ${observation.observedAt}, ${observation.observedAt},
-        ${observation.validThrough ?? null}, ${observation.observedAt}, ${observation.observedAt}
+        ${observation.validThrough ?? null}, ${observation.datePosted ?? null},
+        ${observation.applicationUrl ?? null},
+        ${
+          observation.structuredLocations
+            ? transaction.json(observation.structuredLocations as unknown as postgres.JSONValue)
+            : null
+        }::jsonb,
+        ${observation.observedAt}, ${observation.observedAt}
       )
     `;
     await transaction`

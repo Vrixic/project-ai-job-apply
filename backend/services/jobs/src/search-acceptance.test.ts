@@ -25,6 +25,25 @@ describe("job-search synthetic acceptance contract", () => {
     expect(first.jobs.every((job) => !("rawSnapshot" in job.observation))).toBe(true);
     const sentinel = first.jobs.find((job) => job.slug === "sentinel");
     expect(sentinel?.observation.description).not.toContain(first.queryToken);
+    expect(sentinel?.observation).not.toHaveProperty("applicationUrl");
+    for (const job of first.jobs.filter((candidate) => candidate.matchesQuery)) {
+      expect(job.observation).toMatchObject({
+        employmentType: "full_time",
+        applicationUrl: `https://jobs.example.test/d1-search-acceptance/${runId}/${job.slug}/application`,
+        structuredLocations: [
+          {
+            address: {
+              addressCountry: "US",
+              addressLocality: "Synthetic City",
+              addressRegion: "NY",
+            },
+          },
+        ],
+      });
+      expect(job.observation.datePosted?.toISOString()).toBe("2026-08-08T12:00:00.000Z");
+    }
+    expect(first.jobs.find((job) => job.slug === "alpha")?.observation.workMode).toBe("on_site");
+    expect(first.jobs.find((job) => job.slug === "bravo")?.observation.workMode).toBe("hybrid");
     expect(first.companyName).not.toContain(first.queryToken);
   });
 
