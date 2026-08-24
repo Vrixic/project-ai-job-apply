@@ -439,6 +439,7 @@ export class AwsIngestionDurableClient {
 interface IngestionRuntime {
   store: PostgresIngestionOrchestrationStore;
   coordinators: ReadonlyMap<string, DurableIngestionCoordinator>;
+  disabledSourceCoordinator: DurableIngestionCoordinator;
   configuredSources: readonly ConfiguredIngestionSource[];
   sourceExecutionGate: SourceExecutionGate;
 }
@@ -580,10 +581,12 @@ async function createRuntime(): Promise<IngestionRuntime> {
       }),
     ]),
   );
+  const disabledSourceCoordinator = new DurableIngestionCoordinator(store, registry, runner, {});
   return {
     store,
     sourceExecutionGate,
     coordinators,
+    disabledSourceCoordinator,
     configuredSources: Object.freeze(configuredSources),
   };
 }
@@ -1081,6 +1084,7 @@ export function createIngestionTerminalHandler(
     currentDurableFunctionArn: string;
     currentActivityFunctionArn: string;
     currentAdapterConfigSha256: string | ((executionId: string) => Promise<string | undefined>);
+    pauseDisabledSource?: (executionId: string) => Promise<boolean>;
     now?: () => Date;
     dispatchId?: () => string;
   },
@@ -1170,7 +1174,16 @@ export function createIngestionTerminalHandler(
       typeof config.currentAdapterConfigSha256 === "function"
         ? await config.currentAdapterConfigSha256(dispatch.executionId)
         : config.currentAdapterConfigSha256;
-    if (!currentAdapterConfigSha256 || !/^[a-f0-9]{64}$/u.test(currentAdapterConfigSha256)) {
+    if (currentAdapterConfigSha256 === undefined) {
+      if (
+        !config.pauseDisabledSource ||
+        !(await config.pauseDisabledSource(dispatch.executionId))
+      ) {
+        throw new Error("IngestionTerminalConfigurationRejected");
+      }
+      return { handled: true };
+    }
+    if (!/^[a-f0-9]{64}$/u.test(currentAdapterConfigSha256)) {
       throw new Error("IngestionTerminalConfigurationRejected");
     }
     await store.ensureRecoveryDispatch(
@@ -1204,6 +1217,10 @@ export const terminal: Handler<unknown, { handled: boolean }> = async (event) =>
       return current.configuredSources.find(
         (source) => source.registration.sourceId === checkpoint?.sourceId,
       )?.adapterConfigSha256;
+    },
+    pauseDisabledSource: async (executionId) => {
+      const result = await current.disabledSourceCoordinator.advance(executionId);
+      return result.action === "terminal" && result.disposition.status === "paused";
     },
   })(event);
 };

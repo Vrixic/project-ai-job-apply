@@ -769,6 +769,27 @@ describe("ingestion Lambda transport", () => {
     ).resolves.toEqual({ handled: true });
     expect(resolveDisabledSource).not.toHaveBeenCalled();
     expect(ensureRecoveryDispatch).not.toHaveBeenCalled();
+    const pauseDisabledSource = vi.fn().mockResolvedValue(true);
+    const disabledFailureHandler = createIngestionTerminalHandler(
+      { recordDurableTerminal, ensureRecoveryDispatch } as never,
+      {
+        account: "123456789012",
+        region: "us-east-2",
+        currentDurableFunctionArn: durableFunctionArn,
+        currentActivityFunctionArn: activityFunctionArn,
+        currentAdapterConfigSha256: resolveDisabledSource,
+        pauseDisabledSource,
+        now: () => new Date("2026-08-16T12:01:00.000Z"),
+      },
+    );
+    await expect(disabledFailureHandler(event)).resolves.toEqual({ handled: true });
+    expect(pauseDisabledSource).toHaveBeenCalledTimes(1);
+    expect(pauseDisabledSource).toHaveBeenCalledWith(executionId);
+    expect(ensureRecoveryDispatch).not.toHaveBeenCalled();
+    pauseDisabledSource.mockResolvedValue(false);
+    await expect(disabledFailureHandler(event)).rejects.toThrow(
+      "IngestionTerminalConfigurationRejected",
+    );
     await expect(handler({ ...event, account: "999999999999" })).rejects.toThrow(
       "IngestionTerminalEventRejected",
     );
