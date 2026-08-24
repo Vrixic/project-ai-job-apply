@@ -6,6 +6,7 @@ param(
   [ValidatePattern("^[a-z]{2}-[a-z]+-[0-9]+$")]
   [string]$AwsRegion = "us-east-2",
   [switch]$EnableWorkloadConformance,
+  [switch]$EnableD1WorkloadConformance,
   [switch]$ValidateOnly,
   [switch]$Help
 )
@@ -19,6 +20,7 @@ Usage:
   .\scripts\start-deployed-web-conformance.ps1
   .\scripts\start-deployed-web-conformance.ps1 -Environment staging
   .\scripts\start-deployed-web-conformance.ps1 -Environment staging -EnableWorkloadConformance
+  .\scripts\start-deployed-web-conformance.ps1 -Environment development -EnableD1WorkloadConformance
   .\scripts\start-deployed-web-conformance.ps1 -Environment development -ValidateOnly
 
 Validates the selected environment's steady-state API Gateway/Lambda runtime, then starts only the
@@ -148,6 +150,7 @@ $savedEnvironment = @{}
 foreach ($name in @(
   "AWS_PROFILE", "AWS_REGION", "AWS_DEFAULT_REGION", "TF_DATA_DIR", "PLATFORM_API_BASE_URL",
   "ENABLE_PHASE0_WORKLOAD_CONFORMANCE", "PHASE0_WORKLOAD_ENVIRONMENT",
+  "ENABLE_D1_WORKLOAD_CONFORMANCE", "D1_WORKLOAD_ENVIRONMENT",
   "DEPLOYED_PLATFORM_CONFORMANCE"
 )) { $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, "Process") }
 
@@ -256,8 +259,18 @@ try {
     Remove-Item Env:ENABLE_PHASE0_WORKLOAD_CONFORMANCE -ErrorAction SilentlyContinue
     Remove-Item Env:PHASE0_WORKLOAD_ENVIRONMENT -ErrorAction SilentlyContinue
   }
+  if ($EnableD1WorkloadConformance) {
+    $env:ENABLE_D1_WORKLOAD_CONFORMANCE = "1"
+    $env:D1_WORKLOAD_ENVIRONMENT = $Environment
+  } else {
+    Remove-Item Env:ENABLE_D1_WORKLOAD_CONFORMANCE -ErrorAction SilentlyContinue
+    Remove-Item Env:D1_WORKLOAD_ENVIRONMENT -ErrorAction SilentlyContinue
+  }
 
   Write-Host "Starting the local web client at http://localhost:3000."
+  if ($EnableD1WorkloadConformance) {
+    Write-Host "The bounded D1 read workload is available at http://localhost:3000/d1-conformance."
+  }
   Write-Host "Its server-held BFF targets the deployed $Environment API Gateway/Lambda runtime. Press Ctrl+C to stop."
   Push-Location $repositoryRoot
   try {

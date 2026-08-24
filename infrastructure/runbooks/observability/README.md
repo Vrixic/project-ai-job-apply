@@ -1,5 +1,9 @@
 # Observability Runbooks
 
+- [Development D1 managed-OIDC read workload](development-d1-read-workload.md) — Runs the
+  development-only, fixed aggregate read profile through the server-held managed-OIDC session and
+  deployed API Gateway, then corroborates its exact window without retaining private values.
+
 Contains reviewed procedures for dashboards, metrics, logs, traces, alert routing, and operational
 signal exercises. Procedures use synthetic signals and retain only sanitized state, counts, and
 timestamps.

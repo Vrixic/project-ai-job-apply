@@ -59,6 +59,9 @@ migration execution, or AWS restore execution. No gateway or general worker imag
   work without retaining identifiers or candidate values.
 - `inspect-development-workload-and-cost.ps1` and `inspect-staging-workload-and-cost.ps1` — Inspect
   accepted workload windows through serverless metrics, queues, alarms, logs, and drift.
+- `start-deployed-web-conformance.ps1 -EnableD1WorkloadConformance` — Exposes the opt-in local
+  `/d1-conformance` surface after exact AWS/Auth0/API Gateway validation. Its fixed read profile
+  retains aggregate timings and counts only; see the D1 workload runbook.
 - `inspect-phase0-cost.ps1` — Reconciles one selected environment or both accounts' budgets, CUR
   2.0 delivery, and account-scoped aggregate costs; its `LINKED_ACCOUNT` filter prevents an AWS
   Organizations payer from silently including member-account spend. Its explicit dormant-staging

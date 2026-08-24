@@ -167,3 +167,19 @@ components. The bounded direct Playwright Core and axe-core harness lives under
 The suite requires a local Chrome binary and never downloads one. It is not human accessibility
 acceptance and does not exercise managed OIDC, a deployed BFF/gateway, deployed security headers,
 assistive-technology combinations, visual regression, mobile browsers, or real candidate data.
+
+## D1 deployed read workload
+
+`/d1-conformance` is absent unless the local Next development server starts through
+`start-deployed-web-conformance.ps1 -EnableD1WorkloadConformance`. After the launcher validates the
+exact AWS/Auth0/API Gateway boundary, an approved synthetic managed-OIDC session can run a fixed
+150-public/100-authenticated request profile across health, denial, preferences, entitlements,
+canonical search, and saved-job reads. Four exact generated response schemas must pass before load.
+Concurrency is fixed to the environment's deployed gateway ceiling, every request is bounded, a
+second run is rejected, and only aggregate counts/timestamps/latencies are rendered.
+
+The token remains server-held. No identity, candidate value, preference, job, saved job,
+request/response body, provider record, or cloud identifier enters the result. This profile performs
+no product mutation. Empty search/saved-job results remain valid, so this is not by itself the final
+representative-data, provider-failure, write/recovery, SLO, or Phase 1 acceptance gate. See the
+[development D1 read-workload runbook](../../infrastructure/runbooks/observability/development-d1-read-workload.md).
