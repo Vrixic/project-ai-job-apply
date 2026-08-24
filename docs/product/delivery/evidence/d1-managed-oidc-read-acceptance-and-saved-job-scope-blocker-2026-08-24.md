@@ -2,10 +2,11 @@
 
 - Date: 2026-08-24
 - Environment: isolated development
-- Status: read profile accepted; saved-job create remains under bounded deployed diagnosis
+- Status: read profile accepted; saved-job replay-lookup correction deployed, lifecycle rerun pending
 - Correction sources: `e28f739`, `a6dfae43cd98dd0cab546ef37af84aee0b649bf8`,
   `9421e22bc9c9278191536f9dad396ae25538130f`,
-  `5cea6782e7c3e0fe3ffc669b84c1f4536c4af6de`
+  `5cea6782e7c3e0fe3ffc669b84c1f4536c4af6de`,
+  `ec6aaca463893d89d43263bc1848b0a55ff6440b`
 
 ## Read result
 
@@ -103,18 +104,28 @@ and typecheck pass. The deterministic artifact is deployed on immutable alias `3
 `193`; its plan changed only the gateway function and alias, and post-release zero drift SHA-256 is
 `e5a229bef7f62ab5129a9baaa42107f7726c83a05a3379df3fc6326bc2a4c211`.
 
+The alias-`33` rerun again returned `failureStage=create`; cleanup was attempted and succeeded. The
+value-free boundary code is `SAVED_JOB_FIND_REPLAY`, isolating the failure to the pre-transaction
+idempotency replay query. Exact source `ec6aaca463893d89d43263bc1848b0a55ff6440b` now accepts only a
+single scalar idempotency key at the HTTP boundary, repeats that invariant before PostgreSQL I/O,
+and sends the replay lookup only validated string parameters with explicit `uuid`, `text`, and
+`timestamptz` casts. Matching unit 84, Gateway 108, both typechecks, and real PostgreSQL integration
+5/5 pass. Docker Desktop and WSL were stopped afterward. Deterministic artifact
+`81f6458c0166224c739abe5666e17d9d611442dcba579e0c4461cc08ebed653e` is deployed on immutable
+gateway alias `34` at state serial `194`; the exact plan changed only the gateway function and
+alias, and the refresh-backed plan has zero meaningful changes with SHA-256
+`5c33f802b72a3a40658fc0e8fe90507f72106a9a043f20d11981131503bdcd60`.
+
 ## Verification and next action
 
-- Saved-job persistence: Matching unit 83 passed; the unchanged transaction path retains its prior
-  real PostgreSQL integration 5/5 acceptance.
-- Workload diagnostics: focused web 9/9 and affected type checks passed.
-- Diagnostic release: deterministic double build, immutable publication/readback, alias `33`,
-  exact two-resource plan, and zero drift passed. Its direct boundary check remains to be rerun
-  after the temporary AWS session is refreshed.
+- Saved-job persistence: Matching unit 84 and real PostgreSQL integration 5/5 passed.
+- Gateway boundary: Gateway 108 and both affected typechecks passed.
+- Corrective release: deterministic double build, immutable publication/readback, alias `34`,
+  exact two-resource plan, live code/release binding, and zero meaningful Terraform changes passed.
 - The newest read AWS metric bucket is inconclusive because the next workload shared its minute;
   it is not recorded as a false pass.
 
-Rerun only the saved-job lifecycle against alias `33`. If it fails, retain the displayed aggregate
+Rerun only the saved-job lifecycle against alias `34`. If it fails, retain the displayed aggregate
 result and use the exact bounded CloudWatch window only to read the value-free persistence stage.
 Correct that exact stage and repeat until the lifecycle passes, then corroborate its timestamps
 with `-WorkloadProfile D1SavedJob`. Finally wait for a quiet CloudWatch minute, repeat the read
