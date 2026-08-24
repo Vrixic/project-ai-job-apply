@@ -2,11 +2,12 @@
 
 - Date: 2026-08-24
 - Environment: isolated development
-- Status: read profile accepted; saved-job replay-lookup correction deployed, lifecycle rerun pending
+- Status: read profile accepted; saved-job catalog-summary correction deployed, lifecycle rerun pending
 - Correction sources: `e28f739`, `a6dfae43cd98dd0cab546ef37af84aee0b649bf8`,
   `9421e22bc9c9278191536f9dad396ae25538130f`,
   `5cea6782e7c3e0fe3ffc669b84c1f4536c4af6de`,
-  `ec6aaca463893d89d43263bc1848b0a55ff6440b`
+  `ec6aaca463893d89d43263bc1848b0a55ff6440b`,
+  `3a169890d42067ccc58268622b8ef6845382cfc5`
 
 ## Read result
 
@@ -116,16 +117,31 @@ gateway alias `34` at state serial `194`; the exact plan changed only the gatewa
 alias, and the refresh-backed plan has zero meaningful changes with SHA-256
 `5c33f802b72a3a40658fc0e8fe90507f72106a9a043f20d11981131503bdcd60`.
 
+The alias-`34` rerun again returned `failureStage=create`; cleanup was attempted and succeeded.
+The replay correction is therefore live and moved the value-free failure boundary forward to
+`SAVED_JOB_CATALOG_LOOKUP`. The saved-job resolver was unnecessarily loading the complete active
+job, including source aggregation, when it needed only the bounded public summary. Exact source
+`3a169890d42067ccc58268622b8ef6845382cfc5` now resolves that summary through the existing bounded
+batch reader and binds its PostgreSQL UUID collection with the driver's explicit array helper.
+Jobs unit 63, Gateway 108, both typechecks, and Jobs real-PostgreSQL integration 41/41 pass. Docker
+Desktop and WSL were stopped afterward. Deterministic artifact
+`ba1d7b3d033a81583cb457707a5d7e53155c09373323e213a68248450f7c876e` is deployed on immutable
+gateway alias `35` at state serial `195`; plan SHA-256
+`3381b60cbb3fe36620636a697e33817a3555d7f62bd7a710b5fa9a649ec563df` changed only the gateway
+function and alias. Live code/release binding passed, and the refresh-backed plan has zero
+meaningful changes with SHA-256
+`41f88fba419b271ccee2820b3d640a72167d11c7c074fd135dd4257b1925df60`.
+
 ## Verification and next action
 
-- Saved-job persistence: Matching unit 84 and real PostgreSQL integration 5/5 passed.
+- Catalog/persistence boundary: Jobs unit 63 and real PostgreSQL integration 41/41 passed.
 - Gateway boundary: Gateway 108 and both affected typechecks passed.
-- Corrective release: deterministic double build, immutable publication/readback, alias `34`,
+- Corrective release: deterministic double build, immutable publication/readback, alias `35`,
   exact two-resource plan, live code/release binding, and zero meaningful Terraform changes passed.
 - The newest read AWS metric bucket is inconclusive because the next workload shared its minute;
   it is not recorded as a false pass.
 
-Rerun only the saved-job lifecycle against alias `34`. If it fails, retain the displayed aggregate
+Rerun only the saved-job lifecycle against alias `35`. If it fails, retain the displayed aggregate
 result and use the exact bounded CloudWatch window only to read the value-free persistence stage.
 Correct that exact stage and repeat until the lifecycle passes, then corroborate its timestamps
 with `-WorkloadProfile D1SavedJob`. Finally wait for a quiet CloudWatch minute, repeat the read
