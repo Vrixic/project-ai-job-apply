@@ -121,8 +121,11 @@ if (
   -not $source.Contains("'^AGENTS\.md$'") -or
   -not $source.Contains("'^docs/'") -or
   -not $source.Contains("'^scripts/operate-development-document-processing-acceptance\.ps1$'") -or
+  -not $source.Contains("'^scripts/operate-development-postgresql-restore\.ps1$'") -or
+  -not $source.Contains("'^scripts/tests/staging-postgresql-restore-verifier\.tests\.ps1$'") -or
   -not $source.Contains("'^scripts/tests/development-document-processing-acceptance-operator\.tests\.ps1$'") -or
-  -not $source.Contains("'^infrastructure/runbooks/deployments/development-document-processing-acceptance\.md$'")
+  -not $source.Contains("'^infrastructure/runbooks/deployments/development-document-processing-acceptance\.md$'") -or
+  -not $source.Contains("'^infrastructure/runbooks/restore/development-postgresql-point-in-time\.md$'")
 ) {
   throw "The application-to-operator delta allowlist is not exact."
 }

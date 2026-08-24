@@ -159,8 +159,14 @@ function Get-OperatorDeltaEvidence {
     '^AGENTS\.md$',
     '^docs/',
     '^scripts/operate-development-document-processing-acceptance\.ps1$',
+    '^scripts/inspect-staging-workload-and-cost\.ps1$',
+    '^scripts/lib/staging-postgresql-restore-verifier\.ps1$',
+    '^scripts/operate-development-postgresql-restore\.ps1$',
+    '^scripts/operate-staging-postgresql-restore\.ps1$',
     '^scripts/tests/development-document-processing-acceptance-operator\.tests\.ps1$',
-    '^infrastructure/runbooks/deployments/development-document-processing-acceptance\.md$'
+    '^scripts/tests/staging-postgresql-restore-verifier\.tests\.ps1$',
+    '^infrastructure/runbooks/deployments/development-document-processing-acceptance\.md$',
+    '^infrastructure/runbooks/restore/development-postgresql-point-in-time\.md$'
   )
   foreach ($record in $records) {
     $parts = $record -split "`t", 2
