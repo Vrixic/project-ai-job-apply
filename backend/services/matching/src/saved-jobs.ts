@@ -125,6 +125,38 @@ class SavedJobPersistenceError extends Error {
   }
 }
 
+type SavedJobCreateStage = "FIND_REPLAY" | "CATALOG_LOOKUP" | "PERSIST";
+
+class SavedJobCreateStageError extends Error {
+  readonly code: `SAVED_JOB_${SavedJobCreateStage}`;
+
+  constructor(stage: SavedJobCreateStage, cause: unknown) {
+    super("Saved-job create failed", { cause });
+    this.name = "SavedJobCreateStageError";
+    this.code = `SAVED_JOB_${stage}`;
+  }
+}
+
+async function runSavedJobCreateStage<T>(
+  stage: SavedJobCreateStage,
+  operation: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (
+      error instanceof SavedJobIdempotencyConflictError ||
+      error instanceof SavedJobTargetUnavailableError ||
+      error instanceof SavedJobLimitError ||
+      error instanceof SavedJobIdempotencyLimitError ||
+      error instanceof SavedJobPersistenceError
+    ) {
+      throw error;
+    }
+    throw new SavedJobCreateStageError(stage, error);
+  }
+}
+
 function requestHash(requestedJobId: string): string {
   return createHash("sha256")
     .update(JSON.stringify({ jobId: requestedJobId }))
@@ -201,26 +233,29 @@ export class SavedJobsService implements SavedJobs {
     idempotencyKey: string,
   ): Promise<SavedJob> {
     const occurredAt = this.timestamp();
-    const replay = await this.store.findCreateReplay(
-      ownerUserId,
-      requestedJobId,
-      idempotencyKey,
-      new Date(occurredAt.getTime()),
+    const replay = await runSavedJobCreateStage("FIND_REPLAY", () =>
+      this.store.findCreateReplay(
+        ownerUserId,
+        requestedJobId,
+        idempotencyKey,
+        new Date(occurredAt.getTime()),
+      ),
     );
     if (replay) {
       return publicSavedJob(replay, originalAvailableJob(replay));
     }
-    const current = await this.catalog.getActiveJobSummary(
-      requestedJobId,
-      new Date(occurredAt.getTime()),
+    const current = await runSavedJobCreateStage("CATALOG_LOOKUP", () =>
+      this.catalog.getActiveJobSummary(requestedJobId, new Date(occurredAt.getTime())),
     );
     if (!current) throw new SavedJobTargetUnavailableError();
-    const record = await this.store.create(
-      ownerUserId,
-      requestedJobId,
-      current,
-      idempotencyKey,
-      new Date(occurredAt.getTime()),
+    const record = await runSavedJobCreateStage("PERSIST", () =>
+      this.store.create(
+        ownerUserId,
+        requestedJobId,
+        current,
+        idempotencyKey,
+        new Date(occurredAt.getTime()),
+      ),
     );
     return publicSavedJob(record, originalAvailableJob(record));
   }

@@ -285,6 +285,48 @@ describe("SavedJobsService", () => {
     expect(store.records).toHaveLength(0);
   });
 
+  it.each([
+    {
+      expectedCode: "SAVED_JOB_FIND_REPLAY",
+      configure(store: MemorySavedJobStore, _catalog: MutableCatalog) {
+        store.findCreateReplay = async () => {
+          throw new TypeError("private replay lookup details");
+        };
+      },
+    },
+    {
+      expectedCode: "SAVED_JOB_CATALOG_LOOKUP",
+      configure(_store: MemorySavedJobStore, catalog: MutableCatalog) {
+        catalog.getActiveJobSummary = async () => {
+          throw new TypeError("private catalog lookup details");
+        };
+      },
+    },
+    {
+      expectedCode: "SAVED_JOB_PERSIST",
+      configure(store: MemorySavedJobStore, _catalog: MutableCatalog) {
+        store.create = async () => {
+          throw new TypeError("private persistence details");
+        };
+      },
+    },
+  ])("classifies an unexpected $expectedCode create-stage failure", async (scenario) => {
+    const store = new MemorySavedJobStore();
+    const catalog = new MutableCatalog();
+    const requested = uuidv7();
+    catalog.current.set(requested, job(requested));
+    scenario.configure(store, catalog);
+    const service = new SavedJobsService(store, catalog, keys);
+
+    await expect(
+      service.create(uuidv7(), requested, "saved-job-stage-classification-0001"),
+    ).rejects.toMatchObject({
+      name: "SavedJobCreateStageError",
+      code: scenario.expectedCode,
+      message: "Saved-job create failed",
+    });
+  });
+
   it("classifies unexpected PostgreSQL create failures without retaining their details", async () => {
     const client = {
       begin: async () => {
