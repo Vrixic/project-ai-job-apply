@@ -60,6 +60,7 @@ const logger = createLogger({
   releaseSha: process.env.RELEASE_SHA ?? "local",
 });
 const maximumNudgeBytes = 4_096;
+const ingestionDeadLetterRetentionMilliseconds = 14 * 24 * 60 * 60 * 1_000;
 const sqsQueueArnPattern =
   /^arn:(aws|aws-us-gov|aws-cn):sqs:([a-z0-9-]+):([0-9]{12}):[A-Za-z0-9_-]{1,80}$/u;
 
@@ -1119,7 +1120,7 @@ export function createIngestionTerminalHandler(
       event.source !== "aws.lambda" ||
       event["detail-type"] !== "Durable Execution Status Change" ||
       !envelopeTime ||
-      envelopeTime.getTime() < now.getTime() - 2 * 60 * 60 * 1_000 ||
+      envelopeTime.getTime() < now.getTime() - ingestionDeadLetterRetentionMilliseconds ||
       envelopeTime.getTime() > now.getTime() + 5 * 60 * 1_000 ||
       !Array.isArray(event.resources) ||
       event.resources.length !== 1 ||

@@ -782,12 +782,25 @@ describe("ingestion Lambda transport", () => {
       "IngestionTerminalEventRejected",
     );
     await expect(
-      handler({
+      successHandler({
         ...event,
-        time: "2026-08-16T09:00:00Z",
+        time: "2026-08-03T12:00:05Z",
         detail: {
           ...event.detail,
-          endTimestamp: "2026-08-16T09:00:00Z",
+          status: "SUCCEEDED",
+          startTimestamp: "2026-08-03T12:00:00.000Z",
+          endTimestamp: "2026-08-03T12:00:04.000Z",
+        },
+      }),
+    ).resolves.toEqual({ handled: true });
+    await expect(
+      handler({
+        ...event,
+        time: "2026-08-02T12:00:00Z",
+        detail: {
+          ...event.detail,
+          startTimestamp: "2026-08-02T11:59:59.000Z",
+          endTimestamp: "2026-08-02T12:00:00Z",
         },
       }),
     ).rejects.toThrow("IngestionTerminalEventRejected");
