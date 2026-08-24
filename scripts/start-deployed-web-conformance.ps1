@@ -269,7 +269,7 @@ try {
 
   Write-Host "Starting the local web client at http://localhost:3000."
   if ($EnableD1WorkloadConformance) {
-    Write-Host "The bounded D1 read workload is available at http://localhost:3000/d1-conformance."
+    Write-Host "The bounded D1 read and saved-job workloads are available at http://localhost:3000/d1-conformance."
   }
   Write-Host "Its server-held BFF targets the deployed $Environment API Gateway/Lambda runtime. Press Ctrl+C to stop."
   Push-Location $repositoryRoot

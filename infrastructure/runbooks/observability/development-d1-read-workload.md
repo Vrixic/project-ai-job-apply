@@ -96,7 +96,7 @@ and already-applied ignored steady-state plan:
   -EndTime "<endedAt>" `
   -ExpectedAccountId "<DEVELOPMENT_ACCOUNT_ID>" `
   -StateBucket "<DEVELOPMENT_STATE_BUCKET>" `
-  -RuntimePlanPath ".terraform/development-ingestion-provider-dark/zero-drift-7eb4fe33ba8c-state149.tfplan"
+  -RuntimePlanPath ".terraform/development-provider-activation/zero-drift-eb617045e98a-20260824-152628.tfplan"
 ```
 
 Require zero API `5xx`, Lambda errors/throttles, queue/DLQ backlog, forbidden log-pattern matches,
