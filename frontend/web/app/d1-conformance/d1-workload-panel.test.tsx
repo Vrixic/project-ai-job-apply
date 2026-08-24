@@ -37,7 +37,7 @@ describe("D1WorkloadPanel", () => {
     vi.stubGlobal("fetch", fetchMock);
     vi.spyOn(window, "confirm").mockReturnValue(false);
     await act(async () => root.render(<D1WorkloadPanel authenticated />));
-    const button = container.querySelector("button") as HTMLButtonElement;
+    const button = container.querySelectorAll("button")[0] as HTMLButtonElement;
     await act(async () => button.click());
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -56,7 +56,7 @@ describe("D1WorkloadPanel", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
     await act(async () => root.render(<D1WorkloadPanel authenticated />));
-    const button = container.querySelector("button") as HTMLButtonElement;
+    const button = container.querySelectorAll("button")[0] as HTMLButtonElement;
     await act(async () => button.click());
     await act(async () => {});
     expect(fetchMock).toHaveBeenCalledWith(
@@ -66,8 +66,37 @@ describe("D1WorkloadPanel", () => {
         body: JSON.stringify({ confirmation: "run-d1-development-read-workload-v1" }),
       }),
     );
-    expect(container.textContent).toContain("The D1 workload passed");
+    expect(container.textContent).toContain("The D1 read workload passed");
     expect(container.textContent).toContain('"publicRequests": 150');
     expect(container.textContent).not.toContain("server-held-secret-token");
+  });
+
+  it("requires a distinct confirmation for the saved-job lifecycle", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      Response.json({
+        state: "passed",
+        metrics: {
+          profile: "d1_deployed_saved_job_lifecycle_v1",
+          writesSucceeded: 1,
+          cleanupDeletes: 1,
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<D1WorkloadPanel authenticated />));
+    const button = container.querySelectorAll("button")[1] as HTMLButtonElement;
+    await act(async () => button.click());
+    await act(async () => {});
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/d1-conformance/saved-job-workload",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          confirmation: "run-d1-development-saved-job-lifecycle-v1",
+        }),
+      }),
+    );
+    expect(container.textContent).toContain("saved association was removed");
   });
 });
