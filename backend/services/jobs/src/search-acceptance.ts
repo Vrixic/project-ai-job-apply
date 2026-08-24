@@ -235,7 +235,7 @@ export function buildJobSearchAcceptanceFixture(
         provenance: "authorized_fixture",
         companyName,
         title: definition.title,
-        locations: ["Synthetic Remote"],
+        locations: definition.publicTruth ? ["Synthetic City, NY, US"] : ["Synthetic Remote"],
         description: definition.description,
         sourceUrl: `https://jobs.example.test/d1-search-acceptance/${runId}/${definition.slug}`,
         observedAt,

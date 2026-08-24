@@ -28,6 +28,7 @@ describe("job-search synthetic acceptance contract", () => {
     expect(sentinel?.observation).not.toHaveProperty("applicationUrl");
     for (const job of first.jobs.filter((candidate) => candidate.matchesQuery)) {
       expect(job.observation).toMatchObject({
+        locations: ["Synthetic City, NY, US"],
         employmentType: "full_time",
         applicationUrl: `https://jobs.example.test/d1-search-acceptance/${runId}/${job.slug}/application`,
         structuredLocations: [
