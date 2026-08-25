@@ -2,7 +2,7 @@
 
 - Date: 2026-08-24
 - Environment: isolated development
-- Status: read profile accepted; saved-job delete correction deployed, residual cleanup and lifecycle rerun pending
+- Status: read and saved-job profiles pass at the application boundary; clean saved-job AWS window pending
 - Correction sources: `e28f739`, `a6dfae43cd98dd0cab546ef37af84aee0b649bf8`,
   `9421e22bc9c9278191536f9dad396ae25538130f`,
   `5cea6782e7c3e0fe3ffc669b84c1f4536c4af6de`,
@@ -170,22 +170,51 @@ function and alias. Live binding and the 24-case direct boundary passed, and the
 has zero meaningful changes with SHA-256
 `84fba83630f3ead3fad98e78eefcaec28416153e85a0224c1565026b3c7547ad`.
 
+The product owner then removed the one retained workload-owned association through the normal
+authenticated UI and confirmed that it left the list. A fresh alias-`37` lifecycle passed every
+application assertion and removed its own association. Only this aggregate result is retained:
+
+```json
+{
+  "profile": "d1_deployed_saved_job_lifecycle_v1",
+  "startedAt": "2026-08-25T00:48:13.621Z",
+  "endedAt": "2026-08-25T00:48:15.080Z",
+  "durationMs": 1460,
+  "catalogPagesValidated": 2,
+  "savedJobPagesValidated": 1,
+  "writesSucceeded": 1,
+  "idempotentReplays": 1,
+  "expectedConflicts": 1,
+  "cleanupDeletes": 1,
+  "postCleanupAbsent": true
+}
+```
+
+The exact minute-rounded AWS corroboration was rejected rather than recorded as a false pass. The
+fixed lifecycle issues ten sequential API requests, while this bucket contained 21 API requests,
+one API 5xx, zero Lambda execution errors, and one Lambda throttle. The extra eleven requests prove
+that adjacent UI/API activity shared the bucket; the lifecycle result itself still proves successful
+create/replay/conflict/read/delete/absence. A distinct otherwise-quiet lifecycle minute remains
+required to accept the AWS workload gate.
+
 ## Verification and next action
 
 - Saved-job persistence: Matching unit 86 and real PostgreSQL integration 5/5 passed.
 - Gateway boundary: Gateway 108 and both affected typechecks passed.
 - Corrective release: deterministic double build, immutable publication/readback, alias `37`,
   exact two-resource plan, live code/release binding, and zero meaningful Terraform changes passed.
+- Residual cleanup: the one alias-`36` workload-owned association was removed through the normal UI.
+- Alias-`37` application lifecycle: two catalog pages and one saved-job page validated; one write,
+  one replay, one expected conflict, one cleanup delete, and post-cleanup absence passed.
+- Saved-job AWS bucket: rejected because 21 requests, one API 5xx, and one Lambda throttle shared the
+  minute; zero Lambda execution errors were recorded.
 - The newest read AWS metric bucket is inconclusive because the next workload shared its minute;
   it is not recorded as a false pass.
 
-First remove the newest saved-job item through the normal authenticated UI; this retries only the
-exact workload-owned association retained by the failed alias-`36` transaction. Confirm it leaves
-the list, then rerun only the saved-job lifecycle against alias `37`. If it fails, retain the displayed aggregate
-result and use the exact bounded CloudWatch window only to read the value-free persistence stage.
-Correct that exact stage and repeat until the lifecycle passes, then corroborate its timestamps
-with `-WorkloadProfile D1SavedJob`. Finally wait for a quiet CloudWatch minute, repeat the read
-profile, and corroborate that distinct window.
+Wait for an otherwise quiet CloudWatch minute, run only the saved-job lifecycle against alias `37`,
+and corroborate its timestamps with `-WorkloadProfile D1SavedJob` without navigating or issuing any
+other deployed request during that minute. Then use a separate quiet minute for the read profile and
+corroborate that distinct window.
 
 No token, identity, preference, job identifier, saved-job identifier, request identifier, response
 body, or real candidate data is retained here.
