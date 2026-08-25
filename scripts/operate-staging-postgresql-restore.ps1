@@ -238,7 +238,6 @@ function New-RestoreRequest {
     MaxAllocatedStorage             = [int]$Source.MaxAllocatedStorage
     Iops                            = [int]$Source.Iops
     StorageThroughput               = [int]$Source.StorageThroughput
-    EnablePerformanceInsights       = [bool]$Source.PerformanceInsightsEnabled
     VpcSecurityGroupIds             = @($Source.VpcSecurityGroups.VpcSecurityGroupId)
     EnableIAMDatabaseAuthentication = [bool]$Source.IAMDatabaseAuthenticationEnabled
     EnableCloudwatchLogsExports     = @("postgresql")

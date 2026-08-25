@@ -532,7 +532,8 @@ if (
   [int]$sentRequest.MaxAllocatedStorage -ne 100 -or
   [int]$sentRequest.Iops -ne 3000 -or
   [int]$sentRequest.StorageThroughput -ne 125 -or
-  $sentRequest.PSObject.Properties.Name -contains "SourceDBInstanceIdentifier"
+  $sentRequest.PSObject.Properties.Name -contains "SourceDBInstanceIdentifier" -or
+  $sentRequest.PSObject.Properties.Name -contains "EnablePerformanceInsights"
 ) {
   throw "The immutable restore request projection is incomplete."
 }
