@@ -1,5 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "cd ../.. && pnpm exec turbo run build --filter=@ai-job-apply/web",
   "framework": "nextjs",
+  "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
   "regions": ["iad1"]
 }

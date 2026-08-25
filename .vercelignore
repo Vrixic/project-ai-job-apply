@@ -1,0 +1,24 @@
+# Upload only the monorepo source required to build the two Next.js projects. Local credentials,
+# dependencies, build output, Terraform caches/state, evidence, and unrelated workstation files
+# must never enter a Vercel source deployment.
+/*
+
+!.vercelignore
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!tsconfig.base.json
+!turbo.json
+!frontend/
+!packages/
+
+frontend/extension/
+frontend/mobile/
+
+**/.env*
+**/.next/
+**/.turbo/
+**/.vercel/
+**/coverage/
+**/dist/
+**/node_modules/

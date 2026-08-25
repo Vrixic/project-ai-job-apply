@@ -15,9 +15,12 @@ authority.
 | Candidate web | `frontend/web` | Dedicated candidate Regular Web Application | Candidate scopes; never `jobs:moderate` | Synthetic hosted acceptance after exact-host protection and callback configuration |
 | Moderation admin | `frontend/admin` | Dedicated moderation Regular Web Application | Exact `jobs:moderate` only | Identity-dark until D1P disposition, managed grant, MFA moderator, and explicit acceptance authority |
 
-Both source roots contain `vercel.json` with the Next.js framework and single `iad1` Function
-region. AWS `us-east-2` API Gateway/Lambda remains the server-side target and PostgreSQL remains
-truth. Vercel stores no product database or workflow state.
+Both source roots contain `vercel.json` with the Next.js framework, monorepo-aware frozen install
+and dependency build commands, and single `iad1` Function region. The repository `.vercelignore`
+allowlist uploads only the root pnpm/Turbo configuration plus `frontend` and `packages` source,
+then re-excludes credentials, dependencies, generated output, caches, mobile, and extension source.
+AWS `us-east-2` API Gateway/Lambda remains the server-side target and PostgreSQL remains truth.
+Vercel stores no product database or workflow state.
 
 ## Local preflight
 
@@ -42,8 +45,20 @@ shell transcript, chat, source file, or evidence record.
 
 ```powershell
 pnpm dlx vercel@latest login
-pnpm dlx vercel@latest whoami
+$expectedVercelIdentity = Read-Host 'Enter the authorized Vercel username'
+$actualVercelIdentity = (& pnpm dlx vercel@latest whoami).Trim()
+
+if ($LASTEXITCODE -ne 0 -or
+    [string]::IsNullOrWhiteSpace($expectedVercelIdentity) -or
+    $actualVercelIdentity -cne $expectedVercelIdentity.Trim()) {
+  pnpm dlx vercel@latest logout
+  throw 'The active Vercel identity is not the authorized project owner.'
+}
 ```
+
+Stop before linking, importing, or creating a project when the identity does not exactly match the
+account approved for this platform. Logging in successfully is not project authority, and an
+existing unrelated account must never be used as a temporary deployment target.
 
 In the Vercel dashboard, import the Git repository twice. Create one project for each root in the
 fixed topology table. For both projects:
