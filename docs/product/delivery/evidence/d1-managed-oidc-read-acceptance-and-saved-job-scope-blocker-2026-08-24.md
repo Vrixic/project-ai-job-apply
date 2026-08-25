@@ -2,7 +2,7 @@
 
 - Date: 2026-08-24
 - Environment: isolated development
-- Status: read and saved-job profiles pass at the application boundary; clean saved-job AWS window pending
+- Status: saved-job application/AWS acceptance passed; quiet-minute read repeat pending
 - Correction sources: `e28f739`, `a6dfae43cd98dd0cab546ef37af84aee0b649bf8`,
   `9421e22bc9c9278191536f9dad396ae25538130f`,
   `5cea6782e7c3e0fe3ffc669b84c1f4536c4af6de`,
@@ -177,9 +177,9 @@ application assertion and removed its own association. Only this aggregate resul
 ```json
 {
   "profile": "d1_deployed_saved_job_lifecycle_v1",
-  "startedAt": "2026-08-25T00:48:13.621Z",
-  "endedAt": "2026-08-25T00:48:15.080Z",
-  "durationMs": 1460,
+  "startedAt": "2026-08-25T00:57:35.638Z",
+  "endedAt": "2026-08-25T00:57:37.842Z",
+  "durationMs": 2204,
   "catalogPagesValidated": 2,
   "savedJobPagesValidated": 1,
   "writesSucceeded": 1,
@@ -190,12 +190,46 @@ application assertion and removed its own association. Only this aggregate resul
 }
 ```
 
-The exact minute-rounded AWS corroboration was rejected rather than recorded as a false pass. The
-fixed lifecycle issues ten sequential API requests, while this bucket contained 21 API requests,
-one API 5xx, zero Lambda execution errors, and one Lambda throttle. The extra eleven requests prove
-that adjacent UI/API activity shared the bucket; the lifecycle result itself still proves successful
-create/replay/conflict/read/delete/absence. A distinct otherwise-quiet lifecycle minute remains
-required to accept the AWS workload gate.
+The exact minute-rounded `D1SavedJob` AWS corroboration passed. Its aggregate-only result is retained
+below:
+
+```json
+{
+  "environment": "development",
+  "workloadProfile": "D1SavedJob",
+  "windowMinutes": 1,
+  "apiRequests": 13,
+  "minimumApiRequests": 10,
+  "api4xx": 1,
+  "minimumExpected4xx": 1,
+  "api5xx": 0,
+  "apiLatencyAverageMs": 89.23,
+  "apiLatencyMaximumMs": 431,
+  "lambdaInvocations": 14,
+  "lambdaErrors": 0,
+  "lambdaThrottles": 0,
+  "lambdaDurationMaximumMs": 287.57,
+  "databaseCpuMaxPercent": 5.1,
+  "databaseConnectionsMax": 2,
+  "eventQueueAgeMaxSeconds": 0,
+  "eventQueueVisibleMax": 0,
+  "deadLetterMessagesMax": 0,
+  "durableDeadLetterMax": 0,
+  "logEvents": 27,
+  "logErrorMatches": 0,
+  "forbiddenLogMatches": 0,
+  "activeEcsServices": 0,
+  "runningEcsTasks": 0,
+  "runtimeAlarmsOk": 10,
+  "dispatchTarget": "lambda_durable",
+  "triggersEnabled": true,
+  "terraformDrift": 0
+}
+```
+
+The preceding application pass at `00:48` remains useful lifecycle evidence, but its shared AWS
+bucket was correctly rejected because it contained 21 requests, one API 5xx, and one Lambda
+throttle. It is not recorded as an AWS pass.
 
 ## Verification and next action
 
@@ -204,17 +238,16 @@ required to accept the AWS workload gate.
 - Corrective release: deterministic double build, immutable publication/readback, alias `37`,
   exact two-resource plan, live code/release binding, and zero meaningful Terraform changes passed.
 - Residual cleanup: the one alias-`36` workload-owned association was removed through the normal UI.
-- Alias-`37` application lifecycle: two catalog pages and one saved-job page validated; one write,
-  one replay, one expected conflict, one cleanup delete, and post-cleanup absence passed.
-- Saved-job AWS bucket: rejected because 21 requests, one API 5xx, and one Lambda throttle shared the
-  minute; zero Lambda execution errors were recorded.
+- Alias-`37` application lifecycle: the accepted 2,204 ms run validated two catalog pages and one
+  saved-job page; one write, replay, expected conflict, cleanup delete, and post-cleanup absence passed.
+- Saved-job AWS bucket: accepted with 13 API requests, one expected 4xx, zero 5xx/errors/throttles,
+  zero queue/dead-letter backlog, zero error/restricted log matches, ten healthy alarms, idle ECS,
+  Lambda Durable dispatch, and zero Terraform drift.
 - The newest read AWS metric bucket is inconclusive because the next workload shared its minute;
   it is not recorded as a false pass.
 
-Wait for an otherwise quiet CloudWatch minute, run only the saved-job lifecycle against alias `37`,
-and corroborate its timestamps with `-WorkloadProfile D1SavedJob` without navigating or issuing any
-other deployed request during that minute. Then use a separate quiet minute for the read profile and
-corroborate that distinct window.
+Use a separate quiet CloudWatch minute for the read profile and corroborate that distinct window
+with `-WorkloadProfile D1Read`. The saved-job lifecycle and its AWS window require no further rerun.
 
 No token, identity, preference, job identifier, saved-job identifier, request identifier, response
 body, or real candidate data is retained here.
