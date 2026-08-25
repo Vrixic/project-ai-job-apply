@@ -102,6 +102,21 @@ function New-D1RestoreTaskOverride {
   }
 }
 
+function Test-D1RestoreLogStreamMismatch {
+  param(
+    [Parameter(Mandatory = $true)]
+    [object]$Container,
+    [Parameter(Mandatory = $true)]
+    [string]$ExpectedLogStreamName
+  )
+
+  $reportedProperty = $Container.PSObject.Properties["logStreamName"]
+  return (
+    $null -ne $reportedProperty -and
+    [string]$reportedProperty.Value -cne $ExpectedLogStreamName
+  )
+}
+
 function Assert-D1RestoreRuntimeContext {
   param(
     [Parameter(Mandatory = $true)]

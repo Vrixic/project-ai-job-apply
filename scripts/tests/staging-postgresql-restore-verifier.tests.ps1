@@ -181,6 +181,23 @@ Assert-Throws {
   New-D1RestoreTaskOverride "source" "source.rds.amazonaws.com.evil.example"
 } "Unreviewed verifier endpoint"
 
+$expectedLogStream = "database-migration/database-migration/0123456789abcdef"
+$containerWithoutReportedLogStream = [pscustomobject]@{ name = "database-migration" }
+if (Test-D1RestoreLogStreamMismatch $containerWithoutReportedLogStream $expectedLogStream) {
+  throw "An omitted optional ECS log-stream field was treated as a mismatch."
+}
+$containerWithReportedLogStream = [pscustomobject]@{
+  name = "database-migration"
+  logStreamName = $expectedLogStream
+}
+if (Test-D1RestoreLogStreamMismatch $containerWithReportedLogStream $expectedLogStream) {
+  throw "The exact reported ECS log stream was rejected."
+}
+$containerWithReportedLogStream.logStreamName = "database-migration/database-migration/wrong"
+if (-not (Test-D1RestoreLogStreamMismatch $containerWithReportedLogStream $expectedLogStream)) {
+  throw "A conflicting reported ECS log stream was accepted."
+}
+
 $runtime = [pscustomobject]@{
   TaskDefinitionArn = $pending.runtime_task_definition_arn
   Image = $pending.runtime_image

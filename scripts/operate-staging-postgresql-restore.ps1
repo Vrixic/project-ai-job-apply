@@ -635,7 +635,7 @@ function Invoke-DatabaseVerifier {
     [int]$containers[0].exitCode -ne 0 -or
     [string]$containers[0].image -cne [string]$Runtime.Image -or
     [string]$containers[0].imageDigest -cne (($Runtime.Image -split "@", 2)[1]) -or
-    [string]$containers[0].logStreamName -cne $expectedLogStreamName
+    (Test-D1RestoreLogStreamMismatch $containers[0] $expectedLogStreamName)
   ) {
     throw "The $Mode restore verifier did not complete successfully."
   }
