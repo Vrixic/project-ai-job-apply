@@ -152,6 +152,16 @@ function ConvertTo-StrictTerraformBoolean([object]$Value, [string]$Description) 
   throw "$Description is not an exact Terraform boolean input."
 }
 
+function ConvertTo-StrictTerraformInteger([object]$Value, [string]$Description) {
+  if ($Value -is [int] -or $Value -is [long]) { return [long]$Value }
+  if ($Value -is [string] -and $Value -cmatch '^(0|[1-9][0-9]*)$') {
+    $parsed = 0L
+    if ([long]::TryParse($Value, [Globalization.NumberStyles]::None,
+        [Globalization.CultureInfo]::InvariantCulture, [ref]$parsed)) { return $parsed }
+  }
+  throw "$Description is not an exact Terraform integer input."
+}
+
 function Assert-StageBVariableTransition {
   param([object]$BaselineVariables, [object]$PlanVariables, [object]$Artifact, [string]$Audience)
   $baselineNames = @($BaselineVariables.PSObject.Properties | ForEach-Object Name | Sort-Object)
@@ -175,6 +185,8 @@ function Assert-StageBVariableTransition {
     if ($expected.ContainsKey($name)) {
       if ($expected[$name] -is [bool]) {
         if ((ConvertTo-StrictTerraformBoolean $actual "Stage B $name") -ne $expected[$name]) { throw "Stage B contains an invalid bounded Terraform variable transition." }
+      } elseif ($expected[$name] -is [int] -or $expected[$name] -is [long]) {
+        if ((ConvertTo-StrictTerraformInteger $actual "Stage B $name") -ne [long]$expected[$name]) { throw "Stage B contains an invalid bounded Terraform variable transition." }
       } elseif ((Get-CanonicalValue $actual) -cne (Get-CanonicalValue $expected[$name])) {
         throw "Stage B contains an invalid bounded Terraform variable transition."
       }

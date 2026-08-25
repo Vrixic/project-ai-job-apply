@@ -98,6 +98,8 @@ if ((Get-MeaningfulChangeCount $zeroChangePlan) -ne 0) { throw "An empty baselin
 if ((ConvertTo-StrictTerraformBoolean "false" "fixture") -ne $false -or
     (ConvertTo-StrictTerraformBoolean "true" "fixture") -ne $true) { throw "Exact Terraform boolean input parsing failed." }; $passed++
 Assert-Rejected { ConvertTo-StrictTerraformBoolean "False" "fixture" } "Noncanonical Terraform boolean input accepted."
+if ((ConvertTo-StrictTerraformInteger "300" "fixture") -ne 300L) { throw "Exact Terraform integer input parsing failed." }; $passed++
+Assert-Rejected { ConvertTo-StrictTerraformInteger "0300" "fixture" } "Noncanonical Terraform integer input accepted."
 
 $versioning = [pscustomobject]@{ Status = "Enabled" }
 $public = [pscustomobject]@{ PublicAccessBlockConfiguration = [pscustomobject]@{ BlockPublicAcls = $true; IgnorePublicAcls = $true; BlockPublicPolicy = $true; RestrictPublicBuckets = $true } }
