@@ -199,11 +199,16 @@ function Assert-StageBVariableTransition {
 
 function Assert-StageBOutputChanges([object]$Plan) {
   $changes = @($Plan.output_changes.PSObject.Properties | Where-Object { ($_.Value.actions -join ",") -ne "no-op" })
-  $allowed = @("candidate_data_export_bucket", "candidate_deletion_recovery_bucket")
-  foreach ($change in $changes) {
-    if ($change.Name -notin $allowed -or ($change.Value.actions -join ",") -notin @("create", "update")) { throw "Stage B contains an unexpected output change." }
+  $allowed = @{
+    candidate_data_export_bucket = "create"
+    candidate_deletion_recovery_bucket = "create"
+    profile_readiness_durable_alias_arn = "update"
+    profile_readiness_durable_version_arn = "update"
   }
-  foreach ($name in $allowed) { if ($name -notin @($changes | ForEach-Object Name)) { throw "Stage B is missing a required bounded output change." } }
+  foreach ($change in $changes) {
+    if (-not $allowed.ContainsKey($change.Name) -or ($change.Value.actions -join ",") -cne $allowed[$change.Name]) { throw "Stage B contains an unexpected output change." }
+  }
+  foreach ($name in $allowed.Keys) { if ($name -notin @($changes | ForEach-Object Name)) { throw "Stage B is missing a required bounded output change." } }
   return $changes.Count
 }
 

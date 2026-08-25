@@ -93,6 +93,17 @@ Assert-Rejected { Assert-StageBVariableTransition $baselineVariables $badVariabl
 $badVariables = $planVariables | ConvertTo-Json -Depth 8 | ConvertFrom-Json; $badVariables.PSObject.Properties.Remove("untouched")
 Assert-Rejected { Assert-StageBVariableTransition $baselineVariables $badVariables $artifact "candidate-web-client" } "Changed variable inventory accepted."
 
+$outputPlan = [pscustomobject]@{ output_changes = [pscustomobject]@{
+  candidate_data_export_bucket = [pscustomobject]@{ actions = @("create") }
+  candidate_deletion_recovery_bucket = [pscustomobject]@{ actions = @("create") }
+  profile_readiness_durable_alias_arn = [pscustomobject]@{ actions = @("update") }
+  profile_readiness_durable_version_arn = [pscustomobject]@{ actions = @("update") }
+} }
+if ((Assert-StageBOutputChanges $outputPlan) -ne 4) { throw "Exact Stage B output transition failed." }; $passed++
+$badOutputPlan = $outputPlan | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+$badOutputPlan.output_changes | Add-Member NoteProperty unrelated_output ([pscustomobject]@{ actions = @("update") })
+Assert-Rejected { Assert-StageBOutputChanges $badOutputPlan } "Unexpected Stage B output accepted."
+
 $zeroChangePlan = [pscustomobject]@{ resource_changes = @() }
 if ((Get-MeaningfulChangeCount $zeroChangePlan) -ne 0) { throw "An empty baseline change set was not counted as zero." }; $passed++
 if ((ConvertTo-StrictTerraformBoolean "false" "fixture") -ne $false -or

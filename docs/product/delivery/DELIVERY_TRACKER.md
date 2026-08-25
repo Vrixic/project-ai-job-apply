@@ -75,13 +75,14 @@ This is the master record for the delivery phases defined in the [product and sy
   proof header only on those four operations; the Lambda edge allowlist, BFF forwarding, and logger
   redaction cover the same boundary. Auth 11/11, gateway 122/122, web 529/529, targeted typecheck,
   Terraform 42/42, both environment validations, the acceptance operator in both PowerShell hosts,
-  and the guarded Stage B operator at 42/42 in each host pass locally. The exact development Auth0
+  and the guarded Stage B operator at 44/44 in each host pass locally. The exact development Auth0
   tenant now has a deployed, candidate-client-only step-up Action with OTP/recovery factors, a
   dedicated non-Zach generated-synthetic M2M client with the sole Management API scope
   `delete:users`, one verified `AWSCURRENT` managed-secret version, and one disposable synthetic
   identity awaiting MFA enrollment. Candidate-rights activation remains false. A live Stage B
   preflight exposed and corrected empty-change aggregation, exact Terraform boolean/integer
-  decoding, and the omitted seven-address exact-version durable-workflow dependency set before any apply. No
+  decoding, the omitted seven-address exact-version durable-workflow dependency set, and its two
+  exact durable-version output updates before any apply. No
   Stage B apply, deployed rights acceptance, Vercel deployment, real identity/data, or
   accountable human acceptance is claimed; D1-R11 and Phase 1 stay in progress.
   [Evidence](evidence/d1-candidate-rights-policy-and-preprovision-2026-08-25.md),
