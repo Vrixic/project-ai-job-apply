@@ -68,7 +68,7 @@ part of the exact historical artifacts published from `8e2f1546390c14a0813cec6e6
   allowlist, and zero durable deletions/replacements before apply.
 - Auth 11/11, gateway 122/122, web 529/529, targeted typecheck, Terraform 42/42, both environment
   validations, and the acceptance operator in PowerShell 7 and Windows PowerShell 5.1 pass locally.
-  The Stage B operator passes 36/36 in PowerShell 7 and 36/36 in Windows PowerShell 5.1. Its
+  The Stage B operator passes 37/37 in PowerShell 7 and 37/37 in Windows PowerShell 5.1. Its
   current-state preflight omits nullable baseline inputs and accepts only the existing exact
   provider-drift guard, including the strictly forward RDS `latest_restorable_time` refresh.
 - The candidate route requests `max_age=0` and multi-factor `acr_values`. Auth0 must still configure
@@ -115,19 +115,19 @@ part of the exact historical artifacts published from `8e2f1546390c14a0813cec6e6
 - Preserve the selected generated-synthetic policy/digest and Stage A state `204`. These are
   engineering acceptance inputs, not public durations, lawful-exclusion decisions, or accountable
   real-user approval. Elapsed time alone cannot prove backup expiry.
-- Populate the preprovisioned managed Auth0 secret with a newly authorized non-Zach M2M identity
-  and explicit revocation mode. Configure and validate the Auth0 step-up Action and factor, create
-  and MFA-enroll one disposable generated-synthetic identity, and reauthenticate it through the
-  candidate web session. Then use the guarded Stage B operator to generate, independently review,
-  and apply the exact saved plan before generated-synthetic export, deletion, recovery-ledger
+- The exact tenant now has the dedicated non-Zach M2M client with only `delete:users`, one verified
+  `AWSCURRENT` secret version, the candidate-client-only deployed step-up Action, enabled
+  OTP/recovery factors, and one disposable generated-synthetic identity. MFA-enroll and freshly
+  reauthenticate that identity through the candidate web session. Then use the guarded Stage B
+  operator to generate, independently review, and apply the exact saved plan before generated-synthetic export, deletion, recovery-ledger
   replay, backup-aging, alert, and zero-drift acceptance.
 - Create the candidate and admin Vercel projects only under the authorized non-Zach account and run
   hosted browser, response-header, and accessibility acceptance. Vercel login is currently deferred.
 - Obtain attributable product, security/privacy, accessibility, source-quality, moderation, and
   operational acceptance for the final frozen Phase 1 candidate.
 
-No Auth0 M2M client or credential, managed secret version, disposable identity, Stage B plan/apply,
-or deployed candidate-rights acceptance is claimed. No production PII, raw candidate artifact,
+No MFA-enrolled identity, Stage B plan/apply, or deployed candidate-rights acceptance is claimed.
+No production PII, raw candidate artifact,
 credential, token, provider response body, new AWS runtime/Terraform/database/Lambda-alias/trigger/
 route mutation, Vercel login, GitHub Actions execution, real-candidate use, or Phase 1 completion is
 claimed. The only AWS writes in this packet are the historical immutable ECR/S3 artifact

@@ -85,6 +85,9 @@ Assert-Rejected { Assert-StageBVariableTransition $baselineVariables $badVariabl
 $badVariables = $planVariables | ConvertTo-Json -Depth 8 | ConvertFrom-Json; $badVariables.PSObject.Properties.Remove("untouched")
 Assert-Rejected { Assert-StageBVariableTransition $baselineVariables $badVariables $artifact "candidate-web-client" } "Changed variable inventory accepted."
 
+$zeroChangePlan = [pscustomobject]@{ resource_changes = @() }
+if ((Get-MeaningfulChangeCount $zeroChangePlan) -ne 0) { throw "An empty baseline change set was not counted as zero." }; $passed++
+
 $versioning = [pscustomobject]@{ Status = "Enabled" }
 $public = [pscustomobject]@{ PublicAccessBlockConfiguration = [pscustomobject]@{ BlockPublicAcls = $true; IgnorePublicAcls = $true; BlockPublicPolicy = $true; RestrictPublicBuckets = $true } }
 $encryption = [pscustomobject]@{ ServerSideEncryptionConfiguration = [pscustomobject]@{ Rules = @([pscustomobject]@{ BucketKeyEnabled = $true; ApplyServerSideEncryptionByDefault = [pscustomobject]@{ SSEAlgorithm = "aws:kms"; KMSMasterKeyID = "arn:aws:kms:us-east-2:123456789012:key/fixture" } }) } }

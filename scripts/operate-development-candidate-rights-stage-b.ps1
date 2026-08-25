@@ -135,6 +135,10 @@ function Get-MeaningfulChanges([object]$Plan) {
   return @($Plan.resource_changes | Where-Object { ($_.change.actions -join ",") -notin @("no-op", "read") })
 }
 
+function Get-MeaningfulChangeCount([object]$Plan) {
+  return @(Get-MeaningfulChanges $Plan).Count
+}
+
 function Get-CanonicalValue([AllowNull()][object]$Value) {
   if ($Value -is [string]) { return "string:$Value" }
   return "json:" + (ConvertTo-Json $Value -Depth 30 -Compress)
@@ -182,7 +186,7 @@ function Assert-StageBOutputChanges([object]$Plan) {
 function Assert-ZeroDriftBaseline {
   param([object]$Plan, [object]$PlanState, [object]$LiveState)
   $outputChanges = @($Plan.output_changes.PSObject.Properties | Where-Object { ($_.Value.actions -join ",") -ne "no-op" })
-  if ($Plan.applyable -or -not $Plan.complete -or $Plan.errored -or (Get-MeaningfulChanges $Plan).Count -ne 0 -or
+  if ($Plan.applyable -or -not $Plan.complete -or $Plan.errored -or (Get-MeaningfulChangeCount $Plan) -ne 0 -or
       $outputChanges.Count -ne 0 -or $PlanState.Lineage -cne $LiveState.Lineage -or
       $PlanState.Serial -ne $LiveState.Serial -or $null -eq $Plan.planned_values.root_module) {
     throw "The reviewed baseline is not a fresh zero-drift plan for the current state."
