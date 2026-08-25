@@ -75,7 +75,7 @@ This is the master record for the delivery phases defined in the [product and sy
   proof header only on those four operations; the Lambda edge allowlist, BFF forwarding, and logger
   redaction cover the same boundary. Auth 11/11, gateway 122/122, web 529/529, targeted typecheck,
   Terraform 42/42, both environment validations, the acceptance operator in both PowerShell hosts,
-  and the guarded Stage B operator at 33/33 in each host pass locally. Candidate-rights activation
+  and the guarded Stage B operator at 36/36 in each host pass locally. Candidate-rights activation
   remains false. No Auth0 client, credential secret version, disposable identity, Stage B plan/apply,
   deployed rights acceptance, Vercel deployment, or accountable human acceptance is claimed;
   D1-R11 and Phase 1 stay in progress.

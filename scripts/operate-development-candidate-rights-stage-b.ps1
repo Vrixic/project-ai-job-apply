@@ -19,6 +19,8 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib\deployment-operator-guards.ps1")
+. (Join-Path $PSScriptRoot "lib\development-document-dark-guards.ps1")
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $terraformDirectory = Join-Path $repositoryRoot "infrastructure\terraform\environments\development"
@@ -181,10 +183,11 @@ function Assert-ZeroDriftBaseline {
   param([object]$Plan, [object]$PlanState, [object]$LiveState)
   $outputChanges = @($Plan.output_changes.PSObject.Properties | Where-Object { ($_.Value.actions -join ",") -ne "no-op" })
   if ($Plan.applyable -or -not $Plan.complete -or $Plan.errored -or (Get-MeaningfulChanges $Plan).Count -ne 0 -or
-      @($Plan.resource_drift).Count -ne 0 -or $outputChanges.Count -ne 0 -or
-      $PlanState.Lineage -cne $LiveState.Lineage -or $PlanState.Serial -ne $LiveState.Serial) {
+      $outputChanges.Count -ne 0 -or $PlanState.Lineage -cne $LiveState.Lineage -or
+      $PlanState.Serial -ne $LiveState.Serial -or $null -eq $Plan.planned_values.root_module) {
     throw "The reviewed baseline is not a fresh zero-drift plan for the current state."
   }
+  Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($Plan.resource_drift) -RootModule $Plan.planned_values.root_module
   $values = $Plan.variables
   foreach ($required in @("candidate_rights_id_token_audience", "candidate_rights_enabled", "private_application_networking", "candidate_rights_auth0_secret_provisioned", "candidate_rights_auth0_authorized_owner")) {
     if ($null -eq $values.PSObject.Properties[$required]) { throw "The baseline variable inventory is stale." }
@@ -269,6 +272,10 @@ function Get-ChangeSummary([object[]]$Changes) {
 function Set-VariablesFromBaseline([object]$Variables, [object]$Artifact, [string]$Audience) {
   foreach ($property in $Variables.PSObject.Properties) {
     $value = $property.Value.value
+    if ($null -eq $value) {
+      Remove-Item "Env:TF_VAR_$($property.Name)" -ErrorAction SilentlyContinue
+      continue
+    }
     $serialized = if ($value -is [bool]) { ([string]$value).ToLowerInvariant() } elseif ($value -is [string]) { $value } else { ConvertTo-Json $value -Depth 30 -Compress }
     Set-Item "Env:TF_VAR_$($property.Name)" $serialized
   }

@@ -90,8 +90,10 @@ in this section is source-level validation only, not an Auth0 configuration or S
 - Terraform platform tests: `42` passed, `0` failed.
 - Development and staging Terraform validation: passed.
 - Candidate-rights acceptance operator: passed in PowerShell 7 and Windows PowerShell 5.1.
-- Candidate-rights Stage B operator: `33` tests passed in PowerShell 7 and `33` passed in Windows
-  PowerShell 5.1.
+- Candidate-rights Stage B operator: `36` tests passed in PowerShell 7 and `36` passed in Windows
+  PowerShell 5.1. Nullable baseline inputs remain unset, and provider-observed drift must pass the
+  existing exact drift guard; a strictly advancing RDS restore clock is not misclassified as a
+  configuration change.
 - Canonical policy JSON: UTF-8 without BOM, LF-only, one trailing LF, and valid JSON.
 - Development IAM Identity Center caller: valid in account `362544434697`, `us-east-2`.
 

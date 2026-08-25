@@ -58,6 +58,7 @@ $baselineVariables = [pscustomobject]@{
   gateway_lambda_artifact_sha256 = [pscustomobject]@{ value = "b" * 64 }
   gateway_lambda_artifact_base64sha256 = [pscustomobject]@{ value = "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI=" }
   untouched = [pscustomobject]@{ value = "same" }
+  nullable_untouched = [pscustomobject]@{ value = $null }
 }
 $planVariables = $baselineVariables | ConvertTo-Json -Depth 8 | ConvertFrom-Json
 $expected = @{
@@ -70,6 +71,15 @@ $expected = @{
 }
 foreach($entry in $expected.GetEnumerator()){ $planVariables.PSObject.Properties[$entry.Key].Value.value = $entry.Value }
 $null = Assert-StageBVariableTransition $baselineVariables $planVariables $artifact "candidate-web-client"; $passed++
+$savedNullable = [Environment]::GetEnvironmentVariable("TF_VAR_nullable_untouched")
+try {
+  Set-VariablesFromBaseline $baselineVariables $artifact "candidate-web-client"
+  if ($null -ne [Environment]::GetEnvironmentVariable("TF_VAR_nullable_untouched")) { throw "Nullable Terraform variables were not left unset." }
+  $passed++
+} finally {
+  if ($null -eq $savedNullable) { Remove-Item Env:TF_VAR_nullable_untouched -ErrorAction SilentlyContinue }
+  else { $env:TF_VAR_nullable_untouched = $savedNullable }
+}
 $badVariables = $planVariables | ConvertTo-Json -Depth 8 | ConvertFrom-Json; $badVariables.untouched.value = "changed"
 Assert-Rejected { Assert-StageBVariableTransition $baselineVariables $badVariables $artifact "candidate-web-client" } "Non-Stage-B variable change accepted."
 $badVariables = $planVariables | ConvertTo-Json -Depth 8 | ConvertFrom-Json; $badVariables.PSObject.Properties.Remove("untouched")
@@ -104,6 +114,7 @@ foreach ($needle in @(
   'CANDIDATE_RIGHTS_STAGE_B_ID_TOKEN_AUDIENCE', 'Require clean main equal to origin/main',
   'Get-PlanStateIdentity', 'Assert-ZeroDriftBaseline', 'VerifyPublication', 'Assert-StageBChangeSet',
   'changedAddressActionSha256', 'Assert-StateBucketBoundary', 'Assert-Auth0SecretBoundary',
+  'lib\deployment-operator-guards.ps1', 'Assert-DevelopmentDocumentAcceptedResourceDrift',
   '"-backend-config=encrypt=true"', 'Assert-ExactPropertySet $metadata',
   'terraform "-chdir=$terraformDirectory" apply -input=false -lock-timeout=5m $resolvedPlan'
 )) { if (-not $source.Contains($needle)) { throw "Operator invariant missing: $needle" }; $passed++ }
