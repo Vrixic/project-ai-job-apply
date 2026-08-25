@@ -2,7 +2,7 @@
 
 - Date: 2026-08-25
 - Environment: isolated development
-- Status: source/local verification passed; managed-OIDC execution and AWS window pending
+- Status: managed-OIDC application and AWS acceptance passed
 - Exact source: `0406b2b2cfbb487242a8eb4776985a280a2432d6`
 
 ## Boundary
@@ -33,10 +33,61 @@ queue/dead-letter, privacy-safe log, healthy-alarm, idle-ECS, and zero-drift gat
 - Development/staging PowerShell parsers and `D1Match` wrapper/help validation passed.
 - Docker and WSL were not used.
 
-## Remaining acceptance
+## Managed-OIDC result
 
-Run only **Run match-assessment check** with the approved synthetic managed-OIDC account. Retain only
-its displayed aggregate result, then corroborate the exact timestamps with
-`-WorkloadProfile D1Match` against the state-197 zero-drift plan. This foundation makes no deployed
-match, hosted-web, representative-SLO, human accessibility, security/privacy, product, real-data, or
-Phase 1 completion claim.
+The approved synthetic account passed the exact profile. Only this aggregate result is retained:
+
+```json
+{
+  "profile": "d1_deployed_match_assessment_v1",
+  "startedAt": "2026-08-25T01:26:49.938Z",
+  "endedAt": "2026-08-25T01:26:50.833Z",
+  "durationMs": 895,
+  "catalogPagesValidated": 1,
+  "matchAssessmentsValidated": 1,
+  "evidenceItemsValidated": 9
+}
+```
+
+## AWS result
+
+The exact one-minute `D1Match` window passed against the state-197 zero-drift plan. Only this
+aggregate result is retained:
+
+```json
+{
+  "environment": "development",
+  "workloadProfile": "D1Match",
+  "windowMinutes": 1,
+  "apiRequests": 2,
+  "minimumApiRequests": 2,
+  "api4xx": 0,
+  "minimumExpected4xx": 0,
+  "api5xx": 0,
+  "apiLatencyAverageMs": 219,
+  "apiLatencyMaximumMs": 348,
+  "lambdaInvocations": 3,
+  "lambdaErrors": 0,
+  "lambdaThrottles": 0,
+  "lambdaDurationMaximumMs": 206.55,
+  "databaseCpuMaxPercent": 5.38,
+  "databaseConnectionsMax": 3,
+  "eventQueueAgeMaxSeconds": 0,
+  "eventQueueVisibleMax": 0,
+  "deadLetterMessagesMax": 0,
+  "durableDeadLetterMax": 0,
+  "logEvents": 5,
+  "logErrorMatches": 0,
+  "forbiddenLogMatches": 0,
+  "activeEcsServices": 0,
+  "runningEcsTasks": 0,
+  "runtimeAlarmsOk": 10,
+  "dispatchTarget": "lambda_durable",
+  "triggersEnabled": true,
+  "terraformDrift": 0
+}
+```
+
+This closes the bounded deployed match-assessment execution gap. It is not hosted-web,
+representative-SLO, human accessibility, independent security/privacy, broader product, real-data,
+or Phase 1 completion evidence.
