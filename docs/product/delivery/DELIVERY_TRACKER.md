@@ -37,7 +37,12 @@ This is the master record for the delivery phases defined in the [product and sy
   default-off Terraform boundaries are complete. Confirmation writes an independently encrypted,
   Object-Locked recovery marker before PostgreSQL quarantine, and aggregate-only restore replay
   fails closed before traffic. Repository tests pass 32/32 tasks, typecheck 31/31, gateway 111/111,
-  workflows 63/63, web 523/523, and Terraform 29/29. Deployment, exact policy/backup disposition,
+  workflows 63/63, web 523/523, and Terraform 29/29. Exact source
+  `8e2f1546390c14a0813cec6e664b7a5478a2a24f` has immutable verified migration, gateway, and
+  document artifacts; the migration scan is complete with zero High/Critical findings. No runtime,
+  database, Terraform, alias, trigger, or route was changed. A fresh state-197 CompleteDark release
+  baseline is required because the retained state-109 baseline correctly rejects the broad current
+  delta. Deployment, exact policy/backup disposition,
   managed-OIDC rights acceptance, Vercel, and accountable human acceptance remain; D1-R11 and Phase
   1 stay in progress.
   [Evidence](evidence/d1-candidate-rights-foundation-2026-08-25.md),

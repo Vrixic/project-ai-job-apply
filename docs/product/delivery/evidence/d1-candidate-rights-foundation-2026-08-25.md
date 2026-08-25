@@ -4,9 +4,12 @@
 
 The contract, persistence, durable runtime, AWS boundary, gateway, same-origin BFF, and candidate UI
 for portable data export and irreversible account deletion are implemented and locally verified.
-The feature is default-disabled and has not been deployed. D1-R11 and Phase 1 remain open for exact
-policy selection, generated-synthetic deployed acceptance, backup-inventory acceptance, managed
-identity configuration, Vercel hosting, and accountable human review.
+The feature remains default-disabled and has not been applied to the development runtime or
+database. Exact source `8e2f1546390c14a0813cec6e664b7a5478a2a24f` is merged, and its migration,
+gateway, and document artifacts are immutably published in development. D1-R11 and Phase 1 remain
+open for a fresh current-state release baseline, exact policy selection, generated-synthetic
+deployed acceptance, backup-inventory acceptance, managed identity configuration, Vercel hosting,
+and accountable human review.
 
 ## Implemented boundary
 
@@ -51,26 +54,48 @@ identity configuration, Vercel hosting, and accountable human review.
 - Earlier in this exact source packet, fresh PostgreSQL 16.14 passed Profile 6/6, Documents 10/10,
   Jobs 41/41, Matching 5/5, and Billing 8/8 after the final migration checksum correction. The
   restore-manifest source suite passed 35/35 and the PowerShell staging restore guard passed. The
-  subsequent pre-commit external-journal adapter changes do not alter SQL or migrations; Docker was
-  unavailable for a redundant rerun and remained off.
+  subsequent external-journal adapter changes do not alter SQL or migrations. The exact merged
+  migration image then passed two deterministic Linux/AMD64 builds and hardened runtime smoke.
 - Terraform development and staging validate. Platform Terraform tests pass 29/29.
 - Deterministic Profile durable/activity packaging passes; the latest local activity artifact SHA-256
   is `42ec1fd5a17315fa5c8036fd6ff54285f77708b128b53c9d65aa4ad5e8aabf5f` and is not deployment
   evidence.
 - Docker Desktop and WSL are not running. The PC was not shut down.
 
+## Development artifact publication
+
+- The first exact-source migration build exposed and fixed a stale Dockerfile package-smoke
+  assertion. The image now requires all five new owner migrations and the current restore boundary
+  of five contributors, nine schemas, 45 relations, and 25 migrations.
+- Exact source `8e2f1546390c14a0813cec6e664b7a5478a2a24f` produced a deterministic
+  Linux/AMD64 migration platform digest
+  `sha256:12f0cb01eaf38fe95e2a66ac4821757e98959763b7d2628c545d3b7fc4e0a13a`.
+  Immutable ECR readback and the complete scan pass with zero High and zero Critical findings.
+- The exact gateway bundle and both exact document Lambda bundles were built twice, published only
+  as immutable customer-KMS/versioned objects, and read back successfully. Publication did not move
+  a Lambda alias, run a migration, apply Terraform, enable a trigger, or expose a route.
+- The migration planner rejected the state-109 retained document baseline before Terraform because
+  the current candidate correctly exceeds its narrow ancestor-delta allowlist. Development is now
+  at state serial 197, and the new document binaries differ from the deployed binaries. The safe
+  next engineering action is a fresh current-state CompleteDark baseline/release path; do not weaken
+  the allowlist, reuse the stale baseline, or treat artifact publication as deployment.
+
 ## External and accountable gates still open
 
 - Select and approve the exact policy/version digest: export lifetime, download-grant lifetime,
   recent-authentication age, rights timing, active/audit retention, backup window, backup inventory,
   and any lawful exclusions. Elapsed time alone cannot prove backup expiry.
+- Establish a fresh state-197 CompleteDark release baseline, then apply the five owner migrations
+  and exact default-dark runtime artifacts.
 - Populate the managed Auth0 secret with a newly authorized non-Zach M2M identity and explicit
-  revocation mode, then publish/apply the reviewed AWS release and execute generated-synthetic
+  revocation mode, then enable the reviewed AWS release and execute generated-synthetic
   export, deletion, recovery-ledger replay, backup-aging, alert, and zero-drift acceptance.
 - Create the candidate and admin Vercel projects only under the authorized non-Zach account and run
   hosted browser, response-header, and accessibility acceptance. Vercel login is currently deferred.
 - Obtain attributable product, security/privacy, accessibility, source-quality, moderation, and
   operational acceptance for the final frozen Phase 1 candidate.
 
-No production PII, raw candidate artifact, credential, token, provider response body, AWS mutation,
-Vercel login, GitHub Actions execution, real-candidate use, or Phase 1 completion is claimed.
+No production PII, raw candidate artifact, credential, token, provider response body, AWS runtime,
+Terraform, database, Lambda-alias, trigger, or route mutation, Vercel login, GitHub Actions
+execution, real-candidate use, or Phase 1 completion is claimed. The only AWS writes in this packet
+are the immutable ECR/S3 artifact publications described above.
