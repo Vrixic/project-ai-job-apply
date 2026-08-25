@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import type {
+  AccountDeletionRequest,
+  CandidateDataExport,
   CreateProfileFactRequest,
   CurrentUser,
   JobPreferenceSet,
@@ -17,14 +19,29 @@ import {
   type OutboxNudgeV1,
   outboxNudgeIntegrityInput,
   outboxNudgeSchemaVersion,
+  type ProfileAccountDeletionConfirmedData,
+  type ProfileDataExportRequestedData,
   type ProfilePreferencesUpdatedData,
+  validateEventData,
 } from "@ai-job-apply/event-contracts";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import {
+  type AccountDeletionRecord,
+  assertCandidateRightsAuthentication,
+  type CandidateDataExportRecord,
+  type CandidateRightsPolicy,
+  CandidateRightsPolicyError,
+  CandidateRightsTransitionError,
+  confirmAccountDeletion,
+} from "./candidate-rights.js";
+import {
+  accountDeletionLedger,
+  accountDeletionRequests,
   auditEvents,
+  candidateDataExports,
   externalIdentities,
   idempotencyKeys,
   jobPreferences,
@@ -33,6 +50,10 @@ import {
   outboxEvents,
   users,
 } from "./schema.js";
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
+export * from "./candidate-rights.js";
 
 export { resolveLambdaDatabaseUrl } from "./lambda-database-url.js";
 
@@ -57,14 +78,38 @@ export interface OutboxNudgePublisher {
   publish(nudge: OutboxNudgeV1): Promise<void>;
 }
 
+export interface CandidateDeletionConfirmationJournalEntry {
+  requestId: string;
+  operationId: string;
+  userId: string;
+  policyVersion: string;
+  policySha256: string;
+  subjectDigest: string;
+  confirmedAt: Date;
+  backupExpiresAt: Date;
+}
+
+export interface CandidateDeletionConfirmationJournal {
+  recordConfirmed(
+    entry: CandidateDeletionConfirmationJournalEntry,
+  ): Promise<CandidateDeletionConfirmationJournalEntry>;
+}
+
 export interface ProfileStoreOptions {
   dispatchTarget?: OutboxDispatchTarget;
   nudgePublisher?: OutboxNudgePublisher;
   nudgeRetryDelaySeconds?: number;
+  candidateRightsPolicy?: CandidateRightsPolicy;
+  candidateDeletionConfirmationJournal?: CandidateDeletionConfirmationJournal;
+  clock?: () => Date;
 }
 
 export interface ProfileStore {
-  resolveUser(principal: AuthPrincipal, traceId: string): Promise<CurrentUser>;
+  resolveUser(
+    principal: AuthPrincipal,
+    traceId: string,
+    options?: { allowQuarantined?: boolean },
+  ): Promise<CurrentUser>;
   getPreferences(userId: string): Promise<JobPreferenceSet | null>;
   putPreferences(
     userId: string,
@@ -87,6 +132,44 @@ export interface ProfileStore {
     idempotencyKey: string,
     traceId: string,
   ): Promise<ProfileFact | null>;
+  createCandidateDataExport?(
+    principal: AuthPrincipal,
+    userId: string,
+    idempotencyKey: string,
+    traceId: string,
+    traceparent?: string,
+  ): Promise<CandidateDataExport>;
+  getCandidateDataExport?(
+    userId: string,
+    exportId: string,
+  ): Promise<CandidateDataExportRecord | null>;
+  createAccountDeletionRequest?(
+    principal: AuthPrincipal,
+    userId: string,
+    idempotencyKey: string,
+    traceId: string,
+  ): Promise<AccountDeletionRequest>;
+  getAccountDeletionRequest?(
+    userId: string,
+    requestId: string,
+  ): Promise<AccountDeletionRequest | null>;
+  cancelAccountDeletionRequest?(
+    principal: AuthPrincipal,
+    userId: string,
+    requestId: string,
+    expectedVersion: number,
+    idempotencyKey: string,
+    traceId: string,
+  ): Promise<boolean>;
+  confirmAccountDeletionRequest?(
+    principal: AuthPrincipal,
+    userId: string,
+    requestId: string,
+    expectedVersion: number,
+    idempotencyKey: string,
+    traceId: string,
+    traceparent?: string,
+  ): Promise<AccountDeletionRequest | null>;
   getOperation(userId: string, operationId: string): Promise<Operation | null>;
   getPreferencesById(preferenceSetId: string): Promise<JobPreferenceSet | null>;
   markOperationRunning(operationId: string, preferenceSetId: string): Promise<void>;
@@ -145,6 +228,92 @@ function mapPreferences(row: typeof jobPreferences.$inferSelect): JobPreferenceS
     updatedAt: row.updatedAt.toISOString(),
     ...row.preferences,
   };
+}
+
+function mapCandidateDataExportRecord(
+  row: typeof candidateDataExports.$inferSelect,
+): CandidateDataExportRecord {
+  return {
+    id: row.id,
+    userId: row.userId,
+    operationId: row.operationId,
+    policyVersion: row.policyVersion,
+    state: row.state,
+    requestedAt: row.requestedAt,
+    updatedAt: row.updatedAt,
+    ...(row.artifactObjectKey &&
+    row.artifactObjectVersion &&
+    row.artifactSha256 &&
+    row.artifactExpiresAt
+      ? {
+          artifact: {
+            objectKey: row.artifactObjectKey,
+            objectVersion: row.artifactObjectVersion,
+            sha256: row.artifactSha256,
+            expiresAt: row.artifactExpiresAt,
+          },
+        }
+      : {}),
+    ...(row.failureCode ? { failureCode: row.failureCode } : {}),
+  };
+}
+
+function projectCandidateDataExport(record: CandidateDataExportRecord): CandidateDataExport {
+  return {
+    id: record.id,
+    schemaVersion: 1,
+    format: "candidate-data-export-v1",
+    policyVersion: record.policyVersion,
+    state: record.state,
+    requestedAt: record.requestedAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+    ...(record.artifact ? { artifactExpiresAt: record.artifact.expiresAt.toISOString() } : {}),
+    ...(record.failureCode ? { failureCode: record.failureCode } : {}),
+  } as CandidateDataExport;
+}
+
+function mapAccountDeletionRecord(
+  row: typeof accountDeletionRequests.$inferSelect,
+): AccountDeletionRecord {
+  return {
+    id: row.id,
+    userId: row.userId,
+    policyVersion: row.policyVersion,
+    state: row.state,
+    version: row.version,
+    requestedAt: row.requestedAt,
+    updatedAt: row.updatedAt,
+    ...(row.operationId ? { operationId: row.operationId } : {}),
+    ...(row.confirmedAt ? { confirmedAt: row.confirmedAt } : {}),
+    ...(row.completedAt ? { completedAt: row.completedAt } : {}),
+    ...(row.backupExpiresAt ? { backupExpiresAt: row.backupExpiresAt } : {}),
+    ...(row.backupExpiredAt ? { backupExpiredAt: row.backupExpiredAt } : {}),
+  };
+}
+
+function projectAccountDeletionRequest(record: AccountDeletionRecord): AccountDeletionRequest {
+  return {
+    id: record.id,
+    schemaVersion: 1,
+    policyVersion: record.policyVersion,
+    state: record.state,
+    version: record.version,
+    requestedAt: record.requestedAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+    ...(record.confirmedAt ? { confirmedAt: record.confirmedAt.toISOString() } : {}),
+    ...(record.completedAt ? { completedAt: record.completedAt.toISOString() } : {}),
+    ...(record.backupExpiresAt ? { backupExpiresAt: record.backupExpiresAt.toISOString() } : {}),
+    ...(record.backupExpiredAt ? { backupExpiredAt: record.backupExpiredAt.toISOString() } : {}),
+  } as AccountDeletionRequest;
+}
+
+export class AccountQuarantinedError extends Error {
+  readonly code = "ACCOUNT_QUARANTINED";
+
+  constructor() {
+    super("The account is quarantined for deletion");
+    this.name = "AccountQuarantinedError";
+  }
 }
 
 function mapOperation(row: typeof operations.$inferSelect): Operation {
@@ -434,6 +603,11 @@ export class PostgresProfileStore implements ProfileStore {
   private readonly dispatchTarget: OutboxDispatchTarget;
   private readonly nudgePublisher: OutboxNudgePublisher | undefined;
   private readonly nudgeRetryDelaySeconds: number;
+  private readonly candidateRightsPolicy: CandidateRightsPolicy | undefined;
+  private readonly candidateDeletionConfirmationJournal:
+    | CandidateDeletionConfirmationJournal
+    | undefined;
+  private readonly clock: () => Date;
 
   constructor(
     private readonly handle: DatabaseHandle,
@@ -442,12 +616,25 @@ export class PostgresProfileStore implements ProfileStore {
     this.dispatchTarget = options.dispatchTarget ?? "lambda_durable";
     this.nudgePublisher = options.nudgePublisher;
     this.nudgeRetryDelaySeconds = options.nudgeRetryDelaySeconds ?? 300;
+    this.candidateRightsPolicy = options.candidateRightsPolicy;
+    this.candidateDeletionConfirmationJournal = options.candidateDeletionConfirmationJournal;
+    this.clock = options.clock ?? (() => new Date());
   }
 
-  async resolveUser(principal: AuthPrincipal, traceId: string): Promise<CurrentUser> {
+  async resolveUser(
+    principal: AuthPrincipal,
+    traceId: string,
+    options: { allowQuarantined?: boolean } = {},
+  ): Promise<CurrentUser> {
     const existing = await this.handle.db
-      .select()
+      .select({
+        issuer: externalIdentities.issuer,
+        subject: externalIdentities.subject,
+        userId: externalIdentities.userId,
+        accountState: users.accountState,
+      })
       .from(externalIdentities)
+      .innerJoin(users, eq(users.id, externalIdentities.userId))
       .where(
         and(
           eq(externalIdentities.issuer, principal.issuer),
@@ -458,6 +645,12 @@ export class PostgresProfileStore implements ProfileStore {
 
     const identity = existing[0];
     if (identity) {
+      if (identity.accountState !== "active" && !options.allowQuarantined) {
+        throw new AccountQuarantinedError();
+      }
+      if (identity.accountState !== "active") {
+        return { id: identity.userId, ...(principal.email ? { email: principal.email } : {}) };
+      }
       await this.handle.db
         .update(externalIdentities)
         .set({
@@ -473,8 +666,38 @@ export class PostgresProfileStore implements ProfileStore {
       return { id: identity.userId, ...(principal.email ? { email: principal.email } : {}) };
     }
 
+    const subjectDigest = createHash("sha256")
+      .update("ai-job-apply/account-deletion-subject/v1\0")
+      .update(principal.issuer)
+      .update("\0")
+      .update(principal.subject)
+      .digest("hex");
+    const tombstones = await this.handle.db
+      .select({ userId: accountDeletionRequests.userId })
+      .from(accountDeletionLedger)
+      .innerJoin(
+        accountDeletionRequests,
+        eq(accountDeletionRequests.id, accountDeletionLedger.requestId),
+      )
+      .where(eq(accountDeletionLedger.subjectDigest, subjectDigest))
+      .limit(1);
+    const tombstone = tombstones[0];
+    if (tombstone) {
+      if (options.allowQuarantined) {
+        return { id: tombstone.userId, ...(principal.email ? { email: principal.email } : {}) };
+      }
+      throw new AccountQuarantinedError();
+    }
+
     const userId = uuidv7();
     await this.handle.db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${subjectDigest}))`);
+      const concurrentTombstone = await tx
+        .select({ requestId: accountDeletionLedger.requestId })
+        .from(accountDeletionLedger)
+        .where(eq(accountDeletionLedger.subjectDigest, subjectDigest))
+        .limit(1);
+      if (concurrentTombstone[0]) throw new AccountQuarantinedError();
       await tx.insert(users).values({ id: userId });
       await tx.insert(externalIdentities).values({
         issuer: principal.issuer,
@@ -967,11 +1190,496 @@ export class PostgresProfileStore implements ProfileStore {
     });
   }
 
+  async createCandidateDataExport(
+    principal: AuthPrincipal,
+    userId: string,
+    idempotencyKey: string,
+    traceId: string,
+    traceparent?: string,
+  ): Promise<CandidateDataExport> {
+    const policy = this.requireCandidateRightsPolicy();
+    const now = this.clock();
+    assertCandidateRightsAuthentication(principal, now, policy, false);
+    const scope = "profile.candidate-data-export.create.v1";
+    const hash = requestHash({ format: "candidate-data-export-v1" });
+    const outcome = await this.handle.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`${userId}:${scope}:${idempotencyKey}`}))`,
+      );
+      const prior = await tx
+        .select()
+        .from(idempotencyKeys)
+        .where(
+          and(
+            eq(idempotencyKeys.userId, userId),
+            eq(idempotencyKeys.scope, scope),
+            eq(idempotencyKeys.key, idempotencyKey),
+          ),
+        )
+        .limit(1);
+      if (prior[0]) {
+        if (prior[0].requestHash !== hash) throw new IdempotencyConflictError();
+        return { response: prior[0].response as unknown as CandidateDataExport };
+      }
+
+      const exportId = uuidv7();
+      const operationId = uuidv7();
+      const eventId = uuidv7();
+      await tx.insert(operations).values({
+        id: operationId,
+        userId,
+        kind: "candidate_data_export",
+        state: "queued",
+        createdAt: now,
+        updatedAt: now,
+      });
+      const [saved] = await tx
+        .insert(candidateDataExports)
+        .values({
+          id: exportId,
+          userId,
+          operationId,
+          format: "candidate-data-export-v1",
+          policyVersion: policy.version,
+          state: "queued",
+          requestedAt: now,
+          updatedAt: now,
+        })
+        .returning();
+      if (!saved) throw new Error("Candidate data-export persistence returned no row");
+      const response = projectCandidateDataExport(mapCandidateDataExportRecord(saved));
+      const eventData: ProfileDataExportRequestedData = {
+        dataExportId: exportId,
+        operationId,
+        policyVersion: policy.version,
+      };
+      await tx.insert(outboxEvents).values({
+        id: eventId,
+        type: eventTypes.profileDataExportRequested,
+        source: "urn:ai-job-apply:profile-service",
+        subject: `candidate-data-export/${exportId}`,
+        dataSchema:
+          "https://schemas.ai-job-apply.internal/events/profile.data-export.requested.v1.json",
+        data: eventData as unknown as Record<string, unknown>,
+        dispatchTarget: this.dispatchTarget,
+        ...(traceparent ? { traceparent } : {}),
+      });
+      await tx.insert(idempotencyKeys).values({
+        userId,
+        scope,
+        key: idempotencyKey,
+        requestHash: hash,
+        response: response as unknown as Record<string, unknown>,
+      });
+      await tx.insert(auditEvents).values({
+        id: uuidv7(),
+        userId,
+        action: "profile.candidate-data-export.requested",
+        resourceType: "candidate_data_export",
+        resourceId: exportId,
+        traceId,
+        metadata: { policyVersion: policy.version },
+        occurredAt: now,
+      });
+      return {
+        response,
+        nudge:
+          this.dispatchTarget === "lambda_durable"
+            ? buildOutboxNudge(eventId, eventTypes.profileDataExportRequested, traceparent)
+            : undefined,
+      };
+    });
+    if (outcome.nudge && this.nudgePublisher) await this.attemptOutboxNudge(outcome.nudge);
+    return outcome.response;
+  }
+
+  async getCandidateDataExport(
+    userId: string,
+    exportId: string,
+  ): Promise<CandidateDataExportRecord | null> {
+    const rows = await this.handle.db
+      .select()
+      .from(candidateDataExports)
+      .where(and(eq(candidateDataExports.id, exportId), eq(candidateDataExports.userId, userId)))
+      .limit(1);
+    return rows[0] ? mapCandidateDataExportRecord(rows[0]) : null;
+  }
+
+  async createAccountDeletionRequest(
+    principal: AuthPrincipal,
+    userId: string,
+    idempotencyKey: string,
+    traceId: string,
+  ): Promise<AccountDeletionRequest> {
+    const policy = this.requireCandidateRightsPolicy();
+    const now = this.clock();
+    assertCandidateRightsAuthentication(principal, now, policy, false);
+    const scope = "profile.account-deletion.request.v1";
+    const hash = requestHash({ acknowledgement: "ACCOUNT_DELETION_IS_IRREVERSIBLE" });
+    return this.handle.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`${userId}:${scope}:${idempotencyKey}`}))`,
+      );
+      const prior = await tx
+        .select()
+        .from(idempotencyKeys)
+        .where(
+          and(
+            eq(idempotencyKeys.userId, userId),
+            eq(idempotencyKeys.scope, scope),
+            eq(idempotencyKeys.key, idempotencyKey),
+          ),
+        )
+        .limit(1);
+      if (prior[0]) {
+        if (prior[0].requestHash !== hash) throw new IdempotencyConflictError();
+        return prior[0].response as unknown as AccountDeletionRequest;
+      }
+      const existing = await tx
+        .select({ id: accountDeletionRequests.id })
+        .from(accountDeletionRequests)
+        .where(
+          and(
+            eq(accountDeletionRequests.userId, userId),
+            inArray(accountDeletionRequests.state, [
+              "requested",
+              "quarantined",
+              "active_systems_deleted",
+              "subprocessors_pending",
+            ]),
+          ),
+        )
+        .limit(1);
+      if (existing[0]) throw new CandidateRightsTransitionError();
+
+      const requestId = uuidv7();
+      const [saved] = await tx
+        .insert(accountDeletionRequests)
+        .values({
+          id: requestId,
+          userId,
+          policyVersion: policy.version,
+          state: "requested",
+          version: 1,
+          requestedAt: now,
+          updatedAt: now,
+        })
+        .returning();
+      if (!saved) throw new Error("Account-deletion request persistence returned no row");
+      const response = projectAccountDeletionRequest(mapAccountDeletionRecord(saved));
+      await tx.insert(idempotencyKeys).values({
+        userId,
+        scope,
+        key: idempotencyKey,
+        requestHash: hash,
+        response: response as unknown as Record<string, unknown>,
+      });
+      await tx.insert(auditEvents).values({
+        id: uuidv7(),
+        userId,
+        action: "profile.account-deletion.requested",
+        resourceType: "account_deletion_request",
+        resourceId: requestId,
+        traceId,
+        metadata: { policyVersion: policy.version },
+        occurredAt: now,
+      });
+      return response;
+    });
+  }
+
+  async getAccountDeletionRequest(
+    userId: string,
+    requestId: string,
+  ): Promise<AccountDeletionRequest | null> {
+    const rows = await this.handle.db
+      .select()
+      .from(accountDeletionRequests)
+      .where(
+        and(eq(accountDeletionRequests.id, requestId), eq(accountDeletionRequests.userId, userId)),
+      )
+      .limit(1);
+    return rows[0] ? projectAccountDeletionRequest(mapAccountDeletionRecord(rows[0])) : null;
+  }
+
+  async cancelAccountDeletionRequest(
+    principal: AuthPrincipal,
+    userId: string,
+    requestId: string,
+    expectedVersion: number,
+    idempotencyKey: string,
+    traceId: string,
+  ): Promise<boolean> {
+    const policy = this.requireCandidateRightsPolicy();
+    const now = this.clock();
+    assertCandidateRightsAuthentication(principal, now, policy, false);
+    const scope = `profile.account-deletion.cancel.v1:${requestId}`;
+    const hash = requestHash({ expectedVersion });
+    return this.handle.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`${userId}:${scope}:${idempotencyKey}`}))`,
+      );
+      const prior = await tx
+        .select()
+        .from(idempotencyKeys)
+        .where(
+          and(
+            eq(idempotencyKeys.userId, userId),
+            eq(idempotencyKeys.scope, scope),
+            eq(idempotencyKeys.key, idempotencyKey),
+          ),
+        )
+        .limit(1);
+      if (prior[0]) {
+        if (prior[0].requestHash !== hash) throw new IdempotencyConflictError();
+        return true;
+      }
+      const rows = await tx
+        .select()
+        .from(accountDeletionRequests)
+        .where(
+          and(
+            eq(accountDeletionRequests.id, requestId),
+            eq(accountDeletionRequests.userId, userId),
+          ),
+        )
+        .limit(1);
+      const current = rows[0];
+      if (!current) return false;
+      if (current.state !== "requested" || current.version !== expectedVersion) {
+        throw new CandidateRightsTransitionError();
+      }
+      await tx
+        .delete(accountDeletionRequests)
+        .where(
+          and(
+            eq(accountDeletionRequests.id, requestId),
+            eq(accountDeletionRequests.userId, userId),
+          ),
+        );
+      await tx.insert(idempotencyKeys).values({
+        userId,
+        scope,
+        key: idempotencyKey,
+        requestHash: hash,
+        response: { cancelled: true },
+      });
+      await tx.insert(auditEvents).values({
+        id: uuidv7(),
+        userId,
+        action: "profile.account-deletion.cancelled",
+        resourceType: "account_deletion_request",
+        resourceId: requestId,
+        traceId,
+        metadata: { version: expectedVersion },
+        occurredAt: now,
+      });
+      return true;
+    });
+  }
+
+  async confirmAccountDeletionRequest(
+    principal: AuthPrincipal,
+    userId: string,
+    requestId: string,
+    expectedVersion: number,
+    idempotencyKey: string,
+    traceId: string,
+    traceparent?: string,
+  ): Promise<AccountDeletionRequest | null> {
+    const policy = this.requireCandidateRightsPolicy();
+    const confirmationJournal = this.candidateDeletionConfirmationJournal;
+    if (!confirmationJournal) throw new CandidateRightsPolicyError();
+    const now = this.clock();
+    assertCandidateRightsAuthentication(principal, now, policy, true);
+    const scope = `profile.account-deletion.confirm.v1:${requestId}`;
+    const hash = requestHash({ expectedVersion, confirmation: "DELETE_MY_ACCOUNT" });
+    const outcome = await this.handle.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`${userId}:${scope}:${idempotencyKey}`}))`,
+      );
+      const prior = await tx
+        .select()
+        .from(idempotencyKeys)
+        .where(
+          and(
+            eq(idempotencyKeys.userId, userId),
+            eq(idempotencyKeys.scope, scope),
+            eq(idempotencyKeys.key, idempotencyKey),
+          ),
+        )
+        .limit(1);
+      if (prior[0]) {
+        if (prior[0].requestHash !== hash) throw new IdempotencyConflictError();
+        return { response: prior[0].response as unknown as AccountDeletionRequest };
+      }
+      const rows = await tx
+        .select()
+        .from(accountDeletionRequests)
+        .where(
+          and(
+            eq(accountDeletionRequests.id, requestId),
+            eq(accountDeletionRequests.userId, userId),
+          ),
+        )
+        .limit(1);
+      const current = rows[0];
+      if (!current) return { response: null };
+      const proposedOperationId = uuidv7();
+      const proposed = confirmAccountDeletion(
+        mapAccountDeletionRecord(current),
+        expectedVersion,
+        proposedOperationId,
+        now,
+        policy,
+      );
+      if (!proposed.backupExpiresAt || !proposed.confirmedAt) {
+        throw new CandidateRightsTransitionError();
+      }
+      const subjectDigest = createHash("sha256")
+        .update("ai-job-apply/account-deletion-subject/v1\0")
+        .update(principal.issuer)
+        .update("\0")
+        .update(principal.subject)
+        .digest("hex");
+      const journaled = await confirmationJournal.recordConfirmed({
+        requestId,
+        operationId: proposedOperationId,
+        userId,
+        policyVersion: policy.version,
+        policySha256: policy.accountablePolicySha256,
+        subjectDigest,
+        confirmedAt: proposed.confirmedAt,
+        backupExpiresAt: proposed.backupExpiresAt,
+      });
+      const operationId = journaled.operationId;
+      const confirmed = confirmAccountDeletion(
+        mapAccountDeletionRecord(current),
+        expectedVersion,
+        operationId,
+        journaled.confirmedAt,
+        policy,
+      );
+      if (
+        !confirmed.backupExpiresAt ||
+        confirmed.backupExpiresAt.toISOString() !== journaled.backupExpiresAt.toISOString() ||
+        journaled.requestId !== requestId ||
+        journaled.userId !== userId ||
+        journaled.policyVersion !== policy.version ||
+        journaled.policySha256 !== policy.accountablePolicySha256 ||
+        journaled.subjectDigest !== subjectDigest
+      ) {
+        throw new CandidateRightsTransitionError();
+      }
+      const eventId = uuidv7();
+      await tx.insert(operations).values({
+        id: operationId,
+        userId,
+        kind: "account_deletion",
+        state: "queued",
+        createdAt: now,
+        updatedAt: now,
+      });
+      const [saved] = await tx
+        .update(accountDeletionRequests)
+        .set({
+          operationId,
+          state: confirmed.state,
+          version: confirmed.version,
+          confirmedAt: confirmed.confirmedAt,
+          backupExpiresAt: confirmed.backupExpiresAt,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(accountDeletionRequests.id, requestId),
+            eq(accountDeletionRequests.userId, userId),
+            eq(accountDeletionRequests.version, expectedVersion),
+          ),
+        )
+        .returning();
+      if (!saved) throw new CandidateRightsTransitionError();
+      await tx
+        .update(users)
+        .set({ accountState: "quarantined", quarantinedAt: now })
+        .where(and(eq(users.id, userId), eq(users.accountState, "active")));
+
+      const ownerInventory = Object.fromEntries(
+        policy.ownerInventory.map((owner) => [owner, "pending"]),
+      );
+      const subprocessorInventory = Object.fromEntries(
+        policy.subprocessorInventory.map((processor) => [processor, "pending"]),
+      );
+      await tx.execute(sql`
+        INSERT INTO privacy.account_deletion_ledger (
+          request_id, subject_digest, policy_version, policy_sha256, state,
+          owner_inventory, subprocessor_inventory, confirmed_at, backup_expires_at, updated_at
+        ) VALUES (
+          ${requestId}, ${subjectDigest}, ${policy.version}, ${policy.accountablePolicySha256},
+          'quarantined', ${JSON.stringify(ownerInventory)}::jsonb,
+          ${JSON.stringify(subprocessorInventory)}::jsonb,
+          ${now.toISOString()}::timestamptz,
+          ${confirmed.backupExpiresAt.toISOString()}::timestamptz,
+          ${now.toISOString()}::timestamptz
+        )
+      `);
+      const response = projectAccountDeletionRequest(mapAccountDeletionRecord(saved));
+      const eventData: ProfileAccountDeletionConfirmedData = {
+        deletionRequestId: requestId,
+        operationId,
+        policyVersion: policy.version,
+      };
+      await tx.insert(outboxEvents).values({
+        id: eventId,
+        type: eventTypes.profileAccountDeletionConfirmed,
+        source: "urn:ai-job-apply:profile-service",
+        subject: `account-deletion-request/${requestId}`,
+        dataSchema:
+          "https://schemas.ai-job-apply.internal/events/profile.account-deletion.confirmed.v1.json",
+        data: eventData as unknown as Record<string, unknown>,
+        dispatchTarget: this.dispatchTarget,
+        ...(traceparent ? { traceparent } : {}),
+      });
+      await tx.insert(idempotencyKeys).values({
+        userId,
+        scope,
+        key: idempotencyKey,
+        requestHash: hash,
+        response: response as unknown as Record<string, unknown>,
+      });
+      await tx.insert(auditEvents).values({
+        id: uuidv7(),
+        userId,
+        action: "profile.account-deletion.confirmed",
+        resourceType: "account_deletion_request",
+        resourceId: requestId,
+        traceId,
+        metadata: { policyVersion: policy.version, version: confirmed.version },
+        occurredAt: now,
+      });
+      return {
+        response,
+        nudge:
+          this.dispatchTarget === "lambda_durable"
+            ? buildOutboxNudge(eventId, eventTypes.profileAccountDeletionConfirmed, traceparent)
+            : undefined,
+      };
+    });
+    if (outcome.nudge && this.nudgePublisher) await this.attemptOutboxNudge(outcome.nudge);
+    return outcome.response;
+  }
+
   async getOperation(userId: string, operationId: string): Promise<Operation | null> {
     const rows = await this.handle.db
       .select()
       .from(operations)
-      .where(and(eq(operations.id, operationId), eq(operations.userId, userId)))
+      .where(
+        and(
+          eq(operations.id, operationId),
+          eq(operations.userId, userId),
+          eq(operations.kind, "profile_readiness"),
+        ),
+      )
       .limit(1);
     return rows[0] ? mapOperation(rows[0]) : null;
   }
@@ -1302,12 +2010,127 @@ export class PostgresProfileStore implements ProfileStore {
     `;
   }
 
+  async reconcileDurableOperationFailure(executionName: string, errorCode: string): Promise<void> {
+    const code = sanitizedErrorCode(errorCode);
+    await this.handle.client.begin(async (transaction) => {
+      const events = await transaction<
+        Array<{
+          id: string;
+          type: string;
+          source: string;
+          subject: string;
+          dataSchema: string;
+          data: Record<string, unknown>;
+          traceparent: string | null;
+        }>
+      >`
+        SELECT id, type, source, subject, data_schema AS "dataSchema", data, traceparent
+        FROM platform.outbox_events
+        WHERE durable_execution_name = ${executionName}
+          AND dispatch_target = 'lambda_durable'
+        FOR UPDATE
+      `;
+      const event = events[0];
+      if (!event || events.length !== 1) throw new Error("DurableTerminalInputNotFound");
+      if (!validateEventData(event.type, event.data)) {
+        throw new Error("DurableTerminalInputRejected");
+      }
+      const operationId = event.data.operationId;
+      if (typeof operationId !== "string" || !UUID.test(operationId)) {
+        throw new Error("DurableTerminalInputRejected");
+      }
+      if (event.type === eventTypes.profilePreferencesUpdated) {
+        const preferenceSetId = event.data.preferenceSetId;
+        if (typeof preferenceSetId !== "string" || !UUID.test(preferenceSetId)) {
+          throw new Error("DurableTerminalInputRejected");
+        }
+        await transaction`
+          UPDATE platform.operations AS operation SET state = 'failed', updated_at = now(),
+            error_code = ${code}
+          FROM profile.job_preferences AS preference_set
+          WHERE operation.id = ${operationId}::uuid
+            AND preference_set.id = ${preferenceSetId}::uuid
+            AND preference_set.user_id = operation.user_id
+            AND operation.state IN ('queued', 'running', 'retryable_failure')
+        `;
+        return;
+      }
+      if (
+        event.type !== eventTypes.profileDataExportRequested &&
+        event.type !== eventTypes.profileAccountDeletionConfirmed
+      ) {
+        throw new Error("DurableTerminalEventTypeRejected");
+      }
+
+      await transaction`SELECT pg_advisory_xact_lock(hashtext(${operationId}))`;
+      const pending = await transaction<Array<{ present: boolean }>>`
+        SELECT EXISTS (
+          SELECT 1 FROM platform.outbox_events
+          WHERE type = ${event.type} AND data ->> 'operationId' = ${operationId}
+            AND published_at IS NULL AND id <> ${event.id}::uuid
+        ) AS present
+      `;
+      const attempts = await transaction<Array<{ count: number }>>`
+        SELECT count(*)::int AS count FROM platform.outbox_events
+        WHERE type = ${event.type} AND data ->> 'operationId' = ${operationId}
+      `;
+      if (pending[0]?.present) return;
+      if ((attempts[0]?.count ?? 0) < 3) {
+        await transaction`
+          UPDATE platform.operations SET state = 'retryable_failure', error_code = ${code},
+            updated_at = now()
+          WHERE id = ${operationId}::uuid AND state IN ('queued', 'running', 'retryable_failure')
+        `;
+        await transaction`
+          INSERT INTO platform.outbox_events (
+            id, type, source, subject, data_schema, data, traceparent, dispatch_target
+          ) VALUES (
+            ${uuidv7()}::uuid, ${event.type}, ${event.source}, ${event.subject},
+            ${event.dataSchema}, ${JSON.stringify(event.data)}::jsonb, ${event.traceparent},
+            'lambda_durable'
+          )
+        `;
+        return;
+      }
+      if (event.type === eventTypes.profileDataExportRequested) {
+        const dataExportId = (event.data as { dataExportId?: unknown }).dataExportId;
+        if (typeof dataExportId !== "string" || !UUID.test(dataExportId)) {
+          throw new Error("DurableTerminalInputRejected");
+        }
+        await transaction`
+          UPDATE profile.candidate_data_exports SET state = 'failed',
+            artifact_object_key = NULL, artifact_object_version = NULL, artifact_sha256 = NULL,
+            artifact_expires_at = NULL, failure_code = 'owner_unavailable', updated_at = now()
+          WHERE id = ${dataExportId}::uuid AND operation_id = ${operationId}::uuid
+            AND state IN ('queued', 'building')
+        `;
+        await transaction`
+          UPDATE platform.operations SET state = 'failed', error_code = ${code}, updated_at = now()
+          WHERE id = ${operationId}::uuid AND kind = 'candidate_data_export'
+            AND state IN ('queued', 'running', 'retryable_failure')
+        `;
+      } else {
+        await transaction`
+          UPDATE platform.operations SET state = 'retryable_failure', error_code = ${code},
+            updated_at = now()
+          WHERE id = ${operationId}::uuid AND kind = 'account_deletion'
+            AND state IN ('queued', 'running', 'retryable_failure')
+        `;
+      }
+    });
+  }
+
   async ping(): Promise<void> {
     await this.handle.client`SELECT 1`;
   }
 
   async close(): Promise<void> {
     await this.handle.client.end();
+  }
+
+  private requireCandidateRightsPolicy(): CandidateRightsPolicy {
+    if (!this.candidateRightsPolicy) throw new CandidateRightsPolicyError();
+    return this.candidateRightsPolicy;
   }
 
   private async attemptOutboxNudge(nudge: OutboxNudgeV1): Promise<void> {

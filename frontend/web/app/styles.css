@@ -480,3 +480,47 @@ aside {
   padding: 16px;
   box-shadow: none;
 }
+
+.candidate-rights {
+  display: grid;
+  gap: 16px;
+}
+
+.candidate-rights-card {
+  padding: 18px;
+  border: 1px solid #cedbd3;
+  border-radius: 12px;
+  background: white;
+}
+
+.candidate-rights-card h3,
+.candidate-rights-card p {
+  margin-top: 0;
+}
+
+.candidate-rights-actions {
+  display: grid;
+  gap: 12px;
+  align-items: start;
+}
+
+.candidate-rights-actions a {
+  width: fit-content;
+}
+
+.danger-zone {
+  border-color: #bd776e;
+  background: #fff8f6;
+}
+
+.acknowledgement {
+  display: flex;
+  gap: 10px;
+  align-items: start;
+  margin-bottom: 14px;
+}
+
+.acknowledgement input {
+  width: auto;
+  margin-top: 3px;
+}

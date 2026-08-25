@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ai-job-apply.internal/events/profile.data-export.requested.v1.json",
+  "title": "profile.data-export.requested.v1",
+  "type": "object",
+  "required": ["dataExportId", "operationId", "policyVersion"],
+  "properties": {
+    "dataExportId": { "type": "string", "format": "uuid" },
+    "operationId": { "type": "string", "format": "uuid" },
+    "policyVersion": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" }
+  },
+  "additionalProperties": false
+}

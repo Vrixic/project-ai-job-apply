@@ -33,6 +33,7 @@ Records important technical decisions, their context, alternatives, consequences
 ## Proposed delivery decisions
 
 - [ADR-023: Isolate untrusted document parsing from candidate data](023-isolate-untrusted-document-parsing.md)
+- [ADR-027: Profile-owned candidate rights workflows](027-profile-owned-candidate-rights-workflows.md)
 
 Use `000-template.md` for future decisions.
 

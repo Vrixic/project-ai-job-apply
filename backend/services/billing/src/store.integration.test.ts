@@ -60,10 +60,10 @@ describeWithDatabase("PostgresBillingStore", () => {
       env: environment,
     });
     expect(first.stdout.trim()).toBe(
-      "Billing migrations through 0001_entitlement_projection applied and verified.",
+      "Billing migrations through 0002_candidate_rights applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(
-      "Billing migrations through 0001_entitlement_projection applied and verified.",
+      "Billing migrations through 0002_candidate_rights applied and verified.",
     );
     await store.ping();
   });

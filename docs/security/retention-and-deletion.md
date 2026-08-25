@@ -1,7 +1,7 @@
 # Retention and Deletion Specification
 
 - Status: Provisional engineering defaults; product and counsel approval pending
-- Last updated: 2026-08-11
+- Last updated: 2026-08-25
 
 All durations are configuration, not hard-coded policy.
 
@@ -36,8 +36,8 @@ engineering settings. At the reviewed source baseline:
 | SQS work queue / DLQ | 4 days / 14 days | The work queue is identifier-only. The shared DLQ retains value-free schedule, terminal-metadata, durable-identifier, and failed-nudge envelopes; it has no automatic consumer/redrive and is not product-record retention. |
 | Security/audit record store | No separate 365-day product audit store is implemented | Blocks any claim that the provisional public audit schedule is enforced |
 | Product analytics | Optional product analytics is not active | No Phase 0 analytics-retention approval is implied |
-| Export and account-deletion workflow | Not implemented end to end | Blocks real candidate onboarding until implemented, deployed, and tested |
-| Candidate-document source and normalized objects | Separate KMS bucket/scan plan are deployed in development; deterministic normalized storage is locally implemented; full version-aware deletion/reconciliation remains unimplemented | Blocks real resume upload and any retention-enforcement claim |
+| Export and account-deletion workflow | Complete default-off technical vertical is implemented locally, including portable export, recent-MFA confirmation, quarantine/tombstones, durable owner-local deletion, exact-version artifact cleanup, identity revocation/deletion, and aggregate-only restore replay | Cloud release, generated-synthetic acceptance, exact policy approval, backup inventory, and accountable review still block real candidate onboarding |
+| Candidate-document source and normalized objects | Separate KMS bucket/scan plan is deployed in development; deterministic normalized storage and exact version-aware deletion/reconciliation are implemented | Deployed candidate-rights acceptance, real-resume trigger authorization, and retention approval still block real resume upload |
 
 Shared environments remain synthetic-only, so the seven-day backup setting does not shorten a
 public promise or authorize real-data processing. Before real candidate onboarding, reviewers must

@@ -15,3 +15,6 @@ evidence is retained.
   tagged private copy, compare immutable read-only aggregate verification, measure recovery, and
   prove cleanup. The repository packet is source-only until an accountable operator separately
   runs the reviewed AWS procedure.
+- [Candidate deletion recovery replay](candidate-deletion-recovery-replay.md) — Reconciles the
+  independently retained encrypted deletion markers into a private restored database before any
+  route may serve it.

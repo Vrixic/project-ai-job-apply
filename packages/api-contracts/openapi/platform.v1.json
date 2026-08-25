@@ -112,6 +112,272 @@
         }
       }
     },
+    "/me/data-exports": {
+      "post": {
+        "operationId": "createCandidateDataExport",
+        "security": [{ "oidc": ["profile:write"] }],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": { "type": "string", "minLength": 16, "maxLength": 128 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateCandidateDataExportRequest" }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "A candidate-owned portable export request was accepted",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/CandidateDataExport" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/me/data-exports/{dataExportId}": {
+      "get": {
+        "operationId": "getCandidateDataExport",
+        "security": [{ "oidc": ["profile:write"] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dataExportId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current owner-scoped export state and an optional exact-object grant",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/CandidateDataExportAccess" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/me/account-deletion-requests": {
+      "post": {
+        "operationId": "createAccountDeletionRequest",
+        "security": [{ "oidc": ["profile:write"] }],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": { "type": "string", "minLength": 16, "maxLength": 128 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateAccountDeletionRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "A cancellable account-deletion request was created",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AccountDeletionRequest" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/me/account-deletion-requests/{deletionRequestId}": {
+      "get": {
+        "operationId": "getAccountDeletionRequest",
+        "security": [{ "oidc": ["profile:write"] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deletionRequestId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current owner-scoped account-deletion state",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AccountDeletionRequest" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      },
+      "delete": {
+        "operationId": "cancelAccountDeletionRequest",
+        "security": [{ "oidc": ["profile:write"] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deletionRequestId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": { "type": "string", "minLength": 16, "maxLength": 128 }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": { "type": "string", "pattern": "^\\\"[1-9][0-9]*\\\"$" }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The unconfirmed deletion request was cancelled",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/me/account-deletion-requests/{deletionRequestId}/confirm": {
+      "post": {
+        "operationId": "confirmAccountDeletionRequest",
+        "security": [{ "oidc": ["profile:write"] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deletionRequestId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": { "type": "string", "minLength": 16, "maxLength": 128 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ConfirmAccountDeletionRequest" }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "The account was quarantined and durable deletion was accepted",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AccountDeletionRequest" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
     "/resumes": {
       "get": {
         "operationId": "listResumeDocuments",
@@ -1082,6 +1348,235 @@
           "preferences": { "$ref": "#/components/schemas/JobPreferenceSet" },
           "operationId": { "type": "string", "format": "uuid" }
         },
+        "additionalProperties": false
+      },
+      "CreateCandidateDataExportRequest": {
+        "type": "object",
+        "required": ["format"],
+        "properties": {
+          "format": { "type": "string", "const": "candidate-data-export-v1" }
+        },
+        "additionalProperties": false
+      },
+      "CandidateDataExport": {
+        "type": "object",
+        "required": [
+          "id",
+          "schemaVersion",
+          "format",
+          "policyVersion",
+          "state",
+          "requestedAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "schemaVersion": { "type": "integer", "const": 1 },
+          "format": { "type": "string", "const": "candidate-data-export-v1" },
+          "policyVersion": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" },
+          "state": {
+            "type": "string",
+            "enum": ["queued", "building", "ready", "expired", "failed"]
+          },
+          "requestedAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" },
+          "artifactExpiresAt": { "type": "string", "format": "date-time" },
+          "failureCode": {
+            "type": "string",
+            "enum": ["owner_unavailable", "inventory_incomplete", "artifact_write_failed"]
+          }
+        },
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "state": { "enum": ["queued", "building"] },
+              "artifactExpiresAt": false,
+              "failureCode": false
+            }
+          },
+          {
+            "type": "object",
+            "required": ["artifactExpiresAt"],
+            "properties": {
+              "state": { "enum": ["ready", "expired"] },
+              "artifactExpiresAt": { "type": "string", "format": "date-time" },
+              "failureCode": false
+            }
+          },
+          {
+            "type": "object",
+            "required": ["failureCode"],
+            "properties": {
+              "state": { "const": "failed" },
+              "artifactExpiresAt": false,
+              "failureCode": {
+                "type": "string",
+                "enum": ["owner_unavailable", "inventory_incomplete", "artifact_write_failed"]
+              }
+            }
+          }
+        ],
+        "additionalProperties": false
+      },
+      "CandidateDataExportDownloadGrant": {
+        "type": "object",
+        "required": ["url", "method", "expiresAt"],
+        "properties": {
+          "url": { "type": "string", "format": "uri", "maxLength": 8192 },
+          "method": { "type": "string", "const": "GET" },
+          "expiresAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      },
+      "CandidateDataExportAccess": {
+        "type": "object",
+        "required": ["export"],
+        "properties": {
+          "export": { "$ref": "#/components/schemas/CandidateDataExport" },
+          "download": { "$ref": "#/components/schemas/CandidateDataExportDownloadGrant" }
+        },
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["download"],
+            "properties": {
+              "export": {
+                "allOf": [
+                  { "$ref": "#/components/schemas/CandidateDataExport" },
+                  { "type": "object", "properties": { "state": { "const": "ready" } } }
+                ]
+              },
+              "download": { "$ref": "#/components/schemas/CandidateDataExportDownloadGrant" }
+            }
+          },
+          {
+            "type": "object",
+            "properties": {
+              "export": {
+                "allOf": [
+                  { "$ref": "#/components/schemas/CandidateDataExport" },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "state": { "enum": ["queued", "building", "expired", "failed"] }
+                    }
+                  }
+                ]
+              },
+              "download": false
+            }
+          }
+        ],
+        "additionalProperties": false
+      },
+      "CreateAccountDeletionRequest": {
+        "type": "object",
+        "required": ["acknowledgement"],
+        "properties": {
+          "acknowledgement": {
+            "type": "string",
+            "const": "ACCOUNT_DELETION_IS_IRREVERSIBLE"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConfirmAccountDeletionRequest": {
+        "type": "object",
+        "required": ["expectedVersion", "confirmation"],
+        "properties": {
+          "expectedVersion": { "type": "integer", "minimum": 1 },
+          "confirmation": { "type": "string", "const": "DELETE_MY_ACCOUNT" }
+        },
+        "additionalProperties": false
+      },
+      "AccountDeletionRequest": {
+        "type": "object",
+        "required": [
+          "id",
+          "schemaVersion",
+          "policyVersion",
+          "state",
+          "version",
+          "requestedAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "schemaVersion": { "type": "integer", "const": 1 },
+          "policyVersion": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" },
+          "state": {
+            "type": "string",
+            "enum": [
+              "requested",
+              "quarantined",
+              "active_systems_deleted",
+              "subprocessors_pending",
+              "completed",
+              "backup_expired"
+            ]
+          },
+          "version": { "type": "integer", "minimum": 1 },
+          "requestedAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" },
+          "confirmedAt": { "type": "string", "format": "date-time" },
+          "completedAt": { "type": "string", "format": "date-time" },
+          "backupExpiresAt": { "type": "string", "format": "date-time" },
+          "backupExpiredAt": { "type": "string", "format": "date-time" }
+        },
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "state": { "const": "requested" },
+              "confirmedAt": false,
+              "completedAt": false,
+              "backupExpiresAt": false,
+              "backupExpiredAt": false
+            }
+          },
+          {
+            "type": "object",
+            "required": ["confirmedAt", "backupExpiresAt"],
+            "properties": {
+              "state": {
+                "enum": ["quarantined", "active_systems_deleted", "subprocessors_pending"]
+              },
+              "confirmedAt": { "type": "string", "format": "date-time" },
+              "backupExpiresAt": { "type": "string", "format": "date-time" },
+              "completedAt": false,
+              "backupExpiredAt": false
+            }
+          },
+          {
+            "type": "object",
+            "required": ["confirmedAt", "completedAt", "backupExpiresAt"],
+            "properties": {
+              "state": { "const": "completed" },
+              "confirmedAt": { "type": "string", "format": "date-time" },
+              "completedAt": { "type": "string", "format": "date-time" },
+              "backupExpiresAt": { "type": "string", "format": "date-time" },
+              "backupExpiredAt": false
+            }
+          },
+          {
+            "type": "object",
+            "required": ["confirmedAt", "completedAt", "backupExpiresAt", "backupExpiredAt"],
+            "properties": {
+              "state": { "const": "backup_expired" },
+              "confirmedAt": { "type": "string", "format": "date-time" },
+              "completedAt": { "type": "string", "format": "date-time" },
+              "backupExpiresAt": { "type": "string", "format": "date-time" },
+              "backupExpiredAt": { "type": "string", "format": "date-time" }
+            }
+          }
+        ],
         "additionalProperties": false
       },
       "ResumeMediaType": {

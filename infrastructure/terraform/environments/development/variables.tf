@@ -336,3 +336,53 @@ variable "profile_readiness_retention_days" {
   type    = number
   default = 30
 }
+
+variable "candidate_rights_enabled" {
+  type    = bool
+  default = false
+}
+
+variable "candidate_rights_policy_version" {
+  type    = string
+  default = ""
+}
+
+variable "candidate_rights_policy_sha256" {
+  type    = string
+  default = ""
+}
+
+variable "candidate_rights_export_lifetime_seconds" {
+  type    = number
+  default = 3600
+}
+
+variable "candidate_rights_download_grant_seconds" {
+  type    = number
+  default = 300
+}
+
+variable "candidate_rights_backup_retention_days" {
+  type    = number
+  default = 7
+}
+
+variable "candidate_rights_recent_auth_max_age_seconds" {
+  type    = number
+  default = 300
+}
+
+variable "candidate_rights_owner_inventory" {
+  type    = string
+  default = ""
+}
+
+variable "candidate_rights_subprocessor_inventory" {
+  type    = string
+  default = ""
+}
+
+variable "candidate_rights_export_lifecycle_days" {
+  type    = number
+  default = 1
+}

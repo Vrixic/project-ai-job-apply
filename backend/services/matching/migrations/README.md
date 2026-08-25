@@ -1,5 +1,8 @@
 # Matching Migrations
 
+`0002_candidate_rights` adds a portable saved-job/audit export and preserves append-only audit
+behavior except inside a privacy-ledger-authorized whole-account deletion transaction.
+
 Forward-only, checksum-verified migrations for Matching-owned private candidate associations.
 No migration reads or modifies Jobs-owned or Profile-owned tables.
 

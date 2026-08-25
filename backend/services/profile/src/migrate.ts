@@ -14,6 +14,7 @@ const migrationVersions = [
   "0003_retire_legacy_dispatch",
   "0004_profile_fact_versions",
   "0005_resume_fact_proposals",
+  "0006_candidate_rights",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -81,7 +82,10 @@ try {
         (to_regclass('platform.outbox_events') IS NOT NULL)::int +
         (to_regclass('platform.idempotency_keys') IS NOT NULL)::int +
         (to_regclass('platform.audit_events') IS NOT NULL)::int +
-        (to_regclass('platform.schema_migrations') IS NOT NULL)::int
+        (to_regclass('platform.schema_migrations') IS NOT NULL)::int +
+        (to_regclass('profile.candidate_data_exports') IS NOT NULL)::int +
+        (to_regclass('profile.account_deletion_requests') IS NOT NULL)::int +
+        (to_regclass('privacy.account_deletion_ledger') IS NOT NULL)::int
       )::int AS table_count,
       (
         SELECT count(*)::int
@@ -116,7 +120,7 @@ try {
       ) AS profile_fact_trigger_count
     `;
     if (
-      verification?.table_count !== 12 ||
+      verification?.table_count !== 15 ||
       verification.migration_count !== migrationVersions.length ||
       verification.outbox_column_count !== 11 ||
       verification.profile_fact_trigger_count !== 1

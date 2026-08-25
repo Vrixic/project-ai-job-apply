@@ -54,6 +54,9 @@ const validBodies: Record<FoundationWriteSchemaName, Record<string, unknown>> = 
     expectedVersion: 1,
     value: "TypeScript and JavaScript",
   },
+  CreateCandidateDataExportRequest: { format: "candidate-data-export-v1" },
+  CreateAccountDeletionRequest: { acknowledgement: "ACCOUNT_DELETION_IS_IRREVERSIBLE" },
+  ConfirmAccountDeletionRequest: { expectedVersion: 1, confirmation: "DELETE_MY_ACCOUNT" },
 };
 const responsePreferenceSet = {
   id: "019b4e12-7ea3-7c36-9357-aea35ab542c1",

@@ -1,4 +1,9 @@
 import {
+  eventTypes,
+  type ProfilePreferencesUpdatedData,
+  validateEventData,
+} from "@ai-job-apply/event-contracts";
+import {
   type DurableContext,
   type DurableExecutionHandler,
   type DurableLambdaHandler,
@@ -6,10 +11,10 @@ import {
   withRetry,
 } from "@aws/durable-execution-sdk-js";
 import {
-  eventTypes,
-  type ProfilePreferencesUpdatedData,
-  validateEventData,
-} from "@ai-job-apply/event-contracts";
+  type CandidateRightsWorkflowResultV1,
+  createCandidateRightsWorkflow,
+  validateCandidateRightsDurableInput,
+} from "./candidate-rights-durable.js";
 import type { DurableExecutionPayloadV1 } from "./serverless-outbox.js";
 
 export const PROFILE_READINESS_WORKFLOW_DEFINITION_VERSION = 1 as const;
@@ -281,11 +286,14 @@ export function createProfileReadinessDurableHandler(
 
 const productionWorkflow: DurableExecutionHandler<
   DurableExecutionPayloadV1,
-  ProfileReadinessWorkflowResultV1
+  ProfileReadinessWorkflowResultV1 | CandidateRightsWorkflowResultV1
 > = async (event, context) => {
   const activityFunctionArn = process.env.PROFILE_ACTIVITY_FUNCTION_ARN;
   if (!activityFunctionArn) {
     throw new Error("PROFILE_ACTIVITY_FUNCTION_ARN is required");
+  }
+  if (validateCandidateRightsDurableInput(event)) {
+    return createCandidateRightsWorkflow(activityFunctionArn)(event, context);
   }
   return createProfileReadinessWorkflow(activityFunctionArn)(event, context);
 };

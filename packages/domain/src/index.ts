@@ -4,6 +4,8 @@ import type {
   PutJobPreferencesRequest,
 } from "@ai-job-apply/api-contracts";
 
+export { validateCandidateDataExportV1 } from "./candidate-data-export.js";
+
 export type UserId = string & { readonly __brand: "UserId" };
 export type PreferenceSetId = string & { readonly __brand: "PreferenceSetId" };
 export type OperationId = string & { readonly __brand: "OperationId" };

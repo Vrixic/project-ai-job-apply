@@ -36,6 +36,10 @@ const declaredProblems = new Map<string, Readonly<DeclaredProblem>>([
     { code: "authentication_required", title: "Authentication required" },
   ],
   ["403:forbidden", { code: "forbidden", title: "Forbidden" }],
+  [
+    "403:account_quarantined",
+    { code: "account_quarantined", title: "Account deletion is in progress" },
+  ],
   ["404:not_found", { code: "not_found", title: "Not found" }],
   [
     "404:saved_job_target_unavailable",
@@ -47,6 +51,10 @@ const declaredProblems = new Map<string, Readonly<DeclaredProblem>>([
   ],
   ["404:match_job_unavailable", { code: "match_job_unavailable", title: "Job is unavailable" }],
   ["409:idempotency_conflict", { code: "idempotency_conflict", title: "Idempotency key conflict" }],
+  [
+    "409:candidate_rights_state_conflict",
+    { code: "candidate_rights_state_conflict", title: "Candidate rights state changed" },
+  ],
   ["409:version_conflict", { code: "version_conflict", title: "Profile fact changed" }],
   [
     "409:profile_fact_transition_conflict",
@@ -106,6 +114,10 @@ const declaredProblems = new Map<string, Readonly<DeclaredProblem>>([
   [
     "503:entitlement_unavailable",
     { code: "entitlement_unavailable", title: "Entitlement status unavailable" },
+  ],
+  [
+    "503:candidate_rights_unavailable",
+    { code: "candidate_rights_unavailable", title: "Candidate rights service unavailable" },
   ],
 ]);
 

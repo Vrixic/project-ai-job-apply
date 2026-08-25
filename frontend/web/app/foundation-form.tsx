@@ -12,6 +12,7 @@ import {
   candidateSafeProblemMessage,
 } from "../lib/candidate-safe-problem";
 import { isIsolationOperationEligible } from "../lib/isolation-operation";
+import { CandidateRightsPanel } from "./candidate-rights-panel";
 import { EntitlementStatus } from "./entitlement-status";
 import { JobSearchForm } from "./job-search-form";
 import {
@@ -1012,6 +1013,7 @@ export function FoundationForm({
       <JobSearchForm authenticated={authenticated} />
       <SavedJobsPanel authenticated={authenticated} />
       <EntitlementStatus authenticated={authenticated} />
+      <CandidateRightsPanel authenticated={authenticated} />
 
       {!authConfigured && (
         <aside>

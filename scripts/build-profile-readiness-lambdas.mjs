@@ -22,7 +22,7 @@ const activity = await buildLambdaArtifact({
   outputDirectory,
   artifactName: "profile-readiness-activity-lambda",
   applicationName: "@ai-job-apply/profile-readiness-activity-lambda",
-  handlers: ["index.activity", "index.terminal"],
+  handlers: ["index.activity", "index.terminal", "index.maintenance"],
   packageFilter,
 });
 

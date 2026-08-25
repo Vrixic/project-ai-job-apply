@@ -1,11 +1,20 @@
+import type { ProfileStore } from "@ai-job-apply/profile-service";
 import { withDurableExecution } from "@aws/durable-execution-sdk-js";
 import {
   ExecutionStatus,
   LocalDurableTestRunner,
   WaitingOperationStatus,
 } from "@aws/durable-execution-sdk-js-testing";
-import type { ProfileStore } from "@ai-job-apply/profile-service";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { createCandidateRightsActivityHandler } from "./candidate-rights-activities.js";
+import {
+  type CandidateRightsActivityInputV1,
+  type CandidateRightsActivityResultV1,
+  candidateRightsOperationNames,
+  createCandidateRightsDurableHandler,
+  validateCandidateRightsActivityInput,
+  validateCandidateRightsDurableInput,
+} from "./candidate-rights-durable.js";
 import {
   createProfileReadinessDurableHandler,
   isExactNumericVersionFunctionArn,
@@ -17,6 +26,7 @@ import {
   validateProfileReadinessDurableInput,
 } from "./profile-readiness-durable.js";
 import {
+  createCandidateRightsMaintenanceHandler,
   createDurableTerminalHandler,
   createProfileReadinessActivityHandler,
   type DurableTerminalEvent,
@@ -35,11 +45,39 @@ const durableInput: DurableExecutionPayloadV1 = {
   data: { operationId, preferenceSetId, version: 1 },
 };
 
+const exportId = "019c2b89-79b2-7000-8000-000000000004";
+const deletionRequestId = "019c2b89-79b2-7000-8000-000000000005";
+const exportInput: DurableExecutionPayloadV1 = {
+  schemaVersion: 1,
+  eventId,
+  eventType: "profile.data-export.requested.v1",
+  data: { dataExportId: exportId, operationId, policyVersion: "policy-2026-08" },
+};
+const deletionInput: DurableExecutionPayloadV1 = {
+  schemaVersion: 1,
+  eventId,
+  eventType: "profile.account-deletion.confirmed.v1",
+  data: { deletionRequestId, operationId, policyVersion: "policy-2026-08" },
+};
+
 function activityResult(
   input: ProfileReadinessActivityInputV1,
   outcome: ProfileReadinessActivityResultV1["outcome"] = "completed",
   errorCode?: string,
 ): ProfileReadinessActivityResultV1 {
+  return {
+    schemaVersion: 1,
+    action: input.action,
+    outcome,
+    ...(errorCode ? { errorCode } : {}),
+  };
+}
+
+function candidateRightsActivityResult(
+  input: CandidateRightsActivityInputV1,
+  outcome: CandidateRightsActivityResultV1["outcome"] = "completed",
+  errorCode?: string,
+): CandidateRightsActivityResultV1 {
   return {
     schemaVersion: 1,
     action: input.action,
@@ -81,6 +119,115 @@ describe("profile readiness Lambda durable workflow", () => {
     });
     expect(calls.map((call) => call.action)).toEqual(["mark_running", "calculate_and_persist"]);
     expect(result.getInvocations().length).toBeGreaterThan(1);
+  });
+
+  it("runs the candidate export stages and compensates a rejected assembly", async () => {
+    const actions: CandidateRightsActivityInputV1[] = [];
+    const runner = new LocalDurableTestRunner({
+      handlerFunction: createCandidateRightsDurableHandler(activityArn),
+    });
+    runner.registerFunction(activityArn, async (event) => {
+      expect(validateCandidateRightsActivityInput(event)).toBe(true);
+      const input = event as CandidateRightsActivityInputV1;
+      actions.push(input);
+      return input.action === "export_assemble"
+        ? candidateRightsActivityResult(input, "non_retryable_failure", "InventoryIncomplete")
+        : candidateRightsActivityResult(input);
+    });
+
+    const result = await runner.run({ payload: exportInput });
+
+    expect(result.getStatus()).toBe(ExecutionStatus.FAILED);
+    expect(actions.map((input) => input.action)).toEqual([
+      "export_begin",
+      "export_assemble",
+      "export_fail",
+    ]);
+    expect(actions[2]?.errorCode).toBe("WorkflowNonRetryableFailure");
+  });
+
+  it("runs irreversible deletion in ordered durable stages", async () => {
+    const actions: string[] = [];
+    const runner = new LocalDurableTestRunner({
+      handlerFunction: createCandidateRightsDurableHandler(activityArn),
+    });
+    runner.registerFunction(activityArn, async (event) => {
+      const input = event as CandidateRightsActivityInputV1;
+      actions.push(input.action);
+      return candidateRightsActivityResult(input);
+    });
+
+    const result = await runner.run({ payload: deletionInput });
+
+    expect(result.getStatus()).toBe(ExecutionStatus.SUCCEEDED);
+    expect(result.getResult()).toMatchObject({
+      resourceId: deletionRequestId,
+      operationId,
+      kind: "account_deletion",
+      state: "succeeded",
+    });
+    expect(actions).toEqual([
+      "deletion_record_recovery",
+      "deletion_delete_active_systems",
+      "deletion_reconcile_subprocessors",
+      "deletion_complete",
+    ]);
+    expect(
+      runner.getOperation(`${candidateRightsOperationNames.deletionComplete}.attempt-1`),
+    ).toBeDefined();
+  });
+
+  it("strictly rejects malformed candidate-rights inputs", () => {
+    expect(validateCandidateRightsDurableInput(exportInput)).toBe(true);
+    expect(validateCandidateRightsDurableInput(deletionInput)).toBe(true);
+    expect(validateCandidateRightsDurableInput({ ...exportInput, extra: true })).toBe(false);
+    expect(
+      validateCandidateRightsDurableInput({
+        ...deletionInput,
+        data: { ...deletionInput.data, policyVersion: "" },
+      }),
+    ).toBe(false);
+  });
+
+  it("dispatches strict candidate-rights activities and classifies safe failures", async () => {
+    const store = {
+      beginExport: vi.fn(async () => undefined),
+      assembleExport: vi.fn(async () => {
+        throw Object.assign(new Error("hidden"), { code: "40001" });
+      }),
+      failExport: vi.fn(async () => undefined),
+      deleteActiveSystems: vi.fn(async () => undefined),
+      reconcileSubprocessors: vi.fn(async () => undefined),
+      completeDeletion: vi.fn(async () => undefined),
+    };
+    const handler = createCandidateRightsActivityHandler(store as never);
+    const base = {
+      schemaVersion: 1 as const,
+      workflowDefinitionVersion: 1 as const,
+      eventId,
+      resourceId: exportId,
+      operationId,
+      policyVersion: "policy-2026-08",
+    };
+
+    await expect(handler({ ...base, action: "export_begin" })).resolves.toEqual({
+      schemaVersion: 1,
+      action: "export_begin",
+      outcome: "completed",
+    });
+    await expect(handler({ ...base, action: "export_assemble" })).resolves.toEqual({
+      schemaVersion: 1,
+      action: "export_assemble",
+      outcome: "retryable_failure",
+      errorCode: "40001",
+    });
+    await expect(handler({ ...base, action: "export_fail" })).resolves.toMatchObject({
+      outcome: "non_retryable_failure",
+      errorCode: "ActivityInputRejected",
+    });
+    expect(store.beginExport).toHaveBeenCalledOnce();
+    expect(store.assembleExport).toHaveBeenCalledOnce();
+    expect(store.failExport).not.toHaveBeenCalled();
   });
 
   it("retries a classified transient activity failure with bounded durable backoff", async () => {
@@ -216,13 +363,37 @@ describe("profile readiness Lambda durable workflow", () => {
 });
 
 describe("profile readiness activity and terminal boundaries", () => {
+  it("accepts only the exact scheduled candidate-rights maintenance rule", async () => {
+    const expireDueExports = vi.fn(async () => ({ scanned: 2, expired: 2 }));
+    const ruleArn =
+      "arn:aws:events:us-east-2:123456789012:rule/ai-job-apply-development-candidate-rights-maintenance";
+    const handler = createCandidateRightsMaintenanceHandler({ expireDueExports }, ruleArn);
+    await expect(
+      handler({
+        source: "aws.events",
+        "detail-type": "Scheduled Event",
+        resources: [ruleArn],
+        detail: {},
+      }),
+    ).resolves.toEqual({ schemaVersion: 1, scanned: 2, expired: 2 });
+    await expect(
+      handler({
+        source: "aws.events",
+        "detail-type": "Scheduled Event",
+        resources: [`${ruleArn}-other`],
+        detail: {},
+      }),
+    ).rejects.toThrow("CandidateRightsMaintenanceEventRejected");
+    expect(expireDueExports).toHaveBeenCalledOnce();
+  });
+
   it("rejects malformed direct activity invocation before touching persistence", async () => {
     const store = {
       markOperationRunning: vi.fn(),
       getPreferencesById: vi.fn(),
       completeReadinessOperation: vi.fn(),
       failReadinessOperation: vi.fn(),
-      failDurableReadinessOperation: vi.fn(),
+      reconcileDurableOperationFailure: vi.fn(),
     } as unknown as ProfileStore;
 
     const result = await createProfileReadinessActivityHandler(store)({
@@ -246,9 +417,9 @@ describe("profile readiness activity and terminal boundaries", () => {
   ] as const)(
     "maps %s terminal state to one idempotent product-state reconciliation",
     async (status, code) => {
-      const failDurableReadinessOperation = vi.fn(async () => undefined);
+      const reconcileDurableOperationFailure = vi.fn(async () => undefined);
       const handler = createDurableTerminalHandler(
-        { failDurableReadinessOperation },
+        { reconcileDurableOperationFailure },
         activityArn.replace("profile-readiness-activity", "profile-readiness-workflow"),
       );
       const event: DurableTerminalEvent = {
@@ -266,18 +437,18 @@ describe("profile readiness activity and terminal boundaries", () => {
       };
 
       await expect(handler(event)).resolves.toEqual({ handled: true });
-      expect(failDurableReadinessOperation).toHaveBeenCalledWith(`outbox-${eventId}`, code);
+      expect(reconcileDurableOperationFailure).toHaveBeenCalledWith(`outbox-${eventId}`, code);
     },
   );
 
   it("ignores non-terminal success and rejects a cross-function terminal event", async () => {
-    const failDurableReadinessOperation = vi.fn(async () => undefined);
+    const reconcileDurableOperationFailure = vi.fn(async () => undefined);
     const expectedFunctionArn = activityArn.replace(
       "profile-readiness-activity",
       "profile-readiness-workflow",
     );
     const handler = createDurableTerminalHandler(
-      { failDurableReadinessOperation },
+      { reconcileDurableOperationFailure },
       expectedFunctionArn,
     );
     const event: DurableTerminalEvent = {
@@ -295,6 +466,6 @@ describe("profile readiness activity and terminal boundaries", () => {
     await expect(
       handler({ ...event, detail: { ...event.detail, functionArn: activityArn } }),
     ).rejects.toThrow("DurableTerminalEventRejected");
-    expect(failDurableReadinessOperation).not.toHaveBeenCalled();
+    expect(reconcileDurableOperationFailure).not.toHaveBeenCalled();
   });
 });

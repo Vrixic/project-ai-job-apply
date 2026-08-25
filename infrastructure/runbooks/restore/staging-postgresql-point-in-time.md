@@ -168,6 +168,8 @@ production data authorization, or an RTO/RPO result. Matching composition and ve
 remain source changes until an immutable migration image and task definition are separately
 published, deployed, and exercised under this runbook.
 
-This PostgreSQL packet also does not prove versioned object/artifact recovery, durable
-outbox/workflow/event reconciliation after restore, deletion-ledger or account-deletion replay, or
-cross-region recovery. Those remain separate D1-010B or later acceptance gates.
+This PostgreSQL packet also does not by itself prove versioned object/artifact recovery, durable
+outbox/workflow/event reconciliation, candidate-deletion recovery replay, or cross-region recovery.
+When candidate rights are enabled, the restored target must remain quiesced until the separate
+[candidate deletion recovery replay](candidate-deletion-recovery-replay.md) succeeds. Deployed
+execution remains a D1-010B acceptance gate.

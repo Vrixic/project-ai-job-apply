@@ -9,7 +9,10 @@ export type FoundationWriteSchemaName =
   | "PutJobPreferencesRequest"
   | "CreateResumeUploadRequest"
   | "CreateProfileFactRequest"
-  | "UpdateProfileFactRequest";
+  | "UpdateProfileFactRequest"
+  | "CreateCandidateDataExportRequest"
+  | "CreateAccountDeletionRequest"
+  | "ConfirmAccountDeletionRequest";
 
 const validators = new Map<FoundationWriteSchemaName, ReturnType<typeof compileComponentValidator>>(
   [
@@ -17,6 +20,12 @@ const validators = new Map<FoundationWriteSchemaName, ReturnType<typeof compileC
     ["CreateResumeUploadRequest", compileComponentValidator("CreateResumeUploadRequest")],
     ["CreateProfileFactRequest", compileComponentValidator("CreateProfileFactRequest")],
     ["UpdateProfileFactRequest", compileComponentValidator("UpdateProfileFactRequest")],
+    [
+      "CreateCandidateDataExportRequest",
+      compileComponentValidator("CreateCandidateDataExportRequest"),
+    ],
+    ["CreateAccountDeletionRequest", compileComponentValidator("CreateAccountDeletionRequest")],
+    ["ConfirmAccountDeletionRequest", compileComponentValidator("ConfirmAccountDeletionRequest")],
   ],
 );
 

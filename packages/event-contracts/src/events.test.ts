@@ -10,6 +10,39 @@ import {
 } from "./index.js";
 
 describe("event schemas", () => {
+  it("accepts only identifier-only candidate-rights events", () => {
+    const common = {
+      operationId: "019b4e12-7ea3-7c36-9357-aea35ab542ca",
+      policyVersion: "d1-synthetic-v1",
+    };
+    expect(
+      validateEventData(eventTypes.profileDataExportRequested, {
+        ...common,
+        dataExportId: "019b4e12-7ea3-7c36-9357-aea35ab542cb",
+      }),
+    ).toBe(true);
+    expect(
+      validateEventData(eventTypes.profileAccountDeletionConfirmed, {
+        ...common,
+        deletionRequestId: "019b4e12-7ea3-7c36-9357-aea35ab542cc",
+      }),
+    ).toBe(true);
+    expect(
+      validateEventData(eventTypes.profileDataExportRequested, {
+        ...common,
+        dataExportId: "019b4e12-7ea3-7c36-9357-aea35ab542cb",
+        email: "candidate@example.test",
+      }),
+    ).toBe(false);
+    expect(
+      validateEventData(eventTypes.profileAccountDeletionConfirmed, {
+        ...common,
+        deletionRequestId: "019b4e12-7ea3-7c36-9357-aea35ab542cc",
+        identityProviderSubject: "auth0|candidate",
+      }),
+    ).toBe(false);
+  });
+
   it("accepts identifiers without candidate preference values", () => {
     expect(
       validateEventData(eventTypes.profilePreferencesUpdated, {

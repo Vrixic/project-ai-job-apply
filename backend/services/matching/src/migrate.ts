@@ -6,7 +6,7 @@ import postgres from "postgres";
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
 
-const migrationVersions = ["0001_saved_jobs"] as const;
+const migrationVersions = ["0001_saved_jobs", "0002_candidate_rights"] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
     const migrationPath = fileURLToPath(
@@ -69,7 +69,7 @@ try {
       throw new Error("Matching saved-job migration verification failed");
     }
   });
-  console.log("Matching migrations through 0001_saved_jobs applied and verified.");
+  console.log(`Matching migrations through ${migrationVersions.at(-1)} applied and verified.`);
 } finally {
   await client.end();
 }

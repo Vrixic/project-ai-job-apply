@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   date,
   index,
@@ -10,14 +11,16 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 
 const identity = pgSchema("identity");
 const profile = pgSchema("profile");
 const platform = pgSchema("platform");
+const privacy = pgSchema("privacy");
 
 export const users = identity.table("users", {
   id: uuid("id").primaryKey(),
+  accountState: text("account_state").$type<"active" | "quarantined">().notNull().default("active"),
+  quarantinedAt: timestamp("quarantined_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -142,6 +145,94 @@ export const resumeFactImports = profile.table(
     ),
   ],
 );
+
+export type CandidateDataExportState = "queued" | "building" | "ready" | "expired" | "failed";
+export type CandidateDataExportFailureCode =
+  | "owner_unavailable"
+  | "inventory_incomplete"
+  | "artifact_write_failed";
+
+export const candidateDataExports = profile.table(
+  "candidate_data_exports",
+  {
+    id: uuid("id").primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    operationId: uuid("operation_id").notNull(),
+    format: text("format").$type<"candidate-data-export-v1">().notNull(),
+    policyVersion: text("policy_version").notNull(),
+    state: text("state").$type<CandidateDataExportState>().notNull(),
+    artifactObjectKey: text("artifact_object_key"),
+    artifactObjectVersion: text("artifact_object_version"),
+    artifactSha256: text("artifact_sha256"),
+    artifactExpiresAt: timestamp("artifact_expires_at", { withTimezone: true }),
+    failureCode: text("failure_code").$type<CandidateDataExportFailureCode>(),
+    requestedAt: timestamp("requested_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("candidate_data_exports_user_requested_idx").on(
+      table.userId,
+      table.requestedAt,
+      table.id,
+    ),
+    uniqueIndex("candidate_data_exports_operation_uq").on(table.operationId),
+  ],
+);
+
+export type AccountDeletionState =
+  | "requested"
+  | "quarantined"
+  | "active_systems_deleted"
+  | "subprocessors_pending"
+  | "completed"
+  | "backup_expired";
+
+export const accountDeletionRequests = profile.table(
+  "account_deletion_requests",
+  {
+    id: uuid("id").primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    operationId: uuid("operation_id"),
+    policyVersion: text("policy_version").notNull(),
+    state: text("state").$type<AccountDeletionState>().notNull(),
+    version: integer("version").notNull(),
+    requestedAt: timestamp("requested_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    backupExpiresAt: timestamp("backup_expires_at", { withTimezone: true }),
+    backupExpiredAt: timestamp("backup_expired_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("account_deletion_requests_user_requested_idx").on(
+      table.userId,
+      table.requestedAt,
+      table.id,
+    ),
+    uniqueIndex("account_deletion_requests_operation_uq")
+      .on(table.operationId)
+      .where(sql`${table.operationId} IS NOT NULL`),
+  ],
+);
+
+export const accountDeletionLedger = privacy.table("account_deletion_ledger", {
+  requestId: uuid("request_id").primaryKey(),
+  subjectDigest: text("subject_digest").notNull(),
+  policyVersion: text("policy_version").notNull(),
+  policySha256: text("policy_sha256").notNull(),
+  state: text("state").notNull(),
+  ownerInventory: jsonb("owner_inventory").$type<Record<string, string>>().notNull(),
+  subprocessorInventory: jsonb("subprocessor_inventory").$type<Record<string, string>>().notNull(),
+  confirmedAt: timestamp("confirmed_at", { withTimezone: true }).notNull(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  backupExpiresAt: timestamp("backup_expires_at", { withTimezone: true }).notNull(),
+  backupExpiredAt: timestamp("backup_expired_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+});
 
 export const profileFactEvidence = profile.table(
   "profile_fact_evidence",

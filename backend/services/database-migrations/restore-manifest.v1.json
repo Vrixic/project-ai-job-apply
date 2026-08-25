@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "manifestId": "d1-profile-jobs-public-documents-matching-billing-v1",
+  "manifestId": "d1-candidate-rights-profile-jobs-documents-matching-billing-v1",
   "contributors": [
     {
       "owner": "billing",
@@ -10,6 +10,10 @@
         {
           "version": "0001_entitlement_projection",
           "checksum": "05368bb42a9c6ed3007b61f80a980a921d1f02bbcac633a4ecfd0b4c7dcf0ba0"
+        },
+        {
+          "version": "0002_candidate_rights",
+          "checksum": "d99303245eb56aa3e926487acac2911b447993f0b057829822b96944ad332812"
         }
       ],
       "relations": [
@@ -32,6 +36,10 @@
         {
           "version": "0002_resume_processing",
           "checksum": "6b534809a2b20764813500d07784f833897697b261b333c0abe3abf2f2795f32"
+        },
+        {
+          "version": "0003_candidate_rights",
+          "checksum": "4d40f6cb198849cecc086e85b5cc5136779adddb5ecb39d784a956c00fc8e9b4"
         }
       ],
       "relations": [
@@ -91,6 +99,10 @@
         {
           "version": "0011_positive_source_withdrawal",
           "checksum": "e08967c746fcd2a5a7471f038382c879eb3df7d6d1ee001508a9efaeed402945"
+        },
+        {
+          "version": "0012_candidate_rights",
+          "checksum": "8f1b1b8566e4450a2ada7baee899529854a4cba63a5c88137410f8e7e38ceb09"
         }
       ],
       "relations": [
@@ -118,6 +130,10 @@
         {
           "version": "0001_saved_jobs",
           "checksum": "cd8cb5392a761671c4a232e4c8534cdbaa495dd9c1aff123095f201759cc1851"
+        },
+        {
+          "version": "0002_candidate_rights",
+          "checksum": "fa4c2bce9c702b10f17a0bee1ba63378ac852554ee89b68198ba215d10934611"
         }
       ],
       "relations": [
@@ -130,7 +146,7 @@
     },
     {
       "owner": "profile",
-      "schemas": ["identity", "platform", "profile"],
+      "schemas": ["identity", "platform", "privacy", "profile"],
       "migrationLedger": "platform.schema_migrations",
       "migrations": [
         {
@@ -152,6 +168,10 @@
         {
           "version": "0005_resume_fact_proposals",
           "checksum": "3c59bee0e4e43e768f7ca3832f5327dc07d784e3cba94f454283a83093ca524e"
+        },
+        {
+          "version": "0006_candidate_rights",
+          "checksum": "cf5966af5ac55588a20879315ceca230f37dfda29c234e74adf57acda146cbff"
         }
       ],
       "relations": [
@@ -162,6 +182,9 @@
         "platform.operations",
         "platform.outbox_events",
         "platform.schema_migrations",
+        "privacy.account_deletion_ledger",
+        "profile.account_deletion_requests",
+        "profile.candidate_data_exports",
         "profile.job_preferences",
         "profile.profile_fact_evidence",
         "profile.profile_fact_versions",

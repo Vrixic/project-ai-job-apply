@@ -8,7 +8,11 @@ if (!databaseUrl) {
   throw new Error("DATABASE_URL is required");
 }
 
-const migrationVersions = ["0001_resume_intake", "0002_resume_processing"] as const;
+const migrationVersions = [
+  "0001_resume_intake",
+  "0002_resume_processing",
+  "0003_candidate_rights",
+] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
     const path = fileURLToPath(new URL(`../../migrations/${version}.sql`, import.meta.url));

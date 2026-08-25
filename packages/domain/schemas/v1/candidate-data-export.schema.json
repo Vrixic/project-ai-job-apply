@@ -1,0 +1,287 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ai-job-apply.internal/domain/v1/candidate-data-export.schema.json",
+  "title": "CandidateDataExportV1",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "format",
+    "exportId",
+    "policyVersion",
+    "generatedAt",
+    "candidate",
+    "profile",
+    "documents",
+    "jobs",
+    "matching",
+    "billing",
+    "audit"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "format": { "const": "candidate-data-export-v1" },
+    "exportId": { "$ref": "#/$defs/uuid" },
+    "policyVersion": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" },
+    "generatedAt": { "$ref": "#/$defs/dateTime" },
+    "candidate": {
+      "type": "object",
+      "required": ["createdAt", "connectedAccounts"],
+      "properties": {
+        "email": { "type": "string", "format": "email", "maxLength": 320 },
+        "createdAt": { "$ref": "#/$defs/dateTime" },
+        "connectedAccounts": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "required": ["provider", "linkedAt", "lastSeenAt"],
+            "properties": {
+              "provider": { "type": "string", "minLength": 1, "maxLength": 64 },
+              "linkedAt": { "$ref": "#/$defs/dateTime" },
+              "lastSeenAt": { "$ref": "#/$defs/dateTime" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "profile": {
+      "type": "object",
+      "required": ["preferences", "facts"],
+      "properties": {
+        "preferences": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/preferences" }] },
+        "facts": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/profileFact" } }
+      },
+      "additionalProperties": false
+    },
+    "documents": {
+      "type": "object",
+      "required": ["resumes"],
+      "properties": {
+        "resumes": { "type": "array", "maxItems": 1000, "items": { "$ref": "#/$defs/resume" } }
+      },
+      "additionalProperties": false
+    },
+    "jobs": {
+      "type": "object",
+      "required": ["reports"],
+      "properties": {
+        "reports": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/jobReport" } }
+      },
+      "additionalProperties": false
+    },
+    "matching": {
+      "type": "object",
+      "required": ["savedJobs"],
+      "properties": {
+        "savedJobs": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/savedJob" } }
+      },
+      "additionalProperties": false
+    },
+    "billing": {
+      "type": "object",
+      "required": ["entitlement"],
+      "properties": { "entitlement": { "$ref": "#/$defs/entitlement" } },
+      "additionalProperties": false
+    },
+    "audit": {
+      "type": "object",
+      "required": ["events"],
+      "properties": {
+        "events": { "type": "array", "maxItems": 100000, "items": { "$ref": "#/$defs/auditEvent" } }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "uuid": { "type": "string", "format": "uuid" },
+    "dateTime": { "type": "string", "format": "date-time" },
+    "preferences": {
+      "type": "object",
+      "required": [
+        "version",
+        "targetRoles",
+        "locations",
+        "workModes",
+        "employmentTypes",
+        "updatedAt"
+      ],
+      "properties": {
+        "version": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+        "targetRoles": {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+        },
+        "locations": {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "type": "string", "minLength": 1, "maxLength": 240 }
+        },
+        "workModes": {
+          "type": "array",
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": { "enum": ["remote", "hybrid", "on_site"] }
+        },
+        "employmentTypes": {
+          "type": "array",
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": { "enum": ["full_time", "part_time", "contract", "internship"] }
+        },
+        "salaryMinimum": { "type": "integer", "minimum": 0, "maximum": 10000000 },
+        "salaryCurrency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "updatedAt": { "$ref": "#/$defs/dateTime" }
+      },
+      "additionalProperties": false
+    },
+    "profileFact": {
+      "type": "object",
+      "required": [
+        "id",
+        "version",
+        "kind",
+        "key",
+        "value",
+        "verification",
+        "sensitivity",
+        "sourceType",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "version": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+        "kind": {
+          "enum": [
+            "identity",
+            "employment",
+            "education",
+            "project",
+            "skill",
+            "certification",
+            "preference"
+          ]
+        },
+        "key": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "value": {
+          "oneOf": [
+            { "type": "string", "maxLength": 10000 },
+            { "type": "number" },
+            { "type": "boolean" },
+            { "type": "array", "maxItems": 100, "items": { "type": "string", "maxLength": 1000 } }
+          ]
+        },
+        "verification": { "enum": ["proposed", "confirmed", "rejected"] },
+        "availability": { "enum": ["available", "invalidated"] },
+        "sensitivity": { "enum": ["standard", "confidential", "restricted"] },
+        "sourceType": { "enum": ["user", "resume", "import", "derived"] },
+        "effectiveFrom": { "type": "string", "format": "date" },
+        "effectiveTo": { "type": "string", "format": "date" },
+        "createdAt": { "$ref": "#/$defs/dateTime" },
+        "updatedAt": { "$ref": "#/$defs/dateTime" }
+      },
+      "additionalProperties": false
+    },
+    "resume": {
+      "type": "object",
+      "required": [
+        "id",
+        "fileName",
+        "mediaType",
+        "sizeBytes",
+        "sha256",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "fileName": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "mediaType": {
+          "enum": [
+            "application/pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          ]
+        },
+        "sizeBytes": { "type": "integer", "minimum": 1, "maximum": 10485760 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "status": {
+          "enum": ["awaiting_upload", "scanning", "parsing", "parsed", "rejected", "failed"]
+        },
+        "failureCode": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "pageCount": { "type": "integer", "minimum": 1, "maximum": 1000 },
+        "characterCount": { "type": "integer", "minimum": 0, "maximum": 5000000 },
+        "createdAt": { "$ref": "#/$defs/dateTime" },
+        "updatedAt": { "$ref": "#/$defs/dateTime" }
+      },
+      "additionalProperties": false
+    },
+    "jobReport": {
+      "type": "object",
+      "required": ["id", "requestedJobId", "canonicalJobId", "reason", "createdAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "requestedJobId": { "$ref": "#/$defs/uuid" },
+        "canonicalJobId": { "$ref": "#/$defs/uuid" },
+        "reason": {
+          "enum": [
+            "job_closed",
+            "job_not_found",
+            "job_inaccurate",
+            "suspected_scam",
+            "duplicate_listing",
+            "other_catalog_issue"
+          ]
+        },
+        "createdAt": { "$ref": "#/$defs/dateTime" }
+      },
+      "additionalProperties": false
+    },
+    "savedJob": {
+      "type": "object",
+      "required": ["id", "requestedJobId", "canonicalJobIdAtSave", "savedAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "requestedJobId": { "$ref": "#/$defs/uuid" },
+        "canonicalJobIdAtSave": { "$ref": "#/$defs/uuid" },
+        "titleAtSave": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "companyNameAtSave": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "locationsAtSave": {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "type": "string", "minLength": 1, "maxLength": 240 }
+        },
+        "savedAt": { "$ref": "#/$defs/dateTime" }
+      },
+      "additionalProperties": false
+    },
+    "entitlement": {
+      "type": "object",
+      "required": ["plan", "version", "effectiveAt"],
+      "properties": {
+        "plan": { "enum": ["free", "pro"] },
+        "version": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+        "effectiveAt": { "$ref": "#/$defs/dateTime" },
+        "accessThrough": { "$ref": "#/$defs/dateTime" },
+        "graceThrough": { "$ref": "#/$defs/dateTime" }
+      },
+      "additionalProperties": false
+    },
+    "auditEvent": {
+      "type": "object",
+      "required": ["owner", "action", "resourceType", "occurredAt"],
+      "properties": {
+        "owner": { "enum": ["identity", "profile", "documents", "jobs", "matching", "billing"] },
+        "action": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "resourceType": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "resourceId": { "$ref": "#/$defs/uuid" },
+        "occurredAt": { "$ref": "#/$defs/dateTime" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,6 +1,13 @@
 import { createHash } from "node:crypto";
 import type {
+  AccountDeletionRequest,
+  CandidateDataExport,
+  CandidateDataExportAccess,
+  CandidateDataExportDownloadGrant,
   CanonicalJobDetail,
+  ConfirmAccountDeletionRequest,
+  CreateAccountDeletionRequest,
+  CreateCandidateDataExportRequest,
   CreateJobReportRequest,
   CreateProfileFactRequest,
   CreateResumeUploadRequest,
@@ -75,6 +82,12 @@ import {
 } from "@ai-job-apply/matching-service";
 import { activeTraceparent, correlationId } from "@ai-job-apply/observability";
 import {
+  AccountQuarantinedError,
+  type CandidateDataExportRecord,
+  CandidateRightsAuthenticationError,
+  CandidateRightsMfaError,
+  CandidateRightsPolicyError,
+  CandidateRightsTransitionError,
   IdempotencyConflictError,
   ProfileFactTransitionConflictError,
   ProfileFactVersionConflictError,
@@ -113,12 +126,22 @@ const SAVED_JOBS = Symbol("SAVED_JOBS");
 const MATCH_ASSESSMENTS = Symbol("MATCH_ASSESSMENTS");
 const ENTITLEMENTS = Symbol("ENTITLEMENTS");
 const DOCUMENT_STORE = Symbol("DOCUMENT_STORE");
+const CANDIDATE_DATA_EXPORT_DOWNLOADS = Symbol("CANDIDATE_DATA_EXPORT_DOWNLOADS");
 const TOKEN_VERIFIER = Symbol("TOKEN_VERIFIER");
 const RELEASE_SHA = Symbol("RELEASE_SHA");
 const CLOCK = Symbol("CLOCK");
 
 interface AuthenticatedRequest extends FastifyRequest {
   traceId?: string;
+}
+
+export interface CandidateDataExportDownloadSigner {
+  createGrant(input: {
+    objectKey: string;
+    objectVersion: string;
+    artifactExpiresAt: Date;
+    now: Date;
+  }): Promise<CandidateDataExportDownloadGrant>;
 }
 
 const SAFE_ERROR_IDENTIFIER = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
@@ -128,6 +151,11 @@ const SAFE_ROUTE_TEMPLATES = new Set([
   "/health/ready",
   "/v1/me",
   "/v1/me/job-preferences",
+  "/v1/me/data-exports",
+  "/v1/me/data-exports/:dataExportId",
+  "/v1/me/account-deletion-requests",
+  "/v1/me/account-deletion-requests/:deletionRequestId",
+  "/v1/me/account-deletion-requests/:deletionRequestId/confirm",
   "/v1/profile/facts",
   "/v1/profile/facts/:factId",
   "/v1/resumes",
@@ -209,6 +237,20 @@ class RequestIdentity {
     return this.store.resolveUser(principal, request.traceId ?? correlationId(undefined));
   }
 
+  async resolveWithPrincipal(
+    request: AuthenticatedRequest,
+    requiredScope: "profile:read" | "profile:write",
+    allowQuarantined = false,
+  ) {
+    const principal = await this.authorize(request, requiredScope);
+    const user = await this.store.resolveUser(
+      principal,
+      request.traceId ?? correlationId(undefined),
+      { allowQuarantined },
+    );
+    return { principal, user };
+  }
+
   async operator(request: AuthenticatedRequest): Promise<string> {
     const principal = await this.authorize(request, "jobs:moderate");
     const digest = createHash("sha256")
@@ -234,10 +276,29 @@ class ProblemDetailsFilter implements ExceptionFilter {
     let title = "Internal server error";
     let detail: string | undefined;
 
-    if (exception instanceof AuthenticationError) {
+    if (
+      exception instanceof AuthenticationError ||
+      exception instanceof CandidateRightsAuthenticationError ||
+      exception instanceof CandidateRightsMfaError
+    ) {
       status = HttpStatus.UNAUTHORIZED;
       code = "authentication_required";
       title = "Authentication required";
+      detail = exception.message;
+    } else if (exception instanceof AccountQuarantinedError) {
+      status = HttpStatus.FORBIDDEN;
+      code = "account_quarantined";
+      title = "Account deletion is in progress";
+      detail = exception.message;
+    } else if (exception instanceof CandidateRightsPolicyError) {
+      status = HttpStatus.SERVICE_UNAVAILABLE;
+      code = "candidate_rights_unavailable";
+      title = "Candidate rights service unavailable";
+      detail = exception.message;
+    } else if (exception instanceof CandidateRightsTransitionError) {
+      status = HttpStatus.CONFLICT;
+      code = "candidate_rights_state_conflict";
+      title = "Candidate rights state changed";
       detail = exception.message;
     } else if (exception instanceof IdempotencyConflictError) {
       status = HttpStatus.CONFLICT;
@@ -458,6 +519,16 @@ class HealthController {
 }
 
 const validatePreferences = compileComponentValidator("PutJobPreferencesRequest");
+const validateCreateCandidateDataExport = compileComponentValidator(
+  "CreateCandidateDataExportRequest",
+);
+const validateCandidateDataExportAccess = compileComponentValidator("CandidateDataExportAccess");
+const validateCreateAccountDeletionRequest = compileComponentValidator(
+  "CreateAccountDeletionRequest",
+);
+const validateConfirmAccountDeletionRequest = compileComponentValidator(
+  "ConfirmAccountDeletionRequest",
+);
 const validateCreateProfileFact = compileComponentValidator("CreateProfileFactRequest");
 const validateUpdateProfileFact = compileComponentValidator("UpdateProfileFactRequest");
 const validateCreateResumeUpload = compileComponentValidator("CreateResumeUploadRequest");
@@ -485,6 +556,38 @@ function requireIdempotencyKey(value: unknown): string {
     );
   }
   return key;
+}
+
+function requireExpectedVersion(value: unknown): number {
+  const candidate = Array.isArray(value) && value.length === 1 ? value[0] : value;
+  if (typeof candidate !== "string" || !/^"[1-9][0-9]*"$/.test(candidate)) {
+    throw new HttpException(
+      "If-Match must contain one quoted positive version",
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+  const version = Number(candidate.slice(1, -1));
+  if (!Number.isSafeInteger(version)) {
+    throw new HttpException(
+      "If-Match version is outside the supported range",
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+  return version;
+}
+
+function projectCandidateDataExport(record: CandidateDataExportRecord): CandidateDataExport {
+  return {
+    id: record.id,
+    schemaVersion: 1,
+    format: "candidate-data-export-v1",
+    policyVersion: record.policyVersion,
+    state: record.state,
+    requestedAt: record.requestedAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+    ...(record.artifact ? { artifactExpiresAt: record.artifact.expiresAt.toISOString() } : {}),
+    ...(record.failureCode ? { failureCode: record.failureCode } : {}),
+  } as CandidateDataExport;
 }
 
 const ENTITLEMENT_GRANTS = [
@@ -748,12 +851,211 @@ class CandidateController {
     @Inject(MATCH_ASSESSMENTS) private readonly matchAssessments: MatchAssessments,
     @Inject(ENTITLEMENTS) private readonly entitlements: EntitlementReadService,
     @Inject(DOCUMENT_STORE) private readonly documents: DocumentStore,
+    @Inject(CANDIDATE_DATA_EXPORT_DOWNLOADS)
+    private readonly candidateDataExportDownloads: CandidateDataExportDownloadSigner | null,
     @Inject(CLOCK) private readonly clock: () => Date,
   ) {}
 
   @Get("/me")
   async me(@Req() request: AuthenticatedRequest): Promise<CurrentUser> {
     return this.identity.resolve(request, "profile:read");
+  }
+
+  @Post("/me/data-exports")
+  @HttpCode(HttpStatus.ACCEPTED)
+  @Header("cache-control", "no-store")
+  async createCandidateDataExport(
+    @Req() request: AuthenticatedRequest,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<CandidateDataExport> {
+    const { principal, user } = await this.identity.resolveWithPrincipal(request, "profile:write");
+    if (!validateCreateCandidateDataExport(request.body)) {
+      throw new HttpException(
+        formatValidationErrors(validateCreateCandidateDataExport.errors),
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const input = request.body as CreateCandidateDataExportRequest;
+    if (input.format !== "candidate-data-export-v1") {
+      throw new HttpException("Candidate data-export format is invalid", HttpStatus.BAD_REQUEST);
+    }
+    if (!this.store.createCandidateDataExport) throw new CandidateRightsPolicyError();
+    return this.store.createCandidateDataExport(
+      principal,
+      user.id,
+      requireIdempotencyKey(idempotencyKey),
+      request.traceId ?? correlationId(undefined),
+      activeTraceparent(),
+    );
+  }
+
+  @Get("/me/data-exports/:dataExportId")
+  @Header("cache-control", "no-store")
+  async getCandidateDataExport(
+    @Req() request: AuthenticatedRequest,
+    @Param("dataExportId") dataExportId: string,
+  ): Promise<CandidateDataExportAccess> {
+    const user = await this.identity.resolve(request, "profile:write");
+    if (!UUID_V7_PATTERN.test(dataExportId)) {
+      throw new HttpException(
+        "Candidate data-export identifier is invalid",
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (!this.store.getCandidateDataExport) throw new CandidateRightsPolicyError();
+    const record = await this.store.getCandidateDataExport(user.id, dataExportId);
+    if (!record) {
+      throw new HttpException("Candidate data export was not found", HttpStatus.NOT_FOUND);
+    }
+    const response: { export: CandidateDataExport; download?: CandidateDataExportDownloadGrant } = {
+      export: projectCandidateDataExport(record),
+    };
+    if (record.state === "ready") {
+      if (!record.artifact || !this.candidateDataExportDownloads) {
+        throw new CandidateRightsPolicyError();
+      }
+      const now = this.clock();
+      if (record.artifact.expiresAt.getTime() <= now.getTime()) {
+        throw new CandidateRightsTransitionError();
+      }
+      const download = await this.candidateDataExportDownloads.createGrant({
+        objectKey: record.artifact.objectKey,
+        objectVersion: record.artifact.objectVersion,
+        artifactExpiresAt: record.artifact.expiresAt,
+        now,
+      });
+      const grantExpiresAt = Date.parse(download.expiresAt);
+      if (
+        download.method !== "GET" ||
+        !Number.isFinite(grantExpiresAt) ||
+        grantExpiresAt <= now.getTime() ||
+        grantExpiresAt > record.artifact.expiresAt.getTime()
+      ) {
+        throw new CandidateRightsPolicyError();
+      }
+      response.download = download;
+    }
+    if (!validateCandidateDataExportAccess(response)) {
+      throw new CandidateRightsPolicyError();
+    }
+    return response as CandidateDataExportAccess;
+  }
+
+  @Post("/me/account-deletion-requests")
+  @HttpCode(HttpStatus.CREATED)
+  @Header("cache-control", "no-store")
+  async createAccountDeletionRequest(
+    @Req() request: AuthenticatedRequest,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<AccountDeletionRequest> {
+    const { principal, user } = await this.identity.resolveWithPrincipal(request, "profile:write");
+    if (!validateCreateAccountDeletionRequest(request.body)) {
+      throw new HttpException(
+        formatValidationErrors(validateCreateAccountDeletionRequest.errors),
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const input = request.body as CreateAccountDeletionRequest;
+    if (input.acknowledgement !== "ACCOUNT_DELETION_IS_IRREVERSIBLE") {
+      throw new HttpException(
+        "Account-deletion acknowledgement is invalid",
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (!this.store.createAccountDeletionRequest) throw new CandidateRightsPolicyError();
+    return this.store.createAccountDeletionRequest(
+      principal,
+      user.id,
+      requireIdempotencyKey(idempotencyKey),
+      request.traceId ?? correlationId(undefined),
+    );
+  }
+
+  @Get("/me/account-deletion-requests/:deletionRequestId")
+  @Header("cache-control", "no-store")
+  async getAccountDeletionRequest(
+    @Req() request: AuthenticatedRequest,
+    @Param("deletionRequestId") deletionRequestId: string,
+  ): Promise<AccountDeletionRequest> {
+    const { user } = await this.identity.resolveWithPrincipal(request, "profile:write", true);
+    if (!UUID_V7_PATTERN.test(deletionRequestId)) {
+      throw new HttpException("Account-deletion identifier is invalid", HttpStatus.BAD_REQUEST);
+    }
+    if (!this.store.getAccountDeletionRequest) throw new CandidateRightsPolicyError();
+    const deletion = await this.store.getAccountDeletionRequest(user.id, deletionRequestId);
+    if (!deletion) {
+      throw new HttpException("Account-deletion request was not found", HttpStatus.NOT_FOUND);
+    }
+    return deletion;
+  }
+
+  @Delete("/me/account-deletion-requests/:deletionRequestId")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Header("cache-control", "no-store")
+  async cancelAccountDeletionRequest(
+    @Req() request: AuthenticatedRequest,
+    @Param("deletionRequestId") deletionRequestId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("if-match") ifMatch: string | undefined,
+  ): Promise<void> {
+    const { principal, user } = await this.identity.resolveWithPrincipal(request, "profile:write");
+    if (!UUID_V7_PATTERN.test(deletionRequestId)) {
+      throw new HttpException("Account-deletion identifier is invalid", HttpStatus.BAD_REQUEST);
+    }
+    if (!this.store.cancelAccountDeletionRequest) throw new CandidateRightsPolicyError();
+    const cancelled = await this.store.cancelAccountDeletionRequest(
+      principal,
+      user.id,
+      deletionRequestId,
+      requireExpectedVersion(ifMatch),
+      requireIdempotencyKey(idempotencyKey),
+      request.traceId ?? correlationId(undefined),
+    );
+    if (!cancelled) {
+      throw new HttpException("Account-deletion request was not found", HttpStatus.NOT_FOUND);
+    }
+  }
+
+  @Post("/me/account-deletion-requests/:deletionRequestId/confirm")
+  @HttpCode(HttpStatus.ACCEPTED)
+  @Header("cache-control", "no-store")
+  async confirmAccountDeletionRequest(
+    @Req() request: AuthenticatedRequest,
+    @Param("deletionRequestId") deletionRequestId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<AccountDeletionRequest> {
+    const { principal, user } = await this.identity.resolveWithPrincipal(
+      request,
+      "profile:write",
+      true,
+    );
+    if (!UUID_V7_PATTERN.test(deletionRequestId)) {
+      throw new HttpException("Account-deletion identifier is invalid", HttpStatus.BAD_REQUEST);
+    }
+    if (!validateConfirmAccountDeletionRequest(request.body)) {
+      throw new HttpException(
+        formatValidationErrors(validateConfirmAccountDeletionRequest.errors),
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const input = request.body as ConfirmAccountDeletionRequest;
+    if (input.confirmation !== "DELETE_MY_ACCOUNT") {
+      throw new HttpException("Account-deletion confirmation is invalid", HttpStatus.BAD_REQUEST);
+    }
+    if (!this.store.confirmAccountDeletionRequest) throw new CandidateRightsPolicyError();
+    const deletion = await this.store.confirmAccountDeletionRequest(
+      principal,
+      user.id,
+      deletionRequestId,
+      input.expectedVersion,
+      requireIdempotencyKey(idempotencyKey),
+      request.traceId ?? correlationId(undefined),
+      activeTraceparent(),
+    );
+    if (!deletion) {
+      throw new HttpException("Account-deletion request was not found", HttpStatus.NOT_FOUND);
+    }
+    return deletion;
   }
 
   @Get("/entitlements")
@@ -1102,6 +1404,7 @@ export interface AppModuleOptions {
   matchAssessments: MatchAssessments;
   entitlements: EntitlementReadService;
   documents: DocumentStore;
+  candidateDataExportDownloads?: CandidateDataExportDownloadSigner;
   verifier: AccessTokenVerifier;
   releaseSha: string;
   clock?: () => Date;
@@ -1124,6 +1427,10 @@ export class AppModule {
         { provide: MATCH_ASSESSMENTS, useValue: options.matchAssessments },
         { provide: ENTITLEMENTS, useValue: options.entitlements },
         { provide: DOCUMENT_STORE, useValue: options.documents },
+        {
+          provide: CANDIDATE_DATA_EXPORT_DOWNLOADS,
+          useValue: options.candidateDataExportDownloads ?? null,
+        },
         { provide: TOKEN_VERIFIER, useValue: options.verifier },
         { provide: RELEASE_SHA, useValue: options.releaseSha },
         { provide: CLOCK, useValue: options.clock ?? (() => new Date()) },

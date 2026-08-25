@@ -68,6 +68,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/data-exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createCandidateDataExport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/data-exports/{dataExportId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getCandidateDataExport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/account-deletion-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createAccountDeletionRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/account-deletion-requests/{deletionRequestId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getAccountDeletionRequest"];
+        put?: never;
+        post?: never;
+        delete: operations["cancelAccountDeletionRequest"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/account-deletion-requests/{deletionRequestId}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["confirmAccountDeletionRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/resumes": {
         parameters: {
             query?: never;
@@ -403,6 +483,136 @@ export interface components {
             /** Format: uuid */
             operationId: string;
         };
+        CreateCandidateDataExportRequest: {
+            /** @constant */
+            format: "candidate-data-export-v1";
+        };
+        CandidateDataExport: {
+            id: string;
+            /** @constant */
+            schemaVersion: 1;
+            /** @constant */
+            format: "candidate-data-export-v1";
+            policyVersion: string;
+            /** @enum {string} */
+            state: "queued" | "building" | "ready" | "expired" | "failed";
+            /** Format: date-time */
+            requestedAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            artifactExpiresAt?: string;
+            /** @enum {string} */
+            failureCode?: "owner_unavailable" | "inventory_incomplete" | "artifact_write_failed";
+        } & ({
+            /** @enum {unknown} */
+            state?: "queued" | "building";
+            artifactExpiresAt?: never;
+            failureCode?: never;
+        } | {
+            /** @enum {unknown} */
+            state?: "ready" | "expired";
+            /** Format: date-time */
+            artifactExpiresAt: string;
+            failureCode?: never;
+        } | {
+            /** @constant */
+            state?: "failed";
+            artifactExpiresAt?: never;
+            /** @enum {string} */
+            failureCode: "owner_unavailable" | "inventory_incomplete" | "artifact_write_failed";
+        });
+        CandidateDataExportDownloadGrant: {
+            /** Format: uri */
+            url: string;
+            /** @constant */
+            method: "GET";
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        CandidateDataExportAccess: {
+            export: components["schemas"]["CandidateDataExport"];
+            download?: components["schemas"]["CandidateDataExportDownloadGrant"];
+        } & ({
+            export?: components["schemas"]["CandidateDataExport"] & {
+                /** @constant */
+                state?: "ready";
+            };
+            download: components["schemas"]["CandidateDataExportDownloadGrant"];
+        } | {
+            export?: components["schemas"]["CandidateDataExport"] & {
+                /** @enum {unknown} */
+                state?: "queued" | "building" | "expired" | "failed";
+            };
+            download?: never;
+        });
+        CreateAccountDeletionRequest: {
+            /** @constant */
+            acknowledgement: "ACCOUNT_DELETION_IS_IRREVERSIBLE";
+        };
+        ConfirmAccountDeletionRequest: {
+            expectedVersion: number;
+            /** @constant */
+            confirmation: "DELETE_MY_ACCOUNT";
+        };
+        AccountDeletionRequest: {
+            id: string;
+            /** @constant */
+            schemaVersion: 1;
+            policyVersion: string;
+            /** @enum {string} */
+            state: "requested" | "quarantined" | "active_systems_deleted" | "subprocessors_pending" | "completed" | "backup_expired";
+            version: number;
+            /** Format: date-time */
+            requestedAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            confirmedAt?: string;
+            /** Format: date-time */
+            completedAt?: string;
+            /** Format: date-time */
+            backupExpiresAt?: string;
+            /** Format: date-time */
+            backupExpiredAt?: string;
+        } & ({
+            /** @constant */
+            state?: "requested";
+            confirmedAt?: never;
+            completedAt?: never;
+            backupExpiresAt?: never;
+            backupExpiredAt?: never;
+        } | {
+            /** @enum {unknown} */
+            state?: "quarantined" | "active_systems_deleted" | "subprocessors_pending";
+            /** Format: date-time */
+            confirmedAt: string;
+            /** Format: date-time */
+            backupExpiresAt: string;
+            completedAt?: never;
+            backupExpiredAt?: never;
+        } | {
+            /** @constant */
+            state?: "completed";
+            /** Format: date-time */
+            confirmedAt: string;
+            /** Format: date-time */
+            completedAt: string;
+            /** Format: date-time */
+            backupExpiresAt: string;
+            backupExpiredAt?: never;
+        } | {
+            /** @constant */
+            state?: "backup_expired";
+            /** Format: date-time */
+            confirmedAt: string;
+            /** Format: date-time */
+            completedAt: string;
+            /** Format: date-time */
+            backupExpiresAt: string;
+            /** Format: date-time */
+            backupExpiredAt: string;
+        });
         /** @enum {string} */
         ResumeMediaType: "application/pdf" | "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
         /** @enum {string} */
@@ -1231,6 +1441,198 @@ export interface operations {
             409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    createCandidateDataExport: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCandidateDataExportRequest"];
+            };
+        };
+        responses: {
+            /** @description A candidate-owned portable export request was accepted */
+            202: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidateDataExport"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getCandidateDataExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dataExportId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current owner-scoped export state and an optional exact-object grant */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidateDataExportAccess"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    createAccountDeletionRequest: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAccountDeletionRequest"];
+            };
+        };
+        responses: {
+            /** @description A cancellable account-deletion request was created */
+            201: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountDeletionRequest"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getAccountDeletionRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deletionRequestId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current owner-scoped account-deletion state */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountDeletionRequest"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    cancelAccountDeletionRequest: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                deletionRequestId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The unconfirmed deletion request was cancelled */
+            204: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    confirmAccountDeletionRequest: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                deletionRequestId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmAccountDeletionRequest"];
+            };
+        };
+        responses: {
+            /** @description The account was quarantined and durable deletion was accepted */
+            202: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountDeletionRequest"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
         };
     };
     listResumeDocuments: {

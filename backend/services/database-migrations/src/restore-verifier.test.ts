@@ -78,7 +78,9 @@ describe("current restore manifest", () => {
   it("binds the exact current Profile, Jobs, Documents, Matching, and Billing bytes", async () => {
     const source = loadCurrentRestoreManifest();
 
-    expect(source.manifest.manifestId).toBe("d1-profile-jobs-public-documents-matching-billing-v1");
+    expect(source.manifest.manifestId).toBe(
+      "d1-candidate-rights-profile-jobs-documents-matching-billing-v1",
+    );
     expect(source.manifest.contributors.map((contributor) => contributor.owner)).toEqual([
       "billing",
       "documents",
@@ -89,13 +91,13 @@ describe("current restore manifest", () => {
     expect([...migrationRunners].map((runner) => runner.owner).sort()).toEqual(
       source.manifest.contributors.map((contributor) => contributor.owner),
     );
-    expect(expectedRelations(source)).toHaveLength(42);
+    expect(expectedRelations(source)).toHaveLength(45);
     expect(
       source.manifest.contributors.reduce(
         (total, contributor) => total + contributor.migrations.length,
         0,
       ),
-    ).toBe(20);
+    ).toBe(25);
     expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 
     for (const contributor of source.manifest.contributors) {
@@ -232,11 +234,11 @@ describe("read-only aggregate restore verification", () => {
 
     expect(transactionModes).toEqual(["read only isolation level repeatable read"]);
     expect(result).toMatchObject({
-      manifestId: "d1-profile-jobs-public-documents-matching-billing-v1",
+      manifestId: "d1-candidate-rights-profile-jobs-documents-matching-billing-v1",
       manifestSha256: source.sha256,
       ownerCount: 5,
-      relationCount: 42,
-      migrationCount: 20,
+      relationCount: 45,
+      migrationCount: 25,
     });
     expect(result.aggregateDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.keys(result)).toEqual([

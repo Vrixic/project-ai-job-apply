@@ -81,12 +81,18 @@ describe("managed OIDC verifier", () => {
   async function issue(options: {
     algorithm?: "RS256" | "ES256";
     audience?: string;
+    authenticatedAt?: number;
+    authenticationMethods?: unknown;
     expiresAt?: string;
     keyId?: string;
     signingKey?: CryptoKey;
     tokenIssuer?: string;
   }): Promise<string> {
-    return new SignJWT({ scope: "profile:read profile:write" })
+    return new SignJWT({
+      scope: "profile:read profile:write",
+      ...(options.authenticatedAt ? { auth_time: options.authenticatedAt } : {}),
+      ...(options.authenticationMethods ? { amr: options.authenticationMethods } : {}),
+    })
       .setProtectedHeader({
         alg: options.algorithm ?? "RS256",
         kid: options.keyId ?? "primary",
@@ -105,6 +111,27 @@ describe("managed OIDC verifier", () => {
     expect(principal.issuer).toBe(issuer);
     expect(principal.subject).toBe("candidate-1");
     expect(principal.scopes).toEqual(["profile:read", "profile:write"]);
+  });
+
+  it("projects only bounded standard recent-authentication evidence", async () => {
+    const verifier = createOidcVerifier({ issuer, audience: "ai-job-apply-api" });
+    const authenticatedAt = Math.floor(Date.now() / 1000) - 30;
+    await expect(
+      verifier.verify(
+        await issue({ authenticatedAt, authenticationMethods: ["pwd", "mfa", "webauthn"] }),
+      ),
+    ).resolves.toMatchObject({
+      authenticatedAt,
+      authenticationMethods: ["pwd", "mfa", "webauthn"],
+    });
+
+    const malformed = await verifier.verify(
+      await issue({ authenticatedAt, authenticationMethods: ["mfa", "not allowed"] }),
+    );
+    expect(malformed.authenticationMethods).toBeUndefined();
+    const missing = await verifier.verify(await issue({}));
+    expect(missing.authenticatedAt).toBeUndefined();
+    expect(missing.authenticationMethods).toBeUndefined();
   });
 
   it("rejects wrong issuer, audience, expiry, and signature", async () => {

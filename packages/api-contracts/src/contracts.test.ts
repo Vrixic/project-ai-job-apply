@@ -95,6 +95,162 @@ describe("job preference response contracts", () => {
   });
 });
 
+describe("candidate rights contracts", () => {
+  const exportId = "019d04cf-1f80-7000-8000-000000000030";
+  const deletionId = "019d04cf-1f80-7000-8000-000000000031";
+  const requestedAt = "2026-08-25T14:00:00.000Z";
+  const laterAt = "2026-08-25T14:01:00.000Z";
+  const backupExpiresAt = "2026-09-29T14:01:00.000Z";
+  const validateExportRequest = compileComponentValidator("CreateCandidateDataExportRequest");
+  const validateExport = compileComponentValidator("CandidateDataExport");
+  const validateExportAccess = compileComponentValidator("CandidateDataExportAccess");
+  const validateDeletionRequest = compileComponentValidator("CreateAccountDeletionRequest");
+  const validateDeletionConfirmation = compileComponentValidator("ConfirmAccountDeletionRequest");
+  const validateDeletion = compileComponentValidator("AccountDeletionRequest");
+
+  const queuedExport = {
+    id: exportId,
+    schemaVersion: 1,
+    format: "candidate-data-export-v1",
+    policyVersion: "d1-synthetic-v1",
+    state: "queued",
+    requestedAt,
+    updatedAt: requestedAt,
+  };
+
+  it("accepts only the versioned portable export request and state-dependent access grant", () => {
+    expect(validateExportRequest({ format: "candidate-data-export-v1" })).toBe(true);
+    expect(validateExportRequest({ format: "csv" })).toBe(false);
+    expect(validateExportRequest({ format: "candidate-data-export-v1", includeTokens: true })).toBe(
+      false,
+    );
+    expect(validateExport(queuedExport)).toBe(true);
+    expect(
+      validateExport({
+        ...queuedExport,
+        state: "ready",
+        updatedAt: laterAt,
+        artifactExpiresAt: backupExpiresAt,
+      }),
+    ).toBe(true);
+    expect(validateExport({ ...queuedExport, state: "ready" })).toBe(false);
+    expect(validateExport({ ...queuedExport, failureCode: "owner_unavailable" })).toBe(false);
+    expect(validateExportAccess({ export: queuedExport })).toBe(true);
+    expect(
+      validateExportAccess({
+        export: { ...queuedExport, state: "ready", artifactExpiresAt: backupExpiresAt },
+        download: {
+          url: "https://objects.example.test/exact?signature=synthetic",
+          method: "GET",
+          expiresAt: laterAt,
+        },
+      }),
+    ).toBe(true);
+    expect(
+      validateExportAccess({
+        export: queuedExport,
+        download: {
+          url: "https://objects.example.test/exact?signature=synthetic",
+          method: "GET",
+          expiresAt: laterAt,
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("enforces two-step irreversible deletion and exact state chronology fields", () => {
+    expect(validateDeletionRequest({ acknowledgement: "ACCOUNT_DELETION_IS_IRREVERSIBLE" })).toBe(
+      true,
+    );
+    expect(validateDeletionRequest({ acknowledgement: true })).toBe(false);
+    expect(
+      validateDeletionConfirmation({ expectedVersion: 1, confirmation: "DELETE_MY_ACCOUNT" }),
+    ).toBe(true);
+    expect(
+      validateDeletionConfirmation({
+        expectedVersion: 1,
+        confirmation: "maybe",
+        recoverable: true,
+      }),
+    ).toBe(false);
+
+    const requested = {
+      id: deletionId,
+      schemaVersion: 1,
+      policyVersion: "d1-synthetic-v1",
+      state: "requested",
+      version: 1,
+      requestedAt,
+      updatedAt: requestedAt,
+    };
+    expect(validateDeletion(requested)).toBe(true);
+    expect(
+      validateDeletion({
+        ...requested,
+        state: "quarantined",
+        version: 2,
+        updatedAt: laterAt,
+        confirmedAt: laterAt,
+        backupExpiresAt,
+      }),
+    ).toBe(true);
+    expect(validateDeletion({ ...requested, state: "quarantined" })).toBe(false);
+    expect(
+      validateDeletion({
+        ...requested,
+        state: "completed",
+        version: 5,
+        updatedAt: laterAt,
+        confirmedAt: laterAt,
+        completedAt: laterAt,
+        backupExpiresAt,
+      }),
+    ).toBe(true);
+    expect(
+      validateDeletion({
+        ...requested,
+        state: "backup_expired",
+        version: 6,
+        updatedAt: backupExpiresAt,
+        confirmedAt: laterAt,
+        completedAt: laterAt,
+        backupExpiresAt,
+        backupExpiredAt: backupExpiresAt,
+      }),
+    ).toBe(true);
+  });
+
+  it("keeps every rights route owner-scoped, non-cacheable, and mutation-idempotent", () => {
+    for (const path of [
+      "/me/data-exports",
+      "/me/data-exports/{dataExportId}",
+      "/me/account-deletion-requests",
+      "/me/account-deletion-requests/{deletionRequestId}",
+      "/me/account-deletion-requests/{deletionRequestId}/confirm",
+    ] as const) {
+      for (const operation of Object.values(contract.paths[path])) {
+        expect(operation.security).toEqual([{ oidc: ["profile:write"] }]);
+        const success =
+          operation.responses["200"] ??
+          operation.responses["201"] ??
+          operation.responses["202"] ??
+          operation.responses["204"];
+        expect(success.headers["Cache-Control"].schema.enum).toEqual(["no-store"]);
+      }
+    }
+    for (const operation of [
+      contract.paths["/me/data-exports"].post,
+      contract.paths["/me/account-deletion-requests"].post,
+      contract.paths["/me/account-deletion-requests/{deletionRequestId}"].delete,
+      contract.paths["/me/account-deletion-requests/{deletionRequestId}/confirm"].post,
+    ]) {
+      expect(operation.parameters.some((parameter) => parameter.name === "Idempotency-Key")).toBe(
+        true,
+      );
+    }
+  });
+});
+
 describe("CanonicalJobDetail", () => {
   const validate = compileComponentValidator("CanonicalJobDetail");
   const activeJob = {

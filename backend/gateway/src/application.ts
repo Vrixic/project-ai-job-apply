@@ -6,7 +6,11 @@ import type { MatchAssessments, SavedJobs } from "@ai-job-apply/matching-service
 import type { ProfileStore } from "@ai-job-apply/profile-service";
 import { NestFactory } from "@nestjs/core";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
-import { AppModule, applyRequestContext } from "./app.module.js";
+import {
+  AppModule,
+  applyRequestContext,
+  type CandidateDataExportDownloadSigner,
+} from "./app.module.js";
 
 export interface GatewayApplicationOptions {
   store: ProfileStore;
@@ -17,6 +21,7 @@ export interface GatewayApplicationOptions {
   matchAssessments: MatchAssessments;
   entitlements: EntitlementReadService;
   documents: DocumentStore;
+  candidateDataExportDownloads?: CandidateDataExportDownloadSigner;
   verifier: AccessTokenVerifier;
   releaseSha: string;
   clock?: () => Date;
@@ -40,6 +45,9 @@ export async function createGatewayApplication(
       matchAssessments: options.matchAssessments,
       entitlements: options.entitlements,
       documents: options.documents,
+      ...(options.candidateDataExportDownloads
+        ? { candidateDataExportDownloads: options.candidateDataExportDownloads }
+        : {}),
       verifier: options.verifier,
       releaseSha: options.releaseSha,
       ...(options.clock ? { clock: options.clock } : {}),

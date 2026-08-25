@@ -1,12 +1,28 @@
-import type { ProfileStore } from "@ai-job-apply/profile-service";
+import type { DatabaseHandle, ProfileStore } from "@ai-job-apply/profile-service";
 import {
   createDatabase,
   errorCodeFromUnknown,
+  loadCandidateRightsPolicy,
   PostgresProfileStore,
   resolveLambdaDatabaseUrl,
 } from "@ai-job-apply/profile-service";
 import type { Handler } from "aws-lambda";
 import { createProfileReadinessActivities } from "./activities.js";
+import {
+  createCandidateRightsActivityHandler,
+  PostgresCandidateRightsActivityStore,
+} from "./candidate-rights-activities.js";
+import { Auth0CandidateIdentityProvider } from "./candidate-rights-auth0.js";
+import {
+  AwsCandidateDocumentObjectStore,
+  AwsCandidateExportArtifactStore,
+} from "./candidate-rights-aws.js";
+import {
+  type CandidateRightsActivityResultV1,
+  validateCandidateRightsActivityInput,
+} from "./candidate-rights-durable.js";
+import { AwsCandidateDeletionRecoveryLedger } from "./candidate-rights-recovery-ledger.js";
+import { resolveCandidateRightsAuth0Secret } from "./candidate-rights-secret.js";
 import {
   type ProfileReadinessActivityInputV1,
   type ProfileReadinessActivityResultV1,
@@ -39,6 +55,11 @@ export type ProfileReadinessActivityHandler = (
   event: unknown,
 ) => Promise<ProfileReadinessActivityResultV1>;
 export type DurableTerminalHandler = (event: unknown) => Promise<{ handled: boolean }>;
+export interface CandidateRightsMaintenanceResult {
+  schemaVersion: 1;
+  scanned: number;
+  expired: number;
+}
 
 function safeFailureCode(error: unknown): string {
   const candidate =
@@ -135,7 +156,9 @@ function isTerminalEvent(
 }
 
 export function createDurableTerminalHandler(
-  store: Pick<ProfileStore, "failDurableReadinessOperation">,
+  store: {
+    reconcileDurableOperationFailure(executionName: string, errorCode: string): Promise<void>;
+  },
   expectedFunctionArn: string,
 ): DurableTerminalHandler {
   return async (event) => {
@@ -151,15 +174,47 @@ export function createDurableTerminalHandler(
         : event.detail.status === "TIMED_OUT"
           ? "WorkflowTimedOut"
           : "WorkflowFailed";
-    await store.failDurableReadinessOperation(event.detail.durableExecutionName, errorCode);
+    await store.reconcileDurableOperationFailure(event.detail.durableExecutionName, errorCode);
     return { handled: true };
   };
 }
 
-let runtimeStore: PostgresProfileStore | undefined;
+function isCandidateRightsMaintenanceEvent(value: unknown, expectedRuleArn: string): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const event = value as Record<string, unknown>;
+  return (
+    event.source === "aws.events" &&
+    event["detail-type"] === "Scheduled Event" &&
+    Array.isArray(event.resources) &&
+    event.resources.length === 1 &&
+    event.resources[0] === expectedRuleArn &&
+    !!event.detail &&
+    typeof event.detail === "object" &&
+    !Array.isArray(event.detail) &&
+    Object.keys(event.detail as object).length === 0
+  );
+}
 
-async function getRuntimeStore(): Promise<PostgresProfileStore> {
-  if (!runtimeStore) {
+export function createCandidateRightsMaintenanceHandler(
+  store: Pick<PostgresCandidateRightsActivityStore, "expireDueExports">,
+  expectedRuleArn: string,
+): (event: unknown) => Promise<CandidateRightsMaintenanceResult> {
+  if (!expectedRuleArn) throw new Error("CandidateRightsMaintenanceConfigurationInvalid");
+  return async (event) => {
+    if (!isCandidateRightsMaintenanceEvent(event, expectedRuleArn)) {
+      throw new Error("CandidateRightsMaintenanceEventRejected");
+    }
+    const result = await store.expireDueExports();
+    return { schemaVersion: 1, ...result };
+  };
+}
+
+let runtimeDatabase: DatabaseHandle | undefined;
+let runtimeStore: PostgresProfileStore | undefined;
+let runtimeCandidateRightsStore: PostgresCandidateRightsActivityStore | undefined;
+
+async function getRuntimeDatabase(): Promise<DatabaseHandle> {
+  if (!runtimeDatabase) {
     const databaseUrl = await resolveLambdaDatabaseUrl(
       {
         ...(process.env.DATABASE_URL ? { DATABASE_URL: process.env.DATABASE_URL } : {}),
@@ -169,13 +224,55 @@ async function getRuntimeStore(): Promise<PostgresProfileStore> {
       },
       { ...(process.env.AWS_SESSION_TOKEN ? { sessionToken: process.env.AWS_SESSION_TOKEN } : {}) },
     );
-    runtimeStore = new PostgresProfileStore(createDatabase(databaseUrl, { maxConnections: 1 }));
+    runtimeDatabase = createDatabase(databaseUrl, { maxConnections: 1 });
   }
+  return runtimeDatabase;
+}
+
+async function getRuntimeStore(): Promise<PostgresProfileStore> {
+  runtimeStore ??= new PostgresProfileStore(await getRuntimeDatabase());
   return runtimeStore;
 }
 
-export const activity: Handler<unknown, ProfileReadinessActivityResultV1> = async (event) =>
-  createProfileReadinessActivityHandler(await getRuntimeStore())(event);
+async function getRuntimeCandidateRightsStore(): Promise<PostgresCandidateRightsActivityStore> {
+  if (runtimeCandidateRightsStore) return runtimeCandidateRightsStore;
+  const exportBucket = process.env.CANDIDATE_DATA_EXPORT_BUCKET;
+  const exportKmsKeyArn = process.env.CANDIDATE_DATA_EXPORT_KMS_KEY_ARN;
+  const documentBucket = process.env.CANDIDATE_DOCUMENT_BUCKET;
+  const recoveryBucket = process.env.CANDIDATE_DELETION_RECOVERY_BUCKET;
+  const issuer = process.env.OIDC_ISSUER;
+  if (!exportBucket || !exportKmsKeyArn || !documentBucket || !recoveryBucket || !issuer) {
+    throw new Error("CandidateRightsRuntimeConfigurationIncomplete");
+  }
+  const policy = loadCandidateRightsPolicy(process.env);
+  if (policy.subprocessorInventory.length !== 0) {
+    throw new Error("CandidateRightsSubprocessorAdapterUnavailable");
+  }
+  const auth0 = await resolveCandidateRightsAuth0Secret(
+    process.env.CANDIDATE_RIGHTS_AUTH0_SECRET_ID,
+    { ...(process.env.AWS_SESSION_TOKEN ? { sessionToken: process.env.AWS_SESSION_TOKEN } : {}) },
+  );
+  runtimeCandidateRightsStore = new PostgresCandidateRightsActivityStore({
+    database: await getRuntimeDatabase(),
+    policy,
+    artifactStore: new AwsCandidateExportArtifactStore(exportBucket, exportKmsKeyArn),
+    documentObjectStore: new AwsCandidateDocumentObjectStore(documentBucket),
+    identityProvider: new Auth0CandidateIdentityProvider({ issuer, ...auth0 }),
+    subprocessors: [],
+    recoveryLedger: new AwsCandidateDeletionRecoveryLedger(recoveryBucket, exportKmsKeyArn),
+  });
+  return runtimeCandidateRightsStore;
+}
+
+export const activity: Handler<
+  unknown,
+  ProfileReadinessActivityResultV1 | CandidateRightsActivityResultV1
+> = async (event) => {
+  if (validateCandidateRightsActivityInput(event)) {
+    return createCandidateRightsActivityHandler(await getRuntimeCandidateRightsStore())(event);
+  }
+  return createProfileReadinessActivityHandler(await getRuntimeStore())(event);
+};
 
 export const terminal: Handler<unknown, { handled: boolean }> = async (event) => {
   const durableFunctionArn = process.env.DURABLE_FUNCTION_ARN;
@@ -183,4 +280,13 @@ export const terminal: Handler<unknown, { handled: boolean }> = async (event) =>
     throw new Error("DURABLE_FUNCTION_ARN is required");
   }
   return createDurableTerminalHandler(await getRuntimeStore(), durableFunctionArn)(event);
+};
+
+export const maintenance: Handler<unknown, CandidateRightsMaintenanceResult> = async (event) => {
+  const ruleArn = process.env.CANDIDATE_RIGHTS_MAINTENANCE_RULE_ARN;
+  if (!ruleArn) throw new Error("CANDIDATE_RIGHTS_MAINTENANCE_RULE_ARN is required");
+  return createCandidateRightsMaintenanceHandler(
+    await getRuntimeCandidateRightsStore(),
+    ruleArn,
+  )(event);
 };

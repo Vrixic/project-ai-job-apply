@@ -20,6 +20,7 @@ const migrationVersions = [
   "0009_provider_ingestion_sources",
   "0010_public_job_truth_fields",
   "0011_positive_source_withdrawal",
+  "0012_candidate_rights",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -604,7 +605,7 @@ try {
           FROM pg_trigger trigger
           JOIN (VALUES
             ('jobs.job_reports'::regclass, 'job_reports_guard',
-              'jobs.guard_job_report()'::regprocedure, 31::smallint),
+              'jobs.guard_job_report()'::regprocedure, 23::smallint),
             ('jobs.moderation_cases'::regclass, 'moderation_cases_guard',
               'jobs.guard_moderation_case()'::regprocedure, 31::smallint),
             ('jobs.moderation_cases'::regclass, 'moderation_cases_append_event',

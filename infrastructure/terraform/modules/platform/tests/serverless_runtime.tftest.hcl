@@ -103,6 +103,48 @@ variables {
   ingestion_lambda_extension_layer_arn                  = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
 }
 
+run "candidate_rights_boundary_is_private_versioned_and_default_expiring" {
+  command = plan
+
+  variables {
+    private_application_networking               = true
+    deploy_document_intake                       = true
+    serverless_runtime_enabled                   = true
+    candidate_rights_enabled                     = true
+    candidate_rights_policy_version              = "d1-reviewed-v1"
+    candidate_rights_policy_sha256               = "9999999999999999999999999999999999999999999999999999999999999999"
+    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing"
+    candidate_rights_subprocessor_inventory      = "none"
+    candidate_rights_export_lifetime_seconds     = 3600
+    candidate_rights_download_grant_seconds      = 300
+    candidate_rights_backup_retention_days       = 7
+    candidate_rights_recent_auth_max_age_seconds = 300
+    candidate_rights_export_lifecycle_days       = 1
+  }
+
+  assert {
+    condition = (
+      aws_s3_bucket_versioning.candidate_data_exports[0].versioning_configuration[0].status == "Enabled" &&
+      aws_s3_bucket_public_access_block.candidate_data_exports[0].restrict_public_buckets &&
+      aws_s3_bucket_lifecycle_configuration.candidate_data_exports[0].rule[0].expiration[0].days == 1 &&
+      length(aws_secretsmanager_secret.candidate_rights_auth0) == 1
+    )
+    error_message = "Candidate exports must be private, versioned, policy-expiring, and paired with an operator-populated managed identity secret."
+  }
+
+  assert {
+    condition = (
+      aws_lambda_function.profile_readiness_activity[0].timeout == 300 &&
+      aws_cloudwatch_event_rule.candidate_rights_maintenance[0].state == "ENABLED" &&
+      aws_cloudwatch_event_rule.candidate_rights_maintenance[0].schedule_expression == "rate(5 minutes)" &&
+      aws_lambda_function.profile_readiness_activity[0].environment[0].variables.CANDIDATE_RIGHTS_SUBPROCESSOR_INVENTORY == "none" &&
+      aws_lambda_function.gateway[0].environment[0].variables.CANDIDATE_RIGHTS_DOWNLOAD_GRANT_SECONDS == "300" &&
+      length(aws_iam_role_policy.candidate_rights_activity) == 1
+    )
+    error_message = "Only the private activity gets deletion privileges while the gateway receives the exact reviewed policy and bounded download grant."
+  }
+}
+
 run "ingestion_data_plane_deploys_dark_with_ordered_source_gate" {
   command = plan
 

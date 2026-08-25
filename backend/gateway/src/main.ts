@@ -29,9 +29,15 @@ import {
   shutdownTelemetry,
   startLogDeliveryHeartbeat,
 } from "@ai-job-apply/observability";
-import { createDatabase, PostgresProfileStore } from "@ai-job-apply/profile-service";
+import {
+  createDatabase,
+  loadCandidateRightsPolicyIfConfigured,
+  PostgresProfileStore,
+} from "@ai-job-apply/profile-service";
 import { FastifyAdapter } from "@nestjs/platform-fastify";
 import { createGatewayApplication } from "./application.js";
+import { S3CandidateDataExportDownloadSigner } from "./candidate-data-export-download-signer.js";
+import { S3CandidateDeletionConfirmationJournal } from "./candidate-deletion-confirmation-journal.js";
 import { deriveJobSearchCursorKeys, deriveModerationCursorKey } from "./job-search-cursor-key.js";
 import { JobCatalogSavedJobResolver } from "./saved-job-catalog-resolver.js";
 
@@ -42,7 +48,24 @@ const logger = createLogger({
   releaseSha: config.RELEASE_SHA,
 });
 const database = createDatabase(config.DATABASE_URL);
-const store = new PostgresProfileStore(database, { dispatchTarget: "lambda_durable" });
+const candidateRightsPolicy = loadCandidateRightsPolicyIfConfigured(process.env);
+const recoveryBucket = process.env.CANDIDATE_DELETION_RECOVERY_BUCKET;
+const recoveryKmsKeyArn = process.env.CANDIDATE_DATA_EXPORT_KMS_KEY_ARN;
+if (candidateRightsPolicy && (!recoveryBucket || !recoveryKmsKeyArn)) {
+  throw new Error("CandidateDeletionConfirmationJournalConfigurationInvalid");
+}
+const store = new PostgresProfileStore(database, {
+  dispatchTarget: "lambda_durable",
+  ...(candidateRightsPolicy ? { candidateRightsPolicy } : {}),
+  ...(candidateRightsPolicy && recoveryBucket && recoveryKmsKeyArn
+    ? {
+        candidateDeletionConfirmationJournal: new S3CandidateDeletionConfirmationJournal(
+          recoveryBucket,
+          recoveryKmsKeyArn,
+        ),
+      }
+    : {}),
+});
 const catalog = new PostgresJobCatalog(database.client, {
   searchCursorKeys: deriveJobSearchCursorKeys(config.DATABASE_URL),
 });
@@ -74,6 +97,13 @@ const verifier = createOidcVerifier({
   issuer: config.OIDC_ISSUER,
   audience: config.OIDC_AUDIENCE,
 });
+const candidateDataExportDownloads =
+  candidateRightsPolicy && process.env.CANDIDATE_DATA_EXPORT_BUCKET
+    ? new S3CandidateDataExportDownloadSigner(
+        process.env.CANDIDATE_DATA_EXPORT_BUCKET,
+        candidateRightsPolicy.downloadGrantLifetimeSeconds,
+      )
+    : undefined;
 
 const app = await createGatewayApplication({
   store,
@@ -84,6 +114,7 @@ const app = await createGatewayApplication({
   matchAssessments,
   entitlements,
   documents,
+  ...(candidateDataExportDownloads ? { candidateDataExportDownloads } : {}),
   verifier,
   releaseSha: config.RELEASE_SHA,
   adapter: new FastifyAdapter({ loggerInstance: logger }),

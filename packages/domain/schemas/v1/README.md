@@ -11,3 +11,8 @@ telemetry may carry only document/version identifiers and bounded counts.
 `saved-job.schema.json` defines the Matching-owned Confidential association. It preserves the
 owner, immutable requested target, resolved canonical identifier at save time, and a bounded public
 snapshot; descriptions, source payloads, profile data, and post-submission outcomes are forbidden.
+
+`candidate-data-export.schema.json` is the portable Profile-owned candidate-rights envelope. It
+contains candidate-readable values and bounded metadata from every Phase 1 owner, but deliberately
+excludes OIDC subjects, access/refresh tokens, database-only ownership identifiers, object-store
+keys/versions, raw resume bytes, provider credentials, and unrestricted audit metadata.

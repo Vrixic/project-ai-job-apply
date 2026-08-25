@@ -7,6 +7,8 @@ export interface AuthPrincipal {
   scopes: string[];
   email?: string;
   sessionId?: string;
+  authenticatedAt?: number;
+  authenticationMethods?: string[];
 }
 
 export interface AccessTokenVerifier {
@@ -45,6 +47,15 @@ export function createOidcVerifier(options: {
           : payload.aud
             ? [payload.aud]
             : [];
+        const authenticationMethods =
+          Array.isArray(payload.amr) &&
+          payload.amr.length <= 16 &&
+          payload.amr.every(
+            (value): value is string =>
+              typeof value === "string" && /^[A-Za-z0-9._-]{1,64}$/.test(value),
+          )
+            ? payload.amr
+            : undefined;
 
         return {
           issuer: payload.iss,
@@ -53,6 +64,14 @@ export function createOidcVerifier(options: {
           scopes,
           ...(typeof payload.email === "string" ? { email: payload.email } : {}),
           ...(typeof payload.sid === "string" ? { sessionId: payload.sid } : {}),
+          ...(typeof payload.auth_time === "number" &&
+          Number.isSafeInteger(payload.auth_time) &&
+          payload.auth_time > 0
+            ? { authenticatedAt: payload.auth_time }
+            : {}),
+          ...(authenticationMethods && authenticationMethods.length > 0
+            ? { authenticationMethods }
+            : {}),
         };
       } catch (error) {
         if (error instanceof AuthenticationError) {

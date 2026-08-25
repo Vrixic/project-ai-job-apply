@@ -243,9 +243,10 @@ data "aws_iam_policy_document" "platform_kms" {
       condition {
         test     = "ArnEquals"
         variable = "aws:SourceArn"
-        values = [
-          "arn:aws:events:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:rule/${var.name}-${var.environment}-profile-readiness-terminal"
-        ]
+        values = concat(
+          ["arn:aws:events:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:rule/${var.name}-${var.environment}-profile-readiness-terminal"],
+          var.candidate_rights_enabled ? [local.candidate_rights_maintenance_rule_arn] : []
+        )
       }
     }
   }
@@ -1576,6 +1577,37 @@ data "aws_iam_policy_document" "gateway_lambda" {
     }
   }
 
+
+  dynamic "statement" {
+    for_each = var.candidate_rights_enabled ? [1] : []
+    content {
+      sid       = "ReadExactCandidateExportVersions"
+      effect    = "Allow"
+      actions   = ["s3:GetObjectVersion"]
+      resources = ["${aws_s3_bucket.candidate_data_exports[0].arn}/${local.candidate_data_export_prefix}*"]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.candidate_rights_enabled ? [1] : []
+    content {
+      sid       = "WriteCandidateDeletionConfirmationJournal"
+      effect    = "Allow"
+      actions   = ["s3:GetObject", "s3:PutObject", "s3:PutObjectRetention"]
+      resources = ["${aws_s3_bucket.candidate_deletion_recovery[0].arn}/${local.candidate_deletion_recovery_prefix}*"]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.candidate_rights_enabled ? [1] : []
+    content {
+      sid       = "EncryptCandidateDeletionConfirmationLocator"
+      effect    = "Allow"
+      actions   = ["kms:Encrypt"]
+      resources = [local.platform_kms_key_arn]
+    }
+  }
+
   dynamic "statement" {
     for_each = var.deploy_document_intake ? [1] : []
     content {
@@ -1621,6 +1653,26 @@ data "aws_iam_policy_document" "secrets_endpoint" {
     principals {
       type        = "AWS"
       identifiers = [aws_iam_role.execution.arn]
+    }
+  }
+
+
+  dynamic "statement" {
+    for_each = var.candidate_rights_enabled ? [1] : []
+    content {
+      sid       = "ExactCandidateRightsIdentitySecret"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = [aws_secretsmanager_secret.candidate_rights_auth0[0].arn]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = [aws_iam_role.profile_readiness_activity[0].arn]
+      }
     }
   }
 
@@ -1709,6 +1761,19 @@ resource "aws_lambda_function" "gateway" {
       var.deploy_document_intake ? {
         DOCUMENT_UPLOAD_BUCKET      = aws_s3_bucket.candidate_documents[0].id
         DOCUMENT_UPLOAD_KMS_KEY_ARN = aws_kms_key.platform.arn
+      } : {},
+      var.candidate_rights_enabled ? {
+        CANDIDATE_DATA_EXPORT_BUCKET                 = aws_s3_bucket.candidate_data_exports[0].id
+        CANDIDATE_DATA_EXPORT_KMS_KEY_ARN            = aws_kms_key.platform.arn
+        CANDIDATE_DELETION_RECOVERY_BUCKET           = aws_s3_bucket.candidate_deletion_recovery[0].id
+        CANDIDATE_RIGHTS_POLICY_VERSION              = var.candidate_rights_policy_version
+        CANDIDATE_RIGHTS_POLICY_SHA256               = var.candidate_rights_policy_sha256
+        CANDIDATE_RIGHTS_EXPORT_LIFETIME_SECONDS     = tostring(var.candidate_rights_export_lifetime_seconds)
+        CANDIDATE_RIGHTS_DOWNLOAD_GRANT_SECONDS      = tostring(var.candidate_rights_download_grant_seconds)
+        CANDIDATE_RIGHTS_BACKUP_RETENTION_DAYS       = tostring(var.candidate_rights_backup_retention_days)
+        CANDIDATE_RIGHTS_RECENT_AUTH_MAX_AGE_SECONDS = tostring(var.candidate_rights_recent_auth_max_age_seconds)
+        CANDIDATE_RIGHTS_OWNER_INVENTORY             = var.candidate_rights_owner_inventory
+        CANDIDATE_RIGHTS_SUBPROCESSOR_INVENTORY      = var.candidate_rights_subprocessor_inventory
       } : {}
     )
   }

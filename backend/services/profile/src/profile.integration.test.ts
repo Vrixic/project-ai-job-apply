@@ -5,7 +5,9 @@ import type { PutJobPreferencesRequest } from "@ai-job-apply/api-contracts";
 import type { AuthPrincipal } from "@ai-job-apply/auth";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  AccountQuarantinedError,
   createDatabase,
+  loadCandidateRightsPolicy,
   PostgresProfileStore,
   PostgresResumeProposalWriter,
   ProfileFactVersionConflictError,
@@ -41,10 +43,10 @@ describeWithDatabase("PostgresProfileStore", () => {
     });
 
     expect(first.stdout.trim()).toBe(
-      "Database migrations through 0005_resume_fact_proposals applied and verified.",
+      "Database migrations through 0006_candidate_rights applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(
-      "Database migrations through 0005_resume_fact_proposals applied and verified.",
+      "Database migrations through 0006_candidate_rights applied and verified.",
     );
     expect(
       await database.client`
@@ -61,10 +63,11 @@ describeWithDatabase("PostgresProfileStore", () => {
           '0002_serverless_outbox',
           '0003_retire_legacy_dispatch',
           '0004_profile_fact_versions',
-          '0005_resume_fact_proposals'
+          '0005_resume_fact_proposals',
+          '0006_candidate_rights'
         )
       `,
-    ).toHaveLength(4);
+    ).toHaveLength(5);
   });
 
   afterAll(async () => {
@@ -158,6 +161,219 @@ describeWithDatabase("PostgresProfileStore", () => {
         AND data ->> 'operationId' = ${first.operationId}
     `;
     expect(completionEvents).toEqual({ count: 1, pending: 0, allAcknowledged: true });
+  });
+
+  it("persists candidate-rights requests atomically and quarantines confirmed accounts", async () => {
+    const runId = crypto.randomUUID();
+    const now = new Date("2026-08-25T15:00:00.000Z");
+    const rightsStore = new PostgresProfileStore(database, {
+      candidateDeletionConfirmationJournal: {
+        recordConfirmed: async (entry) => entry,
+      },
+      candidateRightsPolicy: loadCandidateRightsPolicy({
+        CANDIDATE_RIGHTS_POLICY_VERSION: "d1-synthetic-v1",
+        CANDIDATE_RIGHTS_POLICY_SHA256: "a".repeat(64),
+        CANDIDATE_RIGHTS_EXPORT_LIFETIME_SECONDS: "3600",
+        CANDIDATE_RIGHTS_DOWNLOAD_GRANT_SECONDS: "300",
+        CANDIDATE_RIGHTS_BACKUP_RETENTION_DAYS: "7",
+        CANDIDATE_RIGHTS_RECENT_AUTH_MAX_AGE_SECONDS: "300",
+        CANDIDATE_RIGHTS_OWNER_INVENTORY: "identity,profile,documents,jobs,matching,billing",
+        CANDIDATE_RIGHTS_SUBPROCESSOR_INVENTORY: "auth0,aws",
+      }),
+      clock: () => new Date(now.getTime()),
+    });
+    const rightsPrincipal: AuthPrincipal = {
+      ...principal,
+      subject: `candidate-rights-${runId}`,
+      authenticatedAt: Math.floor(now.getTime() / 1_000),
+      authenticationMethods: ["pwd", "mfa"],
+    };
+    const user = await rightsStore.resolveUser(rightsPrincipal, "rights-trace");
+    let exportId: string | undefined;
+    let deletionRequestId: string | undefined;
+    try {
+      const firstExport = await rightsStore.createCandidateDataExport(
+        rightsPrincipal,
+        user.id,
+        `rights-export-${runId}`,
+        "rights-export-trace",
+        traceparent,
+      );
+      exportId = firstExport.id;
+      expect(
+        await rightsStore.createCandidateDataExport(
+          rightsPrincipal,
+          user.id,
+          `rights-export-${runId}`,
+          "rights-export-replay",
+        ),
+      ).toEqual(firstExport);
+      expect(await rightsStore.getCandidateDataExport(user.id, firstExport.id)).toMatchObject({
+        state: "queued",
+        policyVersion: "d1-synthetic-v1",
+      });
+
+      const requested = await rightsStore.createAccountDeletionRequest(
+        rightsPrincipal,
+        user.id,
+        `rights-delete-${runId}`,
+        "rights-delete-trace",
+      );
+      deletionRequestId = requested.id;
+      expect(requested).toMatchObject({ state: "requested", version: 1 });
+      const confirmed = await rightsStore.confirmAccountDeletionRequest(
+        rightsPrincipal,
+        user.id,
+        requested.id,
+        requested.version,
+        `rights-confirm-${runId}`,
+        "rights-confirm-trace",
+        traceparent,
+      );
+      expect(confirmed).toMatchObject({
+        id: requested.id,
+        state: "quarantined",
+        version: 2,
+        policyVersion: "d1-synthetic-v1",
+      });
+      expect(confirmed?.backupExpiresAt).toBe("2026-09-01T15:00:00.000Z");
+      await expect(
+        rightsStore.resolveUser(rightsPrincipal, "blocked-trace"),
+      ).rejects.toBeInstanceOf(AccountQuarantinedError);
+      expect(
+        await rightsStore.resolveUser(rightsPrincipal, "rights-replay-trace", {
+          allowQuarantined: true,
+        }),
+      ).toMatchObject({ id: user.id });
+      expect(
+        await rightsStore.confirmAccountDeletionRequest(
+          rightsPrincipal,
+          user.id,
+          requested.id,
+          requested.version,
+          `rights-confirm-${runId}`,
+          "rights-confirm-replay",
+        ),
+      ).toEqual(confirmed);
+
+      const [ledger] = await database.client<
+        Array<{
+          state: string;
+          subjectDigest: string;
+          ownerInventory: Record<string, string>;
+          subprocessorInventory: Record<string, string>;
+        }>
+      >`
+        SELECT state, subject_digest AS "subjectDigest", owner_inventory AS "ownerInventory",
+          subprocessor_inventory AS "subprocessorInventory"
+        FROM privacy.account_deletion_ledger
+        WHERE request_id = ${requested.id}
+      `;
+      expect(ledger).toMatchObject({
+        state: "quarantined",
+        ownerInventory: {
+          identity: "pending",
+          profile: "pending",
+          documents: "pending",
+          jobs: "pending",
+          matching: "pending",
+          billing: "pending",
+        },
+        subprocessorInventory: { auth0: "pending", aws: "pending" },
+      });
+      expect(ledger?.subjectDigest).toMatch(/^[a-f0-9]{64}$/);
+      expect(JSON.stringify(ledger)).not.toContain(rightsPrincipal.subject);
+      expect(JSON.stringify(ledger)).not.toContain(rightsPrincipal.email);
+
+      const events = await database.client<Array<{ type: string; data: Record<string, unknown> }>>`
+        SELECT type, data
+        FROM platform.outbox_events
+        WHERE data ->> 'dataExportId' = ${firstExport.id}
+           OR data ->> 'deletionRequestId' = ${requested.id}
+        ORDER BY type
+      `;
+      expect(events).toEqual([
+        {
+          type: "profile.account-deletion.confirmed.v1",
+          data: {
+            deletionRequestId: requested.id,
+            operationId: expect.any(String),
+            policyVersion: "d1-synthetic-v1",
+          },
+        },
+        {
+          type: "profile.data-export.requested.v1",
+          data: {
+            dataExportId: firstExport.id,
+            operationId: expect.any(String),
+            policyVersion: "d1-synthetic-v1",
+          },
+        },
+      ]);
+      expect(JSON.stringify(events)).not.toContain(rightsPrincipal.subject);
+      expect(JSON.stringify(events)).not.toContain(rightsPrincipal.email);
+
+      const [exportEvent] = await database.client<Array<{ id: string; operationId: string }>>`
+        SELECT id, data ->> 'operationId' AS "operationId"
+        FROM platform.outbox_events WHERE data ->> 'dataExportId' = ${firstExport.id}
+      `;
+      if (!exportEvent) throw new Error("Candidate export outbox event was not created");
+      const executionName = `outbox-${exportEvent.id}`;
+      await database.client`
+        UPDATE platform.outbox_events SET durable_execution_name = ${executionName},
+          published_at = now() WHERE id = ${exportEvent.id}::uuid
+      `;
+      await rightsStore.reconcileDurableOperationFailure(executionName, "WorkflowTimedOut");
+      const [recoveredOperation] = await database.client<
+        Array<{ state: string; errorCode: string }>
+      >`
+        SELECT state, error_code AS "errorCode" FROM platform.operations
+        WHERE id = ${exportEvent.operationId}::uuid
+      `;
+      expect(recoveredOperation).toEqual({
+        state: "retryable_failure",
+        errorCode: "WorkflowTimedOut",
+      });
+      const [replayCount] = await database.client<Array<{ count: number }>>`
+        SELECT count(*)::integer AS count FROM platform.outbox_events
+        WHERE type = 'profile.data-export.requested.v1'
+          AND data ->> 'operationId' = ${exportEvent.operationId}
+      `;
+      expect(replayCount?.count).toBe(2);
+
+      await database.client`
+        DELETE FROM identity.external_identities
+        WHERE issuer = ${rightsPrincipal.issuer} AND subject = ${rightsPrincipal.subject}
+      `;
+      await expect(
+        rightsStore.resolveUser(rightsPrincipal, "deleted-subject-replay"),
+      ).rejects.toBeInstanceOf(AccountQuarantinedError);
+      expect(
+        await rightsStore.resolveUser(rightsPrincipal, "deleted-subject-rights-read", {
+          allowQuarantined: true,
+        }),
+      ).toMatchObject({ id: user.id });
+      const recreated = await database.client<Array<{ count: number }>>`
+        SELECT count(*)::integer AS count FROM identity.external_identities
+        WHERE issuer = ${rightsPrincipal.issuer} AND subject = ${rightsPrincipal.subject}
+      `;
+      expect(recreated[0]?.count).toBe(0);
+    } finally {
+      if (deletionRequestId) {
+        await database.client`
+          DELETE FROM privacy.account_deletion_ledger WHERE request_id = ${deletionRequestId}
+        `;
+        await database.client`
+          DELETE FROM platform.outbox_events WHERE data ->> 'deletionRequestId' = ${deletionRequestId}
+        `;
+      }
+      if (exportId) {
+        await database.client`
+          DELETE FROM platform.outbox_events WHERE data ->> 'dataExportId' = ${exportId}
+        `;
+      }
+      await database.client`DELETE FROM identity.users WHERE id = ${user.id}`;
+    }
   });
 
   it("imports resume proposals idempotently and changes provenance on candidate correction", async () => {

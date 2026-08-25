@@ -15,6 +15,10 @@
     "./document-processing-acceptance": {
       "types": "./dist/src/document-processing-acceptance.d.ts",
       "default": "./dist/src/document-processing-acceptance.js"
+    },
+    "./candidate-rights": {
+      "types": "./dist/src/candidate-rights.d.ts",
+      "default": "./dist/src/candidate-rights.js"
     }
   },
   "scripts": {

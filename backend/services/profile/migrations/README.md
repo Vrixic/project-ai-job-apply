@@ -15,3 +15,9 @@ while account deletion can still cascade through both tables under the deletion 
 evidence for each fact version. Resume-derived values enter as `proposed`; explicit review appends
 a confirmed or rejected version. Editing during confirmation switches to user-correction
 provenance instead of claiming the original span exactly supports the corrected value.
+
+`0006_candidate_rights` adds fail-closed candidate export and two-step account-deletion state,
+enforces login quarantine on the identity owner, and retains only a restricted privacy ledger after
+active identity removal. Runtime policy values remain required configuration with no migration
+defaults. The ledger contains digests, policy identity, owner/subprocessor completion state, and an
+encrypted replay locator; it must never contain contact data, raw candidate content, or tokens.

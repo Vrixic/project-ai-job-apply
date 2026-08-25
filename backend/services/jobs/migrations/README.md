@@ -1,5 +1,9 @@
 # Jobs Migrations
 
+`0012_candidate_rights` preserves ordinary report immutability while permitting deletion only
+inside a privacy-ledger-authorized account-deletion transaction. It also exposes a bounded,
+candidate-readable report export without idempotency hashes or moderation data.
+
 Contains forward-only, checksum-verified SQL migrations for the job catalog's owned `jobs` and
 `jobs_public` schemas. The
 jobs service applies these independently under its own advisory lock and migration ledger; no

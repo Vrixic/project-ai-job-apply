@@ -110,6 +110,10 @@ After the target becomes available:
 5. Inspect only the two verifier streams in memory. Require zero credential/candidate-field,
    email, and JWT pattern matches, and retain only aggregate event/match counts.
 
+If candidate rights are enabled, keep the target quiesced and run the
+[candidate deletion recovery replay](candidate-deletion-recovery-replay.md) before any application
+role or route can reach the restore.
+
 Do not run migrations, write test rows, or inspect candidate values as a substitute for recovery
 verification.
 

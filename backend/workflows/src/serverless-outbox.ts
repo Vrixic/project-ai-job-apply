@@ -69,10 +69,12 @@ export class ServerlessOutboxStarter {
       }
       return;
     }
-    if (
-      event.type !== eventTypes.profilePreferencesUpdated ||
-      !validateEventData(event.type, event.data)
-    ) {
+    const supportedEventTypes: ReadonlySet<string> = new Set([
+      eventTypes.profilePreferencesUpdated,
+      eventTypes.profileDataExportRequested,
+      eventTypes.profileAccountDeletionConfirmed,
+    ]);
+    if (!supportedEventTypes.has(event.type) || !validateEventData(event.type, event.data)) {
       throw new OutboxNudgeRejectedError(
         "The authoritative event is not a supported workflow input",
       );

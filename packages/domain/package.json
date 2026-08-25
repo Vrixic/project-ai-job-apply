@@ -16,10 +16,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@ai-job-apply/api-contracts": "workspace:*"
-  },
-  "devDependencies": {
+    "@ai-job-apply/api-contracts": "workspace:*",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1"
-  }
+  },
+  "devDependencies": {}
 }

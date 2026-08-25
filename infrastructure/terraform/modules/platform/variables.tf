@@ -739,3 +739,116 @@ variable "profile_readiness_retention_days" {
     error_message = "Profile-readiness history retention must be a whole number from one through 30 days."
   }
 }
+
+variable "candidate_rights_enabled" {
+  description = "Activate the candidate data-export and account-deletion runtime after accountable policy review and secret population."
+  type        = bool
+  default     = false
+
+  validation {
+    condition = !var.candidate_rights_enabled || (
+      var.deploy_gateway_lambda &&
+      var.deploy_document_intake &&
+      var.deploy_serverless_outbox &&
+      var.deploy_profile_readiness_durable &&
+      var.serverless_runtime_enabled &&
+      var.private_application_networking &&
+      var.candidate_rights_policy_version != "" &&
+      can(regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", var.candidate_rights_policy_version)) &&
+      can(regex("^[a-f0-9]{64}$", var.candidate_rights_policy_sha256)) &&
+      var.candidate_rights_owner_inventory == "identity,profile,documents,jobs,matching,billing" &&
+      var.candidate_rights_subprocessor_inventory != ""
+    )
+    error_message = "Candidate rights require the active gateway/document/outbox/durable runtime, private NAT egress, and an exact accountable policy inventory."
+  }
+}
+
+variable "candidate_rights_policy_version" {
+  type    = string
+  default = ""
+}
+
+variable "candidate_rights_policy_sha256" {
+  type    = string
+  default = ""
+
+  validation {
+    condition     = var.candidate_rights_policy_sha256 == "" || can(regex("^[a-f0-9]{64}$", var.candidate_rights_policy_sha256))
+    error_message = "Candidate-rights policy SHA-256 must be empty or exactly 64 lowercase hexadecimal characters."
+  }
+}
+
+variable "candidate_rights_export_lifetime_seconds" {
+  type    = number
+  default = 3600
+
+  validation {
+    condition     = floor(var.candidate_rights_export_lifetime_seconds) == var.candidate_rights_export_lifetime_seconds && var.candidate_rights_export_lifetime_seconds >= 300 && var.candidate_rights_export_lifetime_seconds <= 604800
+    error_message = "Candidate export lifetime must be a whole number from 300 through 604800 seconds."
+  }
+}
+
+variable "candidate_rights_download_grant_seconds" {
+  type    = number
+  default = 300
+
+  validation {
+    condition     = floor(var.candidate_rights_download_grant_seconds) == var.candidate_rights_download_grant_seconds && var.candidate_rights_download_grant_seconds >= 60 && var.candidate_rights_download_grant_seconds <= 900
+    error_message = "Candidate export download grants must last 60 through 900 whole seconds."
+  }
+}
+
+variable "candidate_rights_backup_retention_days" {
+  type    = number
+  default = 7
+
+  validation {
+    condition     = floor(var.candidate_rights_backup_retention_days) == var.candidate_rights_backup_retention_days && var.candidate_rights_backup_retention_days >= 1 && var.candidate_rights_backup_retention_days <= 35
+    error_message = "Candidate deletion backup retention must be a whole number from one through 35 days."
+  }
+}
+
+variable "candidate_rights_recent_auth_max_age_seconds" {
+  type    = number
+  default = 300
+
+  validation {
+    condition     = floor(var.candidate_rights_recent_auth_max_age_seconds) == var.candidate_rights_recent_auth_max_age_seconds && var.candidate_rights_recent_auth_max_age_seconds >= 60 && var.candidate_rights_recent_auth_max_age_seconds <= 3600
+    error_message = "Candidate-rights recent authentication age must be a whole number from 60 through 3600 seconds."
+  }
+}
+
+variable "candidate_rights_owner_inventory" {
+  type    = string
+  default = ""
+}
+
+variable "candidate_rights_subprocessor_inventory" {
+  description = "Exact comma-separated adapter IDs, or the literal none after accountable review."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = var.candidate_rights_subprocessor_inventory == "" || var.candidate_rights_subprocessor_inventory == "none" || can(regex(
+      "^[a-z][a-z0-9_-]{0,63}(,[a-z][a-z0-9_-]{0,63})*$",
+      var.candidate_rights_subprocessor_inventory
+    ))
+    error_message = "Candidate-rights subprocessors must be explicit lowercase adapter IDs or the literal none."
+  }
+}
+
+variable "candidate_rights_export_lifecycle_days" {
+  description = "Defense-in-depth S3 lifecycle expiry; application grants still stop at the exact seconds-based policy deadline."
+  type        = number
+  default     = 1
+
+  validation {
+    condition = (
+      floor(var.candidate_rights_export_lifecycle_days) == var.candidate_rights_export_lifecycle_days &&
+      var.candidate_rights_export_lifecycle_days >= 1 &&
+      var.candidate_rights_export_lifecycle_days <= 8 &&
+      var.candidate_rights_export_lifecycle_days >= ceil(var.candidate_rights_export_lifetime_seconds / 86400)
+    )
+    error_message = "Candidate export lifecycle must be one through eight whole days and cannot precede the seconds-based export deadline."
+  }
+}

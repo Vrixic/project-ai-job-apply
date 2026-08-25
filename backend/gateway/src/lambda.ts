@@ -32,6 +32,7 @@ import {
 import { createLogger, initializeTelemetry } from "@ai-job-apply/observability";
 import {
   createDatabase,
+  loadCandidateRightsPolicyIfConfigured,
   PostgresProfileStore,
   resolveLambdaDatabaseUrl,
 } from "@ai-job-apply/profile-service";
@@ -43,6 +44,8 @@ import type {
   Handler,
 } from "aws-lambda";
 import { createGatewayApplication } from "./application.js";
+import { S3CandidateDataExportDownloadSigner } from "./candidate-data-export-download-signer.js";
+import { S3CandidateDeletionConfirmationJournal } from "./candidate-deletion-confirmation-journal.js";
 import { MAXIMUM_GATEWAY_BODY_BYTES } from "./gateway-boundary.js";
 import { deriveJobSearchCursorKeys, deriveModerationCursorKey } from "./job-search-cursor-key.js";
 import { JobCatalogSavedJobResolver } from "./saved-job-catalog-resolver.js";
@@ -550,10 +553,25 @@ async function createConfiguredApplication(
     ...(process.env.AWS_SESSION_TOKEN ? { sessionToken: process.env.AWS_SESSION_TOKEN } : {}),
   });
   const database = createDatabase(databaseUrl, { maxConnections: 2 });
+  const candidateRightsPolicy = loadCandidateRightsPolicyIfConfigured(process.env);
+  const recoveryBucket = process.env.CANDIDATE_DELETION_RECOVERY_BUCKET;
+  const recoveryKmsKeyArn = process.env.CANDIDATE_DATA_EXPORT_KMS_KEY_ARN;
+  if (candidateRightsPolicy && (!recoveryBucket || !recoveryKmsKeyArn)) {
+    throw new Error("CandidateDeletionConfirmationJournalConfigurationInvalid");
+  }
   const store = new PostgresProfileStore(database, {
     dispatchTarget: config.OUTBOX_DISPATCH_TARGET,
     ...(config.OUTBOX_QUEUE_URL
       ? { nudgePublisher: new SqsOutboxNudgePublisher(config.OUTBOX_QUEUE_URL) }
+      : {}),
+    ...(candidateRightsPolicy ? { candidateRightsPolicy } : {}),
+    ...(candidateRightsPolicy && recoveryBucket && recoveryKmsKeyArn
+      ? {
+          candidateDeletionConfirmationJournal: new S3CandidateDeletionConfirmationJournal(
+            recoveryBucket,
+            recoveryKmsKeyArn,
+          ),
+        }
       : {}),
   });
   const catalog = new PostgresJobCatalog(database.client, {
@@ -583,6 +601,13 @@ async function createConfiguredApplication(
           }),
         )
       : new UnavailableDocumentStore();
+  const candidateDataExportDownloads =
+    candidateRightsPolicy && process.env.CANDIDATE_DATA_EXPORT_BUCKET
+      ? new S3CandidateDataExportDownloadSigner(
+          process.env.CANDIDATE_DATA_EXPORT_BUCKET,
+          candidateRightsPolicy.downloadGrantLifetimeSeconds,
+        )
+      : undefined;
   return createGatewayApplication({
     store,
     catalog,
@@ -592,6 +617,7 @@ async function createConfiguredApplication(
     matchAssessments,
     entitlements,
     documents,
+    ...(candidateDataExportDownloads ? { candidateDataExportDownloads } : {}),
     verifier: principalBridge.verifier,
     releaseSha: config.RELEASE_SHA,
     adapter: new FastifyAdapter({

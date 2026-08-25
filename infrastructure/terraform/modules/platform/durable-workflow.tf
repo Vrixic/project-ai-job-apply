@@ -7,6 +7,10 @@ locals {
   profile_readiness_terminal_rule_arn = (
     "arn:aws:events:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:rule/${local.profile_readiness_terminal_rule_name}"
   )
+  candidate_rights_maintenance_rule_name = "${var.name}-${var.environment}-candidate-rights-maintenance"
+  candidate_rights_maintenance_rule_arn = (
+    "arn:aws:events:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:rule/${local.candidate_rights_maintenance_rule_name}"
+  )
   profile_readiness_durable_version_arn = var.deploy_profile_readiness_durable ? (
     aws_cloudformation_stack.profile_readiness_durable[0].outputs["DurableVersionArn"]
   ) : ""
@@ -106,6 +110,71 @@ resource "aws_iam_role_policy" "profile_readiness_activity" {
   policy = data.aws_iam_policy_document.profile_readiness_database_handler[0].json
 }
 
+data "aws_iam_policy_document" "candidate_rights_activity" {
+  count = var.candidate_rights_enabled ? 1 : 0
+
+  statement {
+    sid       = "ReadCandidateRightsIdentitySecret"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [aws_secretsmanager_secret.candidate_rights_auth0[0].arn]
+  }
+
+  statement {
+    sid       = "WriteAndVerifyCandidateExports"
+    effect    = "Allow"
+    actions   = ["s3:PutObject", "s3:GetObject", "s3:GetObjectVersion", "s3:DeleteObjectVersion"]
+    resources = ["${aws_s3_bucket.candidate_data_exports[0].arn}/${local.candidate_data_export_prefix}*"]
+  }
+
+  statement {
+    sid       = "DeleteExactCandidateDocumentVersions"
+    effect    = "Allow"
+    actions   = ["s3:DeleteObjectVersion"]
+    resources = ["${aws_s3_bucket.candidate_documents[0].arn}/*"]
+  }
+
+  statement {
+    sid       = "ListCandidateDocumentVersions"
+    effect    = "Allow"
+    actions   = ["s3:ListBucketVersions"]
+    resources = [aws_s3_bucket.candidate_documents[0].arn]
+  }
+
+  statement {
+    sid       = "EncryptCandidateExports"
+    effect    = "Allow"
+    actions   = ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"]
+    resources = [local.platform_kms_key_arn]
+  }
+
+  statement {
+    sid       = "WriteCandidateDeletionRecoveryLedger"
+    effect    = "Allow"
+    actions   = ["s3:GetObject", "s3:GetObjectTagging", "s3:PutObject", "s3:PutObjectRetention", "s3:PutObjectTagging"]
+    resources = ["${aws_s3_bucket.candidate_deletion_recovery[0].arn}/${local.candidate_deletion_recovery_prefix}*"]
+  }
+
+  statement {
+    sid       = "ListCandidateDeletionRecoveryLedger"
+    effect    = "Allow"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.candidate_deletion_recovery[0].arn]
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["${local.candidate_deletion_recovery_prefix}*"]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "candidate_rights_activity" {
+  count  = var.candidate_rights_enabled ? 1 : 0
+  name   = "candidate-rights-activity-runtime"
+  role   = aws_iam_role.profile_readiness_activity[0].id
+  policy = data.aws_iam_policy_document.candidate_rights_activity[0].json
+}
+
 resource "aws_iam_role_policy" "profile_readiness_terminal" {
   count  = var.deploy_profile_readiness_durable ? 1 : 0
   name   = "profile-readiness-terminal-runtime"
@@ -116,13 +185,13 @@ resource "aws_iam_role_policy" "profile_readiness_terminal" {
 resource "aws_lambda_function" "profile_readiness_activity" {
   count                          = var.deploy_profile_readiness_durable ? 1 : 0
   function_name                  = "${var.name}-${var.environment}-profile-readiness-activity"
-  description                    = "Private replay-safe database activity for profile readiness"
+  description                    = "Private replay-safe database and candidate-rights activity"
   role                           = aws_iam_role.profile_readiness_activity[0].arn
   runtime                        = "nodejs24.x"
   architectures                  = ["x86_64"]
   handler                        = "index.activity"
   memory_size                    = 512
-  timeout                        = 30
+  timeout                        = var.candidate_rights_enabled ? 300 : 30
   reserved_concurrent_executions = 1
   publish                        = true
   s3_bucket                      = aws_s3_bucket.artifacts.bucket
@@ -133,11 +202,30 @@ resource "aws_lambda_function" "profile_readiness_activity" {
   kms_key_arn                    = aws_kms_key.platform.arn
 
   environment {
-    variables = {
-      NODE_ENV           = "production"
-      RELEASE_SHA        = var.profile_readiness_activity_artifact_sha256
-      DATABASE_SECRET_ID = aws_secretsmanager_secret.database_url.arn
-    }
+    variables = merge(
+      {
+        NODE_ENV           = "production"
+        RELEASE_SHA        = var.profile_readiness_activity_artifact_sha256
+        DATABASE_SECRET_ID = aws_secretsmanager_secret.database_url.arn
+      },
+      var.candidate_rights_enabled ? {
+        OIDC_ISSUER                                  = var.oidc_issuer
+        CANDIDATE_DATA_EXPORT_BUCKET                 = aws_s3_bucket.candidate_data_exports[0].id
+        CANDIDATE_DATA_EXPORT_KMS_KEY_ARN            = aws_kms_key.platform.arn
+        CANDIDATE_DOCUMENT_BUCKET                    = aws_s3_bucket.candidate_documents[0].id
+        CANDIDATE_DELETION_RECOVERY_BUCKET           = aws_s3_bucket.candidate_deletion_recovery[0].id
+        CANDIDATE_RIGHTS_AUTH0_SECRET_ID             = aws_secretsmanager_secret.candidate_rights_auth0[0].arn
+        CANDIDATE_RIGHTS_POLICY_VERSION              = var.candidate_rights_policy_version
+        CANDIDATE_RIGHTS_POLICY_SHA256               = var.candidate_rights_policy_sha256
+        CANDIDATE_RIGHTS_EXPORT_LIFETIME_SECONDS     = tostring(var.candidate_rights_export_lifetime_seconds)
+        CANDIDATE_RIGHTS_DOWNLOAD_GRANT_SECONDS      = tostring(var.candidate_rights_download_grant_seconds)
+        CANDIDATE_RIGHTS_BACKUP_RETENTION_DAYS       = tostring(var.candidate_rights_backup_retention_days)
+        CANDIDATE_RIGHTS_RECENT_AUTH_MAX_AGE_SECONDS = tostring(var.candidate_rights_recent_auth_max_age_seconds)
+        CANDIDATE_RIGHTS_OWNER_INVENTORY             = var.candidate_rights_owner_inventory
+        CANDIDATE_RIGHTS_SUBPROCESSOR_INVENTORY      = var.candidate_rights_subprocessor_inventory
+        CANDIDATE_RIGHTS_MAINTENANCE_RULE_ARN        = local.candidate_rights_maintenance_rule_arn
+      } : {}
+    )
   }
 
   vpc_config {
@@ -168,6 +256,39 @@ resource "aws_lambda_alias" "profile_readiness_activity" {
   description      = "Reviewed immutable ${var.environment} profile-readiness activity release"
   function_name    = aws_lambda_function.profile_readiness_activity[0].function_name
   function_version = aws_lambda_function.profile_readiness_activity[0].version
+}
+
+resource "aws_cloudwatch_event_rule" "candidate_rights_maintenance" {
+  count               = var.candidate_rights_enabled ? 1 : 0
+  name                = local.candidate_rights_maintenance_rule_name
+  description         = "Delete exact expired candidate-export versions and settle their database state"
+  schedule_expression = "rate(5 minutes)"
+  state               = "ENABLED"
+}
+
+resource "aws_cloudwatch_event_target" "candidate_rights_maintenance" {
+  count     = var.candidate_rights_enabled ? 1 : 0
+  rule      = aws_cloudwatch_event_rule.candidate_rights_maintenance[0].name
+  target_id = "candidate-rights-maintenance"
+  arn       = aws_lambda_alias.profile_readiness_activity[0].arn
+
+  dead_letter_config {
+    arn = aws_sqs_queue.profile_readiness_dead_letter[0].arn
+  }
+  retry_policy {
+    maximum_event_age_in_seconds = 3600
+    maximum_retry_attempts       = 5
+  }
+}
+
+resource "aws_lambda_permission" "candidate_rights_maintenance" {
+  count         = var.candidate_rights_enabled ? 1 : 0
+  statement_id  = "AllowExactCandidateRightsMaintenanceRule"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.profile_readiness_activity[0].function_name
+  qualifier     = aws_lambda_alias.profile_readiness_activity[0].name
+  principal     = "events.amazonaws.com"
+  source_arn    = local.candidate_rights_maintenance_rule_arn
 }
 
 data "aws_iam_policy_document" "profile_readiness_durable" {
@@ -459,7 +580,10 @@ data "aws_iam_policy_document" "profile_readiness_dead_letter" {
     condition {
       test     = "ArnEquals"
       variable = "aws:SourceArn"
-      values   = [local.profile_readiness_terminal_rule_arn]
+      values = concat(
+        [local.profile_readiness_terminal_rule_arn],
+        var.candidate_rights_enabled ? [local.candidate_rights_maintenance_rule_arn] : []
+      )
     }
   }
 }

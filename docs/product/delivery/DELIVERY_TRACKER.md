@@ -32,6 +32,17 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## D1 — Useful web product and canonical job catalog
 
+- Current candidate-rights vertical (2026-08-25): the locally implementable contract, five-owner
+  persistence, durable export/deletion, exact-version S3, Auth0, BFF/UI, scheduled expiry, and
+  default-off Terraform boundaries are complete. Confirmation writes an independently encrypted,
+  Object-Locked recovery marker before PostgreSQL quarantine, and aggregate-only restore replay
+  fails closed before traffic. Repository tests pass 32/32 tasks, typecheck 31/31, gateway 111/111,
+  workflows 63/63, web 523/523, and Terraform 29/29. Deployment, exact policy/backup disposition,
+  managed-OIDC rights acceptance, Vercel, and accountable human acceptance remain; D1-R11 and Phase
+  1 stay in progress.
+  [Evidence](evidence/d1-candidate-rights-foundation-2026-08-25.md),
+  [Phase 1 tasks](phase-1-web-and-job-catalog.md)
+
 - Status: In progress
 - Start: 2026-08-11
 - Completion: Not completed

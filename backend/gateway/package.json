@@ -16,9 +16,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@aws-sdk/rds-signer": "3.1106.0",
-    "@aws-sdk/client-lambda": "3.1106.0",
-    "@aws-sdk/client-sqs": "3.1106.0",
     "@ai-job-apply/api-contracts": "workspace:*",
     "@ai-job-apply/auth": "workspace:*",
     "@ai-job-apply/billing-service": "workspace:*",
@@ -28,6 +25,12 @@
     "@ai-job-apply/matching-service": "workspace:*",
     "@ai-job-apply/observability": "workspace:*",
     "@ai-job-apply/profile-service": "workspace:*",
+    "@aws-sdk/client-kms": "3.1106.0",
+    "@aws-sdk/client-lambda": "3.1106.0",
+    "@aws-sdk/client-s3": "3.1106.0",
+    "@aws-sdk/client-sqs": "3.1106.0",
+    "@aws-sdk/rds-signer": "3.1106.0",
+    "@aws-sdk/s3-request-presigner": "3.1106.0",
     "@nestjs/common": "11.1.28",
     "@nestjs/core": "11.1.28",
     "@nestjs/platform-fastify": "11.1.28",

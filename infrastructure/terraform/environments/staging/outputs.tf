@@ -117,6 +117,18 @@ output "profile_readiness_activity_alias_arn" {
   value = module.platform.profile_readiness_activity_alias_arn
 }
 
+output "candidate_data_export_bucket" {
+  value = module.platform.candidate_data_export_bucket
+}
+
+output "candidate_deletion_recovery_bucket" {
+  value = module.platform.candidate_deletion_recovery_bucket
+}
+
+output "candidate_rights_auth0_secret_arn" {
+  value = module.platform.candidate_rights_auth0_secret_arn
+}
+
 output "profile_readiness_terminal_alias_arn" {
   value = module.platform.profile_readiness_terminal_alias_arn
 }

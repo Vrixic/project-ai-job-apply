@@ -6,7 +6,7 @@ import postgres from "postgres";
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
 
-const migrationVersions = ["0001_entitlement_projection"] as const;
+const migrationVersions = ["0001_entitlement_projection", "0002_candidate_rights"] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
     const migrationPath = fileURLToPath(
@@ -65,7 +65,9 @@ try {
             'entitlement_accounts_chronology_guard',
             'entitlement_command_receipts_immutable',
             'entitlement_outbox_payload_immutable',
-            'entitlement_outbox_delete_forbidden'
+            'entitlement_changes_candidate_delete_guard',
+            'entitlement_command_receipts_candidate_delete_guard',
+            'entitlement_outbox_candidate_delete_guard'
           ) AND NOT tgisinternal) AS "appendOnlyTriggerCount",
         (SELECT count(*)::int FROM pg_indexes
           WHERE schemaname = 'billing' AND indexname IN (
@@ -85,14 +87,14 @@ try {
     `;
     if (
       verification?.relationCount !== 5 ||
-      verification.appendOnlyTriggerCount !== 6 ||
+      verification.appendOnlyTriggerCount !== 8 ||
       verification.supportingIndexCount !== 3 ||
       verification.foreignKeyCount !== 6
     ) {
       throw new Error("Billing entitlement migration verification failed");
     }
   });
-  console.log("Billing migrations through 0001_entitlement_projection applied and verified.");
+  console.log(`Billing migrations through ${migrationVersions.at(-1)} applied and verified.`);
 } finally {
   await client.end();
 }

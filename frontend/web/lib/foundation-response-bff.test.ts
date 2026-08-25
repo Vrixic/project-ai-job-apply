@@ -168,6 +168,25 @@ const savedJobPage = {
   items: [savedJob, unavailableSavedJob],
   nextCursor: "saved_jobs_cursor.signature",
 };
+const candidateDataExport = {
+  id: "019b4e12-7ea3-7c36-9357-aea35ab542d1",
+  schemaVersion: 1,
+  format: "candidate-data-export-v1",
+  policyVersion: "policy-2026-08",
+  state: "queued",
+  requestedAt: "2026-08-25T12:00:00.000Z",
+  updatedAt: "2026-08-25T12:00:00.000Z",
+};
+const candidateDataExportAccess = { export: candidateDataExport };
+const accountDeletionRequest = {
+  id: "019b4e12-7ea3-7c36-9357-aea35ab542d2",
+  schemaVersion: 1,
+  policyVersion: "policy-2026-08",
+  state: "requested",
+  version: 1,
+  requestedAt: "2026-08-25T12:00:00.000Z",
+  updatedAt: "2026-08-25T12:00:00.000Z",
+};
 
 const validValues: Record<FoundationResponseSchemaName, unknown> = {
   EntitlementSummary: freeEntitlement,
@@ -180,6 +199,9 @@ const validValues: Record<FoundationResponseSchemaName, unknown> = {
   CreateResumeUploadResponse: resumeUploadResponse,
   ProfileFactCollection: factCollection,
   ProfileFact: profileFact,
+  CandidateDataExport: candidateDataExport,
+  CandidateDataExportAccess: candidateDataExportAccess,
+  AccountDeletionRequest: accountDeletionRequest,
 };
 const validUpstreamValues: Record<FoundationResponseSchemaName, unknown> = {
   ...validValues,

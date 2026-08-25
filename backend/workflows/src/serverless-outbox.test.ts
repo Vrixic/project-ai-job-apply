@@ -171,6 +171,43 @@ describe("serverless outbox starter", () => {
     expect(store.acknowledgeDurableOutboxStart).toHaveBeenCalledTimes(2);
   });
 
+  it.each([
+    {
+      type: eventTypes.profileDataExportRequested,
+      subject: "candidate-data-export/019b4e12-7ea3-7c36-9357-aea35ab542cb",
+      data: {
+        dataExportId: "019b4e12-7ea3-7c36-9357-aea35ab542cb",
+        operationId: "019b4e12-7ea3-7c36-9357-aea35ab542cc",
+        policyVersion: "policy-2026-08",
+      },
+    },
+    {
+      type: eventTypes.profileAccountDeletionConfirmed,
+      subject: "account-deletion-request/019b4e12-7ea3-7c36-9357-aea35ab542cb",
+      data: {
+        deletionRequestId: "019b4e12-7ea3-7c36-9357-aea35ab542cb",
+        operationId: "019b4e12-7ea3-7c36-9357-aea35ab542cc",
+        policyVersion: "policy-2026-08",
+      },
+    },
+  ])("accepts the authoritative $type workflow event", async ({ type, subject, data }) => {
+    const event = { ...durableEvent("019b4e12-7ea3-7c36-9357-aea35ab542ca"), type, subject, data };
+    const start = vi.fn(async () => ({}));
+    const store = {
+      getDurableOutboxEvent: vi.fn(async () => event),
+      acknowledgeDurableOutboxStart: vi.fn(async () => undefined),
+      recordDurableOutboxStartFailure: vi.fn(async () => undefined),
+    } as unknown as ServerlessOutboxStore;
+    const starter = new ServerlessOutboxStarter(store, { start }, logger);
+
+    await starter.process(buildOutboxNudge(event.id, event.type));
+
+    expect(start).toHaveBeenCalledWith({
+      executionName: durableExecutionName(event.id),
+      payload: expect.objectContaining({ eventType: type, data }),
+    });
+  });
+
   it("uses asynchronous invocation and the durable execution-name idempotency key", async () => {
     const send = vi.fn(async (_command: InvokeCommand) => ({
       StatusCode: 202,

@@ -7,6 +7,12 @@ import ingestionDispatchNudgeSchema from "../schemas/jobs.ingestion.dispatch.nud
   type: "json",
 };
 import outboxNudgeSchema from "../schemas/platform.outbox.nudge.v1.json" with { type: "json" };
+import accountDeletionConfirmedSchema from "../schemas/profile.account-deletion.confirmed.v1.json" with {
+  type: "json",
+};
+import dataExportRequestedSchema from "../schemas/profile.data-export.requested.v1.json" with {
+  type: "json",
+};
 import preferencesUpdatedSchema from "../schemas/profile.preferences.updated.v1.json" with {
   type: "json",
 };
@@ -18,6 +24,8 @@ import entitlementChangedSchema from "../schemas/subscription.entitlement_change
 };
 
 export const eventTypes = {
+  profileAccountDeletionConfirmed: "profile.account-deletion.confirmed.v1",
+  profileDataExportRequested: "profile.data-export.requested.v1",
   profilePreferencesUpdated: "profile.preferences.updated.v1",
   profileReadinessCalculated: "profile.readiness.calculated.v1",
   subscriptionEntitlementChanged: "subscription.entitlement_changed.v1",
@@ -115,6 +123,18 @@ export interface ProfilePreferencesUpdatedData {
   operationId: string;
 }
 
+export interface ProfileDataExportRequestedData {
+  dataExportId: string;
+  operationId: string;
+  policyVersion: string;
+}
+
+export interface ProfileAccountDeletionConfirmedData {
+  deletionRequestId: string;
+  operationId: string;
+  policyVersion: string;
+}
+
 export interface ProfileReadinessCalculatedData {
   preferenceSetId: string;
   operationId: string;
@@ -143,6 +163,8 @@ const addFormats = addFormatsModule.default as unknown as (instance: Ajv2020) =>
 addFormats(ajv);
 
 const validators = new Map<string, ValidateFunction<unknown>>([
+  [eventTypes.profileAccountDeletionConfirmed, ajv.compile(accountDeletionConfirmedSchema)],
+  [eventTypes.profileDataExportRequested, ajv.compile(dataExportRequestedSchema)],
   [eventTypes.profilePreferencesUpdated, ajv.compile(preferencesUpdatedSchema)],
   [eventTypes.profileReadinessCalculated, ajv.compile(readinessCalculatedSchema)],
   [eventTypes.subscriptionEntitlementChanged, ajv.compile(entitlementChangedSchema)],

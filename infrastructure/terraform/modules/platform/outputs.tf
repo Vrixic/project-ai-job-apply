@@ -15,6 +15,19 @@ output "candidate_document_bucket" {
   value = var.deploy_document_intake ? aws_s3_bucket.candidate_documents[0].bucket : null
 }
 
+output "candidate_data_export_bucket" {
+  value = var.candidate_rights_enabled ? aws_s3_bucket.candidate_data_exports[0].bucket : null
+}
+
+output "candidate_deletion_recovery_bucket" {
+  value = var.candidate_rights_enabled ? aws_s3_bucket.candidate_deletion_recovery[0].bucket : null
+}
+
+output "candidate_rights_auth0_secret_arn" {
+  description = "Populate this managed secret with exact clientId, clientSecret, and revocationMode JSON before activation evidence."
+  value       = var.candidate_rights_enabled ? aws_secretsmanager_secret.candidate_rights_auth0[0].arn : null
+}
+
 output "candidate_document_malware_protection_plan_id" {
   value = var.deploy_document_intake ? aws_guardduty_malware_protection_plan.candidate_documents[0].id : null
 }

@@ -8,6 +8,15 @@ export type ApiPaths = paths;
 export type PutJobPreferencesRequest = components["schemas"]["PutJobPreferencesRequest"];
 export type JobPreferenceSet = components["schemas"]["JobPreferenceSet"];
 export type PutJobPreferencesResponse = components["schemas"]["PutJobPreferencesResponse"];
+export type CreateCandidateDataExportRequest =
+  components["schemas"]["CreateCandidateDataExportRequest"];
+export type CandidateDataExport = components["schemas"]["CandidateDataExport"];
+export type CandidateDataExportAccess = components["schemas"]["CandidateDataExportAccess"];
+export type CandidateDataExportDownloadGrant =
+  components["schemas"]["CandidateDataExportDownloadGrant"];
+export type CreateAccountDeletionRequest = components["schemas"]["CreateAccountDeletionRequest"];
+export type ConfirmAccountDeletionRequest = components["schemas"]["ConfirmAccountDeletionRequest"];
+export type AccountDeletionRequest = components["schemas"]["AccountDeletionRequest"];
 export type ProfileReadiness = components["schemas"]["ProfileReadiness"];
 export type Operation = components["schemas"]["Operation"];
 export type CurrentUser = components["schemas"]["CurrentUser"];

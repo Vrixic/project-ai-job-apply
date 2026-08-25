@@ -14,7 +14,10 @@ export type FoundationResponseSchemaName =
   | "ResumeDocumentCollection"
   | "CreateResumeUploadResponse"
   | "ProfileFactCollection"
-  | "ProfileFact";
+  | "ProfileFact"
+  | "CandidateDataExport"
+  | "CandidateDataExportAccess"
+  | "AccountDeletionRequest";
 
 const validators = new Map<
   FoundationResponseSchemaName,
@@ -30,6 +33,9 @@ const validators = new Map<
   ["CreateResumeUploadResponse", compileComponentValidator("CreateResumeUploadResponse")],
   ["ProfileFactCollection", compileComponentValidator("ProfileFactCollection")],
   ["ProfileFact", compileComponentValidator("ProfileFact")],
+  ["CandidateDataExport", compileComponentValidator("CandidateDataExport")],
+  ["CandidateDataExportAccess", compileComponentValidator("CandidateDataExportAccess")],
+  ["AccountDeletionRequest", compileComponentValidator("AccountDeletionRequest")],
 ]);
 
 function projectFoundationValue(
