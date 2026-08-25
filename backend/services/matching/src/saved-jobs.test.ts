@@ -352,6 +352,48 @@ describe("SavedJobsService", () => {
     expect(boundValues).toContain("2026-08-25T21:30:00.000Z");
   });
 
+  it("normalizes delete-transaction timestamps before PostgreSQL binding", async () => {
+    const owner = uuidv7();
+    const savedJobId = uuidv7();
+    const requestedJobId = uuidv7();
+    const resolvedJobId = uuidv7();
+    const boundValues: unknown[] = [];
+    const transaction = ((strings: TemplateStringsArray, ...values: unknown[]) => {
+      boundValues.push(...values);
+      if (strings.join("?").includes("DELETE FROM matching.saved_jobs")) {
+        return Promise.resolve([
+          {
+            id: savedJobId,
+            ownerUserId: owner,
+            requestedJobId,
+            resolvedCanonicalJobIdAtSave: resolvedJobId,
+            snapshotCompanyId: uuidv7(),
+            snapshotCompanyName: "Synthetic Company",
+            snapshotVerifiedDomain: null,
+            snapshotTitle: "Synthetic Engineer",
+            snapshotLocations: ["Remote - US"],
+            snapshotDepartment: null,
+            snapshotFirstObservedAt: "2026-08-24T12:00:00.000Z",
+            snapshotLastVerifiedAt: "2026-08-24T12:00:00.000Z",
+            snapshotExpiresAt: "2026-09-23T12:00:00.000Z",
+            savedAt: "2026-08-24T21:30:00.000Z",
+          },
+        ]);
+      }
+      return Promise.resolve([]);
+    }) as unknown as postgres.Sql;
+    const client = {
+      begin: async (operation: (sql: postgres.Sql) => Promise<unknown>) => operation(transaction),
+    } as unknown as postgres.Sql;
+    const store = new PostgresSavedJobStore(client);
+
+    await expect(
+      store.delete(owner, savedJobId, new Date("2026-08-24T21:45:00.000Z")),
+    ).resolves.toBeUndefined();
+    expect(boundValues.some((value) => value instanceof Date)).toBe(false);
+    expect(boundValues).toContain("2026-08-24T21:45:00.000Z");
+  });
+
   it.each([
     {
       expectedCode: "SAVED_JOB_FIND_REPLAY",

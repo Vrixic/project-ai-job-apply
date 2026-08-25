@@ -670,12 +670,12 @@ export class PostgresSavedJobStore implements SavedJobStore {
     assertIdentifiers(ownerUserId, savedJobId);
     const occurredAtMilliseconds = occurredAt.getTime();
     if (!Number.isFinite(occurredAtMilliseconds)) throw new Error("Saved-job clock is invalid");
-    const timestamp = new Date(occurredAtMilliseconds);
+    const timestampIso = new Date(occurredAtMilliseconds).toISOString();
     await this.client.begin(async (transaction) => {
       await transaction`SELECT pg_advisory_xact_lock(hashtext(${`matching:saved:${ownerUserId}`}))`;
       const [deleted] = await transaction<SavedJobRow[]>`
         DELETE FROM matching.saved_jobs
-        WHERE owner_user_id = ${ownerUserId} AND id = ${savedJobId}
+        WHERE owner_user_id = ${ownerUserId}::uuid AND id = ${savedJobId}::uuid
         RETURNING id, owner_user_id AS "ownerUserId", requested_job_id AS "requestedJobId",
           resolved_canonical_job_id_at_save AS "resolvedCanonicalJobIdAtSave",
           snapshot_company_id AS "snapshotCompanyId",
@@ -690,7 +690,7 @@ export class PostgresSavedJobStore implements SavedJobStore {
       if (!deleted) return;
       await transaction`
         INSERT INTO matching.saved_job_list_state (owner_user_id, revision)
-        VALUES (${ownerUserId}, 2)
+        VALUES (${ownerUserId}::uuid, 2)
         ON CONFLICT (owner_user_id) DO UPDATE
         SET revision = matching.saved_job_list_state.revision + 1
       `;
@@ -700,7 +700,7 @@ export class PostgresSavedJobStore implements SavedJobStore {
           resolved_canonical_job_id_at_save, action, occurred_at
         ) VALUES (
           ${uuidv7()}, ${ownerUserId}, ${deleted.id}, ${deleted.requestedJobId},
-          ${deleted.resolvedCanonicalJobIdAtSave}, 'unsaved', ${timestamp}
+          ${deleted.resolvedCanonicalJobIdAtSave}, 'unsaved', ${timestampIso}::timestamptz
         )
       `;
     });
