@@ -57,10 +57,16 @@ quiesced-restore replay evidence. The representative assessor accepts no default
 recipient values and deliberately refuses execution until a guarded generated-synthetic provider
 fault/recovery fixture exists.
 
-## Remaining sequence
+## Superseding deployment disposition
 
-The next engineering sequence is immutable exact-current artifact publication, an application-only
-default-dark Terraform release, runtime/alias/alarm/queue/zero-drift verification, a separately
-planned migration-task update, exactly one migration run, and a final public-reader dark release.
+The planned engineering sequence is complete. Exact release source
+`9abcebb5c2577d09b789ad74be1bb7ee51a891e6` was immutably published, applied default-dark, migrated
+once through the 26-migration/45-relation boundary, verified across aliases, alarms, queues, routes,
+and zero drift, and recovered through a clean isolated PITR exercise. Follow-up guard correction
+`041e4320bc47c614f52aa2fd5f0209da23418e3e` is merged and verified. See the
+[current dark release, migration, and recovery](d1-current-dark-release-migration-and-recovery-2026-08-25.md).
+
 Vercel and accountable product, accessibility, security/privacy, moderation, source-quality,
-policy, SLO, and alert-recipient decisions remain at the end. Phase 1 is not complete.
+candidate-rights policy/timing/backup/subprocessor, representative SLO, alert-recipient, and safe
+provider-fault-fixture decisions remain. Phase 1 is not complete, and every affected activation
+gate remains false.
