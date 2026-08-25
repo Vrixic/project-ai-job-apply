@@ -13,6 +13,40 @@ read-only with respect to application data and AWS resources. No action can enab
 move a Lambda alias, apply Terraform, run an ECS task, create an Auth0 identity, or accept a caller-
 selected route, payload, SQL, command, role, bucket, function, secret, subject, or token.
 
+The selected generated-synthetic policy is
+[`d1-development-synthetic-v1`](../../../docs/security/policies/candidate-rights.d1-development-synthetic-v1.json),
+SHA-256 `d9a04c500445c83fe75cc7666f5fc22351431ce4913d81da39abf8aaedd06fff`.
+Its exact runtime values are export `3600`, download grant `300`, backup retention `35`, recent
+authentication `900`, export lifecycle `1`, owners
+`identity,profile,documents,jobs,matching,billing`, and executable subprocessor adapters `none`.
+This is generated-synthetic engineering policy, not real-candidate or public-policy approval.
+
+## Two-stage infrastructure and credential setup
+
+Provision the tagged managed secret and raise RDS retention before runtime activation. Keep
+`candidate_rights_enabled=false`, set `candidate_rights_auth0_secret_provisioned=true`, set
+`candidate_rights_auth0_authorized_owner` to the exact approved non-Zach operator identifier, and
+set `database_backup_retention_days=35`. Review and apply one refresh-backed saved plan with no
+destroy or replacement of durable data. Wait until RDS reports an available instance with live
+retention `35`; a pending modification is not acceptance.
+
+In the Auth0 dashboard, an MFA-protected non-Zach administrator creates a dedicated Machine to
+Machine application for the tenant Management API and grants only `delete:users`. Do not reuse the
+candidate web client or any dashboard administrator identity as the disposable candidate. Populate
+the Terraform-managed container from a private interactive terminal; the helper never accepts the
+secret on its command line and emits hashes only:
+
+```powershell
+pwsh -NoProfile -File scripts/configure-development-candidate-rights-auth0.ps1 `
+  -ExpectedAccountId <development-account-id> `
+  -AuthorizedOwner <exact-non-Zach-owner>
+```
+
+After exact secret validation, prepare a second refresh-backed saved plan with the policy values
+above, `private_application_networking=true`, and `candidate_rights_enabled=true`. Review the NAT,
+private routes, two private KMS/versioned buckets, Object Lock, IAM, scheduled maintenance, Lambda
+versions/aliases, and absence of durable-data destruction. Apply only that exact plan.
+
 ## Non-negotiable prerequisites
 
 Stop before planning unless all of these are independently available:
@@ -35,8 +69,12 @@ Stop before planning unless all of these are independently available:
   `ai-job-apply:generated-synthetic-only=true` and
   `ai-job-apply:authorized-owner=<approved-non-Zach-owner>`. Its exact secret JSON is
   `clientId`, `clientSecret`, and
-  `revocationMode=revoke_sessions_refresh_tokens_then_delete`. Do not use Zach Becker's identity,
-  an IAM user, a shared client, or the basic delete-only mode;
+  `revocationMode=delete_user_only`. The dedicated Auth0 M2M client receives only `delete:users`.
+  This generated-synthetic development mode is compatible with the current tenant and relies on
+  the platform's immediate quarantine/tombstone for authorization denial before provider deletion.
+  Do not use Zach Becker's identity, an IAM user, or a shared client. The stronger
+  `revoke_sessions_refresh_tokens_then_delete` mode remains a future launch option only after an
+  eligible Auth0 plan and separate accountable review;
 - one disposable generated-synthetic Auth0 identity with `profile:write`, a current `auth_time`, and
   MFA in `amr`. The identity must contain no real candidate values. Create it through the separately
   reviewed identity procedure; the acceptance operator intentionally has no identity-creation
@@ -215,4 +253,3 @@ completed locally, but a deployed acceptance run cannot be claimed yet.
 A successful run proves one generated-synthetic development lifecycle only. It does not approve
 real data, policy values, lawful exclusions, backup expiry, Vercel, browser/accessibility behavior,
 staging, production, public launch, independent security/privacy review, or Phase 1 completion.
-

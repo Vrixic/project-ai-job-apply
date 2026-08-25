@@ -23,7 +23,7 @@ if ($actualParameters -contains 'AccessToken' -or $actualParameters -contains 'S
 
 foreach ($required in @(
     'generated-synthetic-only',
-    'revoke_sessions_refresh_tokens_then_delete',
+    'delete_user_only',
     'identity,profile,documents,jobs,matching,billing',
     'DELETE_MY_ACCOUNT',
     'ACCOUNT_DELETION_IS_IRREVERSIBLE',
@@ -145,7 +145,7 @@ try {
     Snapshot = [pscustomobject]@{ Lineage = '11111111-1111-4111-8111-111111111111'; Serial = 200; VersionId = 'state-version' }
     Runtime = [pscustomobject]@{ Aliases = [pscustomobject]@{} }
     Identity = [pscustomobject]@{ SubjectSha256 = Get-TextSha256 'auth0|generated-synthetic'; AttestationSha256 = ('d' * 64) }
-    Secret = [pscustomobject]@{ ClientIdSha256 = ('e' * 64); AuthorizedOwnerSha256 = ('f' * 64); RevocationMode = 'revoke_sessions_refresh_tokens_then_delete' }
+    Secret = [pscustomobject]@{ ClientIdSha256 = ('e' * 64); AuthorizedOwnerSha256 = ('f' * 64); RevocationMode = 'delete_user_only' }
     Backup = [pscustomobject]@{ BackupRetentionDays = 7; SnapshotCount = 1; InventorySha256 = ('1' * 64); LatestRestorableTime = $now.ToString('o') }
     Health = [pscustomobject]@{ ActiveCompute = 0; QueueCount = 3; QueuedMessages = 0; AlarmCount = 44; AlarmsOk = $true }
     Drift = [pscustomobject]@{ Sha256 = ('2' * 64) }

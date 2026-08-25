@@ -54,6 +54,7 @@ module "platform" {
   enable_redis                        = var.enable_redis
   database_instance_class             = var.database_instance_class
   database_engine_version             = var.database_engine_version
+  database_backup_retention_days      = var.database_backup_retention_days
   database_performance_insights       = var.database_performance_insights
   persistent_data_plane_enabled       = var.staging_runtime_mode != "dormant"
   database_deletion_protection        = var.staging_runtime_mode == "active"
@@ -133,6 +134,8 @@ module "platform" {
   profile_readiness_execution_timeout_seconds           = var.profile_readiness_execution_timeout_seconds
   profile_readiness_retention_days                      = var.profile_readiness_retention_days
   candidate_rights_enabled                              = var.candidate_rights_enabled
+  candidate_rights_auth0_secret_provisioned             = var.candidate_rights_auth0_secret_provisioned
+  candidate_rights_auth0_authorized_owner               = var.candidate_rights_auth0_authorized_owner
   candidate_rights_policy_version                       = var.candidate_rights_policy_version
   candidate_rights_policy_sha256                        = var.candidate_rights_policy_sha256
   candidate_rights_export_lifetime_seconds              = var.candidate_rights_export_lifetime_seconds

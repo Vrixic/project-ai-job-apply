@@ -25,7 +25,7 @@ output "candidate_deletion_recovery_bucket" {
 
 output "candidate_rights_auth0_secret_arn" {
   description = "Populate this managed secret with exact clientId, clientSecret, and revocationMode JSON before activation evidence."
-  value       = var.candidate_rights_enabled ? aws_secretsmanager_secret.candidate_rights_auth0[0].arn : null
+  value       = var.candidate_rights_auth0_secret_provisioned ? aws_secretsmanager_secret.candidate_rights_auth0[0].arn : null
 }
 
 output "candidate_document_malware_protection_plan_id" {

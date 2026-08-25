@@ -33,3 +33,13 @@ authority until its row includes:
 - approval date, artifact/policy versions, residual risks, and revalidation trigger.
 
 Repository selection or Terraform configuration is not provider approval.
+
+## Candidate-rights executable inventory
+
+The D1 generated-synthetic candidate-rights runtime uses the exact executable subprocessor-adapter
+inventory `none`. This does not mean the platform has no external systems. Auth0 is reconciled by
+the separately typed identity-provider adapter, while AWS database/object cleanup and backup aging
+are first-party owner/infrastructure controls. AWS and Auth0 therefore remain in the disclosure and
+activation register above, but neither may be duplicated into the generic runtime adapter CSV.
+The current Lambda deliberately rejects a nonempty CSV until a concrete idempotent deletion adapter
+is implemented and reviewed.

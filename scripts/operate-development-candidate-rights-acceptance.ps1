@@ -309,7 +309,7 @@ function Assert-Auth0SecretBoundary {
   $value = Invoke-AwsJson @("secretsmanager", "get-secret-value", "--secret-id", $SecretArn, "--output", "json") "Candidate-rights Auth0 secret validation"
   $secret = ConvertFrom-OperatorJson ([string]$value.SecretString) "Candidate-rights Auth0 secret"
   $null = Assert-ExactPropertySet $secret @("clientId", "clientSecret", "revocationMode") "Candidate-rights Auth0 secret"
-  if ([string]::IsNullOrWhiteSpace([string]$secret.clientId) -or ([string]$secret.clientSecret).Length -lt 16 -or [string]$secret.revocationMode -cne 'revoke_sessions_refresh_tokens_then_delete') { throw "Candidate-rights acceptance requires the explicit sessions/refresh-tokens/delete Auth0 revocation mode." }
+  if ([string]::IsNullOrWhiteSpace([string]$secret.clientId) -or ([string]$secret.clientSecret).Length -lt 16 -or [string]$secret.revocationMode -cne 'delete_user_only') { throw "Development candidate-rights acceptance requires the reviewed generated-synthetic Auth0 user-deletion mode." }
   return [pscustomobject]@{ ClientIdSha256 = Get-TextSha256 ([string]$secret.clientId); RevocationMode = [string]$secret.revocationMode; AuthorizedOwnerSha256 = Get-TextSha256 $tags['ai-job-apply:authorized-owner'] }
 }
 
@@ -412,7 +412,7 @@ function Read-ExecutionPlan {
   $plan = ConvertFrom-OperatorJson (Get-Content -LiteralPath $path -Raw) "Execution plan"
   $null = Assert-ExactPropertySet $plan @('schemaVersion','kind','environment','region','sourceSha','createdAt','expiresAt','state','policy','identity','auth0','backups','aliases','health','zeroDriftPlanSha256','fixedSequence') "Execution plan"
   if ([int]$plan.schemaVersion -ne 1 -or [string]$plan.kind -cne 'development-candidate-rights-acceptance-plan' -or [string]$plan.sourceSha -cne $SourceSha -or [DateTimeOffset]::Parse([string]$plan.expiresAt) -le [DateTimeOffset]::UtcNow -or
-      [string]$plan.policy.sha256 -cne $ReviewedPolicySha256 -or [string]$plan.identity.classification -cne 'generated-synthetic-only' -or [string]$plan.auth0.revocationMode -cne 'revoke_sessions_refresh_tokens_then_delete' -or @($plan.fixedSequence).Count -ne 15) { throw "The reviewed execution plan is invalid or expired." }
+      [string]$plan.policy.sha256 -cne $ReviewedPolicySha256 -or [string]$plan.identity.classification -cne 'generated-synthetic-only' -or [string]$plan.auth0.revocationMode -cne 'delete_user_only' -or @($plan.fixedSequence).Count -ne 15) { throw "The reviewed execution plan is invalid or expired." }
   return [pscustomobject]@{ Path = $path; Value = $plan }
 }
 

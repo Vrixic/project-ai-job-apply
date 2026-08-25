@@ -55,6 +55,21 @@ variable "database_engine_version" {
   }
 }
 
+variable "database_backup_retention_days" {
+  description = "RDS automated-backup/PITR retention. Candidate-rights activation must cover its exact deletion backup window."
+  type        = number
+  default     = 7
+
+  validation {
+    condition = (
+      floor(var.database_backup_retention_days) == var.database_backup_retention_days &&
+      var.database_backup_retention_days >= 1 &&
+      var.database_backup_retention_days <= 35
+    )
+    error_message = "Database backup retention must be a whole number from one through 35 days."
+  }
+}
+
 variable "database_performance_insights" {
   description = "Enable RDS Performance Insights only on a supported instance class when evidence requires it."
   type        = bool
@@ -753,6 +768,7 @@ variable "candidate_rights_enabled" {
       var.deploy_profile_readiness_durable &&
       var.serverless_runtime_enabled &&
       var.private_application_networking &&
+      var.candidate_rights_auth0_secret_provisioned &&
       var.candidate_rights_policy_version != "" &&
       can(regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", var.candidate_rights_policy_version)) &&
       can(regex("^[a-f0-9]{64}$", var.candidate_rights_policy_sha256)) &&
@@ -761,11 +777,33 @@ variable "candidate_rights_enabled" {
       var.candidate_rights_export_lifetime_seconds != null &&
       var.candidate_rights_download_grant_seconds != null &&
       var.candidate_rights_backup_retention_days != null &&
+      try(var.database_backup_retention_days >= var.candidate_rights_backup_retention_days, false) &&
       var.candidate_rights_recent_auth_max_age_seconds != null &&
       var.candidate_rights_export_lifecycle_days != null
     )
     error_message = "Candidate rights require the active gateway/document/outbox/durable runtime, private NAT egress, an exact accountable policy inventory, and explicit timing and lifecycle values."
   }
+}
+
+variable "candidate_rights_auth0_secret_provisioned" {
+  description = "Provision the operator-populated Auth0 Management API secret before candidate-rights runtime activation."
+  type        = bool
+  default     = false
+
+  validation {
+    condition = !var.candidate_rights_auth0_secret_provisioned || (
+      var.candidate_rights_auth0_authorized_owner != "" &&
+      can(regex("^[A-Za-z0-9][A-Za-z0-9._@-]{0,127}$", var.candidate_rights_auth0_authorized_owner)) &&
+      !can(regex("zach[^a-z0-9]*becker", lower(var.candidate_rights_auth0_authorized_owner)))
+    )
+    error_message = "Candidate-rights Auth0 secret provisioning requires one explicit safe non-Zach authorized owner identifier."
+  }
+}
+
+variable "candidate_rights_auth0_authorized_owner" {
+  description = "Non-secret accountable owner identifier applied as a managed tag to the generated-synthetic Auth0 secret."
+  type        = string
+  default     = ""
 }
 
 variable "candidate_rights_policy_version" {

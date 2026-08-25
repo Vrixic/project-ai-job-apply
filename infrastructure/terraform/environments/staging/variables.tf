@@ -39,6 +39,11 @@ variable "database_engine_version" {
   default = "16.14"
 }
 
+variable "database_backup_retention_days" {
+  type    = number
+  default = 7
+}
+
 variable "database_performance_insights" {
   type    = bool
   default = false
@@ -355,6 +360,16 @@ variable "profile_readiness_retention_days" {
 variable "candidate_rights_enabled" {
   type    = bool
   default = false
+}
+
+variable "candidate_rights_auth0_secret_provisioned" {
+  type    = bool
+  default = false
+}
+
+variable "candidate_rights_auth0_authorized_owner" {
+  type    = string
+  default = ""
 }
 
 variable "candidate_rights_policy_version" {

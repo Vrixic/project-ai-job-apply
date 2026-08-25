@@ -642,7 +642,7 @@ resource "aws_db_instance" "postgres" { # nosemgrep: semgrep-rules.terraform.aws
   password                            = random_password.database.result
   db_subnet_group_name                = aws_db_subnet_group.this.name
   vpc_security_group_ids              = [aws_security_group.data.id]
-  backup_retention_period             = 7
+  backup_retention_period             = var.database_backup_retention_days
   copy_tags_to_snapshot               = true
   deletion_protection                 = var.database_deletion_protection
   performance_insights_enabled        = var.database_performance_insights

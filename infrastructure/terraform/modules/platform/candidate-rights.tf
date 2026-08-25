@@ -102,16 +102,20 @@ resource "aws_s3_bucket_policy" "candidate_data_exports" {
 }
 
 resource "aws_secretsmanager_secret" "candidate_rights_auth0" {
-  count                   = var.candidate_rights_enabled ? 1 : 0
+  count                   = var.candidate_rights_auth0_secret_provisioned ? 1 : 0
   name                    = "${var.name}/${var.environment}/candidate-rights/auth0-management"
   description             = "Operator-populated Auth0 M2M clientId, clientSecret, and explicit revocationMode"
   kms_key_id              = aws_kms_key.platform.arn
   recovery_window_in_days = 30
+  tags = {
+    "ai-job-apply:generated-synthetic-only" = "true"
+    "ai-job-apply:authorized-owner"         = var.candidate_rights_auth0_authorized_owner
+  }
 }
 
 resource "aws_s3_bucket" "candidate_deletion_recovery" { # nosemgrep: semgrep-rules.terraform.aws.best-practice.aws-s3-bucket-versioning-not-enabled -- managed below
   count               = var.candidate_rights_enabled ? 1 : 0
-  bucket              = "${var.name}-${var.environment}-candidate-deletion-recovery-${data.aws_caller_identity.current.account_id}"
+  bucket              = "${var.name}-${var.environment}-candidate-del-recovery-${data.aws_caller_identity.current.account_id}"
   object_lock_enabled = true
 }
 
