@@ -92,10 +92,19 @@ foreach ($required in @(
     'PublishedObjectCount',
     'LambdaDeploymentChanged = $false',
     'TriggerChanged          = $false',
-    'No action changes a Lambda function or alias'
+    'No action changes a Lambda function or alias',
+    '$arguments.SourceSha = $SourceSha',
+    '$arguments.ReceiptPath = $ReceiptPath',
+    '$arguments.ReviewedReceiptSha256 = $ReviewedReceiptSha256'
   )) {
   if (-not ($operatorSource.Contains($required) -or $engineSource.Contains($required))) {
     throw "The public-job publication boundary is missing: $required"
+  }
+}
+
+foreach ($optional in @('SourceSha', 'ReceiptPath', 'ReviewedReceiptSha256')) {
+  if ($operatorSource -match "(?m)^\s+$optional\s+=\s+`$$optional\s*$") {
+    throw "The public-job wrapper forwards an empty optional $optional value."
   }
 }
 

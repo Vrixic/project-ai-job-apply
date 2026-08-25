@@ -66,9 +66,11 @@ $arguments = @{
   Region                = $Region
   ExpectedAccountId     = $ExpectedAccountId
   StateBucket           = $StateBucket
-  SourceSha             = $SourceSha
-  ReceiptPath           = $ReceiptPath
-  ReviewedReceiptSha256 = $ReviewedReceiptSha256
+}
+if (-not [string]::IsNullOrWhiteSpace($SourceSha)) { $arguments.SourceSha = $SourceSha }
+if (-not [string]::IsNullOrWhiteSpace($ReceiptPath)) { $arguments.ReceiptPath = $ReceiptPath }
+if (-not [string]::IsNullOrWhiteSpace($ReviewedReceiptSha256)) {
+  $arguments.ReviewedReceiptSha256 = $ReviewedReceiptSha256
 }
 
 & $publisher @arguments

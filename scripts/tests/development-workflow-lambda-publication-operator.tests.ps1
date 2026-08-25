@@ -124,10 +124,19 @@ foreach ($required in @(
     '"list-object-versions"',
     '"--checksum-mode", "ENABLED"',
     'LambdaDeploymentChanged = $false',
-    'TriggerChanged          = $false'
+    'TriggerChanged          = $false',
+    '$arguments.SourceSha = $SourceSha',
+    '$arguments.ReceiptPath = $ReceiptPath',
+    '$arguments.ReviewedReceiptSha256 = $ReviewedReceiptSha256'
   )) {
   if (-not ($operatorSource.Contains($required) -or $engineSource.Contains($required))) {
     throw "The workflow publication boundary is missing: $required"
+  }
+}
+
+foreach ($optional in @('SourceSha', 'ReceiptPath', 'ReviewedReceiptSha256')) {
+  if ($operatorSource -match "(?m)^\s+$optional\s+=\s+`$$optional\s*$") {
+    throw "The workflow wrapper forwards an empty optional $optional value."
   }
 }
 
