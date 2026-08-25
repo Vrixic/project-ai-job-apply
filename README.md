@@ -69,19 +69,22 @@ scopes validate; test tokens are unavailable outside `NODE_ENV=test`.
 ## Current status
 
 The repository foundation, Auth0 web slice, isolated AWS environments, scale-to-zero Lambda
-application runtime, durable workflow path, restore drills, observability, and provider retirement
-are implemented and deployed in development and synthetic staging. Phase 0 completed on
-2026-08-12 after its evidence-based final acceptance. Phase 1 is in progress: the managed web
-identity and canonical catalog foundations are complete, direct-entry profile facts and secure
-resume intake are deployed in development, document processing is deployed CompleteDark with its
-triggers disabled, and bounded canonical search and filters are released in synthetic development.
-The generated-synthetic direct-dark document-processing acceptance packet is implemented and
-locally verified only; immutable image publication, deployment, AWS execution, and the
-separately human-reviewed activation sequence remain open. Stale-cursor acceptance, saved jobs,
-matching, reporting, entitlements, and public job pages remain open in Phase 1. Under
-[ADR-024](docs/adr/024-application-history-and-inbox-phase-ownership.md), authoritative technical
-application history is assigned to D3 rather than D1. Real provider ingestion, real candidate data, and
-production activation remain disabled behind their accountable release gates. Final public naming
-and the independent launch review remain D6 gates.
+application runtime, durable workflow path, restore operators, observability, and provider
+retirement are implemented and deployed in development and synthetic staging. Phase 0 completed on
+2026-08-12 after its evidence-based final acceptance. Phase 1 remains in progress, but its core
+backend is substantially deployed: managed identity and canonical catalog are complete; profile,
+document, search, saved-job, conservative matching, reporting/moderation, entitlement, provider
+ingestion, and isolated public-job foundations are implemented; fixed managed-OIDC read,
+saved-job, and match workloads pass; and both S3 version recovery and an isolated PostgreSQL
+point-in-time recovery pass with complete cleanup. Document triggers, ingestion schedules, provider
+egress, the public API route, indexing, and real-candidate use remain disabled.
+
+The remaining Phase 1 gates are intentionally fail-closed: Vercel candidate/admin deployment and
+hosted browser/header evidence; exact public-route load/abuse acceptance; dedicated admin identity
+and moderation authority; accountable source, document-trigger, security/privacy/accessibility,
+and product decisions; representative SLO acceptance; and approved candidate export/deletion and
+retention behavior. Under [ADR-024](docs/adr/024-application-history-and-inbox-phase-ownership.md),
+authoritative technical application history belongs to D3 rather than D1. Final public naming and
+the independent launch review remain D6 gates.
 
 Delivery progress, actual start/completion dates, tasks, evidence, risks, and decisions are maintained in the [delivery tracker](docs/product/delivery/DELIVERY_TRACKER.md).
