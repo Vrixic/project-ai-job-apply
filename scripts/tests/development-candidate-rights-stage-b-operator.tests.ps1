@@ -26,17 +26,25 @@ $required = @(
   (New-Change "module.platform.aws_lambda_function.gateway[0]" "aws_lambda_function" @("update")),
   (New-Change "module.platform.aws_lambda_alias.gateway[0]" "aws_lambda_alias" @("update")),
   (New-Change "module.platform.aws_lambda_function.profile_readiness_activity[0]" "aws_lambda_function" @("update")),
-  (New-Change "module.platform.aws_lambda_alias.profile_readiness_activity[0]" "aws_lambda_alias" @("update"))
+  (New-Change "module.platform.aws_lambda_alias.profile_readiness_activity[0]" "aws_lambda_alias" @("update")),
+  (New-Change "module.platform.aws_cloudwatch_event_rule.profile_readiness_terminal[0]" "aws_cloudwatch_event_rule" @("update")),
+  (New-Change "module.platform.aws_iam_role_policy.outbox_starter[0]" "aws_iam_role_policy" @("update")),
+  (New-Change "module.platform.aws_lambda_function.outbox_starter[0]" "aws_lambda_function" @("update")),
+  (New-Change "module.platform.aws_lambda_alias.outbox_starter[0]" "aws_lambda_alias" @("update")),
+  (New-Change "module.platform.aws_lambda_function.profile_readiness_terminal[0]" "aws_lambda_function" @("update")),
+  (New-Change "module.platform.aws_lambda_alias.profile_readiness_terminal[0]" "aws_lambda_alias" @("update")),
+  (New-Change "module.platform.aws_vpc_endpoint.lambda[0]" "aws_vpc_endpoint" @("update"))
 )
 $null = Assert-StageBChangeSet $required; $passed++
 $summary = Get-ChangeSummary $required
-if ($summary.Count -ne 13 -or $summary.Counts.create -ne 9 -or $summary.Counts.update -ne 4 -or $summary.Digest -notmatch '^[a-f0-9]{64}$') { throw "Aggregate change summary failed." }
+if ($summary.Count -ne 20 -or $summary.Counts.create -ne 9 -or $summary.Counts.update -ne 11 -or $summary.Digest -notmatch '^[a-f0-9]{64}$') { throw "Aggregate change summary failed." }
 $passed++
 
 Assert-Rejected { Assert-StageBChangeSet @($required + (New-Change "module.platform.aws_db_instance.postgres" "aws_db_instance" @("delete", "create"))) } "Durable replacement accepted."
 Assert-Rejected { Assert-StageBChangeSet @($required + (New-Change "module.platform.aws_iam_user.operator" "aws_iam_user" @("create"))) } "Unexpected address accepted."
 Assert-Rejected { Assert-StageBChangeSet @($required + (New-Change "module.platform.aws_lambda_function.gateway[0]" "aws_lambda_function" @("delete"))) } "Unexpected action accepted."
 Assert-Rejected { Assert-StageBChangeSet @($required | Select-Object -Skip 1) } "Missing required change accepted."
+Assert-Rejected { Assert-StageBChangeSet @($required | Where-Object address -cne "module.platform.aws_iam_role_policy.outbox_starter[0]") } "Missing exact-version outbox transition accepted."
 
 $artifact = [pscustomobject]@{ key = "lambda/gateway/source/artifact/gateway.zip"; versionId = "version"; artifactSha256 = "a" * 64; objectBase64Sha256 = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=" }
 $baselineVariables = [pscustomobject]@{

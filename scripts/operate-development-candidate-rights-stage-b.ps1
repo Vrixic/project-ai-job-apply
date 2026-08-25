@@ -232,11 +232,14 @@ function Get-AllowedStageBChanges {
     "aws_s3_bucket_versioning.candidate_deletion_recovery"
   )
   $update = @(
-    "aws_cloudformation_stack.profile_readiness_durable", "aws_iam_role_policy.gateway_lambda",
-    "aws_iam_role_policy.profile_readiness_durable", "aws_kms_key.platform", "aws_lambda_alias.gateway",
-    "aws_lambda_alias.profile_readiness_activity", "aws_lambda_function.gateway", "aws_lambda_function.profile_readiness_activity",
+    "aws_cloudformation_stack.profile_readiness_durable", "aws_cloudwatch_event_rule.profile_readiness_terminal",
+    "aws_iam_role_policy.gateway_lambda", "aws_iam_role_policy.outbox_starter", "aws_iam_role_policy.profile_readiness_durable",
+    "aws_kms_key.platform", "aws_lambda_alias.gateway", "aws_lambda_alias.outbox_starter",
+    "aws_lambda_alias.profile_readiness_activity", "aws_lambda_alias.profile_readiness_terminal",
+    "aws_lambda_function.gateway", "aws_lambda_function.outbox_starter", "aws_lambda_function.profile_readiness_activity",
+    "aws_lambda_function.profile_readiness_terminal",
     "aws_route_table.private", "aws_s3_bucket_policy.candidate_documents", "aws_sqs_queue_policy.profile_readiness_dead_letter",
-    "aws_vpc_endpoint.candidate_documents_s3", "aws_vpc_endpoint.secretsmanager"
+    "aws_vpc_endpoint.candidate_documents_s3", "aws_vpc_endpoint.lambda", "aws_vpc_endpoint.secretsmanager"
   )
   return [pscustomobject]@{ Create = $create; Update = $update }
 }
@@ -255,7 +258,9 @@ function Assert-StageBChangeSet {
     "aws_iam_role_policy.candidate_rights_activity", "aws_cloudwatch_event_rule.candidate_rights_maintenance",
     "aws_cloudwatch_event_target.candidate_rights_maintenance", "aws_lambda_permission.candidate_rights_maintenance",
     "aws_lambda_function.gateway", "aws_lambda_alias.gateway", "aws_lambda_function.profile_readiness_activity",
-    "aws_lambda_alias.profile_readiness_activity"
+    "aws_lambda_alias.profile_readiness_activity", "aws_cloudwatch_event_rule.profile_readiness_terminal",
+    "aws_iam_role_policy.outbox_starter", "aws_lambda_function.outbox_starter", "aws_lambda_alias.outbox_starter",
+    "aws_lambda_function.profile_readiness_terminal", "aws_lambda_alias.profile_readiness_terminal", "aws_vpc_endpoint.lambda"
   )
   $seen = @{}
   foreach ($change in $Changes) {
