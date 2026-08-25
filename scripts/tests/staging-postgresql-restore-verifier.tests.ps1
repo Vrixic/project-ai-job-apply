@@ -301,6 +301,18 @@ foreach ($required in @(
   '"candidate_document_cors_allowed_origins"',
   '"ingestion_provider_sources"',
   '"public_job_route_activation_allowed"',
+  '"candidate_rights_enabled"',
+  '"candidate_rights_policy_version"',
+  '"candidate_rights_policy_sha256"',
+  '"candidate_rights_export_lifetime_seconds"',
+  '"candidate_rights_export_lifecycle_days"',
+  '"candidate_rights_download_grant_seconds"',
+  '"candidate_rights_backup_retention_days"',
+  '"candidate_rights_recent_auth_max_age_seconds"',
+  '"candidate_rights_owner_inventory"',
+  '"candidate_rights_subprocessor_inventory"',
+  'if ($null -eq $value)',
+  'Remove-Item -LiteralPath "Env:$environmentName" -ErrorAction SilentlyContinue',
   'ConvertTo-Json -InputObject $value -Compress -Depth 20'
 )) {
   if (-not $inspector.Contains($required)) {

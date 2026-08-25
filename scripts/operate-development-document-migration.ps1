@@ -2056,11 +2056,11 @@ function Assert-TaskResultAndLogs {
   $logStream = Resolve-TaskLogStreamName -Task $task -Container $containers[0] `
     -TaskDefinition $definition
   $expectedMessages = @(
-    'Database migrations through 0005_resume_fact_proposals applied and verified.',
-    'Jobs migrations through 0011_positive_source_withdrawal applied and verified.',
-    'Documents migrations through 0002_resume_processing applied and verified.',
-    'Matching migrations through 0001_saved_jobs applied and verified.',
-    'Billing migrations through 0001_entitlement_projection applied and verified.',
+    'Database migrations through 0006_candidate_rights applied and verified.',
+    'Jobs migrations through 0013_public_job_sitemap applied and verified.',
+    'Documents migrations through 0003_candidate_rights applied and verified.',
+    'Matching migrations through 0002_candidate_rights applied and verified.',
+    'Billing migrations through 0002_candidate_rights applied and verified.',
     'All service-owned database migrations applied and verified.'
   )
   for ($attempt = 0; $attempt -lt 30; $attempt++) {

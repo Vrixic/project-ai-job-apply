@@ -106,7 +106,12 @@ $allowedVariableNames = @(
   "public_job_projection_artifact_s3_key", "public_job_projection_artifact_s3_object_version",
   "public_job_projection_artifact_sha256", "public_job_projection_artifact_base64sha256",
   "public_job_lambda_artifact_s3_key", "public_job_lambda_artifact_s3_object_version",
-  "public_job_lambda_artifact_sha256", "public_job_lambda_artifact_base64sha256"
+  "public_job_lambda_artifact_sha256", "public_job_lambda_artifact_base64sha256",
+  "candidate_rights_enabled", "candidate_rights_policy_version",
+  "candidate_rights_policy_sha256", "candidate_rights_export_lifetime_seconds",
+  "candidate_rights_export_lifecycle_days", "candidate_rights_download_grant_seconds",
+  "candidate_rights_backup_retention_days", "candidate_rights_recent_auth_max_age_seconds",
+  "candidate_rights_owner_inventory", "candidate_rights_subprocessor_inventory"
 )
 $applicationLogGroup = "/ai-job-apply/$Environment/application"
 
@@ -194,10 +199,14 @@ function Get-RuntimeStatus {
       $environmentName = "TF_VAR_$($property.Name)"
       $saved[$environmentName] = [Environment]::GetEnvironmentVariable($environmentName, "Process")
       $value = $property.Value.value
-      $serialized = if ($value -is [bool]) { $value.ToString().ToLowerInvariant() }
-        elseif ($value -is [string]) { $value }
-        else { ConvertTo-Json -InputObject $value -Compress -Depth 20 }
-      [Environment]::SetEnvironmentVariable($environmentName, [string]$serialized, "Process")
+      if ($null -eq $value) {
+        Remove-Item -LiteralPath "Env:$environmentName" -ErrorAction SilentlyContinue
+      } else {
+        $serialized = if ($value -is [bool]) { $value.ToString().ToLowerInvariant() }
+          elseif ($value -is [string]) { $value }
+          else { ConvertTo-Json -InputObject $value -Compress -Depth 20 }
+        [Environment]::SetEnvironmentVariable($environmentName, [string]$serialized, "Process")
+      }
       $names.Add($environmentName)
     }
     $runtimeSetting = @($variableProperties | Where-Object Name -eq "serverless_runtime_enabled")
