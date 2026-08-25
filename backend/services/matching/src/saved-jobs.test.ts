@@ -298,6 +298,60 @@ describe("SavedJobsService", () => {
     ).rejects.toThrow("Saved-job idempotency key is invalid");
   });
 
+  it("normalizes create-transaction timestamps before PostgreSQL binding", async () => {
+    const owner = uuidv7();
+    const requested = uuidv7();
+    const current = job(uuidv7());
+    const savedJobId = uuidv7();
+    const boundValues: unknown[] = [];
+    const transaction = Object.assign(
+      (strings: TemplateStringsArray, ...values: unknown[]) => {
+        boundValues.push(...values);
+        const statement = strings.join("?");
+        if (statement.includes("SELECT count(*)::text")) return Promise.resolve([{ count: "0" }]);
+        if (statement.includes("INSERT INTO matching.saved_jobs")) {
+          return Promise.resolve([
+            {
+              id: savedJobId,
+              ownerUserId: owner,
+              requestedJobId: requested,
+              resolvedCanonicalJobIdAtSave: current.id,
+              snapshotCompanyId: current.company.id,
+              snapshotCompanyName: current.company.name,
+              snapshotVerifiedDomain: null,
+              snapshotTitle: current.title,
+              snapshotLocations: current.locations,
+              snapshotDepartment: null,
+              snapshotFirstObservedAt: current.firstObservedAt,
+              snapshotLastVerifiedAt: current.lastVerifiedAt,
+              snapshotExpiresAt: current.expiresAt,
+              savedAt: "2026-08-24T21:30:00.000Z",
+            },
+          ]);
+        }
+        return Promise.resolve([]);
+      },
+      { array: (values: readonly string[]) => [...values] },
+    ) as unknown as postgres.Sql;
+    const client = {
+      begin: async (operation: (sql: postgres.Sql) => Promise<unknown>) => operation(transaction),
+    } as unknown as postgres.Sql;
+    const store = new PostgresSavedJobStore(client);
+
+    await expect(
+      store.create(
+        owner,
+        requested,
+        current,
+        "saved-job-normalized-timestamps-0001",
+        new Date("2026-08-24T21:30:00.000Z"),
+      ),
+    ).resolves.toMatchObject({ id: savedJobId });
+    expect(boundValues.some((value) => value instanceof Date)).toBe(false);
+    expect(boundValues).toContain("2026-08-24T21:30:00.000Z");
+    expect(boundValues).toContain("2026-08-25T21:30:00.000Z");
+  });
+
   it.each([
     {
       expectedCode: "SAVED_JOB_FIND_REPLAY",

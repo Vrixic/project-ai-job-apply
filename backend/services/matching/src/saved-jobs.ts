@@ -451,6 +451,9 @@ export class PostgresSavedJobStore implements SavedJobStore {
     if (!Number.isFinite(occurredAtMilliseconds)) throw new Error("Saved-job clock is invalid");
     const timestamp = new Date(occurredAtMilliseconds);
     const timestampIso = timestamp.toISOString();
+    const idempotencyExpiresAtIso = new Date(
+      occurredAtMilliseconds + SAVED_JOB_IDEMPOTENCY_RETENTION_HOURS * 60 * 60 * 1_000,
+    ).toISOString();
     let stage: SavedJobPersistenceStage = "BEGIN";
     try {
       return await this.client.begin(async (transaction) => {
@@ -483,13 +486,14 @@ export class PostgresSavedJobStore implements SavedJobStore {
         stage = "EXPIRED_CLEANUP";
         await transaction`
         DELETE FROM matching.idempotency_keys
-        WHERE owner_user_id = ${ownerUserId} AND idempotency_expires_at <= ${timestamp}
+        WHERE owner_user_id = ${ownerUserId}::uuid
+          AND idempotency_expires_at <= ${timestampIso}::timestamptz
       `;
         stage = "IDEMPOTENCY_COUNT";
         const [idempotencyUsage] = await transaction<{ count: string }[]>`
         SELECT count(*)::text AS count
         FROM matching.idempotency_keys
-        WHERE owner_user_id = ${ownerUserId}
+        WHERE owner_user_id = ${ownerUserId}::uuid
       `;
         if (Number(idempotencyUsage?.count ?? 0) >= this.maximumIdempotencyKeys) {
           throw new SavedJobIdempotencyLimitError(this.maximumIdempotencyKeys);
@@ -507,7 +511,8 @@ export class PostgresSavedJobStore implements SavedJobStore {
           snapshot_last_verified_at AS "snapshotLastVerifiedAt",
           snapshot_expires_at AS "snapshotExpiresAt", saved_at AS "savedAt"
         FROM matching.saved_jobs
-        WHERE owner_user_id = ${ownerUserId} AND requested_job_id = ${requestedJobId}
+        WHERE owner_user_id = ${ownerUserId}::uuid
+          AND requested_job_id = ${requestedJobId}::uuid
       `;
         let created = existing ? record(existing) : undefined;
         if (!created) {
@@ -515,7 +520,7 @@ export class PostgresSavedJobStore implements SavedJobStore {
           const [savedJobUsage] = await transaction<{ count: string }[]>`
           SELECT count(*)::text AS count
           FROM matching.saved_jobs
-          WHERE owner_user_id = ${ownerUserId}
+          WHERE owner_user_id = ${ownerUserId}::uuid
         `;
           if (Number(savedJobUsage?.count ?? 0) >= this.maximumSavedJobs) {
             throw new SavedJobLimitError(this.maximumSavedJobs);
@@ -536,7 +541,8 @@ export class PostgresSavedJobStore implements SavedJobStore {
             ${boundedSnapshot.company.verifiedDomain ?? null}, ${boundedSnapshot.title},
             ${transaction.array(boundedSnapshot.locations)}, ${boundedSnapshot.department ?? null},
             ${boundedSnapshot.firstObservedAt}, ${boundedSnapshot.lastVerifiedAt},
-            ${boundedSnapshot.expiresAt}, ${timestamp}, ${timestamp}
+            ${boundedSnapshot.expiresAt}::timestamptz,
+            ${timestampIso}::timestamptz, ${timestampIso}::timestamptz
           )
           RETURNING id, owner_user_id AS "ownerUserId", requested_job_id AS "requestedJobId",
             resolved_canonical_job_id_at_save AS "resolvedCanonicalJobIdAtSave",
@@ -554,7 +560,7 @@ export class PostgresSavedJobStore implements SavedJobStore {
           stage = "REVISION_UPDATE";
           await transaction`
           INSERT INTO matching.saved_job_list_state (owner_user_id, revision)
-          VALUES (${ownerUserId}, 2)
+          VALUES (${ownerUserId}::uuid, 2)
           ON CONFLICT (owner_user_id) DO UPDATE
           SET revision = matching.saved_job_list_state.revision + 1
         `;
@@ -565,7 +571,7 @@ export class PostgresSavedJobStore implements SavedJobStore {
             resolved_canonical_job_id_at_save, action, occurred_at
           ) VALUES (
             ${uuidv7()}, ${ownerUserId}, ${created.id}, ${requestedJobId},
-            ${resolvedJob.id}, 'saved', ${timestamp}
+            ${resolvedJob.id}, 'saved', ${timestampIso}::timestamptz
           )
         `;
         }
@@ -584,8 +590,8 @@ export class PostgresSavedJobStore implements SavedJobStore {
           ${created.snapshot.company.verifiedDomain ?? null}, ${created.snapshot.title},
           ${transaction.array(created.snapshot.locations)}, ${created.snapshot.department ?? null},
           ${created.snapshot.firstObservedAt}, ${created.snapshot.lastVerifiedAt},
-          ${created.snapshot.expiresAt}, ${created.savedAt}, ${timestamp},
-          ${new Date(timestamp.getTime() + SAVED_JOB_IDEMPOTENCY_RETENTION_HOURS * 60 * 60 * 1_000)}
+          ${created.snapshot.expiresAt}, ${created.savedAt.toISOString()}::timestamptz,
+          ${timestampIso}::timestamptz, ${idempotencyExpiresAtIso}::timestamptz
         )
       `;
         return created;
