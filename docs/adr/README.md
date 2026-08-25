@@ -28,6 +28,7 @@ Records important technical decisions, their context, alternatives, consequences
 - [ADR-022: Quarantine and scan candidate document uploads](022-quarantine-and-scan-candidate-document-uploads.md)
 - [ADR-024: Application history and inbox phase ownership](024-application-history-and-inbox-phase-ownership.md)
 - [ADR-025: Govern public ATS feed activation without a separate counsel gate](025-public-ats-feed-activation-governance.md)
+- [ADR-026: Host Next.js presentation boundaries on Vercel](026-vercel-nextjs-presentation-hosting.md)
 
 ## Proposed delivery decisions
 

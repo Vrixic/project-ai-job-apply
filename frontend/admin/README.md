@@ -41,3 +41,12 @@ change catalog state. Source resume, free-form evidence, automated thresholds, g
 privacy requests, entitlement support, and break-glass controls are not implemented here. The app
 requires a separately configured admin Regular Web Application and is not deployed or accepted
 through managed OIDC by these source bytes.
+
+## Vercel hosting boundary
+
+[ADR-026](../../docs/adr/026-vercel-nextjs-presentation-hosting.md) assigns this directory its own
+Vercel project, isolated from candidate web. The source configuration runs Functions in `iad1` and
+adds minimum browser security headers plus response-level crawler denial. An identity-dark build is
+permitted, but no admin credential or managed-OIDC activation is authorized until the separate
+client/grant, MFA moderator, protected stable hostname, and D1P dispositions pass. Follow the
+[Vercel hosting runbook](../../infrastructure/runbooks/deployments/vercel-nextjs-hosting.md).

@@ -1,7 +1,7 @@
 # Phase 0 Privacy Impact Assessment
 
 - Status: Engineering review ready; accountable privacy/legal and security approval pending
-- Last updated: 2026-08-11
+- Last updated: 2026-08-25
 - Assessment owner: Security/privacy engineering
 - Accountable approvers: Future external legal/privacy counsel and independent security reviewer;
   individuals unassigned
@@ -21,6 +21,12 @@ shares the development Auth0 issuer under
 [ADR-014](../adr/014-shared-development-auth0-for-synthetic-staging.md); this is not identity
 isolation evidence. The slice does not call ATS, AI, email, calendar, billing, extension, mobile,
 or remote-browser providers.
+
+[ADR-026](../adr/026-vercel-nextjs-presentation-hosting.md) selects Vercel for two isolated
+Next.js projects: candidate web and moderation admin. The source configuration keeps AWS as the
+authoritative API/data plane, dynamic previews identity-dark, and candidate/admin credentials
+separate. No Vercel project, hosted managed-OIDC session, real candidate data flow, or provider
+approval is claimed yet.
 
 Shared development, CI, staging, and demos are restricted to synthetic data. Isolated founder-only
 dogfooding with the founder's own data is accepted as product direction. A live founder ATS effect
@@ -44,6 +50,7 @@ processing is not approved.
 | Outreach content and recipient | Confidential PII | Send one candidate-approved message | No inbox/calendar reading; per-send approval; suppression and limits | Planned D5 |
 | Billing identifiers | Confidential PII | Maintain Free/Pro entitlement | Provider-neutral ID; do not store full payment credentials | Planned D6 |
 | Operational telemetry | Internal | Reliability, security, debugging | Opaque IDs and redacted measurements only | Deployed redaction, trace, alarm-delivery, and aggregate workload evidence exists for the synthetic foundation |
+| Web request and encrypted session metadata | Internal/Confidential; access tokens and session secrets are Restricted | Serve the candidate/admin presentation and server-side BFF | Two isolated Vercel projects; server-held tokens; no browser token exposure; minimum provider logs | Vercel selected and source-configured for synthetic acceptance only; provider and real-user activation review pending |
 | Product analytics | Internal/de-identified where possible | Evaluate product behavior and quality | Phase 0 operational telemetry only; optional analytics later require an explicit preference and no raw candidate values | Planned after review |
 
 ## Data subjects and affected people
@@ -85,6 +92,7 @@ decisions.
 | P-10 | Users misunderstand automation or privacy behavior | Just-in-time notices, plain-language state, review by exception, accurate public claims | UX/legal review pending |
 | P-11 | Retention exceeds the candidate's expectation or business need | Purpose-bound retention, user controls, documented defaults, periodic deletion verification | Synthetic environment settings and provisional product defaults are documented separately; public durations and enforcement require approval |
 | P-12 | A new feature silently changes processing | Mandatory privacy/security delta review and updated data-flow map before activation | Delivery gates documented |
+| P-13 | A hosted web/BFF provider receives candidate sessions or request metadata beyond the intended boundary | Separate candidate/admin projects and credentials; server-held tokens; identity-dark previews; minimum logs; provider/DPA/retention/deletion/incident review before real users | Source controls are implemented; Vercel account configuration, deployed verification, and accountable real-user approval remain open |
 
 ## Individual controls and rights design
 

@@ -27,6 +27,7 @@ build/Release
 .cache
 .parcel-cache
 .next
+.vercel
 .expo/
 out/
 .nuxt

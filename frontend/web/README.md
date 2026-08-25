@@ -61,6 +61,18 @@ with `NEXT_PUBLIC_PRODUCT_BRAND_NAME` and `NEXT_PUBLIC_PRODUCT_BRAND_DOMAIN`. Th
 descriptive only until ownership and public-brand approval are recorded; API and web origins use
 separate configuration.
 
+## Vercel hosting boundary
+
+[ADR-026](../../docs/adr/026-vercel-nextjs-presentation-hosting.md) selects a dedicated Vercel
+project rooted at this directory. Its Functions run in `iad1`; the authoritative API/data plane
+remains AWS `us-east-2`. The deployed app applies repository-owned minimum browser security headers.
+
+Managed OIDC requires one protected stable HTTPS hostname, an exact `/auth/callback` allowlist
+entry, and server-only Vercel variables. Dynamic previews remain identity-dark by default; never
+add wildcard Auth0 origins or expose secrets through `NEXT_PUBLIC_*`. Keep
+`PUBLIC_JOB_INDEXING_ENABLED=false` until D1-009 acceptance. Follow the
+[Vercel hosting runbook](../../infrastructure/runbooks/deployments/vercel-nextjs-hosting.md).
+
 ## Phase 1 implementation
 
 The truth-profile panel uses server-held Auth0 sessions to list, create, correct, and reject

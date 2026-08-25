@@ -20,3 +20,6 @@ saved infrastructure plan, success evidence, and recovery boundary.
 - [Staging runtime lifecycle](staging-runtime-lifecycle.md) — Activates isolated synthetic staging
   for bounded release exercises and returns its RDS/interface-endpoint data plane to a guarded
   dormant state.
+- [Vercel Next.js hosting](vercel-nextjs-hosting.md) — Creates isolated candidate/admin projects,
+  preserves exact Auth0 origins and server-held secrets, and verifies the hosted presentation/BFF
+  boundary without moving API or product truth out of AWS.

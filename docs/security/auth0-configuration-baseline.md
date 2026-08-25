@@ -67,6 +67,20 @@ until D6-012 approves the final name and owned domain.
 - Never log authorization codes, cookies, access/refresh/ID tokens, secrets, raw claims, or full
   email addresses.
 
+### Vercel-hosted web boundaries
+
+[ADR-026](../adr/026-vercel-nextjs-presentation-hosting.md) assigns candidate web and moderation
+admin to separate Vercel projects. Each project requires one stable HTTPS `APP_BASE_URL` and exact
+Auth0 callback/logout allowlist entries for that origin. Do not use a wildcard to authenticate
+dynamic preview deployments. Previews remain identity-dark unless one exact preview hostname is
+deliberately registered for a bounded synthetic exercise and removed afterward.
+
+Store `AUTH0_CLIENT_SECRET` and `AUTH0_SECRET` only as sensitive, server-only variables in the
+owning Vercel project. Candidate and admin client IDs, client secrets, and session secrets must all
+remain distinct. Vercel preview targets receive no real-user credential, production API target, or
+real candidate data. Hosted configuration is deployment evidence only; it does not satisfy tenant
+isolation, provider approval, admin authority, or launch review.
+
 The synthetic-only development tenant has passed passkey enrollment/sign-in, TOTP enrollment and
 reauthentication, administrator-assisted MFA reset/re-enrollment, and recovery-code sign-in. Its
 temporary `Always` test policy demonstrated redundant TOTP after passkey authentication, so the
