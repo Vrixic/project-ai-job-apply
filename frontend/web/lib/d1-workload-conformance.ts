@@ -2,6 +2,7 @@ import { compileComponentValidator } from "@ai-job-apply/api-contracts";
 
 const readConfirmation = "run-d1-development-read-workload-v1";
 const savedJobLifecycleConfirmation = "run-d1-development-saved-job-lifecycle-v1";
+const matchAssessmentConfirmation = "run-d1-development-match-assessment-v1";
 const requestsPerPublicRoute = 50;
 const authenticatedIterations = 25;
 const requestTimeoutMilliseconds = 15_000;
@@ -11,6 +12,7 @@ const validateEntitlements = compileComponentValidator("EntitlementSummary");
 const validateJobSearch = compileComponentValidator("JobSearchPage");
 const validateSavedJobs = compileComponentValidator("SavedJobPage");
 const validateSavedJob = compileComponentValidator("SavedJob");
+const validateMatchAssessment = compileComponentValidator("MatchAssessment");
 const validateProblem = compileComponentValidator("ProblemDetails");
 
 interface WorkloadSession {
@@ -367,6 +369,136 @@ export async function runD1ReadWorkload(
     });
   } catch {
     return response(503, "workload_inconclusive", "The D1 workload could not be completed");
+  } finally {
+    workloadInProgress = false;
+  }
+}
+
+export async function runD1MatchAssessmentWorkload(
+  request: Request,
+  dependencies: WorkloadDependencies,
+): Promise<Response> {
+  if (!dependencies.enabled) return response(404, "unavailable", "Not found");
+  const origin = expectedOrigin(dependencies.appBaseUrl);
+  if (!origin || request.headers.get("origin") !== origin) {
+    return response(403, "origin_rejected", "The request origin was rejected");
+  }
+  try {
+    const body = (await request.json()) as { confirmation?: unknown };
+    if (body.confirmation !== matchAssessmentConfirmation) {
+      return response(400, "confirmation_required", "Explicit workload confirmation is required");
+    }
+  } catch {
+    return response(400, "confirmation_required", "Explicit workload confirmation is required");
+  }
+  if (workloadInProgress) {
+    return response(409, "already_running", "The D1 workload is already running");
+  }
+  const baseUrl = platformBaseUrl(dependencies.baseUrl);
+  if (!baseUrl) {
+    return response(503, "configuration_unavailable", "The workload configuration is unavailable");
+  }
+  let session: unknown | null;
+  try {
+    session = await dependencies.auth0.getSession();
+  } catch {
+    session = null;
+  }
+  if (!session) return response(401, "reauthentication_required", "Sign in again to continue");
+  let token: string;
+  try {
+    ({ token } = await dependencies.auth0.getAccessToken());
+  } catch {
+    return response(401, "reauthentication_required", "Sign in again to continue");
+  }
+
+  workloadInProgress = true;
+  const startedAt = new Date().toISOString();
+  const overallStarted = performance.now();
+  let failureStage = "catalog";
+  try {
+    const catalogResult = await issue(
+      baseUrl,
+      {
+        body: JSON.stringify({ sort: "relevance", pageSize: 10 }),
+        expectedStatus: 200,
+        label: "job_search",
+        method: "POST",
+        path: "/v1/jobs/search",
+        token,
+      },
+      dependencies,
+    );
+    if (catalogResult.status !== 200 || catalogResult.headers.get("cache-control") !== "no-store") {
+      discardBody(catalogResult);
+      throw new Error("catalog failed");
+    }
+    const catalog = (await catalogResult.json()) as {
+      items?: Array<{ id?: unknown }>;
+    };
+    if (!validateJobSearch(catalog)) throw new Error("catalog contract failed");
+    const targetJobId = catalog.items?.[0]?.id;
+    if (typeof targetJobId !== "string") {
+      return response(
+        409,
+        "baseline_required",
+        "At least one assessable catalog job is required for the approved synthetic account",
+      );
+    }
+
+    failureStage = "assessment";
+    const assessmentResult = await issue(
+      baseUrl,
+      {
+        expectedStatus: 200,
+        label: "match_assessment",
+        method: "GET",
+        path: `/v1/jobs/${targetJobId}/match-assessment`,
+        token,
+      },
+      dependencies,
+    );
+    if (
+      assessmentResult.status !== 200 ||
+      assessmentResult.headers.get("cache-control") !== "no-store"
+    ) {
+      discardBody(assessmentResult);
+      if (assessmentResult.status === 409) {
+        return response(
+          409,
+          "baseline_required",
+          "Review and save the approved synthetic preferences before checking match evidence",
+        );
+      }
+      throw new Error("assessment failed");
+    }
+    const assessment = (await assessmentResult.json()) as {
+      evidence?: unknown[];
+      requestedJobId?: unknown;
+    };
+    if (!validateMatchAssessment(assessment) || assessment.requestedJobId !== targetJobId) {
+      throw new Error("assessment contract failed");
+    }
+
+    return response(200, "passed", "The D1 match-assessment workload passed", {
+      profile: "d1_deployed_match_assessment_v1",
+      startedAt,
+      endedAt: new Date().toISOString(),
+      durationMs: Math.round(performance.now() - overallStarted),
+      catalogPagesValidated: 1,
+      matchAssessmentsValidated: 1,
+      evidenceItemsValidated: assessment.evidence?.length ?? 0,
+    });
+  } catch {
+    return response(
+      503,
+      "workload_inconclusive",
+      "The D1 match-assessment workload could not be completed",
+      {
+        profile: "d1_deployed_match_assessment_v1",
+        failureStage,
+      },
+    );
   } finally {
     workloadInProgress = false;
   }

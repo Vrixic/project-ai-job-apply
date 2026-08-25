@@ -3,7 +3,8 @@
 Use this procedure only with an approved synthetic development account. It exercises the exact
 deployed API Gateway/Lambda boundary through the local web application's server-held managed-OIDC
 session. It does not process real candidate data, activate a provider, create a job report, write
-preferences, or invoke an external ATS. The opt-in saved-job lifecycle does mutate one previously
+preferences, or invoke an external ATS. The match profile reads one assessment without retaining its
+job, preference, gate, or reason values. The opt-in saved-job lifecycle does mutate one previously
 unsaved catalog association, verifies it, and deletes it. Its bounded idempotency and append-only
 audit records remain by design.
 
@@ -30,11 +31,13 @@ corroboration, and accountable acceptance against the frozen Phase 1 candidate.
   server-generated idempotency key, verifies exact replay, requires an `idempotency_conflict` for
   the same key and a different unsaved job, verifies owner-visible persistence, deletes the exact
   association, and verifies absence.
+- The separately confirmed match profile reads one bounded catalog page, selects the first current
+  result, and requires one exact no-store `MatchAssessment` response for that same job.
 - A lifecycle failure attempts exact owner-scoped cleanup before returning an aggregate-only
   inconclusive result. Never retry when `cleanupSucceeded` is false; inspect and reconcile first.
 - The result contains only timestamps, counts, pass/fail totals, duration, and aggregate p50/p95/max
   latency. It never contains a token, identity, preference, job, saved-job, request/response body,
-  endpoint, AWS identifier, or Auth0 identifier.
+  endpoint, match gate/reason, AWS identifier, or Auth0 identifier.
 - A second concurrent run is rejected. Every request has a fixed 15-second deadline and the browser
   request has a three-minute ceiling.
 
@@ -78,8 +81,11 @@ Then:
 6. Select **Run saved-job lifecycle**, accept its distinct mutation confirmation, and require
    `state=passed`, one successful write, one idempotent replay, one expected conflict, one cleanup
    delete, and `postCleanupAbsent=true`.
-7. Retain only the displayed aggregate metrics and exact start/end timestamps for both runs.
-8. Stop the local server with Ctrl+C.
+7. Select **Run match-assessment check**, accept its distinct read-only confirmation, and require
+   `state=passed`, one validated catalog page, one match assessment, and a positive aggregate evidence
+   item count.
+8. Retain only the displayed aggregate metrics and exact start/end timestamps for all three runs.
+9. Stop the local server with Ctrl+C.
 
 If the lifecycle returns `write_scope_required`, the Platform API permission exists but the web
 application's per-app user-delegated grant does not include `jobs:write`. Add that exact grant in
@@ -105,8 +111,9 @@ and already-applied ignored steady-state plan:
   -RuntimePlanPath ".terraform/development-provider-activation/zero-drift-eb617045e98a-20260824-152628.tfplan"
 ```
 
-Use `-WorkloadProfile D1SavedJob` with the lifecycle timestamps. The legacy/default `Phase0`
-profile has different fixed request floors and cannot corroborate either D1 workload.
+Use `-WorkloadProfile D1SavedJob` with the lifecycle timestamps and `-WorkloadProfile D1Match` with
+the match-check timestamps. The legacy/default `Phase0` profile has different fixed request floors
+and cannot corroborate any D1 workload.
 
 Require zero API `5xx`, Lambda errors/throttles, queue/DLQ backlog, forbidden log-pattern matches,
 or alarm failures; require idle ECS and refresh-backed zero drift. Do not retain account/resource

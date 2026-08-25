@@ -100,6 +100,36 @@ describe("D1WorkloadPanel", () => {
     expect(container.textContent).toContain("saved association was removed");
   });
 
+  it("requires a distinct confirmation for the match-assessment check", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      Response.json({
+        state: "passed",
+        metrics: {
+          profile: "d1_deployed_match_assessment_v1",
+          catalogPagesValidated: 1,
+          matchAssessmentsValidated: 1,
+          evidenceItemsValidated: 9,
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<D1WorkloadPanel authenticated />));
+    const button = container.querySelectorAll("button")[2] as HTMLButtonElement;
+    await act(async () => button.click());
+    await act(async () => {});
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/d1-conformance/match-assessment-workload",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ confirmation: "run-d1-development-match-assessment-v1" }),
+      }),
+    );
+    expect(container.textContent).toContain("match-assessment workload passed");
+    expect(container.textContent).toContain('"matchAssessmentsValidated": 1');
+    expect(container.textContent).not.toContain("review_required");
+  });
+
   it("retains aggregate diagnostics when the saved-job write grant is missing", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const fetchMock = vi.fn<typeof fetch>(async () =>

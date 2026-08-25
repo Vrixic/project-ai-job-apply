@@ -2,17 +2,44 @@
 
 import { useState } from "react";
 
+type WorkloadProfile = "match-assessment" | "read" | "saved-job";
+
+const workloadConfiguration: Record<
+  WorkloadProfile,
+  { confirmation: string; endpoint: string; prompt: string; success: string }
+> = {
+  read: {
+    confirmation: "run-d1-development-read-workload-v1",
+    endpoint: "/api/d1-conformance/workload",
+    prompt: "Run the fixed D1 read workload: 150 public and 100 authenticated synthetic requests?",
+    success: "The D1 read workload passed. Retain only the aggregate metrics shown below.",
+  },
+  "saved-job": {
+    confirmation: "run-d1-development-saved-job-lifecycle-v1",
+    endpoint: "/api/d1-conformance/saved-job-workload",
+    prompt:
+      "Create, replay, conflict-test, and delete one saved job for the approved synthetic account? Bounded audit and idempotency records remain by design.",
+    success:
+      "The saved-job lifecycle passed and its saved association was removed. Retain only the aggregate metrics shown below.",
+  },
+  "match-assessment": {
+    confirmation: "run-d1-development-match-assessment-v1",
+    endpoint: "/api/d1-conformance/match-assessment-workload",
+    prompt:
+      "Validate one deployed match assessment for the approved synthetic account without retaining its job, preferences, gate, or evidence reasons?",
+    success:
+      "The D1 match-assessment workload passed. Retain only the aggregate metrics shown below.",
+  },
+};
+
 export function D1WorkloadPanel({ authenticated }: { authenticated: boolean }) {
   const [running, setRunning] = useState(false);
   const [message, setMessage] = useState<string>();
   const [metrics, setMetrics] = useState<Record<string, unknown>>();
 
-  async function run(profile: "read" | "saved-job"): Promise<void> {
-    const writeProfile = profile === "saved-job";
-    const prompt = writeProfile
-      ? "Create, replay, conflict-test, and delete one saved job for the approved synthetic account? Bounded audit and idempotency records remain by design."
-      : "Run the fixed D1 read workload: 150 public and 100 authenticated synthetic requests?";
-    if (!window.confirm(prompt)) {
+  async function run(profile: WorkloadProfile): Promise<void> {
+    const configuration = workloadConfiguration[profile];
+    if (!window.confirm(configuration.prompt)) {
       return;
     }
     setRunning(true);
@@ -21,19 +48,12 @@ export function D1WorkloadPanel({ authenticated }: { authenticated: boolean }) {
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 180_000);
     try {
-      const response = await fetch(
-        writeProfile ? "/api/d1-conformance/saved-job-workload" : "/api/d1-conformance/workload",
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            confirmation: writeProfile
-              ? "run-d1-development-saved-job-lifecycle-v1"
-              : "run-d1-development-read-workload-v1",
-          }),
-          signal: controller.signal,
-        },
-      );
+      const response = await fetch(configuration.endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ confirmation: configuration.confirmation }),
+        signal: controller.signal,
+      });
       const result = (await response.json()) as {
         message?: string;
         metrics?: Record<string, unknown>;
@@ -44,11 +64,7 @@ export function D1WorkloadPanel({ authenticated }: { authenticated: boolean }) {
       if (!response.ok || !result.metrics) {
         throw new Error(result.message ?? "The D1 workload failed");
       }
-      setMessage(
-        writeProfile
-          ? "The saved-job lifecycle passed and its saved association was removed. Retain only the aggregate metrics shown below."
-          : "The D1 read workload passed. Retain only the aggregate metrics shown below.",
-      );
+      setMessage(configuration.success);
     } catch (error) {
       setMessage(
         controller.signal.aborted
@@ -69,8 +85,8 @@ export function D1WorkloadPanel({ authenticated }: { authenticated: boolean }) {
       <h1>Bounded synthetic D1 workloads</h1>
       <p className="lede">
         This local-only control uses the server-held managed-OIDC session against the deployed API
-        Gateway. It validates preferences, entitlements, job search, and saved-job reads before
-        sending fixed aggregate-only read and saved-job lifecycle profiles.
+        Gateway. It validates preferences, entitlements, job search, saved-job reads, and bounded
+        match evidence through aggregate-only read, saved-job lifecycle, and match profiles.
       </p>
       {!authenticated ? (
         <aside>
@@ -87,15 +103,19 @@ export function D1WorkloadPanel({ authenticated }: { authenticated: boolean }) {
           <p>
             Save synthetic job preferences on the main page before running the read workload. The
             lifecycle profile uses the approved synthetic account to create, replay, conflict-test,
-            and delete one previously unsaved catalog job. Bounded audit and idempotency records
+            and delete one previously unsaved catalog job. The match profile validates one current
+            assessment without retaining its gate or reasons. Bounded audit and idempotency records
             remain by design. No token, identity, preference, job, saved-job, or response body
-            enters either result.
+            enters any result.
           </p>
           <button type="button" onClick={() => run("read")} disabled={running}>
             {running ? "Running workload…" : "Run D1 read workload"}
           </button>
           <button type="button" onClick={() => run("saved-job")} disabled={running}>
             {running ? "Running workload…" : "Run saved-job lifecycle"}
+          </button>
+          <button type="button" onClick={() => run("match-assessment")} disabled={running}>
+            {running ? "Running workload…" : "Run match-assessment check"}
           </button>
           <a className="secondary-link" href="/">
             Return to preferences

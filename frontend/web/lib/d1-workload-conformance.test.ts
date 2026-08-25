@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   d1WorkloadConcurrency,
   isD1WorkloadConformanceEnabled,
+  runD1MatchAssessmentWorkload,
   runD1ReadWorkload,
   runD1SavedJobLifecycleWorkload,
 } from "./d1-workload-conformance";
@@ -102,6 +103,60 @@ function savedJob(
   };
 }
 
+function matchAssessment(jobId = catalogJobs[0]?.id) {
+  if (!jobId) throw new Error("The synthetic catalog fixture is missing");
+  return {
+    schemaVersion: 1,
+    requestedJobId: jobId,
+    canonicalJobId: jobId,
+    preferenceSetId: "018f0000-0000-7000-8000-000000000041",
+    preferenceVersion: 1,
+    preferenceUpdatedAt: "2026-08-23T12:00:00.000Z",
+    catalogRevision: "9",
+    assessedAt: "2026-08-24T12:00:00.000Z",
+    gate: "review_required",
+    evidence: [
+      { constraint: "work_mode", state: "satisfied", reasonCode: "work_mode_selected" },
+      {
+        constraint: "employment_type",
+        state: "satisfied",
+        reasonCode: "employment_type_selected",
+      },
+      {
+        constraint: "target_role",
+        state: "satisfied",
+        reasonCode: "target_role_exact_overlap",
+      },
+      { constraint: "location", state: "unknown", reasonCode: "location_not_established" },
+      {
+        constraint: "compensation",
+        state: "unknown",
+        reasonCode: "compensation_semantics_unavailable",
+      },
+      {
+        constraint: "authorization_sponsorship",
+        state: "unknown",
+        reasonCode: "authorization_sponsorship_unavailable",
+      },
+      {
+        constraint: "seniority",
+        state: "unknown",
+        reasonCode: "seniority_semantics_unavailable",
+      },
+      {
+        constraint: "blocked_company",
+        state: "unknown",
+        reasonCode: "blocked_company_preferences_unavailable",
+      },
+      {
+        constraint: "qualifications",
+        state: "unknown",
+        reasonCode: "qualification_evidence_unavailable",
+      },
+    ],
+  };
+}
+
 function privateJson(value: unknown, status = 200): Response {
   return Response.json(value, { status, headers: { "cache-control": "no-store" } });
 }
@@ -196,6 +251,88 @@ describe("D1 deployed read workload conformance", () => {
     const result = await runD1ReadWorkload(request(), dependencies(fetch));
     expect(result.status).toBe(409);
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("D1 deployed match-assessment conformance", () => {
+  function matchRequest(confirmation = "run-d1-development-match-assessment-v1"): Request {
+    return new Request(`${appBaseUrl}/api/d1-conformance/match-assessment-workload`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: appBaseUrl },
+      body: JSON.stringify({ confirmation }),
+    });
+  }
+
+  it("validates one exact deployed assessment and returns counts only", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      if (url.pathname === "/v1/jobs/search") {
+        return privateJson({ items: catalogJobs });
+      }
+      if (url.pathname === `/v1/jobs/${catalogJobs[0]?.id}/match-assessment`) {
+        return privateJson(matchAssessment());
+      }
+      return privateJson({}, 500);
+    });
+
+    const result = await runD1MatchAssessmentWorkload(matchRequest(), dependencies(fetch));
+    expect(result.status).toBe(200);
+    const body = await result.json();
+    expect(body).toMatchObject({
+      state: "passed",
+      metrics: {
+        profile: "d1_deployed_match_assessment_v1",
+        catalogPagesValidated: 1,
+        matchAssessmentsValidated: 1,
+        evidenceItemsValidated: 9,
+      },
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toContain("server-held-secret-token");
+    expect(serialized).not.toContain("Synthetic Engineer");
+    expect(serialized).not.toContain("review_required");
+    expect(serialized).not.toContain("target_role_exact_overlap");
+    expect(serialized).not.toContain(catalogJobs[0]?.id);
+  });
+
+  it("fails closed before traffic when unconfirmed and rejects a missing catalog baseline", async () => {
+    const unconfirmedFetch = vi.fn<typeof globalThis.fetch>();
+    expect(
+      (
+        await runD1MatchAssessmentWorkload(
+          matchRequest("wrong-confirmation"),
+          dependencies(unconfirmedFetch),
+        )
+      ).status,
+    ).toBe(400);
+    expect(unconfirmedFetch).not.toHaveBeenCalled();
+
+    const emptyFetch = vi.fn<typeof globalThis.fetch>(async () => privateJson({ items: [] }));
+    const result = await runD1MatchAssessmentWorkload(matchRequest(), dependencies(emptyFetch));
+    expect(result.status).toBe(409);
+    expect(await result.json()).toMatchObject({ state: "baseline_required" });
+    expect(emptyFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a malformed or wrong-job assessment without retaining its body", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      if (url.pathname === "/v1/jobs/search") return privateJson({ items: catalogJobs });
+      return privateJson(matchAssessment(catalogJobs[1]?.id));
+    });
+
+    const result = await runD1MatchAssessmentWorkload(matchRequest(), dependencies(fetch));
+    expect(result.status).toBe(503);
+    const body = await result.json();
+    expect(body).toMatchObject({
+      state: "workload_inconclusive",
+      metrics: {
+        profile: "d1_deployed_match_assessment_v1",
+        failureStage: "assessment",
+      },
+    });
+    expect(JSON.stringify(body)).not.toContain(catalogJobs[1]?.id);
   });
 });
 

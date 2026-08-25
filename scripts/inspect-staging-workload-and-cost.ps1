@@ -11,7 +11,7 @@ param(
   [ValidatePattern("^[a-z0-9.-]+$")]
   [string]$StateBucket = "",
   [string]$RuntimePlanPath = "",
-  [ValidateSet("Phase0", "D1Read", "D1SavedJob")]
+  [ValidateSet("Phase0", "D1Read", "D1SavedJob", "D1Match")]
   [string]$WorkloadProfile = "Phase0",
   [string]$AwsProfile = "",
   [string]$Region = "us-east-2",
@@ -43,8 +43,9 @@ no-drift evidence. RuntimePlanPath is an already applied saved plan used only to
 non-secret immutable artifact inputs for fresh read-only steady-state verification.
 
 WorkloadProfile selects the fixed aggregate request floor: Phase0 requires 552 requests and 100
-expected 4xx responses, D1Read requires 254 requests and 50 expected 401 responses, and
-D1SavedJob requires 10 requests and one expected 409 response.
+expected 4xx responses, D1Read requires 254 requests and 50 expected 401 responses,
+D1SavedJob requires 10 requests and one expected 409 response, and D1Match requires two reads with
+no expected 4xx response.
 
 Both actions are read-only. No account identifier, endpoint, resource ARN, trace, log message,
 identity, token, preference, operation identifier, or raw provider record is printed.
@@ -594,11 +595,13 @@ $runningTasks = @(Get-Collection $taskInventory "taskArns").Count
 $minimumApiRequests = switch ($WorkloadProfile) {
   "D1Read" { 254 }
   "D1SavedJob" { 10 }
+  "D1Match" { 2 }
   default { 552 }
 }
 $minimumExpected4xx = switch ($WorkloadProfile) {
   "D1Read" { 50 }
   "D1SavedJob" { 1 }
+  "D1Match" { 0 }
   default { 100 }
 }
 
