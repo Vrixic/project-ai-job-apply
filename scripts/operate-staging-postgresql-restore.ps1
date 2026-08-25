@@ -812,7 +812,16 @@ function Assert-TargetBoundary {
   }
   $tagMismatches = @(Get-D1RestoreTagMismatchNames $tags $expectedTags)
   if ($tagMismatches.Count -ne 0) {
-    throw "The disposable restore target tag fields do not match: $($tagMismatches -join ', ')."
+    $tagDiagnostics = @(
+      $tagMismatches | ForEach-Object {
+        $field = [string]$_
+        $actual = if ($tags.ContainsKey($field)) { [string]$tags[$field] } else { "<missing>" }
+        $expected = [string]$expectedTags[$field]
+        "$field(actualLength=$($actual.Length),actualSha256=$(Get-D1RestoreStringSha256 $actual)," +
+          "expectedLength=$($expected.Length),expectedSha256=$(Get-D1RestoreStringSha256 $expected))"
+      }
+    )
+    throw "The disposable restore target tag fields do not match: $($tagDiagnostics -join '; ')."
   }
   if (
     $null -ne $Context.target_boundary_sha256 -and
