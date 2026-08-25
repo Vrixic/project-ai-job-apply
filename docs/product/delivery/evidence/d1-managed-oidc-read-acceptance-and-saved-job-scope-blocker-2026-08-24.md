@@ -2,7 +2,7 @@
 
 - Date: 2026-08-24
 - Environment: isolated development
-- Status: saved-job application/AWS acceptance passed; quiet-minute read repeat pending
+- Status: read and saved-job application/AWS workload acceptance passed
 - Correction sources: `e28f739`, `a6dfae43cd98dd0cab546ef37af84aee0b649bf8`,
   `9421e22bc9c9278191536f9dad396ae25538130f`,
   `5cea6782e7c3e0fe3ffc669b84c1f4536c4af6de`,
@@ -19,36 +19,65 @@ following aggregate result is retained:
 ```json
 {
   "profile": "d1_deployed_read_v1",
-  "startedAt": "2026-08-24T19:54:45.156Z",
-  "endedAt": "2026-08-24T19:54:54.634Z",
-  "durationMs": 9478,
+  "startedAt": "2026-08-25T01:06:56.213Z",
+  "endedAt": "2026-08-25T01:07:09.107Z",
+  "durationMs": 12894,
   "baselineContractsValidated": 4,
   "publicRequests": 150,
   "publicFailures": 0,
   "authenticatedRequests": 100,
   "authenticatedFailures": 0,
   "publicLatency": {
-    "p50Ms": 59,
-    "p95Ms": 81,
-    "maxMs": 256
+    "p50Ms": 62,
+    "p95Ms": 78,
+    "maxMs": 1495
   },
   "authenticatedLatency": {
     "p50Ms": 79,
-    "p95Ms": 114,
-    "maxMs": 168
+    "p95Ms": 111,
+    "maxMs": 227
   }
 }
 ```
 
-An earlier isolated read run passed the corrected `D1Read` AWS inspector with 254 API requests,
-50 expected authorization refusals, zero API 5xx, zero Lambda errors or throttles, zero
-queue/dead-letter backlog, zero error or forbidden-content log matches, ten healthy runtime
-alarms, zero ECS services/tasks, Lambda Durable dispatch, and zero Terraform drift. The newer
-repeat above is accepted at the application boundary, but its one-minute CloudWatch bucket is
-inconclusive: the saved-job attempt began in the same metric minute and contributed the known API
-`500`, and the aggregate bucket also reported Lambda throttling. The read profile will be repeated
-in a quiet minute before final D1 load acceptance. This is a bounded development result, not a
-production SLO or capacity claim.
+The exact two-minute `D1Read` AWS corroboration passed. Its aggregate-only result is retained below:
+
+```json
+{
+  "environment": "development",
+  "workloadProfile": "D1Read",
+  "windowMinutes": 2,
+  "apiRequests": 254,
+  "minimumApiRequests": 254,
+  "api4xx": 50,
+  "minimumExpected4xx": 50,
+  "api5xx": 0,
+  "apiLatencyAverageMs": 38.22,
+  "apiLatencyMaximumMs": 2383,
+  "lambdaInvocations": 206,
+  "lambdaErrors": 0,
+  "lambdaThrottles": 0,
+  "lambdaDurationMaximumMs": 670.58,
+  "databaseCpuMaxPercent": 5.86,
+  "databaseConnectionsMax": 5,
+  "eventQueueAgeMaxSeconds": 0,
+  "eventQueueVisibleMax": 0,
+  "deadLetterMessagesMax": 0,
+  "durableDeadLetterMax": 0,
+  "logEvents": 472,
+  "logErrorMatches": 0,
+  "forbiddenLogMatches": 0,
+  "activeEcsServices": 0,
+  "runningEcsTasks": 0,
+  "runtimeAlarmsOk": 10,
+  "dispatchTarget": "lambda_durable",
+  "triggersEnabled": true,
+  "terraformDrift": 0
+}
+```
+
+This closes the fixed read workload's application and AWS gate. It is a bounded development result,
+not a production SLO or capacity claim.
 
 ## Saved-job diagnosis, correction, and cleanup state
 
@@ -243,11 +272,13 @@ throttle. It is not recorded as an AWS pass.
 - Saved-job AWS bucket: accepted with 13 API requests, one expected 4xx, zero 5xx/errors/throttles,
   zero queue/dead-letter backlog, zero error/restricted log matches, ten healthy alarms, idle ECS,
   Lambda Durable dispatch, and zero Terraform drift.
-- The newest read AWS metric bucket is inconclusive because the next workload shared its minute;
-  it is not recorded as a false pass.
+- Read application/AWS workload: four baselines, 150 public and 100 authenticated reads, zero
+  failures, exact 254-request AWS floor, 50 expected 4xx responses, zero 5xx/errors/throttles,
+  zero backlog or error/restricted log matches, ten healthy alarms, idle ECS, and zero drift passed.
 
-Use a separate quiet CloudWatch minute for the read profile and corroborate that distinct window
-with `-WorkloadProfile D1Read`. The saved-job lifecycle and its AWS window require no further rerun.
+Both fixed managed-OIDC workload profiles and their AWS windows require no further rerun. D1-R10
+remains open only for its separately tracked browser/security-header breadth, representative SLO,
+assistive-technology/human accessibility, independent security/privacy, and product acceptance.
 
 No token, identity, preference, job identifier, saved-job identifier, request identifier, response
 body, or real candidate data is retained here.
