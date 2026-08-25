@@ -2,12 +2,13 @@
 
 - Date: 2026-08-24
 - Environment: isolated development
-- Status: read profile accepted; saved-job catalog-summary correction deployed, lifecycle rerun pending
+- Status: read profile accepted; saved-job transaction-timestamp correction deployed, lifecycle rerun pending
 - Correction sources: `e28f739`, `a6dfae43cd98dd0cab546ef37af84aee0b649bf8`,
   `9421e22bc9c9278191536f9dad396ae25538130f`,
   `5cea6782e7c3e0fe3ffc669b84c1f4536c4af6de`,
   `ec6aaca463893d89d43263bc1848b0a55ff6440b`,
-  `3a169890d42067ccc58268622b8ef6845382cfc5`
+  `3a169890d42067ccc58268622b8ef6845382cfc5`,
+  `8307694f6b92adb104e048f8cf3d1e6936916d7c`
 
 ## Read result
 
@@ -132,16 +133,32 @@ function and alias. Live code/release binding passed, and the refresh-backed pla
 meaningful changes with SHA-256
 `41f88fba419b271ccee2820b3d640a72167d11c7c074fd135dd4257b1925df60`.
 
+The alias-`35` rerun again returned `failureStage=create`; cleanup was attempted and succeeded.
+The catalog correction is live and advanced the value-free boundary into the atomic transaction at
+`SAVED_JOB_EXPIRED_CLEANUP`, before any association insert. That statement was the remaining
+create-path query that bound a JavaScript `Date` directly. Exact source
+`8307694f6b92adb104e048f8cf3d1e6936916d7c` normalizes every transaction clock value to canonical
+ISO text with explicit PostgreSQL `timestamptz` casts and explicitly types the cleanup/count/lookup
+identifiers. Its regression test proves no `Date` object crosses the create transaction boundary.
+Matching unit 85, Gateway 108, both typechecks, and Matching real-PostgreSQL integration 5/5 pass.
+Docker Desktop and WSL were stopped afterward. Deterministic artifact
+`14eeac7cf5a4c02b483694c0a29308bef8b3d88c25b6976cff9d24f819530296` is deployed on immutable
+gateway alias `36` at state serial `196`; reviewed plan SHA-256
+`f16bb76c967a8c78490043a654f3e8cc4b3b73f55f7e245ea34681a2a18ede96` changed only the gateway
+function and alias. Live binding and the 24-case direct boundary passed, and the refresh-backed plan
+has zero meaningful changes with SHA-256
+`3281cca064e3f36e64247077f92e28e66ce5ef8a26a5980b63cb108067c0dfe9`.
+
 ## Verification and next action
 
-- Catalog/persistence boundary: Jobs unit 63 and real PostgreSQL integration 41/41 passed.
+- Saved-job persistence: Matching unit 85 and real PostgreSQL integration 5/5 passed.
 - Gateway boundary: Gateway 108 and both affected typechecks passed.
-- Corrective release: deterministic double build, immutable publication/readback, alias `35`,
+- Corrective release: deterministic double build, immutable publication/readback, alias `36`,
   exact two-resource plan, live code/release binding, and zero meaningful Terraform changes passed.
 - The newest read AWS metric bucket is inconclusive because the next workload shared its minute;
   it is not recorded as a false pass.
 
-Rerun only the saved-job lifecycle against alias `35`. If it fails, retain the displayed aggregate
+Rerun only the saved-job lifecycle against alias `36`. If it fails, retain the displayed aggregate
 result and use the exact bounded CloudWatch window only to read the value-free persistence stage.
 Correct that exact stage and repeat until the lifecycle passes, then corroborate its timestamps
 with `-WorkloadProfile D1SavedJob`. Finally wait for a quiet CloudWatch minute, repeat the read
