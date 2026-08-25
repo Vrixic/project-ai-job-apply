@@ -2,13 +2,14 @@
 
 - Date: 2026-08-24
 - Environment: isolated development
-- Status: read profile accepted; saved-job transaction-timestamp correction deployed, lifecycle rerun pending
+- Status: read profile accepted; saved-job delete correction deployed, residual cleanup and lifecycle rerun pending
 - Correction sources: `e28f739`, `a6dfae43cd98dd0cab546ef37af84aee0b649bf8`,
   `9421e22bc9c9278191536f9dad396ae25538130f`,
   `5cea6782e7c3e0fe3ffc669b84c1f4536c4af6de`,
   `ec6aaca463893d89d43263bc1848b0a55ff6440b`,
   `3a169890d42067ccc58268622b8ef6845382cfc5`,
-  `8307694f6b92adb104e048f8cf3d1e6936916d7c`
+  `8307694f6b92adb104e048f8cf3d1e6936916d7c`,
+  `d05b54fd2bdfd8380914bc9eadae9ab5f4d42a03`
 
 ## Read result
 
@@ -149,16 +150,38 @@ function and alias. Live binding and the 24-case direct boundary passed, and the
 has zero meaningful changes with SHA-256
 `3281cca064e3f36e64247077f92e28e66ce5ef8a26a5980b63cb108067c0dfe9`.
 
+The alias-`36` lifecycle passed create, exact replay, expected conflict, and read-after-write, then
+returned `failureStage=delete`; cleanup was attempted and failed. Both DELETE requests reached the
+owner-scoped route and failed with the same privacy-safe `TypeError` / `ERR_INVALID_ARG_TYPE`.
+Delete and its audit are atomic, so both delete attempts rolled back while the earlier successful
+create remained committed. Exactly one workload-created association therefore remains as the
+newest saved-job item for the approved synthetic account; no pre-existing association was touched.
+
+The unsave audit statement contained the last direct JavaScript `Date` binding. Exact source
+`d05b54fd2bdfd8380914bc9eadae9ab5f4d42a03` normalizes it to canonical ISO text with an explicit
+PostgreSQL `timestamptz` cast and explicitly types the delete owner/resource predicates. Its
+regression covers the complete delete transaction and proves no `Date` crosses that boundary.
+Matching unit 86, Gateway 108, both typechecks, and Matching real-PostgreSQL integration 5/5 pass.
+Docker Desktop and WSL were stopped afterward. Deterministic artifact
+`87c2b53ea0d13302d1b860628d8122f591579e5da9c0fd073fbbcd6df5199aa6` is deployed on immutable
+gateway alias `37` at state serial `197`; reviewed plan SHA-256
+`9393c4ae8679ae331fbee1925f54987d60768c2993fb7be09db3d46ca24f3b97` changed only the gateway
+function and alias. Live binding and the 24-case direct boundary passed, and the refresh-backed plan
+has zero meaningful changes with SHA-256
+`84fba83630f3ead3fad98e78eefcaec28416153e85a0224c1565026b3c7547ad`.
+
 ## Verification and next action
 
-- Saved-job persistence: Matching unit 85 and real PostgreSQL integration 5/5 passed.
+- Saved-job persistence: Matching unit 86 and real PostgreSQL integration 5/5 passed.
 - Gateway boundary: Gateway 108 and both affected typechecks passed.
-- Corrective release: deterministic double build, immutable publication/readback, alias `36`,
+- Corrective release: deterministic double build, immutable publication/readback, alias `37`,
   exact two-resource plan, live code/release binding, and zero meaningful Terraform changes passed.
 - The newest read AWS metric bucket is inconclusive because the next workload shared its minute;
   it is not recorded as a false pass.
 
-Rerun only the saved-job lifecycle against alias `36`. If it fails, retain the displayed aggregate
+First remove the newest saved-job item through the normal authenticated UI; this retries only the
+exact workload-owned association retained by the failed alias-`36` transaction. Confirm it leaves
+the list, then rerun only the saved-job lifecycle against alias `37`. If it fails, retain the displayed aggregate
 result and use the exact bounded CloudWatch window only to read the value-free persistence stage.
 Correct that exact stage and repeat until the lifecycle passes, then corroborate its timestamps
 with `-WorkloadProfile D1SavedJob`. Finally wait for a quiet CloudWatch minute, repeat the read
