@@ -132,12 +132,18 @@ for (const [pattern, reason] of [
     /sid\s*=\s*"AllowIngestionDurableRoleStateDecryption"[\s\S]{0,800}kms:EncryptionContext:aws:lambda:FunctionArn[\s\S]{0,300}local\.ingestion_durable_arn/u,
     "durable role KMS encryption context is incomplete",
   ],
-  [
-    /data "aws_iam_policy_document" "secrets_endpoint"[\s\S]{0,2200}ingestion_runtime\["coordinator"\]\.arn[\s\S]{0,300}ingestion_runtime\["starter"\]\.arn[\s\S]{0,300}ingestion_runtime\["activity"\]\.arn[\s\S]{0,300}ingestion_runtime\["terminal"\]\.arn/u,
-    "ingestion Secrets Manager endpoint principals are incomplete",
-  ],
 ]) {
   requirePattern(platform, pattern, reason);
+}
+const secretsEndpointPolicy = section(
+  platform,
+  'data "aws_iam_policy_document" "secrets_endpoint"',
+  'resource "aws_vpc_endpoint" "secretsmanager"',
+);
+for (const role of ["coordinator", "starter", "activity", "terminal"]) {
+  if (!secretsEndpointPolicy.includes(`aws_iam_role.ingestion_runtime["${role}"].arn`)) {
+    failures.push(`${platform}: ingestion Secrets Manager endpoint principal is missing: ${role}`);
+  }
 }
 const ingestionRuntimePolicy = section(
   ingestionWorkflow,

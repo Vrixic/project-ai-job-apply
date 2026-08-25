@@ -757,9 +757,14 @@ variable "candidate_rights_enabled" {
       can(regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", var.candidate_rights_policy_version)) &&
       can(regex("^[a-f0-9]{64}$", var.candidate_rights_policy_sha256)) &&
       var.candidate_rights_owner_inventory == "identity,profile,documents,jobs,matching,billing" &&
-      var.candidate_rights_subprocessor_inventory != ""
+      var.candidate_rights_subprocessor_inventory != "" &&
+      var.candidate_rights_export_lifetime_seconds != null &&
+      var.candidate_rights_download_grant_seconds != null &&
+      var.candidate_rights_backup_retention_days != null &&
+      var.candidate_rights_recent_auth_max_age_seconds != null &&
+      var.candidate_rights_export_lifecycle_days != null
     )
-    error_message = "Candidate rights require the active gateway/document/outbox/durable runtime, private NAT egress, and an exact accountable policy inventory."
+    error_message = "Candidate rights require the active gateway/document/outbox/durable runtime, private NAT egress, an exact accountable policy inventory, and explicit timing and lifecycle values."
   }
 }
 
@@ -780,41 +785,61 @@ variable "candidate_rights_policy_sha256" {
 
 variable "candidate_rights_export_lifetime_seconds" {
   type    = number
-  default = 3600
+  default = null
 
   validation {
-    condition     = floor(var.candidate_rights_export_lifetime_seconds) == var.candidate_rights_export_lifetime_seconds && var.candidate_rights_export_lifetime_seconds >= 300 && var.candidate_rights_export_lifetime_seconds <= 604800
+    condition = var.candidate_rights_export_lifetime_seconds == null || try(
+      floor(var.candidate_rights_export_lifetime_seconds) == var.candidate_rights_export_lifetime_seconds &&
+      var.candidate_rights_export_lifetime_seconds >= 300 &&
+      var.candidate_rights_export_lifetime_seconds <= 604800,
+      false
+    )
     error_message = "Candidate export lifetime must be a whole number from 300 through 604800 seconds."
   }
 }
 
 variable "candidate_rights_download_grant_seconds" {
   type    = number
-  default = 300
+  default = null
 
   validation {
-    condition     = floor(var.candidate_rights_download_grant_seconds) == var.candidate_rights_download_grant_seconds && var.candidate_rights_download_grant_seconds >= 60 && var.candidate_rights_download_grant_seconds <= 900
+    condition = var.candidate_rights_download_grant_seconds == null || try(
+      floor(var.candidate_rights_download_grant_seconds) == var.candidate_rights_download_grant_seconds &&
+      var.candidate_rights_download_grant_seconds >= 60 &&
+      var.candidate_rights_download_grant_seconds <= 900,
+      false
+    )
     error_message = "Candidate export download grants must last 60 through 900 whole seconds."
   }
 }
 
 variable "candidate_rights_backup_retention_days" {
   type    = number
-  default = 7
+  default = null
 
   validation {
-    condition     = floor(var.candidate_rights_backup_retention_days) == var.candidate_rights_backup_retention_days && var.candidate_rights_backup_retention_days >= 1 && var.candidate_rights_backup_retention_days <= 35
+    condition = var.candidate_rights_backup_retention_days == null || try(
+      floor(var.candidate_rights_backup_retention_days) == var.candidate_rights_backup_retention_days &&
+      var.candidate_rights_backup_retention_days >= 1 &&
+      var.candidate_rights_backup_retention_days <= 35,
+      false
+    )
     error_message = "Candidate deletion backup retention must be a whole number from one through 35 days."
   }
 }
 
 variable "candidate_rights_recent_auth_max_age_seconds" {
   type    = number
-  default = 300
+  default = null
 
   validation {
-    condition     = floor(var.candidate_rights_recent_auth_max_age_seconds) == var.candidate_rights_recent_auth_max_age_seconds && var.candidate_rights_recent_auth_max_age_seconds >= 60 && var.candidate_rights_recent_auth_max_age_seconds <= 3600
-    error_message = "Candidate-rights recent authentication age must be a whole number from 60 through 3600 seconds."
+    condition = var.candidate_rights_recent_auth_max_age_seconds == null || try(
+      floor(var.candidate_rights_recent_auth_max_age_seconds) == var.candidate_rights_recent_auth_max_age_seconds &&
+      var.candidate_rights_recent_auth_max_age_seconds >= 60 &&
+      var.candidate_rights_recent_auth_max_age_seconds <= 900,
+      false
+    )
+    error_message = "Candidate-rights recent authentication age must be a whole number from 60 through 900 seconds."
   }
 }
 
@@ -840,14 +865,15 @@ variable "candidate_rights_subprocessor_inventory" {
 variable "candidate_rights_export_lifecycle_days" {
   description = "Defense-in-depth S3 lifecycle expiry; application grants still stop at the exact seconds-based policy deadline."
   type        = number
-  default     = 1
+  default     = null
 
   validation {
-    condition = (
+    condition = var.candidate_rights_export_lifecycle_days == null || var.candidate_rights_export_lifetime_seconds == null || try(
       floor(var.candidate_rights_export_lifecycle_days) == var.candidate_rights_export_lifecycle_days &&
       var.candidate_rights_export_lifecycle_days >= 1 &&
       var.candidate_rights_export_lifecycle_days <= 8 &&
-      var.candidate_rights_export_lifecycle_days >= ceil(var.candidate_rights_export_lifetime_seconds / 86400)
+      var.candidate_rights_export_lifecycle_days >= ceil(var.candidate_rights_export_lifetime_seconds / 86400),
+      false
     )
     error_message = "Candidate export lifecycle must be one through eight whole days and cannot precede the seconds-based export deadline."
   }

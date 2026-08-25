@@ -3,6 +3,9 @@ param(
   [ValidateSet("Status", "Publish", "Verify")]
   [string]$Action = "Status",
 
+  [ValidateSet("Document", "CoreWorkflow")]
+  [string]$ArtifactFamily = "Document",
+
   [string]$AwsProfile = "ai-job-apply-development-admin",
   [string]$Region = "us-east-2",
 
@@ -61,11 +64,29 @@ if ($ExpectedAccountId -notmatch '^[0-9]{12}$' -or [string]::IsNullOrWhiteSpace(
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $terraformDirectory = Join-Path $repositoryRoot "infrastructure\terraform\environments\development"
 $terraformRoot = [IO.Path]::GetFullPath((Join-Path $terraformDirectory ".terraform"))
-$operatorRoot = Join-Path $terraformRoot "development-document-artifacts"
-$terraformDataDirectory = Join-Path $terraformRoot "development-document-artifacts-data"
-$artifactDirectory = Join-Path $repositoryRoot "backend\services\documents\dist\lambda"
+$isCoreWorkflow = $ArtifactFamily -ceq "CoreWorkflow"
+$operatorDirectoryName = if ($isCoreWorkflow) { "development-workflow-artifacts" } else { "development-document-artifacts" }
+$operatorRoot = Join-Path $terraformRoot $operatorDirectoryName
+$terraformDataDirectory = Join-Path $terraformRoot "$operatorDirectoryName-data"
+$artifactDirectory = if ($isCoreWorkflow) {
+  Join-Path $repositoryRoot "backend\workflows\dist\lambda"
+} else {
+  Join-Path $repositoryRoot "backend\services\documents\dist\lambda"
+}
 $stateKey = "platform.tfstate"
-$artifactNames = @("document-processor-lambda", "document-parser-lambda")
+$artifactNames = if ($isCoreWorkflow) {
+  @("workflow-ingress-lambda", "profile-readiness-durable-lambda", "profile-readiness-activity-lambda")
+} else {
+  @("document-processor-lambda", "document-parser-lambda")
+}
+$artifactKeyRoot = if ($isCoreWorkflow) { "lambda/workflows" } else { "lambda/documents" }
+$receiptKind = if ($isCoreWorkflow) {
+  "development-core-workflow-lambda-publication"
+} else {
+  "development-document-lambda-publication"
+}
+$artifactLabel = if ($isCoreWorkflow) { "core workflow" } else { "document" }
+$expectedObjectCount = $artifactNames.Count * 4
 
 $env:AWS_PROFILE = $AwsProfile
 $env:AWS_REGION = $Region
@@ -135,7 +156,7 @@ function Resolve-OperatorPath {
   $root = [IO.Path]::GetFullPath($operatorRoot)
   $prefix = $root.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
   if (-not $resolved.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
-    throw "Publication artifacts must stay below the ignored development document-artifact directory."
+    throw "Publication artifacts must stay below the ignored development artifact directory."
   }
   if ($MustExist -and -not (Test-Path -LiteralPath $resolved -PathType Leaf)) {
     throw "A required publication artifact does not exist."
@@ -313,7 +334,7 @@ function Get-ArtifactSet {
     foreach ($suffix in @("zip", "cdx.json", "manifest.json", "sha256")) {
       $path = Join-Path $artifactDirectory "$name.$suffix"
       if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -le 0) {
-        throw "A required document Lambda artifact is missing or empty."
+        throw "A required $artifactLabel Lambda artifact is missing or empty."
       }
       $files[$suffix] = [pscustomobject]@{
         Path         = $path
@@ -332,7 +353,7 @@ function Get-ArtifactSet {
         [string]$manifest.artifactBase64Sha256 -cne $files["zip"].Base64Sha256 -or
         -not $checksumValid -or [string]$sbom.bomFormat -cne "CycloneDX" -or
         [string]$sbom.specVersion -cne "1.6") {
-      throw "A document Lambda manifest, checksum, or CycloneDX SBOM failed validation."
+      throw "A $artifactLabel Lambda manifest, checksum, or CycloneDX SBOM failed validation."
     }
     Assert-BundleSourceMarker -ZipPath $files["zip"].Path -ExpectedSourceSha $ExpectedSourceSha
     $result += [pscustomobject]@{ Name = $name; ArtifactSha256 = $files["zip"].Sha256; Files = $files }
@@ -395,7 +416,10 @@ function Assert-CanonicalReceiptMatrix {
     [AllowNull()][object[]]$Artifacts,
     [Parameter(Mandatory)][string[]]$ExpectedArtifactNames
   )
-  if (@($Artifacts).Count -ne 8) { throw "The canonical publication receipt must contain exactly eight objects." }
+  $requiredObjectCount = $ExpectedArtifactNames.Count * 4
+  if (@($Artifacts).Count -ne $requiredObjectCount) {
+    throw "The canonical publication receipt has an invalid object count."
+  }
   foreach ($artifactName in $ExpectedArtifactNames) {
     $entries = @($Artifacts | Where-Object { [string]$_.artifactName -ceq $artifactName })
     $suffixes = @($entries | ForEach-Object { [string]$_.suffix } | Sort-Object -Unique)
@@ -416,10 +440,10 @@ function Read-AndValidateReceipt {
   if ((Get-FileSha256 -Path $Path) -cne $Sha256) { throw "The publication receipt checksum does not match the reviewed value." }
   $receipt = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
   $binding = Get-TextSha256 -Value "$ExpectedAccountId|$Region|$($Boundary.Bucket)|$($Boundary.KmsArn)"
-  if ([int]$receipt.schemaVersion -ne 1 -or [string]$receipt.kind -cne "development-document-lambda-publication" -or
+  if ([int]$receipt.schemaVersion -ne 1 -or [string]$receipt.kind -cne $receiptKind -or
       [string]$receipt.environment -cne "development" -or [string]$receipt.region -cne $Region -or
       [string]$receipt.sourceSha -cne $SourceSha -or [string]$receipt.boundarySha256 -cne $binding -or
-      [string]$receipt.phase -cne "verified" -or @($receipt.artifacts).Count -ne 8) {
+      [string]$receipt.phase -cne "verified" -or @($receipt.artifacts).Count -ne $expectedObjectCount) {
     throw "The publication receipt does not match the exact reviewed environment and release."
   }
   $null = Assert-CanonicalReceiptMatrix -Artifacts @($receipt.artifacts) `
@@ -450,24 +474,32 @@ if ($Action -eq "Status") {
 if ($Action -eq "Publish") {
   $null = New-Item -ItemType Directory -Path $operatorRoot -Force
   $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-  $testLog = Join-Path $operatorRoot "document-tests-$timestamp.log"
+  $testLog = Join-Path $operatorRoot "$artifactLabel-tests-$timestamp.log"
   $auditLog = Join-Path $operatorRoot "dependency-audit-$timestamp.log"
   $buildOneLog = Join-Path $operatorRoot "build-one-$timestamp.log"
   $buildTwoLog = Join-Path $operatorRoot "build-two-$timestamp.log"
-  Invoke-LocalGate -Name "Document service tests" -LogPath $testLog -Command {
-    pnpm --filter @ai-job-apply/documents-service test
+  if ($isCoreWorkflow) {
+    Invoke-LocalGate -Name "Workflow tests" -LogPath $testLog -Command {
+      pnpm --filter @ai-job-apply/workflows test
+    }
+  } else {
+    Invoke-LocalGate -Name "Document service tests" -LogPath $testLog -Command {
+      pnpm --filter @ai-job-apply/documents-service test
+    }
   }
   Invoke-LocalGate -Name "Dependency audit" -LogPath $auditLog -Command { pnpm audit:dependencies }
   $previousSource = $env:ARTIFACT_SOURCE_SHA
   try {
     $env:ARTIFACT_SOURCE_SHA = $SourceSha
-    Invoke-LocalGate -Name "First document Lambda build" -LogPath $buildOneLog -Command {
-      pnpm --filter @ai-job-apply/documents-service build:lambda
+    Invoke-LocalGate -Name "First $artifactLabel Lambda build" -LogPath $buildOneLog -Command {
+      if ($isCoreWorkflow) { pnpm --filter @ai-job-apply/workflows build:lambda }
+      else { pnpm --filter @ai-job-apply/documents-service build:lambda }
     }
     $first = @(Get-ArtifactSet -ExpectedSourceSha $SourceSha)
     $firstFingerprint = Get-ArtifactFingerprint -Artifacts $first
-    Invoke-LocalGate -Name "Second document Lambda build" -LogPath $buildTwoLog -Command {
-      pnpm --filter @ai-job-apply/documents-service build:lambda
+    Invoke-LocalGate -Name "Second $artifactLabel Lambda build" -LogPath $buildTwoLog -Command {
+      if ($isCoreWorkflow) { pnpm --filter @ai-job-apply/workflows build:lambda }
+      else { pnpm --filter @ai-job-apply/documents-service build:lambda }
     }
     $second = @(Get-ArtifactSet -ExpectedSourceSha $SourceSha)
     $secondFingerprint = Get-ArtifactFingerprint -Artifacts $second
@@ -475,11 +507,13 @@ if ($Action -eq "Publish") {
     if ($null -eq $previousSource) { Remove-Item Env:\ARTIFACT_SOURCE_SHA -ErrorAction SilentlyContinue }
     else { $env:ARTIFACT_SOURCE_SHA = $previousSource }
   }
-  if ($firstFingerprint -cne $secondFingerprint) { throw "The two document Lambda builds were not byte-for-byte reproducible." }
+  if ($firstFingerprint -cne $secondFingerprint) {
+    throw "The two $artifactLabel Lambda builds were not byte-for-byte reproducible."
+  }
 
   $objects = @()
   foreach ($artifact in $second) {
-    $prefix = "lambda/documents/$SourceSha/$($artifact.ArtifactSha256)"
+    $prefix = "$artifactKeyRoot/$SourceSha/$($artifact.ArtifactSha256)"
     foreach ($suffix in @("zip", "cdx.json", "manifest.json", "sha256")) {
       $file = $artifact.Files[$suffix]
       $key = "$prefix/$($artifact.Name).$suffix"
@@ -496,7 +530,9 @@ if ($Action -eq "Publish") {
       }
     }
   }
-  if ($objects.Count -ne 8) { throw "Publication must contain exactly eight immutable release objects." }
+  if ($objects.Count -ne $expectedObjectCount) {
+    throw "Publication contains an invalid immutable release-object count."
+  }
 
   if ([string]::IsNullOrWhiteSpace($ReceiptPath)) {
     $ReceiptPath = Join-Path $operatorRoot "receipt-$($SourceSha.Substring(0, 12))-$timestamp.json"
@@ -505,7 +541,7 @@ if ($Action -eq "Publish") {
   if (Test-Path -LiteralPath $receipt) { throw "Refusing to replace an existing publication receipt." }
   $receiptValue = [ordered]@{
     schemaVersion  = 1
-    kind           = "development-document-lambda-publication"
+    kind           = $receiptKind
     environment    = "development"
     region         = $Region
     sourceSha      = $SourceSha
@@ -533,7 +569,7 @@ if ($Action -eq "Publish") {
       "--body", $object.Path, "--checksum-algorithm", "SHA256", "--checksum-sha256", $object.Base64Sha256,
       "--metadata", "source-sha=$SourceSha,artifact-sha256=$($object.ArtifactSha256)",
       "--if-none-match", "*", "--output", "json"
-    ) -Operation "Immutable document Lambda object publication"
+    ) -Operation "Immutable $artifactLabel Lambda object publication"
     $versionId = [string]$put.VersionId
     if ([string]::IsNullOrWhiteSpace($versionId) -or $versionId -ceq "null") {
       throw "S3 did not return an immutable object version."
@@ -554,8 +590,8 @@ if ($Action -eq "Publish") {
     SourceSha               = $SourceSha
     ReceiptPath             = $receipt
     ReceiptSha256           = Get-FileSha256 -Path $receipt
-    ArtifactCount           = 2
-    PublishedObjectCount    = 8
+    ArtifactCount           = $artifactNames.Count
+    PublishedObjectCount    = $expectedObjectCount
     DeterministicBuildCount = 2
     LambdaDeploymentChanged = $false
     TriggerChanged          = $false
@@ -569,14 +605,14 @@ if ([string]::IsNullOrWhiteSpace($ReceiptPath) -or $ReviewedReceiptSha256 -notma
 $receipt = Resolve-OperatorPath -Candidate $ReceiptPath -MustExist
 $receiptValue = Read-AndValidateReceipt -Path $receipt -Sha256 $ReviewedReceiptSha256 -Boundary $boundary
 $uniqueKeys = @($receiptValue.artifacts | ForEach-Object { [string]$_.key } | Sort-Object -Unique)
-if ($uniqueKeys.Count -ne 8) { throw "The publication receipt contains duplicate keys." }
+if ($uniqueKeys.Count -ne $expectedObjectCount) { throw "The publication receipt contains duplicate keys." }
 foreach ($object in $receiptValue.artifacts) {
   if ([string]$object.artifactName -notin $artifactNames -or
       [string]$object.artifactSha256 -notmatch '^[a-f0-9]{64}$' -or
       [string]$object.suffix -notin @("zip", "cdx.json", "manifest.json", "sha256") -or
       [string]$object.objectSha256 -notmatch '^[a-f0-9]{64}$' -or
       [string]::IsNullOrWhiteSpace([string]$object.versionId) -or [long]$object.contentLength -le 0 -or
-      [string]$object.key -cne "lambda/documents/$SourceSha/$($object.artifactSha256)/$($object.artifactName).$($object.suffix)") {
+      [string]$object.key -cne "$artifactKeyRoot/$SourceSha/$($object.artifactSha256)/$($object.artifactName).$($object.suffix)") {
     throw "The publication receipt contains an invalid artifact entry."
   }
   Assert-StoredObject -Boundary $boundary -Key ([string]$object.key) -VersionId ([string]$object.versionId) `
@@ -587,8 +623,8 @@ foreach ($object in $receiptValue.artifacts) {
   Outcome                 = "verified"
   SourceSha               = $SourceSha
   ReceiptSha256           = $ReviewedReceiptSha256
-  ArtifactCount           = 2
-  PublishedObjectCount    = 8
+  ArtifactCount           = $artifactNames.Count
+  PublishedObjectCount    = $expectedObjectCount
   CustomerKmsEncrypted    = $true
   ExactVersionReadback    = $true
   LambdaDeploymentChanged = $false

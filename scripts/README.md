@@ -20,6 +20,13 @@ both AWS environments accepted the steady-state serverless runtime.
 - `build-workflow-ingress-lambda.mjs` — Builds the outbox-ingress Lambda artifact.
 - `build-profile-readiness-lambdas.mjs` — Builds durable definition, activity, and terminal
   artifacts with exact-version metadata.
+- `operate-development-workflow-lambda-publication.ps1` — Provides the fail-closed local
+  development publisher for the exact current-source workflow ingress, profile-readiness durable,
+  and profile-readiness activity artifacts. It tests and builds twice, refuses any existing key or
+  delete marker, publishes twelve conditional/versioned/customer-KMS-bound ZIP/evidence objects,
+  verifies exact-version readback, and writes a checksum-reviewed ignored receipt without changing
+  a Lambda, alias, trigger, Terraform state, or database. See
+  `infrastructure/runbooks/deployments/development-workflow-lambda-publication.md`.
 - `build-document-lambdas.mjs` — Builds separate deterministic document coordinator and isolated
   parser artifacts, manifests, and CycloneDX SBOMs; the parser artifact has no database runtime.
 - `publish-development-document-lambdas.ps1` — Provides the fail-closed local development fallback
@@ -39,7 +46,8 @@ both AWS environments accepted the steady-state serverless runtime.
   authenticated search boundary. See
   `infrastructure/runbooks/deployments/development-gateway-release.md`.
 
-Artifacts are published by the protected GitHub workflows. The migration-only container is built
+Artifacts are normally published by the protected GitHub workflows; the development-only local
+publishers preserve the same immutable boundary when that route is unavailable. The migration-only container is built
 from `Dockerfile.migration` and runs the fail-fast profile/jobs/documents/matching migration
 orchestrator. Its source package also includes the strict restore-verifier CLI and canonical
 manifest; source inclusion does not claim image publication, task-definition deployment,

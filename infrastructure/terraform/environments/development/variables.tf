@@ -354,22 +354,22 @@ variable "candidate_rights_policy_sha256" {
 
 variable "candidate_rights_export_lifetime_seconds" {
   type    = number
-  default = 3600
+  default = null
 }
 
 variable "candidate_rights_download_grant_seconds" {
   type    = number
-  default = 300
+  default = null
 }
 
 variable "candidate_rights_backup_retention_days" {
   type    = number
-  default = 7
+  default = null
 }
 
 variable "candidate_rights_recent_auth_max_age_seconds" {
   type    = number
-  default = 300
+  default = null
 }
 
 variable "candidate_rights_owner_inventory" {
@@ -384,5 +384,5 @@ variable "candidate_rights_subprocessor_inventory" {
 
 variable "candidate_rights_export_lifecycle_days" {
   type    = number
-  default = 1
+  default = null
 }

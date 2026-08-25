@@ -45,6 +45,10 @@ Every alert and privileged admin operation should link to a relevant runbook.
 
 ## Phase 1 procedures
 
+- [Development workflow Lambda publication](deployments/development-workflow-lambda-publication.md) —
+  Reproducibly publishes and exact-version verifies the three current-source workflow
+  ingress/profile-readiness artifact sets without changing Lambda runtime, aliases, triggers,
+  Terraform, or the database.
 - [Development document-processing acceptance](deployments/development-document-processing-acceptance.md) —
   Executes the generated-synthetic direct-dark document lifecycle with exact runtime, claim,
   privacy, recovery, and cleanup guards while all document-processing triggers remain disabled.

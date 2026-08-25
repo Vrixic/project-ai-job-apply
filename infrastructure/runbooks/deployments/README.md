@@ -12,6 +12,9 @@ saved infrastructure plan, success evidence, and recovery boundary.
 - [Development gateway release](development-gateway-release.md) — Publishes one source-bound,
   immutable gateway artifact set, limits Terraform changes to the gateway function and alias, and
   verifies the direct authenticated job-search boundary without retaining query values.
+- [Development workflow Lambda publication](development-workflow-lambda-publication.md) — Tests,
+  reproducibly builds, immutably publishes, and exact-version verifies only the workflow ingress,
+  profile-readiness durable, and profile-readiness activity artifact sets without changing runtime.
 - [Database migration](database-migration.md) — Publishes the scanned migration-only image and
   runs exactly one hardened Fargate task while the retained cluster otherwise stays empty.
 - [Development document-processing acceptance](development-document-processing-acceptance.md) —
