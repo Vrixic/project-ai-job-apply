@@ -87,6 +87,9 @@ Assert-Rejected { Assert-StageBVariableTransition $baselineVariables $badVariabl
 
 $zeroChangePlan = [pscustomobject]@{ resource_changes = @() }
 if ((Get-MeaningfulChangeCount $zeroChangePlan) -ne 0) { throw "An empty baseline change set was not counted as zero." }; $passed++
+if ((ConvertTo-StrictTerraformBoolean "false" "fixture") -ne $false -or
+    (ConvertTo-StrictTerraformBoolean "true" "fixture") -ne $true) { throw "Exact Terraform boolean input parsing failed." }; $passed++
+Assert-Rejected { ConvertTo-StrictTerraformBoolean "False" "fixture" } "Noncanonical Terraform boolean input accepted."
 
 $versioning = [pscustomobject]@{ Status = "Enabled" }
 $public = [pscustomobject]@{ PublicAccessBlockConfiguration = [pscustomobject]@{ BlockPublicAcls = $true; IgnorePublicAcls = $true; BlockPublicPolicy = $true; RestrictPublicBuckets = $true } }

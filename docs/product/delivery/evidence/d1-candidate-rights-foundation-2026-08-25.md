@@ -68,7 +68,7 @@ part of the exact historical artifacts published from `8e2f1546390c14a0813cec6e6
   allowlist, and zero durable deletions/replacements before apply.
 - Auth 11/11, gateway 122/122, web 529/529, targeted typecheck, Terraform 42/42, both environment
   validations, and the acceptance operator in PowerShell 7 and Windows PowerShell 5.1 pass locally.
-  The Stage B operator passes 37/37 in PowerShell 7 and 37/37 in Windows PowerShell 5.1. Its
+  The Stage B operator passes 39/39 in PowerShell 7 and 39/39 in Windows PowerShell 5.1. Its
   current-state preflight omits nullable baseline inputs and accepts only the existing exact
   provider-drift guard, including the strictly forward RDS `latest_restorable_time` refresh.
 - The candidate route requests `max_age=0` and multi-factor `acr_values`. Auth0 must still configure

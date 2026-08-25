@@ -144,6 +144,14 @@ function Get-CanonicalValue([AllowNull()][object]$Value) {
   return "json:" + (ConvertTo-Json $Value -Depth 30 -Compress)
 }
 
+function ConvertTo-StrictTerraformBoolean([object]$Value, [string]$Description) {
+  if ($Value -is [bool]) { return $Value }
+  if ($Value -is [string] -and $Value -cin @("true", "false")) {
+    return $Value -ceq "true"
+  }
+  throw "$Description is not an exact Terraform boolean input."
+}
+
 function Assert-StageBVariableTransition {
   param([object]$BaselineVariables, [object]$PlanVariables, [object]$Artifact, [string]$Audience)
   $baselineNames = @($BaselineVariables.PSObject.Properties | ForEach-Object Name | Sort-Object)
@@ -165,7 +173,11 @@ function Assert-StageBVariableTransition {
   foreach ($name in $planNames) {
     $actual = $PlanVariables.PSObject.Properties[$name].Value.value
     if ($expected.ContainsKey($name)) {
-      if ((Get-CanonicalValue $actual) -cne (Get-CanonicalValue $expected[$name])) { throw "Stage B contains an invalid bounded Terraform variable transition." }
+      if ($expected[$name] -is [bool]) {
+        if ((ConvertTo-StrictTerraformBoolean $actual "Stage B $name") -ne $expected[$name]) { throw "Stage B contains an invalid bounded Terraform variable transition." }
+      } elseif ((Get-CanonicalValue $actual) -cne (Get-CanonicalValue $expected[$name])) {
+        throw "Stage B contains an invalid bounded Terraform variable transition."
+      }
     } elseif ((Get-CanonicalValue $actual) -cne (Get-CanonicalValue $BaselineVariables.PSObject.Properties[$name].Value.value)) {
       throw "Stage B changed a non-Stage-B Terraform variable."
     }
@@ -196,8 +208,10 @@ function Assert-ZeroDriftBaseline {
   foreach ($required in @("candidate_rights_id_token_audience", "candidate_rights_enabled", "private_application_networking", "candidate_rights_auth0_secret_provisioned", "candidate_rights_auth0_authorized_owner")) {
     if ($null -eq $values.PSObject.Properties[$required]) { throw "The baseline variable inventory is stale." }
   }
-  if ([bool]$values.candidate_rights_enabled.value -or [bool]$values.private_application_networking.value -or
-      -not [bool]$values.candidate_rights_auth0_secret_provisioned.value -or
+  $rightsEnabled = ConvertTo-StrictTerraformBoolean $values.candidate_rights_enabled.value "Baseline candidate rights"
+  $privateNetworking = ConvertTo-StrictTerraformBoolean $values.private_application_networking.value "Baseline private networking"
+  $secretProvisioned = ConvertTo-StrictTerraformBoolean $values.candidate_rights_auth0_secret_provisioned.value "Baseline Auth0 secret"
+  if ($rightsEnabled -or $privateNetworking -or -not $secretProvisioned -or
       -not [string]::IsNullOrEmpty([string]$values.candidate_rights_id_token_audience.value) -or
       [string]$values.candidate_rights_auth0_authorized_owner.value -cne "vrij") {
     throw "The baseline is outside the exact default-dark, provisioned-secret boundary."
