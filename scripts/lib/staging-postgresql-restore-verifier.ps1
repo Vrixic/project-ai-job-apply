@@ -117,6 +117,22 @@ function Test-D1RestoreLogStreamMismatch {
   )
 }
 
+function Get-D1RestoreTagMismatchNames {
+  param(
+    [Parameter(Mandatory = $true)]
+    [hashtable]$Actual,
+    [Parameter(Mandatory = $true)]
+    [hashtable]$Expected
+  )
+
+  return @(
+    $Expected.Keys | Where-Object {
+      -not $Actual.ContainsKey([string]$_) -or
+      [string]$Actual[[string]$_] -cne [string]$Expected[[string]$_]
+    } | Sort-Object
+  )
+}
+
 function Assert-D1RestoreRuntimeContext {
   param(
     [Parameter(Mandatory = $true)]

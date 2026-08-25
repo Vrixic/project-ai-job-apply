@@ -198,6 +198,27 @@ if (-not (Test-D1RestoreLogStreamMismatch $containerWithReportedLogStream $expec
   throw "A conflicting reported ECS log stream was accepted."
 }
 
+$expectedRestoreTags = @{
+  Project = "ai-job-apply"
+  Environment = "development"
+  ManagedBy = "restore-drill"
+  Purpose = "d1-current-isolated-restore"
+  StartedAt = "2026-08-25T12:00:00Z"
+}
+$actualRestoreTags = @{}
+foreach ($entry in $expectedRestoreTags.GetEnumerator()) {
+  $actualRestoreTags[[string]$entry.Key] = [string]$entry.Value
+}
+if (@(Get-D1RestoreTagMismatchNames $actualRestoreTags $expectedRestoreTags).Count -ne 0) {
+  throw "The exact restore tags were rejected."
+}
+$actualRestoreTags.Remove("Purpose")
+$actualRestoreTags["StartedAt"] = "2026-08-25T12:00:01Z"
+$tagMismatches = @(Get-D1RestoreTagMismatchNames $actualRestoreTags $expectedRestoreTags)
+if (($tagMismatches -join ",") -cne "Purpose,StartedAt") {
+  throw "Restore tag mismatches were not reported by field name only."
+}
+
 $runtime = [pscustomobject]@{
   TaskDefinitionArn = $pending.runtime_task_definition_arn
   Image = $pending.runtime_image

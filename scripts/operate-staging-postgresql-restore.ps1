@@ -803,14 +803,16 @@ function Assert-TargetBoundary {
   }
 
   $tags = Get-ResourceTags ([string]$Target.DBInstanceArn)
-  if (
-    $tags["Project"] -cne "ai-job-apply" -or
-    $tags["Environment"] -cne $Environment -or
-    $tags["ManagedBy"] -cne "restore-drill" -or
-    $tags["Purpose"] -cne "d1-current-isolated-restore" -or
-    $tags["StartedAt"] -cne [string]$Context.started_at
-  ) {
-    throw "The disposable restore target tags do not match the current exercise."
+  $expectedTags = @{
+    Project = "ai-job-apply"
+    Environment = $Environment
+    ManagedBy = "restore-drill"
+    Purpose = "d1-current-isolated-restore"
+    StartedAt = [string]$Context.started_at
+  }
+  $tagMismatches = @(Get-D1RestoreTagMismatchNames $tags $expectedTags)
+  if ($tagMismatches.Count -ne 0) {
+    throw "The disposable restore target tag fields do not match: $($tagMismatches -join ', ')."
   }
   if (
     $null -ne $Context.target_boundary_sha256 -and
