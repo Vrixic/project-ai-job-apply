@@ -318,6 +318,59 @@ describe("API Gateway Lambda boundary", () => {
     expect(inject).toHaveBeenCalledTimes(3);
   });
 
+  it("allows only exact candidate-rights routes and preserves the private proof header", async () => {
+    const principalBridge = createInvocationPrincipalBridge();
+    const inject = vi.fn().mockResolvedValue({
+      statusCode: 202,
+      body: "{}",
+      headers: { "cache-control": "no-store", "content-type": "application/json" },
+    });
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge,
+    });
+    const resourceId = "018f92b0-4ad7-7b1d-8f44-b7ae694c85c1";
+    const proof = "proof-header-segment.proof-payload-segment.proof-signature-segment";
+    const bodyOptions = {
+      body: "{}",
+      headers: {
+        authorization: "Bearer opaque-api-gateway-token",
+        "content-type": "application/json",
+        "x-ai-job-apply-reauthentication": proof,
+      },
+    };
+
+    for (const [method, path, options] of [
+      ["POST", "/v1/me/data-exports", bodyOptions],
+      ["GET", `/v1/me/data-exports/${resourceId}`, undefined],
+      ["POST", "/v1/me/account-deletion-requests", bodyOptions],
+      ["GET", `/v1/me/account-deletion-requests/${resourceId}`, undefined],
+      ["DELETE", `/v1/me/account-deletion-requests/${resourceId}`, undefined],
+      ["POST", `/v1/me/account-deletion-requests/${resourceId}/confirm`, bodyOptions],
+    ] as const) {
+      const response = await invoke(handler, routedEvent(method, path, options));
+      expect(response.statusCode).toBe(202);
+    }
+
+    expect(inject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "POST",
+        url: "/v1/me/data-exports",
+        headers: expect.objectContaining({ "x-ai-job-apply-reauthentication": proof }),
+      }),
+    );
+    for (const [method, path] of [
+      ["GET", `/v1/me/data-exports/${resourceId.toUpperCase()}`],
+      ["GET", "/v1/me/data-exports/018f92b0-4ad7-4b1d-8f44-b7ae694c85c1"],
+      ["DELETE", `/v1/me/account-deletion-requests/${resourceId}/`],
+      ["GET", `/v1/me/account-deletion-requests/${resourceId}/confirm`],
+    ] as const) {
+      expect((await invoke(handler, routedEvent(method, path))).statusCode).toBe(404);
+    }
+  });
+
   it("allows only exact candidate-report and admin-moderation route shapes", async () => {
     const principalBridge = createInvocationPrincipalBridge();
     const inject = vi.fn(async () => ({ statusCode: 200, body: "{}", headers: {} }));

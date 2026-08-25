@@ -1,5 +1,7 @@
 import "reflect-metadata";
 import type {
+  AccountDeletionRequest,
+  CandidateDataExport,
   CreateProfileFactRequest,
   CreateResumeUploadRequest,
   CreateResumeUploadResponse,
@@ -20,7 +22,7 @@ import type {
   SavedJobSearchRequest,
   UpdateProfileFactRequest,
 } from "@ai-job-apply/api-contracts";
-import type { AuthPrincipal } from "@ai-job-apply/auth";
+import type { AuthPrincipal, IdTokenVerifier } from "@ai-job-apply/auth";
 import { createTestTokenIssuer } from "@ai-job-apply/auth/testing";
 import {
   BillingEntitlementService,
@@ -57,6 +59,10 @@ import {
   type SavedJobs,
 } from "@ai-job-apply/matching-service";
 import type { ProfileStore } from "@ai-job-apply/profile-service";
+import {
+  assertCandidateRightsAuthentication,
+  type CandidateRightsPolicy,
+} from "@ai-job-apply/profile-service/candidate-rights";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -68,8 +74,18 @@ import {
   createInvocationPrincipalBridge,
 } from "./lambda.js";
 
+const FRESH_ID_TOKEN_PROOF = "fresh-header-segment.fresh-payload-segment.fresh-signature-segment";
+const RECENT_PASSWORD_ID_TOKEN_PROOF =
+  "password-header-segment.password-payload-segment.password-signature-segment";
+const STALE_ID_TOKEN_PROOF = "stale-header-segment.stale-payload-segment.stale-signature-segment";
+const FUTURE_ID_TOKEN_PROOF =
+  "future-header-segment.future-payload-segment.future-signature-segment";
+const MISMATCHED_ID_TOKEN_PROOF =
+  "mismatch-header-segment.mismatch-payload-segment.mismatch-signature-segment";
+
 class MemoryProfileStore implements ProfileStore {
   resolveUserCalls = 0;
+  candidateRightsPrincipals: AuthPrincipal[] = [];
   private readonly users = new Map<string, CurrentUser>();
   private preferences: JobPreferenceSet | undefined;
   private readonly operations = new Map<string, Operation>();
@@ -78,6 +94,76 @@ class MemoryProfileStore implements ProfileStore {
     string,
     { hash: string; response: PutJobPreferencesResponse }
   >();
+  private readonly candidateRightsNow = new Date("2026-08-16T12:00:00.000Z");
+  private readonly candidateRightsPolicy: CandidateRightsPolicy = {
+    version: "d1-test-v1",
+    accountablePolicySha256: "a".repeat(64),
+    exportArtifactLifetimeSeconds: 3_600,
+    downloadGrantLifetimeSeconds: 300,
+    backupRetentionDays: 35,
+    recentAuthenticationMaxAgeSeconds: 900,
+    ownerInventory: ["identity", "profile", "documents", "jobs", "matching", "billing"],
+    subprocessorInventory: [],
+  };
+
+  private assertCandidateRights(principal: AuthPrincipal, requireMfa: boolean): void {
+    assertCandidateRightsAuthentication(
+      principal,
+      this.candidateRightsNow,
+      this.candidateRightsPolicy,
+      requireMfa,
+    );
+    this.candidateRightsPrincipals.push(principal);
+  }
+
+  async createCandidateDataExport(principal: AuthPrincipal): Promise<CandidateDataExport> {
+    this.assertCandidateRights(principal, false);
+    const timestamp = this.candidateRightsNow.toISOString();
+    return {
+      id: uuidv7(),
+      schemaVersion: 1,
+      format: "candidate-data-export-v1",
+      policyVersion: this.candidateRightsPolicy.version,
+      state: "queued",
+      requestedAt: timestamp,
+      updatedAt: timestamp,
+    };
+  }
+
+  async createAccountDeletionRequest(principal: AuthPrincipal): Promise<AccountDeletionRequest> {
+    this.assertCandidateRights(principal, false);
+    const timestamp = this.candidateRightsNow.toISOString();
+    return {
+      id: uuidv7(),
+      schemaVersion: 1,
+      policyVersion: this.candidateRightsPolicy.version,
+      state: "requested",
+      version: 1,
+      requestedAt: timestamp,
+      updatedAt: timestamp,
+    };
+  }
+
+  async cancelAccountDeletionRequest(principal: AuthPrincipal): Promise<boolean> {
+    this.assertCandidateRights(principal, false);
+    return true;
+  }
+
+  async confirmAccountDeletionRequest(principal: AuthPrincipal): Promise<AccountDeletionRequest> {
+    this.assertCandidateRights(principal, true);
+    const timestamp = this.candidateRightsNow.toISOString();
+    return {
+      id: uuidv7(),
+      schemaVersion: 1,
+      policyVersion: this.candidateRightsPolicy.version,
+      state: "quarantined",
+      version: 2,
+      requestedAt: timestamp,
+      updatedAt: timestamp,
+      confirmedAt: timestamp,
+      backupExpiresAt: "2026-09-20T12:00:00.000Z",
+    };
+  }
 
   seedFact(fact: ProfileFact): void {
     this.facts.set(fact.id, fact);
@@ -626,6 +712,30 @@ async function createApp() {
   const matchAssessments = new MemoryMatchAssessments();
   const entitlements = new MemoryEntitlements();
   const now = new Date("2026-08-16T12:00:00.000Z");
+  const nowSeconds = Math.floor(now.getTime() / 1_000);
+  const idTokenVerificationTokens: string[] = [];
+  const idTokenVerifier: IdTokenVerifier = {
+    async verify(token) {
+      idTokenVerificationTokens.push(token);
+      const evidence =
+        token === FRESH_ID_TOKEN_PROOF
+          ? { authenticatedAt: nowSeconds - 30, authenticationMethods: ["pwd", "mfa"] }
+          : token === RECENT_PASSWORD_ID_TOKEN_PROOF
+            ? { authenticatedAt: nowSeconds - 30, authenticationMethods: ["pwd"] }
+            : token === STALE_ID_TOKEN_PROOF
+              ? { authenticatedAt: nowSeconds - 901, authenticationMethods: ["pwd", "mfa"] }
+              : token === FUTURE_ID_TOKEN_PROOF
+                ? { authenticatedAt: nowSeconds + 31, authenticationMethods: ["pwd", "mfa"] }
+                : { authenticatedAt: nowSeconds - 30, authenticationMethods: ["pwd", "mfa"] };
+      return {
+        issuer: "https://test-issuer.invalid/",
+        subject:
+          token === MISMATCHED_ID_TOKEN_PROOF ? "different-candidate" : "candidate-rights-route",
+        audience: ["candidate-web-client"],
+        ...evidence,
+      };
+    },
+  };
   const app = await createGatewayApplication({
     store,
     catalog,
@@ -636,6 +746,7 @@ async function createApp() {
     entitlements,
     documents,
     verifier: issuer.verifier,
+    idTokenVerifier,
     releaseSha: "test",
     clock: () => new Date(now.getTime()),
   });
@@ -650,6 +761,7 @@ async function createApp() {
     entitlements,
     moderation,
     now,
+    idTokenVerificationTokens,
   };
 }
 
@@ -664,6 +776,7 @@ describe("candidate API", () => {
   let entitlements: MemoryEntitlements;
   let moderation: MemoryModeration;
   let now: Date;
+  let idTokenVerificationTokens: string[];
 
   beforeAll(async () => {
     const setup = await createApp();
@@ -677,6 +790,7 @@ describe("candidate API", () => {
     entitlements = setup.entitlements;
     moderation = setup.moderation;
     now = setup.now;
+    idTokenVerificationTokens = setup.idTokenVerificationTokens;
   });
 
   afterAll(async () => {
@@ -687,6 +801,142 @@ describe("candidate API", () => {
     const response = await app.inject({ method: "GET", url: "/v1/me" });
     expect(response.statusCode).toBe(401);
     expect(response.json().code).toBe("authentication_required");
+  });
+
+  it("requires a subject-bound recent ID-token proof on every candidate-rights mutation", async () => {
+    const token = await issuer.issue("candidate-rights-route", {
+      scope: "profile:read profile:write",
+    });
+    const authorization = { authorization: `Bearer ${token}` };
+    const idempotencyKey = "candidate-rights-route-test-0001";
+    const deletionRequestId = uuidv7();
+
+    for (const proof of [undefined, "malformed-proof"] as const) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/me/data-exports",
+        headers: {
+          ...authorization,
+          "content-type": "application/json",
+          "idempotency-key": idempotencyKey,
+          ...(proof ? { "x-ai-job-apply-reauthentication": proof } : {}),
+        },
+        payload: { format: "candidate-data-export-v1" },
+      });
+      expect(response.statusCode).toBe(401);
+      expect(response.json().code).toBe("authentication_required");
+    }
+
+    for (const proof of [STALE_ID_TOKEN_PROOF, FUTURE_ID_TOKEN_PROOF]) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/me/data-exports",
+        headers: {
+          ...authorization,
+          "content-type": "application/json",
+          "idempotency-key": idempotencyKey,
+          "x-ai-job-apply-reauthentication": proof,
+        },
+        payload: { format: "candidate-data-export-v1" },
+      });
+      expect(response.statusCode).toBe(401);
+      expect(response.json().code).toBe("authentication_required");
+    }
+
+    const mismatch = await app.inject({
+      method: "POST",
+      url: "/v1/me/data-exports",
+      headers: {
+        ...authorization,
+        "content-type": "application/json",
+        "idempotency-key": idempotencyKey,
+        "x-ai-job-apply-reauthentication": MISMATCHED_ID_TOKEN_PROOF,
+      },
+      payload: { format: "candidate-data-export-v1" },
+    });
+    expect(mismatch.statusCode).toBe(401);
+
+    const exportResponse = await app.inject({
+      method: "POST",
+      url: "/v1/me/data-exports",
+      headers: {
+        ...authorization,
+        "content-type": "application/json",
+        "idempotency-key": idempotencyKey,
+        "x-ai-job-apply-reauthentication": FRESH_ID_TOKEN_PROOF,
+      },
+      payload: { format: "candidate-data-export-v1" },
+    });
+    expect(exportResponse.statusCode).toBe(202);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/me/account-deletion-requests",
+      headers: {
+        ...authorization,
+        "content-type": "application/json",
+        "idempotency-key": "candidate-rights-route-test-0002",
+        "x-ai-job-apply-reauthentication": FRESH_ID_TOKEN_PROOF,
+      },
+      payload: { acknowledgement: "ACCOUNT_DELETION_IS_IRREVERSIBLE" },
+    });
+    expect(createResponse.statusCode).toBe(201);
+
+    const cancelResponse = await app.inject({
+      method: "DELETE",
+      url: `/v1/me/account-deletion-requests/${deletionRequestId}`,
+      headers: {
+        ...authorization,
+        "idempotency-key": "candidate-rights-route-test-0003",
+        "if-match": '"1"',
+        "x-ai-job-apply-reauthentication": FRESH_ID_TOKEN_PROOF,
+      },
+    });
+    expect(cancelResponse.statusCode).toBe(204);
+
+    const noMfaConfirmation = await app.inject({
+      method: "POST",
+      url: `/v1/me/account-deletion-requests/${deletionRequestId}/confirm`,
+      headers: {
+        ...authorization,
+        "content-type": "application/json",
+        "idempotency-key": "candidate-rights-route-test-0004",
+        "x-ai-job-apply-reauthentication": RECENT_PASSWORD_ID_TOKEN_PROOF,
+      },
+      payload: { expectedVersion: 1, confirmation: "DELETE_MY_ACCOUNT" },
+    });
+    expect(noMfaConfirmation.statusCode).toBe(401);
+    expect(noMfaConfirmation.json().code).toBe("authentication_required");
+
+    const confirmation = await app.inject({
+      method: "POST",
+      url: `/v1/me/account-deletion-requests/${deletionRequestId}/confirm`,
+      headers: {
+        ...authorization,
+        "content-type": "application/json",
+        "idempotency-key": "candidate-rights-route-test-0005",
+        "x-ai-job-apply-reauthentication": FRESH_ID_TOKEN_PROOF,
+      },
+      payload: { expectedVersion: 1, confirmation: "DELETE_MY_ACCOUNT" },
+    });
+    expect(confirmation.statusCode).toBe(202);
+    expect(store.candidateRightsPrincipals).toHaveLength(4);
+    expect(store.candidateRightsPrincipals.at(-1)).toMatchObject({
+      authenticatedAt: Math.floor(now.getTime() / 1_000) - 30,
+      authenticationMethods: ["pwd", "mfa"],
+    });
+
+    const verificationCount = idTokenVerificationTokens.length;
+    const unrelated = await app.inject({
+      method: "GET",
+      url: "/v1/me",
+      headers: {
+        ...authorization,
+        "x-ai-job-apply-reauthentication": FRESH_ID_TOKEN_PROOF,
+      },
+    });
+    expect(unrelated.statusCode).toBe(200);
+    expect(idTokenVerificationTokens).toHaveLength(verificationCount);
   });
 
   it("fails readiness when the Billing schema is unavailable", async () => {

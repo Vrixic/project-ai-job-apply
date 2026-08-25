@@ -85,6 +85,52 @@ describe("platform BFF", () => {
     expect(await response.json()).toEqual({ id: "candidate-id" });
   });
 
+  it("forwards a bounded server-session ID token only for explicit reauthentication", async () => {
+    const idToken = "headerheader.payloadpayload.signaturesignature";
+    const platformFetch = vi.fn<typeof fetch>(async (_input, init) => {
+      const headers = new Headers(init?.headers);
+      expect(headers.get("authorization")).toBe("Bearer synthetic-token");
+      expect(headers.get("x-ai-job-apply-reauthentication")).toBe(idToken);
+      return Response.json({ state: "quarantined" }, { status: 202 });
+    });
+    const response = await forwardPlatformRequest(
+      "/v1/me/account-deletion-requests/synthetic/confirm",
+      {
+        method: "POST",
+        headers: { "x-ai-job-apply-reauthentication": "caller-controlled.must.not-cross" },
+      },
+      {
+        auth0: {
+          getSession: async () => ({ tokenSet: { idToken } }),
+          getAccessToken: async () => ({ token: "synthetic-token" }),
+        },
+        baseUrl: "http://localhost:4000",
+        fetch: platformFetch,
+        includeReauthenticationProof: true,
+      },
+    );
+
+    expect(response.status).toBe(202);
+    expect(platformFetch).toHaveBeenCalledOnce();
+  });
+
+  it("fails before the platform call when a reauthentication proof is unavailable", async () => {
+    const platformFetch = vi.fn<typeof fetch>();
+    const response = await forwardPlatformRequest(
+      "/v1/me/account-deletion-requests/synthetic/confirm",
+      { method: "POST" },
+      {
+        auth0: authenticated,
+        baseUrl: "http://localhost:4000",
+        fetch: platformFetch,
+        includeReauthenticationProof: true,
+      },
+    );
+
+    expect(response.status).toBe(401);
+    expect(platformFetch).not.toHaveBeenCalled();
+  });
+
   it("returns a sanitized unavailable response when the platform cannot be reached", async () => {
     const platformFetch = vi.fn<typeof fetch>(async () => {
       throw new Error("sensitive upstream failure");

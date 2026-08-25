@@ -8,6 +8,7 @@ import {
   compileComponentValidator,
 } from "@ai-job-apply/api-contracts";
 import { useEffect, useRef, useState } from "react";
+import { candidateRightsReauthenticationPath } from "../lib/auth0";
 
 const validateExport = compileComponentValidator("CandidateDataExport");
 const validateExportAccess = compileComponentValidator("CandidateDataExportAccess");
@@ -257,6 +258,11 @@ export function CandidateRightsPanel({ authenticated }: { authenticated: boolean
   return (
     <section className="candidate-rights" aria-labelledby="candidate-rights-heading">
       <h2 id="candidate-rights-heading">Your data and account</h2>
+      <p>
+        Requests and account changes require a recent sign-in. Permanent deletion also requires
+        multi-factor authentication.
+      </p>
+      <a href={candidateRightsReauthenticationPath}>Refresh identity verification with MFA</a>
       <div className="candidate-rights-card">
         <h3>Portable data export</h3>
         <p>Request a structured copy of the candidate data held by the current platform owners.</p>
@@ -316,6 +322,9 @@ export function CandidateRightsPanel({ authenticated }: { authenticated: boolean
                     onChange={(event) => setConfirmation(event.target.value)}
                   />
                 </label>
+                <a href={candidateRightsReauthenticationPath}>
+                  Verify with MFA before permanent deletion
+                </a>
                 <button
                   type="button"
                   disabled={confirmation !== "DELETE_MY_ACCOUNT" || busy !== null}

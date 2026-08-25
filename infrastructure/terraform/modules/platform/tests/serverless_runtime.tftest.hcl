@@ -103,6 +103,7 @@ variables {
   ingestion_lambda_extension_layer_arn                  = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
   candidate_rights_auth0_secret_provisioned             = true
   candidate_rights_auth0_authorized_owner               = "authorized-operator"
+  candidate_rights_id_token_audience                    = "candidate-web-client"
 }
 
 run "candidate_rights_auth0_secret_preprovisions_with_managed_tags" {
@@ -155,11 +156,45 @@ run "candidate_rights_boundary_accepts_explicit_timing_policy" {
       aws_cloudwatch_event_rule.candidate_rights_maintenance[0].schedule_expression == "rate(5 minutes)" &&
       aws_lambda_function.profile_readiness_activity[0].environment[0].variables.CANDIDATE_RIGHTS_SUBPROCESSOR_INVENTORY == "none" &&
       aws_lambda_function.profile_readiness_activity[0].environment[0].variables.CANDIDATE_RIGHTS_RECENT_AUTH_MAX_AGE_SECONDS == "900" &&
+      aws_lambda_function.gateway[0].environment[0].variables.OIDC_ID_TOKEN_AUDIENCE == "candidate-web-client" &&
       aws_lambda_function.gateway[0].environment[0].variables.CANDIDATE_RIGHTS_DOWNLOAD_GRANT_SECONDS == "300" &&
       length(aws_iam_role_policy.candidate_rights_activity) == 1
     )
     error_message = "Only the private activity gets deletion privileges while the gateway receives the exact reviewed policy and bounded download grant."
   }
+}
+
+run "candidate_rights_activation_rejects_missing_id_token_audience" {
+  command = plan
+
+  variables {
+    private_application_networking               = true
+    deploy_document_intake                       = true
+    serverless_runtime_enabled                   = true
+    candidate_rights_enabled                     = true
+    candidate_rights_id_token_audience           = ""
+    candidate_rights_policy_version              = "d1-reviewed-v1"
+    candidate_rights_policy_sha256               = "9999999999999999999999999999999999999999999999999999999999999999"
+    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing"
+    candidate_rights_subprocessor_inventory      = "none"
+    candidate_rights_export_lifetime_seconds     = 3600
+    candidate_rights_download_grant_seconds      = 300
+    candidate_rights_backup_retention_days       = 7
+    candidate_rights_recent_auth_max_age_seconds = 900
+    candidate_rights_export_lifecycle_days       = 1
+  }
+
+  expect_failures = [var.candidate_rights_enabled]
+}
+
+run "candidate_rights_id_token_audience_rejects_non_runtime_value" {
+  command = plan
+
+  variables {
+    candidate_rights_id_token_audience = "too-short"
+  }
+
+  expect_failures = [var.candidate_rights_id_token_audience]
 }
 
 run "candidate_rights_boundary_rejects_short_database_backup_window" {
@@ -296,6 +331,7 @@ run "candidate_rights_disabled_accepts_unset_timing_policy" {
   variables {
     candidate_rights_auth0_secret_provisioned = false
     candidate_rights_auth0_authorized_owner   = ""
+    candidate_rights_id_token_audience        = ""
   }
 
   assert {
@@ -306,6 +342,7 @@ run "candidate_rights_disabled_accepts_unset_timing_policy" {
       var.candidate_rights_backup_retention_days == null &&
       var.candidate_rights_recent_auth_max_age_seconds == null &&
       var.candidate_rights_export_lifecycle_days == null &&
+      !contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "OIDC_ID_TOKEN_AUDIENCE") &&
       length(aws_s3_bucket.candidate_data_exports) == 0 &&
       length(aws_secretsmanager_secret.candidate_rights_auth0) == 0
     )

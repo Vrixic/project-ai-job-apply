@@ -247,7 +247,20 @@ describe("candidate rights contracts", () => {
       expect(operation.parameters.some((parameter) => parameter.name === "Idempotency-Key")).toBe(
         true,
       );
+      const proof = operation.parameters.find(
+        (parameter) => parameter.name === "X-AI-Job-Apply-Reauthentication",
+      );
+      expect(proof).toMatchObject({
+        in: "header",
+        required: true,
+        schema: { type: "string", minLength: 32, maxLength: 16_384 },
+      });
     }
+    expect(
+      contract.paths["/me/job-preferences"].put.parameters.some(
+        (parameter) => parameter.name === "X-AI-Job-Apply-Reauthentication",
+      ),
+    ).toBe(false);
   });
 });
 

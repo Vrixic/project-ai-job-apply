@@ -4,6 +4,7 @@ import {
   type AccessTokenVerifier,
   AuthenticationError,
   type AuthPrincipal,
+  createOidcIdTokenVerifier,
 } from "@ai-job-apply/auth";
 import {
   BillingEntitlementService,
@@ -112,6 +113,8 @@ const PROTECTED_EXACT_ROUTES = new Set([
   "GET /v1/me",
   "GET /v1/me/job-preferences",
   "PUT /v1/me/job-preferences",
+  "POST /v1/me/data-exports",
+  "POST /v1/me/account-deletion-requests",
   "GET /v1/profile/facts",
   "POST /v1/profile/facts",
   "GET /v1/resumes",
@@ -139,6 +142,12 @@ const PROFILE_FACT_PATH_PATTERN =
   /^\/v1\/profile\/facts\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SAVED_JOB_PATH_PATTERN =
   /^\/v1\/saved-jobs\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const CANDIDATE_DATA_EXPORT_PATH_PATTERN =
+  /^\/v1\/me\/data-exports\/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const ACCOUNT_DELETION_REQUEST_PATH_PATTERN =
+  /^\/v1\/me\/account-deletion-requests\/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const ACCOUNT_DELETION_CONFIRMATION_PATH_PATTERN =
+  /^\/v1\/me\/account-deletion-requests\/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/confirm$/;
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
   "content-length",
@@ -172,6 +181,19 @@ function allowedRoute(method: string, path: string): AllowedRoute | undefined {
   }
   if (method === "GET" && MATCH_ASSESSMENT_PATH_PATTERN.test(path)) {
     return { acceptsBody: false, protected: true };
+  }
+  if (
+    method === "GET" &&
+    (CANDIDATE_DATA_EXPORT_PATH_PATTERN.test(path) ||
+      ACCOUNT_DELETION_REQUEST_PATH_PATTERN.test(path))
+  ) {
+    return { acceptsBody: false, protected: true };
+  }
+  if (method === "DELETE" && ACCOUNT_DELETION_REQUEST_PATH_PATTERN.test(path)) {
+    return { acceptsBody: false, protected: true };
+  }
+  if (method === "POST" && ACCOUNT_DELETION_CONFIRMATION_PATH_PATTERN.test(path)) {
+    return { acceptsBody: true, protected: true };
   }
   if (method === "GET" && MODERATION_REPORT_SUMMARY_PATH_PATTERN.test(path)) {
     return { acceptsBody: false, protected: true };
@@ -554,6 +576,17 @@ async function createConfiguredApplication(
   });
   const database = createDatabase(databaseUrl, { maxConnections: 2 });
   const candidateRightsPolicy = loadCandidateRightsPolicyIfConfigured(process.env);
+  const idTokenAudience = config.OIDC_ID_TOKEN_AUDIENCE;
+  if (candidateRightsPolicy && !idTokenAudience) {
+    throw new Error("CandidateRightsIdTokenVerifierConfigurationInvalid");
+  }
+  const idTokenVerifier =
+    candidateRightsPolicy && idTokenAudience
+      ? createOidcIdTokenVerifier({
+          issuer: config.OIDC_ISSUER,
+          audience: idTokenAudience,
+        })
+      : undefined;
   const recoveryBucket = process.env.CANDIDATE_DELETION_RECOVERY_BUCKET;
   const recoveryKmsKeyArn = process.env.CANDIDATE_DATA_EXPORT_KMS_KEY_ARN;
   if (candidateRightsPolicy && (!recoveryBucket || !recoveryKmsKeyArn)) {
@@ -619,6 +652,7 @@ async function createConfiguredApplication(
     documents,
     ...(candidateDataExportDownloads ? { candidateDataExportDownloads } : {}),
     verifier: principalBridge.verifier,
+    ...(idTokenVerifier ? { idTokenVerifier } : {}),
     releaseSha: config.RELEASE_SHA,
     adapter: new FastifyAdapter({
       bodyLimit: MAXIMUM_GATEWAY_BODY_BYTES,

@@ -1,7 +1,7 @@
 import { createServer, type Server } from "node:http";
 import { exportJWK, generateKeyPair, type JWK, SignJWT } from "jose";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { bearerToken, createOidcVerifier } from "./index.js";
+import { bearerToken, createOidcIdTokenVerifier, createOidcVerifier } from "./index.js";
 import { createTestTokenIssuer } from "./testing.js";
 
 describe("authentication primitives", () => {
@@ -80,15 +80,18 @@ describe("managed OIDC verifier", () => {
 
   async function issue(options: {
     algorithm?: "RS256" | "ES256";
-    audience?: string;
+    audience?: string | string[];
     authenticatedAt?: number;
     authenticationMethods?: unknown;
     expiresAt?: string;
     keyId?: string;
+    omitExpiration?: boolean;
+    omitIssuedAt?: boolean;
     signingKey?: CryptoKey;
     tokenIssuer?: string;
+    subject?: string;
   }): Promise<string> {
-    return new SignJWT({
+    const token = new SignJWT({
       scope: "profile:read profile:write",
       ...(options.authenticatedAt ? { auth_time: options.authenticatedAt } : {}),
       ...(options.authenticationMethods ? { amr: options.authenticationMethods } : {}),
@@ -99,10 +102,10 @@ describe("managed OIDC verifier", () => {
       })
       .setIssuer(options.tokenIssuer ?? issuer)
       .setAudience(options.audience ?? "ai-job-apply-api")
-      .setSubject("candidate-1")
-      .setIssuedAt()
-      .setExpirationTime(options.expiresAt ?? "5m")
-      .sign(options.signingKey ?? privateKey);
+      .setSubject(options.subject ?? "candidate-1");
+    if (!options.omitIssuedAt) token.setIssuedAt();
+    if (!options.omitExpiration) token.setExpirationTime(options.expiresAt ?? "5m");
+    return token.sign(options.signingKey ?? privateKey);
   }
 
   it("accepts an exact RS256 issuer and audience", async () => {
@@ -113,25 +116,105 @@ describe("managed OIDC verifier", () => {
     expect(principal.scopes).toEqual(["profile:read", "profile:write"]);
   });
 
-  it("projects only bounded standard recent-authentication evidence", async () => {
+  it("does not derive recent-authentication evidence from an access token", async () => {
     const verifier = createOidcVerifier({ issuer, audience: "ai-job-apply-api" });
+    const authenticatedAt = Math.floor(Date.now() / 1000) - 30;
+    const principal = await verifier.verify(
+      await issue({ authenticatedAt, authenticationMethods: ["pwd", "mfa"] }),
+    );
+    expect(principal.authenticatedAt).toBeUndefined();
+    expect(principal.authenticationMethods).toBeUndefined();
+  });
+
+  it("verifies a distinct RS256 ID-token proof for one exact client audience", async () => {
+    const verifier = createOidcIdTokenVerifier({ issuer, audience: "auth0-client-id-1234" });
     const authenticatedAt = Math.floor(Date.now() / 1000) - 30;
     await expect(
       verifier.verify(
-        await issue({ authenticatedAt, authenticationMethods: ["pwd", "mfa", "webauthn"] }),
+        await issue({
+          audience: "auth0-client-id-1234",
+          authenticatedAt,
+          authenticationMethods: ["pwd", "mfa"],
+        }),
       ),
-    ).resolves.toMatchObject({
+    ).resolves.toEqual({
+      issuer,
+      subject: "candidate-1",
+      audience: ["auth0-client-id-1234"],
       authenticatedAt,
-      authenticationMethods: ["pwd", "mfa", "webauthn"],
+      authenticationMethods: ["pwd", "mfa"],
     });
+  });
 
-    const malformed = await verifier.verify(
-      await issue({ authenticatedAt, authenticationMethods: ["mfa", "not allowed"] }),
-    );
-    expect(malformed.authenticationMethods).toBeUndefined();
-    const missing = await verifier.verify(await issue({}));
-    expect(missing.authenticatedAt).toBeUndefined();
-    expect(missing.authenticationMethods).toBeUndefined();
+  it("rejects ID-token proofs with ambiguous audience or missing recent-authentication claims", async () => {
+    const verifier = createOidcIdTokenVerifier({ issuer, audience: "auth0-client-id-1234" });
+    const authenticatedAt = Math.floor(Date.now() / 1000) - 30;
+    await expect(
+      verifier.verify(
+        await issue({
+          audience: ["auth0-client-id-1234", "other-client"],
+          authenticatedAt,
+          authenticationMethods: ["mfa"],
+        }),
+      ),
+    ).rejects.toThrow("audience");
+    await expect(
+      verifier.verify(
+        await issue({ audience: "auth0-client-id-1234", authenticationMethods: ["mfa"] }),
+      ),
+    ).rejects.toThrow();
+    await expect(
+      verifier.verify(await issue({ audience: "auth0-client-id-1234", authenticatedAt })),
+    ).rejects.toThrow("authentication methods");
+    await expect(
+      verifier.verify(
+        await issue({
+          audience: "auth0-client-id-1234",
+          authenticatedAt,
+          authenticationMethods: ["mfa"],
+          omitExpiration: true,
+        }),
+      ),
+    ).rejects.toThrow();
+    await expect(
+      verifier.verify(
+        await issue({
+          audience: "auth0-client-id-1234",
+          authenticatedAt,
+          authenticationMethods: ["mfa"],
+          omitIssuedAt: true,
+        }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("rejects ID-token proofs with a wrong signature, issuer, client audience, expiry, or algorithm", async () => {
+    const verifier = createOidcIdTokenVerifier({ issuer, audience: "auth0-client-id-1234" });
+    const claims = {
+      audience: "auth0-client-id-1234",
+      authenticatedAt: Math.floor(Date.now() / 1000) - 30,
+      authenticationMethods: ["mfa"],
+    };
+    await expect(
+      verifier.verify(await issue({ ...claims, signingKey: otherPrivateKey })),
+    ).rejects.toThrow();
+    await expect(
+      verifier.verify(await issue({ ...claims, tokenIssuer: "https://wrong.invalid/" })),
+    ).rejects.toThrow();
+    await expect(
+      verifier.verify(await issue({ ...claims, audience: "wrong-client-id" })),
+    ).rejects.toThrow();
+    await expect(verifier.verify(await issue({ ...claims, expiresAt: "0s" }))).rejects.toThrow();
+    await expect(
+      verifier.verify(
+        await issue({
+          ...claims,
+          algorithm: "ES256",
+          keyId: "ec",
+          signingKey: ecPrivateKey,
+        }),
+      ),
+    ).rejects.toThrow();
   });
 
   it("rejects wrong issuer, audience, expiry, and signature", async () => {

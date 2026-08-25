@@ -23,6 +23,7 @@ export async function POST(request: Request): Promise<Response> {
       auth0: getAuth0Client(),
       baseUrl: process.env.PLATFORM_API_BASE_URL ?? "http://localhost:4000",
       fetch,
+      includeReauthenticationProof: true,
     },
   );
   return validateFoundationResponse(response, 201, "AccountDeletionRequest", request.signal);

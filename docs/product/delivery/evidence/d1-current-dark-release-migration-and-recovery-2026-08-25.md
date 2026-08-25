@@ -106,7 +106,7 @@ not a production RTO/RPO, row-value-integrity, or capacity commitment.
 No further backend publication, migration, or development recovery mutation is presently required
 for this candidate. Phase 1 remains open for Vercel project/login/hosted browser and response-header
 acceptance; human assistive-technology testing; accountable product, source-quality, moderation,
-security/privacy, ADR-023, candidate-rights policy/timing/backup/subprocessor, representative SLO,
+security/privacy, ADR-023, candidate-rights deployed lifecycle/replay, representative SLO,
 alert-recipient, and safe provider-fault-fixture decisions. Until those gates are supplied, public
 routing/indexing, provider schedules, document triggers, candidate-rights execution, admin authority,
 and real-candidate data remain disabled.

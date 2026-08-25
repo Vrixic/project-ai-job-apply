@@ -57,6 +57,9 @@ describe("candidate-rights BFF routes", () => {
     );
     expect(created.status).toBe(202);
     expect(mocks.forwardPlatformRequest.mock.calls[0]?.[0]).toBe("/v1/me/data-exports");
+    expect(mocks.forwardPlatformRequest.mock.calls[0]?.[2]).toMatchObject({
+      includeReauthenticationProof: true,
+    });
 
     const accessed = await getExport(
       new Request(`https://app.example.test/api/platform/data-exports/${exportId}`),
@@ -95,6 +98,9 @@ describe("candidate-rights BFF routes", () => {
       }),
     );
     expect(created.status).toBe(201);
+    expect(mocks.forwardPlatformRequest.mock.calls[0]?.[2]).toMatchObject({
+      includeReauthenticationProof: true,
+    });
 
     const context = { params: Promise.resolve({ deletionRequestId }) };
     expect(
@@ -125,6 +131,9 @@ describe("candidate-rights BFF routes", () => {
       method: "DELETE",
       headers: { "idempotency-key": idempotencyKey, "if-match": '"1"' },
     });
+    expect(mocks.forwardPlatformRequest.mock.calls[2]?.[2]).toMatchObject({
+      includeReauthenticationProof: true,
+    });
 
     const confirmed = await confirmDeletion(
       new Request(
@@ -144,6 +153,9 @@ describe("candidate-rights BFF routes", () => {
     expect(mocks.forwardPlatformRequest.mock.calls[3]?.[0]).toBe(
       `/v1/me/account-deletion-requests/${deletionRequestId}/confirm`,
     );
+    expect(mocks.forwardPlatformRequest.mock.calls[3]?.[2]).toMatchObject({
+      includeReauthenticationProof: true,
+    });
   });
 
   it("rejects query strings, malformed identifiers, and weak preconditions locally", async () => {

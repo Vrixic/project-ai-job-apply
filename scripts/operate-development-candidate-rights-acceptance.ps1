@@ -76,10 +76,13 @@ Usage:
     -ExpectedSubprocessorInventory CSV -ZeroDriftPlanPath PATH `
     -ReviewedZeroDriftPlanSha256 SHA256 [reviewed plan/receipt arguments]
 
-The fixed environment variables CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN and
-CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH are required for Plan and Execute. The token
-and identity are never printed or retained. The attestation must describe one disposable,
-generated-synthetic, recent-MFA identity and an authorized owner other than Zach Becker.
+The fixed environment variables CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN,
+CANDIDATE_RIGHTS_ACCEPTANCE_ID_TOKEN, and
+CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH are required for Plan and Execute. The tokens
+and identity are never printed or retained. The access token supplies API scope; the separately
+verified ID token supplies recent-authentication and MFA proof for the same subject. The attestation
+must describe one disposable generated-synthetic identity and an authorized owner other than Zach
+Becker.
 
 Plan is read-only and writes one checksum-reviewable descriptor below the ignored development
 .terraform directory. Execute is the only normal mutation action. It exercises one disposable
@@ -100,6 +103,7 @@ $stateKey = "platform.tfstate"
 $utf8WithoutBom = New-Object Text.UTF8Encoding($false)
 $requiredOwners = "identity,profile,documents,jobs,matching,billing"
 $tokenEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN"
+$idTokenEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_ID_TOKEN"
 $attestationEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH"
 $script:TestOnly = $env:CANDIDATE_RIGHTS_OPERATOR_TEST_ONLY -ceq "1"
 
@@ -241,32 +245,43 @@ function Read-ReviewedZeroDrift {
 }
 
 function Read-SyntheticIdentityContext {
-  param([Parameter(Mandatory)][string]$ExpectedIssuer, [Parameter(Mandatory)][int]$MaximumAgeSeconds)
+  param(
+    [Parameter(Mandatory)][string]$ExpectedIssuer,
+    [Parameter(Mandatory)][string]$ExpectedIdTokenAudience,
+    [Parameter(Mandatory)][int]$MaximumAgeSeconds
+  )
   $token = [Environment]::GetEnvironmentVariable($tokenEnvironmentName)
+  $idToken = [Environment]::GetEnvironmentVariable($idTokenEnvironmentName)
   $attestationPath = [Environment]::GetEnvironmentVariable($attestationEnvironmentName)
-  if ([string]::IsNullOrWhiteSpace($token) -or [string]::IsNullOrWhiteSpace($attestationPath)) { throw "The fixed generated-synthetic token and identity-attestation environment variables are required." }
-  $segments = $token.Split('.')
-  if ($segments.Count -ne 3) { throw "The access token is not a JWT." }
-  $claims = ConvertFrom-OperatorJson (ConvertFrom-Base64Url $segments[1]) "Access-token claims"
+  if ([string]::IsNullOrWhiteSpace($token) -or [string]::IsNullOrWhiteSpace($idToken) -or [string]::IsNullOrWhiteSpace($attestationPath)) { throw "The fixed generated-synthetic token and identity-attestation environment variables are required." }
+  $accessSegments = $token.Split('.')
+  $idSegments = $idToken.Split('.')
+  if ($accessSegments.Count -ne 3 -or $idSegments.Count -ne 3) { throw "The acceptance tokens are not compact JWTs." }
+  $accessClaims = ConvertFrom-OperatorJson (ConvertFrom-Base64Url $accessSegments[1]) "Access-token claims"
+  $idClaims = ConvertFrom-OperatorJson (ConvertFrom-Base64Url $idSegments[1]) "ID-token claims"
   $attestation = ConvertFrom-OperatorJson (Get-Content -LiteralPath $attestationPath -Raw) "Identity attestation"
   $null = Assert-ExactPropertySet $attestation @("schemaVersion", "classification", "issuer", "subjectSha256", "authorizedOwner", "createdAt", "expiresAt") "Identity attestation"
   $now = [DateTimeOffset]::UtcNow
   $created = [DateTimeOffset]::Parse([string]$attestation.createdAt)
   $expires = [DateTimeOffset]::Parse([string]$attestation.expiresAt)
-  $subject = [string]$claims.sub
-  $scope = @(([string]$claims.scope).Split(' ', [StringSplitOptions]::RemoveEmptyEntries))
-  $amr = @($claims.amr | ForEach-Object { [string]$_ })
-  $authTime = [DateTimeOffset]::FromUnixTimeSeconds([long]$claims.auth_time)
-  $exp = [DateTimeOffset]::FromUnixTimeSeconds([long]$claims.exp)
+  $subject = [string]$accessClaims.sub
+  $scope = @(([string]$accessClaims.scope).Split(' ', [StringSplitOptions]::RemoveEmptyEntries))
+  $idAudience = @($idClaims.aud | ForEach-Object { [string]$_ })
+  $amr = @($idClaims.amr | ForEach-Object { [string]$_ })
+  $authTime = [DateTimeOffset]::FromUnixTimeSeconds([long]$idClaims.auth_time)
+  $accessExp = [DateTimeOffset]::FromUnixTimeSeconds([long]$accessClaims.exp)
+  $idExp = [DateTimeOffset]::FromUnixTimeSeconds([long]$idClaims.exp)
   if ([int]$attestation.schemaVersion -ne 1 -or [string]$attestation.classification -cne "generated-synthetic-only" -or
-      [string]$attestation.issuer -cne $ExpectedIssuer -or [string]$claims.iss -cne $ExpectedIssuer -or
+      [string]$attestation.issuer -cne $ExpectedIssuer -or [string]$accessClaims.iss -cne $ExpectedIssuer -or [string]$idClaims.iss -cne $ExpectedIssuer -or
+      [string]$idClaims.sub -cne $subject -or
+      $ExpectedIdTokenAudience -notmatch '^[A-Za-z0-9_-]{16,256}$' -or $idAudience.Count -ne 1 -or $idAudience[0] -cne $ExpectedIdTokenAudience -or
       [string]$attestation.subjectSha256 -cne (Get-TextSha256 $subject) -or [string]$attestation.subjectSha256 -notmatch '^[a-f0-9]{64}$' -or
       [string]::IsNullOrWhiteSpace([string]$attestation.authorizedOwner) -or [string]$attestation.authorizedOwner -match '(?i)zach\s*becker' -or
-      $created -gt $now -or $expires -le $now -or $exp -le $now.AddMinutes(2) -or $authTime -gt $now -or ($now - $authTime).TotalSeconds -gt $MaximumAgeSeconds -or
-      -not $scope.Contains("profile:write") -or -not (@($amr | Where-Object { $_ -match '^(mfa|otp|webauthn)$' }).Count -ge 1)) {
+      $created -gt $now -or $expires -le $now -or $accessExp -le $now.AddMinutes(2) -or $idExp -le $now.AddMinutes(2) -or $authTime -gt $now -or ($now - $authTime).TotalSeconds -gt $MaximumAgeSeconds -or
+      -not $scope.Contains("profile:write") -or -not $amr.Contains("mfa")) {
     throw "The disposable identity is not an exact current generated-synthetic recent-MFA context under an authorized non-Zach owner."
   }
-  return [pscustomobject]@{ Token = $token; Subject = $subject; SubjectSha256 = [string]$attestation.subjectSha256; AttestationSha256 = Get-FileSha256 $attestationPath; AuthTime = $authTime.ToString('o') }
+  return [pscustomobject]@{ Token = $token; IdToken = $idToken; Subject = $subject; SubjectSha256 = [string]$attestation.subjectSha256; AttestationSha256 = Get-FileSha256 $attestationPath; IdTokenAudienceSha256 = Get-TextSha256 $ExpectedIdTokenAudience; AuthTime = $authTime.ToString('o') }
 }
 
 function Get-LambdaIdentity {
@@ -362,8 +377,10 @@ function Get-RuntimeBoundary {
     $aliases[$binding[0]] = Get-LambdaIdentity ([string](Get-StateOutput $Snapshot $binding[1])) $binding[0]
   }
   $null = Assert-PolicyEnvironment $aliases.activity.Environment
+  $idTokenAudience = [string](Get-OptionalProperty $aliases.gateway.Environment 'OIDC_ID_TOKEN_AUDIENCE')
   return [pscustomobject]@{
     GatewayUrl = $gatewayUrl.TrimEnd('/'); Issuer = [string]$issuer[0]; Aliases = [pscustomobject]$aliases
+    IdTokenAudience = $idTokenAudience
     ExportBucket = [string](Get-StateOutput $Snapshot 'candidate_data_export_bucket')
     RecoveryBucket = [string](Get-StateOutput $Snapshot 'candidate_deletion_recovery_bucket')
     Auth0SecretArn = [string](Get-StateOutput $Snapshot 'candidate_rights_auth0_secret_arn')
@@ -375,11 +392,12 @@ function Get-AcceptanceBoundary {
   $source = Assert-CallerAndSource -RequireSource:$RequireIdentity
   $snapshot = Read-StateSnapshot
   $runtime = Get-RuntimeBoundary $snapshot
+  if ($RequireIdentity -and $runtime.IdTokenAudience -notmatch '^[A-Za-z0-9_-]{16,256}$') { throw "The gateway does not expose the exact candidate web ID-token audience." }
   $secret = Assert-Auth0SecretBoundary $runtime.Auth0SecretArn
   $backup = Get-BackupInventory $snapshot
   $health = Assert-OperationalHealth $snapshot
   $drift = if ($RequireIdentity) { Read-ReviewedZeroDrift } else { $null }
-  $identity = if ($RequireIdentity) { Read-SyntheticIdentityContext $runtime.Issuer $ExpectedRecentAuthMaxAgeSeconds } else { $null }
+  $identity = if ($RequireIdentity) { Read-SyntheticIdentityContext $runtime.Issuer $runtime.IdTokenAudience $ExpectedRecentAuthMaxAgeSeconds } else { $null }
   return [pscustomobject]@{ Source = $source; Snapshot = $snapshot; Runtime = $runtime; Secret = $secret; Backup = $backup; Health = $health; Drift = $drift; Identity = $identity }
 }
 
@@ -396,7 +414,7 @@ function New-ExecutionPlan {
     sourceSha = $SourceSha; createdAt = $now.ToString('o'); expiresAt = $now.AddMinutes(15).ToString('o')
     state = [ordered]@{ lineage = $Boundary.Snapshot.Lineage; serial = $Boundary.Snapshot.Serial; versionIdSha256 = Get-TextSha256 $Boundary.Snapshot.VersionId }
     policy = [ordered]@{ version = $ExpectedPolicyVersion; sha256 = $ReviewedPolicySha256; exportLifetimeSeconds = $ExpectedExportLifetimeSeconds; downloadGrantSeconds = $ExpectedDownloadGrantSeconds; backupRetentionDays = $ExpectedBackupRetentionDays; recentAuthMaxAgeSeconds = $ExpectedRecentAuthMaxAgeSeconds; owners = $ExpectedOwnerInventory; subprocessors = $ExpectedSubprocessorInventory }
-    identity = [ordered]@{ classification = 'generated-synthetic-only'; subjectSha256 = $Boundary.Identity.SubjectSha256; attestationSha256 = $Boundary.Identity.AttestationSha256; recentMfa = $true }
+    identity = [ordered]@{ classification = 'generated-synthetic-only'; subjectSha256 = $Boundary.Identity.SubjectSha256; attestationSha256 = $Boundary.Identity.AttestationSha256; idTokenAudienceSha256 = $Boundary.Identity.IdTokenAudienceSha256; recentMfa = $true }
     auth0 = [ordered]@{ clientIdSha256 = $Boundary.Secret.ClientIdSha256; authorizedOwnerSha256 = $Boundary.Secret.AuthorizedOwnerSha256; revocationMode = $Boundary.Secret.RevocationMode }
     backups = $Boundary.Backup
     aliases = $aliasIdentity
@@ -500,11 +518,12 @@ function Invoke-FixedLifecycle {
   param([Parameter(Mandatory)][object]$Boundary, [Parameter(Mandatory)][object]$Plan)
   $script:Runtime = $Boundary.Runtime
   $token = $Boundary.Identity.Token
+  $idToken = $Boundary.Identity.IdToken
   $started = [DateTimeOffset]::UtcNow
   $exportKey = "rights-export-$([guid]::NewGuid().ToString('N'))"
   $exportBody = [ordered]@{ format = 'candidate-data-export-v1' }
-  $first = Invoke-CandidateApi POST '/me/data-exports' $token $exportBody @{ 'idempotency-key' = $exportKey } @(202)
-  $replay = Invoke-CandidateApi POST '/me/data-exports' $token $exportBody @{ 'idempotency-key' = $exportKey } @(202)
+  $first = Invoke-CandidateApi POST '/me/data-exports' $token $exportBody @{ 'idempotency-key' = $exportKey; 'x-ai-job-apply-reauthentication' = $idToken } @(202)
+  $replay = Invoke-CandidateApi POST '/me/data-exports' $token $exportBody @{ 'idempotency-key' = $exportKey; 'x-ai-job-apply-reauthentication' = $idToken } @(202)
   if ([string]$first.Body.id -cne [string]$replay.Body.id -or [string]$first.Body.policyVersion -cne $ExpectedPolicyVersion) { throw "Candidate export idempotency or policy binding failed." }
   $ready = Wait-ExportReady ([string]$first.Body.id) $token
   $download = Test-ExactVersionGrant $ready
@@ -513,17 +532,18 @@ function Invoke-FixedLifecycle {
 
   $cancelKey = "rights-delete-cancel-$([guid]::NewGuid().ToString('N'))"
   $deletionBody = [ordered]@{ acknowledgement = 'ACCOUNT_DELETION_IS_IRREVERSIBLE' }
-  $cancelRequest = Invoke-CandidateApi POST '/me/account-deletion-requests' $token $deletionBody @{ 'idempotency-key' = $cancelKey } @(201)
-  $cancelReplay = Invoke-CandidateApi POST '/me/account-deletion-requests' $token $deletionBody @{ 'idempotency-key' = $cancelKey } @(201)
+  $cancelRequest = Invoke-CandidateApi POST '/me/account-deletion-requests' $token $deletionBody @{ 'idempotency-key' = $cancelKey; 'x-ai-job-apply-reauthentication' = $idToken } @(201)
+  $cancelReplay = Invoke-CandidateApi POST '/me/account-deletion-requests' $token $deletionBody @{ 'idempotency-key' = $cancelKey; 'x-ai-job-apply-reauthentication' = $idToken } @(201)
   if ([string]$cancelRequest.Body.id -cne [string]$cancelReplay.Body.id) { throw "Deletion-request idempotency failed." }
-  $null = Invoke-CandidateApi DELETE "/me/account-deletion-requests/$($cancelRequest.Body.id)" $token $null @{ 'idempotency-key' = "rights-cancel-$([guid]::NewGuid().ToString('N'))"; 'if-match' = "`"$($cancelRequest.Body.version)`"" } @(204)
+  $null = Invoke-CandidateApi DELETE "/me/account-deletion-requests/$($cancelRequest.Body.id)" $token $null @{ 'idempotency-key' = "rights-cancel-$([guid]::NewGuid().ToString('N'))"; 'if-match' = "`"$($cancelRequest.Body.version)`""; 'x-ai-job-apply-reauthentication' = $idToken } @(204)
 
-  $freshIdentity = Read-SyntheticIdentityContext $Boundary.Runtime.Issuer $ExpectedRecentAuthMaxAgeSeconds
+  $freshIdentity = Read-SyntheticIdentityContext $Boundary.Runtime.Issuer $Boundary.Runtime.IdTokenAudience $ExpectedRecentAuthMaxAgeSeconds
   if ([string]$freshIdentity.SubjectSha256 -cne [string]$Boundary.Identity.SubjectSha256) { throw "The recent-MFA refresh changed the reviewed generated-synthetic identity." }
   $token = $freshIdentity.Token
-  $confirmRequest = Invoke-CandidateApi POST '/me/account-deletion-requests' $token $deletionBody @{ 'idempotency-key' = "rights-delete-$([guid]::NewGuid().ToString('N'))" } @(201)
+  $idToken = $freshIdentity.IdToken
+  $confirmRequest = Invoke-CandidateApi POST '/me/account-deletion-requests' $token $deletionBody @{ 'idempotency-key' = "rights-delete-$([guid]::NewGuid().ToString('N'))"; 'x-ai-job-apply-reauthentication' = $idToken } @(201)
   $confirmation = [ordered]@{ expectedVersion = [int]$confirmRequest.Body.version; confirmation = 'DELETE_MY_ACCOUNT' }
-  $confirmed = Invoke-CandidateApi POST "/me/account-deletion-requests/$($confirmRequest.Body.id)/confirm" $token $confirmation @{ 'idempotency-key' = "rights-confirm-$([guid]::NewGuid().ToString('N'))" } @(202)
+  $confirmed = Invoke-CandidateApi POST "/me/account-deletion-requests/$($confirmRequest.Body.id)/confirm" $token $confirmation @{ 'idempotency-key' = "rights-confirm-$([guid]::NewGuid().ToString('N'))"; 'x-ai-job-apply-reauthentication' = $idToken } @(202)
   if ([string]$confirmed.Body.state -cne 'quarantined') { throw "Deletion confirmation did not atomically quarantine the generated-synthetic identity." }
   $null = Wait-DeletionCompletion ([string]$confirmRequest.Body.id) $Boundary.Identity.SubjectSha256
   $post = Assert-OperationalHealth $Boundary.Snapshot

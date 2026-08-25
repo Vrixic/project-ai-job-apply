@@ -18,9 +18,11 @@ import pino, { type Logger } from "pino";
 export const LOG_DELIVERY_HEARTBEAT_EVENT = "log_delivery_heartbeat";
 export const LOG_DELIVERY_HEARTBEAT_INTERVAL_MS = 30_000;
 
-const REDACTED_PATHS = [
+export const PRIVACY_REDACTION_PATHS = Object.freeze([
   "req.headers.authorization",
   "request.headers.authorization",
+  'req.headers["x-ai-job-apply-reauthentication"]',
+  'request.headers["x-ai-job-apply-reauthentication"]',
   "accessToken",
   "refreshToken",
   "password",
@@ -32,7 +34,7 @@ const REDACTED_PATHS = [
   "*.locations",
   "resume",
   "*.resume",
-];
+]);
 
 const TRACEPARENT_PATTERN = /^00-([0-9a-f]{32})-([0-9a-f]{16})-(0[01])$/;
 const tracer = trace.getTracer("@ai-job-apply/observability");
@@ -154,7 +156,7 @@ export function createLogger(options: {
       release_sha: options.releaseSha ?? "local",
     },
     redact: {
-      paths: REDACTED_PATHS,
+      paths: [...PRIVACY_REDACTION_PATHS],
       censor: "[REDACTED]",
     },
   });

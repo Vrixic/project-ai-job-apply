@@ -32,15 +32,15 @@ engineering settings. At the reviewed source baseline:
 |---|---|---|
 | CloudWatch application logs | 30-day Terraform retention | Matches the provisional detailed-log value for synthetic foundation telemetry only |
 | Lambda durable execution history | 30-day bounded history; PostgreSQL remains product truth | Operational execution history, not candidate audit-retention evidence |
-| RDS automated backups/PITR | Seven days in development; synthetic staging has the same setting only while active | Tested prelaunch recovery setting; not the provisional 35-day public backup policy |
+| RDS automated backups/PITR | 35 days in development; synthetic staging remains seven days while active | Development now matches the selected generated-synthetic candidate-rights backup window; this is not a public promise or production approval |
 | SQS work queue / DLQ | 4 days / 14 days | The work queue is identifier-only. The shared DLQ retains value-free schedule, terminal-metadata, durable-identifier, and failed-nudge envelopes; it has no automatic consumer/redrive and is not product-record retention. |
 | Security/audit record store | No separate 365-day product audit store is implemented | Blocks any claim that the provisional public audit schedule is enforced |
 | Product analytics | Optional product analytics is not active | No Phase 0 analytics-retention approval is implied |
-| Export and account-deletion workflow | Complete default-off technical vertical is implemented locally, including portable export, recent-MFA confirmation, quarantine/tombstones, durable owner-local deletion, exact-version artifact cleanup, identity revocation/deletion, and aggregate-only restore replay | Cloud release, generated-synthetic acceptance, exact policy approval, backup inventory, and accountable review still block real candidate onboarding |
+| Export and account-deletion workflow | Complete technical vertical and owner migrations are deployed default-dark; the immutable generated-synthetic policy is selected and Stage A state `204` applies 35-day retention plus an empty tagged identity-provider secret container | Stage B, generated-synthetic lifecycle/replay evidence, provider credential/identity setup, backup-aging acceptance, and accountable public-policy review still block real candidate onboarding |
 | Candidate-document source and normalized objects | Separate KMS bucket/scan plan is deployed in development; deterministic normalized storage and exact version-aware deletion/reconciliation are implemented | Deployed candidate-rights acceptance, real-resume trigger authorization, and retention approval still block real resume upload |
 
-Shared environments remain synthetic-only, so the seven-day backup setting does not shorten a
-public promise or authorize real-data processing. Before real candidate onboarding, reviewers must
+Shared environments remain synthetic-only, so neither environment setting is a public promise or
+authority for real-data processing. Before real candidate onboarding, reviewers must
 approve one coherent schedule and engineering must prove that configured stores, restores,
 deletion-ledger replay, audit retention, provider reconciliation, and public disclosures match it.
 Configuration drift from an approved schedule is a release-blocking finding.

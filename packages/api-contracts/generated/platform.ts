@@ -1473,6 +1473,8 @@ export interface operations {
             query?: never;
             header: {
                 "Idempotency-Key": string;
+                /** @description A freshly verified OIDC ID token for the same subject. This restricted credential proves recent authentication and must never be logged or returned. */
+                "X-AI-Job-Apply-Reauthentication": string;
             };
             path?: never;
             cookie?: never;
@@ -1536,6 +1538,8 @@ export interface operations {
             query?: never;
             header: {
                 "Idempotency-Key": string;
+                /** @description A freshly verified OIDC ID token for the same subject. This restricted credential proves recent authentication and must never be logged or returned. */
+                "X-AI-Job-Apply-Reauthentication": string;
             };
             path?: never;
             cookie?: never;
@@ -1599,6 +1603,8 @@ export interface operations {
             header: {
                 "Idempotency-Key": string;
                 "If-Match": string;
+                /** @description A freshly verified OIDC ID token for the same subject. This restricted credential proves recent authentication and must never be logged or returned. */
+                "X-AI-Job-Apply-Reauthentication": string;
             };
             path: {
                 deletionRequestId: string;
@@ -1628,6 +1634,8 @@ export interface operations {
             query?: never;
             header: {
                 "Idempotency-Key": string;
+                /** @description A freshly verified OIDC ID token for the same subject. This restricted credential proves recent MFA and must never be logged or returned. */
+                "X-AI-Job-Apply-Reauthentication": string;
             };
             path: {
                 deletionRequestId: string;

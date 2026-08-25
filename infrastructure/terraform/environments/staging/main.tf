@@ -136,6 +136,7 @@ module "platform" {
   candidate_rights_enabled                              = var.candidate_rights_enabled
   candidate_rights_auth0_secret_provisioned             = var.candidate_rights_auth0_secret_provisioned
   candidate_rights_auth0_authorized_owner               = var.candidate_rights_auth0_authorized_owner
+  candidate_rights_id_token_audience                    = var.candidate_rights_id_token_audience
   candidate_rights_policy_version                       = var.candidate_rights_policy_version
   candidate_rights_policy_sha256                        = var.candidate_rights_policy_sha256
   candidate_rights_export_lifetime_seconds              = var.candidate_rights_export_lifetime_seconds

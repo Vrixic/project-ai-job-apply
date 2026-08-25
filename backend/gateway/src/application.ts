@@ -1,4 +1,4 @@
-import type { AccessTokenVerifier } from "@ai-job-apply/auth";
+import type { AccessTokenVerifier, IdTokenVerifier } from "@ai-job-apply/auth";
 import type { EntitlementReadService } from "@ai-job-apply/billing-service";
 import type { DocumentStore } from "@ai-job-apply/documents-service";
 import type { JobCatalogReader, JobModeration, JobReports } from "@ai-job-apply/jobs-service";
@@ -23,6 +23,7 @@ export interface GatewayApplicationOptions {
   documents: DocumentStore;
   candidateDataExportDownloads?: CandidateDataExportDownloadSigner;
   verifier: AccessTokenVerifier;
+  idTokenVerifier?: IdTokenVerifier;
   releaseSha: string;
   clock?: () => Date;
   adapter?: FastifyAdapter;
@@ -49,6 +50,7 @@ export async function createGatewayApplication(
         ? { candidateDataExportDownloads: options.candidateDataExportDownloads }
         : {}),
       verifier: options.verifier,
+      ...(options.idTokenVerifier ? { idTokenVerifier: options.idTokenVerifier } : {}),
       releaseSha: options.releaseSha,
       ...(options.clock ? { clock: options.clock } : {}),
     }),

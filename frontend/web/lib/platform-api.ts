@@ -11,6 +11,7 @@ interface PlatformRequestDependencies {
   retryDelaysMilliseconds?: readonly number[];
   sleep?: (milliseconds: number) => Promise<void>;
   timeoutMilliseconds?: number;
+  includeReauthenticationProof?: boolean;
 }
 
 const defaultReadRetryDelaysMilliseconds = [250, 750, 1_500] as const;
@@ -18,6 +19,9 @@ const transientReadStatuses = new Set([429, 500, 502, 503, 504]);
 const maximumProblemBytes = 16 * 1024;
 const problemContentTypePattern = /^application\/problem\+json(?:\s*;\s*charset=utf-8)?$/i;
 const jobReadAuthorizationProbePath = "/v1/jobs/00000000-0000-7000-8000-000000000000";
+const reauthenticationHeader = "x-ai-job-apply-reauthentication";
+const maximumReauthenticationTokenBytes = 16 * 1024;
+const compactJwtPattern = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/u;
 
 interface DeclaredProblem {
   code: string;
@@ -127,6 +131,19 @@ function sleep(milliseconds: number): Promise<void> {
 
 function canRetry(method: string | undefined): boolean {
   return method === undefined || method.toUpperCase() === "GET" || method.toUpperCase() === "HEAD";
+}
+
+function sessionReauthenticationProof(session: unknown): string | undefined {
+  if (!session || typeof session !== "object" || Array.isArray(session)) return undefined;
+  const tokenSet = (session as Record<string, unknown>).tokenSet;
+  if (!tokenSet || typeof tokenSet !== "object" || Array.isArray(tokenSet)) return undefined;
+  const idToken = (tokenSet as Record<string, unknown>).idToken;
+  return typeof idToken === "string" &&
+    idToken.length >= 32 &&
+    idToken.length <= maximumReauthenticationTokenBytes &&
+    compactJwtPattern.test(idToken)
+    ? idToken
+    : undefined;
 }
 
 function problem(status: number, code: string, title: string): Response {
@@ -308,6 +325,13 @@ export async function forwardPlatformRequest(
     return problem(401, "authentication_required", "Authentication required");
   }
 
+  const reauthenticationProof = dependencies.includeReauthenticationProof
+    ? sessionReauthenticationProof(session)
+    : undefined;
+  if (dependencies.includeReauthenticationProof && !reauthenticationProof) {
+    return problem(401, "authentication_required", "Authentication required");
+  }
+
   let token: string;
   try {
     ({ token } = await dependencies.auth0.getAccessToken());
@@ -347,6 +371,7 @@ export async function forwardPlatformRequest(
           headers: {
             ...init.headers,
             authorization: `Bearer ${token}`,
+            ...(reauthenticationProof ? { [reauthenticationHeader]: reauthenticationProof } : {}),
           },
         });
       } catch {

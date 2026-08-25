@@ -372,6 +372,11 @@ variable "candidate_rights_auth0_authorized_owner" {
   default = ""
 }
 
+variable "candidate_rights_id_token_audience" {
+  type    = string
+  default = ""
+}
+
 variable "candidate_rights_policy_version" {
   type    = string
   default = ""

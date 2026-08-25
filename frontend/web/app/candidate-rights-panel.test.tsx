@@ -88,6 +88,7 @@ describe("CandidateRightsPanel", () => {
       );
     vi.stubGlobal("fetch", fetchMock);
     await act(async () => root.render(<CandidateRightsPanel authenticated />));
+    expect(container.textContent).toContain("Refresh identity verification with MFA");
 
     await click(button(container, "Request my data export"));
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/platform/data-exports");
@@ -147,6 +148,13 @@ describe("CandidateRightsPanel", () => {
     if (!checkbox) throw new Error("Missing acknowledgement checkbox");
     await click(checkbox);
     await click(button(container, "Start account deletion"));
+
+    const reauthentication = Array.from(container.querySelectorAll("a")).find((element) =>
+      element.textContent?.includes("Verify with MFA"),
+    );
+    expect(reauthentication?.getAttribute("href")).toContain("/auth/login?");
+    expect(reauthentication?.getAttribute("href")).toContain("max_age=0");
+    expect(reauthentication?.getAttribute("href")).toContain("acr_values=");
 
     const confirmation = container.querySelector<HTMLInputElement>('input[autocomplete="off"]');
     if (!confirmation) throw new Error("Missing confirmation input");

@@ -43,9 +43,48 @@ pwsh -NoProfile -File scripts/configure-development-candidate-rights-auth0.ps1 `
 ```
 
 After exact secret validation, prepare a second refresh-backed saved plan with the policy values
-above, `private_application_networking=true`, and `candidate_rights_enabled=true`. Review the NAT,
-private routes, two private KMS/versioned buckets, Object Lock, IAM, scheduled maintenance, Lambda
+above, the exact nonsecret candidate web client ID as `candidate_rights_id_token_audience`,
+`private_application_networking=true`, and `candidate_rights_enabled=true`. Review the NAT, private
+routes, two private KMS/versioned buckets, Object Lock, IAM, scheduled maintenance, Lambda
 versions/aliases, and absence of durable-data destruction. Apply only that exact plan.
+
+Use the bounded Stage B operator after publishing and independently verifying the gateway artifact
+from the same clean merged source. Put the Regular Web App client ID (not the Management API M2M
+client ID and not the API audience) in the fixed nonsecret environment variable; never pass it on
+the command line:
+
+```powershell
+$env:CANDIDATE_RIGHTS_STAGE_B_ID_TOKEN_AUDIENCE = '<exact-candidate-web-client-id>'
+
+pwsh -NoProfile -File scripts/operate-development-candidate-rights-stage-b.ps1 `
+  -Action Plan -ExpectedAccountId <development-account-id> `
+  -StateBucket <development-state-bucket> -SourceSha <exact-clean-merged-sha> `
+  -BaselinePlanPath <fresh-reviewed-zero-drift-plan> `
+  -ReviewedBaselineSha256 <reviewed-baseline-sha256> `
+  -GatewayReceiptPath <verified-gateway-publication-receipt> `
+  -ReviewedGatewayReceiptSha256 <reviewed-receipt-sha256>
+```
+
+Independently rehash and review the returned saved plan and adjacent aggregate-only metadata. The
+operator requires the baseline's embedded lineage/serial to equal live state, reconstructs every
+baseline variable, overlays only the fixed Stage B policy/network/audience and verified gateway ZIP,
+requires the state bucket to remain in `us-east-2`, versioned, fully public-blocked and KMS-encrypted,
+and validates exactly one `AWSCURRENT` Auth0 value under owner `vrij` with the exact
+`clientId`/`clientSecret`/`delete_user_only` schema without emitting or hashing either credential.
+It rejects unrecognized address/action sets or any durable deletion/replacement. Apply rechecks the
+saved plan's applyable/complete/error status and embedded state identity, never makes a new plan, and
+accepts only the unchanged checksummed pair with an exact aggregate-metadata property set:
+
+```powershell
+pwsh -NoProfile -File scripts/operate-development-candidate-rights-stage-b.ps1 `
+  -Action Apply <the exact account, state, source, baseline, and receipt arguments above> `
+  -PlanPath <reviewed-stage-b-plan> -ReviewedPlanSha256 <reviewed-plan-sha256> `
+  -PlanMetadataPath <reviewed-stage-b-metadata> `
+  -ReviewedPlanMetadataSha256 <reviewed-metadata-sha256>
+```
+
+Clear the audience environment variable after use. The operator has no `-auto-approve` path and
+never accepts or records the Auth0 M2M secret, candidate tokens, or identity values.
 
 ## Non-negotiable prerequisites
 
@@ -75,18 +114,21 @@ Stop before planning unless all of these are independently available:
   Do not use Zach Becker's identity, an IAM user, or a shared client. The stronger
   `revoke_sessions_refresh_tokens_then_delete` mode remains a future launch option only after an
   eligible Auth0 plan and separate accountable review;
-- one disposable generated-synthetic Auth0 identity with `profile:write`, a current `auth_time`, and
-  MFA in `amr`. The identity must contain no real candidate values. Create it through the separately
-  reviewed identity procedure; the acceptance operator intentionally has no identity-creation
-  authority; and
+- one disposable generated-synthetic Auth0 identity with `profile:write`. The API access token
+  supplies only the API authorization context. A separately signed ID token for the same exact
+  issuer and subject must have the candidate web client as its sole audience, a current
+  `auth_time`, and MFA in `amr`. The identity must contain no real candidate values. Enroll its MFA,
+  then reauthenticate through the candidate web route
+  `/auth/login?returnTo=%2F&max_age=0&acr_values=http%3A%2F%2Fschemas.openid.net%2Fpape%2Fpolicies%2F2007%2F06%2Fmulti-factor`.
+  The acceptance operator intentionally has no identity-creation authority; and
 - accountable product/security/privacy ownership of the exact policy and backup inventory. A local
   checksum or repository author is not external approval.
 
-The operator reads the token only from
-`CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN` and the attestation path only from
-`CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH`. Never place either value on the command
-line, in shell history, source, a Terraform value, or evidence. The attestation is a private
-operator input with this exact schema:
+The operator reads the API token only from `CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN`, the signed
+recent-MFA proof only from `CANDIDATE_RIGHTS_ACCEPTANCE_ID_TOKEN`, and the attestation path only from
+`CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH`. Never place any of these values on the
+command line, in shell history, source, a Terraform value, or evidence. The attestation is a
+private operator input with this exact schema:
 
 ```json
 {
@@ -101,10 +143,10 @@ operator input with this exact schema:
 ```
 
 Keep the attestation outside source and below an operator-controlled encrypted location. The plan
-retains only its SHA-256 and the subject SHA-256. The access token is never written. Mint a fresh
-recent-MFA token immediately before `Execute`; it must remain inside the reviewed recent-auth window
-after the signed-grant expiry wait. If it becomes stale, execution stops before creating the final
-deletion request.
+retains only its SHA-256 and the subject SHA-256. Neither token is ever written. Mint a fresh access
+token and ID token immediately before `Execute`; the ID-token proof must remain inside the reviewed
+recent-auth window after the signed-grant expiry wait. If it becomes stale, execution stops before
+creating the final deletion request.
 
 ## Local fail-closed gate
 
@@ -140,11 +182,12 @@ pwsh -NoProfile -File scripts/operate-development-candidate-rights-acceptance.ps
   -ExpectedSubprocessorInventory <exact-reviewed-csv>
 ```
 
-Create a 15-minute review descriptor only after exporting the two fixed environment variables in
+Create a 15-minute review descriptor only after exporting the three fixed environment variables in
 the current PowerShell process:
 
 ```powershell
 $env:CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN = '<fresh-disposable-token>'
+$env:CANDIDATE_RIGHTS_ACCEPTANCE_ID_TOKEN = '<fresh-disposable-id-token>'
 $env:CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH = '<private-attestation-path>'
 
 pwsh -NoProfile -File scripts/operate-development-candidate-rights-acceptance.ps1 `
@@ -172,9 +215,9 @@ no token, subject, owner name, secret, account ID, bucket, ARN, URL, identity va
 
 ## Execute once
 
-Mint or refresh the same generated-synthetic identity's recent-MFA token immediately before
-execution, update only the fixed token environment variable, and consume the exact reviewed plan.
-Do not edit or rehash the descriptor.
+Mint or refresh the same generated-synthetic identity's access and recent-MFA ID tokens immediately
+before execution, update only the two fixed token environment variables, and consume the exact
+reviewed plan. Do not edit or rehash the descriptor.
 
 ```powershell
 pwsh -NoProfile -File scripts/operate-development-candidate-rights-acceptance.ps1 `

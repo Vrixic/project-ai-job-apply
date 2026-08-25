@@ -14,6 +14,10 @@ const baseSchema = z.object({
 const oidcSchema = {
   OIDC_ISSUER: z.string().url(),
   OIDC_AUDIENCE: z.string().min(1).default("ai-job-apply-api"),
+  OIDC_ID_TOKEN_AUDIENCE: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{16,256}$/)
+    .optional(),
 };
 
 const telemetrySchema = {

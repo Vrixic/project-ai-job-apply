@@ -50,10 +50,11 @@ The API Gateway detail and sitemap routes share the existing complete public-pub
 remain absent by default. The public database identity retains execute-only access to fixed
 security-definer functions and no Jobs table access. No Indexing API integration exists.
 
-Candidate-rights execution still requires attributable policy/version and timing decisions,
-backup-inventory/aging disposition, an authorized non-Zach managed Auth0 M2M credential, one
-disposable generated-synthetic recent-MFA identity, a reviewed zero-drift release, and separate
-quiesced-restore replay evidence. The representative assessor accepts no default SLO or alert
+The later policy/preprovision record supersedes this packet's candidate-rights decision state: the
+policy/version/digest, timings, 35-day backup disposition, owners, and executable-adapter inventory
+are selected, and Stage A is applied at state `204` with zero drift. Execution still requires an
+authorized non-Zach managed Auth0 M2M credential, one disposable generated-synthetic recent-MFA
+identity, Stage B, and separate quiesced-restore replay evidence. The representative assessor accepts no default SLO or alert
 recipient values and deliberately refuses execution until a guarded generated-synthetic provider
 fault/recovery fixture exists.
 
@@ -67,6 +68,6 @@ and zero drift, and recovered through a clean isolated PITR exercise. Follow-up 
 [current dark release, migration, and recovery](d1-current-dark-release-migration-and-recovery-2026-08-25.md).
 
 Vercel and accountable product, accessibility, security/privacy, moderation, source-quality,
-candidate-rights policy/timing/backup/subprocessor, representative SLO, alert-recipient, and safe
+candidate-rights deployed lifecycle/replay, representative SLO, alert-recipient, and safe
 provider-fault-fixture decisions remain. Phase 1 is not complete, and every affected activation
 gate remains false.

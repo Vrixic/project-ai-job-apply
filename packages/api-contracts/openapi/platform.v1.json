@@ -122,6 +122,18 @@
             "name": "Idempotency-Key",
             "required": true,
             "schema": { "type": "string", "minLength": 16, "maxLength": 128 }
+          },
+          {
+            "description": "A freshly verified OIDC ID token for the same subject. This restricted credential proves recent authentication and must never be logged or returned.",
+            "in": "header",
+            "name": "X-AI-Job-Apply-Reauthentication",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 32,
+              "maxLength": 16384,
+              "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+            }
           }
         ],
         "requestBody": {
@@ -206,6 +218,18 @@
             "name": "Idempotency-Key",
             "required": true,
             "schema": { "type": "string", "minLength": 16, "maxLength": 128 }
+          },
+          {
+            "description": "A freshly verified OIDC ID token for the same subject. This restricted credential proves recent authentication and must never be logged or returned.",
+            "in": "header",
+            "name": "X-AI-Job-Apply-Reauthentication",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 32,
+              "maxLength": 16384,
+              "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+            }
           }
         ],
         "requestBody": {
@@ -302,6 +326,18 @@
             "name": "If-Match",
             "required": true,
             "schema": { "type": "string", "pattern": "^\\\"[1-9][0-9]*\\\"$" }
+          },
+          {
+            "description": "A freshly verified OIDC ID token for the same subject. This restricted credential proves recent authentication and must never be logged or returned.",
+            "in": "header",
+            "name": "X-AI-Job-Apply-Reauthentication",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 32,
+              "maxLength": 16384,
+              "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+            }
           }
         ],
         "responses": {
@@ -342,6 +378,18 @@
             "name": "Idempotency-Key",
             "required": true,
             "schema": { "type": "string", "minLength": 16, "maxLength": 128 }
+          },
+          {
+            "description": "A freshly verified OIDC ID token for the same subject. This restricted credential proves recent MFA and must never be logged or returned.",
+            "in": "header",
+            "name": "X-AI-Job-Apply-Reauthentication",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 32,
+              "maxLength": 16384,
+              "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+            }
           }
         ],
         "requestBody": {

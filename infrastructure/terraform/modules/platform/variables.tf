@@ -769,6 +769,7 @@ variable "candidate_rights_enabled" {
       var.serverless_runtime_enabled &&
       var.private_application_networking &&
       var.candidate_rights_auth0_secret_provisioned &&
+      var.candidate_rights_id_token_audience != "" &&
       var.candidate_rights_policy_version != "" &&
       can(regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", var.candidate_rights_policy_version)) &&
       can(regex("^[a-f0-9]{64}$", var.candidate_rights_policy_sha256)) &&
@@ -804,6 +805,17 @@ variable "candidate_rights_auth0_authorized_owner" {
   description = "Non-secret accountable owner identifier applied as a managed tag to the generated-synthetic Auth0 secret."
   type        = string
   default     = ""
+}
+
+variable "candidate_rights_id_token_audience" {
+  description = "Exact non-secret Auth0 web client audience accepted only for recent-MFA candidate-rights ID-token proof."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.candidate_rights_id_token_audience == "" || can(regex("^[A-Za-z0-9_-]{16,256}$", var.candidate_rights_id_token_audience))
+    error_message = "Candidate-rights ID-token audience must be empty while disabled or exactly 16 through 256 URL-safe client-ID characters."
+  }
 }
 
 variable "candidate_rights_policy_version" {

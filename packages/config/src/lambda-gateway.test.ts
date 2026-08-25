@@ -20,6 +20,24 @@ describe("Lambda gateway configuration", () => {
     expect(result.OUTBOX_DISPATCH_TARGET).toBe("lambda_durable");
   });
 
+  it("accepts a bounded Auth0 ID-token client audience and rejects malformed values", () => {
+    const result = loadLambdaGatewayConfig({
+      ...baseEnvironment,
+      DATABASE_SECRET_ID: "ai-job-apply/development/database-url",
+      OUTBOX_QUEUE_URL: "https://sqs.us-east-2.amazonaws.com/000000000000/synthetic",
+      OIDC_ID_TOKEN_AUDIENCE: "auth0ClientId_1234567890",
+    });
+    expect(result.OIDC_ID_TOKEN_AUDIENCE).toBe("auth0ClientId_1234567890");
+    expect(() =>
+      loadLambdaGatewayConfig({
+        ...baseEnvironment,
+        DATABASE_SECRET_ID: "ai-job-apply/development/database-url",
+        OUTBOX_QUEUE_URL: "https://sqs.us-east-2.amazonaws.com/000000000000/synthetic",
+        OIDC_ID_TOKEN_AUDIENCE: "not valid",
+      }),
+    ).toThrow();
+  });
+
   it("requires an exact queue URL for Lambda durable dispatch", () => {
     expect(() =>
       loadLambdaGatewayConfig({

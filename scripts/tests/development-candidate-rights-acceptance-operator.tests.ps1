@@ -82,9 +82,15 @@ $null = New-Item -ItemType Directory -Path $temporary
 try {
   $now = [DateTimeOffset]::UtcNow
   function New-TestJwt {
-    param([string]$Subject = 'auth0|generated-synthetic', [string[]]$Amr = @('pwd','mfa'), [int]$AuthAge = 30, [string]$Scope = 'profile:write')
+    param(
+      [string]$Subject = 'auth0|generated-synthetic',
+      [string[]]$Amr = @('pwd','mfa'),
+      [int]$AuthAge = 30,
+      [string]$Scope = 'profile:write',
+      [object]$Audience = 'candidate-web-client'
+    )
     $header = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('{"alg":"RS256","typ":"JWT"}')).TrimEnd('=').Replace('+','-').Replace('/','_')
-    $payloadObject = [ordered]@{ iss = 'https://identity.example/'; sub = $Subject; scope = $Scope; amr = $Amr; auth_time = $now.AddSeconds(-$AuthAge).ToUnixTimeSeconds(); exp = $now.AddMinutes(10).ToUnixTimeSeconds() }
+    $payloadObject = [ordered]@{ iss = 'https://identity.example/'; sub = $Subject; aud = $Audience; scope = $Scope; amr = $Amr; auth_time = $now.AddSeconds(-$AuthAge).ToUnixTimeSeconds(); exp = $now.AddMinutes(10).ToUnixTimeSeconds() }
     $payload = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($payloadObject | ConvertTo-Json -Compress))).TrimEnd('=').Replace('+','-').Replace('/','_')
     return "$header.$payload.signature"
   }
@@ -100,24 +106,31 @@ try {
   $attestationPath = Join-Path $temporary 'identity.json'
   Write-Attestation $attestationPath
   $env:CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN = New-TestJwt
+  $env:CANDIDATE_RIGHTS_ACCEPTANCE_ID_TOKEN = New-TestJwt
   $env:CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH = $attestationPath
-  $identity = Read-SyntheticIdentityContext 'https://identity.example/' 300
+  $identity = Read-SyntheticIdentityContext 'https://identity.example/' 'candidate-web-client' 300
   if ([string]$identity.SubjectSha256 -cne (Get-TextSha256 'auth0|generated-synthetic') -or [string]$identity.Token -cne $env:CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN) { throw 'The exact generated-synthetic identity was not accepted.' }
 
   foreach ($case in @(
-      @{ Token = New-TestJwt -Amr @('pwd'); Owner = 'authorized-operator' },
-      @{ Token = New-TestJwt -AuthAge 301; Owner = 'authorized-operator' },
-      @{ Token = New-TestJwt -Scope 'profile:read'; Owner = 'authorized-operator' },
-      @{ Token = New-TestJwt; Owner = 'Zach Becker' }
+      @{ AccessToken = New-TestJwt; IdToken = New-TestJwt -Amr @('pwd'); Owner = 'authorized-operator' },
+      @{ AccessToken = New-TestJwt; IdToken = New-TestJwt -AuthAge 301; Owner = 'authorized-operator' },
+      @{ AccessToken = New-TestJwt -Scope 'profile:read'; IdToken = New-TestJwt; Owner = 'authorized-operator' },
+      @{ AccessToken = New-TestJwt; IdToken = New-TestJwt -Subject 'auth0|other-synthetic'; Owner = 'authorized-operator' },
+      @{ AccessToken = New-TestJwt; IdToken = New-TestJwt -Audience 'different-web-client'; Owner = 'authorized-operator' },
+      @{ AccessToken = New-TestJwt; IdToken = New-TestJwt -Audience @('candidate-web-client','other-client'); Owner = 'authorized-operator' },
+      @{ AccessToken = New-TestJwt; IdToken = New-TestJwt -Amr @('pwd','otp','webauthn'); Owner = 'authorized-operator' },
+      @{ AccessToken = New-TestJwt; IdToken = New-TestJwt; Owner = 'Zach Becker' }
     )) {
     Write-Attestation $attestationPath -Owner $case.Owner
-    $env:CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN = $case.Token
+    $env:CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN = $case.AccessToken
+    $env:CANDIDATE_RIGHTS_ACCEPTANCE_ID_TOKEN = $case.IdToken
     $rejected = $false
-    try { $null = Read-SyntheticIdentityContext 'https://identity.example/' 300 } catch { $rejected = $true }
+    try { $null = Read-SyntheticIdentityContext 'https://identity.example/' 'candidate-web-client' 300 } catch { $rejected = $true }
     if (-not $rejected) { throw 'The identity guard accepted missing MFA, stale auth, missing scope, or Zach ownership.' }
   }
   Write-Attestation $attestationPath
   $env:CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN = New-TestJwt
+  $env:CANDIDATE_RIGHTS_ACCEPTANCE_ID_TOKEN = New-TestJwt
 
   $script:weightedAlias = $false
   function global:Invoke-AwsJson {
@@ -144,7 +157,7 @@ try {
   $boundary = [pscustomobject]@{
     Snapshot = [pscustomobject]@{ Lineage = '11111111-1111-4111-8111-111111111111'; Serial = 200; VersionId = 'state-version' }
     Runtime = [pscustomobject]@{ Aliases = [pscustomobject]@{} }
-    Identity = [pscustomobject]@{ SubjectSha256 = Get-TextSha256 'auth0|generated-synthetic'; AttestationSha256 = ('d' * 64) }
+    Identity = [pscustomobject]@{ SubjectSha256 = Get-TextSha256 'auth0|generated-synthetic'; AttestationSha256 = ('d' * 64); IdTokenAudienceSha256 = ('9' * 64) }
     Secret = [pscustomobject]@{ ClientIdSha256 = ('e' * 64); AuthorizedOwnerSha256 = ('f' * 64); RevocationMode = 'delete_user_only' }
     Backup = [pscustomobject]@{ BackupRetentionDays = 7; SnapshotCount = 1; InventorySha256 = ('1' * 64); LatestRestorableTime = $now.ToString('o') }
     Health = [pscustomobject]@{ ActiveCompute = 0; QueueCount = 3; QueuedMessages = 0; AlarmCount = 44; AlarmsOk = $true }
@@ -155,7 +168,13 @@ try {
   }
   $plan = New-ExecutionPlan $boundary
   $serialized = $plan | ConvertTo-Json -Depth 30 -Compress
-  if (@($plan.fixedSequence).Count -ne 15 -or $serialized.Contains('auth0|generated-synthetic') -or $serialized.Contains('authorized-operator') -or $serialized.Contains($env:CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN)) { throw 'The execution plan is not aggregate-only or omitted a fixed phase.' }
+  if (@($plan.fixedSequence).Count -ne 15 -or
+      $serialized.Contains('auth0|generated-synthetic') -or
+      $serialized.Contains('authorized-operator') -or
+      $serialized.Contains($env:CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN) -or
+      $serialized.Contains($env:CANDIDATE_RIGHTS_ACCEPTANCE_ID_TOKEN)) {
+    throw 'The execution plan is not aggregate-only or omitted a fixed phase.'
+  }
 
   $replayPath = Join-Path $temporary 'replay.json'
   $validReplay = [ordered]@{
@@ -181,6 +200,7 @@ try {
 finally {
   Remove-Item Env:CANDIDATE_RIGHTS_OPERATOR_TEST_ONLY -ErrorAction SilentlyContinue
   Remove-Item Env:CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN -ErrorAction SilentlyContinue
+  Remove-Item Env:CANDIDATE_RIGHTS_ACCEPTANCE_ID_TOKEN -ErrorAction SilentlyContinue
   Remove-Item Env:CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH -ErrorAction SilentlyContinue
   if (Test-Path -LiteralPath $temporary) { [IO.Directory]::Delete($temporary, $true) }
 }

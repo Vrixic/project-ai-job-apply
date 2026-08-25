@@ -7,8 +7,6 @@ export interface TestTokenIssuer {
     claims?: {
       email?: string;
       scope?: string;
-      authTime?: number;
-      authenticationMethods?: string[];
     },
   ): Promise<string>;
   verifier: AccessTokenVerifier;
@@ -30,8 +28,6 @@ export async function createTestTokenIssuer(): Promise<TestTokenIssuer> {
     async issue(subject, claims = {}) {
       return new SignJWT({
         ...(claims.email ? { email: claims.email } : {}),
-        ...(claims.authTime ? { auth_time: claims.authTime } : {}),
-        ...(claims.authenticationMethods ? { amr: claims.authenticationMethods } : {}),
         scope: claims.scope ?? "profile:read profile:write",
       })
         .setProtectedHeader({ alg: "RS256", kid: "test-key" })
@@ -58,12 +54,6 @@ export async function createTestTokenIssuer(): Promise<TestTokenIssuer> {
           audience: [audience],
           scopes: typeof payload.scope === "string" ? payload.scope.split(" ").filter(Boolean) : [],
           ...(typeof payload.email === "string" ? { email: payload.email } : {}),
-          ...(typeof payload.auth_time === "number" && Number.isSafeInteger(payload.auth_time)
-            ? { authenticatedAt: payload.auth_time }
-            : {}),
-          ...(Array.isArray(payload.amr) && payload.amr.every((value) => typeof value === "string")
-            ? { authenticationMethods: payload.amr as string[] }
-            : {}),
         };
       },
     },

@@ -7,19 +7,28 @@ for portable data export and irreversible account deletion are implemented and l
 The feature remains default-disabled and has not been applied to the development runtime or
 database. Exact source `8e2f1546390c14a0813cec6e664b7a5478a2a24f` is merged, and its migration,
 gateway, and document artifacts are immutably published in development. D1-R11 and Phase 1 remain
-open for a fresh current-state release baseline, exact policy selection, generated-synthetic
-deployed acceptance, backup-inventory acceptance, managed identity configuration, Vercel hosting,
-and accountable human review.
+open for generated-synthetic deployed acceptance, backup-aging/replay acceptance, managed identity
+configuration, Vercel hosting, and accountable human review. The later
+[policy/preprovision record](d1-candidate-rights-policy-and-preprovision-2026-08-25.md) supersedes
+the release state in this source packet: the default-dark code/migrations are deployed, the policy
+is selected, and Stage A is applied at state `204`. The expanded reauthentication and Stage B
+operator correction described below is locally verified current working-tree behavior; it is not
+part of the exact historical artifacts published from `8e2f1546390c14a0813cec6e664b7a5478a2a24f`.
 
 ## Implemented boundary
 
 - Proposed ADR-027 assigns the user-visible lifecycle and orchestration to Profile while preserving
   exact owner-local export and deletion in Profile, Documents, Jobs, Matching, and Billing.
 - Generated OpenAPI and event contracts cover export request/status and deletion
-  request/status/cancel/confirm. A strict versioned domain schema validates the final portable
-  export before encrypted artifact storage.
-- Authentication projects standard `auth_time` and `amr` claims. Policy loading has no activation
-  defaults, rejects partial configuration, and requires policy-bounded recent MFA for confirmation.
+  request/status/cancel/confirm. Current OpenAPI places the bounded private reauthentication header
+  directly on export create and deletion-request create/cancel/confirm, not on reads or as a global
+  security scheme. A strict versioned domain schema validates the final portable export before
+  encrypted artifact storage.
+- Current authentication keeps API authorization on the `profile:write` access token. A separate
+  RS256/JWKS-verified ID token requires `exp`, `iat`, `auth_time`, exact issuer, the candidate web
+  client as sole audience, the same nonempty subject, and bounded nonempty `amr`. Every
+  candidate-rights mutation requires the separate proof and policy-bounded recency; confirmation
+  alone additionally requires literal `mfa`.
 - Profile `0006_candidate_rights` provides request/operation/outbox/audit atomicity, account
   quarantine, anti-resurrection subject tombstones, and bounded terminal replay. The other four
   owner migrations provide allowlisted exports and privacy-authorized idempotent deletion.
@@ -44,6 +53,25 @@ and accountable human review.
 - Terraform remains default-off and defines private versioned export/recovery buckets, customer-KMS
   encryption, Object Lock, lifecycle defense in depth, least-privilege gateway/activity access, an
   operator-populated Auth0 secret, scheduled maintenance, DLQ/retry policy, and exact outputs.
+
+## Current local correction verification
+
+- The same-origin BFF attaches the server-held ID token only to the four candidate-rights mutations;
+  neither token is exposed to browser code. Shared logger redaction covers the private header under
+  both supported request shapes.
+- The Lambda edge allowlist now includes the exact export create/status and deletion-request
+  create/status/cancel/confirm route shapes, preserves the proof header, and rejects malformed
+  UUID/version/case, wrong-method, and trailing-slash variants.
+- The audience-bound acceptance operator consumes separate access and ID tokens, retains neither,
+  and stores only an audience hash. The new saved-plan-only Stage B operator validates state
+  lineage/serial, exact variable/artifact/secret/bucket boundaries, an explicit address/action
+  allowlist, and zero durable deletions/replacements before apply.
+- Auth 11/11, gateway 122/122, web 529/529, targeted typecheck, Terraform 42/42, both environment
+  validations, and the acceptance operator in PowerShell 7 and Windows PowerShell 5.1 pass locally.
+  The Stage B operator passes 33/33 in PowerShell 7 and 33/33 in Windows PowerShell 5.1.
+- The candidate route requests `max_age=0` and multi-factor `acr_values`. Auth0 must still configure
+  and validate a post-login step-up Action and an enabled factor that honor the request; the query
+  parameter alone is not provider evidence.
 
 ## Local verification
 
@@ -82,20 +110,23 @@ and accountable human review.
 
 ## External and accountable gates still open
 
-- Select and approve the exact policy/version digest: export lifetime, download-grant lifetime,
-  recent-authentication age, rights timing, active/audit retention, backup window, backup inventory,
-  and any lawful exclusions. Elapsed time alone cannot prove backup expiry.
-- Establish a fresh state-197 CompleteDark release baseline, then apply the five owner migrations
-  and exact default-dark runtime artifacts.
-- Populate the managed Auth0 secret with a newly authorized non-Zach M2M identity and explicit
-  revocation mode, then enable the reviewed AWS release and execute generated-synthetic
-  export, deletion, recovery-ledger replay, backup-aging, alert, and zero-drift acceptance.
+- Preserve the selected generated-synthetic policy/digest and Stage A state `204`. These are
+  engineering acceptance inputs, not public durations, lawful-exclusion decisions, or accountable
+  real-user approval. Elapsed time alone cannot prove backup expiry.
+- Populate the preprovisioned managed Auth0 secret with a newly authorized non-Zach M2M identity
+  and explicit revocation mode. Configure and validate the Auth0 step-up Action and factor, create
+  and MFA-enroll one disposable generated-synthetic identity, and reauthenticate it through the
+  candidate web session. Then use the guarded Stage B operator to generate, independently review,
+  and apply the exact saved plan before generated-synthetic export, deletion, recovery-ledger
+  replay, backup-aging, alert, and zero-drift acceptance.
 - Create the candidate and admin Vercel projects only under the authorized non-Zach account and run
   hosted browser, response-header, and accessibility acceptance. Vercel login is currently deferred.
 - Obtain attributable product, security/privacy, accessibility, source-quality, moderation, and
   operational acceptance for the final frozen Phase 1 candidate.
 
-No production PII, raw candidate artifact, credential, token, provider response body, AWS runtime,
-Terraform, database, Lambda-alias, trigger, or route mutation, Vercel login, GitHub Actions
-execution, real-candidate use, or Phase 1 completion is claimed. The only AWS writes in this packet
-are the immutable ECR/S3 artifact publications described above.
+No Auth0 M2M client or credential, managed secret version, disposable identity, Stage B plan/apply,
+or deployed candidate-rights acceptance is claimed. No production PII, raw candidate artifact,
+credential, token, provider response body, new AWS runtime/Terraform/database/Lambda-alias/trigger/
+route mutation, Vercel login, GitHub Actions execution, real-candidate use, or Phase 1 completion is
+claimed. The only AWS writes in this packet are the historical immutable ECR/S3 artifact
+publications described above.

@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import { createOidcVerifier } from "@ai-job-apply/auth";
+import { createOidcIdTokenVerifier, createOidcVerifier } from "@ai-job-apply/auth";
 import {
   BillingEntitlementService,
   EntitlementCache,
@@ -49,6 +49,10 @@ const logger = createLogger({
 });
 const database = createDatabase(config.DATABASE_URL);
 const candidateRightsPolicy = loadCandidateRightsPolicyIfConfigured(process.env);
+const idTokenAudience = config.OIDC_ID_TOKEN_AUDIENCE;
+if (candidateRightsPolicy && !idTokenAudience) {
+  throw new Error("CandidateRightsIdTokenVerifierConfigurationInvalid");
+}
 const recoveryBucket = process.env.CANDIDATE_DELETION_RECOVERY_BUCKET;
 const recoveryKmsKeyArn = process.env.CANDIDATE_DATA_EXPORT_KMS_KEY_ARN;
 if (candidateRightsPolicy && (!recoveryBucket || !recoveryKmsKeyArn)) {
@@ -97,6 +101,13 @@ const verifier = createOidcVerifier({
   issuer: config.OIDC_ISSUER,
   audience: config.OIDC_AUDIENCE,
 });
+const idTokenVerifier =
+  candidateRightsPolicy && idTokenAudience
+    ? createOidcIdTokenVerifier({
+        issuer: config.OIDC_ISSUER,
+        audience: idTokenAudience,
+      })
+    : undefined;
 const candidateDataExportDownloads =
   candidateRightsPolicy && process.env.CANDIDATE_DATA_EXPORT_BUCKET
     ? new S3CandidateDataExportDownloadSigner(
@@ -116,6 +127,7 @@ const app = await createGatewayApplication({
   documents,
   ...(candidateDataExportDownloads ? { candidateDataExportDownloads } : {}),
   verifier,
+  ...(idTokenVerifier ? { idTokenVerifier } : {}),
   releaseSha: config.RELEASE_SHA,
   adapter: new FastifyAdapter({ loggerInstance: logger }),
 });

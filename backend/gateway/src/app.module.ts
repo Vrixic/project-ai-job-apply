@@ -38,7 +38,13 @@ import type {
   UpdateProfileFactRequest,
 } from "@ai-job-apply/api-contracts";
 import { compileComponentValidator, formatValidationErrors } from "@ai-job-apply/api-contracts";
-import { type AccessTokenVerifier, AuthenticationError, bearerToken } from "@ai-job-apply/auth";
+import {
+  type AccessTokenVerifier,
+  AuthenticationError,
+  type AuthPrincipal,
+  bearerToken,
+  type IdTokenVerifier,
+} from "@ai-job-apply/auth";
 import {
   type EntitlementReadService,
   EntitlementUnavailableError,
@@ -128,8 +134,39 @@ const ENTITLEMENTS = Symbol("ENTITLEMENTS");
 const DOCUMENT_STORE = Symbol("DOCUMENT_STORE");
 const CANDIDATE_DATA_EXPORT_DOWNLOADS = Symbol("CANDIDATE_DATA_EXPORT_DOWNLOADS");
 const TOKEN_VERIFIER = Symbol("TOKEN_VERIFIER");
+const ID_TOKEN_VERIFIER = Symbol("ID_TOKEN_VERIFIER");
 const RELEASE_SHA = Symbol("RELEASE_SHA");
 const CLOCK = Symbol("CLOCK");
+export const CANDIDATE_REAUTHENTICATION_HEADER = "x-ai-job-apply-reauthentication";
+const MAXIMUM_REAUTHENTICATION_HEADER_BYTES = 16_384;
+const COMPACT_JWT = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+
+export async function bindCandidateReauthenticationProof(
+  principal: AuthPrincipal,
+  header: string | string[] | undefined,
+  verifier: IdTokenVerifier | null,
+): Promise<AuthPrincipal> {
+  if (!verifier) {
+    throw new CandidateRightsPolicyError();
+  }
+  if (
+    typeof header !== "string" ||
+    Buffer.byteLength(header, "utf8") < 32 ||
+    Buffer.byteLength(header, "utf8") > MAXIMUM_REAUTHENTICATION_HEADER_BYTES ||
+    !COMPACT_JWT.test(header)
+  ) {
+    throw new AuthenticationError("A bounded reauthentication proof is required");
+  }
+  const proof = await verifier.verify(header);
+  if (proof.issuer !== principal.issuer || proof.subject !== principal.subject) {
+    throw new AuthenticationError("The reauthentication proof identity does not match");
+  }
+  return {
+    ...principal,
+    authenticatedAt: proof.authenticatedAt,
+    authenticationMethods: proof.authenticationMethods,
+  };
+}
 
 interface AuthenticatedRequest extends FastifyRequest {
   traceId?: string;
@@ -200,6 +237,7 @@ export function privacySafeRequestFailure(exception: unknown, routeTemplate: str
 class RequestIdentity {
   constructor(
     @Inject(TOKEN_VERIFIER) private readonly verifier: AccessTokenVerifier,
+    @Inject(ID_TOKEN_VERIFIER) private readonly idTokenVerifier: IdTokenVerifier | null,
     @Inject(PROFILE_STORE) private readonly store: ProfileStore,
   ) {}
 
@@ -249,6 +287,25 @@ class RequestIdentity {
       { allowQuarantined },
     );
     return { principal, user };
+  }
+
+  async resolveWithReauthenticationProof(
+    request: AuthenticatedRequest,
+    requiredScope: "profile:write",
+    allowQuarantined = false,
+  ) {
+    const principal = await this.authorize(request, requiredScope);
+    const reauthenticatedPrincipal = await bindCandidateReauthenticationProof(
+      principal,
+      request.headers[CANDIDATE_REAUTHENTICATION_HEADER],
+      this.idTokenVerifier,
+    );
+    const user = await this.store.resolveUser(
+      reauthenticatedPrincipal,
+      request.traceId ?? correlationId(undefined),
+      { allowQuarantined },
+    );
+    return { principal: reauthenticatedPrincipal, user };
   }
 
   async operator(request: AuthenticatedRequest): Promise<string> {
@@ -868,7 +925,10 @@ class CandidateController {
     @Req() request: AuthenticatedRequest,
     @Headers("idempotency-key") idempotencyKey: string | undefined,
   ): Promise<CandidateDataExport> {
-    const { principal, user } = await this.identity.resolveWithPrincipal(request, "profile:write");
+    const { principal, user } = await this.identity.resolveWithReauthenticationProof(
+      request,
+      "profile:write",
+    );
     if (!validateCreateCandidateDataExport(request.body)) {
       throw new HttpException(
         formatValidationErrors(validateCreateCandidateDataExport.errors),
@@ -948,7 +1008,10 @@ class CandidateController {
     @Req() request: AuthenticatedRequest,
     @Headers("idempotency-key") idempotencyKey: string | undefined,
   ): Promise<AccountDeletionRequest> {
-    const { principal, user } = await this.identity.resolveWithPrincipal(request, "profile:write");
+    const { principal, user } = await this.identity.resolveWithReauthenticationProof(
+      request,
+      "profile:write",
+    );
     if (!validateCreateAccountDeletionRequest(request.body)) {
       throw new HttpException(
         formatValidationErrors(validateCreateAccountDeletionRequest.errors),
@@ -998,7 +1061,10 @@ class CandidateController {
     @Headers("idempotency-key") idempotencyKey: string | undefined,
     @Headers("if-match") ifMatch: string | undefined,
   ): Promise<void> {
-    const { principal, user } = await this.identity.resolveWithPrincipal(request, "profile:write");
+    const { principal, user } = await this.identity.resolveWithReauthenticationProof(
+      request,
+      "profile:write",
+    );
     if (!UUID_V7_PATTERN.test(deletionRequestId)) {
       throw new HttpException("Account-deletion identifier is invalid", HttpStatus.BAD_REQUEST);
     }
@@ -1024,7 +1090,7 @@ class CandidateController {
     @Param("deletionRequestId") deletionRequestId: string,
     @Headers("idempotency-key") idempotencyKey: string | undefined,
   ): Promise<AccountDeletionRequest> {
-    const { principal, user } = await this.identity.resolveWithPrincipal(
+    const { principal, user } = await this.identity.resolveWithReauthenticationProof(
       request,
       "profile:write",
       true,
@@ -1406,6 +1472,7 @@ export interface AppModuleOptions {
   documents: DocumentStore;
   candidateDataExportDownloads?: CandidateDataExportDownloadSigner;
   verifier: AccessTokenVerifier;
+  idTokenVerifier?: IdTokenVerifier;
   releaseSha: string;
   clock?: () => Date;
 }
@@ -1432,6 +1499,7 @@ export class AppModule {
           useValue: options.candidateDataExportDownloads ?? null,
         },
         { provide: TOKEN_VERIFIER, useValue: options.verifier },
+        { provide: ID_TOKEN_VERIFIER, useValue: options.idTokenVerifier ?? null },
         { provide: RELEASE_SHA, useValue: options.releaseSha },
         { provide: CLOCK, useValue: options.clock ?? (() => new Date()) },
       ],

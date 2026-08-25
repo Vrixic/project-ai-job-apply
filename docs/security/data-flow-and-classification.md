@@ -191,9 +191,11 @@ not persisted or cached, and target expiry is rechecked after both reads complet
 
 ## Rights-flow design boundary
 
-Export and account deletion are not implemented by the Phase 0 slice. The following diagrams define
-the minimum trust boundaries that an owning delivery must implement, update with exact deployed
-components, and test before real candidate onboarding. They are not deployed-flow evidence.
+Phase 1 implements and default-dark deploys the following export and account-deletion trust
+boundaries. Stage A preprovisions 35-day development backup retention and an empty tagged identity
+provider secret while runtime activation remains false. The diagrams describe deployed composition,
+but do not prove a generated-synthetic lifecycle, managed recent-MFA identity, deletion-ledger replay,
+or authority for real candidate onboarding.
 
 ### Authenticated export
 

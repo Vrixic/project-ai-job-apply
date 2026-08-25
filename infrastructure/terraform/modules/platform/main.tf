@@ -1777,6 +1777,7 @@ resource "aws_lambda_function" "gateway" {
         CANDIDATE_DATA_EXPORT_BUCKET                 = aws_s3_bucket.candidate_data_exports[0].id
         CANDIDATE_DATA_EXPORT_KMS_KEY_ARN            = aws_kms_key.platform.arn
         CANDIDATE_DELETION_RECOVERY_BUCKET           = aws_s3_bucket.candidate_deletion_recovery[0].id
+        OIDC_ID_TOKEN_AUDIENCE                       = var.candidate_rights_id_token_audience
         CANDIDATE_RIGHTS_POLICY_VERSION              = var.candidate_rights_policy_version
         CANDIDATE_RIGHTS_POLICY_SHA256               = var.candidate_rights_policy_sha256
         CANDIDATE_RIGHTS_EXPORT_LIFETIME_SECONDS     = tostring(var.candidate_rights_export_lifetime_seconds)
