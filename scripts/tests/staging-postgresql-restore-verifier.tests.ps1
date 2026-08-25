@@ -294,6 +294,9 @@ finally {
 $operator = Get-Content -LiteralPath $operatorPath -Raw
 $developmentOperator = Get-Content -LiteralPath $developmentOperatorPath -Raw
 $inspector = Get-Content -LiteralPath $inspectorPath -Raw
+if (-not $operator.Contains('return ($raw -join "`n") | ConvertFrom-D1RestoreJson')) {
+  throw "The restore operator does not preserve AWS ISO timestamp strings."
+}
 foreach ($required in @(
   '"candidate_document_cors_allowed_origins"',
   '"ingestion_provider_sources"',

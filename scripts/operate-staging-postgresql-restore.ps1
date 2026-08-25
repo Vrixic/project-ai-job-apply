@@ -85,7 +85,7 @@ function Invoke-AwsJson {
   if (-not $raw) {
     return $null
   }
-  return $raw | ConvertFrom-Json
+  return ($raw -join "`n") | ConvertFrom-D1RestoreJson
 }
 
 function Assert-ExecutionAuthorized {
