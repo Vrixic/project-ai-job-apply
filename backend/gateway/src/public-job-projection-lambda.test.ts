@@ -53,4 +53,29 @@ describe("public job projection Lambda", () => {
     ).rejects.toThrow("request is invalid");
     expect(projector.get).toHaveBeenCalledTimes(1);
   });
+
+  it("accepts only the tagged bounded sitemap projection event", async () => {
+    const detail = { get: vi.fn(async () => ({ kind: "absent" as const })) };
+    const sitemap = {
+      list: vi.fn(async () => ({ kind: "page" as const, items: [], hasMore: false })),
+    };
+    const handler = createProjectionHandler(detail, sitemap);
+    await expect(
+      handler({ schemaVersion: 1, operation: "sitemap", cursor: null }, {} as never),
+    ).resolves.toEqual({ kind: "page", items: [], hasMore: false });
+    await expect(
+      handler({ schemaVersion: 1, operation: "sitemap", cursor: null, limit: 10_000 }, {} as never),
+    ).rejects.toThrow("request is invalid");
+    await expect(
+      handler(
+        {
+          schemaVersion: 1,
+          operation: "sitemap",
+          cursor: { jobId, lastModifiedAt: "not-an-instant" },
+        },
+        {} as never,
+      ),
+    ).rejects.toThrow("request is invalid");
+    expect(sitemap.list).toHaveBeenCalledTimes(1);
+  });
 });

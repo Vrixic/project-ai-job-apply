@@ -197,10 +197,10 @@ variable "deploy_public_job_reader" {
       var.public_job_projection_artifact_s3_object_version != "" &&
       var.public_job_projection_artifact_sha256 != "" &&
       var.public_job_projection_artifact_base64sha256 != "" &&
-      var.public_job_database_boundary_version == "0006_public_job_reader" &&
+      var.public_job_database_boundary_version == "0013_public_job_sitemap" &&
       var.persistent_data_plane_enabled
     )
-    error_message = "Public job reader deployment requires the existing API, persistent database, exact 0006 public-reader boundary, and separate immutable versioned edge/projection artifact identities."
+    error_message = "Public job reader deployment requires the existing API, persistent database, exact 0013 public-sitemap boundary, and separate immutable versioned edge/projection artifact identities."
   }
 }
 
@@ -210,8 +210,8 @@ variable "public_job_database_boundary_version" {
   default     = ""
 
   validation {
-    condition     = var.public_job_database_boundary_version == "" || var.public_job_database_boundary_version == "0006_public_job_reader"
-    error_message = "Public job database boundary must be empty or exactly 0006_public_job_reader."
+    condition     = var.public_job_database_boundary_version == "" || var.public_job_database_boundary_version == "0013_public_job_sitemap"
+    error_message = "Public job database boundary must be empty or exactly 0013_public_job_sitemap."
   }
 }
 

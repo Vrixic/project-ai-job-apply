@@ -89,6 +89,10 @@ output "public_job_route_id" {
   value = module.platform.public_job_route_id
 }
 
+output "public_job_sitemap_route_id" {
+  value = module.platform.public_job_sitemap_route_id
+}
+
 output "gateway_lambda_function_name" {
   value = module.platform.gateway_lambda_function_name
 }

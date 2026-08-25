@@ -65,7 +65,8 @@ projection Lambda, each with reserved concurrency one. The edge has no VPC attac
 identity, RDS-IAM grant, database secret, or KMS-decrypt code path. It may invoke only the exact
 qualified projection alias with an identifier-only request. Only the projection enters the VPC and
 may connect as `ai_job_apply_public_job_reader`; its sole application read is the fixed
-security-definer function from Jobs migration `0006_public_job_reader`. This contains the
+security-definer detail function from Jobs migration `0006_public_job_reader` or the bounded
+sitemap function from migration `0013_public_job_sitemap`. This contains the
 cluster-global PostgreSQL residuals behind a non-public fixed-query service boundary instead of
 placing them in the anonymous runtime's compromise boundary.
 
@@ -79,3 +80,8 @@ remain frozen at one. Edge, projection, and route alarms are mandatory. The depr
 `public_job_cluster_residual_accepted` input is retained only for state compatibility and has no
 activation effect. Artifact publication, reviewed apply, abuse testing, truthful source fields,
 indexing approval, and public-surface acceptance remain separate gates; defaults expose no route.
+
+The exact sitemap route is created by the same activation expression as public job detail and is
+absent under repository defaults. Its separate route metrics and alarms retain the same frozen
+rate/burst and generic availability boundary; adding the source does not enable indexing or
+crawling.

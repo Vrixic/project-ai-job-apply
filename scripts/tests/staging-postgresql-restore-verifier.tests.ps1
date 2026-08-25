@@ -106,10 +106,10 @@ if (@($errors).Count -ne 0) { throw "The shared workload inspector did not parse
 
 $boundary = Get-D1RestoreManifestBoundary $repositoryRoot
 if (
-  [string]$boundary.ManifestId -cne "d1-candidate-rights-profile-jobs-documents-matching-billing-v1" -or
+  [string]$boundary.ManifestId -cne "d1-public-sitemap-profile-jobs-documents-matching-billing-v1" -or
   [int]$boundary.OwnerCount -ne 5 -or
   [int]$boundary.RelationCount -ne 45 -or
-  [int]$boundary.MigrationCount -ne 25 -or
+  [int]$boundary.MigrationCount -ne 26 -or
   [string]$boundary.ManifestSha256 -cnotmatch "^[a-f0-9]{64}$"
 ) {
   throw "The current restore manifest boundary is unexpected."

@@ -3,7 +3,7 @@ param(
   [ValidateSet("Status", "Publish", "Verify")]
   [string]$Action = "Status",
 
-  [ValidateSet("Document", "CoreWorkflow")]
+  [ValidateSet("Document", "CoreWorkflow", "PublicJob")]
   [string]$ArtifactFamily = "Document",
 
   [string]$AwsProfile = "ai-job-apply-development-admin",
@@ -65,27 +65,52 @@ $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $terraformDirectory = Join-Path $repositoryRoot "infrastructure\terraform\environments\development"
 $terraformRoot = [IO.Path]::GetFullPath((Join-Path $terraformDirectory ".terraform"))
 $isCoreWorkflow = $ArtifactFamily -ceq "CoreWorkflow"
-$operatorDirectoryName = if ($isCoreWorkflow) { "development-workflow-artifacts" } else { "development-document-artifacts" }
+$isPublicJob = $ArtifactFamily -ceq "PublicJob"
+$operatorDirectoryName = if ($isCoreWorkflow) {
+  "development-workflow-artifacts"
+} elseif ($isPublicJob) {
+  "development-public-job-artifacts"
+} else {
+  "development-document-artifacts"
+}
 $operatorRoot = Join-Path $terraformRoot $operatorDirectoryName
 $terraformDataDirectory = Join-Path $terraformRoot "$operatorDirectoryName-data"
 $artifactDirectory = if ($isCoreWorkflow) {
   Join-Path $repositoryRoot "backend\workflows\dist\lambda"
+} elseif ($isPublicJob) {
+  Join-Path $repositoryRoot "backend\gateway\dist\public-job-lambda"
 } else {
   Join-Path $repositoryRoot "backend\services\documents\dist\lambda"
 }
 $stateKey = "platform.tfstate"
 $artifactNames = if ($isCoreWorkflow) {
   @("workflow-ingress-lambda", "profile-readiness-durable-lambda", "profile-readiness-activity-lambda")
+} elseif ($isPublicJob) {
+  @("public-job-edge-lambda", "public-job-projection-lambda")
 } else {
   @("document-processor-lambda", "document-parser-lambda")
 }
-$artifactKeyRoot = if ($isCoreWorkflow) { "lambda/workflows" } else { "lambda/documents" }
+$artifactKeyRoot = if ($isCoreWorkflow) {
+  "lambda/workflows"
+} elseif ($isPublicJob) {
+  "lambda/public-jobs"
+} else {
+  "lambda/documents"
+}
 $receiptKind = if ($isCoreWorkflow) {
   "development-core-workflow-lambda-publication"
+} elseif ($isPublicJob) {
+  "development-public-job-lambda-publication"
 } else {
   "development-document-lambda-publication"
 }
-$artifactLabel = if ($isCoreWorkflow) { "core workflow" } else { "document" }
+$artifactLabel = if ($isCoreWorkflow) {
+  "core workflow"
+} elseif ($isPublicJob) {
+  "public job"
+} else {
+  "document"
+}
 $expectedObjectCount = $artifactNames.Count * 4
 
 $env:AWS_PROFILE = $AwsProfile
@@ -482,6 +507,10 @@ if ($Action -eq "Publish") {
     Invoke-LocalGate -Name "Workflow tests" -LogPath $testLog -Command {
       pnpm --filter @ai-job-apply/workflows test
     }
+  } elseif ($isPublicJob) {
+    Invoke-LocalGate -Name "Gateway tests" -LogPath $testLog -Command {
+      pnpm --filter @ai-job-apply/gateway test
+    }
   } else {
     Invoke-LocalGate -Name "Document service tests" -LogPath $testLog -Command {
       pnpm --filter @ai-job-apply/documents-service test
@@ -493,12 +522,14 @@ if ($Action -eq "Publish") {
     $env:ARTIFACT_SOURCE_SHA = $SourceSha
     Invoke-LocalGate -Name "First $artifactLabel Lambda build" -LogPath $buildOneLog -Command {
       if ($isCoreWorkflow) { pnpm --filter @ai-job-apply/workflows build:lambda }
+      elseif ($isPublicJob) { pnpm --filter @ai-job-apply/gateway build:public-job-lambda }
       else { pnpm --filter @ai-job-apply/documents-service build:lambda }
     }
     $first = @(Get-ArtifactSet -ExpectedSourceSha $SourceSha)
     $firstFingerprint = Get-ArtifactFingerprint -Artifacts $first
     Invoke-LocalGate -Name "Second $artifactLabel Lambda build" -LogPath $buildTwoLog -Command {
       if ($isCoreWorkflow) { pnpm --filter @ai-job-apply/workflows build:lambda }
+      elseif ($isPublicJob) { pnpm --filter @ai-job-apply/gateway build:public-job-lambda }
       else { pnpm --filter @ai-job-apply/documents-service build:lambda }
     }
     $second = @(Get-ArtifactSet -ExpectedSourceSha $SourceSha)

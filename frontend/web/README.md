@@ -150,9 +150,12 @@ The source-only `/jobs/{lowercase-uuidv7}` page reads the dedicated anonymous pu
 without cookies or authorization, redirects reversible aliases temporarily to the current
 canonical identifier, and renders the employer description as plain text. Canonical metadata uses
 only the configured trusted application origin. Crawlers are denied globally by default; an exact
-gate may allow only `/jobs/` after separate publication review. No `JobPosting` JSON-LD, sitemap,
-Indexing API, application action, employer-original posting date, structured location assertion,
-or search-engine eligibility is claimed. No route, Lambda artifact, database identity, bootstrap
+gate may allow only `/jobs/` after separate publication review. The generated sitemap remains
+empty without reading the API while that gate is false. When deliberately enabled, it reads only
+the strict bounded public feed, follows at most 500 cursor pages/50,000 identifiers, emits URLs
+only beneath the configured canonical application origin, and fails closed on unavailable,
+malformed, duplicated, unordered, or looping data. No Indexing API, application action, or
+search-engine eligibility is claimed. No route, Lambda artifact, database identity, bootstrap
 boundary, Terraform change, or crawler policy is deployed by these source bytes.
 
 `pnpm test:d1-public-job-page-assurance` builds the production Next application and exercises that

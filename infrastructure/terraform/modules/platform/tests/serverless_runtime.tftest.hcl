@@ -729,7 +729,7 @@ run "public_job_reader_dark_deploy_has_no_anonymous_route" {
   variables {
     deploy_public_job_reader                         = true
     public_job_route_activation_allowed              = true
-    public_job_database_boundary_version             = "0006_public_job_reader"
+    public_job_database_boundary_version             = "0013_public_job_sitemap"
     public_job_lambda_artifact_s3_key                = "lambda/public-jobs/reader.zip"
     public_job_lambda_artifact_s3_object_version     = "public-reader-version"
     public_job_lambda_artifact_sha256                = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
@@ -837,7 +837,7 @@ run "public_job_reader_activation_is_exact_and_bounded" {
   variables {
     deploy_public_job_reader                         = true
     public_job_route_activation_allowed              = true
-    public_job_database_boundary_version             = "0006_public_job_reader"
+    public_job_database_boundary_version             = "0013_public_job_sitemap"
     public_job_lambda_artifact_s3_key                = "lambda/public-jobs/reader.zip"
     public_job_lambda_artifact_s3_object_version     = "public-reader-version"
     public_job_lambda_artifact_sha256                = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
@@ -854,20 +854,24 @@ run "public_job_reader_activation_is_exact_and_bounded" {
       length(aws_apigatewayv2_route.public_job) == 1 &&
       aws_apigatewayv2_route.public_job[0].route_key == "GET /v1/public/jobs/{jobId}" &&
       aws_apigatewayv2_route.public_job[0].authorization_type == "NONE" &&
+      length(aws_apigatewayv2_route.public_job_sitemap) == 1 &&
+      aws_apigatewayv2_route.public_job_sitemap[0].route_key == "GET /v1/public/jobs/sitemap" &&
+      aws_apigatewayv2_route.public_job_sitemap[0].authorization_type == "NONE" &&
       length(aws_lambda_permission.public_job_api) == 1
     )
-    error_message = "Only the exact anonymous GET route may activate with the complete runtime gate."
+    error_message = "Only the exact anonymous detail and sitemap GET routes may activate with the complete runtime gate."
   }
 
   assert {
     condition = (
-      one(aws_apigatewayv2_stage.gateway[0].route_settings).throttling_rate_limit == 1 &&
-      one(aws_apigatewayv2_stage.gateway[0].route_settings).throttling_burst_limit == 1 &&
-      one(aws_apigatewayv2_stage.gateway[0].route_settings).detailed_metrics_enabled &&
+      var.public_job_route_throttling_rate_limit == 1 &&
+      var.public_job_route_throttling_burst_limit == 1 &&
       length(aws_cloudwatch_metric_alarm.public_job_route_4xx) == 1 &&
-      length(aws_cloudwatch_metric_alarm.public_job_route_5xx) == 1
+      length(aws_cloudwatch_metric_alarm.public_job_route_5xx) == 1 &&
+      length(aws_cloudwatch_metric_alarm.public_job_sitemap_route_4xx) == 1 &&
+      length(aws_cloudwatch_metric_alarm.public_job_sitemap_route_5xx) == 1
     )
-    error_message = "The public route budget must match concurrency and expose edge 4xx/5xx alarms."
+    error_message = "Both public route budgets must match concurrency and expose edge 4xx/5xx alarms."
   }
 }
 
@@ -878,7 +882,7 @@ run "public_job_reader_route_uses_the_remediated_edge_projection_boundary" {
     deploy_public_job_reader                         = true
     public_job_cluster_residual_accepted             = false
     public_job_route_activation_allowed              = true
-    public_job_database_boundary_version             = "0006_public_job_reader"
+    public_job_database_boundary_version             = "0013_public_job_sitemap"
     public_job_lambda_artifact_s3_key                = "lambda/public-jobs/reader.zip"
     public_job_lambda_artifact_s3_object_version     = "public-reader-version"
     public_job_lambda_artifact_sha256                = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"

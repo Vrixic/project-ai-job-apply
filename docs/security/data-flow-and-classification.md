@@ -238,10 +238,10 @@ acknowledgement or expired backup window cannot be assumed from elapsed time alo
 
 ```mermaid
 flowchart LR
-  Browser[Anonymous browser or crawler] -->|exact GET, no identity| Web[Canonical Next job page]
+  Browser[Anonymous browser or crawler] -->|exact GET, no identity| Web[Canonical page or sitemap]
   Web -->|no cookies or authorization| Edge[No-VPC public-job edge Lambda]
-  Edge -->|UUID-only invoke, exact qualified alias| Reader[Private projection Lambda]
-  Reader -->|IAM DB auth, one security-definer function| Jobs[(Jobs public projection)]
+  Edge -->|UUID detail or fixed sitemap operation| Reader[Private projection Lambda]
+  Reader -->|IAM DB auth, fixed security-definer function| Jobs[(Jobs public projection)]
 ```
 
 Only the requested/canonical public UUIDs, reversible-alias flag, company display name, title,
@@ -259,3 +259,10 @@ proves table/schema/temp least privilege inside the application database; remain
 catalog and other-database capabilities are contained behind the non-public fixed-query Lambda
 rather than exposed to an anonymous runtime compromise. `public_job_route_activation_allowed`
 remains false by default.
+
+The sitemap branch returns only active, nonexpired, non-alias canonical UUIDv7 identifiers and the
+public `last_verified_at` timestamp, in bounded keyset pages. It excludes detail text and every
+candidate/source/internal field. The web emits no sitemap entries while indexing is disabled and
+uses only its configured canonical origin when enabled. Projection, edge, or pagination failures
+remain availability failures instead of false-empty deindexing signals; crawling and both public
+API routes remain default-dark behind the same activation gate.

@@ -17,3 +17,9 @@ The D1 catalog contract defines a strict `POST /v1/jobs/search` body with bounde
 an exact `jobs:read` security requirement, active redacted result summaries, and an opaque
 continuation cursor. It intentionally excludes saved-job state, profile matching, and unsupported
 inferred filters.
+
+The anonymous public-job contract also defines an additive, strict
+`GET /v1/public/jobs/sitemap` feed. It returns at most 100 canonical UUIDv7 identifiers with one
+public freshness timestamp and an optional opaque keyset cursor. The feed contains no job text,
+source/provenance data, candidate data, or internal lifecycle state; dependency failures are
+availability errors rather than successful empty pages.

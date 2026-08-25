@@ -1,5 +1,9 @@
 import { loadPublicJobEdgeLambdaConfig } from "@ai-job-apply/config/public-job-edge";
-import type { PublicJobDetailResult } from "@ai-job-apply/jobs-service";
+import type {
+  PublicJobDetailResult,
+  PublicJobSitemapCursor,
+  PublicJobSitemapProjectionPage,
+} from "@ai-job-apply/jobs-service";
 import { initializeTelemetry } from "@ai-job-apply/observability";
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import {
@@ -8,6 +12,11 @@ import {
   PublicJobReadCache,
   publicJobUnavailableResponse,
 } from "./public-job-read.js";
+import {
+  assertPublicJobSitemapProjection,
+  createPublicJobSitemapReadHandler,
+  type PublicJobSitemapResultReader,
+} from "./public-job-sitemap-read.js";
 
 const uuidV7Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const canonicalInstantPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
@@ -212,6 +221,47 @@ export class LambdaPublicJobDetailReader {
   }
 }
 
+export function parseSitemapProjectionResult(
+  payload: Uint8Array | undefined,
+): PublicJobSitemapProjectionPage {
+  if (!payload || payload.byteLength < 2 || payload.byteLength > 64_000) {
+    throw new Error("The public sitemap projection response is invalid");
+  }
+  const parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(payload)) as unknown;
+  assertPublicJobSitemapProjection(parsed, new Date());
+  return parsed;
+}
+
+export class LambdaPublicJobSitemapReader implements PublicJobSitemapResultReader {
+  constructor(
+    private readonly client: Pick<LambdaClient, "send">,
+    private readonly functionName: string,
+  ) {}
+
+  async list(
+    cursor: Readonly<PublicJobSitemapCursor> | undefined,
+  ): Promise<PublicJobSitemapProjectionPage> {
+    const response = await this.client.send(
+      new InvokeCommand({
+        FunctionName: this.functionName,
+        InvocationType: "RequestResponse",
+        Payload: new TextEncoder().encode(
+          JSON.stringify({ schemaVersion: 1, operation: "sitemap", cursor: cursor ?? null }),
+        ),
+      }),
+    );
+    if (
+      response.StatusCode !== 200 ||
+      response.FunctionError ||
+      typeof response.ExecutedVersion !== "string" ||
+      !/^[1-9][0-9]*$/.test(response.ExecutedVersion)
+    ) {
+      throw new Error("The public sitemap projection invocation failed");
+    }
+    return parseSitemapProjectionResult(response.Payload);
+  }
+}
+
 export async function createConfiguredPublicJobHandler(
   environment: NodeJS.ProcessEnv = process.env,
 ): Promise<PublicJobHandler> {
@@ -223,17 +273,22 @@ export async function createConfiguredPublicJobHandler(
     sampleRatio: config.OTEL_TRACE_SAMPLE_RATIO,
     ...(config.OTEL_EXPORTER_OTLP_ENDPOINT ? { endpoint: config.OTEL_EXPORTER_OTLP_ENDPOINT } : {}),
   });
-  const reader = new LambdaPublicJobDetailReader(
-    new LambdaClient({ region: config.AWS_REGION }),
-    config.PUBLIC_JOB_PROJECTION_ARN,
-  );
-  return createPublicJobReadHandler(
+  const lambda = new LambdaClient({ region: config.AWS_REGION });
+  const reader = new LambdaPublicJobDetailReader(lambda, config.PUBLIC_JOB_PROJECTION_ARN);
+  const detailHandler = createPublicJobReadHandler(
     new PublicJobReadCache(reader, {
       capacity: config.PUBLIC_JOB_CACHE_CAPACITY,
       positiveTtlMs: config.PUBLIC_JOB_CACHE_TTL_MS,
       negativeTtlMs: config.PUBLIC_JOB_NEGATIVE_CACHE_TTL_MS,
     }),
   );
+  const sitemapHandler = createPublicJobSitemapReadHandler(
+    new LambdaPublicJobSitemapReader(lambda, config.PUBLIC_JOB_PROJECTION_ARN),
+  );
+  return async (event, context) =>
+    event.routeKey === "GET /v1/public/jobs/sitemap"
+      ? sitemapHandler(event, context)
+      : detailHandler(event, context);
 }
 
 export function createLazyPublicJobHandler(

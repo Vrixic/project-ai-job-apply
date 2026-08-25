@@ -108,6 +108,11 @@ variable "deploy_public_job_reader" {
 variable "public_job_database_boundary_version" {
   type    = string
   default = ""
+
+  validation {
+    condition     = var.public_job_database_boundary_version == "" || var.public_job_database_boundary_version == "0013_public_job_sitemap"
+    error_message = "Public job database boundary must be empty or exactly 0013_public_job_sitemap."
+  }
 }
 
 variable "public_job_cluster_residual_accepted" {

@@ -49,6 +49,18 @@ Every alert and privileged admin operation should link to a relevant runbook.
   Reproducibly publishes and exact-version verifies the three current-source workflow
   ingress/profile-readiness artifact sets without changing Lambda runtime, aliases, triggers,
   Terraform, or the database.
+- [Development public-job Lambda publication](deployments/development-public-job-lambda-publication.md) —
+  Reproducibly publishes and exact-version verifies the isolated anonymous edge and private
+  projection artifacts without deploying them, enabling either anonymous route, or changing
+  indexing, Terraform, or the database.
+- [Development candidate-rights acceptance](deployments/development-candidate-rights-acceptance.md) —
+  Guards one disposable generated-synthetic export/deletion lifecycle, exact-version cleanup,
+  Auth0 reconciliation, recovery-ledger replay, backup inventory, alarms, idle compute, and zero
+  drift behind exact policy, identity, runtime, and independently reviewed aggregate evidence.
+- [D1 representative deployed acceptance](observability/d1-representative-deployed-acceptance.md) —
+  Defines the no-default, aggregate-only workload, SLO, failure/recovery, alert-delivery, privacy,
+  cleanup, and zero-drift acceptance packet; execution remains fail-closed until the guarded
+  generated-synthetic provider fault fixture exists.
 - [Development document-processing acceptance](deployments/development-document-processing-acceptance.md) —
   Executes the generated-synthetic direct-dark document lifecycle with exact runtime, claim,
   privacy, recovery, and cleanup guards while all document-processing triggers remain disabled.

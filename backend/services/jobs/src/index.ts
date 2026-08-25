@@ -4,4 +4,5 @@ export * from "./persistence/ingestion-orchestration.js";
 export * from "./persistence/reporting.js";
 export * from "./persistence/schema.js";
 export * from "./public-detail.js";
+export * from "./public-sitemap.js";
 export * from "./reporting.js";

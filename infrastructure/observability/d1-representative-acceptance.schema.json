@@ -1,0 +1,253 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://applydash.local/schemas/d1-representative-acceptance.schema.json",
+  "title": "D1 representative deployed acceptance configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "kind",
+    "status",
+    "environment",
+    "release",
+    "run",
+    "thresholds",
+    "profiles"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "kind": { "const": "d1-representative-deployed-acceptance" },
+    "status": { "enum": ["draft", "reviewed"] },
+    "environment": { "const": "development" },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceSha",
+        "terraformStateSerial",
+        "runtimePlanPath",
+        "runtimePlanSha256",
+        "artifacts",
+        "migrationImage"
+      ],
+      "properties": {
+        "sourceSha": { "$ref": "#/$defs/nullableGitSha" },
+        "terraformStateSerial": { "$ref": "#/$defs/nullablePositiveInteger" },
+        "runtimePlanPath": { "type": ["string", "null"] },
+        "runtimePlanSha256": { "$ref": "#/$defs/nullableSha256" },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "sha256", "base64Sha256", "objectVersionId"],
+            "properties": {
+              "name": {
+                "enum": [
+                  "gateway",
+                  "workflow-ingress",
+                  "profile-readiness-durable",
+                  "profile-readiness-activity"
+                ]
+              },
+              "sha256": { "$ref": "#/$defs/nullableSha256" },
+              "base64Sha256": {
+                "type": ["string", "null"],
+                "pattern": "^[A-Za-z0-9+/]{43}=$"
+              },
+              "objectVersionId": { "type": ["string", "null"], "minLength": 1 }
+            }
+          },
+          "maxItems": 4
+        },
+        "migrationImage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sourceSha", "platformDigest", "receiptSha256"],
+          "properties": {
+            "sourceSha": { "$ref": "#/$defs/nullableGitSha" },
+            "platformDigest": { "type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$" },
+            "receiptSha256": { "$ref": "#/$defs/nullableSha256" }
+          }
+        }
+      }
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runId",
+        "generatedSyntheticOnly",
+        "oneRunOnly",
+        "cleanupRequired",
+        "recoveryRequired",
+        "ledgerPath"
+      ],
+      "properties": {
+        "runId": { "type": ["string", "null"], "format": "uuid" },
+        "generatedSyntheticOnly": { "type": "boolean" },
+        "oneRunOnly": { "type": "boolean" },
+        "cleanupRequired": { "type": "boolean" },
+        "recoveryRequired": { "type": "boolean" },
+        "ledgerPath": { "type": ["string", "null"] }
+      }
+    },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["concurrency", "durationMs", "latencyMs", "errors", "queues", "alerts"],
+      "properties": {
+        "concurrency": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "read": { "$ref": "#/$defs/nullablePositiveInteger" },
+            "savedJob": { "$ref": "#/$defs/nullablePositiveInteger" },
+            "match": { "$ref": "#/$defs/nullablePositiveInteger" },
+            "providerFailure": { "$ref": "#/$defs/nullablePositiveInteger" }
+          },
+          "required": ["read", "savedJob", "match", "providerFailure"]
+        },
+        "durationMs": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "read": { "$ref": "#/$defs/nullablePositiveInteger" },
+            "savedJob": { "$ref": "#/$defs/nullablePositiveInteger" },
+            "match": { "$ref": "#/$defs/nullablePositiveInteger" },
+            "providerFailure": { "$ref": "#/$defs/nullablePositiveInteger" },
+            "recovery": { "$ref": "#/$defs/nullablePositiveInteger" },
+            "alertTransition": { "$ref": "#/$defs/nullablePositiveInteger" }
+          },
+          "required": [
+            "read",
+            "savedJob",
+            "match",
+            "providerFailure",
+            "recovery",
+            "alertTransition"
+          ]
+        },
+        "latencyMs": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "publicP95": { "$ref": "#/$defs/nullablePositiveInteger" },
+            "authenticatedP95": { "$ref": "#/$defs/nullablePositiveInteger" },
+            "apiAverage": { "$ref": "#/$defs/nullablePositiveInteger" },
+            "apiMaximum": { "$ref": "#/$defs/nullablePositiveInteger" },
+            "lambdaMaximum": { "$ref": "#/$defs/nullablePositiveInteger" }
+          },
+          "required": ["publicP95", "authenticatedP95", "apiAverage", "apiMaximum", "lambdaMaximum"]
+        },
+        "errors": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxApplicationFailures": { "$ref": "#/$defs/nullableNonnegativeInteger" },
+            "maxApi5xx": { "$ref": "#/$defs/nullableNonnegativeInteger" },
+            "maxLambdaErrors": { "$ref": "#/$defs/nullableNonnegativeInteger" },
+            "maxLambdaThrottles": { "$ref": "#/$defs/nullableNonnegativeInteger" },
+            "maxErrorLogMatches": { "$ref": "#/$defs/nullableNonnegativeInteger" },
+            "maxForbiddenLogMatches": { "$ref": "#/$defs/nullableNonnegativeInteger" }
+          },
+          "required": [
+            "maxApplicationFailures",
+            "maxApi5xx",
+            "maxLambdaErrors",
+            "maxLambdaThrottles",
+            "maxErrorLogMatches",
+            "maxForbiddenLogMatches"
+          ]
+        },
+        "queues": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxOldestAgeSeconds": { "$ref": "#/$defs/nullableNonnegativeInteger" },
+            "maxVisible": { "$ref": "#/$defs/nullableNonnegativeInteger" },
+            "maxEventDlq": { "$ref": "#/$defs/nullableNonnegativeInteger" },
+            "maxDurableDlq": { "$ref": "#/$defs/nullableNonnegativeInteger" }
+          },
+          "required": ["maxOldestAgeSeconds", "maxVisible", "maxEventDlq", "maxDurableDlq"]
+        },
+        "alerts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "expectedHealthyAlarmCount": { "$ref": "#/$defs/nullablePositiveInteger" },
+            "expectedConfirmedRecipientCount": { "$ref": "#/$defs/nullablePositiveInteger" },
+            "reviewedRecipientSetSha256": { "$ref": "#/$defs/nullableSha256" }
+          },
+          "required": [
+            "expectedHealthyAlarmCount",
+            "expectedConfirmedRecipientCount",
+            "reviewedRecipientSetSha256"
+          ]
+        }
+      }
+    },
+    "profiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["read", "savedJob", "match", "providerFailure", "alertDelivery", "postRun"],
+      "properties": {
+        "read": { "$ref": "#/$defs/deployedProfile" },
+        "savedJob": { "$ref": "#/$defs/deployedProfile" },
+        "match": { "$ref": "#/$defs/deployedProfile" },
+        "providerFailure": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["required", "state", "blocker", "existingGuardedSyntheticFixture"],
+          "properties": {
+            "required": { "const": true },
+            "state": { "const": "blocked" },
+            "blocker": { "type": "string", "minLength": 1 },
+            "existingGuardedSyntheticFixture": { "type": "null" }
+          }
+        },
+        "alertDelivery": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "required",
+            "statusResultPath",
+            "exerciseResultPath",
+            "operatorDeliveryConfirmed"
+          ],
+          "properties": {
+            "required": { "const": true },
+            "statusResultPath": { "type": ["string", "null"] },
+            "exerciseResultPath": { "type": ["string", "null"] },
+            "operatorDeliveryConfirmed": { "type": "boolean" }
+          }
+        },
+        "postRun": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["aggregateResultPath", "zeroDriftResultPath"],
+          "properties": {
+            "aggregateResultPath": { "type": ["string", "null"] },
+            "zeroDriftResultPath": { "type": ["string", "null"] }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "nullableGitSha": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40}$" },
+    "nullableSha256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+    "nullablePositiveInteger": { "type": ["integer", "null"], "minimum": 1 },
+    "nullableNonnegativeInteger": { "type": ["integer", "null"], "minimum": 0 },
+    "deployedProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "resultPath", "awsResultPath"],
+      "properties": {
+        "required": { "const": true },
+        "resultPath": { "type": ["string", "null"] },
+        "awsResultPath": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

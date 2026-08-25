@@ -961,6 +961,46 @@
         }
       }
     },
+    "/public/jobs/sitemap": {
+      "get": {
+        "operationId": "getPublicJobSitemapFeed",
+        "security": [],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 512,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded active canonical-job sitemap feed without source or candidate data",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["public, max-age=0, must-revalidate"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PublicJobSitemapFeedResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/PublicJobBadRequest" },
+          "503": { "$ref": "#/components/responses/PublicJobUnavailable" }
+        }
+      }
+    },
     "/saved-jobs": {
       "post": {
         "operationId": "createSavedJob",
@@ -2767,6 +2807,40 @@
           },
           "isAlias": { "type": "boolean" },
           "job": { "$ref": "#/components/schemas/PublicJobDetail" }
+        },
+        "additionalProperties": false
+      },
+      "PublicJobSitemapItem": {
+        "type": "object",
+        "required": ["jobId", "lastModifiedAt"],
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "lastModifiedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicJobSitemapFeedResponse": {
+        "type": "object",
+        "required": ["items"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": { "$ref": "#/components/schemas/PublicJobSitemapItem" }
+          },
+          "nextCursor": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 512,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
         },
         "additionalProperties": false
       },

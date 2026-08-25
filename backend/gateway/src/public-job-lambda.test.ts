@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createLazyPublicJobHandler,
   LambdaPublicJobDetailReader,
+  LambdaPublicJobSitemapReader,
   parseProjectionResult,
+  parseSitemapProjectionResult,
 } from "./public-job-lambda.js";
 import { publicJobPostgresOptions } from "./public-job-projection-lambda.js";
 
@@ -139,6 +141,31 @@ describe("public job Lambda module", () => {
       schemaVersion: 1,
       jobId,
     });
+  });
+
+  it("invokes the qualified projection with only the tagged public keyset", async () => {
+    const payload = {
+      kind: "page",
+      items: [{ jobId, lastModifiedAt: "2026-08-21T00:00:00.000Z" }],
+      hasMore: false,
+    } as const;
+    const send = vi.fn(async (_command: unknown) => ({
+      StatusCode: 200,
+      ExecutedVersion: "3",
+      Payload: new TextEncoder().encode(JSON.stringify(payload)),
+    }));
+    const reader = new LambdaPublicJobSitemapReader(
+      { send } as never,
+      "arn:aws:lambda:us-east-2:111122223333:function:public-job-projection:development",
+    );
+    await expect(reader.list(undefined)).resolves.toEqual(payload);
+    const command = send.mock.calls[0]?.[0] as { input: { Payload?: Uint8Array } };
+    expect(
+      JSON.parse(new TextDecoder().decode(command.input.Payload)) as Record<string, unknown>,
+    ).toEqual({ schemaVersion: 1, operation: "sitemap", cursor: null });
+    expect(parseSitemapProjectionResult(new TextEncoder().encode(JSON.stringify(payload)))).toEqual(
+      payload,
+    );
   });
 
   it("rejects malformed, oversized, errored, and mutable projection responses", async () => {

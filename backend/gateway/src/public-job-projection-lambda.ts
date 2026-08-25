@@ -1,8 +1,11 @@
 import { loadPublicJobLambdaConfig, type PublicJobLambdaConfig } from "@ai-job-apply/config";
 import {
   PostgresPublicJobDetailReader,
+  PostgresPublicJobSitemapReader,
   PublicJobDetailProjector,
   type PublicJobDetailResult,
+  type PublicJobSitemapProjectionPage,
+  PublicJobSitemapProjector,
 } from "@ai-job-apply/jobs-service";
 import { initializeTelemetry } from "@ai-job-apply/observability";
 import { Signer } from "@aws-sdk/rds-signer";
@@ -36,12 +39,48 @@ export function publicJobPostgresOptions(
   };
 }
 
-type ProjectionHandler = (event: unknown, context: Context) => Promise<PublicJobDetailResult>;
+type ProjectionResult = PublicJobDetailResult | PublicJobSitemapProjectionPage;
+type ProjectionHandler = (event: unknown, context: Context) => Promise<ProjectionResult>;
 
 export function createProjectionHandler(
   projector: Pick<PublicJobDetailProjector, "get">,
+  sitemapProjector?: Pick<PublicJobSitemapProjector, "list">,
 ): ProjectionHandler {
   return async (event) => {
+    if (
+      sitemapProjector &&
+      event &&
+      typeof event === "object" &&
+      !Array.isArray(event) &&
+      Object.keys(event).length === 3 &&
+      (event as Record<string, unknown>).schemaVersion === 1 &&
+      (event as Record<string, unknown>).operation === "sitemap"
+    ) {
+      const rawCursor = (event as Record<string, unknown>).cursor;
+      if (
+        rawCursor !== null &&
+        (!rawCursor ||
+          typeof rawCursor !== "object" ||
+          Array.isArray(rawCursor) ||
+          Object.keys(rawCursor).length !== 2 ||
+          typeof (rawCursor as Record<string, unknown>).jobId !== "string" ||
+          !uuidV7Pattern.test((rawCursor as Record<string, unknown>).jobId as string) ||
+          typeof (rawCursor as Record<string, unknown>).lastModifiedAt !== "string" ||
+          !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(
+            (rawCursor as Record<string, unknown>).lastModifiedAt as string,
+          ))
+      ) {
+        throw new Error("The public sitemap projection request is invalid");
+      }
+      return sitemapProjector.list(
+        rawCursor === null
+          ? undefined
+          : {
+              jobId: (rawCursor as Record<string, unknown>).jobId as string,
+              lastModifiedAt: (rawCursor as Record<string, unknown>).lastModifiedAt as string,
+            },
+      );
+    }
     if (
       !event ||
       typeof event !== "object" ||
@@ -77,6 +116,7 @@ export async function createConfiguredProjectionHandler(
   const client = postgres(publicJobPostgresOptions(config, () => signer.getAuthToken()));
   return createProjectionHandler(
     new PublicJobDetailProjector(new PostgresPublicJobDetailReader(client)),
+    new PublicJobSitemapProjector(new PostgresPublicJobSitemapReader(client)),
   );
 }
 

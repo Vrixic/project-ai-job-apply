@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "manifestId": "d1-candidate-rights-profile-jobs-documents-matching-billing-v1",
+  "manifestId": "d1-public-sitemap-profile-jobs-documents-matching-billing-v1",
   "contributors": [
     {
       "owner": "billing",
@@ -103,6 +103,10 @@
         {
           "version": "0012_candidate_rights",
           "checksum": "8f1b1b8566e4450a2ada7baee899529854a4cba63a5c88137410f8e7e38ceb09"
+        },
+        {
+          "version": "0013_public_job_sitemap",
+          "checksum": "6cf9ccf4f9fcf3502024fbcf8c2a8d023eaa3320da0bfac4a1b3f6d20e08d44f"
         }
       ],
       "relations": [

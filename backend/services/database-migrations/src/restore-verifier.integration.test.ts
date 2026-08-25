@@ -83,14 +83,24 @@ describe.skipIf(!requested)("restored PostgreSQL aggregate verification", () => 
     for (const client of [source, restored]) {
       const publicProjectionBoundary = await client.unsafe<{
         schema_present: boolean;
-        function_present: boolean;
+        detail_function_present: boolean;
+        sitemap_function_present: boolean;
       }>(`
         SELECT
           to_regnamespace('jobs_public') IS NOT NULL AS schema_present,
           to_regprocedure('jobs_public.read_public_job_detail(uuid)') IS NOT NULL
-            AS function_present
+            AS detail_function_present,
+          to_regprocedure(
+            'jobs_public.read_public_job_sitemap(timestamptz,uuid,integer)'
+          ) IS NOT NULL AS sitemap_function_present
       `);
-      expect(publicProjectionBoundary).toEqual([{ schema_present: true, function_present: true }]);
+      expect(publicProjectionBoundary).toEqual([
+        {
+          schema_present: true,
+          detail_function_present: true,
+          sitemap_function_present: true,
+        },
+      ]);
       const fixture = await client.unsafe<{ fixture_count: number }>(`
         SELECT count(*)::int AS fixture_count
         FROM matching.saved_job_list_state

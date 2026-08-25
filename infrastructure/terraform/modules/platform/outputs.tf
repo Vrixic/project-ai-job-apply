@@ -118,6 +118,10 @@ output "public_job_route_id" {
   value = local.public_job_route_enabled ? aws_apigatewayv2_route.public_job[0].id : null
 }
 
+output "public_job_sitemap_route_id" {
+  value = local.public_job_route_enabled ? aws_apigatewayv2_route.public_job_sitemap[0].id : null
+}
+
 output "gateway_lambda_authorizer_id" {
   value = var.deploy_gateway_lambda ? aws_apigatewayv2_authorizer.gateway[0].id : null
 }

@@ -102,6 +102,14 @@ targets collapse to one absence result; reversible alias identity remains explic
 and malformed records remain availability errors rather than being converted into deindexing
 absence.
 
+Migration `0013_public_job_sitemap` adds a second fixed security-definer projection for bounded
+keyset sitemap pages. It returns only canonical UUIDv7 identifiers and `last_verified_at` for
+active, nonexpired, non-alias jobs that already satisfy the public-detail chronology and content
+boundary. The same dedicated reader retains execute-only access to the two projection functions
+and no Jobs table access. `src/public-sitemap.ts` validates exact row shape, chronology, ordering,
+uniqueness, and the 101-row lookahead before returning a maximum 100-item page; database or shape
+failures remain availability errors and never become a false-empty feed.
+
 The Jobs-owned function does not expose source/provider/provenance metadata, source URLs, company
 identifiers or verified domains, hashes, raw content, candidate data, or lifecycle reasons. The
 anonymous no-VPC edge, private fixed-query Lambda, canonical page, cache/throttle, and crawler

@@ -132,3 +132,10 @@ secret. The Lambda and route remain Terraform-default-off. The Jobs migration an
 refusals are source-verified but unapplied. Reviewed bootstrap/migration apply, artifact publication,
 Terraform plan/apply, accountable cluster-residual acceptance, and live abuse/availability
 acceptance are mandatory before anonymous activation.
+
+That isolated public edge/projection pair also implements the strict
+`GET /v1/public/jobs/sitemap` feed. The private Lambda accepts only an exact versioned sitemap
+operation and calls the Jobs-owned fixed projection; the edge validates every item and continuation
+before returning a bounded page. Invalid dependency payloads and invocation failures return one
+generic `503` and are never represented as an empty successful feed. The sitemap route shares the
+public-detail activation expression, so Terraform defaults leave both anonymous routes absent.

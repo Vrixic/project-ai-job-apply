@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "kind": "d1-representative-deployed-acceptance",
+  "status": "draft",
+  "environment": "development",
+  "release": {
+    "sourceSha": null,
+    "terraformStateSerial": null,
+    "runtimePlanPath": null,
+    "runtimePlanSha256": null,
+    "artifacts": [],
+    "migrationImage": { "sourceSha": null, "platformDigest": null, "receiptSha256": null }
+  },
+  "run": {
+    "runId": null,
+    "generatedSyntheticOnly": true,
+    "oneRunOnly": true,
+    "cleanupRequired": true,
+    "recoveryRequired": true,
+    "ledgerPath": null
+  },
+  "thresholds": {
+    "concurrency": { "read": null, "savedJob": null, "match": null, "providerFailure": null },
+    "durationMs": {
+      "read": null,
+      "savedJob": null,
+      "match": null,
+      "providerFailure": null,
+      "recovery": null,
+      "alertTransition": null
+    },
+    "latencyMs": {
+      "publicP95": null,
+      "authenticatedP95": null,
+      "apiAverage": null,
+      "apiMaximum": null,
+      "lambdaMaximum": null
+    },
+    "errors": {
+      "maxApplicationFailures": null,
+      "maxApi5xx": null,
+      "maxLambdaErrors": null,
+      "maxLambdaThrottles": null,
+      "maxErrorLogMatches": null,
+      "maxForbiddenLogMatches": null
+    },
+    "queues": {
+      "maxOldestAgeSeconds": null,
+      "maxVisible": null,
+      "maxEventDlq": null,
+      "maxDurableDlq": null
+    },
+    "alerts": {
+      "expectedHealthyAlarmCount": null,
+      "expectedConfirmedRecipientCount": null,
+      "reviewedRecipientSetSha256": null
+    }
+  },
+  "profiles": {
+    "read": { "required": true, "resultPath": null, "awsResultPath": null },
+    "savedJob": { "required": true, "resultPath": null, "awsResultPath": null },
+    "match": { "required": true, "resultPath": null, "awsResultPath": null },
+    "providerFailure": {
+      "required": true,
+      "state": "blocked",
+      "blocker": "No existing guarded generated-synthetic provider fixture supports bounded deployed fault injection, exact cleanup, and recovery verification.",
+      "existingGuardedSyntheticFixture": null
+    },
+    "alertDelivery": {
+      "required": true,
+      "statusResultPath": null,
+      "exerciseResultPath": null,
+      "operatorDeliveryConfirmed": false
+    },
+    "postRun": { "aggregateResultPath": null, "zeroDriftResultPath": null }
+  }
+}

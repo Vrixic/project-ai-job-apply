@@ -984,6 +984,14 @@ resource "aws_apigatewayv2_route" "public_job" {
   authorization_type = "NONE"
 }
 
+resource "aws_apigatewayv2_route" "public_job_sitemap" {
+  count              = local.public_job_route_enabled ? 1 : 0
+  api_id             = aws_apigatewayv2_api.gateway[0].id
+  route_key          = "GET /v1/public/jobs/sitemap"
+  target             = "integrations/${aws_apigatewayv2_integration.public_job_lambda[0].id}"
+  authorization_type = "NONE"
+}
+
 resource "aws_apigatewayv2_stage" "gateway" {
   count       = var.deploy_applications ? 1 : 0
   api_id      = aws_apigatewayv2_api.gateway[0].id
@@ -991,9 +999,12 @@ resource "aws_apigatewayv2_stage" "gateway" {
   auto_deploy = true
 
   dynamic "route_settings" {
-    for_each = local.public_job_route_enabled ? [1] : []
+    for_each = local.public_job_route_enabled ? toset([
+      aws_apigatewayv2_route.public_job[0].route_key,
+      aws_apigatewayv2_route.public_job_sitemap[0].route_key
+    ]) : toset([])
     content {
-      route_key                = aws_apigatewayv2_route.public_job[0].route_key
+      route_key                = route_settings.value
       detailed_metrics_enabled = true
       throttling_rate_limit    = var.public_job_route_throttling_rate_limit
       throttling_burst_limit   = var.public_job_route_throttling_burst_limit
@@ -2069,6 +2080,48 @@ resource "aws_cloudwatch_metric_alarm" "public_job_route_5xx" {
     ApiId = aws_apigatewayv2_api.gateway[0].id
     Stage = aws_apigatewayv2_stage.gateway[0].name
     Route = aws_apigatewayv2_route.public_job[0].route_key
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "public_job_sitemap_route_4xx" {
+  count               = local.public_job_route_enabled ? 1 : 0
+  alarm_name          = "${var.name}-${var.environment}-public-job-sitemap-route-4xx"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "4xx"
+  namespace           = "AWS/ApiGateway"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 20
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "Anonymous public-job sitemap 4xx volume exceeded the prelaunch boundary. Runbook: ${local.observability_runbook_url}"
+  dimensions = {
+    ApiId = aws_apigatewayv2_api.gateway[0].id
+    Stage = aws_apigatewayv2_stage.gateway[0].name
+    Route = aws_apigatewayv2_route.public_job_sitemap[0].route_key
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "public_job_sitemap_route_5xx" {
+  count               = local.public_job_route_enabled ? 1 : 0
+  alarm_name          = "${var.name}-${var.environment}-public-job-sitemap-route-5xx"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "5xx"
+  namespace           = "AWS/ApiGateway"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "Anonymous public-job sitemap emitted an integration 5xx. Runbook: ${local.observability_runbook_url}"
+  dimensions = {
+    ApiId = aws_apigatewayv2_api.gateway[0].id
+    Stage = aws_apigatewayv2_stage.gateway[0].name
+    Route = aws_apigatewayv2_route.public_job_sitemap[0].route_key
   }
 }
 

@@ -21,6 +21,7 @@ const migrationVersions = [
   "0010_public_job_truth_fields",
   "0011_positive_source_withdrawal",
   "0012_candidate_rights",
+  "0013_public_job_sitemap",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -59,6 +60,16 @@ const publicReaderBodyMatch =
   );
 if (!publicReaderBodyMatch?.[1]) throw new Error("The public reader function source is invalid");
 const expectedPublicReaderBody = publicReaderBodyMatch[1];
+const publicSitemapMigration = migrations.find(
+  (migration) => migration.version === "0013_public_job_sitemap",
+);
+if (!publicSitemapMigration) throw new Error("The public sitemap migration source is missing");
+const publicSitemapBodyMatch =
+  /CREATE FUNCTION jobs_public\.read_public_job_sitemap\([\s\S]*?AS \$function\$([\s\S]*?)\$function\$;/u.exec(
+    publicSitemapMigration.sql,
+  );
+if (!publicSitemapBodyMatch?.[1]) throw new Error("The public sitemap function source is invalid");
+const expectedPublicSitemapBody = publicSitemapBodyMatch[1];
 const reportingTriggerFunctions = [
   "guard_job_report",
   "guard_moderation_case",
@@ -133,6 +144,8 @@ try {
         publicReaderRoleCount: number;
         publicReaderFunctionCount: number;
         publicReaderFunctionBody: string | null;
+        publicSitemapFunctionCount: number;
+        publicSitemapFunctionBody: string | null;
         publicReaderGrantCount: number;
         publicReaderMembershipViolationCount: number;
         publicReaderMembershipCount: number;
@@ -432,6 +445,33 @@ try {
         ) AS "publicReaderFunctionBody"
         , (
           SELECT count(*)::int
+          FROM pg_proc function_definition
+          INNER JOIN pg_namespace namespace ON namespace.oid = function_definition.pronamespace
+          INNER JOIN pg_language language ON language.oid = function_definition.prolang
+          WHERE namespace.nspname = 'jobs_public'
+            AND function_definition.proname = 'read_public_job_sitemap'
+            AND function_definition.pronargs = 3
+            AND pg_get_function_identity_arguments(function_definition.oid) =
+              'after_last_modified_at timestamp with time zone, after_job_id uuid, requested_limit integer'
+            AND pg_get_function_result(function_definition.oid) =
+              'TABLE(job_id uuid, last_modified_at timestamp with time zone)'
+            AND language.lanname = 'plpgsql'
+            AND function_definition.provolatile = 's'
+            AND function_definition.prosecdef
+            AND NOT function_definition.proisstrict
+            AND function_definition.proparallel = 's'
+            AND function_definition.proconfig = ARRAY['search_path=pg_catalog']::text[]
+        ) AS "publicSitemapFunctionCount"
+        , (
+          SELECT function_definition.prosrc
+          FROM pg_proc function_definition
+          INNER JOIN pg_namespace namespace ON namespace.oid = function_definition.pronamespace
+          WHERE namespace.nspname = 'jobs_public'
+            AND function_definition.proname = 'read_public_job_sitemap'
+            AND function_definition.pronargs = 3
+        ) AS "publicSitemapFunctionBody"
+        , (
+          SELECT count(*)::int
           FROM (VALUES
             (has_database_privilege(
               'ai_job_apply_public_job_reader', current_database(), 'CONNECT'
@@ -454,6 +494,10 @@ try {
             (has_function_privilege(
               'ai_job_apply_public_job_reader',
               'jobs_public.read_public_job_detail(uuid)', 'EXECUTE'
+            )),
+            (has_function_privilege(
+              'ai_job_apply_public_job_reader',
+              'jobs_public.read_public_job_sitemap(timestamptz,uuid,integer)', 'EXECUTE'
             )),
             (NOT has_table_privilege(
               'ai_job_apply_public_job_reader', 'jobs.canonical_jobs', 'SELECT'
@@ -531,6 +575,9 @@ try {
               AND privilege_type = 'USAGE')
             OR (object_kind = 'function'
               AND object_name = 'jobs_public.read_public_job_detail(requested_job_id uuid)'
+              AND privilege_type = 'EXECUTE')
+            OR (object_kind = 'function'
+              AND object_name = 'jobs_public.read_public_job_sitemap(after_last_modified_at timestamp with time zone, after_job_id uuid, requested_limit integer)'
               AND privilege_type = 'EXECUTE')
           )
         ) AS "publicReaderDirectGrantViolationCount"
@@ -683,7 +730,9 @@ try {
       verification.publicReaderRoleCount !== 1 ||
       verification.publicReaderFunctionCount !== 1 ||
       verification.publicReaderFunctionBody !== expectedPublicReaderBody ||
-      verification.publicReaderGrantCount !== 8 ||
+      verification.publicSitemapFunctionCount !== 1 ||
+      verification.publicSitemapFunctionBody !== expectedPublicSitemapBody ||
+      verification.publicReaderGrantCount !== 9 ||
       verification.publicReaderMembershipViolationCount !== 0 ||
       verification.publicReaderMembershipCount !== verification.rdsIamRoleCount ||
       verification.publicReaderDirectGrantViolationCount !== 0 ||
@@ -727,6 +776,9 @@ try {
           publicReaderFunctionCount: verification?.publicReaderFunctionCount,
           publicReaderFunctionBodyMatches:
             verification?.publicReaderFunctionBody === expectedPublicReaderBody,
+          publicSitemapFunctionCount: verification?.publicSitemapFunctionCount,
+          publicSitemapFunctionBodyMatches:
+            verification?.publicSitemapFunctionBody === expectedPublicSitemapBody,
           publicReaderGrantCount: verification?.publicReaderGrantCount,
           publicReaderMembershipViolationCount: verification?.publicReaderMembershipViolationCount,
           publicReaderMembershipCount: verification?.publicReaderMembershipCount,

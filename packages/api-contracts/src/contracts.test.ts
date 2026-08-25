@@ -389,6 +389,46 @@ describe("PublicJobDetailResponse", () => {
   });
 });
 
+describe("PublicJobSitemapFeedResponse", () => {
+  const validate = compileComponentValidator("PublicJobSitemapFeedResponse");
+  const item = {
+    jobId: "018f92b0-4ad7-7b1d-8f44-b7ae694c85c1",
+    lastModifiedAt: "2026-08-16T11:00:00.000Z",
+  };
+
+  it("accepts only bounded canonical identifiers and public freshness", () => {
+    expect(validate({ items: [item] })).toBe(true);
+    expect(validate({ items: [item], sourceId: "ashby-linear-v1" })).toBe(false);
+    expect(validate({ items: [{ ...item, jobId: randomUUID() }] })).toBe(false);
+    expect(validate({ items: [{ ...item, lastModifiedAt: "2026-08-16T07:00:00-04:00" }] })).toBe(
+      false,
+    );
+    expect(validate({ items: Array.from({ length: 101 }, () => item) })).toBe(false);
+  });
+
+  it("freezes the anonymous keyset transport and fail-closed errors", () => {
+    const operation = contract.paths["/public/jobs/sitemap"].get;
+    expect(operation.security).toEqual([]);
+    expect(operation.parameters).toEqual([
+      {
+        in: "query",
+        name: "cursor",
+        required: false,
+        schema: {
+          type: "string",
+          minLength: 16,
+          maxLength: 512,
+          pattern: "^[A-Za-z0-9_-]+$",
+        },
+      },
+    ]);
+    expect(operation.responses[400].$ref).toBe("#/components/responses/PublicJobBadRequest");
+    expect(operation.responses[503].$ref).toBe("#/components/responses/PublicJobUnavailable");
+    expect(operation.responses).not.toHaveProperty("404");
+    expect(operation.responses).not.toHaveProperty("429");
+  });
+});
+
 describe("job search contracts", () => {
   const validateRequest = compileComponentValidator("JobSearchRequest");
   const validatePage = compileComponentValidator("JobSearchPage");

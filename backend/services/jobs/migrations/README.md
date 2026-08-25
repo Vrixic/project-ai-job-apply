@@ -44,3 +44,8 @@ other service may modify these tables.
 - `0011_positive_source_withdrawal.sql` — Records explicit provider withdrawal per exact source so
   a canonical job is removed only after every source is positively withdrawn; empty and failed
   polls remain non-evidence.
+- `0013_public_job_sitemap.sql` — Adds the second execute-only `jobs_public` projection. It returns
+  at most 101 active, unexpired canonical UUIDv7 identifiers and their public `last_verified_at`
+  freshness in `(last_verified_at DESC, id ASC)` keyset order. The dedicated reader retains no
+  direct Jobs table access; incomplete, future, or oversized internal cursors raise instead of
+  producing a false-empty page.

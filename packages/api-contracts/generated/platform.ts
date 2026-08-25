@@ -356,6 +356,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/public/jobs/sitemap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPublicJobSitemapFeed"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/saved-jobs": {
         parameters: {
             query?: never;
@@ -1136,6 +1152,15 @@ export interface components {
             canonicalJobId: string;
             isAlias: boolean;
             job: components["schemas"]["PublicJobDetail"];
+        };
+        PublicJobSitemapItem: {
+            jobId: string;
+            /** Format: date-time */
+            lastModifiedAt: string;
+        };
+        PublicJobSitemapFeedResponse: {
+            items: components["schemas"]["PublicJobSitemapItem"][];
+            nextCursor?: string;
         };
         EntitlementSummary: {
             /** @enum {string} */
@@ -2101,6 +2126,31 @@ export interface operations {
             };
             400: components["responses"]["PublicJobBadRequest"];
             404: components["responses"]["PublicJobNotFound"];
+            503: components["responses"]["PublicJobUnavailable"];
+        };
+    };
+    getPublicJobSitemapFeed: {
+        parameters: {
+            query?: {
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded active canonical-job sitemap feed without source or candidate data */
+            200: {
+                headers: {
+                    "Cache-Control": "public, max-age=0, must-revalidate";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicJobSitemapFeedResponse"];
+                };
+            };
+            400: components["responses"]["PublicJobBadRequest"];
             503: components["responses"]["PublicJobUnavailable"];
         };
     };

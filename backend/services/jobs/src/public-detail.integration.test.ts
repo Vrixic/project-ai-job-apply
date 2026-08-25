@@ -63,10 +63,10 @@ describeWithDatabase("dedicated public job reader boundary", () => {
     const first = await runMigrationVerifier();
     const replay = await runMigrationVerifier();
     expect(first.stdout.trim()).toBe(
-      "Jobs migrations through 0012_candidate_rights applied and verified.",
+      "Jobs migrations through 0013_public_job_sitemap applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(
-      "Jobs migrations through 0012_candidate_rights applied and verified.",
+      "Jobs migrations through 0013_public_job_sitemap applied and verified.",
     );
 
     await client`
@@ -209,6 +209,28 @@ describeWithDatabase("dedicated public job reader boundary", () => {
     expect(canonical[0]).not.toHaveProperty("raw_snapshot");
   });
 
+  it("projects only canonical active sitemap identifiers through a bounded keyset", async () => {
+    const firstPage = await asReader<Record<string, unknown>>(`
+      SELECT * FROM jobs_public.read_public_job_sitemap(NULL, NULL, 1)
+    `);
+    expect(firstPage).toEqual([
+      {
+        job_id: canonicalJobId,
+        last_modified_at: new Date("2026-08-15T11:00:00.000Z"),
+      },
+    ]);
+    expect(Object.keys(firstPage[0] ?? {}).sort()).toEqual(["job_id", "last_modified_at"]);
+
+    const continuation = await asReader<Record<string, unknown>>(`
+      SELECT * FROM jobs_public.read_public_job_sitemap(
+        '2026-08-15T11:00:00.000Z'::timestamptz,
+        '${canonicalJobId}'::uuid,
+        1
+      )
+    `);
+    expect(continuation).toEqual([]);
+  });
+
   it("has only the reviewed application-database grants", async () => {
     const rows = await client<
       Array<{
@@ -218,7 +240,8 @@ describeWithDatabase("dedicated public job reader boundary", () => {
         publicSchema: boolean;
         jobsSchema: boolean;
         projectionSchema: boolean;
-        projectionFunction: boolean;
+        detailProjectionFunction: boolean;
+        sitemapProjectionFunction: boolean;
         catalogTable: boolean;
       }>
     >`
@@ -231,7 +254,12 @@ describeWithDatabase("dedicated public job reader boundary", () => {
         has_schema_privilege(${readerRole}, 'jobs_public', 'USAGE') AS "projectionSchema",
         has_function_privilege(
           ${readerRole}, 'jobs_public.read_public_job_detail(uuid)', 'EXECUTE'
-        ) AS "projectionFunction",
+        ) AS "detailProjectionFunction",
+        has_function_privilege(
+          ${readerRole},
+          'jobs_public.read_public_job_sitemap(timestamptz,uuid,integer)',
+          'EXECUTE'
+        ) AS "sitemapProjectionFunction",
         has_table_privilege(${readerRole}, 'jobs.canonical_jobs', 'SELECT') AS "catalogTable"
     `;
     expect(rows).toEqual([
@@ -242,7 +270,8 @@ describeWithDatabase("dedicated public job reader boundary", () => {
         publicSchema: false,
         jobsSchema: false,
         projectionSchema: true,
-        projectionFunction: true,
+        detailProjectionFunction: true,
+        sitemapProjectionFunction: true,
         catalogTable: false,
       },
     ]);
@@ -341,7 +370,7 @@ describeWithDatabase("dedicated public job reader boundary", () => {
   it("clears password drift and rejects unexpected direct role membership", async () => {
     await client.unsafe(`ALTER ROLE ${readerRole} PASSWORD 'synthetic-password-drift'`);
     await expect(runMigrationVerifier()).resolves.toMatchObject({
-      stdout: expect.stringContaining("0012_candidate_rights applied and verified"),
+      stdout: expect.stringContaining("0013_public_job_sitemap applied and verified"),
     });
     const [afterPasswordRepair] = await client<{ passwordIsNull: boolean }[]>`
       SELECT rolpassword IS NULL AS "passwordIsNull"
@@ -358,7 +387,7 @@ describeWithDatabase("dedicated public job reader boundary", () => {
       await client.unsafe("DROP ROLE public_job_reader_unexpected_group");
     }
     await expect(runMigrationVerifier()).resolves.toMatchObject({
-      stdout: expect.stringContaining("0012_candidate_rights applied and verified"),
+      stdout: expect.stringContaining("0013_public_job_sitemap applied and verified"),
     });
 
     await client.unsafe(`GRANT rds_iam TO ${readerRole} WITH ADMIN TRUE, INHERIT FALSE, SET FALSE`);
@@ -370,7 +399,7 @@ describeWithDatabase("dedicated public job reader boundary", () => {
       );
     }
     await expect(runMigrationVerifier()).resolves.toMatchObject({
-      stdout: expect.stringContaining("0012_candidate_rights applied and verified"),
+      stdout: expect.stringContaining("0013_public_job_sitemap applied and verified"),
     });
 
     await client.unsafe("CREATE ROLE public_job_reader_secondary_grantor NOLOGIN");
@@ -396,7 +425,7 @@ describeWithDatabase("dedicated public job reader boundary", () => {
       await client.unsafe("DROP ROLE public_job_reader_secondary_grantor");
     }
     await expect(runMigrationVerifier()).resolves.toMatchObject({
-      stdout: expect.stringContaining("0012_candidate_rights applied and verified"),
+      stdout: expect.stringContaining("0013_public_job_sitemap applied and verified"),
     });
   });
 
@@ -419,7 +448,7 @@ describeWithDatabase("dedicated public job reader boundary", () => {
       );
     }
     await expect(runMigrationVerifier()).resolves.toMatchObject({
-      stdout: expect.stringContaining("0012_candidate_rights applied and verified"),
+      stdout: expect.stringContaining("0013_public_job_sitemap applied and verified"),
     });
   });
 
