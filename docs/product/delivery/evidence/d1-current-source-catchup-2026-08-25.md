@@ -16,6 +16,14 @@ All work was integrated directly on shared `main`. The three assigned agents cre
 commits, or cloud mutations; the primary agent reviewed, reconciled, tested, and committed their
 disjoint changes as one source candidate.
 
+The first exact-current workflow publication invocation then exposed a wrapper-only PowerShell
+binding defect before any workflow object was written: empty optional checksum/path parameters had
+been forwarded explicitly to validated engine parameters. Exact correction
+`bec803cae0dd8c0e1d6c90da0745ac6f868b068a` conditionally forwards all three optional values in both
+the workflow and public-job wrappers. PowerShell 7 and 5.1 regressions pass for both wrappers. The
+earlier gateway publication remains immutable but is superseded for final-source provenance; it
+did not deploy anything.
+
 ## Verification
 
 - API contracts: 37/37.
