@@ -35,6 +35,16 @@ Read the sanitized state:
 Before subscription, zero confirmed destinations is expected. Any unintended pending or duplicate
 subscription must be handled through a separately reviewed operator action.
 
+Machine-readable status is available as one compact aggregate-only object:
+
+```powershell
+.\scripts\operate-platform-alerts.ps1 -Environment staging -Action Status -AggregateJson
+```
+
+It fails closed unless the canary and every Terraform-managed runtime alarm under the exact
+staging name prefix are `OK` with both actions. The output omits endpoints, ARNs, account
+identifiers, and notification content.
+
 ## Subscribe without retaining the destination
 
 Run:
@@ -73,6 +83,23 @@ The operator:
 
 Confirm receipt of both the synthetic ALARM and recovery notifications. These are notification
 path tests, not service incidents.
+
+When an aggregate delivery record is required, an accountable reviewer must separately calculate
+and review the lowercase SHA-256 of this in-memory UTF-8/no-BOM canonical form: the literal first
+line `d1-alert-recipient-set-v1`, followed by each confirmed email endpoint trimmed, lowercased,
+ordinally sorted, and placed on its own line, including a final newline. Retain only the digest and
+never the canonical recipient payload. Run:
+
+```powershell
+.\scripts\operate-platform-alerts.ps1 -Environment staging -Action Exercise -Execute `
+  -AggregateJson -ReviewedRecipientSetSha256 '<reviewed-recipient-set-sha256>'
+```
+
+The operator verifies the exact confirmed recipient-set digest before the exercise. After one
+ALARM and one recovery transition finish at `OK`, it asks the accountable operator to directly
+verify both sanitized notifications and type an exact confirmation phrase. Delivery is never
+inferred from SNS or CloudWatch state. Retain only the compact aggregate JSON; a missing or
+non-exact manual confirmation produces `deliveryConfirmed: false`.
 
 ## Final checks
 

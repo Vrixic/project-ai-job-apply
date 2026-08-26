@@ -4,6 +4,7 @@ import { LeverPostingsAdapter } from "./lever.js";
 const context = () => ({
   observedAt: new Date("2026-08-23T00:00:00.000Z"),
   signal: new AbortController().signal,
+  attempt: 1,
 });
 
 function posting(overrides: Record<string, unknown> = {}) {

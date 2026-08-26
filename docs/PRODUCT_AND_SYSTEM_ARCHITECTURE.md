@@ -1642,22 +1642,18 @@ Do not launch automated submission broadly until:
 
 The living delivery tracker is authoritative. Current dependency order is:
 
-1. Publish, deploy, and execute the locally verified D1-002 generated-synthetic direct-dark
-   acceptance packet while all document-processing triggers remain disabled; then stop for human
-   review of ADR-023 and the separate activation sequence. Keep real resumes prohibited.
-2. Complete D1-005's mutation-driven stale-cursor acceptance against the deployed gateway, add the
-   merged Matching-owned saved-job migration to the release composition, and run managed-OIDC/browser
-   acceptance; then implement hard-constraint evaluation and grounded explanations without cross-owner
-   database access.
-3. Implement D1 reporting and moderation, provider-neutral entitlements, crawlable job pages, and
-   delivery-wide reliability/accessibility evidence with synthetic data and fail-closed external
-   integrations. Per ADR-024, defer Applications-owned technical history to D3 and the generic
-   Notifications-owned action inbox to D5.
-4. Integrate the merged source-neutral ingestion foundation into bounded durable scheduling and
-   deployed acceptance. Under ADR-025, Greenhouse, Lever, and Ashby do not require a separate
-   counsel gate, but each exact company configuration stays disabled until product/source
-   engineering accepts its provenance, cadence, revalidation, takedown, egress, and kill-switch
-   evidence.
+1. Finish D1-010A's generated-synthetic provider fault/recovery fixture and strict aggregate alert
+   evidence plumbing without inventing SLO thresholds, recipients, or delivery confirmation.
+2. Execute the candidate-rights export/deletion and recovery-replay acceptance during a later
+   disposable recent-MFA window; retain the default-dark boundary and require accountable
+   backup-aging, privacy, security, and product disposition.
+3. Complete hosted Vercel presentation, managed-OIDC browser, public-route, security-header,
+   cache/lifecycle/load, and human assistive-technology evidence only after the non-Zach hosted
+   identities and approved public host are available. Keep anonymous publication/indexing off.
+4. Preserve all ingestion and provider gates default-off. Under ADR-025, Greenhouse, Lever, and
+   Ashby do not require a separate counsel gate, but each exact company configuration still needs
+   product/source-engineering provenance, cadence, revalidation, takedown, egress, and kill-switch
+   acceptance before activation.
 5. Acquire authorized representative provider fixtures in D2, D3, and D4 after each owning
    adapter declares its supported variants; D0-007 owns the approved process and fail-closed gate,
    not premature provider selection.

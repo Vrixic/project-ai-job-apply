@@ -15,6 +15,7 @@ import type {
   SourceJobWithdrawal,
   SourcePollResult,
 } from "./contract.js";
+import { assertSourcePollAttempt } from "./contract.js";
 import type { SourceRegistry } from "./registry.js";
 
 export const maximumSourceBatchSize = 100;
@@ -407,6 +408,7 @@ export class SourceNeutralIngestionRunner {
   }
 
   async run(sourceId: string, attempt: number, signal: AbortSignal): Promise<IngestionRunResult> {
+    assertSourcePollAttempt(attempt);
     const registration = this.registry.requireEnabled(sourceId);
     const identity = Object.freeze({
       sourceId: registration.sourceId,
@@ -424,7 +426,9 @@ export class SourceNeutralIngestionRunner {
     const observedAt = currentTimestamp(this.#clock);
     let result: SourcePollResult;
     try {
-      result = await registration.adapter.poll({ observedAt: new Date(observedAt), signal });
+      result = await registration.adapter.poll(
+        Object.freeze({ observedAt: new Date(observedAt), signal, attempt }),
+      );
     } catch {
       if (signal.aborted) {
         return {

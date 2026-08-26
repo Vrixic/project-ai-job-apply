@@ -4,6 +4,7 @@ import { GreenhouseJobBoardAdapter } from "./greenhouse.js";
 const context = () => ({
   observedAt: new Date("2026-08-22T00:00:00.000Z"),
   signal: new AbortController().signal,
+  attempt: 1,
 });
 
 function adapter(fetch: typeof globalThis.fetch) {

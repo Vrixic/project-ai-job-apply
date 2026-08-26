@@ -1,4 +1,9 @@
-import type { IngestionSourceAdapter, SourceJobObservation, SourcePollResult } from "./contract.js";
+import type {
+  IngestionSourceAdapter,
+  SourceJobObservation,
+  SourcePollContext,
+  SourcePollResult,
+} from "./contract.js";
 
 export const generatedSyntheticSourceId = "synthetic-foundation-v1";
 export const generatedSyntheticAdapterVersion = "synthetic-ingestion-v1";
@@ -56,7 +61,7 @@ export class GeneratedSyntheticIngestionAdapter implements IngestionSourceAdapte
 
   constructor(private readonly seed: string) {}
 
-  async poll({ observedAt }: { observedAt: Date; signal: AbortSignal }): Promise<SourcePollResult> {
+  async poll({ observedAt }: SourcePollContext): Promise<SourcePollResult> {
     return {
       kind: "success",
       observations: buildGeneratedSyntheticObservations(this.seed, observedAt),

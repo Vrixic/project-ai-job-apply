@@ -1,4 +1,9 @@
-import type { IngestionSourceAdapter, SourceJobObservation, SourcePollResult } from "./contract.js";
+import type {
+  IngestionSourceAdapter,
+  SourceJobObservation,
+  SourcePollContext,
+  SourcePollResult,
+} from "./contract.js";
 
 const boardTokenPattern = /^[a-z0-9][a-z0-9_-]{1,62}$/;
 const sourceIdPattern = /^greenhouse-[a-z0-9][a-z0-9-]{2,52}$/;
@@ -207,7 +212,7 @@ export class GreenhouseJobBoardAdapter implements IngestionSourceAdapter {
     }
   }
 
-  async poll({ signal }: { observedAt: Date; signal: AbortSignal }): Promise<SourcePollResult> {
+  async poll({ signal }: SourcePollContext): Promise<SourcePollResult> {
     const timeout = AbortSignal.timeout(this.#requestTimeoutMs);
     const combined = AbortSignal.any([signal, timeout]);
     let response: Response;

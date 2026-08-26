@@ -1,59 +1,59 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { ZipFile } from "yazl";
-import { parseResume } from "./index.js";
 import { parseDocx } from "./docx.js";
-import { InvalidDocumentError, ParseLimitError } from "./limits.js";
+import {
+  CONTENT_TYPES_XML,
+  GENERATED_DOCUMENT_CORPUS_VERSION,
+  generatedDocx,
+  generatedDocxAdversarialCorpus,
+  generatedMinimalPdf,
+  generatedPdfAdversarialCorpus,
+} from "./generated-adversarial-corpus.js";
+import { parseResume } from "./index.js";
+import { DOCUMENT_LIMITS, type InvalidDocumentError, type ParseLimitError } from "./limits.js";
 import { normalizeBlocks } from "./normalize.js";
+import { parsePdf } from "./pdf.js";
 
-function minimalPdf(text: string): Uint8Array {
-  const escaped = text.replaceAll("\\", "\\\\").replaceAll("(", "\\(").replaceAll(")", "\\)");
-  const objects = [
-    "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
-    "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
-    "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>\nendobj\n",
-    `4 0 obj\n<< /Length ${escaped.length + 29} >>\nstream\nBT /F1 12 Tf 72 720 Td (${escaped}) Tj ET\nendstream\nendobj\n`,
-    "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
-  ];
-  let source = "%PDF-1.4\n";
-  const offsets = [0];
-  for (const object of objects) {
-    offsets.push(Buffer.byteLength(source));
-    source += object;
-  }
-  const xref = Buffer.byteLength(source);
-  source += `xref\n0 6\n0000000000 65535 f \n${offsets
-    .slice(1)
-    .map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`)
-    .join("")}trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
-  return new TextEncoder().encode(source);
-}
+const parseInput = {
+  documentId: "019b4e12-7ea3-7c36-9357-aea35ab542ca",
+  documentVersion: 1,
+  parserVersion: "resume-parser-v1",
+  createdAt: "2026-08-12T12:00:00.000Z",
+} as const;
 
-function docx(entries: ReadonlyArray<{ name: string; value: string }>): Promise<Uint8Array> {
-  return new Promise((resolve, reject) => {
-    const zip = new ZipFile();
-    const chunks: Buffer[] = [];
-    zip.outputStream.on("data", (chunk: Buffer) => chunks.push(chunk));
-    zip.outputStream.once("error", reject);
-    zip.outputStream.once("end", () => resolve(Buffer.concat(chunks)));
-    for (const entry of entries) zip.addBuffer(Buffer.from(entry.value), entry.name);
-    zip.end();
+describe(`generated adversarial corpus ${GENERATED_DOCUMENT_CORPUS_VERSION}`, () => {
+  describe("PDF envelope and active-content controls", () => {
+    it.each(generatedPdfAdversarialCorpus)("rejects $name", async ({ generate, reasonCode }) => {
+      await expect(parsePdf(await generate())).rejects.toMatchObject({
+        name: "InvalidDocumentError",
+        reasonCode,
+      });
+    });
+
+    it("rejects a generated PDF over the page limit", async () => {
+      await expect(
+        parsePdf(generatedMinimalPdf("generated page-limit fixture", DOCUMENT_LIMITS.pages + 1)),
+      ).rejects.toMatchObject({
+        name: "ParseLimitError",
+        reasonCode: "PDF_PAGE_LIMIT",
+      });
+    });
   });
-}
 
-const contentTypes =
-  '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/></Types>';
+  describe("DOCX package, XML, and expansion controls", () => {
+    it.each(generatedDocxAdversarialCorpus)("rejects $name", async ({ generate, reasonCode }) => {
+      await expect(parseDocx(await generate())).rejects.toMatchObject({ reasonCode });
+    });
+  });
+});
 
 describe("bounded resume parsing", () => {
   it("extracts deterministic normalized text from a PDF", async () => {
-    const bytes = minimalPdf("Taylor Candidate - TypeScript");
+    const bytes = generatedMinimalPdf("Taylor Candidate - TypeScript");
     const normalized = await parseResume({
-      documentId: "019b4e12-7ea3-7c36-9357-aea35ab542ca",
-      documentVersion: 1,
-      parserVersion: "resume-parser-v1",
+      ...parseInput,
       mediaType: "application/pdf",
       sourceSha256: createHash("sha256").update(bytes).digest("hex"),
-      createdAt: "2026-08-12T12:00:00.000Z",
       bytes,
     });
     expect(normalized.blocks).toEqual([
@@ -61,63 +61,106 @@ describe("bounded resume parsing", () => {
     ]);
   });
 
-  it("extracts allowlisted WordprocessingML paragraphs", async () => {
-    const bytes = await docx([
-      { name: "[Content_Types].xml", value: contentTypes },
-      {
-        name: "word/document.xml",
-        value:
-          '<?xml version="1.0"?><w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:t>Skills: TypeScript, PostgreSQL</w:t></w:r></w:p></w:body></w:document>',
-      },
+  it("extracts and orders only allowlisted WordprocessingML parts", async () => {
+    const wordPart = (text: string) =>
+      `<?xml version="1.0"?><w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:body></w:document>`;
+    const bytes = await generatedDocx([
+      { name: "[Content_Types].xml", value: CONTENT_TYPES_XML },
+      { name: "word/header1.xml", value: wordPart("Header") },
+      { name: "word/document.xml", value: wordPart("Skills: TypeScript") },
+      { name: "word/footnotes.xml", value: wordPart("Footnote") },
+      { name: "word/footer1.xml", value: wordPart("Footer") },
+      { name: "word/endnotes.xml", value: wordPart("Endnote") },
+      { name: "word/styles.xml", value: wordPart("Not extracted") },
     ]);
     const blocks = await parseDocx(bytes);
     expect(normalizeBlocks(blocks).map((block) => block.text)).toEqual([
-      "Skills: TypeScript, PostgreSQL",
+      "Skills: TypeScript",
+      "Endnote",
+      "Footer",
+      "Footnote",
+      "Header",
     ]);
   });
 
-  it("rejects traversal, DTDs, active PDF tokens, and excessive blocks", async () => {
-    const activePackage = await docx([
-      { name: "[Content_Types].xml", value: contentTypes },
-      { name: "word/document.xml", value: "<w:document/>" },
-      { name: "word/vbaProject.bin", value: "bad" },
+  it("preserves generated tab and line-break semantics before normalization", async () => {
+    const bytes = await generatedDocx([
+      { name: "[Content_Types].xml", value: CONTENT_TYPES_XML },
+      {
+        name: "word/document.xml",
+        value:
+          '<?xml version="1.0"?><w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:t>TypeScript</w:t><w:tab/><w:t>PostgreSQL</w:t><w:br/><w:t>AWS</w:t></w:r></w:p></w:body></w:document>',
+      },
     ]);
-    await expect(parseDocx(activePackage)).rejects.toBeInstanceOf(InvalidDocumentError);
-
-    const dtd = await docx([
-      { name: "[Content_Types].xml", value: contentTypes },
-      { name: "word/document.xml", value: "<!DOCTYPE x><w:document/>" },
+    expect(normalizeBlocks(await parseDocx(bytes)).map((block) => block.text)).toEqual([
+      "TypeScript PostgreSQL AWS",
     ]);
-    await expect(parseDocx(dtd)).rejects.toBeInstanceOf(InvalidDocumentError);
+  });
 
-    const activePdf = minimalPdf("/JavaScript");
+  it("rejects empty sources and source digest mismatches before parsing", async () => {
     await expect(
       parseResume({
-        documentId: "019b4e12-7ea3-7c36-9357-aea35ab542ca",
-        documentVersion: 1,
-        parserVersion: "resume-parser-v1",
+        ...parseInput,
         mediaType: "application/pdf",
-        sourceSha256: createHash("sha256").update(activePdf).digest("hex"),
-        createdAt: "2026-08-12T12:00:00.000Z",
-        bytes: activePdf,
+        sourceSha256: createHash("sha256").update(new Uint8Array()).digest("hex"),
+        bytes: new Uint8Array(),
       }),
-    ).rejects.toBeInstanceOf(InvalidDocumentError);
+    ).rejects.toMatchObject({ reasonCode: "SOURCE_SIZE" });
 
-    const escapedActivePdf = minimalPdf("/Java#53cript");
+    const bytes = generatedMinimalPdf("generated digest mismatch");
     await expect(
       parseResume({
-        documentId: "019b4e12-7ea3-7c36-9357-aea35ab542ca",
-        documentVersion: 1,
-        parserVersion: "resume-parser-v1",
+        ...parseInput,
         mediaType: "application/pdf",
-        sourceSha256: createHash("sha256").update(escapedActivePdf).digest("hex"),
-        createdAt: "2026-08-12T12:00:00.000Z",
-        bytes: escapedActivePdf,
+        sourceSha256: "0".repeat(64),
+        bytes,
       }),
-    ).rejects.toBeInstanceOf(InvalidDocumentError);
+    ).rejects.toMatchObject({ reasonCode: "SOURCE_DIGEST" });
+  });
+});
 
-    expect(() => normalizeBlocks(Array.from({ length: 10_001 }, () => ({ text: "x" })))).toThrow(
-      ParseLimitError,
+describe("normalization safety controls", () => {
+  it("removes unsupported control characters and calculates stable offsets", () => {
+    expect(normalizeBlocks([{ text: "  Type\u0000Script\t  AWS  " }, { text: "SQL" }])).toEqual([
+      { index: 0, text: "TypeScript AWS", startOffset: 0, endOffset: 14 },
+      { index: 1, text: "SQL", startOffset: 15, endOffset: 18 },
+    ]);
+  });
+
+  it("rejects documents without usable text", () => {
+    expect(() => normalizeBlocks([{ text: " \t\r\n " }])).toThrowError(
+      expect.objectContaining<Partial<InvalidDocumentError>>({ reasonCode: "NO_USABLE_TEXT" }),
+    );
+  });
+
+  it("enforces the block count limit", () => {
+    expect(() =>
+      normalizeBlocks(Array.from({ length: DOCUMENT_LIMITS.blocks + 1 }, () => ({ text: "x" }))),
+    ).toThrowError(
+      expect.objectContaining<Partial<ParseLimitError>>({ reasonCode: "BLOCK_COUNT_LIMIT" }),
+    );
+  });
+
+  it("enforces the per-block character limit", () => {
+    expect(() =>
+      normalizeBlocks([{ text: "x".repeat(DOCUMENT_LIMITS.blockCharacters + 1) }]),
+    ).toThrowError(
+      expect.objectContaining<Partial<ParseLimitError>>({ reasonCode: "BLOCK_CHARACTER_LIMIT" }),
+    );
+  });
+
+  it("enforces the total character limit", () => {
+    const maximumBlock = "x".repeat(DOCUMENT_LIMITS.blockCharacters);
+    expect(() =>
+      normalizeBlocks([
+        ...Array.from(
+          { length: DOCUMENT_LIMITS.characters / DOCUMENT_LIMITS.blockCharacters },
+          () => ({ text: maximumBlock }),
+        ),
+        { text: "x" },
+      ]),
+    ).toThrowError(
+      expect.objectContaining<Partial<ParseLimitError>>({ reasonCode: "DOCUMENT_CHARACTER_LIMIT" }),
     );
   });
 });

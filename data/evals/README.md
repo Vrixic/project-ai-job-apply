@@ -18,5 +18,6 @@ The first executable set is the
 [`D1 match-assessment set`](matching/d1-match-assessment.v1.json). It is generated-synthetic
 scenario coverage for the already selected US-English early/mid-career software, data, and product
 launch segment. It is not a statistical population sample, provider fixture, ranking or calibration
-set, or evidence about hiring outcomes. Its candidate rubric remains pending accountable Product
-and QA approval.
+set, or evidence about hiring outcomes. Product and independent QA accepted and froze the exact v1
+corpus, all-or-nothing rubric, gate semantics, and fixed value-free copy with those limitations;
+the Phase 1 delivery record remains the authoritative acceptance evidence.

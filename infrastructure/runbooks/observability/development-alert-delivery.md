@@ -27,6 +27,18 @@ Read the sanitized state:
 
 Any unintended pending or duplicate subscription requires a separately reviewed cleanup action.
 
+For the D1 representative-acceptance contract, retain the single compact JSON object from:
+
+```powershell
+.\scripts\operate-platform-alerts.ps1 -Environment development -Action Status -AggregateJson
+```
+
+This mode fails closed unless the canary and every Terraform-managed runtime alarm under the exact
+development name prefix are `OK` and have both ALARM and OK actions. Its
+`d1_deployed_alert_status_v1` result contains only the check time, recipient counts, canary state,
+action counts, and healthy runtime-alarm count. It never contains an endpoint, subscription ARN,
+topic ARN, account identifier, or notification body.
+
 ## Subscribe without retaining the destination
 
 ```powershell
@@ -48,6 +60,26 @@ The operator establishes `OK`, publishes `1` only to the dedicated `AlertDeliver
 `ALARM`, publishes `0`, waits for `OK`, and publishes a final recovery value in `finally`. Confirm
 receipt of both synthetic notifications. These messages test routing; they are not service
 incidents.
+
+To produce the strict D1 aggregate, first have the accountable reviewer bind the exact confirmed
+recipient set. Canonicalize only in separately controlled memory as UTF-8 without a BOM: the
+literal line `d1-alert-recipient-set-v1`, followed by each confirmed email endpoint trimmed,
+lowercased, ordinally sorted, and written on its own line, including one final newline. Review and
+retain only the lowercase SHA-256; do not retain or paste the canonical payload. Then run:
+
+```powershell
+.\scripts\operate-platform-alerts.ps1 -Environment development -Action Exercise -Execute `
+  -AggregateJson -ReviewedRecipientSetSha256 '<reviewed-recipient-set-sha256>'
+```
+
+The operator recomputes the digest from the confirmed SNS email subscriptions before publishing a
+metric and refuses a mismatch, duplicate destination, or non-email protocol. After the canary has
+completed one ALARM transition and one recovery transition and is independently read back as
+`OK`, the accountable operator must directly verify both sanitized notifications and type the
+exact prompted confirmation phrase. The script does not infer delivery from subscription state,
+CloudWatch state, or a successful publish. Retain only the resulting
+`d1_deployed_alert_delivery_v1` JSON object; `deliveryConfirmed` remains `false` unless the exact
+manual confirmation is entered.
 
 Afterward, require `CanaryState: OK`, both actions on every managed alarm, API and durable-trigger
 health, an empty ECS application boundary, and zero unexpected application-error or forbidden-log

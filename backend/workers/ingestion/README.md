@@ -73,8 +73,10 @@ around this coordinator. Greenhouse, Lever, and Ashby configuration is an exact 
 list, not an arbitrary URL or credential. Provider execution additionally requires the global
 runtime gate, explicit provider authority, and private application networking with NAT egress.
 Each source is independently enabled and pauseable; changing its company/tenant configuration
-changes its immutable configuration digest. The development environment currently has no provider
-configuration or real-provider data and remains disabled.
+changes its immutable configuration digest. Development Terraform retains no enabled provider
+configuration and all ingestion/provider activation gates remain off. A prior bounded, attributable
+Ashby acceptance run retained canonical projections with exact provenance; it retained no raw
+provider snapshots and does not authorize another provider request or an enabled source.
 
 Run unit tests with `pnpm --filter @ai-job-apply/ingestion-worker test`. PostgreSQL integration
 requires an explicit `DATABASE_URL` and is separate from the default suite.

@@ -105,6 +105,36 @@ function catalog(outcomes: RecordObservationResult["outcome"][] = ["created"]): 
 }
 
 describe("SourceNeutralIngestionRunner", () => {
+  it("passes one immutable validated attempt context to the source adapter", async () => {
+    const target = catalog();
+    const poll = vi.fn<IngestionSourceAdapter["poll"]>(async (context) => {
+      expect(Object.isFrozen(context)).toBe(true);
+      expect(context).toMatchObject({ attempt: 4, observedAt });
+      return { kind: "success", observations: [] };
+    });
+    const runner = new SourceNeutralIngestionRunner(registry(adapter(poll)), target.port, {
+      clock: () => observedAt,
+    });
+
+    await expect(
+      runner.run("synthetic-foundation-v1", 4, new AbortController().signal),
+    ).resolves.toMatchObject({ status: "succeeded", observationCount: 0 });
+    expect(poll).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([0, 6, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    "rejects invalid source poll attempt %s before adapter dispatch",
+    async (attempt) => {
+      const sourceAdapter = adapter({ kind: "success", observations: [] });
+      const runner = new SourceNeutralIngestionRunner(registry(sourceAdapter), catalog().port);
+
+      await expect(
+        runner.run("synthetic-foundation-v1", attempt, new AbortController().signal),
+      ).rejects.toThrow("source poll attempt must be a whole number from 1 through 5");
+      expect(sourceAdapter.poll).not.toHaveBeenCalled();
+    },
+  );
+
   it("injects fixed provenance, canonicalizes URLs, and returns aggregate-only counts", async () => {
     const target = catalog(["created", "exact_match_updated"]);
     const runner = new SourceNeutralIngestionRunner(

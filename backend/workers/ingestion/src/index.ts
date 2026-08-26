@@ -8,3 +8,4 @@ export * from "./orchestration-store.js";
 export * from "./registry.js";
 export * from "./runner.js";
 export * from "./synthetic.js";
+export * from "./synthetic-fault.js";

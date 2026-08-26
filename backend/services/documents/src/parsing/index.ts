@@ -1,13 +1,12 @@
 import { createHash } from "node:crypto";
 import { parseDocx } from "./docx.js";
 import { DOCUMENT_LIMITS, InvalidDocumentError } from "./limits.js";
-import { normalizeBlocks, type NormalizedResumeDocument } from "./normalize.js";
+import { type NormalizedResumeDocument, normalizeBlocks } from "./normalize.js";
 import { parsePdf } from "./pdf.js";
 
 export { DOCUMENT_LIMITS, InvalidDocumentError, ParseLimitError } from "./limits.js";
 export type { NormalizedResumeBlock, NormalizedResumeDocument } from "./normalize.js";
-export { characterCount } from "./normalize.js";
-export { parseNormalizedResumeDocument } from "./normalize.js";
+export { characterCount, parseNormalizedResumeDocument } from "./normalize.js";
 
 export interface ParseResumeInput {
   documentId: string;

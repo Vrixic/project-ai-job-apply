@@ -12,6 +12,19 @@ import type {
 
 export const sourceIdentifierPattern = /^[a-z0-9][a-z0-9-]{2,63}$/;
 export const adapterVersionPattern = /^[a-z0-9][a-z0-9._-]{2,99}$/;
+export const maximumSourcePollAttempt = 5;
+
+export function assertSourcePollAttempt(attempt: unknown): asserts attempt is number {
+  if (
+    !Number.isSafeInteger(attempt) ||
+    Number(attempt) < 1 ||
+    Number(attempt) > maximumSourcePollAttempt
+  ) {
+    throw new Error(
+      `The source poll attempt must be a whole number from 1 through ${maximumSourcePollAttempt}`,
+    );
+  }
+}
 
 export interface SourceJobObservation {
   companyName: string;
@@ -39,8 +52,9 @@ export interface SourceJobWithdrawal {
 }
 
 export interface SourcePollContext {
-  observedAt: Date;
-  signal: AbortSignal;
+  readonly observedAt: Date;
+  readonly signal: AbortSignal;
+  readonly attempt: number;
 }
 
 export type SourceRetryReason = "rate_limited" | "source_unavailable" | "timeout";

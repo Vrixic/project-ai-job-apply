@@ -29,8 +29,16 @@ describe("generated synthetic ingestion", () => {
       sourceId: generatedSyntheticSourceId,
       adapterVersion: generatedSyntheticAdapterVersion,
     });
-    const first = await adapter.poll({ observedAt, signal: new AbortController().signal });
-    const second = await adapter.poll({ observedAt, signal: new AbortController().signal });
+    const first = await adapter.poll({
+      observedAt,
+      signal: new AbortController().signal,
+      attempt: 1,
+    });
+    const second = await adapter.poll({
+      observedAt,
+      signal: new AbortController().signal,
+      attempt: 1,
+    });
     expect(first).toEqual(second);
     expect(first).not.toBe(second);
   });
