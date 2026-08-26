@@ -148,8 +148,9 @@ its recorded serial. It also requires a separately reviewed zero-drift plan at t
 state and its verification receipt as the variable template. The template source must be the
 current operator or its Git ancestor; the exact checksum, state lineage/serial, default-dark
 verification, and a new current-source refresh plan—not source equality alone—prove that its
-variables are current. Only the historical document artifact coordinates, numeric parser pin,
-stage, and dark switches replace template values.
+variables are current. The current-state plan—not the historical plan—supplies all 100 variables,
+including the exact staged parser and processor artifact coordinates and numeric parser pin.
+The historical baseline and receipt remain authenticated provenance only.
 
 Produce the template with `scripts/operate-development-ingestion-dark-release.ps1 -Action Verify`.
 Use that operator's retained `ZeroDriftPlanPath` and `VerificationPath`; bootstrap accepts only the
@@ -182,11 +183,17 @@ The full-source contract hashes exact no-rename name-status records and a full-i
 It accepts only regular Git blobs (including deterministically encoded binary blobs), treats detected
 copies as ordinary additions, and rejects renames, submodules, missing paths, and ambiguous records.
 Historical stored operator deltas retain their original nonbinary boundary.
+Bootstrap independently reads back the parser and processor object versions named by the current
+template, verifies their checksums, KMS key, source metadata, and Git-ancestor sources, and matches
+those exact (possibly staged from different releases) artifacts plus the numeric pin to the live
+aliases. A single newer publication receipt is therefore not falsely required to describe a
+legitimate mixed parser/processor handoff.
 State identity must remain stable while evidence is written. Success emits an exclusive schema-6
 baseline sidecar binding the historical schema and serial, both reviewed bootstrap deltas, current
-operator, current state, receipt, parser pin, migration image, and new plan checksum. Use that plan
-and sidecar as `CURRENT_COMPLETE_DARK_BASELINE` below. A parser refresh accepts schema 6 only at its
-exact current serial and repeats the complete live-boundary proof before planning.
+operator, current state, historical receipt, current template plan/verification checksums, parser
+pin, migration image, and new plan checksum. Use that plan and sidecar as
+`CURRENT_COMPLETE_DARK_BASELINE` below. A parser refresh accepts schema 6 only at its exact current
+serial and repeats the complete live-boundary proof before planning.
 
 Do not predict the next parser version or combine the release into one plan. The processor policy
 and environment both require the exact numeric parser ARN, which exists only after parser apply.

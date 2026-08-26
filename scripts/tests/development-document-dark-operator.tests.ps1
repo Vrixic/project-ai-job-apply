@@ -37,6 +37,8 @@ foreach ($required in @(
     'Get-ReviewedBootstrapDelta', 'development-document-complete-dark-bootstrap-delta-v1',
     'Assert-CompleteDarkBootstrapBaselineMetadata', 'Read-CurrentBootstrapTemplate',
     'Assert-CurrentBootstrapTemplateSource', 'Assert-CurrentBootstrapTemplateVerification',
+    'Get-CurrentBootstrapDocumentEvidence', 'CurrentTemplatePlanSha256',
+    'CurrentTemplateReceiptSha256', 'A current-state document artifact failed exact-version KMS readback.',
     'Assert-BaselineBooleanVariables', '-AllowMissing:($Operation -ceq "Bootstrap")',
     'Invoke-CompleteDarkBaselineBootstrap', 'Set-CompleteDarkBootstrapVariables',
     'complete-dark-bootstrap-full-source-v1', 'PriorBaselineStateSerial',
@@ -873,33 +875,26 @@ if ($bootstrapVariableFunctions.Count -ne 1) {
 Invoke-Expression $bootstrapVariableFunctions[0].Extent.Text
 
 $bootstrapTemplateFixture = [pscustomobject]@{ variables = New-DeploymentBaselineVariableFixture $allowedVariableNames }
-$bootstrapHistoricalFixture = $bootstrapTemplateFixture | ConvertTo-Json -Depth 60 | ConvertFrom-Json
-$bootstrapDocumentNames = @(
-  "document_parser_artifact_base64sha256", "document_parser_artifact_s3_key",
-  "document_parser_artifact_s3_object_version", "document_parser_artifact_sha256",
-  "document_parser_invocation_qualified_arn", "document_parser_version",
-  "document_processing_deployment_stage", "document_processor_artifact_base64sha256",
-  "document_processor_artifact_s3_key", "document_processor_artifact_s3_object_version",
-  "document_processor_artifact_sha256", "document_processor_extension_layer_arn",
-  "document_scan_event_rule_enabled", "document_scan_mapping_enabled",
-  "document_security_health_rules_enabled"
-)
-foreach ($name in $bootstrapDocumentNames) {
-  $bootstrapHistoricalFixture.variables.PSObject.Properties[$name].Value.value = "historical-$name"
-}
-$bootstrapHistoricalFixture.variables.document_processing_deployment_stage.value = "complete-dark"
-$bootstrapHistoricalFixture.variables.document_scan_event_rule_enabled.value = $false
-$bootstrapHistoricalFixture.variables.document_scan_mapping_enabled.value = $false
-$bootstrapHistoricalFixture.variables.document_security_health_rules_enabled.value = $true
+$bootstrapTemplateFixture.variables.document_processing_deployment_stage.value = "complete-dark"
+$bootstrapTemplateFixture.variables.document_scan_event_rule_enabled.value = $false
+$bootstrapTemplateFixture.variables.document_scan_mapping_enabled.value = $false
+$bootstrapTemplateFixture.variables.document_security_health_rules_enabled.value = $true
 $script:bootstrapTemplate = $bootstrapTemplateFixture
-Set-CompleteDarkBootstrapVariables $bootstrapHistoricalFixture
+Set-CompleteDarkBootstrapVariables
 foreach ($name in $allowedVariableNames) {
-  $sourceVariables = if ($name -in $bootstrapDocumentNames) { $bootstrapHistoricalFixture.variables } else { $bootstrapTemplateFixture.variables }
-  $expected = ConvertTo-TerraformVariableEnvironmentValue -Name $name -Value $sourceVariables.PSObject.Properties[$name].Value.value
+  $expected = ConvertTo-TerraformVariableEnvironmentValue -Name $name `
+    -Value $bootstrapTemplateFixture.variables.PSObject.Properties[$name].Value.value
   if ([string][Environment]::GetEnvironmentVariable("TF_VAR_$name", "Process") -cne [string]$expected) {
-    throw "The CompleteDark bootstrap did not preserve the exact historical/current overlay for '$name'."
+    throw "The CompleteDark bootstrap did not preserve exact current-state variable '$name'."
   }
 }
+$missingBootstrapVariable = $bootstrapTemplateFixture | ConvertTo-Json -Depth 60 | ConvertFrom-Json
+$missingBootstrapVariable.variables.PSObject.Properties.Remove("candidate_rights_policy_version")
+$script:bootstrapTemplate = $missingBootstrapVariable
+$missingBootstrapVariableRejected = $false
+try { Set-CompleteDarkBootstrapVariables } catch { $missingBootstrapVariableRejected = $true }
+if (-not $missingBootstrapVariableRejected) { throw "Bootstrap accepted an incomplete current-state variable template." }
+$script:bootstrapTemplate = $bootstrapTemplateFixture
 
 $derivedVariableNames = @(
   "document_processing_deployment_stage", "document_parser_invocation_qualified_arn",

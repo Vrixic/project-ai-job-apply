@@ -579,6 +579,47 @@ function Read-CurrentBootstrapTemplate {
   return $plan
 }
 
+function Get-CurrentBootstrapDocumentEvidence {
+  param([Parameter(Mandatory)][object]$Template)
+  $definitions = @(
+    [pscustomobject]@{ Name = "document-parser-lambda"; Prefix = "document_parser_artifact" },
+    [pscustomobject]@{ Name = "document-processor-lambda"; Prefix = "document_processor_artifact" }
+  )
+  $boundary = Get-BoundaryValues
+  $platformKey = Invoke-AwsJson @("kms", "describe-key", "--key-id", [string]$boundary.PlatformKmsArn, "--output", "json")
+  $artifacts = @()
+  foreach ($definition in $definitions) {
+    $key = [string]$Template.variables.PSObject.Properties["$($definition.Prefix)_s3_key"].Value.value
+    $versionId = [string]$Template.variables.PSObject.Properties["$($definition.Prefix)_s3_object_version"].Value.value
+    $artifactSha = [string]$Template.variables.PSObject.Properties["$($definition.Prefix)_sha256"].Value.value
+    $base64Sha = [string]$Template.variables.PSObject.Properties["$($definition.Prefix)_base64sha256"].Value.value
+    $pattern = "^lambda/documents/([a-f0-9]{40})/$artifactSha/$($definition.Name)\.zip$"
+    if ($artifactSha -cnotmatch '^[a-f0-9]{64}$' -or $base64Sha -cnotmatch '^[A-Za-z0-9+/]{43}=$' -or
+      [string]::IsNullOrWhiteSpace($versionId) -or $key -cnotmatch $pattern) {
+      throw "The current-state template has invalid $($definition.Name) artifact coordinates."
+    }
+    $sourceSha = $Matches[1]
+    & git -C $repositoryRoot merge-base --is-ancestor $sourceSha $operatorCommit 2>$null
+    if ($LASTEXITCODE -ne 0) { throw "A current document artifact source is not an ancestor of the operator." }
+    $stored = Invoke-AwsJson @("s3api", "head-object", "--bucket", [string]$boundary.ArtifactBucket,
+      "--key", $key, "--version-id", $versionId, "--checksum-mode", "ENABLED", "--output", "json")
+    $storedKey = Invoke-AwsJson @("kms", "describe-key", "--key-id", [string]$stored.SSEKMSKeyId, "--output", "json")
+    if ([string]$stored.VersionId -cne $versionId -or [string]$stored.ChecksumSHA256 -cne $base64Sha -or
+      [string]$stored.ServerSideEncryption -cne "aws:kms" -or
+      [string]$storedKey.KeyMetadata.KeyId -cne [string]$platformKey.KeyMetadata.KeyId -or
+      [string]$stored.Metadata."source-sha" -cne $sourceSha -or
+      [string]$stored.Metadata."artifact-sha256" -cne $artifactSha) {
+      throw "A current-state document artifact failed exact-version KMS readback."
+    }
+    $artifacts += [pscustomobject]@{
+      artifactName = [string]$definition.Name; suffix = "zip"; sourceSha = $sourceSha
+      key = $key; versionId = $versionId; artifactSha256 = $artifactSha
+      objectBase64Sha256 = $base64Sha
+    }
+  }
+  return [pscustomobject]@{ artifacts = $artifacts }
+}
+
 function Write-ExclusiveJsonFile {
   param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][object]$Value)
 
@@ -915,7 +956,8 @@ function Assert-CompleteDarkRefreshBaselineMetadata {
   if ([string]$Metadata.SchemaVersion -ceq "6") {
     $keys = @(
       "AccountId", "Applyable", "CreatedAt", "DeltaKind", "Environment", "Kind", "MeaningfulChanges",
-      "MigrationImage", "OperatorDeltaSha256", "OperatorSourceSha", "ParserQualifiedArn", "PlanPath",
+      "CurrentTemplatePlanSha256", "CurrentTemplateReceiptSha256", "MigrationImage",
+      "OperatorDeltaSha256", "OperatorSourceSha", "ParserQualifiedArn", "PlanPath",
       "PlanSha256", "PriorBaselineMetadataSha256", "PriorBaselineOperatorSourceSha",
       "PriorBaselinePlanSha256", "PriorBaselineSchemaVersion", "PriorBaselineStateSerial",
       "PriorBaselineToOperatorDeltaSha256", "ReceiptSha256", "Region", "ReleaseSourceSha",
@@ -928,6 +970,8 @@ function Assert-CompleteDarkRefreshBaselineMetadata {
       [string]$Metadata.Region -cne $Region -or [string]$Metadata.Stage -cne "complete-dark" -or
       [string]$Metadata.OperatorSourceSha -cne $operatorCommit -or
       [string]$Metadata.ReceiptSha256 -ceq $ReviewedReceiptSha256 -or
+      [string]$Metadata.CurrentTemplatePlanSha256 -cnotmatch '^[a-f0-9]{64}$' -or
+      [string]$Metadata.CurrentTemplateReceiptSha256 -cnotmatch '^[a-f0-9]{64}$' -or
       [string]$Metadata.PlanPath -cne $ResolvedPlanPath -or [string]$Metadata.PlanSha256 -cne $PlanSha256 -or
       [string]$Metadata.StateLineage -cne [string]$StateIdentity.Lineage -or
       [long]$Metadata.StateSerial -ne [long]$StateIdentity.Serial -or
@@ -1785,30 +1829,13 @@ function Set-DarkVariables {
 }
 
 function Set-CompleteDarkBootstrapVariables {
-  param([Parameter(Mandatory)][object]$HistoricalBaseline)
   if ($null -eq $script:bootstrapTemplate -or $null -eq $script:bootstrapTemplate.variables) {
     throw "Bootstrap requires its authenticated current-state variable template."
   }
   $variables = $script:bootstrapTemplate.variables | ConvertTo-Json -Depth 60 | ConvertFrom-Json
-  $historicalDocumentNames = @(
-    "document_parser_artifact_base64sha256", "document_parser_artifact_s3_key",
-    "document_parser_artifact_s3_object_version", "document_parser_artifact_sha256",
-    "document_parser_invocation_qualified_arn", "document_parser_version",
-    "document_processing_deployment_stage", "document_processor_artifact_base64sha256",
-    "document_processor_artifact_s3_key", "document_processor_artifact_s3_object_version",
-    "document_processor_artifact_sha256", "document_processor_extension_layer_arn",
-    "document_scan_event_rule_enabled", "document_scan_mapping_enabled",
-    "document_security_health_rules_enabled"
-  )
-  foreach ($name in $historicalDocumentNames) {
-    $historical = $HistoricalBaseline.variables.PSObject.Properties[$name]
-    $current = $variables.PSObject.Properties[$name]
-    if ($null -eq $historical -or $null -eq $current) {
-      throw "Bootstrap cannot reconstruct exact historical document variable '$name'."
-    }
-    $current.Value = $historical.Value
-  }
-  if ([string]$variables.document_processing_deployment_stage.value -cne "complete-dark" -or
+  if ((@($variables.PSObject.Properties.Name | Sort-Object) -join "|") -cne
+      (@($allowedVariableNames | Sort-Object) -join "|") -or
+    [string]$variables.document_processing_deployment_stage.value -cne "complete-dark" -or
     (ConvertTo-ExactBoolean $variables.document_scan_mapping_enabled.value "bootstrap mapping") -or
     (ConvertTo-ExactBoolean $variables.document_scan_event_rule_enabled.value "bootstrap event rule") -or
     -not (ConvertTo-ExactBoolean $variables.document_security_health_rules_enabled.value "bootstrap health rules")) {
@@ -2246,13 +2273,14 @@ function Invoke-ZeroDrift {
 
 function Invoke-CompleteDarkBaselineBootstrap {
   param(
-    [Parameter(Mandatory)][object]$Baseline,
+    [Parameter(Mandatory)][object]$HistoricalBaseline,
+    [Parameter(Mandatory)][object]$CurrentBaseline,
     [Parameter(Mandatory)][object]$Receipt,
     [Parameter(Mandatory)][string]$ParserQualifiedArn
   )
-  Set-CompleteDarkBootstrapVariables -HistoricalBaseline $Baseline
+  Set-CompleteDarkBootstrapVariables
   Assert-LiveStageBoundary -DeploymentStage "complete-dark" -Receipt $Receipt `
-    -ParserQualifiedArn $ParserQualifiedArn -Baseline $Baseline
+    -ParserQualifiedArn $ParserQualifiedArn -Baseline $CurrentBaseline
   $path = Join-Path $operatorRoot "bootstrap-complete-dark-$($operatorCommit.Substring(0, 12))-$([guid]::NewGuid().ToString('N')).tfplan"
   $metadataPath = "$path.baseline.json"
   Assert-RetainedBaselinePathsAvailable -PlanPath $path -MetadataPath $metadataPath
@@ -2281,6 +2309,8 @@ function Invoke-CompleteDarkBaselineBootstrap {
       OperatorDeltaSha256 = $operatorDeltaSha256
       PriorBaselinePlanSha256 = $ReviewedBaselineSha256
       PriorBaselineMetadataSha256 = $ReviewedBaselineMetadataSha256
+      CurrentTemplatePlanSha256 = $ReviewedCurrentTemplateSha256
+      CurrentTemplateReceiptSha256 = $ReviewedCurrentTemplateReceiptSha256
       PriorBaselineSchemaVersion = [string]$priorMetadata.SchemaVersion
       PriorBaselineStateSerial = [long]$priorMetadata.StateSerial
       PriorBaselineOperatorSourceSha = $priorOperator
@@ -2507,6 +2537,9 @@ $script:retainedParserArtifact = if ($null -eq $retainedParserEvidence) {
 } else { $retainedParserEvidence.ParserArtifact }
 $receipt = if ($Stage -ceq "KmsPrerequisite") { $null } else { Read-Receipt -Commit $releaseCommit }
 $script:currentReceipt = $receipt
+$bootstrapDocumentEvidence = if ($Action -ceq "Bootstrap") {
+  Get-CurrentBootstrapDocumentEvidence -Template $script:bootstrapTemplate
+} else { $null }
 $script:parserRefreshEvidence = if ($completeDarkProcessorRefresh) { Read-ParserRefreshReceipt } else { $null }
 $baseline = Read-Baseline -RequestedStage $stageValue -AppliedStage $appliedStage -Operation $Action -Receipt $receipt
 if (-not $parserSourceTransition -and -not $completeDarkVerifyRecovery -and
@@ -2516,7 +2549,8 @@ if (-not $parserSourceTransition -and -not $completeDarkVerifyRecovery -and
   throw "A baseline-to-current operator delta is accepted only for an explicit CompleteDark parser source transition."
 }
 $parserQualifiedArn = if ($Stage -ceq "CompleteDark") {
-  if ($completeDarkProcessorRefresh) { [string]$parserRefreshEvidence.ParserQualifiedArn }
+  if ($Action -ceq "Bootstrap") { [string]$script:bootstrapTemplate.variables.document_parser_invocation_qualified_arn.value }
+  elseif ($completeDarkProcessorRefresh) { [string]$parserRefreshEvidence.ParserQualifiedArn }
   elseif ($completeDarkVerifyRecovery) { Get-AppliedProcessorParserQualifiedArn }
   elseif ($appliedStage -ceq "parser-dark") { Get-AppliedParserQualifiedArn }
   else { [string]$baseline.variables.document_parser_invocation_qualified_arn.value }
@@ -2555,7 +2589,8 @@ if ($completeDarkParserRefresh -or $completeDarkProcessorRefresh) {
 }
 
 if ($Action -ceq "Bootstrap") {
-  $bootstrapped = Invoke-CompleteDarkBaselineBootstrap -Baseline $baseline -Receipt $receipt `
+  $bootstrapped = Invoke-CompleteDarkBaselineBootstrap -HistoricalBaseline $baseline `
+    -CurrentBaseline $script:bootstrapTemplate -Receipt $bootstrapDocumentEvidence `
     -ParserQualifiedArn $parserQualifiedArn
   [pscustomobject]@{
     Result = "complete-dark-baseline-bootstrapped"; Environment = "development"; Stage = "complete-dark"
