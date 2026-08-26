@@ -23,7 +23,7 @@ function Import-OperatorFunction {
 foreach ($name in @(
     "Get-FileSha256", "Get-TextSha256", "ConvertFrom-OperatorJson", "Assert-ExactProperties", "Resolve-PrivatePath",
     "Remove-SensitiveTemporaryFile", "Assert-TerraformVersion", "Assert-IngestionMappingInventory",
-    "Read-PublicationReceipt", "Get-ZipRecord", "Test-ExactFalse", "Assert-DarkVariables",
+    "Read-PublicationReceipt", "Get-ZipRecord", "Convert-BaselineDarkVariables", "Test-ExactFalse", "Assert-DarkVariables",
     "New-ReleaseVariables", "Get-ArtifactCoordinates", "Assert-ReleasePlan", "New-PlanReceipt",
     "Read-PlanReceipt"
   )) { Import-OperatorFunction $name }
@@ -48,6 +48,7 @@ foreach ($requiredSource in @(
     'list-event-source-mappings',
     'INGESTION_ACTIVITY_FUNCTION_ARN -cne $activityArn',
     'Terraform 1.9.8 is required',
+    '$values = Convert-BaselineDarkVariables $values',
     'Remove-SensitiveTemporaryFile $temporary',
     'Remove-SensitiveTemporaryFile $varsPath'
   )) {
@@ -213,7 +214,31 @@ try {
     ingestion_runtime_artifact_base64sha256 = ("D" * 43) + "="
     unrelated_baseline_value = "retained"
   }
-  $baseline = [pscustomobject]@{ Values = $baselineValues; Sha256 = $ReviewedBaselinePlanSha256 }
+  $serializedBaselineValues = [ordered]@{}
+  foreach ($key in $baselineValues.Keys) { $serializedBaselineValues[$key] = $baselineValues[$key] }
+  $serializedBaselineValues.deploy_ingestion_runtime = "true"
+  foreach ($gate in $darkBooleanVariables) { $serializedBaselineValues[$gate] = "false" }
+  $normalizedBaselineValues = Convert-BaselineDarkVariables $serializedBaselineValues
+  Assert-DarkVariables $normalizedBaselineValues
+  foreach ($name in @("deploy_ingestion_runtime") + $darkBooleanVariables) {
+    if ($normalizedBaselineValues[$name] -isnot [bool]) {
+      throw "The real Terraform baseline boolean string for $name was not normalized to a native boolean."
+    }
+  }
+  if ($normalizedBaselineValues.unrelated_baseline_value -cne "retained") {
+    throw "Baseline-only boolean normalization changed an unrelated variable."
+  }
+  if ($serializedBaselineValues.deploy_ingestion_runtime -isnot [string] -or
+    $serializedBaselineValues.ingestion_runtime_enabled -isnot [string]) {
+    throw "Baseline-only boolean normalization mutated the reviewed Terraform plan projection."
+  }
+  foreach ($invalid in @("True", "FALSE", " true", "false ", 1, $null)) {
+    $invalidBaselineValues = [ordered]@{}
+    foreach ($key in $serializedBaselineValues.Keys) { $invalidBaselineValues[$key] = $serializedBaselineValues[$key] }
+    $invalidBaselineValues.ingestion_runtime_enabled = $invalid
+    Assert-Rejected { Convert-BaselineDarkVariables $invalidBaselineValues } "noncanonical baseline boolean '$invalid'"
+  }
+  $baseline = [pscustomobject]@{ Values = $normalizedBaselineValues; Sha256 = $ReviewedBaselinePlanSha256 }
   $release = New-ReleaseVariables $baseline $publication
   $releaseValues = $release
   Assert-DarkVariables $release
@@ -248,6 +273,9 @@ try {
   }
   $inventory = @(Assert-ReleasePlan $plan $release)
   if ($inventory.Count -ne $allowedReleaseActions.Count) { throw "The exact release plan inventory was not accepted." }
+  $stringBooleanPlan = $plan | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+  $stringBooleanPlan.variables.ingestion_runtime_enabled.value = "false"
+  Assert-Rejected { Assert-ReleasePlan $stringBooleanPlan $release } "a non-native release-plan boolean"
 
   foreach ($mutation in @("route", "action", "missing", "gate", "source", "baseline", "output")) {
     $candidate = $plan | ConvertTo-Json -Depth 30 | ConvertFrom-Json

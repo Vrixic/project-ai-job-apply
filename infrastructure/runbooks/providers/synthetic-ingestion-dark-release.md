@@ -124,6 +124,11 @@ Terraform artifact coordinates for the two ZIPs and reasserts the dark gates abo
 eight coordinates are retained as explicit rollback coordinates. This does not authorize rollback;
 a rollback requires its own reviewed plan and receipt.
 
+Terraform 1.9.8 may serialize the five baseline deploy/dark input booleans as exact lowercase
+`true`/`false` strings in `terraform show -json`. The operator normalizes only those baseline
+values before validating and copying them. Other strings, casing, or value types fail closed, and
+the generated release variables plus the saved release plan must contain native JSON booleans.
+
 Before using AWS, use a clean `main` checkout exactly equal to `origin/main` and the supplied source
 SHA. Use a fresh temporary IAM Identity Center session in the exact development account and
 `us-east-2`. Supply the customer-KMS, versioned, public-blocked Terraform state bucket and the exact

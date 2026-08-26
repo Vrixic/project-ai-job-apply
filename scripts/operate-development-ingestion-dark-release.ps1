@@ -262,6 +262,7 @@ function Read-BaselinePlan {
   if ($changes.Count -ne 0 -or $outputs.Count -ne 0) { throw "The reviewed current baseline is not zero drift." }
   $values = [ordered]@{}
   foreach ($property in @($plan.variables.PSObject.Properties)) { $values[$property.Name] = $property.Value.value }
+  $values = Convert-BaselineDarkVariables $values
   $declared = @(Get-DeclaredTerraformVariables)
   if ($values.Count -ne $declared.Count -or @($declared | Where-Object { -not $values.Contains($_) }).Count -ne 0 -or
     @($values.Keys | Where-Object { $_ -notin $declared }).Count -ne 0) {
@@ -269,6 +270,23 @@ function Read-BaselinePlan {
   }
   Assert-DarkVariables $values
   return [pscustomobject]@{ Path = $path; Sha256 = $ReviewedBaselinePlanSha256; Plan = $plan; Values = $values }
+}
+
+function Convert-BaselineDarkVariables {
+  param([Parameter(Mandatory)][object]$Values)
+  $normalized = [ordered]@{}
+  foreach ($key in $Values.Keys) { $normalized[$key] = $Values[$key] }
+  foreach ($name in @("deploy_ingestion_runtime") + $darkBooleanVariables) {
+    $value = $normalized[$name]
+    if ($value -is [bool]) { continue }
+    if ($value -isnot [string]) {
+      throw "The baseline Terraform variable $name must be a native boolean or an exact lowercase boolean string."
+    }
+    if ($value -ceq "true") { $normalized[$name] = $true; continue }
+    if ($value -ceq "false") { $normalized[$name] = $false; continue }
+    throw "The baseline Terraform variable $name is not an exact lowercase boolean string."
+  }
+  return $normalized
 }
 
 function Test-ExactFalse {
