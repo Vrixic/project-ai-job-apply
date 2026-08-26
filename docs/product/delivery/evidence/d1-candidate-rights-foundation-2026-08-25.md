@@ -4,16 +4,19 @@
 
 The contract, persistence, durable runtime, AWS boundary, gateway, same-origin BFF, and candidate UI
 for portable data export and irreversible account deletion are implemented and locally verified.
-The feature remains default-disabled and has not been applied to the development runtime or
-database. Exact source `8e2f1546390c14a0813cec6e664b7a5478a2a24f` is merged, and its migration,
+The original feature packet was default-disabled. Exact source
+`8e2f1546390c14a0813cec6e664b7a5478a2a24f` is merged, and its migration,
 gateway, and document artifacts are immutably published in development. D1-R11 and Phase 1 remain
 open for generated-synthetic deployed acceptance, backup-aging/replay acceptance, managed identity
 configuration, Vercel hosting, and accountable human review. The later
 [policy/preprovision record](d1-candidate-rights-policy-and-preprovision-2026-08-25.md) supersedes
 the release state in this source packet: the default-dark code/migrations are deployed, the policy
-is selected, and Stage A is applied at state `204`. The expanded reauthentication and Stage B
-operator correction described below is locally verified current working-tree behavior; it is not
-part of the exact historical artifacts published from `8e2f1546390c14a0813cec6e664b7a5478a2a24f`.
+is selected. Stage A applied at state `204`, and the exact checksum-reviewed Stage B plan from
+source `e71dd4f06ea98c07f265673fba30f3da7fb9a035` applied 42 bounded meaningful changes at state
+serial `208`. Candidate rights and private application networking are now enabled with the exact
+policy, private encrypted/versioned export and Object-Locked recovery storage, scheduled
+maintenance, immutable Lambda versions/aliases, NAT, and exact IAM. A fresh refresh-backed plan at
+serial `208` has zero meaningful/output changes and is complete/non-applyable.
 
 ## Implemented boundary
 
@@ -71,9 +74,14 @@ part of the exact historical artifacts published from `8e2f1546390c14a0813cec6e6
   The Stage B operator passes 44/44 in PowerShell 7 and 44/44 in Windows PowerShell 5.1. Its
   current-state preflight omits nullable baseline inputs and accepts only the existing exact
   provider-drift guard, including the strictly forward RDS `latest_restorable_time` refresh.
-- The candidate route requests `max_age=0` and multi-factor `acr_values`. Auth0 must still configure
-  and validate a post-login step-up Action and an enabled factor that honor the request; the query
-  parameter alone is not provider evidence.
+- The exact tenant has the candidate-client-only deployed step-up Action plus OTP/recovery factors.
+  One disposable generated-synthetic identity completed OTP enrollment and returned a same-subject
+  session with recent MFA proof. No token or identity value entered shared evidence.
+- Two lifecycle attempts stopped during read-only Plan before any export or deletion mutation: the
+  first on the fail-closed alarm gate while seven post-login gateway throttles were active, and the
+  second because zero-drift inspection lacked an isolated initialized Terraform provider-schema
+  directory. The alarm returned to `OK`; the operator now initializes its own backend-disabled,
+  lockfile-readonly inspection directory and has a regression guard in both PowerShell hosts.
 
 ## Local verification
 
@@ -112,21 +120,22 @@ part of the exact historical artifacts published from `8e2f1546390c14a0813cec6e6
 
 ## External and accountable gates still open
 
-- Preserve the selected generated-synthetic policy/digest and Stage A state `204`. These are
+- Preserve the selected generated-synthetic policy/digest and current Stage B state `208`. These are
   engineering acceptance inputs, not public durations, lawful-exclusion decisions, or accountable
   real-user approval. Elapsed time alone cannot prove backup expiry.
-- The exact tenant now has the dedicated non-Zach M2M client with only `delete:users`, one verified
+- The exact tenant has the dedicated non-Zach M2M client with only `delete:users`, one verified
   `AWSCURRENT` secret version, the candidate-client-only deployed step-up Action, enabled
-  OTP/recovery factors, and one disposable generated-synthetic identity. MFA-enroll and freshly
-  reauthenticate that identity through the candidate web session. Then use the guarded Stage B
-  operator to generate, independently review, and apply the exact saved plan before generated-synthetic export, deletion, recovery-ledger
-  replay, backup-aging, alert, and zero-drift acceptance.
+  OTP/recovery factors, and one MFA-enrolled disposable generated-synthetic identity. Freshly
+  reauthenticate that identity after the merged inspection correction, then run the guarded
+  generated-synthetic export/deletion lifecycle followed by isolated recovery-ledger replay,
+  backup-aging, alert, and zero-drift acceptance.
 - Create the candidate and admin Vercel projects only under the authorized non-Zach account and run
   hosted browser, response-header, and accessibility acceptance. Vercel login is currently deferred.
 - Obtain attributable product, security/privacy, accessibility, source-quality, moderation, and
   operational acceptance for the final frozen Phase 1 candidate.
 
-No MFA-enrolled identity, Stage B plan/apply, or deployed candidate-rights acceptance is claimed.
+No completed export/deletion lifecycle, recovery replay, backup-aging disposition, or accountable
+real-candidate acceptance is claimed.
 No production PII, raw candidate artifact,
 credential, token, provider response body, new AWS runtime/Terraform/database/Lambda-alias/trigger/
 route mutation, Vercel login, GitHub Actions execution, real-candidate use, or Phase 1 completion is

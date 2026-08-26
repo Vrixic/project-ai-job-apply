@@ -79,11 +79,18 @@ This is the master record for the delivery phases defined in the [product and sy
   tenant now has a deployed, candidate-client-only step-up Action with OTP/recovery factors, a
   dedicated non-Zach generated-synthetic M2M client with the sole Management API scope
   `delete:users`, one verified `AWSCURRENT` managed-secret version, and one disposable synthetic
-  identity awaiting MFA enrollment. Candidate-rights activation remains false. A live Stage B
+  identity with completed OTP enrollment and recent-MFA session proof. The checksum-reviewed Stage
+  B plan from source `e71dd4f06ea98c07f265673fba30f3da7fb9a035` applied 42 bounded changes and
+  enabled candidate rights/private application networking at state `208`; a fresh plan is complete
+  zero drift. A live Stage B
   preflight exposed and corrected empty-change aggregation, exact Terraform boolean/integer
   decoding, the omitted seven-address exact-version durable-workflow dependency set, and its two
-  exact durable-version output updates before any apply. No
-  Stage B apply, deployed rights acceptance, Vercel deployment, real identity/data, or
+  exact durable-version output updates before apply. Two lifecycle attempts stopped during
+  read-only Plan before export/deletion mutation: once on an expected post-login throttle alarm,
+  which returned to `OK`, and once on a missing isolated Terraform provider-schema cache. The
+  operator now initializes a backend-disabled lockfile-readonly inspection directory and passes in
+  both PowerShell hosts. No completed deployed rights lifecycle/recovery replay, Vercel deployment,
+  real identity/data, or
   accountable human acceptance is claimed; D1-R11 and Phase 1 stay in progress.
   [Evidence](evidence/d1-candidate-rights-policy-and-preprovision-2026-08-25.md),
   [Phase 1 tasks](phase-1-web-and-job-catalog.md)

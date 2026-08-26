@@ -97,8 +97,10 @@ command, role, bucket, Lambda, or network destination from the command line.
 }
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
-$terraformRoot = Join-Path $repositoryRoot "infrastructure\terraform\environments\development\.terraform"
+$terraformDirectory = Join-Path $repositoryRoot "infrastructure\terraform\environments\development"
+$terraformRoot = Join-Path $terraformDirectory ".terraform"
 $operatorRoot = Join-Path $terraformRoot "development-candidate-rights-acceptance"
+$terraformInspectionDataDirectory = Join-Path $terraformRoot "development-candidate-rights-acceptance-data"
 $stateKey = "platform.tfstate"
 $utf8WithoutBom = New-Object Text.UTF8Encoding($false)
 $requiredOwners = "identity,profile,documents,jobs,matching,billing"
@@ -236,8 +238,18 @@ function Read-ReviewedZeroDrift {
   $path = [IO.Path]::GetFullPath($ZeroDriftPlanPath)
   if (-not $path.StartsWith([IO.Path]::GetFullPath($terraformRoot), [StringComparison]::OrdinalIgnoreCase) -or -not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "The zero-drift plan must be an existing ignored development Terraform artifact." }
   if ((Get-FileSha256 $path) -cne $ReviewedZeroDriftPlanSha256) { throw "The zero-drift plan checksum does not match the reviewed value." }
-  $shown = & terraform show -json $path 2>$null
-  if ($LASTEXITCODE -ne 0) { throw "The reviewed zero-drift plan cannot be inspected." }
+  $savedTerraformDataDirectory = [Environment]::GetEnvironmentVariable('TF_DATA_DIR', 'Process')
+  try {
+    $env:TF_DATA_DIR = $terraformInspectionDataDirectory
+    $null = New-Item -ItemType Directory -Path $terraformInspectionDataDirectory -Force
+    & terraform "-chdir=$terraformDirectory" init -backend=false -input=false -lockfile=readonly 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Terraform provider schemas could not be initialized for zero-drift inspection." }
+    $shown = & terraform "-chdir=$terraformDirectory" show -json $path 2>$null
+    if ($LASTEXITCODE -ne 0) { throw "The reviewed zero-drift plan cannot be inspected." }
+  } finally {
+    if ($null -eq $savedTerraformDataDirectory) { Remove-Item Env:TF_DATA_DIR -ErrorAction SilentlyContinue }
+    else { $env:TF_DATA_DIR = $savedTerraformDataDirectory }
+  }
   $plan = ConvertFrom-OperatorJson ($shown -join "`n") "Zero-drift plan"
   $changes = @($plan.resource_changes | Where-Object { (@($_.change.actions) -join ',') -cne 'no-op' })
   if ($changes.Count -ne 0) { throw "The reviewed Terraform plan is not zero drift." }

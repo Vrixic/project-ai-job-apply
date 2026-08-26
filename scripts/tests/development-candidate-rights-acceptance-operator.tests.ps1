@@ -35,6 +35,16 @@ foreach ($required in @(
   )) {
   if (-not $source.Contains($required)) { throw "The operator is missing the required fixed guard: $required" }
 }
+foreach ($requiredInspectionGuard in @(
+    'development-candidate-rights-acceptance-data',
+    'init -backend=false -input=false -lockfile=readonly',
+    'Terraform provider schemas could not be initialized for zero-drift inspection.',
+    "[Environment]::GetEnvironmentVariable('TF_DATA_DIR', 'Process')"
+  )) {
+  if (-not $source.Contains($requiredInspectionGuard)) {
+    throw "The zero-drift inspection path is missing its isolated provider-schema guard: $requiredInspectionGuard"
+  }
+}
 foreach ($forbidden in @('terraform apply', 'aws ecs run-task', 'docker ', 'wsl --shutdown', 'shutdown.exe', 'Stop-Computer', 'github workflow', 'vercel ')) {
   if ($source -match [regex]::Escape($forbidden)) { throw "The operator contains a forbidden mutation/control path: $forbidden" }
 }
