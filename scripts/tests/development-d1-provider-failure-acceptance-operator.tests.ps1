@@ -363,9 +363,9 @@ try {
             [pscustomobject]@{
               RouteTableId = if ($script:liveMutation -ceq "provider-route") { $providerRouteIds[0] } else { $privateRouteIds[0] }
               Associations = @([pscustomobject]@{ SubnetId = $privateSubnetIds[0] })
-              Routes = @([pscustomobject]@{ NatGatewayId = if ($script:liveMutation -ceq "unknown-nat") { "nat-unowned" } else { "nat-candidate-rights" } })
+              Routes = @([pscustomobject]@{ GatewayId = "local" }, [pscustomobject]@{ NatGatewayId = if ($script:liveMutation -ceq "unknown-nat") { "nat-unowned" } else { "nat-candidate-rights" } })
             },
-            [pscustomobject]@{ RouteTableId = $privateRouteIds[1]; Associations = @([pscustomobject]@{ SubnetId = $privateSubnetIds[1] }); Routes = @([pscustomobject]@{ NatGatewayId = "nat-candidate-rights" }) }
+            [pscustomobject]@{ RouteTableId = $privateRouteIds[1]; Associations = @([pscustomobject]@{ SubnetId = $privateSubnetIds[1] }); Routes = @([pscustomobject]@{ GatewayId = "local" }, [pscustomobject]@{ NatGatewayId = "nat-candidate-rights" }) }
           ) }
       }
       "ecs list-tasks" { return [pscustomobject]@{ taskArns = if ($script:liveMutation -ceq "task") { @("private-arn") } else { @() } } }

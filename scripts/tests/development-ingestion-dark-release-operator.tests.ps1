@@ -21,7 +21,7 @@ function Import-OperatorFunction {
 }
 
 foreach ($name in @(
-    "Get-FileSha256", "Get-TextSha256", "ConvertFrom-OperatorJson", "Assert-ExactProperties", "Resolve-PrivatePath",
+    "Get-FileSha256", "Get-TextSha256", "ConvertFrom-OperatorJson", "Assert-ExactProperties", "Resolve-PrivatePath", "Get-OptionalProperty",
     "Remove-SensitiveTemporaryFile", "Assert-TerraformVersion", "Assert-IngestionMappingInventory",
     "Read-PublicationReceipt", "Get-ZipRecord", "Convert-BaselineDarkVariables", "Test-ExactFalse", "Assert-DarkVariables",
     "New-ReleaseVariables", "Get-ArtifactCoordinates", "Assert-ReleasePlan", "Get-StateResourceAttributes",
@@ -236,8 +236,8 @@ try {
   $network = Get-IngestionNetworkBoundary $networkSnapshot
   $liveActivity = [pscustomobject]@{ VpcConfig = [pscustomobject]@{ SubnetIds = $privateSubnetIds } }
   $liveRoutes = [pscustomobject]@{ RouteTables = @(
-      [pscustomobject]@{ RouteTableId = $privateRouteIds[0]; Associations = @([pscustomobject]@{ SubnetId = $privateSubnetIds[0] }); Routes = @([pscustomobject]@{ NatGatewayId = "nat-candidate-rights" }) },
-      [pscustomobject]@{ RouteTableId = $privateRouteIds[1]; Associations = @([pscustomobject]@{ SubnetId = $privateSubnetIds[1] }); Routes = @([pscustomobject]@{ NatGatewayId = "nat-candidate-rights" }) }
+      [pscustomobject]@{ RouteTableId = $privateRouteIds[0]; Associations = @([pscustomobject]@{ SubnetId = $privateSubnetIds[0] }); Routes = @([pscustomobject]@{ GatewayId = "local" }, [pscustomobject]@{ NatGatewayId = "nat-candidate-rights" }) },
+      [pscustomobject]@{ RouteTableId = $privateRouteIds[1]; Associations = @([pscustomobject]@{ SubnetId = $privateSubnetIds[1] }); Routes = @([pscustomobject]@{ GatewayId = "local" }, [pscustomobject]@{ NatGatewayId = "nat-candidate-rights" }) }
     ) }
   Assert-LiveIngestionNetworkBoundary $network $liveActivity $liveRoutes
   foreach ($mutation in @("activity-provider-subnet", "provider-nat", "provider-route", "unknown-nat")) {
@@ -254,7 +254,7 @@ try {
   $badLiveRoutes.RouteTables[0].RouteTableId = $providerRouteIds[0]
   Assert-Rejected { Assert-LiveIngestionNetworkBoundary $network $liveActivity $badLiveRoutes } "live provider-route topology"
   $badLiveNat = $liveRoutes | ConvertTo-Json -Depth 10 | ConvertFrom-Json
-  $badLiveNat.RouteTables[0].Routes[0].NatGatewayId = "nat-unowned"
+  $badLiveNat.RouteTables[0].Routes[1].NatGatewayId = "nat-unowned"
   Assert-Rejected { Assert-LiveIngestionNetworkBoundary $network $liveActivity $badLiveNat } "live unowned NAT route"
 
   $baselineValues = [ordered]@{

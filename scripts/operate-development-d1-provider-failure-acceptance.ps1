@@ -447,7 +447,7 @@ function Assert-LiveIngestionNetworkBoundary {
       -not [string]::IsNullOrWhiteSpace([string]$_.SubnetId)
     } | ForEach-Object { [string]$_.SubnetId } | Sort-Object)
   $liveNatIds = @($tables | ForEach-Object { @($_.Routes) } | ForEach-Object {
-      [string]$_.NatGatewayId
+      [string](Get-OptionalProperty $_ "NatGatewayId")
     } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
   if (($liveSubnets -join "|") -cne (@($Network.ActivitySubnetIds) -join "|") -or
     $tables.Count -ne 2 -or ($liveRouteIds -join "|") -cne (@($Network.ActivityRouteTableIds) -join "|") -or

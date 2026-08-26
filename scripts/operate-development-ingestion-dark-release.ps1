@@ -138,6 +138,18 @@ function Write-ExclusiveJson {
   [IO.File]::WriteAllText($Path, ($Value | ConvertTo-Json -Depth 100), $utf8WithoutBom)
 }
 
+function Get-OptionalProperty {
+  param([AllowNull()][object]$Value, [Parameter(Mandatory)][string]$Name)
+  if ($null -eq $Value) { return $null }
+  if ($Value -is [System.Collections.IDictionary]) {
+    if ($Value.Contains($Name)) { return $Value[$Name] }
+    return $null
+  }
+  $property = $Value.PSObject.Properties[$Name]
+  if ($null -eq $property) { return $null }
+  return $property.Value
+}
+
 function Remove-SensitiveTemporaryFile {
   param([Parameter(Mandatory)][string]$Path)
   if (Test-Path -LiteralPath $Path) { Remove-Item -LiteralPath $Path -Force }
@@ -487,7 +499,7 @@ function Assert-LiveIngestionNetworkBoundary {
       -not [string]::IsNullOrWhiteSpace([string]$_.SubnetId)
     } | ForEach-Object { [string]$_.SubnetId } | Sort-Object)
   $liveNatIds = @($tables | ForEach-Object { @($_.Routes) } | ForEach-Object {
-      [string]$_.NatGatewayId
+      [string](Get-OptionalProperty $_ "NatGatewayId")
     } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
   if (($liveSubnets -join "|") -cne (@($Network.ActivitySubnetIds) -join "|") -or
     $tables.Count -ne 2 -or ($liveRouteIds -join "|") -cne (@($Network.ActivityRouteTableIds) -join "|") -or
