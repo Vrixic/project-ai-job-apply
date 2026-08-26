@@ -669,7 +669,7 @@ function Invoke-ZeroDriftPlan {
   if ((Test-Path -LiteralPath $varsPath) -or (Test-Path -LiteralPath $zeroPath)) { throw "Refusing to replace zero-drift verification artifacts." }
   [IO.File]::WriteAllText($varsPath, ($Values | ConvertTo-Json -Compress -Depth 100), $utf8WithoutBom)
   try {
-    & terraform "-chdir=$terraformDirectory" plan -input=false -lock-timeout=5m -refresh=true -detailed-exitcode "-var-file=$varsPath" "-out=$zeroPath"
+    $null = & terraform "-chdir=$terraformDirectory" plan -input=false -lock-timeout=5m -refresh=true -detailed-exitcode "-var-file=$varsPath" "-out=$zeroPath"
     $exitCode = $LASTEXITCODE
   } finally { Remove-SensitiveTemporaryFile $varsPath }
   if ($exitCode -ne 0) { throw "The fresh refresh-backed verification plan is not zero drift." }

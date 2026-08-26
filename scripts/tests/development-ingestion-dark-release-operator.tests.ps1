@@ -40,6 +40,7 @@ if (($actualParameters -join "|") -cne ($expectedParameters -join "|")) { throw 
 
 foreach ($requiredSource in @(
     'plan -input=false -lock-timeout=5m -refresh=true',
+    '$null = & terraform "-chdir=$terraformDirectory" plan',
     'apply -input=false -lock-timeout=5m -auto-approve $resolvedPlan',
     'Read-EncryptedStateSnapshot',
     'Assert-LiveDarkRelease',
