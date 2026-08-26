@@ -32,6 +32,32 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## D1 — Useful web product and canonical job catalog
 
+- Provider-failure deployable foundation (2026-08-26): exact implementation revision
+  `29d3ab0de6e65d4c6b66213e83c15824350cd1a8` adds the operator-only durable fail-once/recover
+  fixture, isolated immutable ingestion publisher, checksum-gated default-dark release, guarded
+  one-run acceptance, and representative evidence integration. Workflow tests pass `70/70`; both
+  PowerShell hosts pass the publisher/release/acceptance/representative suites; full infrastructure
+  validation, dependency audit, scoped formatting, and secret-pattern/diff checks pass. No cloud,
+  provider, candidate data, Terraform, Docker, WSL, Vercel, or MFA mutation occurred. Immutable
+  publication, reviewed dark deployment, and the bounded deployed run are next; thresholds,
+  recipients, alert receipt, hosted checks, and accountable human gates remain separate blockers.
+  Phase 1 is not complete.
+  [Evidence](evidence/d1-provider-failure-deployable-foundation-2026-08-26.md),
+  [Phase 1 tasks](phase-1-web-and-job-catalog.md)
+
+- Autonomous assurance catch-up (2026-08-26): exact merged revision
+  `eacdc8adbd42561712914c76ed63ebe42726ed01` adds immutable ingestion attempt propagation and the
+  unschedulable generated-synthetic fail-once/recover adapter, strict alert status/exercise
+  aggregates with reviewed-recipient binding and manual delivery confirmation, and a generated-only
+  43-case adversarial PDF/DOCX corpus plus post-parse controls. Worker tests pass `96/96`, document
+  tests pass `87/87`, both typechecks and the worker build pass, both PowerShell hosts pass the alert
+  operator tests, and scoped formatting/lint is clean. No provider, candidate data, cloud state,
+  Docker, WSL, Vercel, or MFA was used. The IAM-only untriggered durable fixture handler/operator
+  remains the next autonomous engineering slice; human thresholds/recipients and hosted/final
+  acceptance remain separate blockers. Phase 1 is not complete.
+  [Evidence](evidence/d1-autonomous-assurance-catchup-2026-08-26.md),
+  [Phase 1 tasks](phase-1-web-and-job-catalog.md)
+
 - Current default-dark backend candidate (2026-08-25): exact artifact source
   `9abcebb5c2577d09b789ad74be1bb7ee51a891e6` is immutably published and deployed at state serial
   `202`; guard correction `041e4320bc47c614f52aa2fd5f0209da23418e3e` is merged on `main`.
