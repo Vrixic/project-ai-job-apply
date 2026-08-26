@@ -381,8 +381,9 @@ function Get-ReviewedBootstrapDelta {
   $recordsExit = $LASTEXITCODE
   $numstat = @(& git -C $repositoryRoot diff --numstat --no-renames "$ReleaseSha..$OperatorSha" 2>$null)
   if ($recordsExit -ne 0 -or $LASTEXITCODE -ne 0 -or $records.Count -eq 0 -or
-    $records.Count -ne $numstat.Count -or @($numstat | Where-Object { $_ -match '^-\t-\t' }).Count -ne 0) {
-    throw "The canonical bootstrap delta is empty, unreadable, binary, or ambiguous."
+    $records.Count -ne $numstat.Count -or
+    ($DeltaKind -ceq "Stored" -and @($numstat | Where-Object { $_ -match '^-\t-\t' }).Count -ne 0)) {
+    throw "The canonical bootstrap delta is empty, unreadable, or ambiguous."
   }
   foreach ($record in $records) {
     if ($record -notmatch '^(A|M|D)\t([^\t]+)$') { throw "The bootstrap delta contains an unsupported record." }

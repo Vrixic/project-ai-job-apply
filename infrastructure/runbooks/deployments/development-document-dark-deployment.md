@@ -178,6 +178,10 @@ Both reviewed deltas use the domain-separated
 never calls `terraform apply`: it proves clean current main, exact historical receipt versions and
 KMS boundary, the complete live parser/processor/IAM/queue/rule/endpoint dark boundary, same state
 lineage with a strictly newer live serial, and a full untargeted refresh-backed zero-change plan.
+The full-source contract hashes exact no-rename name-status records and a full-index binary patch.
+It accepts only regular Git blobs (including deterministically encoded binary blobs), treats detected
+copies as ordinary additions, and rejects renames, submodules, missing paths, and ambiguous records.
+Historical stored operator deltas retain their original nonbinary boundary.
 State identity must remain stable while evidence is written. Success emits an exclusive schema-6
 baseline sidecar binding the historical schema and serial, both reviewed bootstrap deltas, current
 operator, current state, receipt, parser pin, migration image, and new plan checksum. Use that plan

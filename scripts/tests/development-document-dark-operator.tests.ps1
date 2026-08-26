@@ -386,9 +386,9 @@ if (-not $rogueParserRejected) { throw "ParserDark accepted an exact-family proc
 $deltaFunctions = @($ast.FindAll({
       param($node)
       $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
-      $node.Name -in @("Get-TextSha256", "Get-ReviewedOperatorDelta")
+      $node.Name -in @("Get-TextSha256", "Get-ReviewedOperatorDelta", "Get-ReviewedBootstrapDelta")
     }, $true))
-if ($deltaFunctions.Count -ne 2) { throw "The canonical operator-delta guards must each be defined once." }
+if ($deltaFunctions.Count -ne 3) { throw "The canonical operator/bootstrap delta guards must each be defined once." }
 foreach ($function in $deltaFunctions | Sort-Object { $_.Extent.StartOffset }) { Invoke-Expression $function.Extent.Text }
 $releaseSha = "d0e55de86edfa6b5f655f5631bb1741d6c5b5ac8"
 $operatorSha = "9d290416c61847f1682157c08312cdb920d42107"
@@ -503,6 +503,72 @@ try {
   $tempPrefix = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
   if (-not $resolvedFixture.StartsWith($tempPrefix, [StringComparison]::OrdinalIgnoreCase)) { throw "Fixture cleanup escaped the temporary directory." }
   if (Test-Path -LiteralPath $resolvedFixture) { Remove-Item -LiteralPath $resolvedFixture -Recurse -Force }
+}
+
+# The full-source Bootstrap delta authenticates regular binary blobs through the exact full-index
+# binary patch. Historical Stored deltas retain their original nonbinary boundary.
+$bootstrapDeltaFixture = Join-Path ([IO.Path]::GetTempPath()) "applydash-bootstrap-delta-$([guid]::NewGuid().ToString('N'))"
+try {
+  $null = New-Item -ItemType Directory -Path $bootstrapDeltaFixture
+  & git -C $bootstrapDeltaFixture init -q
+  & git -C $bootstrapDeltaFixture config user.email "fixture@example.invalid"
+  & git -C $bootstrapDeltaFixture config user.name "Bootstrap Delta Fixture"
+  & git -C $bootstrapDeltaFixture config core.autocrlf false
+  $textPath = Join-Path $bootstrapDeltaFixture "operator.txt"
+  [IO.File]::WriteAllText($textPath, "base`n", [Text.UTF8Encoding]::new($false))
+  & git -C $bootstrapDeltaFixture add .
+  & git -C $bootstrapDeltaFixture commit -q -m base
+  $bootstrapDeltaBase = (& git -C $bootstrapDeltaFixture rev-parse HEAD).Trim()
+
+  [IO.File]::WriteAllText($textPath, "current`n", [Text.UTF8Encoding]::new($false))
+  [IO.File]::WriteAllBytes((Join-Path $bootstrapDeltaFixture "asset.bin"), [byte[]](0, 255, 1, 254, 2, 253))
+  & git -C $bootstrapDeltaFixture add .
+  & git -C $bootstrapDeltaFixture commit -q -m current-with-binary
+  $bootstrapDeltaCurrent = (& git -C $bootstrapDeltaFixture rev-parse HEAD).Trim()
+
+  function Get-TestBootstrapDeltaSha([string]$From, [string]$To, [string]$Kind) {
+    $domain = if ($Kind -ceq "Stored") { "development-operator-delta-v1" }
+      else { "development-document-complete-dark-bootstrap-delta-v1" }
+    $deltaRecords = @(& git -C $bootstrapDeltaFixture diff --name-status --no-renames "$From..$To")
+    $deltaPatch = @(& git -C $bootstrapDeltaFixture diff --full-index --binary --no-ext-diff --no-renames "$From..$To")
+    return Get-TextSha256 ("$domain`n$From`n$To`n--name-status--`n" +
+      (($deltaRecords -join "`n") + "`n--patch--`n" + ($deltaPatch -join "`n") + "`n"))
+  }
+
+  $repositoryRoot = $bootstrapDeltaFixture
+  $bootstrapBinarySha = Get-TestBootstrapDeltaSha $bootstrapDeltaBase $bootstrapDeltaCurrent "Bootstrap"
+  if ((Get-ReviewedBootstrapDelta $bootstrapDeltaBase $bootstrapDeltaCurrent $bootstrapBinarySha Bootstrap) -cne
+    $bootstrapBinarySha) {
+    throw "The full-source bootstrap delta rejected a canonically hashed regular binary blob."
+  }
+  $storedBinaryRejected = $false
+  try {
+    $null = Get-ReviewedBootstrapDelta $bootstrapDeltaBase $bootstrapDeltaCurrent `
+      (Get-TestBootstrapDeltaSha $bootstrapDeltaBase $bootstrapDeltaCurrent "Stored") Stored
+  } catch { $storedBinaryRejected = $true }
+  if (-not $storedBinaryRejected) { throw "A historical Stored delta accepted a binary blob." }
+
+  & git -C $bootstrapDeltaFixture checkout -q $bootstrapDeltaBase
+  & git -C $bootstrapDeltaFixture mv operator.txt renamed.txt
+  & git -C $bootstrapDeltaFixture commit -q -m rename
+  $bootstrapRename = (& git -C $bootstrapDeltaFixture rev-parse HEAD).Trim()
+  $bootstrapRenameRejected = $false
+  try {
+    $null = Get-ReviewedBootstrapDelta $bootstrapDeltaBase $bootstrapRename `
+      (Get-TestBootstrapDeltaSha $bootstrapDeltaBase $bootstrapRename "Bootstrap") Bootstrap
+  } catch { $bootstrapRenameRejected = $true }
+  if (-not $bootstrapRenameRejected) { throw "The full-source bootstrap delta accepted a rename." }
+}
+finally {
+  $repositoryRoot = $realRepositoryRoot
+  $resolvedBootstrapDeltaFixture = [IO.Path]::GetFullPath($bootstrapDeltaFixture)
+  $temporaryRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+  if (-not $resolvedBootstrapDeltaFixture.StartsWith($temporaryRoot, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Bootstrap delta fixture cleanup escaped the temporary directory."
+  }
+  if (Test-Path -LiteralPath $resolvedBootstrapDeltaFixture) {
+    Remove-Item -LiteralPath $resolvedBootstrapDeltaFixture -Recurse -Force
+  }
 }
 
 Assert-MonotonicDocumentStage "kms-prerequisite" "parser-dark" "Plan"
