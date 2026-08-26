@@ -478,6 +478,57 @@ function Read-Plan {
   return $raw | ConvertFrom-Json
 }
 
+function Assert-CurrentBootstrapTemplateSource {
+  param(
+    [Parameter(Mandatory)][string]$TemplateSourceSha,
+    [Parameter(Mandatory)][string]$OperatorSourceSha,
+    [Parameter(Mandatory)][string]$RepositoryPath
+  )
+  if ($TemplateSourceSha -notmatch '^[a-f0-9]{40}$' -or $OperatorSourceSha -notmatch '^[a-f0-9]{40}$') {
+    throw "The current-state template has an invalid source identity."
+  }
+  & git -C $RepositoryPath merge-base --is-ancestor $TemplateSourceSha $OperatorSourceSha 2>$null
+  if ($LASTEXITCODE -ne 0) {
+    throw "The current-state template source is not an ancestor of the current operator."
+  }
+}
+
+function Assert-CurrentBootstrapTemplateVerification {
+  param(
+    [Parameter(Mandatory)][object]$Verification,
+    [Parameter(Mandatory)][string]$PlanPath,
+    [Parameter(Mandatory)][string]$PlanSha256,
+    [Parameter(Mandatory)][object]$StateIdentity,
+    [Parameter(Mandatory)][string]$OperatorSourceSha,
+    [Parameter(Mandatory)][string]$RepositoryPath
+  )
+  $keys = @(
+    "activeEcsTaskCount", "activityRouteTableCount", "activitySubnetCount", "applicationNatGatewayCount",
+    "appliedPlanSha256", "defaultDark", "emptyQueueCount", "environment", "kind",
+    "planReceiptSha256", "providerDedicatedTopologyUsed", "publicationReceiptSha256",
+    "releaseArtifactCoordinates", "rollbackArtifactCoordinates", "schemaVersion", "sourceSha",
+    "stateLineage", "stateSerial", "verifiedAt", "versions", "zeroDriftPlanPath", "zeroDriftPlanSha256",
+    "continuousEcsServiceCount"
+  ) | Sort-Object
+  Assert-CurrentBootstrapTemplateSource -TemplateSourceSha ([string]$Verification.sourceSha) `
+    -OperatorSourceSha $OperatorSourceSha -RepositoryPath $RepositoryPath
+  if ((@($Verification.PSObject.Properties | ForEach-Object Name | Sort-Object) -join "|") -cne ($keys -join "|") -or
+    [string]$Verification.schemaVersion -cne "1" -or
+    [string]$Verification.kind -cne "development-ingestion-dark-release-verification" -or
+    [string]$Verification.environment -cne "development" -or
+    [IO.Path]::GetFullPath([string]$Verification.zeroDriftPlanPath) -cne $PlanPath -or
+    [string]$Verification.zeroDriftPlanSha256 -cne $PlanSha256 -or
+    [string]$Verification.stateLineage -cne [string]$StateIdentity.Lineage -or
+    [long]$Verification.stateSerial -ne [long]$StateIdentity.Serial -or
+    $Verification.defaultDark -isnot [bool] -or -not $Verification.defaultDark -or
+    [int]$Verification.activeEcsTaskCount -ne 0 -or [int]$Verification.continuousEcsServiceCount -ne 0 -or
+    [int]$Verification.emptyQueueCount -ne 2 -or
+    [string]$Verification.planReceiptSha256 -cnotmatch '^[a-f0-9]{64}$' -or
+    [string]$Verification.publicationReceiptSha256 -cnotmatch '^[a-f0-9]{64}$') {
+    throw "The current-state template is not the exact reviewed current default-dark verification."
+  }
+}
+
 function Read-CurrentBootstrapTemplate {
   $planPath = Resolve-InputPath -Candidate $CurrentTemplatePlanPath -MustExist
   $planSha = (Get-FileHash -LiteralPath $planPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -490,31 +541,10 @@ function Read-CurrentBootstrapTemplate {
     throw "The current-state template verification receipt checksum does not match review."
   }
   $verification = ConvertFrom-DocumentBaselineJson -Json (Get-Content -LiteralPath $receiptPath -Raw)
-  $keys = @(
-    "activeEcsTaskCount", "activityRouteTableCount", "activitySubnetCount", "applicationNatGatewayCount",
-    "appliedPlanSha256", "defaultDark", "emptyQueueCount", "environment", "kind",
-    "planReceiptSha256", "providerDedicatedTopologyUsed", "publicationReceiptSha256",
-    "releaseArtifactCoordinates", "rollbackArtifactCoordinates", "schemaVersion", "sourceSha",
-    "stateLineage", "stateSerial", "verifiedAt", "versions", "zeroDriftPlanPath", "zeroDriftPlanSha256",
-    "continuousEcsServiceCount"
-  ) | Sort-Object
   $state = Get-StateIdentity
-  if ((@($verification.PSObject.Properties | ForEach-Object Name | Sort-Object) -join "|") -cne ($keys -join "|") -or
-    [string]$verification.schemaVersion -cne "1" -or
-    [string]$verification.kind -cne "development-ingestion-dark-release-verification" -or
-    [string]$verification.environment -cne "development" -or
-    [string]$verification.sourceSha -cne $operatorCommit -or
-    [IO.Path]::GetFullPath([string]$verification.zeroDriftPlanPath) -cne $planPath -or
-    [string]$verification.zeroDriftPlanSha256 -cne $planSha -or
-    [string]$verification.stateLineage -cne [string]$state.Lineage -or
-    [long]$verification.stateSerial -ne [long]$state.Serial -or
-    $verification.defaultDark -isnot [bool] -or -not $verification.defaultDark -or
-    [int]$verification.activeEcsTaskCount -ne 0 -or [int]$verification.continuousEcsServiceCount -ne 0 -or
-    [int]$verification.emptyQueueCount -ne 2 -or
-    [string]$verification.planReceiptSha256 -cnotmatch '^[a-f0-9]{64}$' -or
-    [string]$verification.publicationReceiptSha256 -cnotmatch '^[a-f0-9]{64}$') {
-    throw "The current-state template is not the exact reviewed current default-dark verification."
-  }
+  Assert-CurrentBootstrapTemplateVerification -Verification $verification -PlanPath $planPath `
+    -PlanSha256 $planSha -StateIdentity $state -OperatorSourceSha $operatorCommit `
+    -RepositoryPath $repositoryRoot
   $plan = Read-Plan -Path $planPath
   Assert-DevelopmentDocumentRetainedBaselinePlan -Plan $plan
   return $plan

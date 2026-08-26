@@ -144,9 +144,17 @@ current parser alias still matches the current receipt, and no processing trigge
 If the latest document baseline is historical while live Terraform state has advanced through
 other guarded releases, first create current-state document evidence with the read-only bootstrap.
 The bootstrap accepts the reviewed schema-3/4 document baseline or schema-5 migration handoff at
-its recorded serial. It also requires a separately reviewed current-source zero-drift plan and its
-verification receipt as the variable template. Only the historical document artifact coordinates,
-numeric parser pin, stage, and dark switches replace template values.
+its recorded serial. It also requires a separately reviewed zero-drift plan at the exact current
+state and its verification receipt as the variable template. The template source must be the
+current operator or its Git ancestor; the exact checksum, state lineage/serial, default-dark
+verification, and a new current-source refresh plan—not source equality alone—prove that its
+variables are current. Only the historical document artifact coordinates, numeric parser pin,
+stage, and dark switches replace template values.
+
+Produce the template with `scripts/operate-development-ingestion-dark-release.ps1 -Action Verify`.
+Use that operator's retained `ZeroDriftPlanPath` and `VerificationPath`; bootstrap accepts only the
+exact schema-1 `development-ingestion-dark-release-verification` receipt and its checksum-reviewed
+zero-drift plan at the current state serial.
 
 ```powershell
 .\scripts\operate-development-document-dark-deployment.ps1 -Action Bootstrap -Stage CompleteDark `

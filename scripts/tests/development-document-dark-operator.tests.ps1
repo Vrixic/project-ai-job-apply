@@ -36,6 +36,7 @@ foreach ($required in @(
     '[ValidateSet("Plan", "Apply", "Verify", "Bootstrap")]',
     'Get-ReviewedBootstrapDelta', 'development-document-complete-dark-bootstrap-delta-v1',
     'Assert-CompleteDarkBootstrapBaselineMetadata', 'Read-CurrentBootstrapTemplate',
+    'Assert-CurrentBootstrapTemplateSource', 'Assert-CurrentBootstrapTemplateVerification',
     'Invoke-CompleteDarkBaselineBootstrap', 'Set-CompleteDarkBootstrapVariables',
     'complete-dark-bootstrap-full-source-v1', 'PriorBaselineStateSerial',
     'CurrentTemplatePlanPath', 'ReviewedCurrentTemplateSha256',
@@ -522,10 +523,13 @@ foreach ($transition in @(
 }
 
 function Get-ReviewedBootstrapDelta {
-  param([string]$ReleaseSha, [string]$OperatorSha, [string]$ReviewedSha256, [string]$DeltaKind)
+  param([string]$ReleaseSha, [string]$OperatorSha, [string]$ReviewedSha256,
+    [ValidateSet("Current", "Stored")][string]$DeltaKind = "Current")
   if ($ReviewedSha256 -notmatch '^[a-f0-9]{64}$') { throw "fixture reviewed delta missing" }
+  $script:bootstrapDeltaCalls += "$ReleaseSha|$OperatorSha|$ReviewedSha256|$DeltaKind"
   return $ReviewedSha256
 }
+$script:bootstrapDeltaCalls = @()
 $ExpectedAccountId = "111122223333"; $Region = "us-east-2"
 $releaseCommit = "a" * 40; $operatorCommit = "f" * 40
 $ReviewedReceiptSha256 = "1" * 64; $ReviewedBaselineToOperatorDeltaSha256 = "2" * 64
@@ -550,6 +554,15 @@ $bootstrapMetadata = [pscustomobject][ordered]@{
 $currentBootstrapState = [pscustomobject]@{ Lineage = $bootstrapMetadata.StateLineage; Serial = 220 }
 Assert-CompleteDarkBootstrapBaselineMetadata $bootstrapMetadata $bootstrapBaseline $bootstrapPlanPath `
   ("7" * 64) $currentBootstrapState
+$expectedBootstrapDeltaCalls = @(
+  "$('a' * 40)|$('b' * 40)|$('4' * 64)|Stored",
+  "$('b' * 40)|$('c' * 40)|$('5' * 64)|Stored",
+  "$('c' * 40)|$('d' * 40)|$('6' * 64)|Stored",
+  "$('b' * 40)|$('f' * 40)|$('2' * 64)|Current"
+)
+if (($script:bootstrapDeltaCalls -join "`n") -cne ($expectedBootstrapDeltaCalls -join "`n")) {
+  throw "The schema-5 bootstrap did not authenticate the exact four-edge source graph."
+}
 foreach ($bootstrapMutation in @("lineage", "equal-serial", "older-serial", "stage", "applyable")) {
   $badBootstrap = $bootstrapMetadata | ConvertTo-Json -Depth 20 | ConvertFrom-Json
   $badCurrent = $currentBootstrapState | ConvertTo-Json | ConvertFrom-Json
@@ -667,6 +680,131 @@ function New-DeploymentBaselineVariableFixture([string[]]$Names) {
     $variables | Add-Member $name ([pscustomobject]@{ value = $value })
   }
   return $variables
+}
+
+$templateVerificationFunctions = @($ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+      $node.Name -in @("Assert-CurrentBootstrapTemplateSource", "Assert-CurrentBootstrapTemplateVerification")
+    }, $true) | Sort-Object { $_.Extent.StartOffset })
+if ($templateVerificationFunctions.Count -ne 2) {
+  throw "The current bootstrap template verification must have exactly two testable guards."
+}
+foreach ($function in $templateVerificationFunctions) { Invoke-Expression $function.Extent.Text }
+
+$realRepositoryRoot = $repositoryRoot
+$templateGitFixture = Join-Path ([IO.Path]::GetTempPath()) "document-template-$([guid]::NewGuid().ToString('N'))"
+try {
+  $null = New-Item -ItemType Directory -Path $templateGitFixture
+  & git -C $templateGitFixture init -q
+  & git -C $templateGitFixture config user.email "fixture@example.invalid"
+  & git -C $templateGitFixture config user.name "Fixture"
+  [IO.File]::WriteAllText((Join-Path $templateGitFixture "fixture.txt"), "base")
+  & git -C $templateGitFixture add fixture.txt
+  & git -C $templateGitFixture commit -q -m base
+  $templateBase = (& git -C $templateGitFixture rev-parse HEAD).Trim()
+  [IO.File]::WriteAllText((Join-Path $templateGitFixture "fixture.txt"), "ancestor")
+  & git -C $templateGitFixture commit -q -am ancestor
+  $templateAncestor = (& git -C $templateGitFixture rev-parse HEAD).Trim()
+  [IO.File]::WriteAllText((Join-Path $templateGitFixture "fixture.txt"), "operator")
+  & git -C $templateGitFixture commit -q -am operator
+  $templateOperator = (& git -C $templateGitFixture rev-parse HEAD).Trim()
+
+  Assert-CurrentBootstrapTemplateSource $templateOperator $templateOperator $templateGitFixture
+  Assert-CurrentBootstrapTemplateSource $templateAncestor $templateOperator $templateGitFixture
+
+  & git -C $templateGitFixture checkout -q -b divergent $templateBase
+  [IO.File]::WriteAllText((Join-Path $templateGitFixture "fixture.txt"), "divergent")
+  & git -C $templateGitFixture commit -q -am divergent
+  $templateDivergent = (& git -C $templateGitFixture rev-parse HEAD).Trim()
+  foreach ($sourceCase in @($templateDivergent, ("z" * 40))) {
+    $rejected = $false
+    try { Assert-CurrentBootstrapTemplateSource $sourceCase $templateOperator $templateGitFixture }
+    catch { $rejected = $true }
+    if (-not $rejected) { throw "The current bootstrap template accepted a divergent or malformed source." }
+  }
+
+  $templatePlanPath = [IO.Path]::GetFullPath((Join-Path $templateGitFixture "current.tfplan"))
+  $templateState = [pscustomobject]@{ Lineage = "472ef790-b249-45ec-817f-718005980d9e"; Serial = 220 }
+  $templateVerification = [pscustomobject][ordered]@{
+    activeEcsTaskCount = 0; activityRouteTableCount = 0; activitySubnetCount = 0
+    applicationNatGatewayCount = 1; appliedPlanSha256 = "1" * 64; defaultDark = $true
+    emptyQueueCount = 2; environment = "development"; kind = "development-ingestion-dark-release-verification"
+    planReceiptSha256 = "2" * 64; providerDedicatedTopologyUsed = $false
+    publicationReceiptSha256 = "3" * 64; releaseArtifactCoordinates = @(); rollbackArtifactCoordinates = @()
+    schemaVersion = "1"; sourceSha = $templateAncestor; stateLineage = $templateState.Lineage
+    stateSerial = $templateState.Serial; verifiedAt = "2026-08-26T00:00:00Z"; versions = [pscustomobject]@{}
+    zeroDriftPlanPath = $templatePlanPath; zeroDriftPlanSha256 = "4" * 64; continuousEcsServiceCount = 0
+  }
+  Assert-CurrentBootstrapTemplateVerification $templateVerification $templatePlanPath ("4" * 64) `
+    $templateState $templateOperator $templateGitFixture
+  foreach ($templateMutation in @("source", "kind", "serial", "dark", "queues", "plan")) {
+    $badTemplate = $templateVerification | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+    switch ($templateMutation) {
+      "source" { $badTemplate.sourceSha = $templateDivergent }
+      "kind" { $badTemplate.kind = "wrong" }
+      "serial" { $badTemplate.stateSerial = 219 }
+      "dark" { $badTemplate.defaultDark = $false }
+      "queues" { $badTemplate.emptyQueueCount = 1 }
+      "plan" { $badTemplate.zeroDriftPlanSha256 = "5" * 64 }
+    }
+    $rejected = $false
+    try {
+      Assert-CurrentBootstrapTemplateVerification $badTemplate $templatePlanPath ("4" * 64) `
+        $templateState $templateOperator $templateGitFixture
+    } catch { $rejected = $true }
+    if (-not $rejected) { throw "The current bootstrap template accepted '$templateMutation' tampering." }
+  }
+}
+finally {
+  $repositoryRoot = $realRepositoryRoot
+  $resolvedTemplateFixture = [IO.Path]::GetFullPath($templateGitFixture)
+  $temporaryRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+  if (-not $resolvedTemplateFixture.StartsWith($temporaryRoot, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Template fixture cleanup escaped the temporary directory."
+  }
+  if (Test-Path -LiteralPath $resolvedTemplateFixture) {
+    Remove-Item -LiteralPath $resolvedTemplateFixture -Recurse -Force
+  }
+}
+
+$bootstrapVariableFunctions = @($ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+      $node.Name -ceq "Set-CompleteDarkBootstrapVariables"
+    }, $true))
+if ($bootstrapVariableFunctions.Count -ne 1) {
+  throw "The CompleteDark bootstrap overlay must be defined exactly once."
+}
+Invoke-Expression $bootstrapVariableFunctions[0].Extent.Text
+
+$bootstrapTemplateFixture = [pscustomobject]@{ variables = New-DeploymentBaselineVariableFixture $allowedVariableNames }
+$bootstrapHistoricalFixture = $bootstrapTemplateFixture | ConvertTo-Json -Depth 60 | ConvertFrom-Json
+$bootstrapDocumentNames = @(
+  "document_parser_artifact_base64sha256", "document_parser_artifact_s3_key",
+  "document_parser_artifact_s3_object_version", "document_parser_artifact_sha256",
+  "document_parser_invocation_qualified_arn", "document_parser_version",
+  "document_processing_deployment_stage", "document_processor_artifact_base64sha256",
+  "document_processor_artifact_s3_key", "document_processor_artifact_s3_object_version",
+  "document_processor_artifact_sha256", "document_processor_extension_layer_arn",
+  "document_scan_event_rule_enabled", "document_scan_mapping_enabled",
+  "document_security_health_rules_enabled"
+)
+foreach ($name in $bootstrapDocumentNames) {
+  $bootstrapHistoricalFixture.variables.PSObject.Properties[$name].Value.value = "historical-$name"
+}
+$bootstrapHistoricalFixture.variables.document_processing_deployment_stage.value = "complete-dark"
+$bootstrapHistoricalFixture.variables.document_scan_event_rule_enabled.value = $false
+$bootstrapHistoricalFixture.variables.document_scan_mapping_enabled.value = $false
+$bootstrapHistoricalFixture.variables.document_security_health_rules_enabled.value = $true
+$script:bootstrapTemplate = $bootstrapTemplateFixture
+Set-CompleteDarkBootstrapVariables $bootstrapHistoricalFixture
+foreach ($name in $allowedVariableNames) {
+  $sourceVariables = if ($name -in $bootstrapDocumentNames) { $bootstrapHistoricalFixture.variables } else { $bootstrapTemplateFixture.variables }
+  $expected = ConvertTo-TerraformVariableEnvironmentValue -Name $name -Value $sourceVariables.PSObject.Properties[$name].Value.value
+  if ([string][Environment]::GetEnvironmentVariable("TF_VAR_$name", "Process") -cne [string]$expected) {
+    throw "The CompleteDark bootstrap did not preserve the exact historical/current overlay for '$name'."
+  }
 }
 
 $derivedVariableNames = @(
