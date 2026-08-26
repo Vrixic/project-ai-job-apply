@@ -48,6 +48,14 @@ foreach ($requiredInspectionGuard in @(
 foreach ($forbidden in @('terraform apply', 'aws ecs run-task', 'docker ', 'wsl --shutdown', 'shutdown.exe', 'Stop-Computer', 'github workflow', 'vercel ')) {
   if ($source -match [regex]::Escape($forbidden)) { throw "The operator contains a forbidden mutation/control path: $forbidden" }
 }
+$identityBoundaryIndex = $source.IndexOf('$identity = if ($RequireIdentity) { Read-SyntheticIdentityContext')
+$backupBoundaryIndex = $source.IndexOf('$backup = Get-BackupInventory')
+$healthBoundaryIndex = $source.IndexOf('$health = Assert-OperationalHealth')
+$driftBoundaryIndex = $source.IndexOf('$drift = if ($RequireIdentity) { Read-ReviewedZeroDrift')
+if ($identityBoundaryIndex -lt 0 -or $identityBoundaryIndex -gt $backupBoundaryIndex -or
+    $identityBoundaryIndex -gt $healthBoundaryIndex -or $identityBoundaryIndex -gt $driftBoundaryIndex) {
+  throw 'The short-lived identity proof is not validated before the slow acceptance inspections.'
+}
 
 $env:CANDIDATE_RIGHTS_OPERATOR_TEST_ONLY = '1'
 . $operator `

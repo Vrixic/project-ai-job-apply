@@ -405,11 +405,14 @@ function Get-AcceptanceBoundary {
   $snapshot = Read-StateSnapshot
   $runtime = Get-RuntimeBoundary $snapshot
   if ($RequireIdentity -and $runtime.IdTokenAudience -notmatch '^[A-Za-z0-9_-]{16,256}$') { throw "The gateway does not expose the exact candidate web ID-token audience." }
+  # Validate the short-lived caller proof as soon as the state-bound issuer and audience are known.
+  # Backup, queue, alarm, and drift inspection can be comparatively slow and must not consume the
+  # token's usable acceptance window before its first exact validation.
+  $identity = if ($RequireIdentity) { Read-SyntheticIdentityContext $runtime.Issuer $runtime.IdTokenAudience $ExpectedRecentAuthMaxAgeSeconds } else { $null }
   $secret = Assert-Auth0SecretBoundary $runtime.Auth0SecretArn
   $backup = Get-BackupInventory $snapshot
   $health = Assert-OperationalHealth $snapshot
   $drift = if ($RequireIdentity) { Read-ReviewedZeroDrift } else { $null }
-  $identity = if ($RequireIdentity) { Read-SyntheticIdentityContext $runtime.Issuer $runtime.IdTokenAudience $ExpectedRecentAuthMaxAgeSeconds } else { $null }
   return [pscustomobject]@{ Source = $source; Snapshot = $snapshot; Runtime = $runtime; Secret = $secret; Backup = $backup; Health = $health; Drift = $drift; Identity = $identity }
 }
 
