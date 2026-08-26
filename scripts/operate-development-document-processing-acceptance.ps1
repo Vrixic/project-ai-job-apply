@@ -2561,11 +2561,28 @@ function Read-CorpusPlan {
     'sourceSha', 'operatorSourceSha', 'sourceToOperatorDeltaSha256', 'migrationReceiptSha256', 'migrationImage',
     'runId', 'corpusVersion', 'corpusSha256', 'descriptorPath', 'descriptorSha256', 'cases', 'runtime', 'createdAt'
   )
+  $corpusRecoveryOrVerify = $Action -in @('CorpusRecoverCleanup', 'CorpusVerify')
+  $operatorBindingValid = (
+    [string]$plan.operatorSourceSha -ceq $script:operatorSourceSha -and
+    [string]$plan.sourceToOperatorDeltaSha256 -ceq $script:sourceToOperatorDeltaSha256
+  )
+  if (-not $operatorBindingValid -and $corpusRecoveryOrVerify) {
+    $originalOperatorDelta = Get-OperatorDeltaEvidence -FromSha $SourceSha -ToSha ([string]$plan.operatorSourceSha)
+    $null = Get-RecoveryOperatorDeltaEvidence -FromSha ([string]$plan.operatorSourceSha) -ToSha $script:operatorSourceSha
+    $operatorBindingValid = (
+      [string]$plan.sourceToOperatorDeltaSha256 -ceq [string]$originalOperatorDelta.Sha256
+    )
+  }
+  $stateBindingValid = if ($corpusRecoveryOrVerify) {
+    [long]$plan.stateSerial -le [long]$identity.Serial
+  }
+  else {
+    [long]$plan.stateSerial -eq [long]$identity.Serial
+  }
   if ([int]$plan.schemaVersion -ne 1 -or [string]$plan.kind -cne 'development-document-parser-corpus-plan' -or
     [string]$plan.environment -cne 'development' -or [string]$plan.region -cne $Region -or [string]$plan.accountId -cne $ExpectedAccountId -or
-    [string]$plan.stateBucket -cne $StateBucket -or [string]$plan.stateLineage -cne $identity.Lineage -or [long]$plan.stateSerial -ne $identity.Serial -or
-    [string]$plan.sourceSha -cne $SourceSha -or [string]$plan.operatorSourceSha -cne $script:operatorSourceSha -or
-    [string]$plan.sourceToOperatorDeltaSha256 -cne $script:sourceToOperatorDeltaSha256 -or
+    [string]$plan.stateBucket -cne $StateBucket -or [string]$plan.stateLineage -cne $identity.Lineage -or -not $stateBindingValid -or
+    [string]$plan.sourceSha -cne $SourceSha -or -not $operatorBindingValid -or
     [string]$plan.migrationReceiptSha256 -cne $ReviewedMigrationReceiptSha256 -or [string]$plan.migrationImage -cne $migration.ImageUri -or
     [string]$plan.runId -notmatch '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' -or
     [string]$plan.corpusVersion -cne 'document-parser-adversarial-v1' -or [string]$plan.corpusSha256 -cne $FixtureSetSha256 -or
@@ -2861,6 +2878,8 @@ if ($Action -in @('CorpusExecute', 'CorpusRecoverCleanup', 'CorpusVerify')) {
     if ([string]$receipt.phase -notin @('running', 'cleanup-required')) { throw 'Corpus cleanup recovery requires an interrupted or cleanup-required receipt.' }
     Remove-CorpusObjects $runtime @($receipt.documents)
     Remove-CorpusFiles ([string]$corpusPlan.Plan.descriptorPath)
+    Assert-ReviewedRuntimeUnchanged
+    Assert-ZeroTasks $runtime.ClusterArn
     $receipt.objectsRemoved = $true; $receipt.phase = 'recovered-cleaned'; $receipt.completedAt = [DateTimeOffset]::UtcNow.ToString('o')
     Write-CorpusReceipt $receiptPath $receipt
     [pscustomobject]@{ Outcome = 'cleanup-recovered'; ReceiptPath = $receiptPath; ReceiptSha256 = Get-FileSha256 $receiptPath; AcceptanceClaim = $false; PersistentRows = 0; ObjectsRemoved = $true }
@@ -2874,7 +2893,8 @@ if ($Action -in @('CorpusExecute', 'CorpusRecoverCleanup', 'CorpusVerify')) {
   }
   $aggregate = ConvertFrom-OperatorJson (Get-Content $aggregatePath -Raw) 'Document parser corpus aggregate'
   Assert-CorpusAggregate $aggregate $corpusPlan.Plan | Out-Null
-  Assert-TriggersDark $runtime.State | Out-Null; Assert-ZeroTasks $runtime.ClusterArn
+  Assert-ReviewedRuntimeUnchanged
+  Assert-ZeroTasks $runtime.ClusterArn
   [pscustomobject]@{ Outcome = 'verified'; ReceiptSha256 = $ReviewedReceiptSha256; AggregateSha256 = $receipt.aggregateSha256; CaseCount = 43; RejectedCount = 43; PersistentRows = 0; ObjectsRemoved = $true; TriggerActivation = $false; CloudMutation = $false; RealCandidateData = $false }
   exit 0
 }

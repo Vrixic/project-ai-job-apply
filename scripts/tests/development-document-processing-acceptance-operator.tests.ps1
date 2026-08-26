@@ -57,6 +57,9 @@ foreach ($required in @(
     'Get-OperatorDeltaEvidence',
     'Get-RecoveryOperatorDeltaEvidence',
     'A recovery operator dependency changed after the reviewed source.',
+    '$corpusRecoveryOrVerify',
+    "`$Action -in @('CorpusRecoverCleanup', 'CorpusVerify')",
+    '[long]$plan.stateSerial -le [long]$identity.Serial',
     '$recoveryOnlyStateAdvance',
     '[long]$identity.Serial -gt [long]$planEvidence.Plan.stateSerial',
     '$null = Assert-RecoveryDescriptor',
@@ -109,6 +112,16 @@ if ($versionHistoryOffset -lt 0 -or $versionReadbackOffset -le $versionHistoryOf
 }
 if ($source.Contains('[long]$planEvidence.Plan.stateSerial +')) {
   throw "Recovery safety must depend on exact runtime identity, not an arbitrary state-serial distance."
+}
+if ($source -match '\[long\]\$plan\.stateSerial -ne \$identity\.Serial') {
+  throw "Corpus recovery and verification must not require the execution-plan state serial to remain current."
+}
+$corpusRecoveryOffset = $source.IndexOf("if (`$Action -eq 'CorpusRecoverCleanup')")
+$corpusVerifyOutputOffset = $source.IndexOf("Outcome = 'verified'", $corpusRecoveryOffset)
+$corpusClosingRegion = $source.Substring($corpusRecoveryOffset, $corpusVerifyOutputOffset - $corpusRecoveryOffset)
+if ([regex]::Matches($corpusClosingRegion, [regex]::Escape('Assert-ReviewedRuntimeUnchanged')).Count -ne 2 -or
+  [regex]::Matches($corpusClosingRegion, [regex]::Escape('Assert-ZeroTasks $runtime.ClusterArn')).Count -ne 2) {
+  throw "Corpus cleanup recovery and verification must both revalidate the live runtime and idle task boundary before success."
 }
 if ($source -notmatch 'function Remove-DescriptorObjects \{[\s\S]{0,250}\[AllowEmptyCollection\(\)\]\[object\[\]\]\$Documents') {
   throw "Descriptor cleanup must accept a reviewed receipt containing zero fixture objects."

@@ -5,6 +5,23 @@ $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 . (Join-Path $repositoryRoot "scripts\lib\development-document-dark-guards.ps1")
 $account = "123456789012"
 
+$declaredDevelopmentOutputs = @(
+  foreach ($path in @(
+      (Join-Path $repositoryRoot "infrastructure\terraform\environments\development\outputs.tf"),
+      (Join-Path $repositoryRoot "infrastructure\terraform\environments\development\ingestion.tf")
+    )) {
+    foreach ($match in [regex]::Matches((Get-Content -LiteralPath $path -Raw), '(?m)^output\s+"([^"]+)"')) {
+      $match.Groups[1].Value
+    }
+  }
+)
+$guardedDevelopmentOutputs = @(Get-DevelopmentDocumentCurrentOutputNames)
+if ($guardedDevelopmentOutputs.Count -ne 50 -or
+  (@($guardedDevelopmentOutputs | Sort-Object -Unique).Count) -ne 50 -or
+  (($guardedDevelopmentOutputs | Sort-Object) -join "|") -cne (($declaredDevelopmentOutputs | Sort-Object) -join "|")) {
+  throw "The document output guard is not synchronized with the exact development root output inventory."
+}
+
 $parser = Get-DevelopmentDocumentStageExpectedActions "parser-dark"
 $complete = Get-DevelopmentDocumentStageExpectedActions "complete-dark"
 $completeTransition = Get-DevelopmentDocumentStageExpectedActions "complete-dark" -ParserSourceTransition
@@ -647,20 +664,12 @@ foreach ($pinMutation in @("environment", "policy", "extra")) {
 }
 function New-TestCompleteDarkSourceTransitionOutputs([string]$ParserQualifiedArn) {
   $outputs = [ordered]@{}
-  foreach ($name in @(
-      "alert_delivery_canary_alarm_name", "application_security_group_id", "artifact_bucket",
-      "candidate_document_bucket", "candidate_document_malware_protection_plan_id", "cost_export_arn",
-      "cost_export_bucket", "document_scan_event_rule_arn", "ecs_cluster_arn", "gateway_lambda_alias_arn",
-      "gateway_lambda_authorizer_id", "gateway_lambda_function_name", "gateway_url", "migration_repository_url",
-      "migration_subnet_ids", "migration_task_definition_arn", "monthly_budget_name",
-      "observability_dashboard_name", "operational_alert_topic_arn", "outbox_reconciler_alias_arn",
-      "outbox_reconciler_rule_arn", "outbox_starter_alias_arn", "outbox_starter_event_source_mapping_uuid",
-      "profile_readiness_activity_alias_arn", "profile_readiness_durable_alias_arn",
-      "profile_readiness_durable_version_arn", "profile_readiness_terminal_alias_arn",
-      "profile_readiness_terminal_rule_arn", "vpc_id"
-    )) {
+  foreach ($name in @(Get-DevelopmentDocumentCurrentOutputNames | Where-Object {
+        $_ -notin @("document_parser_version_arn", "document_processor_alias_arn", "document_scan_event_source_mapping_uuid")
+      })) {
+    $knownValue = if ($name -in @("public_job_route_id", "public_job_sitemap_route_id")) { $null } else { "known-$name" }
     $outputs[$name] = [pscustomobject][ordered]@{
-      actions = @("no-op"); before = "known-$name"; after = "known-$name"; after_unknown = $false
+      actions = @("no-op"); before = $knownValue; after = $knownValue; after_unknown = $false
       before_sensitive = $false; after_sensitive = $false
     }
   }
@@ -830,6 +839,7 @@ if ($diagnosticPlanPresent) {
         objectBase64Sha256 = [string]$diagnosticFunction.change.after.source_code_hash
       }) }
   $diagnosticPin = [string]$diagnosticFunction.change.before.qualified_arn
+  $diagnosticPlan.output_changes = New-TestCompleteDarkSourceTransitionOutputs $diagnosticPin
   $diagnosticChanges = @(Assert-DevelopmentDocumentDarkPlan $diagnosticPlan "362544434697" complete-dark `
       -ParserSourceTransition -BaselineVariables $diagnosticBaselineVariables `
       -Receipt $diagnosticReceipt -ParserQualifiedArn $diagnosticPin)

@@ -98,8 +98,10 @@ readback, and writes the fixed synthetic clean tag. It directly invokes the exac
 processor version; that version invokes only its exact numeric parser pin. The mapping, GuardDuty
 rule, reconciler, provider inputs, and real-resume path remain off. The special processor request
 branches before database resolution, so the gate creates no rows. Success requires 43 exact
-rejections and the descriptor-derived reason-code histogram; retained evidence contains no bytes,
-text, filenames, document IDs, keys, versions, ARNs, or candidate data.
+rejections and the descriptor-derived reason-code histogram. The retained aggregate contains no
+bytes, text, filenames, document IDs, keys, versions, ARNs, or candidate data. The ignored local
+checkpoint receipt necessarily retains generated-synthetic document IDs, object keys and versions,
+and exact Lambda ARNs for recovery and runtime binding; never publish that receipt.
 
 The operator always removes every version and delete marker at the exact generated quarantine key
 and throughout each generated document's normalized namespace, then removes the local corpus

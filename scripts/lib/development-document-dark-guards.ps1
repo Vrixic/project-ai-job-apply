@@ -1836,6 +1836,28 @@ function Assert-ExactDocumentAlarmSet {
   }
 }
 
+function Get-DevelopmentDocumentCurrentOutputNames {
+  @(
+    "alert_delivery_canary_alarm_name", "application_security_group_id", "artifact_bucket",
+    "candidate_data_export_bucket", "candidate_deletion_recovery_bucket", "candidate_document_bucket",
+    "candidate_document_malware_protection_plan_id", "candidate_rights_auth0_secret_arn", "cost_export_arn",
+    "cost_export_bucket", "document_parser_version_arn", "document_processor_alias_arn",
+    "document_scan_event_rule_arn", "document_scan_event_source_mapping_uuid", "ecs_cluster_arn",
+    "gateway_lambda_alias_arn", "gateway_lambda_authorizer_id", "gateway_lambda_function_name", "gateway_url",
+    "ingestion_dead_letter_queue_arn", "ingestion_dispatch_queue_arn", "ingestion_durable_version_arn",
+    "ingestion_provider_activation_allowed", "ingestion_provider_private_egress", "ingestion_provider_source_count",
+    "ingestion_runtime_deployed", "ingestion_runtime_enabled", "ingestion_synthetic_source_enabled",
+    "migration_repository_url", "migration_subnet_ids", "migration_task_definition_arn", "monthly_budget_name",
+    "observability_dashboard_name", "operational_alert_topic_arn", "outbox_reconciler_alias_arn",
+    "outbox_reconciler_rule_arn", "outbox_starter_alias_arn", "outbox_starter_event_source_mapping_uuid",
+    "profile_readiness_activity_alias_arn", "profile_readiness_durable_alias_arn",
+    "profile_readiness_durable_version_arn", "profile_readiness_terminal_alias_arn",
+    "profile_readiness_terminal_rule_arn", "public_job_lambda_alias_arn", "public_job_lambda_function_name",
+    "public_job_projection_lambda_alias_arn", "public_job_projection_lambda_function_name",
+    "public_job_route_id", "public_job_sitemap_route_id", "vpc_id"
+  )
+}
+
 function Assert-DevelopmentDocumentCompleteDarkSourceTransitionOutputs {
   param(
     [Parameter(Mandatory)][object]$OutputChanges,
@@ -1847,18 +1869,7 @@ function Assert-DevelopmentDocumentCompleteDarkSourceTransitionOutputs {
     document_processor_alias_arn = "create"
     document_scan_event_source_mapping_uuid = "create"
   }
-  $noOpNames = @(
-    "alert_delivery_canary_alarm_name", "application_security_group_id", "artifact_bucket",
-    "candidate_document_bucket", "candidate_document_malware_protection_plan_id", "cost_export_arn",
-    "cost_export_bucket", "document_scan_event_rule_arn", "ecs_cluster_arn", "gateway_lambda_alias_arn",
-    "gateway_lambda_authorizer_id", "gateway_lambda_function_name", "gateway_url", "migration_repository_url",
-    "migration_subnet_ids", "migration_task_definition_arn", "monthly_budget_name",
-    "observability_dashboard_name", "operational_alert_topic_arn", "outbox_reconciler_alias_arn",
-    "outbox_reconciler_rule_arn", "outbox_starter_alias_arn", "outbox_starter_event_source_mapping_uuid",
-    "profile_readiness_activity_alias_arn", "profile_readiness_durable_alias_arn",
-    "profile_readiness_durable_version_arn", "profile_readiness_terminal_alias_arn",
-    "profile_readiness_terminal_rule_arn", "vpc_id"
-  )
+  $noOpNames = @(Get-DevelopmentDocumentCurrentOutputNames | Where-Object { -not $transitionActions.Contains($_) })
   Assert-ExactObjectKeys $OutputChanges @($noOpNames + $transitionActions.Keys) `
     "CompleteDark source-transition outputs"
 
@@ -1867,8 +1878,10 @@ function Assert-DevelopmentDocumentCompleteDarkSourceTransitionOutputs {
     Assert-ExactObjectKeys $change @(
       "actions", "after", "after_sensitive", "after_unknown", "before", "before_sensitive"
     ) "CompleteDark no-op output '$name'"
-    if ((@($change.actions) -join ",") -cne "no-op" -or $null -eq $change.before -or
-      $null -eq $change.after -or
+    $allowsNull = $name -in @("public_job_route_id", "public_job_sitemap_route_id")
+    if ((@($change.actions) -join ",") -cne "no-op" -or
+      ($allowsNull -and ($null -ne $change.before -or $null -ne $change.after)) -or
+      (-not $allowsNull -and ($null -eq $change.before -or $null -eq $change.after)) -or
       (ConvertTo-DeploymentCanonicalValue $change.before) -cne
       (ConvertTo-DeploymentCanonicalValue $change.after) -or
       $change.after_unknown -isnot [bool] -or $change.after_unknown -or
@@ -1902,19 +1915,7 @@ function Assert-DevelopmentDocumentCompleteDarkParserRefreshOutputs {
     [Parameter(Mandatory)][string]$ParserQualifiedArn
   )
 
-  $expectedNames = @(
-    "alert_delivery_canary_alarm_name", "application_security_group_id", "artifact_bucket",
-    "candidate_document_bucket", "candidate_document_malware_protection_plan_id", "cost_export_arn",
-    "cost_export_bucket", "document_parser_version_arn", "document_processor_alias_arn",
-    "document_scan_event_rule_arn", "document_scan_event_source_mapping_uuid", "ecs_cluster_arn",
-    "gateway_lambda_alias_arn", "gateway_lambda_authorizer_id", "gateway_lambda_function_name",
-    "gateway_url", "migration_repository_url", "migration_subnet_ids", "migration_task_definition_arn",
-    "monthly_budget_name", "observability_dashboard_name", "operational_alert_topic_arn",
-    "outbox_reconciler_alias_arn", "outbox_reconciler_rule_arn", "outbox_starter_alias_arn",
-    "outbox_starter_event_source_mapping_uuid", "profile_readiness_activity_alias_arn",
-    "profile_readiness_durable_alias_arn", "profile_readiness_durable_version_arn",
-    "profile_readiness_terminal_alias_arn", "profile_readiness_terminal_rule_arn", "vpc_id"
-  )
+  $expectedNames = @(Get-DevelopmentDocumentCurrentOutputNames)
   Assert-ExactObjectKeys $OutputChanges $expectedNames "CompleteDark parser-refresh outputs"
   foreach ($name in $expectedNames) {
     $change = $OutputChanges.PSObject.Properties[$name].Value
@@ -1934,8 +1935,10 @@ function Assert-DevelopmentDocumentCompleteDarkParserRefreshOutputs {
     Assert-ExactObjectKeys $change @(
       "actions", "after", "after_sensitive", "after_unknown", "before", "before_sensitive"
     ) "CompleteDark parser-refresh no-op output '$name'"
-    if ((@($change.actions) -join ",") -cne "no-op" -or $null -eq $change.before -or
-      $null -eq $change.after -or
+    $allowsNull = $name -in @("public_job_route_id", "public_job_sitemap_route_id")
+    if ((@($change.actions) -join ",") -cne "no-op" -or
+      ($allowsNull -and ($null -ne $change.before -or $null -ne $change.after)) -or
+      (-not $allowsNull -and ($null -eq $change.before -or $null -eq $change.after)) -or
       (ConvertTo-DeploymentCanonicalValue $change.before) -cne
       (ConvertTo-DeploymentCanonicalValue $change.after) -or
       $change.after_unknown -isnot [bool] -or $change.after_unknown -or
