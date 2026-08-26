@@ -32,6 +32,25 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## D1 — Useful web product and canonical job catalog
 
+- Ingestion fixture default-dark release (2026-08-26): exact source
+  `8d2cec438103fcc866aa9b50e9ddd380818345d5` is immutably published and deployed through the
+  reviewed exact twelve-change plan at development state serial `220`. Publication receipt SHA-256
+  is `577f6087b0355e9869909ff4e25bea7fcc9471c6d50f224a011ae216ac341f0a`; saved plan SHA-256 is
+  `a2ebf968fdb551e53f96df18c36de9008592a82400de6d883b62362ccc124c4e`; plan receipt SHA-256 is
+  `17a4c4e35f870360d225e23f9c3c26f8a7172db14b2c9ae9598fd1cca03a3e58`; and verification receipt
+  SHA-256 is `ad91c02480f69d4ae90aafbd5a370d02016c41992fa5c4b4d32d0e09901a961a`. The fresh
+  refresh-backed zero-drift plan SHA-256 is
+  `766e91f4c854c46b3f028045b4cfeb86b4fb5b41e0931b5cc4d3f28c22b95063`. Safety corrections
+  `8582218`, `53be8b9`, and `8d2cec4` bind qualified mapping inventory, accept legitimate EC2 local
+  routes without weakening NAT ownership checks, and keep Terraform verification output outside
+  the machine result. Provider authority, sources, schedules, terminal handling, and mappings
+  remain disabled. The shared application NAT is legitimate; no dedicated ingestion-provider NAT,
+  subnet, or route is used. The bounded provider-failure execution, document corpus execution,
+  Vercel projects/deployments, representative values and alert receipt, candidate-rights lifecycle,
+  and accountable human gates remain. Phase 1 is not complete.
+  [Evidence](evidence/d1-development-ingestion-fixture-dark-release-2026-08-26.md),
+  [Phase 1 tasks](phase-1-web-and-job-catalog.md)
+
 - Final autonomous source foundation (2026-08-26): exact merged revision
   `2f4270cc536c04f0376f686ea19706b35eab9ec4` adds the guarded deployed-runtime 43-case document
   corpus, corrects ingestion release/provider-failure topology and the exact twelve-change plan,

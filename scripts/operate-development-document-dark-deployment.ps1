@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
-  [ValidateSet("Plan", "Apply", "Verify")][string]$Action = "Verify",
+  [ValidateSet("Plan", "Apply", "Verify", "Bootstrap")][string]$Action = "Verify",
   [ValidateSet("KmsPrerequisite", "ParserDark", "CompleteDark")][string]$Stage = "ParserDark",
+  [ValidateSet("None", "Parser", "Processor")][string]$RefreshStep = "None",
   [string]$AwsProfile = "ai-job-apply-development-admin",
   [string]$Region = "us-east-2",
   [ValidatePattern("^[0-9]{12}$")][string]$ExpectedAccountId = "",
@@ -12,6 +13,10 @@ param(
   [string]$BaselinePlanPath = "",
   [ValidatePattern("^[a-f0-9]{64}$")][string]$ReviewedBaselineSha256 = "",
   [ValidatePattern("^(?:|[a-f0-9]{64})$")][string]$ReviewedBaselineMetadataSha256 = "",
+  [string]$CurrentTemplatePlanPath = "",
+  [ValidatePattern("^(?:|[a-f0-9]{64})$")][string]$ReviewedCurrentTemplateSha256 = "",
+  [string]$CurrentTemplateReceiptPath = "",
+  [ValidatePattern("^(?:|[a-f0-9]{64})$")][string]$ReviewedCurrentTemplateReceiptSha256 = "",
   [string]$PublicationReceiptPath = "",
   [ValidatePattern("^[a-f0-9]{64}$")][string]$ReviewedReceiptSha256 = "",
   [string]$AppliedGatewayPlanPath = "",
@@ -21,6 +26,8 @@ param(
   [ValidatePattern("^(?:|[a-f0-9]{64})$")][string]$ReviewedAppliedGatewayReceiptSha256 = "",
   [string]$RetainedParserReceiptPath = "",
   [ValidatePattern("^(?:|[a-f0-9]{64})$")][string]$ReviewedRetainedParserReceiptSha256 = "",
+  [string]$ParserRefreshReceiptPath = "",
+  [ValidatePattern("^(?:|[a-f0-9]{64})$")][string]$ReviewedParserRefreshReceiptSha256 = "",
   [string]$PlanPath = "",
   [ValidatePattern("^[a-f0-9]{64}$")][string]$ReviewedPlanSha256 = "",
   [switch]$Help
@@ -149,6 +156,32 @@ $appliedGatewayRecoveryRequested = $appliedGatewayInputCount -eq $appliedGateway
 if ($appliedGatewayRecoveryRequested -and ($Action -cne "Verify" -or $Stage -cne "CompleteDark")) {
   throw "Already-applied gateway recovery is accepted only for CompleteDark Verify."
 }
+$parserRefreshInputCount = @(@($ParserRefreshReceiptPath, $ReviewedParserRefreshReceiptSha256) |
+  Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }).Count
+if ($parserRefreshInputCount -notin @(0, 2)) { throw "The parser-refresh receipt inputs are all-or-none." }
+if ($RefreshStep -cne "None" -and ($Stage -cne "CompleteDark" -or $Action -notin @("Plan", "Apply"))) {
+  throw "A current CompleteDark refresh step is accepted only for CompleteDark Plan or Apply."
+}
+if ($Action -ceq "Bootstrap" -and ($Stage -cne "CompleteDark" -or $RefreshStep -cne "None")) {
+  throw "Baseline bootstrap is accepted only for CompleteDark without a refresh step."
+}
+$templateInputs = @(
+  $CurrentTemplatePlanPath, $ReviewedCurrentTemplateSha256,
+  $CurrentTemplateReceiptPath, $ReviewedCurrentTemplateReceiptSha256
+)
+$templateInputCount = @($templateInputs | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }).Count
+if ($Action -ceq "Bootstrap" -and $templateInputCount -ne $templateInputs.Count) {
+  throw "Bootstrap requires the checksum-reviewed current-state template plan and verification receipt."
+}
+if ($Action -cne "Bootstrap" -and $templateInputCount -ne 0) {
+  throw "Current-state template inputs are accepted only for Bootstrap."
+}
+if ($RefreshStep -ceq "Processor" -and $parserRefreshInputCount -ne 2) {
+  throw "The processor refresh requires the checksum-reviewed parser-refresh receipt."
+}
+if ($RefreshStep -cne "Processor" -and $parserRefreshInputCount -ne 0) {
+  throw "Parser-refresh receipt inputs are accepted only for the processor refresh step."
+}
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $terraformDirectory = Join-Path $repositoryRoot "infrastructure\terraform\environments\development"
@@ -163,6 +196,11 @@ $script:completeDarkAppliedGatewayRecovery = $false
 $script:appliedGatewayRecovery = $null
 $script:retainedParserArtifact = $null
 $script:baselineReceiptSha256 = ""
+$script:completeDarkParserRefresh = $RefreshStep -ceq "Parser"
+$script:completeDarkProcessorRefresh = $RefreshStep -ceq "Processor"
+$script:parserRefreshEvidence = $null
+$script:bootstrapInputMetadata = $null
+$script:bootstrapTemplate = $null
 $completeDarkRecoveryReleaseSourceSha = "a6d0fba09082b8bc61ee7b604ee1d5c47bd71624"
 $completeDarkRecoveryBaselineReleaseSourceSha = "d0e55de86edfa6b5f655f5631bb1741d6c5b5ac8"
 $completeDarkRecoveryBaselineOperatorSourceSha = "cd8bc47fd89239c5e224ccdd1baff097d13c5bf7"
@@ -307,6 +345,65 @@ function Get-ReviewedOperatorDelta {
   return $sha
 }
 
+function Get-ReviewedBootstrapDelta {
+  param(
+    [Parameter(Mandatory)][string]$ReleaseSha,
+    [Parameter(Mandatory)][string]$OperatorSha,
+    [AllowEmptyString()][string]$ReviewedSha256 = "",
+    [ValidateSet("Stored", "Bootstrap")][string]$DeltaKind = "Bootstrap"
+  )
+  $domain = if ($DeltaKind -ceq "Stored") { "development-operator-delta-v1" }
+    else { "development-document-complete-dark-bootstrap-delta-v1" }
+  if ($ReleaseSha -notmatch '^[a-f0-9]{40}$' -or $OperatorSha -notmatch '^[a-f0-9]{40}$') {
+    throw "Bootstrap source boundaries require exact commits."
+  }
+  if ($ReleaseSha -ceq $OperatorSha) {
+    if (-not [string]::IsNullOrEmpty($ReviewedSha256)) {
+      throw "A bootstrap delta must be omitted for an exact source boundary."
+    }
+    return Get-TextSha256 "$domain`n$ReleaseSha`n$OperatorSha`n--name-status--`n--patch--`n"
+  }
+  if ($ReviewedSha256 -notmatch '^[a-f0-9]{64}$') {
+    throw "An ancestor bootstrap boundary requires its independently reviewed canonical delta SHA-256."
+  }
+  & git -C $repositoryRoot merge-base --is-ancestor $ReleaseSha $OperatorSha 2>$null
+  if ($LASTEXITCODE -ne 0) { throw "A bootstrap source boundary is not an ancestor of current main." }
+  $detected = @(& git -C $repositoryRoot diff --name-status --find-renames --find-copies-harder `
+      "$ReleaseSha..$OperatorSha" 2>$null)
+  if ($LASTEXITCODE -ne 0 -or $detected.Count -eq 0 -or
+    @($detected | Where-Object { $_ -match '^R[0-9]*\t' }).Count -ne 0 -or
+    @($detected | Where-Object {
+        $_ -notmatch '^(?:A|M|D)\t[^\t]+$' -and $_ -notmatch '^C[0-9]+\t[^\t]+\t[^\t]+$'
+      }).Count -ne 0) {
+    throw "The bootstrap delta is empty, unreadable, renamed, or structurally ambiguous."
+  }
+  $records = @(& git -C $repositoryRoot diff --name-status --no-renames "$ReleaseSha..$OperatorSha" 2>$null)
+  $recordsExit = $LASTEXITCODE
+  $numstat = @(& git -C $repositoryRoot diff --numstat --no-renames "$ReleaseSha..$OperatorSha" 2>$null)
+  if ($recordsExit -ne 0 -or $LASTEXITCODE -ne 0 -or $records.Count -eq 0 -or
+    $records.Count -ne $numstat.Count -or @($numstat | Where-Object { $_ -match '^-\t-\t' }).Count -ne 0) {
+    throw "The canonical bootstrap delta is empty, unreadable, binary, or ambiguous."
+  }
+  foreach ($record in $records) {
+    if ($record -notmatch '^(A|M|D)\t([^\t]+)$') { throw "The bootstrap delta contains an unsupported record." }
+    $status = $Matches[1]; $path = $Matches[2]
+    $revisions = if ($status -ceq "A") { @($OperatorSha) } elseif ($status -ceq "D") { @($ReleaseSha) } else { @($ReleaseSha, $OperatorSha) }
+    foreach ($revision in $revisions) {
+      $entry = @(& git -C $repositoryRoot ls-tree $revision -- $path 2>$null)
+      if ($LASTEXITCODE -ne 0 -or $entry.Count -ne 1 -or [string]$entry[0] -notmatch '^(100644|100755) blob [a-f0-9]{40,64}\t') {
+        throw "The bootstrap delta contains a missing, ambiguous, or non-regular path."
+      }
+    }
+  }
+  $patch = @(& git -C $repositoryRoot diff --full-index --binary --no-ext-diff --no-renames `
+      "$ReleaseSha..$OperatorSha" 2>$null)
+  if ($LASTEXITCODE -ne 0) { throw "The canonical bootstrap patch could not be read." }
+  $computed = Get-TextSha256 ("$domain`n$ReleaseSha`n$OperatorSha`n--name-status--`n" +
+    (($records -join "`n") + "`n--patch--`n" + ($patch -join "`n") + "`n"))
+  if ($computed -cne $ReviewedSha256) { throw "The canonical bootstrap delta checksum does not match independent review." }
+  return $computed
+}
+
 function Assert-CallerAndSource {
   $identity = Invoke-AwsJson @("sts", "get-caller-identity", "--output", "json")
   if ([string]$identity.Account -cne $ExpectedAccountId -or -not ([string]$identity.Arn).Contains(":assumed-role/")) {
@@ -322,11 +419,13 @@ function Assert-CallerAndSource {
     throw "The operation requires clean main exactly matching origin/main."
   }
   $release = if ([string]::IsNullOrEmpty($ReleaseSourceSha)) { $head } else { $ReleaseSourceSha }
-  if ($Action -cne "Verify" -and $release -cne $head) {
+  if ($Action -notin @("Verify", "Bootstrap") -and $release -cne $head) {
     throw "Plan and Apply require the exact current release; an ancestor artifact release is accepted only for Verify."
   }
   if ($Stage -ceq "KmsPrerequisite" -and $release -cne $head) { throw "KMS prerequisite operations require the exact current source." }
-  $deltaSha = Get-ReviewedOperatorDelta -ReleaseSha $release -OperatorSha $head
+  $deltaSha = if ($Action -ceq "Bootstrap") {
+    Get-ReviewedBootstrapDelta -ReleaseSha $release -OperatorSha $head -ReviewedSha256 $ReviewedOperatorDeltaSha256
+  } else { Get-ReviewedOperatorDelta -ReleaseSha $release -OperatorSha $head }
   return [pscustomobject]@{ Release = $release; Operator = $head; DeltaSha256 = $deltaSha }
 }
 
@@ -377,6 +476,48 @@ function Read-Plan {
   $raw = & terraform "-chdir=$terraformDirectory" show -json $Path 2>$null
   if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($raw)) { throw "A saved Terraform plan could not be inspected." }
   return $raw | ConvertFrom-Json
+}
+
+function Read-CurrentBootstrapTemplate {
+  $planPath = Resolve-InputPath -Candidate $CurrentTemplatePlanPath -MustExist
+  $planSha = (Get-FileHash -LiteralPath $planPath -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($planSha -cne $ReviewedCurrentTemplateSha256) {
+    throw "The current-state template plan checksum does not match review."
+  }
+  $receiptPath = Resolve-InputPath -Candidate $CurrentTemplateReceiptPath -MustExist
+  $receiptSha = (Get-FileHash -LiteralPath $receiptPath -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($receiptSha -cne $ReviewedCurrentTemplateReceiptSha256) {
+    throw "The current-state template verification receipt checksum does not match review."
+  }
+  $verification = ConvertFrom-DocumentBaselineJson -Json (Get-Content -LiteralPath $receiptPath -Raw)
+  $keys = @(
+    "activeEcsTaskCount", "activityRouteTableCount", "activitySubnetCount", "applicationNatGatewayCount",
+    "appliedPlanSha256", "defaultDark", "emptyQueueCount", "environment", "kind",
+    "planReceiptSha256", "providerDedicatedTopologyUsed", "publicationReceiptSha256",
+    "releaseArtifactCoordinates", "rollbackArtifactCoordinates", "schemaVersion", "sourceSha",
+    "stateLineage", "stateSerial", "verifiedAt", "versions", "zeroDriftPlanPath", "zeroDriftPlanSha256",
+    "continuousEcsServiceCount"
+  ) | Sort-Object
+  $state = Get-StateIdentity
+  if ((@($verification.PSObject.Properties | ForEach-Object Name | Sort-Object) -join "|") -cne ($keys -join "|") -or
+    [string]$verification.schemaVersion -cne "1" -or
+    [string]$verification.kind -cne "development-ingestion-dark-release-verification" -or
+    [string]$verification.environment -cne "development" -or
+    [string]$verification.sourceSha -cne $operatorCommit -or
+    [IO.Path]::GetFullPath([string]$verification.zeroDriftPlanPath) -cne $planPath -or
+    [string]$verification.zeroDriftPlanSha256 -cne $planSha -or
+    [string]$verification.stateLineage -cne [string]$state.Lineage -or
+    [long]$verification.stateSerial -ne [long]$state.Serial -or
+    $verification.defaultDark -isnot [bool] -or -not $verification.defaultDark -or
+    [int]$verification.activeEcsTaskCount -ne 0 -or [int]$verification.continuousEcsServiceCount -ne 0 -or
+    [int]$verification.emptyQueueCount -ne 2 -or
+    [string]$verification.planReceiptSha256 -cnotmatch '^[a-f0-9]{64}$' -or
+    [string]$verification.publicationReceiptSha256 -cnotmatch '^[a-f0-9]{64}$') {
+    throw "The current-state template is not the exact reviewed current default-dark verification."
+  }
+  $plan = Read-Plan -Path $planPath
+  Assert-DevelopmentDocumentRetainedBaselinePlan -Plan $plan
+  return $plan
 }
 
 function Write-ExclusiveJsonFile {
@@ -531,7 +672,7 @@ function Get-DevelopmentDocumentBaselineShape {
     [Parameter(Mandatory)][object]$Variables,
     [Parameter(Mandatory)][string]$RequestedStage,
     [Parameter(Mandatory)][string]$AppliedStage,
-    [Parameter(Mandatory)][ValidateSet("Plan", "Apply", "Verify")][string]$Operation
+    [Parameter(Mandatory)][ValidateSet("Plan", "Apply", "Verify", "Bootstrap")][string]$Operation
   )
 
   $legacyName = "document_processing_kms_prerequisite_enabled"
@@ -619,6 +760,196 @@ function Assert-CurrentDocumentBaselineMetadata {
   }
 }
 
+function Assert-CompleteDarkBootstrapBaselineMetadata {
+  param(
+    [Parameter(Mandatory)][object]$Metadata,
+    [Parameter(Mandatory)][object]$Baseline,
+    [Parameter(Mandatory)][string]$ResolvedPlanPath,
+    [Parameter(Mandatory)][string]$PlanSha256,
+    [Parameter(Mandatory)][object]$CurrentStateIdentity
+  )
+  $schema = [string]$Metadata.SchemaVersion
+  if ($schema -notin @("3", "4", "5") -or [string]$Metadata.Stage -cne "complete-dark") {
+    throw "Bootstrap requires a reviewed schema-3/4/5 CompleteDark baseline."
+  }
+  $createdAtValid = if ($Metadata.CreatedAt -is [datetime]) {
+    $Metadata.CreatedAt.Year -ge 2000 -and $Metadata.CreatedAt.Year -le 2099
+  } else { $Metadata.CreatedAt -is [string] -and [string]$Metadata.CreatedAt -match '^20[0-9]{2}-[0-9]{2}-[0-9]{2}T' }
+  $metadataPath = if ([string]::IsNullOrWhiteSpace([string]$Metadata.PlanPath)) { "" } else {
+    [IO.Path]::GetFullPath([string]$Metadata.PlanPath)
+  }
+  if ([string]$Metadata.Kind -cne "development-document-zero-drift-baseline" -or
+    [string]$Metadata.Environment -cne "development" -or [string]$Metadata.AccountId -cne $ExpectedAccountId -or
+    [string]$Metadata.Region -cne $Region -or $metadataPath -cne $ResolvedPlanPath -or
+    [string]$Metadata.PlanSha256 -cne $PlanSha256 -or $Metadata.Applyable -isnot [bool] -or
+    $Metadata.Applyable -or [int]$Metadata.MeaningfulChanges -ne 0 -or -not $createdAtValid -or
+    [string]$Metadata.StateLineage -cnotmatch '^[a-f0-9-]{36}$' -or [long]$Metadata.StateSerial -lt 1 -or
+    [string]$CurrentStateIdentity.Lineage -cne [string]$Metadata.StateLineage -or
+    [long]$CurrentStateIdentity.Serial -le [long]$Metadata.StateSerial -or
+    [string]$Metadata.ReceiptSha256 -cne $ReviewedReceiptSha256 -or
+    [string]$Metadata.ParserQualifiedArn -cne [string]$Baseline.variables.document_parser_invocation_qualified_arn.value) {
+    throw "The bootstrap baseline does not match its reviewed plan, historical state, receipt, or live lineage."
+  }
+  if ($schema -in @("3", "4")) {
+    $expectedKeys = @(
+      "AccountId", "Applyable", "CreatedAt", "Environment", "Kind", "MeaningfulChanges",
+      "ParserQualifiedArn", "PlanPath", "PlanSha256", "ReceiptSha256", "Region", "SchemaVersion",
+      "OperatorDeltaSha256", "OperatorSourceSha", "ReleaseSourceSha", "Stage", "StateLineage", "StateSerial"
+    )
+    if ($schema -ceq "4") { $expectedKeys += "MigrationImage" }
+    if ((@($Metadata.PSObject.Properties | ForEach-Object Name | Sort-Object) -join "|") -cne
+      (@($expectedKeys | Sort-Object) -join "|") -or [string]$Metadata.ReleaseSourceSha -cne $releaseCommit) {
+      throw "The schema-3/4 bootstrap metadata has an unexpected exact shape or release."
+    }
+    $stored = Get-ReviewedBootstrapDelta -ReleaseSha ([string]$Metadata.ReleaseSourceSha) `
+      -OperatorSha ([string]$Metadata.OperatorSourceSha) -ReviewedSha256 ([string]$Metadata.OperatorDeltaSha256) `
+      -DeltaKind Stored
+    $toCurrent = Get-ReviewedBootstrapDelta -ReleaseSha ([string]$Metadata.OperatorSourceSha) `
+      -OperatorSha $operatorCommit -ReviewedSha256 $ReviewedBaselineToOperatorDeltaSha256
+    if ($stored -cne [string]$Metadata.OperatorDeltaSha256 -or [string]::IsNullOrWhiteSpace($toCurrent)) {
+      throw "The schema-3/4 bootstrap source chain is not exact."
+    }
+    if ($schema -ceq "4" -and [string]$Metadata.MigrationImage -cne [string]$Baseline.variables.migration_image.value) {
+      throw "The schema-4 bootstrap migration image does not match its reviewed plan."
+    }
+    return
+  }
+
+  $schemaFiveKeys = @(
+    "AccountId", "Applyable", "BaselineToReleaseDeltaSha256", "CreatedAt",
+    "DocumentOperatorDeltaSha256", "DocumentOperatorSourceSha", "DocumentReleaseSourceSha",
+    "Environment", "Kind", "MeaningfulChanges", "MigrationImage", "OperatorDeltaSha256",
+    "OperatorSourceSha", "ParserQualifiedArn", "PlanPath", "PlanSha256", "ReceiptSha256",
+    "Region", "ReleaseSourceSha", "SchemaVersion", "Stage", "StateLineage", "StateSerial"
+  ) | Sort-Object
+  if ((@($Metadata.PSObject.Properties | ForEach-Object Name | Sort-Object) -join "|") -cne
+    ($schemaFiveKeys -join "|") -or [string]$Metadata.DocumentReleaseSourceSha -cne $releaseCommit -or
+    [string]$Metadata.MigrationImage -cne [string]$Baseline.variables.migration_image.value) {
+    throw "The schema-5 bootstrap metadata has an unexpected shape, document release, or migration image."
+  }
+  $documentDelta = Get-ReviewedBootstrapDelta -ReleaseSha ([string]$Metadata.DocumentReleaseSourceSha) `
+    -OperatorSha ([string]$Metadata.DocumentOperatorSourceSha) `
+    -ReviewedSha256 ([string]$Metadata.DocumentOperatorDeltaSha256) -DeltaKind Stored
+  $handoffDelta = Get-ReviewedBootstrapDelta -ReleaseSha ([string]$Metadata.DocumentOperatorSourceSha) `
+    -OperatorSha ([string]$Metadata.ReleaseSourceSha) `
+    -ReviewedSha256 ([string]$Metadata.BaselineToReleaseDeltaSha256) -DeltaKind Stored
+  $migrationDelta = Get-ReviewedBootstrapDelta -ReleaseSha ([string]$Metadata.ReleaseSourceSha) `
+    -OperatorSha ([string]$Metadata.OperatorSourceSha) -ReviewedSha256 ([string]$Metadata.OperatorDeltaSha256) `
+    -DeltaKind Stored
+  $toCurrent = Get-ReviewedBootstrapDelta -ReleaseSha ([string]$Metadata.DocumentOperatorSourceSha) `
+    -OperatorSha $operatorCommit -ReviewedSha256 $ReviewedBaselineToOperatorDeltaSha256
+  if ($documentDelta -cne [string]$Metadata.DocumentOperatorDeltaSha256 -or
+    $handoffDelta -cne [string]$Metadata.BaselineToReleaseDeltaSha256 -or
+    $migrationDelta -cne [string]$Metadata.OperatorDeltaSha256 -or [string]::IsNullOrWhiteSpace($toCurrent)) {
+    throw "The schema-5 bootstrap source chain is not exact."
+  }
+}
+
+function Assert-CompleteDarkRefreshBaselineMetadata {
+  param(
+    [Parameter(Mandatory)][object]$Metadata,
+    [Parameter(Mandatory)][object]$Baseline,
+    [Parameter(Mandatory)][string]$ResolvedPlanPath,
+    [Parameter(Mandatory)][string]$PlanSha256,
+    [Parameter(Mandatory)][object]$StateIdentity
+  )
+  if ([string]$Metadata.SchemaVersion -ceq "6") {
+    $keys = @(
+      "AccountId", "Applyable", "CreatedAt", "DeltaKind", "Environment", "Kind", "MeaningfulChanges",
+      "MigrationImage", "OperatorDeltaSha256", "OperatorSourceSha", "ParserQualifiedArn", "PlanPath",
+      "PlanSha256", "PriorBaselineMetadataSha256", "PriorBaselineOperatorSourceSha",
+      "PriorBaselinePlanSha256", "PriorBaselineSchemaVersion", "PriorBaselineStateSerial",
+      "PriorBaselineToOperatorDeltaSha256", "ReceiptSha256", "Region", "ReleaseSourceSha",
+      "SchemaVersion", "Stage", "StateLineage", "StateSerial"
+    ) | Sort-Object
+    if ((@($Metadata.PSObject.Properties | ForEach-Object Name | Sort-Object) -join "|") -cne ($keys -join "|") -or
+      [string]$Metadata.Kind -cne "development-document-zero-drift-baseline" -or
+      [string]$Metadata.DeltaKind -cne "complete-dark-bootstrap-full-source-v1" -or
+      [string]$Metadata.Environment -cne "development" -or [string]$Metadata.AccountId -cne $ExpectedAccountId -or
+      [string]$Metadata.Region -cne $Region -or [string]$Metadata.Stage -cne "complete-dark" -or
+      [string]$Metadata.OperatorSourceSha -cne $operatorCommit -or
+      [string]$Metadata.ReceiptSha256 -ceq $ReviewedReceiptSha256 -or
+      [string]$Metadata.PlanPath -cne $ResolvedPlanPath -or [string]$Metadata.PlanSha256 -cne $PlanSha256 -or
+      [string]$Metadata.StateLineage -cne [string]$StateIdentity.Lineage -or
+      [long]$Metadata.StateSerial -ne [long]$StateIdentity.Serial -or
+      [string]$Metadata.ParserQualifiedArn -cne [string]$Baseline.variables.document_parser_invocation_qualified_arn.value -or
+      [string]$Metadata.MigrationImage -cne [string]$Baseline.variables.migration_image.value -or
+      $Metadata.Applyable -isnot [bool] -or $Metadata.Applyable -or [int]$Metadata.MeaningfulChanges -ne 0 -or
+      [string]$Metadata.PriorBaselineSchemaVersion -notin @("3", "4", "5") -or
+      [long]$Metadata.PriorBaselineStateSerial -ge [long]$Metadata.StateSerial -or
+      [string]$Metadata.PriorBaselinePlanSha256 -cnotmatch '^[a-f0-9]{64}$' -or
+      [string]$Metadata.PriorBaselineMetadataSha256 -cnotmatch '^[a-f0-9]{64}$') {
+      throw "The schema-6 CompleteDark bootstrap baseline is not exact or current."
+    }
+    $releaseDelta = Get-ReviewedBootstrapDelta -ReleaseSha ([string]$Metadata.ReleaseSourceSha) `
+      -OperatorSha ([string]$Metadata.OperatorSourceSha) -ReviewedSha256 ([string]$Metadata.OperatorDeltaSha256)
+    $priorDelta = Get-ReviewedBootstrapDelta -ReleaseSha ([string]$Metadata.PriorBaselineOperatorSourceSha) `
+      -OperatorSha ([string]$Metadata.OperatorSourceSha) `
+      -ReviewedSha256 ([string]$Metadata.PriorBaselineToOperatorDeltaSha256)
+    if ($releaseDelta -cne [string]$Metadata.OperatorDeltaSha256 -or
+      $priorDelta -cne [string]$Metadata.PriorBaselineToOperatorDeltaSha256) {
+      throw "The schema-6 CompleteDark bootstrap deltas are not exact."
+    }
+    return
+  }
+  if ([string]$Metadata.SchemaVersion -notin @("3", "4") -or
+    [string]$Metadata.Stage -cne "complete-dark" -or
+    [string]$Metadata.ReceiptSha256 -ceq $ReviewedReceiptSha256) {
+    throw "A current CompleteDark refresh requires a distinct retained schema-3/4/6 CompleteDark baseline."
+  }
+  $storedDelta = Get-ReviewedOperatorDelta -ReleaseSha ([string]$Metadata.ReleaseSourceSha) `
+    -OperatorSha ([string]$Metadata.OperatorSourceSha) -ReviewedSha256 ([string]$Metadata.OperatorDeltaSha256)
+  $currentDelta = Get-ReviewedOperatorDelta -ReleaseSha ([string]$Metadata.OperatorSourceSha) `
+    -OperatorSha $operatorCommit -ReviewedSha256 $ReviewedBaselineToOperatorDeltaSha256
+  if ($storedDelta -cne [string]$Metadata.OperatorDeltaSha256 -or
+    $currentDelta -cne $(Get-ReviewedOperatorDelta -ReleaseSha ([string]$Metadata.OperatorSourceSha) `
+      -OperatorSha $operatorCommit -ReviewedSha256 $ReviewedBaselineToOperatorDeltaSha256)) {
+    throw "The CompleteDark refresh baseline source bindings are not exact."
+  }
+  Assert-CurrentDocumentBaselineMetadata -Metadata $Metadata -Baseline $Baseline `
+    -ResolvedPlanPath $ResolvedPlanPath -PlanSha256 $PlanSha256 -AppliedStage "complete-dark" `
+    -ReceiptSha256 ([string]$Metadata.ReceiptSha256) -StateIdentity $StateIdentity `
+    -ReleaseSourceSha ([string]$Metadata.ReleaseSourceSha) -OperatorSourceSha ([string]$Metadata.OperatorSourceSha) `
+    -OperatorDeltaSha256 ([string]$Metadata.OperatorDeltaSha256)
+}
+
+function Read-ParserRefreshReceipt {
+  $resolved = Resolve-InputPath -Candidate $ParserRefreshReceiptPath -MustExist
+  $sha = (Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($sha -cne $ReviewedParserRefreshReceiptSha256) { throw "The parser-refresh receipt checksum does not match review." }
+  $evidence = ConvertFrom-DocumentBaselineJson -Json (Get-Content -LiteralPath $resolved -Raw)
+  $expectedKeys = @(
+    "AccountId", "AfterStateSerial", "BaselineMetadataSha256", "BaselineReceiptSha256",
+    "BaselineSha256", "BeforeStateSerial", "CreatedAt", "Environment", "Kind",
+    "OperatorSourceSha", "ParserArtifactBase64Sha256", "ParserArtifactSha256",
+    "ParserPlanSha256", "ParserQualifiedArn", "Region", "ReleaseSourceSha", "SchemaVersion",
+    "StateLineage", "TargetReceiptSha256"
+  ) | Sort-Object
+  if ((@($evidence.PSObject.Properties | ForEach-Object Name | Sort-Object) -join "|") -cne ($expectedKeys -join "|") -or
+    [string]$evidence.SchemaVersion -cne "1" -or
+    [string]$evidence.Kind -cne "development-document-complete-dark-parser-refresh" -or
+    [string]$evidence.Environment -cne "development" -or [string]$evidence.AccountId -cne $ExpectedAccountId -or
+    [string]$evidence.Region -cne $Region -or [string]$evidence.ReleaseSourceSha -cne $releaseCommit -or
+    [string]$evidence.OperatorSourceSha -cne $operatorCommit -or
+    [string]$evidence.BaselineSha256 -cne $ReviewedBaselineSha256 -or
+    [string]$evidence.BaselineMetadataSha256 -cne $ReviewedBaselineMetadataSha256 -or
+    [string]$evidence.TargetReceiptSha256 -cne $ReviewedReceiptSha256 -or
+    [string]$evidence.ParserQualifiedArn -cnotmatch "^arn:aws:lambda:us-east-2:${ExpectedAccountId}:function:ai-job-apply-development-document-parser:[1-9][0-9]*$" -or
+    [string]$evidence.ParserArtifactSha256 -cnotmatch '^[a-f0-9]{64}$' -or
+    [string]$evidence.ParserArtifactBase64Sha256 -cnotmatch '^[A-Za-z0-9+/]{43}=$' -or
+    [string]$evidence.StateLineage -cnotmatch '^[a-f0-9-]{36}$' -or
+    [long]$evidence.AfterStateSerial -le [long]$evidence.BeforeStateSerial -or
+    [string]$evidence.ParserPlanSha256 -cnotmatch '^[a-f0-9]{64}$') {
+    throw "The parser-refresh receipt does not match the exact reviewed source, baseline, receipt, and state transition."
+  }
+  $parserArtifact = @($script:currentReceipt.artifacts | Where-Object { $_.artifactName -ceq "document-parser-lambda" -and $_.suffix -ceq "zip" })
+  if ($parserArtifact.Count -ne 1 -or [string]$evidence.ParserArtifactSha256 -cne [string]$parserArtifact[0].artifactSha256 -or
+    [string]$evidence.ParserArtifactBase64Sha256 -cne [string]$parserArtifact[0].objectBase64Sha256) {
+    throw "The parser-refresh receipt does not bind the exact current parser artifact."
+  }
+  return $evidence
+}
+
 function ConvertFrom-DocumentBaselineJson {
   param([Parameter(Mandatory)][string]$Json)
 
@@ -678,7 +1009,7 @@ function Assert-CompleteDarkVerifyRecoveryBaselineMetadata {
     [Parameter(Mandatory)][object]$Receipt,
     [Parameter(Mandatory)][string]$RequestedStage,
     [Parameter(Mandatory)][string]$AppliedStage,
-    [Parameter(Mandatory)][ValidateSet("Plan", "Apply", "Verify")][string]$Operation
+    [Parameter(Mandatory)][ValidateSet("Plan", "Apply", "Verify", "Bootstrap")][string]$Operation
   )
 
   if ($Operation -cne "Verify" -or $RequestedStage -cne "complete-dark" -or $AppliedStage -cne "complete-dark" -or
@@ -757,7 +1088,7 @@ function Assert-CompleteDarkAppliedGatewayRecoveryBaselineMetadata {
     [Parameter(Mandatory)][object]$CurrentStateIdentity,
     [Parameter(Mandatory)][string]$RequestedStage,
     [Parameter(Mandatory)][string]$AppliedStage,
-    [Parameter(Mandatory)][ValidateSet("Plan", "Apply", "Verify")][string]$Operation
+    [Parameter(Mandatory)][ValidateSet("Plan", "Apply", "Verify", "Bootstrap")][string]$Operation
   )
 
   if (-not $appliedGatewayRecoveryRequested -or $Operation -cne "Verify" -or
@@ -1009,7 +1340,7 @@ function Read-Baseline {
   param(
     [Parameter(Mandatory)][string]$RequestedStage,
     [Parameter(Mandatory)][string]$AppliedStage,
-    [Parameter(Mandatory)][ValidateSet("Plan", "Apply", "Verify")][string]$Operation,
+    [Parameter(Mandatory)][ValidateSet("Plan", "Apply", "Verify", "Bootstrap")][string]$Operation,
     [AllowNull()][object]$Receipt
   )
   $resolved = Resolve-InputPath -Candidate $BaselinePlanPath -MustExist
@@ -1020,9 +1351,25 @@ function Read-Baseline {
   if ($changes.Count -ne 0 -or [string]$baseline.terraform_version -cne "1.9.8") {
     throw "The reviewed baseline is not a Terraform 1.9.8 zero-change plan."
   }
-  $shape = Get-DevelopmentDocumentBaselineShape -Variables $baseline.variables `
-    -RequestedStage $RequestedStage -AppliedStage $AppliedStage -Operation $Operation
-  if ($shape -ceq "current") {
+  $schemaSixBootstrapBaseline = $false
+  if (($completeDarkParserRefresh -or $completeDarkProcessorRefresh) -and
+    -not [string]::IsNullOrWhiteSpace($ReviewedBaselineMetadataSha256)) {
+    $candidateMetadataPath = "$resolved.baseline.json"
+    if (Test-Path -LiteralPath $candidateMetadataPath -PathType Leaf) {
+      $candidateMetadataSha = (Get-FileHash -LiteralPath $candidateMetadataPath -Algorithm SHA256).Hash.ToLowerInvariant()
+      if ($candidateMetadataSha -ceq $ReviewedBaselineMetadataSha256) {
+        $candidateMetadata = ConvertFrom-DocumentBaselineJson -Json (Get-Content -LiteralPath $candidateMetadataPath -Raw)
+        $schemaSixBootstrapBaseline = [string]$candidateMetadata.SchemaVersion -ceq "6"
+      }
+    }
+  }
+  $shape = if ($Operation -ceq "Bootstrap") { "bootstrap" } elseif ($schemaSixBootstrapBaseline) {
+    "bootstrap-current"
+  } else {
+    Get-DevelopmentDocumentBaselineShape -Variables $baseline.variables `
+      -RequestedStage $RequestedStage -AppliedStage $AppliedStage -Operation $Operation
+  }
+  if ($shape -in @("current", "bootstrap", "bootstrap-current")) {
     if ($AppliedStage -notin @("parser-dark", "complete-dark") -or $null -eq $Receipt) {
       throw "A current-shape retained baseline requires an applied document runtime and verified receipt."
     }
@@ -1058,6 +1405,11 @@ function Read-Baseline {
       [string]$baseline.variables.document_parser_artifact_s3_object_version.value -cne [string]$parser[0].versionId -or
       [string]$baseline.variables.document_parser_artifact_sha256.value -cne [string]$parser[0].artifactSha256 -or
       [string]$baseline.variables.document_parser_artifact_base64sha256.value -cne [string]$parser[0].objectBase64Sha256
+    $processorArtifactDiffersFromReceipt =
+      [string]$baseline.variables.document_processor_artifact_s3_key.value -cne [string]$processor[0].key -or
+      [string]$baseline.variables.document_processor_artifact_s3_object_version.value -cne [string]$processor[0].versionId -or
+      [string]$baseline.variables.document_processor_artifact_sha256.value -cne [string]$processor[0].artifactSha256 -or
+      [string]$baseline.variables.document_processor_artifact_base64sha256.value -cne [string]$processor[0].objectBase64Sha256
     $parserSourceTransition = $RequestedStage -ceq "complete-dark" -and $AppliedStage -ceq "parser-dark" -and
       $Operation -in @("Plan", "Apply") -and $parserArtifactDiffersFromReceipt
     $baselineStageMatches = [string]$baseline.variables.document_processing_deployment_stage.value -ceq $AppliedStage -or
@@ -1070,10 +1422,19 @@ function Read-Baseline {
       (ConvertTo-ExactBoolean $baseline.variables.document_scan_event_rule_enabled.value "document_scan_event_rule_enabled") -or
       -not (ConvertTo-ExactBoolean $baseline.variables.document_security_health_rules_enabled.value "document_security_health_rules_enabled") -or
       [string]$baseline.variables.document_parser_version.value -cne "resume-parser-v1" -or
-      [string]$baseline.variables.gateway_lambda_extension_layer_arn.value -cne $extensionLayerArn -or
-      (-not $parserSourceTransition -and -not $completeDarkVerifyRecovery -and
-        -not $completeDarkAppliedGatewayRecovery -and $parserArtifactDiffersFromReceipt)) {
+      [string]$baseline.variables.gateway_lambda_extension_layer_arn.value -cne $extensionLayerArn) {
       throw "The current retained baseline does not prove the exact applied dark document boundary."
+    }
+    if (-not $parserSourceTransition -and -not $completeDarkVerifyRecovery -and
+      -not $completeDarkAppliedGatewayRecovery -and -not ($completeDarkParserRefresh -or $completeDarkProcessorRefresh) -and
+      $parserArtifactDiffersFromReceipt) {
+      throw "The current retained baseline does not prove the exact applied dark document boundary."
+    }
+    if (($completeDarkParserRefresh -or $completeDarkProcessorRefresh) -and
+      ($RequestedStage -cne "complete-dark" -or $AppliedStage -cne "complete-dark" -or
+        $Operation -notin @("Plan", "Apply") -or -not $parserArtifactDiffersFromReceipt -or
+        -not $processorArtifactDiffersFromReceipt)) {
+      throw "The CompleteDark refresh requires distinct exact-current parser and processor artifacts."
     }
     $parserPin = [string]$baseline.variables.document_parser_invocation_qualified_arn.value
     if ((($AppliedStage -ceq "parser-dark" -or $completeDarkVerifyRecovery) -and
@@ -1092,16 +1453,39 @@ function Read-Baseline {
           throw "ParserDark retained baseline contains a CompleteDark artifact input."
         }
       }
-    } elseif (
+    } elseif (-not ($completeDarkParserRefresh -or $completeDarkProcessorRefresh) -and (
       [string]$baseline.variables.document_processor_artifact_s3_key.value -cne [string]$processor[0].key -or
       [string]$baseline.variables.document_processor_artifact_s3_object_version.value -cne [string]$processor[0].versionId -or
       [string]$baseline.variables.document_processor_artifact_sha256.value -cne [string]$processor[0].artifactSha256 -or
       [string]$baseline.variables.document_processor_artifact_base64sha256.value -cne [string]$processor[0].objectBase64Sha256 -or
-      [string]$baseline.variables.document_processor_extension_layer_arn.value -cne $extensionLayerArn) {
+      [string]$baseline.variables.document_processor_extension_layer_arn.value -cne $extensionLayerArn)) {
       throw "CompleteDark retained baseline does not bind the exact reviewed processor artifact."
     }
     $stateIdentity = Get-StateIdentity
-    if ($parserSourceTransition) {
+    if ($Operation -ceq "Bootstrap") {
+      Assert-CompleteDarkBootstrapBaselineMetadata -Metadata $metadata -Baseline $baseline `
+        -ResolvedPlanPath $resolved -PlanSha256 $sha -CurrentStateIdentity $stateIdentity
+      $script:bootstrapInputMetadata = $metadata
+    }
+    elseif ($completeDarkParserRefresh) {
+      Assert-CompleteDarkRefreshBaselineMetadata -Metadata $metadata -Baseline $baseline `
+        -ResolvedPlanPath $resolved -PlanSha256 $sha -StateIdentity $stateIdentity
+    }
+    elseif ($completeDarkProcessorRefresh) {
+      if ($null -eq $script:parserRefreshEvidence -or
+        [string]$script:parserRefreshEvidence.BaselineReceiptSha256 -cne [string]$metadata.ReceiptSha256 -or
+        [string]$stateIdentity.Lineage -cne [string]$script:parserRefreshEvidence.StateLineage -or
+        [long]$stateIdentity.Serial -ne [long]$script:parserRefreshEvidence.AfterStateSerial) {
+        throw "The processor refresh is not at the exact parser-refresh state boundary."
+      }
+      $beforeIdentity = [pscustomobject]@{
+        Lineage = [string]$script:parserRefreshEvidence.StateLineage
+        Serial = [long]$script:parserRefreshEvidence.BeforeStateSerial
+      }
+      Assert-CompleteDarkRefreshBaselineMetadata -Metadata $metadata -Baseline $baseline `
+        -ResolvedPlanPath $resolved -PlanSha256 $sha -StateIdentity $beforeIdentity
+    }
+    elseif ($parserSourceTransition) {
       Assert-CompleteDarkTransitionBaselineMetadata -Metadata $metadata -Baseline $baseline `
         -ResolvedPlanPath $resolved -PlanSha256 $sha -StateIdentity $stateIdentity
     }
@@ -1320,12 +1704,48 @@ function Set-DarkVariables {
   $env:TF_VAR_document_parser_artifact_s3_object_version = [string]$parser.versionId
   $env:TF_VAR_document_parser_artifact_sha256 = [string]$parser.artifactSha256
   $env:TF_VAR_document_parser_artifact_base64sha256 = [string]$parser.objectBase64Sha256
-  if ($DeploymentStage -ceq "complete-dark") {
+  if ($DeploymentStage -ceq "complete-dark" -and -not $script:completeDarkParserRefresh) {
     $env:TF_VAR_document_processor_artifact_s3_key = [string]$processor.key
     $env:TF_VAR_document_processor_artifact_s3_object_version = [string]$processor.versionId
     $env:TF_VAR_document_processor_artifact_sha256 = [string]$processor.artifactSha256
     $env:TF_VAR_document_processor_artifact_base64sha256 = [string]$processor.objectBase64Sha256
     $env:TF_VAR_document_processor_extension_layer_arn = $extensionLayerArn
+  }
+}
+
+function Set-CompleteDarkBootstrapVariables {
+  param([Parameter(Mandatory)][object]$HistoricalBaseline)
+  if ($null -eq $script:bootstrapTemplate -or $null -eq $script:bootstrapTemplate.variables) {
+    throw "Bootstrap requires its authenticated current-state variable template."
+  }
+  $variables = $script:bootstrapTemplate.variables | ConvertTo-Json -Depth 60 | ConvertFrom-Json
+  $historicalDocumentNames = @(
+    "document_parser_artifact_base64sha256", "document_parser_artifact_s3_key",
+    "document_parser_artifact_s3_object_version", "document_parser_artifact_sha256",
+    "document_parser_invocation_qualified_arn", "document_parser_version",
+    "document_processing_deployment_stage", "document_processor_artifact_base64sha256",
+    "document_processor_artifact_s3_key", "document_processor_artifact_s3_object_version",
+    "document_processor_artifact_sha256", "document_processor_extension_layer_arn",
+    "document_scan_event_rule_enabled", "document_scan_mapping_enabled",
+    "document_security_health_rules_enabled"
+  )
+  foreach ($name in $historicalDocumentNames) {
+    $historical = $HistoricalBaseline.variables.PSObject.Properties[$name]
+    $current = $variables.PSObject.Properties[$name]
+    if ($null -eq $historical -or $null -eq $current) {
+      throw "Bootstrap cannot reconstruct exact historical document variable '$name'."
+    }
+    $current.Value = $historical.Value
+  }
+  if ([string]$variables.document_processing_deployment_stage.value -cne "complete-dark" -or
+    (ConvertTo-ExactBoolean $variables.document_scan_mapping_enabled.value "bootstrap mapping") -or
+    (ConvertTo-ExactBoolean $variables.document_scan_event_rule_enabled.value "bootstrap event rule") -or
+    -not (ConvertTo-ExactBoolean $variables.document_security_health_rules_enabled.value "bootstrap health rules")) {
+    throw "Bootstrap reconstructed a non-dark document variable boundary."
+  }
+  $assignments = Get-TerraformVariableEnvironmentAssignments -Variables $variables
+  foreach ($entry in $assignments.GetEnumerator()) {
+    [Environment]::SetEnvironmentVariable([string]$entry.Key, [string]$entry.Value, "Process")
   }
 }
 
@@ -1753,6 +2173,67 @@ function Invoke-ZeroDrift {
   }
 }
 
+function Invoke-CompleteDarkBaselineBootstrap {
+  param(
+    [Parameter(Mandatory)][object]$Baseline,
+    [Parameter(Mandatory)][object]$Receipt,
+    [Parameter(Mandatory)][string]$ParserQualifiedArn
+  )
+  Set-CompleteDarkBootstrapVariables -HistoricalBaseline $Baseline
+  Assert-LiveStageBoundary -DeploymentStage "complete-dark" -Receipt $Receipt `
+    -ParserQualifiedArn $ParserQualifiedArn -Baseline $Baseline
+  $path = Join-Path $operatorRoot "bootstrap-complete-dark-$($operatorCommit.Substring(0, 12))-$([guid]::NewGuid().ToString('N')).tfplan"
+  $metadataPath = "$path.baseline.json"
+  Assert-RetainedBaselinePathsAvailable -PlanPath $path -MetadataPath $metadataPath
+  $before = Get-StateIdentity
+  $succeeded = $false
+  try {
+    & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m `
+      "-out=$path" -detailed-exitcode | Out-Null
+    $code = $LASTEXITCODE
+    if ($code -eq 1) { throw "The CompleteDark bootstrap zero-drift plan failed." }
+    if ($code -eq 2) { throw "The historical CompleteDark variables do not match current live state." }
+    $plan = Read-Plan -Path $path
+    Assert-DevelopmentDocumentRetainedBaselinePlan -Plan $plan
+    $after = Get-StateIdentity
+    Assert-StateIdentityStable -Before $before -After $after
+    $planSha = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+    $priorMetadata = $script:bootstrapInputMetadata
+    $priorOperator = if ([string]$priorMetadata.SchemaVersion -ceq "5") {
+      [string]$priorMetadata.DocumentOperatorSourceSha
+    } else { [string]$priorMetadata.OperatorSourceSha }
+    $metadata = [ordered]@{
+      SchemaVersion = "6"; Kind = "development-document-zero-drift-baseline"
+      Environment = "development"; AccountId = $ExpectedAccountId; Region = $Region
+      DeltaKind = "complete-dark-bootstrap-full-source-v1"
+      ReleaseSourceSha = $releaseCommit; OperatorSourceSha = $operatorCommit
+      OperatorDeltaSha256 = $operatorDeltaSha256
+      PriorBaselinePlanSha256 = $ReviewedBaselineSha256
+      PriorBaselineMetadataSha256 = $ReviewedBaselineMetadataSha256
+      PriorBaselineSchemaVersion = [string]$priorMetadata.SchemaVersion
+      PriorBaselineStateSerial = [long]$priorMetadata.StateSerial
+      PriorBaselineOperatorSourceSha = $priorOperator
+      PriorBaselineToOperatorDeltaSha256 = $ReviewedBaselineToOperatorDeltaSha256
+      StateLineage = [string]$after.Lineage; StateSerial = [long]$after.Serial
+      Stage = "complete-dark"; ReceiptSha256 = $ReviewedReceiptSha256
+      ParserQualifiedArn = $ParserQualifiedArn
+      MigrationImage = [string]$plan.variables.migration_image.value
+      PlanPath = $path; PlanSha256 = $planSha; Applyable = $false; MeaningfulChanges = 0
+      CreatedAt = (Get-Date).ToUniversalTime().ToString("o")
+    }
+    Write-ExclusiveJsonFile -Path $metadataPath -Value $metadata
+    $metadataSha = (Get-FileHash -LiteralPath $metadataPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $succeeded = $true
+    return [pscustomobject]@{
+      PlanPath = $path; PlanSha256 = $planSha
+      MetadataPath = $metadataPath; MetadataSha256 = $metadataSha
+    }
+  }
+  finally {
+    if (-not $succeeded) { Remove-NewRetainedBaselineArtifacts -PlanPath $path -MetadataPath $metadataPath }
+  }
+}
+
 function Get-StateIdentity {
   $raw = & terraform "-chdir=$terraformDirectory" state pull 2>$null
   if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($raw)) { throw "Terraform state identity could not be read." }
@@ -1836,11 +2317,23 @@ function Assert-LivePinnedParserVersion {
 
 function Assert-MonotonicDocumentStage {
   param([Parameter(Mandatory)][string]$Applied, [Parameter(Mandatory)][string]$Requested,
-    [Parameter(Mandatory)][string]$Operation)
+    [Parameter(Mandatory)][string]$Operation, [switch]$CompleteDarkRefresh)
   $rank = @{ "disabled" = 0; "kms-prerequisite" = 1; "parser-dark" = 2; "complete-dark" = 3 }
   if (-not $rank.ContainsKey($Applied) -or -not $rank.ContainsKey($Requested)) { throw "Unknown document stage." }
+  if ($Operation -ceq "Bootstrap") {
+    if ($Applied -cne "complete-dark" -or $Requested -cne "complete-dark") {
+      throw "Bootstrap requires the exact already-applied CompleteDark stage."
+    }
+    return
+  }
   if ($Operation -ceq "Verify") {
     if ($rank[$Requested] -ne $rank[$Applied]) { throw "Verify requires the exact currently applied document stage '$Applied'." }
+    return
+  }
+  if ($CompleteDarkRefresh) {
+    if ($Applied -cne "complete-dark" -or $Requested -cne "complete-dark" -or $Operation -notin @("Plan", "Apply")) {
+      throw "A CompleteDark refresh must remain at the exact already-applied CompleteDark stage."
+    }
     return
   }
   if ($rank[$Requested] -ne ($rank[$Applied] + 1)) {
@@ -1931,8 +2424,10 @@ $operatorDeltaSha256 = [string]$sourceBinding.DeltaSha256
 $commit = $operatorCommit
 Initialize-Backend
 $null = New-Item -ItemType Directory -Path $operatorRoot -Force
+$script:bootstrapTemplate = if ($Action -ceq "Bootstrap") { Read-CurrentBootstrapTemplate } else { $null }
 $appliedStage = Get-AppliedDocumentStage
-Assert-MonotonicDocumentStage -Applied $appliedStage -Requested $stageValue -Operation $Action
+Assert-MonotonicDocumentStage -Applied $appliedStage -Requested $stageValue -Operation $Action `
+  -CompleteDarkRefresh:($completeDarkParserRefresh -or $completeDarkProcessorRefresh)
 $retainedParserEvidence = if ($appliedGatewayRecoveryRequested) {
   Read-AppliedGatewayRetainedParserReceipt
 } else { $null }
@@ -1940,20 +2435,66 @@ $script:retainedParserArtifact = if ($null -eq $retainedParserEvidence) {
   $null
 } else { $retainedParserEvidence.ParserArtifact }
 $receipt = if ($Stage -ceq "KmsPrerequisite") { $null } else { Read-Receipt -Commit $releaseCommit }
+$script:currentReceipt = $receipt
+$script:parserRefreshEvidence = if ($completeDarkProcessorRefresh) { Read-ParserRefreshReceipt } else { $null }
 $baseline = Read-Baseline -RequestedStage $stageValue -AppliedStage $appliedStage -Operation $Action -Receipt $receipt
 if (-not $parserSourceTransition -and -not $completeDarkVerifyRecovery -and
-  -not $completeDarkAppliedGatewayRecovery -and
+  -not $completeDarkAppliedGatewayRecovery -and -not $completeDarkParserRefresh -and
+  -not $completeDarkProcessorRefresh -and $Action -cne "Bootstrap" -and
   -not [string]::IsNullOrEmpty($ReviewedBaselineToOperatorDeltaSha256)) {
   throw "A baseline-to-current operator delta is accepted only for an explicit CompleteDark parser source transition."
 }
 $parserQualifiedArn = if ($Stage -ceq "CompleteDark") {
-  if ($completeDarkVerifyRecovery) { Get-AppliedProcessorParserQualifiedArn }
+  if ($completeDarkProcessorRefresh) { [string]$parserRefreshEvidence.ParserQualifiedArn }
+  elseif ($completeDarkVerifyRecovery) { Get-AppliedProcessorParserQualifiedArn }
   elseif ($appliedStage -ceq "parser-dark") { Get-AppliedParserQualifiedArn }
   else { [string]$baseline.variables.document_parser_invocation_qualified_arn.value }
 } else { "" }
-if ($parserSourceTransition -or $completeDarkVerifyRecovery -or $completeDarkAppliedGatewayRecovery) {
+if ($parserSourceTransition -or $completeDarkVerifyRecovery -or $completeDarkAppliedGatewayRecovery -or
+  $completeDarkParserRefresh) {
   Assert-LivePinnedParserVersion -Baseline $baseline -ParserQualifiedArn $parserQualifiedArn `
     -ExpectedArtifact $script:retainedParserArtifact -MustMatchBaselineArtifact
+}
+if ($completeDarkProcessorRefresh) {
+  $targetParserArtifact = @($receipt.artifacts | Where-Object { $_.artifactName -ceq "document-parser-lambda" -and $_.suffix -ceq "zip" })[0]
+  Assert-LivePinnedParserVersion -Baseline $baseline -ParserQualifiedArn $parserQualifiedArn `
+    -ExpectedArtifact $targetParserArtifact -MustMatchBaselineArtifact
+}
+if ($completeDarkParserRefresh -or $completeDarkProcessorRefresh) {
+  $baselineParserArtifact = [pscustomobject]@{
+    artifactName = "document-parser-lambda"; suffix = "zip"
+    key = [string]$baseline.variables.document_parser_artifact_s3_key.value
+    versionId = [string]$baseline.variables.document_parser_artifact_s3_object_version.value
+    artifactSha256 = [string]$baseline.variables.document_parser_artifact_sha256.value
+    objectBase64Sha256 = [string]$baseline.variables.document_parser_artifact_base64sha256.value
+  }
+  $baselineProcessorArtifact = [pscustomobject]@{
+    artifactName = "document-processor-lambda"; suffix = "zip"
+    key = [string]$baseline.variables.document_processor_artifact_s3_key.value
+    versionId = [string]$baseline.variables.document_processor_artifact_s3_object_version.value
+    artifactSha256 = [string]$baseline.variables.document_processor_artifact_sha256.value
+    objectBase64Sha256 = [string]$baseline.variables.document_processor_artifact_base64sha256.value
+  }
+  $liveParserArtifact = if ($completeDarkProcessorRefresh) { $targetParserArtifact } else { $baselineParserArtifact }
+  $liveReceipt = [pscustomobject]@{ artifacts = @($baselineProcessorArtifact, $liveParserArtifact) }
+  $liveProcessorPin = [string]$baseline.variables.document_parser_invocation_qualified_arn.value
+  Assert-LiveStageBoundary -DeploymentStage "complete-dark" -Receipt $liveReceipt `
+    -ParserQualifiedArn $liveProcessorPin -Baseline $baseline `
+    -ExpectedPinnedParserArtifact $baselineParserArtifact -PinnedParserMatchesBaselineArtifact
+}
+
+if ($Action -ceq "Bootstrap") {
+  $bootstrapped = Invoke-CompleteDarkBaselineBootstrap -Baseline $baseline -Receipt $receipt `
+    -ParserQualifiedArn $parserQualifiedArn
+  [pscustomobject]@{
+    Result = "complete-dark-baseline-bootstrapped"; Environment = "development"; Stage = "complete-dark"
+    ProcessingTriggers = "disabled"; Drift = $false
+    BaselinePath = $bootstrapped.PlanPath; BaselineSha256 = $bootstrapped.PlanSha256
+    BaselineMetadataPath = $bootstrapped.MetadataPath
+    BaselineMetadataSha256 = $bootstrapped.MetadataSha256
+    ApprovalCommand = "Use reviewed current-state CompleteDark bootstrap baseline $($bootstrapped.PlanSha256)"
+  } | ConvertTo-Json
+  exit 0
 }
 
 if ($Action -ceq "Verify") {
@@ -1987,9 +2528,12 @@ if ($Action -ceq "Plan") {
       Assert-DevelopmentDocumentKmsPrerequisiteVariables $baseline.variables $plan.variables
       $changes = @(Assert-DevelopmentDocumentKmsPrerequisitePlan -Plan $plan -AccountId $ExpectedAccountId)
     } else {
-      Assert-DevelopmentDocumentDarkVariables $baseline.variables $plan.variables $receipt $stageValue $parserQualifiedArn
+      Assert-DevelopmentDocumentDarkVariables $baseline.variables $plan.variables $receipt $stageValue $parserQualifiedArn `
+        -CompleteDarkParserRefresh:$completeDarkParserRefresh
       $changes = Assert-DevelopmentDocumentDarkPlan -Plan $plan -AccountId $ExpectedAccountId -Stage $stageValue `
         -ParserSourceTransition:$parserSourceTransition -BaselineVariables $baseline.variables `
+        -CompleteDarkParserRefresh:$completeDarkParserRefresh `
+        -CompleteDarkProcessorRefresh:$completeDarkProcessorRefresh `
         -Receipt $receipt -ParserQualifiedArn $parserQualifiedArn
     }
   } catch { if (Test-Path -LiteralPath $resolved) { Remove-Item -LiteralPath $resolved -Force }; throw }
@@ -2006,6 +2550,8 @@ if ($Action -ceq "Plan") {
   $planMetadata.BaselineReceiptSha256 = $baselineReceiptSha256
   $planMetadata.BaselineToOperatorDeltaSha256 = $ReviewedBaselineToOperatorDeltaSha256
   $planMetadata.ParserSourceTransition = [bool]$parserSourceTransition
+  $planMetadata.RefreshStep = $RefreshStep
+  $planMetadata.ParserRefreshReceiptSha256 = $(if ($completeDarkProcessorRefresh) { $ReviewedParserRefreshReceiptSha256 } else { "" })
   $planMetadata.ReceiptSha256 = $(if ($null -eq $receipt) { "" } else { $ReviewedReceiptSha256 })
   $planMetadata.ParserQualifiedArn = $parserQualifiedArn; $planMetadata.PlanPath = $resolved
   $planMetadata.PlanSha256 = $sha; $planMetadata.CreatedAt = (Get-Date).ToUniversalTime().ToString("o")
@@ -2036,6 +2582,8 @@ $expectedPlanMetadata = @{
   BaselineReceiptSha256 = $baselineReceiptSha256
   BaselineToOperatorDeltaSha256 = $ReviewedBaselineToOperatorDeltaSha256
   ParserSourceTransition = [bool]$parserSourceTransition
+  RefreshStep = $RefreshStep
+  ParserRefreshReceiptSha256 = $(if ($completeDarkProcessorRefresh) { $ReviewedParserRefreshReceiptSha256 } else { "" })
 }
 $expectedPlanMetadata.BaselineSha256 = $ReviewedBaselineSha256
 $expectedPlanMetadata.Commit = $operatorCommit
@@ -2049,13 +2597,62 @@ if ($Stage -ceq "KmsPrerequisite") {
   Assert-DevelopmentDocumentKmsPrerequisiteVariables $baseline.variables $plan.variables
   $null = Assert-DevelopmentDocumentKmsPrerequisitePlan -Plan $plan -AccountId $ExpectedAccountId
 } else {
-  Assert-DevelopmentDocumentDarkVariables $baseline.variables $plan.variables $receipt $stageValue $parserQualifiedArn
+  Assert-DevelopmentDocumentDarkVariables $baseline.variables $plan.variables $receipt $stageValue $parserQualifiedArn `
+    -CompleteDarkParserRefresh:$completeDarkParserRefresh
   $null = Assert-DevelopmentDocumentDarkPlan -Plan $plan -AccountId $ExpectedAccountId -Stage $stageValue `
     -ParserSourceTransition:$parserSourceTransition -BaselineVariables $baseline.variables `
+    -CompleteDarkParserRefresh:$completeDarkParserRefresh `
+    -CompleteDarkProcessorRefresh:$completeDarkProcessorRefresh `
     -Receipt $receipt -ParserQualifiedArn $parserQualifiedArn
 }
 & terraform "-chdir=$terraformDirectory" apply -input=false -lock-timeout=5m $resolved
 if ($LASTEXITCODE -ne 0) { throw "The exact reviewed $stageValue plan failed to apply." }
+if ($completeDarkParserRefresh) {
+  $afterState = Get-StateIdentity
+  if ([string]$afterState.Lineage -cne [string]$stateIdentity.Lineage -or
+    [long]$afterState.Serial -le [long]$stateIdentity.Serial) {
+    throw "The parser refresh did not advance the exact reviewed state lineage monotonically."
+  }
+  $newParserQualifiedArn = Get-AppliedParserQualifiedArn
+  if ($newParserQualifiedArn -ceq $parserQualifiedArn) { throw "The parser refresh did not publish a new numeric parser version." }
+  $oldProcessorArtifact = [pscustomobject]@{
+    artifactName = "document-processor-lambda"; suffix = "zip"
+    key = [string]$baseline.variables.document_processor_artifact_s3_key.value
+    versionId = [string]$baseline.variables.document_processor_artifact_s3_object_version.value
+    artifactSha256 = [string]$baseline.variables.document_processor_artifact_sha256.value
+    objectBase64Sha256 = [string]$baseline.variables.document_processor_artifact_base64sha256.value
+  }
+  $targetParserArtifact = @($receipt.artifacts | Where-Object { $_.artifactName -ceq "document-parser-lambda" -and $_.suffix -ceq "zip" })[0]
+  $mixedReceipt = [pscustomobject]@{ artifacts = @($oldProcessorArtifact, $targetParserArtifact) }
+  Assert-LiveStageBoundary -DeploymentStage "complete-dark" -Receipt $mixedReceipt `
+    -ParserQualifiedArn $parserQualifiedArn -Baseline $baseline `
+    -ExpectedPinnedParserArtifact $null -PinnedParserMatchesBaselineArtifact
+  $null = Invoke-ZeroDrift -Baseline $baseline -Receipt $receipt -DeploymentStage "complete-dark" `
+    -ParserQualifiedArn $parserQualifiedArn
+  $receiptPath = Join-Path $operatorRoot "parser-refresh-$($operatorCommit.Substring(0, 12))-$([guid]::NewGuid().ToString('N')).json"
+  $refreshReceipt = [ordered]@{
+    SchemaVersion = "1"; Kind = "development-document-complete-dark-parser-refresh"
+    Environment = "development"; AccountId = $ExpectedAccountId; Region = $Region
+    ReleaseSourceSha = $releaseCommit; OperatorSourceSha = $operatorCommit
+    BaselineSha256 = $ReviewedBaselineSha256; BaselineMetadataSha256 = $ReviewedBaselineMetadataSha256
+    BaselineReceiptSha256 = $baselineReceiptSha256; TargetReceiptSha256 = $ReviewedReceiptSha256
+    ParserPlanSha256 = $ReviewedPlanSha256; StateLineage = [string]$afterState.Lineage
+    BeforeStateSerial = [long]$stateIdentity.Serial; AfterStateSerial = [long]$afterState.Serial
+    ParserQualifiedArn = $newParserQualifiedArn
+    ParserArtifactSha256 = [string]$targetParserArtifact.artifactSha256
+    ParserArtifactBase64Sha256 = [string]$targetParserArtifact.objectBase64Sha256
+    CreatedAt = (Get-Date).ToUniversalTime().ToString("o")
+  }
+  Write-ExclusiveJsonFile -Path $receiptPath -Value $refreshReceipt
+  $refreshReceiptSha = (Get-FileHash -LiteralPath $receiptPath -Algorithm SHA256).Hash.ToLowerInvariant()
+  [pscustomobject]@{
+    Result = "parser-refreshed-review-required"; Environment = "development"; Stage = "complete-dark"
+    ProcessingTriggers = "disabled"; ParserQualifiedArn = $newParserQualifiedArn
+    ParserRefreshReceiptPath = $receiptPath; ParserRefreshReceiptSha256 = $refreshReceiptSha
+    ApprovalCommand = "Apply reviewed CompleteDark processor refresh bound to parser receipt $refreshReceiptSha"
+  } | ConvertTo-Json
+  exit 0
+}
 Assert-LiveStageBoundary -DeploymentStage $stageValue -Receipt $receipt -ParserQualifiedArn $parserQualifiedArn `
   -Baseline $baseline -PinnedParserMatchesBaselineArtifact:$parserSourceTransition
 $postApplyBaseline = Invoke-ZeroDrift -Baseline $baseline -Receipt $receipt -DeploymentStage $stageValue `

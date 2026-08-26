@@ -26,6 +26,20 @@ foreach ($required in @(
     '$metadataSha256 -cne $ReviewedBaselineMetadataSha256'
     'ReviewedBaselineToOperatorDeltaSha256', 'Assert-CompleteDarkTransitionBaselineMetadata',
     'ParserSourceTransition = [bool]$parserSourceTransition',
+    '[ValidateSet("None", "Parser", "Processor")]',
+    'CompleteDarkParserRefresh', 'CompleteDarkProcessorRefresh',
+    'ParserRefreshReceiptPath', 'ReviewedParserRefreshReceiptSha256',
+    'development-document-complete-dark-parser-refresh',
+    'BeforeStateSerial = [long]$stateIdentity.Serial', 'AfterStateSerial = [long]$afterState.Serial',
+    'DOCUMENT_PARSER_FUNCTION_ARN', 'ParserRefreshReceiptSha256',
+    'The parser refresh did not advance the exact reviewed state lineage monotonically.',
+    '[ValidateSet("Plan", "Apply", "Verify", "Bootstrap")]',
+    'Get-ReviewedBootstrapDelta', 'development-document-complete-dark-bootstrap-delta-v1',
+    'Assert-CompleteDarkBootstrapBaselineMetadata', 'Read-CurrentBootstrapTemplate',
+    'Invoke-CompleteDarkBaselineBootstrap', 'Set-CompleteDarkBootstrapVariables',
+    'complete-dark-bootstrap-full-source-v1', 'PriorBaselineStateSerial',
+    'CurrentTemplatePlanPath', 'ReviewedCurrentTemplateSha256',
+    'CurrentTemplateReceiptPath', 'ReviewedCurrentTemplateReceiptSha256',
     'Assert-LivePinnedParserVersion', 'MustMatchBaselineArtifact',
     'Assert-CompleteDarkVerifyRecoveryBaselineMetadata', 'Get-AppliedProcessorParserQualifiedArn',
     '-PinnedParserMatchesBaselineArtifact:($completeDarkVerifyRecovery -or $completeDarkAppliedGatewayRecovery)',
@@ -81,6 +95,50 @@ function Invoke-TestOperatorFailure([string[]]$Arguments) {
   }
   finally { $ErrorActionPreference = $savedErrorActionPreference }
 }
+$invalidRefreshBase = @(
+  "-NoProfile", "-File", $operatorPath, "-Action", "Verify", "-Stage", "CompleteDark",
+  "-RefreshStep", "Parser", "-ExpectedAccountId", "362544434697", "-StateBucket", "fixture-state-bucket",
+  "-BaselinePlanPath", "missing.tfplan", "-ReviewedBaselineSha256", ("a" * 64),
+  "-PublicationReceiptPath", "missing.json", "-ReviewedReceiptSha256", ("b" * 64)
+)
+$invalidRefresh = Invoke-TestOperatorFailure -Arguments $invalidRefreshBase
+if ($invalidRefresh.ExitCode -eq 0 -or $invalidRefresh.Output -notmatch "only for CompleteDark Plan or Apply") {
+  throw "CompleteDark refresh mode was accepted outside Plan/Apply."
+}
+$missingProcessorReceipt = @($invalidRefreshBase)
+$missingProcessorReceipt[([array]::IndexOf($missingProcessorReceipt, "Verify"))] = "Plan"
+$missingProcessorReceipt[([array]::IndexOf($missingProcessorReceipt, "Parser"))] = "Processor"
+$invalidRefresh = Invoke-TestOperatorFailure -Arguments $missingProcessorReceipt
+if ($invalidRefresh.ExitCode -eq 0 -or $invalidRefresh.Output -notmatch "checksum-reviewed parser-refresh receipt") {
+  throw "The processor refresh accepted a missing reviewed parser-refresh receipt."
+}
+$bootstrapBase = @(
+  "-NoProfile", "-File", $operatorPath, "-Action", "Bootstrap", "-Stage", "CompleteDark",
+  "-ExpectedAccountId", "362544434697", "-StateBucket", "fixture-state-bucket",
+  "-ReleaseSourceSha", ("1" * 40), "-ReviewedOperatorDeltaSha256", ("2" * 64),
+  "-ReviewedBaselineToOperatorDeltaSha256", ("3" * 64),
+  "-BaselinePlanPath", "missing.tfplan", "-ReviewedBaselineSha256", ("4" * 64),
+  "-ReviewedBaselineMetadataSha256", ("5" * 64),
+  "-PublicationReceiptPath", "missing.json", "-ReviewedReceiptSha256", ("6" * 64)
+)
+$bootstrapMissingTemplate = Invoke-TestOperatorFailure -Arguments $bootstrapBase
+if ($bootstrapMissingTemplate.ExitCode -eq 0 -or $bootstrapMissingTemplate.Output -notmatch "current-state template plan and verification receipt") {
+  throw "Bootstrap accepted missing current-state template evidence."
+}
+$bootstrapWrongStage = @($bootstrapBase)
+$bootstrapWrongStage[([array]::IndexOf($bootstrapWrongStage, "CompleteDark"))] = "ParserDark"
+$bootstrapWrongStageResult = Invoke-TestOperatorFailure -Arguments $bootstrapWrongStage
+if ($bootstrapWrongStageResult.ExitCode -eq 0 -or $bootstrapWrongStageResult.Output -notmatch "only for CompleteDark") {
+  throw "Bootstrap was accepted outside CompleteDark."
+}
+$bootstrapOffset = $source.IndexOf('if ($Action -ceq "Bootstrap") {', $source.IndexOf('$parserQualifiedArn ='))
+$bootstrapInvokeOffset = $source.IndexOf('Invoke-CompleteDarkBaselineBootstrap', $bootstrapOffset)
+$bootstrapExitOffset = $source.IndexOf('exit 0', $bootstrapInvokeOffset)
+$applyOffset = $source.IndexOf('& terraform "-chdir=$terraformDirectory" apply')
+if ($bootstrapOffset -lt 0 -or $bootstrapInvokeOffset -lt $bootstrapOffset -or
+  $bootstrapExitOffset -lt $bootstrapInvokeOffset -or $applyOffset -lt $bootstrapExitOffset) {
+  throw "Bootstrap is not structurally terminated before the Terraform apply path."
+}
 foreach ($singleInput in $recoveryInputArguments.GetEnumerator()) {
   $result = Invoke-TestOperatorFailure -Arguments @(
     $baseRecoveryArguments + @("-$($singleInput.Key)", $singleInput.Value)
@@ -133,10 +191,11 @@ $compatibilityFunctions = @($ast.FindAll({
       $node.Name -in @(
         "Get-DevelopmentDocumentBaselineShape", "ConvertFrom-DocumentBaselineJson",
         "Assert-CurrentDocumentBaselineMetadata",
-        "Assert-CompleteDarkTransitionBaselineMetadata", "Assert-MonotonicDocumentStage"
+        "Assert-CompleteDarkTransitionBaselineMetadata", "Assert-CompleteDarkBootstrapBaselineMetadata",
+        "Assert-MonotonicDocumentStage"
       )
     }, $true))
-if ($compatibilityFunctions.Count -ne 5) { throw "The retained baseline compatibility guards must each be defined once." }
+if ($compatibilityFunctions.Count -ne 6) { throw "The retained baseline compatibility guards must each be defined once." }
 foreach ($function in $compatibilityFunctions | Sort-Object { $_.Extent.StartOffset }) { Invoke-Expression $function.Extent.Text }
 
 $inventoryFunctions = @($ast.FindAll({
@@ -448,16 +507,63 @@ try {
 Assert-MonotonicDocumentStage "kms-prerequisite" "parser-dark" "Plan"
 Assert-MonotonicDocumentStage "parser-dark" "complete-dark" "Plan"
 Assert-MonotonicDocumentStage "parser-dark" "parser-dark" "Verify"
+Assert-MonotonicDocumentStage "complete-dark" "complete-dark" "Bootstrap"
 foreach ($transition in @(
     @{ Applied = "kms-prerequisite"; Requested = "complete-dark"; Operation = "Plan"; Label = "skipped stage" },
     @{ Applied = "parser-dark"; Requested = "kms-prerequisite"; Operation = "Plan"; Label = "reversed stage" },
     @{ Applied = "parser-dark"; Requested = "parser-dark"; Operation = "Plan"; Label = "same-stage plan" },
     @{ Applied = "complete-dark"; Requested = "parser-dark"; Operation = "Verify"; Label = "wrong-stage verify" }
+    @{ Applied = "parser-dark"; Requested = "complete-dark"; Operation = "Bootstrap"; Label = "non-CompleteDark bootstrap" }
   )) {
   $rejected = $false
   try { Assert-MonotonicDocumentStage $transition.Applied $transition.Requested $transition.Operation }
   catch { $rejected = $true }
   if (-not $rejected) { throw "The monotonic stage guard accepted $($transition.Label)." }
+}
+
+function Get-ReviewedBootstrapDelta {
+  param([string]$ReleaseSha, [string]$OperatorSha, [string]$ReviewedSha256, [string]$DeltaKind)
+  if ($ReviewedSha256 -notmatch '^[a-f0-9]{64}$') { throw "fixture reviewed delta missing" }
+  return $ReviewedSha256
+}
+$ExpectedAccountId = "111122223333"; $Region = "us-east-2"
+$releaseCommit = "a" * 40; $operatorCommit = "f" * 40
+$ReviewedReceiptSha256 = "1" * 64; $ReviewedBaselineToOperatorDeltaSha256 = "2" * 64
+$bootstrapPlanPath = [IO.Path]::GetFullPath((Join-Path $repositoryRoot "fixture-bootstrap.tfplan"))
+$bootstrapBaseline = [pscustomobject]@{ variables = [pscustomobject]@{
+    document_parser_invocation_qualified_arn = [pscustomobject]@{ value = "arn:aws:lambda:us-east-2:${ExpectedAccountId}:function:ai-job-apply-development-document-parser:1" }
+    migration_image = [pscustomobject]@{ value = "${ExpectedAccountId}.dkr.ecr.us-east-2.amazonaws.com/ai-job-apply/migration@sha256:$('3' * 64)" }
+  } }
+$bootstrapMetadata = [pscustomobject][ordered]@{
+  SchemaVersion = "5"; Kind = "development-document-zero-drift-baseline"; Environment = "development"
+  AccountId = $ExpectedAccountId; Region = $Region; DocumentReleaseSourceSha = $releaseCommit
+  DocumentOperatorSourceSha = "b" * 40; DocumentOperatorDeltaSha256 = "4" * 64
+  ReleaseSourceSha = "c" * 40; BaselineToReleaseDeltaSha256 = "5" * 64
+  OperatorSourceSha = "d" * 40; OperatorDeltaSha256 = "6" * 64
+  StateLineage = "472ef790-b249-45ec-817f-718005980d9e"; StateSerial = 109
+  Stage = "complete-dark"; ReceiptSha256 = $ReviewedReceiptSha256
+  ParserQualifiedArn = $bootstrapBaseline.variables.document_parser_invocation_qualified_arn.value
+  MigrationImage = $bootstrapBaseline.variables.migration_image.value
+  PlanPath = $bootstrapPlanPath; PlanSha256 = "7" * 64; Applyable = $false; MeaningfulChanges = 0
+  CreatedAt = "2026-08-22T16:50:23Z"
+}
+$currentBootstrapState = [pscustomobject]@{ Lineage = $bootstrapMetadata.StateLineage; Serial = 220 }
+Assert-CompleteDarkBootstrapBaselineMetadata $bootstrapMetadata $bootstrapBaseline $bootstrapPlanPath `
+  ("7" * 64) $currentBootstrapState
+foreach ($bootstrapMutation in @("lineage", "equal-serial", "older-serial", "stage", "applyable")) {
+  $badBootstrap = $bootstrapMetadata | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+  $badCurrent = $currentBootstrapState | ConvertTo-Json | ConvertFrom-Json
+  switch ($bootstrapMutation) {
+    "lineage" { $badCurrent.Lineage = "572ef790-b249-45ec-817f-718005980d9e" }
+    "equal-serial" { $badCurrent.Serial = 109 }
+    "older-serial" { $badCurrent.Serial = 108 }
+    "stage" { $badBootstrap.Stage = "parser-dark" }
+    "applyable" { $badBootstrap.Applyable = $true }
+  }
+  $rejected = $false
+  try { Assert-CompleteDarkBootstrapBaselineMetadata $badBootstrap $bootstrapBaseline $bootstrapPlanPath ("7" * 64) $badCurrent }
+  catch { $rejected = $true }
+  if (-not $rejected) { throw "Bootstrap accepted '$bootstrapMutation' historical/current state tampering." }
 }
 
 function New-TestBaselineVariables([string[]]$Names) {

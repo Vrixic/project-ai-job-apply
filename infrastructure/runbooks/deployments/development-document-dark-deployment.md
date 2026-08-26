@@ -11,7 +11,7 @@ alert rules after their referenced protection plan and candidate-document bucket
 |---|---|---|
 | `KmsPrerequisite` | Two exact EventBridge grants on the platform KMS key | One in-place update when first installed; zero drift thereafter |
 | `ParserDark` | Encrypted queues, dark processing rules, active bounded security-health alerts, bounded roles, isolated parser, S3 endpoint, metrics and alarms | 32 creates and two policy updates |
-| `CompleteDark` | Coordinator, disabled mapping and reconciler target, STS endpoint, and exact existing endpoint grants | Seven creates and three policy updates; when advancing from an ancestor-release ParserDark baseline, exactly two additional in-place parser function/alias source updates |
+| `CompleteDark` | Coordinator, disabled mapping and reconciler target, STS endpoint, and exact existing endpoint grants | Seven creates and three policy updates; later artifact refreshes use two reviewed parser updates followed by three reviewed processor/policy updates |
 
 The operator rejects skipped or reversed stages. `CompleteDark` reads the numeric parser version
 ARN from applied `ParserDark` state, verifies its exact account, region, function name, and positive
@@ -138,6 +138,97 @@ zero-drift baseline and metadata sidecar. That handoff binds the current parser 
 artifacts while preserving the exact older numeric parser-version ARN used by the dark processor;
 later `CompleteDark` verification proves that pinned immutable version remains healthy, the
 current parser alias still matches the current receipt, and no processing trigger is active.
+
+### Refresh an already CompleteDark runtime
+
+If the latest document baseline is historical while live Terraform state has advanced through
+other guarded releases, first create current-state document evidence with the read-only bootstrap.
+The bootstrap accepts the reviewed schema-3/4 document baseline or schema-5 migration handoff at
+its recorded serial. It also requires a separately reviewed current-source zero-drift plan and its
+verification receipt as the variable template. Only the historical document artifact coordinates,
+numeric parser pin, stage, and dark switches replace template values.
+
+```powershell
+.\scripts\operate-development-document-dark-deployment.ps1 -Action Bootstrap -Stage CompleteDark `
+  -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
+  -ReleaseSourceSha HISTORICAL_DOCUMENT_RELEASE_SHA `
+  -ReviewedOperatorDeltaSha256 REVIEWED_RELEASE_TO_CURRENT_BOOTSTRAP_DELTA `
+  -ReviewedBaselineToOperatorDeltaSha256 REVIEWED_BASELINE_OPERATOR_TO_CURRENT_BOOTSTRAP_DELTA `
+  -BaselinePlanPath HISTORICAL_COMPLETE_DARK_BASELINE `
+  -ReviewedBaselineSha256 HISTORICAL_BASELINE_SHA256 `
+  -ReviewedBaselineMetadataSha256 HISTORICAL_BASELINE_METADATA_SHA256 `
+  -PublicationReceiptPath HISTORICAL_DOCUMENT_RECEIPT `
+  -ReviewedReceiptSha256 HISTORICAL_DOCUMENT_RECEIPT_SHA256 `
+  -CurrentTemplatePlanPath REVIEWED_CURRENT_ZERO_DRIFT_PLAN `
+  -ReviewedCurrentTemplateSha256 CURRENT_TEMPLATE_PLAN_SHA256 `
+  -CurrentTemplateReceiptPath REVIEWED_CURRENT_VERIFICATION_RECEIPT `
+  -ReviewedCurrentTemplateReceiptSha256 CURRENT_TEMPLATE_RECEIPT_SHA256
+```
+
+Both reviewed deltas use the domain-separated
+`development-document-complete-dark-bootstrap-delta-v1` canonical full-source contract. Bootstrap
+never calls `terraform apply`: it proves clean current main, exact historical receipt versions and
+KMS boundary, the complete live parser/processor/IAM/queue/rule/endpoint dark boundary, same state
+lineage with a strictly newer live serial, and a full untargeted refresh-backed zero-change plan.
+State identity must remain stable while evidence is written. Success emits an exclusive schema-6
+baseline sidecar binding the historical schema and serial, both reviewed bootstrap deltas, current
+operator, current state, receipt, parser pin, migration image, and new plan checksum. Use that plan
+and sidecar as `CURRENT_COMPLETE_DARK_BASELINE` below. A parser refresh accepts schema 6 only at its
+exact current serial and repeats the complete live-boundary proof before planning.
+
+Do not predict the next parser version or combine the release into one plan. The processor policy
+and environment both require the exact numeric parser ARN, which exists only after parser apply.
+Keep the mapping, scan-result rule, and reconciler rule disabled throughout these two reviewed steps.
+
+```powershell
+.\scripts\operate-development-document-dark-deployment.ps1 -Action Plan -Stage CompleteDark `
+  -RefreshStep Parser -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
+  -BaselinePlanPath CURRENT_COMPLETE_DARK_BASELINE -ReviewedBaselineSha256 BASELINE_SHA256 `
+  -ReviewedBaselineMetadataSha256 BASELINE_METADATA_SHA256 `
+  [-ReviewedBaselineToOperatorDeltaSha256 REVIEWED_BASELINE_OPERATOR_DELTA_SHA256] `
+  -PublicationReceiptPath EXACT_CURRENT_RECEIPT -ReviewedReceiptSha256 CURRENT_RECEIPT_SHA256
+
+.\scripts\operate-development-document-dark-deployment.ps1 -Action Apply -Stage CompleteDark `
+  -RefreshStep Parser -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
+  -BaselinePlanPath CURRENT_COMPLETE_DARK_BASELINE -ReviewedBaselineSha256 BASELINE_SHA256 `
+  -ReviewedBaselineMetadataSha256 BASELINE_METADATA_SHA256 `
+  [-ReviewedBaselineToOperatorDeltaSha256 REVIEWED_BASELINE_OPERATOR_DELTA_SHA256] `
+  -PublicationReceiptPath EXACT_CURRENT_RECEIPT -ReviewedReceiptSha256 CURRENT_RECEIPT_SHA256 `
+  -PlanPath REVIEWED_PARSER_PLAN -ReviewedPlanSha256 PARSER_PLAN_SHA256
+```
+
+The first plan accepts only parser function and alias updates. Apply observes the new positive
+numeric version, verifies the state lineage advanced monotonically and binds its exact resulting
+serial, verifies the mixed state with the old processor still pinned, runs a refresh-backed
+zero-drift check, and emits an exclusive aggregate parser-refresh receipt under ignored `.terraform`.
+Independently review that receipt checksum before step two.
+
+```powershell
+.\scripts\operate-development-document-dark-deployment.ps1 -Action Plan -Stage CompleteDark `
+  -RefreshStep Processor -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
+  -BaselinePlanPath CURRENT_COMPLETE_DARK_BASELINE -ReviewedBaselineSha256 BASELINE_SHA256 `
+  -ReviewedBaselineMetadataSha256 BASELINE_METADATA_SHA256 `
+  [-ReviewedBaselineToOperatorDeltaSha256 REVIEWED_BASELINE_OPERATOR_DELTA_SHA256] `
+  -PublicationReceiptPath EXACT_CURRENT_RECEIPT -ReviewedReceiptSha256 CURRENT_RECEIPT_SHA256 `
+  -ParserRefreshReceiptPath PARSER_REFRESH_RECEIPT `
+  -ReviewedParserRefreshReceiptSha256 PARSER_REFRESH_RECEIPT_SHA256
+
+.\scripts\operate-development-document-dark-deployment.ps1 -Action Apply -Stage CompleteDark `
+  -RefreshStep Processor -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
+  -BaselinePlanPath CURRENT_COMPLETE_DARK_BASELINE -ReviewedBaselineSha256 BASELINE_SHA256 `
+  -ReviewedBaselineMetadataSha256 BASELINE_METADATA_SHA256 `
+  [-ReviewedBaselineToOperatorDeltaSha256 REVIEWED_BASELINE_OPERATOR_DELTA_SHA256] `
+  -PublicationReceiptPath EXACT_CURRENT_RECEIPT -ReviewedReceiptSha256 CURRENT_RECEIPT_SHA256 `
+  -ParserRefreshReceiptPath PARSER_REFRESH_RECEIPT `
+  -ReviewedParserRefreshReceiptSha256 PARSER_REFRESH_RECEIPT_SHA256 `
+  -PlanPath REVIEWED_PROCESSOR_PLAN -ReviewedPlanSha256 PROCESSOR_PLAN_SHA256
+```
+
+The second plan accepts exactly the processor IAM policy, function, and alias updates. Both policy
+and environment must move from the old numeric parser ARN to the exact ARN in the reviewed parser
+receipt. State lineage/serial must match that receipt, outputs must remain known no-ops, and no
+trigger may activate. Successful apply performs full live verification and retains the fresh
+ordinary CompleteDark zero-drift baseline and checksum-bound sidecar.
 
 If the exact `a6d0fba09082b8bc61ee7b604ee1d5c47bd71624` CompleteDark apply completed but its
 post-apply inventory verification stopped before retaining a baseline, recover with `Verify` only.

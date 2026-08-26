@@ -8,6 +8,8 @@ $account = "123456789012"
 $parser = Get-DevelopmentDocumentStageExpectedActions "parser-dark"
 $complete = Get-DevelopmentDocumentStageExpectedActions "complete-dark"
 $completeTransition = Get-DevelopmentDocumentStageExpectedActions "complete-dark" -ParserSourceTransition
+$completeParserRefresh = Get-DevelopmentDocumentStageExpectedActions "complete-dark" -CompleteDarkParserRefresh
+$completeProcessorRefresh = Get-DevelopmentDocumentStageExpectedActions "complete-dark" -CompleteDarkProcessorRefresh
 $kms = Get-DevelopmentDocumentStageExpectedActions "kms-prerequisite"
 if ($parser.Count -ne 34 -or @($parser.Values | Where-Object { $_ -ceq "create" }).Count -ne 32 -or
   @($parser.Values | Where-Object { $_ -ceq "update" }).Count -ne 2) {
@@ -23,6 +25,25 @@ if ($completeTransition.Count -ne 12 -or
   $completeTransition["module.platform.aws_lambda_function.document_parser[0]"] -cne "update" -or
   $completeTransition["module.platform.aws_lambda_alias.document_parser[0]"] -cne "update") {
   throw "CompleteDark source transition does not retain its exact 7-create/5-update boundary."
+}
+if ($completeParserRefresh.Count -ne 2 -or
+  $completeParserRefresh["module.platform.aws_lambda_function.document_parser[0]"] -cne "update" -or
+  $completeParserRefresh["module.platform.aws_lambda_alias.document_parser[0]"] -cne "update") {
+  throw "CompleteDark parser refresh does not retain its exact two-update boundary."
+}
+if ($completeProcessorRefresh.Count -ne 3 -or
+  $completeProcessorRefresh["module.platform.aws_iam_role_policy.document_processor[0]"] -cne "update" -or
+  $completeProcessorRefresh["module.platform.aws_lambda_function.document_processor[0]"] -cne "update" -or
+  $completeProcessorRefresh["module.platform.aws_lambda_alias.document_processor[0]"] -cne "update") {
+  throw "CompleteDark processor refresh does not retain its exact three-update boundary."
+}
+foreach ($invalidRefresh in @(
+    { Get-DevelopmentDocumentStageExpectedActions parser-dark -CompleteDarkParserRefresh },
+    { Get-DevelopmentDocumentStageExpectedActions parser-dark -CompleteDarkProcessorRefresh },
+    { Get-DevelopmentDocumentStageExpectedActions complete-dark -CompleteDarkParserRefresh -CompleteDarkProcessorRefresh }
+  )) {
+  $rejected = $false; try { & $invalidRefresh | Out-Null } catch { $rejected = $true }
+  if (-not $rejected) { throw "An invalid CompleteDark refresh-mode combination was accepted." }
 }
 if ($kms.Count -ne 1 -or $kms["module.platform.aws_kms_key.platform"] -cne "update") {
   throw "The KMS prerequisite is not exactly one in-place update."
@@ -549,6 +570,81 @@ $parserAliasTransition = [pscustomobject]@{
     after_unknown = [pscustomobject]@{ function_version = $true; routing_config = @() }
   }
 }
+$newParserQualifiedArn = $qualified -replace ':1$', ':2'
+$processorFunctionBefore = $parserFunctionBefore | ConvertTo-Json -Depth 40 | ConvertFrom-Json
+$processorFunctionBefore.function_name = "ai-job-apply-development-document-processor"
+$processorFunctionBefore.s3_key = $completeVariables.document_processor_artifact_s3_key.value
+$processorFunctionBefore.s3_object_version = $completeVariables.document_processor_artifact_s3_object_version.value
+$processorFunctionBefore.source_code_hash = $completeVariables.document_processor_artifact_base64sha256.value
+$processorFunctionBefore.code_sha256 = $completeVariables.document_processor_artifact_base64sha256.value
+$processorFunctionBefore.environment[0].variables.RELEASE_SHA = $completeVariables.document_processor_artifact_sha256.value
+$processorFunctionBefore.environment[0].variables | Add-Member DOCUMENT_PARSER_FUNCTION_ARN $qualified
+$processorFunctionAfter = $processorFunctionBefore | ConvertTo-Json -Depth 40 | ConvertFrom-Json
+$processorFunctionAfter.s3_key = $currentReceipt.artifacts[0].key
+$processorFunctionAfter.s3_object_version = $currentReceipt.artifacts[0].versionId
+$processorFunctionAfter.source_code_hash = $currentReceipt.artifacts[0].objectBase64Sha256
+$processorFunctionAfter.environment[0].variables.RELEASE_SHA = $currentReceipt.artifacts[0].artifactSha256
+$processorFunctionAfter.environment[0].variables.DOCUMENT_PARSER_FUNCTION_ARN = $newParserQualifiedArn
+$processorFunctionAfter.qualified_arn = $null; $processorFunctionAfter.qualified_invoke_arn = $null
+$processorFunctionAfter.version = $null; $processorFunctionAfter.last_modified = $null
+$processorFunctionRefresh = [pscustomobject]@{
+  address = "module.platform.aws_lambda_function.document_processor[0]"; mode = "managed"; type = "aws_lambda_function"
+  change = [pscustomobject]@{
+    actions = @("update"); before = $processorFunctionBefore; after = $processorFunctionAfter
+    before_sensitive = [pscustomobject]@{}; after_sensitive = [pscustomobject]@{}
+    after_unknown = [pscustomobject][ordered]@{
+      architectures = @($false); capacity_provider_config = @(); dead_letter_config = @(); durable_config = @()
+      environment = @([pscustomobject]@{ variables = [pscustomobject]@{} }); ephemeral_storage = @([pscustomobject]@{})
+      file_system_config = @(); image_config = @(); last_modified = $true; layers = @($false)
+      logging_config = @([pscustomobject]@{}); qualified_arn = $true; qualified_invoke_arn = $true
+      snap_start = @(); tags = [pscustomobject]@{}; tags_all = [pscustomobject]@{}; tenancy_config = @()
+      tracing_config = @([pscustomobject]@{}); version = $true
+      vpc_config = @([pscustomobject]@{ security_group_ids = @($false); subnet_ids = @($false, $false) })
+    }
+  }
+}
+$processorAliasBefore = $parserAliasBefore | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+$processorAliasBefore.function_name = "ai-job-apply-development-document-processor"
+$processorAliasAfter = $processorAliasBefore | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+$processorAliasAfter.function_version = $null
+$processorAliasRefresh = [pscustomobject]@{
+  address = "module.platform.aws_lambda_alias.document_processor[0]"; mode = "managed"; type = "aws_lambda_alias"
+  change = [pscustomobject]@{ actions = @("update"); before = $processorAliasBefore; after = $processorAliasAfter
+    before_sensitive = [pscustomobject]@{}; after_sensitive = [pscustomobject]@{}
+    after_unknown = [pscustomobject]@{ function_version = $true; routing_config = @() } }
+}
+$processorPolicyBefore = [pscustomobject]@{ Version = "2012-10-17"; Statement = @([pscustomobject]@{
+      Sid = "CoordinatorInvokesExactParserVersionOnly"; Effect = "Allow"; Action = "lambda:InvokeFunction"
+      Resource = $qualified
+    }) }
+$processorPolicyAfter = $processorPolicyBefore | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+$processorPolicyAfter.Statement[0].Resource = $newParserQualifiedArn
+$processorPolicyRefresh = [pscustomobject]@{
+  address = "module.platform.aws_iam_role_policy.document_processor[0]"; mode = "managed"; type = "aws_iam_role_policy"
+  change = [pscustomobject]@{ actions = @("update")
+    before = [pscustomobject]@{ policy = ($processorPolicyBefore | ConvertTo-Json -Compress -Depth 20) }
+    after = [pscustomobject]@{ policy = ($processorPolicyAfter | ConvertTo-Json -Compress -Depth 20) }
+    before_sensitive = [pscustomobject]@{}; after_sensitive = [pscustomobject]@{}; after_unknown = [pscustomobject]@{} }
+}
+$processorRefreshChanges = @($processorFunctionRefresh, $processorAliasRefresh, $processorPolicyRefresh)
+Assert-ExactDocumentProcessorRefresh -Changes $processorRefreshChanges -BaselineVariables $completeVariables `
+  -Receipt $currentReceipt -ParserQualifiedArn $newParserQualifiedArn -AccountId $account
+foreach ($pinMutation in @("environment", "policy", "extra")) {
+  $badProcessorRefresh = $processorRefreshChanges | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  switch ($pinMutation) {
+    "environment" { $badProcessorRefresh[0].change.after.environment[0].variables.DOCUMENT_PARSER_FUNCTION_ARN = $qualified }
+    "policy" {
+      $badPolicy = $badProcessorRefresh[2].change.after.policy | ConvertFrom-Json
+      $badPolicy.Statement[0].Resource = $qualified
+      $badProcessorRefresh[2].change.after.policy = $badPolicy | ConvertTo-Json -Compress -Depth 20
+    }
+    "extra" { $badProcessorRefresh += $parserAliasTransition }
+  }
+  $rejected = $false
+  try { Assert-ExactDocumentProcessorRefresh $badProcessorRefresh $completeVariables $currentReceipt $newParserQualifiedArn $account }
+  catch { $rejected = $true }
+  if (-not $rejected) { throw "The processor refresh accepted '$pinMutation' parser-pin tampering." }
+}
 function New-TestCompleteDarkSourceTransitionOutputs([string]$ParserQualifiedArn) {
   $outputs = [ordered]@{}
   foreach ($name in @(
@@ -580,6 +676,20 @@ function New-TestCompleteDarkSourceTransitionOutputs([string]$ParserQualifiedArn
   }
   return [pscustomobject]$outputs
 }
+$parserRefreshOutputs = New-TestCompleteDarkSourceTransitionOutputs $qualified
+foreach ($name in @("document_processor_alias_arn", "document_scan_event_source_mapping_uuid")) {
+  $parserRefreshOutputs.$name = [pscustomobject][ordered]@{
+    actions = @("no-op"); before = "known-$name"; after = "known-$name"; after_unknown = $false
+    before_sensitive = $false; after_sensitive = $false
+  }
+}
+Assert-DevelopmentDocumentCompleteDarkParserRefreshOutputs $parserRefreshOutputs $qualified
+$badParserRefreshOutputs = $parserRefreshOutputs | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+$badParserRefreshOutputs.document_processor_alias_arn.actions = @("update")
+$rejected = $false
+try { Assert-DevelopmentDocumentCompleteDarkParserRefreshOutputs $badParserRefreshOutputs $qualified }
+catch { $rejected = $true }
+if (-not $rejected) { throw "The parser refresh output guard accepted a meaningful processor output." }
 $validTransitionPlan = $validCompletePlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
 $validTransitionPlan.resource_changes = @($validTransitionPlan.resource_changes) + @($parserFunctionTransition, $parserAliasTransition)
 $validTransitionPlan.output_changes = New-TestCompleteDarkSourceTransitionOutputs $qualified

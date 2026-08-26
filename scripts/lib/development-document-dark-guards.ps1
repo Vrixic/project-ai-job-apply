@@ -188,10 +188,19 @@ function Get-TerraformVariableEnvironmentAssignments {
 function Get-DevelopmentDocumentStageExpectedActions {
   param(
     [Parameter(Mandatory)][ValidateSet("kms-prerequisite", "parser-dark", "complete-dark")][string]$Stage,
-    [switch]$ParserSourceTransition
+    [switch]$ParserSourceTransition,
+    [switch]$CompleteDarkParserRefresh,
+    [switch]$CompleteDarkProcessorRefresh
   )
+  if (@(@($ParserSourceTransition, $CompleteDarkParserRefresh, $CompleteDarkProcessorRefresh) |
+      Where-Object { $_ }).Count -gt 1) {
+    throw "A CompleteDark plan may select only one artifact-transition mode."
+  }
   if ($ParserSourceTransition -and $Stage -cne "complete-dark") {
     throw "A parser source transition is permitted only while advancing to complete-dark."
+  }
+  if (($CompleteDarkParserRefresh -or $CompleteDarkProcessorRefresh) -and $Stage -cne "complete-dark") {
+    throw "A CompleteDark refresh is permitted only while already complete-dark."
   }
   if ($Stage -ceq "kms-prerequisite") {
     return @{ "module.platform.aws_kms_key.platform" = "update" }
@@ -248,6 +257,19 @@ function Get-DevelopmentDocumentStageExpectedActions {
     "module.platform.aws_vpc_endpoint.secretsmanager[0]",
     "module.platform.aws_vpc_endpoint.sqs[0]"
   )
+  if ($CompleteDarkParserRefresh) {
+    return @{
+      "module.platform.aws_lambda_function.document_parser[0]" = "update"
+      "module.platform.aws_lambda_alias.document_parser[0]" = "update"
+    }
+  }
+  if ($CompleteDarkProcessorRefresh) {
+    return @{
+      "module.platform.aws_iam_role_policy.document_processor[0]" = "update"
+      "module.platform.aws_lambda_function.document_processor[0]" = "update"
+      "module.platform.aws_lambda_alias.document_processor[0]" = "update"
+    }
+  }
   $result = @{}
   $creates = if ($Stage -ceq "parser-dark") { $parserCreates } else { $completeCreates }
   $updates = if ($Stage -ceq "parser-dark") { $parserUpdates } else { $completeUpdates }
@@ -520,6 +542,119 @@ function Assert-ExactDocumentParserSourceTransition {
     (ConvertTo-DeploymentCanonicalValue $aliasUnknown) -cne
     (ConvertTo-DeploymentCanonicalValue $expectedAliasUnknown)) {
     throw "The parser source transition alias unknowns differ from the exact provider shape."
+  }
+}
+
+function Assert-ExactDocumentProcessorRefresh {
+  param(
+    [Parameter(Mandatory)][object[]]$Changes,
+    [Parameter(Mandatory)][object]$BaselineVariables,
+    [Parameter(Mandatory)][object]$Receipt,
+    [Parameter(Mandatory)][string]$ParserQualifiedArn,
+    [Parameter(Mandatory)][string]$AccountId
+  )
+  $oldPin = [string]$BaselineVariables.document_parser_invocation_qualified_arn.value
+  if ($oldPin -cnotmatch "^arn:aws:lambda:us-east-2:${AccountId}:function:ai-job-apply-development-document-parser:[1-9][0-9]*$" -or
+    $ParserQualifiedArn -cnotmatch "^arn:aws:lambda:us-east-2:${AccountId}:function:ai-job-apply-development-document-parser:[1-9][0-9]*$" -or
+    $ParserQualifiedArn -ceq $oldPin) { throw "The processor refresh requires distinct exact old and new numeric parser pins." }
+  $artifact = @($Receipt.artifacts | Where-Object { $_.artifactName -ceq "document-processor-lambda" -and $_.suffix -ceq "zip" })
+  if ($artifact.Count -ne 1) { throw "The processor refresh requires one exact reviewed processor ZIP." }
+  $artifact = $artifact[0]
+  $oldKey = [string]$BaselineVariables.document_processor_artifact_s3_key.value
+  $oldVersion = [string]$BaselineVariables.document_processor_artifact_s3_object_version.value
+  $oldSha = [string]$BaselineVariables.document_processor_artifact_sha256.value
+  $oldObjectSha = [string]$BaselineVariables.document_processor_artifact_base64sha256.value
+  if ($oldKey -cnotmatch "^lambda/documents/[a-f0-9]{40}/$oldSha/document-processor-lambda\.zip$" -or
+    [string]::IsNullOrWhiteSpace($oldVersion) -or $oldSha -cnotmatch '^[a-f0-9]{64}$' -or
+    $oldObjectSha -cnotmatch '^[A-Za-z0-9+/]{43}=$' -or
+    $oldKey -ceq [string]$artifact.key -or $oldVersion -ceq [string]$artifact.versionId -or
+    $oldSha -ceq [string]$artifact.artifactSha256 -or $oldObjectSha -ceq [string]$artifact.objectBase64Sha256) {
+    throw "The processor refresh does not move every processor artifact identity."
+  }
+  $function = @($Changes | Where-Object address -ceq "module.platform.aws_lambda_function.document_processor[0]")
+  $alias = @($Changes | Where-Object address -ceq "module.platform.aws_lambda_alias.document_processor[0]")
+  $policy = @($Changes | Where-Object address -ceq "module.platform.aws_iam_role_policy.document_processor[0]")
+  if ($Changes.Count -ne 3 -or $function.Count -ne 1 -or $alias.Count -ne 1 -or $policy.Count -ne 1 -or
+    [string]$function[0].type -cne "aws_lambda_function" -or [string]$alias[0].type -cne "aws_lambda_alias" -or
+    [string]$policy[0].type -cne "aws_iam_role_policy") {
+    throw "The processor refresh lacks its exact policy, function, and alias updates."
+  }
+  foreach ($change in @($function[0], $alias[0], $policy[0])) {
+    if ([string]$change.mode -cne "managed" -or (@($change.change.actions) -join ",") -cne "update" -or
+      (ConvertTo-OptionalTerraformMetadataCanonicalValue $change.change "before_sensitive" -SortArrays) -cne
+      (ConvertTo-OptionalTerraformMetadataCanonicalValue $change.change "after_sensitive" -SortArrays)) {
+      throw "The processor refresh may not create, delete, replace, or broaden sensitivity."
+    }
+    Assert-NoTerraformReplacementPaths $change.change
+  }
+  $function = $function[0]; $alias = $alias[0]; $policy = $policy[0]
+  if ([string]$function.change.before.s3_key -cne $oldKey -or
+    [string]$function.change.before.s3_object_version -cne $oldVersion -or
+    [string]$function.change.before.source_code_hash -cne $oldObjectSha -or
+    [string]$function.change.before.environment[0].variables.RELEASE_SHA -cne $oldSha -or
+    [string]$function.change.before.environment[0].variables.DOCUMENT_PARSER_FUNCTION_ARN -cne $oldPin -or
+    [string]$function.change.after.s3_key -cne [string]$artifact.key -or
+    [string]$function.change.after.s3_object_version -cne [string]$artifact.versionId -or
+    [string]$function.change.after.source_code_hash -cne [string]$artifact.objectBase64Sha256 -or
+    [string]$function.change.after.environment[0].variables.RELEASE_SHA -cne [string]$artifact.artifactSha256 -or
+    [string]$function.change.after.environment[0].variables.DOCUMENT_PARSER_FUNCTION_ARN -cne $ParserQualifiedArn -or
+    [string]::IsNullOrWhiteSpace([string]$function.change.before.code_sha256) -or
+    [string]$function.change.after.code_sha256 -cne [string]$function.change.before.code_sha256) {
+    throw "The processor function refresh is not bound to the exact artifact and new parser pin."
+  }
+  $beforeFunction = $function.change.before | ConvertTo-Json -Depth 60 | ConvertFrom-Json
+  $afterFunction = $function.change.after | ConvertTo-Json -Depth 60 | ConvertFrom-Json
+  foreach ($copy in @($beforeFunction, $afterFunction)) {
+    $copy.environment[0].variables.PSObject.Properties.Remove("RELEASE_SHA")
+    $copy.environment[0].variables.PSObject.Properties.Remove("DOCUMENT_PARSER_FUNCTION_ARN")
+    foreach ($field in @("code_sha256", "last_modified", "qualified_arn", "qualified_invoke_arn", "s3_key", "s3_object_version", "source_code_hash", "version")) { $copy.PSObject.Properties.Remove($field) }
+  }
+  if ((ConvertTo-DeploymentCanonicalValue $beforeFunction -SortArrays) -cne
+    (ConvertTo-DeploymentCanonicalValue $afterFunction -SortArrays)) {
+    throw "The processor refresh changes a non-artifact Lambda field."
+  }
+  $expectedFunctionUnknown = [ordered]@{
+    architectures = @($false); capacity_provider_config = @(); dead_letter_config = @(); durable_config = @()
+    environment = @([ordered]@{ variables = [ordered]@{} }); ephemeral_storage = @([ordered]@{})
+    file_system_config = @(); image_config = @(); last_modified = $true; layers = @($false)
+    logging_config = @([ordered]@{}); qualified_arn = $true; qualified_invoke_arn = $true
+    snap_start = @(); tags = [ordered]@{}; tags_all = [ordered]@{}; tenancy_config = @()
+    tracing_config = @([ordered]@{}); version = $true
+    vpc_config = @([ordered]@{ security_group_ids = @($false); subnet_ids = @($false, $false) })
+  }
+  if ((ConvertTo-DeploymentCanonicalValue (Get-OptionalTerraformChangeValue $function.change "after_unknown")) -cne
+    (ConvertTo-DeploymentCanonicalValue $expectedFunctionUnknown)) {
+    throw "The processor refresh Lambda unknowns differ from the exact provider shape."
+  }
+  $aliasBefore = $alias.change.before | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+  $aliasAfter = $alias.change.after | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+  $aliasBefore.PSObject.Properties.Remove("function_version"); $aliasAfter.PSObject.Properties.Remove("function_version")
+  if ([string]$alias.change.before.function_version -cnotmatch '^[1-9][0-9]*$' -or
+    (ConvertTo-DeploymentCanonicalValue $aliasBefore -SortArrays) -cne (ConvertTo-DeploymentCanonicalValue $aliasAfter -SortArrays) -or
+    (ConvertTo-DeploymentCanonicalValue (Get-OptionalTerraformChangeValue $alias.change "after_unknown")) -cne
+    (ConvertTo-DeploymentCanonicalValue ([ordered]@{ function_version = $true; routing_config = @() }))) {
+    throw "The processor refresh changes alias routing or has unexpected unknowns."
+  }
+  $beforePolicy = ConvertFrom-IamPolicyValue $policy.change.before.policy
+  $afterPolicy = ConvertFrom-IamPolicyValue $policy.change.after.policy
+  $beforeStatement = @($beforePolicy.Statement | Where-Object Sid -ceq "CoordinatorInvokesExactParserVersionOnly")
+  $afterStatement = @($afterPolicy.Statement | Where-Object Sid -ceq "CoordinatorInvokesExactParserVersionOnly")
+  if ($beforeStatement.Count -ne 1 -or $afterStatement.Count -ne 1 -or
+    [string]$beforeStatement[0].Resource -cne $oldPin -or [string]$afterStatement[0].Resource -cne $ParserQualifiedArn) {
+    throw "The processor policy refresh does not rebind the exact parser version."
+  }
+  $beforeStatement[0].Resource = "__PIN__"; $afterStatement[0].Resource = "__PIN__"
+  if ((ConvertTo-DeploymentCanonicalValue $beforePolicy -SortArrays) -cne
+    (ConvertTo-DeploymentCanonicalValue $afterPolicy -SortArrays)) {
+    throw "The processor policy refresh changes more than the exact parser-version resource."
+  }
+  $beforePolicyRecord = $policy.change.before | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+  $afterPolicyRecord = $policy.change.after | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+  $beforePolicyRecord.PSObject.Properties.Remove("policy"); $afterPolicyRecord.PSObject.Properties.Remove("policy")
+  if ((ConvertTo-DeploymentCanonicalValue $beforePolicyRecord -SortArrays) -cne
+      (ConvertTo-DeploymentCanonicalValue $afterPolicyRecord -SortArrays) -or
+    (ConvertTo-OptionalTerraformMetadataCanonicalValue $policy.change "after_unknown") -cne "{}") {
+    throw "The processor policy refresh changes a non-policy field or contains unknown values."
   }
 }
 
@@ -1072,7 +1207,8 @@ function Assert-DevelopmentDocumentDarkVariables {
     [Parameter(Mandatory)][object]$PlanVariables,
     [Parameter(Mandatory)][object]$Receipt,
     [Parameter(Mandatory)][ValidateSet("kms-prerequisite", "parser-dark", "complete-dark")][string]$Stage,
-    [string]$ParserQualifiedArn = ""
+    [string]$ParserQualifiedArn = "",
+    [switch]$CompleteDarkParserRefresh
   )
 
   $processor = @($Receipt.artifacts | Where-Object {
@@ -1101,6 +1237,13 @@ function Assert-DevelopmentDocumentDarkVariables {
     document_processor_extension_layer_arn = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
   }
   if ($Stage -cne "complete-dark") {
+    foreach ($name in @(
+        "document_processor_artifact_s3_key", "document_processor_artifact_s3_object_version",
+        "document_processor_artifact_sha256", "document_processor_artifact_base64sha256",
+        "document_processor_extension_layer_arn"
+      )) { $null = $overlay.Remove($name) }
+  }
+  elseif ($CompleteDarkParserRefresh) {
     foreach ($name in @(
         "document_processor_artifact_s3_key", "document_processor_artifact_s3_object_version",
         "document_processor_artifact_sha256", "document_processor_artifact_base64sha256",
@@ -1729,10 +1872,62 @@ function Assert-DevelopmentDocumentCompleteDarkSourceTransitionOutputs {
   }
 }
 
+function Assert-DevelopmentDocumentCompleteDarkParserRefreshOutputs {
+  param(
+    [Parameter(Mandatory)][object]$OutputChanges,
+    [Parameter(Mandatory)][string]$ParserQualifiedArn
+  )
+
+  $expectedNames = @(
+    "alert_delivery_canary_alarm_name", "application_security_group_id", "artifact_bucket",
+    "candidate_document_bucket", "candidate_document_malware_protection_plan_id", "cost_export_arn",
+    "cost_export_bucket", "document_parser_version_arn", "document_processor_alias_arn",
+    "document_scan_event_rule_arn", "document_scan_event_source_mapping_uuid", "ecs_cluster_arn",
+    "gateway_lambda_alias_arn", "gateway_lambda_authorizer_id", "gateway_lambda_function_name",
+    "gateway_url", "migration_repository_url", "migration_subnet_ids", "migration_task_definition_arn",
+    "monthly_budget_name", "observability_dashboard_name", "operational_alert_topic_arn",
+    "outbox_reconciler_alias_arn", "outbox_reconciler_rule_arn", "outbox_starter_alias_arn",
+    "outbox_starter_event_source_mapping_uuid", "profile_readiness_activity_alias_arn",
+    "profile_readiness_durable_alias_arn", "profile_readiness_durable_version_arn",
+    "profile_readiness_terminal_alias_arn", "profile_readiness_terminal_rule_arn", "vpc_id"
+  )
+  Assert-ExactObjectKeys $OutputChanges $expectedNames "CompleteDark parser-refresh outputs"
+  foreach ($name in $expectedNames) {
+    $change = $OutputChanges.PSObject.Properties[$name].Value
+    if ($name -ceq "document_parser_version_arn") {
+      $keys = @("actions", "after_sensitive", "after_unknown", "before", "before_sensitive")
+      if ($null -ne $change.PSObject.Properties["after"]) { $keys += "after" }
+      Assert-ExactObjectKeys $change $keys "CompleteDark parser-refresh output"
+      if ((@($change.actions) -join ",") -cne "update" -or [string]$change.before -cne $ParserQualifiedArn -or
+        $null -ne (Get-OptionalTerraformChangeValue $change "after") -or
+        $change.after_unknown -isnot [bool] -or -not $change.after_unknown -or
+        $change.before_sensitive -isnot [bool] -or $change.before_sensitive -or
+        $change.after_sensitive -isnot [bool] -or $change.after_sensitive) {
+        throw "The CompleteDark parser-refresh output is not its exact nonsensitive unknown update."
+      }
+      continue
+    }
+    Assert-ExactObjectKeys $change @(
+      "actions", "after", "after_sensitive", "after_unknown", "before", "before_sensitive"
+    ) "CompleteDark parser-refresh no-op output '$name'"
+    if ((@($change.actions) -join ",") -cne "no-op" -or $null -eq $change.before -or
+      $null -eq $change.after -or
+      (ConvertTo-DeploymentCanonicalValue $change.before) -cne
+      (ConvertTo-DeploymentCanonicalValue $change.after) -or
+      $change.after_unknown -isnot [bool] -or $change.after_unknown -or
+      $change.before_sensitive -isnot [bool] -or $change.after_sensitive -isnot [bool] -or
+      $change.before_sensitive -ne $change.after_sensitive) {
+      throw "CompleteDark parser-refresh output '$name' is not an exact known sensitivity-stable no-op."
+    }
+  }
+}
+
 function Assert-DevelopmentDocumentDarkPlan {
   param([Parameter(Mandatory)][object]$Plan, [Parameter(Mandatory)][string]$AccountId,
     [Parameter(Mandatory)][ValidateSet("parser-dark", "complete-dark")][string]$Stage,
     [switch]$ParserSourceTransition,
+    [switch]$CompleteDarkParserRefresh,
+    [switch]$CompleteDarkProcessorRefresh,
     [AllowNull()][object]$BaselineVariables,
     [AllowNull()][object]$Receipt,
     [string]$ParserQualifiedArn = "")
@@ -1741,12 +1936,21 @@ function Assert-DevelopmentDocumentDarkPlan {
     throw "The document dark transition must be a successful applyable Terraform 1.9.8 plan."
   }
   $outputChanges = Get-OptionalTerraformChangeValue $Plan "output_changes"
-  if ($ParserSourceTransition -and ($Stage -cne "complete-dark" -or $null -eq $BaselineVariables -or
+  if (@(@($ParserSourceTransition, $CompleteDarkParserRefresh, $CompleteDarkProcessorRefresh) |
+      Where-Object { $_ }).Count -gt 1) {
+    throw "A CompleteDark plan may select only one artifact-transition mode."
+  }
+  if (($ParserSourceTransition -or $CompleteDarkParserRefresh -or $CompleteDarkProcessorRefresh) -and
+    ($Stage -cne "complete-dark" -or $null -eq $BaselineVariables -or
       $null -eq $Receipt -or [string]::IsNullOrWhiteSpace($ParserQualifiedArn))) {
-    throw "The parser source transition requires CompleteDark, retained variables, receipt, and version pin."
+    throw "A CompleteDark artifact transition requires retained variables, receipt, and version pin."
   }
   if ($ParserSourceTransition) {
     Assert-DevelopmentDocumentCompleteDarkSourceTransitionOutputs `
+      -OutputChanges $outputChanges -ParserQualifiedArn $ParserQualifiedArn
+  }
+  elseif ($CompleteDarkParserRefresh) {
+    Assert-DevelopmentDocumentCompleteDarkParserRefreshOutputs `
       -OutputChanges $outputChanges -ParserQualifiedArn $ParserQualifiedArn
   }
   else {
@@ -1760,7 +1964,9 @@ function Assert-DevelopmentDocumentDarkPlan {
     )
     if ($meaningfulOutputs.Count -ne 0) { throw "The document dark transition contains a meaningful output change." }
   }
-  $expected = Get-DevelopmentDocumentStageExpectedActions -Stage $Stage -ParserSourceTransition:$ParserSourceTransition
+  $expected = Get-DevelopmentDocumentStageExpectedActions -Stage $Stage `
+    -ParserSourceTransition:$ParserSourceTransition -CompleteDarkParserRefresh:$CompleteDarkParserRefresh `
+    -CompleteDarkProcessorRefresh:$CompleteDarkProcessorRefresh
   Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($Plan.resource_drift) -RootModule $Plan.planned_values.root_module
   $kmsRecords = @($Plan.resource_changes | Where-Object { [string]$_.address -ceq "module.platform.aws_kms_key.platform" })
   if ($kmsRecords.Count -ne 1 -or [string]$kmsRecords[0].mode -cne "managed" -or
@@ -1787,7 +1993,8 @@ function Assert-DevelopmentDocumentDarkPlan {
     if ($action -cne $expected[$address]) { throw "The dark plan action for '$address' must be '$($expected[$address])'." }
   }
 
-  $securityCreateFields = if ($Stage -ceq "parser-dark") { @{
+  $refresh = $CompleteDarkParserRefresh -or $CompleteDarkProcessorRefresh
+  $securityCreateFields = if ($refresh) { @{} } elseif ($Stage -ceq "parser-dark") { @{
       "module.platform.aws_iam_role.document_processor[0]" = @("assume_role_policy")
       "module.platform.aws_iam_role.document_parser[0]" = @("assume_role_policy")
       "module.platform.aws_iam_role.document_parser_object_access[0]" = @("assume_role_policy")
@@ -1814,7 +2021,9 @@ function Assert-DevelopmentDocumentDarkPlan {
       }
     }
   }
-  $policyUpdates = Get-DevelopmentDocumentStageExpectedActions -Stage $Stage
+  $policyUpdates = Get-DevelopmentDocumentStageExpectedActions -Stage $Stage `
+    -CompleteDarkParserRefresh:$CompleteDarkParserRefresh `
+    -CompleteDarkProcessorRefresh:$CompleteDarkProcessorRefresh
   foreach ($address in @($policyUpdates.Keys | Where-Object { $policyUpdates[$_] -ceq "update" })) {
     $afterUnknown = Get-OptionalTerraformChangeValue $byAddress[$address].change "after_unknown"
     $unknown = if ($null -eq $afterUnknown) { $null } else { $afterUnknown.PSObject.Properties["policy"] }
@@ -1823,7 +2032,9 @@ function Assert-DevelopmentDocumentDarkPlan {
       throw "Updated security policy must be fully known before review for '$address'."
     }
   }
-  Assert-ExactDocumentCreatedResourcePolicies -ByAddress $byAddress -AccountId $AccountId -PlatformKmsArn $platformKmsArn -Stage $Stage
+  if (-not $refresh) {
+    Assert-ExactDocumentCreatedResourcePolicies -ByAddress $byAddress -AccountId $AccountId -PlatformKmsArn $platformKmsArn -Stage $Stage
+  }
 
   if ($Stage -ceq "parser-dark") {
     foreach ($ruleAddress in @(
@@ -1841,16 +2052,26 @@ function Assert-DevelopmentDocumentDarkPlan {
       }
     }
   }
-  else {
+  elseif (-not $refresh) {
     $mapping = $byAddress["module.platform.aws_lambda_event_source_mapping.document_scan_results[0]"]
     if (ConvertTo-ExactBoolean $mapping.change.after.enabled "document mapping enabled") {
       throw "The document queue mapping must be disabled in complete-dark."
     }
   }
-  Assert-ApprovedPolicyUpdateSemantics -Changes $changes -AccountId $AccountId -Stage $Stage
+  if (-not $refresh) {
+    Assert-ApprovedPolicyUpdateSemantics -Changes $changes -AccountId $AccountId -Stage $Stage
+  }
   if ($ParserSourceTransition) {
     Assert-ExactDocumentParserSourceTransition -Changes $changes -BaselineVariables $BaselineVariables `
       -Receipt $Receipt -ParserQualifiedArn $ParserQualifiedArn
+  }
+  elseif ($CompleteDarkParserRefresh) {
+    Assert-ExactDocumentParserSourceTransition -Changes $changes -BaselineVariables $BaselineVariables `
+      -Receipt $Receipt -ParserQualifiedArn $ParserQualifiedArn
+  }
+  elseif ($CompleteDarkProcessorRefresh) {
+    Assert-ExactDocumentProcessorRefresh -Changes $changes -BaselineVariables $BaselineVariables `
+      -Receipt $Receipt -ParserQualifiedArn $ParserQualifiedArn -AccountId $AccountId
   }
   return $changes
 }
