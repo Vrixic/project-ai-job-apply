@@ -25,16 +25,16 @@
     "@ai-job-apply/matching-service": "workspace:*",
     "@ai-job-apply/observability": "workspace:*",
     "@ai-job-apply/profile-service": "workspace:*",
-    "@aws-sdk/client-kms": "3.1106.0",
-    "@aws-sdk/client-lambda": "3.1106.0",
-    "@aws-sdk/client-s3": "3.1106.0",
-    "@aws-sdk/client-sqs": "3.1106.0",
-    "@aws-sdk/rds-signer": "3.1106.0",
-    "@aws-sdk/s3-request-presigner": "3.1106.0",
-    "@nestjs/common": "11.1.28",
-    "@nestjs/core": "11.1.28",
-    "@nestjs/platform-fastify": "11.1.28",
-    "fastify": "5.10.0",
+    "@aws-sdk/client-kms": "3.1116.0",
+    "@aws-sdk/client-lambda": "3.1116.0",
+    "@aws-sdk/client-s3": "3.1116.0",
+    "@aws-sdk/client-sqs": "3.1116.0",
+    "@aws-sdk/rds-signer": "3.1116.0",
+    "@aws-sdk/s3-request-presigner": "3.1116.0",
+    "@nestjs/common": "11.2.1",
+    "@nestjs/core": "11.2.1",
+    "@nestjs/platform-fastify": "11.2.1",
+    "fastify": "5.12.1",
     "postgres": "3.4.9",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2"
@@ -42,7 +42,7 @@
   "devDependencies": {
     "@ai-job-apply/domain": "workspace:*",
     "@types/aws-lambda": "8.10.162",
-    "tsx": "4.23.11",
-    "uuid": "14.0.1"
+    "tsx": "4.23.12",
+    "uuid": "14.0.2"
   }
 }
