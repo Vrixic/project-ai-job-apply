@@ -16,8 +16,7 @@
     "generatedSyntheticOnly": true,
     "oneRunOnly": true,
     "cleanupRequired": true,
-    "recoveryRequired": true,
-    "ledgerPath": null
+    "recoveryRequired": true
   },
   "thresholds": {
     "concurrency": { "read": null, "savedJob": null, "match": null, "providerFailure": null },
@@ -72,6 +71,6 @@
       "exerciseResultPath": null,
       "operatorDeliveryConfirmed": false
     },
-    "postRun": { "aggregateResultPath": null, "zeroDriftResultPath": null }
+    "postRun": { "zeroDriftResultPath": null }
   }
 }

@@ -9,6 +9,7 @@ import {
   ashbyJobBoardAdapterVersion,
   DurableIngestionCoordinator,
   GeneratedSyntheticIngestionAdapter,
+  GeneratedSyntheticProviderFaultAdapter,
   GreenhouseJobBoardAdapter,
   generatedSyntheticAdapterVersion,
   generatedSyntheticSourceId,
@@ -53,6 +54,12 @@ import {
   isExactNumericLambdaVersionArn,
   validateIngestionActivityInput,
 } from "./ingestion-durable.js";
+import {
+  INGESTION_PROVIDER_FAILURE_FIXTURE_KIND,
+  type IngestionProviderFailureActivityResultV1,
+  isIngestionProviderFailureFixtureCandidate,
+  validateIngestionProviderFailureActivityInput,
+} from "./ingestion-provider-failure-durable.js";
 
 const logger = createLogger({
   service: "ingestion-durable",
@@ -910,7 +917,68 @@ export function requireInvokedActivityVersionArn(
   return context.invokedFunctionArn;
 }
 
-export const activity: Handler<unknown, IngestionActivityResultV1> = async (event, context) => {
+export async function runIngestionProviderFailureActivity(
+  event: unknown,
+): Promise<IngestionProviderFailureActivityResultV1> {
+  if (!validateIngestionProviderFailureActivityInput(event)) {
+    throw new Error("IngestionProviderFailureActivityInputRejected");
+  }
+  const adapter = new GeneratedSyntheticProviderFaultAdapter();
+  const result = await adapter.poll(
+    Object.freeze({
+      observedAt: new Date("2000-01-01T00:00:00.000Z"),
+      signal: new AbortController().signal,
+      attempt: event.attempt,
+    }),
+  );
+  if (event.attempt === 1) {
+    if (
+      result.kind !== "retry" ||
+      result.reason !== "source_unavailable" ||
+      result.retryAfterMs !== 1_000
+    ) {
+      throw new Error("IngestionProviderFailureFaultContractRejected");
+    }
+    return {
+      schemaVersion: 1,
+      fixtureKind: INGESTION_PROVIDER_FAILURE_FIXTURE_KIND,
+      attempt: 1,
+      status: "retry",
+      reason: "source_unavailable",
+      retryAfterMs: 1_000,
+      providerRequests: 0,
+      observationCount: 0,
+      createdCount: 0,
+      updatedCount: 0,
+    };
+  }
+  if (
+    result.kind !== "success" ||
+    result.observations.length !== 0 ||
+    (result.withdrawals?.length ?? 0) !== 0
+  ) {
+    throw new Error("IngestionProviderFailureRecoveryContractRejected");
+  }
+  return {
+    schemaVersion: 1,
+    fixtureKind: INGESTION_PROVIDER_FAILURE_FIXTURE_KIND,
+    attempt: 2,
+    status: "succeeded",
+    providerRequests: 0,
+    observationCount: 0,
+    createdCount: 0,
+    updatedCount: 0,
+  };
+}
+
+export const activity: Handler<
+  unknown,
+  IngestionActivityResultV1 | IngestionProviderFailureActivityResultV1
+> = async (event, context) => {
+  if (isIngestionProviderFailureFixtureCandidate(event)) {
+    requireInvokedActivityVersionArn(context);
+    return runIngestionProviderFailureActivity(event);
+  }
   if (!validateIngestionActivityInput(event)) throw new Error("IngestionActivityInputRejected");
   const activityArn = requireInvokedActivityVersionArn(context);
   const current = await getRuntime();

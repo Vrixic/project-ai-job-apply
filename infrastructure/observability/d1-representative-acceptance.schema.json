@@ -80,16 +80,14 @@
         "generatedSyntheticOnly",
         "oneRunOnly",
         "cleanupRequired",
-        "recoveryRequired",
-        "ledgerPath"
+        "recoveryRequired"
       ],
       "properties": {
         "runId": { "type": ["string", "null"], "format": "uuid" },
         "generatedSyntheticOnly": { "type": "boolean" },
         "oneRunOnly": { "type": "boolean" },
         "cleanupRequired": { "type": "boolean" },
-        "recoveryRequired": { "type": "boolean" },
-        "ledgerPath": { "type": ["string", "null"] }
+        "recoveryRequired": { "type": "boolean" }
       }
     },
     "thresholds": {
@@ -201,10 +199,50 @@
           "required": ["required", "state", "blocker", "existingGuardedSyntheticFixture"],
           "properties": {
             "required": { "const": true },
-            "state": { "const": "blocked" },
-            "blocker": { "type": "string", "minLength": 1 },
-            "existingGuardedSyntheticFixture": { "type": "null" }
-          }
+            "state": { "enum": ["blocked", "available"] },
+            "blocker": { "type": ["string", "null"], "minLength": 1 },
+            "existingGuardedSyntheticFixture": {
+              "oneOf": [
+                { "type": "null" },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "kind",
+                    "sourceId",
+                    "adapterVersion",
+                    "operatorPath",
+                    "aggregateResultPath"
+                  ],
+                  "properties": {
+                    "kind": { "const": "d1-generated-synthetic-provider-failure-v1" },
+                    "sourceId": { "const": "synthetic-d1-provider-fault-v1" },
+                    "adapterVersion": { "const": "synthetic-d1-provider-fault-v1" },
+                    "operatorPath": {
+                      "const": "scripts/operate-development-d1-provider-failure-acceptance.ps1"
+                    },
+                    "aggregateResultPath": { "type": "string", "minLength": 1 }
+                  }
+                }
+              ]
+            }
+          },
+          "oneOf": [
+            {
+              "properties": {
+                "state": { "const": "blocked" },
+                "blocker": { "type": "string", "minLength": 1 },
+                "existingGuardedSyntheticFixture": { "type": "null" }
+              }
+            },
+            {
+              "properties": {
+                "state": { "const": "available" },
+                "blocker": { "type": "null" },
+                "existingGuardedSyntheticFixture": { "type": "object" }
+              }
+            }
+          ]
         },
         "alertDelivery": {
           "type": "object",
@@ -225,9 +263,8 @@
         "postRun": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["aggregateResultPath", "zeroDriftResultPath"],
+          "required": ["zeroDriftResultPath"],
           "properties": {
-            "aggregateResultPath": { "type": ["string", "null"] },
             "zeroDriftResultPath": { "type": ["string", "null"] }
           }
         }

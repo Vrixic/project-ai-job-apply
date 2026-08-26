@@ -15,6 +15,9 @@ saved infrastructure plan, success evidence, and recovery boundary.
 - [Development workflow Lambda publication](development-workflow-lambda-publication.md) — Tests,
   reproducibly builds, immutably publishes, and exact-version verifies only the workflow ingress,
   profile-readiness durable, and profile-readiness activity artifact sets without changing runtime.
+- [Development ingestion Lambda publication](development-ingestion-lambda-publication.md) — Tests,
+  reproducibly builds, immutably publishes, and exact-version verifies only the ingestion durable
+  and runtime artifact sets without changing runtime.
 - [Database migration](database-migration.md) — Publishes the scanned migration-only image and
   runs exactly one hardened Fargate task while the retained cluster otherwise stays empty.
 - [Development document-processing acceptance](development-document-processing-acceptance.md) —

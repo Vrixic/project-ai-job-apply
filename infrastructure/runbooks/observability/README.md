@@ -13,6 +13,9 @@ timestamps.
 
 - [Development alert delivery](development-alert-delivery.md) — Privately subscribes an operator
   to the provisioned encrypted route and exercises ALARM → OK delivery with a synthetic metric.
+- [Development D1 provider-failure acceptance](development-d1-provider-failure-acceptance.md) —
+  Invokes one strict generated-synthetic fail-once/recover input through the exact numeric ingestion
+  durable/activity versions with every normal trigger and provider path dark.
 - [Staging alert delivery](staging-alert-delivery.md) — Subscribes and exercises the already
   provisioned synthetic staging notification path without retaining the destination.
 - [Serverless distributed tracing](serverless-distributed-tracing.md) — Verifies privacy-safe W3C

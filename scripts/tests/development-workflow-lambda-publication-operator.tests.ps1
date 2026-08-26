@@ -154,9 +154,12 @@ foreach ($forbidden in @(
 }
 
 foreach ($excludedArtifact in @("ingestion-durable-lambda", "ingestion-runtime-lambda")) {
-  if (($operatorSource + $engineSource).Contains($excludedArtifact)) {
-    throw "The core workflow publisher selected an excluded ingestion artifact: $excludedArtifact"
+  if ($operatorSource.Contains($excludedArtifact)) {
+    throw "The core workflow wrapper selected an excluded ingestion artifact: $excludedArtifact"
   }
+}
+if (-not $engineSource.Contains('@("workflow-ingress-lambda", "profile-readiness-durable-lambda", "profile-readiness-activity-lambda")')) {
+  throw "The shared publisher lost the exact core workflow artifact selection."
 }
 
 Write-Host "Development workflow Lambda publication operator pure guard tests passed."

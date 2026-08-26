@@ -3,7 +3,7 @@ param(
   [ValidateSet("Status", "Publish", "Verify")]
   [string]$Action = "Status",
 
-  [ValidateSet("Document", "CoreWorkflow", "PublicJob")]
+  [ValidateSet("Document", "CoreWorkflow", "Ingestion", "PublicJob")]
   [string]$ArtifactFamily = "Document",
 
   [string]$AwsProfile = "ai-job-apply-development-admin",
@@ -46,9 +46,10 @@ Usage:
     -ReviewedReceiptSha256 64_CHARACTER_SHA256
 
 Status is read-only. Publish is the explicit GitHub Actions-budget fallback and is the only action
-that writes S3 objects. It runs document tests, the centralized dependency audit, two deterministic
-builds, and every bucket/artifact guard before writing eight new immutable objects. Verify performs
-an independent exact-version readback. No action deploys Lambda code or enables a trigger.
+that writes S3 objects. It runs the selected artifact-family tests, the centralized dependency
+audit, two deterministic builds, and every bucket/artifact guard before writing the exact immutable
+object set. Verify performs an independent exact-version readback. No action deploys Lambda code or
+enables a trigger.
 
 Receipts and command logs remain below the ignored development .terraform directory. Do not copy
 account IDs, bucket names, KMS identifiers, raw object content, or command logs into shared evidence.
@@ -65,9 +66,12 @@ $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $terraformDirectory = Join-Path $repositoryRoot "infrastructure\terraform\environments\development"
 $terraformRoot = [IO.Path]::GetFullPath((Join-Path $terraformDirectory ".terraform"))
 $isCoreWorkflow = $ArtifactFamily -ceq "CoreWorkflow"
+$isIngestion = $ArtifactFamily -ceq "Ingestion"
 $isPublicJob = $ArtifactFamily -ceq "PublicJob"
 $operatorDirectoryName = if ($isCoreWorkflow) {
   "development-workflow-artifacts"
+} elseif ($isIngestion) {
+  "development-ingestion-artifacts"
 } elseif ($isPublicJob) {
   "development-public-job-artifacts"
 } else {
@@ -75,7 +79,7 @@ $operatorDirectoryName = if ($isCoreWorkflow) {
 }
 $operatorRoot = Join-Path $terraformRoot $operatorDirectoryName
 $terraformDataDirectory = Join-Path $terraformRoot "$operatorDirectoryName-data"
-$artifactDirectory = if ($isCoreWorkflow) {
+$artifactDirectory = if ($isCoreWorkflow -or $isIngestion) {
   Join-Path $repositoryRoot "backend\workflows\dist\lambda"
 } elseif ($isPublicJob) {
   Join-Path $repositoryRoot "backend\gateway\dist\public-job-lambda"
@@ -85,6 +89,8 @@ $artifactDirectory = if ($isCoreWorkflow) {
 $stateKey = "platform.tfstate"
 $artifactNames = if ($isCoreWorkflow) {
   @("workflow-ingress-lambda", "profile-readiness-durable-lambda", "profile-readiness-activity-lambda")
+} elseif ($isIngestion) {
+  @("ingestion-durable-lambda", "ingestion-runtime-lambda")
 } elseif ($isPublicJob) {
   @("public-job-edge-lambda", "public-job-projection-lambda")
 } else {
@@ -92,6 +98,8 @@ $artifactNames = if ($isCoreWorkflow) {
 }
 $artifactKeyRoot = if ($isCoreWorkflow) {
   "lambda/workflows"
+} elseif ($isIngestion) {
+  "lambda/ingestion"
 } elseif ($isPublicJob) {
   "lambda/public-jobs"
 } else {
@@ -99,6 +107,8 @@ $artifactKeyRoot = if ($isCoreWorkflow) {
 }
 $receiptKind = if ($isCoreWorkflow) {
   "development-core-workflow-lambda-publication"
+} elseif ($isIngestion) {
+  "development-ingestion-lambda-publication"
 } elseif ($isPublicJob) {
   "development-public-job-lambda-publication"
 } else {
@@ -106,6 +116,8 @@ $receiptKind = if ($isCoreWorkflow) {
 }
 $artifactLabel = if ($isCoreWorkflow) {
   "core workflow"
+} elseif ($isIngestion) {
+  "ingestion"
 } elseif ($isPublicJob) {
   "public job"
 } else {
@@ -503,7 +515,7 @@ if ($Action -eq "Publish") {
   $auditLog = Join-Path $operatorRoot "dependency-audit-$timestamp.log"
   $buildOneLog = Join-Path $operatorRoot "build-one-$timestamp.log"
   $buildTwoLog = Join-Path $operatorRoot "build-two-$timestamp.log"
-  if ($isCoreWorkflow) {
+  if ($isCoreWorkflow -or $isIngestion) {
     Invoke-LocalGate -Name "Workflow tests" -LogPath $testLog -Command {
       pnpm --filter @ai-job-apply/workflows test
     }
@@ -522,6 +534,7 @@ if ($Action -eq "Publish") {
     $env:ARTIFACT_SOURCE_SHA = $SourceSha
     Invoke-LocalGate -Name "First $artifactLabel Lambda build" -LogPath $buildOneLog -Command {
       if ($isCoreWorkflow) { pnpm --filter @ai-job-apply/workflows build:lambda }
+      elseif ($isIngestion) { pnpm --filter @ai-job-apply/workflows build:lambda:ingestion }
       elseif ($isPublicJob) { pnpm --filter @ai-job-apply/gateway build:public-job-lambda }
       else { pnpm --filter @ai-job-apply/documents-service build:lambda }
     }
@@ -529,6 +542,7 @@ if ($Action -eq "Publish") {
     $firstFingerprint = Get-ArtifactFingerprint -Artifacts $first
     Invoke-LocalGate -Name "Second $artifactLabel Lambda build" -LogPath $buildTwoLog -Command {
       if ($isCoreWorkflow) { pnpm --filter @ai-job-apply/workflows build:lambda }
+      elseif ($isIngestion) { pnpm --filter @ai-job-apply/workflows build:lambda:ingestion }
       elseif ($isPublicJob) { pnpm --filter @ai-job-apply/gateway build:public-job-lambda }
       else { pnpm --filter @ai-job-apply/documents-service build:lambda }
     }

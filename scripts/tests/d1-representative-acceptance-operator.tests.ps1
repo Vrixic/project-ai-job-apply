@@ -58,16 +58,27 @@ foreach ($group in @("concurrency", "durationMs", "latencyMs", "errors", "queues
 
 foreach ($functionName in @(
     "Resolve-RepositoryPath", "Get-FileSha256", "ConvertFrom-StrictJson", "Assert-ExactProperties", "Test-CanonicalTimestamp",
-    "Test-IntegerValue", "Get-ConfigurationIssues", "Get-ReadinessIssues",
+    "Test-IntegerValue", "Get-ConfigurationIssues", "Get-ReadinessIssues", "Resolve-FixtureOperatorSourcePath",
+    "Resolve-PrivateEvidencePath",
     "Assert-D1ApplicationResult", "Assert-AwsAggregateResult", "Assert-AlertDeliveryResults",
-    "Assert-PostRunResults"
+    "Assert-ProviderFailureResult", "Assert-PostRunZeroDriftResult"
   )) { Import-OperatorFunction $functionName }
 $requiredArtifactNames = @(
   "gateway", "workflow-ingress", "profile-readiness-durable",
   "profile-readiness-activity"
 )
+$terraformRoot = [IO.Path]::GetFullPath((Join-Path $repositoryRoot "infrastructure\terraform\environments\development"))
+$evidenceRoot = [IO.Path]::GetFullPath((Join-Path $terraformRoot ".terraform\d1-representative-acceptance"))
+$providerFixtureKind = "d1-generated-synthetic-provider-failure-v1"
+$providerFixtureSourceId = "synthetic-d1-provider-fault-v1"
+$providerFixtureAdapterVersion = "synthetic-d1-provider-fault-v1"
+$providerFixtureOperatorPath = "scripts/operate-development-d1-provider-failure-acceptance.ps1"
 
 $example = ConvertFrom-StrictJson (Get-Content -LiteralPath $examplePath -Raw) "Draft example"
+$dateProbe = ConvertFrom-StrictJson '{"at":"2026-08-26T12:34:56.789Z"}' "Date probe"
+if ($dateProbe.at -isnot [string]) {
+  throw "Strict aggregate JSON parsing coerced a canonical timestamp away from its contract string."
+}
 $draftIssues = @(Get-ConfigurationIssues $example)
 if ($draftIssues.Count -ne 0) { throw "The source-controlled draft is structurally invalid: $($draftIssues -join '; ')." }
 
@@ -100,7 +111,7 @@ $reviewed.release.migrationImage.sourceSha = "a" * 40
 $reviewed.release.migrationImage.platformDigest = "sha256:$('5' * 64)"
 $reviewed.release.migrationImage.receiptSha256 = "7" * 64
 $reviewed.run.runId = "12345678-1234-4abc-8def-1234567890ab"
-$reviewed.run.ledgerPath = ".terraform/d1-representative-acceptance/ledger.json"
+$privateRoot = "infrastructure/terraform/environments/development/.terraform/d1-representative-acceptance"
 foreach ($group in @("concurrency", "durationMs", "latencyMs", "errors", "queues")) {
   foreach ($property in $reviewed.thresholds.$group.PSObject.Properties) {
     $property.Value = if ($group -in @("errors", "queues")) { 0 } else { 10000 }
@@ -109,18 +120,29 @@ foreach ($group in @("concurrency", "durationMs", "latencyMs", "errors", "queues
 $reviewed.thresholds.concurrency.read = 2
 $reviewed.thresholds.concurrency.savedJob = 1
 $reviewed.thresholds.concurrency.match = 1
+$reviewed.thresholds.concurrency.providerFailure = 1
 $reviewed.thresholds.alerts.expectedHealthyAlarmCount = 10
 $reviewed.thresholds.alerts.expectedConfirmedRecipientCount = 1
 $reviewed.thresholds.alerts.reviewedRecipientSetSha256 = "6" * 64
 foreach ($profileName in @("read", "savedJob", "match")) {
-  $reviewed.profiles.$profileName.resultPath = ".terraform/d1-representative-acceptance/$profileName.json"
-  $reviewed.profiles.$profileName.awsResultPath = ".terraform/d1-representative-acceptance/$profileName-aws.json"
+  $reviewed.profiles.$profileName.resultPath = "$privateRoot/$profileName.json"
+  $reviewed.profiles.$profileName.awsResultPath = "$privateRoot/$profileName-aws.json"
 }
-$reviewed.profiles.alertDelivery.statusResultPath = ".terraform/d1-representative-acceptance/alert-status.json"
-$reviewed.profiles.alertDelivery.exerciseResultPath = ".terraform/d1-representative-acceptance/alert-exercise.json"
+$reviewed.profiles.alertDelivery.statusResultPath = "$privateRoot/alert-status.json"
+$reviewed.profiles.alertDelivery.exerciseResultPath = "$privateRoot/alert-exercise.json"
 $reviewed.profiles.alertDelivery.operatorDeliveryConfirmed = $true
-$reviewed.profiles.postRun.aggregateResultPath = ".terraform/d1-representative-acceptance/post-run.json"
-$reviewed.profiles.postRun.zeroDriftResultPath = ".terraform/d1-representative-acceptance/zero-drift.json"
+$reviewed.profiles.postRun.zeroDriftResultPath = "$privateRoot/zero-drift.json"
+
+$available = $reviewed | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+$available.profiles.providerFailure.state = "available"
+$available.profiles.providerFailure.blocker = $null
+$available.profiles.providerFailure.existingGuardedSyntheticFixture = [pscustomobject]@{
+  kind = $providerFixtureKind
+  sourceId = $providerFixtureSourceId
+  adapterVersion = $providerFixtureAdapterVersion
+  operatorPath = $providerFixtureOperatorPath
+  aggregateResultPath = "$privateRoot/provider-failure.json"
+}
 
 $reviewedIssues = @(Get-ConfigurationIssues $reviewed)
 if ($reviewedIssues.Count -ne 0) { throw "The fully populated reviewed shape is invalid: $($reviewedIssues -join '; ')." }
@@ -148,6 +170,27 @@ const schema = JSON.parse(fs.readFileSync(process.env.D1_ACCEPTANCE_SCHEMA_PATH,
 const reviewed = JSON.parse(fs.readFileSync(process.env.D1_ACCEPTANCE_FIXTURE_PATH, "utf8"));
 const validate = ajv.compile(schema);
 if (!validate(reviewed)) throw new Error(JSON.stringify(validate.errors));
+const blockedWithNonStringBlocker = JSON.parse(JSON.stringify(reviewed));
+blockedWithNonStringBlocker.profiles.providerFailure.blocker = false;
+if (validate(blockedWithNonStringBlocker)) {
+  throw new Error("A blocked profile with a non-string blocker was accepted.");
+}
+const available = JSON.parse(JSON.stringify(reviewed));
+available.profiles.providerFailure = {
+  required: true,
+  state: "available",
+  blocker: null,
+  existingGuardedSyntheticFixture: {
+    kind: "d1-generated-synthetic-provider-failure-v1",
+    sourceId: "synthetic-d1-provider-fault-v1",
+    adapterVersion: "synthetic-d1-provider-fault-v1",
+    operatorPath: "scripts/operate-development-d1-provider-failure-acceptance.ps1",
+    aggregateResultPath: "infrastructure/terraform/environments/development/.terraform/d1-representative-acceptance/provider-failure.json"
+  }
+};
+if (!validate(available)) throw new Error(JSON.stringify(validate.errors));
+available.profiles.providerFailure.existingGuardedSyntheticFixture.sourceId = "synthetic-wrong-v1";
+if (validate(available)) throw new Error("A non-fixed provider fixture was accepted.");
 reviewed.thresholds.latencyMs.inventedSlo = 1;
 if (validate(reviewed)) throw new Error("Unknown threshold key was accepted.");
 '@,
@@ -169,6 +212,38 @@ if (validate(reviewed)) throw new Error("Unknown threshold key was accepted.");
 $readiness = @(Get-ReadinessIssues $reviewed)
 if ($readiness.Count -ne 1 -or $readiness[0] -notmatch "provider-failure") {
   throw "A fully populated reviewed configuration must be blocked only by provider-failure automation."
+}
+$availableIssues = @(Get-ConfigurationIssues $available)
+if ($availableIssues.Count -ne 0) {
+  throw "The exact available fixture shape is invalid: $($availableIssues -join '; ')."
+}
+$availableReadiness = @(Get-ReadinessIssues $available)
+if (@($availableReadiness | Where-Object { $_ -match "automation is blocked" }).Count -ne 0 -or
+  @($availableReadiness | Where-Object { $_ -match "aggregate evidence file is missing" }).Count -ne 1) {
+  throw "Available provider readiness did not replace the blocker with exact evidence checks."
+}
+$fixtureOperatorExists = Test-Path -LiteralPath (Join-Path $repositoryRoot $providerFixtureOperatorPath) -PathType Leaf
+$missingOperatorIssues = @($availableReadiness | Where-Object { $_ -match "fixture operator is missing" })
+if (($fixtureOperatorExists -and $missingOperatorIssues.Count -ne 0) -or
+  (-not $fixtureOperatorExists -and $missingOperatorIssues.Count -ne 1)) {
+  throw "Available provider readiness did not bind the exact source-controlled fixture operator."
+}
+$wrongFixture = $available | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+$wrongFixture.profiles.providerFailure.existingGuardedSyntheticFixture.adapterVersion = "synthetic-wrong-v1"
+if (@(Get-ConfigurationIssues $wrongFixture).Count -eq 0) { throw "A non-fixed available fixture was accepted." }
+$blockedWithFixture = $available | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+$blockedWithFixture.profiles.providerFailure.state = "blocked"
+$blockedWithFixture.profiles.providerFailure.blocker = "blocked"
+if (@(Get-ConfigurationIssues $blockedWithFixture).Count -eq 0) { throw "A blocked fixture binding was accepted." }
+$blockedWithNonStringBlocker = $reviewed | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+$blockedWithNonStringBlocker.profiles.providerFailure.blocker = $false
+if (@(Get-ConfigurationIssues $blockedWithNonStringBlocker).Count -eq 0) {
+  throw "A blocked provider profile with a non-string blocker was accepted."
+}
+$outsideEvidence = $available | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+$outsideEvidence.profiles.providerFailure.existingGuardedSyntheticFixture.aggregateResultPath = "outside.json"
+if (@(Get-ReadinessIssues $outsideEvidence | Where-Object { $_ -match "ignored development" }).Count -ne 1) {
+  throw "An available provider result outside ignored private evidence was not rejected."
 }
 $unknownThreshold = $reviewed | ConvertTo-Json -Depth 30 | ConvertFrom-Json
 $unknownThreshold.thresholds.latencyMs | Add-Member NoteProperty inventedSlo 1
@@ -235,10 +310,13 @@ $alertExercise = [pscustomobject]@{
 Assert-AlertDeliveryResults $alertStatus $alertExercise $reviewed.thresholds
 
 $postRun = [pscustomobject]@{
-  profile = "d1_deployed_provider_failure_recovery_v1"; startedAt = $at; endedAt = $later
+  profile = "d1_deployed_provider_failure_recovery_v1"
+  fixtureKind = $providerFixtureKind; sourceId = $providerFixtureSourceId
+  adapterVersion = $providerFixtureAdapterVersion; startedAt = $at; endedAt = $later
   durationMs = 1000; providerFaultsInjected = 1; providerFailuresObserved = 1
   recoveriesSucceeded = 1; cleanupAttempted = $true; cleanupSucceeded = $true
-  postCleanupArtifacts = 0; alertDeliveriesConfirmed = 1; eventQueueAgeMaxSeconds = 0
+  postCleanupArtifacts = 0; retainedAuditRows = 0; retainedDurableExecutions = 1
+  eventQueueAgeMaxSeconds = 0
   eventQueueVisibleMax = 0; eventDeadLetterMax = 0; durableDeadLetterMax = 0
   logErrorMatches = 0; forbiddenLogMatches = 0
 }
@@ -246,9 +324,98 @@ $zeroDrift = [pscustomobject]@{
   profile = "d1_post_run_zero_drift_v1"; checkedAt = $at; sourceSha = "a" * 40
   runtimePlanSha256 = "b" * 64; terraformStateSerial = 197; meaningfulChanges = 0; drift = $false
 }
-Assert-PostRunResults $postRun $zeroDrift $reviewed
+Assert-ProviderFailureResult $postRun $available
+Assert-PostRunZeroDriftResult $zeroDrift $reviewed
+$wrongProviderBinding = $postRun | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+$wrongProviderBinding.sourceId = "synthetic-wrong-v1"
+Assert-Rejected {
+  Assert-ProviderFailureResult $wrongProviderBinding $available
+} "provider aggregate fixture mismatch"
+$deletedHistory = $postRun | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+$deletedHistory.retainedDurableExecutions = 0
+Assert-Rejected {
+  Assert-ProviderFailureResult $deletedHistory $available
+} "deleted durable audit history"
+$unexpectedAuditRow = $postRun | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+$unexpectedAuditRow.retainedAuditRows = 1
+Assert-Rejected {
+  Assert-ProviderFailureResult $unexpectedAuditRow $available
+} "unexpected database audit row"
+$mutableArtifact = $postRun | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+$mutableArtifact.postCleanupArtifacts = 1
+Assert-Rejected {
+  Assert-ProviderFailureResult $mutableArtifact $available
+} "cleanup-required mutable artifact"
+$stringCount = $postRun | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+$stringCount.retainedAuditRows = "0"
+Assert-Rejected {
+  Assert-ProviderFailureResult $stringCount $available
+} "string provider aggregate count"
 $drifted = $zeroDrift | ConvertTo-Json | ConvertFrom-Json
 $drifted.drift = $true
-Assert-Rejected { Assert-PostRunResults $postRun $drifted $reviewed } "post-run drift"
+Assert-Rejected { Assert-PostRunZeroDriftResult $drifted $reviewed } "post-run drift"
+
+foreach ($requiredSource in @(
+    'ProviderFailureAutomated = $providerFailureAutomated',
+    'Accepted = $accepted',
+    'Assert-ProviderFailureResult $providerResult $configuration.Config'
+  )) {
+  if (-not $source.Contains($requiredSource)) {
+    throw "Assessment composition is missing '$requiredSource'."
+  }
+}
+
+$testEvidenceDirectory = Join-Path $evidenceRoot "operator-test-$PID-$([guid]::NewGuid().ToString('N'))"
+$providerResultPath = Join-Path $testEvidenceDirectory "provider-failure.json"
+$assessmentConfigPath = Join-Path $testEvidenceDirectory "config.json"
+$relativeProviderResultPath = "$privateRoot/$([IO.Path]::GetFileName($testEvidenceDirectory))/provider-failure.json"
+$assessmentConfig = $available | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+$assessmentConfig.profiles.providerFailure.existingGuardedSyntheticFixture.aggregateResultPath = $relativeProviderResultPath
+try {
+  $null = New-Item -ItemType Directory -Path $testEvidenceDirectory -Force
+  [IO.File]::WriteAllText(
+    $providerResultPath,
+    ($postRun | ConvertTo-Json -Depth 20),
+    [Text.UTF8Encoding]::new($false)
+  )
+  [IO.File]::WriteAllText(
+    $assessmentConfigPath,
+    ($assessmentConfig | ConvertTo-Json -Depth 30),
+    [Text.UTF8Encoding]::new($false)
+  )
+  $assessmentConfigSha = (Get-FileHash -LiteralPath $assessmentConfigPath -Algorithm SHA256).Hash.ToLowerInvariant()
+  $assessmentOutput = & $hostExecutable -NoProfile -File $operatorPath -Action Assess `
+    -ConfigPath $assessmentConfigPath -ReviewedConfigSha256 $assessmentConfigSha 2>&1
+  if ($LASTEXITCODE -ne 0) {
+    throw "Available-provider assessment failed unexpectedly: $($assessmentOutput -join "`n")"
+  }
+  $assessment = ($assessmentOutput -join "`n") | ConvertFrom-Json
+  if ($assessment.ProviderFailureAutomated -isnot [bool] -or
+    -not [bool]$assessment.ProviderFailureAutomated -or [bool]$assessment.Accepted) {
+    throw "A valid separate provider aggregate was not reported independently of other missing evidence: $($assessmentOutput -join "`n")"
+  }
+
+  $tamperedProviderResult = $postRun | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+  $tamperedProviderResult.retainedDurableExecutions = 0
+  [IO.File]::WriteAllText(
+    $providerResultPath,
+    ($tamperedProviderResult | ConvertTo-Json -Depth 20),
+    [Text.UTF8Encoding]::new($false)
+  )
+  $rejectedAssessmentOutput = & $hostExecutable -NoProfile -File $operatorPath -Action Assess `
+    -ConfigPath $assessmentConfigPath -ReviewedConfigSha256 $assessmentConfigSha 2>&1
+  if ($LASTEXITCODE -ne 0) {
+    throw "Invalid-provider assessment did not return its aggregate rejection: $($rejectedAssessmentOutput -join "`n")"
+  }
+  $rejectedAssessment = ($rejectedAssessmentOutput -join "`n") | ConvertFrom-Json
+  if ($rejectedAssessment.ProviderFailureAutomated -isnot [bool] -or
+    [bool]$rejectedAssessment.ProviderFailureAutomated -or [bool]$rejectedAssessment.Accepted) {
+    throw "An invalid provider aggregate was reported as automated acceptance."
+  }
+} finally {
+  if (Test-Path -LiteralPath $testEvidenceDirectory -PathType Container) {
+    Remove-Item -LiteralPath $testEvidenceDirectory -Recurse -Force
+  }
+}
 
 Write-Output "D1 representative acceptance operator tests passed."

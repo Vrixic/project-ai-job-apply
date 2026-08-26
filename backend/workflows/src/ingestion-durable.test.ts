@@ -2,11 +2,13 @@ import type { DurableContext } from "@aws/durable-execution-sdk-js";
 import { describe, expect, it, vi } from "vitest";
 import {
   createIngestionWorkflow,
+  createProductionIngestionWorkflow,
   isExactNumericLambdaVersionArn,
   validateIngestionActivityInput,
   validateIngestionActivityResult,
   validateIngestionWorkflowInput,
 } from "./ingestion-durable.js";
+import { INGESTION_PROVIDER_FAILURE_FIXTURE_KIND } from "./ingestion-provider-failure-durable.js";
 
 const activityArn = "arn:aws:lambda:us-east-1:123456789012:function:ingestion-activity:7";
 const event = {
@@ -18,6 +20,59 @@ const event = {
 } as const;
 
 describe("ingestion durable workflow", () => {
+  it("dispatches the strict provider-failure discriminator through the production workflow", async () => {
+    const fixture = {
+      schemaVersion: 1,
+      workflowDefinitionVersion: 1,
+      fixtureKind: INGESTION_PROVIDER_FAILURE_FIXTURE_KIND,
+      runId: "3f4d7a90-c1b2-4e6f-8a9b-0123456789ab",
+      reviewedConfigSha256: "a".repeat(64),
+      releaseSourceSha: "b".repeat(40),
+    } as const;
+    const invoke = vi
+      .fn()
+      .mockResolvedValueOnce({
+        schemaVersion: 1,
+        fixtureKind: INGESTION_PROVIDER_FAILURE_FIXTURE_KIND,
+        attempt: 1,
+        status: "retry",
+        reason: "source_unavailable",
+        retryAfterMs: 1_000,
+        providerRequests: 0,
+        observationCount: 0,
+        createdCount: 0,
+        updatedCount: 0,
+      })
+      .mockResolvedValueOnce({
+        schemaVersion: 1,
+        fixtureKind: INGESTION_PROVIDER_FAILURE_FIXTURE_KIND,
+        attempt: 2,
+        status: "succeeded",
+        providerRequests: 0,
+        observationCount: 0,
+        createdCount: 0,
+        updatedCount: 0,
+      });
+    const context = { invoke, wait: vi.fn() } as unknown as DurableContext;
+
+    await expect(
+      createProductionIngestionWorkflow(activityArn)(fixture, context),
+    ).resolves.toMatchObject({
+      profile: "d1_deployed_provider_failure_durable_v1",
+      runId: fixture.runId,
+      reviewedConfigSha256: fixture.reviewedConfigSha256,
+      releaseSourceSha: fixture.releaseSourceSha,
+      providerFaultsInjected: 1,
+      recoveriesSucceeded: 1,
+    });
+    await expect(
+      createProductionIngestionWorkflow(activityArn)(
+        { ...fixture, fixtureKind: "unknown-fixture" } as never,
+        context,
+      ),
+    ).rejects.toThrow("IngestionProviderFailureWorkflowInputRejected");
+  });
+
   it("requires exact versioned ARNs and strict identifier-only contracts", () => {
     expect(isExactNumericLambdaVersionArn(activityArn)).toBe(true);
     expect(isExactNumericLambdaVersionArn(activityArn.replace(":7", ":live"))).toBe(false);

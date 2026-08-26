@@ -4,6 +4,12 @@ import {
   type DurableLambdaHandler,
   withDurableExecution,
 } from "@aws/durable-execution-sdk-js";
+import {
+  createIngestionProviderFailureWorkflow,
+  type IngestionProviderFailureWorkflowInputV1,
+  type IngestionProviderFailureWorkflowResultV1,
+  isIngestionProviderFailureFixtureCandidate,
+} from "./ingestion-provider-failure-durable.js";
 
 export const INGESTION_WORKFLOW_DEFINITION_VERSION = 1 as const;
 
@@ -349,13 +355,34 @@ export function createIngestionDurableHandler(activityArn: string): DurableLambd
   return withDurableExecution(createIngestionWorkflow(activityArn));
 }
 
+type ProductionIngestionWorkflowInput =
+  | IngestionWorkflowInputV1
+  | IngestionProviderFailureWorkflowInputV1;
+type ProductionIngestionWorkflowResult =
+  | IngestionWorkflowResultV1
+  | IngestionProviderFailureWorkflowResultV1;
+
+export function createProductionIngestionWorkflow(
+  activityArn: string,
+): DurableExecutionHandler<ProductionIngestionWorkflowInput, ProductionIngestionWorkflowResult> {
+  return async (event, context) => {
+    if (isIngestionProviderFailureFixtureCandidate(event)) {
+      return createIngestionProviderFailureWorkflow(activityArn)(
+        event as unknown as IngestionProviderFailureWorkflowInputV1,
+        context,
+      );
+    }
+    return createIngestionWorkflow(activityArn)(event as IngestionWorkflowInputV1, context);
+  };
+}
+
 const productionWorkflow: DurableExecutionHandler<
-  IngestionWorkflowInputV1,
-  IngestionWorkflowResultV1
+  ProductionIngestionWorkflowInput,
+  ProductionIngestionWorkflowResult
 > = async (event, context) => {
   const activityArn = process.env.INGESTION_ACTIVITY_FUNCTION_ARN;
   if (!activityArn) throw new Error("INGESTION_ACTIVITY_FUNCTION_ARN is required");
-  return createIngestionWorkflow(activityArn)(event, context);
+  return createProductionIngestionWorkflow(activityArn)(event, context);
 };
 
 export const handler = withDurableExecution(productionWorkflow);

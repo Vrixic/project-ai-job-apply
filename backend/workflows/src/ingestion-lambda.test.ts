@@ -4,6 +4,7 @@ import type { EventBridgeEvent, SQSEvent } from "aws-lambda";
 import { describe, expect, it, vi } from "vitest";
 import {
   AwsIngestionDurableStatusReader,
+  activity,
   assertIngestionActivityDispatch,
   buildIngestionDispatchNudge,
   createIngestionStarterHandler,
@@ -17,9 +18,11 @@ import {
   publishClaimedIngestionDispatch,
   requireInvokedActivityVersionArn,
   requireScheduledEvent,
+  runIngestionProviderFailureActivity,
   safeIngestionTransportErrorCode,
   verifyIngestionDispatchNudge,
 } from "./ingestion-lambda.js";
+import { INGESTION_PROVIDER_FAILURE_FIXTURE_KIND } from "./ingestion-provider-failure-durable.js";
 
 const dispatchId = "018f47a6-7b2c-7ee1-8c09-3ea174e80e2d";
 const executionId = "a".repeat(64);
@@ -58,6 +61,69 @@ function sqs(body: string): SQSEvent {
 }
 
 describe("ingestion Lambda transport", () => {
+  it("runs the exact provider-failure activity contract without runtime or provider I/O", async () => {
+    const fixtureInput = {
+      schemaVersion: 1,
+      workflowDefinitionVersion: 1,
+      fixtureKind: INGESTION_PROVIDER_FAILURE_FIXTURE_KIND,
+      runId: "3f4d7a90-c1b2-4e6f-8a9b-0123456789ab",
+      reviewedConfigSha256: "a".repeat(64),
+      releaseSourceSha: "b".repeat(40),
+    } as const;
+    await expect(
+      runIngestionProviderFailureActivity({ ...fixtureInput, attempt: 1 }),
+    ).resolves.toEqual({
+      schemaVersion: 1,
+      fixtureKind: INGESTION_PROVIDER_FAILURE_FIXTURE_KIND,
+      attempt: 1,
+      status: "retry",
+      reason: "source_unavailable",
+      retryAfterMs: 1_000,
+      providerRequests: 0,
+      observationCount: 0,
+      createdCount: 0,
+      updatedCount: 0,
+    });
+    await expect(
+      runIngestionProviderFailureActivity({ ...fixtureInput, attempt: 2 }),
+    ).resolves.toEqual({
+      schemaVersion: 1,
+      fixtureKind: INGESTION_PROVIDER_FAILURE_FIXTURE_KIND,
+      attempt: 2,
+      status: "succeeded",
+      providerRequests: 0,
+      observationCount: 0,
+      createdCount: 0,
+      updatedCount: 0,
+    });
+    await expect(
+      runIngestionProviderFailureActivity({ ...fixtureInput, attempt: 3 }),
+    ).rejects.toThrow("IngestionProviderFailureActivityInputRejected");
+    await expect(
+      runIngestionProviderFailureActivity({ ...fixtureInput, attempt: 1, raw: "provider" }),
+    ).rejects.toThrow("IngestionProviderFailureActivityInputRejected");
+
+    const previousVersion = process.env.AWS_LAMBDA_FUNCTION_VERSION;
+    process.env.AWS_LAMBDA_FUNCTION_VERSION = "9";
+    try {
+      await expect(
+        activity(
+          { ...fixtureInput, attempt: 1 },
+          { invokedFunctionArn: activityFunctionArn } as never,
+          vi.fn(),
+        ),
+      ).resolves.toMatchObject({
+        fixtureKind: INGESTION_PROVIDER_FAILURE_FIXTURE_KIND,
+        attempt: 1,
+        status: "retry",
+        providerRequests: 0,
+      });
+    } finally {
+      if (previousVersion === undefined) delete process.env.AWS_LAMBDA_FUNCTION_VERSION;
+      else process.env.AWS_LAMBDA_FUNCTION_VERSION = previousVersion;
+    }
+  });
+
   it("binds the generated-synthetic adapter and policy configuration into one digest", () => {
     expect(adapterConfigSha256).toMatch(/^[a-f0-9]{64}$/u);
     expect(generatedSyntheticConfigSha256("foundation02")).not.toBe(adapterConfigSha256);

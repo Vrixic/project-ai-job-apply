@@ -96,3 +96,103 @@ is not the real-time persisted source-pause control.
 
 This source packet does not prove artifact publication, Terraform apply, AWS execution, exact
 provider activation, dynamic persisted source-pause operation, or production ingestion.
+
+## Guarded development artifact release
+
+Use `scripts/operate-development-ingestion-dark-release.ps1` to replace only the two immutable
+ingestion ZIPs in the already-deployed development runtime. This is a release operator, not an
+activation operator. Every action preserves:
+
+- `deploy_ingestion_runtime = true`;
+- `ingestion_runtime_enabled = false`;
+- `ingestion_synthetic_source_enabled = false`;
+- `ingestion_provider_activation_allowed = false`;
+- `ingestion_provider_private_egress = false`;
+- `ingestion_provider_sources = []`.
+
+The reviewed publication receipt must be the exact verified eight-object
+`development-ingestion-lambda-publication` receipt for the merged source. It contains ZIP,
+CycloneDX, manifest, and checksum objects for each of `ingestion-durable-lambda` and
+`ingestion-runtime-lambda`. Supply the receipt only from the ignored development `.terraform`
+directory and bind its independently reviewed SHA-256. The operator rejects missing, duplicate,
+mutable, source-mismatched, or non-versioned coordinates. Its `boundarySha256` must also match the
+exact Terraform-owned artifact bucket and platform KMS key in the encrypted reviewed state.
+
+The baseline must be a checksum-reviewed, refresh-backed zero-drift plan for the current deployed
+state. Its exact current variable inventory is retained; the release overlays only the eight
+Terraform artifact coordinates for the two ZIPs and reasserts the dark gates above. The baseline's
+eight coordinates are retained as explicit rollback coordinates. This does not authorize rollback;
+a rollback requires its own reviewed plan and receipt.
+
+Before using AWS, use a clean `main` checkout exactly equal to `origin/main` and the supplied source
+SHA. Use a fresh temporary IAM Identity Center session in the exact development account and
+`us-east-2`. Supply the customer-KMS, versioned, public-blocked Terraform state bucket and the exact
+reviewed state lineage and serial.
+
+Validate the local receipt and baseline without AWS mutation:
+
+```powershell
+.\scripts\operate-development-ingestion-dark-release.ps1 -Action Validate `
+  -SourceSha '<merged-source-sha>' `
+  -PublicationReceiptPath '<ignored-verified-ingestion-publication-receipt.json>' `
+  -ReviewedPublicationReceiptSha256 '<reviewed-publication-receipt-sha256>' `
+  -BaselinePlanPath '<ignored-current-zero-drift-plan.tfplan>' `
+  -ReviewedBaselinePlanSha256 '<reviewed-baseline-plan-sha256>'
+```
+
+Create the saved refresh-backed plan and its exclusive checksum receipt:
+
+```powershell
+.\scripts\operate-development-ingestion-dark-release.ps1 -Action Plan `
+  <all Validate arguments> `
+  -ExpectedAccountId '<development-account-id>' -StateBucket '<state-bucket>' `
+  -ExpectedStateLineage '<reviewed-state-lineage>' -ExpectedStateSerial '<reviewed-state-serial>' `
+  -PlanPath '<ignored-new-release.tfplan>' `
+  -PlanReceiptPath '<ignored-new-release-plan-receipt.json>'
+```
+
+The plan must contain exactly nine enumerated artifact-caused changes: the activity and three
+runtime functions, their four aliases, and the durable CloudFormation stack. Computed version
+values within those resources may remain unknown until apply, but no additional resource may change.
+Only the durable-version output may change. Routes, NAT/EIP, queues, mappings, schedules, terminal
+rules, provider configuration, database/ECS task definitions, APIs, and data mutations are forbidden.
+The plan receipt binds the plan checksum, source and publication, pre-apply state version,
+enumerated changes, exact release coordinates, rollback coordinates, and dark gates. Independently
+review and hash both the saved plan receipt and the plan before apply.
+
+Apply only that exact checksum-reviewed saved plan:
+
+```powershell
+.\scripts\operate-development-ingestion-dark-release.ps1 -Action Execute `
+  <all Plan inputs except output paths> `
+  -PlanReceiptPath '<ignored-new-release-plan-receipt.json>' `
+  -ReviewedPlanReceiptSha256 '<reviewed-plan-receipt-sha256>'
+```
+
+Never substitute a new plan at Execute. Stop on an ambiguous or failed apply; do not re-plan or
+retry until state and AWS have been inspected against the retained receipt and rollback coordinates.
+
+Verify after a successful apply:
+
+```powershell
+.\scripts\operate-development-ingestion-dark-release.ps1 -Action Verify `
+  <all Execute inputs> `
+  -VerificationReceiptPath '<ignored-verification-receipt.json>'
+```
+
+Verify requires exact published code hashes, active numeric versions, unweighted development
+aliases, a complete durable CloudFormation stack, disabled schedule and terminal rules, one disabled
+dispatch mapping, empty dispatch and dead-letter queues, no pending/available NAT gateway, and zero
+running ECS tasks or services. Terraform outputs must still prove the deployed runtime and all four
+dark gates with zero provider sources. It then creates a new `-refresh=true -detailed-exitcode`
+Terraform plan from the applied variables and accepts only zero resource and output changes. The
+exclusive private verification receipt retains release and rollback coordinates plus the fresh
+zero-drift plan checksum. No step invokes a provider or processes candidate/job data.
+
+Run the pure offline contract suite in both supported PowerShell hosts before credentials are used:
+
+```powershell
+pwsh -NoProfile -File scripts/tests/development-ingestion-dark-release-operator.tests.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
+  scripts/tests/development-ingestion-dark-release-operator.tests.ps1
+```

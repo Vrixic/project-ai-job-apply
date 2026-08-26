@@ -22,9 +22,11 @@ Usage:
 
 Validate accepts the source-controlled draft and reports why it is not executable. Plan and Assess
 require an exact reviewed configuration checksum. Assess consumes only aggregate D1 workload and
-AWS corroboration JSON below the ignored development .terraform acceptance directory. Execute is
-fail-closed while the required provider-failure profile has no supported guarded synthetic fixture.
-No action invokes GitHub Actions, Vercel, Docker, WSL, a provider, AWS mutation, or candidate data.
+AWS corroboration JSON below the ignored development .terraform acceptance directory. An available
+provider-failure profile must bind the fixed generated-synthetic fixture, its source-controlled
+operator, and its private aggregate result. Execute remains fail-closed in this evidence composer;
+run the separately reviewed fixture operator directly. No action here invokes GitHub Actions,
+Vercel, Docker, WSL, a provider, AWS mutation, or candidate data.
 "@
   exit 0
 }
@@ -38,6 +40,10 @@ $requiredArtifactNames = @(
   "profile-readiness-durable",
   "profile-readiness-activity"
 )
+$providerFixtureKind = "d1-generated-synthetic-provider-failure-v1"
+$providerFixtureSourceId = "synthetic-d1-provider-fault-v1"
+$providerFixtureAdapterVersion = "synthetic-d1-provider-fault-v1"
+$providerFixtureOperatorPath = "scripts/operate-development-d1-provider-failure-acceptance.ps1"
 
 function Resolve-RepositoryPath {
   param([Parameter(Mandatory)][string]$Path)
@@ -55,7 +61,12 @@ function ConvertFrom-StrictJson {
     [Parameter(Mandatory)][string]$Json,
     [Parameter(Mandatory)][string]$Description
   )
-  try { return $Json | ConvertFrom-Json }
+  try {
+    if ((Get-Command ConvertFrom-Json).Parameters.ContainsKey("DateKind")) {
+      return $Json | ConvertFrom-Json -DateKind String
+    }
+    return $Json | ConvertFrom-Json
+  }
   catch { throw "$Description is not valid JSON." }
 }
 
@@ -89,7 +100,7 @@ function Test-CanonicalTimestamp {
 
 function Test-IntegerValue {
   param([object]$Value, [int]$Minimum)
-  if ($null -eq $Value -or $Value -is [bool]) { return $false }
+  if ($null -eq $Value -or $Value -is [bool] -or $Value -isnot [ValueType]) { return $false }
   try { return ([long]$Value -eq [double]$Value) -and [long]$Value -ge $Minimum }
   catch { return $false }
 }
@@ -105,7 +116,7 @@ function Get-ConfigurationIssues {
       "sourceSha", "terraformStateSerial", "runtimePlanPath", "runtimePlanSha256", "artifacts", "migrationImage"
     ) "Release"
     Assert-ExactProperties $Config.run @(
-      "runId", "generatedSyntheticOnly", "oneRunOnly", "cleanupRequired", "recoveryRequired", "ledgerPath"
+      "runId", "generatedSyntheticOnly", "oneRunOnly", "cleanupRequired", "recoveryRequired"
     ) "Run"
     Assert-ExactProperties $Config.thresholds @(
       "concurrency", "durationMs", "latencyMs", "errors", "queues", "alerts"
@@ -174,17 +185,44 @@ function Get-ConfigurationIssues {
     Assert-ExactProperties $Config.profiles.providerFailure @(
       "required", "state", "blocker", "existingGuardedSyntheticFixture"
     ) "profiles.providerFailure"
-    if ([string]$Config.profiles.providerFailure.state -cne "blocked" -or
-      [string]::IsNullOrWhiteSpace([string]$Config.profiles.providerFailure.blocker) -or
-      $null -ne $Config.profiles.providerFailure.existingGuardedSyntheticFixture) {
-      $issues.Add("providerFailure must retain the fail-closed blocked placeholder")
+    if ($Config.profiles.providerFailure.required -isnot [bool] -or
+      -not [bool]$Config.profiles.providerFailure.required) {
+      $issues.Add("profiles.providerFailure.required must be true")
+    }
+    $providerState = [string]$Config.profiles.providerFailure.state
+    $fixture = $Config.profiles.providerFailure.existingGuardedSyntheticFixture
+    if ($providerState -ceq "blocked") {
+      if ($Config.profiles.providerFailure.blocker -isnot [string] -or
+        [string]::IsNullOrWhiteSpace($Config.profiles.providerFailure.blocker) -or
+        $null -ne $fixture) {
+        $issues.Add("blocked providerFailure requires one blocker and no fixture binding")
+      }
+    } elseif ($providerState -ceq "available") {
+      if ($null -ne $Config.profiles.providerFailure.blocker -or $null -eq $fixture) {
+        $issues.Add("available providerFailure requires no blocker and one exact fixture binding")
+      } else {
+        try {
+          Assert-ExactProperties $fixture @(
+            "kind", "sourceId", "adapterVersion", "operatorPath", "aggregateResultPath"
+          ) "profiles.providerFailure.existingGuardedSyntheticFixture"
+          if ([string]$fixture.kind -cne $providerFixtureKind -or
+            [string]$fixture.sourceId -cne $providerFixtureSourceId -or
+            [string]$fixture.adapterVersion -cne $providerFixtureAdapterVersion -or
+            [string]$fixture.operatorPath -cne $providerFixtureOperatorPath -or
+            [string]::IsNullOrWhiteSpace([string]$fixture.aggregateResultPath)) {
+            $issues.Add("available providerFailure does not bind the exact guarded fixture")
+          }
+        } catch { $issues.Add($_.Exception.Message) }
+      }
+    } else {
+      $issues.Add("profiles.providerFailure.state must be blocked or available")
     }
   } catch { $issues.Add($_.Exception.Message) }
   try {
     Assert-ExactProperties $Config.profiles.alertDelivery @(
       "required", "statusResultPath", "exerciseResultPath", "operatorDeliveryConfirmed"
     ) "profiles.alertDelivery"
-    Assert-ExactProperties $Config.profiles.postRun @("aggregateResultPath", "zeroDriftResultPath") "profiles.postRun"
+    Assert-ExactProperties $Config.profiles.postRun @("zeroDriftResultPath") "profiles.postRun"
   } catch { $issues.Add($_.Exception.Message) }
 
   if ($null -ne $Config.release.sourceSha -and [string]$Config.release.sourceSha -notmatch '^[0-9a-f]{40}$') {
@@ -223,7 +261,7 @@ function Get-ReadinessIssues {
   if ([string]$Config.status -cne "reviewed") { $issues.Add("configuration status is not reviewed") }
   foreach ($path in @(
       "release.sourceSha", "release.terraformStateSerial", "release.runtimePlanPath",
-      "release.runtimePlanSha256", "run.runId", "run.ledgerPath"
+      "release.runtimePlanSha256", "run.runId"
     )) {
     $parts = $path.Split('.')
     if ($null -eq $Config.($parts[0]).($parts[1]) -or [string]::IsNullOrWhiteSpace([string]$Config.($parts[0]).($parts[1]))) {
@@ -235,7 +273,7 @@ function Get-ReadinessIssues {
   if ($null -ne $Config.thresholds.concurrency.read -and [int]$Config.thresholds.concurrency.read -ne 2) {
     $issues.Add("the reviewed read concurrency must match the fixed deployed development profile concurrency of 2")
   }
-  foreach ($name in @("savedJob", "match")) {
+  foreach ($name in @("savedJob", "match", "providerFailure")) {
     if ($null -ne $Config.thresholds.concurrency.$name -and [int]$Config.thresholds.concurrency.$name -ne 1) {
       $issues.Add("the reviewed $name concurrency must match its single-flight profile concurrency of 1")
     }
@@ -271,13 +309,37 @@ function Get-ReadinessIssues {
     -not [bool]$Config.profiles.alertDelivery.operatorDeliveryConfirmed) {
     $issues.Add("alert delivery requires attributable operator confirmation")
   }
-  foreach ($property in @("aggregateResultPath", "zeroDriftResultPath")) {
-    if ([string]::IsNullOrWhiteSpace([string]$Config.profiles.postRun.$property)) {
-      $issues.Add("profiles.postRun.$property is required")
-    }
+  if ([string]::IsNullOrWhiteSpace([string]$Config.profiles.postRun.zeroDriftResultPath)) {
+    $issues.Add("profiles.postRun.zeroDriftResultPath is required")
   }
-  $issues.Add("provider-failure/fault/recovery automation is blocked: $($Config.profiles.providerFailure.blocker)")
+  if ([string]$Config.profiles.providerFailure.state -ceq "blocked") {
+    $issues.Add("provider-failure/fault/recovery automation is blocked: $($Config.profiles.providerFailure.blocker)")
+  } else {
+    $fixture = $Config.profiles.providerFailure.existingGuardedSyntheticFixture
+    try {
+      $null = Resolve-FixtureOperatorSourcePath -Path ([string]$fixture.operatorPath) -RequireFile
+    } catch { $issues.Add($_.Exception.Message) }
+    try {
+      $null = Resolve-PrivateEvidencePath -Path ([string]$fixture.aggregateResultPath) -RequireFile
+    } catch { $issues.Add($_.Exception.Message) }
+  }
   return @($issues)
+}
+
+function Resolve-FixtureOperatorSourcePath {
+  param([Parameter(Mandatory)][string]$Path, [switch]$RequireFile)
+  if ($Path -cne $providerFixtureOperatorPath) {
+    throw "The provider-failure fixture operator must use the exact reviewed repository path."
+  }
+  $resolved = Resolve-RepositoryPath $Path
+  $prefix = $repositoryRoot + [IO.Path]::DirectorySeparatorChar
+  if (-not $resolved.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "The provider-failure fixture operator must remain in repository source."
+  }
+  if ($RequireFile -and -not (Test-Path -LiteralPath $resolved -PathType Leaf)) {
+    throw "The source-controlled provider-failure fixture operator is missing."
+  }
+  return $resolved
 }
 
 function Resolve-PrivateEvidencePath {
@@ -422,40 +484,63 @@ function Assert-AlertDeliveryResults {
   }
 }
 
-function Assert-PostRunResults {
+function Assert-ProviderFailureResult {
   param(
     [Parameter(Mandatory)][object]$Aggregate,
-    [Parameter(Mandatory)][object]$ZeroDrift,
     [Parameter(Mandatory)][object]$Config
   )
   Assert-ExactProperties $Aggregate @(
-    "profile", "startedAt", "endedAt", "durationMs", "providerFaultsInjected",
+    "profile", "fixtureKind", "sourceId", "adapterVersion", "startedAt", "endedAt",
+    "durationMs", "providerFaultsInjected",
     "providerFailuresObserved", "recoveriesSucceeded", "cleanupAttempted", "cleanupSucceeded",
-    "postCleanupArtifacts", "alertDeliveriesConfirmed", "eventQueueAgeMaxSeconds",
-    "eventQueueVisibleMax", "eventDeadLetterMax", "durableDeadLetterMax", "logErrorMatches",
-    "forbiddenLogMatches"
-  ) "Post-run aggregate"
-  Assert-ExactProperties $ZeroDrift @(
-    "profile", "checkedAt", "sourceSha", "runtimePlanSha256", "terraformStateSerial",
-    "meaningfulChanges", "drift"
-  ) "Post-run zero-drift aggregate"
+    "postCleanupArtifacts", "retainedAuditRows", "retainedDurableExecutions",
+    "eventQueueAgeMaxSeconds", "eventQueueVisibleMax", "eventDeadLetterMax",
+    "durableDeadLetterMax", "logErrorMatches", "forbiddenLogMatches"
+  ) "Provider-failure aggregate"
+  foreach ($name in @(
+      "providerFaultsInjected", "providerFailuresObserved", "recoveriesSucceeded",
+      "postCleanupArtifacts", "retainedAuditRows", "retainedDurableExecutions",
+      "eventQueueAgeMaxSeconds", "eventQueueVisibleMax", "eventDeadLetterMax",
+      "durableDeadLetterMax", "logErrorMatches", "forbiddenLogMatches"
+    )) {
+    if (-not (Test-IntegerValue $Aggregate.$name 0)) {
+      throw "Provider-failure aggregate count $name must be a nonnegative integer."
+    }
+  }
   $thresholds = $Config.thresholds
   if ([string]$Aggregate.profile -cne "d1_deployed_provider_failure_recovery_v1" -or
+    [string]$Aggregate.fixtureKind -cne $providerFixtureKind -or
+    [string]$Aggregate.sourceId -cne $providerFixtureSourceId -or
+    [string]$Aggregate.adapterVersion -cne $providerFixtureAdapterVersion -or
     -not (Test-CanonicalTimestamp $Aggregate.startedAt) -or -not (Test-CanonicalTimestamp $Aggregate.endedAt) -or
+    [DateTimeOffset]::Parse([string]$Aggregate.endedAt) -lt [DateTimeOffset]::Parse([string]$Aggregate.startedAt) -or
+    -not (Test-IntegerValue $Aggregate.durationMs 1) -or
     [int]$Aggregate.durationMs -gt [int]$thresholds.durationMs.providerFailure -or
     [int]$Aggregate.providerFaultsInjected -ne 1 -or [int]$Aggregate.providerFailuresObserved -ne 1 -or
     [int]$Aggregate.recoveriesSucceeded -ne 1 -or $Aggregate.cleanupAttempted -isnot [bool] -or
     -not [bool]$Aggregate.cleanupAttempted -or $Aggregate.cleanupSucceeded -isnot [bool] -or
-    -not [bool]$Aggregate.cleanupSucceeded -or [int]$Aggregate.postCleanupArtifacts -ne 0 -or
-    [int]$Aggregate.alertDeliveriesConfirmed -lt 1 -or
+    -not [bool]$Aggregate.cleanupSucceeded -or
+    [int]$Aggregate.postCleanupArtifacts -ne 0 -or
+    [int]$Aggregate.retainedAuditRows -ne 0 -or [int]$Aggregate.retainedDurableExecutions -ne 1 -or
     [decimal]$Aggregate.eventQueueAgeMaxSeconds -gt [decimal]$thresholds.queues.maxOldestAgeSeconds -or
     [decimal]$Aggregate.eventQueueVisibleMax -gt [decimal]$thresholds.queues.maxVisible -or
     [decimal]$Aggregate.eventDeadLetterMax -gt [decimal]$thresholds.queues.maxEventDlq -or
     [decimal]$Aggregate.durableDeadLetterMax -gt [decimal]$thresholds.queues.maxDurableDlq -or
     [int]$Aggregate.logErrorMatches -gt [int]$thresholds.errors.maxErrorLogMatches -or
     [int]$Aggregate.forbiddenLogMatches -gt [int]$thresholds.errors.maxForbiddenLogMatches) {
-    throw "Post-run provider failure, cleanup, recovery, queue, or privacy evidence did not pass."
+    throw "Provider failure, recovery, mutable cleanup, retained history, queue, or privacy evidence did not pass."
   }
+}
+
+function Assert-PostRunZeroDriftResult {
+  param(
+    [Parameter(Mandatory)][object]$ZeroDrift,
+    [Parameter(Mandatory)][object]$Config
+  )
+  Assert-ExactProperties $ZeroDrift @(
+    "profile", "checkedAt", "sourceSha", "runtimePlanSha256", "terraformStateSerial",
+    "meaningfulChanges", "drift"
+  ) "Post-run zero-drift aggregate"
   if ([string]$ZeroDrift.profile -cne "d1_post_run_zero_drift_v1" -or
     -not (Test-CanonicalTimestamp $ZeroDrift.checkedAt) -or
     [string]$ZeroDrift.sourceSha -cne [string]$Config.release.sourceSha -or
@@ -503,7 +588,7 @@ if ($Action -ceq "Execute") {
   if ($readinessIssues.Count -ne 0) {
     throw "Execution is fail-closed: $($readinessIssues -join '; ')."
   }
-  throw "Execution is unavailable until a supported guarded generated-synthetic provider fixture is implemented and reviewed."
+  throw "Execution remains fail-closed in the representative evidence composer. Run the exact reviewed provider-failure fixture operator separately."
 }
 
 # Assess validates only already-produced aggregate evidence. It deliberately cannot create a
@@ -522,6 +607,16 @@ foreach ($profile in $applicationProfiles.GetEnumerator()) {
   } catch { $assessmentIssues.Add($_.Exception.Message) }
 }
 
+$providerFailureAutomated = $false
+if ([string]$configuration.Config.profiles.providerFailure.state -ceq "available") {
+  try {
+    $fixture = $configuration.Config.profiles.providerFailure.existingGuardedSyntheticFixture
+    $providerResult = Read-AggregateJson $fixture.aggregateResultPath "Provider-failure aggregate"
+    Assert-ProviderFailureResult $providerResult $configuration.Config
+    $providerFailureAutomated = $true
+  } catch { $assessmentIssues.Add($_.Exception.Message) }
+}
+
 $alertDeliveryAccepted = $false
 try {
   $alertStatus = Read-AggregateJson $configuration.Config.profiles.alertDelivery.statusResultPath "Alert status aggregate"
@@ -532,11 +627,15 @@ try {
 
 $postRunAccepted = $false
 try {
-  $postAggregate = Read-AggregateJson $configuration.Config.profiles.postRun.aggregateResultPath "Post-run aggregate"
   $zeroDrift = Read-AggregateJson $configuration.Config.profiles.postRun.zeroDriftResultPath "Post-run zero-drift aggregate"
-  Assert-PostRunResults $postAggregate $zeroDrift $configuration.Config
+  Assert-PostRunZeroDriftResult $zeroDrift $configuration.Config
   $postRunAccepted = $true
 } catch { $assessmentIssues.Add($_.Exception.Message) }
+
+$accepted = (
+  $assessmentIssues.Count -eq 0 -and $passedProfiles -eq $applicationProfiles.Count -and
+  $providerFailureAutomated -and $alertDeliveryAccepted -and $postRunAccepted
+)
 
 [pscustomobject]@{
   SchemaVersion = 1
@@ -544,10 +643,10 @@ try {
   ConfigSha256 = $configuration.Hash
   ApplicationAwsProfilesPassed = $passedProfiles
   ApplicationAwsProfilesRequired = 3
-  ProviderFailureAutomated = $false
+  ProviderFailureAutomated = $providerFailureAutomated
   AlertDeliveryAccepted = $alertDeliveryAccepted
   PostRunZeroDriftAccepted = $postRunAccepted
   AggregateMetricsOnly = $true
-  Accepted = $false
+  Accepted = $accepted
   BlockingIssues = @($assessmentIssues | Select-Object -Unique)
 } | ConvertTo-Json -Depth 10

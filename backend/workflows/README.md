@@ -62,3 +62,12 @@ The production artifact and Terraform composition remain dark by default. Deploy
 environment-wide runtime activation, schedule/queue mapping, provider authority, and each source's
 enable flag are ordered independent gates. Repository environment defaults supply an empty provider
 list and enable none of them.
+
+The same exact durable and activity artifacts also contain one operator-only Phase 1 assurance
+contract. A strict generated-synthetic input, named from a reviewed run UUID, invokes the fixed
+`synthetic-d1-provider-fault-v1` adapter at attempt 1, waits durably for one second, and invokes it
+again at attempt 2. The first call returns only `source_unavailable`; the second returns an empty
+success. This path is absent from the schedulable source registry, performs no database or provider
+I/O, produces no catalog rows, and has no EventBridge, SQS, API, or resource-based trigger. It is
+reachable only through an explicitly authorized direct IAM invocation of an exact numeric durable
+version while the guarded acceptance operator proves every normal/provider gate remains off.

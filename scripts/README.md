@@ -27,6 +27,16 @@ both AWS environments accepted the steady-state serverless runtime.
   verifies exact-version readback, and writes a checksum-reviewed ignored receipt without changing
   a Lambda, alias, trigger, Terraform state, or database. See
   `infrastructure/runbooks/deployments/development-workflow-lambda-publication.md`.
+- `operate-development-ingestion-lambda-publication.ps1` — Reproducibly publishes and
+  exact-version verifies only the ingestion durable and runtime artifact sets below the dedicated
+  `lambda/ingestion` boundary. It writes no Lambda, alias, trigger, Terraform, database, or
+  provider state. See
+  `infrastructure/runbooks/deployments/development-ingestion-lambda-publication.md`.
+- `operate-development-ingestion-dark-release.ps1` — Plans, applies, and verifies only the
+  checksum-reviewed ingestion durable/runtime artifact update while preserving disabled sources,
+  provider authority, private egress, schedules, and queue mapping. Verification requires exact
+  numeric unweighted versions, empty queues, idle ECS, no NAT, and fresh zero drift. See
+  `infrastructure/runbooks/providers/synthetic-ingestion-dark-release.md`.
 - `operate-development-public-job-lambda-publication.ps1` — Publishes and exact-version verifies
   the separate anonymous edge and private projection artifacts from clean, exact merged source.
   It cannot deploy a function, move an alias, enable the anonymous routes or indexing, apply
@@ -61,10 +71,15 @@ migration execution, or AWS restore execution. No gateway or general worker imag
 ## Deployed verification and evidence
 
 - `operate-d1-representative-acceptance.ps1` — Validates a checksum-reviewed, aggregate-only D1
-  representative-assurance packet with explicit thresholds and recipients. It has no defaults and
-  remains deliberately non-executable until a guarded generated-synthetic provider fault/recovery
-  fixture exists. See
+  representative-assurance packet with explicit thresholds and recipients. It composes already
+  produced workload, provider-failure, alert-delivery, and zero-drift aggregates and never performs
+  the fixture mutation itself. See
   `infrastructure/runbooks/observability/d1-representative-deployed-acceptance.md`.
+- `operate-development-d1-provider-failure-acceptance.ps1` — Plans, runs, resumes, and verifies
+  exactly one IAM-invoked generated-synthetic fail-once/recover execution through the deployed
+  numeric ingestion durable/activity versions while every scheduler, provider, NAT, queue mapping,
+  and normal synthetic-source gate remains off. See
+  `infrastructure/runbooks/observability/development-d1-provider-failure-acceptance.md`.
 - `operate-development-candidate-rights-acceptance.ps1` — Plans, executes, recovers, and verifies
   one generated-synthetic candidate export/deletion lifecycle only after exact policy, backup,
   Auth0, identity, runtime, and zero-drift prerequisites pass. See

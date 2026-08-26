@@ -49,6 +49,9 @@ Every alert and privileged admin operation should link to a relevant runbook.
   Reproducibly publishes and exact-version verifies the three current-source workflow
   ingress/profile-readiness artifact sets without changing Lambda runtime, aliases, triggers,
   Terraform, or the database.
+- [Development ingestion Lambda publication](deployments/development-ingestion-lambda-publication.md) —
+  Reproducibly publishes and exact-version verifies only the ingestion durable and runtime
+  artifact sets without changing Lambda runtime, aliases, triggers, Terraform, or the database.
 - [Development public-job Lambda publication](deployments/development-public-job-lambda-publication.md) —
   Reproducibly publishes and exact-version verifies the isolated anonymous edge and private
   projection artifacts without deploying them, enabling either anonymous route, or changing
@@ -65,6 +68,6 @@ Every alert and privileged admin operation should link to a relevant runbook.
   Executes the generated-synthetic direct-dark document lifecycle with exact runtime, claim,
   privacy, recovery, and cleanup guards while all document-processing triggers remain disabled.
 - [Ingestion dark release](providers/synthetic-ingestion-dark-release.md) — Verifies the durable
-  ingestion packet, its generated-synthetic and bounded public ATS adapters, provider/source
-  default-off controls, and shared lifecycle activation authority without authorizing publication,
-  AWS mutation, provider activation, or real data.
+  ingestion packet and provides the checksum-gated local artifact Plan/Execute/Verify path while
+  preserving generated-synthetic/provider/source/private-egress controls, schedules, and queue
+  mapping default-off. It grants no provider activation or real-data authority.
