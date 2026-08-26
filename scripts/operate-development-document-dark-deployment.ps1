@@ -2121,10 +2121,13 @@ function Assert-LiveDarkBoundary {
   Assert-ExactDocumentAlarmSet @($alarms.MetricAlarms) $alarmNames $topicArn
   $endpoints = Invoke-AwsJson @("ec2", "describe-vpc-endpoints", "--filters", "Name=vpc-id,Values=$vpcId", "--output", "json")
   foreach ($service in @("s3", "sts", "lambda", "sqs", "secretsmanager")) {
-    $matching = @($endpoints.VpcEndpoints | Where-Object { $_.ServiceName -eq "com.amazonaws.$Region.$service" -and $_.State -eq "available" })
-    if ($matching.Count -ne 1) { throw "The exact available $service VPC endpoint is missing." }
     $address = if ($service -eq "s3") { "module.platform.aws_vpc_endpoint.candidate_documents_s3[0]" } else { "module.platform.aws_vpc_endpoint.$service[0]" }
     $expectedEndpoint = $state[$address]
+    $matching = @($endpoints.VpcEndpoints | Where-Object {
+        [string]$_.VpcEndpointId -ceq [string]$expectedEndpoint.id -and
+        [string]$_.ServiceName -ceq "com.amazonaws.$Region.$service" -and [string]$_.State -ceq "available"
+      })
+    if ($matching.Count -ne 1) { throw "The exact Terraform-owned available $service VPC endpoint is missing." }
     $expectedType = if ($service -eq "s3") { "Gateway" } else { "Interface" }
     if ([string]$matching[0].VpcEndpointType -cne $expectedType -or [string]$matching[0].VpcId -cne $vpcId -or
       ($service -ne "s3" -and -not (ConvertTo-ExactBoolean $matching[0].PrivateDnsEnabled "$service PrivateDnsEnabled")) -or
@@ -2226,9 +2229,13 @@ function Assert-LiveParserDarkBoundary {
   Assert-ExactDocumentAlarmSet @($alarms.MetricAlarms) $alarmNames ([string]$state["module.platform.aws_sns_topic.operational_alerts"].arn)
   $endpoints = Invoke-AwsJson @("ec2", "describe-vpc-endpoints", "--filters", "Name=vpc-id,Values=$vpcId", "--output", "json")
   foreach ($service in @("s3", "lambda", "sqs", "secretsmanager")) {
-    $matching = @($endpoints.VpcEndpoints | Where-Object { $_.ServiceName -eq "com.amazonaws.$Region.$service" -and $_.State -eq "available" })
-    if ($matching.Count -ne 1) { throw "The parser-dark $service endpoint boundary is unavailable." }
     $address = if ($service -eq "s3") { "module.platform.aws_vpc_endpoint.candidate_documents_s3[0]" } else { "module.platform.aws_vpc_endpoint.$service[0]" }
+    $expectedEndpoint = $state[$address]
+    $matching = @($endpoints.VpcEndpoints | Where-Object {
+        [string]$_.VpcEndpointId -ceq [string]$expectedEndpoint.id -and
+        [string]$_.ServiceName -ceq "com.amazonaws.$Region.$service" -and [string]$_.State -ceq "available"
+      })
+    if ($matching.Count -ne 1) { throw "The exact Terraform-owned parser-dark $service endpoint is unavailable." }
     if ((ConvertTo-DeploymentCanonicalValue ($matching[0].PolicyDocument | ConvertFrom-Json) -SortArrays) -cne
       (ConvertTo-DeploymentCanonicalValue ($state[$address].policy | ConvertFrom-Json) -SortArrays)) {
       throw "The parser-dark $service endpoint policy differs from reviewed state."

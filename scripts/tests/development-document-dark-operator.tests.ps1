@@ -39,6 +39,7 @@ foreach ($required in @(
     'Assert-CurrentBootstrapTemplateSource', 'Assert-CurrentBootstrapTemplateVerification',
     'Get-CurrentBootstrapDocumentEvidence', 'CurrentTemplatePlanSha256',
     'CurrentTemplateReceiptSha256', 'A current-state document artifact failed exact-version KMS readback.',
+    '[string]$_.VpcEndpointId -ceq [string]$expectedEndpoint.id',
     'Assert-BaselineBooleanVariables', '-AllowMissing:($Operation -ceq "Bootstrap")',
     'Invoke-CompleteDarkBaselineBootstrap', 'Set-CompleteDarkBootstrapVariables',
     'complete-dark-bootstrap-full-source-v1', 'PriorBaselineStateSerial',
