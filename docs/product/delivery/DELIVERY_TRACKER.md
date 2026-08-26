@@ -32,6 +32,21 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## D1 — Useful web product and canonical job catalog
 
+- Final autonomous source foundation (2026-08-26): exact merged revision
+  `2f4270cc536c04f0376f686ea19706b35eab9ec4` adds the guarded deployed-runtime 43-case document
+  corpus, corrects ingestion release/provider-failure topology and the exact twelve-change plan,
+  hardens candidate/admin Auth0 origins, and adds a pinned aggregate-only Vercel hosted assessor.
+  Documents `93/93`, candidate web `531/531`, admin `11/11`, repository typecheck `31/31`, build
+  `19/19`, tests `32/32`, complete infrastructure validation, dependency audit, both PowerShell
+  hosts, and scoped format/lint/diff checks pass. Vercel login is exact non-prohibited account
+  `applydash2026-5637`, but no project, link, deployment, environment, or hosted acceptance exists.
+  No AWS/Terraform/provider/Auth0/real-data/trigger/Docker/WSL/GitHub Actions mutation occurred.
+  Publication/deployment/execution, protected Vercel projects and hosts, representative values and
+  alert receipt, candidate-rights fresh-MFA/recovery review, moderation/source/trigger decisions,
+  and final accountable human gates remain. Phase 1 is not complete.
+  [Evidence](evidence/d1-phase1-final-autonomous-source-foundation-2026-08-26.md),
+  [Phase 1 tasks](phase-1-web-and-job-catalog.md)
+
 - Provider-failure deployable foundation (2026-08-26): exact implementation revision
   `29d3ab0de6e65d4c6b66213e83c15824350cd1a8` adds the operator-only durable fail-once/recover
   fixture, isolated immutable ingestion publisher, checksum-gated default-dark release, guarded

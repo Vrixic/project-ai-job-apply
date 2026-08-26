@@ -111,6 +111,28 @@ guarded provider fault/recovery fixture exists; no SLO or alert recipient was in
 validation pass. No AWS, database, route, indexing, provider, Vercel, Docker, or WSL mutation
 occurred. [Current-source catch-up](evidence/d1-current-source-catchup-2026-08-25.md)
 
+Exact merged revision `2f4270cc536c04f0376f686ea19706b35eab9ec4` now completes the next
+repository-controlled assurance packet. The generated-only 43-case PDF/DOCX corpus has guarded
+`CorpusPlan`, `CorpusExecute`, `CorpusRecoverCleanup`, and `CorpusVerify` actions bound to exact
+numeric dark parser/processor versions, aggregate-only reason counts, database bypass, and
+crash-safe exact object/local-file cleanup. The ingestion dark-release guard freezes the observed
+twelve-change artifact plan and no longer rejects the legitimate candidate-rights application NAT:
+it instead proves the dedicated ingestion-provider NAT absent, the activity bound to the exact
+shared-private topology, all live NAT targets Terraform-owned, provider authority false, sources
+empty, triggers disabled, and the generated failure before any adapter. Candidate/admin Auth0
+configuration now accepts only canonical exact domains/origins. A pinned `vercel@59.6.2`
+Validate/Preflight/Verify assessor rejects Zach/Becker identities, requires clean exact-source
+`main`, keeps the two project IDs distinct, and accepts only aggregate protected-host evidence with
+admin identity and indexing dark. Documents `93/93`, candidate web `531/531`, admin `11/11`,
+repository typecheck `31/31`, build `19/19`, tests `32/32`, complete infrastructure validation,
+dependency audit, both PowerShell hosts, and scoped format/lint/diff checks pass. No AWS/Terraform,
+provider, Auth0, Vercel project/link/deployment, real-data, trigger, Docker, WSL, or GitHub Actions
+mutation occurred. This supersedes the earlier statement that representative execution lacks a
+safe provider-failure fixture; publication, deployment, bounded execution, accountable thresholds/
+recipients/manual alert receipt, hosted observations, candidate-rights fresh-MFA/recovery, ADR-023,
+moderation/source decisions, and final human acceptance remain open. [Final autonomous source
+foundation](evidence/d1-phase1-final-autonomous-source-foundation-2026-08-26.md)
+
 ### Current release-preparation checkpoint
 
 The current technically deployable backend candidate is now released default-dark. Exact artifact
