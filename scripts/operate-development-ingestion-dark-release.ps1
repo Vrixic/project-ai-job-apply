@@ -631,7 +631,8 @@ function Assert-LiveDarkRelease {
     $rule = Invoke-AwsJson @("events", "describe-rule", "--name", $ruleName, "--output", "json") "Ingestion rule validation"
     if ([string]$rule.State -cne "DISABLED") { throw "An ingestion EventBridge rule is enabled." }
   }
-  $mapping = Invoke-AwsJson @("lambda", "list-event-source-mappings", "--function-name", $functionNames.starter, "--output", "json") "Ingestion mapping inventory validation"
+  $starterAliasArn = "arn:aws:lambda:$Region`:$ExpectedAccountId`:function:$($functionNames.starter):development"
+  $mapping = Invoke-AwsJson @("lambda", "list-event-source-mappings", "--function-name", $starterAliasArn, "--output", "json") "Ingestion mapping inventory validation"
   Assert-IngestionMappingInventory $mapping
   foreach ($queue in @("ai-job-apply-development-ingestion-dispatch", "ai-job-apply-development-ingestion-dead-letter")) {
     $url = "https://sqs.$Region.amazonaws.com/$ExpectedAccountId/$queue"

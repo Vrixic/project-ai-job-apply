@@ -556,10 +556,11 @@ function Get-DurableExecutionMatches {
 function Get-AllIngestionMappings {
   param([Parameter(Mandatory)][object]$StateBoundary)
   $functionNames = @($durableFunctionName, $activityFunctionName) + @($StateBoundary.RuntimeFunctions | ForEach-Object { $_.Name })
+  $functionTargets = @($functionNames | ForEach-Object { [string]$_; "$($_):development" } | Sort-Object -Unique)
   $mappings = @()
-  foreach ($functionName in $functionNames) {
+  foreach ($functionTarget in $functionTargets) {
     $result = Invoke-AwsJson @(
-      "lambda", "list-event-source-mappings", "--function-name", $functionName,
+      "lambda", "list-event-source-mappings", "--function-name", $functionTarget,
       "--max-items", "100", "--output", "json"
     ) "Ingestion mapping enumeration"
     if (-not [string]::IsNullOrWhiteSpace([string](Get-OptionalProperty $result "NextMarker")) -or

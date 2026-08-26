@@ -47,6 +47,7 @@ foreach ($requiredSource in @(
     'rollbackArtifactCoordinates',
     'describe-route-tables',
     'list-event-source-mappings',
+    '$starterAliasArn',
     'INGESTION_ACTIVITY_FUNCTION_ARN -cne $activityArn',
     'Terraform 1.9.8 is required',
     '$values = Convert-BaselineDarkVariables $values',

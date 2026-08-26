@@ -47,7 +47,9 @@ foreach ($requiredText in @(
     '"lambda", "list-durable-executions-by-function"',
     '"lambda", "get-durable-execution"',
     '--durable-execution-name $ExecutionName',
-    '--function-name $Boundary.DurableArn'
+    '--function-name $Boundary.DurableArn',
+    '"$($_):development"',
+    '"--function-name", $functionTarget'
   )) {
   if (-not $source.Contains($requiredText)) { throw "The operator is missing required contract text '$requiredText'." }
 }
