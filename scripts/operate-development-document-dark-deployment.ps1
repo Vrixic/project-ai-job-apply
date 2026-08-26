@@ -1395,6 +1395,20 @@ function Read-AppliedGatewayRecovery {
   return [pscustomobject]@{ Plan = $plan; Metadata = $metadata; Receipt = $receipt; Artifact = $artifact }
 }
 
+function Assert-BaselineBooleanVariables {
+  param([Parameter(Mandatory)][object]$Variables, [switch]$AllowMissing)
+  foreach ($name in @(Get-DevelopmentDocumentBooleanVariableNames)) {
+    $property = $Variables.PSObject.Properties[$name]
+    if ($null -eq $property) {
+      if ($AllowMissing) { continue }
+      throw "The current retained baseline is missing boolean variable '$name'."
+    }
+    $valueProperty = $property.Value.PSObject.Properties["value"]
+    if ($null -eq $valueProperty) { throw "Baseline variable '$name' has no saved-plan value." }
+    $null = ConvertTo-ExactBoolean $valueProperty.Value "baseline $name"
+  }
+}
+
 function Read-Baseline {
   param(
     [Parameter(Mandatory)][string]$RequestedStage,
@@ -1432,9 +1446,7 @@ function Read-Baseline {
     if ($AppliedStage -notin @("parser-dark", "complete-dark") -or $null -eq $Receipt) {
       throw "A current-shape retained baseline requires an applied document runtime and verified receipt."
     }
-    foreach ($name in @(Get-DevelopmentDocumentBooleanVariableNames)) {
-      $null = ConvertTo-ExactBoolean $baseline.variables.PSObject.Properties[$name].Value.value "baseline $name"
-    }
+    Assert-BaselineBooleanVariables -Variables $baseline.variables -AllowMissing:($Operation -ceq "Bootstrap")
     $parser = @($Receipt.artifacts | Where-Object { $_.artifactName -eq "document-parser-lambda" -and $_.suffix -eq "zip" })
     $processor = @($Receipt.artifacts | Where-Object { $_.artifactName -eq "document-processor-lambda" -and $_.suffix -eq "zip" })
     $metadataPath = "$resolved.baseline.json"

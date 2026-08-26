@@ -37,6 +37,7 @@ foreach ($required in @(
     'Get-ReviewedBootstrapDelta', 'development-document-complete-dark-bootstrap-delta-v1',
     'Assert-CompleteDarkBootstrapBaselineMetadata', 'Read-CurrentBootstrapTemplate',
     'Assert-CurrentBootstrapTemplateSource', 'Assert-CurrentBootstrapTemplateVerification',
+    'Assert-BaselineBooleanVariables', '-AllowMissing:($Operation -ceq "Bootstrap")',
     'Invoke-CompleteDarkBaselineBootstrap', 'Set-CompleteDarkBootstrapVariables',
     'complete-dark-bootstrap-full-source-v1', 'PriorBaselineStateSerial',
     'CurrentTemplatePlanPath', 'ReviewedCurrentTemplateSha256',
@@ -667,6 +668,27 @@ if ($allowedVariableNames.Count -ne 100 -or
   (@($allowedVariableNames | Sort-Object) -join "|") -cne ($currentKindNames -join "|")) {
   throw "The current document baseline does not classify the exact 100-variable development plan."
 }
+
+$baselineBooleanFunctions = @($ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+      $node.Name -ceq "Assert-BaselineBooleanVariables"
+    }, $true))
+if ($baselineBooleanFunctions.Count -ne 1) { throw "The baseline boolean-shape guard must be defined exactly once." }
+Invoke-Expression $baselineBooleanFunctions[0].Extent.Text
+$partialHistoricalBooleans = [pscustomobject]@{
+  deploy_document_intake = [pscustomobject]@{ value = "true" }
+  document_scan_mapping_enabled = [pscustomobject]@{ value = "false" }
+}
+Assert-BaselineBooleanVariables $partialHistoricalBooleans -AllowMissing
+$missingCurrentBooleanRejected = $false
+try { Assert-BaselineBooleanVariables $partialHistoricalBooleans } catch { $missingCurrentBooleanRejected = $true }
+if (-not $missingCurrentBooleanRejected) { throw "A current baseline accepted missing post-historical booleans." }
+$invalidHistoricalBoolean = $partialHistoricalBooleans | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+$invalidHistoricalBoolean.deploy_document_intake.value = "TRUE"
+$invalidHistoricalBooleanRejected = $false
+try { Assert-BaselineBooleanVariables $invalidHistoricalBoolean -AllowMissing } catch { $invalidHistoricalBooleanRejected = $true }
+if (-not $invalidHistoricalBooleanRejected) { throw "Bootstrap accepted a malformed present historical boolean." }
 
 $legacyKmsName = "document_processing_kms_prerequisite_enabled"
 $expectedLegacyNames = @($legacyBaselineVariableNames)
