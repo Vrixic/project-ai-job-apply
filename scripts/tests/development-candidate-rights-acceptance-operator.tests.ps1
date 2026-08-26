@@ -52,6 +52,15 @@ if ($source -notmatch [regex]::Escape('$issuerValue = [string]($issuer | Select-
     $source -match [regex]::Escape('Issuer = [string]$issuer[0]')) {
   throw 'The singular state-bound issuer is vulnerable to scalar character indexing.'
 }
+foreach ($backupProgressGuard in @(
+    "'sourceSha','policy','identity','auth0','aliases','zeroDriftPlanSha256'",
+    '$currentRestorable -lt $reviewedRestorable',
+    'The live backup disposition regressed after plan review.'
+  )) {
+  if ($source -notmatch [regex]::Escape($backupProgressGuard)) {
+    throw "The execution boundary does not safely tolerate monotonic backup progress: $backupProgressGuard"
+  }
+}
 $identityBoundaryIndex = $source.IndexOf('$identity = if ($RequireIdentity) { Read-SyntheticIdentityContext')
 $backupBoundaryIndex = $source.IndexOf('$backup = Get-BackupInventory')
 $healthBoundaryIndex = $source.IndexOf('$health = Assert-OperationalHealth')

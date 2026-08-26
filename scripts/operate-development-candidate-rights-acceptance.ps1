@@ -609,8 +609,18 @@ if (-not $script:TestOnly) {
       $reviewed = Read-ExecutionPlan
       $boundary = Get-AcceptanceBoundary -RequireIdentity
       $current = New-ExecutionPlan $boundary
-      foreach ($name in @('sourceSha','policy','identity','auth0','backups','aliases','zeroDriftPlanSha256')) {
+      foreach ($name in @('sourceSha','policy','identity','auth0','aliases','zeroDriftPlanSha256')) {
         if (($reviewed.Value.$name | ConvertTo-Json -Depth 20 -Compress) -cne ($current.$name | ConvertTo-Json -Depth 20 -Compress)) { throw "The live $name boundary changed after plan review." }
+      }
+      # RDS advances LatestRestorableTime continuously and rotates snapshots under the reviewed
+      # retention policy. Require the durable disposition to remain exact and recovery coverage to
+      # be non-regressing without treating normal backup progress as an acceptance-boundary change.
+      $reviewedRestorable = [DateTimeOffset]::Parse([string]$reviewed.Value.backups.LatestRestorableTime)
+      $currentRestorable = [DateTimeOffset]::Parse([string]$current.backups.LatestRestorableTime)
+      if ([int]$current.backups.BackupRetentionDays -ne [int]$reviewed.Value.backups.BackupRetentionDays -or
+          [int]$reviewed.Value.backups.SnapshotCount -lt 1 -or [int]$current.backups.SnapshotCount -lt 1 -or
+          $currentRestorable -lt $reviewedRestorable) {
+        throw "The live backup disposition regressed after plan review."
       }
       $receipt = Invoke-FixedLifecycle $boundary $reviewed.Value
       $path = Join-Path $operatorRoot "receipt-$($ReviewedExecutionPlanSha256.Substring(0,12)).json"

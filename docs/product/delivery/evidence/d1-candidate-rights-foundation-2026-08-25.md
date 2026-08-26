@@ -82,6 +82,16 @@ serial `208` has zero meaningful/output changes and is complete/non-applyable.
   second because zero-drift inspection lacked an isolated initialized Terraform provider-schema
   directory. The alarm returned to `OK`; the operator now initializes its own backend-disabled,
   lockfile-readonly inspection directory and has a regression guard in both PowerShell hosts.
+- Subsequent read-only attempts isolated and corrected two additional operator/orchestration faults:
+  callback completion now waits beyond the intermediate localhost callback before reading the
+  rotated server session, and the exact Terraform-state issuer is preserved as a scalar string
+  instead of being reduced to its first character. The acceptance operator also validates the
+  short-lived MFA proof immediately after resolving the state-bound issuer/audience.
+- A fresh state-`208` managed-OIDC Plan then passed the exact 15-step aggregate review with no cloud
+  mutation. Execute stopped before its first export or deletion request because RDS advanced its
+  normal `LatestRestorableTime` after Plan. The current correction preserves exact immutable
+  comparisons while requiring retention to stay exact, snapshots to remain present, and current
+  restorable coverage to be no earlier than the reviewed value. Both PowerShell host suites pass.
 
 ## Local verification
 
@@ -126,7 +136,7 @@ serial `208` has zero meaningful/output changes and is complete/non-applyable.
 - The exact tenant has the dedicated non-Zach M2M client with only `delete:users`, one verified
   `AWSCURRENT` secret version, the candidate-client-only deployed step-up Action, enabled
   OTP/recovery factors, and one MFA-enrolled disposable generated-synthetic identity. Freshly
-  reauthenticate that identity after the merged inspection correction, then run the guarded
+  use one later fresh-MFA window after the merged monotonic-backup correction, then run the guarded
   generated-synthetic export/deletion lifecycle followed by isolated recovery-ledger replay,
   backup-aging, alert, and zero-drift acceptance.
 - Create the candidate and admin Vercel projects only under the authorized non-Zach account and run

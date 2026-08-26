@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-08-25
+Last updated: 2026-08-26
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -85,11 +85,14 @@ This is the master record for the delivery phases defined in the [product and sy
   zero drift. A live Stage B
   preflight exposed and corrected empty-change aggregation, exact Terraform boolean/integer
   decoding, the omitted seven-address exact-version durable-workflow dependency set, and its two
-  exact durable-version output updates before apply. Two lifecycle attempts stopped during
-  read-only Plan before export/deletion mutation: once on an expected post-login throttle alarm,
-  which returned to `OK`, and once on a missing isolated Terraform provider-schema cache. The
-  operator now initializes a backend-disabled lockfile-readonly inspection directory and passes in
-  both PowerShell hosts. No completed deployed rights lifecycle/recovery replay, Vercel deployment,
+  exact durable-version output updates before apply. Later read-only attempts corrected
+  callback-session timing and a PowerShell scalar-indexing fault that reduced the state-bound issuer
+  to one character. A fresh state-`208` managed-OIDC Plan then passed the exact 15-step aggregate
+  review with no cloud mutation. Execute stopped before its first export/deletion mutation because
+  normal RDS `LatestRestorableTime` progress changed the serialized backup inventory. The current
+  correction preserves exact immutable-boundary comparison and permits only non-regressing recovery
+  coverage under the exact retention policy with snapshots still present; both PowerShell host
+  suites pass. No completed deployed rights lifecycle/recovery replay, Vercel deployment,
   real identity/data, or
   accountable human acceptance is claimed; D1-R11 and Phase 1 stay in progress.
   [Evidence](evidence/d1-candidate-rights-policy-and-preprovision-2026-08-25.md),
