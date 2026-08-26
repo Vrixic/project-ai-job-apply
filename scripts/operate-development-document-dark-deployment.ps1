@@ -229,6 +229,31 @@ $appliedGatewayRecoveryRetainedParserObjectVersion = "maNFAWhxk8j27IhJ_kd6HcoBJJ
 $appliedGatewayRecoveryRetainedParserContentLength = 489567
 $appliedGatewayRecoveryParserQualifiedArn = "arn:aws:lambda:us-east-2:362544434697:function:ai-job-apply-development-document-parser:1"
 $appliedGatewayRecoveryMigrationImage = "362544434697.dkr.ecr.us-east-2.amazonaws.com/ai-job-apply/migration@sha256:9be2474047872b9dc3878301fe946becbb7653f4e4dc733235f6d424502563eb"
+$postHistoricalVariableNames = @(
+  "candidate_rights_auth0_authorized_owner", "candidate_rights_auth0_secret_provisioned",
+  "candidate_rights_backup_retention_days", "candidate_rights_download_grant_seconds",
+  "candidate_rights_enabled", "candidate_rights_export_lifecycle_days",
+  "candidate_rights_export_lifetime_seconds", "candidate_rights_id_token_audience",
+  "candidate_rights_owner_inventory", "candidate_rights_policy_sha256",
+  "candidate_rights_policy_version", "candidate_rights_recent_auth_max_age_seconds",
+  "candidate_rights_subprocessor_inventory", "database_backup_retention_days",
+  "deploy_ingestion_runtime", "deploy_public_job_reader",
+  "ingestion_durable_artifact_base64sha256", "ingestion_durable_artifact_s3_key",
+  "ingestion_durable_artifact_s3_object_version", "ingestion_durable_artifact_sha256",
+  "ingestion_execution_timeout_seconds", "ingestion_lambda_extension_layer_arn",
+  "ingestion_provider_activation_allowed", "ingestion_provider_private_egress",
+  "ingestion_provider_sources", "ingestion_retention_days",
+  "ingestion_runtime_artifact_base64sha256", "ingestion_runtime_artifact_s3_key",
+  "ingestion_runtime_artifact_s3_object_version", "ingestion_runtime_artifact_sha256",
+  "ingestion_runtime_enabled", "ingestion_synthetic_seed", "ingestion_synthetic_source_enabled",
+  "public_job_cluster_residual_accepted", "public_job_database_boundary_version",
+  "public_job_lambda_artifact_base64sha256", "public_job_lambda_artifact_s3_key",
+  "public_job_lambda_artifact_s3_object_version", "public_job_lambda_artifact_sha256",
+  "public_job_projection_artifact_base64sha256", "public_job_projection_artifact_s3_key",
+  "public_job_projection_artifact_s3_object_version", "public_job_projection_artifact_sha256",
+  "public_job_route_activation_allowed", "public_job_route_throttling_burst_limit",
+  "public_job_route_throttling_rate_limit"
+)
 $allowedVariableNames = @(
   "candidate_document_cors_allowed_origins", "database_engine_version", "database_instance_class",
   "database_performance_insights", "deploy_applications", "deploy_document_intake",
@@ -254,9 +279,12 @@ $allowedVariableNames = @(
   "workflow_ingress_artifact_base64sha256", "workflow_ingress_artifact_s3_key",
   "workflow_ingress_artifact_s3_object_version", "workflow_ingress_artifact_sha256",
   "workflow_ingress_lambda_extension_layer_arn"
-)
+) + $postHistoricalVariableNames
 $legacyBaselineVariableNames = @($allowedVariableNames | Where-Object {
-    $_ -notin @("document_processing_deployment_stage", "document_parser_invocation_qualified_arn", "document_security_health_rules_enabled")
+    $_ -notin @(
+      "document_processing_deployment_stage", "document_parser_invocation_qualified_arn",
+      "document_security_health_rules_enabled"
+    ) -and $_ -notin $postHistoricalVariableNames
   }) + @("deploy_document_processing", "document_processing_kms_prerequisite_enabled")
 
 $env:AWS_PROFILE = $AwsProfile

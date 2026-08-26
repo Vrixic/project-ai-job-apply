@@ -657,10 +657,16 @@ function New-TestBaselineVariables([string[]]$Names) {
 $variableAssignments = @($ast.FindAll({
       param($node)
       $node -is [Management.Automation.Language.AssignmentStatementAst] -and
-      $node.Left.Extent.Text -in @('$allowedVariableNames', '$legacyBaselineVariableNames')
+      $node.Left.Extent.Text -in @('$postHistoricalVariableNames', '$allowedVariableNames', '$legacyBaselineVariableNames')
     }, $true) | Sort-Object { $_.Extent.StartOffset })
-if ($variableAssignments.Count -ne 2) { throw "The current and historical variable sets must each be assigned exactly once." }
+if ($variableAssignments.Count -ne 3) { throw "The post-historical, current, and historical variable sets must each be assigned exactly once." }
 foreach ($assignment in $variableAssignments) { Invoke-Expression $assignment.Extent.Text }
+
+$currentKindNames = @((Get-DevelopmentDocumentVariableKinds).Keys | Sort-Object)
+if ($allowedVariableNames.Count -ne 100 -or
+  (@($allowedVariableNames | Sort-Object) -join "|") -cne ($currentKindNames -join "|")) {
+  throw "The current document baseline does not classify the exact 100-variable development plan."
+}
 
 $legacyKmsName = "document_processing_kms_prerequisite_enabled"
 $expectedLegacyNames = @($legacyBaselineVariableNames)

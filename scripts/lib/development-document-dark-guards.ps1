@@ -15,11 +15,16 @@ function ConvertTo-ExactBoolean {
 
 function Get-DevelopmentDocumentBooleanVariableNames {
   return @(
+    "candidate_rights_auth0_secret_provisioned", "candidate_rights_enabled",
     "database_performance_insights", "deploy_applications", "deploy_document_intake",
-    "deploy_gateway_lambda", "deploy_profile_readiness_durable", "deploy_serverless_outbox",
+    "deploy_gateway_lambda", "deploy_ingestion_runtime", "deploy_profile_readiness_durable",
+    "deploy_public_job_reader", "deploy_serverless_outbox",
     "document_scan_event_rule_enabled", "document_scan_mapping_enabled", "document_security_health_rules_enabled",
     "enable_container_insights", "enable_redis", "high_availability",
-    "private_application_networking", "serverless_runtime_enabled"
+    "ingestion_provider_activation_allowed", "ingestion_provider_private_egress",
+    "ingestion_runtime_enabled", "ingestion_synthetic_source_enabled",
+    "private_application_networking", "public_job_cluster_residual_accepted",
+    "public_job_route_activation_allowed", "serverless_runtime_enabled"
   )
 }
 
@@ -27,11 +32,20 @@ function Get-DevelopmentDocumentVariableKinds {
   $kinds = @{}
   foreach ($name in @(Get-DevelopmentDocumentBooleanVariableNames)) { $kinds[$name] = "boolean" }
   foreach ($name in @(
-      "gateway_lambda_reserved_concurrency", "profile_readiness_execution_timeout_seconds",
-      "profile_readiness_retention_days"
+      "candidate_rights_backup_retention_days", "candidate_rights_download_grant_seconds",
+      "candidate_rights_export_lifecycle_days", "candidate_rights_export_lifetime_seconds",
+      "candidate_rights_recent_auth_max_age_seconds", "database_backup_retention_days",
+      "gateway_lambda_reserved_concurrency", "ingestion_execution_timeout_seconds",
+      "ingestion_retention_days", "profile_readiness_execution_timeout_seconds",
+      "profile_readiness_retention_days", "public_job_route_throttling_burst_limit",
+      "public_job_route_throttling_rate_limit"
     )) { $kinds[$name] = "number" }
   $kinds["candidate_document_cors_allowed_origins"] = "composite"
+  $kinds["ingestion_provider_sources"] = "composite"
   foreach ($name in @(
+      "candidate_rights_auth0_authorized_owner", "candidate_rights_id_token_audience",
+      "candidate_rights_owner_inventory", "candidate_rights_policy_sha256",
+      "candidate_rights_policy_version", "candidate_rights_subprocessor_inventory",
       "database_engine_version", "database_instance_class", "document_parser_artifact_base64sha256",
       "document_parser_invocation_qualified_arn", "document_processing_deployment_stage",
       "document_parser_artifact_s3_key", "document_parser_artifact_s3_object_version",
@@ -40,12 +54,22 @@ function Get-DevelopmentDocumentVariableKinds {
       "document_processor_artifact_s3_object_version", "document_processor_artifact_sha256",
       "document_processor_extension_layer_arn", "gateway_lambda_artifact_base64sha256",
       "gateway_lambda_artifact_s3_key", "gateway_lambda_artifact_s3_object_version",
-      "gateway_lambda_artifact_sha256", "gateway_lambda_extension_layer_arn", "migration_image",
+      "gateway_lambda_artifact_sha256", "gateway_lambda_extension_layer_arn",
+      "ingestion_durable_artifact_base64sha256", "ingestion_durable_artifact_s3_key",
+      "ingestion_durable_artifact_s3_object_version", "ingestion_durable_artifact_sha256",
+      "ingestion_lambda_extension_layer_arn", "ingestion_runtime_artifact_base64sha256",
+      "ingestion_runtime_artifact_s3_key", "ingestion_runtime_artifact_s3_object_version",
+      "ingestion_runtime_artifact_sha256", "ingestion_synthetic_seed", "migration_image",
       "oidc_audience", "oidc_issuer", "profile_readiness_activity_artifact_base64sha256",
       "profile_readiness_activity_artifact_s3_key", "profile_readiness_activity_artifact_s3_object_version",
       "profile_readiness_activity_artifact_sha256", "profile_readiness_durable_artifact_base64sha256",
       "profile_readiness_durable_artifact_s3_key", "profile_readiness_durable_artifact_s3_object_version",
       "profile_readiness_durable_artifact_sha256", "profile_readiness_lambda_extension_layer_arn",
+      "public_job_database_boundary_version", "public_job_lambda_artifact_base64sha256",
+      "public_job_lambda_artifact_s3_key", "public_job_lambda_artifact_s3_object_version",
+      "public_job_lambda_artifact_sha256", "public_job_projection_artifact_base64sha256",
+      "public_job_projection_artifact_s3_key", "public_job_projection_artifact_s3_object_version",
+      "public_job_projection_artifact_sha256",
       "workflow_ingress_artifact_base64sha256", "workflow_ingress_artifact_s3_key",
       "workflow_ingress_artifact_s3_object_version", "workflow_ingress_artifact_sha256",
       "workflow_ingress_lambda_extension_layer_arn"
