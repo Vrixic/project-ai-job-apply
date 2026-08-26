@@ -1,7 +1,7 @@
 # Vercel Next.js Hosting
 
 - Status: Source foundation ready; provider session, projects, stable hosts, and deployment pending
-- Last updated: 2026-08-25
+- Last updated: 2026-08-26
 - Scope: Synthetic development acceptance only
 
 This runbook implements [ADR-026](../../../docs/adr/026-vercel-nextjs-presentation-hosting.md).
@@ -38,23 +38,52 @@ pnpm --filter @ai-job-apply/admin build
 
 Do not start Docker or WSL for this boundary.
 
-## Provider login and project creation
-
-The operator authenticates interactively. Do not create or paste a long-lived Vercel token into a
-shell transcript, chat, source file, or evidence record.
+Record the exact clean `origin/main` SHA and choose the exact authorized non-Zach Vercel username
+and candidate/admin project names. Validate each source root offline before contacting Vercel:
 
 ```powershell
-pnpm dlx vercel@latest login
+$sourceSha = (git rev-parse origin/main).Trim()
+$authorizedVercelIdentity = Read-Host 'Enter the exact authorized non-Zach Vercel username'
+$candidateProject = Read-Host 'Enter the exact candidate Vercel project name'
+$adminProject = Read-Host 'Enter the exact admin Vercel project name'
+
+.\scripts\operate-vercel-phase1-hosted-acceptance.ps1 -Action Validate `
+  -Surface Candidate -SourceSha $sourceSha `
+  -AuthorizedVercelIdentity $authorizedVercelIdentity `
+  -ExpectedProjectName $candidateProject
+
+.\scripts\operate-vercel-phase1-hosted-acceptance.ps1 -Action Validate `
+  -Surface Admin -SourceSha $sourceSha `
+  -AuthorizedVercelIdentity $authorizedVercelIdentity `
+  -ExpectedProjectName $adminProject
+```
+
+The operator fails closed unless the branch is `main`, the worktree is clean, and both `HEAD` and
+`origin/main` equal the supplied SHA. It also validates the exact source-owned root, build command,
+frozen installation, upload boundary, and `iad1` region. It rejects an identity containing `zach`
+or `becker`; do not weaken that check or substitute a temporary account.
+
+## Provider login and project creation
+
+The human operator authenticates interactively. Do not create or paste a long-lived Vercel token
+into a shell transcript, chat, source file, or evidence record.
+
+```powershell
+pnpm dlx vercel@59.6.2 login
 $expectedVercelIdentity = Read-Host 'Enter the authorized Vercel username'
-$actualVercelIdentity = (& pnpm dlx vercel@latest whoami).Trim()
+$actualVercelIdentity = (& pnpm dlx vercel@59.6.2 whoami).Trim()
 
 if ($LASTEXITCODE -ne 0 -or
     [string]::IsNullOrWhiteSpace($expectedVercelIdentity) -or
-    $actualVercelIdentity -cne $expectedVercelIdentity.Trim()) {
-  pnpm dlx vercel@latest logout
+    $expectedVercelIdentity -match '(?i)zach|becker' -or
+    $actualVercelIdentity -cne $expectedVercelIdentity.Trim() -or
+    $actualVercelIdentity -match '(?i)zach|becker') {
   throw 'The active Vercel identity is not the authorized project owner.'
 }
 ```
+
+If this check fails, stop. Sign out separately only after confirming which local account is active;
+do not let a failure branch perform an implicit account change.
 
 Stop before linking, importing, or creating a project when the identity does not exactly match the
 account approved for this platform. Logging in successfully is not project authority, and an
@@ -74,6 +103,27 @@ fixed topology table. For both projects:
 
 Do not link the candidate root and then reuse its `.vercel/project.json` for admin. Local `.vercel`
 directories are ignored and never evidence.
+
+After both existing dashboard projects have been deliberately linked to their corresponding local
+roots, each ignored `.vercel/project.json` must contain the exact `orgId`, `projectId`, and
+`projectName` emitted by Vercel. Run the read-only preflight independently from each surface:
+
+```powershell
+.\scripts\operate-vercel-phase1-hosted-acceptance.ps1 -Action Preflight `
+  -Surface Candidate -SourceSha $sourceSha `
+  -AuthorizedVercelIdentity $authorizedVercelIdentity `
+  -ExpectedProjectName $candidateProject
+
+.\scripts\operate-vercel-phase1-hosted-acceptance.ps1 -Action Preflight `
+  -Surface Admin -SourceSha $sourceSha `
+  -AuthorizedVercelIdentity $authorizedVercelIdentity `
+  -ExpectedProjectName $adminProject
+```
+
+Preflight invokes only pinned `vercel@59.6.2 --version` and `whoami`. It never logs in, links,
+creates a project, deploys, reads environment values, or changes provider state. It hashes the
+private local project ID in its aggregate output and rejects reuse of one project ID across both
+roots.
 
 ## Stable synthetic candidate host
 
@@ -162,6 +212,93 @@ At minimum verify:
 Admin additionally requires exact `jobs:moderate`, MFA/session enforcement, candidate-scope denial,
 response-level crawler denial, and the approved manual-only moderation matrix. A source build or
 identity-dark page does not satisfy those gates.
+
+### Source-controlled aggregate gate
+
+The Phase 1 operator validates hosted observations but deliberately does not make HTTP requests or
+read browser/Vercel authentication material. An authorized bounded capture must inspect only the
+exact stable host and three fixed routes, discard every response body, cookie, token, identity
+attribute, candidate/job value, moderation value, and raw provider log, then write the following
+aggregate shape below:
+
+```text
+infrastructure/terraform/environments/development/.terraform/vercel-phase1-hosted-acceptance/
+```
+
+Use exactly this JSON shape. Replace uppercase placeholders; use the admin values noted below.
+Canonical timestamps use seven fractional seconds and `+00:00`.
+
+```json
+{
+  "schemaVersion": 1,
+  "profile": "d1_vercel_hosted_acceptance_v1",
+  "startedAt": "2026-08-26T12:00:00.0000000+00:00",
+  "endedAt": "2026-08-26T12:00:01.0000000+00:00",
+  "durationMs": 1000,
+  "surface": "candidate",
+  "sourceSha": "SOURCE_SHA",
+  "authorizedIdentitySha256": "SHA256_OF_EXACT_AUTHORIZED_VERCEL_USERNAME",
+  "projectName": "CANDIDATE_PROJECT_NAME",
+  "projectIdSha256": "SHA256_OF_PRIVATE_LOCAL_PROJECT_ID",
+  "rootDirectory": "frontend/web",
+  "deploymentId": "dpl_DEPLOYMENT_ID",
+  "deploymentStatus": "READY",
+  "deploymentCommitSha": "SOURCE_SHA",
+  "stableOrigin": "https://candidate.example.com",
+  "functionRegion": "iad1",
+  "protected": true,
+  "identityMode": "candidate-managed-oidc",
+  "adminIdentityActivated": false,
+  "publicIndexingEnabled": false,
+  "tokensRetained": 0,
+  "cookiesRetained": 0,
+  "responseBodiesRetained": 0,
+  "restrictedValueMatches": 0,
+  "headers": {
+    "strictTransportSecurity": "max-age=31536000",
+    "xContentTypeOptions": "nosniff",
+    "xFrameOptions": "DENY",
+    "referrerPolicy": "no-referrer",
+    "permissionsPolicy": "camera=(), geolocation=(), microphone=(), payment=(), usb=()",
+    "crossOriginOpenerPolicy": "same-origin",
+    "contentSecurityPolicy": "base-uri 'self'; frame-ancestors 'none'; object-src 'none'",
+    "xRobotsTag": ""
+  },
+  "routes": [
+    { "kind": "root", "path": "/", "status": 200, "noStore": false },
+    { "kind": "unknown", "path": "/phase1-generated-synthetic-unknown", "status": 404, "noStore": false },
+    { "kind": "unauthenticated-bff", "path": "/api/platform/entitlements", "status": 401, "noStore": true }
+  ]
+}
+```
+
+For an admin identity-dark observation, use `surface: "admin"`, `rootDirectory:
+"frontend/admin"`, `identityMode: "identity-dark"`, `xRobotsTag: "noindex, nofollow,
+noarchive"`, and unauthenticated BFF path `/api/moderation/cases`. Its BFF status may be `401` or
+`503`; candidate may also use `503` while intentionally identity-dark. The operator always
+requires `adminIdentityActivated: false` and `publicIndexingEnabled: false`. It cannot authorize a
+later admin activation or public launch.
+
+Review the aggregate locally, calculate its checksum, and verify it without adding it to Git:
+
+```powershell
+$observationPath = Resolve-Path '.\infrastructure\terraform\environments\development\.terraform\vercel-phase1-hosted-acceptance\candidate.json'
+$observationSha256 = (Get-FileHash -LiteralPath $observationPath -Algorithm SHA256).Hash.ToLowerInvariant()
+
+.\scripts\operate-vercel-phase1-hosted-acceptance.ps1 -Action Verify `
+  -Surface Candidate -SourceSha $sourceSha `
+  -AuthorizedVercelIdentity $authorizedVercelIdentity `
+  -ExpectedProjectName $candidateProject `
+  -StableOrigin 'https://candidate.example.com' `
+  -HostedObservationPath $observationPath `
+  -ReviewedObservationSha256 $observationSha256
+```
+
+Verification repeats clean-source and read-only provider preflight, checks the observation checksum,
+and emits only the approved aggregate. Any extra JSON field—including a raw token, cookie, body,
+email, subject, candidate value, job value, or moderation value—causes rejection. A passing
+identity-dark aggregate proves only protected hosting and the fixed route/header boundary; it does
+not prove login, BFF authorization, feature behavior, log review, or the later admin authority gate.
 
 ## Failure and rollback
 

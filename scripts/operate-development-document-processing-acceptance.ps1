@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [ValidateSet("Status", "PlanExecution", "Execute", "ServiceDetection", "ObjectRecovery", "RecoverCleanup", "Verify")]
+  [ValidateSet("Status", "PlanExecution", "Execute", "ServiceDetection", "ObjectRecovery", "RecoverCleanup", "Verify", "CorpusPlan", "CorpusExecute", "CorpusRecoverCleanup", "CorpusVerify")]
   [string]$Action = "Status",
   [string]$AwsProfile = "ai-job-apply-development-admin",
   [string]$Region = "us-east-2",
@@ -64,6 +64,15 @@ Usage:
     -ExecutionPlanPath REVIEWED_EXECUTION_PLAN -ReviewedExecutionPlanSha256 SHA256 `
     -ReceiptPath REVIEWED_SUCCESS_RECEIPT -ReviewedReceiptSha256 SHA256
 
+  .\scripts\operate-development-document-processing-acceptance.ps1 -Action CorpusPlan `
+    -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET -SourceSha MERGED_SHA `
+    -MigrationReceiptPath VERIFIED_IMAGE_RECEIPT -ReviewedMigrationReceiptSha256 SHA256
+
+  Use CorpusExecute with the reviewed plan and corpus digest, CorpusRecoverCleanup with an
+  interrupted/cleanup-required receipt, and CorpusVerify with the verified receipt. These actions
+  directly exercise only the exact numeric dark processor/parser versions with the fixed generated
+  adversarial corpus; they never activate a trigger or accept external document bytes.
+
 This operator proves the generated-synthetic document flow while the mapping, GuardDuty rule, and
 reconciler remain disabled. It invokes the deployed gateway and processor aliases synchronously
 with exact bounded events. The direct gateway invocation fabricates an already-validated authorizer
@@ -96,6 +105,7 @@ $operatorRoot = Join-Path $terraformRoot "development-document-processing-accept
 $migrationReceiptRoot = Join-Path $terraformRoot "development-migration-image"
 $terraformRuntimeData = Join-Path $terraformRoot "development-document-processing-acceptance-data"
 $fixtureGenerator = Join-Path $PSScriptRoot "lib\development-document-processing-fixtures.mjs"
+$corpusGenerator = Join-Path $PSScriptRoot "lib\development-document-parser-corpus.mjs"
 $stateKey = "platform.tfstate"
 $containerName = "database-migration"
 $migrationFamily = "ai-job-apply-development-database-migration"
@@ -159,6 +169,8 @@ function Get-OperatorDeltaEvidence {
     '^AGENTS\.md$',
     '^docs/',
     '^scripts/operate-development-document-processing-acceptance\.ps1$',
+    '^scripts/lib/development-document-parser-corpus\.mjs$',
+    '^backend/services/documents/src/document-parser-corpus\.test\.ts$',
     '^scripts/inspect-staging-workload-and-cost\.ps1$',
     '^scripts/lib/staging-postgresql-restore-verifier\.ps1$',
     '^scripts/operate-development-postgresql-restore\.ps1$',
@@ -365,7 +377,7 @@ function Invoke-AwsJson {
 }
 
 function Assert-ActionInputs {
-  $releaseActions = @('PlanExecution', 'Execute', 'ServiceDetection', 'ObjectRecovery', 'RecoverCleanup', 'Verify')
+  $releaseActions = @('PlanExecution', 'Execute', 'ServiceDetection', 'ObjectRecovery', 'RecoverCleanup', 'Verify', 'CorpusPlan', 'CorpusExecute', 'CorpusRecoverCleanup', 'CorpusVerify')
   if ($Action -in $releaseActions) {
     $migrationInputs = @($MigrationReceiptPath, $ReviewedMigrationReceiptSha256) |
       Where-Object { [string]::IsNullOrWhiteSpace($_) }
@@ -373,7 +385,7 @@ function Assert-ActionInputs {
       throw "$Action requires the exact source and migration image receipt pair."
     }
   }
-  if ($Action -in @('Execute', 'ServiceDetection', 'ObjectRecovery', 'RecoverCleanup', 'Verify')) {
+  if ($Action -in @('Execute', 'ServiceDetection', 'ObjectRecovery', 'RecoverCleanup', 'Verify', 'CorpusExecute', 'CorpusRecoverCleanup', 'CorpusVerify')) {
     $executionInputs = @($FixtureSetSha256, $ExecutionPlanPath, $ReviewedExecutionPlanSha256) |
       Where-Object { [string]::IsNullOrWhiteSpace($_) }
     if ($FixtureSetSha256 -notmatch '^[a-f0-9]{64}$' -or @($executionInputs).Count -ne 0) {
@@ -383,7 +395,7 @@ function Assert-ActionInputs {
   elseif (-not [string]::IsNullOrWhiteSpace($FixtureSetSha256)) {
     throw "Only execution, service detection, recovery, and verification accept a fixture-set digest."
   }
-  if ($Action -in @('RecoverCleanup', 'Verify')) {
+  if ($Action -in @('RecoverCleanup', 'Verify', 'CorpusRecoverCleanup', 'CorpusVerify')) {
     $receiptInputs = @($ReceiptPath, $ReviewedReceiptSha256) |
       Where-Object { [string]::IsNullOrWhiteSpace($_) }
     if (@($receiptInputs).Count -ne 0) {
@@ -418,7 +430,7 @@ function Assert-CallerAndSource {
     if ($branch -cne 'main' -or $head -cne $origin -or $dirty.Count -ne 0) {
       throw "The operation requires clean main exactly matching origin/main."
     }
-    $delta = if ($Action -in @('RecoverCleanup', 'Verify')) {
+    $delta = if ($Action -in @('RecoverCleanup', 'Verify', 'CorpusRecoverCleanup', 'CorpusVerify')) {
       Get-RecoveryOperatorDeltaEvidence -FromSha $SourceSha -ToSha $head
     }
     else {
@@ -701,6 +713,7 @@ function Get-ExactRuntime {
     -PinnedVersionArn $parserQualifiedArn
   $null = Get-LambdaVersionIdentity -QualifiedArn $currentParserVersionArn -Description 'Current document parser'
   $parserIdentity = Get-LambdaVersionIdentity -QualifiedArn $parserQualifiedArn -Description 'Document parser'
+  $parserVariables = $parserIdentity.Configuration.Environment.Variables
   $planArn = [string]$processorVariables.GUARDDUTY_PROTECTION_PLAN_ARN
   if (
     [string]$gatewayVariables.OIDC_ISSUER -notmatch '^https://' -or
@@ -708,6 +721,8 @@ function Get-ExactRuntime {
     [string]$gatewayVariables.DOCUMENT_UPLOAD_BUCKET -cne $bucket -or
     [string]$gatewayVariables.DOCUMENT_UPLOAD_KMS_KEY_ARN -cne [string]$processorVariables.PLATFORM_KMS_KEY_ARN -or
     [string]$processorVariables.PLATFORM_KMS_KEY_ARN -notmatch "^arn:aws:kms:$Region`:$ExpectedAccountId`:key/" -or
+    [string]$processorVariables.DOCUMENT_PARSER_VERSION -cne 'resume-parser-v1' -or
+    [string]$parserVariables.DOCUMENT_PARSER_VERSION -cne 'resume-parser-v1' -or
     $planArn -notmatch "^arn:aws:guardduty:$Region`:$ExpectedAccountId`:malware-protection-plan/[A-Za-z0-9]+$" -or
     ($planIdentity -cne $planArn -and -not $planArn.EndsWith("/$planIdentity", [StringComparison]::Ordinal))
   ) {
@@ -733,6 +748,7 @@ function Get-ExactRuntime {
     ProcessorFunctionRevisionId = $processorIdentity.FunctionRevisionId
     ParserVersion = $parserIdentity.FunctionVersion
     ParserVersionArn = $parserIdentity.VersionArn
+    ParserSemanticVersion = [string]$processorVariables.DOCUMENT_PARSER_VERSION
     ParserCodeSha256 = $parserIdentity.CodeSha256
     ParserFunctionRevisionId = $parserIdentity.FunctionRevisionId
     CandidateDocumentBucket = $bucket
@@ -766,6 +782,7 @@ function ConvertTo-ReviewedRuntimeIdentity {
     processorFunctionRevisionId = $Runtime.ProcessorFunctionRevisionId
     parserVersion = $Runtime.ParserVersion
     parserVersionArn = $Runtime.ParserVersionArn
+    parserSemanticVersion = $Runtime.ParserSemanticVersion
     parserCodeSha256 = $Runtime.ParserCodeSha256
     parserFunctionRevisionId = $Runtime.ParserFunctionRevisionId
     candidateDocumentBucket = $Runtime.CandidateDocumentBucket
@@ -2495,6 +2512,191 @@ function Assert-PrivacySafeLogs {
   throw "Application log privacy validation exceeded its bounded page limit."
 }
 
+function Read-CorpusDescriptor {
+  param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$RunId)
+  $resolved = Resolve-OperatorPath -Candidate $Path -AllowedRoot $operatorRoot -MustExist
+  $descriptor = ConvertFrom-OperatorJson (Get-Content -LiteralPath $resolved -Raw) 'Document parser corpus descriptor'
+  Assert-ExactPropertySet $descriptor 'Document parser corpus descriptor' @(
+    'schemaVersion', 'kind', 'corpusVersion', 'runId', 'corpusSha256', 'cases', 'files'
+  )
+  if ([int]$descriptor.schemaVersion -ne 1 -or
+    [string]$descriptor.kind -cne 'development-document-parser-adversarial-corpus' -or
+    [string]$descriptor.corpusVersion -cne 'document-parser-adversarial-v1' -or
+    [string]$descriptor.runId -cne $RunId -or [string]$descriptor.corpusSha256 -notmatch '^[a-f0-9]{64}$' -or
+    @($descriptor.cases).Count -ne 43 -or @($descriptor.files).Count -ne 43) {
+    throw 'The generated document parser corpus descriptor is invalid.'
+  }
+  $ids = @{}
+  foreach ($entry in @($descriptor.cases)) {
+    Assert-ExactPropertySet $entry 'Document parser corpus case' @(
+      'caseId', 'documentId', 'mediaType', 'sizeBytes', 'sha256', 'expectedFailureCode', 'expectedReasonCode'
+    )
+    if ([string]$entry.caseId -notmatch '^(docx|pdf)-[0-9]{3}$' -or $ids.ContainsKey([string]$entry.caseId) -or
+      [string]$entry.documentId -notmatch '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' -or
+      [string]$entry.mediaType -notin @('application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') -or
+      [long]$entry.sizeBytes -lt 1 -or [long]$entry.sizeBytes -gt 5242880 -or [string]$entry.sha256 -notmatch '^[a-f0-9]{64}$' -or
+      [string]$entry.expectedFailureCode -notin @('invalid_document', 'parse_failed') -or
+      [string]$entry.expectedReasonCode -notmatch '^[A-Z0-9_]{1,64}$') {
+      throw 'A generated document parser corpus case is invalid.'
+    }
+    $ids[[string]$entry.caseId] = $true
+    $file = @($descriptor.files | Where-Object { [string]$_.caseId -ceq [string]$entry.caseId })
+    if ($file.Count -ne 1) { throw 'A generated corpus case file is missing or ambiguous.' }
+    $filePath = Resolve-OperatorPath -Candidate ([string]$file[0].path) -AllowedRoot $operatorRoot -MustExist
+    if ((Get-FileSha256 $filePath) -cne [string]$entry.sha256 -or (Get-Item -LiteralPath $filePath).Length -ne [long]$entry.sizeBytes) {
+      throw 'A generated corpus case does not match its reviewed bytes.'
+    }
+    $file[0] | Add-Member NoteProperty resolvedPath $filePath -Force
+  }
+  [pscustomobject]@{ Path = $resolved; Descriptor = $descriptor }
+}
+
+function Read-CorpusPlan {
+  param([switch]$RequireFiles, [switch]$RequireFresh)
+  $path = Resolve-OperatorPath $ExecutionPlanPath $operatorRoot -MustExist
+  if ((Get-FileSha256 $path) -cne $ReviewedExecutionPlanSha256) { throw 'The corpus plan checksum does not match review.' }
+  $plan = ConvertFrom-OperatorJson (Get-Content -LiteralPath $path -Raw) 'Document parser corpus plan'
+  Assert-ExactPropertySet $plan 'Document parser corpus plan' @(
+    'schemaVersion', 'kind', 'environment', 'region', 'accountId', 'stateBucket', 'stateLineage', 'stateSerial',
+    'sourceSha', 'operatorSourceSha', 'sourceToOperatorDeltaSha256', 'migrationReceiptSha256', 'migrationImage',
+    'runId', 'corpusVersion', 'corpusSha256', 'descriptorPath', 'descriptorSha256', 'cases', 'runtime', 'createdAt'
+  )
+  if ([int]$plan.schemaVersion -ne 1 -or [string]$plan.kind -cne 'development-document-parser-corpus-plan' -or
+    [string]$plan.environment -cne 'development' -or [string]$plan.region -cne $Region -or [string]$plan.accountId -cne $ExpectedAccountId -or
+    [string]$plan.stateBucket -cne $StateBucket -or [string]$plan.stateLineage -cne $identity.Lineage -or [long]$plan.stateSerial -ne $identity.Serial -or
+    [string]$plan.sourceSha -cne $SourceSha -or [string]$plan.operatorSourceSha -cne $script:operatorSourceSha -or
+    [string]$plan.sourceToOperatorDeltaSha256 -cne $script:sourceToOperatorDeltaSha256 -or
+    [string]$plan.migrationReceiptSha256 -cne $ReviewedMigrationReceiptSha256 -or [string]$plan.migrationImage -cne $migration.ImageUri -or
+    [string]$plan.runId -notmatch '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' -or
+    [string]$plan.corpusVersion -cne 'document-parser-adversarial-v1' -or [string]$plan.corpusSha256 -cne $FixtureSetSha256 -or
+    @($plan.cases).Count -ne 43 -or -not (Test-CanonicalTimestamp $plan.createdAt) -or
+    (ConvertTo-DeploymentCanonicalValue $plan.runtime) -cne (ConvertTo-DeploymentCanonicalValue (ConvertTo-ReviewedRuntimeIdentity $runtime))) {
+    throw 'The corpus plan is outside the exact reviewed source, state, artifact, or dark runtime.'
+  }
+  if ($RequireFresh -and ([DateTimeOffset]::UtcNow - [DateTimeOffset]::Parse([string]$plan.createdAt)).TotalMinutes -gt 15) {
+    throw 'The corpus plan is outside its 15-minute review window.'
+  }
+  $descriptor = $null
+  if ($RequireFiles) {
+    $descriptor = Read-CorpusDescriptor ([string]$plan.descriptorPath) ([string]$plan.runId)
+    if ((Get-FileSha256 $descriptor.Path) -cne [string]$plan.descriptorSha256 -or
+      (ConvertTo-DeploymentCanonicalValue @($descriptor.Descriptor.cases)) -cne (ConvertTo-DeploymentCanonicalValue @($plan.cases))) {
+      throw 'The reviewed corpus descriptor changed.'
+    }
+  }
+  [pscustomobject]@{ Path = $path; Plan = $plan; Descriptor = $descriptor }
+}
+
+function Write-CorpusReceipt {
+  param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][object]$Receipt)
+  Write-JsonFile $Path $Receipt -AllowReplace
+}
+
+function Remove-CorpusFiles {
+  param([Parameter(Mandatory)][string]$DescriptorPath)
+  $resolvedDescriptor = Resolve-OperatorPath -Candidate $DescriptorPath -AllowedRoot $operatorRoot
+  $directory = [IO.Path]::GetFullPath((Split-Path -Parent $resolvedDescriptor))
+  $root = [IO.Path]::GetFullPath($operatorRoot).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+  $prefix = $root + [IO.Path]::DirectorySeparatorChar
+  if (-not $directory.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) -or
+    [IO.Path]::GetFileName($directory) -notmatch '^corpus-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$') {
+    throw 'Refusing to remove corpus files outside the exact generated operator directory.'
+  }
+  if (Test-Path -LiteralPath $directory) {
+    [IO.Directory]::Delete($directory, $true)
+  }
+  if (Test-Path -LiteralPath $directory) { throw 'Generated corpus bytes remain after cleanup.' }
+}
+
+function Publish-CorpusSource {
+  param(
+    [Parameter(Mandatory)][object]$Runtime,
+    [Parameter(Mandatory)][object]$Entry,
+    [Parameter(Mandatory)][string]$Path,
+    [Parameter(Mandatory)][object]$Receipt,
+    [Parameter(Mandatory)][string]$ReceiptPath
+  )
+  Assert-ReviewedRuntimeUnchanged
+  $key = "quarantine/$($Entry.documentId)/source"
+  $checksum = Convert-HexToBase64 ([string]$Entry.sha256)
+  $put = Invoke-AwsJson @(
+    's3api', 'put-object', '--bucket', $Runtime.CandidateDocumentBucket, '--key', $key,
+    '--body', $Path, '--if-none-match', '*', '--content-type', [string]$Entry.mediaType,
+    '--server-side-encryption', 'aws:kms', '--ssekms-key-id', $Runtime.PlatformKmsKeyArn, '--bucket-key-enabled',
+    '--checksum-sha256', $checksum, '--metadata', "document-id=$($Entry.documentId),sha256=$($Entry.sha256)", '--output', 'json'
+  ) 'Corpus source object upload'
+  if ([string]$put.VersionId -notmatch '^.{1,1024}$' -or [string]$put.ChecksumSHA256 -cne $checksum) {
+    throw 'The corpus upload response is invalid.'
+  }
+  $documents = @($Receipt.documents | Where-Object { [string]$_.caseId -ceq [string]$Entry.caseId })
+  if ($documents.Count -ne 1 -or -not [string]::IsNullOrEmpty([string]$documents[0].sourceVersion)) {
+    throw 'The corpus upload checkpoint is missing or already versioned.'
+  }
+  $documents[0].sourceVersion = [string]$put.VersionId
+  Write-CorpusReceipt $ReceiptPath $Receipt
+  $head = Invoke-AwsJson @(
+    's3api', 'head-object', '--bucket', $Runtime.CandidateDocumentBucket, '--key', $key,
+    '--version-id', [string]$put.VersionId, '--output', 'json'
+  ) 'Corpus source object readback'
+  if ([string]$head.VersionId -cne [string]$put.VersionId -or [long]$head.ContentLength -ne [long]$Entry.sizeBytes -or
+    [string]$head.ContentType -cne [string]$Entry.mediaType -or [string]$head.ServerSideEncryption -cne 'aws:kms' -or
+    [string]$head.SSEKMSKeyId -cne $Runtime.PlatformKmsKeyArn -or
+    [string]$head.Metadata.'document-id' -cne [string]$Entry.documentId -or [string]$head.Metadata.sha256 -cne [string]$Entry.sha256) {
+    throw 'The corpus source object readback is outside the reviewed generated bytes.'
+  }
+  $documents[0]
+}
+
+function Remove-CorpusObjects {
+  param([Parameter(Mandatory)][object]$Runtime, [Parameter(Mandatory)][object[]]$Documents)
+  foreach ($document in @($Documents)) {
+    $boundaries = @(
+      [pscustomobject]@{ Prefix = [string]$document.sourceKey; Exact = [string]$document.sourceKey },
+      [pscustomobject]@{ Prefix = "normalized/$($document.documentId)/"; Exact = '' }
+    )
+    foreach ($boundary in $boundaries) {
+      Assert-ReviewedRuntimeUnchanged
+      $history = Invoke-AwsJson @('s3api', 'list-object-versions', '--bucket', $Runtime.CandidateDocumentBucket, '--prefix', $boundary.Prefix, '--output', 'json') 'Corpus object cleanup discovery'
+      $versions = @(Get-OptionalItems $history 'Versions')
+      $markers = @(Get-OptionalItems $history 'DeleteMarkers')
+      $outside = @($versions + $markers | Where-Object {
+          if ([string]::IsNullOrEmpty([string]$boundary.Exact)) {
+            -not ([string]$_.Key).StartsWith([string]$boundary.Prefix, [StringComparison]::Ordinal)
+          }
+          else { [string]$_.Key -cne [string]$boundary.Exact }
+        })
+      if ($outside.Count -ne 0) { throw 'Corpus cleanup found an object outside the exact generated namespace.' }
+      foreach ($entry in @($versions + $markers)) {
+        Assert-ReviewedRuntimeUnchanged
+        $null = Invoke-AwsJson @('s3api', 'delete-object', '--bucket', $Runtime.CandidateDocumentBucket, '--key', [string]$entry.Key, '--version-id', [string]$entry.VersionId, '--output', 'json') 'Corpus exact object cleanup'
+      }
+      $after = Invoke-AwsJson @('s3api', 'list-object-versions', '--bucket', $Runtime.CandidateDocumentBucket, '--prefix', $boundary.Prefix, '--output', 'json') 'Corpus post-cleanup proof'
+      if (@(Get-OptionalItems $after 'Versions').Count -ne 0 -or @(Get-OptionalItems $after 'DeleteMarkers').Count -ne 0) {
+        throw 'Corpus cleanup did not reduce the exact generated namespace to zero.'
+      }
+    }
+  }
+}
+
+function Assert-CorpusAggregate {
+  param([Parameter(Mandatory)][object]$Aggregate, [Parameter(Mandatory)][object]$Plan)
+  Assert-ExactPropertySet $Aggregate 'Document parser corpus aggregate' @(
+    'schemaVersion', 'profile', 'corpusVersion', 'corpusSha256', 'releaseSourceSha', 'runId',
+    'parserVersion', 'caseCount', 'rejectedCount', 'databaseAccessed', 'reasonCodeCounts'
+  )
+  $expected = @{}
+  foreach ($entry in @($Plan.cases)) { $expected[[string]$entry.expectedReasonCode] = 1 + [int]($expected[[string]$entry.expectedReasonCode]) }
+  if ([int]$Aggregate.schemaVersion -ne 1 -or [string]$Aggregate.profile -cne 'd1_deployed_document_parser_adversarial_corpus_v1' -or
+    [string]$Aggregate.corpusVersion -cne [string]$Plan.corpusVersion -or [string]$Aggregate.corpusSha256 -cne [string]$Plan.corpusSha256 -or
+    [string]$Aggregate.releaseSourceSha -cne $SourceSha -or [string]$Aggregate.runId -cne [string]$Plan.runId -or
+    [string]$Aggregate.parserVersion -cne 'resume-parser-v1' -or [int]$Aggregate.caseCount -ne 43 -or [int]$Aggregate.rejectedCount -ne 43 -or
+    $Aggregate.databaseAccessed -isnot [bool] -or [bool]$Aggregate.databaseAccessed -or
+    (ConvertTo-DeploymentCanonicalValue $Aggregate.reasonCodeCounts) -cne (ConvertTo-DeploymentCanonicalValue $expected)) {
+    throw 'The deployed parser did not return the exact aggregate-only corpus result.'
+  }
+  $true
+}
+
 Assert-ActionInputs
 Assert-CallerAndSource -RequireSource:($Action -ne 'Status')
 Initialize-Backend
@@ -2523,6 +2725,159 @@ $migration = Read-MigrationReceipt
 $runtime = Get-ExactRuntime -ExpectedImage $migration.ImageUri
 Assert-TriggersDark -State $runtime.State | Out-Null
 Assert-ZeroTasks -ClusterArn $runtime.ClusterArn
+
+if ($Action -eq 'CorpusPlan') {
+  & pnpm --filter '@ai-job-apply/documents-service' build | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw 'The exact Documents source could not build the corpus generator.' }
+  $runId = [guid]::NewGuid().ToString()
+  $directory = Join-Path $operatorRoot "corpus-$runId"
+  & node $corpusGenerator --run-id $runId --output-directory $directory 2>$null
+  if ($LASTEXITCODE -ne 0) { throw 'The bounded generated-only adversarial corpus could not be created.' }
+  $descriptor = Read-CorpusDescriptor (Join-Path $directory 'descriptor.json') $runId
+  if ([string]::IsNullOrWhiteSpace($ExecutionPlanPath)) { $ExecutionPlanPath = Join-Path $operatorRoot "corpus-plan-$runId.json" }
+  $path = Resolve-OperatorPath $ExecutionPlanPath $operatorRoot
+  $plan = [ordered]@{
+    schemaVersion = 1; kind = 'development-document-parser-corpus-plan'; environment = 'development'
+    region = $Region; accountId = $ExpectedAccountId; stateBucket = $StateBucket
+    stateLineage = $identity.Lineage; stateSerial = $identity.Serial; sourceSha = $SourceSha
+    operatorSourceSha = $script:operatorSourceSha; sourceToOperatorDeltaSha256 = $script:sourceToOperatorDeltaSha256
+    migrationReceiptSha256 = $ReviewedMigrationReceiptSha256; migrationImage = $migration.ImageUri
+    runId = $runId; corpusVersion = [string]$descriptor.Descriptor.corpusVersion
+    corpusSha256 = [string]$descriptor.Descriptor.corpusSha256; descriptorPath = $descriptor.Path
+    descriptorSha256 = Get-FileSha256 $descriptor.Path; cases = @($descriptor.Descriptor.cases)
+    runtime = ConvertTo-ReviewedRuntimeIdentity $runtime; createdAt = [DateTimeOffset]::UtcNow.ToString('o')
+  }
+  Write-JsonFile $path $plan
+  [pscustomobject]@{ Outcome = 'review-required'; ExecutionPlanPath = $path; ExecutionPlanSha256 = Get-FileSha256 $path; CorpusSha256 = $plan.corpusSha256; CaseCount = 43; TriggerActivation = $false; RealCandidateData = $false }
+  exit 0
+}
+
+if ($Action -in @('CorpusExecute', 'CorpusRecoverCleanup', 'CorpusVerify')) {
+  $corpusPlan = Read-CorpusPlan -RequireFiles:($Action -eq 'CorpusExecute') -RequireFresh:($Action -eq 'CorpusExecute')
+  $script:reviewedRuntimeIdentity = $corpusPlan.Plan.runtime
+  $script:reviewedRuntimeImage = $migration.ImageUri
+  $script:reviewedStateLineage = $corpusPlan.Plan.stateLineage
+  $script:reviewedStateSerial = $identity.Serial
+  $receiptPath = if ([string]::IsNullOrWhiteSpace($ReceiptPath)) {
+    Join-Path $operatorRoot "corpus-receipt-$ReviewedExecutionPlanSha256.json"
+  } else { Resolve-OperatorPath $ReceiptPath $operatorRoot }
+  if ($Action -eq 'CorpusExecute') {
+    if (Test-Path -LiteralPath $receiptPath) { throw 'Refusing to replace an existing corpus receipt or start a second run.' }
+    $receipt = [ordered]@{
+      schemaVersion = 1; kind = 'development-document-parser-corpus-receipt'; phase = 'running'
+      sourceSha = $SourceSha; executionPlanSha256 = $ReviewedExecutionPlanSha256; runId = $corpusPlan.Plan.runId
+      corpusSha256 = $FixtureSetSha256; parserVersion = $runtime.ParserVersion; parserVersionArn = $runtime.ParserVersionArn
+      parserCodeSha256 = $runtime.ParserCodeSha256; processorVersionArn = $runtime.ProcessorVersionArn
+      parserSemanticVersion = $runtime.ParserSemanticVersion
+      documents = @(); aggregatePath = ''; aggregateSha256 = ''; objectsRemoved = $false; databaseRowsCreated = 0
+      startedAt = [DateTimeOffset]::UtcNow.ToString('o'); completedAt = ''
+    }
+    Write-JsonFile $receiptPath $receipt
+    $primary = $null
+    $cleanup = $null
+    $aggregate = $null
+    try {
+      $files = @($corpusPlan.Descriptor.Descriptor.files)
+      foreach ($entry in @($corpusPlan.Plan.cases)) {
+        Assert-TriggersDark $runtime.State | Out-Null
+        Assert-ReviewedRuntimeUnchanged
+        $file = @($files | Where-Object { [string]$_.caseId -ceq [string]$entry.caseId })
+        if ($file.Count -ne 1) { throw 'The reviewed corpus file is not exact.' }
+        $document = [pscustomobject]@{
+          caseId = [string]$entry.caseId; documentId = [string]$entry.documentId
+          sourceKey = "quarantine/$($entry.documentId)/source"; sourceVersion = ''; sha256 = [string]$entry.sha256
+        }
+        $receipt.documents += $document
+        Write-CorpusReceipt $receiptPath $receipt
+        $document = Publish-CorpusSource -Runtime $runtime -Entry $entry -Path ([string]$file[0].resolvedPath) -Receipt $receipt -ReceiptPath $receiptPath
+        Set-ExactScanTag $runtime $document 'NO_THREATS_FOUND'
+      }
+      $requestCases = @($corpusPlan.Plan.cases | ForEach-Object {
+          $case = $_
+          $documents = @($receipt.documents | Where-Object { [string]$_.caseId -ceq [string]$case.caseId })
+          if ($documents.Count -ne 1) { throw 'The uploaded corpus source version is missing or ambiguous.' }
+          [ordered]@{
+            caseId = $case.caseId; documentId = $case.documentId; sourceObjectKey = "quarantine/$($case.documentId)/source"
+            sourceObjectVersion = [string]$documents[0].sourceVersion
+            mediaType = $case.mediaType; sizeBytes = $case.sizeBytes; sha256 = $case.sha256
+            createdAt = '2026-08-26T00:00:00.000Z'; expectedFailureCode = $case.expectedFailureCode; expectedReasonCode = $case.expectedReasonCode
+          }
+        })
+      $request = [ordered]@{
+        schemaVersion = 1; kind = 'development-document-parser-corpus-v1'; corpusVersion = $corpusPlan.Plan.corpusVersion
+        corpusSha256 = $corpusPlan.Plan.corpusSha256; releaseSourceSha = $SourceSha; runId = $corpusPlan.Plan.runId; cases = $requestCases
+      }
+      $response = Invoke-LambdaJson $runtime.ProcessorVersionArn $request 'Direct generated document parser corpus invocation'
+      $aggregate = $response.Payload
+      Assert-CorpusAggregate $aggregate $corpusPlan.Plan | Out-Null
+    } catch { $primary = $_ }
+    finally {
+      try {
+        Remove-CorpusObjects $runtime @($receipt.documents)
+        $receipt.objectsRemoved = $true
+        Remove-CorpusFiles ([string]$corpusPlan.Plan.descriptorPath)
+      } catch { $cleanup = $_ }
+    }
+    if ($null -ne $cleanup) { $receipt.phase = 'cleanup-required'; Write-CorpusReceipt $receiptPath $receipt; throw 'Corpus execution did not prove exact object/file cleanup; use CorpusRecoverCleanup.' }
+    if ($null -ne $primary) { $receipt.phase = 'failed-cleaned'; $receipt.completedAt = [DateTimeOffset]::UtcNow.ToString('o'); Write-CorpusReceipt $receiptPath $receipt; throw 'Corpus execution failed after exact cleanup; no acceptance is claimed.' }
+    $aggregatePath = Join-Path $operatorRoot "corpus-aggregate-$ReviewedExecutionPlanSha256.json"
+    Write-JsonFile $aggregatePath $aggregate
+    $receipt.phase = 'verified'; $receipt.aggregatePath = $aggregatePath; $receipt.aggregateSha256 = Get-FileSha256 $aggregatePath
+    $receipt.completedAt = [DateTimeOffset]::UtcNow.ToString('o'); Write-CorpusReceipt $receiptPath $receipt
+    [pscustomobject]@{ Outcome = 'verified-and-cleaned'; ReceiptPath = $receiptPath; ReceiptSha256 = Get-FileSha256 $receiptPath; AggregatePath = $aggregatePath; AggregateSha256 = $receipt.aggregateSha256; CaseCount = 43; RejectedCount = 43; PersistentRows = 0; ObjectsRemoved = $true; TriggerActivation = $false; RealCandidateData = $false }
+    exit 0
+  }
+  $receiptPath = Resolve-OperatorPath $ReceiptPath $operatorRoot -MustExist
+  if ((Get-FileSha256 $receiptPath) -cne $ReviewedReceiptSha256) { throw 'The reviewed corpus receipt checksum changed.' }
+  $receipt = ConvertFrom-OperatorJson (Get-Content $receiptPath -Raw) 'Document parser corpus receipt'
+  Assert-ExactPropertySet $receipt 'Document parser corpus receipt' @(
+    'schemaVersion', 'kind', 'phase', 'sourceSha', 'executionPlanSha256', 'runId', 'corpusSha256',
+    'parserVersion', 'parserVersionArn', 'parserCodeSha256', 'parserSemanticVersion', 'processorVersionArn',
+    'documents', 'aggregatePath', 'aggregateSha256', 'objectsRemoved', 'databaseRowsCreated', 'startedAt', 'completedAt'
+  )
+  if ([string]$receipt.kind -cne 'development-document-parser-corpus-receipt' -or [string]$receipt.sourceSha -cne $SourceSha -or
+    [string]$receipt.executionPlanSha256 -cne $ReviewedExecutionPlanSha256 -or [string]$receipt.corpusSha256 -cne $FixtureSetSha256 -or
+    [int]$receipt.schemaVersion -ne 1 -or [string]$receipt.runId -cne [string]$corpusPlan.Plan.runId -or
+    [string]$receipt.parserVersion -cne $runtime.ParserVersion -or [string]$receipt.parserVersionArn -cne $runtime.ParserVersionArn -or
+    [string]$receipt.parserCodeSha256 -cne $runtime.ParserCodeSha256 -or
+    [string]$receipt.parserSemanticVersion -cne $runtime.ParserSemanticVersion -or [string]$receipt.processorVersionArn -cne $runtime.ProcessorVersionArn) {
+    throw 'The corpus receipt is outside the exact reviewed release.'
+  }
+  $receiptIds = @{}
+  foreach ($document in @($receipt.documents)) {
+    Assert-ExactPropertySet $document 'Document parser corpus receipt document' @('caseId', 'documentId', 'sourceKey', 'sourceVersion', 'sha256')
+    $case = @($corpusPlan.Plan.cases | Where-Object { [string]$_.caseId -ceq [string]$document.caseId })
+    if ($case.Count -ne 1 -or $receiptIds.ContainsKey([string]$document.caseId) -or
+      [string]$document.documentId -cne [string]$case[0].documentId -or
+      [string]$document.sourceKey -cne "quarantine/$($case[0].documentId)/source" -or
+      (($Action -eq 'CorpusVerify' -and [string]$document.sourceVersion -notmatch '^.{1,1024}$') -or
+        ($Action -eq 'CorpusRecoverCleanup' -and -not ([string]::IsNullOrEmpty([string]$document.sourceVersion) -or [string]$document.sourceVersion -match '^.{1,1024}$'))) -or
+      [string]$document.sha256 -cne [string]$case[0].sha256) {
+      throw 'The corpus receipt contains an unreviewed document or object version.'
+    }
+    $receiptIds[[string]$document.caseId] = $true
+  }
+  if ($Action -eq 'CorpusRecoverCleanup') {
+    if ([string]$receipt.phase -notin @('running', 'cleanup-required')) { throw 'Corpus cleanup recovery requires an interrupted or cleanup-required receipt.' }
+    Remove-CorpusObjects $runtime @($receipt.documents)
+    Remove-CorpusFiles ([string]$corpusPlan.Plan.descriptorPath)
+    $receipt.objectsRemoved = $true; $receipt.phase = 'recovered-cleaned'; $receipt.completedAt = [DateTimeOffset]::UtcNow.ToString('o')
+    Write-CorpusReceipt $receiptPath $receipt
+    [pscustomobject]@{ Outcome = 'cleanup-recovered'; ReceiptPath = $receiptPath; ReceiptSha256 = Get-FileSha256 $receiptPath; AcceptanceClaim = $false; PersistentRows = 0; ObjectsRemoved = $true }
+    exit 0
+  }
+  $aggregatePath = Resolve-OperatorPath ([string]$receipt.aggregatePath) $operatorRoot -MustExist
+  if ([string]$receipt.phase -cne 'verified' -or @($receipt.documents).Count -ne 43 -or
+    $receipt.objectsRemoved -isnot [bool] -or -not [bool]$receipt.objectsRemoved -or [int]$receipt.databaseRowsCreated -ne 0 -or
+    (Get-FileSha256 $aggregatePath) -cne [string]$receipt.aggregateSha256) {
+    throw 'Corpus Verify requires a complete aggregate-only, zero-row, cleaned receipt.'
+  }
+  $aggregate = ConvertFrom-OperatorJson (Get-Content $aggregatePath -Raw) 'Document parser corpus aggregate'
+  Assert-CorpusAggregate $aggregate $corpusPlan.Plan | Out-Null
+  Assert-TriggersDark $runtime.State | Out-Null; Assert-ZeroTasks $runtime.ClusterArn
+  [pscustomobject]@{ Outcome = 'verified'; ReceiptSha256 = $ReviewedReceiptSha256; AggregateSha256 = $receipt.aggregateSha256; CaseCount = 43; RejectedCount = 43; PersistentRows = 0; ObjectsRemoved = $true; TriggerActivation = $false; CloudMutation = $false; RealCandidateData = $false }
+  exit 0
+}
 
 if ($Action -eq 'PlanExecution') {
   $null = Assert-DocumentOperationalHealth

@@ -63,6 +63,69 @@ replay, recovery descriptor rejection, idempotent exact-version deletion semanti
 four-entry fixture generation, production parsing of the clean PDF and DOCX, invalid-PDF rejection,
 and harmless malware-disposition fixture structure. It performs no AWS mutation.
 
+The same suite also builds the production parser and generates the fixed 43-case adversarial
+PDF/DOCX corpus twice. It requires byte-identical case SHA-256 values, the exact bounded rejection
+reason for every case, and rejection of any payload-bearing aggregate.
+
+## Deployed adversarial parser corpus
+
+This is a separate generated-only gate. `CorpusPlan` builds the existing adversarial generator and
+writes a review packet below the ignored development `.terraform` directory. The packet binds the
+clean deployed source, Terraform lineage/serial, exact processor and parser numeric versions and
+code digests, semantic parser version `resume-parser-v1`, all-dark trigger state, 43 case digests,
+and the canonical corpus SHA-256.
+
+```powershell
+pwsh -NoProfile -File scripts/operate-development-document-processing-acceptance.ps1 `
+  -Action CorpusPlan `
+  -ExpectedAccountId <account-id> -StateBucket <state-bucket> -SourceSha <merged-sha> `
+  -MigrationReceiptPath <verified-image-receipt> `
+  -ReviewedMigrationReceiptSha256 <receipt-sha256>
+
+pwsh -NoProfile -File scripts/operate-development-document-processing-acceptance.ps1 `
+  -Action CorpusExecute `
+  -ExpectedAccountId <account-id> -StateBucket <state-bucket> -SourceSha <merged-sha> `
+  -FixtureSetSha256 <reviewed-corpus-sha256> `
+  -MigrationReceiptPath <verified-image-receipt> `
+  -ReviewedMigrationReceiptSha256 <receipt-sha256> `
+  -ExecutionPlanPath <reviewed-corpus-plan> `
+  -ReviewedExecutionPlanSha256 <corpus-plan-sha256>
+```
+
+`CorpusExecute` revalidates the full reviewed runtime before each mutation, uploads only the 43
+descriptor-bound generated versions with exact KMS, checksum, media-type, size, and metadata
+readback, and writes the fixed synthetic clean tag. It directly invokes the exact numeric dark
+processor version; that version invokes only its exact numeric parser pin. The mapping, GuardDuty
+rule, reconciler, provider inputs, and real-resume path remain off. The special processor request
+branches before database resolution, so the gate creates no rows. Success requires 43 exact
+rejections and the descriptor-derived reason-code histogram; retained evidence contains no bytes,
+text, filenames, document IDs, keys, versions, ARNs, or candidate data.
+
+The operator always removes every version and delete marker at the exact generated quarantine key
+and throughout each generated document's normalized namespace, then removes the local corpus
+directory and proves absence. If execution is interrupted or cleanup fails, do not rerun it. Review
+the checkpoint receipt and use `CorpusRecoverCleanup`; recovery performs cleanup only and never
+invokes the processor or claims acceptance. A verified receipt may be rechecked with
+`CorpusVerify`, which revalidates the dark runtime and aggregate without invoking either Lambda.
+
+```powershell
+# Replace CorpusRecoverCleanup with CorpusVerify for an already verified receipt.
+pwsh -NoProfile -File scripts/operate-development-document-processing-acceptance.ps1 `
+  -Action CorpusRecoverCleanup `
+  -ExpectedAccountId <account-id> -StateBucket <state-bucket> -SourceSha <merged-sha> `
+  -FixtureSetSha256 <reviewed-corpus-sha256> `
+  -MigrationReceiptPath <verified-image-receipt> `
+  -ReviewedMigrationReceiptSha256 <receipt-sha256> `
+  -ExecutionPlanPath <reviewed-corpus-plan> `
+  -ReviewedExecutionPlanSha256 <corpus-plan-sha256> `
+  -ReceiptPath <reviewed-corpus-receipt> `
+  -ReviewedReceiptSha256 <corpus-receipt-sha256>
+```
+
+This gate does not prove trigger delivery, GuardDuty service detection, database processing,
+provider ingestion, alert delivery, API Gateway/JWT enforcement, real candidate data, or ADR-023
+acceptance.
+
 ## 1. Confirm the dark boundary
 
 ```powershell

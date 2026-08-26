@@ -54,11 +54,10 @@ export function generatedDocx(entries: readonly GeneratedZipEntry[]): Promise<Ui
     zip.outputStream.once("error", reject);
     zip.outputStream.once("end", () => resolve(Buffer.concat(chunks)));
     for (const entry of entries) {
-      zip.addBuffer(
-        Buffer.from(entry.value),
-        entry.name,
-        entry.compress === undefined ? undefined : { compress: entry.compress },
-      );
+      zip.addBuffer(Buffer.from(entry.value), entry.name, {
+        ...(entry.compress === undefined ? {} : { compress: entry.compress }),
+        mtime: new Date("1980-01-01T00:00:00.000Z"),
+      });
     }
     zip.end();
   });

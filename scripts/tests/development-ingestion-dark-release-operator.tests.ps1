@@ -24,7 +24,8 @@ foreach ($name in @(
     "Get-FileSha256", "Get-TextSha256", "ConvertFrom-OperatorJson", "Assert-ExactProperties", "Resolve-PrivatePath",
     "Remove-SensitiveTemporaryFile", "Assert-TerraformVersion", "Assert-IngestionMappingInventory",
     "Read-PublicationReceipt", "Get-ZipRecord", "Convert-BaselineDarkVariables", "Test-ExactFalse", "Assert-DarkVariables",
-    "New-ReleaseVariables", "Get-ArtifactCoordinates", "Assert-ReleasePlan", "New-PlanReceipt",
+    "New-ReleaseVariables", "Get-ArtifactCoordinates", "Assert-ReleasePlan", "Get-StateResourceAttributes",
+    "Get-StateResourceInstances", "Get-IngestionNetworkBoundary", "Assert-LiveIngestionNetworkBoundary", "New-PlanReceipt",
     "Read-PlanReceipt"
   )) { Import-OperatorFunction $name }
 
@@ -44,7 +45,7 @@ foreach ($requiredSource in @(
     'Assert-LiveDarkRelease',
     'Invoke-ZeroDriftPlan',
     'rollbackArtifactCoordinates',
-    'describe-nat-gateways',
+    'describe-route-tables',
     'list-event-source-mappings',
     'INGESTION_ACTIVITY_FUNCTION_ARN -cne $activityArn',
     'Terraform 1.9.8 is required',
@@ -78,7 +79,9 @@ $darkBooleanVariables = @(
   "ingestion_provider_activation_allowed", "ingestion_provider_private_egress"
 )
 $allowedReleaseActions = [ordered]@{
+  "module.platform.data.aws_iam_policy_document.ingestion_durable[0]" = "read"
   "module.platform.aws_cloudformation_stack.ingestion_durable[0]" = "update"
+  "module.platform.aws_iam_role_policy.ingestion_durable[0]" = "update"
   "module.platform.aws_lambda_alias.ingestion_activity[0]" = "update"
   'module.platform.aws_lambda_alias.ingestion_runtime["coordinator"]' = "update"
   'module.platform.aws_lambda_alias.ingestion_runtime["starter"]' = "update"
@@ -87,8 +90,10 @@ $allowedReleaseActions = [ordered]@{
   'module.platform.aws_lambda_function.ingestion_runtime["coordinator"]' = "update"
   'module.platform.aws_lambda_function.ingestion_runtime["starter"]' = "update"
   'module.platform.aws_lambda_function.ingestion_runtime["terminal"]' = "update"
+  "module.platform.time_sleep.ingestion_policy_propagation[0]" = "create,delete"
 }
 $expectedOutputChanges = @("ingestion_durable_version_arn")
+if ($allowedReleaseActions.Count -ne 12) { throw "The exact real artifact-induced plan inventory must contain twelve changes." }
 $functionNames = [ordered]@{
   activity = "ai-job-apply-development-ingestion-activity"
   coordinator = "ai-job-apply-development-ingestion-coordinator"
@@ -196,6 +201,60 @@ try {
     }
     Assert-Rejected { Assert-IngestionMappingInventory $candidate } "event-source mapping mutation '$mutation'"
   }
+
+  function New-NetworkResource([string]$Type, [string]$Name, [object[]]$Attributes) {
+    return [pscustomobject]@{
+      type = $Type; name = $Name
+      instances = @($Attributes | ForEach-Object { [pscustomobject]@{ attributes = $_ } })
+    }
+  }
+  $privateSubnetIds = @("subnet-private-a", "subnet-private-b")
+  $providerSubnetIds = @("subnet-provider-a", "subnet-provider-b")
+  $privateRouteIds = @("rtb-private-a", "rtb-private-b")
+  $providerRouteIds = @("rtb-provider-a", "rtb-provider-b")
+  $networkSnapshot = [pscustomobject]@{ State = [pscustomobject]@{ resources = @(
+        (New-NetworkResource "aws_lambda_function" "ingestion_activity" @([pscustomobject]@{
+              vpc_config = @([pscustomobject]@{ subnet_ids = $privateSubnetIds })
+            })),
+        (New-NetworkResource "aws_subnet" "private" @($privateSubnetIds | ForEach-Object { [pscustomobject]@{ id = $_ } })),
+        (New-NetworkResource "aws_subnet" "ingestion_provider" @($providerSubnetIds | ForEach-Object { [pscustomobject]@{ id = $_ } })),
+        (New-NetworkResource "aws_route_table" "private" @($privateRouteIds | ForEach-Object {
+              [pscustomobject]@{ id = $_; route = @([pscustomobject]@{ nat_gateway_id = "nat-candidate-rights" }) }
+            })),
+        (New-NetworkResource "aws_route_table" "ingestion_provider" @($providerRouteIds | ForEach-Object { [pscustomobject]@{ id = $_ } })),
+        (New-NetworkResource "aws_route_table_association" "private" @(
+            [pscustomobject]@{ subnet_id = $privateSubnetIds[0]; route_table_id = $privateRouteIds[0] },
+            [pscustomobject]@{ subnet_id = $privateSubnetIds[1]; route_table_id = $privateRouteIds[1] }
+          )),
+        (New-NetworkResource "aws_route_table_association" "ingestion_provider" @(
+            [pscustomobject]@{ subnet_id = $providerSubnetIds[0]; route_table_id = $providerRouteIds[0] },
+            [pscustomobject]@{ subnet_id = $providerSubnetIds[1]; route_table_id = $providerRouteIds[1] }
+          )),
+        (New-NetworkResource "aws_nat_gateway" "this" @([pscustomobject]@{ id = "nat-candidate-rights" }))
+      ) } }
+  $network = Get-IngestionNetworkBoundary $networkSnapshot
+  $liveActivity = [pscustomobject]@{ VpcConfig = [pscustomobject]@{ SubnetIds = $privateSubnetIds } }
+  $liveRoutes = [pscustomobject]@{ RouteTables = @(
+      [pscustomobject]@{ RouteTableId = $privateRouteIds[0]; Associations = @([pscustomobject]@{ SubnetId = $privateSubnetIds[0] }); Routes = @([pscustomobject]@{ NatGatewayId = "nat-candidate-rights" }) },
+      [pscustomobject]@{ RouteTableId = $privateRouteIds[1]; Associations = @([pscustomobject]@{ SubnetId = $privateSubnetIds[1] }); Routes = @([pscustomobject]@{ NatGatewayId = "nat-candidate-rights" }) }
+    ) }
+  Assert-LiveIngestionNetworkBoundary $network $liveActivity $liveRoutes
+  foreach ($mutation in @("activity-provider-subnet", "provider-nat", "provider-route", "unknown-nat")) {
+    $candidate = $networkSnapshot | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+    switch ($mutation) {
+      "activity-provider-subnet" { @($candidate.State.resources | Where-Object name -ceq "ingestion_activity")[0].instances[0].attributes.vpc_config[0].subnet_ids = $providerSubnetIds }
+      "provider-nat" { $candidate.State.resources += New-NetworkResource "aws_nat_gateway" "ingestion_provider" @([pscustomobject]@{ id = "nat-provider" }) }
+      "provider-route" { @($candidate.State.resources | Where-Object name -ceq "private" | Where-Object type -ceq "aws_route_table_association")[0].instances[0].attributes.route_table_id = $providerRouteIds[0] }
+      "unknown-nat" { @($candidate.State.resources | Where-Object name -ceq "private" | Where-Object type -ceq "aws_route_table")[0].instances[0].attributes.route[0].nat_gateway_id = "nat-unowned" }
+    }
+    Assert-Rejected { Get-IngestionNetworkBoundary $candidate } "ingestion topology mutation '$mutation'"
+  }
+  $badLiveRoutes = $liveRoutes | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+  $badLiveRoutes.RouteTables[0].RouteTableId = $providerRouteIds[0]
+  Assert-Rejected { Assert-LiveIngestionNetworkBoundary $network $liveActivity $badLiveRoutes } "live provider-route topology"
+  $badLiveNat = $liveRoutes | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+  $badLiveNat.RouteTables[0].Routes[0].NatGatewayId = "nat-unowned"
+  Assert-Rejected { Assert-LiveIngestionNetworkBoundary $network $liveActivity $badLiveNat } "live unowned NAT route"
 
   $baselineValues = [ordered]@{
     deploy_ingestion_runtime = $true

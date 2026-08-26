@@ -21,11 +21,13 @@ does not itself authorize AWS mutation or source activation.
 - `ingestion_provider_activation_allowed` and `ingestion_provider_private_egress` default false,
   and `ingestion_provider_sources` defaults empty. Provider authority additionally requires
   NAT in the deployed provider-only private subnets and at least one exact enabled source. Only the
-  provider-fetch activity moves onto those subnets; the coordinator, starter, terminal handler,
-  and shared application private subnets retain no default internet route. Restoration deletes the
-  cost-bearing NAT/EIP/default routes but retains the free isolated subnets and empty route tables,
-  because immutable Lambda versions retain their exact VPC attachment. Provider configuration
-  alone never enables a schedule or queue mapping.
+  provider-fetch activity moves onto those subnets. With provider egress false, the activity remains
+  on the shared application private subnets and their Terraform-owned private route tables. Those
+  shared routes may independently use candidate-rights application NAT and are not evidence of
+  ingestion-provider activation. Provider restoration deletes only the ingestion-provider
+  NAT/EIP/default routes while retaining the dedicated subnets and route tables, because immutable
+  Lambda versions retain their exact VPC attachment. Provider configuration alone never enables a
+  schedule or queue mapping.
 - The dispatch queue mapping, five-minute reconciliation rule, and terminal rule remain disabled
   until an approved activation record exists. The coordinator derives one idempotent occurrence
   per canonical UTC hour, so reconciliation cadence does not multiply source polling. An exact
@@ -156,9 +158,11 @@ Create the saved refresh-backed plan and its exclusive checksum receipt:
   -PlanReceiptPath '<ignored-new-release-plan-receipt.json>'
 ```
 
-The plan must contain exactly nine enumerated artifact-caused changes: the activity and three
-runtime functions, their four aliases, and the durable CloudFormation stack. Computed version
-values within those resources may remain unknown until apply, but no additional resource may change.
+The plan must contain exactly twelve enumerated artifact-caused changes: the activity and three
+runtime functions, their four aliases, the durable CloudFormation stack, the durable IAM policy,
+one durable-policy document data read, and the policy-propagation barrier replacement with exact
+`create,delete` actions. Computed version values within those resources may remain unknown until
+apply, but no additional resource may change.
 Only the durable-version output may change. Routes, NAT/EIP, queues, mappings, schedules, terminal
 rules, provider configuration, database/ECS task definitions, APIs, and data mutations are forbidden.
 The plan receipt binds the plan checksum, source and publication, pre-apply state version,
@@ -187,11 +191,19 @@ Verify after a successful apply:
 
 Verify requires exact published code hashes, active numeric versions, unweighted development
 aliases, a complete durable CloudFormation stack, disabled schedule and terminal rules, one disabled
-dispatch mapping, empty dispatch and dead-letter queues, no pending/available NAT gateway, and zero
-running ECS tasks or services. Terraform outputs must still prove the deployed runtime and all four
-dark gates with zero provider sources. It then creates a new `-refresh=true -detailed-exitcode`
+dispatch mapping, empty dispatch and dead-letter queues, and zero running ECS tasks or services.
+State and live Lambda/EC2 evidence must prove that the activity uses the exact two shared-application
+private subnets and their exact route tables, disjoint from the dedicated provider subnet/route
+topology, with no ingestion-provider NAT resource. Account-wide NAT absence is neither required nor
+claimed, and this topology proof does not claim that the shared application subnets lack internet
+egress capability. No-provider-request acceptance instead depends on provider authority false, an
+empty provider-source inventory, disabled triggers, and the fixed local generated-synthetic fixture
+path failing before any adapter. Terraform outputs must still prove the deployed runtime and all
+four dark gates with zero provider sources. It then creates a new `-refresh=true -detailed-exitcode`
 Terraform plan from the applied variables and accepts only zero resource and output changes. The
-exclusive private verification receipt retains release and rollback coordinates plus the fresh
+exclusive private verification receipt retains release and rollback coordinates, exact activity
+subnet/route-table counts, the accepted application-NAT count, the narrow
+`providerDedicatedTopologyUsed=false` result, plus the fresh
 zero-drift plan checksum. No step invokes a provider or processes candidate/job data.
 
 Run the pure offline contract suite in both supported PowerShell hosts before credentials are used:

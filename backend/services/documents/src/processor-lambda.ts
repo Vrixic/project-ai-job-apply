@@ -12,6 +12,11 @@ import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import { GetObjectCommand, HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
 import type { SQSBatchResponse, SQSEvent, SQSRecord } from "aws-lambda";
+import {
+  type DocumentParserCorpusAggregate,
+  type DocumentParserCorpusRequest,
+  executeDocumentParserCorpus,
+} from "./document-parser-corpus.js";
 import type {
   DocumentParserInput,
   DocumentParserResult,
@@ -393,6 +398,37 @@ function parseScanRecord(record: SQSRecord): DocumentScanResultV1 {
 
 let runtimeHandler: ReturnType<typeof createDocumentProcessorHandler> | undefined;
 let runtimeStore: PostgresDocumentProcessorStore | undefined;
+let runtimeParser: AwsDocumentParserClient | undefined;
+
+function getRuntimeParser(): { parser: AwsDocumentParserClient; parserVersion: string } {
+  const bucketName = process.env.CANDIDATE_DOCUMENT_BUCKET ?? "";
+  const kmsKeyArn = process.env.PLATFORM_KMS_KEY_ARN ?? "";
+  const parserFunctionArn = process.env.DOCUMENT_PARSER_FUNCTION_ARN ?? "";
+  const parserVersion = process.env.DOCUMENT_PARSER_VERSION ?? "";
+  const objectAccessRoleArn = process.env.DOCUMENT_OBJECT_ACCESS_ROLE_ARN ?? "";
+  const region = process.env.AWS_REGION ?? "";
+  if (
+    !bucketName ||
+    !kmsKeyArn ||
+    !/^arn:aws:lambda:[a-z0-9-]+:[0-9]{12}:function:[A-Za-z0-9-_]+:[1-9][0-9]*$/u.test(
+      parserFunctionArn,
+    ) ||
+    !/^[A-Za-z0-9._-]{1,64}$/u.test(parserVersion) ||
+    !/^arn:aws:iam::[0-9]{12}:role\/[A-Za-z0-9+=,.@_-]+$/u.test(objectAccessRoleArn) ||
+    !/^[a-z]{2}-[a-z]+-[0-9]$/u.test(region)
+  ) {
+    throw new Error("Document parser client configuration is incomplete");
+  }
+  runtimeParser ??= new AwsDocumentParserClient(
+    parserFunctionArn,
+    parserVersion,
+    objectAccessRoleArn,
+    bucketName,
+    kmsKeyArn,
+    region,
+  );
+  return { parser: runtimeParser, parserVersion };
+}
 
 export function createDocumentProcessingReconciler(
   expectedRuleArn: string,
@@ -429,8 +465,12 @@ function isScheduledEvent(event: SQSEvent | ScheduledEvent): event is ScheduledE
 }
 
 export async function handler(
-  event: SQSEvent | ScheduledEvent,
-): Promise<SQSBatchResponse | undefined> {
+  event: SQSEvent | ScheduledEvent | DocumentParserCorpusRequest,
+): Promise<SQSBatchResponse | DocumentParserCorpusAggregate | undefined> {
+  if ((event as { kind?: unknown }).kind === "development-document-parser-corpus-v1") {
+    const { parser, parserVersion } = getRuntimeParser();
+    return executeDocumentParserCorpus(event, parserVersion, parser);
+  }
   if (!runtimeHandler) {
     const databaseUrl = await resolveLambdaDatabaseUrl(
       {
@@ -444,47 +484,30 @@ export async function handler(
     const database = createDatabase(databaseUrl, { maxConnections: 1 });
     const bucketName = process.env.CANDIDATE_DOCUMENT_BUCKET ?? "";
     const kmsKeyArn = process.env.PLATFORM_KMS_KEY_ARN ?? "";
-    const parserFunctionArn = process.env.DOCUMENT_PARSER_FUNCTION_ARN ?? "";
-    const parserVersion = process.env.DOCUMENT_PARSER_VERSION ?? "";
-    const objectAccessRoleArn = process.env.DOCUMENT_OBJECT_ACCESS_ROLE_ARN ?? "";
     const accountId = process.env.PLATFORM_AWS_ACCOUNT_ID ?? "";
     const protectionPlanArn = process.env.GUARDDUTY_PROTECTION_PLAN_ARN ?? "";
     const region = process.env.AWS_REGION ?? "";
-    if (
-      !bucketName ||
-      !kmsKeyArn ||
-      !parserFunctionArn ||
-      !/^[A-Za-z0-9._-]{1,64}$/u.test(parserVersion) ||
-      !objectAccessRoleArn ||
-      !protectionPlanArn ||
-      !/^[0-9]{12}$/u.test(accountId)
-    ) {
+    if (!bucketName || !kmsKeyArn || !protectionPlanArn || !/^[0-9]{12}$/u.test(accountId)) {
       throw new Error("Document processor configuration is incomplete");
     }
     runtimeStore = new PostgresDocumentProcessorStore(
       database.client,
       new PostgresResumeProposalWriter(),
     );
+    const { parser } = getRuntimeParser();
     runtimeHandler = createDocumentProcessorHandler(
       { accountId, region, protectionPlanArn, bucketName },
       runtimeStore,
-      new AwsDocumentParserClient(
-        parserFunctionArn,
-        parserVersion,
-        objectAccessRoleArn,
-        bucketName,
-        kmsKeyArn,
-        region,
-      ),
+      parser,
       new S3NormalizedDocumentReader(bucketName, kmsKeyArn),
     );
   }
-  if (isScheduledEvent(event)) {
+  if (isScheduledEvent(event as SQSEvent | ScheduledEvent)) {
     await createDocumentProcessingReconciler(
       process.env.DOCUMENT_RECONCILER_RULE_ARN ?? "",
       runtimeStore as PostgresDocumentProcessorStore,
-    )(event);
+    )(event as ScheduledEvent);
     return undefined;
   }
-  return runtimeHandler(event);
+  return runtimeHandler(event as SQSEvent);
 }

@@ -119,7 +119,9 @@ migration execution, or AWS restore execution. No gateway or general worker imag
   generated-synthetic direct-dark acceptance lifecycle against exact gateway, processor, and
   numeric parser identities while mapping, GuardDuty rule, and reconciler stay disabled. It uses
   durable claims, exact-version upload/cleanup, aggregate-only receipts, and a bounded recovery
-  path. Direct authorizer context is a test harness and does not prove API Gateway routing,
+  path. Its separate `Corpus*` actions run only the fixed 43-case generated adversarial corpus
+  against the exact numeric dark processor/parser path and retain reason-code counts only. Direct
+  authorizer context is a test harness and does not prove API Gateway routing,
   JWT/JWKS validation, or authorizer enforcement.
   See
   `infrastructure/runbooks/deployments/development-document-processing-acceptance.md`.

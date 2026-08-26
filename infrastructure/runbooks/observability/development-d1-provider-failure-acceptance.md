@@ -48,8 +48,14 @@ durable version names the exact activity version, schedule and terminal EventBri
 disabled, every event-source mapping across the durable, activity, coordinator, starter, and
 terminal functions is enumerated and the sole Terraform-owned mapping is disabled, normal
 synthetic ingestion and provider authority are false on the activity and all three runtime
-functions, provider sources are `[]`, no NAT gateway exists, dispatch and dead-letter queues are
-empty, ECS has no service or running task, and the UUID-derived execution does not exist.
+functions, and provider sources are `[]`. State and live Lambda/EC2 evidence must instead bind the
+activity to the exact shared-application private subnets and their Terraform-owned route tables,
+disjoint from the dedicated provider topology, with no ingestion-provider NAT resource. The
+candidate-rights/application NAT may legitimately exist and is not an ingestion-provider gate.
+Dispatch and dead-letter queues are empty, ECS has no service or running task, and the UUID-derived
+execution does not exist. This topology does not prove lack of internet egress capability. The
+no-provider-request claim instead rests on provider authority false, sources `[]`, disabled
+triggers, and the fixed fixture code path failing locally before adapter dispatch.
 
 Run the offline suite before using credentials:
 
@@ -135,7 +141,8 @@ receipt, resume bounded polling, and complete aggregate evidence:
 
 If verification advances an incomplete receipt, independently record the new receipt checksum.
 For a completed receipt, Verify rechecks the state/configuration/immutable versions, disabled
-triggers and mappings, provider/NAT gates, empty queues, idle ECS, exact single retained execution,
+triggers and mappings, provider flags and exact non-provider activity network topology, empty
+queues, idle ECS, exact single retained execution,
 evidence checksums, and evidence contents. After the execution completes, the operator rereads the
 exact versioned Terraform state and runs a new refresh-backed zero-change plan; it never reuses the
 pre-run plan as post-run drift proof. An already verified receipt is accepted only when its exact

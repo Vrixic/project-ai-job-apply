@@ -397,6 +397,68 @@ function Get-StateResourceInstances {
     })
 }
 
+function Get-IngestionNetworkBoundary {
+  param([Parameter(Mandatory)][object]$Snapshot, [Parameter(Mandatory)][object]$Activity)
+  $privateSubnets = @(Get-StateResourceInstances $Snapshot "aws_subnet" "private")
+  $providerSubnets = @(Get-StateResourceInstances $Snapshot "aws_subnet" "ingestion_provider")
+  $privateRoutes = @(Get-StateResourceInstances $Snapshot "aws_route_table" "private")
+  $providerRoutes = @(Get-StateResourceInstances $Snapshot "aws_route_table" "ingestion_provider")
+  $privateAssociations = @(Get-StateResourceInstances $Snapshot "aws_route_table_association" "private")
+  $providerAssociations = @(Get-StateResourceInstances $Snapshot "aws_route_table_association" "ingestion_provider")
+  $applicationNats = @($Snapshot.State.resources | Where-Object {
+      [string]$_.type -ceq "aws_nat_gateway" -and [string]$_.name -ceq "this"
+    } | ForEach-Object { @($_.instances) })
+  $providerNats = @($Snapshot.State.resources | Where-Object {
+      [string]$_.type -ceq "aws_nat_gateway" -and [string]$_.name -ceq "ingestion_provider"
+    } | ForEach-Object { @($_.instances) })
+  $privateSubnetIds = @($privateSubnets | ForEach-Object { [string]$_.Attributes.id } | Sort-Object -Unique)
+  $providerSubnetIds = @($providerSubnets | ForEach-Object { [string]$_.Attributes.id } | Sort-Object -Unique)
+  $privateRouteIds = @($privateRoutes | ForEach-Object { [string]$_.Attributes.id } | Sort-Object -Unique)
+  $providerRouteIds = @($providerRoutes | ForEach-Object { [string]$_.Attributes.id } | Sort-Object -Unique)
+  $applicationNatIds = @($applicationNats | ForEach-Object { [string]$_.attributes.id } | Sort-Object -Unique)
+  $activityNatIds = @($privateRoutes | ForEach-Object { @($_.Attributes.route) } | ForEach-Object {
+      [string]$_.nat_gateway_id
+    } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+  $activitySubnetIds = @($Activity.vpc_config[0].subnet_ids | ForEach-Object { [string]$_ } | Sort-Object -Unique)
+  if ($privateSubnetIds.Count -ne 2 -or $providerSubnetIds.Count -ne 2 -or $privateRouteIds.Count -ne 2 -or
+    $providerRouteIds.Count -ne 2 -or @($Activity.vpc_config).Count -ne 1 -or $providerNats.Count -ne 0 -or
+    @($privateSubnetIds | Where-Object { $_ -in $providerSubnetIds }).Count -ne 0 -or
+    ($activitySubnetIds -join "|") -cne ($privateSubnetIds -join "|") -or
+    (@($privateAssociations | ForEach-Object { [string]$_.Attributes.subnet_id } | Sort-Object) -join "|") -cne ($privateSubnetIds -join "|") -or
+    (@($privateAssociations | ForEach-Object { [string]$_.Attributes.route_table_id } | Sort-Object) -join "|") -cne ($privateRouteIds -join "|") -or
+    (@($providerAssociations | ForEach-Object { [string]$_.Attributes.subnet_id } | Sort-Object) -join "|") -cne ($providerSubnetIds -join "|") -or
+    (@($providerAssociations | ForEach-Object { [string]$_.Attributes.route_table_id } | Sort-Object) -join "|") -cne ($providerRouteIds -join "|") -or
+    @($activityNatIds | Where-Object { $_ -notin $applicationNatIds }).Count -ne 0) {
+    throw "Terraform state does not bind ingestion activity to the exact non-provider subnet and route topology."
+  }
+  return [pscustomobject]@{
+    ActivitySubnetIds = $privateSubnetIds; ActivityRouteTableIds = $privateRouteIds
+    ProviderSubnetIds = $providerSubnetIds; ProviderRouteTableIds = $providerRouteIds
+    ApplicationNatGatewayIds = $applicationNatIds; ActivityNatGatewayIds = $activityNatIds
+  }
+}
+
+function Assert-LiveIngestionNetworkBoundary {
+  param([Parameter(Mandatory)][object]$Network, [Parameter(Mandatory)][object]$Activity, [Parameter(Mandatory)][object]$RouteTables)
+  $liveSubnets = @($Activity.VpcConfig.SubnetIds | ForEach-Object { [string]$_ } | Sort-Object -Unique)
+  $tables = @($RouteTables.RouteTables)
+  $liveRouteIds = @($tables | ForEach-Object { [string]$_.RouteTableId } | Sort-Object -Unique)
+  $associatedSubnets = @($tables | ForEach-Object { @($_.Associations) } | Where-Object {
+      -not [string]::IsNullOrWhiteSpace([string]$_.SubnetId)
+    } | ForEach-Object { [string]$_.SubnetId } | Sort-Object)
+  $liveNatIds = @($tables | ForEach-Object { @($_.Routes) } | ForEach-Object {
+      [string]$_.NatGatewayId
+    } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+  if (($liveSubnets -join "|") -cne (@($Network.ActivitySubnetIds) -join "|") -or
+    $tables.Count -ne 2 -or ($liveRouteIds -join "|") -cne (@($Network.ActivityRouteTableIds) -join "|") -or
+    ($associatedSubnets -join "|") -cne (@($Network.ActivitySubnetIds) -join "|") -or
+    ($liveNatIds -join "|") -cne (@($Network.ActivityNatGatewayIds) -join "|") -or
+    @($liveNatIds | Where-Object { $_ -notin @($Network.ApplicationNatGatewayIds) }).Count -ne 0 -or
+    @($liveSubnets | Where-Object { $_ -in @($Network.ProviderSubnetIds) }).Count -ne 0) {
+    throw "Live ingestion activity is not attached to the exact non-provider subnet and route topology."
+  }
+}
+
 function Assert-StateBoundary {
   param([Parameter(Mandatory)][object]$Snapshot, [Parameter(Mandatory)][object]$Representative)
   if ([long]$Snapshot.Serial -ne [long]$Representative.StateSerial) { throw "Terraform state serial does not match the reviewed representative configuration." }
@@ -411,7 +473,7 @@ function Assert-StateBoundary {
   $dispatch = Get-StateResource $Snapshot "aws_sqs_queue" "ingestion_dispatch"
   $deadLetter = Get-StateResource $Snapshot "aws_sqs_queue" "ingestion_dead_letter"
   $cluster = Get-StateResource $Snapshot "aws_ecs_cluster" "this"
-  $natResources = @($Snapshot.State.resources | Where-Object { [string]$_.type -ceq "aws_nat_gateway" } | ForEach-Object { @($_.instances) })
+  $network = Get-IngestionNetworkBoundary $Snapshot $activity
   $template = ConvertFrom-OperatorJson -Json ([string]$stack.template_body) -Description "Terraform-owned ingestion durable template"
   $durableProperties = $template.Resources.DurableFunction.Properties
   $durableVersionProperties = $template.Resources.DurableVersion.Properties
@@ -441,13 +503,14 @@ function Assert-StateBoundary {
     [string]$durableProperties.Environment.Variables.INGESTION_ACTIVITY_FUNCTION_ARN -cne $activityArn -or
     [bool]$mapping.enabled -or [string]$schedule.state -cne "DISABLED" -or [string]$terminal.state -cne "DISABLED" -or
     [string]$dispatch.name -cne $dispatchQueueName -or [string]$deadLetter.name -cne $deadLetterQueueName -or
-    [string]$cluster.name -cne $ecsClusterName -or $natResources.Count -ne 0) {
+    [string]$cluster.name -cne $ecsClusterName) {
     throw "Terraform state does not bind the exact immutable, trigger-dark, provider-off ingestion boundary."
   }
   return [pscustomobject]@{
     DurableArn = $durableArn; ActivityArn = $activityArn; MappingUuid = [string]$mapping.uuid
     DurableFunctionArn = "arn:aws:lambda:$Region`:$ExpectedAccountId`:function:$durableFunctionName"
     ActivityFunctionArn = "arn:aws:lambda:$Region`:$ExpectedAccountId`:function:$activityFunctionName"
+    Network = $network
     RuntimeFunctions = @($runtimeFunctions | ForEach-Object {
         [pscustomobject]@{
           Name = "$durableFunctionName".Replace("ingestion-durable", "ingestion-$($_.IndexKey)")
@@ -519,7 +582,8 @@ function Assert-LiveBoundary {
   $terminal = Invoke-AwsJson @("events", "describe-rule", "--name", $terminalRuleName, "--output", "json") "Ingestion terminal-rule validation"
   $mapping = Invoke-AwsJson @("lambda", "get-event-source-mapping", "--uuid", $StateBoundary.MappingUuid, "--output", "json") "Ingestion mapping validation"
   $allMappings = @(Get-AllIngestionMappings $StateBoundary)
-  $nat = Invoke-AwsJson @("ec2", "describe-nat-gateways", "--filter", "Name=state,Values=pending,available", "--output", "json") "NAT boundary validation"
+  $routeArguments = @("ec2", "describe-route-tables", "--route-table-ids") + @($StateBoundary.Network.ActivityRouteTableIds) + @("--output", "json")
+  $routeTables = Invoke-AwsJson $routeArguments "Ingestion route topology validation"
   $tasks = Invoke-AwsJson @("ecs", "list-tasks", "--cluster", $ecsClusterName, "--desired-status", "RUNNING", "--output", "json") "ECS task validation"
   $services = Invoke-AwsJson @("ecs", "list-services", "--cluster", $ecsClusterName, "--output", "json") "ECS service validation"
   $dispatch = Get-QueueAttributes $dispatchQueueName
@@ -540,13 +604,13 @@ function Assert-LiveBoundary {
     [string]$schedule.State -cne "DISABLED" -or [string]$terminal.State -cne "DISABLED" -or
     [string]$mapping.State -cne "Disabled" -or $allMappings.Count -ne 1 -or
     [string]$allMappings[0].UUID -cne $StateBoundary.MappingUuid -or [string]$allMappings[0].State -cne "Disabled" -or
-    @($nat.NatGateways).Count -ne 0 -or
     @($tasks.taskArns).Count -ne 0 -or @($services.serviceArns).Count -ne 0 -or
     $dispatch.Visible -ne 0 -or $dispatch.NotVisible -ne 0 -or $dispatch.Delayed -ne 0 -or
     $deadLetter.Visible -ne 0 -or $deadLetter.NotVisible -ne 0 -or $deadLetter.Delayed -ne 0 -or
     ($RequireNoExecution -and $matches.Count -ne 0)) {
     throw "The live development boundary is not exact, trigger-dark, provider-off, empty, idle, or execution-free."
   }
+  Assert-LiveIngestionNetworkBoundary $StateBoundary.Network $activity $routeTables
   foreach ($expected in $StateBoundary.RuntimeFunctions) {
     $configuration = @($runtimeConfigurations | Where-Object {
         [string]$_.FunctionName -ceq [string]$expected.Name -and [string]$_.Version -ceq [string]$expected.Version

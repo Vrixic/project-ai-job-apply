@@ -81,7 +81,8 @@ if ($preDriftOffset -lt 0 -or $planBuildOffset -lt $preDriftOffset -or $waitOffs
 foreach ($name in @(
     "Get-FileSha256", "ConvertFrom-OperatorJson", "ConvertFrom-BoundedJsonString", "Assert-ExactProperties", "Test-CanonicalTimestamp", "Get-OptionalProperty",
     "Resolve-PathBelowRoot", "Write-JsonFile", "New-DurableExecutionName", "Read-RepresentativeConfiguration",
-    "Assert-ZeroChangePlan", "Assert-StateBoundary", "Get-StateResource", "Get-StateResourceInstances", "Assert-LiveBoundary", "Get-AllIngestionMappings", "Get-DurableExecutionMatches", "New-WorkflowPayload",
+    "Assert-ZeroChangePlan", "Assert-StateBoundary", "Get-StateResource", "Get-StateResourceInstances", "Get-IngestionNetworkBoundary",
+    "Assert-LiveIngestionNetworkBoundary", "Assert-LiveBoundary", "Get-AllIngestionMappings", "Get-DurableExecutionMatches", "New-WorkflowPayload",
     "New-ExecutionPlan", "Read-ExecutionPlan", "Wait-ExactDurableResult", "New-Receipt", "Assert-Receipt",
     "Assert-InvocationArtifactsAbsent", "Assert-ProviderAggregate", "Assert-ZeroDriftEvidence", "Write-OrValidateEvidence", "Complete-Evidence"
   )) { Import-OperatorFunction $name }
@@ -183,6 +184,16 @@ try {
   function New-StateResource([string]$Type, [string]$Name, [object]$Attributes) {
     return [pscustomobject]@{ type = $Type; name = $Name; instances = @([pscustomobject]@{ attributes = $Attributes }) }
   }
+  function New-StateResourceInstances([string]$Type, [string]$Name, [object[]]$Attributes) {
+    return [pscustomobject]@{
+      type = $Type; name = $Name
+      instances = @($Attributes | ForEach-Object { [pscustomobject]@{ attributes = $_ } })
+    }
+  }
+  $privateSubnetIds = @("subnet-private-a", "subnet-private-b")
+  $providerSubnetIds = @("subnet-provider-a", "subnet-provider-b")
+  $privateRouteIds = @("rtb-private-a", "rtb-private-b")
+  $providerRouteIds = @("rtb-provider-a", "rtb-provider-b")
   $template = [ordered]@{ Resources = [ordered]@{
       DurableFunction = [ordered]@{ Properties = [ordered]@{
           Environment = [ordered]@{ Variables = [ordered]@{
@@ -217,6 +228,7 @@ try {
         })),
     (New-StateResource "aws_lambda_function" "ingestion_activity" ([pscustomobject]@{
           qualified_arn = $activityArn; version = "23"; source_code_hash = $ExpectedActivityCodeSha256
+          vpc_config = @([pscustomobject]@{ subnet_ids = $privateSubnetIds })
           environment = @([pscustomobject]@{ variables = [pscustomobject]@{
                 RELEASE_SHA = $ExpectedActivityArtifactSha256; INGESTION_SYNTHETIC_SOURCE_ENABLED = "false"
                 INGESTION_PROVIDER_ACTIVATION_ALLOWED = "false"; INGESTION_PROVIDER_SOURCES = "[]"
@@ -228,7 +240,22 @@ try {
     (New-StateResource "aws_cloudwatch_event_rule" "ingestion_terminal" ([pscustomobject]@{ state = "DISABLED" })),
     (New-StateResource "aws_sqs_queue" "ingestion_dispatch" ([pscustomobject]@{ name = $dispatchQueueName })),
     (New-StateResource "aws_sqs_queue" "ingestion_dead_letter" ([pscustomobject]@{ name = $deadLetterQueueName })),
-    (New-StateResource "aws_ecs_cluster" "this" ([pscustomobject]@{ name = $ecsClusterName }))
+    (New-StateResource "aws_ecs_cluster" "this" ([pscustomobject]@{ name = $ecsClusterName })),
+    (New-StateResourceInstances "aws_subnet" "private" @($privateSubnetIds | ForEach-Object { [pscustomobject]@{ id = $_ } })),
+    (New-StateResourceInstances "aws_subnet" "ingestion_provider" @($providerSubnetIds | ForEach-Object { [pscustomobject]@{ id = $_ } })),
+    (New-StateResourceInstances "aws_route_table" "private" @($privateRouteIds | ForEach-Object {
+          [pscustomobject]@{ id = $_; route = @([pscustomobject]@{ nat_gateway_id = "nat-candidate-rights" }) }
+        })),
+    (New-StateResourceInstances "aws_route_table" "ingestion_provider" @($providerRouteIds | ForEach-Object { [pscustomobject]@{ id = $_ } })),
+    (New-StateResourceInstances "aws_route_table_association" "private" @(
+        [pscustomobject]@{ subnet_id = $privateSubnetIds[0]; route_table_id = $privateRouteIds[0] },
+        [pscustomobject]@{ subnet_id = $privateSubnetIds[1]; route_table_id = $privateRouteIds[1] }
+      )),
+    (New-StateResourceInstances "aws_route_table_association" "ingestion_provider" @(
+        [pscustomobject]@{ subnet_id = $providerSubnetIds[0]; route_table_id = $providerRouteIds[0] },
+        [pscustomobject]@{ subnet_id = $providerSubnetIds[1]; route_table_id = $providerRouteIds[1] }
+      )),
+    (New-StateResource "aws_nat_gateway" "this" ([pscustomobject]@{ id = "nat-candidate-rights" }))
   )
   $snapshot = [pscustomobject]@{
     Serial = 208; VersionId = "state-version"; Lineage = "11111111-2222-3333-4444-555555555555"
@@ -238,7 +265,7 @@ try {
   if ([string]$boundary.DurableArn -cne $durableArn -or [string]$boundary.ActivityArn -cne $activityArn) {
     throw "The exact immutable state boundary was not accepted."
   }
-  foreach ($stateTamper in @("serial", "activity-version", "provider", "synthetic", "runtime-provider", "runtime-set", "durable-code", "mapping", "schedule", "nat", "durable-activity")) {
+  foreach ($stateTamper in @("serial", "activity-version", "provider", "synthetic", "runtime-provider", "runtime-set", "durable-code", "mapping", "schedule", "provider-nat", "provider-subnet", "provider-route", "unknown-nat", "durable-activity")) {
     $candidate = $snapshot | ConvertTo-Json -Depth 30 | ConvertFrom-Json
     switch ($stateTamper) {
       "serial" { $candidate.Serial = 209 }
@@ -255,7 +282,10 @@ try {
       }
       "mapping" { @($candidate.State.resources | Where-Object name -ceq "ingestion_dispatch" | Where-Object type -ceq "aws_lambda_event_source_mapping")[0].instances[0].attributes.enabled = $true }
       "schedule" { @($candidate.State.resources | Where-Object name -ceq "ingestion_schedule")[0].instances[0].attributes.state = "ENABLED" }
-      "nat" { $candidate.State.resources += New-StateResource "aws_nat_gateway" "ingestion_provider" ([pscustomobject]@{ id = "nat-fixture" }) }
+      "provider-nat" { $candidate.State.resources += New-StateResource "aws_nat_gateway" "ingestion_provider" ([pscustomobject]@{ id = "nat-fixture" }) }
+      "provider-subnet" { @($candidate.State.resources | Where-Object name -ceq "ingestion_activity")[0].instances[0].attributes.vpc_config[0].subnet_ids = $providerSubnetIds }
+      "provider-route" { @($candidate.State.resources | Where-Object name -ceq "private" | Where-Object type -ceq "aws_route_table_association")[0].instances[0].attributes.route_table_id = $providerRouteIds[0] }
+      "unknown-nat" { @($candidate.State.resources | Where-Object name -ceq "private" | Where-Object type -ceq "aws_route_table")[0].instances[0].attributes.route[0].nat_gateway_id = "nat-unowned" }
       "durable-activity" {
         $stack = @($candidate.State.resources | Where-Object name -ceq "ingestion_durable")[0].instances[0].attributes
         $body = $stack.template_body | ConvertFrom-Json
@@ -284,7 +314,9 @@ try {
         if ($arn -ceq $activityArn) {
           return [pscustomobject]@{
             FunctionArn = $boundary.ActivityFunctionArn; Version = "23"; State = "Active"; LastUpdateStatus = "Successful"
-            CodeSha256 = $ExpectedActivityCodeSha256; Environment = [pscustomobject]@{ Variables = [pscustomobject]@{
+            CodeSha256 = $ExpectedActivityCodeSha256
+            VpcConfig = [pscustomobject]@{ SubnetIds = if ($script:liveMutation -ceq "provider-subnet") { $providerSubnetIds } else { $privateSubnetIds } }
+            Environment = [pscustomobject]@{ Variables = [pscustomobject]@{
                 RELEASE_SHA = $ExpectedActivityArtifactSha256; INGESTION_SYNTHETIC_SOURCE_ENABLED = "false"
                 INGESTION_PROVIDER_ACTIVATION_ALLOWED = if ($script:liveMutation -ceq "provider") { "true" } else { "false" }
                 INGESTION_PROVIDER_SOURCES = "[]"
@@ -324,7 +356,16 @@ try {
             [pscustomobject]@{ DurableExecutionName = $executionName; FunctionArn = $boundary.DurableFunctionArn; Version = "18"; Status = "RUNNING" }
           ) }
       }
-      "ec2 describe-nat-gateways" { return [pscustomobject]@{ NatGateways = if ($script:liveMutation -ceq "nat") { @([pscustomobject]@{}) } else { @() } } }
+      "ec2 describe-route-tables" {
+        return [pscustomobject]@{ RouteTables = @(
+            [pscustomobject]@{
+              RouteTableId = if ($script:liveMutation -ceq "provider-route") { $providerRouteIds[0] } else { $privateRouteIds[0] }
+              Associations = @([pscustomobject]@{ SubnetId = $privateSubnetIds[0] })
+              Routes = @([pscustomobject]@{ NatGatewayId = if ($script:liveMutation -ceq "unknown-nat") { "nat-unowned" } else { "nat-candidate-rights" } })
+            },
+            [pscustomobject]@{ RouteTableId = $privateRouteIds[1]; Associations = @([pscustomobject]@{ SubnetId = $privateSubnetIds[1] }); Routes = @([pscustomobject]@{ NatGatewayId = "nat-candidate-rights" }) }
+          ) }
+      }
       "ecs list-tasks" { return [pscustomobject]@{ taskArns = if ($script:liveMutation -ceq "task") { @("private-arn") } else { @() } } }
       "ecs list-services" { return [pscustomobject]@{ serviceArns = @() } }
       default { throw "Unexpected mocked AWS call '$call' for $Operation." }
@@ -346,7 +387,7 @@ try {
     return @()
   }
   $null = Assert-LiveBoundary $boundary $executionName -RequireNoExecution
-  foreach ($liveTamper in @("provider", "runtime-provider", "rule", "mapping", "extra-mapping", "nat", "task", "queue", "execution")) {
+  foreach ($liveTamper in @("provider", "runtime-provider", "rule", "mapping", "extra-mapping", "provider-subnet", "provider-route", "unknown-nat", "task", "queue", "execution")) {
     $script:liveMutation = $liveTamper
     Assert-Rejected { Assert-LiveBoundary $boundary $executionName -RequireNoExecution } "live boundary tampering '$liveTamper'"
   }

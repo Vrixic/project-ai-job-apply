@@ -72,6 +72,9 @@ entry, and server-only Vercel variables. Dynamic previews remain identity-dark b
 add wildcard Auth0 origins or expose secrets through `NEXT_PUBLIC_*`. Keep
 `PUBLIC_JOB_INDEXING_ENABLED=false` until D1-009 acceptance. Follow the
 [Vercel hosting runbook](../../infrastructure/runbooks/deployments/vercel-nextjs-hosting.md).
+`AUTH0_DOMAIN` accepts only the exact lowercase issuer hostname, while `APP_BASE_URL` accepts only
+an exact origin with no credentials, path, query, fragment, trailing slash, or trailing-dot host;
+HTTP remains limited to local `localhost` or `127.0.0.1` development.
 
 ## Phase 1 implementation
 

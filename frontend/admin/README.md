@@ -50,3 +50,6 @@ adds minimum browser security headers plus response-level crawler denial. An ide
 permitted, but no admin credential or managed-OIDC activation is authorized until the separate
 client/grant, MFA moderator, protected stable hostname, and D1P dispositions pass. Follow the
 [Vercel hosting runbook](../../infrastructure/runbooks/deployments/vercel-nextjs-hosting.md).
+`AUTH0_DOMAIN` accepts only the exact lowercase issuer hostname, while `APP_BASE_URL` accepts only
+an exact origin with no credentials, path, query, fragment, trailing slash, or trailing-dot host;
+HTTP remains limited to local `localhost` or `127.0.0.1` development.

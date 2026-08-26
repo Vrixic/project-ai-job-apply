@@ -4,6 +4,7 @@ Set-StrictMode -Version Latest
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 $operatorPath = Join-Path $repositoryRoot "scripts\operate-development-document-processing-acceptance.ps1"
 $fixtureGenerator = Join-Path $repositoryRoot "scripts\lib\development-document-processing-fixtures.mjs"
+$corpusGenerator = Join-Path $repositoryRoot "scripts\lib\development-document-parser-corpus.mjs"
 $source = Get-Content -LiteralPath $operatorPath -Raw
 function Get-TestFileSha256 {
   param([Parameter(Mandatory)][string]$Path)
@@ -26,7 +27,7 @@ if (($parameterNames -join "|") -cne ($expectedParameters -join "|")) {
 }
 
 foreach ($required in @(
-    'ValidateSet("Status", "PlanExecution", "Execute", "ServiceDetection", "ObjectRecovery", "RecoverCleanup", "Verify")',
+    'ValidateSet("Status", "PlanExecution", "Execute", "ServiceDetection", "ObjectRecovery", "RecoverCleanup", "Verify", "CorpusPlan", "CorpusExecute", "CorpusRecoverCleanup", "CorpusVerify")',
     '. (Join-Path $PSScriptRoot "lib\development-document-dark-guards.ps1")',
     'documents/dist/src/run-document-processing-acceptance.js',
     'DOCUMENT_PROCESSING_ACCEPTANCE_CONFIRM',
@@ -89,6 +90,11 @@ foreach ($required in @(
     "--version-id",
     "Get-OptionalProperty -Object `$deleted -Name 'DeleteMarker'",
     "list-object-versions"
+    'development-document-parser-corpus-v1'
+    'd1_deployed_document_parser_adversarial_corpus_v1'
+    'Corpus cleanup did not reduce the exact generated namespace to zero.'
+    "[string]`$processorVariables.DOCUMENT_PARSER_VERSION -cne 'resume-parser-v1'"
+    "[string]`$parserVariables.DOCUMENT_PARSER_VERSION -cne 'resume-parser-v1'"
   )) {
   if (-not $source.Contains($required)) { throw "The operator omits required boundary text: $required" }
 }
@@ -132,7 +138,8 @@ if (
 $guardedMutationFunctions = @(
   'Submit-Task', 'New-DurableClaim', 'Invoke-LambdaJson', 'Invoke-PresignedPost',
   'Set-ExactScanTag', 'Save-RecoveryDescriptor', 'Remove-ExactObjectVersion',
-  'Remove-RecoveryObjectVersion', 'Invoke-VersionedObjectRecovery'
+  'Remove-RecoveryObjectVersion', 'Invoke-VersionedObjectRecovery', 'Publish-CorpusSource',
+  'Remove-CorpusObjects'
 )
 foreach ($name in $guardedMutationFunctions) {
   $definition = @($ast.FindAll({
@@ -183,6 +190,7 @@ foreach ($name in @(
     "Get-LambdaAliasIdentity", "Assert-DocumentParserVersionBoundary", "Assert-PresignedUploadTarget", "Complete-SourceDescriptor",
     "Remove-ExactObjectVersion", "Remove-DescriptorObjects", "Assert-ReviewedRuntimeUnchanged",
     "Wait-GuardDutyServiceScan", "Remove-RecoveryObjectVersion", "Invoke-VersionedObjectRecovery"
+    "Assert-CorpusAggregate", "Remove-CorpusFiles"
   )) {
   Import-OperatorFunction -Name $name
 }
@@ -746,6 +754,69 @@ finally {
   $systemTemporary = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
   if ($resolvedTemporary.StartsWith($systemTemporary, [StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $resolvedTemporary)) {
     [IO.Directory]::Delete($resolvedTemporary, $true)
+  }
+}
+
+$corpusRoot = Join-Path ([IO.Path]::GetTempPath()) "ai-job-apply-parser-corpus-$([guid]::NewGuid().ToString('N'))"
+try {
+  $corpusFirst = Join-Path $corpusRoot 'first'
+  $corpusSecond = Join-Path $corpusRoot 'second'
+  & node $corpusGenerator --run-id $runId --output-directory $corpusFirst 2>$null
+  if ($LASTEXITCODE -ne 0) { throw 'The first bounded parser corpus generation failed.' }
+  & node $corpusGenerator --run-id $runId --output-directory $corpusSecond 2>$null
+  if ($LASTEXITCODE -ne 0) { throw 'The second bounded parser corpus generation failed.' }
+  $firstCorpus = Get-Content -LiteralPath (Join-Path $corpusFirst 'descriptor.json') -Raw | ConvertFrom-Json
+  $secondCorpus = Get-Content -LiteralPath (Join-Path $corpusSecond 'descriptor.json') -Raw | ConvertFrom-Json
+  if (@($firstCorpus.cases).Count -ne 43 -or @($firstCorpus.files).Count -ne 43 -or
+    [string]$firstCorpus.corpusSha256 -notmatch '^[a-f0-9]{64}$' -or
+    [string]$firstCorpus.corpusSha256 -cne [string]$secondCorpus.corpusSha256 -or
+    (@($firstCorpus.cases.sha256) -join '|') -cne (@($secondCorpus.cases.sha256) -join '|')) {
+    throw 'The generated parser corpus is not exact, bounded, and byte deterministic.'
+  }
+  foreach ($entry in @($firstCorpus.cases)) {
+    if ([string]$entry.expectedReasonCode -notmatch '^[A-Z0-9_]{1,64}$' -or
+      [string]$entry.expectedFailureCode -notin @('invalid_document', 'parse_failed')) {
+      throw 'The generated parser corpus includes an unbounded result expectation.'
+    }
+  }
+  $script:SourceSha = 'b' * 40
+  $reasonCounts = [ordered]@{}
+  foreach ($entry in @($firstCorpus.cases)) {
+    $reason = [string]$entry.expectedReasonCode
+    $reasonCounts[$reason] = 1 + [int]$reasonCounts[$reason]
+  }
+  $aggregate = [pscustomobject]@{
+    schemaVersion = 1
+    profile = 'd1_deployed_document_parser_adversarial_corpus_v1'
+    corpusVersion = [string]$firstCorpus.corpusVersion
+    corpusSha256 = [string]$firstCorpus.corpusSha256
+    releaseSourceSha = $script:SourceSha
+    runId = [string]$firstCorpus.runId
+    parserVersion = 'resume-parser-v1'
+    caseCount = 43
+    rejectedCount = 43
+    databaseAccessed = $false
+    reasonCodeCounts = [pscustomobject]$reasonCounts
+  }
+  $plan = [pscustomobject]@{
+    corpusVersion = [string]$firstCorpus.corpusVersion
+    corpusSha256 = [string]$firstCorpus.corpusSha256
+    runId = [string]$firstCorpus.runId
+    cases = @($firstCorpus.cases)
+  }
+  if (-not (Assert-CorpusAggregate -Aggregate $aggregate -Plan $plan)) {
+    throw 'The exact aggregate-only corpus result was not accepted.'
+  }
+  $aggregate | Add-Member -NotePropertyName payload -NotePropertyValue 'forbidden'
+  $leakRejected = $false
+  try { $null = Assert-CorpusAggregate -Aggregate $aggregate -Plan $plan } catch { $leakRejected = $true }
+  if (-not $leakRejected) { throw 'Corpus evidence accepted a payload-bearing result.' }
+}
+finally {
+  $resolvedCorpusRoot = [IO.Path]::GetFullPath($corpusRoot)
+  $systemTemporary = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
+  if ($resolvedCorpusRoot.StartsWith($systemTemporary, [StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $resolvedCorpusRoot)) {
+    [IO.Directory]::Delete($resolvedCorpusRoot, $true)
   }
 }
 
