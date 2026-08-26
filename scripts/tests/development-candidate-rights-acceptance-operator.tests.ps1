@@ -48,6 +48,10 @@ foreach ($requiredInspectionGuard in @(
 foreach ($forbidden in @('terraform apply', 'aws ecs run-task', 'docker ', 'wsl --shutdown', 'shutdown.exe', 'Stop-Computer', 'github workflow', 'vercel ')) {
   if ($source -match [regex]::Escape($forbidden)) { throw "The operator contains a forbidden mutation/control path: $forbidden" }
 }
+if ($source -notmatch [regex]::Escape('$issuerValue = [string]($issuer | Select-Object -First 1)') -or
+    $source -match [regex]::Escape('Issuer = [string]$issuer[0]')) {
+  throw 'The singular state-bound issuer is vulnerable to scalar character indexing.'
+}
 $identityBoundaryIndex = $source.IndexOf('$identity = if ($RequireIdentity) { Read-SyntheticIdentityContext')
 $backupBoundaryIndex = $source.IndexOf('$backup = Get-BackupInventory')
 $healthBoundaryIndex = $source.IndexOf('$health = Assert-OperationalHealth')

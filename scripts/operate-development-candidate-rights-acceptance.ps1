@@ -378,6 +378,7 @@ function Get-RuntimeBoundary {
   $issuerResources = @(Get-StateResources $Snapshot 'aws_apigatewayv2_authorizer')
   $issuer = @($issuerResources | ForEach-Object { $_.jwt_configuration[0].issuer } | Where-Object { $_ }) | Select-Object -Unique
   if ($gatewayUrl -notmatch '^https://[a-z0-9]+\.execute-api\.us-east-2\.amazonaws\.com$' -or @($issuer).Count -ne 1) { throw "The exact regional gateway and issuer boundary is unavailable." }
+  $issuerValue = [string]($issuer | Select-Object -First 1)
   $aliases = [ordered]@{}
   foreach ($binding in @(
       @('gateway', 'gateway_lambda_alias_arn'),
@@ -391,7 +392,7 @@ function Get-RuntimeBoundary {
   $null = Assert-PolicyEnvironment $aliases.activity.Environment
   $idTokenAudience = [string](Get-OptionalProperty $aliases.gateway.Environment 'OIDC_ID_TOKEN_AUDIENCE')
   return [pscustomobject]@{
-    GatewayUrl = $gatewayUrl.TrimEnd('/'); Issuer = [string]$issuer[0]; Aliases = [pscustomobject]$aliases
+    GatewayUrl = $gatewayUrl.TrimEnd('/'); Issuer = $issuerValue; Aliases = [pscustomobject]$aliases
     IdTokenAudience = $idTokenAudience
     ExportBucket = [string](Get-StateOutput $Snapshot 'candidate_data_export_bucket')
     RecoveryBucket = [string](Get-StateOutput $Snapshot 'candidate_deletion_recovery_bucket')
