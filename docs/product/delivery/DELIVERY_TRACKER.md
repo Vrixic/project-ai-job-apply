@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-08-26
+Last updated: 2026-08-27
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -32,6 +32,33 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## D1 — Useful web product and canonical job catalog
 
+- Vercel hosting checkpoint (2026-08-27): the exact approved non-Zach owner now has separate bound
+  candidate and admin projects. Source validation/provider preflight pass for both at
+  `859fe48084eb0f0f78a4747eaf5b5a644e14d9e9`. The identity-dark admin build is `READY` in `iad1`,
+  and its protected immutable URL passes root/unknown-route status and reviewed security/crawler
+  headers. Its unconfigured BFF exposed a `500`; the local fail-closed correction passes focused
+  test, typecheck, and Vercel-mode build with sanitized `503`, but is not deployed. Candidate builds
+  and the corrected admin redeployment are externally blocked before build by Vercel
+  `TEAM_ACCESS_REQUIRED` until the commit-author email is associated with the approved owner. No
+  hosted observation, managed identity, admin activation, public indexing, or Phase 1 completion is
+  claimed. [Phase 1 tasks](phase-1-web-and-job-catalog.md)
+
+- Deployed corpus and provider-failure acceptance (2026-08-27): exact backend release source
+  `48f5d5ba0c2339ec45a818a4c461676ad9ef9191` is deployed at development state serial `230` with
+  the composed migration boundary verified and refresh-backed zero drift retained. A fresh
+  generated-only adversarial document corpus rejected all `43/43` reviewed cases, bypassed database
+  access, left zero persistent rows, removed every exact generated object version, kept triggers
+  disabled, and used no real candidate data. Exactly one guarded provider-failure run injected and
+  observed one fixed pre-adapter failure, completed one recovery with no provider request or catalog
+  write, removed all mutable fixture artifacts, retained only the intentional one-run durable
+  history, and passed queue/DLQ, log-privacy, and fresh zero-drift verification. These results close
+  the deployed corpus execution and bounded automated provider fixture only. Representative
+  thresholds, reviewed recipient binding, manual alert receipt, hosted evidence, ADR-023 human
+  dispositions, and final accountable acceptance remain open. Phase 1 is not complete.
+  [Document corpus evidence](evidence/d1-development-document-corpus-acceptance-2026-08-27.md),
+  [provider-failure evidence](evidence/d1-development-provider-failure-acceptance-2026-08-27.md),
+  [Phase 1 tasks](phase-1-web-and-job-catalog.md)
+
 - Ingestion fixture default-dark release (2026-08-26): exact source
   `8d2cec438103fcc866aa9b50e9ddd380818345d5` is immutably published and deployed through the
   reviewed exact twelve-change plan at development state serial `220`. Publication receipt SHA-256
@@ -45,9 +72,10 @@ This is the master record for the delivery phases defined in the [product and sy
   routes without weakening NAT ownership checks, and keep Terraform verification output outside
   the machine result. Provider authority, sources, schedules, terminal handling, and mappings
   remain disabled. The shared application NAT is legitimate; no dedicated ingestion-provider NAT,
-  subnet, or route is used. The bounded provider-failure execution, document corpus execution,
-  Vercel projects/deployments, representative values and alert receipt, candidate-rights lifecycle,
-  and accountable human gates remain. Phase 1 is not complete.
+  subnet, or route is used. At that checkpoint the bounded provider-failure execution, document
+  corpus execution, Vercel projects/deployments, representative values and alert receipt,
+  candidate-rights lifecycle, and accountable human gates remained. The newer 2026-08-27 record
+  above supersedes the first two execution gaps. Phase 1 is not complete.
   [Evidence](evidence/d1-development-ingestion-fixture-dark-release-2026-08-26.md),
   [Phase 1 tasks](phase-1-web-and-job-catalog.md)
 

@@ -1,7 +1,7 @@
 # Vercel Next.js Hosting
 
-- Status: Source foundation ready; provider session, projects, stable hosts, and deployment pending
-- Last updated: 2026-08-26
+- Status: Projects bound; hosted acceptance pending exact-source deployments and authority gates
+- Last updated: 2026-08-27
 - Scope: Synthetic development acceptance only
 
 This runbook implements [ADR-026](../../../docs/adr/026-vercel-nextjs-presentation-hosting.md).
@@ -85,6 +85,11 @@ if ($LASTEXITCODE -ne 0 -or
 
 If this check fails, stop. Sign out separately only after confirming which local account is active;
 do not let a failure branch perform an implicit account change.
+
+Vercel may reject a deployment before build with `TEAM_ACCESS_REQUIRED` when the exact Git commit
+author is not associated with the owning account or team. Resolve that through the approved
+owner's supported Vercel/Git provider login connection or verified email. Do not rewrite authorship,
+strip Git provenance, use another account, or otherwise evade the collaboration control.
 
 Stop before linking, importing, or creating a project when the identity does not exactly match the
 account approved for this platform. Logging in successfully is not project authority, and an
@@ -291,7 +296,10 @@ seconds and `+00:00`.
 For an admin identity-dark observation, use `surface: "admin"`, `rootDirectory:
 "frontend/admin"`, `identityMode: "identity-dark"`, `xRobotsTag: "noindex, nofollow,
 noarchive"`, and unauthenticated BFF path `/api/moderation/cases`. Its BFF status may be `401` or
-`503`; candidate may also use `503` while intentionally identity-dark. The operator always
+`503`; capture that admin route with `POST`, `Content-Type: application/json`, and a strict
+generated-synthetic `OpenModerationCaseRequest`, while discarding its response body. A `GET` probes
+method handling instead and is not the BFF authentication check. Candidate may also use `503` while
+intentionally identity-dark. The operator always
 requires `adminIdentityActivated: false` and `publicIndexingEnabled: false`. It cannot authorize a
 later admin activation or public launch.
 
