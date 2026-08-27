@@ -173,12 +173,14 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "expectedHealthyAlarmCount": { "$ref": "#/$defs/nullablePositiveInteger" },
+            "expectedWorkloadAlarmCount": { "$ref": "#/$defs/nullablePositiveInteger" },
+            "expectedPlatformAlarmCount": { "$ref": "#/$defs/nullablePositiveInteger" },
             "expectedConfirmedRecipientCount": { "$ref": "#/$defs/nullablePositiveInteger" },
             "reviewedRecipientSetSha256": { "$ref": "#/$defs/nullableSha256" }
           },
           "required": [
-            "expectedHealthyAlarmCount",
+            "expectedWorkloadAlarmCount",
+            "expectedPlatformAlarmCount",
             "expectedConfirmedRecipientCount",
             "reviewedRecipientSetSha256"
           ]

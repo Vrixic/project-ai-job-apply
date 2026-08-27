@@ -85,17 +85,26 @@ function Assert-ExactProperties {
 
 function Test-CanonicalTimestamp {
   param([object]$Value)
-  if ($Value -isnot [string] -or $Value -notmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$') {
-    return $false
+  if ($Value -isnot [string]) { return $false }
+  if ($Value -match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$') {
+    $parsed = [DateTime]::MinValue
+    return [DateTime]::TryParseExact(
+      $Value,
+      "yyyy-MM-ddTHH:mm:ss.fffZ",
+      [Globalization.CultureInfo]::InvariantCulture,
+      [Globalization.DateTimeStyles]::AssumeUniversal,
+      [ref]$parsed
+    )
   }
-  $parsed = [DateTime]::MinValue
-  return [DateTime]::TryParseExact(
+  if ($Value -notmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{7}\+00:00$') { return $false }
+  $roundTrip = [DateTimeOffset]::MinValue
+  return [DateTimeOffset]::TryParseExact(
     $Value,
-    "yyyy-MM-ddTHH:mm:ss.fffZ",
+    "o",
     [Globalization.CultureInfo]::InvariantCulture,
-    [Globalization.DateTimeStyles]::AssumeUniversal,
-    [ref]$parsed
-  )
+    [Globalization.DateTimeStyles]::RoundtripKind,
+    [ref]$roundTrip
+  ) -and $roundTrip.Offset -eq [TimeSpan]::Zero -and $Value -ceq $roundTrip.ToString("o")
 }
 
 function Test-IntegerValue {
@@ -159,10 +168,13 @@ function Get-ConfigurationIssues {
   }
   try {
     Assert-ExactProperties $Config.thresholds.alerts @(
-      "expectedHealthyAlarmCount", "expectedConfirmedRecipientCount", "reviewedRecipientSetSha256"
+      "expectedWorkloadAlarmCount", "expectedPlatformAlarmCount",
+      "expectedConfirmedRecipientCount", "reviewedRecipientSetSha256"
     ) "thresholds.alerts"
   } catch { $issues.Add($_.Exception.Message) }
-  foreach ($name in @("expectedHealthyAlarmCount", "expectedConfirmedRecipientCount")) {
+  foreach ($name in @(
+      "expectedWorkloadAlarmCount", "expectedPlatformAlarmCount", "expectedConfirmedRecipientCount"
+    )) {
     $value = $Config.thresholds.alerts.$name
     if ($null -ne $value -and -not (Test-IntegerValue $value 1)) {
       $issues.Add("thresholds.alerts.$name is invalid")
@@ -445,7 +457,7 @@ function Assert-AwsAggregateResult {
   if ([decimal]$Result.EventQueueVisibleMax -gt [decimal]$Thresholds.queues.maxVisible) { $failed += "queue_visible" }
   if ([decimal]$Result.DeadLetterMessagesMax -gt [decimal]$Thresholds.queues.maxEventDlq) { $failed += "event_dlq" }
   if ([decimal]$Result.DurableDeadLetterMax -gt [decimal]$Thresholds.queues.maxDurableDlq) { $failed += "durable_dlq" }
-  if ([int]$Result.RuntimeAlarmsOk -ne [int]$Thresholds.alerts.expectedHealthyAlarmCount) { $failed += "alarm_count" }
+  if ([int]$Result.RuntimeAlarmsOk -ne [int]$Thresholds.alerts.expectedWorkloadAlarmCount) { $failed += "workload_alarm_count" }
   if ([int]$Result.ActiveEcsServices -ne 0 -or [int]$Result.RunningEcsTasks -ne 0) { $failed += "ecs_not_idle" }
   if ($failed.Count -ne 0) { throw "$Profile AWS aggregate failed reviewed checks: $($failed -join ', ')." }
 }
@@ -469,7 +481,7 @@ function Assert-AlertDeliveryResults {
     [int]$StatusResult.confirmedRecipients -ne [int]$Thresholds.alerts.expectedConfirmedRecipientCount -or
     [int]$StatusResult.pendingRecipients -ne 0 -or [string]$StatusResult.canaryState -cne "OK" -or
     [int]$StatusResult.alarmActionCount -lt 1 -or [int]$StatusResult.okActionCount -lt 1 -or
-    [int]$StatusResult.healthyRuntimeAlarms -ne [int]$Thresholds.alerts.expectedHealthyAlarmCount) {
+    [int]$StatusResult.healthyRuntimeAlarms -ne [int]$Thresholds.alerts.expectedPlatformAlarmCount) {
     throw "Alert status does not match the reviewed recipient and alarm boundary."
   }
   if ([string]$ExerciseResult.profile -cne "d1_deployed_alert_delivery_v1" -or

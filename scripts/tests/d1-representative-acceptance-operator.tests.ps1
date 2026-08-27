@@ -79,6 +79,18 @@ $dateProbe = ConvertFrom-StrictJson '{"at":"2026-08-26T12:34:56.789Z"}' "Date pr
 if ($dateProbe.at -isnot [string]) {
   throw "Strict aggregate JSON parsing coerced a canonical timestamp away from its contract string."
 }
+if (-not (Test-CanonicalTimestamp "2026-08-27T06:22:00.1165123+00:00")) {
+  throw "The exact provider-operator UTC round-trip timestamp was rejected."
+}
+foreach ($invalidTimestamp in @(
+    "2026-08-27T06:22:00.1165123+01:00",
+    "2026-08-27T06:22:00.116+00:00",
+    "2026-08-27T06:22:00Z"
+  )) {
+  if (Test-CanonicalTimestamp $invalidTimestamp) {
+    throw "A non-canonical aggregate timestamp was accepted."
+  }
+}
 $draftIssues = @(Get-ConfigurationIssues $example)
 if ($draftIssues.Count -ne 0) { throw "The source-controlled draft is structurally invalid: $($draftIssues -join '; ')." }
 
@@ -112,6 +124,7 @@ $reviewed.release.migrationImage.platformDigest = "sha256:$('5' * 64)"
 $reviewed.release.migrationImage.receiptSha256 = "7" * 64
 $reviewed.run.runId = "12345678-1234-4abc-8def-1234567890ab"
 $privateRoot = "infrastructure/terraform/environments/development/.terraform/d1-representative-acceptance"
+$missingProviderResultPath = "$privateRoot/operator-test-missing-$PID-$([guid]::NewGuid().ToString('N')).json"
 foreach ($group in @("concurrency", "durationMs", "latencyMs", "errors", "queues")) {
   foreach ($property in $reviewed.thresholds.$group.PSObject.Properties) {
     $property.Value = if ($group -in @("errors", "queues")) { 0 } else { 10000 }
@@ -121,7 +134,8 @@ $reviewed.thresholds.concurrency.read = 2
 $reviewed.thresholds.concurrency.savedJob = 1
 $reviewed.thresholds.concurrency.match = 1
 $reviewed.thresholds.concurrency.providerFailure = 1
-$reviewed.thresholds.alerts.expectedHealthyAlarmCount = 10
+$reviewed.thresholds.alerts.expectedWorkloadAlarmCount = 10
+$reviewed.thresholds.alerts.expectedPlatformAlarmCount = 43
 $reviewed.thresholds.alerts.expectedConfirmedRecipientCount = 1
 $reviewed.thresholds.alerts.reviewedRecipientSetSha256 = "6" * 64
 foreach ($profileName in @("read", "savedJob", "match")) {
@@ -141,7 +155,7 @@ $available.profiles.providerFailure.existingGuardedSyntheticFixture = [pscustomo
   sourceId = $providerFixtureSourceId
   adapterVersion = $providerFixtureAdapterVersion
   operatorPath = $providerFixtureOperatorPath
-  aggregateResultPath = "$privateRoot/provider-failure.json"
+  aggregateResultPath = $missingProviderResultPath
 }
 
 $reviewedIssues = @(Get-ConfigurationIssues $reviewed)
@@ -300,7 +314,7 @@ Assert-Rejected { Assert-AwsAggregateResult D1Read $privacyFailure $reviewed.thr
 $alertStatus = [pscustomobject]@{
   profile = "d1_deployed_alert_status_v1"; checkedAt = $at; confirmedRecipients = 1
   pendingRecipients = 0; canaryState = "OK"; alarmActionCount = 1; okActionCount = 1
-  healthyRuntimeAlarms = 10
+  healthyRuntimeAlarms = 43
 }
 $alertExercise = [pscustomobject]@{
   profile = "d1_deployed_alert_delivery_v1"; startedAt = $at; endedAt = $later

@@ -50,7 +50,8 @@
       "maxDurableDlq": null
     },
     "alerts": {
-      "expectedHealthyAlarmCount": null,
+      "expectedWorkloadAlarmCount": null,
+      "expectedPlatformAlarmCount": null,
       "expectedConfirmedRecipientCount": null,
       "reviewedRecipientSetSha256": null
     }

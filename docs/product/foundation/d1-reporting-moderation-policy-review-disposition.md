@@ -229,7 +229,8 @@ profiles. They are release-acceptance ceilings, not forecasts, capacity claims, 
     "maxDurableDlq": 0
   },
   "alerts": {
-    "expectedHealthyAlarmCount": 10,
+    "expectedWorkloadAlarmCount": 10,
+    "expectedPlatformAlarmCount": 43,
     "expectedConfirmedRecipientCount": 1,
     "reviewedRecipientSetSha256": "SUPPLIED_BY_THE_ALERT_OPERATOR_AFTER_RECIPIENT_CONFIRMATION"
   }
@@ -247,9 +248,13 @@ Rationale:
   database recovery ceiling covers the accepted 2,224-second current recovery and 3,281-second
   earlier recovery measurements.
 - Zero error, privacy-log, backlog, DLQ, and drift tolerance is appropriate for an acceptance run
-  designed to clean up completely. Ten healthy alarms matches the fixed representative profile.
-- The recipient digest is intentionally not invented. The actual confirmed address remains outside
-  source; the alert operator calculates and verifies its digest immediately before execution.
+  designed to clean up completely. Ten healthy alarms bind each fixed workload inspector, while 43
+  healthy alarms bind the complete managed platform status used by alert-delivery acceptance. The
+  counts are intentionally separate because they measure different inventories.
+- The recipient value remains outside source. On 2026-08-27 the alert operator found exactly one
+  confirmed email recipient, zero pending recipients, calculated its canonical-set digest, and bound
+  only that digest in ignored private acceptance evidence. The operator must re-verify the same
+  digest immediately before the manual delivery exercise.
 
 ## Authorization and remaining execution gates
 
@@ -267,11 +272,11 @@ Remaining execution gates are:
 
 1. create/configure the distinct admin Auth0 client and exact `jobs:moderate` grant;
 2. enroll one disposable MFA-protected moderator and run hosted admin acceptance;
-3. confirm one operations/trust recipient, compute its private canonical-set digest, and manually
-   confirm one ALARM and one recovery delivery;
-4. bind the exact frozen release/artifacts and accepted thresholds in the ignored representative
-   run configuration; and
-5. run the representative assessor, then complete the separately deferred final human reviews.
+3. manually confirm one ALARM and one recovery delivery for the already-bound operations/trust
+   recipient set;
+4. rerun the representative assessor against the already-reviewed private release configuration;
+   and
+5. complete the separately deferred final human reviews.
 
 Execution evidence may link this record but must not duplicate or fork these policy and threshold
 decisions. A material change updates this one document to a new decision version and requires new

@@ -32,6 +32,22 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## D1 — Useful web product and canonical job catalog
 
+- Representative evidence binding (2026-08-27): the reviewed ignored configuration now binds exact
+  backend release source `48f5d5ba0c2339ec45a818a4c461676ad9ef9191`, development state `230`,
+  its zero-drift plan, four immutable Lambda artifacts, migration image receipt, product-approved
+  thresholds, and exactly one confirmed/zero-pending recipient-set digest. Historical read,
+  saved-job, and match application aggregates were each freshly corroborated against AWS and the
+  exact applied plan: all `3/3` profiles pass with zero 5xx, Lambda errors/throttles, backlog, DLQ,
+  forbidden-log matches, ECS application work, or Terraform drift. The accepted one-run provider
+  fault/recovery aggregate and post-run zero drift also pass the composed assessor. The assessor
+  remains fail-closed only on the absent attributable ALARM-and-recovery notification receipt; no
+  alert delivery or Phase 1 completion is claimed. Candidate hosted OIDC/public/admin breadth,
+  candidate rights, accessibility, and final security/privacy/product acceptance remain in their
+  explicitly deferred sequence.
+  [Phase 1 tasks](phase-1-web-and-job-catalog.md),
+  [representative runbook](../../../infrastructure/runbooks/observability/d1-representative-deployed-acceptance.md),
+  [single governance record](../foundation/d1-reporting-moderation-policy-review-disposition.md)
+
 - Hosted candidate OIDC deferral (2026-08-27): the refreshed development SSO session was verified
   as an assumed-role session in the exact account and `us-east-2`; read-only Terraform state returned
   the current API origin without AWS mutation. The stable Vercel alias requires a `$150` protection

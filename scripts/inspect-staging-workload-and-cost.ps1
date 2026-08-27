@@ -107,11 +107,14 @@ $allowedVariableNames = @(
   "public_job_projection_artifact_sha256", "public_job_projection_artifact_base64sha256",
   "public_job_lambda_artifact_s3_key", "public_job_lambda_artifact_s3_object_version",
   "public_job_lambda_artifact_sha256", "public_job_lambda_artifact_base64sha256",
+  "database_backup_retention_days",
   "candidate_rights_enabled", "candidate_rights_policy_version",
   "candidate_rights_policy_sha256", "candidate_rights_export_lifetime_seconds",
   "candidate_rights_export_lifecycle_days", "candidate_rights_download_grant_seconds",
   "candidate_rights_backup_retention_days", "candidate_rights_recent_auth_max_age_seconds",
-  "candidate_rights_owner_inventory", "candidate_rights_subprocessor_inventory"
+  "candidate_rights_owner_inventory", "candidate_rights_subprocessor_inventory",
+  "candidate_rights_id_token_audience", "candidate_rights_auth0_authorized_owner",
+  "candidate_rights_auth0_secret_provisioned"
 )
 $applicationLogGroup = "/ai-job-apply/$Environment/application"
 
@@ -182,8 +185,17 @@ function Get-RuntimeStatus {
     throw "The state KMS key is outside the selected account and region."
   }
 
-  $plan = & terraform "-chdir=$terraformDirectory" show -json $planPath 2>$null | ConvertFrom-Json
-  if ($LASTEXITCODE -ne 0 -or $null -eq $plan.variables) { throw "The applied runtime plan could not be inspected." }
+  $savedTerraformDataDirectory = $env:TF_DATA_DIR
+  try {
+    $null = New-Item -ItemType Directory -Path $terraformDataDirectory -Force
+    $env:TF_DATA_DIR = $terraformDataDirectory
+    $plan = & terraform "-chdir=$terraformDirectory" show -json $planPath 2>$null | ConvertFrom-Json
+    if ($LASTEXITCODE -ne 0 -or $null -eq $plan.variables) {
+      throw "The applied runtime plan could not be inspected."
+    }
+  } finally {
+    $env:TF_DATA_DIR = $savedTerraformDataDirectory
+  }
   $variableProperties = @($plan.variables.PSObject.Properties)
   $unexpected = @($variableProperties | Where-Object { $_.Name -notin $allowedVariableNames })
   if ($unexpected.Count -ne 0) { throw "The applied plan contains an unapproved runtime input." }

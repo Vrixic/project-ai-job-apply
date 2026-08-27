@@ -311,6 +311,13 @@ foreach ($required in @(
   '"candidate_rights_recent_auth_max_age_seconds"',
   '"candidate_rights_owner_inventory"',
   '"candidate_rights_subprocessor_inventory"',
+  '"database_backup_retention_days"',
+  '"candidate_rights_id_token_audience"',
+  '"candidate_rights_auth0_authorized_owner"',
+  '"candidate_rights_auth0_secret_provisioned"',
+  '$savedTerraformDataDirectory = $env:TF_DATA_DIR',
+  '$env:TF_DATA_DIR = $terraformDataDirectory',
+  '$env:TF_DATA_DIR = $savedTerraformDataDirectory',
   'if ($null -eq $value)',
   'Remove-Item -LiteralPath "Env:$environmentName" -ErrorAction SilentlyContinue',
   'ConvertTo-Json -InputObject $value -Compress -Depth 20'

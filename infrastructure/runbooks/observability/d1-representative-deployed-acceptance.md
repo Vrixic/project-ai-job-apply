@@ -49,8 +49,10 @@ not infer delivery from CloudWatch or SNS state alone.
    development read profile has concurrency `2`; the saved-job and match profiles are single-flight
    and therefore use concurrency `1`. The bounded provider-failure fixture is also single-flight,
    so its explicitly reviewed concurrency must be `1`.
-5. Review the exact number of confirmed alert recipients. Store only the count and a SHA-256 of a
-   separately controlled canonical recipient set; never store the recipient values.
+5. Review the exact workload-profile and complete platform alarm counts separately. The workload
+   inspectors currently require ten profile-specific alarms; alert status covers all 43 managed
+   runtime alarms. Review the exact number of confirmed alert recipients. Store only the count and
+   a SHA-256 of a separately controlled canonical recipient set; never store the recipient values.
 6. Keep `providerFailure.state = blocked`, its nonempty blocker, and a null fixture binding until
    the exact separate operator is present and reviewed. To bind already-produced evidence, change
    the state to `available`, set the blocker to null, and use only this exact object (with the result
@@ -107,12 +109,13 @@ The composer requires:
   application failures;
 - one saved-job write, replay, expected conflict, exact delete, and post-cleanup absence;
 - one catalog page, one match assessment, and a positive aggregate evidence-item count;
-- reviewed API/Lambda latency, error, throttle, backlog, DLQ, privacy-log, healthy-alarm, idle-ECS,
-  durable-trigger, and zero-drift bounds for each AWS window.
+- reviewed API/Lambda latency, error, throttle, backlog, DLQ, privacy-log, profile-specific healthy-
+  alarm, idle-ECS, durable-trigger, and zero-drift bounds for each AWS window.
 
-The future alert status aggregate has profile `d1_deployed_alert_status_v1` and contains only the
+The alert status aggregate has profile `d1_deployed_alert_status_v1` and contains only the
 check timestamp, confirmed/pending recipient counts, canary state, ALARM/OK action counts, and
-healthy runtime-alarm count. The exercise aggregate has profile
+the complete managed platform runtime-alarm count. This count is intentionally distinct from each
+workload inspector's profile-specific alarm count. The exercise aggregate has profile
 `d1_deployed_alert_delivery_v1` and contains only timestamps, duration, one ALARM transition, one
 recovery transition, delivery confirmation, the reviewed recipient-set SHA-256, and final `OK`.
 
