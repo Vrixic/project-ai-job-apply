@@ -189,13 +189,15 @@ if ($fullRuntimeRevalidations -ne 3) {
 $uploadOffset = $corpusExecuteRegion.IndexOf('Publish-CorpusSource')
 $terminalOffset = $corpusExecuteRegion.IndexOf('Wait-CorpusGuardDutyTerminalTag')
 $syntheticOffset = $corpusExecuteRegion.IndexOf('Set-ExactScanTag')
+$sourceReadbackOffset = $corpusExecuteRegion.IndexOf('Read-CorpusSourceExact')
 $finalTagOffset = $corpusExecuteRegion.IndexOf('Assert-CorpusSyntheticScanTag')
 $processorOffset = $corpusExecuteRegion.IndexOf('Invoke-LambdaJson')
 if ($uploadOffset -lt 0 -or $terminalOffset -le $uploadOffset -or $syntheticOffset -le $terminalOffset -or
-  $finalTagOffset -le $syntheticOffset -or $processorOffset -le $finalTagOffset -or
+  $sourceReadbackOffset -le $syntheticOffset -or $finalTagOffset -le $sourceReadbackOffset -or $processorOffset -le $finalTagOffset -or
   -not $corpusExecuteRegion.Contains('Assert-ActiveGuardDutyTaggingBoundary -Runtime $runtime') -or
-  -not $corpusExecuteRegion.Contains('$managedScanDeadline = [DateTimeOffset]::UtcNow.AddMinutes(15)')) {
-  throw 'Corpus execution does not preserve upload, managed-terminal, synthetic-tag, final-readback, invocation ordering.'
+  -not $corpusExecuteRegion.Contains('$managedScanDeadline = [DateTimeOffset]::UtcNow.AddMinutes(15)') -or
+  -not $corpusExecuteRegion.Contains("if (`$entry.Count -ne 1) { throw 'The tagged corpus source case is missing or ambiguous.' }")) {
+  throw 'Corpus execution does not preserve upload, managed-terminal, synthetic-tag, exact-source-readback, final-tag-readback, invocation ordering.'
 }
 foreach ($required in @(
     "failureStage = 'preflight'; failureCaseId = ''; failureOperation = 'none'",
@@ -271,8 +273,8 @@ $publishCorpusDefinition = @($ast.FindAll({
       $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Publish-CorpusSource'
     }, $true))[0].Extent.Text
 if ([regex]::Matches($publishCorpusDefinition, "'s3api', 'put-object'").Count -ne 1 -or
-  -not $publishCorpusDefinition.Contains('Read-CorpusSourceExact')) {
-  throw 'Corpus publication must perform one upload followed by the bounded read-only exact readback.'
+  $publishCorpusDefinition.Contains('Read-CorpusSourceExact')) {
+  throw 'Corpus publication must perform one upload and defer readback until the exact clean tags exist.'
 }
 $terminalDefinition = @($ast.FindAll({
       param($node)

@@ -2821,7 +2821,6 @@ function Publish-CorpusSource {
   }
   $documents[0].sourceVersion = [string]$put.VersionId
   Write-CorpusReceipt $ReceiptPath $Receipt
-  $null = Read-CorpusSourceExact -Runtime $Runtime -Entry $Entry -Document $documents[0] -Receipt $Receipt -ReceiptPath $ReceiptPath
   $documents[0]
 }
 
@@ -2987,6 +2986,11 @@ if ($Action -in @('CorpusExecute', 'CorpusRecoverCleanup', 'CorpusVerify')) {
       foreach ($document in @($receipt.documents)) {
         Set-CorpusFailureCheckpoint -Receipt $receipt -ReceiptPath $receiptPath -Stage 'synthetic-tag' -CaseId ([string]$document.caseId)
         Set-ExactScanTag -Runtime $runtime -Document $document -Status 'NO_THREATS_FOUND' -CorpusBatch
+      }
+      foreach ($document in @($receipt.documents)) {
+        $entry = @($corpusPlan.Plan.cases | Where-Object { [string]$_.caseId -ceq [string]$document.caseId })
+        if ($entry.Count -ne 1) { throw 'The tagged corpus source case is missing or ambiguous.' }
+        $null = Read-CorpusSourceExact -Runtime $runtime -Entry $entry[0] -Document $document -Receipt $receipt -ReceiptPath $receiptPath
       }
       $requestCases = @($corpusPlan.Plan.cases | ForEach-Object {
           $case = $_
