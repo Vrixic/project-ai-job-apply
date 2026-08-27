@@ -169,6 +169,7 @@ function Get-OperatorDeltaEvidence {
     '^AGENTS\.md$',
     '^docs/',
     '^scripts/operate-development-document-processing-acceptance\.ps1$',
+    '^scripts/operate-development-d1-provider-failure-acceptance\.ps1$',
     '^scripts/lib/development-document-parser-corpus\.mjs$',
     '^backend/services/documents/src/document-parser-corpus\.test\.ts$',
     '^scripts/inspect-staging-workload-and-cost\.ps1$',
@@ -176,8 +177,10 @@ function Get-OperatorDeltaEvidence {
     '^scripts/operate-development-postgresql-restore\.ps1$',
     '^scripts/operate-staging-postgresql-restore\.ps1$',
     '^scripts/tests/development-document-processing-acceptance-operator\.tests\.ps1$',
+    '^scripts/tests/development-d1-provider-failure-acceptance-operator\.tests\.ps1$',
     '^scripts/tests/staging-postgresql-restore-verifier\.tests\.ps1$',
     '^infrastructure/runbooks/deployments/development-document-processing-acceptance\.md$',
+    '^infrastructure/runbooks/observability/development-d1-provider-failure-acceptance\.md$',
     '^infrastructure/runbooks/restore/development-postgresql-point-in-time\.md$'
   )
   foreach ($record in $records) {
@@ -811,6 +814,21 @@ function Assert-ReviewedRuntimeUnchanged {
     throw "The reviewed direct-dark runtime changed before a cloud mutation."
   }
   Assert-TriggersDark -State $current.State | Out-Null
+}
+
+function Assert-CorpusMutationBoundary {
+  param([Parameter(Mandatory)][object]$Runtime)
+  if ($null -eq $script:reviewedRuntimeIdentity) {
+    throw "A corpus cloud mutation requires an exact reviewed runtime."
+  }
+  $identity = Get-StateIdentity
+  if (
+    [string]$identity.Lineage -cne [string]$script:reviewedStateLineage -or
+    [long]$identity.Serial -ne [long]$script:reviewedStateSerial
+  ) {
+    throw "The reviewed corpus state identity changed before a cloud mutation."
+  }
+  Assert-TriggersDark -State $Runtime.State | Out-Null
 }
 
 function Assert-ZeroTasks {
@@ -1562,13 +1580,15 @@ function Set-ExactScanTag {
   param(
     [Parameter(Mandatory)][object]$Runtime,
     [Parameter(Mandatory)][object]$Document,
-    [Parameter(Mandatory)][ValidateSet('NO_THREATS_FOUND', 'THREATS_FOUND')][string]$Status
+    [Parameter(Mandatory)][ValidateSet('NO_THREATS_FOUND', 'THREATS_FOUND')][string]$Status,
+    [switch]$CorpusBatch
   )
-  Assert-ReviewedRuntimeUnchanged
   $tagging = [ordered]@{ TagSet = @([ordered]@{ Key = 'GuardDutyMalwareScanStatus'; Value = $Status }) }
   $temporary = [IO.Path]::GetTempFileName()
   try {
     Write-JsonFile -Path $temporary -Value $tagging -AllowReplace
+    if ($CorpusBatch) { Assert-CorpusMutationBoundary -Runtime $Runtime }
+    else { Assert-ReviewedRuntimeUnchanged }
     $null = Invoke-AwsJson -Arguments @('s3api', 'put-object-tagging', '--bucket', $Runtime.CandidateDocumentBucket, '--key', $Document.sourceKey, '--version-id', $Document.sourceVersion, '--tagging', "file://$temporary", '--output', 'json') -Operation 'Exact synthetic scan tag write'
   }
   finally {
@@ -1586,14 +1606,8 @@ function Set-ExactScanTag {
   }
 }
 
-function Wait-GuardDutyServiceScan {
-  param(
-    [Parameter(Mandatory)][object]$Runtime,
-    [Parameter(Mandatory)][object]$Document,
-    [ValidateRange(60, 900)][int]$TimeoutSeconds = 900
-  )
-  Assert-TriggersDark -State $Runtime.State | Out-Null
-  Assert-ReviewedRuntimeUnchanged
+function Assert-ActiveGuardDutyTaggingBoundary {
+  param([Parameter(Mandatory)][object]$Runtime)
   $planId = ([string]$Runtime.ProtectionPlanArn -split '/')[-1]
   if ($planId -notmatch '^[A-Za-z0-9]+$') {
     throw "The GuardDuty malware protection plan identity is invalid."
@@ -1611,22 +1625,79 @@ function Wait-GuardDutyServiceScan {
   ) {
     throw "The GuardDuty malware protection plan is not the exact active tagging boundary."
   }
+  $true
+}
+
+function Get-ExactScanStatus {
+  param(
+    [Parameter(Mandatory)][object]$Runtime,
+    [Parameter(Mandatory)][object]$Document,
+    [Parameter(Mandatory)][string]$Operation
+  )
+  $readback = Invoke-AwsJson -Arguments @(
+    's3api', 'get-object-tagging', '--bucket', $Runtime.CandidateDocumentBucket,
+    '--key', $Document.sourceKey, '--version-id', $Document.sourceVersion, '--output', 'json'
+  ) -Operation $Operation
+  $tags = @($readback.TagSet)
+  $scanTags = @($tags | Where-Object { [string]$_.Key -ceq 'GuardDutyMalwareScanStatus' })
+  if (
+    [string]$readback.VersionId -cne [string]$Document.sourceVersion -or
+    $scanTags.Count -gt 1 -or $tags.Count -gt 1
+  ) {
+    throw "The exact scanned object version has unexpected tags or identity."
+  }
+  if ($scanTags.Count -eq 0) { return '' }
+  [string]$scanTags[0].Value
+}
+
+function Wait-CorpusGuardDutyTerminalTag {
+  param(
+    [Parameter(Mandatory)][object]$Runtime,
+    [Parameter(Mandatory)][object]$Document,
+    [Parameter(Mandatory)][DateTimeOffset]$Deadline
+  )
+  do {
+    $status = Get-ExactScanStatus -Runtime $Runtime -Document $Document -Operation 'Corpus GuardDuty terminal tag readback'
+    if ($status -in @('NO_THREATS_FOUND', 'THREATS_FOUND', 'UNSUPPORTED', 'ACCESS_DENIED', 'FAILED')) {
+      return $status
+    }
+    if (-not [string]::IsNullOrEmpty($status)) {
+      throw "GuardDuty returned an unknown managed scan result for a corpus object."
+    }
+    if ([DateTimeOffset]::UtcNow -ge $Deadline) { break }
+    Start-Sleep -Seconds 5
+  } while ($true)
+  throw "GuardDuty did not attach a terminal managed scan tag to every corpus version within the bounded window."
+}
+
+function Assert-CorpusSyntheticScanTag {
+  param(
+    [Parameter(Mandatory)][object]$Runtime,
+    [Parameter(Mandatory)][object]$Document
+  )
+  $status = Get-ExactScanStatus -Runtime $Runtime -Document $Document -Operation 'Corpus synthetic scan tag final readback'
+  if ($status -cne 'NO_THREATS_FOUND') {
+    throw "The exact corpus source version does not retain the reviewed synthetic clean tag."
+  }
+  $true
+}
+
+function Wait-GuardDutyServiceScan {
+  param(
+    [Parameter(Mandatory)][object]$Runtime,
+    [Parameter(Mandatory)][object]$Document,
+    [ValidateRange(60, 900)][int]$TimeoutSeconds = 900
+  )
+  Assert-TriggersDark -State $Runtime.State | Out-Null
+  Assert-ReviewedRuntimeUnchanged
+  Assert-ActiveGuardDutyTaggingBoundary -Runtime $Runtime | Out-Null
 
   $deadline = [DateTimeOffset]::UtcNow.AddSeconds($TimeoutSeconds)
   do {
     Assert-TriggersDark -State $Runtime.State | Out-Null
     Assert-ReviewedRuntimeUnchanged
-    $readback = Invoke-AwsJson -Arguments @(
-      's3api', 'get-object-tagging', '--bucket', $Runtime.CandidateDocumentBucket,
-      '--key', $Document.sourceKey, '--version-id', $Document.sourceVersion, '--output', 'json'
-    ) -Operation 'GuardDuty managed scan tag readback'
-    $tags = @($readback.TagSet)
-    $scanTags = @($tags | Where-Object { [string]$_.Key -ceq 'GuardDutyMalwareScanStatus' })
-    if ($scanTags.Count -gt 1 -or $tags.Count -gt 1) {
-      throw "The scanned object version has unexpected tags."
-    }
-    if ($scanTags.Count -eq 1) {
-      $status = [string]$scanTags[0].Value
+    $status = Get-ExactScanStatus -Runtime $Runtime -Document $Document -Operation 'GuardDuty managed scan tag readback'
+    if (-not [string]::IsNullOrEmpty($status)) {
       if ($status -ceq 'NO_THREATS_FOUND') {
         return [pscustomobject]@{
           ProtectionPlanStatus = 'ACTIVE'
@@ -2609,6 +2680,45 @@ function Write-CorpusReceipt {
   Write-JsonFile $Path $Receipt -AllowReplace
 }
 
+function Set-CorpusFailureCheckpoint {
+  param(
+    [Parameter(Mandatory)][object]$Receipt,
+    [Parameter(Mandatory)][string]$ReceiptPath,
+    [Parameter(Mandatory)][ValidateSet(
+      'preflight', 'upload', 'guardduty-terminal', 'synthetic-tag', 'tag-revalidation',
+      'processor-invocation', 'aggregate-validation', 'cleanup', 'none'
+    )][string]$Stage,
+    [AllowEmptyString()][string]$CaseId = ''
+  )
+  $caseStage = $Stage -in @('upload', 'guardduty-terminal', 'synthetic-tag', 'tag-revalidation')
+  if (($caseStage -and $CaseId -notmatch '^[a-z0-9][a-z0-9-]{0,63}$') -or
+    (-not $caseStage -and -not [string]::IsNullOrEmpty($CaseId))) {
+    throw 'The corpus failure checkpoint stage and case identity are inconsistent.'
+  }
+  $Receipt.failureStage = $Stage
+  $Receipt.failureCaseId = $CaseId
+  Write-CorpusReceipt -Path $ReceiptPath -Receipt $Receipt
+}
+
+function Assert-CorpusFailureCheckpoint {
+  param([Parameter(Mandatory)][object]$Receipt, [Parameter(Mandatory)][object]$Plan)
+  $stage = [string]$Receipt.failureStage
+  $caseId = [string]$Receipt.failureCaseId
+  $allowed = @(
+    'preflight', 'upload', 'guardduty-terminal', 'synthetic-tag', 'tag-revalidation',
+    'processor-invocation', 'aggregate-validation', 'cleanup', 'none'
+  )
+  $caseStage = $stage -in @('upload', 'guardduty-terminal', 'synthetic-tag', 'tag-revalidation')
+  $cases = @($Plan.cases | Where-Object { [string]$_.caseId -ceq $caseId })
+  if ($stage -notin $allowed -or
+    ($caseStage -and $cases.Count -ne 1) -or
+    (-not $caseStage -and -not [string]::IsNullOrEmpty($caseId)) -or
+    ($stage -ceq 'none' -and [string]$Receipt.phase -cne 'verified')) {
+    throw 'The corpus receipt failure checkpoint is invalid or outside the reviewed case set.'
+  }
+  $true
+}
+
 function Remove-CorpusFiles {
   param([Parameter(Mandatory)][string]$DescriptorPath)
   $resolvedDescriptor = Resolve-OperatorPath -Candidate $DescriptorPath -AllowedRoot $operatorRoot
@@ -2631,11 +2741,13 @@ function Publish-CorpusSource {
     [Parameter(Mandatory)][object]$Entry,
     [Parameter(Mandatory)][string]$Path,
     [Parameter(Mandatory)][object]$Receipt,
-    [Parameter(Mandatory)][string]$ReceiptPath
+    [Parameter(Mandatory)][string]$ReceiptPath,
+    [switch]$CorpusBatch
   )
-  Assert-ReviewedRuntimeUnchanged
   $key = "quarantine/$($Entry.documentId)/source"
   $checksum = Convert-HexToBase64 ([string]$Entry.sha256)
+  if ($CorpusBatch) { Assert-CorpusMutationBoundary -Runtime $Runtime }
+  else { Assert-ReviewedRuntimeUnchanged }
   $put = Invoke-AwsJson @(
     's3api', 'put-object', '--bucket', $Runtime.CandidateDocumentBucket, '--key', $key,
     '--body', $Path, '--if-none-match', '*', '--content-type', [string]$Entry.mediaType,
@@ -2665,14 +2777,18 @@ function Publish-CorpusSource {
 }
 
 function Remove-CorpusObjects {
-  param([Parameter(Mandatory)][object]$Runtime, [Parameter(Mandatory)][object[]]$Documents)
+  param(
+    [Parameter(Mandatory)][object]$Runtime,
+    [Parameter(Mandatory)][object[]]$Documents,
+    [switch]$CorpusBatch
+  )
   foreach ($document in @($Documents)) {
     $boundaries = @(
       [pscustomobject]@{ Prefix = [string]$document.sourceKey; Exact = [string]$document.sourceKey },
       [pscustomobject]@{ Prefix = "normalized/$($document.documentId)/"; Exact = '' }
     )
     foreach ($boundary in $boundaries) {
-      Assert-ReviewedRuntimeUnchanged
+      if (-not $CorpusBatch) { Assert-ReviewedRuntimeUnchanged }
       $history = Invoke-AwsJson @('s3api', 'list-object-versions', '--bucket', $Runtime.CandidateDocumentBucket, '--prefix', $boundary.Prefix, '--output', 'json') 'Corpus object cleanup discovery'
       $versions = @(Get-OptionalItems $history 'Versions')
       $markers = @(Get-OptionalItems $history 'DeleteMarkers')
@@ -2684,7 +2800,8 @@ function Remove-CorpusObjects {
         })
       if ($outside.Count -ne 0) { throw 'Corpus cleanup found an object outside the exact generated namespace.' }
       foreach ($entry in @($versions + $markers)) {
-        Assert-ReviewedRuntimeUnchanged
+        if ($CorpusBatch) { Assert-CorpusMutationBoundary -Runtime $Runtime }
+        else { Assert-ReviewedRuntimeUnchanged }
         $null = Invoke-AwsJson @('s3api', 'delete-object', '--bucket', $Runtime.CandidateDocumentBucket, '--key', [string]$entry.Key, '--version-id', [string]$entry.VersionId, '--output', 'json') 'Corpus exact object cleanup'
       }
       $after = Invoke-AwsJson @('s3api', 'list-object-versions', '--bucket', $Runtime.CandidateDocumentBucket, '--prefix', $boundary.Prefix, '--output', 'json') 'Corpus post-cleanup proof'
@@ -2781,12 +2898,13 @@ if ($Action -in @('CorpusExecute', 'CorpusRecoverCleanup', 'CorpusVerify')) {
   if ($Action -eq 'CorpusExecute') {
     if (Test-Path -LiteralPath $receiptPath) { throw 'Refusing to replace an existing corpus receipt or start a second run.' }
     $receipt = [ordered]@{
-      schemaVersion = 1; kind = 'development-document-parser-corpus-receipt'; phase = 'running'
+      schemaVersion = 2; kind = 'development-document-parser-corpus-receipt'; phase = 'running'
       sourceSha = $SourceSha; executionPlanSha256 = $ReviewedExecutionPlanSha256; runId = $corpusPlan.Plan.runId
       corpusSha256 = $FixtureSetSha256; parserVersion = $runtime.ParserVersion; parserVersionArn = $runtime.ParserVersionArn
       parserCodeSha256 = $runtime.ParserCodeSha256; processorVersionArn = $runtime.ProcessorVersionArn
       parserSemanticVersion = $runtime.ParserSemanticVersion
       documents = @(); aggregatePath = ''; aggregateSha256 = ''; objectsRemoved = $false; databaseRowsCreated = 0
+      failureStage = 'preflight'; failureCaseId = ''
       startedAt = [DateTimeOffset]::UtcNow.ToString('o'); completedAt = ''
     }
     Write-JsonFile $receiptPath $receipt
@@ -2795,9 +2913,9 @@ if ($Action -in @('CorpusExecute', 'CorpusRecoverCleanup', 'CorpusVerify')) {
     $aggregate = $null
     try {
       $files = @($corpusPlan.Descriptor.Descriptor.files)
+      Assert-ReviewedRuntimeUnchanged
       foreach ($entry in @($corpusPlan.Plan.cases)) {
-        Assert-TriggersDark $runtime.State | Out-Null
-        Assert-ReviewedRuntimeUnchanged
+        Set-CorpusFailureCheckpoint -Receipt $receipt -ReceiptPath $receiptPath -Stage 'upload' -CaseId ([string]$entry.caseId)
         $file = @($files | Where-Object { [string]$_.caseId -ceq [string]$entry.caseId })
         if ($file.Count -ne 1) { throw 'The reviewed corpus file is not exact.' }
         $document = [pscustomobject]@{
@@ -2806,8 +2924,20 @@ if ($Action -in @('CorpusExecute', 'CorpusRecoverCleanup', 'CorpusVerify')) {
         }
         $receipt.documents += $document
         Write-CorpusReceipt $receiptPath $receipt
-        $document = Publish-CorpusSource -Runtime $runtime -Entry $entry -Path ([string]$file[0].resolvedPath) -Receipt $receipt -ReceiptPath $receiptPath
-        Set-ExactScanTag $runtime $document 'NO_THREATS_FOUND'
+        $document = Publish-CorpusSource -Runtime $runtime -Entry $entry -Path ([string]$file[0].resolvedPath) -Receipt $receipt -ReceiptPath $receiptPath -CorpusBatch
+      }
+
+      Assert-ReviewedRuntimeUnchanged
+      Assert-ActiveGuardDutyTaggingBoundary -Runtime $runtime | Out-Null
+      $managedScanDeadline = [DateTimeOffset]::UtcNow.AddMinutes(15)
+      foreach ($document in @($receipt.documents)) {
+        Set-CorpusFailureCheckpoint -Receipt $receipt -ReceiptPath $receiptPath -Stage 'guardduty-terminal' -CaseId ([string]$document.caseId)
+        $null = Wait-CorpusGuardDutyTerminalTag -Runtime $runtime -Document $document -Deadline $managedScanDeadline
+      }
+      Assert-ActiveGuardDutyTaggingBoundary -Runtime $runtime | Out-Null
+      foreach ($document in @($receipt.documents)) {
+        Set-CorpusFailureCheckpoint -Receipt $receipt -ReceiptPath $receiptPath -Stage 'synthetic-tag' -CaseId ([string]$document.caseId)
+        Set-ExactScanTag -Runtime $runtime -Document $document -Status 'NO_THREATS_FOUND' -CorpusBatch
       }
       $requestCases = @($corpusPlan.Plan.cases | ForEach-Object {
           $case = $_
@@ -2824,15 +2954,28 @@ if ($Action -in @('CorpusExecute', 'CorpusRecoverCleanup', 'CorpusVerify')) {
         schemaVersion = 1; kind = 'development-document-parser-corpus-v1'; corpusVersion = $corpusPlan.Plan.corpusVersion
         corpusSha256 = $corpusPlan.Plan.corpusSha256; releaseSourceSha = $SourceSha; runId = $corpusPlan.Plan.runId; cases = $requestCases
       }
-      $response = Invoke-LambdaJson $runtime.ProcessorVersionArn $request 'Direct generated document parser corpus invocation'
+      foreach ($document in @($receipt.documents)) {
+        Set-CorpusFailureCheckpoint -Receipt $receipt -ReceiptPath $receiptPath -Stage 'tag-revalidation' -CaseId ([string]$document.caseId)
+        Assert-CorpusSyntheticScanTag -Runtime $runtime -Document $document | Out-Null
+      }
+      Set-CorpusFailureCheckpoint -Receipt $receipt -ReceiptPath $receiptPath -Stage 'processor-invocation'
+      $response = Invoke-LambdaJson -FunctionArn $runtime.ProcessorVersionArn -Payload $request -Operation 'Direct generated document parser corpus invocation'
       $aggregate = $response.Payload
-      Assert-CorpusAggregate $aggregate $corpusPlan.Plan | Out-Null
+      Set-CorpusFailureCheckpoint -Receipt $receipt -ReceiptPath $receiptPath -Stage 'aggregate-validation'
+      Assert-CorpusAggregate -Aggregate $aggregate -Plan $corpusPlan.Plan | Out-Null
     } catch { $primary = $_ }
     finally {
+      $primaryFailureStage = if ($null -ne $primary) { [string]$receipt.failureStage } else { '' }
+      $primaryFailureCaseId = if ($null -ne $primary) { [string]$receipt.failureCaseId } else { '' }
       try {
-        Remove-CorpusObjects $runtime @($receipt.documents)
+        Set-CorpusFailureCheckpoint -Receipt $receipt -ReceiptPath $receiptPath -Stage 'cleanup'
+        Assert-ReviewedRuntimeUnchanged
+        Remove-CorpusObjects -Runtime $runtime -Documents @($receipt.documents) -CorpusBatch
         $receipt.objectsRemoved = $true
         Remove-CorpusFiles ([string]$corpusPlan.Plan.descriptorPath)
+        if ($null -ne $primary) {
+          Set-CorpusFailureCheckpoint -Receipt $receipt -ReceiptPath $receiptPath -Stage $primaryFailureStage -CaseId $primaryFailureCaseId
+        }
       } catch { $cleanup = $_ }
     }
     if ($null -ne $cleanup) { $receipt.phase = 'cleanup-required'; Write-CorpusReceipt $receiptPath $receipt; throw 'Corpus execution did not prove exact object/file cleanup; use CorpusRecoverCleanup.' }
@@ -2840,6 +2983,7 @@ if ($Action -in @('CorpusExecute', 'CorpusRecoverCleanup', 'CorpusVerify')) {
     $aggregatePath = Join-Path $operatorRoot "corpus-aggregate-$ReviewedExecutionPlanSha256.json"
     Write-JsonFile $aggregatePath $aggregate
     $receipt.phase = 'verified'; $receipt.aggregatePath = $aggregatePath; $receipt.aggregateSha256 = Get-FileSha256 $aggregatePath
+    $receipt.failureStage = 'none'; $receipt.failureCaseId = ''
     $receipt.completedAt = [DateTimeOffset]::UtcNow.ToString('o'); Write-CorpusReceipt $receiptPath $receipt
     [pscustomobject]@{ Outcome = 'verified-and-cleaned'; ReceiptPath = $receiptPath; ReceiptSha256 = Get-FileSha256 $receiptPath; AggregatePath = $aggregatePath; AggregateSha256 = $receipt.aggregateSha256; CaseCount = 43; RejectedCount = 43; PersistentRows = 0; ObjectsRemoved = $true; TriggerActivation = $false; RealCandidateData = $false }
     exit 0
@@ -2850,16 +2994,18 @@ if ($Action -in @('CorpusExecute', 'CorpusRecoverCleanup', 'CorpusVerify')) {
   Assert-ExactPropertySet $receipt 'Document parser corpus receipt' @(
     'schemaVersion', 'kind', 'phase', 'sourceSha', 'executionPlanSha256', 'runId', 'corpusSha256',
     'parserVersion', 'parserVersionArn', 'parserCodeSha256', 'parserSemanticVersion', 'processorVersionArn',
-    'documents', 'aggregatePath', 'aggregateSha256', 'objectsRemoved', 'databaseRowsCreated', 'startedAt', 'completedAt'
+    'documents', 'aggregatePath', 'aggregateSha256', 'objectsRemoved', 'databaseRowsCreated',
+    'failureStage', 'failureCaseId', 'startedAt', 'completedAt'
   )
   if ([string]$receipt.kind -cne 'development-document-parser-corpus-receipt' -or [string]$receipt.sourceSha -cne $SourceSha -or
     [string]$receipt.executionPlanSha256 -cne $ReviewedExecutionPlanSha256 -or [string]$receipt.corpusSha256 -cne $FixtureSetSha256 -or
-    [int]$receipt.schemaVersion -ne 1 -or [string]$receipt.runId -cne [string]$corpusPlan.Plan.runId -or
+    [int]$receipt.schemaVersion -ne 2 -or [string]$receipt.runId -cne [string]$corpusPlan.Plan.runId -or
     [string]$receipt.parserVersion -cne $runtime.ParserVersion -or [string]$receipt.parserVersionArn -cne $runtime.ParserVersionArn -or
     [string]$receipt.parserCodeSha256 -cne $runtime.ParserCodeSha256 -or
     [string]$receipt.parserSemanticVersion -cne $runtime.ParserSemanticVersion -or [string]$receipt.processorVersionArn -cne $runtime.ProcessorVersionArn) {
     throw 'The corpus receipt is outside the exact reviewed release.'
   }
+  Assert-CorpusFailureCheckpoint -Receipt $receipt -Plan $corpusPlan.Plan | Out-Null
   $receiptIds = @{}
   foreach ($document in @($receipt.documents)) {
     Assert-ExactPropertySet $document 'Document parser corpus receipt document' @('caseId', 'documentId', 'sourceKey', 'sourceVersion', 'sha256')

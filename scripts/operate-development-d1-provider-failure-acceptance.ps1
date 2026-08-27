@@ -10,9 +10,9 @@ param(
   [string]$StateBucket = "",
   [ValidatePattern("^[a-f0-9]{40}$")]
   [string]$SourceSha = "",
-  [string]$RepresentativeConfigPath = "",
+  [string]$ProviderFixtureBindingPath = "",
   [ValidatePattern("^[a-f0-9]{64}$")]
-  [string]$ReviewedConfigSha256 = "",
+  [string]$ReviewedProviderFixtureBindingSha256 = "",
   [ValidatePattern("^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")]
   [string]$RunId = "",
   [ValidateRange(1, 2147483647)]
@@ -45,12 +45,12 @@ if ($Help) {
   @"
 Usage:
   .\scripts\operate-development-d1-provider-failure-acceptance.ps1 -Action Validate `
-    -SourceSha RELEASE_SHA -RunId UUID_V4 -RepresentativeConfigPath CONFIG `
-    -ReviewedConfigSha256 CONFIG_SHA256
+    -SourceSha RELEASE_SHA -RunId UUID_V4 -ProviderFixtureBindingPath BINDING `
+    -ReviewedProviderFixtureBindingSha256 BINDING_SHA256
 
   .\scripts\operate-development-d1-provider-failure-acceptance.ps1 -Action Plan `
     -ExpectedAccountId ACCOUNT -StateBucket BUCKET -SourceSha RELEASE_SHA -RunId UUID_V4 `
-    -RepresentativeConfigPath CONFIG -ReviewedConfigSha256 CONFIG_SHA256 `
+    -ProviderFixtureBindingPath BINDING -ReviewedProviderFixtureBindingSha256 BINDING_SHA256 `
     -ExpectedDurableVersion VERSION -ExpectedActivityVersion VERSION `
     -ExpectedDurableArtifactSha256 SHA256 -ExpectedDurableCodeSha256 BASE64_SHA256 `
     -ExpectedActivityArtifactSha256 SHA256 -ExpectedActivityCodeSha256 BASE64_SHA256
@@ -87,10 +87,12 @@ $deadLetterQueueName = "ai-job-apply-development-ingestion-dead-letter"
 $ecsClusterName = "ai-job-apply-development"
 $applicationLogGroup = "/ai-job-apply/development/application"
 $utf8WithoutBom = New-Object Text.UTF8Encoding($false)
-$allowedVerifierDelta = @(
+$allowedOperatorDelta = @(
   "scripts/operate-development-d1-provider-failure-acceptance.ps1",
   "scripts/tests/development-d1-provider-failure-acceptance-operator.tests.ps1",
-  $runbookPath
+  $runbookPath,
+  "scripts/operate-development-document-processing-acceptance.ps1",
+  "scripts/tests/development-document-processing-acceptance-operator.tests.ps1"
 )
 
 $env:AWS_PROFILE = $AwsProfile
@@ -204,8 +206,60 @@ function New-DurableExecutionName {
   return "d1-provider-failure-$($ExactRunId.Replace('-', ''))"
 }
 
+function Assert-OperatorDeltaRecordSet {
+  param(
+    [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$Detected,
+    [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$Records,
+    [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$Numstat
+  )
+  if ($Detected.Count -eq 0) { throw "The operator-only source delta is empty." }
+  foreach ($change in $Detected) {
+    $parts = @($change -split "`t")
+    if ($parts.Count -ne 2 -or $parts[0] -notin @("A", "M") -or $parts[1] -notin $allowedOperatorDelta) {
+      throw "A non-operator dependency changed across the reviewed operator boundary."
+    }
+  }
+  if ($Records.Count -ne $Detected.Count -or $Records.Count -ne $Numstat.Count -or
+    ($Records -join "`n") -cne ($Detected -join "`n")) {
+    throw "The operator-only source delta is structurally ambiguous."
+  }
+  for ($index = 0; $index -lt $Records.Count; $index += 1) {
+    $recordParts = @($Records[$index] -split "`t")
+    if ($Numstat[$index] -notmatch '^[0-9]+\t[0-9]+\t(.+)$' -or $Matches[1] -cne $recordParts[1]) {
+      throw "The operator-only source delta is binary or structurally ambiguous."
+    }
+  }
+  return $true
+}
+
+function Assert-AllowedOperatorDelta {
+  param(
+    [Parameter(Mandatory)][string]$FromSha,
+    [Parameter(Mandatory)][string]$ToSha
+  )
+  if ($FromSha -cnotmatch '^[a-f0-9]{40}$' -or $ToSha -cnotmatch '^[a-f0-9]{40}$') {
+    throw "The operator source boundary must contain exact lowercase Git SHAs."
+  }
+  & git -C $repositoryRoot merge-base --is-ancestor $FromSha $ToSha 2>$null
+  if ($LASTEXITCODE -ne 0) { throw "The prior operator source is not an ancestor of the current operator source." }
+  $detected = @(& git -C $repositoryRoot diff --name-status --find-renames --find-copies-harder "$FromSha..$ToSha" -- 2>$null)
+  if ($LASTEXITCODE -ne 0) { throw "The operator-only source delta is unreadable." }
+  if ($FromSha -ceq $ToSha) {
+    if ($detected.Count -ne 0) { throw "An equal operator source boundary produced a nonempty delta." }
+    return $true
+  }
+  $records = @(& git -C $repositoryRoot diff --name-status --no-renames "$FromSha..$ToSha" -- 2>$null)
+  $numstat = @(& git -C $repositoryRoot diff --numstat --no-renames "$FromSha..$ToSha" -- 2>$null)
+  if ($LASTEXITCODE -ne 0) { throw "The operator-only source delta is unreadable." }
+  $null = Assert-OperatorDeltaRecordSet -Detected $detected -Records $records -Numstat $numstat
+  return $true
+}
+
 function Assert-SourceProvenance {
-  param([switch]$AllowVerifierOnlyDelta)
+  param(
+    [Parameter(Mandatory)][string]$ExpectedOperatorSourceSha,
+    [switch]$AllowRecoveryDelta
+  )
   $branch = (& git -C $repositoryRoot branch --show-current 2>$null).Trim()
   $head = (& git -C $repositoryRoot rev-parse HEAD 2>$null).Trim()
   $origin = (& git -C $repositoryRoot rev-parse origin/main 2>$null).Trim()
@@ -213,64 +267,85 @@ function Assert-SourceProvenance {
   if ($branch -cne "main" -or $head -cne $origin -or $dirty.Count -ne 0) {
     throw "Acceptance requires a clean main checkout exactly matching origin/main."
   }
-  if ($head -ceq $SourceSha) { return $head }
-  if (-not $AllowVerifierOnlyDelta) { throw "Plan and Execute require SourceSha to equal clean origin/main." }
-  & git -C $repositoryRoot merge-base --is-ancestor $SourceSha $head 2>$null
-  if ($LASTEXITCODE -ne 0) { throw "Verify requires SourceSha to be an ancestor of clean origin/main." }
-  $changes = @(& git -C $repositoryRoot diff --name-status $SourceSha $head -- 2>$null)
-  if ($LASTEXITCODE -ne 0 -or $changes.Count -eq 0) { throw "The verifier-only source delta is empty or unreadable." }
-  foreach ($change in $changes) {
-    $parts = @($change -split "`t")
-    if ($parts.Count -ne 2 -or $parts[0] -notin @("A", "M") -or $parts[1] -notin $allowedVerifierDelta) {
-      throw "A non-verifier dependency changed after the reviewed release source."
+  if ($head -cne $ExpectedOperatorSourceSha) {
+    if (-not $AllowRecoveryDelta) {
+      throw "Plan and Execute require clean origin/main to equal the reviewed operator source."
     }
+    $null = Assert-AllowedOperatorDelta -FromSha $ExpectedOperatorSourceSha -ToSha $head
   }
+  $null = Assert-AllowedOperatorDelta -FromSha $SourceSha -ToSha $ExpectedOperatorSourceSha
   return $head
 }
 
-function Read-RepresentativeConfiguration {
-  $path = Resolve-PathBelowRoot -Candidate $RepresentativeConfigPath -AllowedRoot $representativeRoot -MustExist
-  if ((Get-FileSha256 -Path $path) -cne $ReviewedConfigSha256) {
-    throw "The representative configuration checksum does not match the independently reviewed SHA-256."
+function Read-ProviderFixtureBinding {
+  $path = Resolve-PathBelowRoot -Candidate $ProviderFixtureBindingPath -AllowedRoot $operatorRoot -MustExist
+  if ((Get-FileSha256 -Path $path) -cne $ReviewedProviderFixtureBindingSha256) {
+    throw "The provider-fixture binding checksum does not match the independently reviewed SHA-256."
   }
-  $config = ConvertFrom-OperatorJson -Json (Get-Content -LiteralPath $path -Raw) -Description "Representative configuration"
-  $fixture = $config.profiles.providerFailure.existingGuardedSyntheticFixture
-  $aggregatePath = if ($null -ne $fixture) { [string]$fixture.aggregateResultPath } else { "" }
-  if ([string]$config.status -cne "reviewed" -or [string]$config.release.sourceSha -cne $SourceSha -or
-    [long]$config.release.terraformStateSerial -lt 1 -or [string]$config.release.runtimePlanSha256 -notmatch '^[a-f0-9]{64}$' -or
-    [string]$config.run.runId -cne $RunId -or $config.run.generatedSyntheticOnly -isnot [bool] -or
-    -not [bool]$config.run.generatedSyntheticOnly -or $config.run.oneRunOnly -isnot [bool] -or
-    -not [bool]$config.run.oneRunOnly -or $config.run.cleanupRequired -isnot [bool] -or
-    -not [bool]$config.run.cleanupRequired -or $config.run.recoveryRequired -isnot [bool] -or
-    -not [bool]$config.run.recoveryRequired -or [string]$config.profiles.providerFailure.state -cne "available" -or
-    $null -ne $config.profiles.providerFailure.blocker -or $null -eq $fixture -or
+  $binding = ConvertFrom-OperatorJson -Json (Get-Content -LiteralPath $path -Raw) -Description "Provider-fixture binding"
+  $null = Assert-ExactProperties $binding @(
+    "schemaVersion", "kind", "status", "scope", "representativeAcceptanceAuthorized", "release", "run", "fixture"
+  ) "Provider-fixture binding"
+  $null = Assert-ExactProperties $binding.release @(
+    "sourceSha", "operatorSourceSha", "terraformStateSerial", "runtimePlanPath", "runtimePlanSha256"
+  ) "Provider-fixture release binding"
+  $null = Assert-ExactProperties $binding.run @(
+    "runId", "generatedSyntheticOnly", "oneRunOnly", "cleanupRequired", "recoveryRequired"
+  ) "Provider-fixture run binding"
+  $null = Assert-ExactProperties $binding.fixture @(
+    "kind", "sourceId", "adapterVersion", "operatorPath", "aggregateResultPath", "zeroDriftResultPath"
+  ) "Provider-fixture identity binding"
+  $fixture = $binding.fixture
+  if (($binding.schemaVersion -isnot [int] -and $binding.schemaVersion -isnot [long]) -or [long]$binding.schemaVersion -ne 1 -or
+    [string]$binding.kind -cne "development-d1-provider-failure-fixture-binding" -or
+    [string]$binding.status -cne "reviewed" -or [string]$binding.scope -cne "provider-fixture-only" -or
+    $binding.representativeAcceptanceAuthorized -isnot [bool] -or [bool]$binding.representativeAcceptanceAuthorized -or
+    [string]$binding.release.sourceSha -cne $SourceSha -or
+    [string]$binding.release.operatorSourceSha -cnotmatch '^[a-f0-9]{40}$' -or
+    ($binding.release.terraformStateSerial -isnot [int] -and $binding.release.terraformStateSerial -isnot [long]) -or
+    [long]$binding.release.terraformStateSerial -lt 1 -or
+    $binding.release.runtimePlanPath -isnot [string] -or
+    [string]::IsNullOrWhiteSpace([string]$binding.release.runtimePlanPath) -or
+    [string]$binding.release.runtimePlanSha256 -notmatch '^[a-f0-9]{64}$' -or
+    [string]$binding.run.runId -cne $RunId -or $binding.run.generatedSyntheticOnly -isnot [bool] -or
+    -not [bool]$binding.run.generatedSyntheticOnly -or $binding.run.oneRunOnly -isnot [bool] -or
+    -not [bool]$binding.run.oneRunOnly -or $binding.run.cleanupRequired -isnot [bool] -or
+    -not [bool]$binding.run.cleanupRequired -or $binding.run.recoveryRequired -isnot [bool] -or
+    -not [bool]$binding.run.recoveryRequired -or
     [string]$fixture.kind -cne $fixtureKind -or [string]$fixture.sourceId -cne $fixtureSourceId -or
     [string]$fixture.adapterVersion -cne $fixtureAdapterVersion -or
     [string]$fixture.operatorPath -cne "scripts/operate-development-d1-provider-failure-acceptance.ps1" -or
-    [string]::IsNullOrWhiteSpace($aggregatePath)) {
-    throw "The representative configuration is not the exact reviewed, one-run, generated-synthetic provider fixture."
+    $fixture.aggregateResultPath -isnot [string] -or
+    [string]::IsNullOrWhiteSpace([string]$fixture.aggregateResultPath) -or
+    $fixture.zeroDriftResultPath -isnot [string] -or
+    [string]::IsNullOrWhiteSpace([string]$fixture.zeroDriftResultPath)) {
+    throw "The provider-fixture binding is not the exact reviewed, provider-only, one-run generated-synthetic fixture."
   }
-  $resolvedAggregate = Resolve-PathBelowRoot -Candidate $aggregatePath -AllowedRoot $representativeRoot
+  $resolvedAggregate = Resolve-PathBelowRoot -Candidate ([string]$fixture.aggregateResultPath) -AllowedRoot $representativeRoot
+  $resolvedZeroDrift = Resolve-PathBelowRoot -Candidate ([string]$fixture.zeroDriftResultPath) -AllowedRoot $representativeRoot
+  if ($resolvedAggregate -ieq $resolvedZeroDrift) { throw "Provider aggregate and zero-drift evidence require distinct private paths." }
   return [pscustomobject]@{
     Path = $path
-    Config = $config
-    StateSerial = [long]$config.release.terraformStateSerial
-    RuntimePlanPath = [string]$config.release.runtimePlanPath
-    RuntimePlanSha256 = [string]$config.release.runtimePlanSha256
+    Binding = $binding
+    OperatorSourceSha = [string]$binding.release.operatorSourceSha
+    StateSerial = [long]$binding.release.terraformStateSerial
+    RuntimePlanPath = [string]$binding.release.runtimePlanPath
+    RuntimePlanSha256 = [string]$binding.release.runtimePlanSha256
     AggregatePath = $resolvedAggregate
+    ZeroDriftPath = $resolvedZeroDrift
   }
 }
 
 function Assert-ReviewedZeroDriftPlan {
-  param([Parameter(Mandatory)][object]$Representative)
-  $planPath = Resolve-PathBelowRoot -Candidate $Representative.RuntimePlanPath -AllowedRoot $terraformDataRoot -MustExist
-  if ((Get-FileSha256 -Path $planPath) -cne $Representative.RuntimePlanSha256) {
-    throw "The representative runtime plan checksum does not match its reviewed binding."
+  param([Parameter(Mandatory)][object]$Binding)
+  $planPath = Resolve-PathBelowRoot -Candidate $Binding.RuntimePlanPath -AllowedRoot $terraformDataRoot -MustExist
+  if ((Get-FileSha256 -Path $planPath) -cne $Binding.RuntimePlanSha256) {
+    throw "The provider-fixture runtime plan checksum does not match its reviewed binding."
   }
   $shown = & terraform "-chdir=$terraformDirectory" show -json $planPath 2>$null
-  if ($LASTEXITCODE -ne 0) { throw "The reviewed representative runtime plan cannot be inspected." }
-  $plan = ConvertFrom-OperatorJson -Json ($shown -join "`n") -Description "Reviewed representative runtime plan"
-  $null = Assert-ZeroChangePlan $plan "Reviewed representative runtime plan"
+  if ($LASTEXITCODE -ne 0) { throw "The reviewed provider-fixture runtime plan cannot be inspected." }
+  $plan = ConvertFrom-OperatorJson -Json ($shown -join "`n") -Description "Reviewed provider-fixture runtime plan"
+  $null = Assert-ZeroChangePlan $plan "Reviewed provider-fixture runtime plan"
   return [pscustomobject]@{ Path = $planPath; Plan = $plan }
 }
 
@@ -460,8 +535,8 @@ function Assert-LiveIngestionNetworkBoundary {
 }
 
 function Assert-StateBoundary {
-  param([Parameter(Mandatory)][object]$Snapshot, [Parameter(Mandatory)][object]$Representative)
-  if ([long]$Snapshot.Serial -ne [long]$Representative.StateSerial) { throw "Terraform state serial does not match the reviewed representative configuration." }
+  param([Parameter(Mandatory)][object]$Snapshot, [Parameter(Mandatory)][object]$Binding)
+  if ([long]$Snapshot.Serial -ne [long]$Binding.StateSerial) { throw "Terraform state serial does not match the reviewed provider-fixture binding." }
   $durableArn = "arn:aws:lambda:$Region`:$ExpectedAccountId`:function:$durableFunctionName`:$ExpectedDurableVersion"
   $activityArn = "arn:aws:lambda:$Region`:$ExpectedAccountId`:function:$activityFunctionName`:$ExpectedActivityVersion"
   $activity = Get-StateResource $Snapshot "aws_lambda_function" "ingestion_activity"
@@ -633,20 +708,22 @@ function New-WorkflowPayload {
     workflowDefinitionVersion = 1
     fixtureKind = $fixtureKind
     runId = $RunId
-    reviewedConfigSha256 = $ReviewedConfigSha256
+    # The deployed v1 durable wire contract retains this legacy field name. Its value is the
+    # dedicated provider-fixture binding digest, never a representative-acceptance digest.
+    reviewedConfigSha256 = $ReviewedProviderFixtureBindingSha256
     releaseSourceSha = $SourceSha
   }
 }
 
 function New-ExecutionPlan {
   param(
-    [Parameter(Mandatory)][object]$Representative,
+    [Parameter(Mandatory)][object]$Binding,
     [Parameter(Mandatory)][object]$Boundary,
     [Parameter(Mandatory)][string]$ExecutionName,
     [Parameter(Mandatory)][object]$FreshZeroDrift
   )
   return [ordered]@{
-    schemaVersion = 1
+    schemaVersion = 2
     kind = "development-d1-provider-failure-acceptance-plan"
     environment = "development"
     region = $Region
@@ -656,8 +733,9 @@ function New-ExecutionPlan {
     adapterVersion = $fixtureAdapterVersion
     runId = $RunId
     executionName = $ExecutionName
-    reviewedConfigSha256 = $ReviewedConfigSha256
+    providerFixtureBindingSha256 = $ReviewedProviderFixtureBindingSha256
     releaseSourceSha = $SourceSha
+    operatorSourceSha = $Binding.OperatorSourceSha
     durableVersion = $ExpectedDurableVersion
     activityVersion = $ExpectedActivityVersion
     durableArtifactSha256 = $ExpectedDurableArtifactSha256
@@ -667,7 +745,7 @@ function New-ExecutionPlan {
     terraformStateLineage = $Boundary.StateLineage
     terraformStateSerial = $Boundary.StateSerial
     terraformStateVersionId = $Boundary.StateVersionId
-    runtimePlanSha256 = $Representative.RuntimePlanSha256
+    runtimePlanSha256 = $Binding.RuntimePlanSha256
     freshZeroDriftPlanPath = $FreshZeroDrift.Path
     freshZeroDriftPlanSha256 = $FreshZeroDrift.Sha256
     createdAt = [DateTimeOffset]::UtcNow.ToString("o")
@@ -677,28 +755,29 @@ function New-ExecutionPlan {
 }
 
 function Read-ExecutionPlan {
-  param([Parameter(Mandatory)][object]$Representative, [Parameter(Mandatory)][object]$Boundary, [switch]$RequireFresh)
+  param([Parameter(Mandatory)][object]$Binding, [Parameter(Mandatory)][object]$Boundary, [switch]$RequireFresh)
   $path = Resolve-PathBelowRoot -Candidate $ExecutionPlanPath -AllowedRoot $operatorRoot -MustExist
   if ((Get-FileSha256 $path) -cne $ReviewedExecutionPlanSha256) { throw "The execution plan checksum does not match the reviewed SHA-256." }
   $plan = ConvertFrom-OperatorJson (Get-Content -LiteralPath $path -Raw) "Execution plan"
   $null = Assert-ExactProperties $plan @(
     "schemaVersion", "kind", "environment", "region", "accountId", "fixtureKind", "sourceId", "adapterVersion",
-    "runId", "executionName", "reviewedConfigSha256", "releaseSourceSha", "durableVersion", "activityVersion",
+    "runId", "executionName", "providerFixtureBindingSha256", "releaseSourceSha", "operatorSourceSha", "durableVersion", "activityVersion",
     "durableArtifactSha256", "durableCodeSha256", "activityArtifactSha256", "activityCodeSha256",
     "terraformStateLineage", "terraformStateSerial", "terraformStateVersionId", "runtimePlanSha256",
     "freshZeroDriftPlanPath", "freshZeroDriftPlanSha256", "createdAt", "expiresAt", "mutation"
   ) "Execution plan"
-  if ([int]$plan.schemaVersion -ne 1 -or [string]$plan.kind -cne "development-d1-provider-failure-acceptance-plan" -or
+  if ([int]$plan.schemaVersion -ne 2 -or [string]$plan.kind -cne "development-d1-provider-failure-acceptance-plan" -or
     [string]$plan.environment -cne "development" -or [string]$plan.region -cne $Region -or [string]$plan.accountId -cne $ExpectedAccountId -or
     [string]$plan.fixtureKind -cne $fixtureKind -or [string]$plan.sourceId -cne $fixtureSourceId -or
     [string]$plan.adapterVersion -cne $fixtureAdapterVersion -or [string]$plan.runId -cne $RunId -or
     [string]$plan.executionName -cne (New-DurableExecutionName $RunId) -or
-    [string]$plan.reviewedConfigSha256 -cne $ReviewedConfigSha256 -or [string]$plan.releaseSourceSha -cne $SourceSha -or
+    [string]$plan.providerFixtureBindingSha256 -cne $ReviewedProviderFixtureBindingSha256 -or
+    [string]$plan.releaseSourceSha -cne $SourceSha -or [string]$plan.operatorSourceSha -cne $Binding.OperatorSourceSha -or
     [int]$plan.durableVersion -ne $ExpectedDurableVersion -or [int]$plan.activityVersion -ne $ExpectedActivityVersion -or
     [string]$plan.durableArtifactSha256 -cne $ExpectedDurableArtifactSha256 -or [string]$plan.durableCodeSha256 -cne $ExpectedDurableCodeSha256 -or
     [string]$plan.activityArtifactSha256 -cne $ExpectedActivityArtifactSha256 -or [string]$plan.activityCodeSha256 -cne $ExpectedActivityCodeSha256 -or
     [string]$plan.terraformStateLineage -cne $Boundary.StateLineage -or [long]$plan.terraformStateSerial -ne $Boundary.StateSerial -or
-    [string]$plan.terraformStateVersionId -cne $Boundary.StateVersionId -or [string]$plan.runtimePlanSha256 -cne $Representative.RuntimePlanSha256 -or
+    [string]$plan.terraformStateVersionId -cne $Boundary.StateVersionId -or [string]$plan.runtimePlanSha256 -cne $Binding.RuntimePlanSha256 -or
     [string]$plan.freshZeroDriftPlanSha256 -notmatch '^[a-f0-9]{64}$' -or
     (Get-FileSha256 (Resolve-PathBelowRoot -Candidate ([string]$plan.freshZeroDriftPlanPath) -AllowedRoot $operatorRoot -MustExist)) -cne [string]$plan.freshZeroDriftPlanSha256 -or
     [string]$plan.mutation -cne "invoke-one-exact-numeric-ingestion-durable-version" -or
@@ -763,7 +842,7 @@ function Wait-ExactDurableResult {
     [int]$result.schemaVersion -ne 1 -or [string]$result.profile -cne "d1_deployed_provider_failure_durable_v1" -or
     [string]$result.fixtureKind -cne $fixtureKind -or [string]$result.sourceId -cne $fixtureSourceId -or
     [string]$result.adapterVersion -cne $fixtureAdapterVersion -or [string]$result.runId -cne $RunId -or
-    [string]$result.reviewedConfigSha256 -cne $ReviewedConfigSha256 -or [string]$result.releaseSourceSha -cne $SourceSha -or
+    [string]$result.reviewedConfigSha256 -cne $ReviewedProviderFixtureBindingSha256 -or [string]$result.releaseSourceSha -cne $SourceSha -or
     [int]$result.providerFaultsInjected -ne 1 -or [int]$result.providerFailuresObserved -ne 1 -or
     [int]$result.recoveryAttempts -ne 1 -or [int]$result.recoveriesSucceeded -ne 1 -or
     [int]$result.providerRequests -ne 0 -or [int]$result.observationCount -ne 0 -or
@@ -846,14 +925,14 @@ function Assert-ProviderAggregate {
 }
 
 function Assert-ZeroDriftEvidence {
-  param([Parameter(Mandatory)][object]$Evidence, [Parameter(Mandatory)][object]$Representative)
+  param([Parameter(Mandatory)][object]$Evidence, [Parameter(Mandatory)][object]$Binding)
   $null = Assert-ExactProperties $Evidence @(
     "profile", "checkedAt", "sourceSha", "runtimePlanSha256", "terraformStateSerial", "meaningfulChanges", "drift"
   ) "Post-run zero-drift evidence"
   if ([string]$Evidence.profile -cne "d1_post_run_zero_drift_v1" -or
     -not (Test-CanonicalTimestamp $Evidence.checkedAt) -or [string]$Evidence.sourceSha -cne $SourceSha -or
-    [string]$Evidence.runtimePlanSha256 -cne $Representative.RuntimePlanSha256 -or
-    [long]$Evidence.terraformStateSerial -ne [long]$Representative.StateSerial -or
+    [string]$Evidence.runtimePlanSha256 -cne $Binding.RuntimePlanSha256 -or
+    [long]$Evidence.terraformStateSerial -ne [long]$Binding.StateSerial -or
     [int]$Evidence.meaningfulChanges -ne 0 -or $Evidence.drift -isnot [bool] -or [bool]$Evidence.drift) {
     throw "Post-run zero-drift evidence is not bound to the exact reviewed release."
   }
@@ -878,11 +957,17 @@ function Write-OrValidateEvidence {
 }
 
 function New-Receipt {
-  param([Parameter(Mandatory)][string]$ExecutionName, [Parameter(Mandatory)][string]$PlanSha, [Parameter(Mandatory)][string]$StartedAt)
+  param(
+    [Parameter(Mandatory)][string]$ExecutionName,
+    [Parameter(Mandatory)][string]$PlanSha,
+    [Parameter(Mandatory)][string]$StartedAt,
+    [Parameter(Mandatory)][object]$Binding
+  )
   return [ordered]@{
-    schemaVersion = 1; kind = "development-d1-provider-failure-acceptance-receipt"; phase = "invocation-pending"
-    runId = $RunId; executionName = $ExecutionName; reviewedConfigSha256 = $ReviewedConfigSha256
-    releaseSourceSha = $SourceSha; executionPlanSha256 = $PlanSha; durableVersion = $ExpectedDurableVersion
+    schemaVersion = 2; kind = "development-d1-provider-failure-acceptance-receipt"; phase = "invocation-pending"
+    runId = $RunId; executionName = $ExecutionName; providerFixtureBindingSha256 = $ReviewedProviderFixtureBindingSha256
+    releaseSourceSha = $SourceSha; operatorSourceSha = $Binding.OperatorSourceSha
+    executionPlanSha256 = $PlanSha; durableVersion = $ExpectedDurableVersion
     activityVersion = $ExpectedActivityVersion; durableExecutionArn = ""; startedAt = $StartedAt; endedAt = ""
     aggregatePath = ""; aggregateSha256 = ""; zeroDriftPath = ""; zeroDriftSha256 = ""
     postRunStateVersionId = ""; postRunZeroDriftPlanPath = ""; postRunZeroDriftPlanSha256 = ""
@@ -892,19 +977,21 @@ function New-Receipt {
 function Assert-Receipt {
   param(
     [Parameter(Mandatory)][object]$Receipt,
-    [Parameter(Mandatory)][object]$Representative,
+    [Parameter(Mandatory)][object]$Binding,
     [Parameter(Mandatory)][object]$Boundary
   )
   $null = Assert-ExactProperties $Receipt @(
-    "schemaVersion", "kind", "phase", "runId", "executionName", "reviewedConfigSha256", "releaseSourceSha",
+    "schemaVersion", "kind", "phase", "runId", "executionName", "providerFixtureBindingSha256", "releaseSourceSha", "operatorSourceSha",
     "executionPlanSha256", "durableVersion", "activityVersion", "durableExecutionArn", "startedAt", "endedAt",
     "aggregatePath", "aggregateSha256", "zeroDriftPath", "zeroDriftSha256",
     "postRunStateVersionId", "postRunZeroDriftPlanPath", "postRunZeroDriftPlanSha256"
   ) "Acceptance receipt"
-  if ([int]$Receipt.schemaVersion -ne 1 -or [string]$Receipt.kind -cne "development-d1-provider-failure-acceptance-receipt" -or
+  if ([int]$Receipt.schemaVersion -ne 2 -or [string]$Receipt.kind -cne "development-d1-provider-failure-acceptance-receipt" -or
     [string]$Receipt.phase -notin @("invocation-pending", "running", "verified") -or [string]$Receipt.runId -cne $RunId -or
-    [string]$Receipt.executionName -cne (New-DurableExecutionName $RunId) -or [string]$Receipt.reviewedConfigSha256 -cne $ReviewedConfigSha256 -or
-    [string]$Receipt.releaseSourceSha -cne $SourceSha -or [string]$Receipt.executionPlanSha256 -cne $ReviewedExecutionPlanSha256 -or
+    [string]$Receipt.executionName -cne (New-DurableExecutionName $RunId) -or
+    [string]$Receipt.providerFixtureBindingSha256 -cne $ReviewedProviderFixtureBindingSha256 -or
+    [string]$Receipt.releaseSourceSha -cne $SourceSha -or [string]$Receipt.operatorSourceSha -cne $Binding.OperatorSourceSha -or
+    [string]$Receipt.executionPlanSha256 -cne $ReviewedExecutionPlanSha256 -or
     [int]$Receipt.durableVersion -ne $ExpectedDurableVersion -or [int]$Receipt.activityVersion -ne $ExpectedActivityVersion -or
     -not (Test-CanonicalTimestamp $Receipt.startedAt)) { throw "The receipt is not bound to the exact reviewed one-run execution." }
   $emptyEvidence = @(
@@ -923,14 +1010,14 @@ function Assert-Receipt {
       throw "A running receipt contains an invalid execution or premature evidence claim."
     }
   } else {
-    $expectedZeroPath = Resolve-PathBelowRoot ([string]$Representative.Config.profiles.postRun.zeroDriftResultPath) $representativeRoot
+    $expectedZeroPath = $Binding.ZeroDriftPath
     $aggregatePath = Resolve-PathBelowRoot ([string]$Receipt.aggregatePath) $representativeRoot -MustExist
     $zeroPath = Resolve-PathBelowRoot ([string]$Receipt.zeroDriftPath) $representativeRoot -MustExist
     $postPlanPath = Resolve-PathBelowRoot ([string]$Receipt.postRunZeroDriftPlanPath) $operatorRoot -MustExist
     if ([string]$Receipt.durableExecutionArn -cnotmatch $executionPattern -or
       -not (Test-CanonicalTimestamp $Receipt.endedAt) -or
       [DateTimeOffset]::Parse([string]$Receipt.endedAt) -lt [DateTimeOffset]::Parse([string]$Receipt.startedAt) -or
-      [string]$aggregatePath -cne [string]$Representative.AggregatePath -or [string]$zeroPath -cne [string]$expectedZeroPath -or
+      [string]$aggregatePath -cne [string]$Binding.AggregatePath -or [string]$zeroPath -cne [string]$expectedZeroPath -or
       [string]$Receipt.aggregateSha256 -notmatch '^[a-f0-9]{64}$' -or [string]$Receipt.zeroDriftSha256 -notmatch '^[a-f0-9]{64}$' -or
       [string]$Receipt.postRunStateVersionId -cne $Boundary.StateVersionId -or
       [string]$Receipt.postRunZeroDriftPlanSha256 -notmatch '^[a-f0-9]{64}$' -or
@@ -942,13 +1029,13 @@ function Assert-Receipt {
     $aggregate = ConvertFrom-OperatorJson (Get-Content -LiteralPath $aggregatePath -Raw) "Verified provider aggregate"
     $zero = ConvertFrom-OperatorJson (Get-Content -LiteralPath $zeroPath -Raw) "Verified zero-drift evidence"
     $null = Assert-ProviderAggregate $aggregate ([string]$Receipt.startedAt)
-    $null = Assert-ZeroDriftEvidence $zero $Representative
+    $null = Assert-ZeroDriftEvidence $zero $Binding
   }
   return $true
 }
 
 function Complete-Evidence {
-  param([Parameter(Mandatory)][object]$Receipt, [Parameter(Mandatory)][object]$Representative, [Parameter(Mandatory)][object]$Boundary)
+  param([Parameter(Mandatory)][object]$Receipt, [Parameter(Mandatory)][object]$Binding, [Parameter(Mandatory)][object]$Boundary)
   $executionArn = [string]$Receipt.durableExecutionArn
   if ([string]::IsNullOrWhiteSpace($executionArn)) {
     $matches = @(Get-DurableExecutionMatches ([string]$Receipt.executionName))
@@ -962,13 +1049,13 @@ function Complete-Evidence {
   $ended = [DateTimeOffset]::UtcNow
   $started = [DateTimeOffset]::Parse([string]$Receipt.startedAt)
   $postSnapshot = Read-StateSnapshot
-  $postBoundary = Assert-StateBoundary $postSnapshot $Representative
+  $postBoundary = Assert-StateBoundary $postSnapshot $Binding
   if ([string]$postBoundary.StateVersionId -cne [string]$Boundary.StateVersionId -or
     [string]$postBoundary.StateLineage -cne [string]$Boundary.StateLineage -or
     [long]$postBoundary.StateSerial -ne [long]$Boundary.StateSerial) {
     throw "Terraform state changed during the fixed provider-failure run."
   }
-  $postRunZeroDrift = Invoke-FreshZeroDriftPlan $Representative.ReviewedPlan "post-run" -AllowExisting
+  $postRunZeroDrift = Invoke-FreshZeroDriftPlan $Binding.ReviewedPlan "post-run" -AllowExisting
   $postBoundaryResult = Assert-LiveBoundary -StateBoundary $postBoundary -ExecutionName ([string]$Receipt.executionName)
   $matches = @($postBoundaryResult.ExecutionMatches)
   if ($matches.Count -ne 1 -or [string]$matches[0].DurableExecutionArn -cne $executionArn -or [string]$matches[0].Status -cne "SUCCEEDED") {
@@ -989,22 +1076,22 @@ function Complete-Evidence {
     eventDeadLetterMax = $deadLetterMax; durableDeadLetterMax = $deadLetterMax
     logErrorMatches = $errorLogs; forbiddenLogMatches = $forbiddenLogs
   }
-  $aggregate = Write-OrValidateEvidence -Path $Representative.AggregatePath -Value $aggregate -Validator {
+  $aggregate = Write-OrValidateEvidence -Path $Binding.AggregatePath -Value $aggregate -Validator {
     param($value)
     Assert-ProviderAggregate $value ([string]$Receipt.startedAt)
   }
-  $zeroDriftPath = Resolve-PathBelowRoot -Candidate ([string]$Representative.Config.profiles.postRun.zeroDriftResultPath) -AllowedRoot $representativeRoot
+  $zeroDriftPath = $Binding.ZeroDriftPath
   $zeroDrift = [ordered]@{
     profile = "d1_post_run_zero_drift_v1"; checkedAt = $ended.ToUniversalTime().ToString("o"); sourceSha = $SourceSha
-    runtimePlanSha256 = $Representative.RuntimePlanSha256; terraformStateSerial = $Representative.StateSerial
+    runtimePlanSha256 = $Binding.RuntimePlanSha256; terraformStateSerial = $Binding.StateSerial
     meaningfulChanges = 0; drift = $false
   }
   $zeroDrift = Write-OrValidateEvidence -Path $zeroDriftPath -Value $zeroDrift -Validator {
     param($value)
-    Assert-ZeroDriftEvidence $value $Representative
+    Assert-ZeroDriftEvidence $value $Binding
   }
   $Receipt.phase = "verified"; $Receipt.endedAt = [string]$aggregate.endedAt
-  $Receipt.aggregatePath = $Representative.AggregatePath; $Receipt.aggregateSha256 = Get-FileSha256 $Representative.AggregatePath
+  $Receipt.aggregatePath = $Binding.AggregatePath; $Receipt.aggregateSha256 = Get-FileSha256 $Binding.AggregatePath
   $Receipt.zeroDriftPath = $zeroDriftPath; $Receipt.zeroDriftSha256 = Get-FileSha256 $zeroDriftPath
   $Receipt.postRunStateVersionId = $postBoundary.StateVersionId
   $Receipt.postRunZeroDriftPlanPath = $postRunZeroDrift.Path
@@ -1013,31 +1100,34 @@ function Complete-Evidence {
 }
 
 $executionName = New-DurableExecutionName $RunId
-$representative = Read-RepresentativeConfiguration
+$binding = Read-ProviderFixtureBinding
 
 if ($Action -ceq "Validate") {
   [pscustomobject]@{
     SchemaVersion = 1; Kind = "development-d1-provider-failure-validation"; Environment = "development"
     FixtureKind = $fixtureKind; SourceId = $fixtureSourceId; AdapterVersion = $fixtureAdapterVersion
-    RunId = $RunId; ExecutionName = $executionName; ConfigSha256 = $ReviewedConfigSha256
-    ReleaseSourceSha = $SourceSha; ExternalAccess = $false; MutationPerformed = $false; Valid = $true
+    RunId = $RunId; ExecutionName = $executionName
+    ProviderFixtureBindingSha256 = $ReviewedProviderFixtureBindingSha256
+    ReleaseSourceSha = $SourceSha; OperatorSourceSha = $binding.OperatorSourceSha
+    RepresentativeAcceptanceAuthorized = $false
+    ExternalAccess = $false; MutationPerformed = $false; Valid = $true
   } | ConvertTo-Json -Depth 5
   exit 0
 }
 
 $null = Assert-Caller
-$allowVerifier = $Action -ceq "Verify"
-$null = Assert-SourceProvenance -AllowVerifierOnlyDelta:$allowVerifier
-$reviewedZeroDrift = Assert-ReviewedZeroDriftPlan $representative
-$representative | Add-Member NoteProperty ReviewedPlan $reviewedZeroDrift.Plan
+$allowRecoveryDelta = $Action -ceq "Verify"
+$null = Assert-SourceProvenance -ExpectedOperatorSourceSha $binding.OperatorSourceSha -AllowRecoveryDelta:$allowRecoveryDelta
+$reviewedZeroDrift = Assert-ReviewedZeroDriftPlan $binding
+$binding | Add-Member NoteProperty ReviewedPlan $reviewedZeroDrift.Plan
 $snapshot = Read-StateSnapshot
-$boundary = Assert-StateBoundary $snapshot $representative
+$boundary = Assert-StateBoundary $snapshot $binding
 $requireNoExecution = $Action -in @("Plan", "Execute")
 $null = Assert-LiveBoundary -StateBoundary $boundary -ExecutionName $executionName -RequireNoExecution:$requireNoExecution
 
 if ($Action -ceq "Plan") {
   $freshZeroDrift = Invoke-FreshZeroDriftPlan $reviewedZeroDrift.Plan "pre-run"
-  $plan = New-ExecutionPlan $representative $boundary $executionName $freshZeroDrift
+  $plan = New-ExecutionPlan $binding $boundary $executionName $freshZeroDrift
   $path = if ([string]::IsNullOrWhiteSpace($ExecutionPlanPath)) {
     Join-Path $operatorRoot "plan-$RunId.json"
   } else { Resolve-PathBelowRoot -Candidate $ExecutionPlanPath -AllowedRoot $operatorRoot }
@@ -1051,20 +1141,20 @@ if ($Action -ceq "Plan") {
   exit 0
 }
 
-$planEvidence = Read-ExecutionPlan -Representative $representative -Boundary $boundary -RequireFresh:($Action -ceq "Execute")
+$planEvidence = Read-ExecutionPlan -Binding $binding -Boundary $boundary -RequireFresh:($Action -ceq "Execute")
 
 if ($Action -ceq "Execute") {
   $resolvedReceipt = if ([string]::IsNullOrWhiteSpace($ReceiptPath)) {
     Join-Path $operatorRoot "receipt-$ReviewedExecutionPlanSha256.json"
   } else { Resolve-PathBelowRoot -Candidate $ReceiptPath -AllowedRoot $operatorRoot }
   $startedAt = [DateTimeOffset]::UtcNow.ToString("o")
-  $receipt = New-Receipt $executionName $ReviewedExecutionPlanSha256 $startedAt
+  $receipt = New-Receipt $executionName $ReviewedExecutionPlanSha256 $startedAt $binding
   Write-JsonFile -Path $resolvedReceipt -Value $receipt
   try {
     $receipt.durableExecutionArn = Invoke-ExactDurableExecution -Boundary $boundary -Payload (New-WorkflowPayload) -ExecutionName $executionName
     $receipt.phase = "running"
     Write-JsonFile -Path $resolvedReceipt -Value $receipt -AllowReplace
-    $receipt = Complete-Evidence -Receipt $receipt -Representative $representative -Boundary $boundary
+    $receipt = Complete-Evidence -Receipt $receipt -Binding $binding -Boundary $boundary
     Write-JsonFile -Path $resolvedReceipt -Value $receipt -AllowReplace
   } catch {
     Write-JsonFile -Path $resolvedReceipt -Value $receipt -AllowReplace
@@ -1083,12 +1173,12 @@ if ($Action -ceq "Execute") {
 $resolvedReceipt = Resolve-PathBelowRoot -Candidate $ReceiptPath -AllowedRoot $operatorRoot -MustExist
 if ((Get-FileSha256 $resolvedReceipt) -cne $ReviewedReceiptSha256) { throw "The receipt checksum does not match the reviewed SHA-256." }
 $receipt = ConvertFrom-OperatorJson (Get-Content -LiteralPath $resolvedReceipt -Raw) "Acceptance receipt"
-$null = Assert-Receipt $receipt $representative $boundary
+$null = Assert-Receipt $receipt $binding $boundary
 if ([string]$receipt.phase -cne "verified") {
-  $receipt = Complete-Evidence -Receipt $receipt -Representative $representative -Boundary $boundary
+  $receipt = Complete-Evidence -Receipt $receipt -Binding $binding -Boundary $boundary
   Write-JsonFile -Path $resolvedReceipt -Value $receipt -AllowReplace
 }
-$null = Assert-Receipt $receipt $representative $boundary
+$null = Assert-Receipt $receipt $binding $boundary
 if ((Get-FileSha256 $receipt.aggregatePath) -cne [string]$receipt.aggregateSha256 -or
   (Get-FileSha256 $receipt.zeroDriftPath) -cne [string]$receipt.zeroDriftSha256) {
   throw "The verified receipt evidence checksum changed."

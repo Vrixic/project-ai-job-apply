@@ -140,13 +140,25 @@ if (
   -not $source.Contains("'^AGENTS\.md$'") -or
   -not $source.Contains("'^docs/'") -or
   -not $source.Contains("'^scripts/operate-development-document-processing-acceptance\.ps1$'") -or
+  -not $source.Contains("'^scripts/operate-development-d1-provider-failure-acceptance\.ps1$'") -or
   -not $source.Contains("'^scripts/operate-development-postgresql-restore\.ps1$'") -or
+  -not $source.Contains("'^scripts/tests/development-d1-provider-failure-acceptance-operator\.tests\.ps1$'") -or
   -not $source.Contains("'^scripts/tests/staging-postgresql-restore-verifier\.tests\.ps1$'") -or
   -not $source.Contains("'^scripts/tests/development-document-processing-acceptance-operator\.tests\.ps1$'") -or
   -not $source.Contains("'^infrastructure/runbooks/deployments/development-document-processing-acceptance\.md$'") -or
+  -not $source.Contains("'^infrastructure/runbooks/observability/development-d1-provider-failure-acceptance\.md$'") -or
   -not $source.Contains("'^infrastructure/runbooks/restore/development-postgresql-point-in-time\.md$'")
 ) {
   throw "The application-to-operator delta allowlist is not exact."
+}
+$operatorDeltaDefinition = @($ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Get-OperatorDeltaEvidence'
+    }, $true))[0].Extent.Text
+foreach ($forbidden in @('.vercelignore', 'operate-vercel-phase1-hosted-acceptance', 'vercel-nextjs-hosting')) {
+  if ($operatorDeltaDefinition.Contains($forbidden)) {
+    throw "The document-processing provenance boundary must not admit pre-AWS Vercel change: $forbidden"
+  }
 }
 $guardedMutationFunctions = @(
   'Submit-Task', 'New-DurableClaim', 'Invoke-LambdaJson', 'Invoke-PresignedPost',
@@ -162,6 +174,78 @@ foreach ($name in $guardedMutationFunctions) {
   if ($definition.Count -ne 1 -or -not $definition[0].Extent.Text.Contains('Assert-ReviewedRuntimeUnchanged')) {
     throw "Cloud mutation function '$name' does not revalidate the full reviewed runtime identity."
   }
+}
+
+$corpusExecuteStart = $source.IndexOf("if (`$Action -eq 'CorpusExecute')")
+$corpusExecuteEnd = $source.IndexOf('$receiptPath = Resolve-OperatorPath $ReceiptPath $operatorRoot -MustExist', $corpusExecuteStart)
+if ($corpusExecuteStart -lt 0 -or $corpusExecuteEnd -le $corpusExecuteStart) {
+  throw 'The corpus execution implementation could not be isolated.'
+}
+$corpusExecuteRegion = $source.Substring($corpusExecuteStart, $corpusExecuteEnd - $corpusExecuteStart)
+$fullRuntimeRevalidations = [regex]::Matches($corpusExecuteRegion, [regex]::Escape('Assert-ReviewedRuntimeUnchanged')).Count
+if ($fullRuntimeRevalidations -ne 3) {
+  throw "Corpus execution must perform exactly three explicit full runtime validations at batch boundaries; found $fullRuntimeRevalidations."
+}
+$uploadOffset = $corpusExecuteRegion.IndexOf('Publish-CorpusSource')
+$terminalOffset = $corpusExecuteRegion.IndexOf('Wait-CorpusGuardDutyTerminalTag')
+$syntheticOffset = $corpusExecuteRegion.IndexOf('Set-ExactScanTag')
+$finalTagOffset = $corpusExecuteRegion.IndexOf('Assert-CorpusSyntheticScanTag')
+$processorOffset = $corpusExecuteRegion.IndexOf('Invoke-LambdaJson')
+if ($uploadOffset -lt 0 -or $terminalOffset -le $uploadOffset -or $syntheticOffset -le $terminalOffset -or
+  $finalTagOffset -le $syntheticOffset -or $processorOffset -le $finalTagOffset -or
+  -not $corpusExecuteRegion.Contains('Assert-ActiveGuardDutyTaggingBoundary -Runtime $runtime') -or
+  -not $corpusExecuteRegion.Contains('$managedScanDeadline = [DateTimeOffset]::UtcNow.AddMinutes(15)')) {
+  throw 'Corpus execution does not preserve upload, managed-terminal, synthetic-tag, final-readback, invocation ordering.'
+}
+foreach ($required in @(
+    "failureStage = 'preflight'; failureCaseId = ''",
+    "-Stage 'upload' -CaseId",
+    "-Stage 'guardduty-terminal' -CaseId",
+    "-Stage 'synthetic-tag' -CaseId",
+    "-Stage 'tag-revalidation' -CaseId",
+    "-Stage 'processor-invocation'",
+    "-Stage 'aggregate-validation'",
+    "-Stage 'cleanup'",
+    '$Receipt.failureStage = $Stage',
+    '$Receipt.failureCaseId = $CaseId'
+  )) {
+  if (-not $source.Contains($required)) { throw "Corpus durable failure attribution omits: $required" }
+}
+foreach ($name in @('Publish-CorpusSource', 'Set-ExactScanTag', 'Remove-CorpusObjects')) {
+  $definition = @($ast.FindAll({
+        param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name
+      }, $true))[0].Extent.Text
+  if (-not $definition.Contains('[switch]$CorpusBatch') -or -not $definition.Contains('Assert-CorpusMutationBoundary -Runtime $Runtime')) {
+    throw "Corpus cloud mutation function '$name' omits the exact live state/dark mutation guard."
+  }
+}
+$mutationBoundaryDefinition = @($ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Assert-CorpusMutationBoundary'
+    }, $true))[0].Extent.Text
+foreach ($required in @(
+    '$identity = Get-StateIdentity',
+    '[string]$identity.Lineage -cne [string]$script:reviewedStateLineage',
+    '[long]$identity.Serial -ne [long]$script:reviewedStateSerial',
+    'Assert-TriggersDark -State $Runtime.State'
+  )) {
+  if (-not $mutationBoundaryDefinition.Contains($required)) {
+    throw "The corpus per-mutation guard omits exact live state/dark enforcement: $required"
+  }
+}
+if (-not $corpusExecuteRegion.Contains("schemaVersion = 2; kind = 'development-document-parser-corpus-receipt'")) {
+  throw 'The durable corpus failure receipt schema was not versioned.'
+}
+if ($source.Contains("`$receipt.phase = 'recovered-cleaned'; `$receipt.failureStage = 'none'")) {
+  throw 'Corpus cleanup recovery must preserve its durable failure attribution.'
+}
+$terminalDefinition = @($ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Wait-CorpusGuardDutyTerminalTag'
+    }, $true))[0].Extent.Text
+foreach ($status in @('NO_THREATS_FOUND', 'THREATS_FOUND', 'UNSUPPORTED', 'ACCESS_DENIED', 'FAILED')) {
+  if (-not $terminalDefinition.Contains("'$status'")) { throw "Corpus GuardDuty terminal wait omits $status." }
 }
 
 $removeExactDefinition = @($ast.FindAll({
@@ -201,9 +285,10 @@ foreach ($name in @(
     "Test-ExactObjectAlreadyRemoved", "Assert-DocumentOperationalHealth", "Assert-PrivacySafeLogs",
     "Get-OptionalProperty", "New-DirectProcessorEvent", "Get-LambdaVersionIdentity",
     "Get-LambdaAliasIdentity", "Assert-DocumentParserVersionBoundary", "Assert-PresignedUploadTarget", "Complete-SourceDescriptor",
-    "Remove-ExactObjectVersion", "Remove-DescriptorObjects", "Assert-ReviewedRuntimeUnchanged",
-    "Wait-GuardDutyServiceScan", "Remove-RecoveryObjectVersion", "Invoke-VersionedObjectRecovery"
-    "Assert-CorpusAggregate", "Remove-CorpusFiles"
+    "Remove-ExactObjectVersion", "Remove-DescriptorObjects", "Assert-ReviewedRuntimeUnchanged", "Assert-CorpusMutationBoundary",
+    "Assert-ActiveGuardDutyTaggingBoundary", "Get-ExactScanStatus", "Wait-GuardDutyServiceScan", "Wait-CorpusGuardDutyTerminalTag",
+    "Assert-CorpusSyntheticScanTag", "Remove-RecoveryObjectVersion", "Invoke-VersionedObjectRecovery",
+    "Assert-CorpusAggregate", "Assert-CorpusFailureCheckpoint", "Remove-CorpusFiles"
   )) {
   Import-OperatorFunction -Name $name
 }
@@ -497,6 +582,7 @@ $topicArn = 'arn:aws:sns:us-east-2:123456789012:ai-job-apply-development-operati
 function global:Get-TerraformState { [pscustomobject]@{} }
 function global:Get-StateOutput { param($State, $Name) $topicArn }
 function global:Assert-TriggersDark { param($State) [pscustomobject]@{ MappingState = 'Disabled'; GuardDutyRuleState = 'DISABLED'; ReconcilerState = 'DISABLED' } }
+$script:scanStatus = 'NO_THREATS_FOUND'
 function global:Invoke-AwsJson {
   param([string[]]$Arguments, [string]$Operation)
   if ($Arguments[0] -ceq 'guardduty' -and $Arguments[1] -ceq 'get-malware-protection-plan') {
@@ -512,9 +598,11 @@ function global:Invoke-AwsJson {
     }
   }
   if ($Arguments[0] -ceq 's3api' -and $Arguments[1] -ceq 'get-object-tagging') {
+    $tagSet = if ([string]::IsNullOrEmpty([string]$script:scanStatus)) { @() }
+    else { @([pscustomobject]@{ Key = 'GuardDutyMalwareScanStatus'; Value = [string]$script:scanStatus }) }
     return [pscustomobject]@{
       VersionId = 'source-version'
-      TagSet = @([pscustomobject]@{ Key = 'GuardDutyMalwareScanStatus'; Value = 'NO_THREATS_FOUND' })
+      TagSet = $tagSet
     }
   }
   if ($script:orphanProofMode -and $Arguments[0] -ceq 's3api') {
@@ -611,6 +699,51 @@ if (
   [string]$managedScan.ScanResult -cne 'NO_THREATS_FOUND'
 ) {
   throw "The managed GuardDuty scan boundary was not accepted."
+}
+foreach ($terminalStatus in @('NO_THREATS_FOUND', 'THREATS_FOUND', 'UNSUPPORTED', 'ACCESS_DENIED', 'FAILED')) {
+  $script:scanStatus = $terminalStatus
+  $acceptedTerminal = Wait-CorpusGuardDutyTerminalTag -Runtime $runtime -Document $managedScanDocument -Deadline ([DateTimeOffset]::UtcNow)
+  if ([string]$acceptedTerminal -cne $terminalStatus) {
+    throw "Corpus GuardDuty terminal wait changed or rejected $terminalStatus."
+  }
+}
+$script:scanStatus = 'UNKNOWN'
+$unknownTerminalRejected = $false
+try { $null = Wait-CorpusGuardDutyTerminalTag -Runtime $runtime -Document $managedScanDocument -Deadline ([DateTimeOffset]::UtcNow) }
+catch { $unknownTerminalRejected = $true }
+if (-not $unknownTerminalRejected) { throw 'Corpus GuardDuty terminal wait accepted an unknown result.' }
+$script:scanStatus = 'NO_THREATS_FOUND'
+if (-not (Assert-CorpusSyntheticScanTag -Runtime $runtime -Document $managedScanDocument)) {
+  throw 'The exact synthetic corpus tag was not accepted after readback.'
+}
+$checkpointPlan = [pscustomobject]@{ cases = @([pscustomobject]@{ caseId = 'case-001' }) }
+$checkpointReceipt = [pscustomobject]@{ phase = 'running'; failureStage = 'upload'; failureCaseId = 'case-001' }
+if (-not (Assert-CorpusFailureCheckpoint -Receipt $checkpointReceipt -Plan $checkpointPlan)) {
+  throw 'A valid corpus case failure checkpoint was not accepted.'
+}
+$checkpointReceipt.failureStage = 'none'
+$checkpointReceipt.failureCaseId = ''
+$invalidNoneRejected = $false
+try { $null = Assert-CorpusFailureCheckpoint -Receipt $checkpointReceipt -Plan $checkpointPlan }
+catch { $invalidNoneRejected = $true }
+if (-not $invalidNoneRejected) { throw 'A running corpus receipt accepted a closed none failure stage.' }
+$checkpointReceipt.phase = 'verified'
+if (-not (Assert-CorpusFailureCheckpoint -Receipt $checkpointReceipt -Plan $checkpointPlan)) {
+  throw 'A verified corpus receipt did not accept the closed none failure stage.'
+}
+$checkpointReceipt.phase = 'recovered-cleaned'
+$recoveredNoneRejected = $false
+try { $null = Assert-CorpusFailureCheckpoint -Receipt $checkpointReceipt -Plan $checkpointPlan }
+catch { $recoveredNoneRejected = $true }
+if (-not $recoveredNoneRejected) { throw 'A recovered corpus receipt erased its original failure with a none stage.' }
+$checkpointReceipt.failureStage = 'cleanup'
+if (-not (Assert-CorpusFailureCheckpoint -Receipt $checkpointReceipt -Plan $checkpointPlan)) {
+  throw 'A recovered corpus receipt did not preserve its cleanup failure attribution.'
+}
+$checkpointReceipt.failureStage = 'upload'
+$checkpointReceipt.failureCaseId = 'case-001'
+if (-not (Assert-CorpusFailureCheckpoint -Receipt $checkpointReceipt -Plan $checkpointPlan)) {
+  throw 'A recovered corpus receipt did not preserve its case-bound original failure attribution.'
 }
 $script:orphanProofMode = $true
 $script:objectPresent = $true

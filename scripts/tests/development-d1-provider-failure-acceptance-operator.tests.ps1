@@ -29,7 +29,7 @@ function Assert-Rejected {
 $actualParameters = @($ast.ParamBlock.Parameters | ForEach-Object { $_.Name.VariablePath.UserPath })
 $expectedParameters = @(
   "Action", "AwsProfile", "Region", "ExpectedAccountId", "StateBucket", "SourceSha",
-  "RepresentativeConfigPath", "ReviewedConfigSha256", "RunId", "ExpectedDurableVersion",
+  "ProviderFixtureBindingPath", "ReviewedProviderFixtureBindingSha256", "RunId", "ExpectedDurableVersion",
   "ExpectedActivityVersion", "ExpectedDurableArtifactSha256", "ExpectedDurableCodeSha256",
   "ExpectedActivityArtifactSha256", "ExpectedActivityCodeSha256", "ExecutionPlanPath",
   "ReviewedExecutionPlanSha256", "ReceiptPath", "ReviewedReceiptSha256", "MaximumPollSeconds", "Help"
@@ -59,6 +59,27 @@ foreach ($forbiddenText in @(
   )) {
   if ($source -match [regex]::Escape($forbiddenText)) { throw "The operator contains forbidden effect '$forbiddenText'." }
 }
+$allowlistMatch = [regex]::Match($source, '(?s)\$allowedOperatorDelta\s*=\s*@\((.*?)\)')
+if (-not $allowlistMatch.Success) { throw "The exact provider operator-source allowlist is missing." }
+$allowlistLiterals = @([regex]::Matches($allowlistMatch.Groups[1].Value, '"([^"\r\n]+)"') | ForEach-Object { $_.Groups[1].Value })
+$expectedAllowlistLiterals = @(
+  "scripts/operate-development-d1-provider-failure-acceptance.ps1",
+  "scripts/tests/development-d1-provider-failure-acceptance-operator.tests.ps1",
+  "scripts/operate-development-document-processing-acceptance.ps1",
+  "scripts/tests/development-document-processing-acceptance-operator.tests.ps1"
+)
+if (($allowlistLiterals -join "|") -cne ($expectedAllowlistLiterals -join "|") -or
+  @([regex]::Matches($allowlistMatch.Groups[1].Value, '\$runbookPath')).Count -ne 1 -or
+  $allowlistMatch.Groups[1].Value -match '(?i)vercel|\.vercelignore') {
+  throw "The operator-source allowlist is not limited to the two provider and two corpus operator artifacts plus the provider runbook."
+}
+foreach ($provenanceText in @(
+    'Assert-AllowedOperatorDelta -FromSha $SourceSha -ToSha $ExpectedOperatorSourceSha',
+    'Assert-AllowedOperatorDelta -FromSha $ExpectedOperatorSourceSha -ToSha $head',
+    'Plan and Execute require clean origin/main to equal the reviewed operator source.'
+  )) {
+  if (-not $source.Contains($provenanceText)) { throw "The operator is missing provenance constraint '$provenanceText'." }
+}
 $executeOffset = $source.IndexOf('if ($Action -ceq "Execute")')
 $receiptWriteOffset = $source.IndexOf('Write-JsonFile -Path $resolvedReceipt -Value $receipt', $executeOffset)
 $invokeOffset = $source.IndexOf('Invoke-ExactDurableExecution', $receiptWriteOffset)
@@ -71,10 +92,10 @@ if ($verifySource.Contains('Invoke-ExactDurableExecution') -or $verifySource -ma
   throw "Verify can start a second durable execution."
 }
 $preDriftOffset = $source.IndexOf('Invoke-FreshZeroDriftPlan $reviewedZeroDrift.Plan "pre-run"')
-$planBuildOffset = $source.IndexOf('New-ExecutionPlan $representative $boundary $executionName $freshZeroDrift')
+$planBuildOffset = $source.IndexOf('New-ExecutionPlan $binding $boundary $executionName $freshZeroDrift')
 $waitOffset = $source.IndexOf('Wait-ExactDurableResult -DurableExecutionArn $executionArn')
 $postStateOffset = $source.IndexOf('$postSnapshot = Read-StateSnapshot', $waitOffset)
-$postDriftOffset = $source.IndexOf('Invoke-FreshZeroDriftPlan $Representative.ReviewedPlan "post-run"', $postStateOffset)
+$postDriftOffset = $source.IndexOf('Invoke-FreshZeroDriftPlan $Binding.ReviewedPlan "post-run"', $postStateOffset)
 if ($preDriftOffset -lt 0 -or $planBuildOffset -lt $preDriftOffset -or $waitOffset -lt 0 -or
   $postStateOffset -lt $waitOffset -or $postDriftOffset -lt $postStateOffset) {
   throw "Fresh refresh-backed drift plans are not ordered before Plan approval and after the deployed execution."
@@ -82,7 +103,7 @@ if ($preDriftOffset -lt 0 -or $planBuildOffset -lt $preDriftOffset -or $waitOffs
 
 foreach ($name in @(
     "Get-FileSha256", "ConvertFrom-OperatorJson", "ConvertFrom-BoundedJsonString", "Assert-ExactProperties", "Test-CanonicalTimestamp", "Get-OptionalProperty",
-    "Resolve-PathBelowRoot", "Write-JsonFile", "New-DurableExecutionName", "Read-RepresentativeConfiguration",
+    "Resolve-PathBelowRoot", "Write-JsonFile", "New-DurableExecutionName", "Assert-OperatorDeltaRecordSet", "Read-ProviderFixtureBinding",
     "Assert-ZeroChangePlan", "Assert-StateBoundary", "Get-StateResource", "Get-StateResourceInstances", "Get-IngestionNetworkBoundary",
     "Assert-LiveIngestionNetworkBoundary", "Assert-LiveBoundary", "Get-AllIngestionMappings", "Get-DurableExecutionMatches", "New-WorkflowPayload",
     "New-ExecutionPlan", "Read-ExecutionPlan", "Wait-ExactDurableResult", "New-Receipt", "Assert-Receipt",
@@ -99,7 +120,7 @@ $utf8WithoutBom = New-Object Text.UTF8Encoding($false)
 $Region = "us-east-2"
 $ExpectedAccountId = "111122223333"
 $SourceSha = "a" * 40
-$ReviewedConfigSha256 = ""
+$ReviewedProviderFixtureBindingSha256 = ""
 $RunId = "12345678-1234-4abc-8def-1234567890ab"
 $ExpectedDurableVersion = 17
 $ExpectedActivityVersion = 23
@@ -120,6 +141,13 @@ $dispatchQueueName = "ai-job-apply-development-ingestion-dispatch"
 $deadLetterQueueName = "ai-job-apply-development-ingestion-dead-letter"
 $ecsClusterName = "ai-job-apply-development"
 $applicationLogGroup = "/ai-job-apply/development/application"
+$allowedOperatorDelta = @(
+  "scripts/operate-development-d1-provider-failure-acceptance.ps1",
+  "scripts/tests/development-d1-provider-failure-acceptance-operator.tests.ps1",
+  "infrastructure/runbooks/observability/development-d1-provider-failure-acceptance.md",
+  "scripts/operate-development-document-processing-acceptance.ps1",
+  "scripts/tests/development-document-processing-acceptance-operator.tests.ps1"
+)
 
 try {
   $executionName = New-DurableExecutionName $RunId
@@ -130,56 +158,105 @@ try {
       $RunId.ToUpperInvariant(), "12345678-1234-7abc-8def-1234567890ab", "12345678-1234-4abc-0def-1234567890ab"
     )) { Assert-Rejected { New-DurableExecutionName $invalidRun } "invalid run ID $invalidRun" }
 
+  foreach ($allowedPath in $allowedOperatorDelta) {
+    $allowedRecord = "M`t$allowedPath"
+    $null = Assert-OperatorDeltaRecordSet -Detected @($allowedRecord) -Records @($allowedRecord) `
+      -Numstat @("1`t1`t$allowedPath")
+  }
+  $allowedRecord = "M`tscripts/operate-development-d1-provider-failure-acceptance.ps1"
+  foreach ($deltaTamper in @(
+      "empty", "unapproved", "vercel-operator", "vercel-ignore", "rename", "copy", "binary", "record-mismatch", "path-mismatch"
+    )) {
+    $detected = @($allowedRecord)
+    $records = @($allowedRecord)
+    $numstat = @("1`t1`tscripts/operate-development-d1-provider-failure-acceptance.ps1")
+    switch ($deltaTamper) {
+      "empty" { $detected = @(); $records = @(); $numstat = @() }
+      "unapproved" { $detected = @("M`tpackages/runtime/provider.ts"); $records = $detected; $numstat = @("1`t1`tpackages/runtime/provider.ts") }
+      "vercel-operator" { $detected = @("M`tscripts/operate-vercel-phase1-hosted-acceptance.ps1"); $records = $detected; $numstat = @("1`t1`tscripts/operate-vercel-phase1-hosted-acceptance.ps1") }
+      "vercel-ignore" { $detected = @("M`t.vercelignore"); $records = $detected; $numstat = @("1`t1`t.vercelignore") }
+      "rename" { $detected = @("R100`told.ps1`tnew.ps1") }
+      "copy" { $detected = @("C100`told.ps1`tnew.ps1") }
+      "binary" { $numstat = @("-`t-`tscripts/operate-development-d1-provider-failure-acceptance.ps1") }
+      "record-mismatch" { $records = @("A`tscripts/operate-development-d1-provider-failure-acceptance.ps1") }
+      "path-mismatch" { $numstat = @("1`t1`tscripts/tests/development-d1-provider-failure-acceptance-operator.tests.ps1") }
+    }
+    Assert-Rejected {
+      Assert-OperatorDeltaRecordSet -Detected $detected -Records $records -Numstat $numstat
+    } "operator delta tampering '$deltaTamper'"
+  }
+
   $aggregateRelative = Join-Path $representativeRoot "provider-failure.json"
   $zeroRelative = Join-Path $representativeRoot "zero-drift.json"
-  $config = [ordered]@{
+  $bindingDocument = [ordered]@{
+    schemaVersion = 1
+    kind = "development-d1-provider-failure-fixture-binding"
     status = "reviewed"
+    scope = "provider-fixture-only"
+    representativeAcceptanceAuthorized = $false
     release = [ordered]@{
-      sourceSha = $SourceSha; terraformStateSerial = 208
+      sourceSha = $SourceSha; operatorSourceSha = "f" * 40; terraformStateSerial = 208
       runtimePlanPath = "runtime-zero.tfplan"; runtimePlanSha256 = "e" * 64
     }
     run = [ordered]@{
       runId = $RunId; generatedSyntheticOnly = $true; oneRunOnly = $true
       cleanupRequired = $true; recoveryRequired = $true
     }
-    profiles = [ordered]@{
-      providerFailure = [ordered]@{
-        state = "available"; blocker = $null
-        existingGuardedSyntheticFixture = [ordered]@{
-          kind = $fixtureKind; sourceId = $fixtureSourceId; adapterVersion = $fixtureAdapterVersion
-          operatorPath = "scripts/operate-development-d1-provider-failure-acceptance.ps1"
-          aggregateResultPath = $aggregateRelative
-        }
-      }
-      postRun = [ordered]@{ zeroDriftResultPath = $zeroRelative }
+    fixture = [ordered]@{
+      kind = $fixtureKind; sourceId = $fixtureSourceId; adapterVersion = $fixtureAdapterVersion
+      operatorPath = "scripts/operate-development-d1-provider-failure-acceptance.ps1"
+      aggregateResultPath = $aggregateRelative; zeroDriftResultPath = $zeroRelative
     }
   }
-  $RepresentativeConfigPath = Join-Path $representativeRoot "config.json"
-  [IO.File]::WriteAllText($RepresentativeConfigPath, ($config | ConvertTo-Json -Depth 20), $utf8WithoutBom)
-  $ReviewedConfigSha256 = Get-FileSha256 $RepresentativeConfigPath
-  $representative = Read-RepresentativeConfiguration
-  if ([long]$representative.StateSerial -ne 208 -or [string]$representative.AggregatePath -cne (Join-Path $representativeRoot "provider-failure.json")) {
-    throw "The exact representative configuration was not accepted."
+  $ProviderFixtureBindingPath = Join-Path $operatorRoot "fixture-binding.json"
+  [IO.File]::WriteAllText($ProviderFixtureBindingPath, ($bindingDocument | ConvertTo-Json -Depth 20), $utf8WithoutBom)
+  $ReviewedProviderFixtureBindingSha256 = Get-FileSha256 $ProviderFixtureBindingPath
+  $binding = Read-ProviderFixtureBinding
+  $actualBindingSha256 = $ReviewedProviderFixtureBindingSha256
+  $ReviewedProviderFixtureBindingSha256 = "0" * 64
+  Assert-Rejected { Read-ProviderFixtureBinding } "provider-fixture binding checksum mismatch"
+  $ReviewedProviderFixtureBindingSha256 = $actualBindingSha256
+  if ([long]$binding.StateSerial -ne 208 -or [string]$binding.OperatorSourceSha -cne ("f" * 40) -or
+    [string]$binding.AggregatePath -cne (Join-Path $representativeRoot "provider-failure.json") -or
+    [string]$binding.ZeroDriftPath -cne (Join-Path $representativeRoot "zero-drift.json")) {
+    throw "The exact provider-fixture binding was not accepted."
   }
-  foreach ($tamper in @("status", "source", "run", "fixture", "adapter", "operator", "blocked", "flags")) {
-    $candidate = $config | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+  foreach ($tamper in @(
+      "extra", "schema", "schema-type", "kind", "status", "scope", "authority", "source", "operator-source", "state", "state-type", "runtime-path-type", "run",
+      "fixture", "adapter", "operator", "flags", "aggregate-path", "aggregate-path-type", "zero-path", "same-path", "case-same-path"
+    )) {
+    $candidate = $bindingDocument | ConvertTo-Json -Depth 20 | ConvertFrom-Json
     switch ($tamper) {
+      "extra" { $candidate | Add-Member NoteProperty thresholds ([pscustomobject]@{}) }
+      "schema" { $candidate.schemaVersion = 2 }
+      "schema-type" { $candidate.schemaVersion = "1" }
+      "kind" { $candidate.kind = "d1-representative-acceptance" }
       "status" { $candidate.status = "draft" }
+      "scope" { $candidate.scope = "representative-acceptance" }
+      "authority" { $candidate.representativeAcceptanceAuthorized = $true }
       "source" { $candidate.release.sourceSha = "0" * 40 }
+      "operator-source" { $candidate.release.operatorSourceSha = "NOT-A-SHA" }
+      "state" { $candidate.release.terraformStateSerial = 0 }
+      "state-type" { $candidate.release.terraformStateSerial = 208.5 }
+      "runtime-path-type" { $candidate.release.runtimePlanPath = 123 }
       "run" { $candidate.run.runId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }
-      "fixture" { $candidate.profiles.providerFailure.existingGuardedSyntheticFixture.kind = "other" }
-      "adapter" { $candidate.profiles.providerFailure.existingGuardedSyntheticFixture.adapterVersion = "other" }
-      "operator" { $candidate.profiles.providerFailure.existingGuardedSyntheticFixture.operatorPath = "other.ps1" }
-      "blocked" { $candidate.profiles.providerFailure.state = "blocked" }
+      "fixture" { $candidate.fixture.kind = "other" }
+      "adapter" { $candidate.fixture.adapterVersion = "other" }
+      "operator" { $candidate.fixture.operatorPath = "other.ps1" }
       "flags" { $candidate.run.oneRunOnly = $false }
+      "aggregate-path" { $candidate.fixture.aggregateResultPath = Join-Path $operatorRoot "provider-failure.json" }
+      "aggregate-path-type" { $candidate.fixture.aggregateResultPath = 123 }
+      "zero-path" { $candidate.fixture.zeroDriftResultPath = Join-Path $operatorRoot "zero-drift.json" }
+      "same-path" { $candidate.fixture.zeroDriftResultPath = $candidate.fixture.aggregateResultPath }
+      "case-same-path" { $candidate.fixture.zeroDriftResultPath = ([string]$candidate.fixture.aggregateResultPath).ToUpperInvariant() }
     }
-    [IO.File]::WriteAllText($RepresentativeConfigPath, ($candidate | ConvertTo-Json -Depth 20), $utf8WithoutBom)
-    $ReviewedConfigSha256 = Get-FileSha256 $RepresentativeConfigPath
-    Assert-Rejected { Read-RepresentativeConfiguration } "representative config tampering '$tamper'"
+    [IO.File]::WriteAllText($ProviderFixtureBindingPath, ($candidate | ConvertTo-Json -Depth 20), $utf8WithoutBom)
+    $ReviewedProviderFixtureBindingSha256 = Get-FileSha256 $ProviderFixtureBindingPath
+    Assert-Rejected { Read-ProviderFixtureBinding } "provider-fixture binding tampering '$tamper'"
   }
-  [IO.File]::WriteAllText($RepresentativeConfigPath, ($config | ConvertTo-Json -Depth 20), $utf8WithoutBom)
-  $ReviewedConfigSha256 = Get-FileSha256 $RepresentativeConfigPath
-  $representative = Read-RepresentativeConfiguration
+  [IO.File]::WriteAllText($ProviderFixtureBindingPath, ($bindingDocument | ConvertTo-Json -Depth 20), $utf8WithoutBom)
+  $ReviewedProviderFixtureBindingSha256 = Get-FileSha256 $ProviderFixtureBindingPath
+  $binding = Read-ProviderFixtureBinding
 
   $durableArn = "arn:aws:lambda:us-east-2:111122223333:function:$durableFunctionName`:17"
   $activityArn = "arn:aws:lambda:us-east-2:111122223333:function:$activityFunctionName`:23"
@@ -263,7 +340,7 @@ try {
     Serial = 208; VersionId = "state-version"; Lineage = "11111111-2222-3333-4444-555555555555"
     State = [pscustomobject]@{ resources = $resources }
   }
-  $boundary = Assert-StateBoundary $snapshot $representative
+  $boundary = Assert-StateBoundary $snapshot $binding
   if ([string]$boundary.DurableArn -cne $durableArn -or [string]$boundary.ActivityArn -cne $activityArn) {
     throw "The exact immutable state boundary was not accepted."
   }
@@ -295,7 +372,7 @@ try {
         $stack.template_body = $body | ConvertTo-Json -Compress -Depth 20
       }
     }
-    Assert-Rejected { Assert-StateBoundary $candidate $representative } "state tampering '$stateTamper'"
+    Assert-Rejected { Assert-StateBoundary $candidate $binding } "state tampering '$stateTamper'"
   }
 
   $script:liveMutation = ""
@@ -410,18 +487,19 @@ try {
   $freshPlanPath = Join-Path $operatorRoot "pre-run.tfplan"
   [IO.File]::WriteAllText($freshPlanPath, "bounded-test-plan", $utf8WithoutBom)
   $freshPlan = [pscustomobject]@{ Path = $freshPlanPath; Sha256 = Get-FileSha256 $freshPlanPath }
-  $plan = New-ExecutionPlan $representative $boundary $executionName $freshPlan
+  $plan = New-ExecutionPlan $binding $boundary $executionName $freshPlan
   $ExecutionPlanPath = Join-Path $operatorRoot "plan.json"
   [IO.File]::WriteAllText($ExecutionPlanPath, ($plan | ConvertTo-Json -Depth 20), $utf8WithoutBom)
   $ReviewedExecutionPlanSha256 = Get-FileSha256 $ExecutionPlanPath
-  $null = Read-ExecutionPlan $representative $boundary
-  foreach ($planTamper in @("extra", "run", "config", "source", "durable", "activity", "state", "fresh", "mutation")) {
+  $null = Read-ExecutionPlan $binding $boundary
+  foreach ($planTamper in @("extra", "run", "binding", "source", "operator-source", "durable", "activity", "state", "fresh", "mutation")) {
     $candidate = $plan | ConvertTo-Json -Depth 20 | ConvertFrom-Json
     switch ($planTamper) {
       "extra" { $candidate | Add-Member NoteProperty payload "caller-controlled" }
       "run" { $candidate.runId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }
-      "config" { $candidate.reviewedConfigSha256 = "0" * 64 }
+      "binding" { $candidate.providerFixtureBindingSha256 = "0" * 64 }
       "source" { $candidate.releaseSourceSha = "0" * 40 }
+      "operator-source" { $candidate.operatorSourceSha = "0" * 40 }
       "durable" { $candidate.durableVersion = 18 }
       "activity" { $candidate.activityVersion = 24 }
       "state" { $candidate.terraformStateSerial = 209 }
@@ -430,7 +508,7 @@ try {
     }
     [IO.File]::WriteAllText($ExecutionPlanPath, ($candidate | ConvertTo-Json -Depth 20), $utf8WithoutBom)
     $ReviewedExecutionPlanSha256 = Get-FileSha256 $ExecutionPlanPath
-    Assert-Rejected { Read-ExecutionPlan $representative $boundary } "plan tampering '$planTamper'"
+    Assert-Rejected { Read-ExecutionPlan $binding $boundary } "plan tampering '$planTamper'"
   }
   [IO.File]::WriteAllText($ExecutionPlanPath, ($plan | ConvertTo-Json -Depth 20), $utf8WithoutBom)
   $ReviewedExecutionPlanSha256 = Get-FileSha256 $ExecutionPlanPath
@@ -442,7 +520,7 @@ try {
     $result = [ordered]@{
       schemaVersion = 1; profile = "d1_deployed_provider_failure_durable_v1"; fixtureKind = $fixtureKind
       sourceId = $fixtureSourceId; adapterVersion = $fixtureAdapterVersion; runId = $RunId
-      reviewedConfigSha256 = $ReviewedConfigSha256; releaseSourceSha = $SourceSha
+      reviewedConfigSha256 = $ReviewedProviderFixtureBindingSha256; releaseSourceSha = $SourceSha
       providerFaultsInjected = 1; providerFailuresObserved = 1; recoveryAttempts = 1; recoveriesSucceeded = 1
       providerRequests = 0; observationCount = 0; createdCount = 0; updatedCount = 0
     }
@@ -474,8 +552,8 @@ try {
   } "BOM-prefixed durable JSON string"
 
   $startedAt = [DateTimeOffset]::UtcNow.AddSeconds(-2).ToString("o")
-  $receipt = New-Receipt $executionName $ReviewedExecutionPlanSha256 $startedAt
-  $null = Assert-Receipt $receipt $representative $boundary
+  $receipt = New-Receipt $executionName $ReviewedExecutionPlanSha256 $startedAt $binding
+  $null = Assert-Receipt $receipt $binding $boundary
   $receipt.phase = "running"
   $receipt.durableExecutionArn = $executionArn
   function Wait-ExactDurableResult { param([string]$DurableExecutionArn, [object]$Boundary) return [pscustomobject]@{} }
@@ -487,7 +565,7 @@ try {
   function Get-CloudWatchMaximum { param([string]$QueueName, [string]$MetricName, [DateTimeOffset]$Started, [DateTimeOffset]$Ended) return [decimal]0 }
   function Get-AggregateLogCount { param([string]$FilterExpression, [DateTimeOffset]$Started, [DateTimeOffset]$Ended) return 0 }
   function Read-StateSnapshot { return $snapshot }
-  function Assert-StateBoundary { param([object]$Snapshot, [object]$Representative) return $boundary }
+  function Assert-StateBoundary { param([object]$Snapshot, [object]$Binding) return $boundary }
   $postPlanPath = Join-Path $operatorRoot "post-run.tfplan"
   [IO.File]::WriteAllText($postPlanPath, "bounded-post-run-plan", $utf8WithoutBom)
   function Invoke-FreshZeroDriftPlan {
@@ -495,18 +573,18 @@ try {
     if ($Phase -cne "post-run" -or -not $AllowExisting) { throw "Unexpected fresh-plan mock invocation." }
     return [pscustomobject]@{ Path = $postPlanPath; Sha256 = Get-FileSha256 $postPlanPath }
   }
-  $representative | Add-Member NoteProperty ReviewedPlan ([pscustomobject]@{
+  $binding | Add-Member NoteProperty ReviewedPlan ([pscustomobject]@{
       variables = [pscustomobject]@{}; resource_changes = @()
     }) -Force
-  $completed = Complete-Evidence $receipt $representative $boundary
+  $completed = Complete-Evidence $receipt $binding $boundary
   $firstAggregateSha = Get-FileSha256 $completed.aggregatePath
   $firstZeroSha = Get-FileSha256 $completed.zeroDriftPath
-  $completed = Complete-Evidence $completed $representative $boundary
+  $completed = Complete-Evidence $completed $binding $boundary
   if ((Get-FileSha256 $completed.aggregatePath) -cne $firstAggregateSha -or
     (Get-FileSha256 $completed.zeroDriftPath) -cne $firstZeroSha) {
     throw "Crash-resume replaced already validated evidence instead of preserving it."
   }
-  $null = Assert-Receipt $completed $representative $boundary
+  $null = Assert-Receipt $completed $binding $boundary
   $aggregate = Get-Content -LiteralPath $completed.aggregatePath -Raw | ConvertFrom-Json
   $null = Assert-ExactProperties $aggregate @(
     "profile", "fixtureKind", "sourceId", "adapterVersion", "startedAt", "endedAt", "durationMs",
@@ -525,16 +603,18 @@ try {
   if ([int]$zero.meaningfulChanges -ne 0 -or $zero.drift -isnot [bool] -or [bool]$zero.drift) {
     throw "The post-run zero-drift aggregate is invalid."
   }
-  foreach ($receiptTamper in @("aggregate-path", "aggregate-hash", "ended", "state", "post-plan")) {
+  foreach ($receiptTamper in @("binding", "operator-source", "aggregate-path", "aggregate-hash", "ended", "state", "post-plan")) {
     $candidate = $completed | ConvertTo-Json -Depth 20 | ConvertFrom-Json
     switch ($receiptTamper) {
+      "binding" { $candidate.providerFixtureBindingSha256 = "0" * 64 }
+      "operator-source" { $candidate.operatorSourceSha = "0" * 40 }
       "aggregate-path" { $candidate.aggregatePath = $candidate.zeroDriftPath }
       "aggregate-hash" { $candidate.aggregateSha256 = "0" * 64 }
       "ended" { $candidate.endedAt = [DateTimeOffset]::Parse($candidate.startedAt).AddSeconds(-1).ToString("o") }
       "state" { $candidate.postRunStateVersionId = "other-state-version" }
       "post-plan" { $candidate.postRunZeroDriftPlanSha256 = "0" * 64 }
     }
-    Assert-Rejected { Assert-Receipt $candidate $representative $boundary } "verified receipt tampering '$receiptTamper'"
+    Assert-Rejected { Assert-Receipt $candidate $binding $boundary } "verified receipt tampering '$receiptTamper'"
   }
   $aggregateJson = Get-Content -LiteralPath $completed.aggregatePath -Raw
   $badAggregate = $aggregateJson | ConvertFrom-Json
@@ -542,7 +622,7 @@ try {
   [IO.File]::WriteAllText($completed.aggregatePath, ($badAggregate | ConvertTo-Json -Depth 20), $utf8WithoutBom)
   $candidate = $completed | ConvertTo-Json -Depth 20 | ConvertFrom-Json
   $candidate.aggregateSha256 = Get-FileSha256 $completed.aggregatePath
-  Assert-Rejected { Assert-Receipt $candidate $representative $boundary } "private or extra verified aggregate field"
+  Assert-Rejected { Assert-Receipt $candidate $binding $boundary } "private or extra verified aggregate field"
   [IO.File]::WriteAllText($completed.aggregatePath, $aggregateJson, $utf8WithoutBom)
 
   $payloadArtifact = Join-Path $operatorRoot "payload-$RunId.json"
