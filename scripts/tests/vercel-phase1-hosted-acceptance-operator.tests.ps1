@@ -69,7 +69,7 @@ if ([regex]::Matches($source, '& pnpm dlx \$vercelCliPackage').Count -ne 1) {
 
 foreach ($name in @(
     "Get-TextSha256", "ConvertFrom-OperatorJson", "ConvertFrom-BoundedFile", "Assert-ExactProperties",
-    "Test-CanonicalTimestamp", "Get-SurfaceConfiguration", "Read-ProjectBinding",
+    "Assert-ExactVercelIgnoreBoundary", "Test-CanonicalTimestamp", "Get-SurfaceConfiguration", "Read-ProjectBinding",
     "Assert-ExactHttpsOrigin", "Assert-InputBoundary", "Assert-Boolean", "Test-JsonInteger",
     "Assert-HostedObservation"
   )) { Import-OperatorFunction $name }
@@ -82,16 +82,20 @@ $HostedObservationPath = "observation.json"
 $ReviewedObservationSha256 = "b" * 64
 $Action = "Verify"
 $profile = "d1_vercel_hosted_acceptance_v1"
+$maximumObservationAge = [TimeSpan]::FromMinutes(30)
+$maximumObservationClockSkew = [TimeSpan]::FromMinutes(5)
 
 function New-Observation {
   param([Parameter(Mandatory)][object]$Configuration, [Parameter(Mandatory)][object]$Binding)
   $robots = if ($Configuration.Name -ceq "admin") { "noindex, nofollow, noarchive" } else { "" }
   $mode = if ($Configuration.Name -ceq "admin") { "identity-dark" } else { "candidate-managed-oidc" }
+  $endedAt = [DateTimeOffset]::UtcNow.AddSeconds(-1)
+  $startedAt = $endedAt.AddSeconds(-1)
   return [ordered]@{
     schemaVersion = 1
     profile = $profile
-    startedAt = "2026-08-26T12:00:00.0000000+00:00"
-    endedAt = "2026-08-26T12:00:01.0000000+00:00"
+    startedAt = $startedAt.ToString("o")
+    endedAt = $endedAt.ToString("o")
     durationMs = 1000
     surface = $Configuration.Name
     sourceSha = $SourceSha
@@ -150,6 +154,22 @@ Assert-InputBoundary
 $originalRepositoryRoot = $repositoryRoot
 $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) "vercel-hosted-operator-$PID-$([guid]::NewGuid().ToString('N'))"
 try {
+  $vercelIgnorePath = Join-Path $temporaryRoot ".vercelignore"
+  $null = New-Item -ItemType Directory -Path $temporaryRoot -Force
+  Copy-Item -LiteralPath (Join-Path $originalRepositoryRoot ".vercelignore") -Destination $vercelIgnorePath
+  Assert-ExactVercelIgnoreBoundary $vercelIgnorePath | Out-Null
+  Add-Content -LiteralPath $vercelIgnorePath -Value "!docs/"
+  Assert-Rejected { Assert-ExactVercelIgnoreBoundary $vercelIgnorePath } "broadened Vercel upload boundary"
+  Copy-Item -LiteralPath (Join-Path $originalRepositoryRoot ".vercelignore") -Destination $vercelIgnorePath -Force
+  $tamperedIgnore = (Get-Content -LiteralPath $vercelIgnorePath -Raw).Replace("**/.env*", "**/.env.local")
+  [IO.File]::WriteAllText($vercelIgnorePath, $tamperedIgnore)
+  Assert-Rejected { Assert-ExactVercelIgnoreBoundary $vercelIgnorePath } "tampered Vercel upload boundary"
+  Copy-Item -LiteralPath (Join-Path $originalRepositoryRoot ".vercelignore") -Destination $vercelIgnorePath -Force
+  $nonRecursiveIgnore = (Get-Content -LiteralPath $vercelIgnorePath -Raw).Replace("!frontend/**`r`n", "")
+  $nonRecursiveIgnore = $nonRecursiveIgnore.Replace("!frontend/**`n", "")
+  [IO.File]::WriteAllText($vercelIgnorePath, $nonRecursiveIgnore)
+  Assert-Rejected { Assert-ExactVercelIgnoreBoundary $vercelIgnorePath } "non-recursive Vercel frontend allowlist"
+
   $repositoryRoot = $temporaryRoot
   $candidateProjectRoot = Join-Path $temporaryRoot "frontend\web\.vercel"
   $adminProjectRoot = Join-Path $temporaryRoot "frontend\admin\.vercel"
@@ -167,8 +187,15 @@ try {
   [IO.File]::WriteAllText($adminProjectPath, '{"orgId":"team_123","projectId":"prj_candidate123","projectName":"ai-job-apply-admin"}')
   Assert-Rejected { Read-ProjectBinding $candidateConfiguration } "one project reused across candidate and admin"
   [IO.File]::WriteAllText($adminProjectPath, '{"orgId":"team_123","projectId":"prj_admin123","projectName":"ai-job-apply-admin"}')
+  [IO.File]::WriteAllText($adminProjectPath, '{"orgId":"team_other","projectId":"prj_admin123","projectName":"ai-job-apply-admin"}')
+  Assert-Rejected { Read-ProjectBinding $candidateConfiguration } "projects from different Vercel organizations"
+  [IO.File]::WriteAllText($adminProjectPath, '{"orgId":"team_123","projectId":"prj_admin123","projectName":"ai-job-apply-candidate"}')
+  Assert-Rejected { Read-ProjectBinding $candidateConfiguration } "one project name reused across candidate and admin"
+  [IO.File]::WriteAllText($adminProjectPath, '{"orgId":"team_123","projectId":"prj_admin123","projectName":"ai-job-apply-admin"}')
   [IO.File]::WriteAllText($candidateProjectPath, '{"orgId":"team_123","projectId":"prj_candidate123","projectName":"wrong-project"}')
   Assert-Rejected { Read-ProjectBinding $candidateConfiguration } "wrong local project name"
+  [IO.File]::WriteAllText($candidateProjectPath, '{"orgId":"team_123","projectId":"candidate123","projectName":"ai-job-apply-candidate"}')
+  Assert-Rejected { Read-ProjectBinding $candidateConfiguration } "project binding without a real Vercel project ID"
   [IO.File]::WriteAllText($candidateProjectPath, '{"orgId":"team_123","projectId":"prj_candidate123","projectName":"ai-job-apply-candidate","token":"prohibited"}')
   Assert-Rejected { Read-ProjectBinding $candidateConfiguration } "extra local project binding field"
 } finally {
@@ -180,6 +207,22 @@ $candidate = Get-SurfaceConfiguration "Candidate"
 $candidateBinding = [pscustomobject]@{ orgId = "team_123"; projectId = "prj_candidate123"; projectName = $ExpectedProjectName }
 $validCandidate = New-Observation $candidate $candidateBinding
 Assert-HostedObservation $validCandidate $candidate $candidateBinding | Out-Null
+
+$invalidDuration = $validCandidate | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+$invalidDuration.durationMs = 999
+Assert-Rejected { Assert-HostedObservation $invalidDuration $candidate $candidateBinding } "timestamp/duration mismatch"
+
+$staleObservation = $validCandidate | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+$staleEnd = [DateTimeOffset]::UtcNow.Subtract($maximumObservationAge).AddMinutes(-1)
+$staleObservation.startedAt = $staleEnd.AddSeconds(-1).ToString("o")
+$staleObservation.endedAt = $staleEnd.ToString("o")
+Assert-Rejected { Assert-HostedObservation $staleObservation $candidate $candidateBinding } "stale hosted observation"
+
+$futureObservation = $validCandidate | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+$futureEnd = [DateTimeOffset]::UtcNow.Add($maximumObservationClockSkew).AddMinutes(1)
+$futureObservation.startedAt = $futureEnd.AddSeconds(-1).ToString("o")
+$futureObservation.endedAt = $futureEnd.ToString("o")
+Assert-Rejected { Assert-HostedObservation $futureObservation $candidate $candidateBinding } "future hosted observation"
 
 $ExpectedProjectName = "ai-job-apply-admin"
 $StableOrigin = "https://admin.example.com"

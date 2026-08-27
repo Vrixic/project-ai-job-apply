@@ -9,16 +9,26 @@
 !pnpm-workspace.yaml
 !tsconfig.base.json
 !turbo.json
-!frontend/
-!packages/
+!frontend
+!frontend/**
+!packages
+!packages/**
 
-frontend/extension/
-frontend/mobile/
+frontend/extension
+frontend/extension/**
+frontend/mobile
+frontend/mobile/**
 
 **/.env*
-**/.next/
-**/.turbo/
-**/.vercel/
-**/coverage/
-**/dist/
-**/node_modules/
+**/.next
+**/.next/**
+**/.turbo
+**/.turbo/**
+**/.vercel
+**/.vercel/**
+**/coverage
+**/coverage/**
+**/dist
+**/dist/**
+**/node_modules
+**/node_modules/**

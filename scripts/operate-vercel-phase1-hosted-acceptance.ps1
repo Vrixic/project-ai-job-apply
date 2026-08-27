@@ -46,6 +46,8 @@ $operatorRoot = [IO.Path]::GetFullPath((Join-Path $repositoryRoot "infrastructur
 $vercelCliPackage = "vercel@59.6.2"
 $vercelCliVersion = "59.6.2"
 $profile = "d1_vercel_hosted_acceptance_v1"
+$maximumObservationAge = [TimeSpan]::FromMinutes(30)
+$maximumObservationClockSkew = [TimeSpan]::FromMinutes(5)
 
 function Get-FileSha256 {
   param([Parameter(Mandatory)][string]$Path)
@@ -87,6 +89,62 @@ function Assert-ExactProperties {
   }
   if (($actual -join "`n") -cne (@($Expected | Sort-Object) -join "`n")) {
     throw "$Description does not contain the exact canonical property set."
+  }
+  return $true
+}
+
+function Assert-ExactVercelIgnoreBoundary {
+  param([Parameter(Mandatory)][string]$Path)
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+    throw "The repository Vercel upload boundary is missing."
+  }
+  $bytes = [IO.File]::ReadAllBytes($Path)
+  if ($bytes.Length -eq 0 -or $bytes.Length -gt 4096 -or
+    ($bytes.Length -ge 3 -and $bytes[0] -eq 0xef -and $bytes[1] -eq 0xbb -and $bytes[2] -eq 0xbf)) {
+    throw "The repository Vercel upload boundary is empty, BOM-prefixed, or oversized."
+  }
+  $encoder = New-Object Text.UTF8Encoding($false, $true)
+  try { $text = $encoder.GetString($bytes) } catch {
+    throw "The repository Vercel upload boundary is not strict UTF-8."
+  }
+  $rules = @($text -split "`r?`n" | Where-Object {
+      -not [string]::IsNullOrWhiteSpace($_) -and -not $_.StartsWith("#")
+    })
+  if (@($rules | Where-Object { $_ -cne $_.Trim() }).Count -ne 0) {
+    throw "The repository Vercel upload boundary contains noncanonical whitespace."
+  }
+  $expectedRules = @(
+    "/*",
+    "!.vercelignore",
+    "!package.json",
+    "!pnpm-lock.yaml",
+    "!pnpm-workspace.yaml",
+    "!tsconfig.base.json",
+    "!turbo.json",
+    "!frontend",
+    "!frontend/**",
+    "!packages",
+    "!packages/**",
+    "frontend/extension",
+    "frontend/extension/**",
+    "frontend/mobile",
+    "frontend/mobile/**",
+    "**/.env*",
+    "**/.next",
+    "**/.next/**",
+    "**/.turbo",
+    "**/.turbo/**",
+    "**/.vercel",
+    "**/.vercel/**",
+    "**/coverage",
+    "**/coverage/**",
+    "**/dist",
+    "**/dist/**",
+    "**/node_modules",
+    "**/node_modules/**"
+  )
+  if (($rules -join "`n") -cne ($expectedRules -join "`n")) {
+    throw "The repository Vercel upload boundary does not match the exact canonical allowlist."
   }
   return $true
 }
@@ -203,9 +261,7 @@ function Assert-SourceHostingConfiguration {
     @($config.regions).Count -ne 1 -or [string]$config.regions[0] -cne "iad1") {
     throw "The surface Vercel configuration does not match the reviewed Phase 1 boundary."
   }
-  if (-not (Test-Path -LiteralPath (Join-Path $repositoryRoot ".vercelignore") -PathType Leaf)) {
-    throw "The repository Vercel upload boundary is missing."
-  }
+  Assert-ExactVercelIgnoreBoundary (Join-Path $repositoryRoot ".vercelignore") | Out-Null
 }
 
 function ConvertFrom-BoundedFile {
@@ -232,10 +288,11 @@ function Read-ProjectBinding {
   }
   $binding = ConvertFrom-BoundedFile $projectPath "The $($Configuration.Name) Vercel project binding" 4096
   Assert-ExactProperties $binding @('orgId', 'projectId', 'projectName') "The $($Configuration.Name) Vercel project binding" | Out-Null
-  foreach ($property in @("orgId", "projectId")) {
-    if ([string]$binding.$property -cnotmatch '^[A-Za-z0-9_-]{3,128}$') {
-      throw "The $($Configuration.Name) Vercel project binding has an invalid $property."
-    }
+  if ([string]$binding.orgId -cnotmatch '^[A-Za-z0-9_-]{3,128}$') {
+    throw "The $($Configuration.Name) Vercel project binding has an invalid orgId."
+  }
+  if ([string]$binding.projectId -cnotmatch '^prj_[A-Za-z0-9]{3,124}$') {
+    throw "The $($Configuration.Name) Vercel project binding does not contain a real project ID."
   }
   if ([string]$binding.projectName -cne $ExpectedProjectName) {
     throw "The local Vercel project name does not exactly match the reviewed project."
@@ -246,8 +303,19 @@ function Read-ProjectBinding {
   if (Test-Path -LiteralPath $otherPath -PathType Leaf) {
     $other = ConvertFrom-BoundedFile $otherPath "The other Vercel project binding" 4096
     Assert-ExactProperties $other @('orgId', 'projectId', 'projectName') "The other Vercel project binding" | Out-Null
+    if ([string]$other.orgId -cnotmatch '^[A-Za-z0-9_-]{3,128}$' -or
+      [string]$other.projectId -cnotmatch '^prj_[A-Za-z0-9]{3,124}$' -or
+      [string]$other.projectName -cnotmatch '^[a-z0-9][a-z0-9-]{0,99}$') {
+      throw "The other Vercel project binding is not canonical."
+    }
+    if ([string]$other.orgId -cne [string]$binding.orgId) {
+      throw "Candidate and admin projects must belong to the same exact Vercel organization."
+    }
     if ([string]$other.projectId -ceq [string]$binding.projectId) {
       throw "Candidate and admin roots cannot share one Vercel project."
+    }
+    if ([string]$other.projectName -ceq [string]$binding.projectName) {
+      throw "Candidate and admin roots cannot share one Vercel project name."
     }
   }
   return $binding
@@ -321,6 +389,28 @@ function Assert-HostedObservation {
     [long]$Observation.durationMs -gt 3600000 -or
     [DateTimeOffset]::Parse([string]$Observation.endedAt) -lt [DateTimeOffset]::Parse([string]$Observation.startedAt)) {
     throw "The hosted observation envelope is not canonical or bounded."
+  }
+  $startedAt = [DateTimeOffset]::ParseExact(
+    [string]$Observation.startedAt,
+    "o",
+    [Globalization.CultureInfo]::InvariantCulture,
+    [Globalization.DateTimeStyles]::RoundtripKind
+  )
+  $endedAt = [DateTimeOffset]::ParseExact(
+    [string]$Observation.endedAt,
+    "o",
+    [Globalization.CultureInfo]::InvariantCulture,
+    [Globalization.DateTimeStyles]::RoundtripKind
+  )
+  $durationTicks = ($endedAt - $startedAt).Ticks
+  if ($durationTicks % [TimeSpan]::TicksPerMillisecond -ne 0 -or
+    [long]($durationTicks / [TimeSpan]::TicksPerMillisecond) -ne [long]$Observation.durationMs) {
+    throw "The hosted observation duration does not exactly match its timestamps."
+  }
+  $observedNow = [DateTimeOffset]::UtcNow
+  if ($endedAt -gt $observedNow.Add($maximumObservationClockSkew) -or
+    $endedAt -lt $observedNow.Subtract($maximumObservationAge)) {
+    throw "The hosted observation is stale or outside the bounded clock-skew allowance."
   }
   if ([string]$Observation.surface -cne [string]$Configuration.Name -or
     [string]$Observation.sourceSha -cne $SourceSha -or

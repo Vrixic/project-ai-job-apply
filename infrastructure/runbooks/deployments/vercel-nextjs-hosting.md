@@ -17,8 +17,9 @@ authority.
 
 Both source roots contain `vercel.json` with the Next.js framework, monorepo-aware frozen install
 and dependency build commands, and single `iad1` Function region. The repository `.vercelignore`
-allowlist uploads only the root pnpm/Turbo configuration plus `frontend` and `packages` source,
-then re-excludes credentials, dependencies, generated output, caches, mobile, and extension source.
+allowlist recursively re-includes only the root pnpm/Turbo configuration plus `frontend` and
+`packages` source, then re-excludes credentials, dependencies, generated output, caches, mobile,
+and extension source, including the directory entries themselves.
 AWS `us-east-2` API Gateway/Lambda remains the server-side target and PostgreSQL remains truth.
 Vercel stores no product database or workflow state.
 
@@ -295,7 +296,9 @@ $observationSha256 = (Get-FileHash -LiteralPath $observationPath -Algorithm SHA2
 ```
 
 Verification repeats clean-source and read-only provider preflight, checks the observation checksum,
-and emits only the approved aggregate. Any extra JSON field—including a raw token, cookie, body,
+requires the aggregate duration to exactly match its canonical timestamps, rejects observations
+older than 30 minutes or more than five minutes in the future, and emits only the approved
+aggregate. Any extra JSON field—including a raw token, cookie, body,
 email, subject, candidate value, job value, or moderation value—causes rejection. A passing
 identity-dark aggregate proves only protected hosting and the fixed route/header boundary; it does
 not prove login, BFF authorization, feature behavior, log review, or the later admin authority gate.
