@@ -1131,16 +1131,85 @@ Assert-DevelopmentDocumentAcceptedResourceDrift -Records $completeDarkPostCreate
 foreach ($record in @($processorRoleDrift, $mappingDrift, $processorFunctionDrift, $stsEndpointDrift)) {
   Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($record) -RootModule $completeDarkPlannedRoot
 }
-$retainedCompleteDarkDriftPlan = $retainedBaselinePlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
-$retainedCompleteDarkDriftPlan.planned_values.root_module = $completeDarkPlannedRoot
-$retainedCompleteDarkDriftPlan.resource_drift = $completeDarkPostCreateDrift
-Assert-DevelopmentDocumentRetainedBaselinePlan -Plan $retainedCompleteDarkDriftPlan
 
 function Assert-CompleteDarkPostCreateDriftRejected([object[]]$Records, [object]$Root, [string]$Label) {
   $rejected = $false
   try { Assert-DevelopmentDocumentAcceptedResourceDrift -Records $Records -RootModule $Root } catch { $rejected = $true }
   if (-not $rejected) { throw "The CompleteDark post-create drift guard accepted '$Label'." }
 }
+
+$processorPolicyBefore = $processorPolicy | ConvertFrom-Json
+@($processorPolicyBefore.Statement | Where-Object Sid -ceq "InvokeExactParserVersion")[0].Resource =
+  "arn:aws:lambda:us-east-2:${account}:function:ai-job-apply-development-document-parser:5"
+$processorPolicyAfter = $processorPolicy | ConvertFrom-Json
+@($processorPolicyAfter.Statement | Where-Object Sid -ceq "InvokeExactParserVersion")[0].Resource =
+  "arn:aws:lambda:us-east-2:${account}:function:ai-job-apply-development-document-parser:6"
+$processorPolicyBeforeValue = $processorPolicyBefore | ConvertTo-Json -Compress -Depth 50
+$processorPolicyAfterValue = $processorPolicyAfter | ConvertTo-Json -Compress -Depth 50
+$processorRoleRefresh = New-DriftRecord "module.platform.aws_iam_role.document_processor[0]" "aws_iam_role" `
+  ([pscustomobject]@{ id = "processor-role"; inline_policy = @([pscustomobject]@{
+        name = "document-processor-runtime"; policy = $processorPolicyBeforeValue
+      }); tags = [pscustomobject]@{}; tags_all = $defaultTags }) `
+  ([pscustomobject]@{ id = "processor-role"; inline_policy = @([pscustomobject]@{
+        name = "document-processor-runtime"; policy = $processorPolicyAfterValue
+      }); tags = [pscustomobject]@{}; tags_all = $defaultTags }) `
+  ([pscustomobject]@{ inline_policy = @([pscustomobject]@{}); tags = [pscustomobject]@{}; tags_all = [pscustomobject]@{} }) `
+  ([pscustomobject]@{ inline_policy = @([pscustomobject]@{}); tags = [pscustomobject]@{}; tags_all = [pscustomobject]@{} })
+$processorRefreshRoot = $completeDarkPlannedRoot | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$processorRefreshPlannedRole = @($processorRefreshRoot.resources | Where-Object {
+    $_.address -eq "module.platform.aws_iam_role.document_processor[0]"
+  })[0]
+$processorRefreshPlannedPolicy = @($processorRefreshRoot.resources | Where-Object {
+    $_.address -eq "module.platform.aws_iam_role_policy.document_processor[0]"
+  })[0]
+$processorRefreshPlannedRole.values = $processorRoleRefresh.change.after
+$processorRefreshPlannedPolicy.values.policy = $processorPolicyAfterValue
+Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($processorRoleRefresh) -RootModule $processorRefreshRoot
+
+foreach ($mutation in @("same-pin", "before-broadened", "extra-statement", "non-pin", "sensitivity")) {
+  $record = $processorRoleRefresh | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $root = $processorRefreshRoot | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $plannedRole = @($root.resources | Where-Object {
+      $_.address -eq "module.platform.aws_iam_role.document_processor[0]"
+    })[0]
+  $plannedPolicy = @($root.resources | Where-Object {
+      $_.address -eq "module.platform.aws_iam_role_policy.document_processor[0]"
+    })[0]
+  switch ($mutation) {
+    "same-pin" {
+      $record.change.before.inline_policy[0].policy = $record.change.after.inline_policy[0].policy
+    }
+    "before-broadened" {
+      $policy = $record.change.before.inline_policy[0].policy | ConvertFrom-Json
+      @($policy.Statement | Where-Object Sid -eq "ReadDatabaseSecret")[0].Action = "secretsmanager:*"
+      $record.change.before.inline_policy[0].policy = $policy | ConvertTo-Json -Compress -Depth 50
+    }
+    "extra-statement" {
+      $policy = $record.change.after.inline_policy[0].policy | ConvertFrom-Json
+      $policy.Statement = @($policy.Statement) + @([pscustomobject]@{
+          Sid = "Unexpected"; Effect = "Allow"; Action = "lambda:*"; Resource = "*"
+        })
+      $value = $policy | ConvertTo-Json -Compress -Depth 50
+      $record.change.after.inline_policy[0].policy = $value
+      $plannedRole.values.inline_policy[0].policy = $value
+      $plannedPolicy.values.policy = $value
+    }
+    "non-pin" {
+      $policy = $record.change.after.inline_policy[0].policy | ConvertFrom-Json
+      @($policy.Statement | Where-Object Sid -eq "WriteNativeTraces")[0].Action = "xray:*"
+      $value = $policy | ConvertTo-Json -Compress -Depth 50
+      $record.change.after.inline_policy[0].policy = $value
+      $plannedRole.values.inline_policy[0].policy = $value
+      $plannedPolicy.values.policy = $value
+    }
+    "sensitivity" { $record.change.after_sensitive.inline_policy[0] = [pscustomobject]@{ secret = $true } }
+  }
+  Assert-CompleteDarkPostCreateDriftRejected @($record) $root "processor role refresh $mutation"
+}
+$retainedCompleteDarkDriftPlan = $retainedBaselinePlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$retainedCompleteDarkDriftPlan.planned_values.root_module = $completeDarkPlannedRoot
+$retainedCompleteDarkDriftPlan.resource_drift = $completeDarkPostCreateDrift
+Assert-DevelopmentDocumentRetainedBaselinePlan -Plan $retainedCompleteDarkDriftPlan
 
 foreach ($mutation in @(
     "missing", "extra", "name", "action", "resource", "managed-role", "separate-policy", "planned-role",

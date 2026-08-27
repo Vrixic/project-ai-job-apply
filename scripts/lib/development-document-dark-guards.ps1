@@ -1039,12 +1039,50 @@ function Assert-DevelopmentDocumentAcceptedResourceDrift {
       if ($null -eq $beforePolicies -and $null -eq $afterPolicies) {
         Assert-DevelopmentDocumentNullToEmptyObject $before $after tags "Processor role tag drift"
         $sensitivity += "tags"
-      } elseif ($null -eq $beforePolicies -or $null -eq $afterPolicies -or
-        -not (Test-DevelopmentDocumentEmptyArray $beforePolicies.Value)) {
+      } elseif ($null -eq $beforePolicies -or $null -eq $afterPolicies) {
         throw "The processor role drift has an unexpected inline-policy boundary."
       } elseif (Test-DevelopmentDocumentEmptyArray $afterPolicies.Value) {
         Assert-DevelopmentDocumentNullToEmptyObject $before $after tags "Processor role tag drift"
         $sensitivity += "tags"
+      } elseif (@($beforePolicies.Value).Count -eq 1 -and @($afterPolicies.Value).Count -eq 1) {
+        $beforeInlinePolicy = @($beforePolicies.Value)[0]
+        $afterInlinePolicy = @($afterPolicies.Value)[0]
+        $expectedRole = $planned[$processorRole]
+        $expectedPolicy = $planned["module.platform.aws_iam_role_policy.document_processor[0]"]
+        if ([string]$beforeInlinePolicy.name -cne "document-processor-runtime" -or
+          [string]$afterInlinePolicy.name -cne "document-processor-runtime" -or
+          -not (Test-DevelopmentDocumentEmptyObject $before.tags) -or
+          -not (Test-DevelopmentDocumentEmptyObject $after.tags) -or
+          $null -eq $expectedRole -or $null -eq $expectedPolicy -or
+          [string]$expectedPolicy.role -cne "ai-job-apply-development-document-processor" -or
+          [string]$expectedPolicy.policy -cne [string]$afterInlinePolicy.policy -or
+          (ConvertTo-DeploymentCanonicalValue $after -SortArrays) -cne
+          (ConvertTo-DeploymentCanonicalValue $expectedRole -SortArrays)) {
+          throw "The processor role inline-policy refresh differs from the exact source-evaluated policy."
+        }
+        Assert-ExactDocumentIdentityPolicy $beforeInlinePolicy.policy Processor $accountId $kmsArn
+        Assert-ExactDocumentIdentityPolicy $afterInlinePolicy.policy Processor $accountId $kmsArn
+        $beforePolicy = ConvertFrom-IamPolicyValue $beforeInlinePolicy.policy
+        $afterPolicy = ConvertFrom-IamPolicyValue $afterInlinePolicy.policy
+        $beforeStatement = @($beforePolicy.Statement | Where-Object Sid -ceq "InvokeExactParserVersion")
+        $afterStatement = @($afterPolicy.Statement | Where-Object Sid -ceq "InvokeExactParserVersion")
+        $pinPattern = "^arn:aws:lambda:us-east-2:${accountId}:function:ai-job-apply-development-document-parser:([1-9][0-9]*)$"
+        $beforeMatch = [regex]::Match([string]$beforeStatement[0].Resource, $pinPattern)
+        $afterMatch = [regex]::Match([string]$afterStatement[0].Resource, $pinPattern)
+        if ($beforeStatement.Count -ne 1 -or $afterStatement.Count -ne 1 -or
+          -not $beforeMatch.Success -or -not $afterMatch.Success -or
+          [long]$afterMatch.Groups[1].Value -le [long]$beforeMatch.Groups[1].Value) {
+          throw "The processor role inline-policy refresh does not advance one exact numeric parser pin."
+        }
+        $beforeStatement[0].Resource = "__PIN__"
+        $afterStatement[0].Resource = "__PIN__"
+        if ((ConvertTo-DeploymentCanonicalValue $beforePolicy -SortArrays) -cne
+          (ConvertTo-DeploymentCanonicalValue $afterPolicy -SortArrays)) {
+          throw "The processor role inline-policy refresh changes more than the exact parser-version resource."
+        }
+        # The deprecated/computed role snapshot changed in place. Sensitivity is identical on
+        # both sides, so normalize only the already-authenticated policy value for final equality.
+        $afterPolicies.Value = $beforePolicies.Value
       } else {
         $expectedRole = $planned[$processorRole]
         $expectedPolicy = $planned["module.platform.aws_iam_role_policy.document_processor[0]"]
