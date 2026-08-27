@@ -960,6 +960,13 @@ function Assert-CompleteDarkRefreshBaselineMetadata {
     [Parameter(Mandatory)][object]$StateIdentity
   )
   if ([string]$Metadata.SchemaVersion -ceq "6") {
+    $processorContinuationBaseline = (
+      $Action -in @("Plan", "Apply") -and $RefreshStep -ceq "Processor" -and
+      $releaseCommit -cne $operatorCommit -and [string]$Metadata.OperatorSourceSha -ceq $releaseCommit
+    )
+    $baselineOperatorValid = (
+      [string]$Metadata.OperatorSourceSha -ceq $operatorCommit -or $processorContinuationBaseline
+    )
     $keys = @(
       "AccountId", "Applyable", "CreatedAt", "DeltaKind", "Environment", "Kind", "MeaningfulChanges",
       "CurrentTemplatePlanSha256", "CurrentTemplateReceiptSha256", "MigrationImage",
@@ -974,7 +981,7 @@ function Assert-CompleteDarkRefreshBaselineMetadata {
       [string]$Metadata.DeltaKind -cne "complete-dark-bootstrap-full-source-v1" -or
       [string]$Metadata.Environment -cne "development" -or [string]$Metadata.AccountId -cne $ExpectedAccountId -or
       [string]$Metadata.Region -cne $Region -or [string]$Metadata.Stage -cne "complete-dark" -or
-      [string]$Metadata.OperatorSourceSha -cne $operatorCommit -or
+      -not $baselineOperatorValid -or
       [string]$Metadata.ReceiptSha256 -ceq $ReviewedReceiptSha256 -or
       [string]$Metadata.CurrentTemplatePlanSha256 -cnotmatch '^[a-f0-9]{64}$' -or
       [string]$Metadata.CurrentTemplateReceiptSha256 -cnotmatch '^[a-f0-9]{64}$' -or
@@ -995,8 +1002,14 @@ function Assert-CompleteDarkRefreshBaselineMetadata {
     $priorDelta = Get-ReviewedBootstrapDelta -ReleaseSha ([string]$Metadata.PriorBaselineOperatorSourceSha) `
       -OperatorSha ([string]$Metadata.OperatorSourceSha) `
       -ReviewedSha256 ([string]$Metadata.PriorBaselineToOperatorDeltaSha256)
+    $currentOperatorDelta = if ($processorContinuationBaseline) {
+      Get-ReviewedOperatorDelta -ReleaseSha ([string]$Metadata.OperatorSourceSha) `
+        -OperatorSha $operatorCommit -ReviewedSha256 $ReviewedBaselineToOperatorDeltaSha256
+    }
+    else { "" }
     if ($releaseDelta -cne [string]$Metadata.OperatorDeltaSha256 -or
-      $priorDelta -cne [string]$Metadata.PriorBaselineToOperatorDeltaSha256) {
+      $priorDelta -cne [string]$Metadata.PriorBaselineToOperatorDeltaSha256 -or
+      ($processorContinuationBaseline -and $currentOperatorDelta -cne $ReviewedBaselineToOperatorDeltaSha256)) {
       throw "The schema-6 CompleteDark bootstrap deltas are not exact."
     }
     return

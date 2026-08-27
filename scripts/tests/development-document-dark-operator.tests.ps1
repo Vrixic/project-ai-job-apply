@@ -61,7 +61,8 @@ foreach ($required in @(
     '-Retain:($Stage -ceq "CompleteDark")',
     '$result.BaselineMetadataSha256 = $postApplyBaseline.MetadataSha256',
     'authenticated processor continuation after parser apply', '$ancestorProcessorContinuation',
-    '$expectedReceiptOperator', 'SchemaVersion = "2"', '$planMetadata.Commit = $operatorCommit'
+    '$expectedReceiptOperator', '$processorContinuationBaseline', '$baselineOperatorValid',
+    '$currentOperatorDelta', 'SchemaVersion = "2"', '$planMetadata.Commit = $operatorCommit'
   )) {
   if (-not $source.Contains($required)) { throw "The staged operator is missing '$required'." }
 }
