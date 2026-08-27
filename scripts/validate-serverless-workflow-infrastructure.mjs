@@ -658,8 +658,15 @@ for (const required of [
 }
 for (const required of [
   "FROM node:24.18.0-alpine3.23@sha256:595398b0081eacda8e1c4c5b97b76cd1020e4d58a8ebcb4843b9bca1e79e7436 AS runtime",
-  "apk add --no-network ca-certificates-bundle libcrypto3 libssl3 zlib",
+  "libcrypto3-3.5.8-r0.apk",
+  "a5592b5cf276bc7a30ac7b161d46446085490b640faa1f839ea98eb15aacad31",
+  "libssl3-3.5.8-r0.apk",
+  "f80b76cb5e5a52cfc1ced08f8dc3022adc0ce0a3d6e7741976731b22c71fe310",
+  "apk add --no-network /tmp/libcrypto3.apk /tmp/libssl3.apk ca-certificates-bundle zlib",
+  'apk info -e "libcrypto3=3.5.8-r0"',
+  'apk info -e "libssl3=3.5.8-r0"',
   "apk del apk-tools",
+  "rm -f /tmp/libcrypto3.apk /tmp/libssl3.apk",
   "rm -rf /usr/local/lib/node_modules /opt/yarn-v1.22.22",
   "/var/log/apk.log",
   "test ! -e /sbin/apk",
@@ -682,6 +689,11 @@ forbidText(
   "Dockerfile.migration",
   "gcr.io/distroless",
   "Dockerfile.migration retains the vulnerable Debian runtime",
+);
+forbidText(
+  "Dockerfile.migration",
+  "apk upgrade",
+  "Dockerfile.migration must use checksum-pinned security packages instead of a moving upgrade",
 );
 for (const required of [
   "FROM node:24.18.0-alpine3.23@sha256:595398b0081eacda8e1c4c5b97b76cd1020e4d58a8ebcb4843b9bca1e79e7436 AS runtime-node",

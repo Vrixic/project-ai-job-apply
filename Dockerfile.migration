@@ -23,8 +23,15 @@ RUN node --input-type=module -e 'import{access}from"node:fs/promises";import{cre
 RUN SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" node -e 'const fs=require("node:fs"),path=require("node:path");const raw=process.env.SOURCE_DATE_EPOCH;if(!/^[0-9]+$/.test(raw))throw new Error("SOURCE_DATE_EPOCH must be Unix seconds");const epoch=Number(raw),instant=new Date(epoch*1000);if(!Number.isSafeInteger(epoch)||Number.isNaN(instant.valueOf()))throw new Error("invalid SOURCE_DATE_EPOCH");const root="/migration",moduleFiles=[];const normalize=(entry)=>{const stat=fs.lstatSync(entry);if(stat.isDirectory()){for(const child of fs.readdirSync(entry).sort())normalize(path.join(entry,child));}if(stat.isSymbolicLink())fs.lutimesSync(entry,instant,instant);else fs.utimesSync(entry,instant,instant);};const discover=(entry)=>{const stat=fs.lstatSync(entry);if(!stat.isDirectory())return;for(const child of fs.readdirSync(entry).sort()){const candidate=path.join(entry,child);if(child===".modules.yaml")moduleFiles.push(candidate);else if(fs.lstatSync(candidate).isDirectory())discover(candidate);}};discover(root);if(moduleFiles.length!==5)throw new Error(`expected exactly five generated .modules.yaml files, found ${moduleFiles.length}`);for(const file of moduleFiles){const current=fs.readFileSync(file,"utf8"),matches=current.match(/^prunedAt:.*$/gm)||[];if(matches.length!==1)throw new Error(`expected exactly one prunedAt in ${file}`);fs.writeFileSync(file,current.replace(/^prunedAt:.*$/m,`prunedAt: ${instant.toUTCString()}`));}normalize(root);'
 
 FROM node:24.18.0-alpine3.23@sha256:595398b0081eacda8e1c4c5b97b76cd1020e4d58a8ebcb4843b9bca1e79e7436 AS runtime
-RUN apk add --no-network ca-certificates-bundle libcrypto3 libssl3 zlib \
+RUN wget -q -O /tmp/libcrypto3.apk https://dl-cdn.alpinelinux.org/alpine/v3.23/main/x86_64/libcrypto3-3.5.8-r0.apk \
+  && echo "a5592b5cf276bc7a30ac7b161d46446085490b640faa1f839ea98eb15aacad31  /tmp/libcrypto3.apk" | sha256sum -c - \
+  && wget -q -O /tmp/libssl3.apk https://dl-cdn.alpinelinux.org/alpine/v3.23/main/x86_64/libssl3-3.5.8-r0.apk \
+  && echo "f80b76cb5e5a52cfc1ced08f8dc3022adc0ce0a3d6e7741976731b22c71fe310  /tmp/libssl3.apk" | sha256sum -c - \
+  && apk add --no-network /tmp/libcrypto3.apk /tmp/libssl3.apk ca-certificates-bundle zlib \
+  && apk info -e "libcrypto3=3.5.8-r0" \
+  && apk info -e "libssl3=3.5.8-r0" \
   && apk del apk-tools \
+  && rm -f /tmp/libcrypto3.apk /tmp/libssl3.apk \
   && rm -rf /usr/local/lib/node_modules /opt/yarn-v1.22.22 \
   && rm -f /usr/local/bin/corepack /usr/local/bin/docker-entrypoint.sh /usr/local/bin/nodejs \
     /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/yarn /usr/local/bin/yarnpkg \
