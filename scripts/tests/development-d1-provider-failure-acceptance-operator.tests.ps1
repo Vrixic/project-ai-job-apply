@@ -548,6 +548,7 @@ try {
   function Invoke-AwsJson {
     param([string[]]$Arguments, [string]$Operation)
     if (($Arguments[0..1] -join " ") -cne "lambda get-durable-execution") { throw "Unexpected durable mock call." }
+    if ($Arguments -contains '--include-execution-data') { throw 'The current durable read API does not accept include-execution-data.' }
     $result = [ordered]@{
       schemaVersion = 1; profile = "d1_deployed_provider_failure_durable_v1"; fixtureKind = $fixtureKind
       sourceId = $fixtureSourceId; adapterVersion = $fixtureAdapterVersion; runId = $RunId
@@ -565,7 +566,7 @@ try {
       DurableExecutionArn = "$durableArn/durable-execution/$executionName/opaque01"
       DurableExecutionName = $executionName; FunctionArn = $boundary.DurableArn; Version = "17"; Status = "SUCCEEDED"
       InputPayload = (New-WorkflowPayload | ConvertTo-Json -Compress -Depth 10)
-      OutputPayload = ($result | ConvertTo-Json -Compress -Depth 10)
+      Result = ($result | ConvertTo-Json -Compress -Depth 10)
     }
   }
   $executionArn = "$durableArn/durable-execution/$executionName/opaque01"

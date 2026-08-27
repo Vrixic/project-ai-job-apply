@@ -186,7 +186,7 @@ The asynchronous `invoke` response is accepted only with status `202` and an exe
 containing the exact version-qualified function ARN and UUID-derived execution name; Lambda does
 not return `ExecutedVersion` for this durable asynchronous response. The subsequent exact
 execution read independently requires both the qualified function ARN and numeric version.
-The AWS CLI returns durable `InputPayload` and `OutputPayload` as JSON strings; the operator applies strict
+The AWS CLI returns durable `InputPayload` and `Result` as JSON strings; the operator applies strict
 UTF-8 byte bounds and exact closed-object validation without printing either string.
 
 ## Resume and verify

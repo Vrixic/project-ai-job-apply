@@ -819,7 +819,7 @@ function Wait-ExactDurableResult {
   param([Parameter(Mandatory)][string]$DurableExecutionArn, [Parameter(Mandatory)][object]$Boundary)
   $deadline = [DateTimeOffset]::UtcNow.AddSeconds($MaximumPollSeconds)
   do {
-    $execution = Invoke-AwsJson @("lambda", "get-durable-execution", "--durable-execution-arn", $DurableExecutionArn, "--include-execution-data", "--output", "json") "Durable execution polling"
+    $execution = Invoke-AwsJson @("lambda", "get-durable-execution", "--durable-execution-arn", $DurableExecutionArn, "--output", "json") "Durable execution polling"
     if ([string]$execution.DurableExecutionArn -cne $DurableExecutionArn -or [string]$execution.DurableExecutionName -cne (New-DurableExecutionName $RunId) -or
       [string]$execution.FunctionArn -cne $Boundary.DurableArn -or [string]$execution.Version -cne [string]$ExpectedDurableVersion) {
       throw "The durable execution metadata crossed the reviewed version or run boundary."
@@ -830,7 +830,7 @@ function Wait-ExactDurableResult {
   } while ($true)
   if ([string]$execution.Status -cne "SUCCEEDED") { throw "The exact durable execution reached a non-success terminal state." }
   $input = ConvertFrom-BoundedJsonString ([string]$execution.InputPayload) "Private durable input" 4096
-  $result = ConvertFrom-BoundedJsonString ([string]$execution.OutputPayload) "Private durable result" 8192
+  $result = ConvertFrom-BoundedJsonString ([string]$execution.Result) "Private durable result" 8192
   $expectedPayload = New-WorkflowPayload
   $null = Assert-ExactProperties $input @("schemaVersion", "workflowDefinitionVersion", "fixtureKind", "runId", "reviewedConfigSha256", "releaseSourceSha") "Private durable input"
   $null = Assert-ExactProperties $result @(
