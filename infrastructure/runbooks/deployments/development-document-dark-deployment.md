@@ -222,9 +222,18 @@ serial, verifies the mixed state with the old processor still pinned, runs a ref
 zero-drift check, and emits an exclusive aggregate parser-refresh receipt under ignored `.terraform`.
 Independently review that receipt checksum before step two.
 
+If a guard-only operator correction is required after parser apply but before processor planning,
+do not republish or refresh the parser again. The processor continuation may set
+`-ReleaseSourceSha` to the parser receipt's exact source and provide both
+`-ReviewedOperatorDeltaSha256` and `-ReviewedBaselineToOperatorDeltaSha256` for the same independently
+reviewed canonical `development-operator-delta-v1` hash. This exception exists only for the
+processor `Plan`/`Apply` handoff, accepts only the operator/test/runbook allowlist, authenticates the
+parser receipt's original operator, and keeps the deployed artifacts bound to their exact source.
+
 ```powershell
 .\scripts\operate-development-document-dark-deployment.ps1 -Action Plan -Stage CompleteDark `
   -RefreshStep Processor -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
+  [-ReleaseSourceSha PARSER_REFRESH_SOURCE_SHA -ReviewedOperatorDeltaSha256 REVIEWED_OPERATOR_DELTA] `
   -BaselinePlanPath CURRENT_COMPLETE_DARK_BASELINE -ReviewedBaselineSha256 BASELINE_SHA256 `
   -ReviewedBaselineMetadataSha256 BASELINE_METADATA_SHA256 `
   [-ReviewedBaselineToOperatorDeltaSha256 REVIEWED_BASELINE_OPERATOR_DELTA_SHA256] `
@@ -234,6 +243,7 @@ Independently review that receipt checksum before step two.
 
 .\scripts\operate-development-document-dark-deployment.ps1 -Action Apply -Stage CompleteDark `
   -RefreshStep Processor -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET `
+  [-ReleaseSourceSha PARSER_REFRESH_SOURCE_SHA -ReviewedOperatorDeltaSha256 REVIEWED_OPERATOR_DELTA] `
   -BaselinePlanPath CURRENT_COMPLETE_DARK_BASELINE -ReviewedBaselineSha256 BASELINE_SHA256 `
   -ReviewedBaselineMetadataSha256 BASELINE_METADATA_SHA256 `
   [-ReviewedBaselineToOperatorDeltaSha256 REVIEWED_BASELINE_OPERATOR_DELTA_SHA256] `

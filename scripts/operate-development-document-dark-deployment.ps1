@@ -108,8 +108,10 @@ reviewed canonical operator-delta SHA-256 and records release, operator, and del
 the retained metadata. Plan and Apply require the exact current release and preserve their
 exact-current binding. CompleteDark may consume an ancestor-release schema-3/4 ParserDark
 baseline only when its own reviewed metadata plus any baseline-operator-to-current delta are
-verified independently. It still requires separately published exact-current artifacts and does
-not relax the Verify-only ancestor artifact exception.
+verified independently. It still requires separately published exact-current artifacts. The sole
+Plan/Apply ancestor exception is an authenticated guard-only processor continuation after a parser
+refresh has already applied; it reuses that exact parser receipt/source and cannot change deployed
+application or infrastructure source.
 The one failed post-apply CompleteDark verification may recover only from its exact retained
 schema-3/4 ParserDark baseline. That Verify-only path requires both independently reviewed deltas,
 revalidates the baseline's stored release-to-operator delta, binds exact historical and current
@@ -448,8 +450,12 @@ function Assert-CallerAndSource {
     throw "The operation requires clean main exactly matching origin/main."
   }
   $release = if ([string]::IsNullOrEmpty($ReleaseSourceSha)) { $head } else { $ReleaseSourceSha }
-  if ($Action -notin @("Verify", "Bootstrap") -and $release -cne $head) {
-    throw "Plan and Apply require the exact current release; an ancestor artifact release is accepted only for Verify."
+  $ancestorProcessorContinuation = (
+    $Action -in @("Plan", "Apply") -and $Stage -ceq "CompleteDark" -and
+    $RefreshStep -ceq "Processor" -and $release -cne $head
+  )
+  if ($Action -notin @("Verify", "Bootstrap") -and $release -cne $head -and -not $ancestorProcessorContinuation) {
+    throw "Plan and Apply require the exact current release except for an authenticated processor continuation after parser apply."
   }
   if ($Stage -ceq "KmsPrerequisite" -and $release -cne $head) { throw "KMS prerequisite operations require the exact current source." }
   $deltaSha = if ($Action -ceq "Bootstrap") {
@@ -1028,12 +1034,13 @@ function Read-ParserRefreshReceipt {
     "ParserPlanSha256", "ParserQualifiedArn", "Region", "ReleaseSourceSha", "SchemaVersion",
     "StateLineage", "TargetReceiptSha256"
   ) | Sort-Object
+  $expectedReceiptOperator = if ($releaseCommit -ceq $operatorCommit) { $operatorCommit } else { $releaseCommit }
   if ((@($evidence.PSObject.Properties | ForEach-Object Name | Sort-Object) -join "|") -cne ($expectedKeys -join "|") -or
     [string]$evidence.SchemaVersion -cne "1" -or
     [string]$evidence.Kind -cne "development-document-complete-dark-parser-refresh" -or
     [string]$evidence.Environment -cne "development" -or [string]$evidence.AccountId -cne $ExpectedAccountId -or
     [string]$evidence.Region -cne $Region -or [string]$evidence.ReleaseSourceSha -cne $releaseCommit -or
-    [string]$evidence.OperatorSourceSha -cne $operatorCommit -or
+    [string]$evidence.OperatorSourceSha -cne $expectedReceiptOperator -or
     [string]$evidence.BaselineSha256 -cne $ReviewedBaselineSha256 -or
     [string]$evidence.BaselineMetadataSha256 -cne $ReviewedBaselineMetadataSha256 -or
     [string]$evidence.TargetReceiptSha256 -cne $ReviewedReceiptSha256 -or

@@ -292,6 +292,7 @@ function Get-DevelopmentDocumentStageExpectedActions {
       "module.platform.aws_iam_role_policy.document_processor[0]" = "update"
       "module.platform.aws_lambda_function.document_processor[0]" = "update"
       "module.platform.aws_lambda_alias.document_processor[0]" = "update"
+      "module.platform.aws_vpc_endpoint.lambda[0]" = "update"
     }
   }
   $result = @{}
@@ -598,12 +599,14 @@ function Assert-ExactDocumentProcessorRefresh {
   $function = @($Changes | Where-Object address -ceq "module.platform.aws_lambda_function.document_processor[0]")
   $alias = @($Changes | Where-Object address -ceq "module.platform.aws_lambda_alias.document_processor[0]")
   $policy = @($Changes | Where-Object address -ceq "module.platform.aws_iam_role_policy.document_processor[0]")
-  if ($Changes.Count -ne 3 -or $function.Count -ne 1 -or $alias.Count -ne 1 -or $policy.Count -ne 1 -or
+  $endpoint = @($Changes | Where-Object address -ceq "module.platform.aws_vpc_endpoint.lambda[0]")
+  if ($Changes.Count -ne 4 -or $function.Count -ne 1 -or $alias.Count -ne 1 -or $policy.Count -ne 1 -or
+    $endpoint.Count -ne 1 -or
     [string]$function[0].type -cne "aws_lambda_function" -or [string]$alias[0].type -cne "aws_lambda_alias" -or
-    [string]$policy[0].type -cne "aws_iam_role_policy") {
-    throw "The processor refresh lacks its exact policy, function, and alias updates."
+    [string]$policy[0].type -cne "aws_iam_role_policy" -or [string]$endpoint[0].type -cne "aws_vpc_endpoint") {
+    throw "The processor refresh lacks its exact IAM policy, function, alias, and Lambda endpoint-policy updates."
   }
-  foreach ($change in @($function[0], $alias[0], $policy[0])) {
+  foreach ($change in @($function[0], $alias[0], $policy[0], $endpoint[0])) {
     if ([string]$change.mode -cne "managed" -or (@($change.change.actions) -join ",") -cne "update" -or
       (ConvertTo-OptionalTerraformMetadataCanonicalValue $change.change "before_sensitive" -SortArrays) -cne
       (ConvertTo-OptionalTerraformMetadataCanonicalValue $change.change "after_sensitive" -SortArrays)) {
@@ -611,7 +614,7 @@ function Assert-ExactDocumentProcessorRefresh {
     }
     Assert-NoTerraformReplacementPaths $change.change
   }
-  $function = $function[0]; $alias = $alias[0]; $policy = $policy[0]
+  $function = $function[0]; $alias = $alias[0]; $policy = $policy[0]; $endpoint = $endpoint[0]
   if ([string]$function.change.before.s3_key -cne $oldKey -or
     [string]$function.change.before.s3_object_version -cne $oldVersion -or
     [string]$function.change.before.source_code_hash -cne $oldObjectSha -or
@@ -661,8 +664,8 @@ function Assert-ExactDocumentProcessorRefresh {
   }
   $beforePolicy = ConvertFrom-IamPolicyValue $policy.change.before.policy
   $afterPolicy = ConvertFrom-IamPolicyValue $policy.change.after.policy
-  $beforeStatement = @($beforePolicy.Statement | Where-Object Sid -ceq "CoordinatorInvokesExactParserVersionOnly")
-  $afterStatement = @($afterPolicy.Statement | Where-Object Sid -ceq "CoordinatorInvokesExactParserVersionOnly")
+  $beforeStatement = @($beforePolicy.Statement | Where-Object Sid -ceq "InvokeExactParserVersion")
+  $afterStatement = @($afterPolicy.Statement | Where-Object Sid -ceq "InvokeExactParserVersion")
   if ($beforeStatement.Count -ne 1 -or $afterStatement.Count -ne 1 -or
     [string]$beforeStatement[0].Resource -cne $oldPin -or [string]$afterStatement[0].Resource -cne $ParserQualifiedArn) {
     throw "The processor policy refresh does not rebind the exact parser version."
@@ -679,6 +682,22 @@ function Assert-ExactDocumentProcessorRefresh {
       (ConvertTo-DeploymentCanonicalValue $afterPolicyRecord -SortArrays) -or
     (ConvertTo-OptionalTerraformMetadataCanonicalValue $policy.change "after_unknown") -cne "{}") {
     throw "The processor policy refresh changes a non-policy field or contains unknown values."
+  }
+  Assert-OnlyPolicyAttributeChanged $endpoint.change
+  $beforeEndpointPolicy = ConvertFrom-IamPolicyValue $endpoint.change.before.policy
+  $afterEndpointPolicy = ConvertFrom-IamPolicyValue $endpoint.change.after.policy
+  $beforeEndpointStatement = @($beforeEndpointPolicy.Statement | Where-Object Sid -ceq "CoordinatorInvokesExactParserVersionOnly")
+  $afterEndpointStatement = @($afterEndpointPolicy.Statement | Where-Object Sid -ceq "CoordinatorInvokesExactParserVersionOnly")
+  if ($beforeEndpointStatement.Count -ne 1 -or $afterEndpointStatement.Count -ne 1 -or
+    [string]$beforeEndpointStatement[0].Resource -cne $oldPin -or
+    [string]$afterEndpointStatement[0].Resource -cne $ParserQualifiedArn) {
+    throw "The Lambda endpoint policy refresh does not rebind the exact parser version."
+  }
+  $beforeEndpointStatement[0].Resource = "__PIN__"; $afterEndpointStatement[0].Resource = "__PIN__"
+  if ((ConvertTo-DeploymentCanonicalValue $beforeEndpointPolicy -SortArrays) -cne
+      (ConvertTo-DeploymentCanonicalValue $afterEndpointPolicy -SortArrays) -or
+    (ConvertTo-OptionalTerraformMetadataCanonicalValue $endpoint.change "after_unknown") -cne "{}") {
+    throw "The Lambda endpoint policy refresh changes more than the exact parser-version resource."
   }
 }
 
@@ -2055,7 +2074,10 @@ function Assert-DevelopmentDocumentDarkPlan {
     @()
   }
   elseif ($CompleteDarkProcessorRefresh) {
-    @("module.platform.aws_iam_role_policy.document_processor[0]")
+    @(
+      "module.platform.aws_iam_role_policy.document_processor[0]",
+      "module.platform.aws_vpc_endpoint.lambda[0]"
+    )
   }
   else {
     @($policyUpdates.Keys | Where-Object { $policyUpdates[$_] -ceq "update" })

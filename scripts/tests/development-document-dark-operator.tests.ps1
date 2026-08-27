@@ -60,7 +60,8 @@ foreach ($required in @(
     'Already-applied gateway recovery is accepted only for CompleteDark Verify.',
     '-Retain:($Stage -ceq "CompleteDark")',
     '$result.BaselineMetadataSha256 = $postApplyBaseline.MetadataSha256',
-    'Plan and Apply require the exact current release', 'SchemaVersion = "2"', '$planMetadata.Commit = $operatorCommit'
+    'authenticated processor continuation after parser apply', '$ancestorProcessorContinuation',
+    '$expectedReceiptOperator', 'SchemaVersion = "2"', '$planMetadata.Commit = $operatorCommit'
   )) {
   if (-not $source.Contains($required)) { throw "The staged operator is missing '$required'." }
 }

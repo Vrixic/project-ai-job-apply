@@ -48,15 +48,16 @@ if ($completeParserRefresh.Count -ne 2 -or
   $completeParserRefresh["module.platform.aws_lambda_alias.document_parser[0]"] -cne "update") {
   throw "CompleteDark parser refresh does not retain its exact two-update boundary."
 }
-if ($completeProcessorRefresh.Count -ne 3 -or
+if ($completeProcessorRefresh.Count -ne 4 -or
   $completeProcessorRefresh["module.platform.aws_iam_role_policy.document_processor[0]"] -cne "update" -or
   $completeProcessorRefresh["module.platform.aws_lambda_function.document_processor[0]"] -cne "update" -or
-  $completeProcessorRefresh["module.platform.aws_lambda_alias.document_processor[0]"] -cne "update") {
-  throw "CompleteDark processor refresh does not retain its exact three-update boundary."
+  $completeProcessorRefresh["module.platform.aws_lambda_alias.document_processor[0]"] -cne "update" -or
+  $completeProcessorRefresh["module.platform.aws_vpc_endpoint.lambda[0]"] -cne "update") {
+  throw "CompleteDark processor refresh does not retain its exact four-update boundary."
 }
 $guardSource = Get-Content -LiteralPath (Join-Path $repositoryRoot "scripts\lib\development-document-dark-guards.ps1") -Raw
 if ($guardSource -notmatch '\$CompleteDarkParserRefresh\)\s*\{\s*@\(\)\s*\}' -or
-  $guardSource -notmatch '\$CompleteDarkProcessorRefresh\)\s*\{\s*@\("module\.platform\.aws_iam_role_policy\.document_processor\[0\]"\)\s*\}') {
+  $guardSource -notmatch '\$CompleteDarkProcessorRefresh\)\s*\{\s*@\(\s*"module\.platform\.aws_iam_role_policy\.document_processor\[0\]",\s*"module\.platform\.aws_vpc_endpoint\.lambda\[0\]"\s*\)\s*\}') {
   throw "CompleteDark refresh policy validation is not limited to the exact policy-bearing resources."
 }
 foreach ($invalidRefresh in @(
@@ -636,7 +637,7 @@ $processorAliasRefresh = [pscustomobject]@{
     after_unknown = [pscustomobject]@{ function_version = $true; routing_config = @() } }
 }
 $processorPolicyBefore = [pscustomobject]@{ Version = "2012-10-17"; Statement = @([pscustomobject]@{
-      Sid = "CoordinatorInvokesExactParserVersionOnly"; Effect = "Allow"; Action = "lambda:InvokeFunction"
+      Sid = "InvokeExactParserVersion"; Effect = "Allow"; Action = "lambda:InvokeFunction"
       Resource = $qualified
     }) }
 $processorPolicyAfter = $processorPolicyBefore | ConvertTo-Json -Depth 20 | ConvertFrom-Json
@@ -648,10 +649,24 @@ $processorPolicyRefresh = [pscustomobject]@{
     after = [pscustomobject]@{ policy = ($processorPolicyAfter | ConvertTo-Json -Compress -Depth 20) }
     before_sensitive = [pscustomobject]@{}; after_sensitive = [pscustomobject]@{}; after_unknown = [pscustomobject]@{} }
 }
-$processorRefreshChanges = @($processorFunctionRefresh, $processorAliasRefresh, $processorPolicyRefresh)
+$endpointPolicyBefore = [pscustomobject]@{ Version = "2012-10-17"; Statement = @([pscustomobject]@{
+      Sid = "CoordinatorInvokesExactParserVersionOnly"; Effect = "Allow"; Action = "lambda:InvokeFunction"
+      Principal = [pscustomobject]@{ AWS = "arn:aws:iam::${account}:role/ai-job-apply-development-document-processor" }
+      Resource = $qualified
+    }) }
+$endpointPolicyAfter = $endpointPolicyBefore | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+$endpointPolicyAfter.Statement[0].Resource = $newParserQualifiedArn
+$endpointPolicyRefresh = [pscustomobject]@{
+  address = "module.platform.aws_vpc_endpoint.lambda[0]"; mode = "managed"; type = "aws_vpc_endpoint"
+  change = [pscustomobject]@{ actions = @("update")
+    before = [pscustomobject]@{ policy = ($endpointPolicyBefore | ConvertTo-Json -Compress -Depth 20); id = "vpce-lambda" }
+    after = [pscustomobject]@{ policy = ($endpointPolicyAfter | ConvertTo-Json -Compress -Depth 20); id = "vpce-lambda" }
+    before_sensitive = [pscustomobject]@{}; after_sensitive = [pscustomobject]@{}; after_unknown = [pscustomobject]@{} }
+}
+$processorRefreshChanges = @($processorFunctionRefresh, $processorAliasRefresh, $processorPolicyRefresh, $endpointPolicyRefresh)
 Assert-ExactDocumentProcessorRefresh -Changes $processorRefreshChanges -BaselineVariables $completeVariables `
   -Receipt $currentReceipt -ParserQualifiedArn $newParserQualifiedArn -AccountId $account
-foreach ($pinMutation in @("environment", "policy", "extra")) {
+foreach ($pinMutation in @("environment", "policy", "endpoint-policy", "endpoint-extra", "extra")) {
   $badProcessorRefresh = $processorRefreshChanges | ConvertTo-Json -Depth 100 | ConvertFrom-Json
   switch ($pinMutation) {
     "environment" { $badProcessorRefresh[0].change.after.environment[0].variables.DOCUMENT_PARSER_FUNCTION_ARN = $qualified }
@@ -660,6 +675,12 @@ foreach ($pinMutation in @("environment", "policy", "extra")) {
       $badPolicy.Statement[0].Resource = $qualified
       $badProcessorRefresh[2].change.after.policy = $badPolicy | ConvertTo-Json -Compress -Depth 20
     }
+    "endpoint-policy" {
+      $badPolicy = $badProcessorRefresh[3].change.after.policy | ConvertFrom-Json
+      $badPolicy.Statement[0].Resource = $qualified
+      $badProcessorRefresh[3].change.after.policy = $badPolicy | ConvertTo-Json -Compress -Depth 20
+    }
+    "endpoint-extra" { $badProcessorRefresh[3].change.after.id = "vpce-other" }
     "extra" { $badProcessorRefresh += $parserAliasTransition }
   }
   $rejected = $false
