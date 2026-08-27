@@ -32,6 +32,21 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## D1 — Useful web product and canonical job catalog
 
+- Product governance decisions (2026-08-27): the product owner accepted ADR-023 for generated-
+  synthetic development, including mapping/reconciler-first activation and the documented DNS
+  residual only within that boundary; real documents remain blocked. Linear/Ashby
+  `ashby-linear-v1` source quality is accepted while continuing cadence and publication remain
+  disabled. One consolidated decision record now selects D1P-01 through D1P-08 plus exact
+  representative development concurrency, duration, latency, error, queue, alarm-count, retention,
+  alert, recipient-count, and internal service targets with their rationale. The exact recipient
+  digest and execution evidence are not invented. Candidate rights, public publication,
+  accessibility, final security/privacy/product acceptance, and D1-010B are explicitly sequenced
+  last. Candidate managed OIDC is the current provider-dashboard gate and has an exact operator
+  checklist. Phase 1 remains in progress.
+  [ADR-023](../../adr/023-isolate-untrusted-document-parsing.md),
+  [single governance record](../foundation/d1-reporting-moderation-policy-review-disposition.md),
+  [Phase 1 tasks](phase-1-web-and-job-catalog.md)
+
 - Vercel identity-dark hosted acceptance (2026-08-27): exact clean presentation source
   `4ec8f810c9ae69ed262c99be7ffeb876fb1eff65` is deployed to the separate candidate and admin
   projects under the approved non-Zach owner. Both immutable production deployments are `READY` in

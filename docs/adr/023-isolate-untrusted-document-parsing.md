@@ -1,7 +1,8 @@
 # ADR-023: Isolate Untrusted Document Parsing from Candidate Data
 
-Status: Proposed
+Status: Accepted
 Date: 2026-08-12
+Accepted: 2026-08-27
 Extends: [ADR-022](022-quarantine-and-scan-candidate-document-uploads.md)
 
 ## Context
@@ -61,6 +62,16 @@ provisioned concurrency or always-on compute.
 - PDF image-only/OCR input and AI extraction are intentionally unsupported in this slice.
 - Source/normalized deletion, portable export, DNS treatment, and accountable parser review remain
   release gates before real-candidate use.
+
+## Acceptance scope
+
+The repository product owner accepted this architecture on 2026-08-27 and accepted the documented
+AWS-managed DNS covert-channel risk only for generated-synthetic development processing. That
+residual risk is not accepted for real documents. The accepted activation authority is limited to
+the mapping/reconciler-first generated-synthetic sequence; the GuardDuty rule remains independently
+disabled until that sequence passes. Real resumes remain blocked by candidate-rights execution,
+deletion/export/restore reconciliation, an accepted DNS-control treatment, and final attributable
+security/privacy/product review.
 
 ## Alternatives
 

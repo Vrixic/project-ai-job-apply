@@ -1,382 +1,278 @@
-# D1 Job Reporting, Moderation, and Source-Control Policy Disposition Worksheet
+# D1 Moderation and Representative-Assurance Decision Record
 
-- Worksheet status: Ready for accountable input; review has not started
-- Decision state: Every D1P row is `Not started`
-- Authorization state: Every privileged/automatic/activation flag is `false`
-- Prepared: 2026-08-16
-- Scope: D1P-01 through D1P-08
-- Accountable roles: Product owner; security/privacy reviewer; legal/privacy counsel;
-  operations/trust owner; source engineering; platform/security engineering;
-  architecture/platform engineering; named individuals unassigned
-- Review brief: [D1 policy review brief](d1-reporting-moderation-policy-review-brief.md)
+- Decision version: `d1-governance-v1`
+- Product disposition: Accepted
+- Accepted by: Repository product owner through delegated recommendation authority
+- Decision date: 2026-08-27
+- Scope: D1P-01 through D1P-08 and D1 representative development-assurance thresholds
+- Revalidation: Required for any material identity, scope, lifecycle, retention, alert, source,
+  workload-profile, or environment change
 
-This worksheet is an empty attributable decision record, not a policy, approval, implementation
-specification, administrative grant, or source activation. Preserve `Not started` and `false` until
-the named accountable people actually review the frozen package and complete the relevant cells.
+This is the single decision-and-rationale document for the Phase 1 moderation and representative-
+assurance choices delegated by the product owner on 2026-08-27. It supersedes the empty worksheet
+previously stored at this path. The product owner directed that the repository recommendations be
+their decisions and authorized engineering to make the remaining choices, provided the choices and
+their reasons remain together in one document.
 
-## Allowed decision state and closure rule
+Product acceptance here selects policy and development-assurance inputs. It does not itself create
+an Auth0 client, grant a scope, identify or confirm an alert recipient, execute a hosted test,
+approve real candidate data, publish public routes, establish a production SLO/RTO/RPO, or replace
+the final independent security/privacy/accessibility review.
 
-Use exactly one state for each D1P row:
+## Decision principles
 
-| State | Meaning | Gate effect |
+1. Candidate reports are evidence for a human; they never automatically change job or source state.
+2. Administrative authority is separate, minimal, short-lived, MFA-protected, and fully auditable.
+3. A source can be paused exactly, but it cannot be resumed. Reactivation is a new ADR-025 activation.
+4. Moderators see the smallest aggregate view needed to decide; reporter identity is not projected.
+5. Candidate-linked data expires sooner than integrity and privileged-action proof.
+6. D1 provider-catalog authority never grants D2 public-UGC authority.
+7. Development assurance fails on any unexpected application failure, 5xx, Lambda error/throttle,
+   privacy-log match, queue backlog, DLQ message, or Terraform drift.
+
+## D1P moderation dispositions
+
+### D1P-01 — Administrative identity and authority
+
+Accepted decision:
+
+- Use one dedicated Auth0 Regular Web Application for moderation. It must not be the candidate
+  client and must use the existing exact API audience `ai-job-apply-api`.
+- Request and grant exactly `openid profile jobs:moderate`. Candidate, profile, document, rights,
+  billing, and offline/refresh scopes are prohibited.
+- Require an MFA-authenticated `amr`, reauthentication after 15 minutes, a one-hour absolute
+  server-held session, and no token storage in browser JavaScript.
+- Use one MFA-protected generated-synthetic moderator for development acceptance. Before real
+  reports, bind a named operations/trust owner, verify access before each activation and at least
+  quarterly, and revoke immediately on role removal.
+- Phase 1 has no break-glass path. The same accountable operator may open and resolve a case because
+  decisions are version-fenced and append-only audited; a later production risk review may require
+  two-person control for source pause.
+- Every privileged action is constrained to the exact environment, job, case, and, where relevant,
+  `sourceId + adapterVersion + adapterConfigSha256` tuple.
+
+Rationale: one exact scope and short server-held sessions minimize privilege while preserving the
+already implemented manual workflow. A second-person mechanism would add an unimplemented control
+without improving the current generated-synthetic, prelaunch boundary.
+
+### D1P-02 — Candidate/admin separation and minimum view
+
+Accepted decision:
+
+- Keep candidate and admin Vercel projects, Auth0 clients, sessions, and BFF route families separate.
+- Deny candidate tokens at moderation routes and deny moderation-only tokens at candidate-owned
+  routes unless the token separately carries that route's exact candidate scope.
+- The ordinary moderation view contains only case state/version, job/source control identifiers,
+  fixed reason-code counts, lifecycle/control state, timestamps, and opaque operator audit IDs.
+- Do not project reporter identity, candidate profile, documents, preferences, saved jobs, rights
+  records, email, support history, free text, provider payloads, or cross-job candidate linkage.
+- Do not place moderation values in alerts, tickets, screenshots, analytics, or exports. Services
+  expose allowlisted read models; the admin surface receives no direct-table access.
+
+Rationale: aggregate reason codes are sufficient for the supported actions. Additional candidate
+data would create privacy and authorization risk without improving a source-catalog decision.
+
+### D1P-03 — Reports, case opening, review, and suppression
+
+Accepted decision:
+
+- Automatic case-opening and suppression thresholds are disabled in Phase 1.
+- Reports remain immutable evidence. A human explicitly opens a case with one fixed reason code.
+- A report, count, alert, or suspected-scam reason never automatically blocks a job or pauses a
+  source. No job-unblock operation is authorized in Phase 1.
+- `no_action` requires the reviewer to find insufficient corroborating catalog/provider evidence.
+  `block_job` requires reviewed evidence that the exact job is closed, absent, materially inaccurate,
+  fraudulent, duplicated, or otherwise violates the catalog boundary. `pause_source` additionally
+  requires evidence that the exact configured source cannot currently preserve truthful ingestion.
+- During a bounded development acceptance window, an opened case should be reviewed within one
+  business day. This is an internal operating target, not a public promise or production SLA.
+
+Rationale: report-volume thresholds are easy to brigade and the implemented aggregate is not an
+identity-quality signal. Explicit human review is the simpler and safer D1 rule.
+
+### D1P-04 — Exact source pause and reactivation
+
+Accepted decision:
+
+- A moderator may pause only the exact reviewed `sourceId + adapterVersion +
+  adapterConfigSha256` tuple after evidence of source-integrity failure.
+- Pause denies scheduled, resumed, recovered, claimed, and newly dispatched work for that tuple and
+  creates append-only audit evidence.
+- No resume endpoint, reverse decision, or break-glass resume is authorized.
+- A paused source can return only through a new ADR-025 activation record with current source truth,
+  configuration digest, release evidence, reconciliation evidence, and product/source-engineering
+  approval.
+
+Rationale: a new activation is clearer and safer than mutating historical pause evidence, and it
+prevents stale work or an outdated configuration from inheriting authority.
+
+### D1P-05 — Alerts, recipient, acknowledgement, and escalation
+
+Accepted decision:
+
+- Alert payloads contain only fixed event/reason codes, counts, state/version, environment, and
+  opaque control identifiers. Candidate values, reporter identifiers, emails, URLs, descriptions,
+  provider payloads, tokens, and secrets are prohibited.
+- Alert-only thresholds are: any `suspected_scam` report; three reports for one canonical job in a
+  rolling 24-hour window; any job block; any exact-source pause; any denied/failed privileged action;
+  any pause-gate read failure or attempted execution of paused work; ten open cases; or an oldest
+  open case older than one business day. Alerts never change lifecycle or source state.
+- Bind exactly one confirmed operations/trust recipient for development. Store only the canonical
+  recipient-set SHA-256 in acceptance evidence, never the recipient value.
+- During an active acceptance window, acknowledge a security/source-pause alert within four business
+  hours and all other moderation alerts within one business day. Escalate an unacknowledged alert to
+  the product owner at the next boundary. No 24/7 coverage is claimed.
+
+Rationale: the thresholds flag concentrated or safety-relevant evidence without granting automated
+authority. One confirmed recipient is sufficient for prelaunch development and makes delivery
+verification unambiguous.
+
+### D1P-06 — Retention, deletion, export, and privileged audit
+
+Accepted decision:
+
+| Record | Selected active retention | End-of-retention treatment |
 |---|---|---|
-| `Not started` | No accountable review has begun or no attributable conclusion exists. | All related authorizations remain `false`; strict source-only/default-off behavior continues. |
-| `In review` | Named reviewers are evaluating one frozen candidate. | No authorization changes. |
-| `Changes required` | Reviewers require implementation, evidence, or a narrower proposal. | Row remains open; all related authorizations remain `false`. |
-| `Approved` | Every required role approved the exact recorded decision and all release-blocking conditions are closed. | Governance may separately authorize implementation/release; approval does not deploy or activate anything. |
-| `Rejected` | Reviewers declined the requested behavior. | The behavior remains absent/disabled until a new version is reviewed. |
+| Candidate report and reporter link | 90 days from receipt or 30 days after its linked case closes, whichever is later | Irreversibly remove the reporter link and report-level request hash; retain only non-identifying aggregate/integrity proof |
+| Report idempotency material | Same bound as the candidate report, never longer than 90 days when no case exists | Delete |
+| Moderation case and decision event | 365 days after case closure | Delete case detail; retain only minimal non-PII integrity/tombstone proof if still needed for catalog correctness |
+| Job/source tombstone and control evidence | 365 days after the last relevant action | Delete unless the current catalog still requires the tombstone to prevent resurrection |
+| Privileged access/action audit | 365 days | Delete or retain only non-PII aggregate security proof |
+| Alert/incident delivery metadata | 30 days | Delete; retain the accepted aggregate evidence record |
+| Export artifact | 3,600 seconds with a 300-second exact-version download grant in generated-synthetic development | Exact-version deletion; final real-user policy remains part of the deferred rights review |
 
-An approval is invalid without exact scope, reviewer names/roles, date, immutable package identity,
-conditions, evidence, and revalidation. Product-owner acceptance cannot override legal prohibition
-or independent security/privacy conditions.
+- An authenticated candidate export includes the candidate's still-linked report reason/status and
+  relevant audit metadata, but never operator identity, other reporters, provider payloads, tokens,
+  or secrets.
+- Confirmed candidate deletion immediately denies active access and removes the reporter link. Any
+  allowed completion proof must be non-PII. Restores must replay the deletion ledger before service.
+- Inaccessible backup copies age out within the selected 35-day window and cannot restore an account.
+- Phase 1 has no legal-hold mechanism. A requirement for one blocks real-data activation until a
+  separately reviewed implementation exists.
 
-## Immutable review candidate
+Rationale: 90 days supports duplicate/abuse investigation without indefinitely retaining a link to
+a reporter; 365 days preserves bounded privileged-integrity evidence; short alert and export windows
+reduce unnecessary copies. The 35-day backup rule stays consistent with the selected rights policy.
 
-| Field | Value |
-|---|---|
-| Repository commit reviewed | Pending |
-| Commit parent/tree | Pending |
-| Policy version | Pending |
-| Administrative identity configuration revision | Pending; none implemented |
-| API/OpenAPI and generated-contract revision | Pending; no admin route exists |
-| Database/migration revision | Pending |
-| Ingestion runtime and exact source-control revision | Pending |
-| Deployed environment/artifact identity | Pending; D1-007 not deployed |
-| Review start/completion | Not started |
+### D1P-07 — Correction, takedown, and appeal
 
-### Required packet artifacts
+Accepted decision:
 
-Mark each `Reviewed`, `Reviewed with finding`, or `Not reviewed`.
+- Candidates use the authenticated fixed-reason report flow. A verified employer/provider
+  representative uses the separately controlled operations/trust channel; the exact address is not
+  stored in source or evidence.
+- Verify an employer/provider requester through a company-domain identity plus corroboration against
+  the public source record. Do not accept possession of a URL as identity proof.
+- Acknowledge ordinary requests within one business day and decide within five business days.
+  Acknowledge a credible urgent safety/scam request within four business hours during active
+  operations. These are internal prelaunch targets, not public promises.
+- Pending requests do not automatically suppress content. The first reviewer uses the fixed D1
+  decision codes and evidence rules. One appeal is allowed within 14 days with new or corrected
+  evidence and must be handled by a different reviewer.
+- A correction or reversal that requires restoring a blocked job or paused source is not performed
+  in place: job truth is re-observed through the canonical lifecycle, and source return requires a
+  new ADR-025 activation record.
 
-| Artifact | Reviewer state/finding IDs |
-|---|---|
-| [Policy review brief](d1-reporting-moderation-policy-review-brief.md) | Not reviewed |
-| [Product and system architecture](../../PRODUCT_AND_SYSTEM_ARCHITECTURE.md) | Not reviewed |
-| [Phase 1 delivery record](../delivery/phase-1-web-and-job-catalog.md) | Not reviewed |
-| [Jobs boundary](../../../backend/services/jobs/README.md) | Not reviewed |
-| [Reporting domain](../../../backend/services/jobs/src/reporting.ts) | Not reviewed |
-| [Reporting persistence](../../../backend/services/jobs/src/persistence/reporting.ts) | Not reviewed |
-| [Reporting migration](../../../backend/services/jobs/migrations/0008_job_reporting_and_moderation.sql) | Not reviewed |
-| [Ingestion worker boundary](../../../backend/workers/ingestion/README.md) | Not reviewed |
-| [Trust boundary](../../../backend/services/trust/README.md) | Not reviewed |
-| [Admin boundary](../../../frontend/admin/README.md) | Not reviewed |
-| [Conservative technical baseline](d1-moderation-implementation-baseline.md) | Not reviewed |
-| [API security/exposure baseline](../../security/api-security-and-final-review.md) | Not reviewed |
-| [D1 report data flow](../../security/data-flow-and-classification.md#d1-candidate-job-report-and-moderation-source-boundary) | Not reviewed |
-| [D1-007 threat delta](../../security/threat-model.md#d1-007-reportingmoderation-source-delta) | Not reviewed |
-| [Retention and deletion specification](../../security/retention-and-deletion.md) | Not reviewed |
-| [Separate source/onboarding packet](d1-source-and-onboarding-review-brief.md) | Not reviewed |
-| [UGC lifecycle ADR](../../adr/005-ugc-lifecycle.md) | Not reviewed |
+Rationale: authenticated, evidence-bound intake avoids an arbitrary support surface while giving
+affected parties a review path. A second-review appeal limits conflicts without creating an
+unbounded case-management product.
 
-## Reviewer identity and accountability
+### D1P-08 — D1 provider catalog versus D2 public UGC
 
-| Role | Named reviewer/organization | Authority and scope | Date | Attributable record |
-|---|---|---|---|---|
-| Product owner | Unassigned | Pending | Not started | Pending |
-| Security/privacy reviewer | Unassigned | Pending | Not started | Pending |
-| Legal/privacy counsel | Unassigned | Pending | Not started | Pending |
-| Operations/trust owner | Unassigned | Pending | Not started | Pending |
-| Source engineering owner | Unassigned | Technical evidence only; cannot grant provider/legal authority | Not started | Pending |
-| Platform/security engineering owner | Unassigned | Alert, authorization, and implementation evidence; cannot grant product/legal authority | Not started | Pending |
-| Architecture/platform engineering owner | Unassigned | D1/D2 boundary and implementation evidence; cannot grant product/legal authority | Not started | Pending |
+Accepted decision:
 
-## Global authorization flags
+- D1 covers candidate reports about provider-fed canonical jobs and manual controls for those jobs
+  and exact sources only.
+- Public contribution intake, contributor identity/reputation/reward/sanction, UGC licensing,
+  extension collection, and UGC takedown/appeal remain D2-owned and unstarted.
+- D1 scopes, clients, queues, read models, retention rules, audit, and decisions grant no D2
+  authority. A future shared shell still requires separate D2 contracts and authorization.
 
-These flags are authoritative defaults for this worksheet. Set a value to `true` only after the
-linked approved row and separately governed implementation/release evidence exist.
+Rationale: provider truth and public contribution have different authority, consent, abuse, and
+retention boundaries and must not be conflated.
 
-| Authorization | Current value | Required row/evidence before change |
-|---|---:|---|
-| Administrative audience/client may be created or configured | `false` | D1P-01 plus reviewed identity plan |
-| Administrative route/API/UI may be implemented | `false` | D1P-01 and D1P-02 |
-| Administrative route/API/UI may be deployed | `false` | D1P-01/D1P-02 approval plus security/deployment evidence |
-| Candidate report threshold may automatically create a review queue item or case | `false` | D1P-03 exact rule plus implemented/tested evidence; it may not change lifecycle |
-| Candidate report or threshold may automatically change job lifecycle | `false` | Prohibited by current packet boundary |
-| Candidate report or threshold may automatically pause a source | `false` | Prohibited by current packet boundary |
-| Alert may automatically change job or source state | `false` | Prohibited by current packet boundary |
-| Human operator may block a job through a privileged interface | `false` | D1P-01/D1P-03 plus implemented/tested manual boundary |
-| Human operator may pause one exact source/adapter/configuration | `false` | D1P-01/D1P-04 plus current source authority and tested manual boundary |
-| Any source-resume/reactivation operation may be designed | `false` | Explicit D1P-04 conclusion |
-| Any source-resume/reactivation operation may execute | `false` | D1P-04, exact ADR-025 activation record, implementation, deployment, and two-person evidence if required |
-| Individual reporter identity may be viewed by ordinary moderation | `false` | Explicit D1P-02 and D1P-06 necessity/authorization |
-| Real candidate reports may be processed | `false` | LR-D1-04 plus D1P-01 through D1P-07 and deployed acceptance |
-| Real provider source may be activated | `false` | Exact ADR-025 company activation record plus source-specific implementation/release evidence |
-| D1 policy may govern D2 public UGC or contributor reputation | `false` | Prohibited; D2-specific review required |
+## Representative development-assurance decision
 
-## D1P-01 — Administrative audience, identity, scopes, and predicates
+The following exact values are accepted for the existing fixed, generated-synthetic development
+profiles. They are release-acceptance ceilings, not forecasts, capacity claims, or production SLOs.
 
-- State: `Not started`
-- Approval flag: `false`
+```json
+{
+  "concurrency": { "read": 2, "savedJob": 1, "match": 1, "providerFailure": 1 },
+  "durationMs": {
+    "read": 30000,
+    "savedJob": 10000,
+    "match": 5000,
+    "providerFailure": 900000,
+    "recovery": 3600000,
+    "alertTransition": 600000
+  },
+  "latencyMs": {
+    "publicP95": 250,
+    "authenticatedP95": 350,
+    "apiAverage": 500,
+    "apiMaximum": 3000,
+    "lambdaMaximum": 5000
+  },
+  "errors": {
+    "maxApplicationFailures": 0,
+    "maxApi5xx": 0,
+    "maxLambdaErrors": 0,
+    "maxLambdaThrottles": 0,
+    "maxErrorLogMatches": 0,
+    "maxForbiddenLogMatches": 0
+  },
+  "queues": {
+    "maxOldestAgeSeconds": 0,
+    "maxVisible": 0,
+    "maxEventDlq": 0,
+    "maxDurableDlq": 0
+  },
+  "alerts": {
+    "expectedHealthyAlarmCount": 10,
+    "expectedConfirmedRecipientCount": 1,
+    "reviewedRecipientSetSha256": "SUPPLIED_BY_THE_ALERT_OPERATOR_AFTER_RECIPIENT_CONFIRMATION"
+  }
+}
+```
 
-| Decision field | Accountable value |
-|---|---|
-| Administrative issuer | Pending |
-| Exact audience | Pending |
-| Environment/account/tenant isolation | Pending |
-| Client/application type and secret boundary | Pending |
-| Token/session lifetime, MFA, step-up, reauthentication | Pending |
-| Human identity source and employment/offboarding lifecycle | Pending |
-| Workload identities, if any | Pending |
-| Role assignment, periodic access review, expiry, revocation | Pending |
-| Aggregate report-read scope | Pending |
-| Case read/open scopes | Pending |
-| Job-block decision scope | Pending |
-| Exact source-pause decision scope | Pending |
-| Resume request/approval scopes, if resume is permitted | Pending |
-| Reporter-link access scope | Pending |
-| Rights/export/deletion scopes | Pending |
-| Audit-read scope | Pending |
-| Job/source/environment/queue/case owner predicates | Pending |
-| Same-person open/resolve rule | Pending |
-| Two-person/source-control rule | Pending |
-| Ordinary privileged-action reason/expiry/audit/alert | Pending |
-| Break-glass reason, duration, approver, alert, and review | Pending |
-| Required denial and abuse tests | Pending |
-| Named decision makers/date/reference | Pending |
+Rationale:
 
-## D1P-02 — Candidate/admin separation and minimum view
+- Concurrency matches the fixed workload implementations: two-way read and single-flight mutation,
+  match, and provider-failure profiles.
+- The application ceilings preserve material headroom over the accepted observations (read 12.894
+  seconds, saved job 2.204 seconds, match 0.895 seconds; public/authenticated p95 78/111 ms) without
+  turning one bounded run into a capacity claim.
+- The 15-minute provider-failure ceiling covers the accepted bounded recovery fixture; the one-hour
+  database recovery ceiling covers the accepted 2,224-second current recovery and 3,281-second
+  earlier recovery measurements.
+- Zero error, privacy-log, backlog, DLQ, and drift tolerance is appropriate for an acceptance run
+  designed to clean up completely. Ten healthy alarms matches the fixed representative profile.
+- The recipient digest is intentionally not invented. The actual confirmed address remains outside
+  source; the alert operator calculates and verifies its digest immediately before execution.
 
-- State: `Not started`
-- Approval flag: `false`
+## Authorization and remaining execution gates
 
-| Decision field | Accountable value |
-|---|---|
-| Separate admin route family and exposure inventory | Pending |
-| Candidate-token denial and admin-token candidate-route behavior | Pending |
-| Default moderation list/detail allowlist | Pending |
-| Reporter identity visible to ordinary moderator | `false` |
-| Individual report access exception | None authorized |
-| Same-candidate cross-job linking | `false` |
-| Candidate-visible receipt/status/outcome | Pending |
-| Admin redaction for UI, export, screenshot, ticket, and alert | Pending |
-| Service-owned read models and direct-table denial | Pending |
-| Cross-role/object/property/overposting test matrix | Pending |
-| Named decision makers/date/reference | Pending |
+The product decisions above authorize engineering to configure and test the bounded generated-
+synthetic development paths. The following states remain false until their evidence exists:
 
-## D1P-03 — Report thresholds, review, and suppression
+- real candidate reports or documents;
+- public route, sitemap, or indexing activation;
+- production source cadence or source reactivation;
+- automatic job/source lifecycle changes;
+- D2 public UGC behavior; and
+- Phase 1 completion.
 
-- State: `Not started`
-- Approval flag: `false`
-- Automatic job/source lifecycle action: `false`
+Remaining execution gates are:
 
-Copy one row per proposed rule. Do not use `Approved` until all cells are exact.
+1. create/configure the distinct admin Auth0 client and exact `jobs:moderate` grant;
+2. enroll one disposable MFA-protected moderator and run hosted admin acceptance;
+3. confirm one operations/trust recipient, compute its private canonical-set digest, and manually
+   confirm one ALARM and one recovery delivery;
+4. bind the exact frozen release/artifacts and accepted thresholds in the ignored representative
+   run configuration; and
+5. run the representative assessor, then complete the separately deferred final human reviews.
 
-| Rule ID | Eligible reasons | Window | Total reports | Minimum distinct reporters | Job/source grouping | Corroborating signals | Output (`alert`, `queue`, or both) | Review priority/SLA | State |
-|---|---|---|---:|---:|---|---|---|---|---|
-| None | Pending | Pending | 0 | 0 | Pending | Pending | None | Pending | Not started |
-
-| Policy field | Accountable value |
-|---|---|
-| Single suspected-scam report treatment | Pending; no automatic action |
-| Deduplication and correlated/brigading controls | Pending |
-| Reporter-abuse review and false-positive sampling | Pending |
-| Evidence expiry/staleness | Pending |
-| Maximum queue age and escalation | Pending |
-| Manual evidence sufficiency for `no_action` | Pending |
-| Manual evidence sufficiency for `block_job` | Pending |
-| Job unblock/restore operation and authority | Not authorized; no operation exists |
-| Policy quality metrics and revalidation | Pending |
-| Named decision makers/date/reference | Pending |
-
-## D1P-04 — Source pause and any future resume
-
-- State: `Not started`
-- Pause approval flag: `false`
-- Resume design flag: `false`
-- Resume execution flag: `false`
-
-| Decision field | Accountable value |
-|---|---|
-| Approved pause signals and evidence | Pending |
-| Emergency pause requester/approver | Pending |
-| Pause exact target tuple | Pending; implementation currently uses `sourceId + adapterVersion + adapterConfigSha256` |
-| Pause acknowledgement/escalation | Pending |
-| Resume permitted at all | `false` until explicitly decided |
-| Resume model: reverse, superseding activation, or new activation only | Pending |
-| Resume requester and independent approver | Pending |
-| Exact source/provider/tenant/environment | Pending |
-| Exact adapter version and configuration SHA-256 | Pending |
-| Exact source/legal approval record and reviewed terms version | Pending |
-| Exact deployment artifact and egress configuration | Pending |
-| Changes that require new review instead of resume | Pending |
-| Cause-remediation and current-test evidence | Pending |
-| Queue/checkpoint/catalog reconciliation evidence | Pending |
-| Stale scheduled-work denial evidence | Pending |
-| Two-person control, delay, expiry, rollback, notification | Pending |
-| Append-only resume/activation audit event | Pending |
-| Cross-source/version/config/environment denial tests | Pending |
-| Named decision makers/date/reference | Pending |
-
-### Exact source authority dependency
-
-| Source | LR-D1 row | Current disposition | Resume/activation authorized |
-|---|---|---|---:|
-| Greenhouse | ADR-025 / former LR-D1-01 | Counsel gate removed; exact company record pending | `false` |
-| Lever | ADR-025 / former LR-D1-02 | Counsel gate removed; exact company record pending | `false` |
-| Ashby | ADR-025 / former LR-D1-03 | Counsel gate removed; exact company record pending | `false` |
-| Synthetic foundation | Not a production approval | Generated-synthetic/default-off only | `false` for production |
-
-## D1P-05 — Alerts and escalation
-
-- State: `Not started`
-- Approval flag: `false`
-- Automatic lifecycle action: `false`
-
-Copy one row per approved alert.
-
-| Alert ID | Privacy-safe metric | Window/threshold/missing-data rule | Severity | Primary recipient | Acknowledge/escalate | Runbook | Resolution evidence | State |
-|---|---|---|---|---|---|---|---|---|
-| None | Pending | Pending | Pending | Unassigned | Pending | Pending | Pending | Not started |
-
-Required categories to disposition:
-
-| Category | Threshold/owner/status |
-|---|---|
-| Unusual fixed-reason report rate | Pending; Not started |
-| Oldest unreviewed case and queue depth | Pending; Not started |
-| Job block and exact source pause notification | Pending; Not started |
-| Denied/failed/expired/break-glass admin action | Pending; Not started |
-| Pause-gate read failure or attempted paused execution | Pending; Not started |
-| Resume request/approval/execution/mismatch, if ever permitted | Pending; Not started |
-| D1 retention/deletion/export reconciliation failure | Pending; Not started |
-
-Alert payloads containing candidate values, reporter identifiers, URLs, descriptions, or provider
-payloads are authorized: `false`.
-
-| Decision record | Accountable value |
-|---|---|
-| Named decision makers/date/reference | Pending |
-
-## D1P-06 — Retention, deletion, export, and audit
-
-- State: `Not started`
-- Approval flag: `false`
-
-| Record/data | Classification/access | Retention trigger/duration | Deletion or irreversible pseudonymization | Candidate export treatment | Backup/restore reconciliation | Approval state |
-|---|---|---|---|---|---|---|
-| Candidate report and reporter link | Pending | Pending | Pending | Pending | Pending | Not started |
-| Idempotency/request hashes | Pending | Pending | Pending | Pending | Pending | Not started |
-| Aggregate report view | Pending | Pending | Pending | Pending | Pending | Not started |
-| Moderation case | Pending | Pending | Pending | Pending | Pending | Not started |
-| Append-only moderation event | Pending | Pending | Pending | Pending | Pending | Not started |
-| Job/source tombstone/control evidence | Pending | Pending | Pending | Pending | Pending | Not started |
-| Privileged access/action audit | Pending | Pending | Pending | Pending | Pending | Not started |
-| Alert/ticket/incident metadata | Pending | Pending | Pending | Pending | Pending | Not started |
-| Export artifact | Pending | Pending | Pending | Pending | Pending | Not started |
-| Deletion ledger/completion proof | Pending | Pending | Pending | Pending | Pending | Not started |
-
-| Required conclusion | Accountable value |
-|---|---|
-| Immutable-ledger versus candidate-deletion resolution | Pending; current source has no deletion path |
-| Lawful holds/exceptions and who may invoke them | Pending |
-| Reporter/operator access review | Pending |
-| Export format, fields, download window, authentication, audit | Pending |
-| Deleted-account active denial and backup aging | Pending |
-| Restore-time deletion-ledger replay | Pending |
-| Configuration drift detection and stop rule | Pending |
-| Named legal/product/security decision makers/date/reference | Pending |
-
-## D1P-07 — Correction, takedown, and appeal
-
-- State: `Not started`
-- Approval flag: `false`
-
-| Decision field | Accountable value |
-|---|---|
-| Eligible requester classes | Pending |
-| Intake channel and identity/evidence verification | Pending |
-| Urgent safety/scam handling | Pending; no automatic lifecycle action |
-| Acknowledgement and decision time | Pending |
-| Temporary display treatment while pending | Pending; no automatic suppression authorized |
-| First reviewer role and independence | Pending |
-| Decision reasons disclosed to requester/candidate | Pending |
-| Appeal eligibility, window, evidence, second reviewer | Pending |
-| Candidate report correction/withdrawal | Not authorized; no operation exists |
-| Job/source correction/reversal operation | Not authorized; no operation exists |
-| Search, cache, public-page, and downstream reconciliation | Pending |
-| Tombstone fields and retention | Pending |
-| Abuse/repeat-request controls | Pending |
-| Audit/access/alert requirements | Pending |
-| Named decision makers/date/reference | Pending |
-
-## D1P-08 — D1 provider catalog versus D2 public UGC
-
-- State: `Not started`
-- Approval flag: `false`
-
-| Boundary | D1 accountable disposition |
-|---|---|
-| Candidate report on a provider-fed/canonical job | Pending within D1P-01 through D1P-07 |
-| Provider-fed job/source moderation and exact pause | Pending within D1P-01 through D1P-07 |
-| Public contribution intake/consent | Excluded; D2 only |
-| Contributor identity/reputation/reward/sanction | Excluded; D2 only |
-| UGC license/representations/publication | Excluded; D2 only |
-| UGC takedown/appeal/repeat abuse | Excluded; D2 only |
-| Extension permission/browsing/store behavior | Excluded; D2 only |
-| Shared admin shell | Not authorized; if proposed, separate contracts/scopes/queues/views/policies/audit are required |
-| D1 rule reuse for D2 decisions | `false` |
-| Named decision makers/date/reference | Pending |
-
-## Findings and conditions
-
-Assign stable IDs such as `D1P-C01`. Do not mark a finding closed until its accountable reviewer
-inspects the linked evidence.
-
-| ID | D1P row | Effect | Required change/restriction | Owner | Closure evidence | State | Revalidation |
-|---|---|---|---|---|---|---|---|
-
-## Cross-review handoffs
-
-| Handoff | Destination | Owner | State |
-|---|---|---|---|
-| Source authority/terms/field/cadence change | Applicable LR-D1-01 through LR-D1-03 row | Legal/privacy counsel; source engineering | Not started |
-| Real candidate reports/identity/rights | LR-D1-04 | Legal/privacy counsel; security/privacy reviewer | Not started |
-| Public contribution or contributor behavior | D2 UGC/legal/privacy/security gate | Product owner; legal/privacy counsel | Not started |
-| New privileged exposure or trust-boundary change | Capability security review and final D6 exact-candidate assessment | Security/privacy owner | Not started |
-| New retention/deletion/export promise | Privacy assessment, retention spec, rights implementation | Product owner; legal/privacy counsel; security/privacy reviewer | Not started |
-
-## Final disposition summary
-
-| Field | Value |
-|---|---|
-| Overall result | Not started |
-| Approved D1P rows | None |
-| Open rows | D1P-01 through D1P-08 |
-| Open release-blocking findings | None recorded; review not started |
-| Administrative audience/scopes authorized | `false` |
-| Automatic lifecycle/source changes authorized | `false` |
-| Manual job block/source pause release authorized | `false` |
-| Source resume/reactivation authorized | `false` |
-| Real candidate reports authorized | `false` |
-| Real provider activation authorized | `false` |
-| D2 UGC behavior authorized by this packet | `false` |
-| Revalidation owner/date | Pending |
-
-## Sign-off
-
-| Role | Disposition/acknowledgement | Name/date/reference |
-|---|---|---|
-| Product owner | Not started | Pending |
-| Security/privacy reviewer | Not started | Pending |
-| Legal/privacy counsel | Not started | Pending |
-| Operations/trust owner | Not started | Pending |
-
-## Closure checklist
-
-- [ ] One exact repository/deployment candidate and complete artifact manifest were reviewed.
-- [ ] Every required accountable reviewer is named with scope and attributable record.
-- [ ] D1P-01 through D1P-08 each have an allowed state, exact decision, and rationale.
-- [ ] Every approved scope, threshold, predicate, duration, SLA, recipient, and revalidation rule is
-      explicit rather than inferred from current source.
-- [ ] Every finding has an owner, release effect, closure evidence, and revalidation rule.
-- [ ] Candidate/admin/service separation and complete negative authorization tests pass.
-- [ ] Reports, alerts, and thresholds cannot automatically change job/source lifecycle.
-- [ ] Any source control is exact to the approved source/adapter/configuration/environment and any
-      resume is separately authorized, implemented, audited, and independently tested.
-- [ ] Retention/deletion/export/audit and takedown/appeal behavior is implemented and verified
-      across primary, downstream, backup, restore, and support systems.
-- [ ] D1 and D2 policy, data, scopes, queues, and approval records remain separate.
-- [ ] Applicable LR-D1 source/real-candidate rows are independently approved.
-- [ ] Delivery governance separately records implementation, deployment, evidence, and status.
-
-Completing this worksheet does not itself implement, deploy, activate, or complete D1-007.
+Execution evidence may link this record but must not duplicate or fork these policy and threshold
+decisions. A material change updates this one document to a new decision version and requires new
+product acceptance.
