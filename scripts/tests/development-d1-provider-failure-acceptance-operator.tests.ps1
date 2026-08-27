@@ -100,6 +100,16 @@ $verifySource = $source.Substring($verifyOffset)
 if ($verifySource.Contains('Invoke-ExactDurableExecution') -or $verifySource -match 'aws\s+lambda\s+invoke') {
   throw "Verify can start a second durable execution."
 }
+$invokeDefinition = @($ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Invoke-ExactDurableExecution'
+    }, $true))[0].Extent.Text
+if ($invokeDefinition.Contains('ExecutedVersion') -or
+  -not $invokeDefinition.Contains('[int]$response.StatusCode -ne 202') -or
+  -not $invokeDefinition.Contains('[regex]::Escape($Boundary.DurableArn)') -or
+  -not $invokeDefinition.Contains('[regex]::Escape($ExecutionName)')) {
+  throw 'The async durable response must bind status, qualified version ARN, and execution name without requiring an absent ExecutedVersion field.'
+}
 $preDriftOffset = $source.IndexOf('Invoke-FreshZeroDriftPlan $reviewedZeroDrift.Plan "pre-run"')
 $planBuildOffset = $source.IndexOf('New-ExecutionPlan $binding $boundary $executionName $freshZeroDrift')
 $waitOffset = $source.IndexOf('Wait-ExactDurableResult -DurableExecutionArn $executionArn')

@@ -804,7 +804,7 @@ function Invoke-ExactDurableExecution {
       throw "The named durable invocation returned ambiguously. Do not execute again; use Verify with the preserved pre-invocation receipt."
     }
     $response = ConvertFrom-OperatorJson ($raw -join "`n") "Durable invocation response"
-    if ([int]$response.StatusCode -ne 202 -or [string]$response.ExecutedVersion -cne [string]$ExpectedDurableVersion -or
+    if ([int]$response.StatusCode -ne 202 -or
       [string]$response.DurableExecutionArn -cnotmatch "^$([regex]::Escape($Boundary.DurableArn))/durable-execution/$([regex]::Escape($ExecutionName))/[A-Za-z0-9_-]+$") {
       throw "The durable invocation response did not bind the exact version and execution name."
     }

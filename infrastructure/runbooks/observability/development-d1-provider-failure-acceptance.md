@@ -175,13 +175,17 @@ post-run check fails, preserve that receipt and proceed only through Verify. Nam
 idempotent, but this operating contract still forbids a second mutation attempt.
 
 The operator polls for at most five minutes by default. It requires the terminal execution to
-cross-bind the exact execution ARN/name, unqualified function ARN plus numeric durable version,
+cross-bind the exact execution ARN/name, version-qualified function ARN plus numeric durable version,
 private input, run UUID, reviewed
 provider-fixture binding digest, release SHA, fixture/source/adapter identities, one fault, one observed
 failure, one recovery attempt, one successful recovery, and all four provider/write counts at zero.
 The deployed v1 durable payload/result retains the legacy field name `reviewedConfigSha256`; in
 this operator it is always the dedicated provider-fixture binding digest and never a representative
 configuration digest.
+The asynchronous `invoke` response is accepted only with status `202` and an execution ARN
+containing the exact version-qualified function ARN and UUID-derived execution name; Lambda does
+not return `ExecutedVersion` for this durable asynchronous response. The subsequent exact
+execution read independently requires both the qualified function ARN and numeric version.
 The AWS CLI returns durable `InputPayload` and `OutputPayload` as JSON strings; the operator applies strict
 UTF-8 byte bounds and exact closed-object validation without printing either string.
 
