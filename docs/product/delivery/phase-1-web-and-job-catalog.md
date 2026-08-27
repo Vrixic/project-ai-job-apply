@@ -379,7 +379,16 @@ session secret, token, cookie, or candidate identity into chat, source, or an ev
    OIDC scopes. Never grant `jobs:moderate`. Keep authorization-code and refresh-token grants enabled
    for the server-held session; disable unrelated password, client-credentials, device, and passwordless
    grants for this client.
-5. In **Vercel → candidate project → Settings → Environment Variables**, target only the protected
+5. From the repository root, refresh the short-lived development AWS session so engineering can
+   read the exact Terraform `gateway_url` without copying cloud credentials:
+
+   ```powershell
+   aws sso login --profile ai-job-apply-development-admin
+   aws sts get-caller-identity --profile ai-job-apply-development-admin
+   ```
+
+   Tell engineering only that SSO is ready; do not send cached credentials or token material.
+6. In **Vercel → candidate project → Settings → Environment Variables**, target only the protected
    Production environment and set the following server-only variables. Use sensitive dashboard
    fields for both secrets and do not create any `NEXT_PUBLIC_*` secret:
 
@@ -411,9 +420,9 @@ session secret, token, cookie, or candidate identity into chat, source, or an ev
    Paste that value only into the sensitive `AUTH0_SECRET` dashboard field, then run
    `Remove-Variable sessionSecret,bytes -ErrorAction SilentlyContinue` and clear the console if it
    is recorded by the terminal host.
-6. Redeploy Production from the exact reviewed `main` source. Confirm the stable alias still has
+7. Redeploy Production from the exact reviewed `main` source. Confirm the stable alias still has
    Vercel Authentication and that `PUBLIC_JOB_INDEXING_ENABLED` remains `false`.
-7. Tell engineering only that the candidate OIDC dashboard configuration and redeployment are done,
+8. Tell engineering only that the candidate OIDC dashboard configuration and redeployment are done,
    plus the stable origin. Engineering will verify the exact source/deployment binding, login,
    callback/logout, server-held token, API scope behavior, fixed workloads, security headers, and
    aggregate-only logs. Do not send any secret or token.
