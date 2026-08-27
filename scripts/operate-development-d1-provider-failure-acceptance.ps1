@@ -390,7 +390,7 @@ function Invoke-FreshZeroDriftPlan {
       $savedVariables[$name] = [Environment]::GetEnvironmentVariable($name, "Process")
       [Environment]::SetEnvironmentVariable(
         $name,
-        (ConvertTo-TerraformVariableText (Get-OptionalProperty $property.Value "value")),
+        (ConvertTo-TerraformVariableText $property.Value.value),
         "Process"
       )
     }

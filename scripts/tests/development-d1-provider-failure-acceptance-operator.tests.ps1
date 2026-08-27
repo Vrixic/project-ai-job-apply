@@ -109,6 +109,14 @@ if ($preDriftOffset -lt 0 -or $planBuildOffset -lt $preDriftOffset -or $waitOffs
   $postStateOffset -lt $waitOffset -or $postDriftOffset -lt $postStateOffset) {
   throw "Fresh refresh-backed drift plans are not ordered before Plan approval and after the deployed execution."
 }
+$freshPlanDefinition = @($ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Invoke-FreshZeroDriftPlan'
+    }, $true))[0].Extent.Text
+if (-not $freshPlanDefinition.Contains('ConvertTo-TerraformVariableText $property.Value.value') -or
+  $freshPlanDefinition.Contains('ConvertTo-TerraformVariableText (Get-OptionalProperty')) {
+  throw 'Terraform variable reconstruction must preserve plan variable arrays without pipeline enumeration.'
+}
 
 foreach ($name in @(
     "Get-FileSha256", "ConvertFrom-OperatorJson", "ConvertFrom-BoundedJsonString", "Assert-ExactProperties", "Test-CanonicalTimestamp", "Get-OptionalProperty",
