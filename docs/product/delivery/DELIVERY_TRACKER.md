@@ -32,6 +32,16 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## D1 — Useful web product and canonical job catalog
 
+- Hosted candidate OIDC deferral (2026-08-27): the refreshed development SSO session was verified
+  as an assumed-role session in the exact account and `us-east-2`; read-only Terraform state returned
+  the current API origin without AWS mutation. The stable Vercel alias requires a `$150` protection
+  tier, which the product owner declined. Candidate hosted managed OIDC is therefore deferred to the
+  final controlled publication window. No Auth0 callback, Vercel secret, API value, indexing, or
+  public authority is added to the unprotected alias; protected immutable identity-dark evidence
+  remains valid. Phase 1 remains in progress.
+  [Phase 1 tasks](phase-1-web-and-job-catalog.md),
+  [Vercel runbook](../../../infrastructure/runbooks/deployments/vercel-nextjs-hosting.md)
+
 - Product governance decisions (2026-08-27): the product owner accepted ADR-023 for generated-
   synthetic development, including mapping/reconciler-first activation and the documented DNS
   residual only within that boundary; real documents remain blocked. Linear/Ashby
