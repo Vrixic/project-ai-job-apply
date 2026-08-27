@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   forwardPlatformRequest: vi.fn(),
 }));
 
-vi.mock("./auth0", () => ({ getAuth0Client: () => ({ synthetic: "auth0-client" }) }));
+vi.mock("./auth0", () => ({ getLazyAuth0Session: () => ({ synthetic: "auth0-client" }) }));
 vi.mock("./platform-api", () => ({
   forwardPlatformRequest: mocks.forwardPlatformRequest,
 }));

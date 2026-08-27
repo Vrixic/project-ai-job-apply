@@ -1,4 +1,4 @@
-import { getAuth0Client } from "../../../../../lib/auth0";
+import { getLazyAuth0Session } from "../../../../../lib/auth0";
 import { readJobSearchBffBody } from "../../../../../lib/job-search-bff";
 import { validateJobSearchResponse } from "../../../../../lib/job-search-response-bff";
 import { forwardPlatformRequest } from "../../../../../lib/platform-api";
@@ -19,7 +19,7 @@ export async function POST(request: Request): Promise<Response> {
       headers: { "content-type": "application/json" },
     },
     {
-      auth0: getAuth0Client(),
+      auth0: getLazyAuth0Session(),
       baseUrl: process.env.PLATFORM_API_BASE_URL ?? "http://localhost:4000",
       fetch,
     },

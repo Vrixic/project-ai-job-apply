@@ -283,10 +283,10 @@ seconds and `+00:00`.
     "permissionsPolicy": "camera=(), geolocation=(), microphone=(), payment=(), usb=()",
     "crossOriginOpenerPolicy": "same-origin",
     "contentSecurityPolicy": "base-uri 'self'; frame-ancestors 'none'; object-src 'none'",
-    "xRobotsTag": ""
+    "xRobotsTag": "noindex"
   },
   "routes": [
-    { "kind": "root", "path": "/", "status": 200, "noStore": false },
+    { "kind": "root", "path": "/", "status": 200, "noStore": true },
     { "kind": "unknown", "path": "/phase1-generated-synthetic-unknown", "status": 404, "noStore": false },
     { "kind": "unauthenticated-bff", "path": "/api/platform/entitlements", "status": 401, "noStore": true }
   ]
@@ -302,6 +302,11 @@ method handling instead and is not the BFF authentication check. Candidate may a
 intentionally identity-dark. The operator always
 requires `adminIdentityActivated: false` and `publicIndexingEnabled: false`. It cannot authorize a
 later admin activation or public launch.
+
+`noStore` records whether `Cache-Control` contains the exact case-insensitive `no-store` directive
+token; it is not an equality check against the complete header value. The dynamic, session-sensitive
+root and the sanitized unauthenticated BFF must be non-cacheable. The fixed generated unknown route
+contains no private state and remains the exact cacheable `404` baseline.
 
 Review the aggregate locally, calculate its checksum, and verify it without adding it to Git:
 

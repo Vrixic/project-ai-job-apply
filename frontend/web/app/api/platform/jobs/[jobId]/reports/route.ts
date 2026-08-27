@@ -1,4 +1,4 @@
-import { getAuth0Client } from "../../../../../../lib/auth0";
+import { getLazyAuth0Session } from "../../../../../../lib/auth0";
 import {
   jobReportIdempotencyKey,
   jobReportJobId,
@@ -31,7 +31,7 @@ export async function POST(
 ): Promise<Response> {
   const jobId = jobReportJobId((await context.params).jobId);
   if (!jobId) return localProblem(400, "invalid_request", "Invalid request");
-  const auth0 = getAuth0Client();
+  const auth0 = getLazyAuth0Session();
   try {
     if (!(await auth0.getSession())) {
       return localProblem(401, "authentication_required", "Authentication required");

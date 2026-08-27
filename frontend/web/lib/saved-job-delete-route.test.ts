@@ -3,7 +3,7 @@ import { DELETE } from "../app/api/platform/saved-jobs/[savedJobId]/route";
 
 const mocks = vi.hoisted(() => ({
   forwardPlatformRequest: vi.fn(),
-  getAuth0Client: vi.fn(() => ({ synthetic: "auth0-client" })),
+  getLazyAuth0Session: vi.fn(() => ({ synthetic: "auth0-client" })),
 }));
 
 vi.mock("./platform-api", () => ({
@@ -11,7 +11,7 @@ vi.mock("./platform-api", () => ({
 }));
 
 vi.mock("./auth0", () => ({
-  getAuth0Client: mocks.getAuth0Client,
+  getLazyAuth0Session: mocks.getLazyAuth0Session,
 }));
 
 const savedJobId = "019d04cf-1f80-7000-8000-000000000012";
@@ -143,7 +143,7 @@ describe("saved-job delete route", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     const body = await response.text();
     expect(body).not.toContain(privateCanary);
-    expect(mocks.getAuth0Client).not.toHaveBeenCalled();
+    expect(mocks.getLazyAuth0Session).not.toHaveBeenCalled();
     expect(mocks.forwardPlatformRequest).not.toHaveBeenCalled();
   });
 
@@ -160,7 +160,7 @@ describe("saved-job delete route", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     const body = await response.text();
     expect(body).not.toContain(privateCanary);
-    expect(mocks.getAuth0Client).not.toHaveBeenCalled();
+    expect(mocks.getLazyAuth0Session).not.toHaveBeenCalled();
     expect(mocks.forwardPlatformRequest).not.toHaveBeenCalled();
   });
 });

@@ -178,7 +178,7 @@ function Get-SurfaceConfiguration {
       RootDirectory = "frontend/web"
       PackageName = "@ai-job-apply/web"
       BffPath = "/api/platform/entitlements"
-      RequiredRobotsHeader = ""
+      RequiredRobotsHeader = "noindex"
     }
   }
   if ($ExactSurface -ceq "Admin") {
@@ -469,7 +469,7 @@ function Assert-HostedObservation {
   $routes = @($Observation.routes)
   if ($routes.Count -ne 3) { throw "The hosted route matrix must contain exactly three bounded checks." }
   $expectedRoutes = @(
-    [pscustomobject]@{ Kind = "root"; Path = "/"; Statuses = @(200); NoStore = $false },
+    [pscustomobject]@{ Kind = "root"; Path = "/"; Statuses = @(200); NoStore = $true },
     [pscustomobject]@{ Kind = "unknown"; Path = "/phase1-generated-synthetic-unknown"; Statuses = @(404); NoStore = $false },
     [pscustomobject]@{ Kind = "unauthenticated-bff"; Path = $Configuration.BffPath; Statuses = @(401, 503); NoStore = $true }
   )

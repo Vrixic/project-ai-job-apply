@@ -34,6 +34,29 @@ function upstreamProblem(
 }
 
 describe("platform BFF", () => {
+  it("fails closed when identity-dark session construction is unavailable", async () => {
+    const platformFetch = vi.fn<typeof fetch>();
+    const response = await forwardPlatformRequest(
+      "/v1/me",
+      { method: "GET" },
+      {
+        auth0: {
+          getSession: () => {
+            throw new Error("private identity configuration detail");
+          },
+          getAccessToken: async () => ({ token: "should-not-be-used" }),
+        },
+        baseUrl: "http://localhost:4000",
+        fetch: platformFetch,
+      },
+    );
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.text()).not.toContain("private identity configuration detail");
+    expect(platformFetch).not.toHaveBeenCalled();
+  });
+
   it("rejects missing sessions without contacting the platform API", async () => {
     const platformFetch = vi.fn<typeof fetch>();
     const response = await forwardPlatformRequest(

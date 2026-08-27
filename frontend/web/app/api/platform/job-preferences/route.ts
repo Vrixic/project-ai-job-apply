@@ -1,4 +1,4 @@
-import { getAuth0Client } from "../../../../lib/auth0";
+import { getLazyAuth0Session } from "../../../../lib/auth0";
 import { validateFoundationResponse } from "../../../../lib/foundation-response-bff";
 import { readFoundationWriteRequest } from "../../../../lib/foundation-write-bff";
 import { forwardPlatformRequest } from "../../../../lib/platform-api";
@@ -10,7 +10,7 @@ export async function GET(): Promise<Response> {
     "/v1/me/job-preferences",
     { method: "GET" },
     {
-      auth0: getAuth0Client(),
+      auth0: getLazyAuth0Session(),
       baseUrl: process.env.PLATFORM_API_BASE_URL ?? "http://localhost:4000",
       fetch,
     },
@@ -33,7 +33,7 @@ export async function PUT(request: Request): Promise<Response> {
       },
     },
     {
-      auth0: getAuth0Client(),
+      auth0: getLazyAuth0Session(),
       baseUrl: process.env.PLATFORM_API_BASE_URL ?? "http://localhost:4000",
       fetch,
     },

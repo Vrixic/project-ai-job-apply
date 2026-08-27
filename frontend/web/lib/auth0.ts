@@ -143,3 +143,16 @@ export function getAuth0Client(environment: Environment = process.env): Auth0Cli
   }
   return client;
 }
+
+export interface LazyAuth0Session {
+  getAccessToken(options?: { refresh?: boolean }): Promise<{ token: string }>;
+  getSession(): Promise<{ tokenSet?: { idToken?: unknown }; user?: { sub?: unknown } } | null>;
+}
+
+export function getLazyAuth0Session(): LazyAuth0Session {
+  return {
+    getAccessToken: (options) =>
+      options ? getAuth0Client().getAccessToken(options) : getAuth0Client().getAccessToken(),
+    getSession: () => getAuth0Client().getSession(),
+  };
+}

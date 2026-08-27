@@ -13,7 +13,7 @@ import { type FoundationWriteSchemaName, readFoundationWriteRequest } from "./fo
 
 const mocks = vi.hoisted(() => ({
   forwardPlatformRequest: vi.fn(),
-  getAuth0Client: vi.fn(() => ({ synthetic: "auth0-client" })),
+  getLazyAuth0Session: vi.fn(() => ({ synthetic: "auth0-client" })),
 }));
 
 vi.mock("./platform-api", () => ({
@@ -21,7 +21,7 @@ vi.mock("./platform-api", () => ({
 }));
 
 vi.mock("./auth0", () => ({
-  getAuth0Client: mocks.getAuth0Client,
+  getLazyAuth0Session: mocks.getLazyAuth0Session,
 }));
 
 beforeEach(() => {
@@ -402,7 +402,7 @@ describe("foundation write route composition", () => {
 
     expect(response.status).toBe(400);
     expect(await response.text()).not.toContain("candidate-private");
-    expect(mocks.getAuth0Client).not.toHaveBeenCalled();
+    expect(mocks.getLazyAuth0Session).not.toHaveBeenCalled();
     expect(mocks.forwardPlatformRequest).not.toHaveBeenCalled();
   });
 

@@ -1,4 +1,4 @@
-import { getAuth0Client } from "../../../../lib/auth0";
+import { getLazyAuth0Session } from "../../../../lib/auth0";
 import { validateFoundationResponse } from "../../../../lib/foundation-response-bff";
 import { forwardPlatformRequest } from "../../../../lib/platform-api";
 import { forwardIdempotencyKey, readSavedJobBody } from "../../../../lib/saved-jobs-bff";
@@ -29,7 +29,7 @@ export async function POST(request: Request): Promise<Response> {
       headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
     },
     {
-      auth0: getAuth0Client(),
+      auth0: getLazyAuth0Session(),
       baseUrl: process.env.PLATFORM_API_BASE_URL ?? "http://localhost:4000",
       fetch,
     },

@@ -1,4 +1,4 @@
-import { getAuth0Client } from "../../../../lib/auth0";
+import { getLazyAuth0Session } from "../../../../lib/auth0";
 import {
   isPhase0WorkloadConformanceEnabled,
   phase0WorkloadPublicConcurrency,
@@ -11,7 +11,7 @@ export async function POST(request: Request): Promise<Response> {
   const enabled = isPhase0WorkloadConformanceEnabled();
   return runPhase0FoundationWorkload(request, {
     appBaseUrl: process.env.APP_BASE_URL ?? "http://localhost:3000",
-    auth0: getAuth0Client(),
+    auth0: getLazyAuth0Session(),
     baseUrl: process.env.PLATFORM_API_BASE_URL ?? "http://localhost:4000",
     enabled,
     fetch,

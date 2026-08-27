@@ -1,4 +1,4 @@
-import { getAuth0Client } from "../../../../../lib/auth0";
+import { getLazyAuth0Session } from "../../../../../lib/auth0";
 import {
   candidateRightsIdentifier,
   candidateRightsIfMatch,
@@ -30,7 +30,7 @@ export async function GET(
     `/v1/me/account-deletion-requests/${deletionRequestId}`,
     { method: "GET", signal: request.signal },
     {
-      auth0: getAuth0Client(),
+      auth0: getLazyAuth0Session(),
       baseUrl: process.env.PLATFORM_API_BASE_URL ?? "http://localhost:4000",
       fetch,
     },
@@ -56,7 +56,7 @@ export async function DELETE(
       headers: { "idempotency-key": idempotencyKey, "if-match": ifMatch },
     },
     {
-      auth0: getAuth0Client(),
+      auth0: getLazyAuth0Session(),
       baseUrl: process.env.PLATFORM_API_BASE_URL ?? "http://localhost:4000",
       fetch,
       includeReauthenticationProof: true,

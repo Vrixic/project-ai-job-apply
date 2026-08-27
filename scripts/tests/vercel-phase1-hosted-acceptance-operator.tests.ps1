@@ -87,7 +87,7 @@ $maximumObservationClockSkew = [TimeSpan]::FromMinutes(5)
 
 function New-Observation {
   param([Parameter(Mandatory)][object]$Configuration, [Parameter(Mandatory)][object]$Binding)
-  $robots = if ($Configuration.Name -ceq "admin") { "noindex, nofollow, noarchive" } else { "" }
+  $robots = if ($Configuration.Name -ceq "admin") { "noindex, nofollow, noarchive" } else { "noindex" }
   $mode = if ($Configuration.Name -ceq "admin") { "identity-dark" } else { "candidate-managed-oidc" }
   $endedAt = [DateTimeOffset]::UtcNow.AddSeconds(-1)
   $startedAt = $endedAt.AddSeconds(-1)
@@ -127,7 +127,7 @@ function New-Observation {
       xRobotsTag = $robots
     }
     routes = @(
-      [ordered]@{ kind = "root"; path = "/"; status = 200; noStore = $false },
+      [ordered]@{ kind = "root"; path = "/"; status = 200; noStore = $true },
       [ordered]@{ kind = "unknown"; path = "/phase1-generated-synthetic-unknown"; status = 404; noStore = $false },
       [ordered]@{ kind = "unauthenticated-bff"; path = $Configuration.BffPath; status = 401; noStore = $true }
     )
@@ -207,6 +207,22 @@ $candidate = Get-SurfaceConfiguration "Candidate"
 $candidateBinding = [pscustomobject]@{ orgId = "team_123"; projectId = "prj_candidate123"; projectName = $ExpectedProjectName }
 $validCandidate = New-Observation $candidate $candidateBinding
 Assert-HostedObservation $validCandidate $candidate $candidateBinding | Out-Null
+
+$candidateBffUnavailable = ConvertFrom-OperatorJson ($validCandidate | ConvertTo-Json -Depth 20) "The 503 candidate fixture"
+$candidateBffUnavailable.routes[2].status = 503
+Assert-HostedObservation $candidateBffUnavailable $candidate $candidateBinding | Out-Null
+
+$candidateRobotsMissing = ConvertFrom-OperatorJson ($validCandidate | ConvertTo-Json -Depth 20) "The candidate crawler fixture"
+$candidateRobotsMissing.headers.xRobotsTag = ""
+Assert-Rejected { Assert-HostedObservation $candidateRobotsMissing $candidate $candidateBinding } "candidate crawler denial removed"
+
+$cacheableRoot = ConvertFrom-OperatorJson ($validCandidate | ConvertTo-Json -Depth 20) "The candidate root cache fixture"
+$cacheableRoot.routes[0].noStore = $false
+Assert-Rejected { Assert-HostedObservation $cacheableRoot $candidate $candidateBinding } "cacheable dynamic root"
+
+$noncacheableUnknown = ConvertFrom-OperatorJson ($validCandidate | ConvertTo-Json -Depth 20) "The candidate unknown-route cache fixture"
+$noncacheableUnknown.routes[1].noStore = $true
+Assert-Rejected { Assert-HostedObservation $noncacheableUnknown $candidate $candidateBinding } "unexpected unknown-route cache boundary"
 
 $invalidDuration = $validCandidate | ConvertTo-Json -Depth 20 | ConvertFrom-Json
 $invalidDuration.durationMs = 999

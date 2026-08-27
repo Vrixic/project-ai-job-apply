@@ -3,6 +3,7 @@ import {
   AuthConfigurationError,
   auth0CallbackResponse,
   getAuth0Client,
+  getLazyAuth0Session,
   isAuth0Configured,
   requestedAuthScopes,
   validateAppBaseUrl,
@@ -19,6 +20,13 @@ const configuredEnvironment = {
 };
 
 describe("Auth0 web configuration", () => {
+  it("defers identity-dark configuration failure until the session is used", () => {
+    const session = getLazyAuth0Session();
+
+    expect(() => session.getSession()).toThrow(AuthConfigurationError);
+    expect(() => session.getAccessToken()).toThrow(AuthConfigurationError);
+  });
+
   it("fails closed when a required secret is missing", () => {
     expect(isAuth0Configured({})).toBe(false);
     expect(() => getAuth0Client({})).toThrow(AuthConfigurationError);

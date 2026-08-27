@@ -3,7 +3,7 @@ import { GET } from "../app/api/platform/operations/[operationId]/route";
 
 const mocks = vi.hoisted(() => ({
   forwardPlatformRequest: vi.fn(),
-  getAuth0Client: vi.fn(() => ({ synthetic: "auth0-client" })),
+  getLazyAuth0Session: vi.fn(() => ({ synthetic: "auth0-client" })),
 }));
 
 vi.mock("./platform-api", () => ({
@@ -11,7 +11,7 @@ vi.mock("./platform-api", () => ({
 }));
 
 vi.mock("./auth0", () => ({
-  getAuth0Client: mocks.getAuth0Client,
+  getLazyAuth0Session: mocks.getLazyAuth0Session,
 }));
 
 const operationId = "019b4e12-7ea3-7c36-9357-aea35ab542cc";
@@ -145,7 +145,7 @@ describe("operation read route", () => {
       code: "invalid_request",
     });
     expect(body).not.toContain(privateCanary);
-    expect(mocks.getAuth0Client).not.toHaveBeenCalled();
+    expect(mocks.getLazyAuth0Session).not.toHaveBeenCalled();
     expect(mocks.forwardPlatformRequest).not.toHaveBeenCalled();
   });
 
@@ -166,7 +166,7 @@ describe("operation read route", () => {
       code: "invalid_request",
     });
     expect(body).not.toContain(privateCanary);
-    expect(mocks.getAuth0Client).not.toHaveBeenCalled();
+    expect(mocks.getLazyAuth0Session).not.toHaveBeenCalled();
     expect(mocks.forwardPlatformRequest).not.toHaveBeenCalled();
   });
 });

@@ -10,11 +10,11 @@ import { POST as createExport } from "../app/api/platform/data-exports/route";
 
 const mocks = vi.hoisted(() => ({
   forwardPlatformRequest: vi.fn(),
-  getAuth0Client: vi.fn(() => ({ synthetic: "auth0-client" })),
+  getLazyAuth0Session: vi.fn(() => ({ synthetic: "auth0-client" })),
 }));
 
 vi.mock("./platform-api", () => ({ forwardPlatformRequest: mocks.forwardPlatformRequest }));
-vi.mock("./auth0", () => ({ getAuth0Client: mocks.getAuth0Client }));
+vi.mock("./auth0", () => ({ getLazyAuth0Session: mocks.getLazyAuth0Session }));
 
 const exportId = "019c2b89-79b2-7000-8000-000000000004";
 const deletionRequestId = "019c2b89-79b2-7000-8000-000000000005";

@@ -320,7 +320,12 @@ export async function forwardPlatformRequest(
   init: RequestInit,
   dependencies: PlatformRequestDependencies,
 ): Promise<Response> {
-  const session = await dependencies.auth0.getSession();
+  let session: unknown | null;
+  try {
+    session = await dependencies.auth0.getSession();
+  } catch {
+    return problem(503, "platform_unavailable", "The platform API is unavailable");
+  }
   if (!session) {
     return problem(401, "authentication_required", "Authentication required");
   }
