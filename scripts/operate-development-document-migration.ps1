@@ -375,6 +375,68 @@ function Get-DocumentOperatorDeltaSha256 {
     (($records -join "`n") + "`n--patch--`n" + ($patch -join "`n") + "`n"))
 }
 
+function Get-DocumentBootstrapDeltaSha256 {
+  param(
+    [Parameter(Mandatory)][string]$ReleaseSha,
+    [Parameter(Mandatory)][string]$OperatorSha
+  )
+
+  $domain = "development-document-complete-dark-bootstrap-delta-v1"
+  if ($ReleaseSha -notmatch '^[a-f0-9]{40}$' -or $OperatorSha -notmatch '^[a-f0-9]{40}$') {
+    throw "The retained document bootstrap source SHAs are invalid."
+  }
+  if ($ReleaseSha -ceq $OperatorSha) {
+    return Get-TextSha256 "$domain`n$ReleaseSha`n$OperatorSha`n--name-status--`n--patch--`n"
+  }
+  & git -C $repositoryRoot merge-base --is-ancestor $ReleaseSha $OperatorSha 2>$null
+  if ($LASTEXITCODE -ne 0) {
+    throw "A retained document bootstrap source is not an ancestor of its operator."
+  }
+  $detected = @(& git -C $repositoryRoot diff --name-status --find-renames --find-copies-harder `
+      "$ReleaseSha..$OperatorSha" 2>$null)
+  $detectedExit = $LASTEXITCODE
+  if ($detectedExit -ne 0 -or $detected.Count -eq 0 -or
+      @($detected | Where-Object { $_ -match '^R[0-9]*\t' }).Count -ne 0 -or
+      @($detected | Where-Object {
+          $_ -notmatch '^(?:A|M|D)\t[^\t]+$' -and
+          $_ -notmatch '^C[0-9]+\t[^\t]+\t[^\t]+$'
+        }).Count -ne 0) {
+    throw "The retained document bootstrap delta is empty, unreadable, renamed, or structurally ambiguous."
+  }
+  $records = @(& git -C $repositoryRoot diff --name-status --no-renames "$ReleaseSha..$OperatorSha" 2>$null)
+  $recordsExit = $LASTEXITCODE
+  $numstat = @(& git -C $repositoryRoot diff --numstat --no-renames "$ReleaseSha..$OperatorSha" 2>$null)
+  $numstatExit = $LASTEXITCODE
+  if ($recordsExit -ne 0 -or $numstatExit -ne 0 -or $records.Count -eq 0 -or
+      $records.Count -ne $numstat.Count) {
+    throw "The retained document bootstrap delta is empty, unreadable, or structurally ambiguous."
+  }
+  foreach ($record in $records) {
+    if ($record -notmatch '^(A|M|D)\t([^\t]+)$') {
+      throw "The retained document bootstrap delta contains an unsupported record."
+    }
+    $status = $Matches[1]
+    $path = $Matches[2]
+    $revisions = if ($status -ceq 'A') { @($OperatorSha) }
+      elseif ($status -ceq 'D') { @($ReleaseSha) }
+      else { @($ReleaseSha, $OperatorSha) }
+    foreach ($revision in $revisions) {
+      $entry = @(& git -C $repositoryRoot ls-tree $revision -- $path 2>$null)
+      if ($LASTEXITCODE -ne 0 -or $entry.Count -ne 1 -or
+          [string]$entry[0] -notmatch '^(100644|100755) blob [a-f0-9]{40,64}\t') {
+        throw "A retained document bootstrap path is not one regular blob."
+      }
+    }
+  }
+  $patch = @(& git -C $repositoryRoot diff --full-index --binary --no-ext-diff --no-renames `
+      "$ReleaseSha..$OperatorSha" 2>$null)
+  if ($LASTEXITCODE -ne 0) {
+    throw "The retained document bootstrap canonical patch could not be read."
+  }
+  return Get-TextSha256 ("$domain`n$ReleaseSha`n$OperatorSha`n--name-status--`n" +
+    (($records -join "`n") + "`n--patch--`n" + ($patch -join "`n") + "`n"))
+}
+
 function Get-ReviewedBaselineToCurrentDeltaSha256 {
   param(
     [Parameter(Mandatory)][string]$BaselineOperatorSha,
@@ -1328,6 +1390,15 @@ function Read-RetainedMigrationBaseline {
     "OperatorSourceSha", "ParserQualifiedArn", "PlanPath", "PlanSha256", "ReceiptSha256",
     "Region", "ReleaseSourceSha", "SchemaVersion", "Stage", "StateLineage", "StateSerial"
   ) | Sort-Object
+  $schema6Keys = @(
+    "AccountId", "Applyable", "CreatedAt", "CurrentTemplatePlanSha256",
+    "CurrentTemplateReceiptSha256", "DeltaKind", "Environment", "Kind", "MeaningfulChanges",
+    "MigrationImage", "OperatorDeltaSha256", "OperatorSourceSha", "ParserQualifiedArn",
+    "PlanPath", "PlanSha256", "PriorBaselineMetadataSha256", "PriorBaselineOperatorSourceSha",
+    "PriorBaselinePlanSha256", "PriorBaselineSchemaVersion", "PriorBaselineStateSerial",
+    "PriorBaselineToOperatorDeltaSha256", "ReceiptSha256", "Region", "ReleaseSourceSha",
+    "SchemaVersion", "Stage", "StateLineage", "StateSerial"
+  ) | Sort-Object
   $actualKeys = @($metadata.PSObject.Properties | ForEach-Object Name | Sort-Object)
   $metadataPlanPath = if ([string]::IsNullOrWhiteSpace([string]$metadata.PlanPath)) { "" } else {
     [IO.Path]::GetFullPath([string]$metadata.PlanPath)
@@ -1390,6 +1461,31 @@ function Read-RetainedMigrationBaseline {
       $allowSchemaFiveOneSerialAdvance =
         $ReviewedBaselineToCurrentDeltaSha256 -match '^[a-f0-9]{64}$'
     }
+  } elseif ($schema -ceq "6") {
+    $schemaValid = (($actualKeys -join "|") -ceq ($schema6Keys -join "|") -and
+      [string]$metadata.DeltaKind -ceq "complete-dark-bootstrap-full-source-v1" -and
+      [string]$metadata.ReleaseSourceSha -match '^[a-f0-9]{40}$' -and
+      [string]$metadata.OperatorSourceSha -match '^[a-f0-9]{40}$' -and
+      [string]$metadata.OperatorDeltaSha256 -ceq
+        (Get-DocumentBootstrapDeltaSha256 -ReleaseSha ([string]$metadata.ReleaseSourceSha) `
+          -OperatorSha ([string]$metadata.OperatorSourceSha)) -and
+      [string]$metadata.PriorBaselineOperatorSourceSha -match '^[a-f0-9]{40}$' -and
+      [string]$metadata.PriorBaselineToOperatorDeltaSha256 -ceq
+        (Get-DocumentBootstrapDeltaSha256 -ReleaseSha ([string]$metadata.PriorBaselineOperatorSourceSha) `
+          -OperatorSha ([string]$metadata.OperatorSourceSha)) -and
+      [string]$metadata.PriorBaselineSchemaVersion -in @("3", "4", "5") -and
+      [long]$metadata.PriorBaselineStateSerial -ge 1 -and
+      [long]$metadata.PriorBaselineStateSerial -lt [long]$metadata.StateSerial -and
+      [string]$metadata.PriorBaselinePlanSha256 -match '^[a-f0-9]{64}$' -and
+      [string]$metadata.PriorBaselineMetadataSha256 -match '^[a-f0-9]{64}$' -and
+      [string]$metadata.CurrentTemplatePlanSha256 -match '^[a-f0-9]{64}$' -and
+      [string]$metadata.CurrentTemplateReceiptSha256 -match '^[a-f0-9]{64}$' -and
+      [string]$metadata.Stage -ceq "complete-dark")
+    if ($schemaValid) {
+      $baselineToCurrentDeltaSha256 = Get-ReviewedBaselineToCurrentDeltaSha256 `
+        -BaselineOperatorSha ([string]$metadata.OperatorSourceSha) `
+        -CurrentOperatorSha $operatorSourceSha -ReviewedSha256 $ReviewedBaselineToCurrentDeltaSha256
+    }
   }
   if (-not $schemaValid -or
     [string]$metadata.Kind -cne "development-document-zero-drift-baseline" -or
@@ -1426,7 +1522,7 @@ function Read-RetainedMigrationBaseline {
     [string]$metadata.ParserQualifiedArn -cne [string]$parserArnValueProperty.Value) {
     throw "The retained baseline metadata stage or parser pin does not match the exact Terraform plan variables."
   }
-  if ($schema -in @("4", "5") -and
+  if ($schema -in @("4", "5", "6") -and
       [string]$metadata.MigrationImage -cne (Get-ExactStringPlanVariable -Plan $plan -Name "migration_image")) {
     throw "The retained migration baseline image does not match its exact retained plan."
   }
@@ -1440,11 +1536,17 @@ function Read-RetainedMigrationBaseline {
   return [pscustomobject]@{
     Plan = $plan; PlanPath = $resolvedPlan; PlanSha256 = $PlanSha256
     Metadata = $metadata; MetadataPath = $sidecarPath; MetadataSha256 = $sidecarSha256
-    ReleaseSourceSha = $(if ($schema -ceq "5") { [string]$metadata.DocumentReleaseSourceSha }
+    ReleaseSourceSha = $(if ($schema -ceq "6") { [string]$metadata.OperatorSourceSha }
+      elseif ($schema -ceq "5") { [string]$metadata.DocumentReleaseSourceSha }
       elseif ($schema -in @("3", "4")) { [string]$metadata.ReleaseSourceSha } else { $SourceSha })
-    OperatorSourceSha = $(if ($schema -ceq "5") { [string]$metadata.DocumentOperatorSourceSha }
+    OperatorSourceSha = $(if ($schema -ceq "6") { [string]$metadata.OperatorSourceSha }
+      elseif ($schema -ceq "5") { [string]$metadata.DocumentOperatorSourceSha }
       elseif ($schema -in @("3", "4")) { [string]$metadata.OperatorSourceSha } else { $SourceSha })
-    OperatorDeltaSha256 = $(if ($schema -ceq "5") { [string]$metadata.DocumentOperatorDeltaSha256 }
+    OperatorDeltaSha256 = $(if ($schema -ceq "6") {
+        Get-DocumentOperatorDeltaSha256 -ReleaseSha ([string]$metadata.OperatorSourceSha) `
+          -OperatorSha ([string]$metadata.OperatorSourceSha)
+      }
+      elseif ($schema -ceq "5") { [string]$metadata.DocumentOperatorDeltaSha256 }
       elseif ($schema -in @("3", "4")) { [string]$metadata.OperatorDeltaSha256 } else {
         Get-DocumentOperatorDeltaSha256 -ReleaseSha $SourceSha -OperatorSha $SourceSha
       })

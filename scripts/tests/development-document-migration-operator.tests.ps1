@@ -81,6 +81,17 @@ foreach ($schemaFiveMarker in @(
     throw "The post-migration verifier does not preserve the reviewed split-source handoff."
   }
 }
+foreach ($schemaSixMarker in @(
+    'elseif ($schema -ceq "6")',
+    'complete-dark-bootstrap-full-source-v1',
+    'Get-DocumentBootstrapDeltaSha256',
+    'PriorBaselineToOperatorDeltaSha256',
+    'CurrentTemplateReceiptSha256'
+  )) {
+  if (-not $source.Contains($schemaSixMarker)) {
+    throw "The migration handoff does not consume the authenticated schema-6 CompleteDark bootstrap baseline."
+  }
+}
 
 $pathFunctions = @($ast.FindAll({
       param($node)
@@ -122,7 +133,7 @@ $baselineFunctions = @($ast.FindAll({
         "Assert-AcceptedMigrationProviderDrift", "Test-IgnorableRdsRestorableTimeRefresh",
         "Test-IgnorableMigrationTaskTagsRefresh", "Get-UnacceptedVerificationDrift", "Get-OptionalProperty",
         "Test-EcsFaultInjectionDisabled", "Assert-ReleaseSourceBinding",
-        "Assert-OperatorOnlyReleaseDelta", "Get-DocumentOperatorDeltaSha256",
+        "Assert-OperatorOnlyReleaseDelta", "Get-DocumentOperatorDeltaSha256", "Get-DocumentBootstrapDeltaSha256",
         "Get-ReviewedBaselineToCurrentDeltaSha256", "Assert-CleanCurrentMainHead",
         "Assert-NoUntrackedTerraformInputs", "Assert-ExecutionIdentity",
         "Assert-DurableClaimPutResult", "Assert-DurableExecutionClaimEvidence",
@@ -139,7 +150,7 @@ $baselineFunctions = @($ast.FindAll({
         "Save-PostMigrationBaselineMetadata", "Remove-NewPostMigrationBaselineArtifacts"
       )
     }, $true))
-if ($baselineFunctions.Count -ne 45) { throw "The input, plan, and retained-handoff guards must each be defined once." }
+if ($baselineFunctions.Count -ne 46) { throw "The input, plan, and retained-handoff guards must each be defined once." }
 foreach ($function in $baselineFunctions | Sort-Object { $_.Extent.StartOffset }) {
   Invoke-Expression $function.Extent.Text
 }
@@ -1465,8 +1476,18 @@ try {
     $arguments = @($args)
     if ($arguments -contains "merge-base") { $global:LASTEXITCODE = if ($script:ancestorGitMode -ceq "nonancestor") { 1 } else { 0 }; return }
     if ($arguments -contains "--name-status") { $global:LASTEXITCODE = 0; return $script:ancestorRecordsFixture }
-    if ($arguments -contains "--numstat") { $global:LASTEXITCODE = 0; return @("1`t1`tscripts/operate-development-document-migration.ps1", "1`t0`tscripts/tests/development-document-migration-operator.tests.ps1") }
-    if ($arguments -contains "ls-tree") { $global:LASTEXITCODE = 0; return "100644 blob $('a' * 40)`tfixture" }
+    if ($arguments -contains "--numstat") {
+      $global:LASTEXITCODE = 0
+      if ($script:ancestorGitMode -ceq "bootstrap-binary") {
+        return @("-`t-`tscripts/operate-development-document-migration.ps1", "-`t-`tscripts/tests/development-document-migration-operator.tests.ps1")
+      }
+      return @("1`t1`tscripts/operate-development-document-migration.ps1", "1`t0`tscripts/tests/development-document-migration-operator.tests.ps1")
+    }
+    if ($arguments -contains "ls-tree") {
+      $script:ancestorLsTreeCalls += ,@($arguments)
+      $global:LASTEXITCODE = 0
+      return "100644 blob $('a' * 40)`tfixture"
+    }
     if ($arguments -contains "cat-file") { $global:LASTEXITCODE = 0; return "blob" }
     if ($arguments -contains "--full-index") { $global:LASTEXITCODE = 0; return $script:ancestorPatchFixture }
     $global:LASTEXITCODE = 1
@@ -1474,6 +1495,7 @@ try {
   }
   $script:ancestorRecordsFixture = $fullRecords
   $script:ancestorPatchFixture = $fullPatch
+  $script:ancestorLsTreeCalls = @()
   try {
     [IO.File]::WriteAllText($sidecarPath, ($ancestorSidecar | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
     $ancestorSidecarSha = Get-FileSha256 -Path $sidecarPath
@@ -1659,11 +1681,163 @@ try {
         -ReviewedBaselineToCurrentDeltaSha256 $reviewedBaselineDelta -RequireCurrentState
     } catch { $schemaFiveSerialRejected = $true }
     if (-not $schemaFiveSerialRejected) { throw "A schema-5 baseline accepted more than one state-serial advance." }
+
+    $script:retainedStateFixture = [pscustomobject]@{
+      Lineage = $retainedState.Lineage
+      Serial = [long]$retainedState.Serial
+    }
+    $schemaSixReleaseSha = $documentReleaseSha
+    $schemaSixOperatorSha = $currentOperatorSha
+    $schemaSixPriorOperatorSha = $baselineOperatorSha
+    $script:ancestorLsTreeCalls = @()
+    $schemaSixOperatorDelta = Get-DocumentBootstrapDeltaSha256 `
+      -ReleaseSha $schemaSixReleaseSha -OperatorSha $schemaSixOperatorSha
+    if ($script:ancestorLsTreeCalls.Count -ne 4) {
+      throw "The schema-6 bootstrap consumer did not authenticate each modified path at both commits."
+    }
+    $script:ancestorGitMode = "bootstrap-binary"
+    $binaryBootstrapDelta = Get-DocumentBootstrapDeltaSha256 `
+      -ReleaseSha $schemaSixReleaseSha -OperatorSha $schemaSixOperatorSha
+    $expectedBinaryBootstrapDelta = Get-TextSha256 (
+      "development-document-complete-dark-bootstrap-delta-v1`n$schemaSixReleaseSha`n$schemaSixOperatorSha`n--name-status--`n" +
+      (($fullRecords -join "`n") + "`n--patch--`n" + ($fullPatch -join "`n") + "`n")
+    )
+    if ($binaryBootstrapDelta -cne $expectedBinaryBootstrapDelta) {
+      throw "The schema-6 consumer diverged from the producer's bootstrap binary-delta algorithm."
+    }
+    $script:ancestorGitMode = "valid"
+    $schemaSixSidecar = [ordered]@{
+      SchemaVersion = "6"; Kind = "development-document-zero-drift-baseline"; Environment = "development"
+      AccountId = $ExpectedAccountId; Region = $Region
+      DeltaKind = "complete-dark-bootstrap-full-source-v1"
+      ReleaseSourceSha = $schemaSixReleaseSha; OperatorSourceSha = $schemaSixOperatorSha
+      OperatorDeltaSha256 = $schemaSixOperatorDelta
+      PriorBaselinePlanSha256 = "1" * 64; PriorBaselineMetadataSha256 = "2" * 64
+      CurrentTemplatePlanSha256 = "3" * 64; CurrentTemplateReceiptSha256 = "4" * 64
+      PriorBaselineSchemaVersion = "5"; PriorBaselineStateSerial = [long]$retainedState.Serial - 1
+      PriorBaselineOperatorSourceSha = $schemaSixPriorOperatorSha
+      PriorBaselineToOperatorDeltaSha256 = Get-DocumentBootstrapDeltaSha256 `
+        -ReleaseSha $schemaSixPriorOperatorSha -OperatorSha $schemaSixOperatorSha
+      StateLineage = $retainedState.Lineage; StateSerial = $retainedState.Serial; Stage = "complete-dark"
+      ReceiptSha256 = "b" * 64; ParserQualifiedArn = $ancestorSidecar.ParserQualifiedArn
+      MigrationImage = $retainedMigrationImage; PlanPath = $retainedPath; PlanSha256 = $retainedSha
+      Applyable = $false; MeaningfulChanges = 0; CreatedAt = "2026-08-27T02:14:53.4890234Z"
+    }
+    [IO.File]::WriteAllText($sidecarPath, ($schemaSixSidecar | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
+    $schemaSixSidecarSha = Get-FileSha256 -Path $sidecarPath
+    $operatorSourceSha = $schemaSixOperatorSha
+    $schemaSixEvidence = Read-RetainedMigrationBaseline -PlanPath $retainedPath `
+      -PlanSha256 $retainedSha -MetadataSha256 $schemaSixSidecarSha -RequireCurrentState
+    $normalizedSchemaSixDelta = Get-DocumentOperatorDeltaSha256 `
+      -ReleaseSha $schemaSixOperatorSha -OperatorSha $schemaSixOperatorSha
+    if ([string]$schemaSixEvidence.ReleaseSourceSha -cne $schemaSixOperatorSha -or
+        [string]$schemaSixEvidence.OperatorSourceSha -cne $schemaSixOperatorSha -or
+        [string]$schemaSixEvidence.OperatorDeltaSha256 -cne $normalizedSchemaSixDelta -or
+        [string]$schemaSixEvidence.CurrentOperatorSourceSha -cne $schemaSixOperatorSha -or
+        [string]$schemaSixEvidence.Metadata.DeltaKind -cne "complete-dark-bootstrap-full-source-v1" -or
+        [long]$schemaSixEvidence.PlanningState.Serial -ne [long]$retainedState.Serial) {
+      throw "The exact-current schema-6 bootstrap baseline was not authenticated and normalized."
+    }
+    $schemaSixExtraReviewRejected = $false
+    try {
+      $null = Read-RetainedMigrationBaseline -PlanPath $retainedPath -PlanSha256 $retainedSha `
+        -MetadataSha256 $schemaSixSidecarSha `
+        -ReviewedBaselineToCurrentDeltaSha256 $reviewedBaselineDelta
+    } catch { $schemaSixExtraReviewRejected = $true }
+    if (-not $schemaSixExtraReviewRejected) {
+      throw "An exact-current schema-6 baseline accepted an unnecessary baseline review."
+    }
+
+    $ancestorSchemaSix = $schemaSixSidecar | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+    $ancestorSchemaSix.OperatorSourceSha = $baselineOperatorSha
+    $ancestorSchemaSix.OperatorDeltaSha256 = Get-DocumentBootstrapDeltaSha256 `
+      -ReleaseSha $schemaSixReleaseSha -OperatorSha $baselineOperatorSha
+    $ancestorSchemaSix.PriorBaselineOperatorSourceSha = $schemaSixReleaseSha
+    $ancestorSchemaSix.PriorBaselineToOperatorDeltaSha256 = Get-DocumentBootstrapDeltaSha256 `
+      -ReleaseSha $schemaSixReleaseSha -OperatorSha $baselineOperatorSha
+    [IO.File]::WriteAllText($sidecarPath, ($ancestorSchemaSix | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
+    $ancestorSchemaSixSha = Get-FileSha256 -Path $sidecarPath
+    $operatorSourceSha = $currentOperatorSha
+    $ancestorSchemaSixEvidence = Read-RetainedMigrationBaseline -PlanPath $retainedPath `
+      -PlanSha256 $retainedSha -MetadataSha256 $ancestorSchemaSixSha `
+      -ReviewedBaselineToCurrentDeltaSha256 $reviewedBaselineDelta -RequireCurrentState
+    if ([string]$ancestorSchemaSixEvidence.ReleaseSourceSha -cne $baselineOperatorSha -or
+        [string]$ancestorSchemaSixEvidence.OperatorSourceSha -cne $baselineOperatorSha -or
+        [string]$ancestorSchemaSixEvidence.OperatorDeltaSha256 -cne
+          (Get-DocumentOperatorDeltaSha256 -ReleaseSha $baselineOperatorSha -OperatorSha $baselineOperatorSha) -or
+        [string]$ancestorSchemaSixEvidence.BaselineToCurrentDeltaSha256 -cne $reviewedBaselineDelta) {
+      throw "The ancestor schema-6 bootstrap baseline was not normalized through the reviewed current handoff."
+    }
+    $schemaSixMissingReviewRejected = $false
+    try {
+      $null = Read-RetainedMigrationBaseline -PlanPath $retainedPath -PlanSha256 $retainedSha `
+        -MetadataSha256 $ancestorSchemaSixSha -RequireCurrentState
+    } catch { $schemaSixMissingReviewRejected = $true }
+    if (-not $schemaSixMissingReviewRejected) {
+      throw "An ancestor schema-6 baseline accepted a missing baseline-to-current review."
+    }
+
+    $operatorSourceSha = $schemaSixOperatorSha
+    $schemaSixMutationCases = @(
+      @{ Name = "delta kind"; Mutate = { param($v) $v.DeltaKind = "other" } },
+      @{ Name = "bootstrap delta"; Mutate = { param($v) $v.OperatorDeltaSha256 = "f" * 64 } },
+      @{ Name = "prior bootstrap delta"; Mutate = { param($v) $v.PriorBaselineToOperatorDeltaSha256 = "f" * 64 } },
+      @{ Name = "prior schema"; Mutate = { param($v) $v.PriorBaselineSchemaVersion = "2" } },
+      @{ Name = "prior serial"; Mutate = { param($v) $v.PriorBaselineStateSerial = $v.StateSerial } },
+      @{ Name = "prior plan checksum"; Mutate = { param($v) $v.PriorBaselinePlanSha256 = "invalid" } },
+      @{ Name = "prior metadata checksum"; Mutate = { param($v) $v.PriorBaselineMetadataSha256 = "invalid" } },
+      @{ Name = "template plan checksum"; Mutate = { param($v) $v.CurrentTemplatePlanSha256 = "invalid" } },
+      @{ Name = "template receipt checksum"; Mutate = { param($v) $v.CurrentTemplateReceiptSha256 = "invalid" } },
+      @{ Name = "stage"; Mutate = { param($v) $v.Stage = "parser-dark"; $v.ParserQualifiedArn = "" } },
+      @{ Name = "migration image"; Mutate = { param($v) $v.MigrationImage = $MigrationImage } },
+      @{ Name = "release identity"; Mutate = { param($v) $v.ReleaseSourceSha = "invalid" } },
+      @{ Name = "missing field"; Mutate = { param($v) $v.PSObject.Properties.Remove("DeltaKind") } },
+      @{ Name = "extra field"; Mutate = { param($v) $v | Add-Member unexpected $true } }
+    )
+    foreach ($case in $schemaSixMutationCases) {
+      $mutatedSchemaSix = $schemaSixSidecar | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+      & $case.Mutate $mutatedSchemaSix
+      [IO.File]::WriteAllText($sidecarPath, ($mutatedSchemaSix | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
+      $mutatedSchemaSixSha = Get-FileSha256 -Path $sidecarPath
+      $mutationRejected = $false
+      try {
+        $null = Read-RetainedMigrationBaseline -PlanPath $retainedPath -PlanSha256 $retainedSha `
+          -MetadataSha256 $mutatedSchemaSixSha -RequireCurrentState
+      } catch { $mutationRejected = $true }
+      if (-not $mutationRejected) { throw "A schema-6 baseline accepted a wrong $($case.Name)." }
+    }
+
+    [IO.File]::WriteAllText($sidecarPath, ($schemaSixSidecar | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
+    $script:retainedStateFixture = [pscustomobject]@{
+      Lineage = $retainedState.Lineage
+      Serial = [long]$retainedState.Serial + 1
+    }
+    $schemaSixStateAdvanceRejected = $false
+    try {
+      $null = Read-RetainedMigrationBaseline -PlanPath $retainedPath -PlanSha256 $retainedSha `
+        -MetadataSha256 $schemaSixSidecarSha -RequireCurrentState
+    } catch { $schemaSixStateAdvanceRejected = $true }
+    if (-not $schemaSixStateAdvanceRejected) {
+      throw "A schema-6 bootstrap baseline accepted a state-serial advance."
+    }
+    $script:retainedStateFixture = $retainedState
+
+    $script:ancestorGitMode = "nonancestor"
+    $schemaSixNonancestorRejected = $false
+    try {
+      $null = Read-RetainedMigrationBaseline -PlanPath $retainedPath -PlanSha256 $retainedSha `
+        -MetadataSha256 $schemaSixSidecarSha
+    } catch { $schemaSixNonancestorRejected = $true }
+    if (-not $schemaSixNonancestorRejected) {
+      throw "A schema-6 bootstrap baseline accepted a nonancestor source chain."
+    }
+    $script:ancestorGitMode = "valid"
   } finally {
     Remove-Item -LiteralPath Function:\git -Force
     Remove-Variable -Name ancestorGitMode -Scope Script -ErrorAction SilentlyContinue
     Remove-Variable -Name ancestorRecordsFixture -Scope Script -ErrorAction SilentlyContinue
     Remove-Variable -Name ancestorPatchFixture -Scope Script -ErrorAction SilentlyContinue
+    Remove-Variable -Name ancestorLsTreeCalls -Scope Script -ErrorAction SilentlyContinue
     Remove-Variable -Name ancestorPlanFixture -Scope Script -ErrorAction SilentlyContinue
   }
 }
