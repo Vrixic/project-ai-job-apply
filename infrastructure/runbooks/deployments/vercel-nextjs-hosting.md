@@ -109,6 +109,18 @@ After both existing dashboard projects have been deliberately linked to their co
 roots, each ignored `.vercel/project.json` must contain the exact `orgId`, `projectId`, and
 `projectName` emitted by Vercel. Run the read-only preflight independently from each surface:
 
+The CLI deployment is launched from the repository root because Vercel applies the project Root
+Directory after creating the upload. The canonical `.vercelignore` therefore contains the closed
+union needed by the two projects: both Next.js roots, `packages/api-contracts`, `packages/config`,
+and the six root workspace/build controls. It excludes all other workspaces, tests, documentation,
+compiler caches, credentials, dependencies, and build outputs. Use pinned dry runs from the root
+for both projects and reject any manifest outside that union before deploying:
+
+```powershell
+pnpm dlx vercel@59.6.2 deploy . --dry --json --project $candidateProject
+pnpm dlx vercel@59.6.2 deploy . --dry --json --project $adminProject
+```
+
 ```powershell
 .\scripts\operate-vercel-phase1-hosted-acceptance.ps1 -Action Preflight `
   -Surface Candidate -SourceSha $sourceSha `
@@ -226,8 +238,11 @@ aggregate shape below:
 infrastructure/terraform/environments/development/.terraform/vercel-phase1-hosted-acceptance/
 ```
 
-Use exactly this JSON shape. Replace uppercase placeholders; use the admin values noted below.
-Canonical timestamps use seven fractional seconds and `+00:00`.
+Use exactly this JSON shape. Replace uppercase placeholders and replace both example timestamps
+with the actual current capture window; set `durationMs` to the exact whole-millisecond difference
+between them. The observation must end within 30 minutes of verification and no more than five
+minutes in the future. Use the admin values noted below. Canonical timestamps use seven fractional
+seconds and `+00:00`.
 
 ```json
 {

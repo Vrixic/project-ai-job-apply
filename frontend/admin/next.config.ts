@@ -17,10 +17,14 @@ export const securityHeaders = [
   { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
 ] as const;
 
+export function resolveOutputMode(vercelIndicator: string | undefined) {
+  return vercelIndicator === "1" ? {} : { output: "standalone" as const };
+}
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
-  output: "standalone",
+  ...resolveOutputMode(process.env.VERCEL),
   async headers() {
     return [{ source: "/:path*", headers: [...securityHeaders] }];
   },

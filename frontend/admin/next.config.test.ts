@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
-import nextConfig, { securityHeaders } from "./next.config.js";
+import nextConfig, { resolveOutputMode, securityHeaders } from "./next.config.js";
 
 describe("moderation deployment headers", () => {
+  it("lets Vercel own its build output while preserving standalone self-hosting", () => {
+    expect(resolveOutputMode("1")).toEqual({});
+    expect(resolveOutputMode(undefined)).toEqual({ output: "standalone" });
+  });
+
   it("applies browser hardening and crawler denial to every route", async () => {
     expect(await nextConfig.headers?.()).toEqual([
       { source: "/:path*", headers: [...securityHeaders] },

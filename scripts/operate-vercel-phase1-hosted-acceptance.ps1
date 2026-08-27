@@ -124,7 +124,11 @@ function Assert-ExactVercelIgnoreBoundary {
     "!frontend",
     "!frontend/**",
     "!packages",
-    "!packages/**",
+    "packages/*",
+    "!packages/api-contracts",
+    "!packages/api-contracts/**",
+    "!packages/config",
+    "!packages/config/**",
     "frontend/extension",
     "frontend/extension/**",
     "frontend/mobile",
@@ -141,7 +145,11 @@ function Assert-ExactVercelIgnoreBoundary {
     "**/dist",
     "**/dist/**",
     "**/node_modules",
-    "**/node_modules/**"
+    "**/node_modules/**",
+    "**/*.tsbuildinfo",
+    "**/*.test.*",
+    "**/*.spec.*",
+    "**/README.md"
   )
   if (($rules -join "`n") -cne ($expectedRules -join "`n")) {
     throw "The repository Vercel upload boundary does not match the exact canonical allowlist."
