@@ -361,7 +361,7 @@ function ConvertTo-TerraformVariableText {
   if ($null -eq $Value) { return "null" }
   if ($Value -is [string]) { return [string]$Value }
   if ($Value -is [bool]) { if ($Value) { return "true" }; return "false" }
-  return ($Value | ConvertTo-Json -Compress -Depth 30)
+  return (ConvertTo-Json -InputObject $Value -Compress -Depth 30)
 }
 
 function Invoke-FreshZeroDriftPlan {

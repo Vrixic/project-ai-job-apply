@@ -113,7 +113,7 @@ if ($preDriftOffset -lt 0 -or $planBuildOffset -lt $preDriftOffset -or $waitOffs
 foreach ($name in @(
     "Get-FileSha256", "ConvertFrom-OperatorJson", "ConvertFrom-BoundedJsonString", "Assert-ExactProperties", "Test-CanonicalTimestamp", "Get-OptionalProperty",
     "Resolve-PathBelowRoot", "Write-JsonFile", "New-DurableExecutionName", "Assert-OperatorDeltaRecordSet", "Read-ProviderFixtureBinding",
-    "Assert-ZeroChangePlan", "Assert-StateBoundary", "Get-StateResource", "Get-StateResourceInstances", "Get-IngestionNetworkBoundary",
+    "Assert-ZeroChangePlan", "ConvertTo-TerraformVariableText", "Assert-StateBoundary", "Get-StateResource", "Get-StateResourceInstances", "Get-IngestionNetworkBoundary",
     "Assert-LiveIngestionNetworkBoundary", "Assert-LiveBoundary", "Get-AllIngestionMappings", "Get-DurableExecutionMatches", "New-WorkflowPayload",
     "New-ExecutionPlan", "Read-ExecutionPlan", "Wait-ExactDurableResult", "New-Receipt", "Assert-Receipt",
     "Assert-InvocationArtifactsAbsent", "Assert-ProviderAggregate", "Assert-ZeroDriftEvidence", "Write-OrValidateEvidence", "Complete-Evidence"
@@ -159,6 +159,10 @@ $allowedOperatorDelta = @(
 )
 
 try {
+  if ((ConvertTo-TerraformVariableText @('http://localhost:3000')) -cne '["http://localhost:3000"]' -or
+    (ConvertTo-TerraformVariableText @('one', 'two')) -cne '["one","two"]') {
+    throw 'Terraform variable reconstruction did not preserve one- and multi-element composite values.'
+  }
   $executionName = New-DurableExecutionName $RunId
   if ($executionName -cne "d1-provider-failure-1234567812344abc8def1234567890ab" -or $executionName.Length -gt 64) {
     throw "The durable execution name is not the exact bounded UUID-derived identity."
