@@ -1,6 +1,6 @@
 # Vercel Next.js Hosting
 
-- Status: Projects bound; hosted acceptance pending exact-source deployments and authority gates
+- Status: Identity-dark protected-host acceptance passed; managed OIDC, publication, and authority gates remain
 - Last updated: 2026-08-27
 - Scope: Synthetic development acceptance only
 
@@ -247,7 +247,11 @@ Use exactly this JSON shape. Replace uppercase placeholders and replace both exa
 with the actual current capture window; set `durationMs` to the exact whole-millisecond difference
 between them. The observation must end within 30 minutes of verification and no more than five
 minutes in the future. Use the admin values noted below. Canonical timestamps use seven fractional
-seconds and `+00:00`.
+seconds and `+00:00`. The strict UTF-8 file must have no BOM, contain no extra properties, and be no
+larger than 32,768 bytes. `durationMs` must be between `0` and `3,600,000`, and the deployment ID
+must match `dpl_` followed by 8–96 ASCII letters or digits. `stableOrigin` must be a canonical
+lowercase HTTPS DNS origin on the default port, with no credentials, trailing dot, trailing slash,
+path, query, or fragment.
 
 ```json
 {
@@ -293,7 +297,9 @@ seconds and `+00:00`.
 }
 ```
 
-For an admin identity-dark observation, use `surface: "admin"`, `rootDirectory:
+Candidate may use `identityMode: "identity-dark"` for an intentionally unconfigured protected
+deployment or `candidate-managed-oidc` after the separate identity authority and exact-host setup
+exist. For an admin identity-dark observation, use `surface: "admin"`, `rootDirectory:
 "frontend/admin"`, `identityMode: "identity-dark"`, `xRobotsTag: "noindex, nofollow,
 noarchive"`, and unauthenticated BFF path `/api/moderation/cases`. Its BFF status may be `401` or
 `503`; capture that admin route with `POST`, `Content-Type: application/json`, and a strict
@@ -301,7 +307,9 @@ generated-synthetic `OpenModerationCaseRequest`, while discarding its response b
 method handling instead and is not the BFF authentication check. Candidate may also use `503` while
 intentionally identity-dark. The operator always
 requires `adminIdentityActivated: false` and `publicIndexingEnabled: false`. It cannot authorize a
-later admin activation or public launch.
+later admin activation or public launch. The observation schema records the aggregate result but
+cannot mechanically distinguish an admin GET from the required generated-synthetic POST; the
+authorized capture procedure and independent review therefore remain part of that evidence.
 
 `noStore` records whether `Cache-Control` contains the exact case-insensitive `no-store` directive
 token; it is not an equality check against the complete header value. The dynamic, session-sensitive
@@ -326,8 +334,9 @@ $observationSha256 = (Get-FileHash -LiteralPath $observationPath -Algorithm SHA2
 Verification repeats clean-source and read-only provider preflight, checks the observation checksum,
 requires the aggregate duration to exactly match its canonical timestamps, rejects observations
 older than 30 minutes or more than five minutes in the future, and emits only the approved
-aggregate. Any extra JSON field—including a raw token, cookie, body,
-email, subject, candidate value, job value, or moderation value—causes rejection. A passing
+aggregate. It also rejects a file that is oversized, has a BOM, is not strict UTF-8, uses a
+noncanonical origin or deployment ID, or contains an extra JSON field—including a raw token,
+cookie, body, email, subject, candidate value, job value, or moderation value. A passing
 identity-dark aggregate proves only protected hosting and the fixed route/header boundary; it does
 not prove login, BFF authorization, feature behavior, log review, or the later admin authority gate.
 
