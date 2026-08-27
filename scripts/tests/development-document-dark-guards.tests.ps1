@@ -54,6 +54,11 @@ if ($completeProcessorRefresh.Count -ne 3 -or
   $completeProcessorRefresh["module.platform.aws_lambda_alias.document_processor[0]"] -cne "update") {
   throw "CompleteDark processor refresh does not retain its exact three-update boundary."
 }
+$guardSource = Get-Content -LiteralPath (Join-Path $repositoryRoot "scripts\lib\development-document-dark-guards.ps1") -Raw
+if ($guardSource -notmatch '\$CompleteDarkParserRefresh\)\s*\{\s*@\(\)\s*\}' -or
+  $guardSource -notmatch '\$CompleteDarkProcessorRefresh\)\s*\{\s*@\("module\.platform\.aws_iam_role_policy\.document_processor\[0\]"\)\s*\}') {
+  throw "CompleteDark refresh policy validation is not limited to the exact policy-bearing resources."
+}
 foreach ($invalidRefresh in @(
     { Get-DevelopmentDocumentStageExpectedActions parser-dark -CompleteDarkParserRefresh },
     { Get-DevelopmentDocumentStageExpectedActions parser-dark -CompleteDarkProcessorRefresh },

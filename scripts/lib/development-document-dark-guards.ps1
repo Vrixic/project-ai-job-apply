@@ -2051,7 +2051,16 @@ function Assert-DevelopmentDocumentDarkPlan {
   $policyUpdates = Get-DevelopmentDocumentStageExpectedActions -Stage $Stage `
     -CompleteDarkParserRefresh:$CompleteDarkParserRefresh `
     -CompleteDarkProcessorRefresh:$CompleteDarkProcessorRefresh
-  foreach ($address in @($policyUpdates.Keys | Where-Object { $policyUpdates[$_] -ceq "update" })) {
+  $updatedPolicyAddresses = if ($CompleteDarkParserRefresh) {
+    @()
+  }
+  elseif ($CompleteDarkProcessorRefresh) {
+    @("module.platform.aws_iam_role_policy.document_processor[0]")
+  }
+  else {
+    @($policyUpdates.Keys | Where-Object { $policyUpdates[$_] -ceq "update" })
+  }
+  foreach ($address in $updatedPolicyAddresses) {
     $afterUnknown = Get-OptionalTerraformChangeValue $byAddress[$address].change "after_unknown"
     $unknown = if ($null -eq $afterUnknown) { $null } else { $afterUnknown.PSObject.Properties["policy"] }
     if (($null -ne $unknown -and (ConvertTo-DeploymentCanonicalValue $unknown.Value -SortArrays) -match 'true') -or
