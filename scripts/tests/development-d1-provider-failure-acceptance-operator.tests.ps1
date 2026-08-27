@@ -393,7 +393,7 @@ try {
         $arn = [string]$Arguments[3]
         if ($arn -ceq $durableArn) {
           return [pscustomobject]@{
-            FunctionArn = $boundary.DurableFunctionArn; Version = "17"; State = "Active"; LastUpdateStatus = "Successful"
+            FunctionArn = $boundary.DurableArn; Version = "17"; State = "Active"; LastUpdateStatus = "Successful"
             CodeSha256 = $ExpectedDurableCodeSha256; Environment = [pscustomobject]@{ Variables = [pscustomobject]@{
                 RELEASE_SHA = $ExpectedDurableArtifactSha256; INGESTION_ACTIVITY_FUNCTION_ARN = $activityArn
               } }
@@ -401,7 +401,7 @@ try {
         }
         if ($arn -ceq $activityArn) {
           return [pscustomobject]@{
-            FunctionArn = $boundary.ActivityFunctionArn; Version = "23"; State = "Active"; LastUpdateStatus = "Successful"
+            FunctionArn = $boundary.ActivityArn; Version = "23"; State = "Active"; LastUpdateStatus = "Successful"
             CodeSha256 = $ExpectedActivityCodeSha256
             VpcConfig = [pscustomobject]@{ SubnetIds = if ($script:liveMutation -ceq "provider-subnet") { $providerSubnetIds } else { $privateSubnetIds } }
             Environment = [pscustomobject]@{ Variables = [pscustomobject]@{
@@ -439,9 +439,9 @@ try {
       }
       "lambda list-durable-executions-by-function" {
         return [pscustomobject]@{ DurableExecutions = @(
-            [pscustomobject]@{ DurableExecutionName = $executionName; FunctionArn = $boundary.DurableFunctionArn; Version = "17"; Status = "SUCCEEDED" },
-            [pscustomobject]@{ DurableExecutionName = "$executionName-suffix"; FunctionArn = $boundary.DurableFunctionArn; Version = "17"; Status = "RUNNING" },
-            [pscustomobject]@{ DurableExecutionName = $executionName; FunctionArn = $boundary.DurableFunctionArn; Version = "18"; Status = "RUNNING" }
+            [pscustomobject]@{ DurableExecutionName = $executionName; FunctionArn = $boundary.DurableArn; Status = "SUCCEEDED" },
+            [pscustomobject]@{ DurableExecutionName = "$executionName-suffix"; FunctionArn = $boundary.DurableArn; Status = "RUNNING" },
+            [pscustomobject]@{ DurableExecutionName = $executionName; FunctionArn = "$($boundary.DurableFunctionArn):18"; Status = "RUNNING" }
           ) }
       }
       "ec2 describe-route-tables" {
@@ -467,7 +467,7 @@ try {
   }
   $exactMatches = @(Get-DurableExecutionMatches $executionName)
   if ($exactMatches.Count -ne 1 -or [string]$exactMatches[0].DurableExecutionName -cne $executionName -or
-    [string]$exactMatches[0].FunctionArn -cne $boundary.DurableFunctionArn -or [string]$exactMatches[0].Version -cne "17") {
+    [string]$exactMatches[0].FunctionArn -cne $boundary.DurableArn) {
     throw "The contains-filter durable lookup did not reduce to the exact name and numeric function version."
   }
   function Get-DurableExecutionMatches([string]$ExecutionName) {
@@ -541,7 +541,7 @@ try {
     }
     return [pscustomobject]@{
       DurableExecutionArn = "$durableArn/durable-execution/$executionName/opaque01"
-      DurableExecutionName = $executionName; FunctionArn = $boundary.DurableFunctionArn; Version = "17"; Status = "SUCCEEDED"
+      DurableExecutionName = $executionName; FunctionArn = $boundary.DurableArn; Version = "17"; Status = "SUCCEEDED"
       InputPayload = (New-WorkflowPayload | ConvertTo-Json -Compress -Depth 10)
       OutputPayload = ($result | ConvertTo-Json -Compress -Depth 10)
     }

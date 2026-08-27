@@ -15,13 +15,13 @@ The operator invokes only the exact numeric deployed ingestion durable Lambda ve
 version is state- and configuration-bound to the exact numeric ingestion activity version. It does
 not call the coordinator, starter, terminal handler, schedule, event-source mapping, queue, ECS, or
 provider. The execution lookup uses Lambda's supported function-name plus durable-execution-name
-filter without a qualifier, then requires the exact numeric version locally because the API rejects
-combining the name filter with both function and qualifier. Lambda execution names are the one-run idempotency boundary; AWS documents that named
+filter without a qualifier, then requires the exact version-qualified function ARN locally because
+the API rejects combining the name filter with both function and qualifier. The subsequent exact
+execution read also requires that qualified ARN and its separate numeric version. Lambda execution names are the one-run idempotency boundary; AWS documents that named
 durable executions prevent duplicate starts. The operator also reduces the service's contains-name
-listing response to an exact case-sensitive name and exact numeric function ARN before counting a
-listing response to an exact case-sensitive name, unqualified function ARN, and separate numeric
-version before counting a match. AWS durable list/get responses are accepted only when `FunctionArn` is the exact unqualified
-function ARN and the separate `Version` field is the expected numeric version. See
+listing response to an exact case-sensitive name and exact version-qualified function ARN before
+counting a match. AWS durable execution reads are accepted only when `FunctionArn` is the exact
+version-qualified function ARN and the separate `Version` field is the expected numeric version. See
 [Lambda durable idempotency](https://docs.aws.amazon.com/lambda/latest/dg/durable-execution-idempotency.html),
 [Invoke](https://docs.aws.amazon.com/cli/latest/reference/lambda/invoke.html), and
 [GetDurableExecution](https://docs.aws.amazon.com/lambda/latest/api/API_GetDurableExecution.html).

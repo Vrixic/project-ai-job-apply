@@ -621,10 +621,10 @@ function Get-DurableExecutionMatches {
     throw "The exact durable execution lookup was unexpectedly paginated."
   }
   $expectedFunctionArn = "arn:aws:lambda:$Region`:$ExpectedAccountId`:function:$durableFunctionName"
+  $expectedQualifiedArn = "$expectedFunctionArn`:$ExpectedDurableVersion"
   return @($result.DurableExecutions | Where-Object {
       [string]$_.DurableExecutionName -ceq $ExecutionName -and
-      [string]$_.FunctionArn -ceq $expectedFunctionArn -and
-      [string]$_.Version -ceq [string]$ExpectedDurableVersion
+      [string]$_.FunctionArn -ceq $expectedQualifiedArn
     })
 }
 
@@ -665,12 +665,12 @@ function Assert-LiveBoundary {
   $dispatch = Get-QueueAttributes $dispatchQueueName
   $deadLetter = Get-QueueAttributes $deadLetterQueueName
   $matches = @(Get-DurableExecutionMatches $ExecutionName)
-  if ([string]$durable.FunctionArn -cne $StateBoundary.DurableFunctionArn -or [string]$durable.Version -cne [string]$ExpectedDurableVersion -or
+  if ([string]$durable.FunctionArn -cne $StateBoundary.DurableArn -or [string]$durable.Version -cne [string]$ExpectedDurableVersion -or
     [string]$durable.State -cne "Active" -or [string]$durable.LastUpdateStatus -cne "Successful" -or
     [string]$durable.CodeSha256 -cne $ExpectedDurableCodeSha256 -or
     [string]$durable.Environment.Variables.RELEASE_SHA -cne $ExpectedDurableArtifactSha256 -or
     [string]$durable.Environment.Variables.INGESTION_ACTIVITY_FUNCTION_ARN -cne $StateBoundary.ActivityArn -or
-    [string]$activity.FunctionArn -cne $StateBoundary.ActivityFunctionArn -or [string]$activity.Version -cne [string]$ExpectedActivityVersion -or
+    [string]$activity.FunctionArn -cne $StateBoundary.ActivityArn -or [string]$activity.Version -cne [string]$ExpectedActivityVersion -or
     [string]$activity.State -cne "Active" -or [string]$activity.LastUpdateStatus -cne "Successful" -or
     [string]$activity.CodeSha256 -cne $ExpectedActivityCodeSha256 -or
     [string]$activity.Environment.Variables.RELEASE_SHA -cne $ExpectedActivityArtifactSha256 -or
@@ -821,7 +821,7 @@ function Wait-ExactDurableResult {
   do {
     $execution = Invoke-AwsJson @("lambda", "get-durable-execution", "--durable-execution-arn", $DurableExecutionArn, "--include-execution-data", "--output", "json") "Durable execution polling"
     if ([string]$execution.DurableExecutionArn -cne $DurableExecutionArn -or [string]$execution.DurableExecutionName -cne (New-DurableExecutionName $RunId) -or
-      [string]$execution.FunctionArn -cne $Boundary.DurableFunctionArn -or [string]$execution.Version -cne [string]$ExpectedDurableVersion) {
+      [string]$execution.FunctionArn -cne $Boundary.DurableArn -or [string]$execution.Version -cne [string]$ExpectedDurableVersion) {
       throw "The durable execution metadata crossed the reviewed version or run boundary."
     }
     if ([string]$execution.Status -cne "RUNNING") { break }
