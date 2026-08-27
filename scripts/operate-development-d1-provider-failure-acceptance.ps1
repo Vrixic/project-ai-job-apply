@@ -613,7 +613,7 @@ function Get-DurableExecutionMatches {
   param([Parameter(Mandatory)][string]$ExecutionName)
   $result = Invoke-AwsJson @(
     "lambda", "list-durable-executions-by-function", "--function-name", $durableFunctionName,
-    "--qualifier", [string]$ExpectedDurableVersion, "--durable-execution-name", $ExecutionName,
+    "--durable-execution-name", $ExecutionName,
     "--max-items", "2", "--output", "json"
   ) "Exact durable execution lookup"
   if (-not [string]::IsNullOrWhiteSpace([string](Get-OptionalProperty $result "NextMarker")) -or

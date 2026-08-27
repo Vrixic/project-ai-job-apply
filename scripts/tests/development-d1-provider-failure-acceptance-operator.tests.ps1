@@ -59,6 +59,15 @@ foreach ($forbiddenText in @(
   )) {
   if ($source -match [regex]::Escape($forbiddenText)) { throw "The operator contains forbidden effect '$forbiddenText'." }
 }
+$durableLookupDefinition = @($ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Get-DurableExecutionMatches'
+    }, $true))[0].Extent.Text
+if (-not $durableLookupDefinition.Contains('"--function-name", $durableFunctionName') -or
+  -not $durableLookupDefinition.Contains('"--durable-execution-name", $ExecutionName') -or
+  $durableLookupDefinition.Contains('"--qualifier"')) {
+  throw 'The durable execution lookup must use the supported function/name filter and validate the numeric version locally.'
+}
 $allowlistMatch = [regex]::Match($source, '(?s)\$allowedOperatorDelta\s*=\s*@\((.*?)\)')
 if (-not $allowlistMatch.Success) { throw "The exact provider operator-source allowlist is missing." }
 $allowlistLiterals = @([regex]::Matches($allowlistMatch.Groups[1].Value, '"([^"\r\n]+)"') | ForEach-Object { $_.Groups[1].Value })

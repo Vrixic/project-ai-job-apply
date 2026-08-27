@@ -14,7 +14,9 @@ The fixed fixture is:
 The operator invokes only the exact numeric deployed ingestion durable Lambda version. That
 version is state- and configuration-bound to the exact numeric ingestion activity version. It does
 not call the coordinator, starter, terminal handler, schedule, event-source mapping, queue, ECS, or
-provider. Lambda execution names are the one-run idempotency boundary; AWS documents that named
+provider. The execution lookup uses Lambda's supported function-name plus durable-execution-name
+filter without a qualifier, then requires the exact numeric version locally because the API rejects
+combining the name filter with both function and qualifier. Lambda execution names are the one-run idempotency boundary; AWS documents that named
 durable executions prevent duplicate starts. The operator also reduces the service's contains-name
 listing response to an exact case-sensitive name and exact numeric function ARN before counting a
 listing response to an exact case-sensitive name, unqualified function ARN, and separate numeric
