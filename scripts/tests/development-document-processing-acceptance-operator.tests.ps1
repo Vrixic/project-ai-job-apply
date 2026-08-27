@@ -198,8 +198,11 @@ if ($uploadOffset -lt 0 -or $terminalOffset -le $uploadOffset -or $syntheticOffs
   throw 'Corpus execution does not preserve upload, managed-terminal, synthetic-tag, final-readback, invocation ordering.'
 }
 foreach ($required in @(
-    "failureStage = 'preflight'; failureCaseId = ''",
+    "failureStage = 'preflight'; failureCaseId = ''; failureOperation = 'none'",
     "-Stage 'upload' -CaseId",
+    "-Operation 'source-upload'",
+    "-Operation 'source-readback-request'",
+    "-Operation 'source-readback-validation'",
     "-Stage 'guardduty-terminal' -CaseId",
     "-Stage 'synthetic-tag' -CaseId",
     "-Stage 'tag-revalidation' -CaseId",
@@ -207,7 +210,8 @@ foreach ($required in @(
     "-Stage 'aggregate-validation'",
     "-Stage 'cleanup'",
     '$Receipt.failureStage = $Stage',
-    '$Receipt.failureCaseId = $CaseId'
+    '$Receipt.failureCaseId = $CaseId',
+    '$Receipt.failureOperation = $Operation'
   )) {
   if (-not $source.Contains($required)) { throw "Corpus durable failure attribution omits: $required" }
 }
@@ -234,11 +238,41 @@ foreach ($required in @(
     throw "The corpus per-mutation guard omits exact live state/dark enforcement: $required"
   }
 }
-if (-not $corpusExecuteRegion.Contains("schemaVersion = 2; kind = 'development-document-parser-corpus-receipt'")) {
+if (-not $corpusExecuteRegion.Contains("schemaVersion = 3; kind = 'development-document-parser-corpus-receipt'")) {
   throw 'The durable corpus failure receipt schema was not versioned.'
 }
 if ($source.Contains("`$receipt.phase = 'recovered-cleaned'; `$receipt.failureStage = 'none'")) {
   throw 'Corpus cleanup recovery must preserve its durable failure attribution.'
+}
+$sourceReadbackDefinition = @($ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Read-CorpusSourceExact'
+    }, $true))[0].Extent.Text
+foreach ($required in @(
+    '$maximumAttempts = 5',
+    '$retryDelaySeconds = 2',
+    "'s3api', 'head-object'",
+    "'--version-id', `$Document.sourceVersion",
+    "-Operation 'source-readback-request'",
+    "-Operation 'source-readback-validation'",
+    '[string]$head.SSEKMSKeyId -ceq [string]$Runtime.PlatformKmsKeyArn',
+    "[string]`$head.Metadata.'document-id' -ceq [string]`$Entry.documentId",
+    '[string]$head.Metadata.sha256 -ceq [string]$Entry.sha256'
+  )) {
+  if (-not $sourceReadbackDefinition.Contains($required)) {
+    throw "The bounded exact corpus source readback omits: $required"
+  }
+}
+if ($sourceReadbackDefinition.Contains('put-object')) {
+  throw 'The corpus source readback retry helper must never repeat PutObject.'
+}
+$publishCorpusDefinition = @($ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Publish-CorpusSource'
+    }, $true))[0].Extent.Text
+if ([regex]::Matches($publishCorpusDefinition, "'s3api', 'put-object'").Count -ne 1 -or
+  -not $publishCorpusDefinition.Contains('Read-CorpusSourceExact')) {
+  throw 'Corpus publication must perform one upload followed by the bounded read-only exact readback.'
 }
 $terminalDefinition = @($ast.FindAll({
       param($node)
@@ -288,7 +322,8 @@ foreach ($name in @(
     "Remove-ExactObjectVersion", "Remove-DescriptorObjects", "Assert-ReviewedRuntimeUnchanged", "Assert-CorpusMutationBoundary",
     "Assert-ActiveGuardDutyTaggingBoundary", "Get-ExactScanStatus", "Wait-GuardDutyServiceScan", "Wait-CorpusGuardDutyTerminalTag",
     "Assert-CorpusSyntheticScanTag", "Remove-RecoveryObjectVersion", "Invoke-VersionedObjectRecovery",
-    "Assert-CorpusAggregate", "Assert-CorpusFailureCheckpoint", "Remove-CorpusFiles"
+    "Assert-CorpusAggregate", "Write-JsonFile", "Write-CorpusReceipt", "Set-CorpusFailureCheckpoint", "Assert-CorpusFailureCheckpoint",
+    "Read-CorpusSourceExact", "Remove-CorpusFiles"
   )) {
   Import-OperatorFunction -Name $name
 }
@@ -583,6 +618,8 @@ function global:Get-TerraformState { [pscustomobject]@{} }
 function global:Get-StateOutput { param($State, $Name) $topicArn }
 function global:Assert-TriggersDark { param($State) [pscustomobject]@{ MappingState = 'Disabled'; GuardDutyRuleState = 'DISABLED'; ReconcilerState = 'DISABLED' } }
 $script:scanStatus = 'NO_THREATS_FOUND'
+$script:corpusHeadMode = 'off'
+$script:corpusHeadAttempts = 0
 function global:Invoke-AwsJson {
   param([string[]]$Arguments, [string]$Operation)
   if ($Arguments[0] -ceq 'guardduty' -and $Arguments[1] -ceq 'get-malware-protection-plan') {
@@ -603,6 +640,22 @@ function global:Invoke-AwsJson {
     return [pscustomobject]@{
       VersionId = 'source-version'
       TagSet = $tagSet
+    }
+  }
+  if ($script:corpusHeadMode -cne 'off' -and $Arguments[0] -ceq 's3api' -and $Arguments[1] -ceq 'head-object') {
+    $script:corpusHeadAttempts += 1
+    if ($script:corpusHeadMode -ceq 'request-fail' -or
+      ($script:corpusHeadMode -ceq 'transient-request' -and $script:corpusHeadAttempts -eq 1)) {
+      throw 'Synthetic HeadObject request failure.'
+    }
+    $sha = if ($script:corpusHeadMode -ceq 'validation-fail') { 'd' * 64 } else { 'c' * 64 }
+    return [pscustomobject]@{
+      VersionId = 'source-version'
+      ContentLength = 64
+      ContentType = 'application/pdf'
+      ServerSideEncryption = 'aws:kms'
+      SSEKMSKeyId = $runtime.PlatformKmsKeyArn
+      Metadata = [pscustomobject]@{ 'document-id' = '22222222-2222-4222-8222-222222222222'; sha256 = $sha }
     }
   }
   if ($script:orphanProofMode -and $Arguments[0] -ceq 's3api') {
@@ -716,13 +769,65 @@ $script:scanStatus = 'NO_THREATS_FOUND'
 if (-not (Assert-CorpusSyntheticScanTag -Runtime $runtime -Document $managedScanDocument)) {
   throw 'The exact synthetic corpus tag was not accepted after readback.'
 }
+$readbackReceiptPath = [IO.Path]::GetTempFileName()
+$readbackEntry = [pscustomobject]@{
+  caseId = 'case-001'
+  documentId = '22222222-2222-4222-8222-222222222222'
+  mediaType = 'application/pdf'
+  sizeBytes = 64
+  sha256 = 'c' * 64
+}
+$readbackDocument = [pscustomobject]@{
+  caseId = 'case-001'
+  sourceKey = 'quarantine/22222222-2222-4222-8222-222222222222/source'
+  sourceVersion = 'source-version'
+}
+$readbackReceipt = [pscustomobject]@{
+  phase = 'running'
+  failureStage = 'upload'
+  failureCaseId = 'case-001'
+  failureOperation = 'source-upload'
+}
+function global:Start-Sleep { param([int]$Seconds) }
+try {
+  $script:corpusHeadMode = 'transient-request'
+  $script:corpusHeadAttempts = 0
+  $null = Read-CorpusSourceExact -Runtime $runtime -Entry $readbackEntry -Document $readbackDocument -Receipt $readbackReceipt -ReceiptPath $readbackReceiptPath
+  if ($script:corpusHeadAttempts -ne 2 -or [string]$readbackReceipt.failureOperation -cne 'source-readback-validation') {
+    throw 'The bounded corpus readback did not recover from one HeadObject request failure without another upload.'
+  }
+
+  $script:corpusHeadMode = 'request-fail'
+  $script:corpusHeadAttempts = 0
+  $requestFailureClosed = $false
+  try { $null = Read-CorpusSourceExact -Runtime $runtime -Entry $readbackEntry -Document $readbackDocument -Receipt $readbackReceipt -ReceiptPath $readbackReceiptPath }
+  catch { $requestFailureClosed = $_.Exception.Message -ceq 'The exact corpus source object readback request did not succeed within the bounded retry window.' }
+  if (-not $requestFailureClosed -or $script:corpusHeadAttempts -ne 5 -or [string]$readbackReceipt.failureOperation -cne 'source-readback-request') {
+    throw 'The bounded corpus readback did not retain its closed request-failure attribution.'
+  }
+
+  $script:corpusHeadMode = 'validation-fail'
+  $script:corpusHeadAttempts = 0
+  $validationFailureClosed = $false
+  try { $null = Read-CorpusSourceExact -Runtime $runtime -Entry $readbackEntry -Document $readbackDocument -Receipt $readbackReceipt -ReceiptPath $readbackReceiptPath }
+  catch { $validationFailureClosed = $_.Exception.Message -ceq 'The exact corpus source object readback remained outside the reviewed generated bytes after the bounded retry window.' }
+  if (-not $validationFailureClosed -or $script:corpusHeadAttempts -ne 5 -or [string]$readbackReceipt.failureOperation -cne 'source-readback-validation') {
+    throw 'The bounded corpus readback did not retain its closed validation-failure attribution.'
+  }
+}
+finally {
+  $script:corpusHeadMode = 'off'
+  Remove-Item -LiteralPath $readbackReceiptPath -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath Function:global:Start-Sleep -Force -ErrorAction SilentlyContinue
+}
 $checkpointPlan = [pscustomobject]@{ cases = @([pscustomobject]@{ caseId = 'case-001' }) }
-$checkpointReceipt = [pscustomobject]@{ phase = 'running'; failureStage = 'upload'; failureCaseId = 'case-001' }
+$checkpointReceipt = [pscustomobject]@{ phase = 'running'; failureStage = 'upload'; failureCaseId = 'case-001'; failureOperation = 'source-upload' }
 if (-not (Assert-CorpusFailureCheckpoint -Receipt $checkpointReceipt -Plan $checkpointPlan)) {
   throw 'A valid corpus case failure checkpoint was not accepted.'
 }
 $checkpointReceipt.failureStage = 'none'
 $checkpointReceipt.failureCaseId = ''
+$checkpointReceipt.failureOperation = 'none'
 $invalidNoneRejected = $false
 try { $null = Assert-CorpusFailureCheckpoint -Receipt $checkpointReceipt -Plan $checkpointPlan }
 catch { $invalidNoneRejected = $true }
@@ -742,6 +847,7 @@ if (-not (Assert-CorpusFailureCheckpoint -Receipt $checkpointReceipt -Plan $chec
 }
 $checkpointReceipt.failureStage = 'upload'
 $checkpointReceipt.failureCaseId = 'case-001'
+$checkpointReceipt.failureOperation = 'source-readback-validation'
 if (-not (Assert-CorpusFailureCheckpoint -Receipt $checkpointReceipt -Plan $checkpointPlan)) {
   throw 'A recovered corpus receipt did not preserve its case-bound original failure attribution.'
 }
