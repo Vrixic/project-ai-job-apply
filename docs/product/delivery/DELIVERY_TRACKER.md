@@ -39,11 +39,13 @@ This is the master record for the delivery phases defined in the [product and sy
   saved-job, and match application aggregates were each freshly corroborated against AWS and the
   exact applied plan: all `3/3` profiles pass with zero 5xx, Lambda errors/throttles, backlog, DLQ,
   forbidden-log matches, ECS application work, or Terraform drift. The accepted one-run provider
-  fault/recovery aggregate and post-run zero drift also pass the composed assessor. The assessor
-  remains fail-closed only on the absent attributable ALARM-and-recovery notification receipt; no
-  alert delivery or Phase 1 completion is claimed. Candidate hosted OIDC/public/admin breadth,
-  candidate rights, accessibility, and final security/privacy/product acceptance remain in their
-  explicitly deferred sequence.
+  fault/recovery aggregate and post-run zero drift also pass. The guarded canary completed one ALARM
+  and one recovery transition in `328501` ms; the operator directly confirmed both sanitized
+  notifications, and fresh status retained one confirmed/zero pending recipient, final `OK`, both
+  actions, and all `43` managed platform alarms healthy. The final composed representative assessor
+  is accepted with no blocking issue. Candidate hosted OIDC/public/admin breadth, candidate rights,
+  accessibility, and final security/privacy/product acceptance remain in their explicitly deferred
+  sequence; Phase 1 completion is not claimed.
   [Phase 1 tasks](phase-1-web-and-job-catalog.md),
   [representative runbook](../../../infrastructure/runbooks/observability/d1-representative-deployed-acceptance.md),
   [single governance record](../foundation/d1-reporting-moderation-policy-review-disposition.md)

@@ -253,8 +253,10 @@ Rationale:
   counts are intentionally separate because they measure different inventories.
 - The recipient value remains outside source. On 2026-08-27 the alert operator found exactly one
   confirmed email recipient, zero pending recipients, calculated its canonical-set digest, and bound
-  only that digest in ignored private acceptance evidence. The operator must re-verify the same
-  digest immediately before the manual delivery exercise.
+  only that digest in ignored private acceptance evidence. The operator re-verified the same digest,
+  completed one ALARM and one recovery transition in 328.501 seconds, received attributable manual
+  confirmation of both sanitized notifications, and restored the canary to `OK`. The final composed
+  representative assessor accepted every required aggregate with no blocker.
 
 ## Authorization and remaining execution gates
 
@@ -272,11 +274,7 @@ Remaining execution gates are:
 
 1. create/configure the distinct admin Auth0 client and exact `jobs:moderate` grant;
 2. enroll one disposable MFA-protected moderator and run hosted admin acceptance;
-3. manually confirm one ALARM and one recovery delivery for the already-bound operations/trust
-   recipient set;
-4. rerun the representative assessor against the already-reviewed private release configuration;
-   and
-5. complete the separately deferred final human reviews.
+3. complete the separately deferred final human reviews.
 
 Execution evidence may link this record but must not duplicate or fork these policy and threshold
 decisions. A material change updates this one document to a new decision version and requires new
