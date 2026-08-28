@@ -431,7 +431,11 @@ resource "aws_cloudformation_stack" "profile_readiness_durable" {
         Properties = {
           FunctionName = { Ref = "DurableFunction" }
           CodeSha256   = var.profile_readiness_durable_artifact_base64sha256
-          Description  = "Immutable ${var.profile_readiness_durable_artifact_sha256}"
+          # Publishing captures environment variables immutably. Bind the invoked activity
+          # version into this replacement-only property so an activity-only release also
+          # publishes and aliases a coherent durable version instead of leaving the durable
+          # environment on the previous activity ARN while IAM advances to the new one.
+          Description = "Immutable ${var.profile_readiness_durable_artifact_sha256}; activity ${aws_lambda_function.profile_readiness_activity[0].qualified_arn}"
         }
       }
       DurableAlias = {

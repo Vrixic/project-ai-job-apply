@@ -482,6 +482,7 @@ for (const required of [
   'status      = ["FAILED", "STOPPED", "TIMED_OUT"]',
   "source_arn    = local.profile_readiness_terminal_rule_arn",
   "kms_master_key_id         = aws_kms_key.platform.arn",
+  'Description = "Immutable ${var.profile_readiness_durable_artifact_sha256}; activity ${aws_lambda_function.profile_readiness_activity[0].qualified_arn}"',
 ]) {
   requireText(durable, required, `durable security/replay boundary is missing: ${required}`);
 }

@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-08-27
+Last updated: 2026-08-28
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -31,6 +31,19 @@ This is the master record for the delivery phases defined in the [product and sy
 - Current engineering status: Phase 0 is complete. D0-012 accepted immutable revision `ee232824208d6a431024d34904144182b036502d` after every revised exit criterion and the full verifier passed. Counsel remains mandatory D6-016, independent security/privacy assessment remains mandatory D6-015, and representative provider fixtures block their owning D2–D4 adapters. No external approval or provider evidence is claimed. [Final acceptance](evidence/d0-final-exit-acceptance-2026-08-12.md)
 
 ## D1 — Useful web product and canonical job catalog
+
+- Candidate-rights execution diagnosis (2026-08-28): the current state-`230` read-only plan passed.
+  Execute created one generated-synthetic export with one idempotent replay and received `59/59`
+  successful owner-scoped polls; no account-deletion create, cancel, or confirmation request
+  occurred. All three preserved export workflows failed before activity invocation because immutable
+  durable version `7` retained activity version `7` while its least-privilege role allowed only the
+  current activity version `8`. The three identifier-only failures remain in the dedicated DLQ.
+  Source now binds the exact activity qualified ARN into the replacement-only durable-version
+  description, forcing a coherent republish on activity-only releases; the source guard and focused
+  Terraform test pass. Reviewed deployment, DLQ reconciliation, fresh-MFA lifecycle execution, and
+  isolated recovery replay remain open. Phase 1 is not complete.
+  [Phase 1 tasks](phase-1-web-and-job-catalog.md),
+  [candidate-rights runbook](../../../infrastructure/runbooks/deployments/development-candidate-rights-acceptance.md)
 
 - Representative evidence binding (2026-08-27): the reviewed ignored configuration now binds exact
   backend release source `48f5d5ba0c2339ec45a818a4c461676ad9ef9191`, development state `230`,
