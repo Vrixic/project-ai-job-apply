@@ -53,6 +53,43 @@ $overbroadAfter.Statement[1].Resource = "*"
 Assert-Throws { Assert-SingleAddedIamStatement -BeforePolicy $before -AfterPolicy $overbroadAfter -ExpectedStatement $expected } `
   "An overbroad added IAM statement was accepted."
 
+$exactAdded = @{
+  Sid = "OperateCandidateDataExportObjects"
+  Effect = "Allow"
+  Action = @("s3:GetObjectVersion", "s3:PutObject")
+  Resource = "arn:aws:s3:::candidate-exports/candidate-data-exports/*"
+}
+$exactBeforeModified = @{
+  Sid = "ConfigureCandidateDocumentBucketEvents"
+  Effect = "Allow"
+  Action = @("s3:ListBucket")
+  Resource = "arn:aws:s3:::candidate-docs"
+}
+$exactAfterModified = @{
+  Sid = "ConfigureCandidateDocumentBucketEvents"
+  Effect = "Allow"
+  Action = @("s3:ListBucket", "s3:ListBucketVersions")
+  Resource = "arn:aws:s3:::candidate-docs"
+}
+$exactBefore = @{
+  Version = "2012-10-17"
+  Statement = @($before.Statement[0], $exactBeforeModified)
+}
+$exactAfter = @{
+  Version = "2012-10-17"
+  Statement = @($before.Statement[0], $exactAfterModified, $exactAdded)
+}
+$exactDelta = Assert-ExactIamStatementDelta -BeforePolicy $exactBefore -AfterPolicy $exactAfter `
+  -AddedStatements @($exactAdded) -ModifiedStatements @(@{ Before = $exactBeforeModified; After = $exactAfterModified })
+Assert-Equal $exactDelta.AddedSids $exactAdded.Sid "The exact added IAM statement was not recognized."
+Assert-Equal $exactDelta.ModifiedSids $exactAfterModified.Sid "The exact modified IAM statement was not recognized."
+
+$unexpectedExactAfter = $exactAfter | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+$unexpectedExactAfter.Statement[0].Resource = "arn:aws:s3:::unexpected"
+Assert-Throws { Assert-ExactIamStatementDelta -BeforePolicy $exactBefore -AfterPolicy $unexpectedExactAfter `
+    -AddedStatements @($exactAdded) -ModifiedStatements @(@{ Before = $exactBeforeModified; After = $exactAfterModified }) } `
+  "An unapproved existing statement change was accepted by the exact-delta guard."
+
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) "ai-job-apply-operator-guards-$([guid]::NewGuid())"
 try {
   $null = New-Item -ItemType Directory -Path $testRoot

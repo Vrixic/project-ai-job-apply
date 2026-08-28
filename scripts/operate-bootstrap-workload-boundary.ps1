@@ -46,8 +46,8 @@ Usage:
     -Environment development -AwsProfile ai-job-apply-development-admin `
     -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET
 
-Plan permits exactly one semantic change: adding AssumeOwnedDocumentObjectAccessRole to the
-environment workload permissions boundary. Apply accepts only the checksum-reviewed saved plan
+Plan permits exactly one resource update with the candidate-rights-storage-v1 semantic change set.
+Apply accepts only the checksum-reviewed saved plan
 and matching metadata. Verify requires a drift-free bootstrap and compares the live managed IAM
 policy with Terraform state. Plans and metadata remain in the ignored bootstrap .terraform tree.
 "@
@@ -73,12 +73,46 @@ $metadataSuffix = ".bootstrap-workload-boundary.json"
 $policyName = "ai-job-apply-$Environment-workload-boundary"
 $policyArn = "arn:aws:iam::${ExpectedAccountId}:policy/$policyName"
 $objectAccessRoleArn = "arn:aws:iam::${ExpectedAccountId}:role/ai-job-apply-$Environment-document-object-access"
-$expectedStatement = [pscustomobject]@{
+$requiredRetainedStatement = [pscustomobject]@{
   Sid      = "AssumeOwnedDocumentObjectAccessRole"
   Effect   = "Allow"
   Action   = @("sts:AssumeRole")
   Resource = $objectAccessRoleArn
 }
+$candidateDocumentBucketArn = "arn:aws:s3:::ai-job-apply-$Environment-candidate-docs-*"
+$candidateExportBucketArn = "arn:aws:s3:::ai-job-apply-$Environment-candidate-exports-*"
+$candidateRecoveryBucketArn = "arn:aws:s3:::ai-job-apply-$Environment-candidate-del-recovery-*"
+$expectedAddedStatements = @(
+  [pscustomobject]@{
+    Sid = "OperateCandidateDataExportObjects"; Effect = "Allow"
+    Action = @("s3:DeleteObjectVersion", "s3:GetObject", "s3:GetObjectVersion", "s3:PutObject")
+    Resource = "$candidateExportBucketArn/candidate-data-exports/*"
+  },
+  [pscustomobject]@{
+    Sid = "ListCandidateDeletionRecoveryLedger"; Effect = "Allow"; Action = @("s3:ListBucket")
+    Resource = $candidateRecoveryBucketArn
+  },
+  [pscustomobject]@{
+    Sid = "OperateCandidateDeletionRecoveryLedger"; Effect = "Allow"
+    Action = @("s3:GetObject", "s3:GetObjectTagging", "s3:PutObject", "s3:PutObjectRetention", "s3:PutObjectTagging")
+    Resource = "$candidateRecoveryBucketArn/candidate-deletion-recovery/*"
+  }
+)
+$expectedModifiedStatements = @(
+  [pscustomobject]@{
+    Before = [pscustomobject]@{
+      Sid = "ConfigureCandidateDocumentBucketEvents"; Effect = "Allow"
+      Action = @("s3:GetBucketNotification", "s3:ListBucket", "s3:PutBucketNotification")
+      Resource = $candidateDocumentBucketArn
+    }
+    After = [pscustomobject]@{
+      Sid = "ConfigureCandidateDocumentBucketEvents"; Effect = "Allow"
+      Action = @("s3:GetBucketNotification", "s3:ListBucket", "s3:ListBucketVersions", "s3:PutBucketNotification")
+      Resource = $candidateDocumentBucketArn
+    }
+  }
+)
+$changeSet = "candidate-rights-storage-v1"
 
 $env:AWS_PROFILE = $AwsProfile
 $env:AWS_REGION = $Region
@@ -216,8 +250,9 @@ function Assert-ApprovedPlanBoundary {
     throw "The workload-boundary identity changed."
   }
 
-  return Assert-SingleAddedIamStatement -BeforePolicy $change.change.before.policy `
-    -AfterPolicy $change.change.after.policy -ExpectedStatement $expectedStatement
+  return Assert-ExactIamStatementDelta -BeforePolicy $change.change.before.policy `
+    -AfterPolicy $change.change.after.policy -AddedStatements $expectedAddedStatements `
+    -ModifiedStatements $expectedModifiedStatements
 }
 
 function Read-SavedPlan {
@@ -291,11 +326,14 @@ function Invoke-Verification {
     if ($stateCanonical -cne $liveCanonical) {
       throw "The live workload boundary does not semantically match Terraform state."
     }
-    $expectedCanonical = ConvertTo-DeploymentCanonicalValue -Value $expectedStatement -SortArrays
-    $matches = @($livePolicy.Statement | Where-Object {
-        (ConvertTo-DeploymentCanonicalValue -Value $_ -SortArrays) -ceq $expectedCanonical
-      })
-    if ($matches.Count -ne 1) { throw "The live policy lacks the exact approved document-object role statement." }
+    $requiredStatements = @($requiredRetainedStatement) + $expectedAddedStatements + @($expectedModifiedStatements[0].After)
+    foreach ($expected in $requiredStatements) {
+      $expectedCanonical = ConvertTo-DeploymentCanonicalValue -Value $expected -SortArrays
+      $matches = @($livePolicy.Statement | Where-Object {
+          (ConvertTo-DeploymentCanonicalValue -Value $_ -SortArrays) -ceq $expectedCanonical
+        })
+      if ($matches.Count -ne 1) { throw "The live policy lacks an exact required workload-boundary statement." }
+    }
     Assert-PolicyValidation -Policy $livePolicy
   }
   finally {
@@ -309,7 +347,7 @@ function Invoke-Verification {
     Environment = $Environment
     Region      = $Region
     Drift       = $false
-    AddedSid    = [string]$expectedStatement.Sid
+    ChangeSet   = $changeSet
   }
 }
 
@@ -351,7 +389,7 @@ if ($Action -eq "Plan") {
   $sha256 = (Get-FileHash -LiteralPath $resolvedPlan -Algorithm SHA256).Hash.ToLowerInvariant()
   $metadataPath = "$resolvedPlan$metadataSuffix"
   [pscustomobject]@{
-    SchemaVersion = "1"
+    SchemaVersion = "2"
     Operation     = "bootstrap-workload-boundary"
     Environment   = $Environment
     Region        = $Region
@@ -361,7 +399,9 @@ if ($Action -eq "Plan") {
     PlanPath      = $resolvedPlan
     PlanSha256    = $sha256
     Resource      = "aws_iam_policy.workload_boundary"
-    AddedSid      = [string]$delta.AddedSid
+    ChangeSet     = $changeSet
+    AddedSids     = [string]$delta.AddedSids
+    ModifiedSids  = [string]$delta.ModifiedSids
     CreatedAt     = (Get-Date).ToUniversalTime().ToString("o")
   } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $metadataPath -Encoding utf8
 
@@ -369,7 +409,9 @@ if ($Action -eq "Plan") {
     Result           = "review-required"
     Environment      = $Environment
     ChangedResources = 1
-    AddedSid         = [string]$delta.AddedSid
+    ChangeSet        = $changeSet
+    AddedSids        = [string]$delta.AddedSids
+    ModifiedSids     = [string]$delta.ModifiedSids
     PlanPath         = $resolvedPlan
     PlanSha256       = $sha256
     ApprovalCommand  = "Apply reviewed $Environment bootstrap workload-boundary plan $sha256"
@@ -391,7 +433,7 @@ if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) {
 }
 $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
 Assert-ReviewedPlanMetadata -Metadata $metadata -Expected @{
-  SchemaVersion = "1"
+  SchemaVersion = "2"
   Operation     = "bootstrap-workload-boundary"
   Environment   = $Environment
   Region        = $Region
@@ -401,7 +443,9 @@ Assert-ReviewedPlanMetadata -Metadata $metadata -Expected @{
   PlanPath      = $resolvedPlan
   PlanSha256    = $ReviewedPlanSha256
   Resource      = "aws_iam_policy.workload_boundary"
-  AddedSid      = [string]$expectedStatement.Sid
+  ChangeSet     = $changeSet
+  AddedSids     = ($expectedAddedStatements.Sid | Sort-Object) -join ","
+  ModifiedSids  = ($expectedModifiedStatements.After.Sid | Sort-Object) -join ","
 }
 $plan = Read-SavedPlan -ResolvedPlan $resolvedPlan
 $null = Assert-ApprovedPlanBoundary -Plan $plan

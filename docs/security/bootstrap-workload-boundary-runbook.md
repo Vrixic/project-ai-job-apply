@@ -1,8 +1,9 @@
 # Bootstrap workload-boundary operator
 
-Use `scripts/operate-bootstrap-workload-boundary.ps1` for the narrowly approved bootstrap change
-that lets the environment's bounded document-processing role assume only its owned
-`document-object-access` role. The operator supports `development` and `staging`, but one execution
+Use `scripts/operate-bootstrap-workload-boundary.ps1` for the narrowly approved bootstrap
+workload-boundary change set. The current `candidate-rights-storage-v1` change set preserves the
+owned document-object role boundary and permits only the candidate-rights S3 operations already
+granted by the workload roles. The operator supports `development` and `staging`, but one execution
 may target only one exact account and its own `bootstrap.tfstate`.
 
 ## Safety boundary
@@ -10,14 +11,17 @@ may target only one exact account and its own `bootstrap.tfstate`.
 The operator requires Terraform `1.9.8`, `us-east-2`, a temporary IAM Identity Center caller, a
 clean `main` checkout identical to `origin/main`, an account-matching encrypted/versioned/private
 state bucket, and matching remote-state outputs. A generated plan is accepted only when it updates
-`aws_iam_policy.workload_boundary` in place and adds exactly this environment-scoped statement:
+`aws_iam_policy.workload_boundary` in place and adds exactly these environment-scoped permissions:
 
 ```text
-Allow sts:AssumeRole on ai-job-apply-<environment>-document-object-access
+candidate export object read/write/exact-version deletion under candidate-data-exports/*
+candidate deletion recovery list/read/write/retention under candidate-deletion-recovery/*
+candidate document ListBucketVersions for exact-version deletion
 ```
 
-Every pre-existing policy statement must remain semantically unchanged. IAM Access Analyzer must
-return no error or security-warning finding. Plan files and metadata stay beneath the ignored
+Every pre-existing policy statement except the exact candidate-document list action must remain
+semantically unchanged. The existing owned-role assumption must remain exact. IAM Access Analyzer
+must return no error or security-warning finding. Plan files and metadata stay beneath the ignored
 bootstrap `.terraform/bootstrap-workload-boundary/<environment>` directory.
 
 ## Plan, review, and apply

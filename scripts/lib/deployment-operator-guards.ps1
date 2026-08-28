@@ -131,6 +131,85 @@ function Assert-SingleAddedIamStatement {
   }
 }
 
+function Assert-ExactIamStatementDelta {
+  param(
+    [Parameter(Mandatory)][object]$BeforePolicy,
+    [Parameter(Mandatory)][object]$AfterPolicy,
+    [Parameter(Mandatory)][object[]]$AddedStatements,
+    [Parameter(Mandatory)][object[]]$ModifiedStatements
+  )
+
+  $before = ConvertFrom-IamPolicyValue -Policy $BeforePolicy
+  $after = ConvertFrom-IamPolicyValue -Policy $AfterPolicy
+  if ([string]$before.Version -cne [string]$after.Version) {
+    throw "The IAM policy version changed."
+  }
+
+  $beforeStatements = @($before.Statement)
+  $afterStatements = @($after.Statement)
+  $allStatements = @($beforeStatements) + @($afterStatements)
+  if (@($allStatements | Where-Object { [string]::IsNullOrWhiteSpace([string]$_.Sid) }).Count -ne 0 -or
+    @($beforeStatements | Group-Object Sid | Where-Object Count -ne 1).Count -ne 0 -or
+    @($afterStatements | Group-Object Sid | Where-Object Count -ne 1).Count -ne 0) {
+    throw "IAM statement Sids must be present and unique."
+  }
+
+  $addedSids = @($AddedStatements | ForEach-Object { [string]$_.Sid })
+  $modifiedSids = @($ModifiedStatements | ForEach-Object { [string]$_.After.Sid })
+  if (@($addedSids + $modifiedSids | Where-Object { [string]::IsNullOrWhiteSpace($_) }).Count -ne 0 -or
+    @($addedSids + $modifiedSids | Group-Object | Where-Object Count -ne 1).Count -ne 0) {
+    throw "The expected IAM delta Sids must be present, unique, and disjoint."
+  }
+  if ($afterStatements.Count -ne ($beforeStatements.Count + $AddedStatements.Count)) {
+    throw "The IAM statement count does not match the exact approved delta."
+  }
+
+  foreach ($expected in $AddedStatements) {
+    $sid = [string]$expected.Sid
+    if (@($beforeStatements | Where-Object { [string]$_.Sid -ceq $sid }).Count -ne 0) {
+      throw "An approved added IAM statement already exists in the before policy."
+    }
+    $actual = @($afterStatements | Where-Object { [string]$_.Sid -ceq $sid })
+    if ($actual.Count -ne 1 -or
+      (ConvertTo-DeploymentCanonicalValue -Value $actual[0] -SortArrays) -cne
+      (ConvertTo-DeploymentCanonicalValue -Value $expected -SortArrays)) {
+      throw "An added IAM statement does not match the exact approved semantics."
+    }
+  }
+
+  foreach ($expected in $ModifiedStatements) {
+    if ([string]$expected.Before.Sid -cne [string]$expected.After.Sid) {
+      throw "An approved modified IAM statement cannot change Sid."
+    }
+    $sid = [string]$expected.After.Sid
+    $actualBefore = @($beforeStatements | Where-Object { [string]$_.Sid -ceq $sid })
+    $actualAfter = @($afterStatements | Where-Object { [string]$_.Sid -ceq $sid })
+    if ($actualBefore.Count -ne 1 -or $actualAfter.Count -ne 1 -or
+      (ConvertTo-DeploymentCanonicalValue -Value $actualBefore[0] -SortArrays) -cne
+      (ConvertTo-DeploymentCanonicalValue -Value $expected.Before -SortArrays) -or
+      (ConvertTo-DeploymentCanonicalValue -Value $actualAfter[0] -SortArrays) -cne
+      (ConvertTo-DeploymentCanonicalValue -Value $expected.After -SortArrays)) {
+      throw "A modified IAM statement does not match the exact approved before/after semantics."
+    }
+  }
+
+  foreach ($statement in $beforeStatements) {
+    $sid = [string]$statement.Sid
+    if ($sid -in $modifiedSids) { continue }
+    $matchingAfter = @($afterStatements | Where-Object { [string]$_.Sid -ceq $sid })
+    if ($matchingAfter.Count -ne 1 -or
+      (ConvertTo-DeploymentCanonicalValue -Value $statement -SortArrays) -cne
+      (ConvertTo-DeploymentCanonicalValue -Value $matchingAfter[0] -SortArrays)) {
+      throw "An unapproved existing IAM statement changed."
+    }
+  }
+
+  return [pscustomobject]@{
+    AddedSids    = ($addedSids | Sort-Object) -join ","
+    ModifiedSids = ($modifiedSids | Sort-Object) -join ","
+  }
+}
+
 function Resolve-DeploymentPlanPath {
   param(
     [Parameter(Mandatory)]
