@@ -288,6 +288,7 @@ foreach ($required in @(
     '(?:Image)?ScanNotFoundException',
     'oci-layout://', '--network none', '--read-only', '--cap-drop ALL', 'migration-runtime-smoke:ok',
     'profile/dist/src/run-private-feature-acceptance.js',
+    'profile/migrations/0007_candidate_rights_export_null_omission.sql',
     'jobs/dist/src/search-acceptance.js', 'jobs/dist/src/run-search-acceptance.js',
     'documents/dist/src/run-document-processing-acceptance.js',
     'matching/dist/src/run-private-feature-acceptance.js',
@@ -321,7 +322,7 @@ $backendInitialization = $source.LastIndexOf('Initialize-Backend', [StringCompar
 if ($localBuildBranch -lt 0 -or $backendInitialization -lt 0 -or $localBuildBranch -gt $backendInitialization) {
   throw "LocalBuild must exit before Terraform-state and AWS-boundary initialization."
 }
-if (-not $source.Contains('for(const entrypoint of ["profile/dist/src/run-private-feature-acceptance.js","jobs/dist/src/search-acceptance.js","jobs/dist/src/run-search-acceptance.js","documents/dist/src/run-document-processing-acceptance.js","matching/dist/src/run-private-feature-acceptance.js","runner/dist/src/restore-verifier-cli.js","runner/restore-manifest.v1.json","jobs/migrations/0009_provider_ingestion_sources.sql","jobs/migrations/0010_public_job_truth_fields.sql","jobs/migrations/0011_positive_source_withdrawal.sql","jobs/migrations/0012_candidate_rights.sql","jobs/migrations/0013_public_job_sitemap.sql"])await access(entrypoint)')) {
+if (-not $source.Contains('for(const entrypoint of ["profile/dist/src/run-private-feature-acceptance.js","profile/migrations/0007_candidate_rights_export_null_omission.sql","jobs/dist/src/search-acceptance.js","jobs/dist/src/run-search-acceptance.js","documents/dist/src/run-document-processing-acceptance.js","matching/dist/src/run-private-feature-acceptance.js","runner/dist/src/restore-verifier-cli.js","runner/restore-manifest.v1.json","jobs/migrations/0009_provider_ingestion_sources.sql","jobs/migrations/0010_public_job_truth_fields.sql","jobs/migrations/0011_positive_source_withdrawal.sql","jobs/migrations/0012_candidate_rights.sql","jobs/migrations/0013_public_job_sitemap.sql"])await access(entrypoint)')) {
   throw "The migration runtime smoke gate does not require the exact acceptance entrypoint set."
 }
 foreach ($forbidden in @("terraform apply", "ecs run-task", "register-task-definition", "BatchDeleteImage")) {
@@ -337,6 +338,7 @@ foreach ($required in @(
   'runner/dist/src/restore-verifier-cli.js',
   'runner/restore-manifest.v1.json',
   'profile/dist/src/run-private-feature-acceptance.js',
+  'profile/migrations/0007_candidate_rights_export_null_omission.sql',
   'matching/dist/src/run-private-feature-acceptance.js',
   'jobs/migrations/0009_provider_ingestion_sources.sql',
   'jobs/migrations/0010_public_job_truth_fields.sql',

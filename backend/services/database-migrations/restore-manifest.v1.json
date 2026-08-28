@@ -176,6 +176,10 @@
         {
           "version": "0006_candidate_rights",
           "checksum": "cf5966af5ac55588a20879315ceca230f37dfda29c234e74adf57acda146cbff"
+        },
+        {
+          "version": "0007_candidate_rights_export_null_omission",
+          "checksum": "9e5dcd9e6125a51d138f7580f27b989fcdf3f3a10bd7a31bf1e68ddac39e3ae3"
         }
       ],
       "relations": [

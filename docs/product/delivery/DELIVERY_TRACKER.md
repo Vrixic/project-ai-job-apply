@@ -32,16 +32,19 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## D1 — Useful web product and canonical job catalog
 
-- Candidate-rights execution diagnosis (2026-08-28): the current state-`230` read-only plan passed.
-  Execute created one generated-synthetic export with one idempotent replay and received `59/59`
-  successful owner-scoped polls; no account-deletion create, cancel, or confirmation request
-  occurred. All three preserved export workflows failed before activity invocation because immutable
-  durable version `7` retained activity version `7` while its least-privilege role allowed only the
-  current activity version `8`. The three identifier-only failures remain in the dedicated DLQ.
-  Source now binds the exact activity qualified ARN into the replacement-only durable-version
-  description, forcing a coherent republish on activity-only releases; the source guard and focused
-  Terraform test pass. Reviewed deployment, DLQ reconciliation, fresh-MFA lifecycle execution, and
-  isolated recovery replay remain open. Phase 1 is not complete.
+- Candidate-rights repair and export diagnosis (2026-08-28): the reviewed state-`230` coherence
+  plan applied `0/8/0` add/change/destroy and advanced development to state `231`. Activity alias,
+  durable alias, immutable durable environment, and least-privilege IAM now all bind exact activity
+  version `8`; fresh zero drift passes. The three exhausted identifier-only export messages were
+  schema-validated, bound to the recorded failed executions, removed, and followed by three empty
+  receives plus zero queue counters. A fresh-MFA 15-step Plan then passed, and Execute reached the
+  activity but failed closed before artifact creation because the Profile owner projection emitted
+  an unavailable optional email as JSON null. A bounded read-only database task confirmed one
+  external identity, null candidate email, and terminally failed export/operation state. Forward
+  migration `0007_candidate_rights_export_null_omission` now omits that absent optional field;
+  focused tests and a real PostgreSQL integration pass locally. Immutable image publication,
+  migration/task-definition release, a new current-source activity release, lifecycle acceptance,
+  and isolated recovery replay remain open. Phase 1 is not complete.
   [Phase 1 tasks](phase-1-web-and-job-catalog.md),
   [candidate-rights runbook](../../../infrastructure/runbooks/deployments/development-candidate-rights-acceptance.md)
 

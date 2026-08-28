@@ -244,7 +244,7 @@ for (const required of [
   '"ecs", "run-task", "--cli-input-json"',
   "aws ecs wait tasks-stopped",
   "The exact six aggregate success events did not become visible within the bounded CloudWatch polling window.",
-  "Database migrations through 0006_candidate_rights applied and verified.",
+  "Database migrations through 0007_candidate_rights_export_null_omission applied and verified.",
   "Jobs migrations through 0013_public_job_sitemap applied and verified.",
   "Documents migrations through 0003_candidate_rights applied and verified.",
   "Matching migrations through 0002_candidate_rights applied and verified.",

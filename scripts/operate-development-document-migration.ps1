@@ -2158,7 +2158,7 @@ function Assert-TaskResultAndLogs {
   $logStream = Resolve-TaskLogStreamName -Task $task -Container $containers[0] `
     -TaskDefinition $definition
   $expectedMessages = @(
-    'Database migrations through 0006_candidate_rights applied and verified.',
+    'Database migrations through 0007_candidate_rights_export_null_omission applied and verified.',
     'Jobs migrations through 0013_public_job_sitemap applied and verified.',
     'Documents migrations through 0003_candidate_rights applied and verified.',
     'Matching migrations through 0002_candidate_rights applied and verified.',

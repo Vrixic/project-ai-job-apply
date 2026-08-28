@@ -43,10 +43,10 @@ describeWithDatabase("PostgresProfileStore", () => {
     });
 
     expect(first.stdout.trim()).toBe(
-      "Database migrations through 0006_candidate_rights applied and verified.",
+      "Database migrations through 0007_candidate_rights_export_null_omission applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(
-      "Database migrations through 0006_candidate_rights applied and verified.",
+      "Database migrations through 0007_candidate_rights_export_null_omission applied and verified.",
     );
     expect(
       await database.client`
@@ -64,14 +64,34 @@ describeWithDatabase("PostgresProfileStore", () => {
           '0003_retire_legacy_dispatch',
           '0004_profile_fact_versions',
           '0005_resume_fact_proposals',
-          '0006_candidate_rights'
+          '0006_candidate_rights',
+          '0007_candidate_rights_export_null_omission'
         )
       `,
-    ).toHaveLength(5);
+    ).toHaveLength(6);
   });
 
   afterAll(async () => {
     await store.close();
+  });
+
+  it("omits an absent optional email from the portable candidate export", async () => {
+    const runId = crypto.randomUUID();
+    const principalWithoutEmail: AuthPrincipal = {
+      issuer: principal.issuer,
+      subject: `candidate-export-without-email-${runId}`,
+      audience: principal.audience,
+      scopes: principal.scopes,
+    };
+    const user = await store.resolveUser(principalWithoutEmail, "integration-trace");
+    const [exported] = await database.client<
+      Array<{ data: { candidate: Record<string, unknown> } }>
+    >`
+      SELECT profile.export_candidate_data(${user.id}::uuid) AS data
+    `;
+
+    expect(exported?.data.candidate).toMatchObject({ connectedAccounts: expect.any(Array) });
+    expect(exported?.data.candidate).not.toHaveProperty("email");
   });
 
   it("commits preferences, operation, audit, and identifier-only outbox data idempotently", async () => {

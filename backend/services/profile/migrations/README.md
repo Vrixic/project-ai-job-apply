@@ -21,3 +21,7 @@ enforces login quarantine on the identity owner, and retains only a restricted p
 active identity removal. Runtime policy values remain required configuration with no migration
 defaults. The ledger contains digests, policy identity, owner/subprocessor completion state, and an
 encrypted replay locator; it must never contain contact data, raw candidate content, or tokens.
+
+`0007_candidate_rights_export_null_omission` keeps the version-one portable export strict by
+omitting an unavailable optional candidate email instead of serializing JSON null. It does not
+change the export schema or disclose a provider identity.
