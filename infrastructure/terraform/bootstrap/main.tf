@@ -87,10 +87,12 @@ data "aws_iam_policy_document" "github_assume" {
 }
 
 locals {
-  workload_role_arn             = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/ai-job-apply-${var.environment}-*"
-  workload_boundary_arn         = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/ai-job-apply-${var.environment}-workload-boundary"
-  candidate_document_bucket_arn = "arn:aws:s3:::ai-job-apply-${var.environment}-candidate-docs-*"
-  guardduty_managed_rule_arn    = "arn:aws:events:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:rule/DO-NOT-DELETE-AmazonGuardDutyMalwareProtectionS3*"
+  workload_role_arn                      = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/ai-job-apply-${var.environment}-*"
+  workload_boundary_arn                  = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/ai-job-apply-${var.environment}-workload-boundary"
+  candidate_document_bucket_arn          = "arn:aws:s3:::ai-job-apply-${var.environment}-candidate-docs-*"
+  candidate_data_export_bucket_arn       = "arn:aws:s3:::ai-job-apply-${var.environment}-candidate-exports-*"
+  candidate_deletion_recovery_bucket_arn = "arn:aws:s3:::ai-job-apply-${var.environment}-candidate-del-recovery-*"
+  guardduty_managed_rule_arn             = "arn:aws:events:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:rule/DO-NOT-DELETE-AmazonGuardDutyMalwareProtectionS3*"
 
   github_deploy_policy = {
     Version = "2012-10-17"
@@ -394,6 +396,7 @@ resource "aws_iam_policy" "workload_boundary" {
         Action = [
           "s3:GetBucketNotification",
           "s3:ListBucket",
+          "s3:ListBucketVersions",
           "s3:PutBucketNotification"
         ]
         Resource = local.candidate_document_bucket_arn
@@ -411,6 +414,35 @@ resource "aws_iam_policy" "workload_boundary" {
           "s3:PutObjectVersionTagging"
         ]
         Resource = "${local.candidate_document_bucket_arn}/*"
+      },
+      {
+        Sid    = "OperateCandidateDataExportObjects"
+        Effect = "Allow"
+        Action = [
+          "s3:DeleteObjectVersion",
+          "s3:GetObject",
+          "s3:GetObjectVersion",
+          "s3:PutObject"
+        ]
+        Resource = "${local.candidate_data_export_bucket_arn}/candidate-data-exports/*"
+      },
+      {
+        Sid      = "ListCandidateDeletionRecoveryLedger"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = local.candidate_deletion_recovery_bucket_arn
+      },
+      {
+        Sid    = "OperateCandidateDeletionRecoveryLedger"
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:GetObjectTagging",
+          "s3:PutObject",
+          "s3:PutObjectRetention",
+          "s3:PutObjectTagging"
+        ]
+        Resource = "${local.candidate_deletion_recovery_bucket_arn}/candidate-deletion-recovery/*"
       }
     ]
   })

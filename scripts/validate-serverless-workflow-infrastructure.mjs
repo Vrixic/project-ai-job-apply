@@ -513,6 +513,13 @@ for (const required of [
   '"lambda:GetDurableExecutionState"',
   '"kms:GenerateDataKey"',
   '"sts:AssumeRole"',
+  'Sid    = "OperateCandidateDataExportObjects"',
+  'Resource = "${local.candidate_data_export_bucket_arn}/candidate-data-exports/*"',
+  'Sid    = "OperateCandidateDeletionRecoveryLedger"',
+  'Resource = "${local.candidate_deletion_recovery_bucket_arn}/candidate-deletion-recovery/*"',
+  '"s3:DeleteObjectVersion"',
+  '"s3:ListBucketVersions"',
+  '"s3:PutObjectRetention"',
 ]) {
   requireText(bootstrap, required, `workload boundary permission is missing: ${required}`);
 }
