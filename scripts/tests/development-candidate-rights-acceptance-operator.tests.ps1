@@ -29,6 +29,7 @@ foreach ($required in @(
     'ACCOUNT_DELETION_IS_IRREVERSIBLE',
     'candidate-deletion-recovery-v1',
     'CANDIDATE_RIGHTS_ACCEPTANCE_REFRESH_TOKEN',
+    'CANDIDATE_RIGHTS_ACCEPTANCE_CLIENT_SECRET',
     "form['grant_type'] = 'refresh_token'",
     'Refresh-SyntheticIdentityContext $Boundary.Runtime.Issuer',
     'PersistentSyntheticIdentities = 0',
@@ -265,6 +266,7 @@ finally {
   Remove-Item Env:CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN -ErrorAction SilentlyContinue
   Remove-Item Env:CANDIDATE_RIGHTS_ACCEPTANCE_ID_TOKEN -ErrorAction SilentlyContinue
   Remove-Item Env:CANDIDATE_RIGHTS_ACCEPTANCE_REFRESH_TOKEN -ErrorAction SilentlyContinue
+  Remove-Item Env:CANDIDATE_RIGHTS_ACCEPTANCE_CLIENT_SECRET -ErrorAction SilentlyContinue
   Remove-Item Env:CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH -ErrorAction SilentlyContinue
   if (Test-Path -LiteralPath $temporary) { [IO.Directory]::Delete($temporary, $true) }
 }

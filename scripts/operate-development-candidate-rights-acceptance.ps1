@@ -112,6 +112,7 @@ $requiredOwners = "identity,profile,documents,jobs,matching,billing"
 $tokenEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN"
 $idTokenEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_ID_TOKEN"
 $refreshTokenEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_REFRESH_TOKEN"
+$clientSecretEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_CLIENT_SECRET"
 $attestationEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH"
 $script:TestOnly = $env:CANDIDATE_RIGHTS_OPERATOR_TEST_ONLY -ceq "1"
 
@@ -309,8 +310,10 @@ function Refresh-SyntheticIdentityContext {
     [Parameter(Mandatory)][int]$MaximumAgeSeconds
   )
   $refreshToken = [Environment]::GetEnvironmentVariable($refreshTokenEnvironmentName)
-  if ([string]::IsNullOrWhiteSpace($refreshToken)) {
-    throw "The fixed generated-synthetic refresh-token environment variable is required."
+  $clientSecret = [Environment]::GetEnvironmentVariable($clientSecretEnvironmentName)
+  if ([string]::IsNullOrWhiteSpace($refreshToken) -or
+      [string]::IsNullOrWhiteSpace($clientSecret) -or $clientSecret.Length -lt 16) {
+    throw "The fixed generated-synthetic refresh-token and client-authentication environment variables are required."
   }
   $client = [Net.Http.HttpClient]::new([Net.Http.HttpClientHandler]@{ AllowAutoRedirect = $false })
   $content = $null
@@ -318,12 +321,13 @@ function Refresh-SyntheticIdentityContext {
     $form = [Collections.Generic.Dictionary[string,string]]::new()
     $form['grant_type'] = 'refresh_token'
     $form['client_id'] = $ExpectedIdTokenAudience
+    $form['client_secret'] = $clientSecret
     $form['refresh_token'] = $refreshToken
     $content = [Net.Http.FormUrlEncodedContent]::new($form)
     $response = $client.PostAsync("$($ExpectedIssuer.TrimEnd('/'))/oauth/token", $content).GetAwaiter().GetResult()
     try {
       if ([int]$response.StatusCode -ne 200) {
-        throw "The generated-synthetic in-memory token refresh was rejected."
+        throw "The generated-synthetic in-memory token refresh was rejected with status $([int]$response.StatusCode)."
       }
       $bytes = $response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
       if ($bytes.Length -lt 2 -or $bytes.Length -gt 65536) {
