@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [ValidateSet("Status", "Plan", "Execute", "RecoverCleanup", "Verify")]
+  [ValidateSet("Status", "Plan", "Execute", "RecoverUnconfirmed", "RecoverCleanup", "Verify")]
   [string]$Action = "Status",
 
   [string]$AwsProfile = "ai-job-apply-development-admin",
@@ -46,6 +46,8 @@ param(
   [ValidatePattern("^[a-f0-9]{64}$")]
   [string]$ReviewedExecutionPlanSha256 = "",
 
+  [string]$RecoveryFailureTimestamp = "",
+
   [string]$ReceiptPath = "",
 
   [ValidatePattern("^[a-f0-9]{64}$")]
@@ -68,7 +70,7 @@ Usage:
   .\scripts\operate-development-candidate-rights-acceptance.ps1 -Action Status `
     -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET
 
-  .\scripts\operate-development-candidate-rights-acceptance.ps1 -Action Plan|Execute|RecoverCleanup|Verify `
+  .\scripts\operate-development-candidate-rights-acceptance.ps1 -Action Plan|Execute|RecoverUnconfirmed|RecoverCleanup|Verify `
     -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET -SourceSha MERGED_SHA `
     -ExpectedPolicyVersion VERSION -ReviewedPolicySha256 SHA256 `
     -ExpectedExportLifetimeSeconds SECONDS -ExpectedDownloadGrantSeconds SECONDS `
@@ -88,10 +90,13 @@ Plan is read-only and writes one checksum-reviewable descriptor below the ignore
 .terraform directory. Execute is the only normal mutation action. It exercises one disposable
 identity through export, exact-version download, grant expiry, artifact cleanup, request/cancel,
 recent-MFA confirmation, Auth0 reconciliation, recovery-ledger completion, alert checks, and exact
-cleanup. RecoverCleanup cannot create or confirm a deletion; it can only prove already-confirmed
-cleanup. Verify additionally requires a separately reviewed aggregate recovery-replay receipt from
-a quiesced disposable restore. No action accepts a token, subject, secret, payload, route, SQL,
-command, role, bucket, Lambda, or network destination from the command line.
+cleanup. RecoverUnconfirmed accepts only the exact UTC timestamp of a privacy-safe failed
+confirmation log, discovers its request identifier without printing it, and can only cancel that
+still-requested record. RecoverCleanup cannot create or confirm a deletion; it can only prove
+already-confirmed cleanup. Verify additionally requires a separately reviewed aggregate
+recovery-replay receipt from a quiesced disposable restore. No action accepts a token, subject,
+secret, payload, route, SQL, command, role, bucket, Lambda, or network destination from the command
+line.
 "@
   exit 0
 }
@@ -474,6 +479,101 @@ function Invoke-CandidateApi {
   } finally { $client.Dispose() }
 }
 
+function Get-UnconfirmedRequestFromLogEvents {
+  param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Events)
+  $decoded = @(
+    foreach ($logEvent in $Events) {
+      try { $message = ConvertFrom-OperatorJson ([string]$logEvent.message) "Candidate-rights application log" }
+      catch { continue }
+      [pscustomobject]@{ Timestamp = [long]$logEvent.timestamp; Message = $message }
+    }
+  )
+  $failures = @($decoded | Where-Object {
+      [string](Get-OptionalProperty $_.Message 'event') -ceq 'unhandled_request_failure' -and
+      [string](Get-OptionalProperty $_.Message 'route') -ceq '/v1/me/account-deletion-requests/:deletionRequestId/confirm' -and
+      [string](Get-OptionalProperty $_.Message 'error_type') -ceq 'AccessDeniedException' -and
+      -not [string]::IsNullOrWhiteSpace([string](Get-OptionalProperty $_.Message 'reqId'))
+    })
+  if ($failures.Count -ne 1) {
+    throw "Recovery requires exactly one matching privacy-safe failed confirmation event."
+  }
+  $failureRequestId = [string](Get-OptionalProperty $failures[0].Message 'reqId')
+  $requestLogs = @($decoded | Where-Object {
+      $request = Get-OptionalProperty $_.Message 'req'
+      [string](Get-OptionalProperty $_.Message 'reqId') -ceq $failureRequestId -and
+      [string](Get-OptionalProperty $_.Message 'msg') -ceq 'incoming request' -and
+      [string](Get-OptionalProperty $request 'method') -ceq 'POST'
+    })
+  if ($requestLogs.Count -ne 1) {
+    throw "Recovery could not resolve one exact failed confirmation request."
+  }
+  $requestEnvelope = Get-OptionalProperty $requestLogs[0].Message 'req'
+  $match = [regex]::Match(
+    [string](Get-OptionalProperty $requestEnvelope 'url'),
+    '^/v1/me/account-deletion-requests/(?<id>[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})/confirm$'
+  )
+  if (-not $match.Success) {
+    throw "Recovery rejected an unexpected failed confirmation route."
+  }
+  return [pscustomobject]@{
+    RequestId = [string]$match.Groups['id'].Value
+    FailureTimestamp = [DateTimeOffset]::FromUnixTimeMilliseconds([long]$failures[0].Timestamp)
+  }
+}
+
+function Read-UnconfirmedFailureRequest {
+  if ([string]::IsNullOrWhiteSpace($RecoveryFailureTimestamp)) {
+    throw "RecoverUnconfirmed requires the exact failed-confirmation UTC timestamp."
+  }
+  try {
+    $failureAt = [DateTimeOffset]::Parse(
+      $RecoveryFailureTimestamp,
+      [Globalization.CultureInfo]::InvariantCulture,
+      [Globalization.DateTimeStyles]::RoundtripKind
+    )
+  }
+  catch { throw "The failed-confirmation timestamp is invalid." }
+  $now = [DateTimeOffset]::UtcNow
+  if ($failureAt.Offset -ne [TimeSpan]::Zero -or $failureAt -gt $now -or $failureAt -lt $now.AddDays(-7)) {
+    throw "The failed-confirmation timestamp must be recent and explicitly UTC."
+  }
+  $events = Invoke-AwsJson @(
+    'logs','filter-log-events','--log-group-name','/ai-job-apply/development/application',
+    '--start-time',[string]$failureAt.AddSeconds(-2).ToUnixTimeMilliseconds(),
+    '--end-time',[string]$failureAt.AddSeconds(2).ToUnixTimeMilliseconds(),'--output','json'
+  ) 'Failed confirmation recovery lookup'
+  $resolved = Get-UnconfirmedRequestFromLogEvents @($events.events)
+  if ([Math]::Abs(($resolved.FailureTimestamp - $failureAt).TotalSeconds) -gt 1) {
+    throw "The failed confirmation did not match the exact reviewed timestamp."
+  }
+  return $resolved
+}
+
+function Invoke-RecoverUnconfirmedRequest {
+  param([Parameter(Mandatory)][object]$Boundary)
+  $script:Runtime = $Boundary.Runtime
+  $failed = Read-UnconfirmedFailureRequest
+  $current = Invoke-CandidateApi GET "/me/account-deletion-requests/$($failed.RequestId)" $Boundary.Identity.Token $null
+  if ([string]$current.Body.state -cne 'requested' -or
+      [string]$current.Body.policyVersion -cne $ExpectedPolicyVersion -or
+      [int]$current.Body.version -lt 1) {
+    throw "Recovery can only cancel an unconfirmed request under the reviewed policy."
+  }
+  $null = Invoke-CandidateApi DELETE "/me/account-deletion-requests/$($failed.RequestId)" `
+    $Boundary.Identity.Token $null @{
+      'idempotency-key' = "rights-recover-cancel-$([guid]::NewGuid().ToString('N'))"
+      'if-match' = "`"$($current.Body.version)`""
+      'x-ai-job-apply-reauthentication' = $Boundary.Identity.IdToken
+    } @(204)
+  $absent = Invoke-CandidateApi GET "/me/account-deletion-requests/$($failed.RequestId)" `
+    $Boundary.Identity.Token $null @{} @(404)
+  if ([int]$absent.Status -ne 404) { throw "The unconfirmed deletion request remained after recovery." }
+  return [pscustomobject]@{
+    Outcome = 'unconfirmed-request-cancelled'; RequestsDiscovered = 1; RequestsCancelled = 1
+    ConfirmedDeletions = 0; PersistentSyntheticIdentitiesChanged = 0; CloudMutation = $true
+  }
+}
+
 function Wait-ExportReady {
   param([Parameter(Mandatory)][string]$ExportId, [Parameter(Mandatory)][string]$Token)
   $deadline = [DateTimeOffset]::UtcNow.AddMinutes(5)
@@ -626,6 +726,10 @@ if (-not $script:TestOnly) {
       $path = Join-Path $operatorRoot "receipt-$($ReviewedExecutionPlanSha256.Substring(0,12)).json"
       Write-ExclusiveJson $path $receipt
       [pscustomobject]@{ Outcome = 'verified-and-cleaned'; ReceiptPath = $path; ReceiptSha256 = Get-FileSha256 $path; ExportsRequested = 1; DeletionMarkersCompleted = 1; PersistentSyntheticIdentities = 0 }
+    }
+    'RecoverUnconfirmed' {
+      $boundary = Get-AcceptanceBoundary -RequireIdentity
+      Invoke-RecoverUnconfirmedRequest $boundary
     }
     'RecoverCleanup' {
       $receipt = Read-AggregateReceipt

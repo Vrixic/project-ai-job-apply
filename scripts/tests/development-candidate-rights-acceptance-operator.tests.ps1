@@ -14,7 +14,7 @@ $expectedParameters = @(
   'ExpectedPolicyVersion','ReviewedPolicySha256','ExpectedExportLifetimeSeconds',
   'ExpectedDownloadGrantSeconds','ExpectedBackupRetentionDays','ExpectedRecentAuthMaxAgeSeconds',
   'ExpectedOwnerInventory','ExpectedSubprocessorInventory','ZeroDriftPlanPath',
-  'ReviewedZeroDriftPlanSha256','ExecutionPlanPath','ReviewedExecutionPlanSha256','ReceiptPath',
+  'ReviewedZeroDriftPlanSha256','ExecutionPlanPath','ReviewedExecutionPlanSha256','RecoveryFailureTimestamp','ReceiptPath',
   'ReviewedReceiptSha256','RecoveryReplayReceiptPath','ReviewedRecoveryReplayReceiptSha256','Help'
 )
 $actualParameters = @($ast.ParamBlock.Parameters.Name.VariablePath.UserPath)
@@ -162,6 +162,35 @@ try {
   Write-Attestation $attestationPath
   $env:CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN = New-TestJwt
   $env:CANDIDATE_RIGHTS_ACCEPTANCE_ID_TOKEN = New-TestJwt
+
+  $recoveryRequestId = '018f0f6d-7b51-7c2e-8a91-1c4f35e1b92a'
+  $recoveryReqId = 'privacy-safe-log-correlation'
+  $recoveryAt = [DateTimeOffset]::UtcNow
+  $recoveryEvents = @(
+    [pscustomobject]@{
+      timestamp = $recoveryAt.AddMilliseconds(-50).ToUnixTimeMilliseconds()
+      message = ([ordered]@{
+          reqId = $recoveryReqId; msg = 'incoming request'
+          req = [ordered]@{ method = 'POST'; url = "/v1/me/account-deletion-requests/$recoveryRequestId/confirm" }
+        } | ConvertTo-Json -Compress)
+    },
+    [pscustomobject]@{
+      timestamp = $recoveryAt.ToUnixTimeMilliseconds()
+      message = ([ordered]@{
+          reqId = $recoveryReqId; event = 'unhandled_request_failure'
+          route = '/v1/me/account-deletion-requests/:deletionRequestId/confirm'
+          error_type = 'AccessDeniedException'
+        } | ConvertTo-Json -Compress)
+    }
+  )
+  $recovery = Get-UnconfirmedRequestFromLogEvents $recoveryEvents
+  if ([string]$recovery.RequestId -cne $recoveryRequestId -or
+      [long]$recovery.FailureTimestamp.ToUnixTimeMilliseconds() -ne [long]$recoveryAt.ToUnixTimeMilliseconds()) {
+    throw 'The exact privacy-safe unconfirmed request was not recovered.'
+  }
+  $rejected = $false
+  try { $null = Get-UnconfirmedRequestFromLogEvents @($recoveryEvents + $recoveryEvents[1]) } catch { $rejected = $true }
+  if (-not $rejected) { throw 'Ambiguous failed-confirmation recovery logs were accepted.' }
 
   $script:weightedAlias = $false
   function global:Invoke-AwsJson {
