@@ -4,7 +4,7 @@
 - Start: 2026-08-11
 - Completion: Not completed
 - Owners: Platform engineering; product owner
-- Last updated: 2026-08-28
+- Last updated: 2026-08-31
 - Master tracker: [Delivery tracker](DELIVERY_TRACKER.md#d1--useful-web-product-and-canonical-job-catalog)
 
 ## Objective
@@ -20,6 +20,23 @@ continuously provisioned application compute, or always-on staging without measu
 release/recovery requirement. Keep staging dormant between bounded acceptance windows.
 
 ## Current implementation checkpoint
+
+Candidate-rights deployed acceptance is complete at development state serial `245`. The original
+fresh-MFA fixed-sequence execution reached confirmed quarantine after its export, replay, exact
+download, expiry, cleanup, request, cancel, and MFA gates, then failed downstream. Recovery exposed
+and corrected PostgreSQL timestamp normalization plus the exact S3
+`GetObjectVersionTagging`/`PutObjectVersionTagging` permissions required by the Object-Locked
+ledger. The recovered durable execution completed all six owner inventories and Auth0 deletion;
+seven duplicate deliveries for that exact operation were removed, leaving zero identities and an
+empty DLQ. A private, quiesced PITR copy then matched the `5`-owner/`45`-relation/`27`-migration
+source aggregate, replayed one completed marker and reconciled the restored user, and was deleted
+with zero targets, snapshots, target backups, or context remaining. Final verification reports
+export and deletion lifecycle pass, one recovery marker, zero persistent synthetic identities,
+zero queued messages, zero active compute, healthy alarms, unchanged state, and zero drift. The
+aggregate receipt explicitly records `confirmed-failure-recovered-and-restore-replayed`; it is not
+represented as an uninterrupted execution. D1-R11's generated-synthetic technical lifecycle and
+restore-replay portion is closed. Real-candidate use and the deferred final accountable
+security/privacy/product acceptance remain open, so Phase 1 is not yet complete.
 
 Exact clean source `eb617045e98a0a5db70f0b6250e27d0d6102622b` is the current deployed ingestion
 release. It includes identity-only Ashby `isListed: false` withdrawal, the Jobs

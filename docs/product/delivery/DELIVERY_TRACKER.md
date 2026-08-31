@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-08-28
+Last updated: 2026-08-31
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -31,6 +31,22 @@ This is the master record for the delivery phases defined in the [product and sy
 - Current engineering status: Phase 0 is complete. D0-012 accepted immutable revision `ee232824208d6a431024d34904144182b036502d` after every revised exit criterion and the full verifier passed. Counsel remains mandatory D6-016, independent security/privacy assessment remains mandatory D6-015, and representative provider fixtures block their owning D2–D4 adapters. No external approval or provider evidence is claimed. [Final acceptance](evidence/d0-final-exit-acceptance-2026-08-12.md)
 
 ## D1 — Useful web product and canonical job catalog
+
+- Candidate-rights recovered lifecycle and restore replay (2026-08-31): development state serial
+  `245` now includes exact versioned recovery-ledger tag read/write permissions. The fixed-sequence
+  fresh-MFA lifecycle reached confirmed quarantine after its earlier export/download/cancel gates;
+  its downstream failure was recovered through durable version `10`, completing six owner
+  inventories and Auth0 reconciliation. Seven exact duplicate DLQ deliveries were removed; live
+  status has zero persistent synthetic identities, zero queued messages, zero active compute,
+  healthy alarms, and zero drift. A private quiesced PITR copy matched the source
+  `5`-owner/`45`-relation/`27`-migration aggregate, reconciled the one restored marker identity,
+  and was removed with zero target, snapshot, backup, or context residue. The final aggregate
+  verifier passes export, deletion, and restore-replay gates and explicitly labels the evidence as
+  recovered rather than uninterrupted. This closes the immediate generated-synthetic
+  candidate-rights technical gate; real-candidate authority and the deferred final human gates
+  remain, so Phase 1 is not complete.
+  [Phase 1 tasks](phase-1-web-and-job-catalog.md),
+  [candidate-rights runbook](../../../infrastructure/runbooks/deployments/development-candidate-rights-acceptance.md)
 
 - Candidate-rights repair and export diagnosis (2026-08-28): the reviewed state-`230` coherence
   plan applied `0/8/0` add/change/destroy and advanced development to state `231`. Activity alias,
