@@ -1,7 +1,7 @@
 # Bootstrap workload-boundary operator
 
 Use `scripts/operate-bootstrap-workload-boundary.ps1` for the narrowly approved bootstrap
-workload-boundary change set. The current `candidate-rights-storage-v1` change set preserves the
+workload-boundary change set. The current `candidate-rights-versioned-completion-tagging-v1` change set preserves the
 owned document-object role boundary and permits only the candidate-rights S3 operations already
 granted by the workload roles. The operator supports `development` and `staging`, but one execution
 may target only one exact account and its own `bootstrap.tfstate`.

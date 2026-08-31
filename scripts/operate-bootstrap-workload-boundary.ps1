@@ -46,7 +46,7 @@ Usage:
     -Environment development -AwsProfile ai-job-apply-development-admin `
     -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET
 
-Plan permits exactly one resource update with the candidate-rights-journal-encryption-v2 semantic
+Plan permits exactly one resource update with the candidate-rights-versioned-completion-tagging-v1 semantic
 change set.
 Apply accepts only the checksum-reviewed saved plan
 and matching metadata. Verify requires a drift-free bootstrap and compares the live managed IAM
@@ -92,11 +92,6 @@ $requiredRetainedStatements = @(
     Resource = $candidateRecoveryBucketArn
   },
   [pscustomobject]@{
-    Sid = "OperateCandidateDeletionRecoveryLedger"; Effect = "Allow"
-    Action = @("s3:GetObject", "s3:GetObjectTagging", "s3:PutObject", "s3:PutObjectRetention", "s3:PutObjectTagging", "s3:PutObjectVersionTagging")
-    Resource = "$candidateRecoveryBucketArn/candidate-deletion-recovery/*"
-  },
-  [pscustomobject]@{
     Sid = "ConfigureCandidateDocumentBucketEvents"; Effect = "Allow"
     Action = @("s3:GetBucketNotification", "s3:ListBucket", "s3:ListBucketVersions", "s3:PutBucketNotification")
     Resource = $candidateDocumentBucketArn
@@ -106,26 +101,18 @@ $expectedAddedStatements = @()
 $expectedModifiedStatements = @(
   [pscustomobject]@{
     Before = [pscustomobject]@{
-      Sid = "DecryptTaggedRuntimeData"; Effect = "Allow"
-      Action = @("kms:Decrypt", "kms:DescribeKey", "kms:GenerateDataKey")
-      Resource = "*"
-      Condition = @{ StringEquals = @{
-        "aws:ResourceTag/Project" = "ai-job-apply"
-        "aws:ResourceTag/Environment" = $Environment
-      } }
+      Sid = "OperateCandidateDeletionRecoveryLedger"; Effect = "Allow"
+      Action = @("s3:GetObject", "s3:GetObjectTagging", "s3:PutObject", "s3:PutObjectRetention", "s3:PutObjectTagging")
+      Resource = "$candidateRecoveryBucketArn/candidate-deletion-recovery/*"
     }
     After = [pscustomobject]@{
-      Sid = "DecryptTaggedRuntimeData"; Effect = "Allow"
-      Action = @("kms:Decrypt", "kms:DescribeKey", "kms:Encrypt", "kms:GenerateDataKey")
-      Resource = "*"
-      Condition = @{ StringEquals = @{
-        "aws:ResourceTag/Project" = "ai-job-apply"
-        "aws:ResourceTag/Environment" = $Environment
-      } }
+      Sid = "OperateCandidateDeletionRecoveryLedger"; Effect = "Allow"
+      Action = @("s3:GetObject", "s3:GetObjectTagging", "s3:PutObject", "s3:PutObjectRetention", "s3:PutObjectTagging", "s3:PutObjectVersionTagging")
+      Resource = "$candidateRecoveryBucketArn/candidate-deletion-recovery/*"
     }
   }
 )
-$changeSet = "candidate-rights-journal-encryption-v2"
+$changeSet = "candidate-rights-versioned-completion-tagging-v1"
 
 $env:AWS_PROFILE = $AwsProfile
 $env:AWS_REGION = $Region
