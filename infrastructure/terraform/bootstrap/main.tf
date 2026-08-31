@@ -438,6 +438,7 @@ resource "aws_iam_policy" "workload_boundary" {
         Action = [
           "s3:GetObject",
           "s3:GetObjectTagging",
+          "s3:GetObjectVersionTagging",
           "s3:PutObject",
           "s3:PutObjectRetention",
           "s3:PutObjectTagging",

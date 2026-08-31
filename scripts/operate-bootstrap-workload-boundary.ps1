@@ -46,7 +46,7 @@ Usage:
     -Environment development -AwsProfile ai-job-apply-development-admin `
     -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET
 
-Plan permits exactly one resource update with the candidate-rights-versioned-completion-tagging-v1 semantic
+Plan permits exactly one resource update with the candidate-rights-versioned-recovery-read-v1 semantic
 change set.
 Apply accepts only the checksum-reviewed saved plan
 and matching metadata. Verify requires a drift-free bootstrap and compares the live managed IAM
@@ -102,17 +102,17 @@ $expectedModifiedStatements = @(
   [pscustomobject]@{
     Before = [pscustomobject]@{
       Sid = "OperateCandidateDeletionRecoveryLedger"; Effect = "Allow"
-      Action = @("s3:GetObject", "s3:GetObjectTagging", "s3:PutObject", "s3:PutObjectRetention", "s3:PutObjectTagging")
+      Action = @("s3:GetObject", "s3:GetObjectTagging", "s3:PutObject", "s3:PutObjectRetention", "s3:PutObjectTagging", "s3:PutObjectVersionTagging")
       Resource = "$candidateRecoveryBucketArn/candidate-deletion-recovery/*"
     }
     After = [pscustomobject]@{
       Sid = "OperateCandidateDeletionRecoveryLedger"; Effect = "Allow"
-      Action = @("s3:GetObject", "s3:GetObjectTagging", "s3:PutObject", "s3:PutObjectRetention", "s3:PutObjectTagging", "s3:PutObjectVersionTagging")
+      Action = @("s3:GetObject", "s3:GetObjectTagging", "s3:GetObjectVersionTagging", "s3:PutObject", "s3:PutObjectRetention", "s3:PutObjectTagging", "s3:PutObjectVersionTagging")
       Resource = "$candidateRecoveryBucketArn/candidate-deletion-recovery/*"
     }
   }
 )
-$changeSet = "candidate-rights-versioned-completion-tagging-v1"
+$changeSet = "candidate-rights-versioned-recovery-read-v1"
 
 $env:AWS_PROFILE = $AwsProfile
 $env:AWS_REGION = $Region

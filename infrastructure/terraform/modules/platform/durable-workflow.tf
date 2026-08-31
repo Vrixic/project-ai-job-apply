@@ -151,7 +151,7 @@ data "aws_iam_policy_document" "candidate_rights_activity" {
   statement {
     sid       = "WriteCandidateDeletionRecoveryLedger"
     effect    = "Allow"
-    actions   = ["s3:GetObject", "s3:GetObjectTagging", "s3:PutObject", "s3:PutObjectRetention", "s3:PutObjectTagging", "s3:PutObjectVersionTagging"]
+    actions   = ["s3:GetObject", "s3:GetObjectTagging", "s3:GetObjectVersionTagging", "s3:PutObject", "s3:PutObjectRetention", "s3:PutObjectTagging", "s3:PutObjectVersionTagging"]
     resources = ["${aws_s3_bucket.candidate_deletion_recovery[0].arn}/${local.candidate_deletion_recovery_prefix}*"]
   }
 

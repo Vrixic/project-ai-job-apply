@@ -838,7 +838,7 @@ data "aws_iam_policy_document" "candidate_documents_s3_endpoint" {
       sid    = "CandidateDeletionRecoveryLedgerAccess"
       effect = "Allow"
       actions = [
-        "s3:GetObject", "s3:GetObjectTagging", "s3:ListBucket", "s3:PutObject",
+        "s3:GetObject", "s3:GetObjectTagging", "s3:GetObjectVersionTagging", "s3:ListBucket", "s3:PutObject",
         "s3:PutObjectRetention", "s3:PutObjectTagging", "s3:PutObjectVersionTagging"
       ]
       resources = [

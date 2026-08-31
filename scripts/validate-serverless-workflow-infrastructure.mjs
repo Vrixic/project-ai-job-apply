@@ -526,18 +526,18 @@ for (const required of [
 }
 requirePattern(
   bootstrap,
-  /Sid\s*=\s*"OperateCandidateDeletionRecoveryLedger"[\s\S]{0,600}"s3:PutObjectVersionTagging"/u,
-  "candidate deletion recovery boundary must permit exact-version completion tagging",
+  /Sid\s*=\s*"OperateCandidateDeletionRecoveryLedger"[\s\S]{0,600}"s3:GetObjectVersionTagging"[\s\S]{0,600}"s3:PutObjectVersionTagging"/u,
+  "candidate deletion recovery boundary must permit exact-version read and completion tagging",
 );
 requirePattern(
   durable,
-  /sid\s*=\s*"WriteCandidateDeletionRecoveryLedger"[\s\S]{0,600}"s3:PutObjectVersionTagging"/u,
-  "candidate-rights activity role must permit exact-version recovery completion tagging",
+  /sid\s*=\s*"WriteCandidateDeletionRecoveryLedger"[\s\S]{0,600}"s3:GetObjectVersionTagging"[\s\S]{0,600}"s3:PutObjectVersionTagging"/u,
+  "candidate-rights activity role must permit exact-version recovery read and completion tagging",
 );
 requirePattern(
   candidateDocuments,
-  /sid\s*=\s*"CandidateDeletionRecoveryLedgerAccess"[\s\S]{0,600}"s3:PutObjectVersionTagging"/u,
-  "candidate deletion recovery bucket policy must permit exact-version completion tagging",
+  /sid\s*=\s*"CandidateDeletionRecoveryLedgerAccess"[\s\S]{0,600}"s3:GetObjectVersionTagging"[\s\S]{0,600}"s3:PutObjectVersionTagging"/u,
+  "candidate deletion recovery endpoint policy must permit exact-version read and completion tagging",
 );
 for (const required of [
   'test "$(jq -r .schemaVersion "$artifact_dir/$name.manifest.json")" = "2"',

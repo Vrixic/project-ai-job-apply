@@ -1,7 +1,7 @@
 # Bootstrap workload-boundary operator
 
 Use `scripts/operate-bootstrap-workload-boundary.ps1` for the narrowly approved bootstrap
-workload-boundary change set. The current `candidate-rights-versioned-completion-tagging-v1` change set preserves the
+workload-boundary change set. The current `candidate-rights-versioned-recovery-read-v1` change set preserves the
 owned document-object role boundary and permits only the candidate-rights S3 operations already
 granted by the workload roles. The operator supports `development` and `staging`, but one execution
 may target only one exact account and its own `bootstrap.tfstate`.
@@ -15,7 +15,7 @@ state bucket, and matching remote-state outputs. A generated plan is accepted on
 
 ```text
 candidate export object read/write/exact-version deletion under candidate-data-exports/*
-candidate deletion recovery list/read/write/retention and exact-version completion tagging under candidate-deletion-recovery/*
+candidate deletion recovery list/read/write/retention and exact-version tag reads/writes under candidate-deletion-recovery/*
 candidate document ListBucketVersions for exact-version deletion
 ```
 
