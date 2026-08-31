@@ -84,6 +84,15 @@ $exactDelta = Assert-ExactIamStatementDelta -BeforePolicy $exactBefore -AfterPol
 Assert-Equal $exactDelta.AddedSids $exactAdded.Sid "The exact added IAM statement was not recognized."
 Assert-Equal $exactDelta.ModifiedSids $exactAfterModified.Sid "The exact modified IAM statement was not recognized."
 
+$modifiedOnlyBefore = @{ Version = "2012-10-17"; Statement = @($exactBeforeModified) }
+$modifiedOnlyAfter = @{ Version = "2012-10-17"; Statement = @($exactAfterModified) }
+$modifiedOnlyDelta = Assert-ExactIamStatementDelta -BeforePolicy $modifiedOnlyBefore `
+  -AfterPolicy $modifiedOnlyAfter -AddedStatements @() `
+  -ModifiedStatements @(@{ Before = $exactBeforeModified; After = $exactAfterModified })
+Assert-Equal $modifiedOnlyDelta.AddedSids "" "A modified-only IAM delta reported an added statement."
+Assert-Equal $modifiedOnlyDelta.ModifiedSids $exactAfterModified.Sid `
+  "A modified-only IAM delta was not recognized."
+
 $unexpectedExactAfter = $exactAfter | ConvertTo-Json -Depth 10 | ConvertFrom-Json
 $unexpectedExactAfter.Statement[0].Resource = "arn:aws:s3:::unexpected"
 Assert-Throws { Assert-ExactIamStatementDelta -BeforePolicy $exactBefore -AfterPolicy $unexpectedExactAfter `

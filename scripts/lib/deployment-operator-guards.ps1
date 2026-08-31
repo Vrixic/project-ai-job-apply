@@ -135,8 +135,8 @@ function Assert-ExactIamStatementDelta {
   param(
     [Parameter(Mandatory)][object]$BeforePolicy,
     [Parameter(Mandatory)][object]$AfterPolicy,
-    [Parameter(Mandatory)][object[]]$AddedStatements,
-    [Parameter(Mandatory)][object[]]$ModifiedStatements
+    [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$AddedStatements,
+    [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$ModifiedStatements
   )
 
   $before = ConvertFrom-IamPolicyValue -Policy $BeforePolicy
