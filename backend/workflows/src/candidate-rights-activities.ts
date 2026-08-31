@@ -110,6 +110,14 @@ function isUuid(value: unknown): value is string {
   );
 }
 
+function normalizeDatabaseDate(value: unknown): Date {
+  const normalized = value instanceof Date ? new Date(value.getTime()) : new Date(String(value));
+  if (!Number.isFinite(normalized.getTime())) {
+    throw new CandidateRightsActivityRejected("CandidateRightsContextDateRejected");
+  }
+  return normalized;
+}
+
 function safeCode(error: unknown): string {
   if (error instanceof CandidateRightsActivityRejected) return error.code;
   const value = isRecord(error) && typeof error.code === "string" ? error.code : undefined;
@@ -167,7 +175,15 @@ function exactContext(
   ) {
     throw new CandidateRightsActivityRejected("CandidateRightsContextMismatch");
   }
-  return row as unknown as WorkflowContext;
+  return {
+    ...(row as unknown as WorkflowContext),
+    ...(row.confirmedAt === undefined || row.confirmedAt === null
+      ? {}
+      : { confirmedAt: normalizeDatabaseDate(row.confirmedAt) }),
+    ...(row.backupExpiresAt === undefined || row.backupExpiresAt === null
+      ? {}
+      : { backupExpiresAt: normalizeDatabaseDate(row.backupExpiresAt) }),
+  };
 }
 
 function exportObjectKey(userId: string, exportId: string): string {
