@@ -111,6 +111,7 @@ $utf8WithoutBom = New-Object Text.UTF8Encoding($false)
 $requiredOwners = "identity,profile,documents,jobs,matching,billing"
 $tokenEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN"
 $idTokenEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_ID_TOKEN"
+$refreshTokenEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_REFRESH_TOKEN"
 $attestationEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH"
 $script:TestOnly = $env:CANDIDATE_RIGHTS_OPERATOR_TEST_ONLY -ceq "1"
 
@@ -301,6 +302,53 @@ function Read-SyntheticIdentityContext {
   return [pscustomobject]@{ Token = $token; IdToken = $idToken; Subject = $subject; SubjectSha256 = [string]$attestation.subjectSha256; AttestationSha256 = Get-FileSha256 $attestationPath; IdTokenAudienceSha256 = Get-TextSha256 $ExpectedIdTokenAudience; AuthTime = $authTime.ToString('o') }
 }
 
+function Refresh-SyntheticIdentityContext {
+  param(
+    [Parameter(Mandatory)][string]$ExpectedIssuer,
+    [Parameter(Mandatory)][string]$ExpectedIdTokenAudience,
+    [Parameter(Mandatory)][int]$MaximumAgeSeconds
+  )
+  $refreshToken = [Environment]::GetEnvironmentVariable($refreshTokenEnvironmentName)
+  if ([string]::IsNullOrWhiteSpace($refreshToken)) {
+    throw "The fixed generated-synthetic refresh-token environment variable is required."
+  }
+  $client = [Net.Http.HttpClient]::new([Net.Http.HttpClientHandler]@{ AllowAutoRedirect = $false })
+  $content = $null
+  try {
+    $form = [Collections.Generic.Dictionary[string,string]]::new()
+    $form['grant_type'] = 'refresh_token'
+    $form['client_id'] = $ExpectedIdTokenAudience
+    $form['refresh_token'] = $refreshToken
+    $content = [Net.Http.FormUrlEncodedContent]::new($form)
+    $response = $client.PostAsync("$($ExpectedIssuer.TrimEnd('/'))/oauth/token", $content).GetAwaiter().GetResult()
+    try {
+      if ([int]$response.StatusCode -ne 200) {
+        throw "The generated-synthetic in-memory token refresh was rejected."
+      }
+      $bytes = $response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
+      if ($bytes.Length -lt 2 -or $bytes.Length -gt 65536) {
+        throw "The generated-synthetic token refresh exceeded the bounded JSON envelope."
+      }
+      $refreshed = ConvertFrom-OperatorJson ([Text.Encoding]::UTF8.GetString($bytes)) "Refreshed token set"
+    }
+    finally { $response.Dispose() }
+  }
+  finally {
+    if ($null -ne $content) { $content.Dispose() }
+    $client.Dispose()
+  }
+  if ([string]$refreshed.token_type -cne 'Bearer' -or [int]$refreshed.expires_in -le 120 -or
+      [string]::IsNullOrWhiteSpace([string]$refreshed.access_token)) {
+    throw "The generated-synthetic refresh response is incomplete."
+  }
+  [Environment]::SetEnvironmentVariable($tokenEnvironmentName, [string]$refreshed.access_token, 'Process')
+  $rotated = [string](Get-OptionalProperty $refreshed 'refresh_token')
+  if (-not [string]::IsNullOrWhiteSpace($rotated)) {
+    [Environment]::SetEnvironmentVariable($refreshTokenEnvironmentName, $rotated, 'Process')
+  }
+  return Read-SyntheticIdentityContext $ExpectedIssuer $ExpectedIdTokenAudience $MaximumAgeSeconds
+}
+
 function Get-LambdaIdentity {
   param([Parameter(Mandatory)][string]$AliasArn, [Parameter(Mandatory)][string]$Description)
   if ($AliasArn -notmatch '^(?<function>arn:aws:lambda:[^:]+:[0-9]{12}:function:[^:]+):(?<alias>[^:]+)$') { throw "$Description alias ARN is invalid." }
@@ -465,7 +513,11 @@ function Invoke-CandidateApi {
     if ($null -ne $Body) { $request.Content = [Net.Http.StringContent]::new(($Body | ConvertTo-Json -Compress), [Text.Encoding]::UTF8, 'application/json') }
     $response = $client.SendAsync($request, [Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
     $status = [int]$response.StatusCode
-    if (-not $ExpectedStatus.Contains($status)) { $response.Dispose(); throw "The candidate API returned an unexpected status during the fixed acceptance sequence." }
+    if (-not $ExpectedStatus.Contains($status)) {
+      $response.Dispose()
+      $safePath = $Path -replace '[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}', ':id'
+      throw "The candidate API $Method $safePath returned unexpected status $status during the fixed acceptance sequence."
+    }
     $cacheControl = @($response.Headers.GetValues('cache-control')) -join ','
     if ($status -ne 204 -and $cacheControl -cne 'no-store') { $response.Dispose(); throw "A candidate-rights response omitted cache-control no-store." }
     $json = $null
@@ -645,6 +697,13 @@ function Invoke-FixedLifecycle {
   $download = Test-ExactVersionGrant $ready
   $grantUri = [Uri]([string]$ready.download.url)
   $null = Wait-GrantExpiry ([string]$first.Body.id) $token $grantUri $download.GrantExpiresAt $download.ArtifactExpiresAt
+
+  $refreshedIdentity = Refresh-SyntheticIdentityContext $Boundary.Runtime.Issuer $Boundary.Runtime.IdTokenAudience $ExpectedRecentAuthMaxAgeSeconds
+  if ([string]$refreshedIdentity.SubjectSha256 -cne [string]$Boundary.Identity.SubjectSha256) {
+    throw "The in-memory token refresh changed the reviewed generated-synthetic identity."
+  }
+  $token = $refreshedIdentity.Token
+  $idToken = $refreshedIdentity.IdToken
 
   $cancelKey = "rights-delete-cancel-$([guid]::NewGuid().ToString('N'))"
   $deletionBody = [ordered]@{ acknowledgement = 'ACCOUNT_DELETION_IS_IRREVERSIBLE' }
