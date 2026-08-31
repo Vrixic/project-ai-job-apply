@@ -129,6 +129,14 @@ function Get-TextSha256 {
   } finally { $algorithm.Dispose() }
 }
 
+function Get-CandidateDeletionSubjectDigest {
+  param(
+    [Parameter(Mandatory)][string]$Issuer,
+    [Parameter(Mandatory)][string]$Subject
+  )
+  return Get-TextSha256 "ai-job-apply/account-deletion-subject/v1`0$Issuer`0$Subject"
+}
+
 function Get-FileSha256 {
   param([Parameter(Mandatory)][string]$Path)
   return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -670,7 +678,7 @@ function Wait-GrantExpiry {
 }
 
 function Wait-DeletionCompletion {
-  param([Parameter(Mandatory)][string]$RequestId, [Parameter(Mandatory)][string]$SubjectSha256)
+  param([Parameter(Mandatory)][string]$RequestId, [Parameter(Mandatory)][string]$ExpectedSubjectDigest)
   $key = "candidate-deletion-recovery/$RequestId.json"
   $deadline = [DateTimeOffset]::UtcNow.AddMinutes(10)
   do {
@@ -678,7 +686,7 @@ function Wait-DeletionCompletion {
       $head = Invoke-AwsJson @('s3api','head-object','--bucket',$script:Runtime.RecoveryBucket,'--key',$key,'--output','json') 'Recovery marker completion'
       $tags = Invoke-AwsJson @('s3api','get-object-tagging','--bucket',$script:Runtime.RecoveryBucket,'--key',$key,'--version-id',[string]$head.VersionId,'--output','json') 'Recovery marker tags'
       $map = @{}; foreach ($tag in @($tags.TagSet)) { $map[[string]$tag.Key] = [string]$tag.Value }
-      if ([string]$head.Metadata.'subject-digest' -cne $SubjectSha256 -or [string]$head.Metadata.'policy-sha256' -cne $ReviewedPolicySha256 -or [string]$head.Metadata.format -cne 'candidate-deletion-recovery-v1') { throw "The recovery marker does not bind the exact synthetic subject and reviewed policy." }
+      if ([string]$head.Metadata.'subject-digest' -cne $ExpectedSubjectDigest -or [string]$head.Metadata.'policy-sha256' -cne $ReviewedPolicySha256 -or [string]$head.Metadata.format -cne 'candidate-deletion-recovery-v1') { throw "The recovery marker does not bind the exact synthetic subject and reviewed policy." }
       if ($map.state -ceq 'completed' -and [DateTimeOffset]::Parse($map.'completed-at') -le [DateTimeOffset]::UtcNow) { return $true }
     } catch { if ($_.Exception.Message -notmatch 'Recovery marker completion failed') { throw } }
     Start-Sleep -Seconds 5
@@ -724,7 +732,8 @@ function Invoke-FixedLifecycle {
   $confirmation = [ordered]@{ expectedVersion = [int]$confirmRequest.Body.version; confirmation = 'DELETE_MY_ACCOUNT' }
   $confirmed = Invoke-CandidateApi POST "/me/account-deletion-requests/$($confirmRequest.Body.id)/confirm" $token $confirmation @{ 'idempotency-key' = "rights-confirm-$([guid]::NewGuid().ToString('N'))"; 'x-ai-job-apply-reauthentication' = $idToken } @(202)
   if ([string]$confirmed.Body.state -cne 'quarantined') { throw "Deletion confirmation did not atomically quarantine the generated-synthetic identity." }
-  $null = Wait-DeletionCompletion ([string]$confirmRequest.Body.id) $Boundary.Identity.SubjectSha256
+  $expectedSubjectDigest = Get-CandidateDeletionSubjectDigest $Boundary.Runtime.Issuer $Boundary.Identity.Subject
+  $null = Wait-DeletionCompletion ([string]$confirmRequest.Body.id) $expectedSubjectDigest
   $post = Assert-OperationalHealth $Boundary.Snapshot
   return [ordered]@{
     schemaVersion = 1; kind = 'development-candidate-rights-acceptance-receipt'; phase = 'verified-cleaned'; sourceSha = $SourceSha

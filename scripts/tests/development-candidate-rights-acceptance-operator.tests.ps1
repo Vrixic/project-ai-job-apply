@@ -145,6 +145,11 @@ try {
   $env:CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH = $attestationPath
   $identity = Read-SyntheticIdentityContext 'https://identity.example/' 'candidate-web-client' 300
   if ([string]$identity.SubjectSha256 -cne (Get-TextSha256 'auth0|generated-synthetic') -or [string]$identity.Token -cne $env:CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN) { throw 'The exact generated-synthetic identity was not accepted.' }
+  $ledgerSubjectDigest = Get-CandidateDeletionSubjectDigest 'https://identity.example/' 'auth0|generated-synthetic'
+  if ($ledgerSubjectDigest -notmatch '^[a-f0-9]{64}$' -or
+      $ledgerSubjectDigest -ceq $identity.SubjectSha256) {
+    throw 'The recovery-ledger subject digest is not domain-separated from the attestation hash.'
+  }
 
   foreach ($case in @(
       @{ AccessToken = New-TestJwt; IdToken = New-TestJwt -Amr @('pwd'); Owner = 'authorized-operator' },

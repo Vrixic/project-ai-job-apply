@@ -196,6 +196,9 @@ describe("profile readiness Lambda durable workflow", () => {
         throw Object.assign(new Error("hidden"), { code: "40001" });
       }),
       failExport: vi.fn(async () => undefined),
+      recordDeletionRecovery: vi.fn(async () => {
+        throw new Error("CandidateDeletionRecoveryConflict");
+      }),
       deleteActiveSystems: vi.fn(async () => undefined),
       reconcileSubprocessors: vi.fn(async () => undefined),
       completeDeletion: vi.fn(async () => undefined),
@@ -224,6 +227,10 @@ describe("profile readiness Lambda durable workflow", () => {
     await expect(handler({ ...base, action: "export_fail" })).resolves.toMatchObject({
       outcome: "non_retryable_failure",
       errorCode: "ActivityInputRejected",
+    });
+    await expect(handler({ ...base, action: "deletion_record_recovery" })).resolves.toMatchObject({
+      outcome: "non_retryable_failure",
+      errorCode: "CandidateDeletionRecoveryConflict",
     });
     expect(store.beginExport).toHaveBeenCalledOnce();
     expect(store.assembleExport).toHaveBeenCalledOnce();

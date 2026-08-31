@@ -113,11 +113,14 @@ function isUuid(value: unknown): value is string {
 function safeCode(error: unknown): string {
   if (error instanceof CandidateRightsActivityRejected) return error.code;
   const value = isRecord(error) && typeof error.code === "string" ? error.code : undefined;
+  const message = error instanceof Error ? error.message : undefined;
   return value && /^[A-Za-z0-9_.-]{1,64}$/u.test(value)
     ? value
-    : error instanceof Error && /^[A-Za-z0-9_.-]{1,64}$/u.test(error.name)
-      ? error.name
-      : "CandidateRightsActivityFailed";
+    : message && /^[A-Za-z0-9_.-]{1,64}$/u.test(message)
+      ? message
+      : error instanceof Error && /^[A-Za-z0-9_.-]{1,64}$/u.test(error.name)
+        ? error.name
+        : "CandidateRightsActivityFailed";
 }
 
 function isRetryable(error: unknown): boolean {
