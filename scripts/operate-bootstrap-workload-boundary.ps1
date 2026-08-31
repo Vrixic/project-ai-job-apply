@@ -46,7 +46,8 @@ Usage:
     -Environment development -AwsProfile ai-job-apply-development-admin `
     -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET
 
-Plan permits exactly one resource update with the candidate-rights-storage-v1 semantic change set.
+Plan permits exactly one resource update with the candidate-rights-journal-encryption-v2 semantic
+change set.
 Apply accepts only the checksum-reviewed saved plan
 and matching metadata. Verify requires a drift-free bootstrap and compares the live managed IAM
 policy with Terraform state. Plans and metadata remain in the ignored bootstrap .terraform tree.
@@ -73,16 +74,14 @@ $metadataSuffix = ".bootstrap-workload-boundary.json"
 $policyName = "ai-job-apply-$Environment-workload-boundary"
 $policyArn = "arn:aws:iam::${ExpectedAccountId}:policy/$policyName"
 $objectAccessRoleArn = "arn:aws:iam::${ExpectedAccountId}:role/ai-job-apply-$Environment-document-object-access"
-$requiredRetainedStatement = [pscustomobject]@{
-  Sid      = "AssumeOwnedDocumentObjectAccessRole"
-  Effect   = "Allow"
-  Action   = @("sts:AssumeRole")
-  Resource = $objectAccessRoleArn
-}
 $candidateDocumentBucketArn = "arn:aws:s3:::ai-job-apply-$Environment-candidate-docs-*"
 $candidateExportBucketArn = "arn:aws:s3:::ai-job-apply-$Environment-candidate-exports-*"
 $candidateRecoveryBucketArn = "arn:aws:s3:::ai-job-apply-$Environment-candidate-del-recovery-*"
-$expectedAddedStatements = @(
+$requiredRetainedStatements = @(
+  [pscustomobject]@{
+    Sid = "AssumeOwnedDocumentObjectAccessRole"; Effect = "Allow"; Action = @("sts:AssumeRole")
+    Resource = $objectAccessRoleArn
+  },
   [pscustomobject]@{
     Sid = "OperateCandidateDataExportObjects"; Effect = "Allow"
     Action = @("s3:DeleteObjectVersion", "s3:GetObject", "s3:GetObjectVersion", "s3:PutObject")
@@ -96,23 +95,37 @@ $expectedAddedStatements = @(
     Sid = "OperateCandidateDeletionRecoveryLedger"; Effect = "Allow"
     Action = @("s3:GetObject", "s3:GetObjectTagging", "s3:PutObject", "s3:PutObjectRetention", "s3:PutObjectTagging")
     Resource = "$candidateRecoveryBucketArn/candidate-deletion-recovery/*"
+  },
+  [pscustomobject]@{
+    Sid = "ConfigureCandidateDocumentBucketEvents"; Effect = "Allow"
+    Action = @("s3:GetBucketNotification", "s3:ListBucket", "s3:ListBucketVersions", "s3:PutBucketNotification")
+    Resource = $candidateDocumentBucketArn
   }
 )
+$expectedAddedStatements = @()
 $expectedModifiedStatements = @(
   [pscustomobject]@{
     Before = [pscustomobject]@{
-      Sid = "ConfigureCandidateDocumentBucketEvents"; Effect = "Allow"
-      Action = @("s3:GetBucketNotification", "s3:ListBucket", "s3:PutBucketNotification")
-      Resource = $candidateDocumentBucketArn
+      Sid = "DecryptTaggedRuntimeData"; Effect = "Allow"
+      Action = @("kms:Decrypt", "kms:DescribeKey", "kms:GenerateDataKey")
+      Resource = "*"
+      Condition = @{ StringEquals = @{
+        "aws:ResourceTag/Project" = "ai-job-apply"
+        "aws:ResourceTag/Environment" = $Environment
+      } }
     }
     After = [pscustomobject]@{
-      Sid = "ConfigureCandidateDocumentBucketEvents"; Effect = "Allow"
-      Action = @("s3:GetBucketNotification", "s3:ListBucket", "s3:ListBucketVersions", "s3:PutBucketNotification")
-      Resource = $candidateDocumentBucketArn
+      Sid = "DecryptTaggedRuntimeData"; Effect = "Allow"
+      Action = @("kms:Decrypt", "kms:DescribeKey", "kms:Encrypt", "kms:GenerateDataKey")
+      Resource = "*"
+      Condition = @{ StringEquals = @{
+        "aws:ResourceTag/Project" = "ai-job-apply"
+        "aws:ResourceTag/Environment" = $Environment
+      } }
     }
   }
 )
-$changeSet = "candidate-rights-storage-v1"
+$changeSet = "candidate-rights-journal-encryption-v2"
 
 $env:AWS_PROFILE = $AwsProfile
 $env:AWS_REGION = $Region
@@ -326,7 +339,7 @@ function Invoke-Verification {
     if ($stateCanonical -cne $liveCanonical) {
       throw "The live workload boundary does not semantically match Terraform state."
     }
-    $requiredStatements = @($requiredRetainedStatement) + $expectedAddedStatements + @($expectedModifiedStatements[0].After)
+    $requiredStatements = $requiredRetainedStatements + @($expectedModifiedStatements[0].After)
     foreach ($expected in $requiredStatements) {
       $expectedCanonical = ConvertTo-DeploymentCanonicalValue -Value $expected -SortArrays
       $matches = @($livePolicy.Statement | Where-Object {

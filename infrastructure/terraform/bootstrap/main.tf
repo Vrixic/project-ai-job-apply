@@ -315,7 +315,7 @@ resource "aws_iam_policy" "workload_boundary" {
       {
         Sid      = "DecryptTaggedRuntimeData"
         Effect   = "Allow"
-        Action   = ["kms:Decrypt", "kms:DescribeKey", "kms:GenerateDataKey"]
+        Action   = ["kms:Decrypt", "kms:DescribeKey", "kms:Encrypt", "kms:GenerateDataKey"]
         Resource = "*"
         Condition = {
           StringEquals = {

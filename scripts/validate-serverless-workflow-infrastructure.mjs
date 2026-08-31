@@ -512,6 +512,7 @@ for (const required of [
   '"lambda:CheckpointDurableExecution"',
   '"lambda:GetDurableExecutionState"',
   '"kms:GenerateDataKey"',
+  '"kms:Encrypt"',
   '"sts:AssumeRole"',
   'Sid    = "OperateCandidateDataExportObjects"',
   'Resource = "${local.candidate_data_export_bucket_arn}/candidate-data-exports/*"',
