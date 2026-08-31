@@ -457,8 +457,8 @@ Assert-ReviewedPlanMetadata -Metadata $metadata -Expected @{
   PlanSha256    = $ReviewedPlanSha256
   Resource      = "aws_iam_policy.workload_boundary"
   ChangeSet     = $changeSet
-  AddedSids     = ($expectedAddedStatements.Sid | Sort-Object) -join ","
-  ModifiedSids  = ($expectedModifiedStatements.After.Sid | Sort-Object) -join ","
+  AddedSids     = (@($expectedAddedStatements | ForEach-Object { [string]$_.Sid }) | Sort-Object) -join ","
+  ModifiedSids  = (@($expectedModifiedStatements | ForEach-Object { [string]$_.After.Sid }) | Sort-Object) -join ","
 }
 $plan = Read-SavedPlan -ResolvedPlan $resolvedPlan
 $null = Assert-ApprovedPlanBoundary -Plan $plan
