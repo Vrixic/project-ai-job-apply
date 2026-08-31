@@ -14,7 +14,7 @@ claim, or authorization to restore real candidate data into a shared environment
 - Resolve the exact Terraform-managed source and require the `Project`, `Environment`, and
   `ManagedBy` tags expected for development.
 - Require the source to be available, private, KMS-encrypted, deletion-protected, and covered by
-  automated backups with a latest restorable point.
+  the candidate-rights 35-day automated-backup window with a latest restorable point.
 - Require stable gateway and worker services, healthy endpoints, managed alarms in `OK`, and a
   refresh-backed no-drift plan before the exercise.
 - Use a unique target identifier and explicit `Purpose=d1-current-isolated-restore`,

@@ -64,6 +64,7 @@ $terraformDataDirectory = Join-Path $environmentDirectory ".terraform"
 $contextPath = Join-Path $terraformDataDirectory "applydash-$Environment-restore-context.json"
 $sourceIdentifier = "ai-job-apply-$Environment"
 $targetPrefix = "ai-job-apply-$Environment-restore-"
+$expectedBackupRetentionDays = if ($Environment -ceq "development") { 35 } else { 7 }
 $applicationLogGroup = "/ai-job-apply/$Environment/application"
 $runtimeInspector = Join-Path $PSScriptRoot "inspect-staging-workload-and-cost.ps1"
 $repositoryRoot = Split-Path $PSScriptRoot -Parent
@@ -286,7 +287,7 @@ function Assert-SourceBoundary {
     -not [bool]$Source.StorageEncrypted -or
     -not [bool]$Source.DeletionProtection -or
     [bool]$Source.MultiAZ -or
-    [int]$Source.BackupRetentionPeriod -ne 7 -or
+    [int]$Source.BackupRetentionPeriod -ne $expectedBackupRetentionDays -or
     $null -eq $Source.LatestRestorableTime -or
     $tags["Project"] -cne "ai-job-apply" -or
     $tags["Environment"] -cne $Environment -or
