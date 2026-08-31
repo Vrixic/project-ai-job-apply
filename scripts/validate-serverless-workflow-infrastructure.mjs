@@ -524,6 +524,21 @@ for (const required of [
 ]) {
   requireText(bootstrap, required, `workload boundary permission is missing: ${required}`);
 }
+requirePattern(
+  bootstrap,
+  /Sid\s*=\s*"OperateCandidateDeletionRecoveryLedger"[\s\S]{0,600}"s3:PutObjectVersionTagging"/u,
+  "candidate deletion recovery boundary must permit exact-version completion tagging",
+);
+requirePattern(
+  durable,
+  /sid\s*=\s*"WriteCandidateDeletionRecoveryLedger"[\s\S]{0,600}"s3:PutObjectVersionTagging"/u,
+  "candidate-rights activity role must permit exact-version recovery completion tagging",
+);
+requirePattern(
+  candidateDocuments,
+  /sid\s*=\s*"CandidateDeletionRecoveryLedgerAccess"[\s\S]{0,600}"s3:PutObjectVersionTagging"/u,
+  "candidate deletion recovery bucket policy must permit exact-version completion tagging",
+);
 for (const required of [
   'test "$(jq -r .schemaVersion "$artifact_dir/$name.manifest.json")" = "2"',
   'test "$(jq -r .sourceSha "$artifact_dir/$name.manifest.json")" = "$GITHUB_SHA"',

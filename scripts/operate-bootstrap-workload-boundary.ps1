@@ -93,7 +93,7 @@ $requiredRetainedStatements = @(
   },
   [pscustomobject]@{
     Sid = "OperateCandidateDeletionRecoveryLedger"; Effect = "Allow"
-    Action = @("s3:GetObject", "s3:GetObjectTagging", "s3:PutObject", "s3:PutObjectRetention", "s3:PutObjectTagging")
+    Action = @("s3:GetObject", "s3:GetObjectTagging", "s3:PutObject", "s3:PutObjectRetention", "s3:PutObjectTagging", "s3:PutObjectVersionTagging")
     Resource = "$candidateRecoveryBucketArn/candidate-deletion-recovery/*"
   },
   [pscustomobject]@{

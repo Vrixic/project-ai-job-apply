@@ -15,7 +15,7 @@ state bucket, and matching remote-state outputs. A generated plan is accepted on
 
 ```text
 candidate export object read/write/exact-version deletion under candidate-data-exports/*
-candidate deletion recovery list/read/write/retention under candidate-deletion-recovery/*
+candidate deletion recovery list/read/write/retention and exact-version completion tagging under candidate-deletion-recovery/*
 candidate document ListBucketVersions for exact-version deletion
 ```
 

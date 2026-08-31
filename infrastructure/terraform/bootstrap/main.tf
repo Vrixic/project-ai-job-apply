@@ -440,7 +440,8 @@ resource "aws_iam_policy" "workload_boundary" {
           "s3:GetObjectTagging",
           "s3:PutObject",
           "s3:PutObjectRetention",
-          "s3:PutObjectTagging"
+          "s3:PutObjectTagging",
+          "s3:PutObjectVersionTagging"
         ]
         Resource = "${local.candidate_deletion_recovery_bucket_arn}/candidate-deletion-recovery/*"
       }
