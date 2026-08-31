@@ -1176,7 +1176,7 @@ switch ($Action) {
       SourceEncrypted           = $true
       SourceDeletionProtected   = $true
       SourceMultiAz             = $false
-      BackupRetentionDays       = 7
+      BackupRetentionDays       = $expectedBackupRetentionDays
       LatestRestorablePoint     = $true
       EcsRuntimeIdle            = [bool]$baseline.EcsRuntimeIdle
       ManagedRuntimeAlarmsOk    = [int]$baseline.ManagedRuntimeAlarmsOk
