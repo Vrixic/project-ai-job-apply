@@ -95,12 +95,20 @@ $recoveryInputArguments = [ordered]@{
 }
 function Invoke-TestOperatorFailure([string[]]$Arguments) {
   $savedErrorActionPreference = $ErrorActionPreference
+  $savedNoColor = [Environment]::GetEnvironmentVariable("NO_COLOR", "Process")
   try {
     $ErrorActionPreference = "Continue"
+    $env:NO_COLOR = "1"
     $output = & $hostExecutable @Arguments 2>&1
-    return [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($output -join "`n") }
+    $outputText = ($output -join "`n") -replace "`e\[[0-?]*[ -/]*[@-~]", ""
+    $outputText = $outputText -replace "\r?\n\s*\|\s*", " "
+    return [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = $outputText }
   }
-  finally { $ErrorActionPreference = $savedErrorActionPreference }
+  finally {
+    $ErrorActionPreference = $savedErrorActionPreference
+    if ($null -eq $savedNoColor) { Remove-Item Env:NO_COLOR -ErrorAction SilentlyContinue }
+    else { $env:NO_COLOR = $savedNoColor }
+  }
 }
 $invalidRefreshBase = @(
   "-NoProfile", "-File", $operatorPath, "-Action", "Verify", "-Stage", "CompleteDark",

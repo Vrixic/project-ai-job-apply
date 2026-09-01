@@ -233,19 +233,20 @@ export class PostgresDocumentStore implements DocumentStore {
         )
       `;
         stage = "IDEMPOTENCY_INSERT";
-        const idempotencyResponse = JSON.stringify(response);
         await transaction`
         INSERT INTO documents.idempotency_keys (user_id, scope, key, request_hash, response)
-        VALUES (${userId}, ${scope}, ${idempotencyKey}, ${hash}, ${idempotencyResponse}::jsonb)
+        VALUES (
+          ${userId}, ${scope}, ${idempotencyKey}, ${hash},
+          ${transaction.json(response as unknown as postgres.JSONValue)}
+        )
       `;
         stage = "AUDIT_INSERT";
-        const auditMetadata = JSON.stringify({ version: 1, sizeBytes: input.sizeBytes });
         await transaction`
         INSERT INTO documents.audit_events (
           id, user_id, action, document_id, trace_id, metadata
         ) VALUES (
           ${uuidv7()}, ${userId}, 'resume.upload.registered', ${documentId}, ${traceId},
-          ${auditMetadata}::jsonb
+          ${transaction.json({ version: 1, sizeBytes: input.sizeBytes })}
         )
       `;
         stage = "TRANSACTION_COMMIT";

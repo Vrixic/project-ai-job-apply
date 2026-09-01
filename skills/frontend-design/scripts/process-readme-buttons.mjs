@@ -1,5 +1,5 @@
-import fs from "fs";
-import path from "path";
+import fs from "node:fs";
+import path from "node:path";
 import sharp from "sharp";
 
 const srcDir = "C:/Users/User/Downloads";
@@ -97,7 +97,7 @@ async function processOne(srcPath, outPath) {
 
   const meta = await sharp(outPath).metadata();
   console.log(
-    `${path.basename(outPath)} -> ${meta.width}x${meta.height}, ${fs.statSync(outPath).size} bytes`
+    `${path.basename(outPath)} -> ${meta.width}x${meta.height}, ${fs.statSync(outPath).size} bytes`,
   );
 }
 

@@ -41,7 +41,7 @@
     "test:d1-browser-assurance": "node scripts/tests/d1-browser-assurance/run.mjs",
     "test:d1-admin-browser-assurance": "node scripts/tests/d1-admin-browser-assurance/run.mjs",
     "test:d1-public-job-page-assurance": "turbo run build --filter=@ai-job-apply/web && node scripts/tests/d1-public-job-page-assurance/run.mjs",
-    "test:integration": "turbo run test:integration",
+    "test:integration": "turbo run test:integration --concurrency=1",
     "typecheck": "turbo run typecheck",
     "verify:d1-004-catalog-invariants": "pwsh -NoProfile -File scripts/verify-d1-004-catalog-invariants.ps1 -Mode All"
   },

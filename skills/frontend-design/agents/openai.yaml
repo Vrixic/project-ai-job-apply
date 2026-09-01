@@ -1,0 +1,4 @@
+interface:
+  display_name: "Frontend Design Router"
+  short_description: "Route premium frontend design work precisely"
+  default_prompt: "Use $frontend-design to choose the smallest suitable visual-design workflow for this frontend request."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Frontend DESIGN.md References"
+  short_description: "Apply a focused local visual-design reference"
+  default_prompt: "Use $frontend-awesome-design-md to select a suitable local DESIGN.md reference for this frontend task."

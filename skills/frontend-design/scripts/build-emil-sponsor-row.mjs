@@ -1,5 +1,5 @@
-import fs from "fs";
-import path from "path";
+import fs from "node:fs";
+import path from "node:path";
 import sharp from "sharp";
 
 const root = process.cwd();
@@ -37,5 +37,5 @@ await sharp({
 
 const meta = await sharp(out).metadata();
 console.log(
-  `${path.basename(out)} -> ${meta.width}x${meta.height}, ${fs.statSync(out).size} bytes`
+  `${path.basename(out)} -> ${meta.width}x${meta.height}, ${fs.statSync(out).size} bytes`,
 );

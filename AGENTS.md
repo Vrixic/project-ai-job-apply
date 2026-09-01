@@ -25,6 +25,9 @@ and read each selected `SKILL.md` completely.
 | `build-vertical-slice` | Implementing a capability through client, gateway, persistence, outbox, workflow, and tests |
 | `deploy-aws-platform` | AWS bootstrap, Terraform plans, Lambda durable runtime releases, managed OIDC, migrations, and restore evidence |
 | `govern-delivery` | Phase task registers, evidence, blockers, start/completion records, and roadmap status |
+| `frontend-awesome-design-md` | Selecting a focused local DESIGN.md reference for visual direction without copying third-party branding |
+| `frontend-design` | Routing deliberate frontend design or redesign work to a bundled specialist workflow |
+| `web-design-guidelines` | Reviewing UI code for current accessibility, usability, and web-interface guidance |
 
 Use multiple skills only when the request crosses their responsibilities. For example, a deployed
 API change normally uses `evolve-platform-contracts`, `build-vertical-slice`, and

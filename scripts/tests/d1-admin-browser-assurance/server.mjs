@@ -53,7 +53,7 @@ async function bundleGallery() {
   await mkdir(outputRoot, { recursive: true });
   await build({
     bundle: true,
-    define: { "process.env.NODE_ENV": '"test"' },
+    define: { "process.env": '{"NODE_ENV":"test"}' },
     entryPoints: [resolve(galleryRoot, "main.tsx")],
     format: "esm",
     jsx: "automatic",

@@ -66,7 +66,7 @@ async function bundleGallery() {
     nodePaths: [resolve(repositoryRoot, "frontend/web/node_modules")],
     sourcemap: false,
     legalComments: "none",
-    define: { "process.env.NODE_ENV": '"test"' },
+    define: { "process.env": '{"NODE_ENV":"test"}' },
   });
 }
 

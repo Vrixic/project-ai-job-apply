@@ -1,9 +1,8 @@
-import fs from "fs";
-import path from "path";
+import fs from "node:fs";
+import path from "node:path";
 import sharp from "sharp";
 
-const src =
-  "C:/Users/User/Downloads/c4f8c4a7-2566-4644-b752-b652e0c103f5.png";
+const src = "C:/Users/User/Downloads/c4f8c4a7-2566-4644-b752-b652e0c103f5.png";
 const out = path.join(process.cwd(), "assets/sponsors/emil-animations-dev.png");
 
 function isBackground(r, g, b, a, threshold = 22) {
@@ -80,4 +79,6 @@ await sharp(rgba, { raw: { width: info.width, height: info.height, channels: 4 }
 
 fs.renameSync(tmp, out);
 const meta = await sharp(out).metadata();
-console.log(`${path.basename(out)} -> ${meta.width}x${meta.height}, ${fs.statSync(out).size} bytes`);
+console.log(
+  `${path.basename(out)} -> ${meta.width}x${meta.height}, ${fs.statSync(out).size} bytes`,
+);

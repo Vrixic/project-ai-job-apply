@@ -12,6 +12,9 @@ the full architecture in every prompt.
 | [`build-vertical-slice`](build-vertical-slice/SKILL.md) | Contract-first implementation spanning platform layers |
 | [`deploy-aws-platform`](deploy-aws-platform/SKILL.md) | AWS/Terraform bootstrap, planning, deployment, verification, rollback, and restore |
 | [`govern-delivery`](govern-delivery/SKILL.md) | Evidence-gated phase and master-tracker maintenance |
+| [`frontend-awesome-design-md`](frontend-awesome-design-md/SKILL.md) | Focused local DESIGN.md references for visual direction |
+| [`frontend-design`](frontend-design/SKILL.md) | Router for bundled frontend design and redesign workflows |
+| [`web-design-guidelines`](web-design-guidelines/SKILL.md) | UI accessibility, usability, and interface-guideline reviews |
 
 Every skill has UI metadata in `agents/openai.yaml`. `AGENTS.md` provides the routing catalog used
 by repository-aware agents. Skill folders intentionally contain no duplicate README or copied

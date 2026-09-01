@@ -14,6 +14,11 @@ both AWS environments accepted the steady-state serverless runtime.
 - `verify-auth0-tenant.mjs` — Validates managed OIDC discovery and signing configuration without
   exposing credentials.
 
+The root `pnpm test:integration` command deliberately runs package suites one at a time. Several
+database-owner suites exercise fail-closed migration verification by temporarily introducing and
+then restoring schema drift, so parallel package execution against the shared local PostgreSQL
+database is unsafe.
+
 ## Immutable artifact construction
 
 - `build-gateway-lambda.mjs` — Builds the gateway Lambda artifact and provenance manifest.

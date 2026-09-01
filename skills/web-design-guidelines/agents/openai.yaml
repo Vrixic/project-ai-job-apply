@@ -1,0 +1,4 @@
+interface:
+  display_name: "Web Design Guidelines"
+  short_description: "Audit UI code against current web guidelines"
+  default_prompt: "Use $web-design-guidelines to review this UI for accessibility, usability, and interface-quality issues."

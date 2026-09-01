@@ -1,5 +1,5 @@
-import fs from "fs";
-import path from "path";
+import fs from "node:fs";
+import path from "node:path";
 import sharp from "sharp";
 
 const root = process.cwd();
@@ -86,13 +86,12 @@ async function pngFileToWebp(inputRel, { maxWidth } = {}) {
   await pipeline.webp({ quality: 92, effort: 6, alphaQuality: 100 }).toFile(output);
   const outMeta = await sharp(output).metadata();
   console.log(
-    `${path.basename(output)} -> ${outMeta.width}x${outMeta.height}, ${fs.statSync(output).size} bytes`
+    `${path.basename(output)} -> ${outMeta.width}x${outMeta.height}, ${fs.statSync(output).size} bytes`,
   );
 }
 
 async function emilBadgeToWebp() {
-  const src =
-    "C:/Users/User/Downloads/c4f8c4a7-2566-4644-b752-b652e0c103f5.png";
+  const src = "C:/Users/User/Downloads/c4f8c4a7-2566-4644-b752-b652e0c103f5.png";
   const output = path.join(root, "assets/sponsors/emil-animations-dev.webp");
   const exportHeight = 240;
 
@@ -109,16 +108,14 @@ async function emilBadgeToWebp() {
 
   const outMeta = await sharp(output).metadata();
   console.log(
-    `${path.basename(output)} -> ${outMeta.width}x${outMeta.height}, ${fs.statSync(output).size} bytes`
+    `${path.basename(output)} -> ${outMeta.width}x${outMeta.height}, ${fs.statSync(output).size} bytes`,
   );
 }
 
 async function sponsorLogoToWebp() {
   const jfif = "C:/Users/User/Downloads/6b610a0c-8889-49fc-9684-e172d7172ea0.jfif";
   const output = path.join(root, "assets/sponsors/animations-dev.webp");
-  const source = fs.existsSync(jfif)
-    ? jfif
-    : path.join(root, "assets/sponsors/animations-dev.png");
+  const source = fs.existsSync(jfif) ? jfif : path.join(root, "assets/sponsors/animations-dev.png");
 
   await sharp(source)
     .resize(192, 192, { fit: "cover" })
@@ -128,7 +125,7 @@ async function sponsorLogoToWebp() {
 
   const outMeta = await sharp(output).metadata();
   console.log(
-    `${path.basename(output)} -> ${outMeta.width}x${outMeta.height}, ${fs.statSync(output).size} bytes`
+    `${path.basename(output)} -> ${outMeta.width}x${outMeta.height}, ${fs.statSync(output).size} bytes`,
   );
 }
 

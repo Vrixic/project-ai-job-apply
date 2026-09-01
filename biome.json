@@ -6,13 +6,15 @@
       "!**/node_modules",
       "!**/.turbo",
       "!**/.terraform",
+      "!**/.vercel",
       "!**/.tmp",
       "!**/dist",
       "!**/.next",
       "!**/generated",
       "!**/coverage",
       "!**/playwright-report",
-      "!**/test-results"
+      "!**/test-results",
+      "!docs/security/policies/candidate-rights.d1-development-synthetic-v1.json"
     ]
   },
   "formatter": {

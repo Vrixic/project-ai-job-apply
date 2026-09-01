@@ -17,6 +17,7 @@ describeWithDatabase("dedicated public job reader boundary", () => {
   const canonicalJobId = uuidv7();
   const aliasJobId = uuidv7();
   let createdRdsIamRole = false;
+  let sitemapModifiedAt = new Date(0);
 
   async function runMigrationVerifier() {
     return execFileAsync(process.execPath, [migrationExecutable], {
@@ -69,6 +70,12 @@ describeWithDatabase("dedicated public job reader boundary", () => {
       "Jobs migrations through 0013_public_job_sitemap applied and verified.",
     );
 
+    const [databaseClock] = await client<Array<{ now: Date }>>`
+      SELECT statement_timestamp() AS now
+    `;
+    if (!databaseClock) throw new Error("The database clock is unavailable");
+    sitemapModifiedAt = databaseClock.now;
+
     await client`
       INSERT INTO jobs.companies (id, display_name, normalized_name, verified_domain)
       VALUES (${companyId}, 'Public Synthetic Company', 'public synthetic company',
@@ -90,7 +97,7 @@ describeWithDatabase("dedicated public job reader boundary", () => {
           ${client.json(["Remote, US"])}::jsonb, ${["remote, us"] as string[]},
           'Engineering', 'engineering', 'Synthetic public description.', ${"a".repeat(64)},
           ${`public-${id}`}, 'active', NULL, '2026-08-14T12:00:00.000Z'::timestamptz,
-          '2026-08-15T11:00:00.000Z'::timestamptz,
+          ${sitemapModifiedAt},
           '2099-09-15T12:00:00.000Z'::timestamptz,
           '2099-09-01T12:00:00.000Z'::timestamptz,
           'on_site', 'full_time', '2026-08-01T12:00:00.000Z'::timestamptz,
@@ -210,25 +217,49 @@ describeWithDatabase("dedicated public job reader boundary", () => {
   });
 
   it("projects only canonical active sitemap identifiers through a bounded keyset", async () => {
-    const firstPage = await asReader<Record<string, unknown>>(`
+    const firstPage = await asReader<{ job_id: string; last_modified_at: Date }>(`
       SELECT * FROM jobs_public.read_public_job_sitemap(NULL, NULL, 1)
     `);
     expect(firstPage).toEqual([
       {
         job_id: canonicalJobId,
-        last_modified_at: new Date("2026-08-15T11:00:00.000Z"),
+        last_modified_at: sitemapModifiedAt,
       },
     ]);
     expect(Object.keys(firstPage[0] ?? {}).sort()).toEqual(["job_id", "last_modified_at"]);
 
-    const continuation = await asReader<Record<string, unknown>>(`
+    const recentPage = await asReader<{ job_id: string; last_modified_at: Date }>(`
+      SELECT * FROM jobs_public.read_public_job_sitemap(NULL, NULL, 101)
+    `);
+    expect(recentPage.some((row) => row.job_id === canonicalJobId)).toBe(true);
+    expect(recentPage.some((row) => row.job_id === aliasJobId)).toBe(false);
+
+    const continuation = await asReader<{ job_id: string; last_modified_at: Date }>(`
       SELECT * FROM jobs_public.read_public_job_sitemap(
-        '2026-08-15T11:00:00.000Z'::timestamptz,
+        '${sitemapModifiedAt.toISOString()}'::timestamptz,
         '${canonicalJobId}'::uuid,
         1
       )
     `);
-    expect(continuation).toEqual([]);
+    expect(continuation.length).toBeLessThanOrEqual(1);
+    for (const row of continuation) {
+      expect(row.job_id).not.toBe(canonicalJobId);
+      expect(row.job_id).not.toBe(aliasJobId);
+      expect(
+        row.last_modified_at < sitemapModifiedAt ||
+          (row.last_modified_at.getTime() === sitemapModifiedAt.getTime() &&
+            row.job_id > canonicalJobId),
+      ).toBe(true);
+    }
+
+    const replay = await asReader<{ job_id: string; last_modified_at: Date }>(`
+      SELECT * FROM jobs_public.read_public_job_sitemap(
+        '${sitemapModifiedAt.toISOString()}'::timestamptz,
+        '${canonicalJobId}'::uuid,
+        1
+      )
+    `);
+    expect(replay).toEqual(continuation);
   });
 
   it("has only the reviewed application-database grants", async () => {

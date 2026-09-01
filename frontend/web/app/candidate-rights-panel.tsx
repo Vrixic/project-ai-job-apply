@@ -8,7 +8,7 @@ import {
   compileComponentValidator,
 } from "@ai-job-apply/api-contracts";
 import { useEffect, useRef, useState } from "react";
-import { candidateRightsReauthenticationPath } from "../lib/auth0";
+import { candidateRightsReauthenticationPath } from "../lib/candidate-rights-reauthentication";
 
 const validateExport = compileComponentValidator("CandidateDataExport");
 const validateExportAccess = compileComponentValidator("CandidateDataExportAccess");
