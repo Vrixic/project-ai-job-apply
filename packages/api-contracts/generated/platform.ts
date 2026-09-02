@@ -452,6 +452,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/saved-job-captures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createPrivateSavedPageCapture"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/saved-job-captures/{captureId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPrivateSavedPageCapture"];
+        put?: never;
+        post?: never;
+        delete: operations["deletePrivateSavedPageCapture"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/saved-jobs/search": {
         parameters: {
             query?: never;
@@ -877,6 +909,50 @@ export interface components {
         JobSearchPage: {
             items: components["schemas"]["CanonicalJobSummary"][];
             nextCursor?: string;
+        };
+        PrivateSavedPageCaptureSource: {
+            /** @enum {string} */
+            provider: "greenhouse" | "lever" | "ashby";
+            /** @enum {string} */
+            pageVariant: "greenhouse-board-v1" | "lever-posting-v1" | "ashby-job-board-v1";
+            /** Format: uri */
+            sourceUrl: string;
+            /** @constant */
+            adapterVersion: "d2-job-page-v1";
+        } & (unknown & unknown & unknown);
+        PrivateSavedPageCaptureSnapshot: {
+            title: string;
+            company?: string;
+            location?: string;
+            description?: string;
+            externalJobId?: string;
+        };
+        CreatePrivateSavedPageCaptureRequest: {
+            /** @constant */
+            schemaVersion: 1;
+            captureId: string;
+            source: components["schemas"]["PrivateSavedPageCaptureSource"];
+            snapshot: components["schemas"]["PrivateSavedPageCaptureSnapshot"];
+            /** Format: date-time */
+            capturedAt: string;
+        };
+        PrivateSavedPageCaptureResolution: {
+            /** Format: uuid */
+            canonicalJobId: string;
+            /** Format: date-time */
+            resolvedAt: string;
+        };
+        PrivateSavedPageCapture: {
+            /** @constant */
+            schemaVersion: 1;
+            id: string;
+            source: components["schemas"]["PrivateSavedPageCaptureSource"];
+            snapshot: components["schemas"]["PrivateSavedPageCaptureSnapshot"];
+            /** Format: date-time */
+            capturedAt: string;
+            /** Format: date-time */
+            savedAt: string;
+            resolution?: components["schemas"]["PrivateSavedPageCaptureResolution"];
         };
         CreateSavedJobRequest: {
             /** Format: uuid */
@@ -2465,6 +2541,93 @@ export interface operations {
             409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    createPrivateSavedPageCapture: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePrivateSavedPageCaptureRequest"];
+            };
+        };
+        responses: {
+            /** @description The sanitized page capture was saved privately for the authenticated owner */
+            201: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrivateSavedPageCapture"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getPrivateSavedPageCapture: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                captureId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The authenticated owner's private saved-page capture */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrivateSavedPageCapture"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    deletePrivateSavedPageCapture: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                captureId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The owner-scoped private capture is absent */
+            204: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["ServiceUnavailable"];
         };
     };
     listSavedJobs: {

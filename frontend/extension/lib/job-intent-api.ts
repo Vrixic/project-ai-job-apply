@@ -1,7 +1,9 @@
 import type {
+  CreatePrivateSavedPageCaptureRequest,
   CreateJobContributionRequest,
   GrantUgcContributionConsentRequest,
   JobContribution,
+  PrivateSavedPageCapture,
   UgcContributionConsentGrant,
 } from "@ai-job-apply/api-contracts";
 import {
@@ -20,6 +22,7 @@ import {
 } from "./pending-queue";
 
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 
 async function sha256Hex(value: string): Promise<string> {
@@ -71,6 +74,96 @@ function exactContribution(value: unknown, contributionId: string): value is Job
     typeof record.updatedAt === "string" &&
     ISO_TIMESTAMP.test(record.updatedAt)
   );
+}
+
+function exactFlatObject(value: unknown, expected: object): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const actual = value as Record<string, unknown>;
+  const wanted = expected as Record<string, unknown>;
+  const actualKeys = Object.keys(actual).sort();
+  const wantedKeys = Object.keys(wanted).sort();
+  return (
+    actualKeys.join("\0") === wantedKeys.join("\0") &&
+    wantedKeys.every((key) => actual[key] === wanted[key])
+  );
+}
+
+export function preparePrivateSavedPageCapture(
+  intent: PendingJobIntent,
+): CreatePrivateSavedPageCaptureRequest {
+  const capture = intent.capture;
+  return {
+    schemaVersion: 1,
+    captureId: intent.id,
+    source: {
+      provider: capture.provider,
+      pageVariant: capture.pageVariant,
+      sourceUrl: capture.sourceUrl,
+      adapterVersion: capture.adapterVersion,
+    },
+    snapshot: {
+      title: capture.title,
+      ...(capture.company ? { company: capture.company } : {}),
+      ...(capture.location ? { location: capture.location } : {}),
+      ...(capture.description ? { description: capture.description } : {}),
+      ...(capture.externalJobId ? { externalJobId: capture.externalJobId } : {}),
+    },
+    capturedAt: capture.capturedAt,
+  };
+}
+
+function exactPrivateSavedPageCapture(
+  value: unknown,
+  expected: CreatePrivateSavedPageCaptureRequest,
+): value is PrivateSavedPageCapture {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort().join("\0");
+  const exactKeys = [
+    "schemaVersion",
+    "id",
+    "source",
+    "snapshot",
+    "capturedAt",
+    "savedAt",
+    ...(record.resolution === undefined ? [] : ["resolution"]),
+  ]
+    .sort()
+    .join("\0");
+  if (
+    keys !== exactKeys ||
+    record.schemaVersion !== 1 ||
+    record.id !== expected.captureId ||
+    record.capturedAt !== expected.capturedAt ||
+    typeof record.savedAt !== "string" ||
+    !ISO_TIMESTAMP.test(record.savedAt) ||
+    new Date(record.savedAt).toISOString() !== record.savedAt ||
+    !exactFlatObject(record.source, expected.source) ||
+    !exactFlatObject(record.snapshot, expected.snapshot)
+  ) {
+    return false;
+  }
+  if (record.resolution !== undefined) {
+    if (
+      !record.resolution ||
+      typeof record.resolution !== "object" ||
+      Array.isArray(record.resolution)
+    ) {
+      return false;
+    }
+    const resolution = record.resolution as Record<string, unknown>;
+    if (
+      Object.keys(resolution).sort().join("\0") !== ["canonicalJobId", "resolvedAt"].join("\0") ||
+      typeof resolution.canonicalJobId !== "string" ||
+      !UUID.test(resolution.canonicalJobId) ||
+      typeof resolution.resolvedAt !== "string" ||
+      !ISO_TIMESTAMP.test(resolution.resolvedAt) ||
+      new Date(resolution.resolvedAt).toISOString() !== resolution.resolvedAt
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function mappedContributionSkeleton(
@@ -250,16 +343,11 @@ export async function sendJobIntent(
     }
   }
   try {
-    const capture = selectContributionFields(intent.capture, intent.approvedFields);
+    const capture = preparePrivateSavedPageCapture(intent);
     const response = await fetchImplementation(
       new URL("/v1/saved-job-captures", extensionConfiguration.apiOrigin),
       {
-        body: JSON.stringify({
-          capture,
-          clientIntentId: intent.id,
-          clientSurface: "browser_extension",
-          intent: intent.intent,
-        }),
+        body: JSON.stringify(capture),
         headers: {
           accept: "application/json",
           authorization: `Bearer ${accessToken}`,
@@ -269,7 +357,18 @@ export async function sendJobIntent(
         method: "POST",
       },
     );
-    return classifyResponse(response.status);
+    const classified = classifyResponse(response.status);
+    if (classified.outcome !== "accepted") return classified;
+    if (response.status !== 201 || !exactNoStoreJson(response)) return { outcome: "terminal" };
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      return { outcome: "terminal" };
+    }
+    return exactPrivateSavedPageCapture(payload, capture)
+      ? { outcome: "accepted" }
+      : { outcome: "terminal" };
   } catch {
     return { outcome: "retryable" };
   }

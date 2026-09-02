@@ -1269,6 +1269,119 @@
         }
       }
     },
+    "/saved-job-captures": {
+      "post": {
+        "operationId": "createPrivateSavedPageCapture",
+        "security": [{ "oidc": ["jobs:write"] }],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": { "type": "string", "minLength": 16, "maxLength": 128 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreatePrivateSavedPageCaptureRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The sanitized page capture was saved privately for the authenticated owner",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PrivateSavedPageCapture" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/saved-job-captures/{captureId}": {
+      "get": {
+        "operationId": "getPrivateSavedPageCapture",
+        "security": [{ "oidc": ["jobs:read"] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "captureId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The authenticated owner's private saved-page capture",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PrivateSavedPageCapture" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      },
+      "delete": {
+        "operationId": "deletePrivateSavedPageCapture",
+        "security": [{ "oidc": ["jobs:write"] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "captureId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The owner-scoped private capture is absent",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
     "/saved-jobs/search": {
       "post": {
         "operationId": "listSavedJobs",
@@ -2265,6 +2378,145 @@
             "maxLength": 1024,
             "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
           }
+        },
+        "additionalProperties": false
+      },
+      "PrivateSavedPageCaptureSource": {
+        "type": "object",
+        "required": ["provider", "pageVariant", "sourceUrl", "adapterVersion"],
+        "properties": {
+          "provider": { "type": "string", "enum": ["greenhouse", "lever", "ashby"] },
+          "pageVariant": {
+            "type": "string",
+            "enum": ["greenhouse-board-v1", "lever-posting-v1", "ashby-job-board-v1"]
+          },
+          "sourceUrl": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048,
+            "pattern": "^https://[^?#]+$"
+          },
+          "adapterVersion": { "const": "d2-job-page-v1" }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "provider": { "const": "greenhouse" } },
+              "required": ["provider"]
+            },
+            "then": {
+              "properties": {
+                "pageVariant": { "type": "string", "const": "greenhouse-board-v1" },
+                "sourceUrl": {
+                  "type": "string",
+                  "pattern": "^https://(?:boards\\.greenhouse\\.io|job-boards\\.greenhouse\\.io)/[A-Za-z0-9._~-]+/jobs/[A-Za-z0-9._~-]+/?$"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": { "provider": { "const": "lever" } },
+              "required": ["provider"]
+            },
+            "then": {
+              "properties": {
+                "pageVariant": { "type": "string", "const": "lever-posting-v1" },
+                "sourceUrl": {
+                  "type": "string",
+                  "pattern": "^https://(?:jobs\\.lever\\.co|jobs\\.eu\\.lever\\.co)/[A-Za-z0-9._~-]+/[A-Za-z0-9._~-]+/?$"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": { "provider": { "const": "ashby" } },
+              "required": ["provider"]
+            },
+            "then": {
+              "properties": {
+                "pageVariant": { "type": "string", "const": "ashby-job-board-v1" },
+                "sourceUrl": {
+                  "type": "string",
+                  "pattern": "^https://jobs\\.ashbyhq\\.com/[A-Za-z0-9._~-]+/[A-Za-z0-9._~-]+/?$"
+                }
+              }
+            }
+          }
+        ],
+        "additionalProperties": false
+      },
+      "PrivateSavedPageCaptureSnapshot": {
+        "type": "object",
+        "required": ["title"],
+        "properties": {
+          "title": { "type": "string", "minLength": 1, "maxLength": 240, "pattern": "\\S" },
+          "company": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240,
+            "pattern": "\\S"
+          },
+          "location": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "pattern": "\\S"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 12000,
+            "pattern": "\\S"
+          },
+          "externalJobId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreatePrivateSavedPageCaptureRequest": {
+        "type": "object",
+        "required": ["schemaVersion", "captureId", "source", "snapshot", "capturedAt"],
+        "properties": {
+          "schemaVersion": { "const": 1 },
+          "captureId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "source": { "$ref": "#/components/schemas/PrivateSavedPageCaptureSource" },
+          "snapshot": { "$ref": "#/components/schemas/PrivateSavedPageCaptureSnapshot" },
+          "capturedAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      },
+      "PrivateSavedPageCaptureResolution": {
+        "type": "object",
+        "required": ["canonicalJobId", "resolvedAt"],
+        "properties": {
+          "canonicalJobId": { "type": "string", "format": "uuid" },
+          "resolvedAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      },
+      "PrivateSavedPageCapture": {
+        "type": "object",
+        "required": ["schemaVersion", "id", "source", "snapshot", "capturedAt", "savedAt"],
+        "properties": {
+          "schemaVersion": { "const": 1 },
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "source": { "$ref": "#/components/schemas/PrivateSavedPageCaptureSource" },
+          "snapshot": { "$ref": "#/components/schemas/PrivateSavedPageCaptureSnapshot" },
+          "capturedAt": { "type": "string", "format": "date-time" },
+          "savedAt": { "type": "string", "format": "date-time" },
+          "resolution": { "$ref": "#/components/schemas/PrivateSavedPageCaptureResolution" }
         },
         "additionalProperties": false
       },

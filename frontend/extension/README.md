@@ -29,8 +29,9 @@ public contribution, or browser-store distribution.
   Profile consent grant and then `POST /v1/jobs/contributions`. It maps only selected fields,
   uses shared canonical digest inputs, accepts only exact `no-store` server receipts, persists the
   server-issued consent across ambiguous contribution retries, and uses separate stable
-  idempotency keys. The temporary private-source-save boundary must be
-  replaced by the generated `POST /v1/saved-job-captures` contract before activation.
+  idempotency keys. Private save independently sends the exact generated
+  `POST /v1/saved-job-captures` shape, uses its own stable idempotency key, and requires an exact
+  non-cacheable acknowledgement before removing the queued intent.
 
 The normal path never retains or uploads raw DOM, page HTML, browsing history, cookies, request
 headers, form values, authentication material, or private notes. No telemetry provider is active.

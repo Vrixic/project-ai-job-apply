@@ -678,6 +678,17 @@ describe("API Gateway Lambda boundary", () => {
       "GET",
       "/v1/jobs/contributions/019c0000-0000-7000-8000-000000000010",
     ],
+    ["default-dark private capture create", "POST", "/v1/saved-job-captures"],
+    [
+      "default-dark private capture read",
+      "GET",
+      "/v1/saved-job-captures/019c0000-0000-7000-8000-000000000010",
+    ],
+    [
+      "default-dark private capture delete",
+      "DELETE",
+      "/v1/saved-job-captures/019c0000-0000-7000-8000-000000000010",
+    ],
   ])("rejects %s before authentication or application dispatch", async (_label, method, path) => {
     const principalBridge = createInvocationPrincipalBridge();
     const inject = vi.fn();

@@ -20,6 +20,13 @@ require `jobs:contribute`. An exact `UGC_CONTRIBUTION_POLICY_VERSION` must be in
 mismatch fails closed. The Lambda method/path allowlist intentionally omits consent and
 contribution routes, so deployed intake remains default-dark.
 
+The source-only private saved-page seam exposes Matching-owned create, owner read, and idempotent
+owner delete routes independently of contribution. Gateway derives the internal owner from the
+managed principal, rechecks the Profile-owned active-account row through a fail-unavailable
+adapter, strips owner and internal verification identifiers from responses, and exposes no
+canonical-resolution write route. The Lambda method/path allowlist intentionally omits these
+routes, so deployed capture remains default-dark.
+
 ## Phase 0 implementation
 
 `src/` provides health/readiness, current-user, job-preference, and owned-operation endpoints.

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type {
   AccountDeletionRequest,
   CandidateDataExport,
+  CreatePrivateSavedPageCaptureRequest,
   CreateProfileFactRequest,
   CreateResumeUploadRequest,
   CreateResumeUploadResponse,
@@ -62,7 +63,10 @@ import {
   MatchPreferencesRequiredError,
   SavedJobIdempotencyLimitError,
   SavedJobLimitError,
+  type CreatePrivateSavedPageCaptureCommand,
   type SavedJobs,
+  type PrivateSavedPageCapture,
+  type PrivateSavedPageCaptures,
 } from "@ai-job-apply/matching-service";
 import type {
   ProfileStore,
@@ -448,6 +452,47 @@ class MemorySavedJobs implements SavedJobs {
   async ping(): Promise<void> {}
 }
 
+class MemoryPrivateSavedPageCaptures implements PrivateSavedPageCaptures {
+  readonly records = new Map<string, PrivateSavedPageCapture>();
+  readonly commands = new Map<string, { digest: string; capture: PrivateSavedPageCapture }>();
+
+  async create(command: CreatePrivateSavedPageCaptureCommand): Promise<PrivateSavedPageCapture> {
+    const key = `${command.ownerUserId}\0${command.idempotencyKey}`;
+    const digest = JSON.stringify(command.input);
+    const replay = this.commands.get(key);
+    if (replay) {
+      if (replay.digest !== digest) {
+        const { PrivateCaptureIdempotencyConflictError } = await import(
+          "@ai-job-apply/matching-service"
+        );
+        throw new PrivateCaptureIdempotencyConflictError();
+      }
+      return replay.capture;
+    }
+    const capture: PrivateSavedPageCapture = {
+      id: command.input.captureId,
+      ownerUserId: command.ownerUserId,
+      source: command.input.source,
+      snapshot: command.input.snapshot,
+      capturedAt: command.input.capturedAt,
+      savedAt: "2026-08-16T12:00:00.000Z",
+    };
+    this.records.set(capture.id, capture);
+    this.commands.set(key, { capture, digest });
+    return capture;
+  }
+
+  async get(ownerUserId: string, captureId: string): Promise<PrivateSavedPageCapture | null> {
+    const capture = this.records.get(captureId);
+    return capture?.ownerUserId === ownerUserId ? capture : null;
+  }
+
+  async delete(ownerUserId: string, captureId: string): Promise<void> {
+    const capture = this.records.get(captureId);
+    if (capture?.ownerUserId === ownerUserId) this.records.delete(captureId);
+  }
+}
+
 class MemoryJobReports implements JobReports {
   failure: Error | undefined;
   pingFailure: Error | undefined;
@@ -818,6 +863,7 @@ async function createApp() {
   const catalog = new MemoryJobCatalog();
   const documents = new MemoryDocumentStore();
   const savedJobs = new MemorySavedJobs();
+  const privateSavedPageCaptures = new MemoryPrivateSavedPageCaptures();
   const jobReports = new MemoryJobReports();
   const jobContributions = new MemoryJobContributions();
   const ugcContributionConsents = new MemoryUgcContributionConsents();
@@ -853,6 +899,7 @@ async function createApp() {
     store,
     catalog,
     savedJobs,
+    privateSavedPageCaptures,
     jobReports,
     jobContributions,
     ugcContributionConsents,
@@ -872,6 +919,7 @@ async function createApp() {
     catalog,
     store,
     savedJobs,
+    privateSavedPageCaptures,
     jobReports,
     jobContributions,
     ugcContributionConsents,
@@ -2340,6 +2388,127 @@ describe("candidate API", () => {
       },
     });
     expect(invalidResolution.statusCode).toBe(400);
+  });
+
+  it("creates, replays, reads, and deletes a private capture with exact owner isolation", async () => {
+    const subject = "candidate-private-capture-owner";
+    const readToken = await issuer.issue(subject, { scope: "jobs:read" });
+    const writeToken = await issuer.issue(subject, { scope: "jobs:write" });
+    const otherReadToken = await issuer.issue("candidate-private-capture-other", {
+      scope: "jobs:read",
+    });
+    const otherWriteToken = await issuer.issue("candidate-private-capture-other", {
+      scope: "jobs:write",
+    });
+    const captureId = uuidv7();
+    const payload: CreatePrivateSavedPageCaptureRequest = {
+      schemaVersion: 1,
+      captureId,
+      source: {
+        provider: "lever",
+        pageVariant: "lever-posting-v1",
+        sourceUrl: `https://jobs.eu.lever.co/synthetic/${captureId}`,
+        adapterVersion: "d2-job-page-v1",
+      },
+      snapshot: {
+        title: "Synthetic Software Engineer",
+        company: "Synthetic Company",
+        location: "Remote",
+        description: "Generated test fixture.",
+        externalJobId: captureId,
+      },
+      capturedAt: "2026-08-16T11:59:00.000Z",
+    };
+    const headers = {
+      authorization: `Bearer ${writeToken}`,
+      "idempotency-key": "private-capture-gateway-create-0001",
+    };
+
+    const forbidden = await app.inject({
+      method: "POST",
+      url: "/v1/saved-job-captures",
+      headers: {
+        authorization: `Bearer ${readToken}`,
+        "idempotency-key": "private-capture-gateway-forbidden-0001",
+      },
+      payload,
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/saved-job-captures",
+      headers,
+      payload,
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.headers["cache-control"]).toBe("no-store");
+    expect(created.json()).toMatchObject({
+      schemaVersion: 1,
+      id: captureId,
+      source: payload.source,
+      snapshot: payload.snapshot,
+      capturedAt: payload.capturedAt,
+    });
+    expect(created.json()).not.toHaveProperty("captureId");
+    expect(created.json()).not.toHaveProperty("ownerUserId");
+    expect(created.json()).not.toHaveProperty("verificationEvidenceId");
+
+    const replayed = await app.inject({
+      method: "POST",
+      url: "/v1/saved-job-captures",
+      headers,
+      payload,
+    });
+    expect(replayed.statusCode).toBe(201);
+    expect(replayed.json()).toEqual(created.json());
+
+    const ownerRead = await app.inject({
+      method: "GET",
+      url: `/v1/saved-job-captures/${captureId}`,
+      headers: { authorization: `Bearer ${readToken}` },
+    });
+    expect(ownerRead.statusCode).toBe(200);
+    expect(ownerRead.headers["cache-control"]).toBe("no-store");
+    expect(ownerRead.json()).toEqual(created.json());
+
+    const crossOwnerRead = await app.inject({
+      method: "GET",
+      url: `/v1/saved-job-captures/${captureId}`,
+      headers: { authorization: `Bearer ${otherReadToken}` },
+    });
+    expect(crossOwnerRead.statusCode).toBe(404);
+    expect(crossOwnerRead.json().code).toBe("not_found");
+
+    const crossOwnerDelete = await app.inject({
+      method: "DELETE",
+      url: `/v1/saved-job-captures/${captureId}`,
+      headers: { authorization: `Bearer ${otherWriteToken}` },
+    });
+    expect(crossOwnerDelete.statusCode).toBe(204);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/v1/saved-job-captures/${captureId}`,
+          headers: { authorization: `Bearer ${readToken}` },
+        })
+      ).statusCode,
+    ).toBe(200);
+
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/v1/saved-job-captures/${captureId}`,
+      headers: { authorization: `Bearer ${writeToken}` },
+    });
+    expect(deleted.statusCode).toBe(204);
+    expect(deleted.headers["cache-control"]).toBe("no-store");
+    const absent = await app.inject({
+      method: "GET",
+      url: `/v1/saved-job-captures/${captureId}`,
+      headers: { authorization: `Bearer ${readToken}` },
+    });
+    expect(absent.statusCode).toBe(404);
   });
 
   it("keeps saved-job mutations behind jobs:write and reads owner-scoped with jobs:read", async () => {

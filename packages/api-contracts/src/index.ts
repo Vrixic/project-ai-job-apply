@@ -38,6 +38,14 @@ export type PublicJobDetailResponse = components["schemas"]["PublicJobDetailResp
 export type PublicJobSitemapItem = components["schemas"]["PublicJobSitemapItem"];
 export type PublicJobSitemapFeedResponse = components["schemas"]["PublicJobSitemapFeedResponse"];
 export type CreateSavedJobRequest = components["schemas"]["CreateSavedJobRequest"];
+export type CreatePrivateSavedPageCaptureRequest =
+  components["schemas"]["CreatePrivateSavedPageCaptureRequest"];
+export type PrivateSavedPageCapture = components["schemas"]["PrivateSavedPageCapture"];
+export type PrivateSavedPageCaptureSource = components["schemas"]["PrivateSavedPageCaptureSource"];
+export type PrivateSavedPageCaptureSnapshot =
+  components["schemas"]["PrivateSavedPageCaptureSnapshot"];
+export type PrivateSavedPageCaptureResolution =
+  components["schemas"]["PrivateSavedPageCaptureResolution"];
 export type CreateJobReportRequest = components["schemas"]["CreateJobReportRequest"];
 export type CreateJobContributionRequest = components["schemas"]["CreateJobContributionRequest"];
 export type JobContribution = components["schemas"]["JobContribution"];

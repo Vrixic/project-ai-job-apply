@@ -8,6 +8,7 @@ import type {
   ConfirmAccountDeletionRequest,
   CreateAccountDeletionRequest,
   CreateCandidateDataExportRequest,
+  CreatePrivateSavedPageCaptureRequest,
   CreateJobContributionRequest,
   CreateJobReportRequest,
   CreateProfileFactRequest,
@@ -29,6 +30,7 @@ import type {
   OpenModerationCaseRequest,
   Operation,
   ProblemDetails,
+  PrivateSavedPageCapture as PrivateSavedPageCaptureResponse,
   ProfileFact,
   ProfileFactCollection,
   PutJobPreferencesRequest,
@@ -87,6 +89,15 @@ import {
   MatchAssessmentTargetUnavailableError,
   MatchAssessmentUnavailableError,
   MatchPreferencesRequiredError,
+  PrivateCaptureAccountInactiveError,
+  PrivateCaptureAlreadySavedError,
+  PrivateCaptureIdempotencyConflictError,
+  PrivateCaptureIdempotencyLimitError,
+  PrivateCaptureLimitError,
+  PrivateCaptureReplayDeletedError,
+  PrivateCaptureUnavailableError,
+  type PrivateSavedPageCapture,
+  type PrivateSavedPageCaptures,
   SavedJobCollectionChangedError,
   SavedJobIdempotencyConflictError,
   SavedJobIdempotencyLimitError,
@@ -143,6 +154,7 @@ const UGC_CONTRIBUTION_CONSENTS = Symbol("UGC_CONTRIBUTION_CONSENTS");
 const UGC_CONTRIBUTION_POLICY_VERSION = Symbol("UGC_CONTRIBUTION_POLICY_VERSION");
 const JOB_MODERATION = Symbol("JOB_MODERATION");
 const SAVED_JOBS = Symbol("SAVED_JOBS");
+const PRIVATE_SAVED_PAGE_CAPTURES = Symbol("PRIVATE_SAVED_PAGE_CAPTURES");
 const MATCH_ASSESSMENTS = Symbol("MATCH_ASSESSMENTS");
 const ENTITLEMENTS = Symbol("ENTITLEMENTS");
 const DOCUMENT_STORE = Symbol("DOCUMENT_STORE");
@@ -226,6 +238,8 @@ const SAFE_ROUTE_TEMPLATES = new Set([
   "/v1/saved-jobs",
   "/v1/saved-jobs/search",
   "/v1/saved-jobs/:savedJobId",
+  "/v1/saved-job-captures",
+  "/v1/saved-job-captures/:captureId",
   "/v1/entitlements",
   "/v1/operations/:operationId",
 ]);
@@ -522,6 +536,33 @@ class ProblemDetailsFilter implements ExceptionFilter {
       code = "saved_job_target_unavailable";
       title = "Job is unavailable";
       detail = exception.message;
+    } else if (
+      exception instanceof PrivateCaptureIdempotencyConflictError ||
+      exception instanceof PrivateCaptureReplayDeletedError ||
+      exception instanceof PrivateCaptureAlreadySavedError
+    ) {
+      status = HttpStatus.CONFLICT;
+      code = "private_capture_conflict";
+      title = "Private capture conflict";
+      detail = "The private capture command conflicts with current state";
+    } else if (
+      exception instanceof PrivateCaptureLimitError ||
+      exception instanceof PrivateCaptureIdempotencyLimitError
+    ) {
+      status = HttpStatus.CONFLICT;
+      code = "private_capture_limit_reached";
+      title = "Private capture limit reached";
+      detail = exception.message;
+    } else if (exception instanceof PrivateCaptureAccountInactiveError) {
+      status = HttpStatus.CONFLICT;
+      code = "private_capture_account_unavailable";
+      title = "Private capture account unavailable";
+      detail = "The account cannot accept private captures";
+    } else if (exception instanceof PrivateCaptureUnavailableError) {
+      status = HttpStatus.SERVICE_UNAVAILABLE;
+      code = "private_capture_unavailable";
+      title = "Private capture unavailable";
+      detail = "Private saved-page capture is temporarily unavailable";
     } else if (exception instanceof MatchAssessmentTargetUnavailableError) {
       status = HttpStatus.NOT_FOUND;
       code = "match_job_unavailable";
@@ -638,6 +679,10 @@ const validateUpdateProfileFact = compileComponentValidator("UpdateProfileFactRe
 const validateCreateResumeUpload = compileComponentValidator("CreateResumeUploadRequest");
 const validateJobSearch = compileComponentValidator("JobSearchRequest");
 const validateCreateSavedJob = compileComponentValidator("CreateSavedJobRequest");
+const validateCreatePrivateSavedPageCapture = compileComponentValidator(
+  "CreatePrivateSavedPageCaptureRequest",
+);
+const validatePrivateSavedPageCapture = compileComponentValidator("PrivateSavedPageCapture");
 const validateSavedJobSearch = compileComponentValidator("SavedJobSearchRequest");
 const validateMatchAssessment = compileComponentValidator("MatchAssessment");
 const validateCreateJobReport = compileComponentValidator("CreateJobReportRequest");
@@ -828,6 +873,36 @@ function exactJobContribution(value: unknown): value is JobContribution {
   );
 }
 
+function projectPrivateSavedPageCapture(
+  value: PrivateSavedPageCapture,
+): PrivateSavedPageCaptureResponse {
+  const response: PrivateSavedPageCaptureResponse = {
+    schemaVersion: 1,
+    id: value.id,
+    source: value.source,
+    snapshot: value.snapshot,
+    capturedAt: value.capturedAt,
+    savedAt: value.savedAt,
+    ...(value.resolution
+      ? {
+          resolution: {
+            canonicalJobId: value.resolution.canonicalJobId,
+            resolvedAt: value.resolution.resolvedAt,
+          },
+        }
+      : {}),
+  };
+  if (
+    !validatePrivateSavedPageCapture(response) ||
+    !exactCanonicalDateTime(response.capturedAt) ||
+    !exactCanonicalDateTime(response.savedAt) ||
+    (response.resolution && !exactCanonicalDateTime(response.resolution.resolvedAt))
+  ) {
+    throw new PrivateCaptureUnavailableError();
+  }
+  return response;
+}
+
 function projectModerationCase(
   value: Awaited<ReturnType<JobModeration["openCase"]>>,
 ): ModerationCase {
@@ -979,6 +1054,8 @@ class CandidateController {
     @Inject(UGC_CONTRIBUTION_POLICY_VERSION)
     private readonly ugcContributionPolicyVersion: string | null,
     @Inject(SAVED_JOBS) private readonly savedJobs: SavedJobs,
+    @Inject(PRIVATE_SAVED_PAGE_CAPTURES)
+    private readonly privateSavedPageCaptures: PrivateSavedPageCaptures,
     @Inject(MATCH_ASSESSMENTS) private readonly matchAssessments: MatchAssessments,
     @Inject(ENTITLEMENTS) private readonly entitlements: EntitlementReadService,
     @Inject(DOCUMENT_STORE) private readonly documents: DocumentStore,
@@ -1608,6 +1685,73 @@ class CandidateController {
     return this.savedJobs.list(user.id, request.body as SavedJobSearchRequest);
   }
 
+  @Post("/saved-job-captures")
+  @HttpCode(HttpStatus.CREATED)
+  @Header("cache-control", "no-store")
+  async createPrivateSavedPageCapture(
+    @Req() request: AuthenticatedRequest,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<PrivateSavedPageCaptureResponse> {
+    const user = await this.identity.resolve(request, "jobs:write");
+    const commandKey = requireIdempotencyKey(idempotencyKey);
+    if (!validateCreatePrivateSavedPageCapture(request.body)) {
+      throw new HttpException(
+        formatValidationErrors(validateCreatePrivateSavedPageCapture.errors),
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    try {
+      const created = await this.privateSavedPageCaptures.create({
+        ownerUserId: user.id,
+        idempotencyKey: commandKey,
+        input: request.body as CreatePrivateSavedPageCaptureRequest,
+      });
+      return projectPrivateSavedPageCapture(created);
+    } catch (error) {
+      if (error instanceof TypeError) {
+        throw new HttpException("Private capture input is invalid", HttpStatus.BAD_REQUEST);
+      }
+      throw error;
+    }
+  }
+
+  @Get("/saved-job-captures/:captureId")
+  @Header("cache-control", "no-store")
+  async getPrivateSavedPageCapture(
+    @Req() request: AuthenticatedRequest,
+    @Param("captureId") captureId: string,
+  ): Promise<PrivateSavedPageCaptureResponse> {
+    if (
+      (request.query && Object.keys(request.query as Record<string, unknown>).length > 0) ||
+      request.body !== undefined ||
+      !UUID_V7_PATTERN.test(captureId)
+    ) {
+      throw new HttpException("Private capture read input is invalid", HttpStatus.BAD_REQUEST);
+    }
+    const user = await this.identity.resolve(request, "jobs:read");
+    const capture = await this.privateSavedPageCaptures.get(user.id, captureId);
+    if (!capture) throw new HttpException("Private capture was not found", HttpStatus.NOT_FOUND);
+    return projectPrivateSavedPageCapture(capture);
+  }
+
+  @Delete("/saved-job-captures/:captureId")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Header("cache-control", "no-store")
+  async deletePrivateSavedPageCapture(
+    @Req() request: AuthenticatedRequest,
+    @Param("captureId") captureId: string,
+  ): Promise<void> {
+    if (
+      (request.query && Object.keys(request.query as Record<string, unknown>).length > 0) ||
+      request.body !== undefined ||
+      !UUID_V7_PATTERN.test(captureId)
+    ) {
+      throw new HttpException("Private capture delete input is invalid", HttpStatus.BAD_REQUEST);
+    }
+    const user = await this.identity.resolve(request, "jobs:write");
+    await this.privateSavedPageCaptures.delete(user.id, captureId);
+  }
+
   @Delete("/saved-jobs/:savedJobId")
   @HttpCode(HttpStatus.NO_CONTENT)
   @Header("cache-control", "no-store")
@@ -1673,6 +1817,7 @@ export interface AppModuleOptions {
   ugcContributionPolicyVersion?: string;
   moderation: JobModeration;
   savedJobs: SavedJobs;
+  privateSavedPageCaptures: PrivateSavedPageCaptures;
   matchAssessments: MatchAssessments;
   entitlements: EntitlementReadService;
   documents: DocumentStore;
@@ -1703,6 +1848,7 @@ export class AppModule {
         },
         { provide: JOB_MODERATION, useValue: options.moderation },
         { provide: SAVED_JOBS, useValue: options.savedJobs },
+        { provide: PRIVATE_SAVED_PAGE_CAPTURES, useValue: options.privateSavedPageCaptures },
         { provide: MATCH_ASSESSMENTS, useValue: options.matchAssessments },
         { provide: ENTITLEMENTS, useValue: options.entitlements },
         { provide: DOCUMENT_STORE, useValue: options.documents },

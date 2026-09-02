@@ -13,6 +13,13 @@ Defines versioned API schemas and generates type-safe clients for web, mobile, e
 
 Contracts contain transport shapes, not backend implementation or persistence models.
 
+The additive Phase 2 private-capture contract defines strict owner-scoped
+`POST /saved-job-captures` and `GET`/`DELETE /saved-job-captures/{captureId}` routes. The create
+command binds one client UUIDv7 and `Idempotency-Key` to the exact sanitized provider source,
+bounded snapshot, and capture time. Responses omit the owner and internal verification-evidence
+identifiers. No public resolution-write route exists, and this private command has no contribution
+consent or catalog-publication meaning.
+
 The additive Phase 2 contribution contract defines strict `POST /jobs/contributions` and owner
 `GET /jobs/contributions/{contributionId}` routes under the exact `jobs:contribute` scope. Intake
 requires a client-generated UUIDv7, `Idempotency-Key`, detector identity, selected public fields,

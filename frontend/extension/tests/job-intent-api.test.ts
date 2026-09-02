@@ -3,6 +3,7 @@ import { extensionConfiguration } from "../lib/config";
 import {
   createConsentGrantRequest,
   createContributionRequest,
+  preparePrivateSavedPageCapture,
   prepareContribution,
   sendJobIntent,
 } from "../lib/job-intent-api";
@@ -26,6 +27,11 @@ function intent() {
     randomId: () => "018f0000-0000-7000-8000-000000000004",
     retentionMilliseconds: 24 * 60 * 60 * 1_000,
   });
+}
+
+function privateIntent() {
+  const pending = intent();
+  return { ...pending, intent: "private_save" as const };
 }
 
 function jsonResponse(status: number, value: unknown, noStore = true): Response {
@@ -200,5 +206,82 @@ describe("background-only contribution consent transport", () => {
       "d2-synthetic-policy.v1",
     );
     expect(grant.url.pathname).toBe("/v1/profile/ugc-contribution-consents");
+  });
+});
+
+describe("background-only private saved-page transport", () => {
+  it("maps the complete sanitized capture without contribution consent coupling", () => {
+    const pending = privateIntent();
+    expect(preparePrivateSavedPageCapture(pending)).toEqual({
+      schemaVersion: 1,
+      captureId: pending.id,
+      source: {
+        provider: "lever",
+        pageVariant: "lever-posting-v1",
+        sourceUrl: "https://jobs.lever.co/example/123",
+        adapterVersion: "d2-job-page-v1",
+      },
+      snapshot: {
+        title: "Engineer",
+        company: "Removed Company",
+        location: "Remote",
+      },
+      capturedAt: "2026-09-01T12:00:00.000Z",
+    });
+  });
+
+  it("uses the stable private key and accepts only an exact no-store owner response", async () => {
+    extensionConfiguration.apiOrigin = "https://api.example.test";
+    const pending = privateIntent();
+    const expected = preparePrivateSavedPageCapture(pending);
+    const fetcher = vi.fn(async (_input: URL | RequestInfo, init?: RequestInit) => {
+      expect(init?.headers).toMatchObject({ "idempotency-key": pending.idempotencyKey });
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      expect(body).toEqual(expected);
+      expect(body).not.toHaveProperty("approval");
+      expect(body).not.toHaveProperty("consent");
+      expect(body).not.toHaveProperty("clientSurface");
+      return jsonResponse(201, {
+        schemaVersion: 1,
+        id: pending.id,
+        source: expected.source,
+        snapshot: expected.snapshot,
+        capturedAt: expected.capturedAt,
+        savedAt: "2026-09-01T12:00:01.000Z",
+      });
+    });
+
+    await expect(
+      sendJobIntent(pending, "short-lived-token", fetcher as typeof fetch),
+    ).resolves.toEqual({ outcome: "accepted" });
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(String(fetcher.mock.calls[0]?.[0])).toBe(
+      "https://api.example.test/v1/saved-job-captures",
+    );
+  });
+
+  it("keeps private-save retry classification independent of contribution policy", async () => {
+    extensionConfiguration.apiOrigin = "https://api.example.test";
+    delete extensionConfiguration.ugcContributionPolicyVersion;
+    const pending = privateIntent();
+    const expected = preparePrivateSavedPageCapture(pending);
+    const unavailable = vi.fn(async () => jsonResponse(503, { code: "unavailable" }));
+    await expect(sendJobIntent(pending, "token", unavailable as typeof fetch)).resolves.toEqual({
+      outcome: "retryable",
+    });
+
+    const malformed = vi.fn(async () =>
+      jsonResponse(201, {
+        schemaVersion: 1,
+        id: pending.id,
+        source: expected.source,
+        snapshot: { ...expected.snapshot, privateNote: "must not be accepted" },
+        capturedAt: expected.capturedAt,
+        savedAt: "2026-09-01T12:00:01.000Z",
+      }),
+    );
+    await expect(sendJobIntent(pending, "token", malformed as typeof fetch)).resolves.toEqual({
+      outcome: "terminal",
+    });
   });
 });

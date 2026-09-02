@@ -90,6 +90,12 @@ export interface PrivateCaptureResolutionVerifier {
   }): Promise<boolean>;
 }
 
+export interface PrivateSavedPageCaptures {
+  create(command: CreatePrivateSavedPageCaptureCommand): Promise<PrivateSavedPageCapture>;
+  get(ownerUserId: string, captureId: string): Promise<PrivateSavedPageCapture | null>;
+  delete(ownerUserId: string, captureId: string): Promise<void>;
+}
+
 export class PrivateCaptureIdempotencyConflictError extends Error {
   constructor() {
     super("The idempotency key was already used for a different private capture");
@@ -322,7 +328,7 @@ function requestHash(input: PrivateSavedPageCaptureInput): string {
   return createHash("sha256").update(privateSavedPageCaptureDigestInput(input)).digest("hex");
 }
 
-export class PrivateSavedPageCapturesService {
+export class PrivateSavedPageCapturesService implements PrivateSavedPageCaptures {
   constructor(
     private readonly store: PrivateSavedPageCaptureStore,
     private readonly accounts: PrivateCaptureAccountStatus = {

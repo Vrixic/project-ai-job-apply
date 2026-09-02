@@ -7,7 +7,12 @@ import type {
   JobModeration,
   JobReports,
 } from "@ai-job-apply/jobs-service";
-import type { MatchAssessments, SavedJobs } from "@ai-job-apply/matching-service";
+import {
+  type MatchAssessments,
+  PrivateCaptureUnavailableError,
+  type PrivateSavedPageCaptures,
+  type SavedJobs,
+} from "@ai-job-apply/matching-service";
 import {
   type ProfileStore,
   type UgcContributionConsentStore,
@@ -30,6 +35,7 @@ export interface GatewayApplicationOptions {
   ugcContributionPolicyVersion?: string;
   moderation: JobModeration;
   savedJobs: SavedJobs;
+  privateSavedPageCaptures?: PrivateSavedPageCaptures;
   matchAssessments: MatchAssessments;
   entitlements: EntitlementReadService;
   documents: DocumentStore;
@@ -75,6 +81,19 @@ export async function createGatewayApplication(
         : {}),
       moderation: options.moderation,
       savedJobs: options.savedJobs,
+      privateSavedPageCaptures:
+        options.privateSavedPageCaptures ??
+        ({
+          async create() {
+            throw new PrivateCaptureUnavailableError();
+          },
+          async get() {
+            throw new PrivateCaptureUnavailableError();
+          },
+          async delete() {
+            throw new PrivateCaptureUnavailableError();
+          },
+        } satisfies PrivateSavedPageCaptures),
       matchAssessments: options.matchAssessments,
       entitlements: options.entitlements,
       documents: options.documents,

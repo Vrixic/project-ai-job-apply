@@ -77,8 +77,14 @@ The original capture is immutable and create commands use a client UUIDv7 plus a
 canonical job link is a separate append-only row and identifier-only audit transition that the
 service performs only after an injected independent verifier accepts the exact source and evidence
 identifiers. It never publishes, activates, refreshes, or changes Jobs-owned catalog truth.
-Account-active and resolution-verification dependencies default deny. No API, gateway, extension,
-deployment, or feature-switch wiring is included in this foundation.
+Account-active and resolution-verification dependencies default deny. The additive Phase 2
+transport binding exposes create, owner read, and idempotent owner delete through Gateway. The
+extension create request maps only the exact sanitized source/snapshot shape; it does not use
+contribution consent and emits no public event. Gateway uses a real Profile-owned active-account
+check, while missing authority remains fail-unavailable. Canonical resolution stays an
+independently verified internal service operation with no candidate write route. Lambda's
+method/path allowlist still excludes all capture routes, so this is locally verified and
+default-dark rather than deployed activation.
 
 ## D1 evaluation candidate
 

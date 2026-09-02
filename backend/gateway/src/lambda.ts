@@ -29,7 +29,9 @@ import {
 import {
   deriveSavedJobCursorKeys,
   MatchAssessmentService,
+  PostgresPrivateSavedPageCaptureStore,
   PostgresSavedJobStore,
+  PrivateSavedPageCapturesService,
   SavedJobsService,
 } from "@ai-job-apply/matching-service";
 import { createLogger, initializeTelemetry } from "@ai-job-apply/observability";
@@ -56,6 +58,7 @@ import {
   ProfileJobContributionConsentVerifier,
 } from "./job-contribution-consent-verifier.js";
 import { deriveJobSearchCursorKeys, deriveModerationCursorKey } from "./job-search-cursor-key.js";
+import { PostgresProfilePrivateCaptureAccountStatus } from "./private-capture-account-status.js";
 import { JobCatalogSavedJobResolver } from "./saved-job-catalog-resolver.js";
 import { SqsOutboxNudgePublisher } from "./sqs-outbox-nudge-publisher.js";
 
@@ -637,6 +640,10 @@ async function createConfiguredApplication(
     new JobCatalogSavedJobResolver(catalog),
     deriveSavedJobCursorKeys(databaseUrl),
   );
+  const privateSavedPageCaptures = new PrivateSavedPageCapturesService(
+    new PostgresPrivateSavedPageCaptureStore(database.client),
+    new PostgresProfilePrivateCaptureAccountStatus(database.client),
+  );
   const matchAssessments = new MatchAssessmentService(store, catalog);
   const entitlements = new BillingEntitlementService(
     new PostgresBillingStore(database.client),
@@ -668,6 +675,7 @@ async function createConfiguredApplication(
     ...(ugcContributionPolicyVersion ? { ugcContributionPolicyVersion } : {}),
     moderation,
     savedJobs,
+    privateSavedPageCaptures,
     matchAssessments,
     entitlements,
     documents,
