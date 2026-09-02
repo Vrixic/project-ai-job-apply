@@ -56,9 +56,9 @@ database is unsafe.
 - `publish-development-migration-image.ps1` — Provides the corresponding fail-closed development
   fallback for the migration-only container. Its cloud-independent `LocalBuild` action proves two
   source-bound `linux/amd64` builds have identical configuration and rootfs identities and passes a
-  hardened runtime smoke against the exact six-owner, ten-schema, 66-relation, 37-migration Phase 2 manifest,
-  including the Trust runner and checksum-bound migration files. Publication separately resolves
-  the Terraform-owned immutable KMS ECR
+  hardened runtime smoke against the exact six-owner, ten-schema, 68-relation, 38-migration Phase 2
+  manifest, including the Trust runner and checksum-bound migration files. Publication separately
+  resolves the Terraform-owned immutable KMS ECR
   repository, publishes the exact commit tag, requires a completed zero-High/zero-Critical scan,
   and emits a checksum-reviewed ignored receipt without changing Terraform or executing a migration. See
   `infrastructure/runbooks/deployments/development-migration-image-publication.md`.

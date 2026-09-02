@@ -77,8 +77,9 @@ The operator:
 1. repeats all source/application/no-drift guards;
 2. starts the immutable one-off Fargate verifier against the source-managed connection secret;
 3. runs one read-only PostgreSQL transaction that proves the current Phase 2 manifest boundary of
-   six owners, ten schemas, 66 regular relations, and the exact checksum-bound migration journal
-   entries (37 at this boundary), including the separately owned Trust schema, hashes only ordered migration evidence
+   six owners, ten schemas, 68 regular relations, and the exact checksum-bound migration journal
+   entries (38 at this boundary), including the separately owned Trust schema and its
+   identifier-only decision-signal outbox/delivery boundary, hashes only ordered migration evidence
    and per-relation counts in memory, and emits one sanitized digest event;
 4. records the latest-restorable-point lag;
 5. saves only an ignored local target/context record;

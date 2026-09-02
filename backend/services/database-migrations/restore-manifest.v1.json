@@ -261,11 +261,17 @@
         {
           "version": "0002_candidate_rights",
           "checksum": "ff3a95ffedbf3cb59870ff69cd34593338787af27c3d311f87ed95fda4f728a6"
+        },
+        {
+          "version": "0003_decision_signals",
+          "checksum": "8500dd422334932508ae2588a91aa685846b989eb1d7e1b3e922f5d075ac0162"
         }
       ],
       "relations": [
         "trust.case_events",
         "trust.contribution_cases",
+        "trust.contribution_decision_deliveries",
+        "trust.contribution_decision_outbox",
         "trust.reputation_evidence",
         "trust.schema_migrations"
       ]

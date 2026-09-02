@@ -8,7 +8,7 @@ another service's tables.
 
 - `src/` — Fail-fast process orchestration, restore verifier, CLI entry points, and tests.
 - `restore-manifest.v1.json` — Canonical Phase 2 six-owner restore boundary: ten owned schemas
-  (including the empty-table `jobs_public` projection schema), 66 regular relations, and 37
+  (including the empty-table `jobs_public` projection schema), 68 regular relations, and 38
   checksum-bound migrations.
 
 Adding a schema owner requires adding its independently checksum-verified runner here, including it
@@ -21,6 +21,7 @@ It is not a row-value checksum or a general corruption detector. Local integrati
 generated-synthetic data and a local PostgreSQL backup/restore; it does not prove AWS RDS PITR,
 deployment, or an RTO/RPO objective.
 
-The Trust owner includes its candidate-rights migration and checksum-bound export/delete database
-functions. Manifest inclusion and local restore verification prove only the declared structural
-boundary; they do not prove a deployed candidate-rights transaction or AWS restore.
+The Trust owner includes its candidate-rights and identifier-only decision-signal migrations plus
+checksum-bound export/delete database functions. Manifest inclusion and local restore verification
+prove only the declared structural boundary; they do not prove deployed candidate-rights or
+decision-signal delivery, nor an AWS restore.

@@ -36,7 +36,7 @@ vulnerability scan, publish an image, or satisfy the publication/scan/recovery g
 
 The current package boundary is the Phase 2 manifest
 `d2-extension-ugc-profile-jobs-documents-matching-billing-trust-v1`: six ordered owners (Profile,
-Jobs, Documents, Matching, Billing, and Trust), ten schemas, 66 regular relations, and 37 exact
+Jobs, Documents, Matching, Billing, and Trust), ten schemas, 68 regular relations, and 38 exact
 checksum-bound migrations. The smoke gate also requires the Trust
 runner and every Phase 2 migration file before an image can be considered locally buildable.
 This is a generated-synthetic/default-dark source and artifact boundary. It does not establish

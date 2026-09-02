@@ -88,6 +88,8 @@ describe.skipIf(!requested)("restored PostgreSQL aggregate verification", () => 
         private_capture_present: boolean;
         trust_case_present: boolean;
         trust_event_present: boolean;
+        trust_decision_outbox_present: boolean;
+        trust_decision_delivery_present: boolean;
         trust_reputation_present: boolean;
       }>(`
         SELECT
@@ -99,6 +101,10 @@ describe.skipIf(!requested)("restored PostgreSQL aggregate verification", () => 
             AS private_capture_present,
           to_regclass('trust.contribution_cases') IS NOT NULL AS trust_case_present,
           to_regclass('trust.case_events') IS NOT NULL AS trust_event_present,
+          to_regclass('trust.contribution_decision_outbox') IS NOT NULL
+            AS trust_decision_outbox_present,
+          to_regclass('trust.contribution_decision_deliveries') IS NOT NULL
+            AS trust_decision_delivery_present,
           to_regclass('trust.reputation_evidence') IS NOT NULL AS trust_reputation_present
       `);
       expect(phaseTwoBoundary).toEqual([
@@ -109,6 +115,8 @@ describe.skipIf(!requested)("restored PostgreSQL aggregate verification", () => 
           private_capture_present: true,
           trust_case_present: true,
           trust_event_present: true,
+          trust_decision_outbox_present: true,
+          trust_decision_delivery_present: true,
           trust_reputation_present: true,
         },
       ]);
