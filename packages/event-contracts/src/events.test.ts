@@ -24,6 +24,46 @@ describe("event schemas", () => {
     ).toBe(false);
   });
 
+  it("accepts only identifier-only job lifecycle events", () => {
+    const contributionId = "019b4e12-7ea3-7c36-9357-aea35ab542ca";
+    const normalizationId = "019b4e12-7ea3-7c36-9357-aea35ab542cb";
+    const jobId = "019b4e12-7ea3-7c36-9357-aea35ab542cc";
+    const sourceId = "019b4e12-7ea3-7c36-9357-aea35ab542cd";
+    const verificationId = "019b4e12-7ea3-7c36-9357-aea35ab542ce";
+    const statusEventId = "019b4e12-7ea3-7c36-9357-aea35ab542cf";
+
+    expect(
+      validateEventData(eventTypes.jobNormalized, { contributionId, normalizationId }),
+    ).toBe(true);
+    expect(
+      validateEventData(eventTypes.jobVerified, { jobId, sourceId, verificationId }),
+    ).toBe(true);
+    expect(validateEventData(eventTypes.jobExpired, { jobId, statusEventId })).toBe(true);
+
+    expect(
+      validateEventData(eventTypes.jobNormalized, {
+        contributionId,
+        normalizationId,
+        title: "Do not put posting content on the event bus",
+      }),
+    ).toBe(false);
+    expect(
+      validateEventData(eventTypes.jobVerified, {
+        jobId,
+        sourceId,
+        verificationId,
+        sourceUrl: "https://jobs.example.test/private-path",
+      }),
+    ).toBe(false);
+    expect(
+      validateEventData(eventTypes.jobExpired, {
+        jobId,
+        statusEventId,
+        ownerUserId: contributionId,
+      }),
+    ).toBe(false);
+  });
+
   it("accepts only identifier-only candidate-rights events", () => {
     const common = {
       operationId: "019b4e12-7ea3-7c36-9357-aea35ab542ca",

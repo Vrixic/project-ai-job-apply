@@ -12,3 +12,7 @@ integrity digest; consumers reload authoritative event data from PostgreSQL.
 
 `job.contributed.v1` carries only the queued contribution UUIDv7. It intentionally excludes the
 owner, public posting fields, URLs, source metadata, and consent references.
+
+`job.normalized.v1`, `job.verified.v1`, and `job.expired.v1` carry only immutable workflow,
+canonical-job, source, verification, and status-event UUIDv7 references. They intentionally exclude
+posting content, source URLs, contributor identity, trust evidence, and lifecycle reasons.

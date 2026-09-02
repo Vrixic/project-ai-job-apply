@@ -23,9 +23,15 @@ import entitlementChangedSchema from "../schemas/subscription.entitlement_change
   type: "json",
 };
 import jobContributedSchema from "../schemas/job.contributed.v1.json" with { type: "json" };
+import jobExpiredSchema from "../schemas/job.expired.v1.json" with { type: "json" };
+import jobNormalizedSchema from "../schemas/job.normalized.v1.json" with { type: "json" };
+import jobVerifiedSchema from "../schemas/job.verified.v1.json" with { type: "json" };
 
 export const eventTypes = {
   jobContributed: "job.contributed.v1",
+  jobExpired: "job.expired.v1",
+  jobNormalized: "job.normalized.v1",
+  jobVerified: "job.verified.v1",
   profileAccountDeletionConfirmed: "profile.account-deletion.confirmed.v1",
   profileDataExportRequested: "profile.data-export.requested.v1",
   profilePreferencesUpdated: "profile.preferences.updated.v1",
@@ -154,6 +160,22 @@ export interface JobContributedData {
   contributionId: string;
 }
 
+export interface JobNormalizedData {
+  contributionId: string;
+  normalizationId: string;
+}
+
+export interface JobVerifiedData {
+  jobId: string;
+  sourceId: string;
+  verificationId: string;
+}
+
+export interface JobExpiredData {
+  jobId: string;
+  statusEventId: string;
+}
+
 export type ProfilePreferencesUpdatedEvent = CloudEvent<
   typeof eventTypes.profilePreferencesUpdated,
   ProfilePreferencesUpdatedData
@@ -170,6 +192,9 @@ addFormats(ajv);
 
 const validators = new Map<string, ValidateFunction<unknown>>([
   [eventTypes.jobContributed, ajv.compile(jobContributedSchema)],
+  [eventTypes.jobExpired, ajv.compile(jobExpiredSchema)],
+  [eventTypes.jobNormalized, ajv.compile(jobNormalizedSchema)],
+  [eventTypes.jobVerified, ajv.compile(jobVerifiedSchema)],
   [eventTypes.profileAccountDeletionConfirmed, ajv.compile(accountDeletionConfirmedSchema)],
   [eventTypes.profileDataExportRequested, ajv.compile(dataExportRequestedSchema)],
   [eventTypes.profilePreferencesUpdated, ajv.compile(preferencesUpdatedSchema)],
