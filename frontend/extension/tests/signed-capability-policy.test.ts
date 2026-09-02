@@ -144,6 +144,14 @@ describe("signed extension contribution capability policy", () => {
         expiresAt: "2026-09-02T12:00:00.001Z",
       }),
     ).toThrow(/lifetime/u);
+    for (const version of ["01.2.3", "1234567.2.3", "1.2.3-abcdefghijklmnopq", "1.2.3-"]) {
+      expect(() =>
+        contributionCapabilityPolicyDigestInput({
+          ...basePolicy,
+          clients: { [version]: true },
+        }),
+      ).toThrow(/map/u);
+    }
   });
 
   it("enforces global, exact client, provider, variant, and domain controls independently", () => {

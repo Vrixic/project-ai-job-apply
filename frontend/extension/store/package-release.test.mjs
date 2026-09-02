@@ -131,4 +131,17 @@ describe("extension release packaging", () => {
       }),
     ).rejects.toThrow("Dynamic code construction");
   });
+
+  it("rejects telemetry endpoints from the zero-telemetry release", async () => {
+    const { dist, firstOutput } = await fixture();
+    await writeFile(join(dist, "background.js"), 'fetch("https://sentry.io/api/report");\n');
+    await expect(
+      createReleaseArchive({
+        distDirectory: dist,
+        outputDirectory: firstOutput,
+        packageVersion: "0.2.0",
+        policy,
+      }),
+    ).rejects.toThrow("Telemetry endpoint");
+  });
 });

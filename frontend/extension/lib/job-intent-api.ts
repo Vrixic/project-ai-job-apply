@@ -20,6 +20,7 @@ import {
   type PendingJobIntent,
   type UgcConsentBinding,
 } from "./pending-queue";
+import { EXTENSION_CLIENT_VERSION_PATTERN } from "./client-version";
 
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
@@ -91,7 +92,7 @@ function exactFlatObject(value: unknown, expected: object): boolean {
 export function preparePrivateSavedPageCapture(
   intent: PendingJobIntent,
 ): CreatePrivateSavedPageCaptureRequest {
-  const capture = intent.capture;
+  const capture = selectContributionFields(intent.capture, intent.approvedFields);
   return {
     schemaVersion: 1,
     captureId: intent.id,
@@ -172,7 +173,7 @@ function mappedContributionSkeleton(
   policyVersion: string,
   clientVersion: string,
 ): CreateJobContributionRequest {
-  if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(clientVersion)) {
+  if (!EXTENSION_CLIENT_VERSION_PATTERN.test(clientVersion)) {
     throw new TypeError("Extension client version is not configured");
   }
   const skeleton: CreateJobContributionRequest = {

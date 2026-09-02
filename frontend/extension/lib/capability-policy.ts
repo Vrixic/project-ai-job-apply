@@ -1,9 +1,9 @@
 import { PROVIDER_DETECTORS } from "./detectors";
 import type { AtsProvider, JobPageVariant } from "./job-capture";
+import { EXTENSION_CLIENT_VERSION_PATTERN } from "./client-version";
 
 declare const __DETECTOR_ACTIVATION_POLICY__: unknown;
 
-const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u;
 const TOKEN_PATTERN = /^[a-z0-9][a-z0-9._-]{2,99}$/u;
 const KNOWN_DOMAINS = [
   "boards.greenhouse.io",
@@ -63,7 +63,7 @@ export function parseDetectorActivationPolicy(
     typeof value.revision !== "string" ||
     !TOKEN_PATTERN.test(value.revision) ||
     typeof value.extensionVersion !== "string" ||
-    !VERSION_PATTERN.test(value.extensionVersion)
+    !EXTENSION_CLIENT_VERSION_PATTERN.test(value.extensionVersion)
   ) {
     return undefined;
   }

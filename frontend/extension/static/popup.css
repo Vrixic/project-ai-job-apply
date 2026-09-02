@@ -13,6 +13,21 @@ body {
   margin: 0;
   min-width: 360px;
 }
+.skip-link {
+  background: #fff;
+  color: #185b3b;
+  left: 8px;
+  padding: 8px 10px;
+  position: fixed;
+  top: 8px;
+  transform: translateY(-200%);
+  z-index: 1;
+}
+.skip-link:focus-visible {
+  outline: 3px solid #e3a72f;
+  outline-offset: 2px;
+  transform: translateY(0);
+}
 main {
   display: grid;
   gap: 14px;

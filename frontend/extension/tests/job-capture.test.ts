@@ -79,7 +79,7 @@ describe("strict public job capture", () => {
       sanitizeSnapshot(
         {
           canonicalUrl: "https://jobs.lever.co/example/123",
-          title: "Safe\u202e misleading\u2066 title\u0085 <script>ignored</script>",
+          title: "Safe\u200b\u200d\ufeff\u202e misleading\u2066 title\u0085 <script>ignored</script>",
         },
         "lever",
         "lever-posting-v1",

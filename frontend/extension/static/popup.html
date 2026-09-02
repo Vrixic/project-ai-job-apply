@@ -7,7 +7,8 @@
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <main>
+    <a class="skip-link" href="#main-content">Skip to job capture</a>
+    <main id="main-content" tabindex="-1" aria-busy="false">
       <header>
         <p class="eyebrow">Private by default</p>
         <h1>Save this job</h1>
@@ -31,16 +32,16 @@
 
       <section id="preview" class="card" aria-labelledby="preview-heading" hidden>
         <div class="section-heading">
-          <h2 id="preview-heading">Contribution preview</h2>
-          <span class="status">Public job fields</span>
+          <h2 id="preview-heading">Job preview</h2>
+          <span class="status">Selected page fields</span>
         </div>
         <div id="field-list" class="field-list"></div>
-        <button id="save-private" class="secondary" type="button">Save privately</button>
+        <button id="save-private" class="secondary" type="button">Save Selected Fields Privately</button>
         <label class="consent-row">
           <input id="contribution-consent" type="checkbox" />
           <span>I approve sharing only the selected public fields.</span>
         </label>
-        <button id="contribute" type="button" disabled>Contribute selected fields</button>
+        <button id="contribute" type="button" disabled>Contribute Selected Fields</button>
       </section>
 
       <section class="queue" aria-labelledby="queue-heading">

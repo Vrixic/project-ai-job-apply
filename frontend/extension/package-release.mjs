@@ -84,6 +84,15 @@ function validateManifest(manifest, packageVersion, policy) {
   }
 }
 
+const forbiddenTelemetryMarkers = [
+  "amplitude.com",
+  "browser-intake-datadoghq.com",
+  "google-analytics.com",
+  "mixpanel.com",
+  "segment.io",
+  "sentry.io",
+];
+
 async function flatFiles(directory) {
   const names = await readdir(directory);
   const files = [];
@@ -125,6 +134,9 @@ export async function validateReleaseFiles({ distDirectory, packageVersion, poli
       }
       if (/\b(?:eval\s*\(|new\s+Function\s*\()/u.test(source)) {
         throw new Error(`Dynamic code construction is forbidden: ${name}`);
+      }
+      if (forbiddenTelemetryMarkers.some((marker) => source.includes(marker))) {
+        throw new Error(`Telemetry endpoint is forbidden: ${name}`);
       }
     }
     records.push({ name, data, sha256: sha256(data), sizeBytes: data.length });

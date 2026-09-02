@@ -32,6 +32,7 @@ import {
   logout,
   refresh,
 } from "../lib/protocol";
+import { restrictExtensionStorageToTrustedContexts } from "../lib/storage-boundary";
 
 const LAST_CAPTURE_KEY = "d2LastJobCaptureV1";
 const RETRY_ALARM = "d2PendingJobIntentRetry";
@@ -61,7 +62,8 @@ const contributionPolicy = new ExtensionContributionPolicyRuntime(
   },
 );
 
-let contributionPolicyStartup = contributionPolicy.start();
+const storageBoundaryStartup = restrictExtensionStorageToTrustedContexts(chrome.storage);
+let contributionPolicyStartup = storageBoundaryStartup.then(() => contributionPolicy.start());
 
 interface LastCapture {
   capture: SanitizedJobCapture;
@@ -98,6 +100,7 @@ function trustedSender(sender: chrome.runtime.MessageSender): boolean {
 }
 
 async function pendingQueue(): Promise<PendingJobIntent[]> {
+  await storageBoundaryStartup;
   const result = await chrome.storage.local.get(PENDING_QUEUE_KEY);
   const stored = result[PENDING_QUEUE_KEY];
   const queue = Array.isArray(stored) ? (stored as PendingJobIntent[]) : [];
@@ -251,17 +254,15 @@ async function enqueue(
   return dispatchPending();
 }
 
-void chrome.storage.session.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
-
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === RETRY_ALARM) void dispatchPending();
 });
 chrome.runtime.onStartup.addListener(() => {
-  contributionPolicyStartup = contributionPolicy.start();
+  contributionPolicyStartup = storageBoundaryStartup.then(() => contributionPolicy.start());
   void contributionPolicyStartup.then(() => dispatchPending());
 });
 chrome.runtime.onInstalled.addListener(() => {
-  contributionPolicyStartup = contributionPolicy.start();
+  contributionPolicyStartup = storageBoundaryStartup.then(() => contributionPolicy.start());
   void contributionPolicyStartup.then(() => dispatchPending());
 });
 
@@ -273,6 +274,7 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
   }
   void (async () => {
     try {
+      await storageBoundaryStartup;
       if (message.action === "login") await login();
       else if (message.action === "logout") {
         try {

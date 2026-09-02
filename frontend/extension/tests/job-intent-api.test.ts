@@ -222,7 +222,7 @@ describe("background-only contribution consent transport", () => {
 });
 
 describe("background-only private saved-page transport", () => {
-  it("maps the complete sanitized capture without contribution consent coupling", () => {
+  it("honors the same explicit optional-field removal without contribution consent coupling", () => {
     const pending = privateIntent();
     expect(preparePrivateSavedPageCapture(pending)).toEqual({
       schemaVersion: 1,
@@ -235,7 +235,6 @@ describe("background-only private saved-page transport", () => {
       },
       snapshot: {
         title: "Engineer",
-        company: "Removed Company",
         location: "Remote",
       },
       capturedAt: "2026-09-01T12:00:00.000Z",

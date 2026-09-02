@@ -41,6 +41,7 @@ const contributeButton = node<HTMLButtonElement>("#contribute");
 const retryButton = node<HTMLButtonElement>("#retry");
 const clearStoppedButton = node<HTMLButtonElement>("#clear-stopped");
 const clearQueueButton = node<HTMLButtonElement>("#clear-queue");
+const main = node<HTMLElement>("main");
 
 let currentCapture: SanitizedJobCapture | undefined;
 
@@ -59,6 +60,7 @@ function controls(): HTMLButtonElement[] {
 }
 
 function setBusy(busy: boolean): void {
+  main.setAttribute("aria-busy", String(busy));
   for (const button of controls()) button.disabled = busy;
   if (!busy) contributeButton.disabled = !currentCapture || !consent.checked;
 }
@@ -161,10 +163,14 @@ logoutButton.addEventListener("click", () => {
 inspectButton.addEventListener("click", () => void invoke({ action: "capture" }));
 retryButton.addEventListener("click", () => void invoke({ action: "retry" }));
 clearStoppedButton.addEventListener("click", () => void invoke({ action: "clear_stopped" }));
-clearQueueButton.addEventListener("click", () => void invoke({ action: "clear_queue" }));
+clearQueueButton.addEventListener("click", () => {
+  if (window.confirm("Remove every pending and stopped item from this device?")) {
+    void invoke({ action: "clear_queue" });
+  }
+});
 saveButton.addEventListener("click", () => {
   if (currentCapture) {
-    void invoke({ action: "enqueue", approvedFields: CAPTURE_FIELDS, intent: "private_save" });
+    void invoke({ action: "enqueue", approvedFields: selectedFields(), intent: "private_save" });
   }
 });
 contributeButton.addEventListener("click", () => {

@@ -1,9 +1,9 @@
 import type { AtsProvider, JobPageVariant, SanitizedJobCapture } from "./job-capture";
+import { EXTENSION_CLIENT_VERSION_PATTERN } from "./client-version";
 
 export const CONTRIBUTION_CAPABILITY_POLICY_CACHE_KEY = "d2SignedContributionCapabilityPolicyV1";
 export const CONTRIBUTION_CAPABILITY_POLICY_PATH = "/v1/extension/contribution-capability-policy";
 
-const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u;
 const TOKEN_PATTERN = /^[a-z0-9][a-z0-9._-]{2,99}$/u;
 const DOMAIN_PATTERN = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/u;
 const BASE64URL_SIGNATURE_PATTERN = /^[A-Za-z0-9_-]{86}$/u;
@@ -142,7 +142,7 @@ function normalizePolicy(value: unknown): ExtensionContributionCapabilityPolicy 
   ) {
     throw new Error("The contribution capability policy lifetime is invalid");
   }
-  const clients = sortedBooleanRecord(value.clients, VERSION_PATTERN, 100);
+  const clients = sortedBooleanRecord(value.clients, EXTENSION_CLIENT_VERSION_PATTERN, 100);
   const providers = sortedBooleanRecord(value.providers, /^(?:ashby|greenhouse|lever)$/u, 3);
   const variants = sortedBooleanRecord(
     value.variants,

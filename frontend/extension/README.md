@@ -28,7 +28,8 @@ public contribution, or browser-store distribution.
 - A strict structured allowlist: canonical HTTPS URL, provider, adapter version, timestamp, title,
   company, location, description, and external job ID. Text is bounded and stripped of markup and
   control characters; URLs reject credentials, fragments, trackers, and local/private targets.
-- Field-level contribution preview and removal. Required source identity fields are visible and
+- One field-level preview shared by the two explicit actions. Optional-field removal is honored by
+  both private save and public contribution; required source identity fields remain visible and
   cannot be silently removed. Private save never implies contribution approval.
 - A bounded-attempt persistent local queue with one stable client intent/Idempotency-Key,
   exponential retry, service-worker restart recovery, login-session fencing, expiry, and explicit
@@ -42,7 +43,9 @@ public contribution, or browser-store distribution.
   `POST /v1/saved-job-captures` shape, uses its own stable idempotency key, and requires an exact
   non-cacheable acknowledgement before removing the queued intent.
 
-The normal path never retains or uploads raw DOM, page HTML, browsing history, cookies, request
+Both session and local extension storage are restricted to trusted extension contexts before any
+session, policy-cache, capture, or pending-queue access. The normal path never retains or uploads
+raw DOM, page HTML, browsing history, cookies, request
 headers, form values, authentication material, or private notes. No telemetry provider is active.
 
 ## Manifest permissions

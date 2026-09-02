@@ -52,8 +52,10 @@ export function sanitizeText(value: unknown, maximum: number): string | undefine
         code === 12 ||
         (code >= 14 && code <= 31) ||
         (code >= 127 && code <= 159) ||
+        (code >= 0x200b && code <= 0x200f) ||
         (code >= 0x202a && code <= 0x202e) ||
-        (code >= 0x2066 && code <= 0x2069)
+        (code >= 0x2060 && code <= 0x206f) ||
+        code === 0xfeff
         ? " "
         : character;
     })
