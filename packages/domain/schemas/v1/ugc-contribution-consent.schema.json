@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ai-job-apply.internal/domain/v1/ugc-contribution-consent.schema.json",
+  "title": "UgcContributionConsentV1",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "id",
+    "ownerUserId",
+    "purpose",
+    "client",
+    "documentVersion",
+    "policyVersion",
+    "previewPayloadSha256",
+    "state",
+    "grantedAt",
+    "recordedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": { "type": "string", "format": "uuid" },
+    "ownerUserId": { "type": "string", "format": "uuid" },
+    "purpose": { "const": "ugc_contribution" },
+    "client": { "const": "extension" },
+    "documentVersion": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 100,
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,99}$"
+    },
+    "policyVersion": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 100,
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,99}$"
+    },
+    "previewPayloadSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "state": { "type": "string", "enum": ["granted", "revoked", "superseded"] },
+    "grantedAt": { "type": "string", "format": "date-time" },
+    "expiresAt": { "type": "string", "format": "date-time" },
+    "recordedAt": { "type": "string", "format": "date-time" },
+    "replacementConsentId": { "type": "string", "format": "uuid" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "state": { "const": "superseded" } }, "required": ["state"] },
+      "then": {
+        "properties": { "replacementConsentId": { "type": "string", "format": "uuid" } },
+        "required": ["replacementConsentId"]
+      },
+      "else": { "properties": { "replacementConsentId": false } }
+    }
+  ],
+  "additionalProperties": false
+}

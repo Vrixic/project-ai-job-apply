@@ -234,6 +234,44 @@ export const accountDeletionLedger = privacy.table("account_deletion_ledger", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 });
 
+export type UgcContributionConsentAction = "granted" | "revoked" | "superseded";
+
+export const ugcContributionConsents = profile.table(
+  "ugc_contribution_consents",
+  {
+    id: uuid("id").primaryKey(),
+    consentId: uuid("consent_id").notNull(),
+    ownerUserId: uuid("owner_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    purpose: text("purpose").$type<"ugc_contribution">().notNull(),
+    client: text("client").$type<"extension">().notNull(),
+    documentVersion: text("document_version").notNull(),
+    policyVersion: text("policy_version").notNull(),
+    previewPayloadSha256: text("preview_payload_sha256").notNull(),
+    action: text("action").$type<UgcContributionConsentAction>().notNull(),
+    grantedAt: timestamp("granted_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull(),
+    supersedesRecordId: uuid("supersedes_record_id"),
+    replacementConsentId: uuid("replacement_consent_id"),
+  },
+  (table) => [
+    index("ugc_contribution_consents_owner_recorded_idx").on(
+      table.ownerUserId,
+      table.recordedAt,
+      table.id,
+    ),
+    index("ugc_contribution_consents_current_idx").on(table.consentId, table.recordedAt, table.id),
+    uniqueIndex("ugc_contribution_consents_grant_uq")
+      .on(table.consentId)
+      .where(sql`${table.action} = 'granted'`),
+    uniqueIndex("ugc_contribution_consents_supersedes_uq")
+      .on(table.supersedesRecordId)
+      .where(sql`${table.supersedesRecordId} IS NOT NULL`),
+  ],
+);
+
 export const profileFactEvidence = profile.table(
   "profile_fact_evidence",
   {

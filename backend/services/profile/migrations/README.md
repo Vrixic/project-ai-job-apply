@@ -25,3 +25,8 @@ encrypted replay locator; it must never contain contact data, raw candidate cont
 `0007_candidate_rights_export_null_omission` keeps the version-one portable export strict by
 omitting an unavailable optional candidate email instead of serializing JSON null. It does not
 change the export schema or disclose a provider identity.
+
+`0008_ugc_contribution_consents` adds Profile-owned immutable extension contribution grants and
+append-only revoke/supersede transitions. Exact owner, purpose, client, document/policy version,
+preview digest, timestamps, expiry, and current lineage are enforced before Jobs may rely on a
+grant. Idempotency receipts and value-free audit events remain in the existing Platform tables.

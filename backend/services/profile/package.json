@@ -19,6 +19,10 @@
     "./candidate-rights": {
       "types": "./dist/src/candidate-rights.d.ts",
       "default": "./dist/src/candidate-rights.js"
+    },
+    "./ugc-contribution-consent": {
+      "types": "./dist/src/ugc-contribution-consent.d.ts",
+      "default": "./dist/src/ugc-contribution-consent.js"
     }
   },
   "scripts": {

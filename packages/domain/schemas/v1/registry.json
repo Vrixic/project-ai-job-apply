@@ -50,6 +50,12 @@
       "classification": "confidential"
     },
     {
+      "name": "UgcContributionConsent",
+      "file": "ugc-contribution-consent.schema.json",
+      "owner": "profile",
+      "classification": "confidential"
+    },
+    {
       "name": "ResumeDocument",
       "file": "resume-document.schema.json",
       "owner": "documents",

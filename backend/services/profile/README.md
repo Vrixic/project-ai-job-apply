@@ -34,3 +34,12 @@ rejection require the expected version, are idempotent, and never overwrite prio
 return only the authenticated candidate's latest versions, and audit metadata excludes fact
 values. Resume binaries, parsing, supporting spans, and proposed-fact confirmation remain the
 next D1-002 slice and must not be added to events or logs.
+
+## Phase 2 default-dark implementation
+
+Profile owns immutable `ugc_contribution` consent grants for the extension plus append-only
+revocation and supersession records. The narrow creator/verifier interfaces bind an authenticated
+owner to the exact document version, policy version, final preview SHA-256, grant/expiry time, and
+current lineage. Creation is idempotent and audited without payload values. Verification rejects
+owner/hash/version mismatches, expired or non-current grants, quarantined owners, malformed input,
+and persistence failures. Gateway wiring and contribution activation remain default-off.

@@ -93,6 +93,36 @@ describe("domain schema registry", () => {
     expect(validate({ ...savedJob, recruiterResponse: "interview" })).toBe(false);
   });
 
+  it("binds UGC contribution consent to one owner and exact preview digest", async () => {
+    const schema = JSON.parse(
+      await readFile(
+        new URL("../schemas/v1/ugc-contribution-consent.schema.json", import.meta.url),
+        "utf8",
+      ),
+    ) as object;
+    const ajv = new Ajv2020({ strict: true });
+    const addFormats = addFormatsModule.default as unknown as (instance: Ajv2020) => Ajv2020;
+    addFormats(ajv);
+    const validate = ajv.compile(schema);
+    const consent = {
+      schemaVersion: 1,
+      id: "019d04cf-1f80-7000-8000-000000000030",
+      ownerUserId: "019d04cf-1f80-7000-8000-000000000031",
+      purpose: "ugc_contribution",
+      client: "extension",
+      documentVersion: "ugc-contribution-preview.v1",
+      policyVersion: "d2-ugc-policy.v1",
+      previewPayloadSha256: "a".repeat(64),
+      state: "granted",
+      grantedAt: "2026-09-01T12:00:00.000Z",
+      recordedAt: "2026-09-01T12:00:00.000Z",
+    };
+    expect(validate(consent)).toBe(true);
+    expect(validate({ ...consent, client: "web" })).toBe(false);
+    expect(validate({ ...consent, previewPayloadSha256: "raw-preview" })).toBe(false);
+    expect(validate({ ...consent, payload: { title: "must not be copied" } })).toBe(false);
+  });
+
   it("keeps entitlement accounts provider-neutral with exact Free and Pro schedules", async () => {
     const schema = JSON.parse(
       await readFile(

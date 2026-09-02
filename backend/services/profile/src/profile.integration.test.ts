@@ -43,10 +43,10 @@ describeWithDatabase("PostgresProfileStore", () => {
     });
 
     expect(first.stdout.trim()).toBe(
-      "Database migrations through 0007_candidate_rights_export_null_omission applied and verified.",
+      "Database migrations through 0008_ugc_contribution_consents applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(
-      "Database migrations through 0007_candidate_rights_export_null_omission applied and verified.",
+      "Database migrations through 0008_ugc_contribution_consents applied and verified.",
     );
     expect(
       await database.client`
@@ -65,10 +65,11 @@ describeWithDatabase("PostgresProfileStore", () => {
           '0004_profile_fact_versions',
           '0005_resume_fact_proposals',
           '0006_candidate_rights',
-          '0007_candidate_rights_export_null_omission'
+          '0007_candidate_rights_export_null_omission',
+          '0008_ugc_contribution_consents'
         )
       `,
-    ).toHaveLength(6);
+    ).toHaveLength(7);
   });
 
   afterAll(async () => {
