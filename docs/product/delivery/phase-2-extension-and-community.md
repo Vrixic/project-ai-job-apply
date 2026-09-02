@@ -17,6 +17,24 @@ Run contribution and catalog processing in the existing lean services/workers. S
 concurrency or split a worker only from queue-age, provider isolation, abuse, or measured load; do
 not add idle replicas or always-on staging merely because the extension adds traffic.
 
+## Initial detector variant matrix
+
+This matrix defines the first source-level detector scope. Every row remains default-off and
+synthetic-only until D2-011 accepts current authorized provider-derived fixtures for the exact
+variant. A provider family name in source is not fixture evidence or activation authority.
+
+| Provider | Variant ID | Exact current-page hosts | Initial evidence state | Activation state |
+|---|---|---|---|---|
+| Greenhouse | `greenhouse-board-v1` | `boards.greenhouse.io`, `job-boards.greenhouse.io` | Synthetic detector tests only | Disabled pending D2-011 |
+| Lever | `lever-posting-v1` | `jobs.lever.co`, `jobs.eu.lever.co` | Synthetic detector tests only | Disabled pending D2-011 |
+| Ashby | `ashby-job-board-v1` | `jobs.ashbyhq.com` | Synthetic detector tests only | Disabled pending D2-011 |
+
+The first detector reads only the explicitly activated current tab and extracts a strict bounded
+allowlist. It does not claim support for custom domains, embedded variants, authenticated pages,
+application forms, redirects to other providers, or arbitrary employer pages. Expanding the matrix
+requires new variant behavior, fixtures, authorization, scans, human sanitization review, separate
+QA representativeness acceptance, and an updated kill-switch policy.
+
 ## Task register
 
 | ID | Task | State | Owner | Dependencies | Evidence or notes |
