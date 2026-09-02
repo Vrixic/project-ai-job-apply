@@ -10,6 +10,11 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+$currentPowerShellExecutable = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+if ([string]::IsNullOrWhiteSpace($currentPowerShellExecutable) -or
+    -not (Test-Path -LiteralPath $currentPowerShellExecutable -PathType Leaf)) {
+  throw "The current PowerShell executable could not be resolved."
+}
 
 function Get-D1CatalogTestInventory {
   return @(
@@ -111,7 +116,7 @@ function Get-D1CatalogTestInventory {
     [pscustomobject]@{
       Mode = "Unit"
       Name = "Gateway boundary verifier self-test"
-      Executable = "pwsh"
+      Executable = $currentPowerShellExecutable
       Arguments = @("-NoProfile", "-File", "scripts/tests/gateway-boundary-verifier.tests.ps1")
       RepositoryPaths = @(
         "scripts/verify-gateway-lambda-boundary.ps1",
@@ -141,7 +146,7 @@ function Assert-D1CatalogTestInventory {
     [object[]]$Inventory
   )
 
-  $allowedExecutables = @("pnpm", "git", "pwsh")
+  $allowedExecutables = @("pnpm", "git", $currentPowerShellExecutable)
   $repositoryPrefix = $repositoryRoot.TrimEnd(
     [IO.Path]::DirectorySeparatorChar,
     [IO.Path]::AltDirectorySeparatorChar
