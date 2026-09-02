@@ -13,7 +13,9 @@ describe("popup and side-panel source assurance", () => {
 
     expect(html).toContain('href="#main-content"');
     expect(html).toContain('id="main-content"');
-    expect(html.match(/aria-live="polite"/gu)).toHaveLength(3);
+    expect(html.match(/aria-live="polite"/gu)).toHaveLength(4);
+    expect(html).toContain('role="status"');
+    expect(html).toContain('maxlength="2000"');
     expect(html).not.toMatch(/<(?:div|span)[^>]+onclick=/iu);
     expect(html).not.toContain("user-scalable=no");
     expect(css).toContain(":focus-visible");

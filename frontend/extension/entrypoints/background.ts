@@ -7,6 +7,22 @@ import { extensionConfiguration } from "../lib/config";
 import { detectPublicJob } from "../lib/detectors";
 import type { CaptureField, SanitizedJobCapture } from "../lib/job-capture";
 import { sendJobIntent } from "../lib/job-intent-api";
+import {
+  fileContributionAppeal,
+  getContributionStatus,
+  getOwnerTrustStatus,
+  withdrawContribution,
+} from "../lib/contribution-owner-api";
+import {
+  CONTRIBUTION_RECEIPTS_KEY,
+  type ContributionReceipt,
+  receiptFromContribution,
+  parseContributionReceipts,
+  receiptsForIdentity,
+  updateContributionStatus,
+  updateTrustStatus,
+  upsertContributionReceipt,
+} from "../lib/contribution-receipts";
 import { parseExtensionMessage } from "../lib/messages";
 import { captureCurrentPublicJobPage } from "../lib/page-inspection";
 import {
@@ -128,6 +144,16 @@ async function writePendingQueue(queue: PendingJobIntent[]): Promise<void> {
   }
 }
 
+async function contributionReceipts(): Promise<ContributionReceipt[]> {
+  await storageBoundaryStartup;
+  const stored = (await chrome.storage.local.get(CONTRIBUTION_RECEIPTS_KEY))[CONTRIBUTION_RECEIPTS_KEY];
+  return parseContributionReceipts(stored);
+}
+
+async function writeContributionReceipts(receipts: ContributionReceipt[]): Promise<void> {
+  await chrome.storage.local.set({ [CONTRIBUTION_RECEIPTS_KEY]: receipts });
+}
+
 async function dispatchPending(): Promise<{ pending: number; stopped: number }> {
   const queue = await pendingQueue();
   if (queue.length === 0) return { pending: 0, stopped: 0 };
@@ -163,11 +189,11 @@ async function dispatchPending(): Promise<{ pending: number; stopped: number }> 
       replacement.push(intent);
       continue;
     }
-    const settled = settleDispatch(
-      intent,
-      await sendJobIntent(intent, session.accessToken, fetch, chrome.runtime.getManifest().version),
-      now,
-    );
+    const result = await sendJobIntent(intent, session.accessToken, fetch, chrome.runtime.getManifest().version);
+    if (intent.intent === "contribute" && result.outcome === "accepted" && result.contribution) {
+      await writeContributionReceipts(upsertContributionReceipt(await contributionReceipts(), receiptFromContribution(result.contribution, session.identityFence)));
+    }
+    const settled = settleDispatch(intent, result, now);
     if (settled) replacement.push(settled);
   }
   await writePendingQueue(replacement);
@@ -175,6 +201,30 @@ async function dispatchPending(): Promise<{ pending: number; stopped: number }> 
     pending: replacement.filter((intent) => intent.state === "pending").length,
     stopped: replacement.filter((intent) => intent.state !== "pending").length,
   };
+}
+
+async function ownerAction(message: Extract<ReturnType<typeof parseExtensionMessage>, { contributionId: string }>) {
+  if (!message || !extensionConfiguration.apiOrigin) throw new Error("configuration_required");
+  const session = await authenticatedApiSession();
+  const all = await contributionReceipts();
+  const receipt = receiptsForIdentity(all, session.identityFence).find((item) => item.contributionId === message.contributionId);
+  if (!receipt) throw new Error("contribution_required");
+  const result = message.action === "contribution_refresh"
+    ? await getContributionStatus(receipt.contributionId, session.accessToken, extensionConfiguration.apiOrigin)
+    : message.action === "trust_refresh"
+      ? await getOwnerTrustStatus(receipt.contributionId, session.accessToken, extensionConfiguration.apiOrigin)
+      : message.action === "withdraw" && receipt.trust
+        ? await withdrawContribution(receipt.contributionId, receipt.trust.version, session.accessToken, extensionConfiguration.apiOrigin)
+        : message.action === "appeal" && receipt.trust
+          ? await fileContributionAppeal(receipt.contributionId, receipt.trust.version, message.evidenceDigestSha256, session.accessToken, extensionConfiguration.apiOrigin)
+          : { outcome: "rejected" as const };
+  if (result.outcome === "ok") {
+    const updated = message.action === "contribution_refresh"
+      ? updateContributionStatus(receipt, result.value as import("@ai-job-apply/api-contracts").JobContribution)
+      : updateTrustStatus(receipt, result.value as import("@ai-job-apply/api-contracts").OwnerTrustCase);
+    await writeContributionReceipts(upsertContributionReceipt(all, updated));
+  }
+  return result.outcome;
 }
 
 async function captureCurrentPage(): Promise<
@@ -282,6 +332,7 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
         } finally {
           await chrome.storage.session.remove(LAST_CAPTURE_KEY);
           await writePendingQueue([]);
+          await writeContributionReceipts([]);
         }
       } else if (message.action === "refresh") await refresh();
       else if (message.action === "clear_queue") await writePendingQueue([]);
@@ -291,21 +342,34 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
         );
       } else if (message.action === "capture") return captureCurrentPage();
       else if (message.action === "enqueue") {
+        const queue = await enqueue(message.intent, message.approvedFields);
+        const session = await authenticatedApiSession();
         return {
           ok: true,
-          queue: await enqueue(message.intent, message.approvedFields),
+          queue,
+          receipts: receiptsForIdentity(await contributionReceipts(), session.identityFence),
           status: await authenticationStatus(),
         };
       } else if (message.action === "retry") {
         return { ok: true, queue: await dispatchPending(), status: await authenticationStatus() };
+      } else if (["contribution_refresh", "trust_refresh", "withdraw", "appeal"].includes(message.action)) {
+        const outcome = await ownerAction(message as Parameters<typeof ownerAction>[0]);
+        const session = await authenticatedApiSession();
+        return { ok: outcome === "ok", ownerAction: outcome, receipts: receiptsForIdentity(await contributionReceipts(), session.identityFence), status: await authenticationStatus() };
       }
       const queue = await pendingQueue();
+      let receipts: ContributionReceipt[] = [];
+      try {
+        const session = await authenticatedApiSession();
+        receipts = receiptsForIdentity(await contributionReceipts(), session.identityFence);
+      } catch { /* signed-out responses never expose fenced receipts */ }
       return {
         ok: true,
         queue: {
           pending: queue.filter((intent) => intent.state === "pending").length,
           stopped: queue.filter((intent) => intent.state !== "pending").length,
         },
+        receipts,
         status: await authenticationStatus(),
       };
     } catch (error) {

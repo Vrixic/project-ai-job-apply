@@ -328,7 +328,7 @@ async function sendContribution(
   }
   const payload: unknown = await response.json();
   return exactContribution(payload, intent.id)
-    ? { outcome: "accepted" }
+    ? { contribution: payload, outcome: "accepted" }
     : { consent, outcome: "terminal" };
 }
 

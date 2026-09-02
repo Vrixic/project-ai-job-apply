@@ -107,6 +107,12 @@ describe("background-only contribution consent transport", () => {
     await expect(
       sendJobIntent(pending, "short-lived-token", fetcher as typeof fetch, "0.2.0"),
     ).resolves.toEqual({
+      contribution: {
+        id: pending.id,
+        state: "queued",
+        submittedAt: "2026-09-01T12:00:02.000Z",
+        updatedAt: "2026-09-01T12:00:02.000Z",
+      },
       outcome: "accepted",
     });
     expect(calls.map((call) => call.url)).toEqual([

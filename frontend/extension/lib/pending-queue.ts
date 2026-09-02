@@ -32,6 +32,7 @@ export interface PendingJobIntent {
 }
 
 export interface DispatchResult {
+  contribution?: import("@ai-job-apply/api-contracts").JobContribution;
   consent?: UgcConsentBinding;
   outcome: "accepted" | "retryable" | "terminal";
 }

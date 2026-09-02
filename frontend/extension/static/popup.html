@@ -56,6 +56,26 @@
         </div>
       </section>
 
+      <section class="card" aria-labelledby="contributions-heading">
+        <h2 id="contributions-heading">Your contributions</h2>
+        <p>User-initiated refresh only. No background status polling.</p>
+        <div id="contribution-list"></div>
+        <p id="owner-action-status" role="status" aria-live="polite" tabindex="-1"></p>
+      </section>
+
+      <dialog id="appeal-dialog" aria-labelledby="appeal-heading">
+        <form id="appeal-form" method="dialog">
+          <h2 id="appeal-heading">Appeal contribution decision</h2>
+          <label for="appeal-evidence">Evidence supporting this appeal</label>
+          <textarea id="appeal-evidence" maxlength="2000" required></textarea>
+          <p>Only a SHA-256 digest is sent. This text is cleared after submission.</p>
+          <div class="actions compact">
+            <button id="cancel-appeal" class="quiet" type="button">Cancel</button>
+            <button type="submit">Confirm and submit appeal</button>
+          </div>
+        </form>
+      </dialog>
+
       <p class="privacy">No raw page, browsing history, cookies, form values, tokens, or private notes are collected.</p>
     </main>
     <script type="module" src="popup.js"></script>
