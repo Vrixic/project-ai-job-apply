@@ -1,5 +1,6 @@
 export * from "./domain/canonical-job.js";
 export * from "./contribution.js";
+export * from "./freshness-policy.js";
 export * from "./persistence/catalog.js";
 export * from "./persistence/contribution.js";
 export * from "./persistence/ingestion-orchestration.js";
