@@ -24,6 +24,13 @@ catalog truth.
 - The Trust schema has no foreign key, trigger, function, event, or write path into the Jobs schema.
   An `accepted` Trust result is internal eligibility evidence, not publication, activation,
   freshness extension, catalog removal, or source truth.
+- A default-deny application-service boundary now separates authentication/authority, contribution
+  eligibility and evidence, approved policy, and persistence. Contributor reads, withdrawals, and
+  appeals are owner scoped. Case opening, initial decisions, takedowns, and appeal decisions require
+  exact reviewer roles; verified-requester takedowns require an additional dedicated authority.
+- The application service accepts identifiers, fixed codes, versions, timestamps from its injected
+  clock, and SHA-256 evidence references only. Missing ports deny or report dependency unavailability,
+  and lower-level errors are projected to a fixed safe error taxonomy.
 
 ## Package commands
 
@@ -43,8 +50,9 @@ rewriting audit history in place.
 
 ## Not implemented or authorized
 
-- No gateway/API routes, OIDC audience/scopes, administrative UI, reviewer-directory authority,
-  durable workflow, notification, or Jobs reconciliation consumer is wired.
+- No gateway/API routes, OIDC audience/scopes, administrative UI, live reviewer/account/requester
+  authority adapters, approved policy provider, durable workflow, notification, or Jobs
+  reconciliation consumer is wired.
 - No decision automatically publishes, activates, refreshes, blocks, restores, or removes a job.
 - No aggregate reputation score, automatic sanction, reward, or contributor-facing ranking exists.
 - No live policy version, appeal timing, response SLA, retention period, license, takedown channel,
