@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { v7 as uuidv7 } from "uuid";
 import { describe, expect, it } from "vitest";
 import {
@@ -11,6 +11,10 @@ import {
   jobContributionContentDigestInput,
   jobContributionPreviewDigestInput,
 } from "./contribution.js";
+import {
+  contributionCapabilityPolicyDigestInput,
+  type D2ContributionCapabilityPolicy,
+} from "./contribution-capability-policy.js";
 
 class MemoryStore implements JobContributionStore {
   command?: CreateJobContributionCommand;
@@ -47,6 +51,7 @@ function command(): CreateJobContributionCommand {
     input: {
       schemaVersion: 1,
       contributionId: uuidv7(),
+      client: { surface: "browser_extension", version: "0.2.0" },
       source: {
         provider: "greenhouse",
         pageVariant: "greenhouse-board-v1",
@@ -85,6 +90,74 @@ function command(): CreateJobContributionCommand {
   });
 }
 
+const capabilityPolicy: D2ContributionCapabilityPolicy = {
+  schemaVersion: 1,
+  revision: "d2-synthetic-intake-v1",
+  issuedAt: "2026-09-01T12:00:00.000Z",
+  expiresAt: "2026-09-02T12:00:00.000Z",
+  intakeEnabled: true,
+  processingEnabled: false,
+  clients: { "0.2.0": true },
+  providers: { ashby: true, greenhouse: true, lever: true },
+  variants: {
+    "ashby-job-board-v1": true,
+    "greenhouse-board-v1": true,
+    "lever-posting-v1": true,
+  },
+  domains: {
+    "boards.greenhouse.io": true,
+    "job-boards.greenhouse.io": true,
+    "jobs.ashbyhq.com": true,
+    "jobs.eu.lever.co": true,
+    "jobs.lever.co": true,
+  },
+};
+const capabilityKeys = generateKeyPairSync("ed25519");
+const capabilityDigestInput = contributionCapabilityPolicyDigestInput(capabilityPolicy);
+const allowCapability = {
+  async load() {
+    return {
+      envelope: {
+        keyId: "synthetic-key-v1",
+        payload: capabilityPolicy,
+        signature: sign(
+          null,
+          Buffer.from(capabilityDigestInput),
+          capabilityKeys.privateKey,
+        ).toString("base64url"),
+      },
+      publicKeys: {
+        "synthetic-key-v1": capabilityKeys.publicKey
+          .export({ format: "pem", type: "spki" })
+          .toString(),
+      },
+    };
+  },
+};
+const intakeNow = () => new Date("2026-09-01T13:00:00.000Z");
+
+function capabilityLoader(policy: D2ContributionCapabilityPolicy) {
+  const digestInput = contributionCapabilityPolicyDigestInput(policy);
+  return {
+    async load() {
+      return {
+        envelope: {
+          keyId: "synthetic-key-v1",
+          payload: policy,
+          signature: sign(null, Buffer.from(digestInput), capabilityKeys.privateKey).toString(
+            "base64url",
+          ),
+        },
+        publicKeys: {
+          "synthetic-key-v1": capabilityKeys.publicKey
+            .export({ format: "pem", type: "spki" })
+            .toString(),
+        },
+      };
+    },
+  };
+}
+
 describe("JobContributionService", () => {
   const allowConsent = {
     async verify() {
@@ -94,7 +167,7 @@ describe("JobContributionService", () => {
 
   it("accepts only exact preview approval and remains queued", async () => {
     const store = new MemoryStore();
-    const service = new JobContributionService(store, allowConsent);
+    const service = new JobContributionService(store, allowConsent, allowCapability, intakeNow);
     await expect(service.contribute(command())).resolves.toEqual(store.record);
     expect(store.command?.input.posting.title).toBe("Software Engineer");
   });
@@ -110,13 +183,18 @@ describe("JobContributionService", () => {
     };
     seal(input);
     await expect(
-      new JobContributionService(new MemoryStore(), allowConsent).contribute(input),
+      new JobContributionService(
+        new MemoryStore(),
+        allowConsent,
+        allowCapability,
+        intakeNow,
+      ).contribute(input),
     ).resolves.toMatchObject({ state: "queued" });
   });
 
   it("rejects approval that omits a contributed field", async () => {
     const store = new MemoryStore();
-    const service = new JobContributionService(store, allowConsent);
+    const service = new JobContributionService(store, allowConsent, allowCapability, intakeNow);
     const input = command();
     input.input.approval.approvedFields = input.input.approval.approvedFields.slice(0, -1);
     input.input.approval.previewDigestSha256 = createHash("sha256")
@@ -142,7 +220,12 @@ describe("JobContributionService", () => {
       input.input.source.sourceUrl = sourceUrl;
       seal(input);
       await expect(
-        new JobContributionService(new MemoryStore(), allowConsent).contribute(input),
+        new JobContributionService(
+          new MemoryStore(),
+          allowConsent,
+          allowCapability,
+          intakeNow,
+        ).contribute(input),
       ).rejects.toThrow("source or approval is invalid");
     }
   });
@@ -162,7 +245,12 @@ describe("JobContributionService", () => {
         .update(jobContributionPreviewDigestInput(input.input))
         .digest("hex");
       await expect(
-        new JobContributionService(new MemoryStore(), allowConsent).contribute(input),
+        new JobContributionService(
+          new MemoryStore(),
+          allowConsent,
+          allowCapability,
+          intakeNow,
+        ).contribute(input),
       ).rejects.toThrow("source or approval is invalid");
     }
     const forged = command();
@@ -171,7 +259,12 @@ describe("JobContributionService", () => {
       .update(jobContributionPreviewDigestInput(forged.input))
       .digest("hex");
     await expect(
-      new JobContributionService(new MemoryStore(), allowConsent).contribute(forged),
+      new JobContributionService(
+        new MemoryStore(),
+        allowConsent,
+        allowCapability,
+        intakeNow,
+      ).contribute(forged),
     ).rejects.toThrow("source or approval is invalid");
   });
 
@@ -220,9 +313,57 @@ describe("JobContributionService", () => {
 
   it("fails closed on a fabricated or unavailable Profile consent binding", async () => {
     const store = new MemoryStore();
-    await expect(new JobContributionService(store).contribute(command())).rejects.toThrow(
-      "current contribution consent binding is required",
-    );
+    await expect(
+      new JobContributionService(store, undefined, allowCapability, intakeNow).contribute(
+        command(),
+      ),
+    ).rejects.toThrow("current contribution consent binding is required");
+    expect(store.command).toBeUndefined();
+  });
+
+  it("fails closed when signed capability policy is absent, disabled, or not yet valid", async () => {
+    const absentStore = new MemoryStore();
+    await expect(
+      new JobContributionService(absentStore, allowConsent).contribute(command()),
+    ).rejects.toThrow("temporarily unavailable");
+    expect(absentStore.command).toBeUndefined();
+
+    for (const policy of [
+      { ...capabilityPolicy, intakeEnabled: false },
+      {
+        ...capabilityPolicy,
+        issuedAt: "2026-09-01T14:00:00.000Z",
+        expiresAt: "2026-09-02T14:00:00.000Z",
+      },
+    ]) {
+      const store = new MemoryStore();
+      await expect(
+        new JobContributionService(
+          store,
+          allowConsent,
+          capabilityLoader(policy),
+          intakeNow,
+        ).contribute(command()),
+      ).rejects.toThrow("disabled for this client or source");
+      expect(store.command).toBeUndefined();
+    }
+  });
+
+  it("rechecks the signed intake policy immediately before durable creation", async () => {
+    const store = new MemoryStore();
+    const enabled = capabilityLoader(capabilityPolicy);
+    const disabled = capabilityLoader({ ...capabilityPolicy, intakeEnabled: false });
+    let reads = 0;
+    const changing = {
+      load: async () => {
+        reads += 1;
+        return reads === 1 ? enabled.load() : disabled.load();
+      },
+    };
+    await expect(
+      new JobContributionService(store, allowConsent, changing, intakeNow).contribute(command()),
+    ).rejects.toThrow("disabled for this client or source");
+    expect(reads).toBe(2);
     expect(store.command).toBeUndefined();
   });
 
@@ -235,7 +376,12 @@ describe("JobContributionService", () => {
         return true;
       },
     };
-    await new JobContributionService(new MemoryStore(), verifier).contribute(input);
+    await new JobContributionService(
+      new MemoryStore(),
+      verifier,
+      allowCapability,
+      intakeNow,
+    ).contribute(input);
     expect(observed).toEqual({
       ownerUserId: input.ownerUserId,
       consentId: input.input.approval.consentId,
@@ -246,6 +392,7 @@ describe("JobContributionService", () => {
       policyVersion: input.input.approval.policyVersion,
       previewDigestSha256: input.input.approval.previewDigestSha256,
       approvedAt: input.input.approval.approvedAt,
+      clientVersion: "0.2.0",
     });
   });
 });

@@ -88,15 +88,21 @@ describe("signed contribution capability policy", () => {
         pageVariant: "greenhouse-board-v1",
       }),
     ).toEqual({ allowed: false, reason: "variant_disabled" });
-    expect(
-      evaluateContributionCapability(policy, { ...base, domain: "jobs.eu.lever.co" }),
-    ).toEqual({ allowed: false, reason: "domain_disabled" });
+    expect(evaluateContributionCapability(policy, { ...base, domain: "jobs.eu.lever.co" })).toEqual(
+      { allowed: false, reason: "domain_disabled" },
+    );
     expect(
       evaluateContributionCapability(policy, {
         ...base,
         now: new Date("2026-09-02T12:00:00.000Z"),
       }),
     ).toEqual({ allowed: false, reason: "policy_expired" });
+    expect(
+      evaluateContributionCapability(policy, {
+        ...base,
+        now: new Date("2026-09-01T11:59:59.999Z"),
+      }),
+    ).toEqual({ allowed: false, reason: "policy_not_yet_valid" });
   });
 
   it("rejects incomplete boundaries, overlong lifetimes, and unknown fields", () => {

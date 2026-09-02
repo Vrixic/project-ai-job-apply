@@ -57,7 +57,7 @@ describeWithDatabase("Jobs reporting and moderation persistence", () => {
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });
     expect(result.stdout.trim()).toBe(
-      "Jobs migrations through 0016_job_contribution_candidate_rights applied and verified.",
+      "Jobs migrations through 0017_job_contribution_processing applied and verified.",
     );
     await reports.ping();
   });

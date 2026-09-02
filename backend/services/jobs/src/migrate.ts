@@ -25,6 +25,7 @@ const migrationVersions = [
   "0014_job_contribution_intake",
   "0015_source_revalidation_lifecycle",
   "0016_job_contribution_candidate_rights",
+  "0017_job_contribution_processing",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -191,6 +192,9 @@ try {
         revalidationTriggerFunctionCount: number;
         revalidationTriggerFunctionBodies: string[];
         revalidationForeignKeyCount: number;
+        processingTableCount: number;
+        processingTriggerCount: number;
+        processingTriggerFunctionCount: number;
       }[]
     >`
       SELECT
@@ -213,6 +217,13 @@ try {
           + (to_regclass('jobs.job_contribution_outbox') IS NOT NULL)::int
           + (to_regclass('jobs.source_revalidation_queue') IS NOT NULL)::int
           + (to_regclass('jobs.source_verification_evidence') IS NOT NULL)::int
+          + (to_regclass('jobs.job_contribution_processing_queue') IS NOT NULL)::int
+          + (to_regclass('jobs.job_contribution_normalizations') IS NOT NULL)::int
+          + (to_regclass('jobs.job_contribution_independent_verifications') IS NOT NULL)::int
+          + (to_regclass('jobs.job_contribution_trust_decisions') IS NOT NULL)::int
+          + (to_regclass('jobs.job_contribution_state_events') IS NOT NULL)::int
+          + (to_regclass('jobs.job_contribution_reconciliations') IS NOT NULL)::int
+          + (to_regclass('jobs.job_contribution_processing_outbox') IS NOT NULL)::int
         )::int AS "tableCount",
         (
           SELECT count(*)::int FROM jobs.schema_migrations
@@ -889,9 +900,46 @@ try {
               'jobs.source_verification_evidence'::regclass
             )
         ) AS "revalidationForeignKeyCount"
+        , (
+          SELECT count(*)::int FROM pg_class relation
+          JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+          WHERE namespace.nspname = 'jobs' AND relation.relkind = 'r'
+            AND relation.relname = ANY(ARRAY[
+              'job_contribution_processing_queue',
+              'job_contribution_normalizations',
+              'job_contribution_independent_verifications',
+              'job_contribution_trust_decisions',
+              'job_contribution_state_events',
+              'job_contribution_reconciliations',
+              'job_contribution_processing_outbox'
+            ])
+        ) AS "processingTableCount"
+        , (
+          SELECT count(*)::int FROM pg_trigger trigger
+          WHERE NOT trigger.tgisinternal AND trigger.tgenabled = 'O'
+            AND trigger.tgrelid = ANY(ARRAY[
+              'jobs.job_contribution_processing_queue'::regclass,
+              'jobs.job_contribution_normalizations'::regclass,
+              'jobs.job_contribution_independent_verifications'::regclass,
+              'jobs.job_contribution_trust_decisions'::regclass,
+              'jobs.job_contribution_state_events'::regclass,
+              'jobs.job_contribution_reconciliations'::regclass,
+              'jobs.job_contribution_processing_outbox'::regclass
+            ])
+        ) AS "processingTriggerCount"
+        , (
+          SELECT count(*)::int FROM pg_proc procedure
+          JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
+          WHERE namespace.nspname = 'jobs' AND procedure.pronargs = 0
+            AND procedure.proname = ANY(ARRAY[
+              'guard_job_contribution_processing_append_only',
+              'guard_job_contribution_processing_queue',
+              'guard_job_contribution_reconciliation'
+            ])
+        ) AS "processingTriggerFunctionCount"
     `;
     if (
-      verification?.tableCount !== 18 ||
+      verification?.tableCount !== 25 ||
       verification.migrationCount !== migrationVersions.length ||
       verification.identityIndexCount !== 3 ||
       verification.sourceWithdrawalColumnCount !== 1 ||
@@ -950,7 +998,10 @@ try {
       verification.revalidationTriggerFunctionCount !== 2 ||
       JSON.stringify(verification.revalidationTriggerFunctionBodies) !==
         JSON.stringify(expectedRevalidationTriggerBodies) ||
-      verification.revalidationForeignKeyCount !== 4
+      verification.revalidationForeignKeyCount !== 4 ||
+      verification.processingTableCount !== 7 ||
+      verification.processingTriggerCount !== 7 ||
+      verification.processingTriggerFunctionCount !== 3
     ) {
       throw new Error(
         `Jobs database migration verification failed: ${JSON.stringify({
@@ -1016,6 +1067,9 @@ try {
             JSON.stringify(verification?.revalidationTriggerFunctionBodies) ===
             JSON.stringify(expectedRevalidationTriggerBodies),
           revalidationForeignKeyCount: verification?.revalidationForeignKeyCount,
+          processingTableCount: verification?.processingTableCount,
+          processingTriggerCount: verification?.processingTriggerCount,
+          processingTriggerFunctionCount: verification?.processingTriggerFunctionCount,
         })}`,
       );
     }

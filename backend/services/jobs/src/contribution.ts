@@ -5,6 +5,11 @@ import {
   jobContributionContentDigestInput,
   jobContributionPreviewDigestInput,
 } from "@ai-job-apply/api-contracts/job-contribution-canonical";
+import {
+  evaluateContributionCapability,
+  type SignedD2ContributionCapabilityPolicy,
+  verifySignedContributionCapabilityPolicy,
+} from "./contribution-capability-policy.js";
 
 export const contributionProviders = ["greenhouse", "lever", "ashby"] as const;
 export type ContributionProvider = (typeof contributionProviders)[number];
@@ -47,7 +52,15 @@ export interface JobContributionConsentVerifier {
     policyVersion: string;
     previewDigestSha256: string;
     approvedAt: string;
+    clientVersion: string;
   }): Promise<boolean>;
+}
+
+export interface JobContributionCapabilityPolicyLoader {
+  load(): Promise<{
+    envelope: SignedD2ContributionCapabilityPolicy;
+    publicKeys: Readonly<Record<string, string>>;
+  } | null>;
 }
 
 export interface JobContributions {
@@ -77,9 +90,18 @@ export class JobContributionConsentRequiredError extends Error {
   }
 }
 
+export class JobContributionCapabilityDisabledError extends Error {
+  constructor() {
+    super("Job contribution intake is disabled for this client or source");
+    this.name = "JobContributionCapabilityDisabledError";
+  }
+}
+
 const UUID_V7_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const ADAPTER_VERSION_PATTERN = /^[a-z0-9][a-z0-9._-]{2,99}$/;
+const CLIENT_VERSION_PATTERN =
+  /^(?:0|[1-9][0-9]{0,5})\.(?:0|[1-9][0-9]{0,5})\.(?:0|[1-9][0-9]{0,5})(?:-[0-9A-Za-z][0-9A-Za-z.-]{0,15})?$/u;
 
 const PROVIDER_BOUNDARIES: Readonly<
   Record<
@@ -155,6 +177,8 @@ function assertInput(input: JobContributionInput): void {
   if (
     input.schemaVersion !== 1 ||
     !UUID_V7_PATTERN.test(input.contributionId) ||
+    input.client.surface !== "browser_extension" ||
+    !CLIENT_VERSION_PATTERN.test(input.client.version) ||
     !contributionProviders.includes(input.source.provider) ||
     !contributionPageVariants.includes(input.source.pageVariant) ||
     !exactProviderUrl(input.source) ||
@@ -242,6 +266,12 @@ export class JobContributionService implements JobContributions {
         return false;
       },
     },
+    private readonly capabilityPolicy: JobContributionCapabilityPolicyLoader = {
+      async load() {
+        return null;
+      },
+    },
+    private readonly now: () => Date = () => new Date(),
   ) {}
 
   ping(): Promise<void> {
@@ -250,6 +280,7 @@ export class JobContributionService implements JobContributions {
 
   async contribute(command: CreateJobContributionCommand): Promise<JobContributionStatus> {
     assertCommand(command);
+    await this.requireCapability(command.input);
     let consentValid = false;
     try {
       consentValid = await this.consentVerifier.verify({
@@ -262,17 +293,49 @@ export class JobContributionService implements JobContributions {
         policyVersion: command.input.approval.policyVersion,
         previewDigestSha256: command.input.approval.previewDigestSha256,
         approvedAt: command.input.approval.approvedAt,
+        clientVersion: command.input.client.version,
       });
     } catch {
       throw new JobContributionUnavailableError();
     }
     if (!consentValid) throw new JobContributionConsentRequiredError();
+    await this.requireCapability(command.input);
     try {
       return Object.freeze({ ...(await this.store.create(command)) });
     } catch (error) {
       if (error instanceof JobContributionIdempotencyConflictError) throw error;
       throw new JobContributionUnavailableError();
     }
+  }
+
+  private async requireCapability(input: JobContributionInput): Promise<void> {
+    let loaded: Awaited<ReturnType<JobContributionCapabilityPolicyLoader["load"]>>;
+    try {
+      loaded = await this.capabilityPolicy.load();
+    } catch {
+      throw new JobContributionUnavailableError();
+    }
+    if (!loaded) throw new JobContributionUnavailableError();
+    let policy;
+    let domain: string;
+    let now: Date;
+    try {
+      policy = verifySignedContributionCapabilityPolicy(loaded.envelope, loaded.publicKeys);
+      domain = new URL(input.source.sourceUrl).hostname;
+      now = this.now();
+      if (!Number.isFinite(now.getTime())) throw new Error("invalid clock");
+    } catch {
+      throw new JobContributionUnavailableError();
+    }
+    const decision = evaluateContributionCapability(policy, {
+      stage: "intake",
+      clientVersion: input.client.version,
+      provider: input.source.provider,
+      pageVariant: input.source.pageVariant,
+      domain,
+      now,
+    });
+    if (!decision.allowed) throw new JobContributionCapabilityDisabledError();
   }
 
   async get(ownerUserId: string, contributionId: string): Promise<JobContributionStatus | null> {

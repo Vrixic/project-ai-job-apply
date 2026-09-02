@@ -38,6 +38,7 @@ export type ContributionCapabilityDecision =
         | "domain_disabled"
         | "global_disabled"
         | "policy_expired"
+        | "policy_not_yet_valid"
         | "provider_disabled"
         | "variant_disabled";
     };
@@ -69,9 +70,7 @@ function exactIsoTimestamp(value: string): number {
 }
 
 function exactKeys(value: object, expected: readonly string[]): boolean {
-  return (
-    Object.keys(value).sort().join("\0") === [...expected].sort().join("\0")
-  );
+  return Object.keys(value).sort().join("\0") === [...expected].sort().join("\0");
 }
 
 function sortedBooleanRecord(
@@ -121,10 +120,7 @@ export function contributionCapabilityPolicyDigestInput(
   }
   const issuedAt = exactIsoTimestamp(payload.issuedAt);
   const expiresAt = exactIsoTimestamp(payload.expiresAt);
-  if (
-    expiresAt <= issuedAt ||
-    expiresAt - issuedAt > MAXIMUM_POLICY_LIFETIME_MILLISECONDS
-  ) {
+  if (expiresAt <= issuedAt || expiresAt - issuedAt > MAXIMUM_POLICY_LIFETIME_MILLISECONDS) {
     throw new Error("The contribution capability policy lifetime is invalid");
   }
   const clients = sortedBooleanRecord(payload.clients, VERSION_PATTERN, 100);
@@ -199,6 +195,9 @@ export function evaluateContributionCapability(
   }
   if (input.now.getTime() >= Date.parse(policy.expiresAt)) {
     return { allowed: false, reason: "policy_expired" };
+  }
+  if (input.now.getTime() < Date.parse(policy.issuedAt)) {
+    return { allowed: false, reason: "policy_not_yet_valid" };
   }
   if (input.stage === "intake" ? !policy.intakeEnabled : !policy.processingEnabled) {
     return { allowed: false, reason: "global_disabled" };

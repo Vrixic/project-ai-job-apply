@@ -43,9 +43,10 @@ export class PostgresJobContributionStore implements JobContributionStore {
       SELECT (
         to_regclass('jobs.job_contributions') IS NOT NULL
         AND to_regclass('jobs.job_contribution_outbox') IS NOT NULL
+        AND to_regclass('jobs.job_contribution_processing_queue') IS NOT NULL
         AND EXISTS (
           SELECT 1 FROM jobs.schema_migrations
-          WHERE version = '0014_job_contribution_intake'
+          WHERE version = '0017_job_contribution_processing'
         )
       ) AS ready
     `;
@@ -97,12 +98,14 @@ export class PostgresJobContributionStore implements JobContributionStore {
       const input = command.input;
       const [created] = await transaction<ContributionRow[]>`
         INSERT INTO jobs.job_contributions (
-          id, owner_user_id, state, provider, page_variant, source_url, external_job_id,
+          id, owner_user_id, state, client_surface, client_version,
+          provider, page_variant, source_url, external_job_id,
           content_sha256, adapter_version, observed_at, approved_at, consent_id,
           consent_version, policy_version, preview_digest_sha256, payload,
           idempotency_key_hash, request_hash, created_at, updated_at
         ) VALUES (
-          ${contributionId}, ${command.ownerUserId}, 'queued', ${input.source.provider},
+          ${contributionId}, ${command.ownerUserId}, 'queued', ${input.client.surface},
+          ${input.client.version}, ${input.source.provider},
           ${input.source.pageVariant}, ${input.source.sourceUrl}, ${input.source.externalJobId ?? null},
           ${input.observation.contentSha256}, ${input.source.adapterVersion},
           ${input.observation.observedAt}, ${input.approval.approvedAt}, ${input.approval.consentId},
@@ -121,6 +124,15 @@ export class PostgresJobContributionStore implements JobContributionStore {
         ) VALUES (
           ${outboxId}, ${contributionId}, 'job.contributed.v1', ${contributionId},
           ${transaction.json({ contributionId })}, ${createdAt}
+        )
+      `;
+      await transaction`
+        INSERT INTO jobs.job_contribution_processing_queue (
+          id, contribution_id, state, attempt, available_at,
+          created_at, updated_at
+        ) VALUES (
+          ${uuidv7()}, ${contributionId}, 'pending', 0, ${createdAt},
+          ${createdAt}, ${createdAt}
         )
       `;
       return status(created);

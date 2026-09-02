@@ -39,6 +39,7 @@ describeWithDatabase("Jobs contribution candidate rights ownership", () => {
       input: {
         schemaVersion: 1,
         contributionId: uuidv7(),
+        client: { surface: "browser_extension", version: "0.2.0" },
         source: {
           provider: "lever",
           pageVariant: "lever-posting-v1",
@@ -142,7 +143,7 @@ describeWithDatabase("Jobs contribution candidate rights ownership", () => {
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });
     expect(first.stdout.trim()).toBe(
-      "Jobs migrations through 0016_job_contribution_candidate_rights applied and verified.",
+      "Jobs migrations through 0017_job_contribution_processing applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(first.stdout.trim());
   });
@@ -187,6 +188,9 @@ describeWithDatabase("Jobs contribution candidate rights ownership", () => {
       expect.objectContaining({
         id: ownerContribution.id,
         state: "queued",
+        client: { surface: "browser_extension", version: "0.2.0" },
+        processingHistory: [],
+        trustHistory: [],
         source: expect.objectContaining({
           provider: "lever",
           pageVariant: "lever-posting-v1",
@@ -269,6 +273,10 @@ describeWithDatabase("Jobs contribution candidate rights ownership", () => {
         client`DELETE FROM jobs.job_contributions WHERE id = ${ownerContribution.id}`,
       ).rejects.toThrow("immutable");
       await expect(
+        client`DELETE FROM jobs.job_contribution_processing_queue
+          WHERE contribution_id = ${ownerContribution.id}`,
+      ).rejects.toThrow("candidate deletion authority");
+      await expect(
         client`SELECT jobs.delete_candidate_data(${owner}, ${uuidv7()})`,
       ).rejects.toThrow("candidate deletion is not authorized");
       await expect(
@@ -283,6 +291,13 @@ describeWithDatabase("Jobs contribution candidate rights ownership", () => {
         reportsDeleted: 0,
         contributionsDeleted: 1,
         contributionOutboxDeleted: 1,
+        processingOutboxDeleted: 0,
+        processingQueueDeleted: 1,
+        reconciliationsDeleted: 0,
+        stateEventsDeleted: 0,
+        trustDecisionsDeleted: 0,
+        independentVerificationsDeleted: 0,
+        normalizationsDeleted: 0,
       });
       const [replay] = await client<{ result: Record<string, unknown> }[]>`
         SELECT jobs.delete_candidate_data(${owner}, ${ownerAuthorization.requestId}) AS result
@@ -292,6 +307,13 @@ describeWithDatabase("Jobs contribution candidate rights ownership", () => {
         reportsDeleted: 0,
         contributionsDeleted: 0,
         contributionOutboxDeleted: 0,
+        processingOutboxDeleted: 0,
+        processingQueueDeleted: 0,
+        reconciliationsDeleted: 0,
+        stateEventsDeleted: 0,
+        trustDecisionsDeleted: 0,
+        independentVerificationsDeleted: 0,
+        normalizationsDeleted: 0,
       });
 
       const [remaining] = await client<
