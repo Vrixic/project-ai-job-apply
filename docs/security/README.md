@@ -16,6 +16,7 @@ Contains the security architecture and evidence required to protect candidate id
 - [Security and privacy approval plan](security-privacy-approval-plan.md)
 - [Phase 0 accountable review record](phase-0-accountable-review-record.md)
 - [API security and independent final review](api-security-and-final-review.md)
+- [Phase 2 extension and UGC security/privacy delta](d2-extension-ugc-security-privacy.md)
 - [Dependency vulnerability exceptions](dependency-vulnerability-exceptions.md)
 - [Phase 0 incident-response runbook](../../infrastructure/runbooks/incidents/phase-0-incident-response.md)
 - [Vulnerability-management runbook](../../infrastructure/runbooks/security/vulnerability-management.md)

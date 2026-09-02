@@ -30,6 +30,7 @@ Records important technical decisions, their context, alternatives, consequences
 - [ADR-024: Application history and inbox phase ownership](024-application-history-and-inbox-phase-ownership.md)
 - [ADR-025: Govern public ATS feed activation without a separate counsel gate](025-public-ats-feed-activation-governance.md)
 - [ADR-026: Host Next.js presentation boundaries on Vercel](026-vercel-nextjs-presentation-hosting.md)
+- [ADR-028: Separate private saves, public contributions, Jobs truth, and UGC trust](028-extension-ugc-ownership-and-processing.md)
 
 ## Proposed delivery decisions
 

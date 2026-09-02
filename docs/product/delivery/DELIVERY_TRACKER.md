@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-08-31
+Last updated: 2026-09-01
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -13,7 +13,7 @@ This is the master record for the delivery phases defined in the [product and sy
 |---|---|---|---|---|---|
 | D0 | Product, data, and legal foundation | Complete | 2026-07-27 | 2026-08-12 | [Phase 0 tasks](phase-0-foundation.md) |
 | D1 | Useful web product and canonical job catalog | In progress | 2026-08-11 | Not completed | [Phase 1 tasks](phase-1-web-and-job-catalog.md) |
-| D2 | Extension and community loop | Not started | Not started | Not completed | [Phase 2 tasks](phase-2-extension-and-community.md) |
+| D2 | Extension and community loop | In progress | 2026-09-01 | Not completed | [Phase 2 tasks](phase-2-extension-and-community.md) |
 | D3 | High-quality application preparation | Not started | Not started | Not completed | [Phase 3 tasks](phase-3-application-preparation.md) |
 | D4 | Workday and remote preparation | Not started | Not started | Not completed | [Phase 4 tasks](phase-4-workday-and-remote.md) |
 | D5 | Personalized outreach and application notifications | Not started | Not started | Not completed | [Phase 5 tasks](phase-5-outreach-and-notifications.md) |
@@ -318,12 +318,19 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## D2 — Extension and community loop
 
-- Status: Not started
-- Start: Not started
+- Status: In progress
+- Start: 2026-09-01
 - Completion: Not completed
-- Depends on: D0 consent/security foundations and D1 job contribution APIs
+- Depends on: D0 consent/security foundations and D1 catalog, saved-job, and moderation foundations;
+  the public-contribution API is D2-owned work
 - Task document: [Phase 2 tasks](phase-2-extension-and-community.md)
 - Exit gate: Users can privately save and explicitly contribute a public job without unrelated browsing or profile data being collected.
+- Current engineering status: Phase 2 started on 2026-09-01 from the clean Phase 1 checkpoint.
+  The initial implementation slices cover the minimum-permission MV3 client, exact current-page
+  detection, explicit contribution preview, safe local retry, and the missing Jobs-owned
+  contribution contract/persistence boundary. Public contribution, provider detectors, and store
+  distribution remain disabled until their task-specific fixture and accountable approval gates
+  pass. [Phase 2 tasks](phase-2-extension-and-community.md)
 
 ## D3 — High-quality application preparation
 
