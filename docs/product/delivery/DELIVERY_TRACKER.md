@@ -326,11 +326,17 @@ This is the master record for the delivery phases defined in the [product and sy
 - Task document: [Phase 2 tasks](phase-2-extension-and-community.md)
 - Exit gate: Users can privately save and explicitly contribute a public job without unrelated browsing or profile data being collected.
 - Current engineering status: Phase 2 started on 2026-09-01 from the clean Phase 1 checkpoint.
-  The initial implementation slices cover the minimum-permission MV3 client, exact current-page
-  detection, explicit contribution preview, safe local retry, and the missing Jobs-owned
-  contribution contract/persistence boundary. Public contribution, provider detectors, and store
-  distribution remain disabled until their task-specific fixture and accountable approval gates
-  pass. [Phase 2 tasks](phase-2-extension-and-community.md)
+  Repository-local Phase 2 is implemented default-dark end to end: the minimum-permission MV3
+  extension, private save and explicit contribution controls, durable owner-visible processing,
+  independent provider verification and atomic catalog publication, Trust/reputation and candidate
+  rights, lazy Lambda composition, guarded operations, aggregate telemetry, Terraform, and local
+  migration/recovery evidence are present. No production provider is configured, no D2 AWS
+  runtime is deployed or activated, and no extension is distributed. Remaining gates are the D1
+  prerequisites; authorized provider fixtures and QA disposition; a dedicated Auth0 Native
+  Application with real Chrome/Edge lifecycle evidence; final listing assets, support endpoint, and
+  store review; accountable UGC/privacy/security approval; axe and human assistive-technology
+  acceptance; and AWS dark-deploy, rollback, restore, load/abuse, and ALARM/OK acceptance.
+  [Phase 2 tasks](phase-2-extension-and-community.md)
 
 ## D3 — High-quality application preparation
 
