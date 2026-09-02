@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "releaseChannel": "synthetic-default-dark",
+  "archivePrefix": "applydash-job-capture",
+  "allowedFiles": [
+    "background.js",
+    "manifest.json",
+    "popup.css",
+    "popup.html",
+    "popup.js",
+    "sidepanel.html"
+  ],
+  "manifest": {
+    "name": "ApplyDash Job Capture (Default Dark)",
+    "requiredPermissions": ["activeTab", "alarms", "identity", "scripting", "sidePanel", "storage"],
+    "forbiddenPermissions": [
+      "bookmarks",
+      "clipboardRead",
+      "cookies",
+      "debugger",
+      "downloads",
+      "geolocation",
+      "history",
+      "management",
+      "nativeMessaging",
+      "notifications",
+      "proxy",
+      "tabs",
+      "topSites",
+      "webNavigation",
+      "webRequest",
+      "webRequestBlocking"
+    ],
+    "contentSecurityPolicy": "script-src 'self'; object-src 'self'"
+  }
+}

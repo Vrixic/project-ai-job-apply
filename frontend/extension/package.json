@@ -6,6 +6,7 @@
   "scripts": {
     "build": "node build.mjs",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "release:package": "node package-release.mjs",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "watch": "node build.mjs --watch"

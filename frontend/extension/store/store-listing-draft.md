@@ -1,0 +1,37 @@
+# ApplyDash Job Capture — store listing draft
+
+Status: copy draft only; do not upload or publish.
+
+## Short description
+
+Preview selected public job details before privately saving or explicitly contributing them.
+
+## Detailed description
+
+ApplyDash Job Capture is designed to inspect only the current job page you explicitly choose. It
+shows the structured public fields it detected and keeps **Save privately** separate from
+**Contribute selected fields**. A contribution requires a field-level preview and separate
+approval.
+
+The design uses temporary current-tab access rather than persistent browsing access. It does not
+request browsing history, cookies, broad website access, or remote executable code. Delivery is
+bounded and idempotent so a suspended browser worker or temporary connection problem does not
+silently duplicate an intent or assign it to a different signed-in account.
+
+## Current release-candidate limitation
+
+This synthetic/default-dark build has all provider variants and network hosts disabled. It is for
+repository and installed-browser assurance only and does not currently provide functional job
+capture, private save, or public contribution. It must not be submitted as a functional public
+listing.
+
+## Assets still required
+
+- Final approved product name and publisher identity
+- Store icon set and promotional images produced from the exact reviewed UI
+- Chrome and Edge screenshots with no synthetic-only or unsupported claims
+- Approved privacy-policy and support URLs
+- Category, locale, territory, pricing, and accessibility dispositions
+
+No statement about provider support may be added until the exact variant has authorized sanitized
+fixtures, independent QA representativeness acceptance, and an enabled reviewed release policy.
