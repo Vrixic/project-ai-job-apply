@@ -1,4 +1,5 @@
 import "reflect-metadata";
+import { createHash } from "node:crypto";
 import type {
   AccountDeletionRequest,
   CandidateDataExport,
@@ -8,6 +9,7 @@ import type {
   CurrentUser,
   JobPreferenceSet,
   JobReport,
+  JobContribution,
   MatchAssessment,
   Operation,
   ProfileFact,
@@ -37,6 +39,7 @@ import {
   type ActiveJobRecord,
   type ActiveJobSearchInput,
   type CreateJobReportCommand,
+  type CreateJobContributionCommand,
   type ModerationCase as DomainModerationCase,
   JobAlreadyReportedError,
   type JobCatalogReader,
@@ -45,6 +48,9 @@ import {
   JobReportLimitError,
   JobReportServiceUnavailableError,
   type JobReports,
+  type JobContributions,
+  jobContributionContentDigestInput,
+  jobContributionPreviewDigestInput,
   JobReportTargetUnavailableError,
   JobSearchCatalogChangedError,
 } from "@ai-job-apply/jobs-service";
@@ -462,6 +468,43 @@ class MemoryJobReports implements JobReports {
   }
 }
 
+class MemoryJobContributions implements JobContributions {
+  readonly records = new Map<string, { ownerUserId: string; contribution: JobContribution }>();
+  readonly keys = new Map<string, { hash: string; contribution: JobContribution }>();
+
+  async ping(): Promise<void> {}
+
+  async contribute(command: CreateJobContributionCommand): Promise<JobContribution> {
+    const key = `${command.ownerUserId}\0${command.idempotencyKey}`;
+    const hash = JSON.stringify(command.input);
+    const existing = this.keys.get(key);
+    if (existing) {
+      if (existing.hash !== hash) {
+        const { JobContributionIdempotencyConflictError } = await import(
+          "@ai-job-apply/jobs-service"
+        );
+        throw new JobContributionIdempotencyConflictError();
+      }
+      return existing.contribution;
+    }
+    const timestamp = "2026-08-16T12:00:00.000Z";
+    const contribution: JobContribution = {
+      id: uuidv7(),
+      state: "queued",
+      submittedAt: timestamp,
+      updatedAt: timestamp,
+    };
+    this.records.set(contribution.id, { ownerUserId: command.ownerUserId, contribution });
+    this.keys.set(key, { hash, contribution });
+    return contribution;
+  }
+
+  async get(ownerUserId: string, contributionId: string): Promise<JobContribution | null> {
+    const record = this.records.get(contributionId);
+    return record?.ownerUserId === ownerUserId ? record.contribution : null;
+  }
+}
+
 class MemoryModeration implements JobModeration {
   readonly cases: DomainModerationCase[] = [];
   lastOperatorId: string | undefined;
@@ -708,6 +751,7 @@ async function createApp() {
   const documents = new MemoryDocumentStore();
   const savedJobs = new MemorySavedJobs();
   const jobReports = new MemoryJobReports();
+  const jobContributions = new MemoryJobContributions();
   const moderation = new MemoryModeration();
   const matchAssessments = new MemoryMatchAssessments();
   const entitlements = new MemoryEntitlements();
@@ -741,6 +785,7 @@ async function createApp() {
     catalog,
     savedJobs,
     jobReports,
+    jobContributions,
     moderation,
     matchAssessments,
     entitlements,
@@ -757,6 +802,7 @@ async function createApp() {
     store,
     savedJobs,
     jobReports,
+    jobContributions,
     matchAssessments,
     entitlements,
     moderation,
@@ -1012,6 +1058,7 @@ describe("candidate API", () => {
       catalog: new MemoryJobCatalog(),
       savedJobs: new MemorySavedJobs(),
       jobReports: new MemoryJobReports(),
+      jobContributions: new MemoryJobContributions(),
       moderation: new MemoryModeration(),
       matchAssessments: new MemoryMatchAssessments(),
       entitlements: new MemoryEntitlements(),
@@ -1269,6 +1316,7 @@ describe("candidate API", () => {
       catalog: new MemoryJobCatalog(),
       savedJobs: new MemorySavedJobs(),
       jobReports: new MemoryJobReports(),
+      jobContributions: new MemoryJobContributions(),
       moderation: new MemoryModeration(),
       matchAssessments: new MemoryMatchAssessments(),
       entitlements: new BillingEntitlementService(
@@ -1766,6 +1814,167 @@ describe("candidate API", () => {
       }
     } finally {
       matchAssessments.assess = original;
+    }
+  });
+
+  it("queues strict contributions behind jobs:contribute with replay and owner isolation", async () => {
+    const ownerToken = await issuer.issue("candidate-contribution-owner", {
+      scope: "jobs:contribute",
+    });
+    const otherToken = await issuer.issue("candidate-contribution-other", {
+      scope: "jobs:contribute",
+    });
+    const writeOnlyToken = await issuer.issue("candidate-contribution-write-only", {
+      scope: "jobs:write",
+    });
+    const payload = {
+      schemaVersion: 1,
+      contributionId: uuidv7(),
+      source: {
+        provider: "greenhouse",
+        pageVariant: "greenhouse-board-v1",
+        sourceUrl: "https://job-boards.greenhouse.io/synthetic/jobs/123",
+        externalJobId: "123",
+        adapterVersion: "d2-job-page-v1",
+      },
+      posting: {
+        companyName: "Synthetic Company",
+        title: "Software Engineer",
+        locations: ["Remote - US"],
+        description: "Generated public posting data for gateway verification.",
+      },
+      observation: {
+        observedAt: "2026-08-16T11:59:00.000Z",
+        contentSha256: "a".repeat(64),
+      },
+      approval: {
+        consentId: uuidv7(),
+        consentVersion: "ugc-contribution-preview.v1",
+        policyVersion: "ugc-policy-v1",
+        approvedAt: "2026-08-16T12:00:00.000Z",
+        approvedFields: [
+          "provider",
+          "pageVariant",
+          "sourceUrl",
+          "externalJobId",
+          "companyName",
+          "title",
+          "locations",
+          "description",
+        ],
+        previewDigestSha256: "0".repeat(64),
+      },
+    };
+    payload.observation.contentSha256 = createHash("sha256")
+      .update(jobContributionContentDigestInput(payload as CreateJobContributionCommand["input"]))
+      .digest("hex");
+    payload.approval.previewDigestSha256 = createHash("sha256")
+      .update(jobContributionPreviewDigestInput(payload as CreateJobContributionCommand["input"]))
+      .digest("hex");
+    const request = {
+      method: "POST" as const,
+      url: "/v1/jobs/contributions",
+      headers: {
+        authorization: `Bearer ${ownerToken}`,
+        "idempotency-key": "gateway-contribution-key-0001",
+      },
+      payload,
+    };
+    const created = await app.inject(request);
+    const replay = await app.inject(request);
+    expect(created.statusCode).toBe(202);
+    expect(replay.json()).toEqual(created.json());
+    expect(created.json()).toMatchObject({ state: "queued" });
+    expect(created.headers["cache-control"]).toBe("no-store");
+
+    const owned = await app.inject({
+      method: "GET",
+      url: `/v1/jobs/contributions/${created.json().id}`,
+      headers: { authorization: `Bearer ${ownerToken}` },
+    });
+    const hidden = await app.inject({
+      method: "GET",
+      url: `/v1/jobs/contributions/${created.json().id}`,
+      headers: { authorization: `Bearer ${otherToken}` },
+    });
+    expect(owned.statusCode).toBe(200);
+    expect(hidden.statusCode).toBe(404);
+
+    const conflict = await app.inject({
+      ...request,
+      payload: { ...payload, posting: { ...payload.posting, title: "Changed" } },
+    });
+    expect(conflict.statusCode).toBe(409);
+    const wrongScope = await app.inject({
+      ...request,
+      headers: { ...request.headers, authorization: `Bearer ${writeOnlyToken}` },
+    });
+    expect(wrongScope.statusCode).toBe(403);
+  });
+
+  it("rejects contribution payload leakage and incomplete preview approval", async () => {
+    const token = await issuer.issue("candidate-contribution-invalid", {
+      scope: "jobs:contribute",
+    });
+    const base = {
+      schemaVersion: 1,
+      contributionId: uuidv7(),
+      source: {
+        provider: "lever",
+        pageVariant: "lever-posting-v1",
+        sourceUrl: "https://jobs.lever.co/synthetic/123",
+        externalJobId: "123",
+        adapterVersion: "d2-job-page-v1",
+      },
+      posting: {
+        companyName: "Synthetic Company",
+        title: "Engineer",
+        locations: ["Remote - US"],
+        description: "Generated public text.",
+      },
+      observation: {
+        observedAt: "2026-08-16T11:59:00.000Z",
+        contentSha256: "b".repeat(64),
+      },
+      approval: {
+        consentId: uuidv7(),
+        consentVersion: "ugc-contribution-preview.v1",
+        policyVersion: "ugc-policy-v1",
+        approvedAt: "2026-08-16T12:00:00.000Z",
+        approvedFields: [
+          "provider",
+          "pageVariant",
+          "sourceUrl",
+          "externalJobId",
+          "companyName",
+          "title",
+          "locations",
+          "description",
+        ],
+        previewDigestSha256: "0".repeat(64),
+      },
+    };
+    base.observation.contentSha256 = createHash("sha256")
+      .update(jobContributionContentDigestInput(base as CreateJobContributionCommand["input"]))
+      .digest("hex");
+    base.approval.previewDigestSha256 = createHash("sha256")
+      .update(jobContributionPreviewDigestInput(base as CreateJobContributionCommand["input"]))
+      .digest("hex");
+    for (const payload of [
+      { ...base, rawHtml: "<form>private</form>" },
+      { ...base, approval: { ...base.approval, approvedFields: ["sourceUrl"] } },
+    ]) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/jobs/contributions",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "idempotency-key": `invalid-contribution-${crypto.randomUUID()}`,
+        },
+        payload,
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.body).not.toContain("private");
     }
   });
 

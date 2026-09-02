@@ -22,8 +22,10 @@ import readinessCalculatedSchema from "../schemas/profile.readiness.calculated.v
 import entitlementChangedSchema from "../schemas/subscription.entitlement_changed.v1.json" with {
   type: "json",
 };
+import jobContributedSchema from "../schemas/job.contributed.v1.json" with { type: "json" };
 
 export const eventTypes = {
+  jobContributed: "job.contributed.v1",
   profileAccountDeletionConfirmed: "profile.account-deletion.confirmed.v1",
   profileDataExportRequested: "profile.data-export.requested.v1",
   profilePreferencesUpdated: "profile.preferences.updated.v1",
@@ -148,6 +150,10 @@ export interface SubscriptionEntitlementChangedData {
   version: number;
 }
 
+export interface JobContributedData {
+  contributionId: string;
+}
+
 export type ProfilePreferencesUpdatedEvent = CloudEvent<
   typeof eventTypes.profilePreferencesUpdated,
   ProfilePreferencesUpdatedData
@@ -163,6 +169,7 @@ const addFormats = addFormatsModule.default as unknown as (instance: Ajv2020) =>
 addFormats(ajv);
 
 const validators = new Map<string, ValidateFunction<unknown>>([
+  [eventTypes.jobContributed, ajv.compile(jobContributedSchema)],
   [eventTypes.profileAccountDeletionConfirmed, ajv.compile(accountDeletionConfirmedSchema)],
   [eventTypes.profileDataExportRequested, ajv.compile(dataExportRequestedSchema)],
   [eventTypes.profilePreferencesUpdated, ajv.compile(preferencesUpdatedSchema)],

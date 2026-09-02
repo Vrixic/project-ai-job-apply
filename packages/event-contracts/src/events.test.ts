@@ -10,6 +10,20 @@ import {
 } from "./index.js";
 
 describe("event schemas", () => {
+  it("accepts only an identifier-only queued job contribution event", () => {
+    const contributionId = "019b4e12-7ea3-7c36-9357-aea35ab542ca";
+    expect(validateEventData(eventTypes.jobContributed, { contributionId })).toBe(true);
+    expect(
+      validateEventData(eventTypes.jobContributed, {
+        contributionId,
+        sourceUrl: "https://jobs.example.test/private-path",
+      }),
+    ).toBe(false);
+    expect(
+      validateEventData(eventTypes.jobContributed, { contributionId: crypto.randomUUID() }),
+    ).toBe(false);
+  });
+
   it("accepts only identifier-only candidate-rights events", () => {
     const common = {
       operationId: "019b4e12-7ea3-7c36-9357-aea35ab542ca",

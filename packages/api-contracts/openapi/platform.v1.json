@@ -761,6 +761,89 @@
         }
       }
     },
+    "/jobs/contributions": {
+      "post": {
+        "operationId": "createJobContribution",
+        "security": [{ "oidc": ["jobs:contribute"] }],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": { "type": "string", "minLength": 16, "maxLength": 128 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateJobContributionRequest" }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "The explicit contribution was durably queued for independent verification",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/JobContribution" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/jobs/contributions/{contributionId}": {
+      "get": {
+        "operationId": "getJobContribution",
+        "security": [{ "oidc": ["jobs:contribute"] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contributionId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The authenticated owner's contribution status",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/JobContribution" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
     "/jobs/{jobId}/reports": {
       "post": {
         "operationId": "createJobReport",
@@ -2114,6 +2197,217 @@
               "other_catalog_issue"
             ]
           }
+        },
+        "additionalProperties": false
+      },
+      "CreateJobContributionRequest": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "contributionId",
+          "source",
+          "posting",
+          "observation",
+          "approval"
+        ],
+        "properties": {
+          "schemaVersion": { "const": 1 },
+          "contributionId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "source": {
+            "type": "object",
+            "required": ["provider", "pageVariant", "sourceUrl", "adapterVersion"],
+            "properties": {
+              "provider": { "type": "string", "enum": ["greenhouse", "lever", "ashby"] },
+              "pageVariant": {
+                "type": "string",
+                "enum": ["greenhouse-board-v1", "lever-posting-v1", "ashby-job-board-v1"]
+              },
+              "sourceUrl": {
+                "type": "string",
+                "format": "uri",
+                "maxLength": 4096,
+                "pattern": "^https://[^#]+$"
+              },
+              "externalJobId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "^\\S(?:.*\\S)?$"
+              },
+              "adapterVersion": {
+                "type": "string",
+                "const": "d2-job-page-v1"
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": { "provider": { "const": "greenhouse" } },
+                  "required": ["provider"]
+                },
+                "then": {
+                  "properties": {
+                    "pageVariant": { "type": "string", "const": "greenhouse-board-v1" },
+                    "sourceUrl": {
+                      "type": "string",
+                      "pattern": "^https://(?:boards\\.greenhouse\\.io|job-boards\\.greenhouse\\.io)/[A-Za-z0-9._~-]+/jobs/[A-Za-z0-9._~-]+/?$"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": { "provider": { "const": "lever" } },
+                  "required": ["provider"]
+                },
+                "then": {
+                  "properties": {
+                    "pageVariant": { "type": "string", "const": "lever-posting-v1" },
+                    "sourceUrl": {
+                      "type": "string",
+                      "pattern": "^https://(?:jobs\\.lever\\.co|jobs\\.eu\\.lever\\.co)/[A-Za-z0-9._~-]+/[A-Za-z0-9._~-]+/?$"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": { "provider": { "const": "ashby" } },
+                  "required": ["provider"]
+                },
+                "then": {
+                  "properties": {
+                    "pageVariant": { "type": "string", "const": "ashby-job-board-v1" },
+                    "sourceUrl": {
+                      "type": "string",
+                      "pattern": "^https://jobs\\.ashbyhq\\.com/[A-Za-z0-9._~-]+/[A-Za-z0-9._~-]+/?$"
+                    }
+                  }
+                }
+              }
+            ],
+            "additionalProperties": false
+          },
+          "posting": {
+            "type": "object",
+            "required": ["title"],
+            "properties": {
+              "companyName": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
+              },
+              "title": { "type": "string", "minLength": 1, "maxLength": 240, "pattern": "\\S" },
+              "locations": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 20,
+                "uniqueItems": true,
+                "items": { "type": "string", "minLength": 1, "maxLength": 240, "pattern": "\\S" }
+              },
+              "description": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 50000,
+                "pattern": "\\S"
+              },
+              "department": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
+              },
+              "applicationUrl": {
+                "type": "string",
+                "format": "uri",
+                "maxLength": 4096,
+                "pattern": "^https://[^#]+$"
+              },
+              "employmentType": {
+                "type": "string",
+                "enum": ["full_time", "part_time", "contract", "internship", "unknown"]
+              },
+              "workMode": { "type": "string", "enum": ["remote", "hybrid", "on_site", "unknown"] }
+            },
+            "additionalProperties": false
+          },
+          "observation": {
+            "type": "object",
+            "required": ["observedAt", "contentSha256"],
+            "properties": {
+              "observedAt": { "type": "string", "format": "date-time" },
+              "contentSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+            },
+            "additionalProperties": false
+          },
+          "approval": {
+            "type": "object",
+            "required": [
+              "consentId",
+              "consentVersion",
+              "policyVersion",
+              "approvedAt",
+              "approvedFields",
+              "previewDigestSha256"
+            ],
+            "properties": {
+              "consentId": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "consentVersion": { "const": "ugc-contribution-preview.v1" },
+              "policyVersion": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 100,
+                "pattern": "^[a-z0-9][a-z0-9._-]{2,99}$"
+              },
+              "approvedAt": { "type": "string", "format": "date-time" },
+              "approvedFields": {
+                "type": "array",
+                "minItems": 4,
+                "maxItems": 12,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "provider",
+                    "pageVariant",
+                    "sourceUrl",
+                    "externalJobId",
+                    "companyName",
+                    "title",
+                    "locations",
+                    "description",
+                    "department",
+                    "applicationUrl",
+                    "employmentType",
+                    "workMode"
+                  ]
+                }
+              },
+              "previewDigestSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "JobContribution": {
+        "type": "object",
+        "required": ["id", "state", "submittedAt", "updatedAt"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "state": { "const": "queued" },
+          "submittedAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
         },
         "additionalProperties": false
       },

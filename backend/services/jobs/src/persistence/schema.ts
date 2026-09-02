@@ -31,6 +31,7 @@ import type {
   ModerationResolution,
   ModerationResolutionReason,
 } from "../reporting.js";
+import type { ContributionProvider, JobContributionInput } from "../contribution.js";
 
 const jobs = pgSchema("jobs");
 const tsvector = customType<{ data: string }>({ dataType: () => "tsvector" });
@@ -380,6 +381,58 @@ export const jobReports = jobs.table(
       "job_reports_reason_ck",
       sql`${table.reason} IN ('job_closed', 'job_not_found', 'job_inaccurate', 'suspected_scam', 'duplicate_listing', 'other_catalog_issue')`,
     ),
+  ],
+);
+
+export const jobContributions = jobs.table(
+  "job_contributions",
+  {
+    id: uuid("id").primaryKey(),
+    ownerUserId: uuid("owner_user_id").notNull(),
+    state: text("state").$type<"queued">().notNull(),
+    provider: text("provider").$type<ContributionProvider>().notNull(),
+    pageVariant: text("page_variant").notNull(),
+    sourceUrl: text("source_url").notNull(),
+    externalJobId: text("external_job_id"),
+    contentSha256: text("content_sha256").notNull(),
+    adapterVersion: text("adapter_version").notNull(),
+    observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
+    approvedAt: timestamp("approved_at", { withTimezone: true }).notNull(),
+    consentId: uuid("consent_id").notNull(),
+    consentVersion: text("consent_version").notNull(),
+    policyVersion: text("policy_version").notNull(),
+    previewDigestSha256: text("preview_digest_sha256").notNull(),
+    payload: jsonb("payload").$type<JobContributionInput>().notNull(),
+    idempotencyKeyHash: text("idempotency_key_hash").notNull(),
+    requestHash: text("request_hash").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("job_contributions_owner_idempotency_uq").on(
+      table.ownerUserId,
+      table.idempotencyKeyHash,
+    ),
+    index("job_contributions_owner_created_idx").on(table.ownerUserId, table.createdAt, table.id),
+    index("job_contributions_queued_idx").on(table.createdAt, table.id),
+  ],
+);
+
+export const jobContributionOutbox = jobs.table(
+  "job_contribution_outbox",
+  {
+    id: uuid("id").primaryKey(),
+    contributionId: uuid("contribution_id")
+      .notNull()
+      .references(() => jobContributions.id, { onDelete: "cascade" }),
+    eventType: text("event_type").$type<"job.contributed.v1">().notNull(),
+    subject: text("subject").notNull(),
+    data: jsonb("data").$type<{ contributionId: string }>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("job_contribution_outbox_contribution_uq").on(table.contributionId),
+    index("job_contribution_outbox_pending_idx").on(table.createdAt, table.id),
   ],
 );
 

@@ -49,3 +49,7 @@ other service may modify these tables.
   freshness in `(last_verified_at DESC, id ASC)` keyset order. The dedicated reader retains no
   direct Jobs table access; incomplete, future, or oversized internal cursors raise instead of
   producing a false-empty page.
+- `0014_job_contribution_intake.sql` — Adds owner-scoped immutable queued contributions and one
+  identifier-only outbox record per contribution. It stores structured previewed public fields and
+  consent/digest references only—never raw DOM or HTML—and intentionally has no catalog/source
+  foreign key or trigger, so queued UGC cannot affect provider provenance or active-job freshness.

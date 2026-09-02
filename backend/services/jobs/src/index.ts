@@ -1,5 +1,7 @@
 export * from "./domain/canonical-job.js";
+export * from "./contribution.js";
 export * from "./persistence/catalog.js";
+export * from "./persistence/contribution.js";
 export * from "./persistence/ingestion-orchestration.js";
 export * from "./persistence/reporting.js";
 export * from "./persistence/schema.js";

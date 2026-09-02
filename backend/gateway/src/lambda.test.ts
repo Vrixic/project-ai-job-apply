@@ -666,6 +666,12 @@ describe("API Gateway Lambda boundary", () => {
     ["malformed operation identifier", "GET", "/v1/operations/not-a-uuid"],
     ["malformed job identifier", "GET", "/v1/jobs/not-a-uuid"],
     ["malformed profile fact identifier", "PATCH", "/v1/profile/facts/not-a-uuid"],
+    ["default-dark contribution intake", "POST", "/v1/jobs/contributions"],
+    [
+      "default-dark contribution status",
+      "GET",
+      "/v1/jobs/contributions/019c0000-0000-7000-8000-000000000010",
+    ],
   ])("rejects %s before authentication or application dispatch", async (_label, method, path) => {
     const principalBridge = createInvocationPrincipalBridge();
     const inject = vi.fn();

@@ -13,9 +13,11 @@ import {
 } from "@ai-job-apply/documents-service";
 import {
   JobModerationService,
+  JobContributionService,
   JobReportingService,
   PostgresJobCatalog,
   PostgresJobModerationStore,
+  PostgresJobContributionStore,
   PostgresJobReportStore,
 } from "@ai-job-apply/jobs-service";
 import {
@@ -74,6 +76,9 @@ const catalog = new PostgresJobCatalog(database.client, {
   searchCursorKeys: deriveJobSearchCursorKeys(config.DATABASE_URL),
 });
 const jobReports = new JobReportingService(new PostgresJobReportStore(database.client));
+const jobContributions = new JobContributionService(
+  new PostgresJobContributionStore(database.client),
+);
 const moderation = new JobModerationService(
   new PostgresJobModerationStore(database.client, deriveModerationCursorKey(config.DATABASE_URL)),
 );
@@ -120,6 +125,7 @@ const app = await createGatewayApplication({
   store,
   catalog,
   jobReports,
+  jobContributions,
   moderation,
   savedJobs,
   matchAssessments,

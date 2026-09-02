@@ -260,6 +260,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/jobs/contributions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createJobContribution"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/jobs/contributions/{contributionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getJobContribution"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/jobs/{jobId}/reports": {
         parameters: {
             query?: never;
@@ -821,6 +853,59 @@ export interface components {
         CreateJobReportRequest: {
             /** @enum {string} */
             reason: "job_closed" | "job_not_found" | "job_inaccurate" | "suspected_scam" | "duplicate_listing" | "other_catalog_issue";
+        };
+        CreateJobContributionRequest: {
+            /** @constant */
+            schemaVersion: 1;
+            contributionId: string;
+            source: {
+                /** @enum {string} */
+                provider: "greenhouse" | "lever" | "ashby";
+                /** @enum {string} */
+                pageVariant: "greenhouse-board-v1" | "lever-posting-v1" | "ashby-job-board-v1";
+                /** Format: uri */
+                sourceUrl: string;
+                externalJobId?: string;
+                /** @constant */
+                adapterVersion: "d2-job-page-v1";
+            } & (unknown & unknown & unknown);
+            posting: {
+                companyName?: string;
+                title: string;
+                locations?: string[];
+                description?: string;
+                department?: string;
+                /** Format: uri */
+                applicationUrl?: string;
+                /** @enum {string} */
+                employmentType?: "full_time" | "part_time" | "contract" | "internship" | "unknown";
+                /** @enum {string} */
+                workMode?: "remote" | "hybrid" | "on_site" | "unknown";
+            };
+            observation: {
+                /** Format: date-time */
+                observedAt: string;
+                contentSha256: string;
+            };
+            approval: {
+                consentId: string;
+                /** @constant */
+                consentVersion: "ugc-contribution-preview.v1";
+                policyVersion: string;
+                /** Format: date-time */
+                approvedAt: string;
+                approvedFields: ("provider" | "pageVariant" | "sourceUrl" | "externalJobId" | "companyName" | "title" | "locations" | "description" | "department" | "applicationUrl" | "employmentType" | "workMode")[];
+                previewDigestSha256: string;
+            };
+        };
+        JobContribution: {
+            id: string;
+            /** @constant */
+            state: "queued";
+            /** Format: date-time */
+            submittedAt: string;
+            /** Format: date-time */
+            updatedAt: string;
         };
         JobReport: {
             id: string;
@@ -1952,6 +2037,68 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+        };
+    };
+    createJobContribution: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateJobContributionRequest"];
+            };
+        };
+        responses: {
+            /** @description The explicit contribution was durably queued for independent verification */
+            202: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobContribution"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getJobContribution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contributionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The authenticated owner's contribution status */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobContribution"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["ServiceUnavailable"];
         };
     };
     createJobReport: {

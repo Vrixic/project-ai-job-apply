@@ -22,6 +22,7 @@ const migrationVersions = [
   "0011_positive_source_withdrawal",
   "0012_candidate_rights",
   "0013_public_job_sitemap",
+  "0014_job_contribution_intake",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -159,6 +160,10 @@ try {
         reportingTriggerFunctionCount: number;
         reportingTriggerFunctionBodies: string[];
         reportingIndexCount: number;
+        contributionIndexCount: number;
+        contributionTriggerCount: number;
+        contributionForeignKeyCount: number;
+        contributionCatalogForeignKeyCount: number;
       }[]
     >`
       SELECT
@@ -177,6 +182,8 @@ try {
           + (to_regclass('jobs.job_reports') IS NOT NULL)::int
           + (to_regclass('jobs.moderation_cases') IS NOT NULL)::int
           + (to_regclass('jobs.moderation_events') IS NOT NULL)::int
+          + (to_regclass('jobs.job_contributions') IS NOT NULL)::int
+          + (to_regclass('jobs.job_contribution_outbox') IS NOT NULL)::int
         )::int AS "tableCount",
         (
           SELECT count(*)::int FROM jobs.schema_migrations
@@ -701,9 +708,58 @@ try {
               'moderation_events_occurred_idx'
             )
         ) AS "reportingIndexCount"
+        , (
+          SELECT count(*)::int
+          FROM pg_indexes
+          WHERE schemaname = 'jobs'
+            AND indexname IN (
+              'job_contributions_owner_idempotency_uq',
+              'job_contributions_owner_created_idx',
+              'job_contributions_queued_idx',
+              'job_contribution_outbox_contribution_uq',
+              'job_contribution_outbox_pending_idx'
+            )
+        ) AS "contributionIndexCount"
+        , (
+          SELECT count(*)::int
+          FROM pg_trigger trigger
+          JOIN (VALUES
+            ('jobs.job_contributions'::regclass, 'job_contributions_queued_immutable',
+              'jobs.guard_queued_job_contribution()'::regprocedure, 19::smallint),
+            ('jobs.job_contribution_outbox'::regclass, 'job_contribution_outbox_append_only',
+              'jobs.guard_job_contribution_outbox()'::regprocedure, 19::smallint)
+          ) expected(table_oid, trigger_name, function_oid, trigger_type)
+            ON expected.table_oid = trigger.tgrelid
+           AND expected.trigger_name = trigger.tgname
+           AND expected.function_oid = trigger.tgfoid
+           AND expected.trigger_type = trigger.tgtype
+          WHERE NOT trigger.tgisinternal AND trigger.tgenabled = 'O'
+        ) AS "contributionTriggerCount"
+        , (
+          SELECT count(*)::int
+          FROM pg_constraint constraint_definition
+          WHERE constraint_definition.contype = 'f'
+            AND constraint_definition.conrelid IN (
+              'jobs.job_contributions'::regclass,
+              'jobs.job_contribution_outbox'::regclass
+            )
+        ) AS "contributionForeignKeyCount"
+        , (
+          SELECT count(*)::int
+          FROM pg_constraint constraint_definition
+          WHERE constraint_definition.contype = 'f'
+            AND constraint_definition.conrelid IN (
+              'jobs.job_contributions'::regclass,
+              'jobs.job_contribution_outbox'::regclass
+            )
+            AND constraint_definition.confrelid IN (
+              'jobs.canonical_jobs'::regclass,
+              'jobs.job_sources'::regclass
+            )
+        ) AS "contributionCatalogForeignKeyCount"
     `;
     if (
-      verification?.tableCount !== 14 ||
+      verification?.tableCount !== 16 ||
       verification.migrationCount !== migrationVersions.length ||
       verification.identityIndexCount !== 3 ||
       verification.sourceWithdrawalColumnCount !== 1 ||
@@ -748,7 +804,11 @@ try {
       verification.reportingTriggerFunctionCount !== 4 ||
       JSON.stringify(verification.reportingTriggerFunctionBodies) !==
         JSON.stringify(expectedReportingTriggerBodies) ||
-      verification.reportingIndexCount !== 6
+      verification.reportingIndexCount !== 6 ||
+      verification.contributionIndexCount !== 5 ||
+      verification.contributionTriggerCount !== 2 ||
+      verification.contributionForeignKeyCount !== 1 ||
+      verification.contributionCatalogForeignKeyCount !== 0
     ) {
       throw new Error(
         `Jobs database migration verification failed: ${JSON.stringify({
@@ -795,6 +855,10 @@ try {
             JSON.stringify(verification?.reportingTriggerFunctionBodies) ===
             JSON.stringify(expectedReportingTriggerBodies),
           reportingIndexCount: verification?.reportingIndexCount,
+          contributionIndexCount: verification?.contributionIndexCount,
+          contributionTriggerCount: verification?.contributionTriggerCount,
+          contributionForeignKeyCount: verification?.contributionForeignKeyCount,
+          contributionCatalogForeignKeyCount: verification?.contributionCatalogForeignKeyCount,
         })}`,
       );
     }

@@ -13,6 +13,12 @@ Defines versioned API schemas and generates type-safe clients for web, mobile, e
 
 Contracts contain transport shapes, not backend implementation or persistence models.
 
+The additive Phase 2 contribution contract defines strict `POST /jobs/contributions` and owner
+`GET /jobs/contributions/{contributionId}` routes under the exact `jobs:contribute` scope. Intake
+requires a client-generated UUIDv7, `Idempotency-Key`, detector identity, selected public fields,
+and immutable Profile consent/digest references. Its only response state is `queued`; the contract
+does not claim verification, moderation, canonical-job creation, or publication.
+
 The D1 catalog contract defines a strict `POST /v1/jobs/search` body with bounded supported filters,
 an exact `jobs:read` security requirement, active redacted result summaries, and an opaque
 continuation cursor. It intentionally excludes saved-job state, profile matching, and unsupported

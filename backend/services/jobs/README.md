@@ -15,6 +15,21 @@ The catalog persistence runtime accepts only `authorized_fixture` provenance by 
 source-neutral ingestion runtime may explicitly allow the three bounded `permitted_api` adapters;
 public contributions remain disabled until their separate D2 gates pass.
 
+Migration `0014_job_contribution_intake` adds the first D2 queued-intake foundation. The strict
+Jobs command accepts only user-previewed structured public fields, a client-generated UUIDv7,
+source detector identity, content hash, and a Profile-owned consent reference. Jobs recomputes the
+digest over the final preview payload before persisting it. Creation and the identifier-only
+`job.contributed.v1` outbox record are atomic, semantic retries replay one acknowledgement, changed
+payloads conflict, and status reads require the same owner plus the dedicated `jobs:contribute`
+scope. The only implemented state is `queued`. These tables have no mutation path or foreign key
+into provider source or canonical job truth, retain no DOM/HTML/raw page snapshot, and cannot
+activate, refresh, extend, or overwrite catalog provenance.
+
+The durable normalizer, independent source verifier, Profile consent recheck, Trust-owned UGC
+decision, accepted UGC observation/source linkage, outbox dispatcher, contributor export/deletion,
+and deployment/activation controls remain separate D2 work. Until those land, the intake is
+synthetic/default-dark and a queued acknowledgement makes no publication claim.
+
 Migration `0005_ingestion_orchestration` adds three Jobs-owned relations. Schedule occurrences are
 immutable, checkpoint transitions advance exactly one revision under a database lock, every
 revision is copied into an append-only aggregate-only event ledger, and transport dispatches have

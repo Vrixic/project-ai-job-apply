@@ -9,6 +9,7 @@ import type {
   CreateAccountDeletionRequest,
   CreateCandidateDataExportRequest,
   CreateJobReportRequest,
+  CreateJobContributionRequest,
   CreateProfileFactRequest,
   CreateResumeUploadRequest,
   CreateResumeUploadResponse,
@@ -16,6 +17,7 @@ import type {
   CurrentUser,
   EntitlementSummary,
   JobReport,
+  JobContribution,
   JobReportSummary,
   JobSearchPage,
   JobSearchRequest,
@@ -57,6 +59,10 @@ import {
 } from "@ai-job-apply/documents-service";
 import {
   InvalidJobSearchError,
+  type JobContributions,
+  JobContributionConsentRequiredError,
+  JobContributionIdempotencyConflictError,
+  JobContributionUnavailableError,
   InvalidModerationCursorError,
   JobAlreadyReportedError,
   type JobCatalogReader,
@@ -127,6 +133,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 const PROFILE_STORE = Symbol("PROFILE_STORE");
 const JOB_CATALOG = Symbol("JOB_CATALOG");
 const JOB_REPORTS = Symbol("JOB_REPORTS");
+const JOB_CONTRIBUTIONS = Symbol("JOB_CONTRIBUTIONS");
 const JOB_MODERATION = Symbol("JOB_MODERATION");
 const SAVED_JOBS = Symbol("SAVED_JOBS");
 const MATCH_ASSESSMENTS = Symbol("MATCH_ASSESSMENTS");
@@ -201,6 +208,8 @@ const SAFE_ROUTE_TEMPLATES = new Set([
   "/v1/jobs/:jobId",
   "/v1/jobs/:jobId/match-assessment",
   "/v1/jobs/:jobId/reports",
+  "/v1/jobs/contributions",
+  "/v1/jobs/contributions/:contributionId",
   "/v1/admin/moderation/cases",
   "/v1/admin/moderation/cases/search",
   "/v1/admin/moderation/cases/:caseId/resolve",
@@ -247,6 +256,7 @@ class RequestIdentity {
       | "documents:read"
       | "documents:write"
       | "jobs:read"
+      | "jobs:contribute"
       | "jobs:moderate"
       | "jobs:write"
       | "profile:read"
@@ -266,6 +276,7 @@ class RequestIdentity {
       | "documents:read"
       | "documents:write"
       | "jobs:read"
+      | "jobs:contribute"
       | "jobs:moderate"
       | "jobs:write"
       | "profile:read"
@@ -427,6 +438,21 @@ class ProblemDetailsFilter implements ExceptionFilter {
       code = "job_reporting_unavailable";
       title = "Job reporting unavailable";
       detail = "Job reporting is temporarily unavailable";
+    } else if (exception instanceof JobContributionIdempotencyConflictError) {
+      status = HttpStatus.CONFLICT;
+      code = "idempotency_conflict";
+      title = "Idempotency key conflict";
+      detail = exception.message;
+    } else if (exception instanceof JobContributionConsentRequiredError) {
+      status = HttpStatus.CONFLICT;
+      code = "job_contribution_consent_required";
+      title = "Contribution consent is required";
+      detail = exception.message;
+    } else if (exception instanceof JobContributionUnavailableError) {
+      status = HttpStatus.SERVICE_UNAVAILABLE;
+      code = "job_contribution_unavailable";
+      title = "Job contribution unavailable";
+      detail = "Job contribution intake is temporarily unavailable";
     } else if (exception instanceof InvalidModerationCursorError) {
       status = HttpStatus.BAD_REQUEST;
       code = "invalid_moderation_cursor";
@@ -546,6 +572,7 @@ class HealthController {
     @Inject(PROFILE_STORE) private readonly store: ProfileStore,
     @Inject(JOB_CATALOG) private readonly catalog: JobCatalogReader,
     @Inject(JOB_REPORTS) private readonly jobReports: JobReports,
+    @Inject(JOB_CONTRIBUTIONS) private readonly jobContributions: JobContributions,
     @Inject(JOB_MODERATION) private readonly moderation: JobModeration,
     @Inject(SAVED_JOBS) private readonly savedJobs: SavedJobs,
     @Inject(ENTITLEMENTS) private readonly entitlements: EntitlementReadService,
@@ -564,6 +591,7 @@ class HealthController {
         this.store.ping(),
         this.catalog.ping(),
         this.jobReports.ping(),
+        this.jobContributions.ping(),
         this.moderation.ping(),
         this.savedJobs.ping(),
         this.entitlements.ping(),
@@ -595,6 +623,8 @@ const validateSavedJobSearch = compileComponentValidator("SavedJobSearchRequest"
 const validateMatchAssessment = compileComponentValidator("MatchAssessment");
 const validateCreateJobReport = compileComponentValidator("CreateJobReportRequest");
 const validateJobReport = compileComponentValidator("JobReport");
+const validateCreateJobContribution = compileComponentValidator("CreateJobContributionRequest");
+const validateJobContribution = compileComponentValidator("JobContribution");
 const validateOpenModerationCase = compileComponentValidator("OpenModerationCaseRequest");
 const validateResolveModerationCase = compileComponentValidator("ResolveModerationCaseRequest");
 const validateModerationCaseSearch = compileComponentValidator("ModerationCaseSearchRequest");
@@ -759,6 +789,17 @@ function exactJobReport(value: unknown, requestedJobId: string): value is JobRep
   );
 }
 
+function exactJobContribution(value: unknown): value is JobContribution {
+  if (!validateJobContribution(value)) return false;
+  const contribution = value as JobContribution;
+  return (
+    UUID_V7_PATTERN.test(contribution.id) &&
+    exactCanonicalDateTime(contribution.submittedAt) &&
+    exactCanonicalDateTime(contribution.updatedAt) &&
+    contribution.submittedAt === contribution.updatedAt
+  );
+}
+
 function projectModerationCase(
   value: Awaited<ReturnType<JobModeration["openCase"]>>,
 ): ModerationCase {
@@ -904,6 +945,7 @@ class CandidateController {
     @Inject(PROFILE_STORE) private readonly store: ProfileStore,
     @Inject(JOB_CATALOG) private readonly catalog: JobCatalogReader,
     @Inject(JOB_REPORTS) private readonly jobReports: JobReports,
+    @Inject(JOB_CONTRIBUTIONS) private readonly jobContributions: JobContributions,
     @Inject(SAVED_JOBS) private readonly savedJobs: SavedJobs,
     @Inject(MATCH_ASSESSMENTS) private readonly matchAssessments: MatchAssessments,
     @Inject(ENTITLEMENTS) private readonly entitlements: EntitlementReadService,
@@ -1236,6 +1278,62 @@ class CandidateController {
     return fact;
   }
 
+  @Post("/jobs/contributions")
+  @HttpCode(HttpStatus.ACCEPTED)
+  @Header("cache-control", "no-store")
+  async createJobContribution(
+    @Req() request: AuthenticatedRequest,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<JobContribution> {
+    if (
+      (request.query && Object.keys(request.query as Record<string, unknown>).length > 0) ||
+      !validateCreateJobContribution(request.body)
+    ) {
+      throw new HttpException(
+        formatValidationErrors(validateCreateJobContribution.errors),
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const user = await this.identity.resolve(request, "jobs:contribute");
+    let created: Awaited<ReturnType<JobContributions["contribute"]>>;
+    try {
+      created = await this.jobContributions.contribute({
+        ownerUserId: user.id,
+        idempotencyKey: requireIdempotencyKey(idempotencyKey),
+        input: request.body as CreateJobContributionRequest,
+      });
+    } catch (error) {
+      if (error instanceof TypeError) {
+        throw new HttpException("Job contribution approval is invalid", HttpStatus.BAD_REQUEST);
+      }
+      throw error;
+    }
+    if (!exactJobContribution(created)) throw new JobContributionUnavailableError();
+    return created as JobContribution;
+  }
+
+  @Get("/jobs/contributions/:contributionId")
+  @Header("cache-control", "no-store")
+  async getJobContribution(
+    @Req() request: AuthenticatedRequest,
+    @Param("contributionId") contributionId: string,
+  ): Promise<JobContribution> {
+    if (
+      (request.query && Object.keys(request.query as Record<string, unknown>).length > 0) ||
+      request.body !== undefined ||
+      !UUID_V7_PATTERN.test(contributionId)
+    ) {
+      throw new HttpException("Job contribution status input is invalid", HttpStatus.BAD_REQUEST);
+    }
+    const user = await this.identity.resolve(request, "jobs:contribute");
+    const contribution = await this.jobContributions.get(user.id, contributionId);
+    if (!contribution) {
+      throw new HttpException("Job contribution was not found", HttpStatus.NOT_FOUND);
+    }
+    if (!exactJobContribution(contribution)) throw new JobContributionUnavailableError();
+    return contribution as JobContribution;
+  }
+
   @Get("/jobs/:jobId")
   async getCanonicalJob(
     @Req() request: AuthenticatedRequest,
@@ -1465,6 +1563,7 @@ export interface AppModuleOptions {
   store: ProfileStore;
   catalog: JobCatalogReader;
   jobReports: JobReports;
+  jobContributions: JobContributions;
   moderation: JobModeration;
   savedJobs: SavedJobs;
   matchAssessments: MatchAssessments;
@@ -1489,6 +1588,7 @@ export class AppModule {
         { provide: PROFILE_STORE, useValue: options.store },
         { provide: JOB_CATALOG, useValue: options.catalog },
         { provide: JOB_REPORTS, useValue: options.jobReports },
+        { provide: JOB_CONTRIBUTIONS, useValue: options.jobContributions },
         { provide: JOB_MODERATION, useValue: options.moderation },
         { provide: SAVED_JOBS, useValue: options.savedJobs },
         { provide: MATCH_ASSESSMENTS, useValue: options.matchAssessments },

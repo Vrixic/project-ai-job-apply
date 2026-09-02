@@ -1,7 +1,12 @@
 import type { AccessTokenVerifier, IdTokenVerifier } from "@ai-job-apply/auth";
 import type { EntitlementReadService } from "@ai-job-apply/billing-service";
 import type { DocumentStore } from "@ai-job-apply/documents-service";
-import type { JobCatalogReader, JobModeration, JobReports } from "@ai-job-apply/jobs-service";
+import type {
+  JobCatalogReader,
+  JobContributions,
+  JobModeration,
+  JobReports,
+} from "@ai-job-apply/jobs-service";
 import type { MatchAssessments, SavedJobs } from "@ai-job-apply/matching-service";
 import type { ProfileStore } from "@ai-job-apply/profile-service";
 import { NestFactory } from "@nestjs/core";
@@ -16,6 +21,7 @@ export interface GatewayApplicationOptions {
   store: ProfileStore;
   catalog: JobCatalogReader;
   jobReports: JobReports;
+  jobContributions: JobContributions;
   moderation: JobModeration;
   savedJobs: SavedJobs;
   matchAssessments: MatchAssessments;
@@ -41,6 +47,7 @@ export async function createGatewayApplication(
       store: options.store,
       catalog: options.catalog,
       jobReports: options.jobReports,
+      jobContributions: options.jobContributions,
       moderation: options.moderation,
       savedJobs: options.savedJobs,
       matchAssessments: options.matchAssessments,

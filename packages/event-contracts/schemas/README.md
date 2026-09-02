@@ -9,3 +9,6 @@ transformer. It excludes threat names, filenames, user IDs, hashes, bytes, and e
 `platform.outbox.nudge.v1` is an internal SQS transport message, not a domain event. It contains
 only the immutable outbox identity, event type, optional trace context, and a deterministic
 integrity digest; consumers reload authoritative event data from PostgreSQL.
+
+`job.contributed.v1` carries only the queued contribution UUIDv7. It intentionally excludes the
+owner, public posting fields, URLs, source metadata, and consent references.

@@ -299,6 +299,15 @@ export async function createSyntheticAssuranceApplication() {
     store,
     catalog,
     jobReports,
+    jobContributions: {
+      async ping() {},
+      async contribute() {
+        return unused("JobContributions.contribute");
+      },
+      async get() {
+        return unused("JobContributions.get");
+      },
+    },
     moderation: new SyntheticAssuranceModeration(),
     savedJobs: new SyntheticAssuranceSavedJobs(),
     matchAssessments: new SyntheticAssuranceMatchAssessments(),

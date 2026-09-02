@@ -39,6 +39,101 @@ describe("PutJobPreferencesRequest", () => {
   });
 });
 
+describe("Job contribution intake contract", () => {
+  const validate = compileComponentValidator("CreateJobContributionRequest");
+  const input = {
+    schemaVersion: 1,
+    contributionId: "019c0000-0000-7000-8000-000000000010",
+    source: {
+      provider: "greenhouse",
+      pageVariant: "greenhouse-board-v1",
+      sourceUrl: "https://job-boards.greenhouse.io/synthetic/jobs/123",
+      externalJobId: "123",
+      adapterVersion: "d2-job-page-v1",
+    },
+    posting: {
+      companyName: "Synthetic Company",
+      title: "Software Engineer",
+      locations: ["Remote - US"],
+      description: "Generated public job text for contract verification.",
+    },
+    observation: {
+      observedAt: "2026-09-01T12:00:00.000Z",
+      contentSha256: "a".repeat(64),
+    },
+    approval: {
+      consentId: "019c0000-0000-7000-8000-000000000011",
+      consentVersion: "ugc-contribution-preview.v1",
+      policyVersion: "ugc-policy-v1",
+      approvedAt: "2026-09-01T12:01:00.000Z",
+      approvedFields: [
+        "provider",
+        "pageVariant",
+        "sourceUrl",
+        "externalJobId",
+        "companyName",
+        "title",
+        "locations",
+        "description",
+      ],
+      previewDigestSha256: "c".repeat(64),
+    },
+  };
+
+  it("requires the dedicated scope and idempotency for queued intake and owner status", () => {
+    expect(contract.paths["/jobs/contributions"].post.security).toEqual([
+      { oidc: ["jobs:contribute"] },
+    ]);
+    expect(contract.paths["/jobs/contributions"].post.parameters[0]).toMatchObject({
+      name: "Idempotency-Key",
+      required: true,
+    });
+    expect(contract.paths["/jobs/contributions/{contributionId}"].get.security).toEqual([
+      { oidc: ["jobs:contribute"] },
+    ]);
+  });
+
+  it("accepts only strict public posting data with explicit preview evidence", () => {
+    expect(validate(input)).toBe(true);
+    expect(validate({ ...input, rawHtml: "<form>private</form>" })).toBe(false);
+    expect(
+      validate({
+        ...input,
+        source: { ...input.source, sourceUrl: "http://boards.example.test/jobs/123" },
+      }),
+    ).toBe(false);
+  });
+
+  it("accepts Lever EU postings and rejects provider-to-page boundary mismatches", () => {
+    expect(
+      validate({
+        ...input,
+        source: {
+          provider: "lever",
+          pageVariant: "lever-posting-v1",
+          sourceUrl: "https://jobs.eu.lever.co/synthetic/synthetic-123",
+          adapterVersion: "d2-job-page-v1",
+        },
+        approval: {
+          ...input.approval,
+          approvedFields: input.approval.approvedFields.filter(
+            (field) => field !== "externalJobId",
+          ),
+        },
+      }),
+    ).toBe(true);
+    expect(
+      validate({
+        ...input,
+        source: {
+          ...input.source,
+          sourceUrl: "https://jobs.lever.co/synthetic/synthetic-123",
+        },
+      }),
+    ).toBe(false);
+  });
+});
+
 describe("job preference response contracts", () => {
   const validateSet = compileComponentValidator("JobPreferenceSet");
   const validateResponse = compileComponentValidator("PutJobPreferencesResponse");
