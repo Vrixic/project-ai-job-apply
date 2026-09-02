@@ -85,6 +85,29 @@
       "properties": { "entitlement": { "$ref": "#/$defs/entitlement" } },
       "additionalProperties": false
     },
+    "trust": {
+      "type": "object",
+      "required": ["schemaVersion", "cases", "caseEvents", "contributorReputationEvidence"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "cases": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/trustCase" }
+        },
+        "caseEvents": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": { "$ref": "#/$defs/trustCaseEvent" }
+        },
+        "contributorReputationEvidence": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": { "$ref": "#/$defs/trustContributorReputationEvidence" }
+        }
+      },
+      "additionalProperties": false
+    },
     "audit": {
       "type": "object",
       "required": ["events"],
@@ -271,11 +294,163 @@
       },
       "additionalProperties": false
     },
+    "trustCase": {
+      "type": "object",
+      "required": [
+        "id",
+        "contributionId",
+        "policyVersion",
+        "appealWindowMilliseconds",
+        "state",
+        "version",
+        "appealCount",
+        "adverseState",
+        "adverseDecisionAt",
+        "appealDeadlineAt",
+        "pendingAppealEvidenceDigestSha256",
+        "lastAction",
+        "lastActorKind",
+        "lastReasonCode",
+        "lastEvidenceDigestSha256",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "contributionId": { "$ref": "#/$defs/uuid" },
+        "policyVersion": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,99}$" },
+        "appealWindowMilliseconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 31536000000
+        },
+        "state": { "$ref": "#/$defs/trustCaseState" },
+        "version": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+        "appealCount": { "type": "integer", "minimum": 0, "maximum": 1 },
+        "adverseState": {
+          "oneOf": [{ "type": "null" }, { "enum": ["rejected", "taken_down"] }]
+        },
+        "adverseDecisionAt": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/dateTime" }]
+        },
+        "appealDeadlineAt": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/dateTime" }]
+        },
+        "pendingAppealEvidenceDigestSha256": { "$ref": "#/$defs/nullableSha256" },
+        "lastAction": { "$ref": "#/$defs/trustAction" },
+        "lastActorKind": { "$ref": "#/$defs/trustActorKind" },
+        "lastReasonCode": { "$ref": "#/$defs/trustReasonCode" },
+        "lastEvidenceDigestSha256": { "$ref": "#/$defs/nullableSha256" },
+        "createdAt": { "$ref": "#/$defs/dateTime" },
+        "updatedAt": { "$ref": "#/$defs/dateTime" }
+      },
+      "additionalProperties": false
+    },
+    "trustCaseEvent": {
+      "type": "object",
+      "required": [
+        "caseId",
+        "caseVersion",
+        "contributionId",
+        "policyVersion",
+        "priorState",
+        "resultingState",
+        "action",
+        "actorKind",
+        "reasonCode",
+        "evidenceDigestSha256",
+        "occurredAt"
+      ],
+      "properties": {
+        "caseId": { "$ref": "#/$defs/uuid" },
+        "caseVersion": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+        "contributionId": { "$ref": "#/$defs/uuid" },
+        "policyVersion": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,99}$" },
+        "priorState": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/trustCaseState" }]
+        },
+        "resultingState": { "$ref": "#/$defs/trustCaseState" },
+        "action": { "$ref": "#/$defs/trustAction" },
+        "actorKind": { "$ref": "#/$defs/trustActorKind" },
+        "reasonCode": { "$ref": "#/$defs/trustReasonCode" },
+        "evidenceDigestSha256": { "$ref": "#/$defs/nullableSha256" },
+        "occurredAt": { "$ref": "#/$defs/dateTime" }
+      },
+      "additionalProperties": false
+    },
+    "trustContributorReputationEvidence": {
+      "type": "object",
+      "required": [
+        "id",
+        "caseId",
+        "caseVersion",
+        "contributionId",
+        "signalCode",
+        "referenceDigestSha256",
+        "occurredAt"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "caseId": { "$ref": "#/$defs/uuid" },
+        "caseVersion": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+        "contributionId": { "$ref": "#/$defs/uuid" },
+        "signalCode": {
+          "enum": [
+            "contributor_submission_verified",
+            "contributor_submission_incorrect",
+            "contributor_abuse_detected",
+            "adverse_decision_reversed"
+          ]
+        },
+        "referenceDigestSha256": { "$ref": "#/$defs/sha256" },
+        "occurredAt": { "$ref": "#/$defs/dateTime" }
+      },
+      "additionalProperties": false
+    },
+    "trustCaseState": {
+      "enum": ["needs_review", "accepted", "rejected", "appeal_pending", "withdrawn", "taken_down"]
+    },
+    "trustAction": {
+      "enum": [
+        "opened",
+        "review_accepted",
+        "review_rejected",
+        "withdrawn",
+        "taken_down",
+        "appeal_filed",
+        "appeal_upheld",
+        "appeal_reversed"
+      ]
+    },
+    "trustActorKind": { "enum": ["system", "reviewer", "contributor"] },
+    "trustReasonCode": {
+      "enum": [
+        "queued_for_review",
+        "independently_verified",
+        "insufficient_evidence",
+        "content_mismatch",
+        "malicious_or_deceptive",
+        "license_or_policy_block",
+        "contributor_withdrawal",
+        "verified_requester_takedown",
+        "credible_safety_risk",
+        "rights_or_policy_violation",
+        "new_or_corrected_evidence",
+        "decision_upheld",
+        "decision_reversed"
+      ]
+    },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "nullableSha256": {
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }]
+    },
     "auditEvent": {
       "type": "object",
       "required": ["owner", "action", "resourceType", "occurredAt"],
       "properties": {
-        "owner": { "enum": ["identity", "profile", "documents", "jobs", "matching", "billing"] },
+        "owner": {
+          "enum": ["identity", "profile", "documents", "jobs", "matching", "billing", "trust"]
+        },
         "action": { "type": "string", "minLength": 1, "maxLength": 120 },
         "resourceType": { "type": "string", "minLength": 1, "maxLength": 120 },
         "resourceId": { "$ref": "#/$defs/uuid" },

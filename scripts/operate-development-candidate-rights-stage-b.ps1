@@ -29,7 +29,7 @@ $operatorRoot = Join-Path $terraformRoot "development-candidate-rights-stage-b"
 $terraformDataDirectory = Join-Path $terraformRoot "development-candidate-rights-stage-b-data"
 $audienceEnvironmentName = "CANDIDATE_RIGHTS_STAGE_B_ID_TOKEN_AUDIENCE"
 $utf8WithoutBom = New-Object Text.UTF8Encoding($false)
-$policySha256 = "d9a04c500445c83fe75cc7666f5fc22351431ce4913d81da39abf8aaedd06fff"
+$policySha256 = "7dbde35dda7542ace2932a68cc8d28618ce14951180f9ab69025b9f511ac35cf"
 
 if ($Help) {
   @"
@@ -169,11 +169,11 @@ function Assert-StageBVariableTransition {
   if (($baselineNames -join "`n") -cne ($planNames -join "`n")) { throw "Stage B changed the exact Terraform variable inventory." }
   $expected = @{
     candidate_rights_enabled = $true; private_application_networking = $true
-    candidate_rights_id_token_audience = $Audience; candidate_rights_policy_version = "d1-development-synthetic-v1"
+    candidate_rights_id_token_audience = $Audience; candidate_rights_policy_version = "d2-development-synthetic-v1"
     candidate_rights_policy_sha256 = $policySha256; candidate_rights_export_lifetime_seconds = 3600
     candidate_rights_download_grant_seconds = 300; candidate_rights_backup_retention_days = 35
     candidate_rights_recent_auth_max_age_seconds = 900; candidate_rights_export_lifecycle_days = 1
-    candidate_rights_owner_inventory = "identity,profile,documents,jobs,matching,billing"
+    candidate_rights_owner_inventory = "identity,profile,documents,jobs,matching,billing,trust"
     candidate_rights_subprocessor_inventory = "none"; database_backup_retention_days = 35
     gateway_lambda_artifact_s3_key = [string]$Artifact.key
     gateway_lambda_artifact_s3_object_version = [string]$Artifact.versionId
@@ -322,14 +322,14 @@ function Set-VariablesFromBaseline([object]$Variables, [object]$Artifact, [strin
   $env:TF_VAR_candidate_rights_enabled = "true"
   $env:TF_VAR_private_application_networking = "true"
   $env:TF_VAR_candidate_rights_id_token_audience = $Audience
-  $env:TF_VAR_candidate_rights_policy_version = "d1-development-synthetic-v1"
+  $env:TF_VAR_candidate_rights_policy_version = "d2-development-synthetic-v1"
   $env:TF_VAR_candidate_rights_policy_sha256 = $policySha256
   $env:TF_VAR_candidate_rights_export_lifetime_seconds = "3600"
   $env:TF_VAR_candidate_rights_download_grant_seconds = "300"
   $env:TF_VAR_candidate_rights_backup_retention_days = "35"
   $env:TF_VAR_candidate_rights_recent_auth_max_age_seconds = "900"
   $env:TF_VAR_candidate_rights_export_lifecycle_days = "1"
-  $env:TF_VAR_candidate_rights_owner_inventory = "identity,profile,documents,jobs,matching,billing"
+  $env:TF_VAR_candidate_rights_owner_inventory = "identity,profile,documents,jobs,matching,billing,trust"
   $env:TF_VAR_candidate_rights_subprocessor_inventory = "none"
   $env:TF_VAR_database_backup_retention_days = "35"
   $env:TF_VAR_gateway_lambda_artifact_s3_key = [string]$Artifact.key

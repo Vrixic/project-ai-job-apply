@@ -199,7 +199,7 @@ describeWithDatabase("PostgresProfileStore", () => {
         CANDIDATE_RIGHTS_DOWNLOAD_GRANT_SECONDS: "300",
         CANDIDATE_RIGHTS_BACKUP_RETENTION_DAYS: "7",
         CANDIDATE_RIGHTS_RECENT_AUTH_MAX_AGE_SECONDS: "300",
-        CANDIDATE_RIGHTS_OWNER_INVENTORY: "identity,profile,documents,jobs,matching,billing",
+        CANDIDATE_RIGHTS_OWNER_INVENTORY: "identity,profile,documents,jobs,matching,billing,trust",
         CANDIDATE_RIGHTS_SUBPROCESSOR_INVENTORY: "auth0,aws",
       }),
       clock: () => new Date(now.getTime()),
@@ -300,6 +300,7 @@ describeWithDatabase("PostgresProfileStore", () => {
           jobs: "pending",
           matching: "pending",
           billing: "pending",
+          trust: "pending",
         },
         subprocessorInventory: { auth0: "pending", aws: "pending" },
       });

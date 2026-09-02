@@ -14,11 +14,11 @@ move a Lambda alias, apply Terraform, run an ECS task, create an Auth0 identity,
 selected route, payload, SQL, command, role, bucket, function, secret, subject, or token.
 
 The selected generated-synthetic policy is
-[`d1-development-synthetic-v1`](../../../docs/security/policies/candidate-rights.d1-development-synthetic-v1.json),
-SHA-256 `d9a04c500445c83fe75cc7666f5fc22351431ce4913d81da39abf8aaedd06fff`.
+[`d2-development-synthetic-v1`](../../../docs/security/policies/candidate-rights.d2-development-synthetic-v1.json),
+SHA-256 `7dbde35dda7542ace2932a68cc8d28618ce14951180f9ab69025b9f511ac35cf`.
 Its exact runtime values are export `3600`, download grant `300`, backup retention `35`, recent
 authentication `900`, export lifecycle `1`, owners
-`identity,profile,documents,jobs,matching,billing`, and executable subprocessor adapters `none`.
+`identity,profile,documents,jobs,matching,billing,trust`, and executable subprocessor adapters `none`.
 This is generated-synthetic engineering policy, not real-candidate or public-policy approval.
 
 ## Two-stage infrastructure and credential setup
@@ -94,7 +94,7 @@ Stop before planning unless all of these are independently available:
   development IAM Identity Center session in the exact account and `us-east-2`;
 - `candidate_rights_enabled=true` in the applied state and the exact reviewed policy version/digest,
   export lifetime, download-grant lifetime, backup retention, recent-authentication age,
-  `identity,profile,documents,jobs,matching,billing` owner inventory, and nonempty exact subprocessor
+  `identity,profile,documents,jobs,matching,billing,trust` owner inventory, and nonempty exact subprocessor
   inventory;
 - one fresh checksum-reviewed, refresh-backed Terraform plan with zero meaningful changes;
 - an available RDS instance whose automated-backup retention covers the reviewed candidate-rights

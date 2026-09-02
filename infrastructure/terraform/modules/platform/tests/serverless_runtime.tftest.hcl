@@ -217,7 +217,7 @@ run "candidate_rights_boundary_accepts_explicit_timing_policy" {
     candidate_rights_enabled                     = true
     candidate_rights_policy_version              = "d1-reviewed-v1"
     candidate_rights_policy_sha256               = "9999999999999999999999999999999999999999999999999999999999999999"
-    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing"
+    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing,trust"
     candidate_rights_subprocessor_inventory      = "none"
     candidate_rights_export_lifetime_seconds     = 3600
     candidate_rights_download_grant_seconds      = 300
@@ -251,6 +251,28 @@ run "candidate_rights_boundary_accepts_explicit_timing_policy" {
   }
 }
 
+run "candidate_rights_activation_rejects_inventory_without_trust" {
+  command = plan
+
+  variables {
+    private_application_networking               = true
+    deploy_document_intake                       = true
+    serverless_runtime_enabled                   = true
+    candidate_rights_enabled                     = true
+    candidate_rights_policy_version              = "d1-reviewed-v1"
+    candidate_rights_policy_sha256               = "9999999999999999999999999999999999999999999999999999999999999999"
+    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing"
+    candidate_rights_subprocessor_inventory      = "none"
+    candidate_rights_export_lifetime_seconds     = 3600
+    candidate_rights_download_grant_seconds      = 300
+    candidate_rights_backup_retention_days       = 7
+    candidate_rights_recent_auth_max_age_seconds = 900
+    candidate_rights_export_lifecycle_days       = 1
+  }
+
+  expect_failures = [var.candidate_rights_enabled]
+}
+
 run "candidate_rights_activation_rejects_missing_id_token_audience" {
   command = plan
 
@@ -262,7 +284,7 @@ run "candidate_rights_activation_rejects_missing_id_token_audience" {
     candidate_rights_id_token_audience           = ""
     candidate_rights_policy_version              = "d1-reviewed-v1"
     candidate_rights_policy_sha256               = "9999999999999999999999999999999999999999999999999999999999999999"
-    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing"
+    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing,trust"
     candidate_rights_subprocessor_inventory      = "none"
     candidate_rights_export_lifetime_seconds     = 3600
     candidate_rights_download_grant_seconds      = 300
@@ -294,7 +316,7 @@ run "candidate_rights_boundary_rejects_short_database_backup_window" {
     candidate_rights_enabled                     = true
     candidate_rights_policy_version              = "d1-reviewed-v1"
     candidate_rights_policy_sha256               = "9999999999999999999999999999999999999999999999999999999999999999"
-    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing"
+    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing,trust"
     candidate_rights_subprocessor_inventory      = "none"
     candidate_rights_export_lifetime_seconds     = 3600
     candidate_rights_download_grant_seconds      = 300
@@ -317,7 +339,7 @@ run "candidate_rights_activation_rejects_missing_export_lifetime" {
     candidate_rights_enabled                     = true
     candidate_rights_policy_version              = "d1-reviewed-v1"
     candidate_rights_policy_sha256               = "9999999999999999999999999999999999999999999999999999999999999999"
-    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing"
+    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing,trust"
     candidate_rights_subprocessor_inventory      = "none"
     candidate_rights_download_grant_seconds      = 300
     candidate_rights_backup_retention_days       = 7
@@ -338,7 +360,7 @@ run "candidate_rights_activation_rejects_missing_download_grant" {
     candidate_rights_enabled                     = true
     candidate_rights_policy_version              = "d1-reviewed-v1"
     candidate_rights_policy_sha256               = "9999999999999999999999999999999999999999999999999999999999999999"
-    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing"
+    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing,trust"
     candidate_rights_subprocessor_inventory      = "none"
     candidate_rights_export_lifetime_seconds     = 3600
     candidate_rights_backup_retention_days       = 7
@@ -359,7 +381,7 @@ run "candidate_rights_activation_rejects_missing_backup_retention" {
     candidate_rights_enabled                     = true
     candidate_rights_policy_version              = "d1-reviewed-v1"
     candidate_rights_policy_sha256               = "9999999999999999999999999999999999999999999999999999999999999999"
-    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing"
+    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing,trust"
     candidate_rights_subprocessor_inventory      = "none"
     candidate_rights_export_lifetime_seconds     = 3600
     candidate_rights_download_grant_seconds      = 300
@@ -380,7 +402,7 @@ run "candidate_rights_activation_rejects_missing_recent_auth_age" {
     candidate_rights_enabled                 = true
     candidate_rights_policy_version          = "d1-reviewed-v1"
     candidate_rights_policy_sha256           = "9999999999999999999999999999999999999999999999999999999999999999"
-    candidate_rights_owner_inventory         = "identity,profile,documents,jobs,matching,billing"
+    candidate_rights_owner_inventory         = "identity,profile,documents,jobs,matching,billing,trust"
     candidate_rights_subprocessor_inventory  = "none"
     candidate_rights_export_lifetime_seconds = 3600
     candidate_rights_download_grant_seconds  = 300
@@ -401,7 +423,7 @@ run "candidate_rights_activation_rejects_missing_export_lifecycle" {
     candidate_rights_enabled                     = true
     candidate_rights_policy_version              = "d1-reviewed-v1"
     candidate_rights_policy_sha256               = "9999999999999999999999999999999999999999999999999999999999999999"
-    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing"
+    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing,trust"
     candidate_rights_subprocessor_inventory      = "none"
     candidate_rights_export_lifetime_seconds     = 3600
     candidate_rights_download_grant_seconds      = 300

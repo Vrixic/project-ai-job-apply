@@ -16,6 +16,25 @@ const input = {
 };
 
 describe("candidate-rights activity persistence boundary", () => {
+  it("fails closed when the configured aggregate inventory omits Trust", () => {
+    const dependencies = {
+      database: { client: vi.fn() } as unknown as DatabaseHandle,
+      policy: {
+        ownerInventory: ["identity", "profile", "documents", "jobs", "matching", "billing"],
+        subprocessorInventory: [],
+      },
+      artifactStore: {},
+      documentObjectStore: {},
+      identityProvider: {},
+      subprocessors: [],
+      recoveryLedger: {},
+    } as unknown as CandidateRightsActivityDependencies;
+
+    expect(() => new PostgresCandidateRightsActivityStore(dependencies)).toThrow(
+      "CandidateRightsOwnerInventoryMismatch",
+    );
+  });
+
   it("normalizes PostgreSQL timestamp strings before writing the recovery ledger", async () => {
     const recordConfirmed = vi.fn(async (entry) => entry);
     const client = vi.fn(async () => [
@@ -39,7 +58,15 @@ describe("candidate-rights activity persistence boundary", () => {
         downloadGrantLifetimeSeconds: 300,
         backupRetentionDays: 35,
         recentAuthenticationMaxAgeSeconds: 900,
-        ownerInventory: ["identity", "profile", "documents", "jobs", "matching", "billing"],
+        ownerInventory: [
+          "identity",
+          "profile",
+          "documents",
+          "jobs",
+          "matching",
+          "billing",
+          "trust",
+        ],
         subprocessorInventory: [],
       },
       artifactStore: { putIfAbsent: vi.fn() },
@@ -77,7 +104,15 @@ describe("candidate-rights activity persistence boundary", () => {
     const dependencies = {
       database: { client } as unknown as DatabaseHandle,
       policy: {
-        ownerInventory: ["identity", "profile", "documents", "jobs", "matching", "billing"],
+        ownerInventory: [
+          "identity",
+          "profile",
+          "documents",
+          "jobs",
+          "matching",
+          "billing",
+          "trust",
+        ],
         subprocessorInventory: [],
       },
       artifactStore: {},

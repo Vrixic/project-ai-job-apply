@@ -7,6 +7,7 @@ export const candidateRightsOwnerInventory = [
   "jobs",
   "matching",
   "billing",
+  "trust",
 ] as const;
 
 export type CandidateRightsOwner = (typeof candidateRightsOwnerInventory)[number];

@@ -33,7 +33,7 @@ param(
   [ValidateRange(60, 900)]
   [int]$ExpectedRecentAuthMaxAgeSeconds = 0,
 
-  [string]$ExpectedOwnerInventory = "identity,profile,documents,jobs,matching,billing",
+  [string]$ExpectedOwnerInventory = "identity,profile,documents,jobs,matching,billing,trust",
   [string]$ExpectedSubprocessorInventory = "",
 
   [string]$ZeroDriftPlanPath = "",
@@ -108,7 +108,7 @@ $operatorRoot = Join-Path $terraformRoot "development-candidate-rights-acceptanc
 $terraformInspectionDataDirectory = Join-Path $terraformRoot "development-candidate-rights-acceptance-data"
 $stateKey = "platform.tfstate"
 $utf8WithoutBom = New-Object Text.UTF8Encoding($false)
-$requiredOwners = "identity,profile,documents,jobs,matching,billing"
+$requiredOwners = "identity,profile,documents,jobs,matching,billing,trust"
 $tokenEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN"
 $idTokenEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_ID_TOKEN"
 $refreshTokenEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_REFRESH_TOKEN"
@@ -741,7 +741,7 @@ function Invoke-FixedLifecycle {
     startedAt = $started.ToString('o'); completedAt = [DateTimeOffset]::UtcNow.ToString('o')
     exportsRequested = 1; idempotentExportReplays = 1; exactVersionDownloads = 1; expiredDownloadGrants = 1; exportObjectsCleaned = 1
     deletionRequestsCreated = 2; deletionRequestsCancelled = 1; recentMfaConfirmations = 1; deletionMarkersCompleted = 1
-    ownerInventoriesReconciled = 6; auth0Reconciled = $true; persistentSyntheticIdentities = 0
+    ownerInventoriesReconciled = 7; auth0Reconciled = $true; persistentSyntheticIdentities = 0
     queueCount = $post.QueueCount; queuedMessages = 0; alarmCount = $post.AlarmCount; alarmsOk = $true; activeCompute = 0
     stateLineage = $Boundary.Snapshot.Lineage; stateSerial = $Boundary.Snapshot.Serial; zeroDriftPlanSha256 = $ReviewedZeroDriftPlanSha256
   }
@@ -751,7 +751,7 @@ function Read-AggregateReceipt {
   $path = Resolve-BelowOperatorRoot $ReceiptPath -MustExist
   if ((Get-FileSha256 $path) -cne $ReviewedReceiptSha256) { throw "The candidate-rights receipt checksum does not match the reviewed value." }
   $receipt = ConvertFrom-OperatorJson (Get-Content -LiteralPath $path -Raw) "Candidate-rights receipt"
-  if ([string]$receipt.kind -cne 'development-candidate-rights-acceptance-receipt' -or [string]$receipt.phase -cne 'verified-cleaned' -or [string]$receipt.sourceSha -cne $SourceSha -or [int]$receipt.exportsRequested -ne 1 -or [int]$receipt.exportObjectsCleaned -ne 1 -or [int]$receipt.deletionMarkersCompleted -ne 1 -or [int]$receipt.ownerInventoriesReconciled -ne 6 -or $receipt.auth0Reconciled -ne $true -or [int]$receipt.persistentSyntheticIdentities -ne 0 -or [int]$receipt.queuedMessages -ne 0 -or [int]$receipt.activeCompute -ne 0) { throw "The reviewed candidate-rights aggregate receipt is incomplete." }
+  if ([string]$receipt.kind -cne 'development-candidate-rights-acceptance-receipt' -or [string]$receipt.phase -cne 'verified-cleaned' -or [string]$receipt.sourceSha -cne $SourceSha -or [int]$receipt.exportsRequested -ne 1 -or [int]$receipt.exportObjectsCleaned -ne 1 -or [int]$receipt.deletionMarkersCompleted -ne 1 -or [int]$receipt.ownerInventoriesReconciled -ne 7 -or $receipt.auth0Reconciled -ne $true -or [int]$receipt.persistentSyntheticIdentities -ne 0 -or [int]$receipt.queuedMessages -ne 0 -or [int]$receipt.activeCompute -ne 0) { throw "The reviewed candidate-rights aggregate receipt is incomplete." }
   return $receipt
 }
 

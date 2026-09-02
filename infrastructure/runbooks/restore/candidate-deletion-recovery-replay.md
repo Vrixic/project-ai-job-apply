@@ -20,7 +20,7 @@ $env:CANDIDATE_RIGHTS_EXPORT_LIFETIME_SECONDS = '<approved seconds>'
 $env:CANDIDATE_RIGHTS_DOWNLOAD_GRANT_SECONDS = '<approved seconds>'
 $env:CANDIDATE_RIGHTS_BACKUP_RETENTION_DAYS = '<approved days>'
 $env:CANDIDATE_RIGHTS_RECENT_AUTH_MAX_AGE_SECONDS = '<approved seconds>'
-$env:CANDIDATE_RIGHTS_OWNER_INVENTORY = 'identity,profile,documents,jobs,matching,billing'
+$env:CANDIDATE_RIGHTS_OWNER_INVENTORY = 'identity,profile,documents,jobs,matching,billing,trust'
 $env:CANDIDATE_RIGHTS_SUBPROCESSOR_INVENTORY = 'none'
 $env:CANDIDATE_DELETION_RECOVERY_REPLAY_ACK = `
   'RESTORED_DATABASE_IS_QUIESCED_AND_NOT_SERVING_TRAFFIC'

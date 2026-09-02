@@ -24,7 +24,7 @@ if ($actualParameters -contains 'AccessToken' -or $actualParameters -contains 'S
 foreach ($required in @(
     'generated-synthetic-only',
     'delete_user_only',
-    'identity,profile,documents,jobs,matching,billing',
+    'identity,profile,documents,jobs,matching,billing,trust',
     'DELETE_MY_ACCOUNT',
     'ACCOUNT_DELETION_IS_IRREVERSIBLE',
     'candidate-deletion-recovery-v1',
@@ -35,6 +35,7 @@ foreach ($required in @(
     'PersistentSyntheticIdentities = 0',
     'ActiveCompute = 0',
     'QueuedMessages = 0',
+    'ownerInventoriesReconciled = 7',
     'MeaningfulChanges = 0'
   )) {
   if (-not $source.Contains($required)) { throw "The operator is missing the required fixed guard: $required" }
@@ -94,7 +95,7 @@ $policyEnvironment = [pscustomobject]@{
   CANDIDATE_RIGHTS_DOWNLOAD_GRANT_SECONDS = '60'
   CANDIDATE_RIGHTS_BACKUP_RETENTION_DAYS = '7'
   CANDIDATE_RIGHTS_RECENT_AUTH_MAX_AGE_SECONDS = '300'
-  CANDIDATE_RIGHTS_OWNER_INVENTORY = 'identity,profile,documents,jobs,matching,billing'
+  CANDIDATE_RIGHTS_OWNER_INVENTORY = 'identity,profile,documents,jobs,matching,billing,trust'
   CANDIDATE_RIGHTS_SUBPROCESSOR_INVENTORY = 'auth0,aws'
 }
 if (-not (Assert-PolicyEnvironment $policyEnvironment)) { throw 'The exact policy environment was not accepted.' }
@@ -102,7 +103,7 @@ if (-not (Assert-PolicyEnvironment $policyEnvironment)) { throw 'The exact polic
 foreach ($mutation in @(
     @{ Name = 'CANDIDATE_RIGHTS_POLICY_SHA256'; Value = ('c' * 64) },
     @{ Name = 'CANDIDATE_RIGHTS_EXPORT_LIFETIME_SECONDS'; Value = '301' },
-    @{ Name = 'CANDIDATE_RIGHTS_OWNER_INVENTORY'; Value = 'identity,profile,documents,jobs,matching' },
+    @{ Name = 'CANDIDATE_RIGHTS_OWNER_INVENTORY'; Value = 'identity,profile,documents,jobs,matching,billing' },
     @{ Name = 'CANDIDATE_RIGHTS_SUBPROCESSOR_INVENTORY'; Value = 'none' }
   )) {
   $copy = $policyEnvironment | ConvertTo-Json | ConvertFrom-Json

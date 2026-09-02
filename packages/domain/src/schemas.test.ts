@@ -193,6 +193,12 @@ describe("domain schema registry", () => {
           effectiveAt: "2026-08-25T15:00:00.000Z",
         },
       },
+      trust: {
+        schemaVersion: 1,
+        cases: [],
+        caseEvents: [],
+        contributorReputationEvidence: [],
+      },
       audit: { events: [] },
     };
 
@@ -200,6 +206,14 @@ describe("domain schema registry", () => {
     expect(validateCandidateDataExportV1(exported)).toBe(true);
     expect(validate({ ...exported, accessToken: "secret" })).toBe(false);
     expect(validateCandidateDataExportV1({ ...exported, accessToken: "secret" })).toBe(false);
+    const { trust: _trust, ...withoutTrust } = exported;
+    expect(validateCandidateDataExportV1(withoutTrust)).toBe(true);
+    expect(
+      validateCandidateDataExportV1({
+        ...exported,
+        trust: { ...exported.trust, reviewerId: "must-not-be-exported" },
+      }),
+    ).toBe(false);
     expect(
       validate({
         ...exported,

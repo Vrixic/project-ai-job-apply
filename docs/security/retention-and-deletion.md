@@ -101,15 +101,16 @@ and an opportunity to export data or cancel the request. Inaccessible backup cop
 | Export download window and format | Not selected | Product/security/privacy decision required |
 | Rights-request verification and response timing | Not selected | Counsel required |
 
-## D1 generated-synthetic development policy
+## D2 generated-synthetic development policy
 
-Repository-owner direction on 2026-08-25 selects the immutable
-[`d1-development-synthetic-v1`](policies/candidate-rights.d1-development-synthetic-v1.json)
+Repository-owner direction for Phase 2 selects the immutable
+[`d2-development-synthetic-v1`](policies/candidate-rights.d2-development-synthetic-v1.json)
 engineering policy for the disposable development acceptance only. Its exact UTF-8/LF file
-SHA-256 is `d9a04c500445c83fe75cc7666f5fc22351431ce4913d81da39abf8aaedd06fff`.
+SHA-256 is `7dbde35dda7542ace2932a68cc8d28618ce14951180f9ab69025b9f511ac35cf`.
 It fixes a 3,600-second export artifact, 300-second exact-version download grant, 900-second
 recent-MFA window, one-day defense-in-depth S3 lifecycle, and the product-decided 35-day backup
-window. It authorizes generated-synthetic development evidence only. It is not a public promise,
+window. Its exact ordered owner inventory adds Trust to the prior D1 owners. It authorizes
+generated-synthetic development evidence only. It is not a public promise,
 legal approval, accountable security/privacy approval, or authority to process real candidate data.
 
 Approval and tested evidence are recorded in the

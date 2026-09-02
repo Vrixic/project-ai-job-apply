@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "policyVersion": "d2-development-synthetic-v1",
+  "scope": "development-generated-synthetic-only",
+  "selectedAt": "2026-09-02",
+  "selectionAuthority": "product-owner-phase-2-directive",
+  "realCandidateUseAuthorized": false,
+  "publicPolicyApproval": "not-granted",
+  "accountableSecurityPrivacyApproval": "pending",
+  "legalApproval": "deferred-to-launch-review",
+  "export": {
+    "format": "candidate-data-export-v1",
+    "artifactLifetimeSeconds": 3600,
+    "downloadGrantSeconds": 300,
+    "lifecycleExpirationDays": 1
+  },
+  "deletion": {
+    "activeAccessEnds": "immediately-after-confirmation",
+    "accountRecovery": "none-after-confirmation",
+    "backupRetentionDays": 35,
+    "backupRestoreDisposition": "replay-completed-deletion-ledger-before-traffic"
+  },
+  "authentication": {
+    "confirmationRequiresMfa": true,
+    "recentAuthenticationMaxAgeSeconds": 900
+  },
+  "identityDeletion": {
+    "provider": "auth0",
+    "revocationMode": "delete_user_only",
+    "requiredManagementApiScopes": [
+      "delete:users"
+    ],
+    "platformQuarantineAndTombstoneRequired": true
+  },
+  "inventory": {
+    "owners": [
+      "identity",
+      "profile",
+      "documents",
+      "jobs",
+      "matching",
+      "billing",
+      "trust"
+    ],
+    "subprocessorAdapters": []
+  },
+  "externalSystemsHandledOutsideSubprocessorAdapters": [
+    "aws",
+    "auth0"
+  ]
+}

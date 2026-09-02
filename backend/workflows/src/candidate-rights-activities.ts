@@ -86,6 +86,7 @@ interface OwnerExport {
   jobs?: unknown;
   matching?: unknown;
   billing?: unknown;
+  trust?: unknown;
   audit?: { events?: unknown[] };
 }
 
@@ -207,7 +208,7 @@ function assemblePortableExport(
   generatedAt: Date,
   ownerExports: readonly OwnerExport[],
 ): Record<string, unknown> {
-  const [profile, documents, jobs, matching, billing] = ownerExports;
+  const [profile, documents, jobs, matching, billing, trust] = ownerExports;
   if (
     !profile ||
     !isRecord(profile.candidate) ||
@@ -219,7 +220,9 @@ function assemblePortableExport(
     !matching ||
     !isRecord(matching.matching) ||
     !billing ||
-    !isRecord(billing.billing)
+    !isRecord(billing.billing) ||
+    !trust ||
+    !isRecord(trust.trust)
   ) {
     throw new CandidateRightsActivityRejected("CandidateExportInventoryIncomplete");
   }
@@ -235,6 +238,7 @@ function assemblePortableExport(
     jobs: jobs.jobs,
     matching: matching.matching,
     billing: billing.billing,
+    trust: trust.trust,
     audit: { events: normalizeAudit(ownerExports) },
   };
 }
@@ -246,7 +250,7 @@ export class PostgresCandidateRightsActivityStore {
     this.clock = dependencies.clock ?? (() => new Date());
     if (
       dependencies.policy.ownerInventory.join(",") !==
-      "identity,profile,documents,jobs,matching,billing"
+      "identity,profile,documents,jobs,matching,billing,trust"
     ) {
       throw new CandidateRightsActivityRejected("CandidateRightsOwnerInventoryMismatch");
     }
@@ -346,29 +350,34 @@ export class PostgresCandidateRightsActivityStore {
       throw new CandidateRightsActivityRejected("CandidateExportStateConflict");
     }
     const generatedAt = this.clock();
-    const [profileRows, documentRows, jobRows, matchingRows, billingRows] = await Promise.all([
-      this.dependencies.database.client<Array<{ data: OwnerExport }>>`
+    const [profileRows, documentRows, jobRows, matchingRows, billingRows, trustRows] =
+      await Promise.all([
+        this.dependencies.database.client<Array<{ data: OwnerExport }>>`
         SELECT profile.export_candidate_data(${context.userId}::uuid) AS data
       `,
-      this.dependencies.database.client<Array<{ data: OwnerExport }>>`
+        this.dependencies.database.client<Array<{ data: OwnerExport }>>`
         SELECT documents.export_candidate_data(${context.userId}::uuid) AS data
       `,
-      this.dependencies.database.client<Array<{ data: OwnerExport }>>`
+        this.dependencies.database.client<Array<{ data: OwnerExport }>>`
         SELECT jobs.export_candidate_data(${context.userId}::uuid) AS data
       `,
-      this.dependencies.database.client<Array<{ data: OwnerExport }>>`
+        this.dependencies.database.client<Array<{ data: OwnerExport }>>`
         SELECT matching.export_candidate_data(${context.userId}::uuid) AS data
       `,
-      this.dependencies.database.client<Array<{ data: OwnerExport }>>`
+        this.dependencies.database.client<Array<{ data: OwnerExport }>>`
         SELECT billing.export_candidate_data(${context.userId}::uuid, ${generatedAt.toISOString()}::timestamptz) AS data
       `,
-    ]);
+        this.dependencies.database.client<Array<{ data: OwnerExport }>>`
+        SELECT trust.export_candidate_data(${context.userId}::uuid) AS data
+      `,
+      ]);
     const envelope = assemblePortableExport(input, generatedAt, [
       profileRows[0]?.data ?? {},
       documentRows[0]?.data ?? {},
       jobRows[0]?.data ?? {},
       matchingRows[0]?.data ?? {},
       billingRows[0]?.data ?? {},
+      trustRows[0]?.data ?? {},
     ]);
     if (!validateCandidateDataExportV1(envelope)) {
       throw new CandidateRightsActivityRejected("CandidateExportSchemaRejected");
@@ -495,6 +504,7 @@ export class PostgresCandidateRightsActivityStore {
       await transaction`SELECT jobs.delete_candidate_data(${context.userId}::uuid, ${input.resourceId}::uuid)`;
       await transaction`SELECT matching.delete_candidate_data(${context.userId}::uuid, ${input.resourceId}::uuid)`;
       await transaction`SELECT billing.delete_candidate_data(${context.userId}::uuid, ${input.resourceId}::uuid)`;
+      await transaction`SELECT trust.delete_candidate_data(${context.userId}::uuid, ${input.resourceId}::uuid)`;
       await transaction`SELECT documents.delete_candidate_data(${context.userId}::uuid, ${input.resourceId}::uuid, true)`;
       await transaction`SELECT profile.delete_candidate_data(${context.userId}::uuid, ${input.resourceId}::uuid)`;
       await transaction`DELETE FROM identity.external_identities WHERE user_id = ${context.userId}::uuid`;
@@ -663,6 +673,7 @@ export class PostgresCandidateRightsActivityStore {
       await transaction`SELECT jobs.delete_candidate_data(${entry.userId}::uuid, ${entry.requestId}::uuid)`;
       await transaction`SELECT matching.delete_candidate_data(${entry.userId}::uuid, ${entry.requestId}::uuid)`;
       await transaction`SELECT billing.delete_candidate_data(${entry.userId}::uuid, ${entry.requestId}::uuid)`;
+      await transaction`SELECT trust.delete_candidate_data(${entry.userId}::uuid, ${entry.requestId}::uuid)`;
       await transaction`SELECT documents.delete_candidate_data(${entry.userId}::uuid, ${entry.requestId}::uuid, true)`;
       await transaction`SELECT profile.delete_candidate_data(${entry.userId}::uuid, ${entry.requestId}::uuid)`;
       await transaction`DELETE FROM identity.external_identities WHERE user_id = ${entry.userId}::uuid`;

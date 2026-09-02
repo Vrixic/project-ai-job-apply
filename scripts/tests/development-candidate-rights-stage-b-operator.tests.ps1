@@ -71,9 +71,9 @@ $baselineVariables = [pscustomobject]@{
 $planVariables = $baselineVariables | ConvertTo-Json -Depth 8 | ConvertFrom-Json
 $expected = @{
   candidate_rights_enabled = $true; private_application_networking = $true; candidate_rights_id_token_audience = "candidate-web-client"
-  candidate_rights_policy_version = "d1-development-synthetic-v1"; candidate_rights_policy_sha256 = $policySha256
+  candidate_rights_policy_version = "d2-development-synthetic-v1"; candidate_rights_policy_sha256 = $policySha256
   candidate_rights_export_lifetime_seconds = 3600; candidate_rights_download_grant_seconds = 300; candidate_rights_backup_retention_days = 35
-  candidate_rights_recent_auth_max_age_seconds = 900; candidate_rights_export_lifecycle_days = 1; candidate_rights_owner_inventory = "identity,profile,documents,jobs,matching,billing"
+  candidate_rights_recent_auth_max_age_seconds = 900; candidate_rights_export_lifecycle_days = 1; candidate_rights_owner_inventory = "identity,profile,documents,jobs,matching,billing,trust"
   candidate_rights_subprocessor_inventory = "none"; database_backup_retention_days = 35; gateway_lambda_artifact_s3_key = $artifact.key
   gateway_lambda_artifact_s3_object_version = $artifact.versionId; gateway_lambda_artifact_sha256 = $artifact.artifactSha256; gateway_lambda_artifact_base64sha256 = $artifact.objectBase64Sha256
 }

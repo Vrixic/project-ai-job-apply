@@ -13,6 +13,7 @@ owner, immutable requested target, resolved canonical identifier at save time, a
 snapshot; descriptions, source payloads, profile data, and post-submission outcomes are forbidden.
 
 `candidate-data-export.schema.json` is the portable Profile-owned candidate-rights envelope. It
-contains candidate-readable values and bounded metadata from every Phase 1 owner, but deliberately
+contains candidate-readable values and bounded metadata from every active candidate-rights owner,
+including reviewer-redacted Trust cases, decisions, and contributor reputation evidence, but deliberately
 excludes OIDC subjects, access/refresh tokens, database-only ownership identifiers, object-store
 keys/versions, raw resume bytes, provider credentials, and unrestricted audit metadata.

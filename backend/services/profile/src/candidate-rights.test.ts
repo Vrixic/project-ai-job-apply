@@ -27,7 +27,7 @@ const policyEnvironment = {
   CANDIDATE_RIGHTS_DOWNLOAD_GRANT_SECONDS: "300",
   CANDIDATE_RIGHTS_BACKUP_RETENTION_DAYS: "7",
   CANDIDATE_RIGHTS_RECENT_AUTH_MAX_AGE_SECONDS: "300",
-  CANDIDATE_RIGHTS_OWNER_INVENTORY: "identity,profile,documents,jobs,matching,billing",
+  CANDIDATE_RIGHTS_OWNER_INVENTORY: "identity,profile,documents,jobs,matching,billing,trust",
   CANDIDATE_RIGHTS_SUBPROCESSOR_INVENTORY: "auth0,aws",
 };
 
@@ -80,7 +80,7 @@ describe("candidate rights policy", () => {
     expect(() =>
       loadCandidateRightsPolicy({
         ...policyEnvironment,
-        CANDIDATE_RIGHTS_OWNER_INVENTORY: "identity,profile,documents,jobs,matching",
+        CANDIDATE_RIGHTS_OWNER_INVENTORY: "identity,profile,documents,jobs,matching,billing",
       }),
     ).toThrow(CandidateRightsPolicyError);
   });
