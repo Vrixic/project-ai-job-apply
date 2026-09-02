@@ -103,4 +103,23 @@ describe("extension public-client authentication", () => {
       }).ugcContributionPolicyVersion,
     ).toBeUndefined();
   });
+
+  it("embeds only bounded base64url SPKI key pins and selects no source default", () => {
+    const base = {
+      audience: "ai-job-apply-api",
+      clientId: "public-client",
+      domain: "tenant.example.test",
+    };
+    expect(extensionPublicConfiguration(base).capabilityPolicyPublicKeys).toEqual({});
+    expect(
+      extensionPublicConfiguration({
+        ...base,
+        capabilityPolicyPublicKeys: {
+          "synthetic-key-v1": "A".repeat(60),
+          "BAD KEY": "B".repeat(60),
+          "bad-pem-v1": "-----BEGIN PUBLIC KEY-----",
+        },
+      }).capabilityPolicyPublicKeys,
+    ).toEqual({ "synthetic-key-v1": "A".repeat(60) });
+  });
 });

@@ -1,9 +1,7 @@
-import { extensionConfiguration } from "./config";
 import { PROVIDER_DETECTORS } from "./detectors";
 import type { AtsProvider } from "./job-capture";
 
 export interface ExtensionCapabilityPolicy {
-  deliveryEnabled: Readonly<Record<"contribute" | "private_save", boolean>>;
   disabledDomains: readonly string[];
   enabledProviders: Readonly<Record<AtsProvider, boolean>>;
   extensionVersion: string;
@@ -11,7 +9,6 @@ export interface ExtensionCapabilityPolicy {
 }
 
 export const DEFAULT_DARK_POLICY: ExtensionCapabilityPolicy = {
-  deliveryEnabled: { contribute: false, private_save: false },
   disabledDomains: [],
   enabledProviders: {
     ashby: false,
@@ -21,13 +18,6 @@ export const DEFAULT_DARK_POLICY: ExtensionCapabilityPolicy = {
   extensionVersion: "0.2.0",
   revision: "d2-synthetic-default-dark-v1",
 };
-
-export function jobIntentDeliveryAllowed(intent: "contribute" | "private_save"): boolean {
-  return (
-    DEFAULT_DARK_POLICY.deliveryEnabled[intent] &&
-    (intent !== "contribute" || Boolean(extensionConfiguration.ugcContributionPolicyVersion))
-  );
-}
 
 export type CapabilityDecision =
   | { allowed: true; provider: AtsProvider }

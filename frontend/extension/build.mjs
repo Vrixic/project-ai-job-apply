@@ -59,6 +59,30 @@ const ugcContributionPolicyVersion = (
   fileEnvironment.EXTENSION_UGC_CONTRIBUTION_POLICY_VERSION ??
   ""
 ).trim();
+const capabilityPolicyPublicKeysValue = (
+  process.env.EXTENSION_CAPABILITY_POLICY_PUBLIC_KEYS_JSON ??
+  fileEnvironment.EXTENSION_CAPABILITY_POLICY_PUBLIC_KEYS_JSON ??
+  ""
+).trim();
+let capabilityPolicyPublicKeys = {};
+try {
+  const parsed = JSON.parse(capabilityPolicyPublicKeysValue);
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    capabilityPolicyPublicKeys = Object.fromEntries(
+      Object.entries(parsed)
+        .filter(
+          ([keyId, publicKey]) =>
+            /^[a-z0-9][a-z0-9._-]{2,99}$/u.test(keyId) &&
+            typeof publicKey === "string" &&
+            /^[A-Za-z0-9_-]{40,256}$/u.test(publicKey),
+        )
+        .sort(([left], [right]) => left.localeCompare(right))
+        .slice(0, 5),
+    );
+  }
+} catch {
+  capabilityPolicyPublicKeys = {};
+}
 const safeUgcContributionPolicyVersion = /^[a-z0-9][a-z0-9._-]{2,99}$/u.test(
   ugcContributionPolicyVersion,
 )
@@ -104,6 +128,7 @@ const buildOptions = {
     __AUTH0_AUDIENCE__: JSON.stringify(configured ? audience : ""),
     __AUTH0_CLIENT_ID__: JSON.stringify(configured ? clientId : ""),
     __AUTH0_DOMAIN__: JSON.stringify(configured ? domain : ""),
+    __CAPABILITY_POLICY_PUBLIC_KEYS__: JSON.stringify(capabilityPolicyPublicKeys),
     __EXTENSION_API_ORIGIN__: JSON.stringify(apiOrigin),
     __PENDING_RETENTION_MILLISECONDS__: JSON.stringify(pendingRetentionMilliseconds),
     __UGC_CONTRIBUTION_POLICY_VERSION__: JSON.stringify(safeUgcContributionPolicyVersion),

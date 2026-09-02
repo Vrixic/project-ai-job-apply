@@ -57,9 +57,10 @@ afterEach(() => {
 describe("background-only contribution consent transport", () => {
   it("maps selected capture fields to the exact generated request and canonical order", async () => {
     const pending = intent();
-    const prepared = await prepareContribution(pending, "d2-synthetic-policy.v1");
+    const prepared = await prepareContribution(pending, "d2-synthetic-policy.v1", "0.2.0");
     expect(prepared.body).toMatchObject({
       contributionId: pending.id,
+      client: { surface: "browser_extension", version: "0.2.0" },
       source: {
         provider: "lever",
         pageVariant: "lever-posting-v1",
@@ -104,7 +105,7 @@ describe("background-only contribution consent transport", () => {
     });
 
     await expect(
-      sendJobIntent(pending, "short-lived-token", fetcher as typeof fetch),
+      sendJobIntent(pending, "short-lived-token", fetcher as typeof fetch, "0.2.0"),
     ).resolves.toEqual({
       outcome: "accepted",
     });
@@ -121,8 +122,10 @@ describe("background-only contribution consent transport", () => {
     expect(grantBody).not.toHaveProperty("grantedAt");
     const contribution = JSON.parse(String(calls[1]?.init?.body)) as {
       approval: { approvedAt: string; consentId: string };
+      client: { surface: string; version: string };
       posting: Record<string, unknown>;
     };
+    expect(contribution.client).toEqual({ surface: "browser_extension", version: "0.2.0" });
     expect(contribution.approval).toMatchObject({
       approvedAt: "2026-09-01T12:00:01.000Z",
       consentId: "018f0000-0000-7000-8000-000000000099",
@@ -149,7 +152,12 @@ describe("background-only contribution consent transport", () => {
       }
       throw new TypeError("ambiguous network result");
     });
-    const result = await sendJobIntent(pending, "short-lived-token", fetcher as typeof fetch);
+    const result = await sendJobIntent(
+      pending,
+      "short-lived-token",
+      fetcher as typeof fetch,
+      "0.2.0",
+    );
     expect(result).toMatchObject({ outcome: "retryable", consent: { id: expect.any(String) } });
     expect(settleDispatch(pending, result)?.consent).toEqual(result.consent);
   });
@@ -174,10 +182,12 @@ describe("background-only contribution consent transport", () => {
         state: "granted",
       }),
     );
-    await expect(sendJobIntent(pending, "token", malformed as typeof fetch)).resolves.toEqual({
+    await expect(
+      sendJobIntent(pending, "token", malformed as typeof fetch, "0.2.0"),
+    ).resolves.toEqual({
       outcome: "terminal",
     });
-    const prepared = await prepareContribution(pending, "d2-synthetic-policy.v1");
+    const prepared = await prepareContribution(pending, "d2-synthetic-policy.v1", "0.2.0");
     const consent = {
       grantedAt: "2026-09-01T12:00:01.000Z",
       id: "018f0000-0000-7000-8000-000000000099",
@@ -194,7 +204,9 @@ describe("background-only contribution consent transport", () => {
     ).not.toThrow();
     const drifted = { ...pending, consent };
     const notCalled = vi.fn();
-    await expect(sendJobIntent(drifted, "token", notCalled as typeof fetch)).resolves.toEqual({
+    await expect(
+      sendJobIntent(drifted, "token", notCalled as typeof fetch, "0.2.0"),
+    ).resolves.toEqual({
       outcome: "terminal",
     });
     expect(notCalled).not.toHaveBeenCalled();

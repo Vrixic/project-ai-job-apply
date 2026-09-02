@@ -1,10 +1,16 @@
-import { capabilityForPage, jobIntentDeliveryAllowed } from "../lib/capability-policy";
+import { capabilityForPage } from "../lib/capability-policy";
 import { extensionConfiguration } from "../lib/config";
 import { detectPublicJob } from "../lib/detectors";
 import type { CaptureField, SanitizedJobCapture } from "../lib/job-capture";
 import { sendJobIntent } from "../lib/job-intent-api";
 import { parseExtensionMessage } from "../lib/messages";
 import { captureCurrentPublicJobPage } from "../lib/page-inspection";
+import {
+  CONTRIBUTION_CAPABILITY_POLICY_CACHE_KEY,
+  ExtensionContributionPolicyRuntime,
+  fetchSignedContributionCapabilityPolicy,
+  type SignedExtensionContributionCapabilityPolicy,
+} from "../lib/signed-capability-policy";
 import {
   createPendingIntent,
   dueForDispatch,
@@ -26,6 +32,33 @@ import {
 const LAST_CAPTURE_KEY = "d2LastJobCaptureV1";
 const RETRY_ALARM = "d2PendingJobIntentRetry";
 
+const contributionPolicy = new ExtensionContributionPolicyRuntime(
+  extensionConfiguration.capabilityPolicyPublicKeys,
+  {
+    async read() {
+      return (await chrome.storage.local.get(CONTRIBUTION_CAPABILITY_POLICY_CACHE_KEY))[
+        CONTRIBUTION_CAPABILITY_POLICY_CACHE_KEY
+      ];
+    },
+    async remove() {
+      await chrome.storage.local.remove(CONTRIBUTION_CAPABILITY_POLICY_CACHE_KEY);
+    },
+    async write(envelope: SignedExtensionContributionCapabilityPolicy) {
+      await chrome.storage.local.set({
+        [CONTRIBUTION_CAPABILITY_POLICY_CACHE_KEY]: envelope,
+      });
+    },
+  },
+  async () => {
+    if (!extensionConfiguration.apiOrigin) {
+      throw new Error("The API origin is not configured");
+    }
+    return fetchSignedContributionCapabilityPolicy(extensionConfiguration.apiOrigin);
+  },
+);
+
+let contributionPolicyStartup = contributionPolicy.start();
+
 interface LastCapture {
   capture: SanitizedJobCapture;
   tabId: number;
@@ -44,6 +77,9 @@ function safeMessage(error: unknown): string {
   if (message === "capture_required") return "Inspect the current page again before continuing.";
   if (message === "retention_policy_required") {
     return "Pending-item retention must be configured before saving or contributing.";
+  }
+  if (message === "contribution_capability_disabled") {
+    return "Public contribution is currently disabled by its signed capability policy.";
   }
   return "The action did not complete.";
 }
@@ -70,7 +106,11 @@ async function writePendingQueue(queue: PendingJobIntent[]): Promise<void> {
   await chrome.storage.local.set({ [PENDING_QUEUE_KEY]: queue });
   const next = queue
     .filter((intent) => intent.state === "pending")
-    .filter((intent) => jobIntentDeliveryAllowed(intent.intent))
+    .filter(
+      (intent) =>
+        intent.intent === "private_save" ||
+        contributionPolicy.decision(intent.capture, chrome.runtime.getManifest().version).allowed,
+    )
     .map((intent) => Date.parse(intent.nextAttemptAt))
     .filter(Number.isFinite)
     .sort((left, right) => left - right)[0];
@@ -84,6 +124,10 @@ async function writePendingQueue(queue: PendingJobIntent[]): Promise<void> {
 async function dispatchPending(): Promise<{ pending: number; stopped: number }> {
   const queue = await pendingQueue();
   if (queue.length === 0) return { pending: 0, stopped: 0 };
+  if (queue.some((intent) => intent.state === "pending" && intent.intent === "contribute")) {
+    await contributionPolicyStartup;
+    await contributionPolicy.refresh();
+  }
   let session: Awaited<ReturnType<typeof authenticatedApiSession>>;
   try {
     session = await authenticatedApiSession();
@@ -104,11 +148,19 @@ async function dispatchPending(): Promise<{ pending: number; stopped: number }> 
       replacement.push(intent);
       continue;
     }
-    if (!jobIntentDeliveryAllowed(intent.intent)) {
+    if (
+      intent.intent === "contribute" &&
+      !contributionPolicy.decision(intent.capture, chrome.runtime.getManifest().version, now)
+        .allowed
+    ) {
       replacement.push(intent);
       continue;
     }
-    const settled = settleDispatch(intent, await sendJobIntent(intent, session.accessToken), now);
+    const settled = settleDispatch(
+      intent,
+      await sendJobIntent(intent, session.accessToken, fetch, chrome.runtime.getManifest().version),
+      now,
+    );
     if (settled) replacement.push(settled);
   }
   await writePendingQueue(replacement);
@@ -159,6 +211,13 @@ async function enqueue(
   if (!last || !tab?.id || last.tabId !== tab.id || last.tabUrl !== tab.url) {
     throw new Error("capture_required");
   }
+  if (intent === "contribute") {
+    await contributionPolicyStartup;
+    await contributionPolicy.refresh();
+    if (!contributionPolicy.decision(last.capture, chrome.runtime.getManifest().version).allowed) {
+      throw new Error("contribution_capability_disabled");
+    }
+  }
   const session = await authenticatedApiSession();
   if (!extensionConfiguration.pendingRetentionMilliseconds) {
     throw new Error("retention_policy_required");
@@ -183,7 +242,14 @@ void chrome.storage.session.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === RETRY_ALARM) void dispatchPending();
 });
-chrome.runtime.onStartup.addListener(() => void dispatchPending());
+chrome.runtime.onStartup.addListener(() => {
+  contributionPolicyStartup = contributionPolicy.start();
+  void contributionPolicyStartup.then(() => dispatchPending());
+});
+chrome.runtime.onInstalled.addListener(() => {
+  contributionPolicyStartup = contributionPolicy.start();
+  void contributionPolicyStartup.then(() => dispatchPending());
+});
 
 chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
   const message = parseExtensionMessage(rawMessage);

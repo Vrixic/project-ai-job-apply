@@ -170,10 +170,15 @@ function mappedContributionSkeleton(
   intent: PendingJobIntent,
   capture: SanitizedJobCapture,
   policyVersion: string,
+  clientVersion: string,
 ): CreateJobContributionRequest {
+  if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(clientVersion)) {
+    throw new TypeError("Extension client version is not configured");
+  }
   const skeleton: CreateJobContributionRequest = {
     schemaVersion: 1,
     contributionId: intent.id,
+    client: { surface: "browser_extension", version: clientVersion },
     source: {
       provider: capture.provider,
       pageVariant: capture.pageVariant,
@@ -204,10 +209,11 @@ function mappedContributionSkeleton(
 export async function prepareContribution(
   intent: PendingJobIntent,
   policyVersion = extensionConfiguration.ugcContributionPolicyVersion,
+  clientVersion = "",
 ): Promise<{ body: CreateJobContributionRequest; previewDigestSha256: string }> {
   if (!policyVersion) throw new TypeError("UGC contribution policy is not configured");
   const capture = selectContributionFields(intent.capture, intent.approvedFields);
-  const body = mappedContributionSkeleton(intent, capture, policyVersion);
+  const body = mappedContributionSkeleton(intent, capture, policyVersion, clientVersion);
   body.observation.contentSha256 = await sha256Hex(jobContributionContentDigestInput(body));
   const previewDigestSha256 = await sha256Hex(jobContributionPreviewDigestInput(body));
   body.approval.previewDigestSha256 = previewDigestSha256;
@@ -272,10 +278,11 @@ async function sendContribution(
   accessToken: string,
   apiOrigin: string,
   fetchImplementation: typeof fetch,
+  clientVersion: string,
 ): Promise<DispatchResult> {
   const policyVersion = extensionConfiguration.ugcContributionPolicyVersion;
   if (!policyVersion) return { outcome: "terminal" };
-  const prepared = await prepareContribution(intent, policyVersion);
+  const prepared = await prepareContribution(intent, policyVersion, clientVersion);
   let consent = intent.consent;
   if (consent && consent.previewDigestSha256 !== prepared.previewDigestSha256) {
     return { outcome: "terminal" };
@@ -328,6 +335,7 @@ export async function sendJobIntent(
   intent: PendingJobIntent,
   accessToken: string,
   fetchImplementation: typeof fetch = fetch,
+  clientVersion = "",
 ): Promise<DispatchResult> {
   if (!extensionConfiguration.apiOrigin) return { outcome: "terminal" };
   if (intent.intent === "contribute") {
@@ -337,6 +345,7 @@ export async function sendJobIntent(
         accessToken,
         extensionConfiguration.apiOrigin,
         fetchImplementation,
+        clientVersion,
       );
     } catch {
       return { ...(intent.consent ? { consent: intent.consent } : {}), outcome: "retryable" };

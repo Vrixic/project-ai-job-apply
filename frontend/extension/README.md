@@ -16,6 +16,13 @@ public contribution, or browser-store distribution.
   content scripts or provider host grants.
 - Exact provider-domain adapters for Greenhouse, Lever, and Ashby behind a version/domain/provider
   policy whose accepted default enables no provider.
+- Public contribution additionally requires a bounded Ed25519-signed capability policy fetched as
+  JSON data from the exact API origin. The extension pins an explicit key-ID-to-SPKI map at build
+  time, verifies the server-compatible canonical envelope, and independently checks global intake,
+  exact extension version, provider, page variant, and domain. Unknown keys, invalid signatures,
+  incomplete policies, received-invalid updates, future policies, and policies older than their
+  signed expiry deny contribution. A verified cache can bridge a service-worker restart or network
+  outage only until its signed expiry; it never enables private save or executes remote code.
 - A strict structured allowlist: canonical HTTPS URL, provider, adapter version, timestamp, title,
   company, location, description, and external job ID. Text is bounded and stripped of markup and
   control characters; URLs reject credentials, fragments, trackers, and local/private targets.
@@ -61,6 +68,13 @@ Contribution delivery also requires `EXTENSION_UGC_CONTRIBUTION_POLICY_VERSION` 
 accountably selected server value. No value is selected in source or `.env.example`; absence keeps
 delivery off.
 
+It also requires `EXTENSION_CAPABILITY_POLICY_PUBLIC_KEYS_JSON`, a JSON object mapping each approved
+lowercase key ID to that Ed25519 public key's base64url-encoded DER SPKI bytes. This is public key
+material, not a secret, but source and the default-dark store package intentionally pin no live key.
+The signed policy is read only from `/v1/extension/contribution-capability-policy` at the configured
+HTTPS API origin. A received envelope may live for at most 24 hours; source selects no policy,
+signing key, refresh interval, or activation value.
+
 Then run:
 
 ```powershell
@@ -79,7 +93,9 @@ https://EXTENSION_ID.chromiumapp.org/auth0
 The access grant must include `jobs:read`, `jobs:write`, and the dedicated `jobs:contribute` scope
 in addition to the existing profile scopes. A missing or malformed identity/API configuration
 fails closed. Even with valid configuration, current provider capture remains disabled by
-`DEFAULT_DARK_POLICY` until its external evidence gate passes.
+`DEFAULT_DARK_POLICY` until its external evidence gate passes. Private saved-page transport is not
+controlled by the public-contribution policy and remains independently available whenever its own
+identity, API, retention, and detector gates pass.
 
 ## Remaining activation gates
 

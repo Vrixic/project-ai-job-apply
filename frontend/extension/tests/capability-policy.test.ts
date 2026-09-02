@@ -3,7 +3,6 @@ import {
   capabilityForPage,
   DEFAULT_DARK_POLICY,
   type ExtensionCapabilityPolicy,
-  jobIntentDeliveryAllowed,
 } from "../lib/capability-policy";
 
 describe("extension domain and version kill switches", () => {
@@ -13,8 +12,6 @@ describe("extension domain and version kill switches", () => {
       reason: "provider_disabled",
     });
     expect(Object.values(DEFAULT_DARK_POLICY.enabledProviders).every((value) => !value)).toBe(true);
-    expect(jobIntentDeliveryAllowed("contribute")).toBe(false);
-    expect(jobIntentDeliveryAllowed("private_save")).toBe(false);
   });
 
   it("requires exact version, supported host, and an unblocked domain", () => {

@@ -114,6 +114,19 @@ export async function validateReleaseFiles({ distDirectory, packageVersion, poli
     ) {
       throw new Error(`Remote HTML script is forbidden: ${name}`);
     }
+    if (name.endsWith(".js")) {
+      const source = data.toString("utf8");
+      if (
+        /\b(?:import\s*\(|importScripts\s*\(|new\s+(?:Shared)?Worker\s*\()\s*["'](?:https?:|\/\/)/u.test(
+          source,
+        )
+      ) {
+        throw new Error(`Remote executable JavaScript is forbidden: ${name}`);
+      }
+      if (/\b(?:eval\s*\(|new\s+Function\s*\()/u.test(source)) {
+        throw new Error(`Dynamic code construction is forbidden: ${name}`);
+      }
+    }
     records.push({ name, data, sha256: sha256(data), sizeBytes: data.length });
   }
   const manifestRecord = records.find((record) => record.name === "manifest.json");
@@ -229,7 +242,9 @@ async function main() {
       EXTENSION_AUTH0_AUDIENCE: "",
       EXTENSION_AUTH0_CLIENT_ID: "",
       EXTENSION_AUTH0_DOMAIN: "",
+      EXTENSION_CAPABILITY_POLICY_PUBLIC_KEYS_JSON: "",
       EXTENSION_PENDING_RETENTION_HOURS: "",
+      EXTENSION_UGC_CONTRIBUTION_POLICY_VERSION: "",
     },
   });
   const temporaryOutput = await mkdtemp(join(tmpdir(), "applydash-extension-release-"));

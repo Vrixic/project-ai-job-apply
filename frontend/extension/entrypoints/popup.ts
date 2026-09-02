@@ -118,6 +118,7 @@ function renderCapture(capture: SanitizedJobCapture): void {
   fieldList.replaceChildren();
   appendField("Provider", capture.provider);
   appendField("Page variant", capture.pageVariant);
+  appendField("Submitting client", `Browser extension ${chrome.runtime.getManifest().version}`);
   appendField("Public URL", capture.sourceUrl);
   appendField("Title", capture.title);
   for (const field of CAPTURE_FIELDS) {
