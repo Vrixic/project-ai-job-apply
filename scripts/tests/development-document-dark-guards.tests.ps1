@@ -16,8 +16,8 @@ $declaredDevelopmentOutputs = @(
   }
 )
 $guardedDevelopmentOutputs = @(Get-DevelopmentDocumentCurrentOutputNames)
-if ($guardedDevelopmentOutputs.Count -ne 50 -or
-  (@($guardedDevelopmentOutputs | Sort-Object -Unique).Count) -ne 50 -or
+if ($guardedDevelopmentOutputs.Count -ne 56 -or
+  (@($guardedDevelopmentOutputs | Sort-Object -Unique).Count) -ne 56 -or
   (($guardedDevelopmentOutputs | Sort-Object) -join "|") -cne (($declaredDevelopmentOutputs | Sort-Object) -join "|")) {
   throw "The document output guard is not synchronized with the exact development root output inventory."
 }

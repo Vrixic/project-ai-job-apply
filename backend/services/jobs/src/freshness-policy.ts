@@ -1,10 +1,7 @@
 import type { JobStatus } from "./domain/canonical-job.js";
 
 export type D2Provider = "greenhouse" | "lever" | "ashby";
-export type D2PageVariant =
-  | "greenhouse-board-v1"
-  | "lever-posting-v1"
-  | "ashby-job-board-v1";
+export type D2PageVariant = "greenhouse-board-v1" | "lever-posting-v1" | "ashby-job-board-v1";
 
 export interface SourceFreshnessPolicy {
   provider: D2Provider;

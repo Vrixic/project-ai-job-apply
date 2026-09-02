@@ -25,12 +25,8 @@ describe("popup and side-panel source assurance", () => {
 
   it("binds optional-field removal to both actions and confirms destructive queue clearing", async () => {
     const source = await readFile(entrypoint, "utf8");
-    expect(source).toContain(
-      'approvedFields: selectedFields(), intent: "private_save"',
-    );
-    expect(source).toContain(
-      'approvedFields: selectedFields(), intent: "contribute"',
-    );
+    expect(source).toContain('approvedFields: selectedFields(), intent: "private_save"');
+    expect(source).toContain('approvedFields: selectedFields(), intent: "contribute"');
     expect(source).toContain("window.confirm(");
   });
 });

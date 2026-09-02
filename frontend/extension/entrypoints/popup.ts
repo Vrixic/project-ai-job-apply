@@ -62,17 +62,20 @@ let currentCapture: SanitizedJobCapture | undefined;
 let appealContributionId: string | undefined;
 
 function controls(): HTMLButtonElement[] {
-  return [...[
-    loginButton,
-    refreshButton,
-    logoutButton,
-    inspectButton,
-    saveButton,
-    contributeButton,
-    retryButton,
-    clearStoppedButton,
-    clearQueueButton,
-  ], ...contributionList.querySelectorAll<HTMLButtonElement>("button")];
+  return [
+    ...[
+      loginButton,
+      refreshButton,
+      logoutButton,
+      inspectButton,
+      saveButton,
+      contributeButton,
+      retryButton,
+      clearStoppedButton,
+      clearQueueButton,
+    ],
+    ...contributionList.querySelectorAll<HTMLButtonElement>("button"),
+  ];
 }
 
 function setBusy(busy: boolean): void {
@@ -104,7 +107,13 @@ function renderStatus(response: ExtensionResponse): void {
   }
   if (response.receipts) renderReceipts(response.receipts);
   if (response.ownerAction) {
-    ownerActionStatus.textContent = ({ ok: "Contribution information updated.", not_found: "No owner-visible record is available yet.", unavailable: "The service is unavailable. Your saved receipt was kept.", version_conflict: "The record changed. Refresh Trust status before trying again.", rejected: "The request was not accepted." })[response.ownerAction];
+    ownerActionStatus.textContent = {
+      ok: "Contribution information updated.",
+      not_found: "No owner-visible record is available yet.",
+      unavailable: "The service is unavailable. Your saved receipt was kept.",
+      version_conflict: "The record changed. Refresh Trust status before trying again.",
+      rejected: "The request was not accepted.",
+    }[response.ownerAction];
     ownerActionStatus.focus();
   }
   if (response.error) detail.textContent = response.error;
@@ -119,23 +128,52 @@ function renderReceipts(receipts: ContributionReceipt[]): void {
     return;
   }
   for (const receipt of receipts) {
-    const article = document.createElement("article"); article.className = "contribution-receipt";
-    const heading = document.createElement("h3"); heading.textContent = `Contribution ${receipt.contributionId.slice(0, 8)}`;
-    const state = document.createElement("p"); state.textContent = `Processing: ${receipt.state.replaceAll("_", " ")}`;
-    const trust = document.createElement("p"); trust.textContent = receipt.trust ? `Trust: ${receipt.trust.state.replaceAll("_", " ")}${receipt.trust.appealed ? " · appealed" : ""}` : "Trust: refresh to check";
-    const actions = document.createElement("div"); actions.className = "actions compact";
+    const article = document.createElement("article");
+    article.className = "contribution-receipt";
+    const heading = document.createElement("h3");
+    heading.textContent = `Contribution ${receipt.contributionId.slice(0, 8)}`;
+    const state = document.createElement("p");
+    state.textContent = `Processing: ${receipt.state.replaceAll("_", " ")}`;
+    const trust = document.createElement("p");
+    trust.textContent = receipt.trust
+      ? `Trust: ${receipt.trust.state.replaceAll("_", " ")}${receipt.trust.appealed ? " · appealed" : ""}`
+      : "Trust: refresh to check";
+    const actions = document.createElement("div");
+    actions.className = "actions compact";
     const add = (label: string, action: string) => {
-      const button = document.createElement("button"); button.type = "button"; button.className = "quiet"; button.textContent = label;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "quiet";
+      button.textContent = label;
       button.addEventListener("click", () => {
-        if (action === "appeal") { appealContributionId = receipt.contributionId; appealEvidence.value = ""; appealDialog.showModal(); appealEvidence.focus(); return; }
-        if (action === "withdraw" && !window.confirm("Withdraw this contribution from Trust eligibility?")) return;
-        void invoke({ action, contributionId: receipt.contributionId, ...(action === "withdraw" ? { confirmed: true } : {}) });
+        if (action === "appeal") {
+          appealContributionId = receipt.contributionId;
+          appealEvidence.value = "";
+          appealDialog.showModal();
+          appealEvidence.focus();
+          return;
+        }
+        if (
+          action === "withdraw" &&
+          !window.confirm("Withdraw this contribution from Trust eligibility?")
+        )
+          return;
+        void invoke({
+          action,
+          contributionId: receipt.contributionId,
+          ...(action === "withdraw" ? { confirmed: true } : {}),
+        });
       });
       actions.append(button);
     };
-    add("Refresh processing", "contribution_refresh"); add("Refresh Trust", "trust_refresh");
-    if (receipt.trust) { add("Withdraw", "withdraw"); add("Appeal", "appeal"); }
-    article.append(heading, state, trust, actions); contributionList.append(article);
+    add("Refresh processing", "contribution_refresh");
+    add("Refresh Trust", "trust_refresh");
+    if (receipt.trust) {
+      add("Withdraw", "withdraw");
+      add("Appeal", "appeal");
+    }
+    article.append(heading, state, trust, actions);
+    contributionList.append(article);
   }
 }
 
@@ -240,7 +278,12 @@ appealForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const evidenceText = appealEvidence.value;
   const contributionId = appealContributionId;
-  if (!contributionId || !evidenceText.trim() || !window.confirm("Submit this appeal evidence digest now?")) return;
+  if (
+    !contributionId ||
+    !evidenceText.trim() ||
+    !window.confirm("Submit this appeal evidence digest now?")
+  )
+    return;
   const evidenceDigestSha256 = await appealEvidenceDigest(evidenceText);
   appealEvidence.value = "";
   appealContributionId = undefined;

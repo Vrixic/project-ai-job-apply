@@ -146,7 +146,9 @@ async function writePendingQueue(queue: PendingJobIntent[]): Promise<void> {
 
 async function contributionReceipts(): Promise<ContributionReceipt[]> {
   await storageBoundaryStartup;
-  const stored = (await chrome.storage.local.get(CONTRIBUTION_RECEIPTS_KEY))[CONTRIBUTION_RECEIPTS_KEY];
+  const stored = (await chrome.storage.local.get(CONTRIBUTION_RECEIPTS_KEY))[
+    CONTRIBUTION_RECEIPTS_KEY
+  ];
   return parseContributionReceipts(stored);
 }
 
@@ -189,9 +191,19 @@ async function dispatchPending(): Promise<{ pending: number; stopped: number }> 
       replacement.push(intent);
       continue;
     }
-    const result = await sendJobIntent(intent, session.accessToken, fetch, chrome.runtime.getManifest().version);
+    const result = await sendJobIntent(
+      intent,
+      session.accessToken,
+      fetch,
+      chrome.runtime.getManifest().version,
+    );
     if (intent.intent === "contribute" && result.outcome === "accepted" && result.contribution) {
-      await writeContributionReceipts(upsertContributionReceipt(await contributionReceipts(), receiptFromContribution(result.contribution, session.identityFence)));
+      await writeContributionReceipts(
+        upsertContributionReceipt(
+          await contributionReceipts(),
+          receiptFromContribution(result.contribution, session.identityFence),
+        ),
+      );
     }
     const settled = settleDispatch(intent, result, now);
     if (settled) replacement.push(settled);
@@ -203,25 +215,56 @@ async function dispatchPending(): Promise<{ pending: number; stopped: number }> 
   };
 }
 
-async function ownerAction(message: Extract<ReturnType<typeof parseExtensionMessage>, { contributionId: string }>) {
+async function ownerAction(
+  message: Extract<ReturnType<typeof parseExtensionMessage>, { contributionId: string }>,
+) {
   if (!message || !extensionConfiguration.apiOrigin) throw new Error("configuration_required");
   const session = await authenticatedApiSession();
   const all = await contributionReceipts();
-  const receipt = receiptsForIdentity(all, session.identityFence).find((item) => item.contributionId === message.contributionId);
+  const receipt = receiptsForIdentity(all, session.identityFence).find(
+    (item) => item.contributionId === message.contributionId,
+  );
   if (!receipt) throw new Error("contribution_required");
-  const result = message.action === "contribution_refresh"
-    ? await getContributionStatus(receipt.contributionId, session.accessToken, extensionConfiguration.apiOrigin)
-    : message.action === "trust_refresh"
-      ? await getOwnerTrustStatus(receipt.contributionId, session.accessToken, extensionConfiguration.apiOrigin)
-      : message.action === "withdraw" && receipt.trust
-        ? await withdrawContribution(receipt.contributionId, receipt.trust.version, session.accessToken, extensionConfiguration.apiOrigin)
-        : message.action === "appeal" && receipt.trust
-          ? await fileContributionAppeal(receipt.contributionId, receipt.trust.version, message.evidenceDigestSha256, session.accessToken, extensionConfiguration.apiOrigin)
-          : { outcome: "rejected" as const };
+  const result =
+    message.action === "contribution_refresh"
+      ? await getContributionStatus(
+          receipt.contributionId,
+          session.accessToken,
+          extensionConfiguration.apiOrigin,
+        )
+      : message.action === "trust_refresh"
+        ? await getOwnerTrustStatus(
+            receipt.contributionId,
+            session.accessToken,
+            extensionConfiguration.apiOrigin,
+          )
+        : message.action === "withdraw" && receipt.trust
+          ? await withdrawContribution(
+              receipt.contributionId,
+              receipt.trust.version,
+              session.accessToken,
+              extensionConfiguration.apiOrigin,
+            )
+          : message.action === "appeal" && receipt.trust
+            ? await fileContributionAppeal(
+                receipt.contributionId,
+                receipt.trust.version,
+                message.evidenceDigestSha256,
+                session.accessToken,
+                extensionConfiguration.apiOrigin,
+              )
+            : { outcome: "rejected" as const };
   if (result.outcome === "ok") {
-    const updated = message.action === "contribution_refresh"
-      ? updateContributionStatus(receipt, result.value as import("@ai-job-apply/api-contracts").JobContribution)
-      : updateTrustStatus(receipt, result.value as import("@ai-job-apply/api-contracts").OwnerTrustCase);
+    const updated =
+      message.action === "contribution_refresh"
+        ? updateContributionStatus(
+            receipt,
+            result.value as import("@ai-job-apply/api-contracts").JobContribution,
+          )
+        : updateTrustStatus(
+            receipt,
+            result.value as import("@ai-job-apply/api-contracts").OwnerTrustCase,
+          );
     await writeContributionReceipts(upsertContributionReceipt(all, updated));
   }
   return result.outcome;
@@ -352,17 +395,26 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
         };
       } else if (message.action === "retry") {
         return { ok: true, queue: await dispatchPending(), status: await authenticationStatus() };
-      } else if (["contribution_refresh", "trust_refresh", "withdraw", "appeal"].includes(message.action)) {
+      } else if (
+        ["contribution_refresh", "trust_refresh", "withdraw", "appeal"].includes(message.action)
+      ) {
         const outcome = await ownerAction(message as Parameters<typeof ownerAction>[0]);
         const session = await authenticatedApiSession();
-        return { ok: outcome === "ok", ownerAction: outcome, receipts: receiptsForIdentity(await contributionReceipts(), session.identityFence), status: await authenticationStatus() };
+        return {
+          ok: outcome === "ok",
+          ownerAction: outcome,
+          receipts: receiptsForIdentity(await contributionReceipts(), session.identityFence),
+          status: await authenticationStatus(),
+        };
       }
       const queue = await pendingQueue();
       let receipts: ContributionReceipt[] = [];
       try {
         const session = await authenticatedApiSession();
         receipts = receiptsForIdentity(await contributionReceipts(), session.identityFence);
-      } catch { /* signed-out responses never expose fenced receipts */ }
+      } catch {
+        /* signed-out responses never expose fenced receipts */
+      }
       return {
         ok: true,
         queue: {

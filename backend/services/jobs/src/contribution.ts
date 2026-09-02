@@ -6,6 +6,7 @@ import {
   jobContributionPreviewDigestInput,
 } from "@ai-job-apply/api-contracts/job-contribution-canonical";
 import {
+  type D2ContributionCapabilityPolicy,
   evaluateContributionCapability,
   type SignedD2ContributionCapabilityPolicy,
   verifySignedContributionCapabilityPolicy,
@@ -332,7 +333,7 @@ export class JobContributionService implements JobContributions {
       throw new JobContributionUnavailableError();
     }
     if (!loaded) throw new JobContributionUnavailableError();
-    let policy;
+    let policy: D2ContributionCapabilityPolicy;
     let domain: string;
     let now: Date;
     try {

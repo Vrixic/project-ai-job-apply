@@ -66,7 +66,7 @@ describe("contribution processing runtime adapters", () => {
       new ProfileCurrentContributionConsentAdapter({
         verify: vi.fn(async () => ({
           consent: { ...consent(), ownerUserId: contributionId },
-            valid: true as const,
+          valid: true as const,
         })),
       }).verifyCurrent(binding()),
     ).resolves.toEqual({ status: "unavailable" });

@@ -35,10 +35,7 @@ describe("source freshness policy", () => {
 
   it("rejects mismatched variants, invalid timings, and duplicate policy keys", () => {
     expect(
-      () =>
-        new SourceFreshnessPolicyRegistry([
-          { ...policy, pageVariant: "ashby-job-board-v1" },
-        ]),
+      () => new SourceFreshnessPolicyRegistry([{ ...policy, pageVariant: "ashby-job-board-v1" }]),
     ).toThrow(/do not match/u);
     expect(
       () =>
@@ -127,11 +124,7 @@ describe("source freshness policy", () => {
   });
 
   it("moves active jobs to suspect then expired without changing verification time", () => {
-    const suspect = planFreshnessClock(
-      state,
-      new Date("2026-09-02T12:00:00.000Z"),
-      policy,
-    );
+    const suspect = planFreshnessClock(state, new Date("2026-09-02T12:00:00.000Z"), policy);
     expect(suspect).toMatchObject({
       status: "suspect_stale",
       transitionReason: "policy_suspect_window_elapsed",
@@ -140,11 +133,7 @@ describe("source freshness policy", () => {
     });
     expect(suspect.lastVerifiedAt).toEqual(state.lastVerifiedAt);
 
-    const expired = planFreshnessClock(
-      state,
-      new Date("2026-09-04T12:00:00.000Z"),
-      policy,
-    );
+    const expired = planFreshnessClock(state, new Date("2026-09-04T12:00:00.000Z"), policy);
     expect(expired).toMatchObject({
       status: "expired",
       transitionReason: "policy_expiry_window_elapsed",

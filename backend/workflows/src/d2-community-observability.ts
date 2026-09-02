@@ -14,7 +14,10 @@ export function d2CommunityEmf(
     names.length < 1 ||
     names.length > 30 ||
     names.some((name) => !/^[A-Z][A-Za-z0-9]{2,63}$/u.test(name)) ||
-    names.some((name) => !Number.isSafeInteger(metricValues[name]) || metricValues[name]! < 0)
+    names.some((name) => {
+      const value = metricValues[name];
+      return value === undefined || !Number.isSafeInteger(value) || value < 0;
+    })
   ) {
     throw new TypeError("The D2 community aggregate metrics are invalid");
   }

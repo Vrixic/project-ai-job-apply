@@ -1,5 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalPassThroughEnv": ["D2_EXTENSION_BROWSER"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

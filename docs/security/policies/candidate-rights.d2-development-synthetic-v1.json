@@ -27,25 +27,12 @@
   "identityDeletion": {
     "provider": "auth0",
     "revocationMode": "delete_user_only",
-    "requiredManagementApiScopes": [
-      "delete:users"
-    ],
+    "requiredManagementApiScopes": ["delete:users"],
     "platformQuarantineAndTombstoneRequired": true
   },
   "inventory": {
-    "owners": [
-      "identity",
-      "profile",
-      "documents",
-      "jobs",
-      "matching",
-      "billing",
-      "trust"
-    ],
+    "owners": ["identity", "profile", "documents", "jobs", "matching", "billing", "trust"],
     "subprocessorAdapters": []
   },
-  "externalSystemsHandledOutsideSubprocessorAdapters": [
-    "aws",
-    "auth0"
-  ]
+  "externalSystemsHandledOutsideSubprocessorAdapters": ["aws", "auth0"]
 }
