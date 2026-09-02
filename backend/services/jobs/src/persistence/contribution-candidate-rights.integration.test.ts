@@ -143,7 +143,7 @@ describeWithDatabase("Jobs contribution candidate rights ownership", () => {
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });
     expect(first.stdout.trim()).toBe(
-      "Jobs migrations through 0018_job_contribution_processing_delivery applied and verified.",
+      "Jobs migrations through 0019_job_contribution_provider_publication applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(first.stdout.trim());
   });

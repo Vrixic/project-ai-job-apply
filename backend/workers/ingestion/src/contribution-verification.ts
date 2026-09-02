@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
 import {
-  canonicalizeJobUrl,
   type CatalogObservation,
+  canonicalizeJobUrl,
+  canonicalizeObservation,
   type IndependentProviderVerificationPort,
   type IndependentProviderVerificationResult,
-  normalizeText,
   type NormalizedContributionProposal,
+  normalizeText,
 } from "@ai-job-apply/jobs-service";
 import { v7 as uuidv7 } from "uuid";
 import type { SourceRegistration } from "./contract.js";
@@ -78,7 +79,9 @@ function registeredSource(
   }
   const registration = registry.requireEnabled(config.sourceId);
   if (registration.provider !== config.provider || registration.provenance !== "permitted_api") {
-    throw new TypeError("The independent verification source registration does not match its policy");
+    throw new TypeError(
+      "The independent verification source registration does not match its policy",
+    );
   }
   return registration;
 }
@@ -107,7 +110,8 @@ function contentMatches(proposal: NormalizedContributionProposal, observation: C
     JSON.stringify(proposal.normalizedLocations) === JSON.stringify(truth.locations) &&
     (proposal.normalizedDescriptionSha256 === undefined ||
       proposal.normalizedDescriptionSha256 === truth.descriptionSha256) &&
-    (proposal.normalizedDepartment === undefined || proposal.normalizedDepartment === truth.department) &&
+    (proposal.normalizedDepartment === undefined ||
+      proposal.normalizedDepartment === truth.department) &&
     (proposal.applicationUrlSha256 === undefined ||
       proposal.applicationUrlSha256 === truth.applicationUrlSha256) &&
     (proposal.employmentType === undefined || proposal.employmentType === truth.employmentType) &&
@@ -185,16 +189,22 @@ export class RegisteredIndependentProviderVerifier implements IndependentProvide
           canonical.sourceUrl === proposal.provenance.canonicalSourceUrl &&
           normalizeText(canonical.atsTenant) === proposal.provenance.atsTenant &&
           normalizeText(canonical.externalJobId) === proposal.provenance.externalJobId
-        ) return { status: "closed", ...base };
+        )
+          return { status: "closed", ...base };
       }
 
       for (const source of response.observations) {
-        const observation = canonicalizeRegisteredSourceObservation(source, registration, observedAt);
+        const observation = canonicalizeRegisteredSourceObservation(
+          source,
+          registration,
+          observedAt,
+        );
         if (
           observation.sourceUrl !== proposal.provenance.canonicalSourceUrl ||
           normalizeText(observation.atsTenant ?? "") !== proposal.provenance.atsTenant ||
           normalizeText(observation.externalJobId ?? "") !== proposal.provenance.externalJobId
-        ) continue;
+        )
+          continue;
         if (!contentMatches(proposal, observation)) return { status: "mismatch", ...base };
 
         const identities = await this.catalogIdentities.findExact({
@@ -203,31 +213,48 @@ export class RegisteredIndependentProviderVerifier implements IndependentProvide
           externalJobId: proposal.provenance.externalJobId,
           canonicalSourceUrl: proposal.provenance.canonicalSourceUrl,
         });
-        if (!Array.isArray(identities) || identities.length !== 1) {
+        if (!Array.isArray(identities) || identities.length > 1) {
           return { status: "unavailable", ...base };
         }
-        const [{ jobId, sourceId }] = identities;
+        const identity = identities[0];
         const verificationId = this.#createId();
-        if (![verificationId, jobId, sourceId].every((id) => UUID_V7.test(id))) {
+        if (
+          !UUID_V7.test(verificationId) ||
+          (identity && ![identity.jobId, identity.sourceId].every((id) => UUID_V7.test(id)))
+        ) {
           return { status: "unavailable", ...base };
         }
-        const verifiedContentSha256 = sha256(JSON.stringify(providerContent(observation)));
+        const { rawSnapshot: _discardedRawSnapshot, ...normalizedProviderObservation } =
+          observation;
+        const providerObservation = Object.freeze(normalizedProviderObservation);
+        const verifiedContentSha256 = canonicalizeObservation(providerObservation).contentHash;
         const verifiedAt = observedAt.toISOString();
-        const evidenceDigestSha256 = sha256(JSON.stringify({
-          contributionId: input.contributionId,
-          normalizationId: input.normalizationId,
-          verificationId, jobId, sourceId,
-          provider: config.provider,
-          pageVariant: config.pageVariant,
-          canonicalSourceUrlSha256: proposal.provenance.canonicalSourceUrlSha256,
+        const evidenceDigestSha256 = sha256(
+          JSON.stringify({
+            contributionId: input.contributionId,
+            normalizationId: input.normalizationId,
+            verificationId,
+            jobId: identity?.jobId ?? null,
+            sourceId: identity?.sourceId ?? null,
+            provider: config.provider,
+            pageVariant: config.pageVariant,
+            canonicalSourceUrlSha256: proposal.provenance.canonicalSourceUrlSha256,
+            verifiedContentSha256,
+            sourcePolicyVersion: config.sourcePolicyVersion,
+            verifiedAt,
+          }),
+        );
+        return {
+          status: "verified",
+          origin: "independent_provider_fetch",
+          ...base,
+          verificationId,
+          ...(identity ? { jobId: identity.jobId, sourceId: identity.sourceId } : {}),
+          providerObservation,
+          evidenceDigestSha256,
           verifiedContentSha256,
           sourcePolicyVersion: config.sourcePolicyVersion,
           verifiedAt,
-        }));
-        return {
-          status: "verified", origin: "independent_provider_fetch", ...base,
-          verificationId, jobId, sourceId, evidenceDigestSha256, verifiedContentSha256,
-          sourcePolicyVersion: config.sourcePolicyVersion, verifiedAt,
         };
       }
       return { status: "unavailable", ...base };

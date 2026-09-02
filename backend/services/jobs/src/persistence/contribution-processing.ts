@@ -1,9 +1,6 @@
+import { createHash } from "node:crypto";
 import type postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
-import type {
-  ContributionProcessingQueueItem,
-  ContributionProcessingQueueStore,
-} from "../contribution-processing-runner.js";
 import type {
   ContributionOwnerReasonCode,
   ContributionOwnerState,
@@ -16,6 +13,16 @@ import type {
   TrustContributionDecision,
 } from "../contribution-processing.js";
 import type { NormalizedContributionProposal } from "../contribution-processing-policy.js";
+import type {
+  ContributionProcessingQueueItem,
+  ContributionProcessingQueueStore,
+} from "../contribution-processing-runner.js";
+import { canonicalizeJobUrl } from "../domain/canonical-job.js";
+import {
+  type CatalogObservation,
+  type PostgresJobCatalog,
+  ProbableDuplicateObservationError,
+} from "./catalog.js";
 
 interface LoadedRow {
   contributionId: string;
@@ -49,6 +56,7 @@ interface LoadedRow {
   verificationId: string | null;
   verificationJobId: string | null;
   verificationSourceId: string | null;
+  providerObservation: unknown;
   evidenceDigestSha256: string | null;
   verifiedContentSha256: string | null;
   sourcePolicyVersion: string | null;
@@ -67,6 +75,21 @@ function timestamp(value: Date | string): string {
   const parsed = value instanceof Date ? value : new Date(value);
   if (!Number.isFinite(parsed.getTime())) throw new Error("Malformed processing timestamp");
   return parsed.toISOString();
+}
+
+function providerObservation(value: unknown): CatalogObservation {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Malformed staged provider observation");
+  }
+  const row = structuredClone(value) as Record<string, unknown>;
+  if ("rawSnapshot" in row) throw new Error("Raw provider snapshots cannot be staged");
+  for (const field of ["observedAt", "datePosted", "validThrough"] as const) {
+    if (row[field] !== undefined) {
+      if (typeof row[field] !== "string") throw new Error("Malformed provider timestamp");
+      row[field] = new Date(row[field]);
+    }
+  }
+  return row as unknown as CatalogObservation;
 }
 
 function stringArray(value: unknown, label: string): readonly string[] {
@@ -131,8 +154,7 @@ function loaded(row: LoadedRow): LoadedContributionProcessing {
   let independentVerification: IndependentVerificationEvidence | undefined;
   if (row.verificationId) {
     if (
-      !row.verificationJobId ||
-      !row.verificationSourceId ||
+      Boolean(row.verificationJobId) !== Boolean(row.verificationSourceId) ||
       !row.provider ||
       !row.pageVariant ||
       !row.canonicalSourceUrlSha256 ||
@@ -148,8 +170,8 @@ function loaded(row: LoadedRow): LoadedContributionProcessing {
       origin: "independent_provider_fetch",
       contributionId: row.contributionId,
       verificationId: row.verificationId,
-      jobId: row.verificationJobId,
-      sourceId: row.verificationSourceId,
+      ...(row.verificationJobId ? { jobId: row.verificationJobId } : {}),
+      ...(row.verificationSourceId ? { sourceId: row.verificationSourceId } : {}),
       provider: row.provider,
       pageVariant: row.pageVariant,
       canonicalSourceUrlSha256: row.canonicalSourceUrlSha256,
@@ -157,6 +179,7 @@ function loaded(row: LoadedRow): LoadedContributionProcessing {
       verifiedContentSha256: row.verifiedContentSha256,
       sourcePolicyVersion: row.sourcePolicyVersion,
       verifiedAt: timestamp(row.verifiedAt),
+      providerObservation: providerObservation(row.providerObservation),
     });
   }
 
@@ -229,6 +252,7 @@ async function loadWith(
       normalization.observed_at AS "observedAt",
       verification.id AS "verificationId", verification.job_id AS "verificationJobId",
       verification.source_id AS "verificationSourceId",
+      verification.provider_observation AS "providerObservation",
       verification.evidence_digest_sha256 AS "evidenceDigestSha256",
       verification.verified_content_sha256 AS "verifiedContentSha256",
       verification.source_policy_version AS "sourcePolicyVersion",
@@ -407,44 +431,31 @@ export class PostgresContributionProcessingStore implements ContributionProcessi
   ): Promise<LoadedContributionProcessing> {
     return this.client.begin(async (transaction) => {
       const evidence = input.evidence;
-      const [sourceEvidence] = await transaction<{ valid: boolean }[]>`
-        SELECT EXISTS (
-          SELECT 1
-          FROM jobs.source_verification_evidence AS evidence
-          JOIN jobs.job_sources AS source
-            ON source.id = evidence.source_id AND source.job_id = evidence.job_id
-          JOIN jobs.job_contribution_normalizations AS normalization
-            ON normalization.contribution_id = ${input.contributionId}
-          WHERE evidence.id = ${evidence.verificationId}
-            AND evidence.evidence_kind = 'independent_positive_verification'
-            AND evidence.job_id = ${evidence.jobId}
-            AND evidence.source_id = ${evidence.sourceId}
-            AND evidence.provider = ${evidence.provider}
-            AND evidence.page_variant = ${evidence.pageVariant}
-            AND evidence.evidence_digest_sha256 = ${evidence.evidenceDigestSha256}
-            AND evidence.policy_version = ${evidence.sourcePolicyVersion}
-            AND evidence.verified_at = ${evidence.verifiedAt}
-            AND source.provider = ${evidence.provider}
-            AND normalization.provider = ${evidence.provider}
-            AND normalization.page_variant = ${evidence.pageVariant}
-            AND normalization.canonical_source_url_sha256 = ${evidence.canonicalSourceUrlSha256}
-        ) AS valid
-      `;
-      if (!sourceEvidence?.valid)
-        throw new Error("Independent verification does not bind Jobs truth");
       const normalization = await loadWith(transaction, input.contributionId);
       if (!normalization?.normalization) throw new Error("Normalization is required");
+      if (
+        normalization.normalization.proposal.provenance.provider !== evidence.provider ||
+        normalization.normalization.proposal.provenance.pageVariant !== evidence.pageVariant ||
+        normalization.normalization.proposal.provenance.canonicalSourceUrlSha256 !==
+          evidence.canonicalSourceUrlSha256
+      ) {
+        throw new Error("Independent verification does not bind the staged normalization");
+      }
       await transaction`
         INSERT INTO jobs.job_contribution_independent_verifications (
           id, contribution_id, normalization_id, job_id, source_id, provider, page_variant,
           canonical_source_url_sha256, evidence_digest_sha256, verified_content_sha256,
-          source_policy_version, verified_at, processing_policy_version, created_at
+          source_policy_version, verified_at, provider_observation,
+          processing_policy_version, created_at
         ) VALUES (
           ${evidence.verificationId}, ${input.contributionId}, ${normalization.normalization.id},
-          ${evidence.jobId}, ${evidence.sourceId}, ${evidence.provider}, ${evidence.pageVariant},
+          ${evidence.jobId ?? null}, ${evidence.sourceId ?? null}, ${evidence.provider},
+          ${evidence.pageVariant},
           ${evidence.canonicalSourceUrlSha256}, ${evidence.evidenceDigestSha256},
           ${evidence.verifiedContentSha256}, ${evidence.sourcePolicyVersion},
-          ${evidence.verifiedAt}, ${input.processingPolicyVersion}, ${input.occurredAt}
+          ${evidence.verifiedAt},
+          ${transaction.json(evidence.providerObservation as unknown as postgres.JSONValue)},
+          ${input.processingPolicyVersion}, ${input.occurredAt}
         ) ON CONFLICT (contribution_id) DO NOTHING
       `;
       await insertState(transaction, {
@@ -505,13 +516,10 @@ export class PostgresContributionProcessingStore implements ContributionProcessi
         {
           normalizationId: string;
           verificationId: string;
-          jobId: string;
-          sourceId: string;
           trustDecisionId: string;
         }[]
       >`
         SELECT normalization.id AS "normalizationId", verification.id AS "verificationId",
-          verification.job_id AS "jobId", verification.source_id AS "sourceId",
           trust.id AS "trustDecisionId"
         FROM jobs.job_contributions AS contribution
         JOIN jobs.job_contribution_normalizations AS normalization
@@ -524,10 +532,6 @@ export class PostgresContributionProcessingStore implements ContributionProcessi
           WHERE decision.contribution_id = contribution.id
           ORDER BY decision.decided_at DESC, decision.id DESC LIMIT 1
         ) AS trust ON trust.status = 'accepted'
-        JOIN jobs.source_verification_evidence AS evidence
-          ON evidence.id = verification.id
-          AND evidence.evidence_kind = 'independent_positive_verification'
-          AND evidence.job_id = verification.job_id AND evidence.source_id = verification.source_id
         WHERE contribution.id = ${input.contributionId}
           AND contribution.client_surface = 'browser_extension'
           AND contribution.client_version IS NOT NULL
@@ -539,7 +543,7 @@ export class PostgresContributionProcessingStore implements ContributionProcessi
         SELECT id AS "reconciliationId", contribution_id AS "contributionId",
           normalization_id AS "normalizationId",
           independent_verification_id AS "independentVerificationId",
-          job_id AS "jobId", source_id AS "sourceId", trust_decision_id AS "trustDecisionId",
+          trust_decision_id AS "trustDecisionId",
           processing_policy_version AS "processingPolicyVersion",
           capability_policy_version AS "capabilityPolicyVersion",
           capability_configuration_digest_sha256 AS "capabilityConfigurationDigestSha256",
@@ -563,8 +567,6 @@ export class PostgresContributionProcessingStore implements ContributionProcessi
         contributionId: input.contributionId,
         normalizationId: gates.normalizationId,
         independentVerificationId: gates.verificationId,
-        jobId: gates.jobId,
-        sourceId: gates.sourceId,
         trustDecisionId: gates.trustDecisionId,
         processingPolicyVersion: input.processingPolicyVersion,
         capabilityPolicyVersion: input.capabilityPolicyVersion,
@@ -582,7 +584,7 @@ export class PostgresContributionProcessingStore implements ContributionProcessi
         ) VALUES (
           ${command.reconciliationId}, ${command.contributionId}, 'publication', 'prepared',
           ${command.normalizationId}, ${command.independentVerificationId},
-          ${command.trustDecisionId}, ${command.jobId}, ${command.sourceId}, NULL,
+          ${command.trustDecisionId}, NULL, NULL, NULL,
           ${command.processingPolicyVersion}, ${command.capabilityPolicyVersion},
           ${command.capabilityConfigurationDigestSha256}, ${command.capabilityEvaluatedAt},
           ${command.capabilityExpiresAt}, ${input.occurredAt}, ${input.occurredAt}
@@ -596,20 +598,21 @@ export class PostgresContributionProcessingStore implements ContributionProcessi
     input: Parameters<ContributionProcessingStore["completePublication"]>[0],
   ): Promise<LoadedContributionProcessing> {
     return this.client.begin(async (transaction) => {
-      if (
-        input.result.jobId !== input.command.jobId ||
-        input.result.sourceId !== input.command.sourceId ||
-        input.result.verificationId !== input.command.independentVerificationId
-      ) {
+      if (input.result.verificationId !== input.command.independentVerificationId) {
         throw new Error("Publication result changed reconciliation identity");
       }
-      await transaction`
-        UPDATE jobs.job_contribution_reconciliations SET
-          state = 'applied', updated_at = ${input.occurredAt}
+      const completed = await transaction<{ id: string }[]>`
+        SELECT id FROM jobs.job_contribution_reconciliations
         WHERE id = ${input.command.reconciliationId}
           AND contribution_id = ${input.command.contributionId}
-          AND kind = 'publication' AND state = 'prepared'
+          AND kind = 'publication' AND state = 'applied'
+          AND job_id = ${input.result.jobId} AND source_id = ${input.result.sourceId}
       `;
+      if (completed.length !== 1) {
+        throw new Error(
+          "Publication reconciliation is not applied to the returned catalog identity",
+        );
+      }
       await insertState(transaction, {
         contributionId: input.command.contributionId,
         state: "published",
@@ -752,76 +755,154 @@ export class PostgresContributionPublicationReconciler
 {
   constructor(
     private readonly client: postgres.Sql,
+    private readonly catalog: Pick<PostgresJobCatalog, "recordObservationInTransaction">,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
   async publish(command: Readonly<PreparedPublicationReconciliation>) {
     const now = this.now();
     if (!Number.isFinite(now.getTime())) throw new Error("The reconciliation clock is invalid");
-    return this.client.begin(async (transaction) => {
-      await transaction`
-        SELECT pg_advisory_xact_lock(hashtext(${`jobs:contribution-reconcile:${command.contributionId}`}))
-      `;
-      const [row] = await transaction<
-        {
-          jobId: string;
-          sourceId: string;
-          verificationId: string;
-        }[]
-      >`
-        SELECT reconciliation.job_id AS "jobId", reconciliation.source_id AS "sourceId",
-          reconciliation.independent_verification_id AS "verificationId"
-        FROM jobs.job_contribution_reconciliations AS reconciliation
-        JOIN jobs.job_contribution_independent_verifications AS verification
-          ON verification.id = reconciliation.independent_verification_id
-        JOIN jobs.source_verification_evidence AS evidence
-          ON evidence.id = verification.id
-          AND evidence.evidence_kind = 'independent_positive_verification'
-          AND evidence.job_id = verification.job_id AND evidence.source_id = verification.source_id
-          AND evidence.evidence_digest_sha256 = verification.evidence_digest_sha256
-          AND evidence.policy_version = verification.source_policy_version
-        JOIN LATERAL (
-          SELECT decision.id, decision.status
-          FROM jobs.job_contribution_trust_decisions AS decision
-          WHERE decision.contribution_id = reconciliation.contribution_id
-          ORDER BY decision.decided_at DESC, decision.id DESC LIMIT 1
-        ) AS trust ON trust.id = reconciliation.trust_decision_id AND trust.status = 'accepted'
-        JOIN jobs.job_sources AS source
-          ON source.id = reconciliation.source_id AND source.job_id = reconciliation.job_id
-          AND source.provider = verification.provider
-          AND source.canonical_url_hash = verification.canonical_source_url_sha256
-          AND source.content_hash = verification.verified_content_sha256
-          AND source.last_verified_at >= verification.verified_at
-          AND source.withdrawn_at IS NULL
-        JOIN jobs.canonical_jobs AS job
-          ON job.id = reconciliation.job_id AND job.status = 'active'
-          AND job.expires_at > ${now} AND job.description IS NOT NULL
-        WHERE reconciliation.id = ${command.reconciliationId}
-          AND reconciliation.contribution_id = ${command.contributionId}
-          AND reconciliation.kind = 'publication' AND reconciliation.state IN ('prepared', 'applied')
-          AND reconciliation.normalization_id = ${command.normalizationId}
-          AND reconciliation.independent_verification_id = ${command.independentVerificationId}
-          AND reconciliation.job_id = ${command.jobId}
-          AND reconciliation.source_id = ${command.sourceId}
-          AND reconciliation.trust_decision_id = ${command.trustDecisionId}
-          AND reconciliation.processing_policy_version = ${command.processingPolicyVersion}
-          AND reconciliation.capability_policy_version = ${command.capabilityPolicyVersion}
-          AND reconciliation.capability_configuration_digest_sha256 =
-            ${command.capabilityConfigurationDigestSha256}
-          AND reconciliation.capability_evaluated_at = ${command.capabilityEvaluatedAt}
-          AND reconciliation.capability_expires_at = ${command.capabilityExpiresAt}
-          AND reconciliation.capability_evaluated_at <= ${now}
-          AND reconciliation.capability_expires_at > ${now}
-        FOR UPDATE OF reconciliation, source, job
-      `;
-      if (!row) throw new Error("Contribution publication reconciliation is not authorized");
-      await transaction`
-        UPDATE jobs.job_contribution_reconciliations
-        SET state = 'applied', updated_at = ${now}
-        WHERE id = ${command.reconciliationId} AND state = 'prepared'
-      `;
-      return Object.freeze(row);
-    });
+    try {
+      return await this.client.begin(async (transaction) => {
+        await transaction`
+          SELECT pg_advisory_xact_lock(hashtext(${`jobs:contribution-reconcile:${command.contributionId}`}))
+        `;
+        const [row] = await transaction<
+          {
+            state: "prepared" | "applied";
+            jobId: string | null;
+            sourceId: string | null;
+            verificationId: string;
+            provider: string;
+            pageVariant: string;
+            evidenceDigestSha256: string;
+            sourcePolicyVersion: string;
+            verifiedAt: Date | string;
+            providerObservation: unknown;
+          }[]
+        >`
+          SELECT reconciliation.state, reconciliation.job_id AS "jobId",
+            reconciliation.source_id AS "sourceId",
+            verification.id AS "verificationId", verification.provider,
+            verification.page_variant AS "pageVariant",
+            verification.evidence_digest_sha256 AS "evidenceDigestSha256",
+            verification.source_policy_version AS "sourcePolicyVersion",
+            verification.verified_at AS "verifiedAt",
+            verification.provider_observation AS "providerObservation"
+          FROM jobs.job_contribution_reconciliations AS reconciliation
+          JOIN jobs.job_contribution_independent_verifications AS verification
+            ON verification.id = reconciliation.independent_verification_id
+          JOIN LATERAL (
+            SELECT decision.id, decision.status
+            FROM jobs.job_contribution_trust_decisions AS decision
+            WHERE decision.contribution_id = reconciliation.contribution_id
+            ORDER BY decision.decided_at DESC, decision.id DESC LIMIT 1
+          ) AS trust ON trust.id = reconciliation.trust_decision_id AND trust.status = 'accepted'
+          WHERE reconciliation.id = ${command.reconciliationId}
+            AND reconciliation.contribution_id = ${command.contributionId}
+            AND reconciliation.kind = 'publication'
+            AND reconciliation.normalization_id = ${command.normalizationId}
+            AND reconciliation.independent_verification_id = ${command.independentVerificationId}
+            AND reconciliation.trust_decision_id = ${command.trustDecisionId}
+            AND reconciliation.processing_policy_version = ${command.processingPolicyVersion}
+            AND reconciliation.capability_policy_version = ${command.capabilityPolicyVersion}
+            AND reconciliation.capability_configuration_digest_sha256 =
+              ${command.capabilityConfigurationDigestSha256}
+            AND reconciliation.capability_evaluated_at = ${command.capabilityEvaluatedAt}
+            AND reconciliation.capability_expires_at = ${command.capabilityExpiresAt}
+            AND reconciliation.capability_evaluated_at <= ${now}
+            AND reconciliation.capability_expires_at > ${now}
+          FOR UPDATE OF reconciliation
+        `;
+        if (!row) throw new Error("Contribution publication reconciliation is not authorized");
+        if (row.state === "applied") {
+          if (!row.jobId || !row.sourceId)
+            throw new Error("Applied publication lost catalog identity");
+          return Object.freeze({
+            status: "published" as const,
+            jobId: row.jobId,
+            sourceId: row.sourceId,
+            verificationId: row.verificationId,
+          });
+        }
+        const observation = providerObservation(row.providerObservation);
+        const recorded = await this.catalog.recordObservationInTransaction(
+          transaction,
+          observation,
+          { rejectProbableDuplicates: true },
+        );
+        if (recorded.job.status !== "active") {
+          throw new Error("Contribution publication reconciliation is not authorized");
+        }
+        const source = await transaction<{ id: string }[]>`
+          SELECT id FROM jobs.job_sources
+          WHERE job_id = ${recorded.job.id} AND provider = ${observation.provider}
+            AND canonical_url_hash = ${createHash("sha256").update(canonicalizeJobUrl(observation.sourceUrl)).digest("hex")}
+          ORDER BY created_at, id LIMIT 1
+        `;
+        const sourceId = source[0]?.id;
+        if (
+          !sourceId ||
+          (row.jobId && row.jobId !== recorded.job.id) ||
+          (row.sourceId && row.sourceId !== sourceId)
+        ) {
+          throw new Error("Provider publication changed staged exact identity");
+        }
+        await transaction`
+          INSERT INTO jobs.source_verification_evidence (
+            id, job_id, source_id, provider, page_variant, evidence_kind,
+            evidence_digest_sha256, policy_version, verified_at, recorded_at
+          ) VALUES (
+            ${row.verificationId}, ${recorded.job.id}, ${sourceId}, ${row.provider},
+            ${row.pageVariant}, 'independent_positive_verification',
+            ${row.evidenceDigestSha256}, ${row.sourcePolicyVersion}, ${row.verifiedAt}, ${now}
+          ) ON CONFLICT (id) DO NOTHING
+        `;
+        const evidence = await transaction<
+          { jobId: string; sourceId: string; provider: string; digest: string }[]
+        >`
+          SELECT job_id AS "jobId", source_id AS "sourceId", provider,
+            evidence_digest_sha256 AS digest
+          FROM jobs.source_verification_evidence
+          WHERE id = ${row.verificationId}
+        `;
+        if (
+          evidence.length !== 1 ||
+          evidence[0]?.jobId !== recorded.job.id ||
+          evidence[0]?.sourceId !== sourceId ||
+          evidence[0]?.provider !== row.provider ||
+          evidence[0]?.digest !== row.evidenceDigestSha256
+        ) {
+          throw new Error("Provider publication verification evidence is ambiguous");
+        }
+        if (!row.jobId) {
+          await transaction`
+            UPDATE jobs.job_contribution_independent_verifications
+            SET job_id = ${recorded.job.id}, source_id = ${sourceId}
+            WHERE id = ${row.verificationId} AND job_id IS NULL AND source_id IS NULL
+          `;
+        }
+        await transaction`
+          UPDATE jobs.job_contribution_reconciliations
+          SET state = 'applied', job_id = ${recorded.job.id}, source_id = ${sourceId}, updated_at = ${now}
+          WHERE id = ${command.reconciliationId} AND state = 'prepared'
+        `;
+        return Object.freeze({
+          status: "published" as const,
+          jobId: recorded.job.id,
+          sourceId,
+          verificationId: row.verificationId,
+        });
+      });
+    } catch (error) {
+      if (error instanceof ProbableDuplicateObservationError) {
+        return Object.freeze({
+          status: "probable_duplicate" as const,
+          probableDuplicateJobIds: Object.freeze([...error.probableDuplicateJobIds]),
+        });
+      }
+      throw error;
+    }
   }
 
   async remove(command: Readonly<PreparedTerminalReconciliation>): Promise<void> {

@@ -16,6 +16,7 @@ import {
   type TrustContributionDecision,
 } from "./contribution-processing.js";
 import { normalizeContributionForProcessing } from "./contribution-processing-policy.js";
+import { canonicalizeObservation } from "./domain/canonical-job.js";
 
 const ids = {
   contribution: "018f47a6-7b2c-7ee1-8c09-3ea174e80e20",
@@ -196,8 +197,6 @@ class MemoryProcessingStore implements ContributionProcessingStore {
       contributionId: ids.contribution,
       normalizationId: ids.normalization,
       independentVerificationId: ids.verification,
-      jobId: ids.job,
-      sourceId: ids.source,
       trustDecisionId: ids.decision,
       processingPolicyVersion: "synthetic-processing-v1",
       capabilityPolicyVersion: input.capabilityPolicyVersion,
@@ -254,6 +253,19 @@ class MemoryProcessingStore implements ContributionProcessingStore {
 }
 
 function verified(): IndependentProviderVerificationResult {
+  const providerObservation = {
+    provider: "greenhouse" as const,
+    provenance: "permitted_api" as const,
+    companyName: "Synthetic Company",
+    title: "Software Engineer",
+    locations: ["Remote - US"],
+    description: "Generated synthetic posting for processing tests.",
+    sourceUrl: contributionInput().source.sourceUrl,
+    atsTenant: "synthetic",
+    externalJobId: "123",
+    adapterVersion: "greenhouse-v1",
+    observedAt: new Date("2026-09-01T12:55:00.000Z"),
+  };
   return {
     status: "verified",
     origin: "independent_provider_fetch",
@@ -265,7 +277,8 @@ function verified(): IndependentProviderVerificationResult {
     pageVariant: "greenhouse-board-v1",
     canonicalSourceUrlSha256: "df803d20a7f8140243fc1653d1a987844a25d939d7f97b64fa7699a4e2f2a6b5",
     evidenceDigestSha256: "c".repeat(64),
-    verifiedContentSha256: "d".repeat(64),
+    providerObservation,
+    verifiedContentSha256: canonicalizeObservation(providerObservation).contentHash,
     sourcePolicyVersion: "synthetic-source-policy-v1",
     verifiedAt: "2026-09-01T12:55:00.000Z",
   };
@@ -360,8 +373,6 @@ describe("ContributionProcessingService", () => {
       contributionId: ids.contribution,
       normalizationId: ids.normalization,
       independentVerificationId: ids.verification,
-      jobId: ids.job,
-      sourceId: ids.source,
       trustDecisionId: ids.decision,
       processingPolicyVersion: "synthetic-processing-v1",
       capabilityPolicyVersion: "d2-synthetic-capability-v1",
@@ -466,10 +477,7 @@ describe("ContributionProcessingService", () => {
         IndependentProviderVerificationResult,
         { status: "verified" }
       >,
-      trustDecision: accepted() as Extract<
-        TrustContributionDecision,
-        { status: "accepted" }
-      >,
+      trustDecision: accepted() as Extract<TrustContributionDecision, { status: "accepted" }>,
     });
     const trust = { evaluate: vi.fn(async () => ({ status: "unavailable" as const })) };
 
@@ -522,6 +530,27 @@ describe("ContributionProcessingService", () => {
     expect(store.preparedPublications).toHaveLength(2);
     expect(store.preparedPublications[1]).toEqual(store.preparedPublications[0]);
     expect(reconciler.publish).toHaveBeenCalledTimes(2);
+  });
+
+  it("parks a probable duplicate without completing catalog publication", async () => {
+    const store = new MemoryProcessingStore();
+    const reconciler = {
+      publish: vi.fn(async () => ({
+        status: "probable_duplicate" as const,
+        probableDuplicateJobIds: [ids.job],
+      })),
+      remove: vi.fn(async () => undefined),
+    };
+
+    await expect(service(store, { reconciler }).process(ids.contribution)).resolves.toBe(
+      "awaiting_independent_verification",
+    );
+    expect(store.value.ownerState).toBe("awaiting_independent_verification");
+    expect(store.transitions.at(-1)).toEqual({
+      state: "awaiting_independent_verification",
+      reasonCode: "provider_probable_duplicate",
+    });
+    expect(store.outbox.some(({ eventType }) => eventType === "job.verified.v1")).toBe(false);
   });
 
   it("removes an already-published association after withdrawal and replays terminally", async () => {

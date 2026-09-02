@@ -46,6 +46,7 @@ describe("contribution processing batch runtime", () => {
         independentVerifier: { verify: async () => ({ status: "unavailable" }) as never },
         trust: { evaluate: async () => ({ status: "unavailable" }) },
         capability: { load: async () => null },
+        publicationCatalog: { recordObservationInTransaction: vi.fn() as never },
         now: () => new Date("2026-09-02T16:00:00.000Z"),
       }),
     ).resolves.toEqual({
@@ -74,6 +75,7 @@ describe("contribution processing batch runtime", () => {
           independentVerifier: { verify: async () => ({ status: "unavailable" }) as never },
           trust: { evaluate: async () => ({ status: "unavailable" }) },
           capability: { load: async () => null },
+          publicationCatalog: { recordObservationInTransaction: vi.fn() as never },
           now: () => new Date("2026-09-02T16:00:00.000Z"),
         },
       ),

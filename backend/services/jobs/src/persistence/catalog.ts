@@ -146,6 +146,13 @@ export interface RecordObservationResult {
   probableDuplicateJobIds: string[];
 }
 
+export class ProbableDuplicateObservationError extends Error {
+  constructor(readonly probableDuplicateJobIds: readonly string[]) {
+    super("Provider observation requires duplicate review");
+    this.name = "ProbableDuplicateObservationError";
+  }
+}
+
 export interface RecordWithdrawalResult {
   outcome: "not_found" | "stale_ignored" | "source_withdrawn" | "already_withdrawn";
   canonicalJobWithdrawn: boolean;
@@ -656,13 +663,23 @@ export class PostgresJobCatalog {
   }
 
   async recordObservation(input: CatalogObservation): Promise<RecordObservationResult> {
+    return this.client.begin((transaction) =>
+      this.recordObservationInTransaction(transaction, input),
+    );
+  }
+
+  async recordObservationInTransaction(
+    transaction: postgres.TransactionSql,
+    input: CatalogObservation,
+    options: Readonly<{ rejectProbableDuplicates?: boolean }> = {},
+  ): Promise<RecordObservationResult> {
     if (!this.acceptedProvenance.has(input.provenance)) {
       throw new Error(`Provenance ${input.provenance} is not enabled for this runtime`);
     }
     const { rawSnapshot, ...jobObservation } = input;
     const observation = canonicalizeObservation(jobObservation);
 
-    return this.client.begin(async (transaction) => {
+    return (async () => {
       for (const identityKey of exactIdentityKeys(observation).sort()) {
         await transaction`SELECT pg_advisory_xact_lock(hashtext(${`jobs:${identityKey}`}))`;
       }
@@ -793,6 +810,9 @@ export class PostgresJobCatalog {
           ORDER BY created_at, id
         `;
         probableDuplicateJobIds.push(...probableRows.map((row) => row.id));
+        if (options.rejectProbableDuplicates && probableDuplicateJobIds.length > 0) {
+          throw new ProbableDuplicateObservationError(probableDuplicateJobIds);
+        }
         jobId = uuidv7();
         sourceId = uuidv7();
         outcome = "created";
@@ -916,7 +936,7 @@ export class PostgresJobCatalog {
         throw new Error("Canonical job disappeared during observation transaction");
       }
       return { outcome, job, probableDuplicateJobIds };
-    });
+    })();
   }
 
   async recordWithdrawal(input: CatalogWithdrawal): Promise<RecordWithdrawalResult> {

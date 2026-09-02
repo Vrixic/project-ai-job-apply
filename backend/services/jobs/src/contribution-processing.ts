@@ -11,6 +11,8 @@ import {
   type NormalizedContributionProposal,
   normalizeContributionForProcessing,
 } from "./contribution-processing-policy.js";
+import { canonicalizeObservation } from "./domain/canonical-job.js";
+import type { CatalogObservation } from "./persistence/catalog.js";
 
 const UUID_V7_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/u;
@@ -28,6 +30,7 @@ export type ContributionOwnerReasonCode =
   | "provider_temporarily_unavailable"
   | "provider_observation_mismatch"
   | "provider_posting_closed"
+  | "provider_probable_duplicate"
   | "independent_verification_complete"
   | "trust_review_required"
   | "trust_policy_rejected"
@@ -81,8 +84,9 @@ export interface IndependentVerificationEvidence {
   origin: "independent_provider_fetch";
   contributionId: string;
   verificationId: string;
-  jobId: string;
-  sourceId: string;
+  jobId?: string;
+  sourceId?: string;
+  providerObservation: CatalogObservation;
   provider: ContributionProviderProvenance["provider"];
   pageVariant: ContributionProviderProvenance["pageVariant"];
   canonicalSourceUrlSha256: string;
@@ -162,8 +166,6 @@ export interface PreparedPublicationReconciliation {
   contributionId: string;
   normalizationId: string;
   independentVerificationId: string;
-  jobId: string;
-  sourceId: string;
   trustDecisionId: string;
   processingPolicyVersion: string;
   capabilityPolicyVersion: string;
@@ -185,7 +187,10 @@ export interface PreparedTerminalReconciliation {
 export interface ContributionPublicationReconciler {
   publish(
     command: Readonly<PreparedPublicationReconciliation>,
-  ): Promise<{ jobId: string; sourceId: string; verificationId: string }>;
+  ): Promise<
+    | { status?: "published"; jobId: string; sourceId: string; verificationId: string }
+    | { status: "probable_duplicate"; probableDuplicateJobIds: readonly string[] }
+  >;
   remove(command: Readonly<PreparedTerminalReconciliation>): Promise<void>;
 }
 
@@ -227,7 +232,7 @@ export interface ContributionProcessingStore {
   }): Promise<PreparedPublicationReconciliation>;
   completePublication(input: {
     command: PreparedPublicationReconciliation;
-    result: { jobId: string; sourceId: string; verificationId: string };
+    result: { status?: "published"; jobId: string; sourceId: string; verificationId: string };
     occurredAt: Date;
   }): Promise<LoadedContributionProcessing>;
   prepareTerminalReconciliation(input: {
@@ -317,13 +322,6 @@ function uuid(value: string): string {
   return value;
 }
 
-function dependencyDigest(value: string): string {
-  if (!SHA256_PATTERN.test(value)) {
-    throw new ContributionProcessingDependencyUnavailableError();
-  }
-  return value;
-}
-
 async function dependency<T>(operation: () => Promise<T>): Promise<T> {
   try {
     return await operation();
@@ -363,8 +361,9 @@ function assertVerification(
     if (
       result.origin !== "independent_provider_fetch" ||
       !UUID_V7_PATTERN.test(result.verificationId) ||
-      !UUID_V7_PATTERN.test(result.jobId) ||
-      !UUID_V7_PATTERN.test(result.sourceId) ||
+      Boolean(result.jobId) !== Boolean(result.sourceId) ||
+      (result.jobId !== undefined && !UUID_V7_PATTERN.test(result.jobId)) ||
+      (result.sourceId !== undefined && !UUID_V7_PATTERN.test(result.sourceId)) ||
       !SHA256_PATTERN.test(result.evidenceDigestSha256) ||
       !SHA256_PATTERN.test(result.verifiedContentSha256) ||
       !POLICY_VERSION_PATTERN.test(result.sourcePolicyVersion)
@@ -372,6 +371,20 @@ function assertVerification(
       throw new ContributionProcessingDependencyUnavailableError();
     }
     exactInstant(result.verifiedAt);
+    try {
+      const canonical = canonicalizeObservation(result.providerObservation);
+      if (
+        result.providerObservation.rawSnapshot !== undefined ||
+        canonical.provider !== result.provider ||
+        canonical.canonicalUrlHash !== result.canonicalSourceUrlSha256 ||
+        canonical.contentHash !== result.verifiedContentSha256 ||
+        canonical.observedAt.toISOString() !== result.verifiedAt
+      ) {
+        throw new Error("provider observation mismatch");
+      }
+    } catch {
+      throw new ContributionProcessingDependencyUnavailableError();
+    }
   }
 }
 
@@ -552,6 +565,20 @@ export class ContributionProcessingService {
     );
     this.assertPublicationCommand(command, contribution);
     const published = await dependency(() => this.reconciler.publish(command));
+    if (published.status === "probable_duplicate") {
+      if (
+        published.probableDuplicateJobIds.length < 1 ||
+        published.probableDuplicateJobIds.some((id) => !UUID_V7_PATTERN.test(id))
+      ) {
+        throw new ContributionProcessingDependencyUnavailableError();
+      }
+      await this.recordState(
+        contributionId,
+        "awaiting_independent_verification",
+        "provider_probable_duplicate",
+      );
+      return "awaiting_independent_verification";
+    }
     uuid(published.jobId);
     uuid(published.sourceId);
     uuid(published.verificationId);
@@ -617,7 +644,7 @@ export class ContributionProcessingService {
     }
     const loaded = await dependency(() => this.capability.load());
     if (!loaded) return "unavailable";
-    let policy;
+    let policy: ReturnType<typeof verifySignedContributionCapabilityPolicy>;
     try {
       policy = verifySignedContributionCapabilityPolicy(loaded.envelope, loaded.publicKeys);
     } catch {
@@ -705,8 +732,6 @@ export class ContributionProcessingService {
       command.contributionId !== contribution.contributionId ||
       command.normalizationId !== normalization.id ||
       command.independentVerificationId !== verification.verificationId ||
-      command.jobId !== verification.jobId ||
-      command.sourceId !== verification.sourceId ||
       command.trustDecisionId !== trust.decisionId ||
       command.processingPolicyVersion !== this.policy.version ||
       !POLICY_VERSION_PATTERN.test(command.capabilityPolicyVersion) ||
@@ -716,8 +741,6 @@ export class ContributionProcessingService {
       throw new ContributionProcessingDependencyUnavailableError();
     }
     uuid(command.reconciliationId);
-    uuid(command.jobId);
-    uuid(command.sourceId);
   }
 
   private assertTerminalCommand(

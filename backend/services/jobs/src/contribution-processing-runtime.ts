@@ -18,6 +18,7 @@ import {
   ContributionProcessingRunner,
   type ContributionProcessingRunnerPolicy,
 } from "./contribution-processing-runner.js";
+import type { PostgresJobCatalog } from "./persistence/catalog.js";
 import {
   PostgresContributionProcessingQueueStore,
   PostgresContributionProcessingStore,
@@ -53,6 +54,7 @@ interface EnabledContributionProcessingRuntime {
   independentVerifier: IndependentProviderVerificationPort;
   trust: ContributionTrustDecisionPort;
   capability: SignedContributionCapabilityPolicyPort;
+  publicationCatalog: Pick<PostgresJobCatalog, "recordObservationInTransaction">;
   eventDelivery?: Readonly<{
     policy: ContributionProcessingEventDeliveryPolicy;
     publisher: ContributionProcessingEventPublisher;
@@ -84,7 +86,8 @@ export async function runContributionProcessingRuntimeBatch(
     typeof configuration.consent?.verifyCurrent !== "function" ||
     typeof configuration.independentVerifier?.verify !== "function" ||
     typeof configuration.trust?.evaluate !== "function" ||
-    typeof configuration.capability?.load !== "function"
+    typeof configuration.capability?.load !== "function" ||
+    typeof configuration.publicationCatalog?.recordObservationInTransaction !== "function"
   ) {
     throw new TypeError("Every contribution-processing runtime authority must be injected");
   }
@@ -109,6 +112,7 @@ export async function runContributionProcessingRuntimeBatch(
       capability: configuration.capability,
       reconciler: new PostgresContributionPublicationReconciler(
         configuration.client,
+        configuration.publicationCatalog,
         configuration.now,
       ),
       policy: configuration.processingPolicy,

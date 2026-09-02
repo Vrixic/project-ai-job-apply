@@ -3,13 +3,14 @@ import { v7 as uuidv7 } from "uuid";
 import { afterAll, describe, expect, it } from "vitest";
 import type { CreateJobContributionCommand } from "../contribution.js";
 import { normalizeContributionForProcessing } from "../contribution-processing-policy.js";
+import { canonicalizeObservation } from "../domain/canonical-job.js";
+import { createJobCatalogDatabase, PostgresJobCatalog } from "./catalog.js";
+import { PostgresJobContributionStore } from "./contribution.js";
 import {
   PostgresContributionProcessingQueueStore,
   PostgresContributionProcessingStore,
   PostgresContributionPublicationReconciler,
 } from "./contribution-processing.js";
-import { createJobCatalogDatabase } from "./catalog.js";
-import { PostgresJobContributionStore } from "./contribution.js";
 import { PostgresContributionProcessingEventDeliveryStore } from "./contribution-processing-event-delivery.js";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -21,6 +22,10 @@ describeWithDatabase("durable contribution processing persistence", () => {
   });
   const intake = new PostgresJobContributionStore(client);
   const processing = new PostgresContributionProcessingStore(client);
+  const catalog = new PostgresJobCatalog(client, {
+    acceptedProvenance: new Set(["permitted_api"]),
+    searchCursorKeys: { active: { id: "synthetic-v1", key: Buffer.alloc(32, 7) } },
+  });
   const queue = new PostgresContributionProcessingQueueStore(client);
   const ownerId = uuidv7();
   const contributionId = uuidv7();
@@ -34,10 +39,23 @@ describeWithDatabase("durable contribution processing persistence", () => {
   const evidenceDigestSha256 = createHash("sha256")
     .update(`evidence:${contributionId}`)
     .digest("hex");
-  const sourceContentSha256 = "d".repeat(64);
   const observedAt = new Date("2026-09-01T12:00:00.000Z");
   const verifiedAt = new Date("2026-09-01T12:55:00.000Z");
   const reconcileAt = new Date("2026-09-01T13:00:00.000Z");
+  const providerObservation = {
+    provider: "lever" as const,
+    provenance: "permitted_api" as const,
+    companyName: "Synthetic Processing Company",
+    title: "Platform Engineer",
+    locations: ["New York, NY"],
+    description: "Independently verified synthetic provider content",
+    sourceUrl,
+    atsTenant: "synthetic-processing",
+    externalJobId: contributionId,
+    adapterVersion: "lever-v1",
+    observedAt: verifiedAt,
+  };
+  const sourceContentSha256 = canonicalizeObservation(providerObservation).contentHash;
 
   function command(): CreateJobContributionCommand {
     return {
@@ -169,6 +187,7 @@ describeWithDatabase("durable contribution processing persistence", () => {
         canonicalSourceUrlSha256: sourceUrlSha256,
         evidenceDigestSha256,
         verifiedContentSha256: sourceContentSha256,
+        providerObservation,
         sourcePolicyVersion: "synthetic-source-v1",
         verifiedAt: verifiedAt.toISOString(),
       },
@@ -199,17 +218,19 @@ describeWithDatabase("durable contribution processing persistence", () => {
       capabilityExpiresAt: "2026-09-01T14:00:00.000Z",
       occurredAt: reconcileAt,
     });
-    const reconciler = new PostgresContributionPublicationReconciler(client, () => reconcileAt);
+    const reconciler = new PostgresContributionPublicationReconciler(
+      client,
+      catalog,
+      () => reconcileAt,
+    );
 
     await client`UPDATE jobs.canonical_jobs SET status = 'blocked' WHERE id = ${jobId}`;
     await expect(reconciler.publish(prepared)).rejects.toThrow("not authorized");
     await client`UPDATE jobs.canonical_jobs SET status = 'active' WHERE id = ${jobId}`;
     await client`UPDATE jobs.job_sources SET withdrawn_at = ${verifiedAt} WHERE id = ${sourceId}`;
-    await expect(reconciler.publish(prepared)).rejects.toThrow("not authorized");
-    await client`UPDATE jobs.job_sources SET withdrawn_at = NULL WHERE id = ${sourceId}`;
-
     const published = await reconciler.publish(prepared);
-    expect(published).toEqual({ jobId, sourceId, verificationId: evidenceId });
+    expect(published).toEqual({ status: "published", jobId, sourceId, verificationId: evidenceId });
+    if (published.status === "probable_duplicate") throw new Error("Unexpected probable duplicate");
     value = await processing.completePublication({
       command: prepared,
       result: published,
@@ -336,6 +357,7 @@ describeWithDatabase("durable contribution processing persistence", () => {
     if (!removal) throw new Error("Expected removal reconciliation");
     const removalReconciler = new PostgresContributionPublicationReconciler(
       client,
+      catalog,
       () => new Date("2026-09-01T13:05:00.000Z"),
     );
     await removalReconciler.remove(removal);
@@ -358,5 +380,119 @@ describeWithDatabase("durable contribution processing persistence", () => {
       withdrawnAt: null,
       contentHash: sourceContentSha256,
     });
+  });
+
+  it("creates a genuinely new provider job only during authorized reconciliation and replays IDs", async () => {
+    const newOwnerId = uuidv7();
+    const newContributionId = uuidv7();
+    const newVerificationId = uuidv7();
+    const newTrustDecisionId = uuidv7();
+    const unique = newContributionId.slice(-12);
+    const newSourceUrl = `https://jobs.lever.co/provider-truth-${unique}/${newContributionId}`;
+    const newCommand: CreateJobContributionCommand = {
+      ...command(),
+      ownerUserId: newOwnerId,
+      idempotencyKey: `provider-truth-${newContributionId}`,
+      input: {
+        ...command().input,
+        contributionId: newContributionId,
+        source: {
+          ...command().input.source,
+          sourceUrl: newSourceUrl,
+          externalJobId: newContributionId,
+        },
+        posting: {
+          companyName: `Provider Truth ${unique}`,
+          title: `Reliability Engineer ${unique}`,
+          locations: ["Remote"],
+          description: `Candidate-observed content ${unique}`,
+        },
+      },
+    };
+    const newProviderObservation = {
+      provider: "lever" as const,
+      provenance: "permitted_api" as const,
+      companyName: `Provider Truth ${unique}`,
+      title: `Reliability Engineer ${unique}`,
+      locations: ["Remote"],
+      description: `Independently fetched provider content ${unique}`,
+      sourceUrl: newSourceUrl,
+      atsTenant: "synthetic-processing",
+      externalJobId: newContributionId,
+      adapterVersion: "lever-v1",
+      observedAt: verifiedAt,
+    };
+    const newCanonical = canonicalizeObservation(newProviderObservation);
+
+    await intake.create(newCommand);
+    const normalized = await processing.recordNormalization({
+      contributionId: newContributionId,
+      proposal: normalizeContributionForProcessing(newCommand.input),
+      processingPolicyVersion: "synthetic-processing-v1",
+      occurredAt: new Date("2026-09-01T12:10:00.000Z"),
+    });
+    expect(normalized.independentVerification).toBeUndefined();
+    const verified = await processing.recordIndependentVerification({
+      contributionId: newContributionId,
+      evidence: {
+        status: "verified",
+        origin: "independent_provider_fetch",
+        contributionId: newContributionId,
+        verificationId: newVerificationId,
+        provider: "lever",
+        pageVariant: "lever-posting-v1",
+        canonicalSourceUrlSha256: newCanonical.canonicalUrlHash,
+        evidenceDigestSha256: createHash("sha256")
+          .update(`evidence:${newContributionId}`)
+          .digest("hex"),
+        verifiedContentSha256: newCanonical.contentHash,
+        providerObservation: newProviderObservation,
+        sourcePolicyVersion: "synthetic-source-v1",
+        verifiedAt: verifiedAt.toISOString(),
+      },
+      processingPolicyVersion: "synthetic-processing-v1",
+      occurredAt: new Date("2026-09-01T12:56:00.000Z"),
+    });
+    expect(verified.independentVerification).not.toHaveProperty("jobId");
+    await processing.recordTrustDecision({
+      contributionId: newContributionId,
+      decision: {
+        status: "accepted",
+        contributionId: newContributionId,
+        decisionId: newTrustDecisionId,
+        policyVersion: "synthetic-trust-v1",
+        decidedAt: "2026-09-01T12:57:00.000Z",
+      },
+      processingPolicyVersion: "synthetic-processing-v1",
+      occurredAt: new Date("2026-09-01T12:57:00.000Z"),
+    });
+    const prepared = await processing.preparePublication({
+      contributionId: newContributionId,
+      processingPolicyVersion: "synthetic-processing-v1",
+      capabilityPolicyVersion: "synthetic-capability-v1",
+      capabilityConfigurationDigestSha256: "f".repeat(64),
+      capabilityEvaluatedAt: "2026-09-01T12:59:00.000Z",
+      capabilityExpiresAt: "2026-09-01T14:00:00.000Z",
+      occurredAt: reconcileAt,
+    });
+    const reconciler = new PostgresContributionPublicationReconciler(
+      client,
+      catalog,
+      () => reconcileAt,
+    );
+    const first = await reconciler.publish(prepared);
+    const replay = await reconciler.publish(prepared);
+    expect(first).toEqual(replay);
+    expect(first.status).toBe("published");
+    if (first.status === "probable_duplicate") throw new Error("Unexpected probable duplicate");
+    expect(first.verificationId).toBe(newVerificationId);
+    const [counts] = await client<{ jobs: number; sources: number; evidence: number }[]>`
+      SELECT
+        (SELECT count(*)::int FROM jobs.canonical_jobs WHERE id = ${first.jobId}) AS jobs,
+        (SELECT count(*)::int FROM jobs.job_sources WHERE id = ${first.sourceId}) AS sources,
+        (SELECT count(*)::int FROM jobs.source_verification_evidence
+          WHERE id = ${newVerificationId} AND job_id = ${first.jobId} AND source_id = ${first.sourceId}) AS evidence
+    `;
+    expect(counts).toEqual({ jobs: 1, sources: 1, evidence: 1 });
   });
 });

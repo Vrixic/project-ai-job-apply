@@ -27,6 +27,7 @@ const migrationVersions = [
   "0016_job_contribution_candidate_rights",
   "0017_job_contribution_processing",
   "0018_job_contribution_processing_delivery",
+  "0019_job_contribution_provider_publication",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -196,6 +197,10 @@ try {
         processingTableCount: number;
         processingTriggerCount: number;
         processingTriggerFunctionCount: number;
+        processingProviderObservationColumnCount: number;
+        processingNullableCatalogColumnCount: number;
+        processingCatalogForeignKeyCount: number;
+        processingPublicationConstraintCount: number;
       }[]
     >`
       SELECT
@@ -937,11 +942,53 @@ try {
           WHERE namespace.nspname = 'jobs' AND procedure.pronargs = 0
             AND procedure.proname = ANY(ARRAY[
               'guard_job_contribution_processing_append_only',
+              'guard_job_contribution_verification_linkage',
               'guard_job_contribution_processing_queue',
               'guard_job_contribution_reconciliation',
               'guard_job_contribution_processing_event_delivery'
             ])
         ) AS "processingTriggerFunctionCount"
+        , (
+          SELECT count(*)::int FROM information_schema.columns
+          WHERE table_schema = 'jobs'
+            AND table_name = 'job_contribution_independent_verifications'
+            AND column_name = 'provider_observation' AND data_type = 'jsonb'
+            AND is_nullable = 'NO'
+        ) AS "processingProviderObservationColumnCount"
+        , (
+          SELECT count(*)::int FROM information_schema.columns
+          WHERE table_schema = 'jobs'
+            AND table_name IN (
+              'job_contribution_independent_verifications',
+              'job_contribution_reconciliations'
+            )
+            AND column_name IN ('job_id', 'source_id') AND is_nullable = 'YES'
+        ) AS "processingNullableCatalogColumnCount"
+        , (
+          SELECT count(*)::int FROM pg_constraint constraint_definition
+          WHERE constraint_definition.contype = 'f'
+            AND constraint_definition.conrelid IN (
+              'jobs.job_contribution_independent_verifications'::regclass,
+              'jobs.job_contribution_reconciliations'::regclass
+            )
+            AND constraint_definition.confrelid IN (
+              'jobs.canonical_jobs'::regclass,
+              'jobs.job_sources'::regclass
+            )
+        ) AS "processingCatalogForeignKeyCount"
+        , (
+          SELECT count(*)::int FROM pg_constraint constraint_definition
+          WHERE constraint_definition.conrelid IN (
+              'jobs.job_contribution_independent_verifications'::regclass,
+              'jobs.job_contribution_reconciliations'::regclass
+            )
+            AND constraint_definition.conname = ANY(ARRAY[
+              'job_contribution_independent_verifications_catalog_identity_ck',
+              'job_contribution_independent_verifications_observation_ck',
+              'job_contribution_reconciliations_catalog_identity_ck',
+              'job_contribution_reconciliations_applied_identity_ck'
+            ])
+        ) AS "processingPublicationConstraintCount"
     `;
     if (
       verification?.tableCount !== 26 ||
@@ -1006,7 +1053,11 @@ try {
       verification.revalidationForeignKeyCount !== 4 ||
       verification.processingTableCount !== 8 ||
       verification.processingTriggerCount !== 8 ||
-      verification.processingTriggerFunctionCount !== 4
+      verification.processingTriggerFunctionCount !== 5 ||
+      verification.processingProviderObservationColumnCount !== 1 ||
+      verification.processingNullableCatalogColumnCount !== 4 ||
+      verification.processingCatalogForeignKeyCount !== 4 ||
+      verification.processingPublicationConstraintCount !== 4
     ) {
       throw new Error(
         `Jobs database migration verification failed: ${JSON.stringify({
@@ -1075,6 +1126,11 @@ try {
           processingTableCount: verification?.processingTableCount,
           processingTriggerCount: verification?.processingTriggerCount,
           processingTriggerFunctionCount: verification?.processingTriggerFunctionCount,
+          processingProviderObservationColumnCount:
+            verification?.processingProviderObservationColumnCount,
+          processingNullableCatalogColumnCount: verification?.processingNullableCatalogColumnCount,
+          processingCatalogForeignKeyCount: verification?.processingCatalogForeignKeyCount,
+          processingPublicationConstraintCount: verification?.processingPublicationConstraintCount,
         })}`,
       );
     }

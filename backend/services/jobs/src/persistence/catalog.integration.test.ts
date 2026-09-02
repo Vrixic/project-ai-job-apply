@@ -7,7 +7,11 @@ import {
   executeJobSearchAcceptance,
 } from "../search-acceptance.js";
 import type { CatalogObservation, CatalogWithdrawal } from "./catalog.js";
-import { createJobCatalogDatabase, PostgresJobCatalog } from "./catalog.js";
+import {
+  createJobCatalogDatabase,
+  PostgresJobCatalog,
+  ProbableDuplicateObservationError,
+} from "./catalog.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -67,10 +71,10 @@ describeWithDatabase("PostgresJobCatalog", () => {
     const first = await runMigrationVerifier();
     const replay = await runMigrationVerifier();
     expect(first.stdout.trim()).toBe(
-      "Jobs migrations through 0018_job_contribution_processing_delivery applied and verified.",
+      "Jobs migrations through 0019_job_contribution_provider_publication applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(
-      "Jobs migrations through 0018_job_contribution_processing_delivery applied and verified.",
+      "Jobs migrations through 0019_job_contribution_provider_publication applied and verified.",
     );
     await catalog.ping();
   });
@@ -1105,15 +1109,28 @@ describeWithDatabase("PostgresJobCatalog", () => {
         employerRequisitionId: `req-${runId}-probable-a`,
       }),
     );
-    const second = await catalog.recordObservation(
-      fixture({
-        provider: "other",
-        sourceUrl: `https://mirror.example.test/${runId}/probable-b`,
-        atsTenant: `mirror-${runId}`,
-        externalJobId: "probable-b",
-        employerRequisitionId: `req-${runId}-probable-b`,
-      }),
-    );
+    const probableObservation = fixture({
+      provider: "other",
+      sourceUrl: `https://mirror.example.test/${runId}/probable-b`,
+      atsTenant: `mirror-${runId}`,
+      externalJobId: "probable-b",
+      employerRequisitionId: `req-${runId}-probable-b`,
+    });
+    await expect(
+      client.begin((transaction) =>
+        catalog.recordObservationInTransaction(transaction, probableObservation, {
+          rejectProbableDuplicates: true,
+        }),
+      ),
+    ).rejects.toBeInstanceOf(ProbableDuplicateObservationError);
+    const [beforeReview] = await client<{ count: number }[]>`
+      SELECT count(*)::int AS count FROM jobs.job_sources
+      WHERE provider = 'other' AND external_job_id = 'probable-b'
+        AND ats_tenant = ${`mirror-${runId}`}
+    `;
+    expect(beforeReview?.count).toBe(0);
+
+    const second = await catalog.recordObservation(probableObservation);
 
     expect(second.outcome).toBe("created");
     expect(second.job.id).not.toBe(first.job.id);

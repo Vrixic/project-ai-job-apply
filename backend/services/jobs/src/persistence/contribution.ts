@@ -48,7 +48,7 @@ export class PostgresJobContributionStore implements JobContributionStore {
         AND to_regclass('jobs.job_contribution_processing_event_deliveries') IS NOT NULL
         AND EXISTS (
           SELECT 1 FROM jobs.schema_migrations
-          WHERE version = '0018_job_contribution_processing_delivery'
+          WHERE version = '0019_job_contribution_provider_publication'
         )
       ) AS ready
     `;

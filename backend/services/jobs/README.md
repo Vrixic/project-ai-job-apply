@@ -60,11 +60,15 @@ application payload fields, structured location payloads, and every source raw s
 Provider/page-variant freshness windows, queue leases, attempts, retry delays, and administrative
 policy versions have no production defaults and must be injected before this runtime can operate.
 
-The durable normalizer, provider evidence collector, Profile consent recheck, Trust-owned UGC
-decision, accepted UGC observation/source linkage, outbox dispatcher, contributor export/deletion,
-and deployment/activation controls remain separate D2 work. Migration `0015` is persistence and
-application-policy foundation, not a deployed provider verifier. Until those land, the intake is
-synthetic/default-dark and a queued acknowledgement makes no publication claim.
+The later `0017`–`0019` migrations add the durable normalizer, processing queue, staged independent
+provider observation, Trust-decision copy, accepted publication/removal reconciliation, separate
+identifier-only delivery ledgers, and owner-safe processing state. Final publication records the
+independently fetched provider observation through the ordinary catalog transaction only after
+current consent, signed capability, independent verification, and accepted Trust gates pass.
+Probable duplicates roll back without creating catalog truth and park for explicit review. The
+runtime remains synthetic/default-dark until exact provider registrations, policy, schedule,
+transport, deployment, and accountable activation gates are supplied; a queued acknowledgement
+still makes no publication claim.
 
 Migration `0016_job_contribution_candidate_rights` adds owner-scoped export and deletion for queued
 contribution intake. Export reconstructs only the approved source, posting, observation-time, and

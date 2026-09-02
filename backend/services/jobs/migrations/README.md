@@ -65,3 +65,14 @@ other service may modify these tables.
   identities. Privacy-ledger-authorized deletion removes the owner's contribution outbox rows and
   contributions in one transaction while ordinary mutation remains blocked and provider catalog,
   revalidation, and verification truth remain untouched.
+- `0017_job_contribution_processing.sql` — Adds the durable contribution-processing queue,
+  bounded normalized proposals, staged independent-verification and Trust-decision evidence,
+  append-only owner-state events, and guarded publication/removal reconciliations. Queued intake
+  alone still has no catalog mutation path.
+- `0018_job_contribution_processing_delivery.sql` — Adds a separate identifier-only processing
+  event delivery ledger with fenced claims, bounded retry/dead states, and immutable event
+  identity. Transport nudges contain no candidate, posting, source, or decision payload.
+- `0019_job_contribution_provider_publication.sql` — Stages the bounded independently fetched
+  provider observation before catalog identity exists, then permits one guarded linkage to the
+  exact provider-created or reused job/source during atomic final reconciliation. Nullable staged
+  identities retain their catalog foreign keys; probable duplicates roll back and remain parked.
