@@ -82,4 +82,25 @@ describe("extension public-client authentication", () => {
       }).pendingRetentionMilliseconds,
     ).toBeUndefined();
   });
+
+  it("accepts only an explicitly configured accountable UGC policy version", () => {
+    const base = {
+      audience: "ai-job-apply-api",
+      clientId: "public-client",
+      domain: "tenant.example.test",
+    };
+    expect(extensionPublicConfiguration(base).ugcContributionPolicyVersion).toBeUndefined();
+    expect(
+      extensionPublicConfiguration({
+        ...base,
+        ugcContributionPolicyVersion: "d2-synthetic-policy.v1",
+      }).ugcContributionPolicyVersion,
+    ).toBe("d2-synthetic-policy.v1");
+    expect(
+      extensionPublicConfiguration({
+        ...base,
+        ugcContributionPolicyVersion: "NOT APPROVED",
+      }).ugcContributionPolicyVersion,
+    ).toBeUndefined();
+  });
 });

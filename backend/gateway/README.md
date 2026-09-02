@@ -13,6 +13,13 @@ The gateway is the authenticated entry point for web, mobile, extension, and adm
 
 The gateway must not perform long-running AI, ingestion, or browser work. It creates durable resources and returns their identifiers.
 
+The source-only Phase 2 seam exposes Profile-owned immutable contribution-consent grant/revoke
+routes in local application composition and wires Jobs intake to the real Profile verification
+store. Consent identifiers and times are server-issued, responses are `no-store`, and both routes
+require `jobs:contribute`. An exact `UGC_CONTRIBUTION_POLICY_VERSION` must be injected; absence or
+mismatch fails closed. The Lambda method/path allowlist intentionally omits consent and
+contribution routes, so deployed intake remains default-dark.
+
 ## Phase 0 implementation
 
 `src/` provides health/readiness, current-user, job-preference, and owned-operation endpoints.

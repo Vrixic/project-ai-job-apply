@@ -1,4 +1,10 @@
 import { createHash } from "node:crypto";
+import type { CreateJobContributionRequest } from "@ai-job-apply/api-contracts";
+import {
+  expectedJobContributionApprovedFields,
+  jobContributionContentDigestInput,
+  jobContributionPreviewDigestInput,
+} from "@ai-job-apply/api-contracts/job-contribution-canonical";
 
 export const contributionProviders = ["greenhouse", "lever", "ashby"] as const;
 export type ContributionProvider = (typeof contributionProviders)[number];
@@ -9,52 +15,7 @@ export const contributionPageVariants = [
 ] as const;
 export type ContributionPageVariant = (typeof contributionPageVariants)[number];
 
-export const contributionFieldNames = [
-  "provider",
-  "pageVariant",
-  "sourceUrl",
-  "externalJobId",
-  "companyName",
-  "title",
-  "locations",
-  "description",
-  "department",
-  "applicationUrl",
-  "employmentType",
-  "workMode",
-] as const;
-export type ContributionFieldName = (typeof contributionFieldNames)[number];
-
-export interface JobContributionInput {
-  schemaVersion: 1;
-  contributionId: string;
-  source: {
-    provider: ContributionProvider;
-    pageVariant: ContributionPageVariant;
-    sourceUrl: string;
-    externalJobId?: string;
-    adapterVersion: string;
-  };
-  posting: {
-    companyName?: string;
-    title: string;
-    locations?: string[];
-    description?: string;
-    department?: string;
-    applicationUrl?: string;
-    employmentType?: "full_time" | "part_time" | "contract" | "internship" | "unknown";
-    workMode?: "remote" | "hybrid" | "on_site" | "unknown";
-  };
-  observation: { observedAt: string; contentSha256: string };
-  approval: {
-    consentId: string;
-    consentVersion: "ugc-contribution-preview.v1";
-    policyVersion: string;
-    approvedAt: string;
-    approvedFields: ContributionFieldName[];
-    previewDigestSha256: string;
-  };
-}
+export type JobContributionInput = CreateJobContributionRequest;
 
 export interface CreateJobContributionCommand {
   ownerUserId: string;
@@ -85,6 +46,7 @@ export interface JobContributionConsentVerifier {
     consentVersion: "ugc-contribution-preview.v1";
     policyVersion: string;
     previewDigestSha256: string;
+    approvedAt: string;
   }): Promise<boolean>;
 }
 
@@ -174,6 +136,7 @@ function exactIsoTimestamp(value: string): boolean {
 }
 
 const UNSAFE_TEXT =
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: reject browser control and bidi payloads before persistence.
   /[<>\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u;
 
 function boundedText(value: string | undefined, maximum: number, required = false): boolean {
@@ -186,86 +149,7 @@ function boundedText(value: string | undefined, maximum: number, required = fals
   );
 }
 
-function canonicalSource(input: JobContributionInput): Record<string, unknown> {
-  return {
-    provider: input.source.provider,
-    pageVariant: input.source.pageVariant,
-    sourceUrl: input.source.sourceUrl,
-    ...(input.source.externalJobId === undefined
-      ? {}
-      : { externalJobId: input.source.externalJobId }),
-    adapterVersion: input.source.adapterVersion,
-  };
-}
-
-function canonicalSelectedPublicSource(input: JobContributionInput): Record<string, unknown> {
-  return {
-    provider: input.source.provider,
-    pageVariant: input.source.pageVariant,
-    sourceUrl: input.source.sourceUrl,
-    ...(input.source.externalJobId === undefined
-      ? {}
-      : { externalJobId: input.source.externalJobId }),
-  };
-}
-
-function canonicalPosting(input: JobContributionInput): Record<string, unknown> {
-  return {
-    ...(input.posting.companyName === undefined ? {} : { companyName: input.posting.companyName }),
-    title: input.posting.title,
-    ...(input.posting.locations === undefined ? {} : { locations: input.posting.locations }),
-    ...(input.posting.description === undefined ? {} : { description: input.posting.description }),
-    ...(input.posting.department === undefined ? {} : { department: input.posting.department }),
-    ...(input.posting.applicationUrl === undefined
-      ? {}
-      : { applicationUrl: input.posting.applicationUrl }),
-    ...(input.posting.employmentType === undefined
-      ? {}
-      : { employmentType: input.posting.employmentType }),
-    ...(input.posting.workMode === undefined ? {} : { workMode: input.posting.workMode }),
-  };
-}
-
-function expectedApprovedFields(input: JobContributionInput): ContributionFieldName[] {
-  return contributionFieldNames.filter((field) => {
-    if (
-      field === "provider" ||
-      field === "pageVariant" ||
-      field === "sourceUrl" ||
-      field === "title"
-    ) {
-      return true;
-    }
-    return field === "externalJobId"
-      ? input.source.externalJobId !== undefined
-      : input.posting[field] !== undefined;
-  });
-}
-
-export function jobContributionPreviewDigestInput(input: JobContributionInput): string {
-  return JSON.stringify({
-    schemaVersion: input.schemaVersion,
-    contributionId: input.contributionId,
-    source: canonicalSource(input),
-    posting: canonicalPosting(input),
-    observation: {
-      observedAt: input.observation.observedAt,
-      contentSha256: input.observation.contentSha256,
-    },
-    approval: {
-      consentVersion: input.approval.consentVersion,
-      policyVersion: input.approval.policyVersion,
-      approvedFields: input.approval.approvedFields,
-    },
-  });
-}
-
-export function jobContributionContentDigestInput(input: JobContributionInput): string {
-  return JSON.stringify({
-    source: canonicalSelectedPublicSource(input),
-    posting: canonicalPosting(input),
-  });
-}
+export { jobContributionContentDigestInput, jobContributionPreviewDigestInput };
 
 function assertInput(input: JobContributionInput): void {
   if (
@@ -308,7 +192,7 @@ function assertInput(input: JobContributionInput): void {
   ) {
     throw new TypeError("The job contribution source or approval is invalid");
   }
-  const expected = expectedApprovedFields(input);
+  const expected = expectedJobContributionApprovedFields(input);
   if (
     input.approval.approvedFields.length !== expected.length ||
     input.approval.approvedFields.some((field, index) => field !== expected[index])
@@ -377,6 +261,7 @@ export class JobContributionService implements JobContributions {
         consentVersion: command.input.approval.consentVersion,
         policyVersion: command.input.approval.policyVersion,
         previewDigestSha256: command.input.approval.previewDigestSha256,
+        approvedAt: command.input.approval.approvedAt,
       });
     } catch {
       throw new JobContributionUnavailableError();

@@ -48,6 +48,9 @@ describeWithDatabase("PostgresUgcContributionConsentStore", () => {
     const first = await store.grant(grantCommand);
     await expect(store.grant(grantCommand)).resolves.toEqual(first);
     await expect(
+      store.grant({ ...grantCommand, grantedAt: "2026-09-01T12:00:05.000Z" }),
+    ).resolves.toEqual(first);
+    await expect(
       store.grant({ ...grantCommand, previewPayloadSha256: "b".repeat(64) }),
     ).rejects.toBeInstanceOf(UgcContributionConsentConflictError);
 
@@ -73,6 +76,16 @@ describeWithDatabase("PostgresUgcContributionConsentStore", () => {
     ).resolves.toEqual({ reason: "not_found", valid: false });
     await expect(
       store.verify({
+        consentId: uuidv7(),
+        documentVersion: grantCommand.documentVersion,
+        ownerUserId,
+        policyVersion: grantCommand.policyVersion,
+        previewPayloadSha256: grantCommand.previewPayloadSha256,
+        verifiedAt: "2026-09-01T12:00:01.000Z",
+      }),
+    ).resolves.toEqual({ reason: "not_found", valid: false });
+    await expect(
+      store.verify({
         consentId: first.id,
         documentVersion: grantCommand.documentVersion,
         ownerUserId,
@@ -81,6 +94,16 @@ describeWithDatabase("PostgresUgcContributionConsentStore", () => {
         verifiedAt: "2026-09-01T12:00:01.000Z",
       }),
     ).resolves.toEqual({ reason: "mismatch", valid: false });
+    await expect(
+      store.verify({
+        consentId: first.id,
+        documentVersion: grantCommand.documentVersion,
+        ownerUserId,
+        policyVersion: grantCommand.policyVersion,
+        previewPayloadSha256: grantCommand.previewPayloadSha256,
+        verifiedAt: grantCommand.expiresAt,
+      }),
+    ).resolves.toEqual({ reason: "expired", valid: false });
 
     const replacement = await store.grant({
       ...grantCommand,
@@ -108,14 +131,18 @@ describeWithDatabase("PostgresUgcContributionConsentStore", () => {
       }),
     ).resolves.toEqual({ reason: "not_current", valid: false });
 
-    const revoked = await store.revoke({
+    const revokeCommand = {
       consentId: replacement.id,
       idempotencyKey: `ugc-consent-revoke-${uuidv7()}`,
       occurredAt: "2026-09-01T12:03:00.000Z",
       ownerUserId,
       traceId: "integration-ugc-consent",
-    });
+    } as const;
+    const revoked = await store.revoke(revokeCommand);
     expect(revoked.state).toBe("revoked");
+    await expect(
+      store.revoke({ ...revokeCommand, occurredAt: "2026-09-01T12:04:00.000Z" }),
+    ).resolves.toEqual(revoked);
     await expect(
       store.verify({
         consentId: replacement.id,

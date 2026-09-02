@@ -24,6 +24,9 @@ Every box applies independently to Chrome and Edge unless the evidence explicitl
   takedown, and restoration behavior pass deployed owner/cross-owner tests.
 - [x] Local stopped/all-item removal, logout clearing, and fail-closed expiry enforcement are implemented.
 - [ ] The accountable local pending-item retention duration is approved and configured.
+- [ ] The accountable UGC policy version is approved, recorded once, and configured identically as
+  server `UGC_CONTRIBUTION_POLICY_VERSION` and extension
+  `EXTENSION_UGC_CONTRIBUTION_POLICY_VERSION`; source provides no default.
 - [ ] Permission rationale, user-data form, privacy notice, subprocessor register, support/removal
   channels, screenshots, and listing copy match the exact binary and deployed endpoints.
 - [ ] Accessibility, keyboard/zoom/screen-reader, malicious-page, offline/restart, update, rollback,

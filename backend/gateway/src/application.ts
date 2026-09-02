@@ -8,7 +8,11 @@ import type {
   JobReports,
 } from "@ai-job-apply/jobs-service";
 import type { MatchAssessments, SavedJobs } from "@ai-job-apply/matching-service";
-import type { ProfileStore } from "@ai-job-apply/profile-service";
+import {
+  type ProfileStore,
+  type UgcContributionConsentStore,
+  UgcContributionConsentUnavailableError,
+} from "@ai-job-apply/profile-service";
 import { NestFactory } from "@nestjs/core";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
 import {
@@ -22,6 +26,8 @@ export interface GatewayApplicationOptions {
   catalog: JobCatalogReader;
   jobReports: JobReports;
   jobContributions: JobContributions;
+  ugcContributionConsents?: UgcContributionConsentStore;
+  ugcContributionPolicyVersion?: string;
   moderation: JobModeration;
   savedJobs: SavedJobs;
   matchAssessments: MatchAssessments;
@@ -48,6 +54,25 @@ export async function createGatewayApplication(
       catalog: options.catalog,
       jobReports: options.jobReports,
       jobContributions: options.jobContributions,
+      ugcContributionConsents:
+        options.ugcContributionConsents ??
+        ({
+          async grant() {
+            throw new UgcContributionConsentUnavailableError();
+          },
+          async revoke() {
+            throw new UgcContributionConsentUnavailableError();
+          },
+          async supersede() {
+            throw new UgcContributionConsentUnavailableError();
+          },
+          async verify() {
+            return { reason: "unavailable", valid: false } as const;
+          },
+        } satisfies UgcContributionConsentStore),
+      ...(options.ugcContributionPolicyVersion
+        ? { ugcContributionPolicyVersion: options.ugcContributionPolicyVersion }
+        : {}),
       moderation: options.moderation,
       savedJobs: options.savedJobs,
       matchAssessments: options.matchAssessments,

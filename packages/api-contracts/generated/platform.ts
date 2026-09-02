@@ -276,6 +276,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/profile/ugc-contribution-consents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["grantUgcContributionConsent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/ugc-contribution-consents/{consentId}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["revokeUgcContributionConsent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/jobs/contributions/{contributionId}": {
         parameters: {
             query?: never;
@@ -897,6 +929,30 @@ export interface components {
                 approvedFields: ("provider" | "pageVariant" | "sourceUrl" | "externalJobId" | "companyName" | "title" | "locations" | "description" | "department" | "applicationUrl" | "employmentType" | "workMode")[];
                 previewDigestSha256: string;
             };
+        };
+        GrantUgcContributionConsentRequest: {
+            /** @constant */
+            schemaVersion: 1;
+            /** @constant */
+            documentVersion: "ugc-contribution-preview.v1";
+            policyVersion: string;
+            previewDigestSha256: string;
+        };
+        UgcContributionConsentGrant: {
+            /** @constant */
+            schemaVersion: 1;
+            id: string;
+            /** @constant */
+            state: "granted";
+            /** @constant */
+            documentVersion: "ugc-contribution-preview.v1";
+            policyVersion: string;
+            /** Format: date-time */
+            grantedAt: string;
+        };
+        RevokeUgcContributionConsentRequest: {
+            /** @constant */
+            schemaVersion: 1;
         };
         JobContribution: {
             id: string;
@@ -2063,6 +2119,74 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["JobContribution"];
                 };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    grantUgcContributionConsent: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GrantUgcContributionConsentRequest"];
+            };
+        };
+        responses: {
+            /** @description An immutable owner-scoped preview consent was granted */
+            201: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UgcContributionConsentGrant"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    revokeUgcContributionConsent: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                consentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevokeUgcContributionConsentRequest"];
+            };
+        };
+        responses: {
+            /** @description The owner-scoped consent is revoked */
+            204: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];

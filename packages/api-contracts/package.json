@@ -7,6 +7,10 @@
     ".": {
       "types": "./dist/src/index.d.ts",
       "default": "./dist/src/index.js"
+    },
+    "./job-contribution-canonical": {
+      "types": "./dist/src/job-contribution-canonical.d.ts",
+      "default": "./dist/src/job-contribution-canonical.js"
     }
   },
   "scripts": {

@@ -7,9 +7,9 @@ import type {
   CreateResumeUploadRequest,
   CreateResumeUploadResponse,
   CurrentUser,
+  JobContribution,
   JobPreferenceSet,
   JobReport,
-  JobContribution,
   MatchAssessment,
   Operation,
   ProfileFact,
@@ -38,21 +38,21 @@ import { type DocumentStore, ResumeUploadRegistrationError } from "@ai-job-apply
 import {
   type ActiveJobRecord,
   type ActiveJobSearchInput,
-  type CreateJobReportCommand,
   type CreateJobContributionCommand,
+  type CreateJobReportCommand,
   type ModerationCase as DomainModerationCase,
   JobAlreadyReportedError,
   type JobCatalogReader,
+  type JobContributions,
   type JobModeration,
   JobReportIdempotencyConflictError,
   JobReportLimitError,
   JobReportServiceUnavailableError,
   type JobReports,
-  type JobContributions,
-  jobContributionContentDigestInput,
-  jobContributionPreviewDigestInput,
   JobReportTargetUnavailableError,
   JobSearchCatalogChangedError,
+  jobContributionContentDigestInput,
+  jobContributionPreviewDigestInput,
 } from "@ai-job-apply/jobs-service";
 import {
   MatchAssessmentServiceUnavailableError,
@@ -64,7 +64,12 @@ import {
   SavedJobLimitError,
   type SavedJobs,
 } from "@ai-job-apply/matching-service";
-import type { ProfileStore } from "@ai-job-apply/profile-service";
+import type {
+  ProfileStore,
+  UgcContributionConsent,
+  UgcContributionConsentStore,
+} from "@ai-job-apply/profile-service";
+import { UgcContributionConsentConflictError } from "@ai-job-apply/profile-service";
 import {
   assertCandidateRightsAuthentication,
   type CandidateRightsPolicy,
@@ -505,6 +510,69 @@ class MemoryJobContributions implements JobContributions {
   }
 }
 
+class MemoryUgcContributionConsents implements UgcContributionConsentStore {
+  readonly records = new Map<string, UgcContributionConsent>();
+  readonly receipts = new Map<string, { hash: string; response: UgcContributionConsent }>();
+
+  async grant(
+    command: Parameters<UgcContributionConsentStore["grant"]>[0],
+  ): Promise<UgcContributionConsent> {
+    const key = `${command.ownerUserId}\0grant\0${command.idempotencyKey}`;
+    const hash = JSON.stringify({
+      documentVersion: command.documentVersion,
+      ownerUserId: command.ownerUserId,
+      policyVersion: command.policyVersion,
+      previewPayloadSha256: command.previewPayloadSha256,
+    });
+    const receipt = this.receipts.get(key);
+    if (receipt) {
+      if (receipt.hash !== hash) throw new UgcContributionConsentConflictError();
+      return receipt.response;
+    }
+    const id = uuidv7();
+    const response: UgcContributionConsent = {
+      client: "extension",
+      documentVersion: command.documentVersion,
+      grantedAt: command.grantedAt,
+      id,
+      ownerUserId: command.ownerUserId,
+      policyVersion: command.policyVersion,
+      previewPayloadSha256: command.previewPayloadSha256,
+      purpose: "ugc_contribution",
+      recordedAt: command.grantedAt,
+      schemaVersion: 1,
+      state: "granted",
+    };
+    this.records.set(id, response);
+    this.receipts.set(key, { hash, response });
+    return response;
+  }
+
+  async revoke(
+    command: Parameters<UgcContributionConsentStore["revoke"]>[0],
+  ): Promise<UgcContributionConsent> {
+    const current = this.records.get(command.consentId);
+    if (!current || current.ownerUserId !== command.ownerUserId || current.state !== "granted") {
+      throw new UgcContributionConsentConflictError();
+    }
+    const revoked = { ...current, recordedAt: command.occurredAt, state: "revoked" as const };
+    this.records.set(command.consentId, revoked);
+    return revoked;
+  }
+
+  async supersede(): Promise<UgcContributionConsent> {
+    throw new UgcContributionConsentConflictError();
+  }
+
+  async verify(command: Parameters<UgcContributionConsentStore["verify"]>[0]) {
+    const current = this.records.get(command.consentId);
+    if (!current || current.ownerUserId !== command.ownerUserId) {
+      return { reason: "not_found" as const, valid: false as const };
+    }
+    return { consent: current, valid: true as const };
+  }
+}
+
 class MemoryModeration implements JobModeration {
   readonly cases: DomainModerationCase[] = [];
   lastOperatorId: string | undefined;
@@ -752,6 +820,7 @@ async function createApp() {
   const savedJobs = new MemorySavedJobs();
   const jobReports = new MemoryJobReports();
   const jobContributions = new MemoryJobContributions();
+  const ugcContributionConsents = new MemoryUgcContributionConsents();
   const moderation = new MemoryModeration();
   const matchAssessments = new MemoryMatchAssessments();
   const entitlements = new MemoryEntitlements();
@@ -786,6 +855,8 @@ async function createApp() {
     savedJobs,
     jobReports,
     jobContributions,
+    ugcContributionConsents,
+    ugcContributionPolicyVersion: "d2-synthetic-policy.v1",
     moderation,
     matchAssessments,
     entitlements,
@@ -803,6 +874,7 @@ async function createApp() {
     savedJobs,
     jobReports,
     jobContributions,
+    ugcContributionConsents,
     matchAssessments,
     entitlements,
     moderation,
@@ -1910,6 +1982,78 @@ describe("candidate API", () => {
       headers: { ...request.headers, authorization: `Bearer ${writeOnlyToken}` },
     });
     expect(wrongScope.statusCode).toBe(403);
+  });
+
+  it("grants server-timed preview consent without accepting a client consent identity", async () => {
+    const ownerToken = await issuer.issue("candidate-consent-owner", {
+      scope: "jobs:contribute",
+    });
+    const otherToken = await issuer.issue("candidate-consent-other", {
+      scope: "jobs:contribute",
+    });
+    const request = {
+      method: "POST" as const,
+      url: "/v1/profile/ugc-contribution-consents",
+      headers: {
+        authorization: `Bearer ${ownerToken}`,
+        "idempotency-key": "gateway-ugc-consent-grant-0001",
+      },
+      payload: {
+        schemaVersion: 1,
+        documentVersion: "ugc-contribution-preview.v1",
+        policyVersion: "d2-synthetic-policy.v1",
+        previewDigestSha256: "a".repeat(64),
+      },
+    };
+    const granted = await app.inject(request);
+    const replay = await app.inject(request);
+    expect(granted.statusCode).toBe(201);
+    expect(granted.headers["cache-control"]).toBe("no-store");
+    expect(replay.json()).toEqual(granted.json());
+    expect(granted.json()).toMatchObject({
+      documentVersion: "ugc-contribution-preview.v1",
+      grantedAt: now.toISOString(),
+      policyVersion: "d2-synthetic-policy.v1",
+      state: "granted",
+    });
+    expect(granted.json()).not.toHaveProperty("ownerUserId");
+    expect(granted.json()).not.toHaveProperty("previewDigestSha256");
+
+    const fabricated = await app.inject({
+      ...request,
+      headers: { ...request.headers, "idempotency-key": "gateway-ugc-consent-grant-0002" },
+      payload: { ...request.payload, consentId: uuidv7(), grantedAt: now.toISOString() },
+    });
+    expect(fabricated.statusCode).toBe(400);
+
+    const policyMismatch = await app.inject({
+      ...request,
+      headers: { ...request.headers, "idempotency-key": "gateway-ugc-consent-grant-0003" },
+      payload: { ...request.payload, policyVersion: "unapproved-policy.v1" },
+    });
+    expect(policyMismatch.statusCode).toBe(503);
+
+    const crossOwnerRevoke = await app.inject({
+      method: "POST",
+      url: `/v1/profile/ugc-contribution-consents/${granted.json().id}/revoke`,
+      headers: {
+        authorization: `Bearer ${otherToken}`,
+        "idempotency-key": "gateway-ugc-consent-revoke-0001",
+      },
+      payload: { schemaVersion: 1 },
+    });
+    expect(crossOwnerRevoke.statusCode).toBe(409);
+    const revoked = await app.inject({
+      method: "POST",
+      url: `/v1/profile/ugc-contribution-consents/${granted.json().id}/revoke`,
+      headers: {
+        authorization: `Bearer ${ownerToken}`,
+        "idempotency-key": "gateway-ugc-consent-revoke-0002",
+      },
+      payload: { schemaVersion: 1 },
+    });
+    expect(revoked.statusCode).toBe(204);
+    expect(revoked.headers["cache-control"]).toBe("no-store");
   });
 
   it("rejects contribution payload leakage and incomplete preview approval", async () => {

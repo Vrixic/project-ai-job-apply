@@ -3,6 +3,9 @@ declare const __AUTH0_CLIENT_ID__: string;
 declare const __AUTH0_DOMAIN__: string;
 declare const __EXTENSION_API_ORIGIN__: string;
 declare const __PENDING_RETENTION_MILLISECONDS__: number;
+declare const __UGC_CONTRIBUTION_POLICY_VERSION__: string;
+
+const POLICY_VERSION = /^[a-z0-9][a-z0-9._-]{2,99}$/u;
 
 export interface ExtensionPublicConfiguration {
   apiOrigin?: string;
@@ -12,6 +15,7 @@ export interface ExtensionPublicConfiguration {
   configured: boolean;
   domain: string;
   pendingRetentionMilliseconds?: number;
+  ugcContributionPolicyVersion?: string;
 }
 
 export function extensionPublicConfiguration(values: {
@@ -20,12 +24,14 @@ export function extensionPublicConfiguration(values: {
   clientId: string;
   domain: string;
   pendingRetentionMilliseconds?: number;
+  ugcContributionPolicyVersion?: string;
 }): ExtensionPublicConfiguration {
   const domain = values.domain.trim();
   const clientId = values.clientId.trim();
   const audience = values.audience.trim();
   const apiOrigin = safeApiOrigin(values.apiOrigin ?? "");
   const pendingRetentionMilliseconds = values.pendingRetentionMilliseconds;
+  const ugcContributionPolicyVersion = values.ugcContributionPolicyVersion?.trim();
   return {
     apiConfigured: apiOrigin !== undefined,
     audience,
@@ -43,6 +49,9 @@ export function extensionPublicConfiguration(values: {
     (pendingRetentionMilliseconds ?? 0) >= 60 * 60 * 1_000 &&
     (pendingRetentionMilliseconds ?? 0) <= 30 * 24 * 60 * 60 * 1_000
       ? { pendingRetentionMilliseconds }
+      : {}),
+    ...(ugcContributionPolicyVersion && POLICY_VERSION.test(ugcContributionPolicyVersion)
+      ? { ugcContributionPolicyVersion }
       : {}),
   };
 }
@@ -74,6 +83,10 @@ export const extensionConfiguration = extensionPublicConfiguration({
   audience: typeof __AUTH0_AUDIENCE__ === "string" ? __AUTH0_AUDIENCE__ : "",
   clientId: typeof __AUTH0_CLIENT_ID__ === "string" ? __AUTH0_CLIENT_ID__ : "",
   domain: typeof __AUTH0_DOMAIN__ === "string" ? __AUTH0_DOMAIN__ : "",
+  ugcContributionPolicyVersion:
+    typeof __UGC_CONTRIBUTION_POLICY_VERSION__ === "string"
+      ? __UGC_CONTRIBUTION_POLICY_VERSION__
+      : "",
   ...(typeof __PENDING_RETENTION_MILLISECONDS__ === "number"
     ? { pendingRetentionMilliseconds: __PENDING_RETENTION_MILLISECONDS__ }
     : {}),

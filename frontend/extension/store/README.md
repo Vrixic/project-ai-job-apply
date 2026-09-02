@@ -17,4 +17,5 @@ unexpected permissions/files, and writes a deterministic ZIP plus release manife
 
 The package is intentionally not upload-ready. Accountable privacy/security/legal approval,
 Chrome and Edge installed-browser evidence, authorized provider fixtures, working user removal and
-support channels, final listing assets, and browser-store review remain external gates.
+support channels, an accountably selected and identically configured UGC policy version, final
+listing assets, and browser-store review remain external gates.

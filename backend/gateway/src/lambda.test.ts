@@ -667,6 +667,12 @@ describe("API Gateway Lambda boundary", () => {
     ["malformed job identifier", "GET", "/v1/jobs/not-a-uuid"],
     ["malformed profile fact identifier", "PATCH", "/v1/profile/facts/not-a-uuid"],
     ["default-dark contribution intake", "POST", "/v1/jobs/contributions"],
+    ["default-dark contribution consent grant", "POST", "/v1/profile/ugc-contribution-consents"],
+    [
+      "default-dark contribution consent revoke",
+      "POST",
+      "/v1/profile/ugc-contribution-consents/019c0000-0000-7000-8000-000000000010/revoke",
+    ],
     [
       "default-dark contribution status",
       "GET",

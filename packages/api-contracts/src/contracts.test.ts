@@ -134,6 +134,45 @@ describe("Job contribution intake contract", () => {
   });
 });
 
+describe("UGC contribution consent contract", () => {
+  const validateGrant = compileComponentValidator("GrantUgcContributionConsentRequest");
+  const validateResponse = compileComponentValidator("UgcContributionConsentGrant");
+
+  it("requires jobs:contribute, stable idempotency, and no-store", () => {
+    const grant = contract.paths["/profile/ugc-contribution-consents"].post;
+    const revoke = contract.paths["/profile/ugc-contribution-consents/{consentId}/revoke"].post;
+    expect(grant.security).toEqual([{ oidc: ["jobs:contribute"] }]);
+    expect(revoke.security).toEqual([{ oidc: ["jobs:contribute"] }]);
+    expect(grant.parameters[0]).toMatchObject({ name: "Idempotency-Key", required: true });
+    expect(revoke.parameters[1]).toMatchObject({ name: "Idempotency-Key", required: true });
+    expect(grant.responses["201"].headers["Cache-Control"].schema.enum).toEqual(["no-store"]);
+    expect(revoke.responses["204"].headers["Cache-Control"].schema.enum).toEqual(["no-store"]);
+  });
+
+  it("does not accept client-issued consent identity or time and keeps policy externally selected", () => {
+    const request = {
+      schemaVersion: 1,
+      documentVersion: "ugc-contribution-preview.v1",
+      policyVersion: "d2-synthetic-policy.v1",
+      previewDigestSha256: "a".repeat(64),
+    };
+    expect(validateGrant(request)).toBe(true);
+    expect(validateGrant({ ...request, id: "019c0000-0000-7000-8000-000000000011" })).toBe(false);
+    expect(validateGrant({ ...request, grantedAt: "2026-09-01T12:00:00.000Z" })).toBe(false);
+    expect(validateGrant({ ...request, policyVersion: "NOT APPROVED" })).toBe(false);
+    expect(
+      validateResponse({
+        schemaVersion: 1,
+        id: "019c0000-0000-7000-8000-000000000011",
+        state: "granted",
+        documentVersion: "ugc-contribution-preview.v1",
+        policyVersion: "d2-synthetic-policy.v1",
+        grantedAt: "2026-09-01T12:00:00.000Z",
+      }),
+    ).toBe(true);
+  });
+});
+
 describe("job preference response contracts", () => {
   const validateSet = compileComponentValidator("JobPreferenceSet");
   const validateResponse = compileComponentValidator("PutJobPreferencesResponse");

@@ -1,46 +1,204 @@
-import { describe, expect, it } from "vitest";
-import { createJobIntentRequest } from "../lib/job-intent-api";
-import { createPendingIntent } from "../lib/pending-queue";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { extensionConfiguration } from "../lib/config";
+import {
+  createConsentGrantRequest,
+  createContributionRequest,
+  prepareContribution,
+  sendJobIntent,
+} from "../lib/job-intent-api";
+import { createPendingIntent, settleDispatch } from "../lib/pending-queue";
 
-describe("background-only job intent transport", () => {
-  it("uses the ADR-028 contribution route and stable idempotency without omitted fields", () => {
-    const intent = createPendingIntent({
-      approvedFields: ["location"],
-      capture: {
-        adapterVersion: "d2-job-page-v1",
-        capturedAt: "2026-09-01T12:00:00.000Z",
-        company: "Removed Company",
-        location: "Remote",
-        pageVariant: "lever-posting-v1",
-        provider: "lever",
-        sourceUrl: "https://jobs.lever.co/example/123",
-        title: "Engineer",
-      },
-      identityFence: "account-a",
-      intent: "contribute",
-      randomId: () => "018f0000-0000-7000-8000-000000000004",
-      retentionMilliseconds: 24 * 60 * 60 * 1_000,
-    });
-    const capture = {
-      adapterVersion: intent.capture.adapterVersion,
-      capturedAt: intent.capture.capturedAt,
+function intent() {
+  return createPendingIntent({
+    approvedFields: ["location"],
+    capture: {
+      adapterVersion: "d2-job-page-v1",
+      capturedAt: "2026-09-01T12:00:00.000Z",
+      company: "Removed Company",
       location: "Remote",
-      pageVariant: intent.capture.pageVariant,
-      provider: intent.capture.provider,
-      sourceUrl: intent.capture.sourceUrl,
-      title: intent.capture.title,
-    } as const;
-    const request = createJobIntentRequest(
-      intent,
-      capture,
-      "short-lived-token",
-      "https://api.example.test",
-    );
-    expect(request.url.href).toBe("https://api.example.test/v1/jobs/contributions");
-    expect(request.init.headers).toMatchObject({
-      authorization: "Bearer short-lived-token",
-      "idempotency-key": intent.idempotencyKey,
+      pageVariant: "lever-posting-v1",
+      provider: "lever",
+      sourceUrl: "https://jobs.lever.co/example/123",
+      title: "Engineer",
+    },
+    identityFence: "account-a",
+    intent: "contribute",
+    randomId: () => "018f0000-0000-7000-8000-000000000004",
+    retentionMilliseconds: 24 * 60 * 60 * 1_000,
+  });
+}
+
+function jsonResponse(status: number, value: unknown, noStore = true): Response {
+  return new Response(JSON.stringify(value), {
+    status,
+    headers: {
+      "content-type": "application/json",
+      ...(noStore ? { "cache-control": "no-store" } : {}),
+    },
+  });
+}
+
+const previousApiOrigin = extensionConfiguration.apiOrigin;
+const previousPolicy = extensionConfiguration.ugcContributionPolicyVersion;
+
+afterEach(() => {
+  if (previousApiOrigin) extensionConfiguration.apiOrigin = previousApiOrigin;
+  else delete extensionConfiguration.apiOrigin;
+  if (previousPolicy) extensionConfiguration.ugcContributionPolicyVersion = previousPolicy;
+  else delete extensionConfiguration.ugcContributionPolicyVersion;
+});
+
+describe("background-only contribution consent transport", () => {
+  it("maps selected capture fields to the exact generated request and canonical order", async () => {
+    const pending = intent();
+    const prepared = await prepareContribution(pending, "d2-synthetic-policy.v1");
+    expect(prepared.body).toMatchObject({
+      contributionId: pending.id,
+      source: {
+        provider: "lever",
+        pageVariant: "lever-posting-v1",
+        sourceUrl: "https://jobs.lever.co/example/123",
+      },
+      posting: { title: "Engineer", locations: ["Remote"] },
+      observation: { observedAt: "2026-09-01T12:00:00.000Z" },
+      approval: {
+        consentVersion: "ugc-contribution-preview.v1",
+        policyVersion: "d2-synthetic-policy.v1",
+        approvedFields: ["provider", "pageVariant", "sourceUrl", "title", "locations"],
+      },
     });
-    expect(request.init.body).not.toContain("Removed Company");
+    expect(prepared.body.posting).not.toHaveProperty("companyName");
+    expect(prepared.body.observation.contentSha256).toMatch(/^[a-f0-9]{64}$/u);
+    expect(prepared.previewDigestSha256).toMatch(/^[a-f0-9]{64}$/u);
+  });
+
+  it("uses separate stable keys and accepts only exact no-store consent and contribution responses", async () => {
+    extensionConfiguration.apiOrigin = "https://api.example.test";
+    extensionConfiguration.ugcContributionPolicyVersion = "d2-synthetic-policy.v1";
+    const pending = intent();
+    const calls: Array<{ init?: RequestInit; url: string }> = [];
+    const fetcher = vi.fn(async (input: URL | RequestInfo, init?: RequestInit) => {
+      calls.push({ ...(init ? { init } : {}), url: String(input) });
+      if (calls.length === 1) {
+        return jsonResponse(201, {
+          documentVersion: "ugc-contribution-preview.v1",
+          grantedAt: "2026-09-01T12:00:01.000Z",
+          id: "018f0000-0000-7000-8000-000000000099",
+          policyVersion: "d2-synthetic-policy.v1",
+          schemaVersion: 1,
+          state: "granted",
+        });
+      }
+      return jsonResponse(202, {
+        id: pending.id,
+        state: "queued",
+        submittedAt: "2026-09-01T12:00:02.000Z",
+        updatedAt: "2026-09-01T12:00:02.000Z",
+      });
+    });
+
+    await expect(
+      sendJobIntent(pending, "short-lived-token", fetcher as typeof fetch),
+    ).resolves.toEqual({
+      outcome: "accepted",
+    });
+    expect(calls.map((call) => call.url)).toEqual([
+      "https://api.example.test/v1/profile/ugc-contribution-consents",
+      "https://api.example.test/v1/jobs/contributions",
+    ]);
+    expect(calls[0]?.init?.headers).toMatchObject({
+      "idempotency-key": pending.consentIdempotencyKey,
+    });
+    expect(calls[1]?.init?.headers).toMatchObject({ "idempotency-key": pending.idempotencyKey });
+    const grantBody = JSON.parse(String(calls[0]?.init?.body)) as Record<string, unknown>;
+    expect(grantBody).not.toHaveProperty("consentId");
+    expect(grantBody).not.toHaveProperty("grantedAt");
+    const contribution = JSON.parse(String(calls[1]?.init?.body)) as {
+      approval: { approvedAt: string; consentId: string };
+      posting: Record<string, unknown>;
+    };
+    expect(contribution.approval).toMatchObject({
+      approvedAt: "2026-09-01T12:00:01.000Z",
+      consentId: "018f0000-0000-7000-8000-000000000099",
+    });
+    expect(contribution.posting).not.toHaveProperty("companyName");
+  });
+
+  it("persists a server-issued consent across an ambiguous contribution response", async () => {
+    extensionConfiguration.apiOrigin = "https://api.example.test";
+    extensionConfiguration.ugcContributionPolicyVersion = "d2-synthetic-policy.v1";
+    const pending = intent();
+    let call = 0;
+    const fetcher = vi.fn(async () => {
+      call += 1;
+      if (call === 1) {
+        return jsonResponse(201, {
+          documentVersion: "ugc-contribution-preview.v1",
+          grantedAt: "2026-09-01T12:00:01.000Z",
+          id: "018f0000-0000-7000-8000-000000000099",
+          policyVersion: "d2-synthetic-policy.v1",
+          schemaVersion: 1,
+          state: "granted",
+        });
+      }
+      throw new TypeError("ambiguous network result");
+    });
+    const result = await sendJobIntent(pending, "short-lived-token", fetcher as typeof fetch);
+    expect(result).toMatchObject({ outcome: "retryable", consent: { id: expect.any(String) } });
+    expect(settleDispatch(pending, result)?.consent).toEqual(result.consent);
+  });
+
+  it("fails closed on missing policy, malformed grants, and digest drift", async () => {
+    const pending = intent();
+    await expect(prepareContribution(pending, undefined)).rejects.toThrow("policy");
+    extensionConfiguration.apiOrigin = "https://api.example.test";
+    delete extensionConfiguration.ugcContributionPolicyVersion;
+    const disabled = vi.fn();
+    await expect(sendJobIntent(pending, "token", disabled as typeof fetch)).resolves.toEqual({
+      outcome: "terminal",
+    });
+    expect(disabled).not.toHaveBeenCalled();
+    extensionConfiguration.ugcContributionPolicyVersion = "d2-synthetic-policy.v1";
+    const malformed = vi.fn(async () =>
+      jsonResponse(201, {
+        grantedAt: "2026-09-01T12:00:01.000Z",
+        id: pending.id,
+        policyVersion: "different-policy.v1",
+        schemaVersion: 1,
+        state: "granted",
+      }),
+    );
+    await expect(sendJobIntent(pending, "token", malformed as typeof fetch)).resolves.toEqual({
+      outcome: "terminal",
+    });
+    const prepared = await prepareContribution(pending, "d2-synthetic-policy.v1");
+    const consent = {
+      grantedAt: "2026-09-01T12:00:01.000Z",
+      id: "018f0000-0000-7000-8000-000000000099",
+      previewDigestSha256: "f".repeat(64),
+    };
+    expect(() =>
+      createContributionRequest(
+        pending,
+        prepared.body,
+        consent,
+        "token",
+        "https://api.example.test",
+      ),
+    ).not.toThrow();
+    const drifted = { ...pending, consent };
+    const notCalled = vi.fn();
+    await expect(sendJobIntent(drifted, "token", notCalled as typeof fetch)).resolves.toEqual({
+      outcome: "terminal",
+    });
+    expect(notCalled).not.toHaveBeenCalled();
+    const grant = createConsentGrantRequest(
+      pending,
+      prepared.previewDigestSha256,
+      "token",
+      "https://api.example.test",
+      "d2-synthetic-policy.v1",
+    );
+    expect(grant.url.pathname).toBe("/v1/profile/ugc-contribution-consents");
   });
 });

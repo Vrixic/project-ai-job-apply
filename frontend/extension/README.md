@@ -25,8 +25,11 @@ public contribution, or browser-store distribution.
   exponential retry, service-worker restart recovery, login-session fencing, expiry, and explicit
   stopped/all-item removal. Explicit logout clears both the queue and last capture. Tokens are
   never included in UI messages or local pending records.
-- An exact background-only HTTPS API origin. Contribution transport targets the ADR-028
-  `POST /v1/jobs/contributions` boundary. The temporary private-source-save boundary must be
+- An exact background-only HTTPS API origin. Contribution transport first targets the ADR-028
+  Profile consent grant and then `POST /v1/jobs/contributions`. It maps only selected fields,
+  uses shared canonical digest inputs, accepts only exact `no-store` server receipts, persists the
+  server-issued consent across ambiguous contribution retries, and uses separate stable
+  idempotency keys. The temporary private-source-save boundary must be
   replaced by the generated `POST /v1/saved-job-captures` contract before activation.
 
 The normal path never retains or uploads raw DOM, page HTML, browsing history, cookies, request
@@ -51,7 +54,13 @@ Create a separate Auth0 Native Application for this public client. It has no cli
 `.env.example` to `.env.local` and set the public tenant, client ID, audience, and exact HTTPS API
 origin. Saving or contributing additionally requires `EXTENSION_PENDING_RETENTION_HOURS` to be an
 integer from 1 through 720. Source selects no live default: accountable review must select the
-duration within the enforced 30-day ceiling. Then run:
+duration within the enforced 30-day ceiling.
+
+Contribution delivery also requires `EXTENSION_UGC_CONTRIBUTION_POLICY_VERSION` to equal the
+accountably selected server value. No value is selected in source or `.env.example`; absence keeps
+delivery off.
+
+Then run:
 
 ```powershell
 pnpm --filter @ai-job-apply/extension typecheck

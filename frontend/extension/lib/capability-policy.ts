@@ -1,3 +1,4 @@
+import { extensionConfiguration } from "./config";
 import { PROVIDER_DETECTORS } from "./detectors";
 import type { AtsProvider } from "./job-capture";
 
@@ -22,7 +23,10 @@ export const DEFAULT_DARK_POLICY: ExtensionCapabilityPolicy = {
 };
 
 export function jobIntentDeliveryAllowed(intent: "contribute" | "private_save"): boolean {
-  return DEFAULT_DARK_POLICY.deliveryEnabled[intent];
+  return (
+    DEFAULT_DARK_POLICY.deliveryEnabled[intent] &&
+    (intent !== "contribute" || Boolean(extensionConfiguration.ugcContributionPolicyVersion))
+  );
 }
 
 export type CapabilityDecision =

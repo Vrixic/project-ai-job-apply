@@ -43,3 +43,7 @@ owner to the exact document version, policy version, final preview SHA-256, gran
 current lineage. Creation is idempotent and audited without payload values. Verification rejects
 owner/hash/version mismatches, expired or non-current grants, quarantined owners, malformed input,
 and persistence failures. Gateway wiring and contribution activation remain default-off.
+Grant and revoke receipts intentionally exclude server-selected timestamps from their request
+hashes, so an ambiguous retry with the same semantic input returns the original immutable server
+time. Audit metadata contains only fixed purpose/client and version identifiers; it never contains
+the preview digest or selected posting content.

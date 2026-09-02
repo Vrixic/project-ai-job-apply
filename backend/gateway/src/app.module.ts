@@ -8,16 +8,17 @@ import type {
   ConfirmAccountDeletionRequest,
   CreateAccountDeletionRequest,
   CreateCandidateDataExportRequest,
-  CreateJobReportRequest,
   CreateJobContributionRequest,
+  CreateJobReportRequest,
   CreateProfileFactRequest,
   CreateResumeUploadRequest,
   CreateResumeUploadResponse,
   CreateSavedJobRequest,
   CurrentUser,
   EntitlementSummary,
-  JobReport,
+  GrantUgcContributionConsentRequest,
   JobContribution,
+  JobReport,
   JobReportSummary,
   JobSearchPage,
   JobSearchRequest,
@@ -37,6 +38,7 @@ import type {
   SavedJob,
   SavedJobPage,
   SavedJobSearchRequest,
+  UgcContributionConsentGrant,
   UpdateProfileFactRequest,
 } from "@ai-job-apply/api-contracts";
 import { compileComponentValidator, formatValidationErrors } from "@ai-job-apply/api-contracts";
@@ -59,13 +61,13 @@ import {
 } from "@ai-job-apply/documents-service";
 import {
   InvalidJobSearchError,
-  type JobContributions,
-  JobContributionConsentRequiredError,
-  JobContributionIdempotencyConflictError,
-  JobContributionUnavailableError,
   InvalidModerationCursorError,
   JobAlreadyReportedError,
   type JobCatalogReader,
+  JobContributionConsentRequiredError,
+  JobContributionIdempotencyConflictError,
+  type JobContributions,
+  JobContributionUnavailableError,
   type JobModeration,
   JobReportIdempotencyConflictError,
   JobReportLimitError,
@@ -104,6 +106,9 @@ import {
   ProfileFactTransitionConflictError,
   ProfileFactVersionConflictError,
   type ProfileStore,
+  UgcContributionConsentConflictError,
+  type UgcContributionConsentStore,
+  UgcContributionConsentUnavailableError,
 } from "@ai-job-apply/profile-service";
 import {
   type ArgumentsHost,
@@ -134,6 +139,8 @@ const PROFILE_STORE = Symbol("PROFILE_STORE");
 const JOB_CATALOG = Symbol("JOB_CATALOG");
 const JOB_REPORTS = Symbol("JOB_REPORTS");
 const JOB_CONTRIBUTIONS = Symbol("JOB_CONTRIBUTIONS");
+const UGC_CONTRIBUTION_CONSENTS = Symbol("UGC_CONTRIBUTION_CONSENTS");
+const UGC_CONTRIBUTION_POLICY_VERSION = Symbol("UGC_CONTRIBUTION_POLICY_VERSION");
 const JOB_MODERATION = Symbol("JOB_MODERATION");
 const SAVED_JOBS = Symbol("SAVED_JOBS");
 const MATCH_ASSESSMENTS = Symbol("MATCH_ASSESSMENTS");
@@ -210,6 +217,8 @@ const SAFE_ROUTE_TEMPLATES = new Set([
   "/v1/jobs/:jobId/reports",
   "/v1/jobs/contributions",
   "/v1/jobs/contributions/:contributionId",
+  "/v1/profile/ugc-contribution-consents",
+  "/v1/profile/ugc-contribution-consents/:consentId/revoke",
   "/v1/admin/moderation/cases",
   "/v1/admin/moderation/cases/search",
   "/v1/admin/moderation/cases/:caseId/resolve",
@@ -453,6 +462,16 @@ class ProblemDetailsFilter implements ExceptionFilter {
       code = "job_contribution_unavailable";
       title = "Job contribution unavailable";
       detail = "Job contribution intake is temporarily unavailable";
+    } else if (exception instanceof UgcContributionConsentConflictError) {
+      status = HttpStatus.CONFLICT;
+      code = "ugc_contribution_consent_conflict";
+      title = "Contribution consent conflict";
+      detail = "The contribution consent command conflicts with current state";
+    } else if (exception instanceof UgcContributionConsentUnavailableError) {
+      status = HttpStatus.SERVICE_UNAVAILABLE;
+      code = "ugc_contribution_consent_unavailable";
+      title = "Contribution consent unavailable";
+      detail = "Contribution consent is temporarily unavailable";
     } else if (exception instanceof InvalidModerationCursorError) {
       status = HttpStatus.BAD_REQUEST;
       code = "invalid_moderation_cursor";
@@ -625,6 +644,15 @@ const validateCreateJobReport = compileComponentValidator("CreateJobReportReques
 const validateJobReport = compileComponentValidator("JobReport");
 const validateCreateJobContribution = compileComponentValidator("CreateJobContributionRequest");
 const validateJobContribution = compileComponentValidator("JobContribution");
+const validateGrantUgcContributionConsent = compileComponentValidator(
+  "GrantUgcContributionConsentRequest",
+);
+const validateUgcContributionConsentGrant = compileComponentValidator(
+  "UgcContributionConsentGrant",
+);
+const validateRevokeUgcContributionConsent = compileComponentValidator(
+  "RevokeUgcContributionConsentRequest",
+);
 const validateOpenModerationCase = compileComponentValidator("OpenModerationCaseRequest");
 const validateResolveModerationCase = compileComponentValidator("ResolveModerationCaseRequest");
 const validateModerationCaseSearch = compileComponentValidator("ModerationCaseSearchRequest");
@@ -946,6 +974,10 @@ class CandidateController {
     @Inject(JOB_CATALOG) private readonly catalog: JobCatalogReader,
     @Inject(JOB_REPORTS) private readonly jobReports: JobReports,
     @Inject(JOB_CONTRIBUTIONS) private readonly jobContributions: JobContributions,
+    @Inject(UGC_CONTRIBUTION_CONSENTS)
+    private readonly ugcContributionConsents: UgcContributionConsentStore,
+    @Inject(UGC_CONTRIBUTION_POLICY_VERSION)
+    private readonly ugcContributionPolicyVersion: string | null,
     @Inject(SAVED_JOBS) private readonly savedJobs: SavedJobs,
     @Inject(MATCH_ASSESSMENTS) private readonly matchAssessments: MatchAssessments,
     @Inject(ENTITLEMENTS) private readonly entitlements: EntitlementReadService,
@@ -1312,6 +1344,79 @@ class CandidateController {
     return created as JobContribution;
   }
 
+  @Post("/profile/ugc-contribution-consents")
+  @HttpCode(HttpStatus.CREATED)
+  @Header("cache-control", "no-store")
+  async grantUgcContributionConsent(
+    @Req() request: AuthenticatedRequest,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<UgcContributionConsentGrant> {
+    if (
+      (request.query && Object.keys(request.query as Record<string, unknown>).length > 0) ||
+      !validateGrantUgcContributionConsent(request.body)
+    ) {
+      throw new HttpException(
+        formatValidationErrors(validateGrantUgcContributionConsent.errors),
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const user = await this.identity.resolve(request, "jobs:contribute");
+    const input = request.body as GrantUgcContributionConsentRequest;
+    if (
+      !this.ugcContributionPolicyVersion ||
+      input.policyVersion !== this.ugcContributionPolicyVersion
+    ) {
+      throw new UgcContributionConsentUnavailableError();
+    }
+    const grantedAt = this.clock().toISOString();
+    const consent = await this.ugcContributionConsents.grant({
+      documentVersion: input.documentVersion,
+      grantedAt,
+      idempotencyKey: requireIdempotencyKey(idempotencyKey),
+      ownerUserId: user.id,
+      policyVersion: input.policyVersion,
+      previewPayloadSha256: input.previewDigestSha256,
+      traceId: request.traceId ?? correlationId(undefined),
+    });
+    const response: UgcContributionConsentGrant = {
+      documentVersion: consent.documentVersion as UgcContributionConsentGrant["documentVersion"],
+      grantedAt: consent.grantedAt,
+      id: consent.id,
+      policyVersion: consent.policyVersion as UgcContributionConsentGrant["policyVersion"],
+      schemaVersion: 1,
+      state: "granted",
+    };
+    if (!validateUgcContributionConsentGrant(response)) {
+      throw new UgcContributionConsentUnavailableError();
+    }
+    return response;
+  }
+
+  @Post("/profile/ugc-contribution-consents/:consentId/revoke")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Header("cache-control", "no-store")
+  async revokeUgcContributionConsent(
+    @Req() request: AuthenticatedRequest,
+    @Param("consentId") consentId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<void> {
+    if (
+      !UUID_V7_PATTERN.test(consentId) ||
+      (request.query && Object.keys(request.query as Record<string, unknown>).length > 0) ||
+      !validateRevokeUgcContributionConsent(request.body)
+    ) {
+      throw new HttpException("Contribution consent revocation is invalid", HttpStatus.BAD_REQUEST);
+    }
+    const user = await this.identity.resolve(request, "jobs:contribute");
+    await this.ugcContributionConsents.revoke({
+      consentId,
+      idempotencyKey: requireIdempotencyKey(idempotencyKey),
+      occurredAt: this.clock().toISOString(),
+      ownerUserId: user.id,
+      traceId: request.traceId ?? correlationId(undefined),
+    });
+  }
+
   @Get("/jobs/contributions/:contributionId")
   @Header("cache-control", "no-store")
   async getJobContribution(
@@ -1564,6 +1669,8 @@ export interface AppModuleOptions {
   catalog: JobCatalogReader;
   jobReports: JobReports;
   jobContributions: JobContributions;
+  ugcContributionConsents: UgcContributionConsentStore;
+  ugcContributionPolicyVersion?: string;
   moderation: JobModeration;
   savedJobs: SavedJobs;
   matchAssessments: MatchAssessments;
@@ -1589,6 +1696,11 @@ export class AppModule {
         { provide: JOB_CATALOG, useValue: options.catalog },
         { provide: JOB_REPORTS, useValue: options.jobReports },
         { provide: JOB_CONTRIBUTIONS, useValue: options.jobContributions },
+        { provide: UGC_CONTRIBUTION_CONSENTS, useValue: options.ugcContributionConsents },
+        {
+          provide: UGC_CONTRIBUTION_POLICY_VERSION,
+          useValue: options.ugcContributionPolicyVersion ?? null,
+        },
         { provide: JOB_MODERATION, useValue: options.moderation },
         { provide: SAVED_JOBS, useValue: options.savedJobs },
         { provide: MATCH_ASSESSMENTS, useValue: options.matchAssessments },

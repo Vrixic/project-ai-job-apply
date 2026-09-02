@@ -257,7 +257,6 @@ export class PostgresUgcContributionConsentStore implements UgcContributionConse
     const hash = requestHash({
       documentVersion: command.documentVersion,
       expiresAt: command.expiresAt,
-      grantedAt: command.grantedAt,
       ownerUserId: command.ownerUserId,
       policyVersion: command.policyVersion,
       previewPayloadSha256: command.previewPayloadSha256,
@@ -346,7 +345,6 @@ export class PostgresUgcContributionConsentStore implements UgcContributionConse
     const hash = requestHash({
       action,
       consentId: command.consentId,
-      occurredAt: command.occurredAt,
       ownerUserId: command.ownerUserId,
       replacementConsentId: command.replacementConsentId,
     });

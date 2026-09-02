@@ -54,6 +54,16 @@ const pendingRetentionHoursValue = (
   fileEnvironment.EXTENSION_PENDING_RETENTION_HOURS ??
   ""
 ).trim();
+const ugcContributionPolicyVersion = (
+  process.env.EXTENSION_UGC_CONTRIBUTION_POLICY_VERSION ??
+  fileEnvironment.EXTENSION_UGC_CONTRIBUTION_POLICY_VERSION ??
+  ""
+).trim();
+const safeUgcContributionPolicyVersion = /^[a-z0-9][a-z0-9._-]{2,99}$/u.test(
+  ugcContributionPolicyVersion,
+)
+  ? ugcContributionPolicyVersion
+  : "";
 const pendingRetentionHours = Number(pendingRetentionHoursValue);
 const pendingRetentionMilliseconds =
   Number.isInteger(pendingRetentionHours) &&
@@ -96,6 +106,7 @@ const buildOptions = {
     __AUTH0_DOMAIN__: JSON.stringify(configured ? domain : ""),
     __EXTENSION_API_ORIGIN__: JSON.stringify(apiOrigin),
     __PENDING_RETENTION_MILLISECONDS__: JSON.stringify(pendingRetentionMilliseconds),
+    __UGC_CONTRIBUTION_POLICY_VERSION__: JSON.stringify(safeUgcContributionPolicyVersion),
   },
   entryPoints: {
     background: join(extensionRoot, "entrypoints", "background.ts"),

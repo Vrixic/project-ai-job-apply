@@ -25,6 +25,11 @@ scope. The only implemented state is `queued`. These tables have no mutation pat
 into provider source or canonical job truth, retain no DOM/HTML/raw page snapshot, and cannot
 activate, refresh, extend, or overwrite catalog provenance.
 
+The contribution service and extension share one pure canonicalization helper from API contracts.
+Before persistence, the gateway adapter verifies the exact owner, policy, preview digest, current
+nonexpired Profile grant, and exact server-issued grant timestamp. Missing Profile wiring remains
+fail closed.
+
 The durable normalizer, independent source verifier, Profile consent recheck, Trust-owned UGC
 decision, accepted UGC observation/source linkage, outbox dispatcher, contributor export/deletion,
 and deployment/activation controls remain separate D2 work. Until those land, the intake is

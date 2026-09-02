@@ -1,6 +1,6 @@
 import type { CaptureField, SanitizedJobCapture } from "./job-capture";
 
-export const PENDING_QUEUE_KEY = "d2PendingJobIntentsV1";
+export const PENDING_QUEUE_KEY = "d2PendingJobIntentsV2";
 export const MAXIMUM_ATTEMPTS = 5;
 export const MAXIMUM_QUEUE_ITEMS = 25;
 const BACKOFF_MILLISECONDS = [60_000, 5 * 60_000, 30 * 60_000, 2 * 60 * 60_000] as const;
@@ -8,10 +8,18 @@ const BACKOFF_MILLISECONDS = [60_000, 5 * 60_000, 30 * 60_000, 2 * 60 * 60_000] 
 export type JobIntentKind = "contribute" | "private_save";
 export type PendingState = "blocked" | "pending" | "terminal";
 
+export interface UgcConsentBinding {
+  grantedAt: string;
+  id: string;
+  previewDigestSha256: string;
+}
+
 export interface PendingJobIntent {
   approvedFields: readonly CaptureField[];
   attempt: number;
   capture: SanitizedJobCapture;
+  consent?: UgcConsentBinding;
+  consentIdempotencyKey: string;
   createdAt: string;
   expiresAt: string;
   id: string;
@@ -24,6 +32,7 @@ export interface PendingJobIntent {
 }
 
 export interface DispatchResult {
+  consent?: UgcConsentBinding;
   outcome: "accepted" | "retryable" | "terminal";
 }
 
@@ -71,6 +80,7 @@ export function createPendingIntent(input: {
     approvedFields: [...new Set(input.approvedFields)],
     attempt: 0,
     capture: input.capture,
+    consentIdempotencyKey: `extension-ugc-consent-${id}`,
     createdAt: now.toISOString(),
     expiresAt: new Date(now.getTime() + input.retentionMilliseconds).toISOString(),
     id,
@@ -115,13 +125,21 @@ export function settleDispatch(
   if (result.outcome === "accepted") {
     return undefined;
   }
+  const consent = result.consent ?? intent.consent;
   const attempt = intent.attempt + 1;
   if (result.outcome === "terminal" || attempt >= MAXIMUM_ATTEMPTS) {
-    return { ...intent, attempt, lastError: "request_rejected", state: "terminal" };
+    return {
+      ...intent,
+      ...(consent ? { consent } : {}),
+      attempt,
+      lastError: "request_rejected",
+      state: "terminal",
+    };
   }
   const delay = BACKOFF_MILLISECONDS[Math.min(attempt - 1, BACKOFF_MILLISECONDS.length - 1)] ?? 0;
   return {
     ...intent,
+    ...(consent ? { consent } : {}),
     attempt,
     lastError: "retryable",
     nextAttemptAt: new Date(now.getTime() + delay).toISOString(),

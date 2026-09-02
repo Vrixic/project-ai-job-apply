@@ -18,12 +18,12 @@ import {
   UnavailableDocumentStore,
 } from "@ai-job-apply/documents-service";
 import {
-  JobModerationService,
   JobContributionService,
+  JobModerationService,
   JobReportingService,
   PostgresJobCatalog,
-  PostgresJobModerationStore,
   PostgresJobContributionStore,
+  PostgresJobModerationStore,
   PostgresJobReportStore,
 } from "@ai-job-apply/jobs-service";
 import {
@@ -37,6 +37,7 @@ import {
   createDatabase,
   loadCandidateRightsPolicyIfConfigured,
   PostgresProfileStore,
+  PostgresUgcContributionConsentStore,
   resolveLambdaDatabaseUrl,
 } from "@ai-job-apply/profile-service";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
@@ -50,6 +51,10 @@ import { createGatewayApplication } from "./application.js";
 import { S3CandidateDataExportDownloadSigner } from "./candidate-data-export-download-signer.js";
 import { S3CandidateDeletionConfirmationJournal } from "./candidate-deletion-confirmation-journal.js";
 import { MAXIMUM_GATEWAY_BODY_BYTES } from "./gateway-boundary.js";
+import {
+  configuredUgcContributionPolicyVersion,
+  ProfileJobContributionConsentVerifier,
+} from "./job-contribution-consent-verifier.js";
 import { deriveJobSearchCursorKeys, deriveModerationCursorKey } from "./job-search-cursor-key.js";
 import { JobCatalogSavedJobResolver } from "./saved-job-catalog-resolver.js";
 import { SqsOutboxNudgePublisher } from "./sqs-outbox-nudge-publisher.js";
@@ -613,8 +618,16 @@ async function createConfiguredApplication(
     searchCursorKeys: deriveJobSearchCursorKeys(databaseUrl),
   });
   const jobReports = new JobReportingService(new PostgresJobReportStore(database.client));
+  const ugcContributionConsents = new PostgresUgcContributionConsentStore(database.client);
+  const ugcContributionPolicyVersion = configuredUgcContributionPolicyVersion(
+    process.env.UGC_CONTRIBUTION_POLICY_VERSION,
+  );
   const jobContributions = new JobContributionService(
     new PostgresJobContributionStore(database.client),
+    new ProfileJobContributionConsentVerifier(
+      ugcContributionConsents,
+      ugcContributionPolicyVersion,
+    ),
   );
   const moderation = new JobModerationService(
     new PostgresJobModerationStore(database.client, deriveModerationCursorKey(databaseUrl)),
@@ -651,6 +664,8 @@ async function createConfiguredApplication(
     catalog,
     jobReports,
     jobContributions,
+    ugcContributionConsents,
+    ...(ugcContributionPolicyVersion ? { ugcContributionPolicyVersion } : {}),
     moderation,
     savedJobs,
     matchAssessments,

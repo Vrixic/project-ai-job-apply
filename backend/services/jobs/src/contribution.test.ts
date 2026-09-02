@@ -3,11 +3,11 @@ import { v7 as uuidv7 } from "uuid";
 import { describe, expect, it } from "vitest";
 import {
   type CreateJobContributionCommand,
-  type JobContributionInput,
   type JobContributionConsentVerifier,
+  type JobContributionInput,
+  JobContributionService,
   type JobContributionStatus,
   type JobContributionStore,
-  JobContributionService,
   jobContributionContentDigestInput,
   jobContributionPreviewDigestInput,
 } from "./contribution.js";
@@ -245,6 +245,7 @@ describe("JobContributionService", () => {
       consentVersion: input.input.approval.consentVersion,
       policyVersion: input.input.approval.policyVersion,
       previewDigestSha256: input.input.approval.previewDigestSha256,
+      approvedAt: input.input.approval.approvedAt,
     });
   });
 });

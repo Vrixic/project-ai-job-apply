@@ -806,6 +806,100 @@
         }
       }
     },
+    "/profile/ugc-contribution-consents": {
+      "post": {
+        "operationId": "grantUgcContributionConsent",
+        "security": [{ "oidc": ["jobs:contribute"] }],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": { "type": "string", "minLength": 16, "maxLength": 128 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/GrantUgcContributionConsentRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "An immutable owner-scoped preview consent was granted",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UgcContributionConsentGrant" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/profile/ugc-contribution-consents/{consentId}/revoke": {
+      "post": {
+        "operationId": "revokeUgcContributionConsent",
+        "security": [{ "oidc": ["jobs:contribute"] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "consentId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": { "type": "string", "minLength": 16, "maxLength": 128 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RevokeUgcContributionConsentRequest" }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "The owner-scoped consent is revoked",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
     "/jobs/contributions/{contributionId}": {
       "get": {
         "operationId": "getJobContribution",
@@ -2394,6 +2488,61 @@
             },
             "additionalProperties": false
           }
+        },
+        "additionalProperties": false
+      },
+      "GrantUgcContributionConsentRequest": {
+        "type": "object",
+        "required": ["schemaVersion", "documentVersion", "policyVersion", "previewDigestSha256"],
+        "properties": {
+          "schemaVersion": { "const": 1 },
+          "documentVersion": { "const": "ugc-contribution-preview.v1" },
+          "policyVersion": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9][a-z0-9._-]{2,99}$"
+          },
+          "previewDigestSha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UgcContributionConsentGrant": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "id",
+          "state",
+          "documentVersion",
+          "policyVersion",
+          "grantedAt"
+        ],
+        "properties": {
+          "schemaVersion": { "const": 1 },
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "state": { "const": "granted" },
+          "documentVersion": { "const": "ugc-contribution-preview.v1" },
+          "policyVersion": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9][a-z0-9._-]{2,99}$"
+          },
+          "grantedAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      },
+      "RevokeUgcContributionConsentRequest": {
+        "type": "object",
+        "required": ["schemaVersion"],
+        "properties": {
+          "schemaVersion": { "const": 1 }
         },
         "additionalProperties": false
       },

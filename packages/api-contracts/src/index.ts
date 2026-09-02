@@ -41,6 +41,11 @@ export type CreateSavedJobRequest = components["schemas"]["CreateSavedJobRequest
 export type CreateJobReportRequest = components["schemas"]["CreateJobReportRequest"];
 export type CreateJobContributionRequest = components["schemas"]["CreateJobContributionRequest"];
 export type JobContribution = components["schemas"]["JobContribution"];
+export type GrantUgcContributionConsentRequest =
+  components["schemas"]["GrantUgcContributionConsentRequest"];
+export type UgcContributionConsentGrant = components["schemas"]["UgcContributionConsentGrant"];
+export type RevokeUgcContributionConsentRequest =
+  components["schemas"]["RevokeUgcContributionConsentRequest"];
 export type JobReport = components["schemas"]["JobReport"];
 export type OpenModerationCaseRequest = components["schemas"]["OpenModerationCaseRequest"];
 export type ResolveModerationCaseRequest = components["schemas"]["ResolveModerationCaseRequest"];
