@@ -1,4 +1,8 @@
-import { capabilityForPage } from "../lib/capability-policy";
+import {
+  capabilityForPage,
+  DEFAULT_DARK_DETECTOR_POLICY_REVISION,
+  extensionDetectorActivationPolicy,
+} from "../lib/capability-policy";
 import { extensionConfiguration } from "../lib/config";
 import { detectPublicJob } from "../lib/detectors";
 import type { CaptureField, SanitizedJobCapture } from "../lib/job-capture";
@@ -175,12 +179,18 @@ async function captureCurrentPage(): Promise<
 > {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id || !tab.url) return { error: "No inspectable active page.", ok: false };
-  const decision = capabilityForPage(tab.url, chrome.runtime.getManifest().version);
+  const decision = capabilityForPage(
+    tab.url,
+    chrome.runtime.getManifest().version,
+    extensionDetectorActivationPolicy,
+  );
   if (!decision.allowed) {
     const error =
-      decision.reason === "provider_disabled"
-        ? "This provider remains disabled pending representative fixture acceptance."
-        : "This page is unsupported or disabled.";
+      decision.reason === "configuration_missing"
+        ? `Current-page inspection is disabled in ${DEFAULT_DARK_DETECTOR_POLICY_REVISION}.`
+        : decision.reason === "provider_disabled"
+          ? "This provider remains disabled pending representative fixture acceptance."
+          : "This page is unsupported or disabled.";
     return { error, ok: false };
   }
   const [execution] = await chrome.scripting.executeScript({
@@ -192,7 +202,11 @@ async function captureCurrentPage(): Promise<
     return { error: "The page changed during inspection. Try again.", ok: false };
   }
   const capture = execution?.result ? detectPublicJob(execution.result) : undefined;
-  if (!capture || capture.provider !== decision.provider) {
+  if (
+    !capture ||
+    capture.provider !== decision.provider ||
+    capture.pageVariant !== decision.variant
+  ) {
     return { error: "No supported public job was detected.", ok: false };
   }
   await chrome.storage.session.set({

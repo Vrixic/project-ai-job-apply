@@ -14,8 +14,10 @@ public contribution, or browser-store distribution.
   to trusted `chrome.storage.session` contexts.
 - Explicit `activeTab` inspection through `chrome.scripting.executeScript`; there are no persistent
   content scripts or provider host grants.
-- Exact provider-domain adapters for Greenhouse, Lever, and Ashby behind a version/domain/provider
-  policy whose accepted default enables no provider.
+- Exact provider-domain adapters for Greenhouse, Lever, and Ashby behind a separate reviewed
+  build-time detector policy. It requires the exact extension version plus complete provider,
+  page-variant, and domain maps; absence, malformed/extra fields, or any disabled dimension denies
+  inspection. Source and the default-dark package enable no detector.
 - Public contribution additionally requires a bounded Ed25519-signed capability policy fetched as
   JSON data from the exact API origin. The extension pins an explicit key-ID-to-SPKI map at build
   time, verifies the server-compatible canonical envelope, and independently checks global intake,
@@ -75,6 +77,14 @@ The signed policy is read only from `/v1/extension/contribution-capability-polic
 HTTPS API origin. A received envelope may live for at most 24 hours; source selects no policy,
 signing key, refresh interval, or activation value.
 
+Page inspection and private capture use the independent `EXTENSION_DETECTOR_ACTIVATION_JSON`
+build-time policy. Its exact shape is `schemaVersion`, a reviewed `revision`, `extensionVersion`,
+and complete boolean `enabledProviders`, `enabledVariants`, and `enabledDomains` maps covering only
+the three source adapters and five domains documented above. This setting contains no executable
+adapter or remote URL and does not authorize public contribution. A signed contribution disable
+therefore cannot disable an otherwise reviewed private-save path, while an absent detector policy
+still keeps both current-page actions dark because there is no accepted page to save.
+
 Then run:
 
 ```powershell
@@ -93,9 +103,9 @@ https://EXTENSION_ID.chromiumapp.org/auth0
 The access grant must include `jobs:read`, `jobs:write`, and the dedicated `jobs:contribute` scope
 in addition to the existing profile scopes. A missing or malformed identity/API configuration
 fails closed. Even with valid configuration, current provider capture remains disabled by
-`DEFAULT_DARK_POLICY` until its external evidence gate passes. Private saved-page transport is not
-controlled by the public-contribution policy and remains independently available whenever its own
-identity, API, retention, and detector gates pass.
+the absent detector activation policy until its external evidence gate passes. Private saved-page
+transport is not controlled by the public-contribution policy and remains independently available
+whenever its own identity, API, retention, and detector gates pass.
 
 ## Remaining activation gates
 

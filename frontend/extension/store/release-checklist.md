@@ -18,6 +18,9 @@ Every box applies independently to Chrome and Edge unless the evidence explicitl
 ## Product, privacy, and operations
 
 - [ ] Authorized provider fixtures and independent variant acceptance exist for every enabled rule.
+- [ ] `EXTENSION_DETECTOR_ACTIVATION_JSON` contains only the reviewed exact extension version and
+  complete provider/variant/domain maps; enabled tuples match accepted fixtures, and the archive
+  still contains no persistent provider host permission.
 - [ ] Dedicated extension Auth0 Native Application passes Chrome/Edge PKCE, rotation/replay,
   cancellation, sign-out, and revocation tests.
 - [ ] Private-save and contribution APIs, consent binding, Trust review, withdrawal, deletion/export,

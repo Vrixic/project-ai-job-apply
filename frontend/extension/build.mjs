@@ -64,6 +64,22 @@ const capabilityPolicyPublicKeysValue = (
   fileEnvironment.EXTENSION_CAPABILITY_POLICY_PUBLIC_KEYS_JSON ??
   ""
 ).trim();
+const detectorActivationPolicyValue = (
+  process.env.EXTENSION_DETECTOR_ACTIVATION_JSON ??
+  fileEnvironment.EXTENSION_DETECTOR_ACTIVATION_JSON ??
+  ""
+).trim();
+let detectorActivationPolicy = {};
+try {
+  if (detectorActivationPolicyValue.length <= 8_192) {
+    const parsed = JSON.parse(detectorActivationPolicyValue);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      detectorActivationPolicy = parsed;
+    }
+  }
+} catch {
+  detectorActivationPolicy = {};
+}
 let capabilityPolicyPublicKeys = {};
 try {
   const parsed = JSON.parse(capabilityPolicyPublicKeysValue);
@@ -129,6 +145,7 @@ const buildOptions = {
     __AUTH0_CLIENT_ID__: JSON.stringify(configured ? clientId : ""),
     __AUTH0_DOMAIN__: JSON.stringify(configured ? domain : ""),
     __CAPABILITY_POLICY_PUBLIC_KEYS__: JSON.stringify(capabilityPolicyPublicKeys),
+    __DETECTOR_ACTIVATION_POLICY__: JSON.stringify(detectorActivationPolicy),
     __EXTENSION_API_ORIGIN__: JSON.stringify(apiOrigin),
     __PENDING_RETENTION_MILLISECONDS__: JSON.stringify(pendingRetentionMilliseconds),
     __UGC_CONTRIBUTION_POLICY_VERSION__: JSON.stringify(safeUgcContributionPolicyVersion),

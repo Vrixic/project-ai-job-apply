@@ -25,3 +25,7 @@ receive signed capability data must embed only the accountably approved Ed25519 
 the policy remains inert JSON data, is accepted for at most 24 hours, and cannot load executable
 code. Packaging rejects remote JavaScript import/worker construction and dynamic code construction
 in addition to the manifest, CSP, and host-permission checks.
+
+Detector activation is a separate reviewed build-time data object. It cannot carry code or add host
+permissions, must bind the exact package version/provider/variant/domain tuple, and does not enable
+public contribution. The default-dark archive injects no detector policy.
