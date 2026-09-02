@@ -49,15 +49,43 @@ describe("strict public job capture", () => {
         title: "Do not capture",
       }),
     ).toBeUndefined();
+    expect(
+      detectPublicJob({
+        canonicalUrl: "https://jobs.lever.co/not-a-supported-job-path",
+        title: "Do not capture",
+      }),
+    ).toBeUndefined();
+    expect(
+      detectPublicJob({
+        canonicalUrl: "https://boards.greenhouse.io/example/not-jobs/123",
+        title: "Do not capture",
+      }),
+    ).toBeUndefined();
   });
 
-  it("rejects unsafe targets and removes credentials, fragments, and tracking", () => {
+  it("rejects unsafe targets and removes credentials, fragments, and all query data", () => {
     expect(canonicalizePublicJobUrl("http://jobs.example.test/job")).toBeUndefined();
     expect(canonicalizePublicJobUrl("https://127.0.0.1/job")).toBeUndefined();
     expect(canonicalizePublicJobUrl("https://user:secret@example.test/job")).toBeUndefined();
     expect(
-      canonicalizePublicJobUrl("https://EXAMPLE.test/job?utm_campaign=x&keep=yes#fragment"),
-    ).toBe("https://example.test/job?keep=yes");
+      canonicalizePublicJobUrl(
+        "https://EXAMPLE.test/job?utm_campaign=x&keep=yes&token=secret#fragment",
+      ),
+    ).toBe("https://example.test/job");
+  });
+
+  it("removes markup, extended controls, and bidirectional controls locally", () => {
+    expect(
+      sanitizeSnapshot(
+        {
+          canonicalUrl: "https://jobs.lever.co/example/123",
+          title: "Safe\u202e misleading\u2066 title\u0085 <script>ignored</script>",
+        },
+        "lever",
+        "lever-posting-v1",
+        "2026-09-01T12:00:00.000Z",
+      )?.title,
+    ).toBe("Safe misleading title ignored");
   });
 
   it("requires URL and title and sends only selected removable fields", () => {

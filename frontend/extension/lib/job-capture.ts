@@ -32,8 +32,6 @@ export interface SanitizedJobCapture {
   title: string;
 }
 
-const TRACKING_PARAMETERS = new Set(["fbclid", "gclid", "mc_cid", "mc_eid", "ref", "referrer"]);
-
 const LIMITS: Record<CaptureField, number> = {
   company: 240,
   description: 12_000,
@@ -53,7 +51,9 @@ export function sanitizeText(value: unknown, maximum: number): string | undefine
         code === 11 ||
         code === 12 ||
         (code >= 14 && code <= 31) ||
-        code === 127
+        (code >= 127 && code <= 159) ||
+        (code >= 0x202a && code <= 0x202e) ||
+        (code >= 0x2066 && code <= 0x2069)
         ? " "
         : character;
     })
@@ -92,11 +92,7 @@ export function canonicalizePublicJobUrl(value: unknown): string | undefined {
     return undefined;
   }
   url.hash = "";
-  for (const name of [...url.searchParams.keys()]) {
-    if (name.toLowerCase().startsWith("utm_") || TRACKING_PARAMETERS.has(name.toLowerCase())) {
-      url.searchParams.delete(name);
-    }
-  }
+  url.search = "";
   url.hostname = hostname;
   return url.href;
 }

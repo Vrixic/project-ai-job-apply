@@ -13,10 +13,24 @@ export interface ProviderDetector {
   detect(snapshot: RawPageSnapshot, capturedAt?: string): SanitizedJobCapture | undefined;
 }
 
-function exactHost(urlValue: string, domains: readonly string[]): boolean {
+function exactProviderPage(
+  urlValue: string,
+  provider: AtsProvider,
+  domains: readonly string[],
+): boolean {
   try {
     const url = new URL(urlValue);
-    return url.protocol === "https:" && domains.includes(url.hostname.toLowerCase());
+    const pathMatches =
+      provider === "greenhouse"
+        ? /^\/[A-Za-z0-9._~-]+\/jobs\/[A-Za-z0-9._~-]+\/?$/u.test(url.pathname)
+        : /^\/[A-Za-z0-9._~-]+\/[A-Za-z0-9._~-]+\/?$/u.test(url.pathname);
+    return (
+      url.protocol === "https:" &&
+      !url.username &&
+      !url.password &&
+      domains.includes(url.hostname.toLowerCase()) &&
+      pathMatches
+    );
   } catch {
     return false;
   }
@@ -32,7 +46,7 @@ function detector(
     provider,
     variant,
     detect(snapshot, capturedAt) {
-      return exactHost(snapshot.canonicalUrl, domains)
+      return exactProviderPage(snapshot.canonicalUrl, provider, domains)
         ? sanitizeSnapshot(snapshot, provider, variant, capturedAt)
         : undefined;
     },
