@@ -267,16 +267,30 @@ resource "aws_lambda_function" "d2_community_scheduled" {
       D2_COMMUNITY_RUNTIME_ENABLED = tostring(local.d2_community_enabled)
       D2_TRUST_SIGNAL_QUEUE_URL    = aws_sqs_queue.d2_trust_signal[0].url
       }, local.d2_community_enabled ? {
-      D2_COMMUNITY_ACCOUNT_ID          = data.aws_caller_identity.current.account_id
-      D2_COMMUNITY_REGION              = data.aws_region.current.region
-      D2_COMMUNITY_SCHEDULE_RULE_ARN   = local.d2_community_schedule_rule_arn
-      D2_TRUST_SIGNAL_QUEUE_ARN        = aws_sqs_queue.d2_trust_signal[0].arn
-      D2_COMMUNITY_RUNTIME_POLICY_JSON = jsonencode(local.d2_runtime_policy)
+      D2_COMMUNITY_ACCOUNT_ID                               = data.aws_caller_identity.current.account_id
+      D2_COMMUNITY_REGION                                   = data.aws_region.current.region
+      D2_COMMUNITY_SCHEDULE_RULE_ARN                        = local.d2_community_schedule_rule_arn
+      D2_TRUST_SIGNAL_QUEUE_ARN                             = aws_sqs_queue.d2_trust_signal[0].arn
+      D2_COMMUNITY_RUNTIME_POLICY_JSON                      = jsonencode(local.d2_runtime_policy)
+      D2_COMMUNITY_PROVIDER_ACTIVATION_ALLOWED              = tostring(var.d2_community_runtime.provider_activation_allowed)
+      D2_COMMUNITY_PROVIDER_SOURCES_JSON                    = var.d2_community_runtime.provider_sources_json
+      D2_COMMUNITY_PROVIDER_VERIFICATION_REGISTRATIONS_JSON = var.d2_community_runtime.provider_verification_registrations_json
+      JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON               = var.d2_community_runtime.signed_policy_json
+      JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON          = var.d2_community_runtime.signed_public_keys_json
+      D2_TRUST_REVIEWER_ASSIGNMENTS_JSON                    = var.d2_community_runtime.trust_reviewer_assignments_json
+      D2_TRUST_EVIDENCE_ALLOWLIST_JSON                      = var.d2_community_runtime.trust_evidence_allowlist_json
+      D2_TRUST_POLICY_VERSION                               = var.d2_community_runtime.trust_policy_version
+      D2_TRUST_APPEAL_WINDOW_MILLISECONDS                   = tostring(var.d2_community_runtime.trust_appeal_window_milliseconds)
+      D2_TRUST_SYSTEM_ACTOR_ID                              = var.d2_community_runtime.trust_system_actor_id
     } : {})
   }
 
   vpc_config {
-    subnet_ids         = aws_subnet.private[*].id
+    subnet_ids = (
+      local.d2_community_enabled && var.d2_community_runtime.provider_private_egress
+      ? aws_subnet.ingestion_provider[*].id
+      : aws_subnet.private[*].id
+    )
     security_group_ids = [aws_security_group.application.id]
   }
 
@@ -332,9 +346,10 @@ resource "aws_lambda_function" "d2_trust_signal" {
       DATABASE_SECRET_ID           = aws_secretsmanager_secret.database_url.arn
       D2_COMMUNITY_RUNTIME_ENABLED = tostring(local.d2_community_enabled)
       }, local.d2_community_enabled ? {
-      D2_COMMUNITY_ACCOUNT_ID   = data.aws_caller_identity.current.account_id
-      D2_COMMUNITY_REGION       = data.aws_region.current.region
-      D2_TRUST_SIGNAL_QUEUE_ARN = aws_sqs_queue.d2_trust_signal[0].arn
+      D2_COMMUNITY_ACCOUNT_ID                = data.aws_caller_identity.current.account_id
+      D2_COMMUNITY_REGION                    = data.aws_region.current.region
+      D2_TRUST_SIGNAL_QUEUE_ARN              = aws_sqs_queue.d2_trust_signal[0].arn
+      D2_COMMUNITY_PROCESSING_POLICY_VERSION = var.d2_community_runtime.processing_policy_version
     } : {})
   }
 
@@ -486,6 +501,29 @@ resource "aws_cloudwatch_metric_alarm" "d2_community_lambda_duration" {
   ok_actions          = [aws_sns_topic.operational_alerts.arn]
   alarm_description   = "D2 ${each.key} Lambda duration exceeded its reviewed threshold. Runbook: ${local.observability_runbook_url}"
   dimensions          = { FunctionName = each.value }
+}
+
+resource "aws_cloudwatch_metric_alarm" "d2_community_application_failures" {
+  for_each = local.d2_community_deployed ? toset([
+    "ScheduledBatchFailed",
+    "JobsDead",
+    "JobsDeliveryDead",
+    "TrustDeliveryDead",
+    "TrustSignalFailed"
+  ]) : toset([])
+
+  alarm_name          = "${var.name}-${var.environment}-d2-${lower(each.value)}"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = each.value
+  namespace           = "AIJobApply/D2Community"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = var.d2_community_runtime.application_failure_alarm_threshold
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operational_alerts.arn]
+  ok_actions          = [aws_sns_topic.operational_alerts.arn]
+  alarm_description   = "D2 aggregate ${each.value} exceeded its reviewed actionable-failure threshold. Runbook: ${local.observability_runbook_url}"
 }
 
 resource "aws_cloudwatch_metric_alarm" "d2_trust_signal_queue_age" {

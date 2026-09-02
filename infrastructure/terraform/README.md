@@ -30,7 +30,17 @@ NAT. A reviewed dark deployment can publish immutable scheduled and Trust-signal
 an exact encrypted Trust-signal queue/DLQ, least-privilege roles, and standard alarms while leaving
 every trigger and route structurally absent. Activation is a separate change requiring the exact
 artifact identities, concurrency, schedule, lease/retry/batch policy, signed contribution policy,
-Trust authority/policy, route budgets, alarm thresholds, and accountable release authority. The
+Trust authority/policy, an explicitly authorized non-empty provider source registry with matching
+independent-verification registrations, route budgets, alarm thresholds, and accountable release
+authority. These provider fields remain false/empty by default and are passed only to an activated
+scheduled runtime; an empty verifier configuration cannot activate processing. Provider access
+also requires a separate default-false private-egress authority. Only an activated scheduled
+runtime is moved into the retained provider-only private subnets and uses their NAT path; a dark
+deployment retains those non-overlapping subnets for immutable-version cleanup but creates no NAT.
+Dark deployment also creates dimensionless aggregate alarms for scheduled-batch failure, terminal
+processing and delivery outcomes, and Trust-signal failure in `AIJobApply/D2Community`, with both
+ALARM and OK notifications. `JobsParked` is intentionally excluded because awaiting independent
+verification or Trust review is expected parking rather than an actionable failure. The
 anonymous policy GET and separately scoped private, candidate, and reviewer routes are then
 created explicitly; D2 scopes never enter the generic `$default` route. No provider host, egress,
 credential, or timing value is selected by the repository defaults.

@@ -592,6 +592,10 @@ variable "d2_community_runtime" {
     trust_delivery_claim_lease_milliseconds        = number
     trust_delivery_retry_delay_milliseconds        = list(number)
     trust_signal_batch_size                        = number
+    provider_activation_allowed                    = bool
+    provider_private_egress                        = bool
+    provider_sources_json                          = string
+    provider_verification_registrations_json       = string
     ugc_contribution_policy_version                = string
     signed_policy_json                             = string
     signed_public_keys_json                        = string
@@ -605,6 +609,7 @@ variable "d2_community_runtime" {
     lambda_error_alarm_threshold                   = number
     lambda_throttle_alarm_threshold                = number
     lambda_duration_alarm_threshold_milliseconds   = number
+    application_failure_alarm_threshold            = number
     queue_age_alarm_threshold_seconds              = number
     dead_letter_alarm_threshold                    = number
     release_authority                              = string
@@ -642,6 +647,10 @@ variable "d2_community_runtime" {
     trust_delivery_claim_lease_milliseconds        = 0
     trust_delivery_retry_delay_milliseconds        = []
     trust_signal_batch_size                        = 0
+    provider_activation_allowed                    = false
+    provider_private_egress                        = false
+    provider_sources_json                          = ""
+    provider_verification_registrations_json       = ""
     ugc_contribution_policy_version                = ""
     signed_policy_json                             = ""
     signed_public_keys_json                        = ""
@@ -655,6 +664,7 @@ variable "d2_community_runtime" {
     lambda_error_alarm_threshold                   = 0
     lambda_throttle_alarm_threshold                = 0
     lambda_duration_alarm_threshold_milliseconds   = 0
+    application_failure_alarm_threshold            = 0
     queue_age_alarm_threshold_seconds              = 0
     dead_letter_alarm_threshold                    = 0
     release_authority                              = ""
@@ -690,6 +700,9 @@ variable "d2_community_runtime" {
       var.d2_community_runtime.lambda_throttle_alarm_threshold >= 0 &&
       var.d2_community_runtime.lambda_duration_alarm_threshold_milliseconds >= 1 &&
       var.d2_community_runtime.lambda_duration_alarm_threshold_milliseconds <= var.d2_community_runtime.lambda_timeout_seconds * 1000 &&
+      var.d2_community_runtime.application_failure_alarm_threshold >= 0 &&
+      var.d2_community_runtime.application_failure_alarm_threshold <= 1000 &&
+      floor(var.d2_community_runtime.application_failure_alarm_threshold) == var.d2_community_runtime.application_failure_alarm_threshold &&
       var.d2_community_runtime.queue_age_alarm_threshold_seconds >= 1 &&
       var.d2_community_runtime.queue_age_alarm_threshold_seconds <= var.d2_community_runtime.queue_message_retention_seconds &&
       var.d2_community_runtime.dead_letter_alarm_threshold >= 0
@@ -744,6 +757,10 @@ variable "d2_community_runtime" {
       var.d2_community_runtime.trust_signal_batch_size >= 1 &&
       var.d2_community_runtime.trust_signal_batch_size <= 10 &&
       floor(var.d2_community_runtime.trust_signal_batch_size) == var.d2_community_runtime.trust_signal_batch_size &&
+      var.d2_community_runtime.provider_activation_allowed &&
+      var.d2_community_runtime.provider_private_egress &&
+      try(length(tolist(jsondecode(var.d2_community_runtime.provider_sources_json))) > 0, false) &&
+      try(length(tolist(jsondecode(var.d2_community_runtime.provider_verification_registrations_json))) > 0, false) &&
       can(regex("^[a-z0-9][a-z0-9._-]{2,99}$", var.d2_community_runtime.ugc_contribution_policy_version)) &&
       try(length(keys(jsondecode(var.d2_community_runtime.signed_policy_json))) > 0, false) &&
       try(length(keys(jsondecode(var.d2_community_runtime.signed_public_keys_json))) > 0, false) &&
@@ -753,8 +770,10 @@ variable "d2_community_runtime" {
         var.d2_community_runtime.signed_policy_json,
         var.d2_community_runtime.signed_public_keys_json,
         var.d2_community_runtime.trust_reviewer_assignments_json,
-        var.d2_community_runtime.trust_evidence_allowlist_json
-      ]))) <= 3700 &&
+        var.d2_community_runtime.trust_evidence_allowlist_json,
+        var.d2_community_runtime.provider_sources_json,
+        var.d2_community_runtime.provider_verification_registrations_json
+      ]))) <= 2400 &&
       can(regex("^[a-z0-9][a-z0-9._-]{2,99}$", var.d2_community_runtime.trust_policy_version)) &&
       var.d2_community_runtime.trust_appeal_window_milliseconds >= 1 &&
       var.d2_community_runtime.trust_appeal_window_milliseconds <= 31536000000 &&
@@ -767,7 +786,17 @@ variable "d2_community_runtime" {
       floor(var.d2_community_runtime.route_throttling_burst_limit) == var.d2_community_runtime.route_throttling_burst_limit &&
       can(regex("^[A-Za-z0-9][A-Za-z0-9._:@/-]{2,255}$", var.d2_community_runtime.release_authority))
     )
-    error_message = "Phase 2 activation requires the dark deployment, application gateway, explicit schedule, processing/delivery lease-retry-batch policies, signed contribution policy, complete Trust policy/authority, route budgets, runtime activation authority, and accountable release authority."
+    error_message = "Phase 2 activation requires the dark deployment, application gateway, explicit schedule, processing/delivery lease-retry-batch policies, non-empty explicitly authorized provider sources and independent-verification registrations, signed contribution policy, complete Trust policy/authority, route budgets, runtime activation authority, and accountable release authority."
+  }
+
+  validation {
+    condition = !var.d2_community_runtime.provider_private_egress || (
+      var.d2_community_runtime.enabled &&
+      var.d2_community_runtime.provider_activation_allowed &&
+      try(length(tolist(jsondecode(var.d2_community_runtime.provider_sources_json))) > 0, false) &&
+      try(length(tolist(jsondecode(var.d2_community_runtime.provider_verification_registrations_json))) > 0, false)
+    )
+    error_message = "D2 provider-only private egress cannot exist without an enabled runtime, explicit provider authority, and non-empty source and verification registries."
   }
 }
 

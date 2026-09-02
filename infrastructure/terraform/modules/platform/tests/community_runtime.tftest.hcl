@@ -73,6 +73,7 @@ run "d2_defaults_create_nothing" {
       length(aws_lambda_event_source_mapping.d2_trust_signal) == 0 &&
       length(aws_apigatewayv2_route.d2_community_protected) == 0 &&
       length(aws_apigatewayv2_route.d2_contribution_policy) == 0 &&
+      length(aws_nat_gateway.ingestion_provider) == 0 &&
       length(aws_nat_gateway.this) == 0
     )
     error_message = "Default Phase 2 composition must create no D2 compute, queues, schedules, mappings, routes, or NAT."
@@ -116,6 +117,10 @@ run "d2_dark_deploy_has_immutable_compute_queues_and_alarms_without_triggers" {
       trust_delivery_claim_lease_milliseconds        = 0
       trust_delivery_retry_delay_milliseconds        = []
       trust_signal_batch_size                        = 0
+      provider_activation_allowed                    = false
+      provider_private_egress                        = false
+      provider_sources_json                          = ""
+      provider_verification_registrations_json       = ""
       ugc_contribution_policy_version                = ""
       signed_policy_json                             = ""
       signed_public_keys_json                        = ""
@@ -129,6 +134,7 @@ run "d2_dark_deploy_has_immutable_compute_queues_and_alarms_without_triggers" {
       lambda_error_alarm_threshold                   = 0
       lambda_throttle_alarm_threshold                = 0
       lambda_duration_alarm_threshold_milliseconds   = 45000
+      application_failure_alarm_threshold            = 0
       queue_age_alarm_threshold_seconds              = 300
       dead_letter_alarm_threshold                    = 0
       release_authority                              = ""
@@ -148,6 +154,8 @@ run "d2_dark_deploy_has_immutable_compute_queues_and_alarms_without_triggers" {
       length(aws_cloudwatch_metric_alarm.d2_community_lambda_errors) == 2 &&
       length(aws_cloudwatch_metric_alarm.d2_community_lambda_throttles) == 2 &&
       length(aws_cloudwatch_metric_alarm.d2_community_lambda_duration) == 2 &&
+      length(aws_cloudwatch_metric_alarm.d2_community_application_failures) == 5 &&
+      alltrue([for alarm in aws_cloudwatch_metric_alarm.d2_community_application_failures : alarm.namespace == "AIJobApply/D2Community" && alarm.dimensions == null && alarm.treat_missing_data == "notBreaching" && length(alarm.alarm_actions) == 1 && length(alarm.ok_actions) == 1]) &&
       length(aws_cloudwatch_metric_alarm.d2_trust_signal_queue_age) == 1 &&
       length(aws_cloudwatch_metric_alarm.d2_trust_signal_dead_letter) == 1 &&
       length(aws_cloudwatch_event_rule.d2_community_schedule) == 0 &&
@@ -199,6 +207,10 @@ run "d2_activation_requires_and_wires_every_explicit_boundary" {
       trust_delivery_claim_lease_milliseconds        = 60000
       trust_delivery_retry_delay_milliseconds        = [1000, 5000]
       trust_signal_batch_size                        = 5
+      provider_activation_allowed                    = true
+      provider_private_egress                        = true
+      provider_sources_json                          = "[{\"schemaVersion\":1,\"provider\":\"lever\",\"sourceId\":\"synthetic-lever\",\"enabled\":true,\"site\":\"synthetic\",\"region\":\"global\",\"companyName\":\"Synthetic Company\",\"verifiedCompanyDomain\":\"example.test\"}]"
+      provider_verification_registrations_json       = "[{\"sourceId\":\"synthetic-lever\",\"provider\":\"lever\",\"pageVariant\":\"lever-posting-v1\",\"atsTenant\":\"synthetic\",\"sourcePolicyVersion\":\"d2-synthetic-source.v1\"}]"
       ugc_contribution_policy_version                = "d2-synthetic-consent.v1"
       signed_policy_json                             = "{\"synthetic\":true}"
       signed_public_keys_json                        = "{\"synthetic-key\":\"public\"}"
@@ -212,6 +224,7 @@ run "d2_activation_requires_and_wires_every_explicit_boundary" {
       lambda_error_alarm_threshold                   = 0
       lambda_throttle_alarm_threshold                = 0
       lambda_duration_alarm_threshold_milliseconds   = 45000
+      application_failure_alarm_threshold            = 0
       queue_age_alarm_threshold_seconds              = 300
       dead_letter_alarm_threshold                    = 0
       release_authority                              = "synthetic-release-authority"
@@ -233,7 +246,16 @@ run "d2_activation_requires_and_wires_every_explicit_boundary" {
       aws_lambda_function.gateway[0].environment[0].variables.D2_PRIVATE_CAPTURE_ROUTES_ENABLED == "true" &&
       aws_lambda_function.gateway[0].environment[0].variables.D2_CONTRIBUTION_ROUTES_ENABLED == "true" &&
       aws_lambda_function.gateway[0].environment[0].variables.D2_TRUST_REVIEWER_ROUTES_ENABLED == "true" &&
-      aws_lambda_function.gateway[0].environment[0].variables.JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON == "{\"synthetic\":true}"
+      aws_lambda_function.gateway[0].environment[0].variables.JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON == "{\"synthetic\":true}" &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_ACTIVATION_ALLOWED == "true" &&
+      length(aws_nat_gateway.ingestion_provider) == 1 &&
+      local.provider_private_egress &&
+      length(jsondecode(aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_SOURCES_JSON)) == 1 &&
+      length(jsondecode(aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_VERIFICATION_REGISTRATIONS_JSON)) == 1 &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON == "{\"synthetic\":true}" &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON == "{\"synthetic-key\":\"public\"}" &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_TRUST_POLICY_VERSION == "d2-synthetic-trust.v1" &&
+      aws_lambda_function.d2_trust_signal[0].environment[0].variables.D2_COMMUNITY_PROCESSING_POLICY_VERSION == "d2-synthetic-processing.v1"
     )
     error_message = "Activation must bind the exact schedule, batch, policy, Trust, and separately scoped API routes."
   }

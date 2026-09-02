@@ -323,6 +323,10 @@ variable "d2_community_runtime" {
     trust_delivery_claim_lease_milliseconds        = 0
     trust_delivery_retry_delay_milliseconds        = []
     trust_signal_batch_size                        = 0
+    provider_activation_allowed                    = false
+    provider_private_egress                        = false
+    provider_sources_json                          = ""
+    provider_verification_registrations_json       = ""
     ugc_contribution_policy_version                = ""
     signed_policy_json                             = ""
     signed_public_keys_json                        = ""
@@ -336,6 +340,7 @@ variable "d2_community_runtime" {
     lambda_error_alarm_threshold                   = 0
     lambda_throttle_alarm_threshold                = 0
     lambda_duration_alarm_threshold_milliseconds   = 0
+    application_failure_alarm_threshold            = 0
     queue_age_alarm_threshold_seconds              = 0
     dead_letter_alarm_threshold                    = 0
     release_authority                              = ""

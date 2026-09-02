@@ -131,6 +131,8 @@ locals {
   ingestion_schedule_rule_arn   = "arn:aws:events:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:rule/${var.name}-${var.environment}-ingestion-schedule"
   ingestion_terminal_rule_arn   = "arn:aws:events:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:rule/${var.name}-${var.environment}-ingestion-terminal"
   ingestion_provider_cidrs      = [cidrsubnet(var.vpc_cidr, 4, 2), cidrsubnet(var.vpc_cidr, 4, 3)]
+  provider_network_deployed     = var.deploy_ingestion_runtime || var.d2_community_runtime.deploy
+  provider_private_egress       = var.ingestion_provider_private_egress || var.d2_community_runtime.provider_private_egress
   ingestion_activity_subnet_ids = (
     var.ingestion_provider_private_egress
     ? aws_subnet.ingestion_provider[*].id
@@ -211,7 +213,7 @@ resource "terraform_data" "ingestion_activation_guard" {
 }
 
 resource "aws_subnet" "ingestion_provider" {
-  count                   = var.deploy_ingestion_runtime ? length(local.azs) : 0
+  count                   = local.provider_network_deployed ? length(local.azs) : 0
   vpc_id                  = aws_vpc.this.id
   availability_zone       = local.azs[count.index]
   cidr_block              = local.ingestion_provider_cidrs[count.index]
@@ -222,23 +224,23 @@ resource "aws_subnet" "ingestion_provider" {
 }
 
 resource "aws_eip" "ingestion_provider_nat" {
-  count  = var.ingestion_provider_private_egress ? (var.high_availability ? length(local.azs) : 1) : 0
+  count  = local.provider_private_egress ? (var.high_availability ? length(local.azs) : 1) : 0
   domain = "vpc"
 }
 
 resource "aws_nat_gateway" "ingestion_provider" {
-  count         = var.ingestion_provider_private_egress ? (var.high_availability ? length(local.azs) : 1) : 0
+  count         = local.provider_private_egress ? (var.high_availability ? length(local.azs) : 1) : 0
   allocation_id = aws_eip.ingestion_provider_nat[count.index].id
   subnet_id     = aws_subnet.public[count.index].id
   depends_on    = [aws_internet_gateway.this]
 }
 
 resource "aws_route_table" "ingestion_provider" {
-  count  = var.deploy_ingestion_runtime ? length(local.azs) : 0
+  count  = local.provider_network_deployed ? length(local.azs) : 0
   vpc_id = aws_vpc.this.id
 
   dynamic "route" {
-    for_each = var.ingestion_provider_private_egress ? [1] : []
+    for_each = local.provider_private_egress ? [1] : []
     content {
       cidr_block     = "0.0.0.0/0"
       nat_gateway_id = aws_nat_gateway.ingestion_provider[var.high_availability ? count.index : 0].id
@@ -247,7 +249,7 @@ resource "aws_route_table" "ingestion_provider" {
 }
 
 resource "aws_route_table_association" "ingestion_provider" {
-  count          = var.deploy_ingestion_runtime ? length(local.azs) : 0
+  count          = local.provider_network_deployed ? length(local.azs) : 0
   subnet_id      = aws_subnet.ingestion_provider[count.index].id
   route_table_id = aws_route_table.ingestion_provider[count.index].id
 }
