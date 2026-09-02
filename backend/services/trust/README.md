@@ -31,6 +31,17 @@ catalog truth.
 - The application service accepts identifiers, fixed codes, versions, timestamps from its injected
   clock, and SHA-256 evidence references only. Missing ports deny or report dependency unavailability,
   and lower-level errors are projected to a fixed safe error taxonomy.
+- Trust now implements its candidate-rights owner boundary. `trust.export_candidate_data(uuid)`
+  returns one fixed `schemaVersion: 1` section containing only the exact contributor's cases, case
+  events, and contributor reputation evidence. It omits contributor/reviewer identities, all source
+  reputation, and every unrestricted value while retaining relevant identifiers, fixed codes,
+  policy/version fields, timestamps, and candidate-linked evidence digests.
+- `trust.delete_candidate_data(uuid, uuid)` first verifies the Profile-owned deletion request through
+  `privacy.candidate_deletion_authorized`, establishes the exact transaction-local deletion context,
+  then removes reputation evidence, case events, and cases in dependency order. The table triggers
+  permit deletion only while `privacy.current_candidate_deletion_authorized` confirms that exact
+  owner; ordinary updates and deletes remain denied. All candidate-rights and deletion-guard
+  functions are revoked from `PUBLIC`.
 
 ## Package commands
 
@@ -42,11 +53,12 @@ $env:DATABASE_URL = "postgres://ai_job_apply:local_only@127.0.0.1:55432/ai_job_a
 pnpm --filter @ai-job-apply/trust-service test:integration
 ```
 
-The integration suite applies and replays the explicit migration, then proves owner isolation,
+The integration suite applies and replays both explicit migrations, then proves owner isolation,
 different-reviewer enforcement at the SQL boundary, version conflicts, immutable audit/evidence,
-private signal projection, and absence of Trust-to-Jobs database dependencies. It intentionally
-retains only generated synthetic evidence because the production design forbids deleting or
-rewriting audit history in place.
+private signal projection, candidate export redaction, no-public-execute function ACLs,
+unauthorized and cross-owner deletion denial, transactional child-first candidate deletion, and
+absence of Trust-to-Jobs database dependencies. Candidate deletion is the only context in which
+the protected history may be removed.
 
 ## Not implemented or authorized
 

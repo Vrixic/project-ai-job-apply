@@ -147,7 +147,7 @@ export class PostgresTrustStore {
         AND to_regclass('trust.case_events') IS NOT NULL
         AND to_regclass('trust.reputation_evidence') IS NOT NULL
         AND EXISTS (SELECT 1 FROM trust.schema_migrations
-          WHERE version = '0001_ugc_trust_foundation')
+          WHERE version = '0002_candidate_rights')
       ) AS ready
     `;
     if (!result?.ready) throw new Error("The Trust persistence boundary is unavailable");

@@ -31,7 +31,7 @@ describeWithDatabase("PostgreSQL UGC trust foundation", () => {
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });
     expect(first.stdout.trim()).toBe(
-      "Trust migrations through 0001_ugc_trust_foundation applied and verified.",
+      "Trust migrations through 0002_candidate_rights applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(first.stdout.trim());
     await store.ping();
