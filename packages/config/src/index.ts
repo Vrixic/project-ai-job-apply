@@ -76,6 +76,245 @@ const lambdaGatewaySchema = baseSchema
 
 export type LambdaGatewayConfig = z.infer<typeof lambdaGatewaySchema>;
 
+const exactDisabledBoolean = z
+  .enum(["true", "false"])
+  .default("false")
+  .transform((value) => value === "true");
+const optionalToken = (pattern: RegExp, maximum: number) =>
+  z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().trim().min(1).max(maximum).regex(pattern).optional(),
+  );
+const optionalJson = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+  z
+    .string()
+    .min(2)
+    .max(32 * 1024)
+    .optional(),
+);
+const trustReviewerRoles = [
+  "case_reader",
+  "case_opener",
+  "initial_reviewer",
+  "takedown_reviewer",
+  "appeal_reviewer",
+] as const;
+const trustEvidencePurposes = [
+  "independent_verification",
+  "initial_review",
+  "takedown",
+  "appeal_resolution",
+  "verified_requester_takedown",
+] as const;
+const lowercaseUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const lowercaseUuidV7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const policyVersion = /^[a-z0-9][a-z0-9._-]{2,99}$/;
+
+const d2LambdaGatewayEnvironmentSchema = z.object({
+  D2_PRIVATE_CAPTURE_ROUTES_ENABLED: exactDisabledBoolean,
+  D2_CONTRIBUTION_POLICY_ROUTE_ENABLED: exactDisabledBoolean,
+  D2_CONTRIBUTION_ROUTES_ENABLED: exactDisabledBoolean,
+  D2_TRUST_REVIEWER_ROUTES_ENABLED: exactDisabledBoolean,
+  UGC_CONTRIBUTION_POLICY_VERSION: optionalToken(policyVersion, 100),
+  JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON: optionalJson,
+  JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON: optionalJson,
+  D2_TRUST_REVIEWER_ASSIGNMENTS_JSON: optionalJson,
+  D2_TRUST_EVIDENCE_ALLOWLIST_JSON: optionalJson,
+  D2_TRUST_POLICY_VERSION: optionalToken(policyVersion, 100),
+  D2_TRUST_APPEAL_WINDOW_MILLISECONDS: optionalToken(/^[1-9][0-9]{0,10}$/, 11),
+  D2_TRUST_SYSTEM_ACTOR_ID: optionalToken(lowercaseUuid, 36),
+});
+
+const d2TrustReviewerAssignmentSchema = z
+  .object({
+    issuer: z.string().url().max(2_048),
+    subject: z.string().min(1).max(255),
+    roles: z.array(z.enum(trustReviewerRoles)).min(1).max(trustReviewerRoles.length),
+    verifiedRequesterTakedown: z.boolean(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (new Set(value.roles).size !== value.roles.length) {
+      context.addIssue({ code: "custom", message: "Trust reviewer roles must be unique" });
+    }
+  });
+
+const d2TrustEvidenceSchema = z
+  .object({
+    contributionId: z.string().regex(lowercaseUuidV7),
+    evidenceDigestSha256: z.string().regex(/^[a-f0-9]{64}$/),
+    purposes: z.array(z.enum(trustEvidencePurposes)).min(1).max(trustEvidencePurposes.length),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (new Set(value.purposes).size !== value.purposes.length) {
+      context.addIssue({ code: "custom", message: "Trust evidence purposes must be unique" });
+    }
+  });
+
+export interface D2LambdaGatewayTrustConfiguration {
+  reviewerAssignments: readonly z.infer<typeof d2TrustReviewerAssignmentSchema>[];
+  evidenceAllowlist: readonly z.infer<typeof d2TrustEvidenceSchema>[];
+  policyVersion: string;
+  appealWindowMilliseconds: number;
+  systemActorId: string;
+}
+
+export interface D2LambdaGatewayConfiguration {
+  valid: boolean;
+  privateCaptureRoutesEnabled: boolean;
+  contributionPolicyRouteEnabled: boolean;
+  contributionRoutesEnabled: boolean;
+  trustReviewerRoutesEnabled: boolean;
+  ugcContributionPolicyVersion?: string;
+  signedContributionPolicyConfigured: boolean;
+  trust?: D2LambdaGatewayTrustConfiguration;
+}
+
+const disabledD2LambdaGatewayConfiguration = Object.freeze({
+  valid: false,
+  privateCaptureRoutesEnabled: false,
+  contributionPolicyRouteEnabled: false,
+  contributionRoutesEnabled: false,
+  trustReviewerRoutesEnabled: false,
+  signedContributionPolicyConfigured: false,
+});
+
+function parseBoundedJson<T>(value: string, schema: z.ZodType<T>): T {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error("Phase 2 Gateway configuration is malformed");
+  }
+  const result = schema.safeParse(parsed);
+  if (!result.success) throw new Error("Phase 2 Gateway configuration is malformed");
+  return result.data;
+}
+
+/**
+ * Parses only the default-dark Phase 2 Gateway boundary. Callers should use the safe loader in a
+ * shared Gateway process so a malformed optional D2 configuration cannot disable existing D1
+ * routes.
+ */
+export function loadD2LambdaGatewayConfig(
+  environment: NodeJS.ProcessEnv = process.env,
+): D2LambdaGatewayConfiguration {
+  const value = d2LambdaGatewayEnvironmentSchema.parse(environment);
+  const policyPair =
+    Boolean(value.JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON) ===
+    Boolean(value.JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON);
+  if (!policyPair) throw new Error("The signed contribution policy boundary must be complete");
+  const signedContributionPolicyConfigured = Boolean(
+    value.JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON &&
+      value.JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON,
+  );
+
+  const trustFields = [
+    value.D2_TRUST_REVIEWER_ASSIGNMENTS_JSON,
+    value.D2_TRUST_EVIDENCE_ALLOWLIST_JSON,
+    value.D2_TRUST_POLICY_VERSION,
+    value.D2_TRUST_APPEAL_WINDOW_MILLISECONDS,
+    value.D2_TRUST_SYSTEM_ACTOR_ID,
+  ];
+  const trustFieldCount = trustFields.filter(Boolean).length;
+  if (trustFieldCount !== 0 && trustFieldCount !== trustFields.length) {
+    throw new Error("The Trust Gateway boundary must be complete");
+  }
+
+  let trust: D2LambdaGatewayTrustConfiguration | undefined;
+  if (trustFieldCount === trustFields.length) {
+    const reviewerAssignments = parseBoundedJson(
+      value.D2_TRUST_REVIEWER_ASSIGNMENTS_JSON as string,
+      z.array(d2TrustReviewerAssignmentSchema).max(64),
+    );
+    const assignmentKeys = reviewerAssignments.map(
+      (assignment) => `${assignment.issuer}\0${assignment.subject}`,
+    );
+    if (new Set(assignmentKeys).size !== assignmentKeys.length) {
+      throw new Error("Trust reviewer assignments must be unique");
+    }
+    const evidenceAllowlist = parseBoundedJson(
+      value.D2_TRUST_EVIDENCE_ALLOWLIST_JSON as string,
+      z.array(d2TrustEvidenceSchema).max(256),
+    );
+    const evidenceKeys = evidenceAllowlist.flatMap((evidence) =>
+      evidence.purposes.map(
+        (purpose) => `${evidence.contributionId}\0${evidence.evidenceDigestSha256}\0${purpose}`,
+      ),
+    );
+    if (new Set(evidenceKeys).size !== evidenceKeys.length) {
+      throw new Error("Trust evidence assignments must be unique");
+    }
+    const appealWindowMilliseconds = Number(value.D2_TRUST_APPEAL_WINDOW_MILLISECONDS);
+    if (
+      !Number.isSafeInteger(appealWindowMilliseconds) ||
+      appealWindowMilliseconds < 1 ||
+      appealWindowMilliseconds > 365 * 24 * 60 * 60 * 1_000
+    ) {
+      throw new Error("The Trust appeal window is outside the technical bound");
+    }
+    trust = Object.freeze({
+      reviewerAssignments: Object.freeze(reviewerAssignments),
+      evidenceAllowlist: Object.freeze(evidenceAllowlist),
+      policyVersion: value.D2_TRUST_POLICY_VERSION as string,
+      appealWindowMilliseconds,
+      systemActorId: value.D2_TRUST_SYSTEM_ACTOR_ID as string,
+    });
+  }
+
+  const contributionRequested =
+    value.D2_CONTRIBUTION_POLICY_ROUTE_ENABLED || value.D2_CONTRIBUTION_ROUTES_ENABLED;
+  if (
+    contributionRequested &&
+    (!signedContributionPolicyConfigured || !value.UGC_CONTRIBUTION_POLICY_VERSION)
+  ) {
+    throw new Error("Contribution routes require the complete signed policy boundary");
+  }
+  if ((value.D2_CONTRIBUTION_ROUTES_ENABLED || value.D2_TRUST_REVIEWER_ROUTES_ENABLED) && !trust) {
+    throw new Error("Contribution and reviewer routes require the complete Trust boundary");
+  }
+  if (value.D2_TRUST_REVIEWER_ROUTES_ENABLED && trust?.reviewerAssignments.length === 0) {
+    throw new Error("Reviewer routes require at least one explicit reviewer assignment");
+  }
+
+  return Object.freeze({
+    valid: true,
+    privateCaptureRoutesEnabled: value.D2_PRIVATE_CAPTURE_ROUTES_ENABLED,
+    contributionPolicyRouteEnabled: value.D2_CONTRIBUTION_POLICY_ROUTE_ENABLED,
+    contributionRoutesEnabled: value.D2_CONTRIBUTION_ROUTES_ENABLED,
+    trustReviewerRoutesEnabled: value.D2_TRUST_REVIEWER_ROUTES_ENABLED,
+    ...(value.UGC_CONTRIBUTION_POLICY_VERSION
+      ? { ugcContributionPolicyVersion: value.UGC_CONTRIBUTION_POLICY_VERSION }
+      : {}),
+    signedContributionPolicyConfigured,
+    ...(trust ? { trust } : {}),
+  });
+}
+
+/** Fail only the optional D2 surface; existing Gateway capabilities remain available. */
+export function loadD2LambdaGatewayConfigSafely(
+  environment: NodeJS.ProcessEnv = process.env,
+): D2LambdaGatewayConfiguration {
+  const privateCaptureResult = z
+    .object({ D2_PRIVATE_CAPTURE_ROUTES_ENABLED: exactDisabledBoolean })
+    .safeParse(environment);
+  const privateCaptureRoutesEnabled = privateCaptureResult.success
+    ? privateCaptureResult.data.D2_PRIVATE_CAPTURE_ROUTES_ENABLED
+    : false;
+  try {
+    return loadD2LambdaGatewayConfig(environment);
+  } catch {
+    return privateCaptureRoutesEnabled
+      ? Object.freeze({
+          ...disabledD2LambdaGatewayConfiguration,
+          privateCaptureRoutesEnabled: true,
+        })
+      : disabledD2LambdaGatewayConfiguration;
+  }
+}
+
 const publicJobLambdaSchema = baseSchema.extend({
   AWS_REGION: z.literal("us-east-2"),
   PUBLIC_JOB_DATABASE_HOST: z.string().regex(/^[a-z0-9-]+(?:\.[a-z0-9-]+)+\.rds\.amazonaws\.com$/),

@@ -104,6 +104,147 @@ describe("API Gateway Lambda boundary", () => {
     expect(inject).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["private capture create", "POST", "/v1/saved-job-captures"],
+    ["private capture read", "GET", "/v1/saved-job-captures/019d04cf-1f80-7000-8000-000000000010"],
+    ["contribution create", "POST", "/v1/jobs/contributions"],
+    ["contribution status", "GET", "/v1/jobs/contributions/019d04cf-1f80-7000-8000-000000000010"],
+    ["owner Trust read", "GET", "/v1/trust/contributions/019d04cf-1f80-7000-8000-000000000010"],
+    ["reviewer Trust open", "POST", "/v1/admin/trust/cases"],
+    ["reviewer Trust read", "GET", "/v1/admin/trust/cases/019d04cf-1f80-8000-8000-000000000010"],
+  ])(
+    "keeps %s dark by default before authentication or application dispatch",
+    async (_label, method, path) => {
+      const principalBridge = createInvocationPrincipalBridge();
+      const inject = vi.fn();
+      const handler = createApiGatewayHandler({
+        app: Promise.resolve({ inject }),
+        issuer: ISSUER,
+        audience: AUDIENCE,
+        principalBridge,
+      });
+      const input = routedEvent(method, path, {
+        ...(method === "POST" ? { body: "{}" } : {}),
+        headers: method === "POST" ? { "content-type": "application/json" } : {},
+      });
+      delete input.requestContext.authorizer;
+
+      const response = await invoke(handler, input);
+
+      expect(response.statusCode).toBe(404);
+      expect(inject).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps private capture independent from every contribution and Trust route gate", async () => {
+    const principalBridge = createInvocationPrincipalBridge();
+    const inject = vi.fn().mockResolvedValue({ statusCode: 200, body: "{}", headers: {} });
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge,
+      d2Routes: { privateCapture: true },
+    });
+    const captureId = "019d04cf-1f80-7000-8000-000000000010";
+    const privateRead = routedEvent("GET", `/v1/saved-job-captures/${captureId}`);
+    privateRead.routeKey = "GET /v1/saved-job-captures/{captureId}";
+    privateRead.requestContext.routeKey = privateRead.routeKey;
+    const contribution = routedEvent("POST", "/v1/jobs/contributions", {
+      body: "{}",
+      headers: { "content-type": "application/json" },
+    });
+
+    expect((await invoke(handler, privateRead)).statusCode).toBe(200);
+    expect((await invoke(handler, contribution)).statusCode).toBe(404);
+    expect(inject).toHaveBeenCalledOnce();
+  });
+
+  it("allows only the exact anonymous capability-policy route key when its gate is enabled", async () => {
+    const principalBridge = createInvocationPrincipalBridge();
+    const inject = vi.fn().mockResolvedValue({ statusCode: 200, body: "{}", headers: {} });
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge,
+      d2Routes: { contributionPolicy: true },
+    });
+    const path = "/v1/extension/contribution-capability-policy";
+    const exact = routedEvent("GET", path, { headers: {} });
+    delete exact.requestContext.authorizer;
+    const fallback = routedEvent("GET", path, { headers: {}, routeKey: "$default" });
+    fallback.requestContext.routeKey = "$default";
+    delete fallback.requestContext.authorizer;
+    const mismatchedContext = routedEvent("GET", path, { headers: {} });
+    mismatchedContext.requestContext.routeKey = "$default";
+    delete mismatchedContext.requestContext.authorizer;
+
+    expect((await invoke(handler, exact)).statusCode).toBe(200);
+    expect((await invoke(handler, fallback)).statusCode).toBe(404);
+    expect((await invoke(handler, mismatchedContext)).statusCode).toBe(404);
+    expect(inject).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    [
+      "candidate contribution",
+      { candidateContribution: true },
+      "POST",
+      "/v1/jobs/contributions",
+      "POST /v1/jobs/contributions",
+    ],
+    [
+      "candidate owner Trust appeal",
+      { candidateContribution: true },
+      "POST",
+      "/v1/trust/contributions/019d04cf-1f80-7000-8000-000000000010/appeals",
+      "POST /v1/trust/contributions/{contributionId}/appeals",
+    ],
+    [
+      "reviewer Trust decision",
+      { trustReviewer: true },
+      "POST",
+      "/v1/admin/trust/cases/019d04cf-1f80-8000-8000-000000000010/decision",
+      "POST /v1/admin/trust/cases/{caseId}/decision",
+    ],
+  ])(
+    "requires the exact templated route key for %s",
+    async (_label, d2Routes, method, path, routeKey) => {
+      const principalBridge = createInvocationPrincipalBridge();
+      const inject = vi.fn().mockResolvedValue({ statusCode: 200, body: "{}", headers: {} });
+      const handler = createApiGatewayHandler({
+        app: Promise.resolve({ inject }),
+        issuer: ISSUER,
+        audience: AUDIENCE,
+        principalBridge,
+        d2Routes,
+      });
+      const exact = routedEvent(method, path, {
+        body: "{}",
+        headers: {
+          authorization: "Bearer opaque-api-gateway-token",
+          "content-type": "application/json",
+        },
+      });
+      exact.routeKey = routeKey;
+      exact.requestContext.routeKey = routeKey;
+      const fallback = routedEvent(method, path, {
+        body: "{}",
+        headers: {
+          authorization: "Bearer opaque-api-gateway-token",
+          "content-type": "application/json",
+        },
+        routeKey: "$default",
+      });
+      fallback.requestContext.routeKey = "$default";
+
+      expect((await invoke(handler, exact)).statusCode).toBe(200);
+      expect((await invoke(handler, fallback)).statusCode).toBe(404);
+      expect(inject).toHaveBeenCalledOnce();
+    },
+  );
+
   it("allows the exact public health route without authorizer context", async () => {
     const principalBridge = createInvocationPrincipalBridge();
     const inject = vi.fn().mockResolvedValue({

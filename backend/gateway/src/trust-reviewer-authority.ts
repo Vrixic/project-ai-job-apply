@@ -28,7 +28,7 @@ function assignmentKey(issuer: string, subject: string): string {
   return `${issuer}\0${subject}`;
 }
 
-function reviewerUuid(issuer: string, subject: string): string {
+export function trustReviewerId(issuer: string, subject: string): string {
   const bytes = createHash("sha256")
     .update("ai-job-apply/trust-reviewer/v1\0")
     .update(issuer)
@@ -69,7 +69,7 @@ export class OidcTrustReviewerAuthority {
     if (!requiredScopes.every((scope) => principal.scopes.includes(scope)) || !roles?.has(role)) {
       throw new TrustReviewerAccessDeniedError();
     }
-    return reviewerUuid(principal.issuer, principal.subject);
+    return trustReviewerId(principal.issuer, principal.subject);
   }
 
   requireVerifiedRequesterScope(principal: AuthPrincipal): void {

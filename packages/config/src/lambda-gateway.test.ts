@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { loadLambdaGatewayConfig } from "./index.js";
+import {
+  loadD2LambdaGatewayConfig,
+  loadD2LambdaGatewayConfigSafely,
+  loadLambdaGatewayConfig,
+} from "./index.js";
 
 const baseEnvironment = {
   NODE_ENV: "production",
@@ -107,5 +111,152 @@ describe("Lambda gateway configuration", () => {
         OUTBOX_QUEUE_URL: "https://sqs.us-east-2.amazonaws.com/000000000000/synthetic",
       }),
     ).toThrow("Exactly one of DATABASE_URL or DATABASE_SECRET_ID is required");
+  });
+});
+
+const signedPolicyEnvironment = {
+  UGC_CONTRIBUTION_POLICY_VERSION: "d2-synthetic-policy.v1",
+  JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON: '{"synthetic":true}',
+  JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON: '{"synthetic-key":"public"}',
+};
+const trustEnvironment = {
+  D2_TRUST_REVIEWER_ASSIGNMENTS_JSON: JSON.stringify([
+    {
+      issuer: "https://identity.example.test/",
+      subject: "auth0|reviewer-synthetic",
+      roles: ["case_reader", "initial_reviewer"],
+      verifiedRequesterTakedown: false,
+    },
+  ]),
+  D2_TRUST_EVIDENCE_ALLOWLIST_JSON: "[]",
+  D2_TRUST_POLICY_VERSION: "d2-synthetic-trust.v1",
+  D2_TRUST_APPEAL_WINDOW_MILLISECONDS: "1000",
+  D2_TRUST_SYSTEM_ACTOR_ID: "019d04cf-1f80-7000-8000-000000000099",
+};
+
+describe("Phase 2 Lambda gateway configuration", () => {
+  it("is independently default-dark without inventing policy, authority, or timing", () => {
+    expect(loadD2LambdaGatewayConfig({})).toEqual({
+      valid: true,
+      privateCaptureRoutesEnabled: false,
+      contributionPolicyRouteEnabled: false,
+      contributionRoutesEnabled: false,
+      trustReviewerRoutesEnabled: false,
+      signedContributionPolicyConfigured: false,
+    });
+  });
+
+  it("allows private capture independently of every public-contribution boundary", () => {
+    expect(loadD2LambdaGatewayConfig({ D2_PRIVATE_CAPTURE_ROUTES_ENABLED: "true" })).toMatchObject({
+      privateCaptureRoutesEnabled: true,
+      contributionPolicyRouteEnabled: false,
+      contributionRoutesEnabled: false,
+      trustReviewerRoutesEnabled: false,
+      signedContributionPolicyConfigured: false,
+    });
+  });
+
+  it("keeps an explicitly enabled private-capture boundary independent of malformed contribution configuration", () => {
+    expect(
+      loadD2LambdaGatewayConfigSafely({
+        D2_PRIVATE_CAPTURE_ROUTES_ENABLED: "true",
+        D2_CONTRIBUTION_POLICY_ROUTE_ENABLED: "true",
+        JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON: "{}",
+      }),
+    ).toEqual({
+      valid: false,
+      privateCaptureRoutesEnabled: true,
+      contributionPolicyRouteEnabled: false,
+      contributionRoutesEnabled: false,
+      trustReviewerRoutesEnabled: false,
+      signedContributionPolicyConfigured: false,
+    });
+  });
+
+  it("requires the exact signed policy pair and consent policy before any contribution route", () => {
+    expect(() =>
+      loadD2LambdaGatewayConfig({
+        D2_CONTRIBUTION_POLICY_ROUTE_ENABLED: "true",
+        JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON: "{}",
+      }),
+    ).toThrow("signed contribution policy boundary must be complete");
+    expect(() =>
+      loadD2LambdaGatewayConfig({
+        D2_CONTRIBUTION_POLICY_ROUTE_ENABLED: "true",
+        JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON: "{}",
+        JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON: "{}",
+      }),
+    ).toThrow("complete signed policy boundary");
+    expect(
+      loadD2LambdaGatewayConfig({
+        D2_CONTRIBUTION_POLICY_ROUTE_ENABLED: "true",
+        ...signedPolicyEnvironment,
+      }),
+    ).toMatchObject({
+      contributionPolicyRouteEnabled: true,
+      signedContributionPolicyConfigured: true,
+    });
+  });
+
+  it("requires a complete bounded Trust authority and policy for candidate or reviewer routes", () => {
+    expect(() =>
+      loadD2LambdaGatewayConfig({
+        D2_CONTRIBUTION_ROUTES_ENABLED: "true",
+        ...signedPolicyEnvironment,
+      }),
+    ).toThrow("complete Trust boundary");
+    const configured = loadD2LambdaGatewayConfig({
+      D2_CONTRIBUTION_ROUTES_ENABLED: "true",
+      D2_TRUST_REVIEWER_ROUTES_ENABLED: "true",
+      ...signedPolicyEnvironment,
+      ...trustEnvironment,
+    });
+    expect(configured).toMatchObject({
+      contributionRoutesEnabled: true,
+      trustReviewerRoutesEnabled: true,
+      trust: {
+        policyVersion: "d2-synthetic-trust.v1",
+        appealWindowMilliseconds: 1000,
+        systemActorId: "019d04cf-1f80-7000-8000-000000000099",
+      },
+    });
+  });
+
+  it.each([
+    ["invented boolean syntax", { D2_PRIVATE_CAPTURE_ROUTES_ENABLED: "yes" }],
+    ["partial Trust policy", { D2_TRUST_POLICY_VERSION: "d2-synthetic-trust.v1" }],
+    [
+      "duplicate reviewer identity",
+      {
+        ...trustEnvironment,
+        D2_TRUST_REVIEWER_ASSIGNMENTS_JSON: JSON.stringify([
+          {
+            issuer: "https://identity.example.test/",
+            subject: "auth0|duplicate",
+            roles: ["case_reader"],
+            verifiedRequesterTakedown: false,
+          },
+          {
+            issuer: "https://identity.example.test/",
+            subject: "auth0|duplicate",
+            roles: ["case_opener"],
+            verifiedRequesterTakedown: false,
+          },
+        ]),
+      },
+    ],
+    [
+      "appeal window outside the technical bound",
+      { ...trustEnvironment, D2_TRUST_APPEAL_WINDOW_MILLISECONDS: "31536000001" },
+    ],
+  ])("rejects %s", (_label, environment) => {
+    expect(() => loadD2LambdaGatewayConfig(environment)).toThrow();
+    expect(loadD2LambdaGatewayConfigSafely(environment)).toMatchObject({
+      valid: false,
+      privateCaptureRoutesEnabled: false,
+      contributionPolicyRouteEnabled: false,
+      contributionRoutesEnabled: false,
+      trustReviewerRoutesEnabled: false,
+    });
   });
 });

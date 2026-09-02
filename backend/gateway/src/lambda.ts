@@ -11,13 +11,20 @@ import {
   EntitlementCache,
   PostgresBillingStore,
 } from "@ai-job-apply/billing-service";
-import { loadLambdaGatewayConfig } from "@ai-job-apply/config";
+import {
+  type D2LambdaGatewayConfiguration,
+  type LambdaGatewayConfig,
+  loadD2LambdaGatewayConfigSafely,
+  loadLambdaGatewayConfig,
+} from "@ai-job-apply/config";
 import {
   PostgresDocumentStore,
   S3ResumeUploadSigner,
   UnavailableDocumentStore,
 } from "@ai-job-apply/documents-service";
 import {
+  type ContributionCapabilityPolicySource,
+  contributionCapabilityPolicySourceFromEnvironment,
   JobContributionService,
   JobModerationService,
   JobReportingService,
@@ -52,6 +59,7 @@ import type {
 import { createGatewayApplication } from "./application.js";
 import { S3CandidateDataExportDownloadSigner } from "./candidate-data-export-download-signer.js";
 import { S3CandidateDeletionConfirmationJournal } from "./candidate-deletion-confirmation-journal.js";
+import { createConfiguredD2TrustRuntime } from "./d2-trust-runtime.js";
 import { MAXIMUM_GATEWAY_BODY_BYTES } from "./gateway-boundary.js";
 import {
   configuredUgcContributionPolicyVersion,
@@ -95,8 +103,23 @@ export interface ApiGatewayHandlerOptions {
   issuer: string;
   audience: string;
   principalBridge: InvocationPrincipalBridge;
+  d2Routes?: Partial<D2GatewayRouteGates>;
   onAuthenticationFailure?: (diagnostic: AuthenticationContextDiagnostic) => void;
 }
+
+export interface D2GatewayRouteGates {
+  privateCapture: boolean;
+  contributionPolicy: boolean;
+  candidateContribution: boolean;
+  trustReviewer: boolean;
+}
+
+const disabledD2GatewayRoutes: Readonly<D2GatewayRouteGates> = Object.freeze({
+  privateCapture: false,
+  contributionPolicy: false,
+  candidateContribution: false,
+  trustReviewer: false,
+});
 
 export interface AuthenticationContextDiagnostic {
   claimsPresent: boolean;
@@ -152,6 +175,36 @@ const PROFILE_FACT_PATH_PATTERN =
   /^\/v1\/profile\/facts\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SAVED_JOB_PATH_PATTERN =
   /^\/v1\/saved-jobs\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const D2_UUID_V7 = "[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
+const D2_UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
+const PRIVATE_CAPTURE_PATH_PATTERN = new RegExp(`^/v1/saved-job-captures/${D2_UUID_V7}$`, "u");
+const CONTRIBUTION_PATH_PATTERN = new RegExp(`^/v1/jobs/contributions/${D2_UUID_V7}$`, "u");
+const CONSENT_REVOKE_PATH_PATTERN = new RegExp(
+  `^/v1/profile/ugc-contribution-consents/${D2_UUID_V7}/revoke$`,
+  "u",
+);
+const OWNER_TRUST_PATH_PATTERN = new RegExp(`^/v1/trust/contributions/${D2_UUID_V7}$`, "u");
+const OWNER_TRUST_WITHDRAW_PATH_PATTERN = new RegExp(
+  `^/v1/trust/contributions/${D2_UUID_V7}/withdraw$`,
+  "u",
+);
+const OWNER_TRUST_APPEAL_PATH_PATTERN = new RegExp(
+  `^/v1/trust/contributions/${D2_UUID_V7}/appeals$`,
+  "u",
+);
+const REVIEWER_TRUST_CASE_PATH_PATTERN = new RegExp(`^/v1/admin/trust/cases/${D2_UUID}$`, "u");
+const REVIEWER_TRUST_DECISION_PATH_PATTERN = new RegExp(
+  `^/v1/admin/trust/cases/${D2_UUID}/decision$`,
+  "u",
+);
+const REVIEWER_TRUST_TAKEDOWN_PATH_PATTERN = new RegExp(
+  `^/v1/admin/trust/cases/${D2_UUID}/takedown$`,
+  "u",
+);
+const REVIEWER_TRUST_APPEAL_PATH_PATTERN = new RegExp(
+  `^/v1/admin/trust/cases/${D2_UUID}/appeal-resolution$`,
+  "u",
+);
 const CANDIDATE_DATA_EXPORT_PATH_PATTERN =
   /^\/v1\/me\/data-exports\/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const ACCOUNT_DELETION_REQUEST_PATH_PATTERN =
@@ -176,7 +229,16 @@ interface AllowedRoute {
   protected: boolean;
 }
 
-function allowedRoute(method: string, path: string): AllowedRoute | undefined {
+function exactD2RouteKey(routeKey: string, expected: string): boolean {
+  return routeKey === expected;
+}
+
+function allowedRoute(
+  method: string,
+  path: string,
+  routeKey: string,
+  d2Routes: Readonly<D2GatewayRouteGates>,
+): AllowedRoute | undefined {
   if (method === "GET" && PUBLIC_PATHS.has(path)) {
     return { acceptsBody: false, protected: false };
   }
@@ -216,6 +278,119 @@ function allowedRoute(method: string, path: string): AllowedRoute | undefined {
   }
   if (method === "DELETE" && SAVED_JOB_PATH_PATTERN.test(path)) {
     return { acceptsBody: false, protected: true };
+  }
+  if (
+    d2Routes.privateCapture &&
+    method === "POST" &&
+    path === "/v1/saved-job-captures" &&
+    exactD2RouteKey(routeKey, "POST /v1/saved-job-captures")
+  ) {
+    return { acceptsBody: true, protected: true };
+  }
+  if (
+    d2Routes.privateCapture &&
+    PRIVATE_CAPTURE_PATH_PATTERN.test(path) &&
+    ((method === "GET" && exactD2RouteKey(routeKey, "GET /v1/saved-job-captures/{captureId}")) ||
+      (method === "DELETE" &&
+        exactD2RouteKey(routeKey, "DELETE /v1/saved-job-captures/{captureId}")))
+  ) {
+    return { acceptsBody: false, protected: true };
+  }
+  if (
+    d2Routes.contributionPolicy &&
+    method === "GET" &&
+    path === "/v1/extension/contribution-capability-policy" &&
+    exactD2RouteKey(routeKey, "GET /v1/extension/contribution-capability-policy")
+  ) {
+    return { acceptsBody: false, protected: false };
+  }
+  if (d2Routes.candidateContribution) {
+    if (
+      method === "POST" &&
+      path === "/v1/jobs/contributions" &&
+      exactD2RouteKey(routeKey, "POST /v1/jobs/contributions")
+    ) {
+      return { acceptsBody: true, protected: true };
+    }
+    if (
+      method === "POST" &&
+      path === "/v1/profile/ugc-contribution-consents" &&
+      exactD2RouteKey(routeKey, "POST /v1/profile/ugc-contribution-consents")
+    ) {
+      return { acceptsBody: true, protected: true };
+    }
+    if (
+      method === "POST" &&
+      CONSENT_REVOKE_PATH_PATTERN.test(path) &&
+      exactD2RouteKey(routeKey, "POST /v1/profile/ugc-contribution-consents/{consentId}/revoke")
+    ) {
+      return { acceptsBody: true, protected: true };
+    }
+    if (
+      method === "GET" &&
+      CONTRIBUTION_PATH_PATTERN.test(path) &&
+      exactD2RouteKey(routeKey, "GET /v1/jobs/contributions/{contributionId}")
+    ) {
+      return { acceptsBody: false, protected: true };
+    }
+    if (
+      method === "GET" &&
+      OWNER_TRUST_PATH_PATTERN.test(path) &&
+      exactD2RouteKey(routeKey, "GET /v1/trust/contributions/{contributionId}")
+    ) {
+      return { acceptsBody: false, protected: true };
+    }
+    if (
+      method === "POST" &&
+      OWNER_TRUST_WITHDRAW_PATH_PATTERN.test(path) &&
+      exactD2RouteKey(routeKey, "POST /v1/trust/contributions/{contributionId}/withdraw")
+    ) {
+      return { acceptsBody: true, protected: true };
+    }
+    if (
+      method === "POST" &&
+      OWNER_TRUST_APPEAL_PATH_PATTERN.test(path) &&
+      exactD2RouteKey(routeKey, "POST /v1/trust/contributions/{contributionId}/appeals")
+    ) {
+      return { acceptsBody: true, protected: true };
+    }
+  }
+  if (d2Routes.trustReviewer) {
+    if (
+      method === "POST" &&
+      path === "/v1/admin/trust/cases" &&
+      exactD2RouteKey(routeKey, "POST /v1/admin/trust/cases")
+    ) {
+      return { acceptsBody: true, protected: true };
+    }
+    if (
+      method === "GET" &&
+      REVIEWER_TRUST_CASE_PATH_PATTERN.test(path) &&
+      exactD2RouteKey(routeKey, "GET /v1/admin/trust/cases/{caseId}")
+    ) {
+      return { acceptsBody: false, protected: true };
+    }
+    if (
+      method === "POST" &&
+      REVIEWER_TRUST_DECISION_PATH_PATTERN.test(path) &&
+      exactD2RouteKey(routeKey, "POST /v1/admin/trust/cases/{caseId}/decision")
+    ) {
+      return { acceptsBody: true, protected: true };
+    }
+    if (
+      method === "POST" &&
+      REVIEWER_TRUST_TAKEDOWN_PATH_PATTERN.test(path) &&
+      exactD2RouteKey(routeKey, "POST /v1/admin/trust/cases/{caseId}/takedown")
+    ) {
+      return { acceptsBody: true, protected: true };
+    }
+    if (
+      method === "POST" &&
+      REVIEWER_TRUST_APPEAL_PATH_PATTERN.test(path) &&
+      exactD2RouteKey(routeKey, "POST /v1/admin/trust/cases/{caseId}/appeal-resolution")
+    ) {
+      return { acceptsBody: true, protected: true };
+    }
   }
   return undefined;
 }
@@ -507,10 +682,13 @@ function authenticationFailure(event: APIGatewayProxyEventV2): APIGatewayProxySt
 }
 
 export function createApiGatewayHandler(options: ApiGatewayHandlerOptions): ApiGatewayHandler {
+  const d2Routes = Object.freeze({ ...disabledD2GatewayRoutes, ...options.d2Routes });
   return async (event) => {
     const path = event.rawPath || "/";
     const method = event.requestContext.http.method.toUpperCase();
-    const route = allowedRoute(method, path);
+    const routeKey =
+      event.routeKey === event.requestContext.routeKey ? event.routeKey : "mismatched-route-key";
+    const route = allowedRoute(method, path, routeKey, d2Routes);
     if (!route) {
       return boundaryFailure(event, 404, "not_found", "Not found");
     }
@@ -565,10 +743,56 @@ export function createApiGatewayHandler(options: ApiGatewayHandlerOptions): ApiG
   };
 }
 
+interface D2LambdaComposition {
+  configuration: D2LambdaGatewayConfiguration;
+  contributionCapabilityPolicy?: ContributionCapabilityPolicySource;
+  trustConfiguration?: D2LambdaGatewayConfiguration["trust"];
+  routes: Readonly<D2GatewayRouteGates>;
+}
+
+function loadD2LambdaComposition(
+  config: LambdaGatewayConfig,
+  environment: NodeJS.ProcessEnv = process.env,
+): D2LambdaComposition {
+  const configuration = loadD2LambdaGatewayConfigSafely(environment);
+  let contributionCapabilityPolicy: ContributionCapabilityPolicySource | undefined;
+  if (configuration.signedContributionPolicyConfigured) {
+    try {
+      contributionCapabilityPolicy =
+        contributionCapabilityPolicySourceFromEnvironment(environment, () => new Date()) ??
+        undefined;
+    } catch {
+      contributionCapabilityPolicy = undefined;
+    }
+  }
+  const trustConfiguration = configuration.trust?.reviewerAssignments.every(
+    (assignment) => assignment.issuer === config.OIDC_ISSUER,
+  )
+    ? configuration.trust
+    : undefined;
+  const routes = Object.freeze({
+    privateCapture: configuration.privateCaptureRoutesEnabled,
+    contributionPolicy:
+      configuration.contributionPolicyRouteEnabled && Boolean(contributionCapabilityPolicy),
+    candidateContribution:
+      configuration.contributionRoutesEnabled &&
+      Boolean(contributionCapabilityPolicy) &&
+      Boolean(trustConfiguration),
+    trustReviewer: configuration.trustReviewerRoutesEnabled && Boolean(trustConfiguration),
+  });
+  return Object.freeze({
+    configuration,
+    ...(contributionCapabilityPolicy ? { contributionCapabilityPolicy } : {}),
+    ...(trustConfiguration ? { trustConfiguration } : {}),
+    routes,
+  });
+}
+
 async function createConfiguredApplication(
   principalBridge: InvocationPrincipalBridge,
+  config: LambdaGatewayConfig,
+  d2: D2LambdaComposition,
 ): Promise<NestFastifyApplication> {
-  const config = loadLambdaGatewayConfig();
   initializeTelemetry({
     service: "gateway",
     environment: config.NODE_ENV,
@@ -623,7 +847,7 @@ async function createConfiguredApplication(
   const jobReports = new JobReportingService(new PostgresJobReportStore(database.client));
   const ugcContributionConsents = new PostgresUgcContributionConsentStore(database.client);
   const ugcContributionPolicyVersion = configuredUgcContributionPolicyVersion(
-    process.env.UGC_CONTRIBUTION_POLICY_VERSION,
+    d2.configuration.ugcContributionPolicyVersion,
   );
   const jobContributions = new JobContributionService(
     new PostgresJobContributionStore(database.client),
@@ -631,6 +855,7 @@ async function createConfiguredApplication(
       ugcContributionConsents,
       ugcContributionPolicyVersion,
     ),
+    d2.contributionCapabilityPolicy,
   );
   const moderation = new JobModerationService(
     new PostgresJobModerationStore(database.client, deriveModerationCursorKey(databaseUrl)),
@@ -666,11 +891,17 @@ async function createConfiguredApplication(
           candidateRightsPolicy.downloadGrantLifetimeSeconds,
         )
       : undefined;
+  const trust = d2.trustConfiguration
+    ? createConfiguredD2TrustRuntime(database.client, d2.trustConfiguration)
+    : undefined;
   return createGatewayApplication({
     store,
     catalog,
     jobReports,
     jobContributions,
+    ...(d2.contributionCapabilityPolicy
+      ? { contributionCapabilityPolicy: d2.contributionCapabilityPolicy }
+      : {}),
     ugcContributionConsents,
     ...(ugcContributionPolicyVersion ? { ugcContributionPolicyVersion } : {}),
     moderation,
@@ -679,6 +910,7 @@ async function createConfiguredApplication(
     matchAssessments,
     entitlements,
     documents,
+    ...(trust ? { trust: trust.service, trustReviewerAssignments: trust.reviewerAssignments } : {}),
     ...(candidateDataExportDownloads ? { candidateDataExportDownloads } : {}),
     verifier: principalBridge.verifier,
     ...(idTokenVerifier ? { idTokenVerifier } : {}),
@@ -697,6 +929,7 @@ export const handler: Handler<AuthorizedHttpApiEvent, APIGatewayProxyStructuredR
 ) => {
   if (!configuredHandler) {
     const config = loadLambdaGatewayConfig();
+    const d2 = loadD2LambdaComposition(config);
     const principalBridge = createInvocationPrincipalBridge();
     const boundaryLogger = createLogger({
       service: "gateway",
@@ -704,10 +937,11 @@ export const handler: Handler<AuthorizedHttpApiEvent, APIGatewayProxyStructuredR
       releaseSha: config.RELEASE_SHA,
     });
     configuredHandler = createApiGatewayHandler({
-      app: createConfiguredApplication(principalBridge),
+      app: createConfiguredApplication(principalBridge, config, d2),
       issuer: config.OIDC_ISSUER,
       audience: config.OIDC_AUDIENCE,
       principalBridge,
+      d2Routes: d2.routes,
       onAuthenticationFailure: (diagnostic) => {
         boundaryLogger.warn(
           { event: "api_gateway_identity_context_rejected", ...diagnostic },
