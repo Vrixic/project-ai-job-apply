@@ -18,6 +18,10 @@ import type {
 } from "@ai-job-apply/trust-service";
 import type { EventBridgeEvent, SQSBatchResponse, SQSEvent, SQSRecord } from "aws-lambda";
 import { d2CommunityEmf } from "./d2-community-observability.js";
+import {
+  createConfiguredD2CommunityLambdaConfiguration,
+  createConfiguredD2TrustSignalLambdaConfiguration,
+} from "./d2-community-runtime.js";
 
 const MAXIMUM_NUDGE_BYTES = 4_096;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
@@ -90,17 +94,26 @@ function assertBoundary(boundary: D2CommunityLambdaBoundary): void {
   const queue = QUEUE_ARN_PATTERN.exec(boundary.trustSignalQueueArn);
   const rule = RULE_ARN_PATTERN.exec(boundary.scheduleRuleArn);
   if (
-    !/^[0-9]{12}$/u.test(boundary.accountId) ||
-    !/^[a-z0-9-]{3,32}$/u.test(boundary.region) ||
-    !queue ||
+    !validSignalBoundary(boundary, queue) ||
     !rule ||
-    queue[2] !== boundary.region ||
-    queue[3] !== boundary.accountId ||
     rule[2] !== boundary.region ||
     rule[3] !== boundary.accountId
   ) {
     throw new TypeError("The D2 community Lambda boundary is invalid");
   }
+}
+
+function validSignalBoundary(
+  boundary: Pick<D2CommunityLambdaBoundary, "accountId" | "region" | "trustSignalQueueArn">,
+  queue = QUEUE_ARN_PATTERN.exec(boundary.trustSignalQueueArn),
+): boolean {
+  return Boolean(
+    /^[0-9]{12}$/u.test(boundary.accountId) &&
+      /^[a-z0-9-]{3,32}$/u.test(boundary.region) &&
+      queue &&
+      queue[2] === boundary.region &&
+      queue[3] === boundary.accountId,
+  );
 }
 
 function exactDate(value: Date): Date {
@@ -148,7 +161,7 @@ function assertScheduledEvent(
 
 function parseTrustSignalRecord(
   item: SQSRecord,
-  boundary: D2CommunityLambdaBoundary,
+  boundary: Pick<D2CommunityLambdaBoundary, "region" | "trustSignalQueueArn">,
 ): OutboxNudgeV1 {
   const region = QUEUE_ARN_PATTERN.exec(boundary.trustSignalQueueArn)?.[2];
   if (
@@ -196,6 +209,67 @@ function assertSqsEvent(value: unknown): asserts value is SQSEvent {
   }
 }
 
+export type D2TrustSignalLambdaConfiguration =
+  | { enabled?: false }
+  | Readonly<{
+      enabled: true;
+      boundary: Pick<D2CommunityLambdaBoundary, "accountId" | "region" | "trustSignalQueueArn">;
+      trustSignal: Pick<ContributionTrustDecisionSignalConsumer, "consume">;
+      now(): Date;
+      logger: D2CommunityAggregateLogger;
+    }>;
+
+export function createD2TrustSignalLambdaHandler(
+  configuration: D2TrustSignalLambdaConfiguration = { enabled: false },
+) {
+  if (configuration.enabled !== true) {
+    return async (): Promise<SQSBatchResponse> => {
+      throw new Error("D2CommunityRuntimeDisabled");
+    };
+  }
+  if (
+    !validSignalBoundary(configuration.boundary) ||
+    typeof configuration.now !== "function" ||
+    typeof configuration.logger?.info !== "function" ||
+    typeof configuration.trustSignal?.consume !== "function"
+  ) {
+    throw new TypeError("The D2 Trust-signal Lambda configuration is invalid");
+  }
+  return async (event: unknown): Promise<SQSBatchResponse> => {
+    assertSqsEvent(event);
+    const failures: SQSBatchResponse["batchItemFailures"] = [];
+    const totals = { handled: 0, copied: 0, requeued: 0 };
+    for (const item of event.Records) {
+      try {
+        const nudge = parseTrustSignalRecord(item, configuration.boundary);
+        const metrics = await configuration.trustSignal.consume(
+          nudge,
+          exactDate(configuration.now()),
+        );
+        totals.handled += metrics.handled;
+        totals.copied += metrics.copied;
+        totals.requeued += metrics.requeued;
+      } catch {
+        failures.push({ itemIdentifier: item.messageId });
+      }
+    }
+    configuration.logger.info(
+      d2CommunityEmf(
+        {
+          TrustSignalRecords: event.Records.length,
+          TrustSignalHandled: totals.handled,
+          TrustSignalCopied: totals.copied,
+          TrustSignalRequeued: totals.requeued,
+          TrustSignalFailed: failures.length,
+        },
+        exactDate(configuration.now()),
+      ),
+      "d2_community_trust_signal_batch",
+    );
+    return { batchItemFailures: failures };
+  };
+}
+
 export function createD2CommunityLambdaHandlers(
   configuration: D2CommunityLambdaConfiguration = { enabled: false },
 ) {
@@ -203,9 +277,7 @@ export function createD2CommunityLambdaHandlers(
     return Object.freeze({
       scheduled: async (_event?: unknown): Promise<D2CommunityScheduledMetrics> =>
         Object.freeze({ enabled: false, jobs: zeroJobs, trustDelivery: zeroTrustDelivery }),
-      trustSignal: async (): Promise<SQSBatchResponse> => {
-        throw new Error("D2CommunityRuntimeDisabled");
-      },
+      trustSignal: createD2TrustSignalLambdaHandler(),
     });
   }
   assertBoundary(configuration.boundary);
@@ -218,6 +290,13 @@ export function createD2CommunityLambdaHandlers(
     throw new TypeError("Every D2 community Lambda dependency must be injected");
   }
   const runJobsBatch = configuration.jobs.runBatch ?? runContributionProcessingRuntimeBatch;
+  const trustSignal = createD2TrustSignalLambdaHandler({
+    enabled: true,
+    boundary: configuration.boundary,
+    trustSignal: configuration.trustSignal,
+    now: configuration.now,
+    logger: configuration.logger,
+  });
 
   return Object.freeze({
     scheduled: async (event: unknown): Promise<D2CommunityScheduledMetrics> => {
@@ -242,61 +321,84 @@ export function createD2CommunityLambdaHandlers(
         throw error;
       }
       configuration.logger.info(
-        d2CommunityEmf({
-          JobsClaimed: jobs.processing.claimed,
-          JobsCompleted: jobs.processing.completed,
-          JobsRetried: jobs.processing.retried,
-          JobsDead: jobs.processing.dead,
-          JobsParked: jobs.processing.parked,
-          JobsDeliveryClaimed: jobs.delivery.claimed,
-          JobsDeliveryPublished: jobs.delivery.published,
-          JobsDeliveryRetried: jobs.delivery.retried,
-          JobsDeliveryDead: jobs.delivery.dead,
-          TrustDeliveryClaimed: trustDelivery.claimed,
-          TrustDeliveryPublished: trustDelivery.published,
-          TrustDeliveryRetried: trustDelivery.retried,
-          TrustDeliveryDead: trustDelivery.dead,
-          ScheduledBatchSucceeded: 1,
-        }, now),
+        d2CommunityEmf(
+          {
+            JobsClaimed: jobs.processing.claimed,
+            JobsCompleted: jobs.processing.completed,
+            JobsRetried: jobs.processing.retried,
+            JobsDead: jobs.processing.dead,
+            JobsParked: jobs.processing.parked,
+            JobsDeliveryClaimed: jobs.delivery.claimed,
+            JobsDeliveryPublished: jobs.delivery.published,
+            JobsDeliveryRetried: jobs.delivery.retried,
+            JobsDeliveryDead: jobs.delivery.dead,
+            TrustDeliveryClaimed: trustDelivery.claimed,
+            TrustDeliveryPublished: trustDelivery.published,
+            TrustDeliveryRetried: trustDelivery.retried,
+            TrustDeliveryDead: trustDelivery.dead,
+            ScheduledBatchSucceeded: 1,
+          },
+          now,
+        ),
         "d2_community_scheduled_batch",
       );
       return Object.freeze({ enabled: true, jobs, trustDelivery });
     },
-    trustSignal: async (event: unknown): Promise<SQSBatchResponse> => {
-      assertSqsEvent(event);
-      const failures: SQSBatchResponse["batchItemFailures"] = [];
-      const totals = { handled: 0, copied: 0, requeued: 0 };
-      for (const item of event.Records) {
-        try {
-          const nudge = parseTrustSignalRecord(item, configuration.boundary);
-          const metrics = await configuration.trustSignal.consume(
-            nudge,
-            exactDate(configuration.now()),
-          );
-          totals.handled += metrics.handled;
-          totals.copied += metrics.copied;
-          totals.requeued += metrics.requeued;
-        } catch {
-          failures.push({ itemIdentifier: item.messageId });
-        }
-      }
-      configuration.logger.info(
-        d2CommunityEmf({
-          TrustSignalRecords: event.Records.length,
-          TrustSignalHandled: totals.handled,
-          TrustSignalCopied: totals.copied,
-          TrustSignalRequeued: totals.requeued,
-          TrustSignalFailed: failures.length,
-        }, exactDate(configuration.now())),
-        "d2_community_trust_signal_batch",
-      );
-      return { batchItemFailures: failures };
-    },
+    trustSignal,
   });
 }
 
-// The deployable artifact is intentionally inert until a release composes every dependency and
-// replaces this default-dark boundary. Importing it performs no database, queue, or network work.
-const defaultDarkHandlers = createD2CommunityLambdaHandlers();
-export const scheduled = defaultDarkHandlers.scheduled;
-export const trustSignal = defaultDarkHandlers.trustSignal;
+type D2CommunityLambdaHandlers = ReturnType<typeof createD2CommunityLambdaHandlers>;
+
+/** Import-safe cold-start composition. A failed initialization is retryable on a later invoke. */
+export function createLazyD2CommunityLambdaHandlers(
+  initialize: () => Promise<D2CommunityLambdaConfiguration>,
+): D2CommunityLambdaHandlers {
+  let configured: D2CommunityLambdaHandlers | undefined;
+  let initialization: Promise<D2CommunityLambdaHandlers> | undefined;
+  const get = async (): Promise<D2CommunityLambdaHandlers> => {
+    if (configured) return configured;
+    initialization ??= initialize()
+      .then((configuration) => createD2CommunityLambdaHandlers(configuration))
+      .catch((error) => {
+        initialization = undefined;
+        throw error;
+      });
+    configured = await initialization;
+    return configured;
+  };
+  return Object.freeze({
+    scheduled: async (event: unknown) => (await get()).scheduled(event),
+    trustSignal: async (event: unknown) => (await get()).trustSignal(event),
+  });
+}
+
+// Importing the artifact performs no database, queue, secret, or provider work. The initializer
+// returns the inert configuration unless D2_COMMUNITY_RUNTIME_ENABLED is exactly true.
+const runtimeHandlers = createLazyD2CommunityLambdaHandlers(() =>
+  createConfiguredD2CommunityLambdaConfiguration(),
+);
+export const scheduled = runtimeHandlers.scheduled;
+
+export function createLazyD2TrustSignalLambdaHandler(
+  initialize: () => Promise<D2TrustSignalLambdaConfiguration>,
+) {
+  let configured: ReturnType<typeof createD2TrustSignalLambdaHandler> | undefined;
+  let initialization: Promise<ReturnType<typeof createD2TrustSignalLambdaHandler>> | undefined;
+  return async (event: unknown): Promise<SQSBatchResponse> => {
+    if (!configured) {
+      initialization ??= initialize()
+        .then((configuration) => createD2TrustSignalLambdaHandler(configuration))
+        .catch((error) => {
+          initialization = undefined;
+          throw error;
+        });
+      configured = await initialization;
+    }
+    return configured(event);
+  };
+}
+
+export const trustSignal = createLazyD2TrustSignalLambdaHandler(() =>
+  createConfiguredD2TrustSignalLambdaConfiguration(),
+);

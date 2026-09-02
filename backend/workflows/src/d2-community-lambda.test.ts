@@ -3,6 +3,7 @@ import { type OutboxNudgeV1, outboxNudgeIntegrityInput } from "@ai-job-apply/eve
 import { describe, expect, it, vi } from "vitest";
 import {
   createD2CommunityLambdaHandlers,
+  createLazyD2CommunityLambdaHandlers,
   scheduled as defaultScheduled,
   trustSignal as defaultTrustSignal,
 } from "./d2-community-lambda.js";
@@ -122,6 +123,18 @@ describe("D2 community Lambda", () => {
     );
   });
 
+  it("lazily composes once and allows a later invoke to retry failed initialization", async () => {
+    const initialize = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("configuration unavailable"))
+      .mockResolvedValue({ enabled: false });
+    const lazy = createLazyD2CommunityLambdaHandlers(initialize);
+    await expect(lazy.scheduled(undefined)).rejects.toThrow("configuration unavailable");
+    await expect(lazy.scheduled(undefined)).resolves.toMatchObject({ enabled: false });
+    await expect(lazy.scheduled(undefined)).resolves.toMatchObject({ enabled: false });
+    expect(initialize).toHaveBeenCalledTimes(2);
+  });
+
   it("requires the exact scheduled event and returns aggregate metrics", async () => {
     const { handlers, runJobsBatch, runTrustDelivery, logger } = harness();
     await expect(handlers.scheduled(scheduledEvent())).resolves.toMatchObject({
@@ -197,7 +210,9 @@ describe("D2 community Lambda", () => {
 
   it("emits an aggregate-only health metric when a scheduled dependency fails", async () => {
     const { handlers, logger } = harness({
-      runJobsBatch: vi.fn(async () => { throw new Error("sensitive-provider-detail"); }),
+      runJobsBatch: vi.fn(async () => {
+        throw new Error("sensitive-provider-detail");
+      }),
     });
     await expect(handlers.scheduled(scheduledEvent())).rejects.toThrow("sensitive-provider-detail");
     expect(logger.info).toHaveBeenCalledWith(
