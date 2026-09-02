@@ -1,4 +1,5 @@
 export * from "./contribution.js";
+export * from "./contribution-capability-policy.js";
 export * from "./domain/canonical-job.js";
 export * from "./freshness-policy.js";
 export * from "./persistence/catalog.js";
