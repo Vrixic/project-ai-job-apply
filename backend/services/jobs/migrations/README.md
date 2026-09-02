@@ -53,11 +53,6 @@ other service may modify these tables.
   identifier-only outbox record per contribution. It stores structured previewed public fields and
   consent/digest references only—never raw DOM or HTML—and intentionally has no catalog/source
   foreign key or trigger, so queued UGC cannot affect provider provenance or active-job freshness.
-- `0016_job_contribution_candidate_rights.sql` — Adds an exact owner-scoped, allowlisted candidate
-  export for contribution source/posting/consent history without payload blobs, hashes, or command
-  identities. Privacy-ledger-authorized deletion removes the owner's contribution outbox rows and
-  contributions in one transaction while ordinary mutation remains blocked and provider catalog,
-  revalidation, and verification truth remain untouched.
 - `0015_source_revalidation_lifecycle.sql` — Adds the source-scoped durable revalidation queue and
   append-only independent-verification evidence ledger. Community observations and candidate
   closed reports can only enqueue digest-only priority signals. Exact provider evidence or an
@@ -65,3 +60,8 @@ other service may modify these tables.
   attempts, leases, retries, provider/page-variant freshness windows, and policy versions have no
   database or production timing defaults. Policy expiry erases raw snapshots and other nonminimal
   posting payloads while retaining the canonical tombstone and fixed-reason lifecycle event.
+- `0016_job_contribution_candidate_rights.sql` — Adds an exact owner-scoped, allowlisted candidate
+  export for contribution source/posting/consent history without payload blobs, hashes, or command
+  identities. Privacy-ledger-authorized deletion removes the owner's contribution outbox rows and
+  contributions in one transaction while ordinary mutation remains blocked and provider catalog,
+  revalidation, and verification truth remain untouched.

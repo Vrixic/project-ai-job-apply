@@ -55,6 +55,14 @@ and deployment/activation controls remain separate D2 work. Migration `0015` is 
 application-policy foundation, not a deployed provider verifier. Until those land, the intake is
 synthetic/default-dark and a queued acknowledgement makes no publication claim.
 
+Migration `0016_job_contribution_candidate_rights` adds owner-scoped export and deletion for queued
+contribution intake. Export reconstructs only the approved source, posting, observation-time, and
+consent-reference fields; it excludes the stored payload object, content/preview digests, owner ID,
+idempotency identity, and request hash. Deletion requires the existing privacy-ledger authorization
+and removes the owner's contribution outbox before its contribution rows in one transaction.
+Source revalidation signals, independent verification evidence, canonical jobs, and provider
+sources contain no contribution-owner foreign key and deliberately survive candidate deletion.
+
 Migration `0005_ingestion_orchestration` adds three Jobs-owned relations. Schedule occurrences are
 immutable, checkpoint transitions advance exactly one revision under a database lock, every
 revision is copied into an append-only aggregate-only event ledger, and transport dispatches have

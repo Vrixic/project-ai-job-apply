@@ -24,6 +24,7 @@ const migrationVersions = [
   "0013_public_job_sitemap",
   "0014_job_contribution_intake",
   "0015_source_revalidation_lifecycle",
+  "0016_job_contribution_candidate_rights",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -181,6 +182,10 @@ try {
         contributionTriggerCount: number;
         contributionForeignKeyCount: number;
         contributionCatalogForeignKeyCount: number;
+        contributionCandidateRightsFunctionCount: number;
+        contributionCandidateRightsSecurityDefinerCount: number;
+        contributionCandidateRightsPublicExecuteViolationCount: number;
+        contributionCandidateDeleteGuardBodyCount: number;
         revalidationIndexCount: number;
         revalidationTriggerCount: number;
         revalidationTriggerFunctionCount: number;
@@ -751,7 +756,12 @@ try {
             ('jobs.job_contributions'::regclass, 'job_contributions_queued_immutable',
               'jobs.guard_queued_job_contribution()'::regprocedure, 19::smallint),
             ('jobs.job_contribution_outbox'::regclass, 'job_contribution_outbox_append_only',
-              'jobs.guard_job_contribution_outbox()'::regprocedure, 19::smallint)
+              'jobs.guard_job_contribution_outbox()'::regprocedure, 19::smallint),
+            ('jobs.job_contributions'::regclass, 'job_contributions_candidate_delete_guard',
+              'jobs.guard_candidate_job_contribution_delete()'::regprocedure, 11::smallint),
+            ('jobs.job_contribution_outbox'::regclass,
+              'job_contribution_outbox_candidate_delete_guard',
+              'jobs.guard_candidate_job_contribution_outbox_delete()'::regprocedure, 11::smallint)
           ) expected(table_oid, trigger_name, function_oid, trigger_type)
             ON expected.table_oid = trigger.tgrelid
            AND expected.trigger_name = trigger.tgname
@@ -781,6 +791,43 @@ try {
               'jobs.job_sources'::regclass
             )
         ) AS "contributionCatalogForeignKeyCount"
+        , (
+          SELECT count(*)::int FROM pg_proc AS procedure
+          WHERE procedure.oid = ANY(ARRAY[
+            to_regprocedure('jobs.guard_candidate_job_contribution_delete()'),
+            to_regprocedure('jobs.guard_candidate_job_contribution_outbox_delete()'),
+            to_regprocedure('jobs.export_candidate_data(uuid)'),
+            to_regprocedure('jobs.delete_candidate_data(uuid,uuid)')
+          ])
+        ) AS "contributionCandidateRightsFunctionCount"
+        , (
+          SELECT count(*)::int FROM pg_proc AS procedure
+          WHERE procedure.oid = ANY(ARRAY[
+            to_regprocedure('jobs.export_candidate_data(uuid)'),
+            to_regprocedure('jobs.delete_candidate_data(uuid,uuid)')
+          ]) AND procedure.prosecdef
+        ) AS "contributionCandidateRightsSecurityDefinerCount"
+        , (
+          SELECT count(*)::int
+          FROM pg_proc AS procedure
+          CROSS JOIN LATERAL aclexplode(
+            COALESCE(procedure.proacl, acldefault('f', procedure.proowner))
+          ) AS privilege
+          WHERE procedure.oid = ANY(ARRAY[
+            to_regprocedure('jobs.guard_candidate_job_contribution_delete()'),
+            to_regprocedure('jobs.guard_candidate_job_contribution_outbox_delete()'),
+            to_regprocedure('jobs.export_candidate_data(uuid)'),
+            to_regprocedure('jobs.delete_candidate_data(uuid,uuid)')
+          ]) AND privilege.grantee = 0 AND privilege.privilege_type = 'EXECUTE'
+        ) AS "contributionCandidateRightsPublicExecuteViolationCount"
+        , (
+          SELECT count(*)::int FROM pg_proc AS procedure
+          WHERE procedure.oid = ANY(ARRAY[
+            to_regprocedure('jobs.guard_candidate_job_contribution_delete()'),
+            to_regprocedure('jobs.guard_candidate_job_contribution_outbox_delete()')
+          ]) AND pg_get_functiondef(procedure.oid)
+            LIKE '%privacy.current_candidate_deletion_authorized%'
+        ) AS "contributionCandidateDeleteGuardBodyCount"
         , (
           SELECT count(*)::int
           FROM pg_indexes
@@ -891,9 +938,13 @@ try {
         JSON.stringify(expectedReportingTriggerBodies) ||
       verification.reportingIndexCount !== 6 ||
       verification.contributionIndexCount !== 5 ||
-      verification.contributionTriggerCount !== 2 ||
+      verification.contributionTriggerCount !== 4 ||
       verification.contributionForeignKeyCount !== 1 ||
       verification.contributionCatalogForeignKeyCount !== 0 ||
+      verification.contributionCandidateRightsFunctionCount !== 4 ||
+      verification.contributionCandidateRightsSecurityDefinerCount !== 2 ||
+      verification.contributionCandidateRightsPublicExecuteViolationCount !== 0 ||
+      verification.contributionCandidateDeleteGuardBodyCount !== 2 ||
       verification.revalidationIndexCount !== 7 ||
       verification.revalidationTriggerCount !== 2 ||
       verification.revalidationTriggerFunctionCount !== 2 ||
@@ -950,6 +1001,14 @@ try {
           contributionTriggerCount: verification?.contributionTriggerCount,
           contributionForeignKeyCount: verification?.contributionForeignKeyCount,
           contributionCatalogForeignKeyCount: verification?.contributionCatalogForeignKeyCount,
+          contributionCandidateRightsFunctionCount:
+            verification?.contributionCandidateRightsFunctionCount,
+          contributionCandidateRightsSecurityDefinerCount:
+            verification?.contributionCandidateRightsSecurityDefinerCount,
+          contributionCandidateRightsPublicExecuteViolationCount:
+            verification?.contributionCandidateRightsPublicExecuteViolationCount,
+          contributionCandidateDeleteGuardBodyCount:
+            verification?.contributionCandidateDeleteGuardBodyCount,
           revalidationIndexCount: verification?.revalidationIndexCount,
           revalidationTriggerCount: verification?.revalidationTriggerCount,
           revalidationTriggerFunctionCount: verification?.revalidationTriggerFunctionCount,
