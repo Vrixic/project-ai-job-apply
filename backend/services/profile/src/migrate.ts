@@ -17,6 +17,7 @@ const migrationVersions = [
   "0006_candidate_rights",
   "0007_candidate_rights_export_null_omission",
   "0008_ugc_contribution_consents",
+  "0009_ugc_contribution_consent_candidate_rights",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -71,6 +72,7 @@ try {
         outbox_column_count: number;
         profile_fact_trigger_count: number;
         ugc_consent_trigger_count: number;
+        ugc_consent_delete_guard_count: number;
       }[]
     >`
       SELECT (
@@ -132,13 +134,21 @@ try {
           )
           AND NOT tgisinternal
       ) AS ugc_consent_trigger_count
+      , (
+        SELECT count(*)::int
+        FROM pg_trigger
+        WHERE tgrelid = 'profile.ugc_contribution_consents'::regclass
+          AND tgname = 'ugc_contribution_consents_guard_delete'
+          AND NOT tgisinternal
+      ) AS ugc_consent_delete_guard_count
     `;
     if (
       verification?.table_count !== 16 ||
       verification.migration_count !== migrationVersions.length ||
       verification.outbox_column_count !== 11 ||
       verification.profile_fact_trigger_count !== 1 ||
-      verification.ugc_consent_trigger_count !== 2
+      verification.ugc_consent_trigger_count !== 2 ||
+      verification.ugc_consent_delete_guard_count !== 1
     ) {
       throw new Error("Database migration verification failed");
     }

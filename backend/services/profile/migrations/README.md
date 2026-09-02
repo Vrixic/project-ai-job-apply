@@ -30,3 +30,8 @@ change the export schema or disclose a provider identity.
 append-only revoke/supersede transitions. Exact owner, purpose, client, document/policy version,
 preview digest, timestamps, expiry, and current lineage are enforced before Jobs may rely on a
 grant. Idempotency receipts and value-free audit events remain in the existing Platform tables.
+
+`0009_ugc_contribution_consent_candidate_rights` adds the owner's allowlisted consent history to
+the version-one candidate export without exposing the preview digest, internal record lineage, or
+idempotency receipts. It lets only the already-authorized candidate-deletion transaction remove
+consent history and its internal command receipts; ordinary updates and deletes remain blocked.

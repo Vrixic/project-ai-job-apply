@@ -47,3 +47,6 @@ Grant and revoke receipts intentionally exclude server-selected timestamps from 
 hashes, so an ambiguous retry with the same semantic input returns the original immutable server
 time. Audit metadata contains only fixed purpose/client and version identifiers; it never contains
 the preview digest or selected posting content.
+Candidate export includes an allowlisted owner-scoped consent history without preview digests,
+internal lineage identifiers, or command receipts. Candidate deletion removes that history only
+inside the existing privacy-authorized transaction; normal mutation remains fail-closed.
