@@ -18,6 +18,7 @@ import {
   type UgcContributionConsentStore,
   UgcContributionConsentUnavailableError,
 } from "@ai-job-apply/profile-service";
+import { TrustApplicationService } from "@ai-job-apply/trust-service";
 import { NestFactory } from "@nestjs/core";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
 import {
@@ -25,6 +26,10 @@ import {
   applyRequestContext,
   type CandidateDataExportDownloadSigner,
 } from "./app.module.js";
+import {
+  OidcTrustReviewerAuthority,
+  type TrustReviewerAssignment,
+} from "./trust-reviewer-authority.js";
 
 export interface GatewayApplicationOptions {
   store: ProfileStore;
@@ -39,6 +44,8 @@ export interface GatewayApplicationOptions {
   matchAssessments: MatchAssessments;
   entitlements: EntitlementReadService;
   documents: DocumentStore;
+  trust?: TrustApplicationService;
+  trustReviewerAssignments?: readonly TrustReviewerAssignment[];
   candidateDataExportDownloads?: CandidateDataExportDownloadSigner;
   verifier: AccessTokenVerifier;
   idTokenVerifier?: IdTokenVerifier;
@@ -97,6 +104,10 @@ export async function createGatewayApplication(
       matchAssessments: options.matchAssessments,
       entitlements: options.entitlements,
       documents: options.documents,
+      trust: options.trust ?? new TrustApplicationService(),
+      trustReviewerAuthority: new OidcTrustReviewerAuthority(
+        options.trustReviewerAssignments ?? [],
+      ),
       ...(options.candidateDataExportDownloads
         ? { candidateDataExportDownloads: options.candidateDataExportDownloads }
         : {}),

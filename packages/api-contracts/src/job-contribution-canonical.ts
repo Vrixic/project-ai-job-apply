@@ -81,6 +81,10 @@ export function expectedJobContributionApprovedFields(
 
 export function jobContributionContentDigestInput(input: CreateJobContributionRequest): string {
   return JSON.stringify({
+    client: {
+      surface: input.client.surface,
+      version: input.client.version,
+    },
     source: canonicalSelectedPublicSource(input),
     posting: canonicalPosting(input),
   });
@@ -90,6 +94,10 @@ export function jobContributionPreviewDigestInput(input: CreateJobContributionRe
   return JSON.stringify({
     schemaVersion: input.schemaVersion,
     contributionId: input.contributionId,
+    client: {
+      surface: input.client.surface,
+      version: input.client.version,
+    },
     source: canonicalSource(input),
     posting: canonicalPosting(input),
     observation: {

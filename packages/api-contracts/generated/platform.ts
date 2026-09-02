@@ -324,6 +324,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/trust/contributions/{contributionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getOwnerTrustCase"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/trust/contributions/{contributionId}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["withdrawOwnerTrustContribution"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/trust/contributions/{contributionId}/appeals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["fileOwnerTrustAppeal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/jobs/{jobId}/reports": {
         parameters: {
             query?: never;
@@ -334,6 +382,86 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["createJobReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/trust/cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["openTrustCase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/trust/cases/{caseId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getReviewerTrustCase"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/trust/cases/{caseId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["decideTrustCase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/trust/cases/{caseId}/takedown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["takeDownTrustCase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/trust/cases/{caseId}/appeal-resolution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resolveTrustAppeal"];
         delete?: never;
         options?: never;
         head?: never;
@@ -966,6 +1094,11 @@ export interface components {
             /** @constant */
             schemaVersion: 1;
             contributionId: string;
+            client: {
+                /** @constant */
+                surface: "browser_extension";
+                version: string;
+            };
             source: {
                 /** @enum {string} */
                 provider: "greenhouse" | "lever" | "ashby";
@@ -1038,6 +1171,65 @@ export interface components {
             submittedAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        /** @enum {string} */
+        TrustCaseState: "needs_review" | "accepted" | "rejected" | "appeal_pending" | "withdrawn" | "taken_down";
+        OwnerTrustCase: {
+            id: string;
+            contributionId: string;
+            state: components["schemas"]["TrustCaseState"];
+            policyVersion: string;
+            version: number;
+            appealed: boolean;
+            appealDeadlineAt?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        ReviewerTrustCase: {
+            id: string;
+            contributionId: string;
+            state: components["schemas"]["TrustCaseState"];
+            policyVersion: string;
+            version: number;
+            appealed: boolean;
+            /** Format: date-time */
+            appealDeadlineAt?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        WithdrawTrustContributionRequest: {
+            expectedVersion: number;
+        };
+        FileTrustAppealRequest: {
+            expectedVersion: number;
+            evidenceDigestSha256: string;
+        };
+        OpenTrustCaseRequest: {
+            contributionId: string;
+        };
+        DecideTrustCaseRequest: {
+            expectedVersion: number;
+            /** @enum {string} */
+            outcome: "accepted" | "rejected";
+            /** @enum {string} */
+            reasonCode: "independently_verified" | "insufficient_evidence" | "content_mismatch" | "malicious_or_deceptive" | "license_or_policy_block";
+            evidenceDigestSha256: string;
+        } & (unknown & unknown);
+        TakeDownTrustCaseRequest: {
+            expectedVersion: number;
+            /** @enum {string} */
+            reasonCode: "verified_requester_takedown" | "credible_safety_risk" | "rights_or_policy_violation";
+            evidenceDigestSha256: string;
+        };
+        ResolveTrustAppealRequest: {
+            expectedVersion: number;
+            /** @enum {string} */
+            outcome: "upheld" | "reversed";
+            evidenceDigestSha256: string;
         };
         JobReport: {
             id: string;
@@ -2301,6 +2493,100 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    getOwnerTrustCase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contributionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The authenticated contributor's private Trust case status */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnerTrustCase"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    withdrawOwnerTrustContribution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contributionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WithdrawTrustContributionRequest"];
+            };
+        };
+        responses: {
+            /** @description The owner-scoped contribution was withdrawn from Trust eligibility */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnerTrustCase"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    fileOwnerTrustAppeal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contributionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileTrustAppealRequest"];
+            };
+        };
+        responses: {
+            /** @description One evidence-bound owner appeal was filed */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnerTrustCase"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     createJobReport: {
         parameters: {
             query?: never;
@@ -2335,6 +2621,164 @@ export interface operations {
             409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    openTrustCase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpenTrustCaseRequest"];
+            };
+        };
+        responses: {
+            /** @description A policy-bound Trust case was opened for eligible contribution evidence */
+            201: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewerTrustCase"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getReviewerTrustCase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                caseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A reviewer-safe Trust case without contributor or reviewer identity */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewerTrustCase"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    decideTrustCase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                caseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecideTrustCaseRequest"];
+            };
+        };
+        responses: {
+            /** @description The version-fenced initial Trust decision */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewerTrustCase"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    takeDownTrustCase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                caseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TakeDownTrustCaseRequest"];
+            };
+        };
+        responses: {
+            /** @description The version-fenced Trust takedown */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewerTrustCase"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    resolveTrustAppeal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                caseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveTrustAppealRequest"];
+            };
+        };
+        responses: {
+            /** @description The different-reviewer appeal resolution */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewerTrustCase"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             503: components["responses"]["ServiceUnavailable"];
         };
     };

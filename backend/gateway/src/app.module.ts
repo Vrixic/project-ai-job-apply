@@ -8,15 +8,17 @@ import type {
   ConfirmAccountDeletionRequest,
   CreateAccountDeletionRequest,
   CreateCandidateDataExportRequest,
-  CreatePrivateSavedPageCaptureRequest,
   CreateJobContributionRequest,
   CreateJobReportRequest,
+  CreatePrivateSavedPageCaptureRequest,
   CreateProfileFactRequest,
   CreateResumeUploadRequest,
   CreateResumeUploadResponse,
   CreateSavedJobRequest,
   CurrentUser,
+  DecideTrustCaseRequest,
   EntitlementSummary,
+  FileTrustAppealRequest,
   GrantUgcContributionConsentRequest,
   JobContribution,
   JobReport,
@@ -28,20 +30,26 @@ import type {
   ModerationCasePage,
   ModerationCaseSearchRequest,
   OpenModerationCaseRequest,
+  OpenTrustCaseRequest,
   Operation,
-  ProblemDetails,
+  OwnerTrustCase,
   PrivateSavedPageCapture as PrivateSavedPageCaptureResponse,
+  ProblemDetails,
   ProfileFact,
   ProfileFactCollection,
   PutJobPreferencesRequest,
   PutJobPreferencesResponse,
   ResolveModerationCaseRequest,
+  ResolveTrustAppealRequest,
   ResumeDocumentCollection,
+  ReviewerTrustCase,
   SavedJob,
   SavedJobPage,
   SavedJobSearchRequest,
+  TakeDownTrustCaseRequest,
   UgcContributionConsentGrant,
   UpdateProfileFactRequest,
+  WithdrawTrustContributionRequest,
 } from "@ai-job-apply/api-contracts";
 import { compileComponentValidator, formatValidationErrors } from "@ai-job-apply/api-contracts";
 import {
@@ -122,6 +130,12 @@ import {
   UgcContributionConsentUnavailableError,
 } from "@ai-job-apply/profile-service";
 import {
+  TrustApplicationError,
+  type TrustApplicationService,
+  type TrustCase,
+  type TrustReviewerRole,
+} from "@ai-job-apply/trust-service";
+import {
   type ArgumentsHost,
   Catch,
   Controller,
@@ -145,6 +159,10 @@ import {
   UseFilters,
 } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import {
+  type OidcTrustReviewerAuthority,
+  TrustReviewerAccessDeniedError,
+} from "./trust-reviewer-authority.js";
 
 const PROFILE_STORE = Symbol("PROFILE_STORE");
 const JOB_CATALOG = Symbol("JOB_CATALOG");
@@ -163,6 +181,8 @@ const TOKEN_VERIFIER = Symbol("TOKEN_VERIFIER");
 const ID_TOKEN_VERIFIER = Symbol("ID_TOKEN_VERIFIER");
 const RELEASE_SHA = Symbol("RELEASE_SHA");
 const CLOCK = Symbol("CLOCK");
+const TRUST_APPLICATION = Symbol("TRUST_APPLICATION");
+const TRUST_REVIEWER_AUTHORITY = Symbol("TRUST_REVIEWER_AUTHORITY");
 export const CANDIDATE_REAUTHENTICATION_HEADER = "x-ai-job-apply-reauthentication";
 const MAXIMUM_REAUTHENTICATION_HEADER_BYTES = 16_384;
 const COMPACT_JWT = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
@@ -229,6 +249,14 @@ const SAFE_ROUTE_TEMPLATES = new Set([
   "/v1/jobs/:jobId/reports",
   "/v1/jobs/contributions",
   "/v1/jobs/contributions/:contributionId",
+  "/v1/trust/contributions/:contributionId",
+  "/v1/trust/contributions/:contributionId/withdraw",
+  "/v1/trust/contributions/:contributionId/appeals",
+  "/v1/admin/trust/cases",
+  "/v1/admin/trust/cases/:caseId",
+  "/v1/admin/trust/cases/:caseId/decision",
+  "/v1/admin/trust/cases/:caseId/takedown",
+  "/v1/admin/trust/cases/:caseId/appeal-resolution",
   "/v1/profile/ugc-contribution-consents",
   "/v1/profile/ugc-contribution-consents/:consentId/revoke",
   "/v1/admin/moderation/cases",
@@ -283,7 +311,8 @@ class RequestIdentity {
       | "jobs:moderate"
       | "jobs:write"
       | "profile:read"
-      | "profile:write",
+      | "profile:write"
+      | "trust:review",
   ) {
     const token = bearerToken(request.headers.authorization);
     const principal = await this.verifier.verify(token);
@@ -471,7 +500,10 @@ class ProblemDetailsFilter implements ExceptionFilter {
       code = "job_contribution_consent_required";
       title = "Contribution consent is required";
       detail = exception.message;
-    } else if (exception instanceof JobContributionUnavailableError) {
+    } else if (
+      exception instanceof JobContributionUnavailableError ||
+      (exception instanceof Error && exception.name === "JobContributionCapabilityDisabledError")
+    ) {
       status = HttpStatus.SERVICE_UNAVAILABLE;
       code = "job_contribution_unavailable";
       title = "Job contribution unavailable";
@@ -506,6 +538,40 @@ class ProblemDetailsFilter implements ExceptionFilter {
       code = "moderation_unavailable";
       title = "Moderation unavailable";
       detail = "Moderation is temporarily unavailable";
+    } else if (exception instanceof TrustReviewerAccessDeniedError) {
+      status = HttpStatus.FORBIDDEN;
+      code = "trust_access_denied";
+      title = "Trust access denied";
+      detail = "The Trust operation is not authorized";
+    } else if (exception instanceof TrustApplicationError) {
+      const projected = {
+        access_denied: [HttpStatus.FORBIDDEN, "trust_access_denied", "Trust access denied"],
+        dependency_unavailable: [
+          HttpStatus.SERVICE_UNAVAILABLE,
+          "trust_unavailable",
+          "Trust unavailable",
+        ],
+        evidence_not_verified: [
+          HttpStatus.CONFLICT,
+          "trust_evidence_unverified",
+          "Trust evidence is not verified",
+        ],
+        invalid_request: [HttpStatus.BAD_REQUEST, "invalid_trust_request", "Invalid Trust request"],
+        invalid_state: [HttpStatus.CONFLICT, "trust_state_conflict", "Trust state changed"],
+        not_found: [HttpStatus.NOT_FOUND, "trust_case_not_found", "Trust case not found"],
+        policy_unavailable: [
+          HttpStatus.SERVICE_UNAVAILABLE,
+          "trust_policy_unavailable",
+          "Trust policy unavailable",
+        ],
+        version_conflict: [
+          HttpStatus.CONFLICT,
+          "trust_version_conflict",
+          "Trust case version changed",
+        ],
+      } as const;
+      [status, code, title] = projected[exception.code];
+      detail = title;
     } else if (exception instanceof SavedJobIdempotencyConflictError) {
       status = HttpStatus.CONFLICT;
       code = "idempotency_conflict";
@@ -689,6 +755,16 @@ const validateCreateJobReport = compileComponentValidator("CreateJobReportReques
 const validateJobReport = compileComponentValidator("JobReport");
 const validateCreateJobContribution = compileComponentValidator("CreateJobContributionRequest");
 const validateJobContribution = compileComponentValidator("JobContribution");
+const validateOwnerTrustCase = compileComponentValidator("OwnerTrustCase");
+const validateReviewerTrustCase = compileComponentValidator("ReviewerTrustCase");
+const validateWithdrawTrustContribution = compileComponentValidator(
+  "WithdrawTrustContributionRequest",
+);
+const validateFileTrustAppeal = compileComponentValidator("FileTrustAppealRequest");
+const validateOpenTrustCase = compileComponentValidator("OpenTrustCaseRequest");
+const validateDecideTrustCase = compileComponentValidator("DecideTrustCaseRequest");
+const validateTakeDownTrustCase = compileComponentValidator("TakeDownTrustCaseRequest");
+const validateResolveTrustAppeal = compileComponentValidator("ResolveTrustAppealRequest");
 const validateGrantUgcContributionConsent = compileComponentValidator(
   "GrantUgcContributionConsentRequest",
 );
@@ -706,6 +782,8 @@ const validateModerationCasePage = compileComponentValidator("ModerationCasePage
 const validateJobReportSummary = compileComponentValidator("JobReportSummary");
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const UUID_V7_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const TRUST_CASE_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 function requireIdempotencyKey(value: unknown): string {
   const key = Array.isArray(value) && value.length === 1 ? value[0] : value;
@@ -933,6 +1011,221 @@ function validModerationResolution(value: ResolveModerationCaseRequest): boolean
     : value.resolution === "block_job"
       ? value.reasonCode === "report_confirmed" || value.reasonCode === "catalog_policy_violation"
       : value.reasonCode === "source_integrity_failure";
+}
+
+function hasNoQuery(request: AuthenticatedRequest): boolean {
+  return !request.query || Object.keys(request.query as Record<string, unknown>).length === 0;
+}
+
+function projectOwnerTrustCase(value: unknown): OwnerTrustCase {
+  if (!validateOwnerTrustCase(value)) throw new TrustApplicationError("dependency_unavailable");
+  return value as OwnerTrustCase;
+}
+
+function projectReviewerTrustCase(value: TrustCase): ReviewerTrustCase {
+  const projected = {
+    id: value.id,
+    contributionId: value.contributionId,
+    state: value.state,
+    policyVersion: value.policyVersion,
+    version: value.version,
+    appealed: value.appealCount === 1,
+    ...(value.adverseDecision
+      ? { appealDeadlineAt: value.adverseDecision.appealDeadlineAt.toISOString() }
+      : {}),
+    createdAt: value.createdAt.toISOString(),
+    updatedAt: value.updatedAt.toISOString(),
+  };
+  if (!validateReviewerTrustCase(projected)) {
+    throw new TrustApplicationError("dependency_unavailable");
+  }
+  return projected as ReviewerTrustCase;
+}
+
+function requireTrustRequest(
+  request: AuthenticatedRequest,
+  validate: ((value: unknown) => boolean) & { errors?: unknown },
+): void {
+  if (!hasNoQuery(request) || !validate(request.body)) {
+    throw new HttpException("The Trust request is invalid", HttpStatus.BAD_REQUEST);
+  }
+}
+
+@Controller("/v1/trust")
+@UseFilters(ProblemDetailsFilter)
+class OwnerTrustController {
+  constructor(
+    @Inject(RequestIdentity) private readonly identity: RequestIdentity,
+    @Inject(TRUST_APPLICATION) private readonly trust: TrustApplicationService,
+  ) {}
+
+  @Get("/contributions/:contributionId")
+  @Header("cache-control", "no-store")
+  async read(
+    @Req() request: AuthenticatedRequest,
+    @Param("contributionId") contributionId: string,
+  ): Promise<OwnerTrustCase> {
+    const user = await this.identity.resolve(request, "jobs:contribute");
+    if (
+      !hasNoQuery(request) ||
+      request.body !== undefined ||
+      !UUID_V7_PATTERN.test(contributionId)
+    ) {
+      throw new HttpException("The Trust request is invalid", HttpStatus.BAD_REQUEST);
+    }
+    return projectOwnerTrustCase(
+      await this.trust.readOwnerCase({ contributorUserId: user.id, contributionId }),
+    );
+  }
+
+  @Post("/contributions/:contributionId/withdraw")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async withdraw(
+    @Req() request: AuthenticatedRequest,
+    @Param("contributionId") contributionId: string,
+  ): Promise<OwnerTrustCase> {
+    const user = await this.identity.resolve(request, "jobs:contribute");
+    if (!UUID_V7_PATTERN.test(contributionId)) {
+      throw new HttpException("The Trust request is invalid", HttpStatus.BAD_REQUEST);
+    }
+    requireTrustRequest(request, validateWithdrawTrustContribution);
+    const body = request.body as WithdrawTrustContributionRequest;
+    return projectOwnerTrustCase(
+      await this.trust.withdrawOwnerContribution({
+        contributorUserId: user.id,
+        contributionId,
+        expectedVersion: body.expectedVersion,
+      }),
+    );
+  }
+
+  @Post("/contributions/:contributionId/appeals")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async appeal(
+    @Req() request: AuthenticatedRequest,
+    @Param("contributionId") contributionId: string,
+  ): Promise<OwnerTrustCase> {
+    const user = await this.identity.resolve(request, "jobs:contribute");
+    if (!UUID_V7_PATTERN.test(contributionId)) {
+      throw new HttpException("The Trust request is invalid", HttpStatus.BAD_REQUEST);
+    }
+    requireTrustRequest(request, validateFileTrustAppeal);
+    const body = request.body as FileTrustAppealRequest;
+    return projectOwnerTrustCase(
+      await this.trust.appealOwnerDecision({
+        contributorUserId: user.id,
+        contributionId,
+        expectedVersion: body.expectedVersion,
+        evidenceDigestSha256: body.evidenceDigestSha256,
+      }),
+    );
+  }
+}
+
+@Controller("/v1/admin/trust")
+@UseFilters(ProblemDetailsFilter)
+class AdminTrustController {
+  constructor(
+    @Inject(RequestIdentity) private readonly identity: RequestIdentity,
+    @Inject(TRUST_APPLICATION) private readonly trust: TrustApplicationService,
+    @Inject(TRUST_REVIEWER_AUTHORITY)
+    private readonly reviewers: OidcTrustReviewerAuthority,
+  ) {}
+
+  private async reviewer(
+    request: AuthenticatedRequest,
+    role: TrustReviewerRole,
+  ): Promise<{ principal: AuthPrincipal; reviewerId: string }> {
+    const principal = await this.identity.authorize(request, "trust:review");
+    return { principal, reviewerId: this.reviewers.resolve(principal, role) };
+  }
+
+  @Get("/cases/:caseId")
+  @Header("cache-control", "no-store")
+  async read(
+    @Req() request: AuthenticatedRequest,
+    @Param("caseId") caseId: string,
+  ): Promise<ReviewerTrustCase> {
+    const { reviewerId } = await this.reviewer(request, "case_reader");
+    if (!hasNoQuery(request) || request.body !== undefined || !TRUST_CASE_ID_PATTERN.test(caseId)) {
+      throw new HttpException("The Trust request is invalid", HttpStatus.BAD_REQUEST);
+    }
+    return projectReviewerTrustCase(await this.trust.readReviewerCase({ reviewerId, caseId }));
+  }
+
+  @Post("/cases")
+  @HttpCode(HttpStatus.CREATED)
+  @Header("cache-control", "no-store")
+  async open(@Req() request: AuthenticatedRequest): Promise<ReviewerTrustCase> {
+    const { reviewerId } = await this.reviewer(request, "case_opener");
+    requireTrustRequest(request, validateOpenTrustCase);
+    const body = request.body as OpenTrustCaseRequest;
+    return projectReviewerTrustCase(
+      await this.trust.openReview({
+        reviewerId,
+        contributionId: body.contributionId,
+      }),
+    );
+  }
+
+  @Post("/cases/:caseId/decision")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async decide(
+    @Req() request: AuthenticatedRequest,
+    @Param("caseId") caseId: string,
+  ): Promise<ReviewerTrustCase> {
+    const { reviewerId } = await this.reviewer(request, "initial_reviewer");
+    if (!TRUST_CASE_ID_PATTERN.test(caseId)) {
+      throw new HttpException("The Trust request is invalid", HttpStatus.BAD_REQUEST);
+    }
+    requireTrustRequest(request, validateDecideTrustCase);
+    const body = request.body as DecideTrustCaseRequest;
+    return projectReviewerTrustCase(
+      await this.trust.decideInitialReview({ reviewerId, caseId, ...body }),
+    );
+  }
+
+  @Post("/cases/:caseId/takedown")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async takeDown(
+    @Req() request: AuthenticatedRequest,
+    @Param("caseId") caseId: string,
+  ): Promise<ReviewerTrustCase> {
+    const { principal, reviewerId } = await this.reviewer(request, "takedown_reviewer");
+    if (!TRUST_CASE_ID_PATTERN.test(caseId)) {
+      throw new HttpException("The Trust request is invalid", HttpStatus.BAD_REQUEST);
+    }
+    requireTrustRequest(request, validateTakeDownTrustCase);
+    const body = request.body as TakeDownTrustCaseRequest;
+    if (body.reasonCode === "verified_requester_takedown") {
+      this.reviewers.requireVerifiedRequesterScope(principal);
+    }
+    return projectReviewerTrustCase(
+      await this.trust.takeDownAcceptedContribution({ reviewerId, caseId, ...body }),
+    );
+  }
+
+  @Post("/cases/:caseId/appeal-resolution")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async resolveAppeal(
+    @Req() request: AuthenticatedRequest,
+    @Param("caseId") caseId: string,
+  ): Promise<ReviewerTrustCase> {
+    const { reviewerId } = await this.reviewer(request, "appeal_reviewer");
+    if (!TRUST_CASE_ID_PATTERN.test(caseId)) {
+      throw new HttpException("The Trust request is invalid", HttpStatus.BAD_REQUEST);
+    }
+    requireTrustRequest(request, validateResolveTrustAppeal);
+    const body = request.body as ResolveTrustAppealRequest;
+    return projectReviewerTrustCase(
+      await this.trust.resolveAppeal({ reviewerId, caseId, ...body }),
+    );
+  }
 }
 
 @Controller("/v1/admin/moderation")
@@ -1821,6 +2114,8 @@ export interface AppModuleOptions {
   matchAssessments: MatchAssessments;
   entitlements: EntitlementReadService;
   documents: DocumentStore;
+  trust: TrustApplicationService;
+  trustReviewerAuthority: OidcTrustReviewerAuthority;
   candidateDataExportDownloads?: CandidateDataExportDownloadSigner;
   verifier: AccessTokenVerifier;
   idTokenVerifier?: IdTokenVerifier;
@@ -1834,7 +2129,13 @@ export class AppModule {
   static register(options: AppModuleOptions): DynamicModule {
     return {
       module: AppModule,
-      controllers: [HealthController, CandidateController, AdminModerationController],
+      controllers: [
+        HealthController,
+        CandidateController,
+        OwnerTrustController,
+        AdminModerationController,
+        AdminTrustController,
+      ],
       providers: [
         RequestIdentity,
         { provide: PROFILE_STORE, useValue: options.store },
@@ -1852,6 +2153,8 @@ export class AppModule {
         { provide: MATCH_ASSESSMENTS, useValue: options.matchAssessments },
         { provide: ENTITLEMENTS, useValue: options.entitlements },
         { provide: DOCUMENT_STORE, useValue: options.documents },
+        { provide: TRUST_APPLICATION, useValue: options.trust },
+        { provide: TRUST_REVIEWER_AUTHORITY, useValue: options.trustReviewerAuthority },
         {
           provide: CANDIDATE_DATA_EXPORT_DOWNLOADS,
           useValue: options.candidateDataExportDownloads ?? null,

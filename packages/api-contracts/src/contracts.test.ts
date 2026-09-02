@@ -44,6 +44,7 @@ describe("Job contribution intake contract", () => {
   const input = {
     schemaVersion: 1,
     contributionId: "019c0000-0000-7000-8000-000000000010",
+    client: { surface: "browser_extension", version: "0.1.0" },
     source: {
       provider: "greenhouse",
       pageVariant: "greenhouse-board-v1",
@@ -96,6 +97,10 @@ describe("Job contribution intake contract", () => {
   it("accepts only strict public posting data with explicit preview evidence", () => {
     expect(validate(input)).toBe(true);
     expect(validate({ ...input, rawHtml: "<form>private</form>" })).toBe(false);
+    expect(validate({ ...input, client: { surface: "web", version: "0.1.0" } })).toBe(false);
+    expect(
+      validate({ ...input, client: { surface: "browser_extension", version: "latest" } }),
+    ).toBe(false);
     expect(
       validate({
         ...input,

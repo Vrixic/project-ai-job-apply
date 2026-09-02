@@ -22,9 +22,17 @@ consent or catalog-publication meaning.
 
 The additive Phase 2 contribution contract defines strict `POST /jobs/contributions` and owner
 `GET /jobs/contributions/{contributionId}` routes under the exact `jobs:contribute` scope. Intake
-requires a client-generated UUIDv7, `Idempotency-Key`, detector identity, selected public fields,
-and immutable Profile consent/digest references. Its only response state is `queued`; the contract
+requires a client-generated UUIDv7, `Idempotency-Key`, detector identity, exact installed browser
+extension surface/version, selected public fields, and immutable Profile consent/digest references.
+Both canonical content and preview digests bind that exact client surface/version. Its only response
+state is `queued`; the contract
 does not claim verification, moderation, canonical-job creation, or publication.
+
+The additive Trust contract uses the owner-known contribution UUID for private status, withdrawal,
+and one evidence-digest appeal. Reviewer routes require explicit read/open/decision/takedown/appeal
+scopes and expose only fixed-code, identity-redacted case projections. Trust case identifiers allow
+server-derived UUIDv8 values; contribution identifiers remain UUIDv7. All responses are `no-store`,
+and no contract accepts raw evidence or caller-supplied contributor/reviewer identity.
 
 The same additive version defines Profile-owned `POST /profile/ugc-contribution-consents` and
 owner-scoped revoke routes. The client supplies only the canonical preview digest plus technical

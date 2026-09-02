@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   type TrustCase,
   type TrustPolicy,
@@ -15,6 +16,7 @@ const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 
 export const contributorTrustActions = Object.freeze(["read", "withdraw", "appeal"] as const);
 export const trustReviewerRoles = Object.freeze([
+  "case_reader",
   "case_opener",
   "initial_reviewer",
   "takedown_reviewer",
@@ -134,6 +136,10 @@ export interface TrustApplicationStore {
     input: Parameters<PostgresTrustStore["resolveAppeal"]>[2],
   ): Promise<TrustCase>;
   readOwnerCase(ownerUserId: string, caseId: string): Promise<OwnerTrustCaseView | null>;
+  readOwnerCaseByContribution(
+    ownerUserId: string,
+    contributionId: string,
+  ): Promise<OwnerTrustCaseView | null>;
   readReviewerCase(caseId: string): Promise<TrustCase | null>;
 }
 
@@ -188,6 +194,9 @@ const unavailableStore: TrustApplicationStore = {
     throw new Error("unavailable");
   },
   readOwnerCase: async () => {
+    throw new Error("unavailable");
+  },
+  readOwnerCaseByContribution: async () => {
     throw new Error("unavailable");
   },
   readReviewerCase: async () => {
@@ -271,13 +280,13 @@ export class TrustApplicationService {
 
   async readOwnerCase(input: {
     contributorUserId: string;
-    caseId: string;
+    contributionId: string;
   }): Promise<OwnerTrustCaseView> {
     const contributorUserId = uuid(input.contributorUserId);
-    const caseId = uuid(input.caseId);
+    const contributionId = uuid(input.contributionId);
     await this.authorizeContributor(contributorUserId, "read");
     const trustCase = await storeOperation(() =>
-      this.store.readOwnerCase(contributorUserId, caseId),
+      this.store.readOwnerCaseByContribution(contributorUserId, contributionId),
     );
     if (!trustCase) throw new TrustApplicationError("not_found");
     return trustCase;
@@ -285,53 +294,57 @@ export class TrustApplicationService {
 
   async withdrawOwnerContribution(input: {
     contributorUserId: string;
-    caseId: string;
+    contributionId: string;
     expectedVersion: number;
   }): Promise<OwnerTrustCaseView> {
     const contributorUserId = uuid(input.contributorUserId);
-    const caseId = uuid(input.caseId);
+    const contributionId = uuid(input.contributionId);
     const expectedVersion = version(input.expectedVersion);
     await this.authorizeContributor(contributorUserId, "withdraw");
-    await this.requireOwnerCase(contributorUserId, caseId, expectedVersion);
+    const current = await this.requireOwnerContribution(
+      contributorUserId,
+      contributionId,
+      expectedVersion,
+    );
     await storeOperation(() =>
-      this.store.withdraw(caseId, expectedVersion, {
+      this.store.withdraw(current.id, expectedVersion, {
         contributorUserId,
         occurredAt: this.occurredAt(),
       }),
     );
-    return this.requireOwnerCase(contributorUserId, caseId);
+    return this.requireOwnerContribution(contributorUserId, contributionId);
   }
 
   async appealOwnerDecision(input: {
     contributorUserId: string;
-    caseId: string;
+    contributionId: string;
     expectedVersion: number;
     evidenceDigestSha256: string;
   }): Promise<OwnerTrustCaseView> {
     const contributorUserId = uuid(input.contributorUserId);
-    const caseId = uuid(input.caseId);
+    const contributionId = uuid(input.contributionId);
     const expectedVersion = version(input.expectedVersion);
     const evidenceDigestSha256 = digest(input.evidenceDigestSha256);
     await this.authorizeContributor(contributorUserId, "appeal");
-    await this.requireOwnerCase(contributorUserId, caseId, expectedVersion);
+    const current = await this.requireOwnerContribution(
+      contributorUserId,
+      contributionId,
+      expectedVersion,
+    );
     await storeOperation(() =>
-      this.store.appeal(caseId, expectedVersion, {
+      this.store.appeal(current.id, expectedVersion, {
         contributorUserId,
         evidenceDigestSha256,
         occurredAt: this.occurredAt(),
       }),
     );
-    return this.requireOwnerCase(contributorUserId, caseId);
+    return this.requireOwnerContribution(contributorUserId, contributionId);
   }
 
-  async openReview(input: {
-    reviewerId: string;
-    caseId: string;
-    contributionId: string;
-  }): Promise<TrustCase> {
+  async openReview(input: { reviewerId: string; contributionId: string }): Promise<TrustCase> {
     const reviewerId = uuid(input.reviewerId);
-    const caseId = uuid(input.caseId);
     const contributionId = uuid(input.contributionId);
+    const caseId = trustCaseIdForContribution(contributionId);
     await this.authorizeReviewer(reviewerId, "case_opener");
     const eligibility = await dependency(() =>
       this.contributionEvidence.readEligibility(contributionId),
@@ -366,6 +379,15 @@ export class TrustApplicationService {
         occurredAt: this.occurredAt(),
       }),
     );
+  }
+
+  async readReviewerCase(input: { reviewerId: string; caseId: string }): Promise<TrustCase> {
+    const reviewerId = uuid(input.reviewerId);
+    const caseId = uuid(input.caseId);
+    await this.authorizeReviewer(reviewerId, "case_reader");
+    const trustCase = await storeOperation(() => this.store.readReviewerCase(caseId));
+    if (!trustCase) throw new TrustApplicationError("not_found");
+    return trustCase;
   }
 
   async decideInitialReview(input: {
@@ -489,13 +511,13 @@ export class TrustApplicationService {
     if (!authorized) throw new TrustApplicationError("access_denied");
   }
 
-  private async requireOwnerCase(
+  private async requireOwnerContribution(
     contributorUserId: string,
-    caseId: string,
+    contributionId: string,
     expectedVersion?: number,
   ): Promise<OwnerTrustCaseView> {
     const trustCase = await storeOperation(() =>
-      this.store.readOwnerCase(contributorUserId, caseId),
+      this.store.readOwnerCaseByContribution(contributorUserId, contributionId),
     );
     if (!trustCase) throw new TrustApplicationError("not_found");
     if (expectedVersion !== undefined && trustCase.version !== expectedVersion) {
@@ -580,4 +602,17 @@ export class TrustApplicationService {
     );
     if (!verified) throw new TrustApplicationError("evidence_not_verified");
   }
+}
+
+export function trustCaseIdForContribution(contributionId: string): string {
+  uuid(contributionId);
+  const bytes = createHash("sha256")
+    .update("ai-job-apply/trust-case/v1\0")
+    .update(contributionId)
+    .digest()
+    .subarray(0, 16);
+  bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x80;
+  bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
+  const hex = bytes.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }

@@ -31,6 +31,12 @@ catalog truth.
 - The application service accepts identifiers, fixed codes, versions, timestamps from its injected
   clock, and SHA-256 evidence references only. Missing ports deny or report dependency unavailability,
   and lower-level errors are projected to a fixed safe error taxonomy.
+- Candidate status, withdrawal, and appeal operations resolve by the owner-known contribution UUID,
+  not an undiscoverable internal case identifier. Cross-owner and missing contributions share the
+  same absence result.
+- Case opening derives one deterministic UUIDv8 from the contribution UUID. Persistence inserts on
+  the unique contribution boundary and exact-reads a prior result, so a timeout-after-commit retry
+  returns the original case without appending another event.
 - Trust now implements its candidate-rights owner boundary. `trust.export_candidate_data(uuid)`
   returns one fixed `schemaVersion: 1` section containing only the exact contributor's cases, case
   events, and contributor reputation evidence. It omits contributor/reviewer identities, all source
@@ -54,6 +60,7 @@ pnpm --filter @ai-job-apply/trust-service test:integration
 ```
 
 The integration suite applies and replays both explicit migrations, then proves owner isolation,
+idempotent case opening,
 different-reviewer enforcement at the SQL boundary, version conflicts, immutable audit/evidence,
 private signal projection, candidate export redaction, no-public-execute function ACLs,
 unauthorized and cross-owner deletion denial, transactional child-first candidate deletion, and
@@ -62,9 +69,9 @@ the protected history may be removed.
 
 ## Not implemented or authorized
 
-- No gateway/API routes, OIDC audience/scopes, administrative UI, live reviewer/account/requester
-  authority adapters, approved policy provider, durable workflow, notification, or Jobs
-  reconciliation consumer is wired.
+- Gateway/API routes and a source-only administrative review surface are implemented, but no live
+  reviewer assignment, verified-requester authority, approved policy provider, durable workflow,
+  notification, or Jobs reconciliation consumer is wired.
 - No decision automatically publishes, activates, refreshes, blocks, restores, or removes a job.
 - No aggregate reputation score, automatic sanction, reward, or contributor-facing ranking exists.
 - No live policy version, appeal timing, response SLA, retention period, license, takedown channel,

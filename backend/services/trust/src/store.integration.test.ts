@@ -45,7 +45,7 @@ describeWithDatabase("PostgreSQL UGC trust foundation", () => {
     const caseId = uuidv7();
     const contributionId = uuidv7();
     const base = Date.now() - 10_000;
-    const opened = await store.open({
+    const openInput = {
       caseId,
       contributionId,
       contributorUserId: owner,
@@ -55,10 +55,22 @@ describeWithDatabase("PostgreSQL UGC trust foundation", () => {
         appealWindowMilliseconds: 14 * 24 * 60 * 60 * 1_000,
       },
       occurredAt: new Date(base),
-    });
+    };
+    const opened = await store.open(openInput);
+    const ambiguousRetry = await store.open(openInput);
     expect(opened.state).toBe("needs_review");
+    expect(ambiguousRetry).toEqual(opened);
     expect(await store.readOwnerCase(owner, caseId)).toMatchObject({ state: "needs_review" });
     expect(await store.readOwnerCase(otherOwner, caseId)).toBeNull();
+    expect(await store.readOwnerCaseByContribution(owner, contributionId)).toMatchObject({
+      id: caseId,
+      state: "needs_review",
+    });
+    expect(await store.readOwnerCaseByContribution(otherOwner, contributionId)).toBeNull();
+    const [openEventCount] = await client<{ count: string }[]>`
+      SELECT count(*)::text AS count FROM trust.case_events WHERE case_id = ${caseId}
+    `;
+    expect(openEventCount?.count).toBe("1");
 
     const rejected = await store.review(caseId, 1, {
       reviewerId: firstReviewer,

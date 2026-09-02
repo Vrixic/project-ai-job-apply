@@ -17,7 +17,8 @@ const canonicalDnsHostname =
 const canonicalIpv4Address = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/u;
 const canonicalIpv6Address = /^\[[0-9a-f:.]+\]$/u;
 
-export const requestedAuthScopes = "openid profile jobs:moderate";
+export const requestedAuthScopes =
+  "openid profile jobs:moderate trust:review trust:case:open trust:case:decide trust:case:takedown trust:appeal:resolve";
 export const adminMfaAcr = "http://schemas.openid.net/pape/policies/2007/06/multi-factor";
 export const adminReauthenticationSeconds = 15 * 60;
 export const adminAbsoluteSessionSeconds = 60 * 60;

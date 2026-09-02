@@ -938,6 +938,132 @@
         }
       }
     },
+    "/trust/contributions/{contributionId}": {
+      "get": {
+        "operationId": "getOwnerTrustCase",
+        "security": [{ "oidc": ["jobs:contribute"] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contributionId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The authenticated contributor's private Trust case status",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/OwnerTrustCase" } }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/trust/contributions/{contributionId}/withdraw": {
+      "post": {
+        "operationId": "withdrawOwnerTrustContribution",
+        "security": [{ "oidc": ["jobs:contribute"] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contributionId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/WithdrawTrustContributionRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The owner-scoped contribution was withdrawn from Trust eligibility",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/OwnerTrustCase" } }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/trust/contributions/{contributionId}/appeals": {
+      "post": {
+        "operationId": "fileOwnerTrustAppeal",
+        "security": [{ "oidc": ["jobs:contribute"] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contributionId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/FileTrustAppealRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "One evidence-bound owner appeal was filed",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/OwnerTrustCase" } }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
     "/jobs/{jobId}/reports": {
       "post": {
         "operationId": "createJobReport",
@@ -989,6 +1115,211 @@
           "409": { "$ref": "#/components/responses/Conflict" },
           "413": { "$ref": "#/components/responses/PayloadTooLarge" },
           "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/admin/trust/cases": {
+      "post": {
+        "operationId": "openTrustCase",
+        "security": [{ "oidc": ["trust:review", "trust:case:open"] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/OpenTrustCaseRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "A policy-bound Trust case was opened for eligible contribution evidence",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ReviewerTrustCase" } }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/admin/trust/cases/{caseId}": {
+      "get": {
+        "operationId": "getReviewerTrustCase",
+        "security": [{ "oidc": ["trust:review"] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "caseId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A reviewer-safe Trust case without contributor or reviewer identity",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ReviewerTrustCase" } }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/admin/trust/cases/{caseId}/decision": {
+      "post": {
+        "operationId": "decideTrustCase",
+        "security": [{ "oidc": ["trust:review", "trust:case:decide"] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "caseId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/DecideTrustCaseRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The version-fenced initial Trust decision",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ReviewerTrustCase" } }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/admin/trust/cases/{caseId}/takedown": {
+      "post": {
+        "operationId": "takeDownTrustCase",
+        "security": [{ "oidc": ["trust:review", "trust:case:takedown"] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "caseId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/TakeDownTrustCaseRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The version-fenced Trust takedown",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ReviewerTrustCase" } }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/admin/trust/cases/{caseId}/appeal-resolution": {
+      "post": {
+        "operationId": "resolveTrustAppeal",
+        "security": [{ "oidc": ["trust:review", "trust:appeal:resolve"] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "caseId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ResolveTrustAppealRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The different-reviewer appeal resolution",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ReviewerTrustCase" } }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
           "503": { "$ref": "#/components/responses/ServiceUnavailable" }
         }
       }
@@ -2551,6 +2882,7 @@
         "required": [
           "schemaVersion",
           "contributionId",
+          "client",
           "source",
           "posting",
           "observation",
@@ -2561,6 +2893,20 @@
           "contributionId": {
             "type": "string",
             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "client": {
+            "type": "object",
+            "required": ["surface", "version"],
+            "properties": {
+              "surface": { "const": "browser_extension" },
+              "version": {
+                "type": "string",
+                "minLength": 5,
+                "maxLength": 32,
+                "pattern": "^(?:0|[1-9][0-9]{0,5})\\.(?:0|[1-9][0-9]{0,5})\\.(?:0|[1-9][0-9]{0,5})(?:-[0-9A-Za-z][0-9A-Za-z.-]{0,15})?$"
+              }
+            },
+            "additionalProperties": false
           },
           "source": {
             "type": "object",
@@ -2809,6 +3155,187 @@
           "state": { "const": "queued" },
           "submittedAt": { "type": "string", "format": "date-time" },
           "updatedAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      },
+      "TrustCaseState": {
+        "type": "string",
+        "enum": [
+          "needs_review",
+          "accepted",
+          "rejected",
+          "appeal_pending",
+          "withdrawn",
+          "taken_down"
+        ]
+      },
+      "OwnerTrustCase": {
+        "type": "object",
+        "required": [
+          "id",
+          "contributionId",
+          "state",
+          "policyVersion",
+          "version",
+          "appealed",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "contributionId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "state": { "$ref": "#/components/schemas/TrustCaseState" },
+          "policyVersion": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9][a-z0-9._-]{2,99}$"
+          },
+          "version": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+          "appealed": { "type": "boolean" },
+          "appealDeadlineAt": {
+            "oneOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }]
+          },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      },
+      "ReviewerTrustCase": {
+        "type": "object",
+        "required": [
+          "id",
+          "contributionId",
+          "state",
+          "policyVersion",
+          "version",
+          "appealed",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "contributionId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "state": { "$ref": "#/components/schemas/TrustCaseState" },
+          "policyVersion": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9][a-z0-9._-]{2,99}$"
+          },
+          "version": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+          "appealed": { "type": "boolean" },
+          "appealDeadlineAt": { "type": "string", "format": "date-time" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      },
+      "WithdrawTrustContributionRequest": {
+        "type": "object",
+        "required": ["expectedVersion"],
+        "properties": {
+          "expectedVersion": { "type": "integer", "minimum": 1, "maximum": 2147483647 }
+        },
+        "additionalProperties": false
+      },
+      "FileTrustAppealRequest": {
+        "type": "object",
+        "required": ["expectedVersion", "evidenceDigestSha256"],
+        "properties": {
+          "expectedVersion": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+          "evidenceDigestSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        },
+        "additionalProperties": false
+      },
+      "OpenTrustCaseRequest": {
+        "type": "object",
+        "required": ["contributionId"],
+        "properties": {
+          "contributionId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DecideTrustCaseRequest": {
+        "type": "object",
+        "required": ["expectedVersion", "outcome", "reasonCode", "evidenceDigestSha256"],
+        "properties": {
+          "expectedVersion": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+          "outcome": { "type": "string", "enum": ["accepted", "rejected"] },
+          "reasonCode": {
+            "type": "string",
+            "enum": [
+              "independently_verified",
+              "insufficient_evidence",
+              "content_mismatch",
+              "malicious_or_deceptive",
+              "license_or_policy_block"
+            ]
+          },
+          "evidenceDigestSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "outcome": { "const": "accepted" } }, "required": ["outcome"] },
+            "then": { "properties": { "reasonCode": { "const": "independently_verified" } } }
+          },
+          {
+            "if": { "properties": { "outcome": { "const": "rejected" } }, "required": ["outcome"] },
+            "then": {
+              "properties": {
+                "reasonCode": {
+                  "enum": [
+                    "insufficient_evidence",
+                    "content_mismatch",
+                    "malicious_or_deceptive",
+                    "license_or_policy_block"
+                  ]
+                }
+              }
+            }
+          }
+        ],
+        "additionalProperties": false
+      },
+      "TakeDownTrustCaseRequest": {
+        "type": "object",
+        "required": ["expectedVersion", "reasonCode", "evidenceDigestSha256"],
+        "properties": {
+          "expectedVersion": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+          "reasonCode": {
+            "type": "string",
+            "enum": [
+              "verified_requester_takedown",
+              "credible_safety_risk",
+              "rights_or_policy_violation"
+            ]
+          },
+          "evidenceDigestSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        },
+        "additionalProperties": false
+      },
+      "ResolveTrustAppealRequest": {
+        "type": "object",
+        "required": ["expectedVersion", "outcome", "evidenceDigestSha256"],
+        "properties": {
+          "expectedVersion": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+          "outcome": { "type": "string", "enum": ["upheld", "reversed"] },
+          "evidenceDigestSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
         },
         "additionalProperties": false
       },

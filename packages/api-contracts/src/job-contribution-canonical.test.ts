@@ -11,6 +11,7 @@ function vector(): CreateJobContributionRequest {
   return {
     schemaVersion: 1,
     contributionId: "019c0000-0000-7000-8000-000000000010",
+    client: { surface: "browser_extension", version: "0.1.0" },
     source: {
       provider: "greenhouse",
       pageVariant: "greenhouse-board-v1",
@@ -26,7 +27,7 @@ function vector(): CreateJobContributionRequest {
     },
     observation: {
       observedAt: "2026-09-01T12:00:00.000Z",
-      contentSha256: "e52ddc9803019ca0cc9f27ac442be283bb3239ab364656c67e658ff9298f69f3",
+      contentSha256: "960e85b7cb3fc5656ea38c98064e64fe9ee04e563597b0efd8304bebb631bce9",
     },
     approval: {
       consentId: "019c0000-0000-7000-8000-000000000011",
@@ -43,7 +44,7 @@ function vector(): CreateJobContributionRequest {
         "locations",
         "description",
       ],
-      previewDigestSha256: "f89f4cf43700c58ab63606434ff69ed359ddb11a0b7060dad02f945984bcc37f",
+      previewDigestSha256: "0521e8b621f7c0a3b2fabc4fb3f7d7f75838dfdbdf3f749bd331d69e38cfb510",
     },
   };
 }
@@ -66,5 +67,17 @@ describe("shared job contribution canonical vectors", () => {
     expect(
       createHash("sha256").update(jobContributionPreviewDigestInput(input)).digest("hex"),
     ).not.toBe(input.approval.previewDigestSha256);
+  });
+
+  it("binds exact client surface and version to both canonical digests", () => {
+    const first = vector();
+    const second = vector();
+    second.client.version = "0.1.1";
+    expect(jobContributionContentDigestInput(second)).not.toBe(
+      jobContributionContentDigestInput(first),
+    );
+    expect(jobContributionPreviewDigestInput(second)).not.toBe(
+      jobContributionPreviewDigestInput(first),
+    );
   });
 });

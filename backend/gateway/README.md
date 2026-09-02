@@ -27,6 +27,15 @@ adapter, strips owner and internal verification identifiers from responses, and 
 canonical-resolution write route. The Lambda method/path allowlist intentionally omits these
 routes, so deployed capture remains default-dark.
 
+The source-only Trust seam exposes contribution-keyed candidate status, withdrawal, and appeal
+routes plus reviewer case open/read/decision/takedown/appeal-resolution routes. Candidate identity
+comes only from the managed principal. Reviewer identity and role come from exact issuer/subject
+assignments plus route-specific scopes; ordinary admin sessions do not receive the separate
+verified-requester takedown scope. Responses are redacted and `no-store`. Case opening is
+deterministic and retry-safe, and Trust has no direct Jobs mutation. Missing assignments, policy,
+evidence, or dependencies fail closed. These routes are intentionally absent from the Lambda
+method/path allowlist, so deployed behavior remains default-dark.
+
 ## Phase 0 implementation
 
 `src/` provides health/readiness, current-user, job-preference, and owned-operation endpoints.

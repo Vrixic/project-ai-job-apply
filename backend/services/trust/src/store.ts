@@ -1,5 +1,4 @@
 import type postgres from "postgres";
-import { v7 as uuidv7 } from "uuid";
 import {
   decideContributionReview,
   decideTrustAppeal,
@@ -156,7 +155,7 @@ export class PostgresTrustStore {
   async open(input: Parameters<typeof openTrustCase>[0]): Promise<TrustCase> {
     const transition = openTrustCase(input);
     const value = transition.trustCase;
-    const [row] = await this.client<CaseRow[]>`
+    const [inserted] = await this.client<CaseRow[]>`
       INSERT INTO trust.contribution_cases (
         id, contribution_id, contributor_user_id, policy_version, appeal_window_milliseconds,
         state, version, appeal_count,
@@ -169,10 +168,22 @@ export class PostgresTrustStore {
         ${value.version}, ${value.appealCount}, null, null, null, null, null,
         ${transition.action}, ${transition.actorKind}, ${transition.actorId},
         ${transition.reasonCode}, null, ${value.createdAt}, ${value.updatedAt}
-      ) RETURNING ${this.client.unsafe(caseSelection)}
+      ) ON CONFLICT (contribution_id) DO NOTHING
+      RETURNING ${this.client.unsafe(caseSelection)}
     `;
-    if (!row) throw new Error("Trust case insert returned no row");
-    return mapCase(row);
+    if (inserted) return mapCase(inserted);
+    const [existing] = await this.client<CaseRow[]>`
+      SELECT ${this.client.unsafe(caseSelection)} FROM trust.contribution_cases
+      WHERE contribution_id = ${value.contributionId}
+    `;
+    if (
+      !existing ||
+      existing.id !== value.id ||
+      existing.contributorUserId !== value.contributorUserId
+    ) {
+      throw new Error("Trust case idempotent open conflicted with stored identity");
+    }
+    return mapCase(existing);
   }
 
   async review(
@@ -227,6 +238,19 @@ export class PostgresTrustStore {
     const [row] = await this.client<CaseRow[]>`
       SELECT ${this.client.unsafe(caseSelection)} FROM trust.contribution_cases
       WHERE id = ${caseId} AND contributor_user_id = ${ownerUserId}
+    `;
+    return row ? ownerView(mapCase(row)) : null;
+  }
+
+  async readOwnerCaseByContribution(
+    ownerUserId: string,
+    contributionId: string,
+  ): Promise<OwnerTrustCaseView | null> {
+    assertUuid(ownerUserId, "ownerUserId");
+    assertUuid(contributionId, "contributionId");
+    const [row] = await this.client<CaseRow[]>`
+      SELECT ${this.client.unsafe(caseSelection)} FROM trust.contribution_cases
+      WHERE contribution_id = ${contributionId} AND contributor_user_id = ${ownerUserId}
     `;
     return row ? ownerView(mapCase(row)) : null;
   }
@@ -350,8 +374,4 @@ export class PostgresTrustStore {
       return mapCase(updated);
     });
   }
-}
-
-export function newTrustCaseId(): string {
-  return uuidv7();
 }

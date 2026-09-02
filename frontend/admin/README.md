@@ -1,8 +1,8 @@
 # Admin Console
 
-The restricted internal console currently supports only the Phase 1 job/source moderation slice
-described below. Later customer service, contribution, workflow, provider, entitlement, privacy,
-and emergency-control surfaces are not implemented or authorized by this application.
+The restricted internal console supports the Phase 1 job/source moderation slice and a source-only,
+default-dark Phase 2 Trust review slice. Later customer service, workflow, provider, entitlement,
+privacy, and emergency-control surfaces are not implemented or authorized by this application.
 
 ## Implemented Phase 1 moderation slice
 
@@ -20,6 +20,19 @@ and emergency-control surfaces are not implemented or authorized by this applica
 
 Admin access is least-privilege and audited. Sensitive values remain redacted. Break-glass access is
 not implemented or authorized by this slice.
+
+## Source-only Phase 2 Trust review
+
+- The console opens and reads redacted Trust cases and records fixed-code, version-fenced initial
+  decisions, takedowns, and appeal resolutions using SHA-256 evidence references only.
+- Ordinary reviewer sessions request review/open/decide/takedown/appeal scopes but never the
+  separately privileged verified-requester takedown scope.
+- Controls use native labels, explicit destructive confirmation, keyboard focus on failures, and an
+  `aria-live` result region. The same-origin BFF strictly validates bounded requests and redacted
+  responses and emits `no-store` fixed problem details.
+- This source does not establish live reviewer assignments, policy/timing approval, verified-
+  requester authority, deployment, or accessibility acceptance. Gateway Lambda routing remains
+  default-dark.
 
 ## Local managed OIDC configuration
 

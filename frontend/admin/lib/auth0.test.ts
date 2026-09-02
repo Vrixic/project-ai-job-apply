@@ -22,8 +22,11 @@ const configuredEnvironment = {
 
 describe("admin Auth0 policy constants", () => {
   it("freezes the least-privilege short-session MFA candidate", () => {
-    expect(requestedAuthScopes).toBe("openid profile jobs:moderate");
+    expect(requestedAuthScopes).toBe(
+      "openid profile jobs:moderate trust:review trust:case:open trust:case:decide trust:case:takedown trust:appeal:resolve",
+    );
     expect(requestedAuthScopes).not.toContain("offline_access");
+    expect(requestedAuthScopes).not.toContain("trust:requester:takedown");
     expect(adminMfaAcr).toBe("http://schemas.openid.net/pape/policies/2007/06/multi-factor");
     expect(adminReauthenticationSeconds).toBe(900);
     expect(adminAbsoluteSessionSeconds).toBe(3_600);

@@ -1,5 +1,6 @@
 import { getAuth0Client, isAuth0Configured } from "../lib/auth0";
 import { ModerationConsole } from "./moderation-console";
+import { TrustConsole } from "./trust-console";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,7 @@ export default async function AdminPage({
             <a href="/auth/logout">Sign out</a>
           </nav>
           <ModerationConsole />
+          <TrustConsole />
         </>
       )}
     </main>

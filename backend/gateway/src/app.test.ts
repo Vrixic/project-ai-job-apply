@@ -56,17 +56,17 @@ import {
   jobContributionPreviewDigestInput,
 } from "@ai-job-apply/jobs-service";
 import {
+  type CreatePrivateSavedPageCaptureCommand,
   MatchAssessmentServiceUnavailableError,
   type MatchAssessments,
   MatchAssessmentTargetUnavailableError,
   MatchAssessmentUnavailableError,
   MatchPreferencesRequiredError,
-  SavedJobIdempotencyLimitError,
-  SavedJobLimitError,
-  type CreatePrivateSavedPageCaptureCommand,
-  type SavedJobs,
   type PrivateSavedPageCapture,
   type PrivateSavedPageCaptures,
+  SavedJobIdempotencyLimitError,
+  SavedJobLimitError,
+  type SavedJobs,
 } from "@ai-job-apply/matching-service";
 import type {
   ProfileStore,
@@ -78,6 +78,11 @@ import {
   assertCandidateRightsAuthentication,
   type CandidateRightsPolicy,
 } from "@ai-job-apply/profile-service/candidate-rights";
+import {
+  TrustApplicationError,
+  type TrustApplicationService,
+  type TrustCase,
+} from "@ai-job-apply/trust-service";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -88,6 +93,7 @@ import {
   createApiGatewayHandler,
   createInvocationPrincipalBridge,
 } from "./lambda.js";
+import type { TrustReviewerAssignment } from "./trust-reviewer-authority.js";
 
 const FRESH_ID_TOKEN_PROOF = "fresh-header-segment.fresh-payload-segment.fresh-signature-segment";
 const RECENT_PASSWORD_ID_TOKEN_PROOF =
@@ -521,10 +527,12 @@ class MemoryJobReports implements JobReports {
 class MemoryJobContributions implements JobContributions {
   readonly records = new Map<string, { ownerUserId: string; contribution: JobContribution }>();
   readonly keys = new Map<string, { hash: string; contribution: JobContribution }>();
+  failure: Error | undefined;
 
   async ping(): Promise<void> {}
 
   async contribute(command: CreateJobContributionCommand): Promise<JobContribution> {
+    if (this.failure) throw this.failure;
     const key = `${command.ownerUserId}\0${command.idempotencyKey}`;
     const hash = JSON.stringify(command.input);
     const existing = this.keys.get(key);
@@ -857,7 +865,12 @@ class MemoryDocumentStore implements DocumentStore {
   async close(): Promise<void> {}
 }
 
-async function createApp() {
+async function createApp(
+  options: {
+    trust?: TrustApplicationService;
+    trustReviewerAssignments?: readonly TrustReviewerAssignment[];
+  } = {},
+) {
   const issuer = await createTestTokenIssuer();
   const store = new MemoryProfileStore();
   const catalog = new MemoryJobCatalog();
@@ -908,6 +921,10 @@ async function createApp() {
     matchAssessments,
     entitlements,
     documents,
+    ...(options.trust ? { trust: options.trust } : {}),
+    ...(options.trustReviewerAssignments
+      ? { trustReviewerAssignments: options.trustReviewerAssignments }
+      : {}),
     verifier: issuer.verifier,
     idTokenVerifier,
     releaseSha: "test",
@@ -938,6 +955,7 @@ describe("candidate API", () => {
   let store: MemoryProfileStore;
   let savedJobs: MemorySavedJobs;
   let jobReports: MemoryJobReports;
+  let jobContributions: MemoryJobContributions;
   let matchAssessments: MemoryMatchAssessments;
   let entitlements: MemoryEntitlements;
   let moderation: MemoryModeration;
@@ -952,6 +970,7 @@ describe("candidate API", () => {
     store = setup.store;
     savedJobs = setup.savedJobs;
     jobReports = setup.jobReports;
+    jobContributions = setup.jobContributions;
     matchAssessments = setup.matchAssessments;
     entitlements = setup.entitlements;
     moderation = setup.moderation;
@@ -1950,6 +1969,7 @@ describe("candidate API", () => {
     const payload = {
       schemaVersion: 1,
       contributionId: uuidv7(),
+      client: { surface: "browser_extension", version: "0.1.0" },
       source: {
         provider: "greenhouse",
         pageVariant: "greenhouse-board-v1",
@@ -2030,6 +2050,19 @@ describe("candidate API", () => {
       headers: { ...request.headers, authorization: `Bearer ${writeOnlyToken}` },
     });
     expect(wrongScope.statusCode).toBe(403);
+
+    jobContributions.failure = Object.assign(new Error("must remain private"), {
+      name: "JobContributionCapabilityDisabledError",
+    });
+    try {
+      const disabled = await app.inject(request);
+      expect(disabled.statusCode).toBe(503);
+      expect(disabled.json()).toMatchObject({ code: "job_contribution_unavailable" });
+      expect(disabled.body).not.toContain("capability");
+      expect(disabled.body).not.toContain("client_disabled");
+    } finally {
+      jobContributions.failure = undefined;
+    }
   });
 
   it("grants server-timed preview consent without accepting a client consent identity", async () => {
@@ -2111,6 +2144,7 @@ describe("candidate API", () => {
     const base = {
       schemaVersion: 1,
       contributionId: uuidv7(),
+      client: { surface: "browser_extension", version: "0.1.0" },
       source: {
         provider: "lever",
         pageVariant: "lever-posting-v1",
@@ -2718,5 +2752,195 @@ describe("candidate API", () => {
       },
     });
     expect(response.statusCode).toBe(400);
+  });
+});
+
+describe("Phase 2 Trust routes", () => {
+  const caseId = "019c0000-0000-8000-8000-000000000201";
+  const contributionId = "019c0000-0000-7000-8000-000000000202";
+  const reviewerCase: TrustCase = {
+    id: caseId,
+    contributionId,
+    contributorUserId: "019c0000-0000-7000-8000-000000000203",
+    policyVersion: "d2-synthetic-policy.v1",
+    appealWindowMilliseconds: 86_400_000,
+    state: "accepted",
+    version: 2,
+    appealCount: 0,
+    adverseDecision: null,
+    pendingAppealEvidenceDigestSha256: null,
+    createdAt: new Date("2026-09-01T12:00:00.000Z"),
+    updatedAt: new Date("2026-09-01T13:00:00.000Z"),
+  };
+
+  function fakeTrust(observedOwners: string[]): TrustApplicationService {
+    const ownerView = {
+      id: caseId,
+      contributionId,
+      state: "accepted" as const,
+      policyVersion: "d2-synthetic-policy.v1",
+      version: 2,
+      appealed: false,
+      appealDeadlineAt: null,
+      createdAt: "2026-09-01T12:00:00.000Z",
+      updatedAt: "2026-09-01T13:00:00.000Z",
+    };
+    return {
+      async readOwnerCase(input: { contributorUserId: string; contributionId: string }) {
+        observedOwners.push(input.contributorUserId);
+        if (input.contributionId !== contributionId) {
+          throw new TrustApplicationError("not_found");
+        }
+        return ownerView;
+      },
+      async withdrawOwnerContribution() {
+        return { ...ownerView, state: "withdrawn" as const, version: 3 };
+      },
+      async appealOwnerDecision() {
+        return { ...ownerView, state: "appeal_pending" as const, version: 3, appealed: true };
+      },
+      async readReviewerCase() {
+        return reviewerCase;
+      },
+      async openReview() {
+        return { ...reviewerCase, state: "needs_review" as const, version: 1 };
+      },
+      async decideInitialReview() {
+        return reviewerCase;
+      },
+      async takeDownAcceptedContribution() {
+        return { ...reviewerCase, state: "taken_down" as const, version: 3 };
+      },
+      async resolveAppeal() {
+        return { ...reviewerCase, version: 4 };
+      },
+    } as unknown as TrustApplicationService;
+  }
+
+  it("derives the candidate owner and returns only the fixed owner projection", async () => {
+    const observedOwners: string[] = [];
+    const setup = await createApp({ trust: fakeTrust(observedOwners) });
+    try {
+      const token = await setup.issuer.issue("trust-owner", { scope: "jobs:contribute" });
+      const response = await setup.app.inject({
+        method: "GET",
+        url: `/v1/trust/contributions/${contributionId}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.headers["cache-control"]).toBe("no-store");
+      expect(observedOwners).toHaveLength(1);
+      expect(response.json()).not.toHaveProperty("contributorUserId");
+      expect(response.json()).not.toHaveProperty("reviewerId");
+      expect(response.json()).not.toHaveProperty("evidenceDigestSha256");
+
+      const missing = await setup.app.inject({
+        method: "GET",
+        url: "/v1/trust/contributions/019c0000-0000-7000-8000-000000000299",
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(missing.statusCode).toBe(404);
+      expect(missing.headers["cache-control"]).toBe("no-store");
+      expect(missing.json()).toEqual(
+        expect.objectContaining({ code: "trust_case_not_found", title: "Trust case not found" }),
+      );
+      expect(JSON.stringify(missing.json())).not.toContain(caseId);
+    } finally {
+      await setup.app.close();
+    }
+  });
+
+  it("requires both exact OIDC scopes and explicit reviewer roles", async () => {
+    const reviewerSubject = "synthetic-trust-reviewer";
+    const setup = await createApp({
+      trust: fakeTrust([]),
+      trustReviewerAssignments: [
+        {
+          issuer: "https://test-issuer.invalid/",
+          subject: reviewerSubject,
+          roles: ["case_reader", "initial_reviewer", "takedown_reviewer"],
+        },
+      ],
+    });
+    try {
+      const readOnly = await setup.issuer.issue(reviewerSubject, { scope: "trust:review" });
+      const deniedDecision = await setup.app.inject({
+        method: "POST",
+        url: `/v1/admin/trust/cases/${caseId}/decision`,
+        headers: { authorization: `Bearer ${readOnly}` },
+        payload: {
+          expectedVersion: 1,
+          outcome: "accepted",
+          reasonCode: "independently_verified",
+          evidenceDigestSha256: "a".repeat(64),
+        },
+      });
+      expect(deniedDecision.statusCode).toBe(403);
+      expect(deniedDecision.json().code).toBe("trust_access_denied");
+
+      const decisionToken = await setup.issuer.issue(reviewerSubject, {
+        scope: "trust:review trust:case:decide",
+      });
+      const accepted = await setup.app.inject({
+        method: "POST",
+        url: `/v1/admin/trust/cases/${caseId}/decision`,
+        headers: { authorization: `Bearer ${decisionToken}` },
+        payload: {
+          expectedVersion: 1,
+          outcome: "accepted",
+          reasonCode: "independently_verified",
+          evidenceDigestSha256: "a".repeat(64),
+        },
+      });
+      expect(accepted.statusCode).toBe(200);
+      expect(accepted.json()).not.toHaveProperty("contributorUserId");
+      expect(accepted.json()).not.toHaveProperty("reviewerId");
+    } finally {
+      await setup.app.close();
+    }
+  });
+
+  it("adds a separate verified-requester scope before the Trust authority recheck", async () => {
+    const reviewerSubject = "synthetic-takedown-reviewer";
+    const setup = await createApp({
+      trust: fakeTrust([]),
+      trustReviewerAssignments: [
+        {
+          issuer: "https://test-issuer.invalid/",
+          subject: reviewerSubject,
+          roles: ["takedown_reviewer"],
+        },
+      ],
+    });
+    try {
+      const base = "trust:review trust:case:takedown";
+      const payload = {
+        expectedVersion: 2,
+        reasonCode: "verified_requester_takedown",
+        evidenceDigestSha256: "b".repeat(64),
+      };
+      const withoutRequester = await setup.issuer.issue(reviewerSubject, { scope: base });
+      const denied = await setup.app.inject({
+        method: "POST",
+        url: `/v1/admin/trust/cases/${caseId}/takedown`,
+        headers: { authorization: `Bearer ${withoutRequester}` },
+        payload,
+      });
+      expect(denied.statusCode).toBe(403);
+
+      const verified = await setup.issuer.issue(reviewerSubject, {
+        scope: `${base} trust:requester:takedown`,
+      });
+      const accepted = await setup.app.inject({
+        method: "POST",
+        url: `/v1/admin/trust/cases/${caseId}/takedown`,
+        headers: { authorization: `Bearer ${verified}` },
+        payload,
+      });
+      expect(accepted.statusCode).toBe(200);
+      expect(accepted.json().state).toBe("taken_down");
+    } finally {
+      await setup.app.close();
+    }
   });
 });

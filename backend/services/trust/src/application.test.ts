@@ -8,6 +8,7 @@ import {
   TrustApplicationError,
   TrustApplicationService,
   type TrustApplicationStore,
+  trustCaseIdForContribution,
   type VerifiedRequesterTakedownAuthorityPort,
 } from "./application.js";
 import {
@@ -49,6 +50,10 @@ class MemoryTrustStore implements TrustApplicationStore {
   mutationCount = 0;
 
   async open(input: Parameters<TrustApplicationStore["open"]>[0]): Promise<TrustCase> {
+    const existing = [...this.cases.values()].find(
+      (value) => value.contributionId === input.contributionId,
+    );
+    if (existing) return existing;
     const trustCase = openTrustCase(input).trustCase;
     this.cases.set(trustCase.id, trustCase);
     this.mutationCount += 1;
@@ -118,6 +123,16 @@ class MemoryTrustStore implements TrustApplicationStore {
   async readOwnerCase(ownerUserId: string, caseId: string): Promise<OwnerTrustCaseView | null> {
     const trustCase = this.cases.get(caseId);
     return trustCase?.contributorUserId === ownerUserId ? ownerView(trustCase) : null;
+  }
+
+  async readOwnerCaseByContribution(
+    ownerUserId: string,
+    contributionId: string,
+  ): Promise<OwnerTrustCaseView | null> {
+    const trustCase = [...this.cases.values()].find(
+      (value) => value.contributionId === contributionId && value.contributorUserId === ownerUserId,
+    );
+    return trustCase ? ownerView(trustCase) : null;
   }
 
   async readReviewerCase(caseId: string): Promise<TrustCase | null> {
@@ -194,13 +209,30 @@ function openFixture(store: MemoryTrustStore, input?: { reviewerId?: string; at?
 }
 
 describe("TrustApplicationService", () => {
+  it("requires explicit reviewer read authority and returns no Jobs mutation", async () => {
+    const store = new MemoryTrustStore();
+    const fixture = openFixture(store);
+    await expect(
+      new TrustApplicationService({ store }).readReviewerCase({
+        reviewerId: fixture.reviewerId,
+        caseId: fixture.caseId,
+      }),
+    ).rejects.toSatisfy((error: unknown) => expectCode(error, "access_denied"));
+
+    const value = await new TrustApplicationService({
+      store,
+      reviewerAuthority: allowReviewers(),
+    }).readReviewerCase({ reviewerId: fixture.reviewerId, caseId: fixture.caseId });
+    expect(value).toMatchObject({ id: fixture.caseId, contributionId: fixture.contributionId });
+    expect(value).not.toHaveProperty("jobMutation");
+  });
   it("defaults every account and reviewer operation to deny before persistence", async () => {
     const service = new TrustApplicationService();
     await expect(
-      service.readOwnerCase({ contributorUserId: uuidv7(), caseId: uuidv7() }),
+      service.readOwnerCase({ contributorUserId: uuidv7(), contributionId: uuidv7() }),
     ).rejects.toSatisfy((error: unknown) => expectCode(error, "access_denied"));
     await expect(
-      service.openReview({ reviewerId: uuidv7(), caseId: uuidv7(), contributionId: uuidv7() }),
+      service.openReview({ reviewerId: uuidv7(), contributionId: uuidv7() }),
     ).rejects.toSatisfy((error: unknown) => expectCode(error, "access_denied"));
   });
 
@@ -213,7 +245,7 @@ describe("TrustApplicationService", () => {
       },
     });
     await expect(
-      service.readOwnerCase({ contributorUserId: uuidv7(), caseId: uuidv7() }),
+      service.readOwnerCase({ contributorUserId: uuidv7(), contributionId: uuidv7() }),
     ).rejects.toEqual(
       expect.objectContaining({
         code: "dependency_unavailable",
@@ -233,7 +265,7 @@ describe("TrustApplicationService", () => {
     await expect(
       service.withdrawOwnerContribution({
         contributorUserId: uuidv7(),
-        caseId: fixture.caseId,
+        contributionId: fixture.contributionId,
         expectedVersion: 1,
       }),
     ).rejects.toSatisfy((error: unknown) => expectCode(error, "not_found"));
@@ -255,7 +287,6 @@ describe("TrustApplicationService", () => {
     });
     const opened = await service.openReview({
       reviewerId: uuidv7(),
-      caseId: uuidv7(),
       contributionId,
     });
     expect(opened).toMatchObject({
@@ -269,6 +300,29 @@ describe("TrustApplicationService", () => {
     expect(opened).not.toHaveProperty("content");
   });
 
+  it("returns the same deterministic case after an ambiguous open retry without a second mutation", async () => {
+    const store = new MemoryTrustStore();
+    const contributionId = uuidv7();
+    const contributorUserId = uuidv7();
+    const service = new TrustApplicationService({
+      store,
+      reviewerAuthority: allowReviewers(),
+      contributionEvidence: contributionEvidence({ contributionId, contributorUserId }),
+      approvedPolicy: approvedPolicy(),
+      systemActorId: uuidv7(),
+      now: () => now,
+    });
+
+    const first = await service.openReview({ reviewerId: uuidv7(), contributionId });
+    const retried = await service.openReview({ reviewerId: uuidv7(), contributionId });
+
+    expect(first.id).toBe(trustCaseIdForContribution(contributionId));
+    expect(first.id.split("-")[2]?.startsWith("8")).toBe(true);
+    expect(retried).toEqual(first);
+    expect(store.cases.size).toBe(1);
+    expect(store.mutationCount).toBe(1);
+  });
+
   it("fails closed when contribution evidence, policy, or storage is unavailable", async () => {
     const contributionId = uuidv7();
     const contributorUserId = uuidv7();
@@ -280,7 +334,6 @@ describe("TrustApplicationService", () => {
     await expect(
       new TrustApplicationService(base).openReview({
         reviewerId: uuidv7(),
-        caseId: uuidv7(),
         contributionId,
       }),
     ).rejects.toSatisfy((error: unknown) => expectCode(error, "dependency_unavailable"));
@@ -290,7 +343,7 @@ describe("TrustApplicationService", () => {
         ...base,
         contributionEvidence: contributionEvidence({ contributionId, contributorUserId }),
         approvedPolicy: { readApprovedPolicy: async () => null },
-      }).openReview({ reviewerId: uuidv7(), caseId: uuidv7(), contributionId }),
+      }).openReview({ reviewerId: uuidv7(), contributionId }),
     ).rejects.toSatisfy((error: unknown) => expectCode(error, "policy_unavailable"));
 
     await expect(
@@ -298,7 +351,7 @@ describe("TrustApplicationService", () => {
         ...base,
         contributionEvidence: contributionEvidence({ contributionId, contributorUserId }),
         approvedPolicy: approvedPolicy(),
-      }).openReview({ reviewerId: uuidv7(), caseId: uuidv7(), contributionId }),
+      }).openReview({ reviewerId: uuidv7(), contributionId }),
     ).rejects.toSatisfy((error: unknown) => expectCode(error, "dependency_unavailable"));
   });
 
@@ -373,7 +426,7 @@ describe("TrustApplicationService", () => {
     await expect(
       service.withdrawOwnerContribution({
         contributorUserId: fixture.contributorUserId,
-        caseId: fixture.caseId,
+        contributionId: fixture.contributionId,
         expectedVersion: 2,
       }),
     ).rejects.toSatisfy((error: unknown) => expectCode(error, "version_conflict"));
@@ -518,7 +571,7 @@ describe("TrustApplicationService", () => {
     await expect(
       service.appealOwnerDecision({
         contributorUserId: fixture.contributorUserId,
-        caseId: fixture.caseId,
+        contributionId: fixture.contributionId,
         expectedVersion: 2,
         evidenceDigestSha256: secondEvidenceDigestSha256,
       }),

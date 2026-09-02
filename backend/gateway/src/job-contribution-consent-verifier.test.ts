@@ -13,6 +13,7 @@ function input() {
   return {
     approvedAt: grantedAt,
     clientSurface: "browser_extension" as const,
+    clientVersion: "0.1.0",
     consentId,
     consentVersion: "ugc-contribution-preview.v1" as const,
     contributionId: "019d04cf-1f80-7000-8000-000000000003",
