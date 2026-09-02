@@ -11,7 +11,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "build:lambda": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-workflow-ingress-lambda.mjs && node ../../scripts/build-profile-readiness-lambdas.mjs && node ../../scripts/build-ingestion-lambdas.mjs",
+    "build:lambda": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-workflow-ingress-lambda.mjs && node ../../scripts/build-profile-readiness-lambdas.mjs && node ../../scripts/build-ingestion-lambdas.mjs && node ../../scripts/build-d2-community-lambda.mjs",
+    "build:lambda:d2-community": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-d2-community-lambda.mjs",
     "build:lambda:ingestion": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-ingestion-lambdas.mjs",
     "build:lambda:ingress": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-workflow-ingress-lambda.mjs",
     "build:lambda:profile": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-profile-readiness-lambdas.mjs",
@@ -32,6 +33,7 @@
     "@ai-job-apply/jobs-service": "workspace:*",
     "@ai-job-apply/observability": "workspace:*",
     "@ai-job-apply/profile-service": "workspace:*",
+    "@ai-job-apply/trust-service": "workspace:*",
     "@aws-sdk/client-kms": "3.1106.0",
     "@aws-sdk/client-lambda": "3.1106.0",
     "@aws-sdk/client-s3": "3.1106.0",

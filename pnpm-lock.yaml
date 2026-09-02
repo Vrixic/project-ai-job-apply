@@ -303,6 +303,9 @@ importers:
       '@ai-job-apply/profile-service':
         specifier: workspace:*
         version: link:../services/profile
+      '@ai-job-apply/trust-service':
+        specifier: workspace:*
+        version: link:../services/trust
       '@aws-sdk/client-kms':
         specifier: 3.1106.0
         version: 3.1106.0

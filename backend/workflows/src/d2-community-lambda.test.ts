@@ -1,0 +1,193 @@
+import { createHash } from "node:crypto";
+import { type OutboxNudgeV1, outboxNudgeIntegrityInput } from "@ai-job-apply/event-contracts";
+import { describe, expect, it, vi } from "vitest";
+import {
+  createD2CommunityLambdaHandlers,
+  scheduled as defaultScheduled,
+  trustSignal as defaultTrustSignal,
+} from "./d2-community-lambda.js";
+
+const now = new Date("2026-09-02T16:00:00.000Z");
+const decisionId = "8c22280f-3fc3-8f8b-8a0f-1fc74152d8c9";
+const contributionId = "019b4e12-7ea3-7c36-9357-aea35ab542ca";
+const queueArn = "arn:aws:sqs:us-east-2:123456789012:development-d2-trust-decision-signals";
+const ruleArn = "arn:aws:events:us-east-2:123456789012:rule/development-d2-community-batch";
+
+function scheduledEvent(extra: Record<string, unknown> = {}) {
+  return {
+    version: "0",
+    id: "019b4e12-7ea3-7c36-9357-aea35ab542cc",
+    "detail-type": "Scheduled Event",
+    source: "aws.events",
+    account: "123456789012",
+    time: "2026-09-02T16:00:00Z",
+    region: "us-east-2",
+    resources: [ruleArn],
+    detail: {},
+    ...extra,
+  };
+}
+
+function nudge(): OutboxNudgeV1 {
+  const fields = {
+    schemaVersion: 1 as const,
+    eventId: decisionId,
+    eventType: "trust.contribution-decision.changed.v1" as const,
+  };
+  return {
+    ...fields,
+    integrity: {
+      algorithm: "sha256",
+      digest: createHash("sha256").update(outboxNudgeIntegrityInput(fields)).digest("hex"),
+    },
+  };
+}
+
+function sqsRecord(messageId: string, body = JSON.stringify(nudge())) {
+  return {
+    messageId,
+    receiptHandle: "synthetic-receipt",
+    body,
+    attributes: {
+      ApproximateReceiveCount: "1",
+      SentTimestamp: "1788364800000",
+      SenderId: "synthetic",
+      ApproximateFirstReceiveTimestamp: "1788364800000",
+    },
+    messageAttributes: {},
+    md5OfBody: createHash("md5").update(body).digest("hex"),
+    eventSource: "aws:sqs",
+    eventSourceARN: queueArn,
+    awsRegion: "us-east-2",
+  };
+}
+
+function harness(
+  overrides: {
+    consume?: ReturnType<typeof vi.fn>;
+    runJobsBatch?: ReturnType<typeof vi.fn>;
+    runTrustDelivery?: ReturnType<typeof vi.fn>;
+  } = {},
+) {
+  const consume = overrides.consume ?? vi.fn(async () => ({ handled: 1, copied: 1, requeued: 1 }));
+  const runJobsBatch =
+    overrides.runJobsBatch ??
+    vi.fn(async () => ({
+      enabled: true,
+      processing: { claimed: 2, completed: 1, retried: 0, dead: 0, parked: 1 },
+      delivery: { claimed: 0, published: 0, retried: 0, dead: 0 },
+    }));
+  const runTrustDelivery =
+    overrides.runTrustDelivery ??
+    vi.fn(async () => ({ claimed: 1, published: 1, retried: 0, dead: 0 }));
+  const logger = { info: vi.fn() };
+  const handlers = createD2CommunityLambdaHandlers({
+    enabled: true,
+    boundary: {
+      accountId: "123456789012",
+      region: "us-east-2",
+      scheduleRuleArn: ruleArn,
+      trustSignalQueueArn: queueArn,
+    },
+    jobs: {
+      input: { processingWorkerId: "d2:processing", processingLimit: 5 },
+      runtime: { enabled: false },
+      runBatch: runJobsBatch as never,
+    },
+    trustDelivery: {
+      runner: { runBatch: runTrustDelivery as never },
+      workerId: "d2:trust-delivery",
+      limit: 5,
+    },
+    trustSignal: { consume: consume as never },
+    now: () => new Date(now),
+    logger,
+  });
+  return { handlers, consume, runJobsBatch, runTrustDelivery, logger };
+}
+
+describe("D2 community Lambda", () => {
+  it("is import-safe and default-off", async () => {
+    await expect(defaultScheduled(undefined)).resolves.toEqual({
+      enabled: false,
+      jobs: {
+        enabled: false,
+        processing: { claimed: 0, completed: 0, retried: 0, dead: 0, parked: 0 },
+        delivery: { claimed: 0, published: 0, retried: 0, dead: 0 },
+      },
+      trustDelivery: { claimed: 0, published: 0, retried: 0, dead: 0 },
+    });
+    await expect(defaultTrustSignal({ Records: [] } as never)).rejects.toThrow(
+      "D2CommunityRuntimeDisabled",
+    );
+  });
+
+  it("requires the exact scheduled event and returns aggregate metrics", async () => {
+    const { handlers, runJobsBatch, runTrustDelivery, logger } = harness();
+    await expect(handlers.scheduled(scheduledEvent())).resolves.toMatchObject({
+      enabled: true,
+      jobs: { processing: { claimed: 2, completed: 1, parked: 1 } },
+      trustDelivery: { claimed: 1, published: 1 },
+    });
+    expect(runJobsBatch).toHaveBeenCalledOnce();
+    expect(runTrustDelivery).toHaveBeenCalledWith("d2:trust-delivery", now, 5);
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({ jobs_claimed: 2, trust_published: 1 }),
+      "d2_community_scheduled_batch",
+    );
+    await expect(handlers.scheduled(scheduledEvent({ unexpected: true }))).rejects.toThrow(
+      "D2CommunityScheduleEventRejected",
+    );
+  });
+
+  it("returns partial batch failures while exact valid records remain idempotently retryable", async () => {
+    const consume = vi
+      .fn()
+      .mockResolvedValueOnce({ handled: 1, copied: 1, requeued: 1 })
+      .mockRejectedValueOnce(new Error("cross-owner"))
+      .mockResolvedValueOnce({ handled: 1, copied: 0, requeued: 0 });
+    const { handlers, logger } = harness({ consume });
+    const acceptedId = "019b4e12-7ea3-7c36-9357-aea35ab542cd";
+    const failedId = "019b4e12-7ea3-7c36-9357-aea35ab542ce";
+    await expect(
+      handlers.trustSignal({
+        Records: [sqsRecord(acceptedId), sqsRecord(failedId)],
+      }),
+    ).resolves.toEqual({ batchItemFailures: [{ itemIdentifier: failedId }] });
+    expect(consume).toHaveBeenCalledTimes(2);
+
+    await expect(handlers.trustSignal({ Records: [sqsRecord(failedId)] })).resolves.toEqual({
+      batchItemFailures: [],
+    });
+    expect(consume).toHaveBeenCalledTimes(3);
+    const serializedLogs = JSON.stringify(logger.info.mock.calls);
+    expect(serializedLogs).not.toContain(decisionId);
+    expect(serializedLogs).not.toContain(contributionId);
+    expect(serializedLogs).not.toContain(acceptedId);
+    expect(serializedLogs).not.toContain(failedId);
+  });
+
+  it("rejects oversized, tampered, or wrong-queue nudges before authority reads", async () => {
+    const { handlers, consume } = harness();
+    const oversized = sqsRecord("019b4e12-7ea3-7c36-9357-aea35ab542cf", "x".repeat(4_097));
+    const tamperedBody = JSON.stringify({
+      ...nudge(),
+      integrity: { algorithm: "sha256", digest: "0".repeat(64) },
+    });
+    const tampered = sqsRecord("019b4e12-7ea3-7c36-9357-aea35ab542d0", tamperedBody);
+    const wrongQueue = {
+      ...sqsRecord("019b4e12-7ea3-7c36-9357-aea35ab542d1"),
+      eventSourceARN: "arn:aws:sqs:us-east-2:123456789012:profile-outbox",
+    };
+    await expect(
+      handlers.trustSignal({ Records: [oversized, tampered, wrongQueue] }),
+    ).resolves.toEqual({
+      batchItemFailures: [
+        { itemIdentifier: oversized.messageId },
+        { itemIdentifier: tampered.messageId },
+        { itemIdentifier: wrongQueue.messageId },
+      ],
+    });
+    expect(consume).not.toHaveBeenCalled();
+  });
+});

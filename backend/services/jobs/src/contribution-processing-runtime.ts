@@ -1,16 +1,5 @@
 import type postgres from "postgres";
 import {
-  ContributionProcessingEventDeliveryRunner,
-  type ContributionProcessingEventDeliveryBatchMetrics,
-  type ContributionProcessingEventDeliveryPolicy,
-  type ContributionProcessingEventPublisher,
-} from "./contribution-processing-event-delivery.js";
-import {
-  ContributionProcessingRunner,
-  type ContributionProcessingBatchResult,
-  type ContributionProcessingRunnerPolicy,
-} from "./contribution-processing-runner.js";
-import {
   type ContributionProcessingPolicy,
   ContributionProcessingService,
   type ContributionTrustDecisionPort,
@@ -18,18 +7,31 @@ import {
   type IndependentProviderVerificationPort,
   type SignedContributionCapabilityPolicyPort,
 } from "./contribution-processing.js";
-import { PostgresContributionProcessingEventDeliveryStore } from "./persistence/contribution-processing-event-delivery.js";
+import {
+  type ContributionProcessingEventDeliveryBatchMetrics,
+  type ContributionProcessingEventDeliveryPolicy,
+  ContributionProcessingEventDeliveryRunner,
+  type ContributionProcessingEventPublisher,
+} from "./contribution-processing-event-delivery.js";
+import {
+  type ContributionProcessingBatchResult,
+  ContributionProcessingRunner,
+  type ContributionProcessingRunnerPolicy,
+} from "./contribution-processing-runner.js";
 import {
   PostgresContributionProcessingQueueStore,
   PostgresContributionProcessingStore,
   PostgresContributionPublicationReconciler,
 } from "./persistence/contribution-processing.js";
+import { PostgresContributionProcessingEventDeliveryStore } from "./persistence/contribution-processing-event-delivery.js";
 
 export interface ContributionProcessingRuntimeBatchInput {
   processingWorkerId: string;
   processingLimit: number;
-  deliveryWorkerId: string;
-  deliveryLimit: number;
+  delivery?: Readonly<{
+    workerId: string;
+    limit: number;
+  }>;
 }
 
 export interface ContributionProcessingRuntimeBatchMetrics {
@@ -47,12 +49,14 @@ interface EnabledContributionProcessingRuntime {
   client: postgres.Sql;
   processingPolicy: ContributionProcessingPolicy;
   processingRunnerPolicy: ContributionProcessingRunnerPolicy;
-  deliveryPolicy: ContributionProcessingEventDeliveryPolicy;
   consent: CurrentContributionConsentPort;
   independentVerifier: IndependentProviderVerificationPort;
   trust: ContributionTrustDecisionPort;
   capability: SignedContributionCapabilityPolicyPort;
-  publisher: ContributionProcessingEventPublisher;
+  eventDelivery?: Readonly<{
+    policy: ContributionProcessingEventDeliveryPolicy;
+    publisher: ContributionProcessingEventPublisher;
+  }>;
   now: () => Date;
 }
 
@@ -80,10 +84,16 @@ export async function runContributionProcessingRuntimeBatch(
     typeof configuration.consent?.verifyCurrent !== "function" ||
     typeof configuration.independentVerifier?.verify !== "function" ||
     typeof configuration.trust?.evaluate !== "function" ||
-    typeof configuration.capability?.load !== "function" ||
-    typeof configuration.publisher?.publish !== "function"
+    typeof configuration.capability?.load !== "function"
   ) {
     throw new TypeError("Every contribution-processing runtime authority must be injected");
+  }
+  if (
+    (configuration.eventDelivery &&
+      (!input.delivery || typeof configuration.eventDelivery.publisher?.publish !== "function")) ||
+    (!configuration.eventDelivery && input.delivery)
+  ) {
+    throw new TypeError("Configured contribution-event delivery requires a real publisher");
   }
   const now = configuration.now();
   if (!(now instanceof Date) || !Number.isFinite(now.getTime())) {
@@ -106,17 +116,22 @@ export async function runContributionProcessingRuntimeBatch(
     }),
     configuration.processingRunnerPolicy,
   );
-  const delivery = new ContributionProcessingEventDeliveryRunner(
-    new PostgresContributionProcessingEventDeliveryStore(configuration.client),
-    configuration.publisher,
-    configuration.deliveryPolicy,
-  );
   const processingMetrics = await processing.runBatch(
     input.processingWorkerId,
     now,
     input.processingLimit,
   );
-  const deliveryMetrics = await delivery.runBatch(input.deliveryWorkerId, now, input.deliveryLimit);
+  let deliveryMetrics: ContributionProcessingEventDeliveryBatchMetrics = zeroDelivery;
+  if (configuration.eventDelivery) {
+    const deliveryInput = input.delivery;
+    if (!deliveryInput) throw new TypeError("Contribution-event delivery input is unavailable");
+    const delivery = new ContributionProcessingEventDeliveryRunner(
+      new PostgresContributionProcessingEventDeliveryStore(configuration.client),
+      configuration.eventDelivery.publisher,
+      configuration.eventDelivery.policy,
+    );
+    deliveryMetrics = await delivery.runBatch(deliveryInput.workerId, now, deliveryInput.limit);
+  }
   return Object.freeze({
     enabled: true,
     processing: processingMetrics,
