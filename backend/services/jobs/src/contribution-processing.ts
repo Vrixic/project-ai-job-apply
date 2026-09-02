@@ -106,7 +106,7 @@ export interface IndependentProviderVerificationPort {
   verify(input: {
     contributionId: string;
     normalizationId: string;
-    provenance: ContributionProviderProvenance;
+    proposal: NormalizedContributionProposal;
   }): Promise<IndependentProviderVerificationResult>;
 }
 
@@ -263,9 +263,9 @@ const unavailableVerifier: IndependentProviderVerificationPort = {
   verify: async (input) => ({
     status: "unavailable",
     contributionId: input.contributionId,
-    provider: input.provenance.provider,
-    pageVariant: input.provenance.pageVariant,
-    canonicalSourceUrlSha256: input.provenance.canonicalSourceUrlSha256,
+    provider: input.proposal.provenance.provider,
+    pageVariant: input.proposal.provenance.pageVariant,
+    canonicalSourceUrlSha256: input.proposal.provenance.canonicalSourceUrlSha256,
   }),
 };
 const unavailableTrust: ContributionTrustDecisionPort = {
@@ -468,7 +468,7 @@ export class ContributionProcessingService {
         this.independentVerifier.verify({
           contributionId,
           normalizationId: normalization.id,
-          provenance: normalization.proposal.provenance,
+          proposal: normalization.proposal,
         }),
       );
       assertVerification(result, contribution);

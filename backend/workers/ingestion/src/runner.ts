@@ -219,7 +219,7 @@ function enforceAshbySourceBoundary(
   }
 }
 
-function catalogWithdrawal(
+export function canonicalizeRegisteredSourceWithdrawal(
   source: SourceJobWithdrawal,
   registration: ReturnType<SourceRegistry["requireEnabled"]>,
   withdrawnAt: Date,
@@ -279,7 +279,7 @@ function enforceSourceBoundary(
   throw new SourceBatchContractError("The source observation boundary is not implemented");
 }
 
-function catalogObservation(
+export function canonicalizeRegisteredSourceObservation(
   source: SourceJobObservation,
   registration: ReturnType<SourceRegistry["requireEnabled"]>,
   observedAt: Date,
@@ -361,7 +361,7 @@ function validateBatch(
   }
   const identities = new Set<string>();
   const observations = result.observations.map((source) => {
-    const observation = catalogObservation(source, registration, observedAt);
+    const observation = canonicalizeRegisteredSourceObservation(source, registration, observedAt);
     for (const identity of identityKeys(registration.provider, observation)) {
       if (identities.has(identity)) {
         throw new SourceBatchContractError("A source batch contains a duplicate exact identity");
@@ -371,7 +371,7 @@ function validateBatch(
     return observation;
   });
   const withdrawals = sourceWithdrawals.map((source) => {
-    const withdrawal = catalogWithdrawal(source, registration, observedAt);
+    const withdrawal = canonicalizeRegisteredSourceWithdrawal(source, registration, observedAt);
     for (const identity of identityKeys(registration.provider, withdrawal)) {
       if (identities.has(identity)) {
         throw new SourceBatchContractError("A source batch contains a duplicate exact identity");

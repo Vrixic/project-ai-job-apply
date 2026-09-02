@@ -21,6 +21,12 @@ configured by default. Public UGC remains outside this worker and belongs to D2.
   pause, and aggregate-only queue dispositions.
 - `runner.ts` — allowlisted observation mapping, Jobs-domain validation, batch collision checks,
   idempotent catalog-port calls, and aggregate-only results.
+- `contribution-verification.ts` — a default-dark independent-provider verification port. It polls
+  only an explicitly enabled registry source bound to an exact provider, page variant, tenant, and
+  source-policy version; reuses the reviewed ingestion boundary; returns only identifier/digest
+  evidence; resolves existing job/source IDs through an injected read-only exact catalog lookup;
+  and never writes catalog observations or advances source freshness. Missing or ambiguous catalog
+  identity denies verification.
 - `synthetic.ts` — deterministic generated `.example.test` observations representing no provider,
   employer, tenant, or real job.
 - `greenhouse.ts` — fixed-host public Job Board GET adapter with redirect refusal, bounded timeout
@@ -80,3 +86,8 @@ provider snapshots and does not authorize another provider request or an enabled
 
 Run unit tests with `pnpm --filter @ai-job-apply/ingestion-worker test`. PostgreSQL integration
 requires an explicit `DATABASE_URL` and is separate from the default suite.
+
+Contribution verification has no live registrations. Enabling one requires the same reviewed
+provider adapter registration and provider-activation authority as ingestion, plus an exact
+verification registration and an accountable source-policy version supplied by runtime
+configuration. Repository fixtures and synthetic tests do not authorize a provider or live host.
