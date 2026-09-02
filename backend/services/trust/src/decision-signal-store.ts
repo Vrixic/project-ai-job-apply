@@ -144,6 +144,61 @@ export class PostgresTrustDecisionSignalStore implements TrustDecisionDeliverySt
     });
   }
 
+  async readLatestDecision(input: {
+    contributionId: string;
+    contributorUserId: string;
+  }): Promise<AuthoritativeTrustContributionDecision | null> {
+    if (
+      !UUID_V7_PATTERN.test(input.contributionId) ||
+      !UUID_PATTERN.test(input.contributorUserId)
+    ) {
+      return null;
+    }
+    const [row] = await this.client<
+      {
+        contributionId: string;
+        decisionId: string;
+        policyVersion: string;
+        resultingState:
+          | "needs_review"
+          | "accepted"
+          | "rejected"
+          | "appeal_pending"
+          | "withdrawn"
+          | "taken_down";
+        decidedAt: Date | string;
+      }[]
+    >`
+      SELECT event.event_id AS "decisionId", event.contribution_id AS "contributionId",
+        event.policy_version AS "policyVersion", event.resulting_state AS "resultingState",
+        event.occurred_at AS "decidedAt"
+      FROM trust.case_events AS event
+      JOIN trust.contribution_cases AS trust_case ON trust_case.id = event.case_id
+      WHERE event.contribution_id = ${input.contributionId}
+        AND trust_case.contributor_user_id = ${input.contributorUserId}
+      ORDER BY event.case_version DESC
+      LIMIT 1
+    `;
+    if (
+      !row ||
+      row.contributionId !== input.contributionId ||
+      !UUID_V8_PATTERN.test(row.decisionId) ||
+      !POLICY_VERSION_PATTERN.test(row.policyVersion)
+    ) {
+      return null;
+    }
+    return Object.freeze({
+      status:
+        row.resultingState === "needs_review" || row.resultingState === "appeal_pending"
+          ? "needs_review"
+          : row.resultingState,
+      contributionId: row.contributionId,
+      decisionId: row.decisionId,
+      policyVersion: row.policyVersion,
+      decidedAt: instant(row.decidedAt),
+    });
+  }
+
   async claim(
     input: Parameters<TrustDecisionDeliveryStore["claim"]>[0],
   ): Promise<ClaimedTrustContributionDecisionEvent[]> {

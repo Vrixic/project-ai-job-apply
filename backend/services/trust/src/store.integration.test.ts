@@ -4,8 +4,8 @@ import { promisify } from "node:util";
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { PostgresTrustStore, TrustVersionConflictError } from "./store.js";
 import { PostgresTrustDecisionSignalStore } from "./decision-signal-store.js";
+import { PostgresTrustStore, TrustVersionConflictError } from "./store.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -114,16 +114,6 @@ describeWithDatabase("PostgreSQL UGC trust foundation", () => {
       caseId,
       expectedCaseVersion: 2,
       reviewerId: firstReviewer,
-      subject: { kind: "contributor" },
-      signalCode: "contributor_submission_incorrect",
-      referenceDigestSha256: "b".repeat(64),
-      occurredAt: new Date(base + 2_000),
-    });
-    await store.recordReputationEvidence({
-      id: uuidv7(),
-      caseId,
-      expectedCaseVersion: 2,
-      reviewerId: firstReviewer,
       subject: { kind: "source", sourceKeySha256: "c".repeat(64) },
       signalCode: "source_content_conflict",
       referenceDigestSha256: "d".repeat(64),
@@ -133,6 +123,7 @@ describeWithDatabase("PostgreSQL UGC trust foundation", () => {
       expect.objectContaining({
         contributionId,
         signalCode: "contributor_submission_incorrect",
+        occurredAt: new Date(base + 1_000).toISOString(),
       }),
     ]);
     expect(await store.readOwnerReputationEvidence(otherOwner, caseId)).toEqual([]);
@@ -162,6 +153,16 @@ describeWithDatabase("PostgreSQL UGC trust foundation", () => {
       occurredAt: new Date(base + 4_000),
     });
     expect(reversed).toMatchObject({ state: "accepted", appealCount: 1, version: 4 });
+    expect(await store.readOwnerReputationEvidence(owner, caseId)).toEqual([
+      expect.objectContaining({ signalCode: "contributor_submission_incorrect" }),
+      expect.objectContaining({ signalCode: "adverse_decision_reversed" }),
+    ]);
+    expect(
+      await signals.readLatestDecision({ contributionId, contributorUserId: owner }),
+    ).toMatchObject({ status: "accepted", contributionId });
+    expect(
+      await signals.readLatestDecision({ contributionId, contributorUserId: otherOwner }),
+    ).toBeNull();
     await expect(
       store.appeal(caseId, 4, {
         contributorUserId: owner,
@@ -204,7 +205,7 @@ describeWithDatabase("PostgreSQL UGC trust foundation", () => {
       events: "4",
       decisionOutbox: "4",
       decisionDeliveries: "4",
-      contributorSignals: "1",
+      contributorSignals: "2",
       sourceSignals: "1",
     });
 
@@ -236,5 +237,91 @@ describeWithDatabase("PostgreSQL UGC trust foundation", () => {
       WHERE dependent_namespace.nspname = 'trust' AND referenced_namespace.nspname = 'jobs'
     `;
     expect(dependencies[0]?.forbiddenCount).toBe(0);
+  });
+
+  it("records only semantically justified contributor reputation in the transition transaction", async () => {
+    const base = Date.now() - 10_000;
+    const acceptedCaseId = uuidv7();
+    const acceptedContributionId = uuidv7();
+    await store.open({
+      caseId: acceptedCaseId,
+      contributionId: acceptedContributionId,
+      contributorUserId: owner,
+      systemActorId: systemActor,
+      policy: { version: "synthetic-reputation-v1", appealWindowMilliseconds: 86_400_000 },
+      occurredAt: new Date(base),
+    });
+    await store.review(acceptedCaseId, 1, {
+      reviewerId: firstReviewer,
+      outcome: "accepted",
+      reasonCode: "independently_verified",
+      evidenceDigestSha256: "1".repeat(64),
+      occurredAt: new Date(base + 1_000),
+    });
+    await store.takeDown(acceptedCaseId, 2, {
+      reviewerId: firstReviewer,
+      reasonCode: "verified_requester_takedown",
+      evidenceDigestSha256: "2".repeat(64),
+      occurredAt: new Date(base + 2_000),
+    });
+
+    const deceptiveCaseId = uuidv7();
+    await store.open({
+      caseId: deceptiveCaseId,
+      contributionId: uuidv7(),
+      contributorUserId: owner,
+      systemActorId: systemActor,
+      policy: { version: "synthetic-reputation-v1", appealWindowMilliseconds: 86_400_000 },
+      occurredAt: new Date(base + 3_000),
+    });
+    await store.review(deceptiveCaseId, 1, {
+      reviewerId: firstReviewer,
+      outcome: "rejected",
+      reasonCode: "malicious_or_deceptive",
+      evidenceDigestSha256: "3".repeat(64),
+      occurredAt: new Date(base + 4_000),
+    });
+
+    const policyCaseId = uuidv7();
+    await store.open({
+      caseId: policyCaseId,
+      contributionId: uuidv7(),
+      contributorUserId: owner,
+      systemActorId: systemActor,
+      policy: { version: "synthetic-reputation-v1", appealWindowMilliseconds: 86_400_000 },
+      occurredAt: new Date(base + 5_000),
+    });
+    await store.review(policyCaseId, 1, {
+      reviewerId: firstReviewer,
+      outcome: "rejected",
+      reasonCode: "license_or_policy_block",
+      evidenceDigestSha256: "4".repeat(64),
+      occurredAt: new Date(base + 6_000),
+    });
+
+    const rows = await client<
+      { caseId: string; signalCode: string; referenceDigestSha256: string }[]
+    >`
+      SELECT case_id AS "caseId", signal_code AS "signalCode",
+        reference_digest_sha256 AS "referenceDigestSha256"
+      FROM trust.reputation_evidence
+      WHERE case_id IN (${acceptedCaseId}, ${deceptiveCaseId}, ${policyCaseId})
+      ORDER BY case_id, signal_code
+    `;
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        {
+          caseId: acceptedCaseId,
+          signalCode: "contributor_submission_verified",
+          referenceDigestSha256: "1".repeat(64),
+        },
+        {
+          caseId: deceptiveCaseId,
+          signalCode: "contributor_abuse_detected",
+          referenceDigestSha256: "3".repeat(64),
+        },
+      ]),
+    );
+    expect(rows).toHaveLength(2);
   });
 });

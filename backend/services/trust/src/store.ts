@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type postgres from "postgres";
 import {
   decideContributionReview,
@@ -71,6 +72,36 @@ function assertUuid(value: string, field: string): void {
 
 function assertDigest(value: string, field: string): void {
   if (!SHA256_PATTERN.test(value)) throw new Error(`${field} must be a SHA-256 digest`);
+}
+
+function reputationEvidenceId(
+  caseId: string,
+  caseVersion: number,
+  signalCode: TrustSignalCode,
+): string {
+  const bytes = createHash("sha256")
+    .update("ai-job-apply/trust-reputation-evidence/v1\0")
+    .update(caseId)
+    .update("\0")
+    .update(String(caseVersion))
+    .update("\0")
+    .update(signalCode)
+    .digest()
+    .subarray(0, 16);
+  bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x80;
+  bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
+  const hex = bytes.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function contributorSignal(transition: TrustTransition): TrustSignalCode | null {
+  if (transition.action === "review_accepted") return "contributor_submission_verified";
+  if (transition.action === "appeal_reversed") return "adverse_decision_reversed";
+  if (transition.action === "review_rejected") {
+    if (transition.reasonCode === "content_mismatch") return "contributor_submission_incorrect";
+    if (transition.reasonCode === "malicious_or_deceptive") return "contributor_abuse_detected";
+  }
+  return null;
 }
 
 function date(value: Date | string, field: string): Date {
@@ -373,6 +404,26 @@ export class PostgresTrustStore {
         RETURNING ${transaction.unsafe(caseSelection)}
       `;
       if (!updated) throw new TrustVersionConflictError();
+      const signalCode = contributorSignal(transition);
+      if (signalCode) {
+        if (transition.actorKind !== "reviewer" || !transition.evidenceDigestSha256) {
+          throw new Error(
+            "Contributor reputation evidence requires an authoritative reviewer transition",
+          );
+        }
+        const id = reputationEvidenceId(value.id, value.version, signalCode);
+        await transaction`
+          INSERT INTO trust.reputation_evidence (
+            id, case_id, case_version, contribution_id, subject_kind, contributor_user_id,
+            source_key_sha256, signal_code, reference_digest_sha256,
+            recorded_by_reviewer_id, occurred_at
+          ) VALUES (
+            ${id}, ${value.id}, ${value.version}, ${value.contributionId}, 'contributor',
+            ${value.contributorUserId}, null, ${signalCode},
+            ${transition.evidenceDigestSha256}, ${transition.actorId}, ${value.updatedAt}
+          )
+        `;
+      }
       return mapCase(updated);
     });
   }

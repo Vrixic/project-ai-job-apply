@@ -94,11 +94,9 @@ describeWithDatabase("Trust candidate rights ownership", () => {
     const otherReviewer = uuidv7();
     const base = Date.now() - 20_000;
     const ownerDecisionDigest = "3".repeat(64);
-    const ownerContributorDigest = "4".repeat(64);
     const ownerSourceKeyDigest = "5".repeat(64);
     const ownerSourceReferenceDigest = "6".repeat(64);
     const otherDecisionDigest = "7".repeat(64);
-    const otherContributorDigest = "8".repeat(64);
     const otherSourceKeyDigest = "9".repeat(64);
     const otherSourceReferenceDigest = "a".repeat(64);
 
@@ -119,16 +117,6 @@ describeWithDatabase("Trust candidate rights ownership", () => {
       reasonCode: "content_mismatch",
       evidenceDigestSha256: ownerDecisionDigest,
       occurredAt: new Date(base + 1_000),
-    });
-    await store.recordReputationEvidence({
-      id: uuidv7(),
-      caseId: ownerCaseId,
-      expectedCaseVersion: 2,
-      reviewerId: ownerReviewer,
-      subject: { kind: "contributor" },
-      signalCode: "contributor_submission_incorrect",
-      referenceDigestSha256: ownerContributorDigest,
-      occurredAt: new Date(base + 2_000),
     });
     await store.recordReputationEvidence({
       id: uuidv7(),
@@ -158,16 +146,6 @@ describeWithDatabase("Trust candidate rights ownership", () => {
       reasonCode: "independently_verified",
       evidenceDigestSha256: otherDecisionDigest,
       occurredAt: new Date(base + 4_000),
-    });
-    await store.recordReputationEvidence({
-      id: uuidv7(),
-      caseId: otherCaseId,
-      expectedCaseVersion: 2,
-      reviewerId: otherReviewer,
-      subject: { kind: "contributor" },
-      signalCode: "contributor_submission_verified",
-      referenceDigestSha256: otherContributorDigest,
-      occurredAt: new Date(base + 5_000),
     });
     await store.recordReputationEvidence({
       id: uuidv7(),
@@ -243,7 +221,7 @@ describeWithDatabase("Trust candidate rights ownership", () => {
           caseVersion: 2,
           contributionId: ownerContributionId,
           signalCode: "contributor_submission_incorrect",
-          referenceDigestSha256: ownerContributorDigest,
+          referenceDigestSha256: ownerDecisionDigest,
         },
       ],
     });
@@ -257,7 +235,6 @@ describeWithDatabase("Trust candidate rights ownership", () => {
     expect(serialized).not.toContain(ownerSourceKeyDigest);
     expect(serialized).not.toContain(ownerSourceReferenceDigest);
     expect(serialized).not.toContain(otherDecisionDigest);
-    expect(serialized).not.toContain(otherContributorDigest);
     expect(serialized).not.toContain(otherSourceKeyDigest);
     expect(serialized).not.toContain(otherSourceReferenceDigest);
 
