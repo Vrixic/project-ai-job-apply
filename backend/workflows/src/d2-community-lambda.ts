@@ -17,6 +17,7 @@ import type {
   TrustDecisionDeliveryRunner,
 } from "@ai-job-apply/trust-service";
 import type { EventBridgeEvent, SQSBatchResponse, SQSEvent, SQSRecord } from "aws-lambda";
+import { d2CommunityEmf } from "./d2-community-observability.js";
 
 const MAXIMUM_NUDGE_BYTES = 4_096;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
@@ -26,7 +27,7 @@ const RULE_ARN_PATTERN =
   /^arn:(aws|aws-us-gov|aws-cn):events:([a-z0-9-]+):([0-9]{12}):rule\/[A-Za-z0-9_.-]{1,64}$/u;
 
 export interface D2CommunityAggregateLogger {
-  info(fields: Readonly<Record<string, boolean | number | string>>, message: string): void;
+  info(fields: Readonly<Record<string, unknown>>, message: string): void;
 }
 
 export interface D2CommunityLambdaBoundary {
@@ -222,26 +223,41 @@ export function createD2CommunityLambdaHandlers(
     scheduled: async (event: unknown): Promise<D2CommunityScheduledMetrics> => {
       assertScheduledEvent(event, configuration.boundary);
       const now = exactDate(configuration.now());
-      const [jobs, trustDelivery] = await Promise.all([
-        runJobsBatch(configuration.jobs.input, configuration.jobs.runtime),
-        configuration.trustDelivery.runner.runBatch(
-          configuration.trustDelivery.workerId,
-          now,
-          configuration.trustDelivery.limit,
-        ),
-      ]);
+      let jobs: ContributionProcessingRuntimeBatchMetrics;
+      let trustDelivery: TrustDecisionDeliveryBatchMetrics;
+      try {
+        [jobs, trustDelivery] = await Promise.all([
+          runJobsBatch(configuration.jobs.input, configuration.jobs.runtime),
+          configuration.trustDelivery.runner.runBatch(
+            configuration.trustDelivery.workerId,
+            now,
+            configuration.trustDelivery.limit,
+          ),
+        ]);
+      } catch (error) {
+        configuration.logger.info(
+          d2CommunityEmf({ ScheduledBatchFailed: 1 }, now),
+          "d2_community_scheduled_batch_failed",
+        );
+        throw error;
+      }
       configuration.logger.info(
-        {
-          jobs_claimed: jobs.processing.claimed,
-          jobs_completed: jobs.processing.completed,
-          jobs_retried: jobs.processing.retried,
-          jobs_dead: jobs.processing.dead,
-          jobs_parked: jobs.processing.parked,
-          trust_claimed: trustDelivery.claimed,
-          trust_published: trustDelivery.published,
-          trust_retried: trustDelivery.retried,
-          trust_dead: trustDelivery.dead,
-        },
+        d2CommunityEmf({
+          JobsClaimed: jobs.processing.claimed,
+          JobsCompleted: jobs.processing.completed,
+          JobsRetried: jobs.processing.retried,
+          JobsDead: jobs.processing.dead,
+          JobsParked: jobs.processing.parked,
+          JobsDeliveryClaimed: jobs.delivery.claimed,
+          JobsDeliveryPublished: jobs.delivery.published,
+          JobsDeliveryRetried: jobs.delivery.retried,
+          JobsDeliveryDead: jobs.delivery.dead,
+          TrustDeliveryClaimed: trustDelivery.claimed,
+          TrustDeliveryPublished: trustDelivery.published,
+          TrustDeliveryRetried: trustDelivery.retried,
+          TrustDeliveryDead: trustDelivery.dead,
+          ScheduledBatchSucceeded: 1,
+        }, now),
         "d2_community_scheduled_batch",
       );
       return Object.freeze({ enabled: true, jobs, trustDelivery });
@@ -265,13 +281,13 @@ export function createD2CommunityLambdaHandlers(
         }
       }
       configuration.logger.info(
-        {
-          records: event.Records.length,
-          handled: totals.handled,
-          copied: totals.copied,
-          requeued: totals.requeued,
-          failed: failures.length,
-        },
+        d2CommunityEmf({
+          TrustSignalRecords: event.Records.length,
+          TrustSignalHandled: totals.handled,
+          TrustSignalCopied: totals.copied,
+          TrustSignalRequeued: totals.requeued,
+          TrustSignalFailed: failures.length,
+        }, exactDate(configuration.now())),
         "d2_community_trust_signal_batch",
       );
       return { batchItemFailures: failures };

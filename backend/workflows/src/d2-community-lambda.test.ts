@@ -132,9 +132,13 @@ describe("D2 community Lambda", () => {
     expect(runJobsBatch).toHaveBeenCalledOnce();
     expect(runTrustDelivery).toHaveBeenCalledWith("d2:trust-delivery", now, 5);
     expect(logger.info).toHaveBeenCalledWith(
-      expect.objectContaining({ jobs_claimed: 2, trust_published: 1 }),
+      expect.objectContaining({ JobsClaimed: 2, TrustDeliveryPublished: 1 }),
       "d2_community_scheduled_batch",
     );
+    const scheduledLog = logger.info.mock.calls[0]?.[0];
+    expect(scheduledLog).toMatchObject({
+      _aws: { CloudWatchMetrics: [{ Namespace: "AIJobApply/D2Community", Dimensions: [] }] },
+    });
     await expect(handlers.scheduled(scheduledEvent({ unexpected: true }))).rejects.toThrow(
       "D2CommunityScheduleEventRejected",
     );
@@ -189,5 +193,17 @@ describe("D2 community Lambda", () => {
       ],
     });
     expect(consume).not.toHaveBeenCalled();
+  });
+
+  it("emits an aggregate-only health metric when a scheduled dependency fails", async () => {
+    const { handlers, logger } = harness({
+      runJobsBatch: vi.fn(async () => { throw new Error("sensitive-provider-detail"); }),
+    });
+    await expect(handlers.scheduled(scheduledEvent())).rejects.toThrow("sensitive-provider-detail");
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({ ScheduledBatchFailed: 1 }),
+      "d2_community_scheduled_batch_failed",
+    );
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain("sensitive-provider-detail");
   });
 });
