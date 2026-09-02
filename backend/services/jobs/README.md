@@ -30,9 +30,29 @@ Before persistence, the gateway adapter verifies the exact owner, policy, previe
 nonexpired Profile grant, and exact server-issued grant timestamp. Missing Profile wiring remains
 fail closed.
 
-The durable normalizer, independent source verifier, Profile consent recheck, Trust-owned UGC
+Migration `0015_source_revalidation_lifecycle` adds a source-scoped durable revalidation queue and
+an append-only verification-evidence ledger for the D2 Greenhouse, Lever, and Ashby page variants.
+Community observations and fixed-code candidate closed reports store only a SHA-256 signal
+reference and can raise normal or high revalidation priority; they cannot update verification
+clocks, expiry, source withdrawal, or catalog status. Queue claims use database-fenced ownership,
+one-to-twenty-five item batches, explicit leases, at most five attempts, bounded retry timing, and
+expired-lease recovery. Queue identity and legal state transitions are database-guarded, and
+terminal records are immutable.
+
+Only independently obtained provider evidence can advance a source verification clock or record
+positive withdrawal. One source's closed evidence does not withdraw a canonical job while another
+source remains open. A separate default-deny authority port is required for an administrative
+block. Evidence is digest-only and append-only; lifecycle status events contain canonical job
+identity plus fixed reasons, never source URLs, page bodies, candidate identifiers, or arbitrary
+errors. Policy-clock expiry preserves a minimal catalog tombstone while erasing descriptions,
+application payload fields, structured location payloads, and every source raw snapshot.
+Provider/page-variant freshness windows, queue leases, attempts, retry delays, and administrative
+policy versions have no production defaults and must be injected before this runtime can operate.
+
+The durable normalizer, provider evidence collector, Profile consent recheck, Trust-owned UGC
 decision, accepted UGC observation/source linkage, outbox dispatcher, contributor export/deletion,
-and deployment/activation controls remain separate D2 work. Until those land, the intake is
+and deployment/activation controls remain separate D2 work. Migration `0015` is persistence and
+application-policy foundation, not a deployed provider verifier. Until those land, the intake is
 synthetic/default-dark and a queued acknowledgement makes no publication claim.
 
 Migration `0005_ingestion_orchestration` adds three Jobs-owned relations. Schedule occurrences are

@@ -83,7 +83,7 @@ describeWithDatabase("Jobs queued contribution intake persistence", () => {
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });
     expect(result.stdout.trim()).toBe(
-      "Jobs migrations through 0014_job_contribution_intake applied and verified.",
+      "Jobs migrations through 0015_source_revalidation_lifecycle applied and verified.",
     );
     await store.ping();
   });

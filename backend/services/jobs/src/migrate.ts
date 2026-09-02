@@ -23,6 +23,7 @@ const migrationVersions = [
   "0012_candidate_rights",
   "0013_public_job_sitemap",
   "0014_job_contribution_intake",
+  "0015_source_revalidation_lifecycle",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -86,6 +87,22 @@ const expectedReportingTriggerBodies = reportingTriggerFunctions.map((functionNa
     `CREATE FUNCTION jobs\\.${functionName}\\(\\)\\s+RETURNS trigger[\\s\\S]*?AS \\$\\$([\\s\\S]*?)\\$\\$;`,
     "u",
   ).exec(reportingMigration.sql);
+  if (!match?.[1]) throw new Error(`The ${functionName} trigger function source is invalid`);
+  return match[1];
+});
+const revalidationTriggerFunctions = [
+  "guard_source_revalidation_queue",
+  "guard_source_verification_evidence",
+] as const;
+const revalidationMigration = migrations.find(
+  (migration) => migration.version === "0015_source_revalidation_lifecycle",
+);
+if (!revalidationMigration) throw new Error("The revalidation migration source is missing");
+const expectedRevalidationTriggerBodies = revalidationTriggerFunctions.map((functionName) => {
+  const match = new RegExp(
+    `CREATE FUNCTION jobs\\.${functionName}\\(\\)\\s+RETURNS trigger[\\s\\S]*?AS \\$\\$([\\s\\S]*?)\\$\\$;`,
+    "u",
+  ).exec(revalidationMigration.sql);
   if (!match?.[1]) throw new Error(`The ${functionName} trigger function source is invalid`);
   return match[1];
 });
@@ -164,6 +181,11 @@ try {
         contributionTriggerCount: number;
         contributionForeignKeyCount: number;
         contributionCatalogForeignKeyCount: number;
+        revalidationIndexCount: number;
+        revalidationTriggerCount: number;
+        revalidationTriggerFunctionCount: number;
+        revalidationTriggerFunctionBodies: string[];
+        revalidationForeignKeyCount: number;
       }[]
     >`
       SELECT
@@ -184,6 +206,8 @@ try {
           + (to_regclass('jobs.moderation_events') IS NOT NULL)::int
           + (to_regclass('jobs.job_contributions') IS NOT NULL)::int
           + (to_regclass('jobs.job_contribution_outbox') IS NOT NULL)::int
+          + (to_regclass('jobs.source_revalidation_queue') IS NOT NULL)::int
+          + (to_regclass('jobs.source_verification_evidence') IS NOT NULL)::int
         )::int AS "tableCount",
         (
           SELECT count(*)::int FROM jobs.schema_migrations
@@ -757,9 +781,70 @@ try {
               'jobs.job_sources'::regclass
             )
         ) AS "contributionCatalogForeignKeyCount"
+        , (
+          SELECT count(*)::int
+          FROM pg_indexes
+          WHERE schemaname = 'jobs'
+            AND indexname IN (
+              'source_revalidation_queue_source_identity_uq',
+              'source_revalidation_queue_claim_idx',
+              'source_revalidation_queue_lease_idx',
+              'source_revalidation_queue_job_idx',
+              'source_verification_evidence_digest_uq',
+              'source_verification_evidence_job_idx',
+              'source_verification_evidence_source_idx'
+            )
+        ) AS "revalidationIndexCount"
+        , (
+          SELECT count(*)::int
+          FROM pg_trigger trigger
+          JOIN (VALUES
+            ('jobs.source_revalidation_queue'::regclass, 'source_revalidation_queue_guard',
+              'jobs.guard_source_revalidation_queue()'::regprocedure, 31::smallint),
+            ('jobs.source_verification_evidence'::regclass,
+              'source_verification_evidence_append_only',
+              'jobs.guard_source_verification_evidence()'::regprocedure, 31::smallint)
+          ) expected(table_oid, trigger_name, function_oid, trigger_type)
+            ON expected.table_oid = trigger.tgrelid
+           AND expected.trigger_name = trigger.tgname
+           AND expected.function_oid = trigger.tgfoid
+           AND expected.trigger_type = trigger.tgtype
+          WHERE NOT trigger.tgisinternal AND trigger.tgenabled = 'O'
+        ) AS "revalidationTriggerCount"
+        , (
+          SELECT count(*)::int
+          FROM pg_proc function_definition
+          JOIN pg_namespace namespace ON namespace.oid = function_definition.pronamespace
+          JOIN pg_language language ON language.oid = function_definition.prolang
+          WHERE namespace.nspname = 'jobs'
+            AND function_definition.proname = ANY(${revalidationTriggerFunctions as unknown as string[]})
+            AND function_definition.pronargs = 0
+            AND language.lanname = 'plpgsql'
+            AND function_definition.provolatile = 'v'
+            AND NOT function_definition.prosecdef
+            AND function_definition.proconfig IS NULL
+        ) AS "revalidationTriggerFunctionCount"
+        , ARRAY(
+          SELECT function_definition.prosrc
+          FROM unnest(${revalidationTriggerFunctions as unknown as string[]}::text[])
+            WITH ORDINALITY expected(function_name, ordinal)
+          JOIN pg_proc function_definition ON function_definition.proname = expected.function_name
+          JOIN pg_namespace namespace ON namespace.oid = function_definition.pronamespace
+          WHERE namespace.nspname = 'jobs' AND function_definition.pronargs = 0
+          ORDER BY expected.ordinal
+        ) AS "revalidationTriggerFunctionBodies"
+        , (
+          SELECT count(*)::int
+          FROM pg_constraint constraint_definition
+          WHERE constraint_definition.contype = 'f'
+            AND constraint_definition.conrelid IN (
+              'jobs.source_revalidation_queue'::regclass,
+              'jobs.source_verification_evidence'::regclass
+            )
+        ) AS "revalidationForeignKeyCount"
     `;
     if (
-      verification?.tableCount !== 16 ||
+      verification?.tableCount !== 18 ||
       verification.migrationCount !== migrationVersions.length ||
       verification.identityIndexCount !== 3 ||
       verification.sourceWithdrawalColumnCount !== 1 ||
@@ -808,7 +893,13 @@ try {
       verification.contributionIndexCount !== 5 ||
       verification.contributionTriggerCount !== 2 ||
       verification.contributionForeignKeyCount !== 1 ||
-      verification.contributionCatalogForeignKeyCount !== 0
+      verification.contributionCatalogForeignKeyCount !== 0 ||
+      verification.revalidationIndexCount !== 7 ||
+      verification.revalidationTriggerCount !== 2 ||
+      verification.revalidationTriggerFunctionCount !== 2 ||
+      JSON.stringify(verification.revalidationTriggerFunctionBodies) !==
+        JSON.stringify(expectedRevalidationTriggerBodies) ||
+      verification.revalidationForeignKeyCount !== 4
     ) {
       throw new Error(
         `Jobs database migration verification failed: ${JSON.stringify({
@@ -859,6 +950,13 @@ try {
           contributionTriggerCount: verification?.contributionTriggerCount,
           contributionForeignKeyCount: verification?.contributionForeignKeyCount,
           contributionCatalogForeignKeyCount: verification?.contributionCatalogForeignKeyCount,
+          revalidationIndexCount: verification?.revalidationIndexCount,
+          revalidationTriggerCount: verification?.revalidationTriggerCount,
+          revalidationTriggerFunctionCount: verification?.revalidationTriggerFunctionCount,
+          revalidationTriggerBodiesMatch:
+            JSON.stringify(verification?.revalidationTriggerFunctionBodies) ===
+            JSON.stringify(expectedRevalidationTriggerBodies),
+          revalidationForeignKeyCount: verification?.revalidationForeignKeyCount,
         })}`,
       );
     }
