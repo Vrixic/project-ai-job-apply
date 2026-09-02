@@ -960,7 +960,15 @@ resource "aws_apigatewayv2_route" "gateway" {
   authorizer_id      = aws_apigatewayv2_authorizer.gateway[0].id
   authorization_scopes = concat(
     ["jobs:moderate", "jobs:read", "jobs:write", "profile:read", "profile:write"],
-    var.deploy_document_intake ? ["documents:read", "documents:write"] : []
+    var.deploy_document_intake ? ["documents:read", "documents:write"] : [],
+    var.d2_community_runtime.stage == "gateway-dark" ? [
+      "jobs:contribute",
+      "trust:appeal:resolve",
+      "trust:case:decide",
+      "trust:case:open",
+      "trust:case:takedown",
+      "trust:review"
+    ] : []
   )
 }
 
@@ -1786,6 +1794,9 @@ resource "aws_lambda_function" "gateway" {
         CANDIDATE_RIGHTS_RECENT_AUTH_MAX_AGE_SECONDS = tostring(var.candidate_rights_recent_auth_max_age_seconds)
         CANDIDATE_RIGHTS_OWNER_INVENTORY             = var.candidate_rights_owner_inventory
         CANDIDATE_RIGHTS_SUBPROCESSOR_INVENTORY      = var.candidate_rights_subprocessor_inventory
+      } : {},
+      var.d2_community_runtime.stage == "gateway-dark" ? {
+        UGC_CONTRIBUTION_POLICY_VERSION = var.d2_community_runtime.ugc_contribution_policy_version
       } : {}
     )
   }

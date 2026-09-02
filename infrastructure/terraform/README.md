@@ -24,6 +24,13 @@ runs in private bounded Lambdas, and SQS/EventBridge drive exact-version Lambda 
 `serverless_runtime_enabled` is the fail-closed public route/trigger switch. It does not restore a
 second provider.
 
+The Phase 2 community seam is independently default-off. `d2_community_runtime_stage =
+"gateway-dark"` may supply only a reviewed UGC consent policy version and the bounded contribution
+and Trust JWT scope inventory to the existing gateway. It exposes no new application route and
+creates no contribution processor, schedule, or timing default. Those resources remain blocked on
+their application handlers, signed-policy delivery boundary, Trust runtime composition, and
+reviewed D2 signal contract.
+
 The retained ECS cluster has no service. It exists only to run reviewed service-owned database
 migrations through a fail-fast orchestrator as a short-lived Fargate task.
 `ai-job-apply/migration` is the sole application ECR repository and must

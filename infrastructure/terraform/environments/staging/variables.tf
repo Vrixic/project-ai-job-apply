@@ -297,6 +297,16 @@ variable "serverless_runtime_enabled" {
   default = false
 }
 
+variable "d2_community_runtime_stage" {
+  type    = string
+  default = "disabled"
+}
+
+variable "d2_ugc_contribution_policy_version" {
+  type    = string
+  default = ""
+}
+
 variable "deploy_profile_readiness_durable" {
   type    = bool
   default = false

@@ -557,6 +557,30 @@ variable "serverless_runtime_enabled" {
   }
 }
 
+variable "d2_community_runtime" {
+  description = "Default-off Phase 2 community gateway composition. gateway-dark supplies only reviewed gateway configuration and JWT scopes; it activates no contribution or trust route, processor, or schedule."
+  type = object({
+    stage                           = string
+    ugc_contribution_policy_version = string
+  })
+  default = {
+    stage                           = "disabled"
+    ugc_contribution_policy_version = ""
+  }
+
+  validation {
+    condition = (
+      var.d2_community_runtime.stage == "disabled" &&
+      var.d2_community_runtime.ugc_contribution_policy_version == ""
+      ) || (
+      var.d2_community_runtime.stage == "gateway-dark" &&
+      var.deploy_gateway_lambda &&
+      can(regex("^[a-z0-9][a-z0-9._-]{2,99}$", var.d2_community_runtime.ugc_contribution_policy_version))
+    )
+    error_message = "Phase 2 community composition must be disabled with no policy, or gateway-dark with the dark gateway and one explicit 3-100 character lowercase policy version token."
+  }
+}
+
 variable "persistent_data_plane_enabled" {
   description = "Provision the persistent database and private AWS service endpoints required by an active runtime. Disable only after the serverless runtime is quiesced."
   type        = bool

@@ -11,6 +11,21 @@ false, the Lambda integration remains deployable but no public route or workflow
 when true, the JWT-protected default route, two public health routes, SQS starter, reconciler
 schedule, and terminal-recovery rule activate together. There is no ECS or Temporal fallback.
 
+Phase 2 community composition has a separate, default-off `d2_community_runtime_stage`. Its only
+non-disabled value, `gateway-dark`, injects an explicitly reviewed
+`d2_ugc_contribution_policy_version` into the gateway and adds the exact contribution and Trust
+JWT scopes to the existing authenticated default route. It does not add a contribution or Trust
+path to the gateway application's exact route allowlist, and it creates no processor, trigger, or
+schedule. The current source therefore remains structurally dark even when this configuration
+stage is selected.
+
+Advancing beyond `gateway-dark` depends on application-owned exact route handlers and allowlist
+tests, a deployed signed-capability policy/key delivery boundary, Trust persistence and reviewer
+assignment composition, and a contribution-processing Lambda entry point. No reviewed production
+processing interval or D2-specific metric/signal contract exists yet, so this module intentionally
+defines no contribution scheduler or dedicated D2 alarm. Existing gateway Lambda alarms still
+cover errors, throttles, and duration during controlled dark-runtime verification.
+
 The gateway and reconciler are the only producers for the platform-CMK-encrypted outbox queue.
 The durable orchestrator is outside the VPC and invokes an exact activity version; database
 activity and terminal handlers remain private and retrieve only the database secret. A narrow
