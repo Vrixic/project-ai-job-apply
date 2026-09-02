@@ -23,6 +23,7 @@ import type {
   SavedJob,
   SavedJobPage,
   SavedJobSearchRequest,
+  SignedContributionCapabilityPolicy,
   UpdateProfileFactRequest,
 } from "@ai-job-apply/api-contracts";
 import type { AuthPrincipal, IdTokenVerifier } from "@ai-job-apply/auth";
@@ -39,6 +40,8 @@ import { type DocumentStore, ResumeUploadRegistrationError } from "@ai-job-apply
 import {
   type ActiveJobRecord,
   type ActiveJobSearchInput,
+  type ContributionCapabilityPolicySource,
+  ContributionCapabilityPolicySourceUnavailableError,
   type CreateJobContributionCommand,
   type CreateJobReportCommand,
   type ModerationCase as DomainModerationCase,
@@ -867,6 +870,7 @@ class MemoryDocumentStore implements DocumentStore {
 
 async function createApp(
   options: {
+    contributionCapabilityPolicy?: ContributionCapabilityPolicySource;
     trust?: TrustApplicationService;
     trustReviewerAssignments?: readonly TrustReviewerAssignment[];
   } = {},
@@ -915,6 +919,9 @@ async function createApp(
     privateSavedPageCaptures,
     jobReports,
     jobContributions,
+    ...(options.contributionCapabilityPolicy
+      ? { contributionCapabilityPolicy: options.contributionCapabilityPolicy }
+      : {}),
     ugcContributionConsents,
     ugcContributionPolicyVersion: "d2-synthetic-policy.v1",
     moderation,
@@ -947,6 +954,113 @@ async function createApp(
     idTokenVerificationTokens,
   };
 }
+
+const publicContributionCapabilityPolicy = {
+  keyId: "extension-policy-key-v1",
+  payload: {
+    schemaVersion: 1,
+    revision: "extension-policy-r42",
+    issuedAt: "2026-08-16T11:00:00.000Z",
+    expiresAt: "2026-08-16T18:00:00.000Z",
+    intakeEnabled: true,
+    processingEnabled: false,
+    clients: { "0.2.0": true },
+    providers: { ashby: true, greenhouse: true, lever: false },
+    variants: {
+      "ashby-job-board-v1": true,
+      "greenhouse-board-v1": true,
+      "lever-posting-v1": false,
+    },
+    domains: { "jobs.ashbyhq.com": true },
+  },
+  signature: "a".repeat(86),
+} satisfies SignedContributionCapabilityPolicy;
+
+describe("public extension contribution capability policy", () => {
+  it("is absent unless a verified source is explicitly configured", async () => {
+    const { app } = await createApp();
+    try {
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/extension/contribution-capability-policy",
+      });
+      expect(response.statusCode).toBe(404);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("returns only the exact signed envelope without authentication and disables storage", async () => {
+    const source: ContributionCapabilityPolicySource = {
+      async load() {
+        throw new Error("The public route must not use the private loader projection");
+      },
+      async readPublicEnvelope() {
+        return structuredClone(publicContributionCapabilityPolicy);
+      },
+    };
+    const { app } = await createApp({ contributionCapabilityPolicy: source });
+    try {
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/extension/contribution-capability-policy",
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.headers["cache-control"]).toBe("no-store");
+      expect(response.json()).toEqual(publicContributionCapabilityPolicy);
+      expect(response.body).not.toContain("PUBLIC KEY");
+      expect(response.body).not.toContain("PRIVATE KEY");
+
+      const invalid = await app.inject({
+        method: "GET",
+        url: "/v1/extension/contribution-capability-policy?revision=older",
+      });
+      expect(invalid.statusCode).toBe(400);
+      expect(invalid.headers["cache-control"]).toBe("no-store");
+
+      const body = await app.inject({
+        method: "GET",
+        url: "/v1/extension/contribution-capability-policy",
+        payload: { revision: "older" },
+      });
+      expect(body.statusCode).toBe(400);
+      expect(body.headers["cache-control"]).toBe("no-store");
+      expect(body.headers["content-type"]).toContain("application/problem+json");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("projects source and shape failures to one fixed safe unavailable problem", async () => {
+    const messages = ["unknown key secret", "stale revision secret"];
+    for (const message of messages) {
+      const source: ContributionCapabilityPolicySource = {
+        async load() {
+          return null;
+        },
+        async readPublicEnvelope() {
+          if (message.startsWith("unknown")) {
+            throw new ContributionCapabilityPolicySourceUnavailableError();
+          }
+          return { ...publicContributionCapabilityPolicy, signingSecret: message } as never;
+        },
+      };
+      const { app } = await createApp({ contributionCapabilityPolicy: source });
+      try {
+        const response = await app.inject({
+          method: "GET",
+          url: "/v1/extension/contribution-capability-policy",
+        });
+        expect(response.statusCode).toBe(503);
+        expect(response.headers["cache-control"]).toBe("no-store");
+        expect(response.json().code).toBe("contribution_capability_policy_unavailable");
+        expect(response.body).not.toContain(message);
+      } finally {
+        await app.close();
+      }
+    }
+  });
+});
 
 describe("candidate API", () => {
   let app: NestFastifyApplication;
@@ -2027,6 +2141,11 @@ describe("candidate API", () => {
     expect(created.json()).toMatchObject({ state: "queued" });
     expect(created.headers["cache-control"]).toBe("no-store");
 
+    const projected = jobContributions.records.get(created.json().id);
+    if (!projected) throw new Error("Synthetic contribution was not retained");
+    projected.contribution.state = "ready_for_publication";
+    projected.contribution.updatedAt = "2026-08-16T12:01:00.000Z";
+
     const owned = await app.inject({
       method: "GET",
       url: `/v1/jobs/contributions/${created.json().id}`,
@@ -2038,7 +2157,14 @@ describe("candidate API", () => {
       headers: { authorization: `Bearer ${otherToken}` },
     });
     expect(owned.statusCode).toBe(200);
+    expect(owned.json()).toEqual({
+      id: created.json().id,
+      state: "ready_for_publication",
+      submittedAt: "2026-08-16T12:00:00.000Z",
+      updatedAt: "2026-08-16T12:01:00.000Z",
+    });
     expect(hidden.statusCode).toBe(404);
+    expect(hidden.body).not.toContain("ready_for_publication");
 
     const conflict = await app.inject({
       ...request,

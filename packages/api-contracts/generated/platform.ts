@@ -260,6 +260,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/extension/contribution-capability-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getExtensionContributionCapabilityPolicy"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/jobs/contributions": {
         parameters: {
             query?: never;
@@ -1165,12 +1181,48 @@ export interface components {
         };
         JobContribution: {
             id: string;
-            /** @constant */
-            state: "queued";
+            /** @enum {string} */
+            state: "queued" | "normalized" | "awaiting_independent_verification" | "independently_verified" | "awaiting_trust" | "rejected" | "ready_for_publication" | "published" | "consent_invalid" | "withdrawn" | "taken_down" | "removed";
             /** Format: date-time */
             submittedAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        ContributionCapabilityPolicy: {
+            /** @constant */
+            schemaVersion: 1;
+            revision: string;
+            /** Format: date-time */
+            issuedAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+            intakeEnabled: boolean;
+            processingEnabled: boolean;
+            clients: {
+                [key: string]: boolean;
+            };
+            providers: {
+                ashby: boolean;
+                greenhouse: boolean;
+                lever: boolean;
+            };
+            variants: {
+                "ashby-job-board-v1": boolean;
+                "greenhouse-board-v1": boolean;
+                "lever-posting-v1": boolean;
+            };
+            domains: {
+                "boards.greenhouse.io"?: boolean;
+                "job-boards.greenhouse.io"?: boolean;
+                "jobs.lever.co"?: boolean;
+                "jobs.eu.lever.co"?: boolean;
+                "jobs.ashbyhq.com"?: boolean;
+            };
+        };
+        SignedContributionCapabilityPolicy: {
+            keyId: string;
+            payload: components["schemas"]["ContributionCapabilityPolicy"];
+            signature: string;
         };
         /** @enum {string} */
         TrustCaseState: "needs_review" | "accepted" | "rejected" | "appeal_pending" | "withdrawn" | "taken_down";
@@ -2361,6 +2413,29 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+        };
+    };
+    getExtensionContributionCapabilityPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The currently verified, signed extension contribution capability policy */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignedContributionCapabilityPolicy"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            503: components["responses"]["ServiceUnavailable"];
         };
     };
     createJobContribution: {

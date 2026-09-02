@@ -4,13 +4,14 @@ import { v7 as uuidv7 } from "uuid";
 import {
   type CreateJobContributionCommand,
   JobContributionIdempotencyConflictError,
+  type JobContributionState,
   type JobContributionStatus,
   type JobContributionStore,
 } from "../contribution.js";
 
 interface ContributionRow {
   id: string;
-  state: "queued";
+  state: JobContributionState;
   requestHash: string;
   submittedAt: Date | string;
   updatedAt: Date | string;
@@ -44,9 +45,10 @@ export class PostgresJobContributionStore implements JobContributionStore {
         to_regclass('jobs.job_contributions') IS NOT NULL
         AND to_regclass('jobs.job_contribution_outbox') IS NOT NULL
         AND to_regclass('jobs.job_contribution_processing_queue') IS NOT NULL
+        AND to_regclass('jobs.job_contribution_processing_event_deliveries') IS NOT NULL
         AND EXISTS (
           SELECT 1 FROM jobs.schema_migrations
-          WHERE version = '0017_job_contribution_processing'
+          WHERE version = '0018_job_contribution_processing_delivery'
         )
       ) AS ready
     `;
@@ -141,10 +143,17 @@ export class PostgresJobContributionStore implements JobContributionStore {
 
   async get(ownerUserId: string, contributionId: string): Promise<JobContributionStatus | null> {
     const [row] = await this.client<ContributionRow[]>`
-      SELECT id, state, request_hash AS "requestHash",
-        created_at AS "submittedAt", updated_at AS "updatedAt"
-      FROM jobs.job_contributions
-      WHERE id = ${contributionId} AND owner_user_id = ${ownerUserId}
+      SELECT contribution.id, COALESCE(latest.state, contribution.state) AS state,
+        contribution.request_hash AS "requestHash", contribution.created_at AS "submittedAt",
+        COALESCE(latest.occurred_at, contribution.updated_at) AS "updatedAt"
+      FROM jobs.job_contributions AS contribution
+      LEFT JOIN LATERAL (
+        SELECT event.state, event.occurred_at
+        FROM jobs.job_contribution_state_events AS event
+        WHERE event.contribution_id = contribution.id
+        ORDER BY event.occurred_at DESC, event.id DESC LIMIT 1
+      ) AS latest ON true
+      WHERE contribution.id = ${contributionId} AND contribution.owner_user_id = ${ownerUserId}
     `;
     return row ? status(row) : null;
   }

@@ -2,8 +2,8 @@ import { generateKeyPairSync, sign } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   contributionCapabilityPolicyDigestInput,
-  evaluateContributionCapability,
   type D2ContributionCapabilityPolicy,
+  evaluateContributionCapability,
   verifySignedContributionCapabilityPolicy,
 } from "./contribution-capability-policy.js";
 
@@ -121,5 +121,13 @@ describe("signed contribution capability policy", () => {
     expect(() =>
       contributionCapabilityPolicyDigestInput({ ...policy, remoteCode: "https://bad" } as never),
     ).toThrow(/invalid/u);
+    for (const version of ["latest", "01.2.3", "1234567.2.3", "1.2.3-abcdefghijklmnopq"]) {
+      expect(() =>
+        contributionCapabilityPolicyDigestInput({
+          ...policy,
+          clients: { [version]: true },
+        }),
+      ).toThrow(/map/u);
+    }
   });
 });

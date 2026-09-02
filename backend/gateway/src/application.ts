@@ -2,6 +2,7 @@ import type { AccessTokenVerifier, IdTokenVerifier } from "@ai-job-apply/auth";
 import type { EntitlementReadService } from "@ai-job-apply/billing-service";
 import type { DocumentStore } from "@ai-job-apply/documents-service";
 import type {
+  ContributionCapabilityPolicySource,
   JobCatalogReader,
   JobContributions,
   JobModeration,
@@ -36,6 +37,7 @@ export interface GatewayApplicationOptions {
   catalog: JobCatalogReader;
   jobReports: JobReports;
   jobContributions: JobContributions;
+  contributionCapabilityPolicy?: ContributionCapabilityPolicySource;
   ugcContributionConsents?: UgcContributionConsentStore;
   ugcContributionPolicyVersion?: string;
   moderation: JobModeration;
@@ -67,6 +69,9 @@ export async function createGatewayApplication(
       catalog: options.catalog,
       jobReports: options.jobReports,
       jobContributions: options.jobContributions,
+      ...(options.contributionCapabilityPolicy
+        ? { contributionCapabilityPolicy: options.contributionCapabilityPolicy }
+        : {}),
       ugcContributionConsents:
         options.ugcContributionConsents ??
         ({

@@ -3,6 +3,12 @@
 Versioned REST API source documents. These files are reviewed before implementation changes and
 drive generated transport types and clients.
 
+`GET /extension/contribution-capability-policy` is an explicitly anonymous, bodyless, queryless,
+`no-store` read of the exact signed policy envelope used to gate browser-extension contribution
+intake and processing. Its response excludes pinned verification keys and all signing secrets;
+runtime absence, invalidity, or staleness is a fixed availability failure. The OpenAPI path does
+not activate the deployed Lambda route, which remains default-dark behind a separate boundary.
+
 `GET /public/jobs/{jobId}` is an explicitly anonymous, read-only boundary. It accepts only an exact
 lowercase UUIDv7 path and returns the Jobs-owned bounded public projection: reversible
 requested/canonical identity, display text, and freshness/expiry timestamps. Source URLs,

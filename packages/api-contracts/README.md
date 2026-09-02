@@ -24,9 +24,15 @@ The additive Phase 2 contribution contract defines strict `POST /jobs/contributi
 `GET /jobs/contributions/{contributionId}` routes under the exact `jobs:contribute` scope. Intake
 requires a client-generated UUIDv7, `Idempotency-Key`, detector identity, exact installed browser
 extension surface/version, selected public fields, and immutable Profile consent/digest references.
-Both canonical content and preview digests bind that exact client surface/version. Its only response
-state is `queued`; the contract
-does not claim verification, moderation, canonical-job creation, or publication.
+Both canonical content and preview digests bind that exact client surface/version. Owner status
+uses the fixed public-safe processing-state enum and still excludes reasons, evidence, internal
+identifiers, and reviewer data; a state does not itself claim canonical publication truth.
+
+The anonymous `GET /extension/contribution-capability-policy` contract returns one exact bounded
+signed envelope for extension fail-closed gating. It is explicitly `no-store`, contains no signing
+secret or pinned public-key material, and declares a fixed `503` availability boundary. Client
+version keys use the same bounded exact version grammar as contribution intake. Runtime exposure
+is separately activation-controlled; the contract alone does not enable the deployed route.
 
 The additive Trust contract uses the owner-known contribution UUID for private status, withdrawal,
 and one evidence-digest appeal. Reviewer routes require explicit read/open/decision/takedown/appeal

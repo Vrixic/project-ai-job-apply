@@ -84,7 +84,7 @@ describeWithDatabase("Jobs queued contribution intake persistence", () => {
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });
     expect(result.stdout.trim()).toBe(
-      "Jobs migrations through 0017_job_contribution_processing applied and verified.",
+      "Jobs migrations through 0018_job_contribution_processing_delivery applied and verified.",
     );
     await store.ping();
   });
@@ -168,6 +168,21 @@ describeWithDatabase("Jobs queued contribution intake persistence", () => {
       eventCount: "1",
       jobCount: before[0]?.jobs,
       sourceCount: before[0]?.sources,
+    });
+
+    const normalizedAt = new Date(new Date(first.updatedAt).getTime() + 1_000);
+    await client`
+      INSERT INTO jobs.job_contribution_state_events (
+        id, contribution_id, state, reason_code, processing_policy_version, occurred_at
+      ) VALUES (
+        ${uuidv7()}, ${first.id}, 'normalized', 'normalization_complete',
+        'synthetic-processing-v1', ${normalizedAt}
+      )
+    `;
+    await expect(store.get(ownerA, first.id)).resolves.toMatchObject({
+      id: first.id,
+      state: "normalized",
+      updatedAt: normalizedAt.toISOString(),
     });
 
     await expect(

@@ -10,6 +10,7 @@ import {
 } from "./contribution-processing.js";
 import { createJobCatalogDatabase } from "./catalog.js";
 import { PostgresJobContributionStore } from "./contribution.js";
+import { PostgresContributionProcessingEventDeliveryStore } from "./contribution-processing-event-delivery.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -229,6 +230,88 @@ describeWithDatabase("durable contribution processing persistence", () => {
       ).reconciliationId,
     ).toBe(prepared.reconciliationId);
 
+    const delivery = new PostgresContributionProcessingEventDeliveryStore(client);
+    const deliveryAt = new Date("2026-09-01T13:01:00.000Z");
+    const [normalizedDelivery] = await delivery.claim({
+      workerId: "delivery:integration",
+      now: deliveryAt,
+      claimExpiresAt: new Date(deliveryAt.getTime() + 30_000),
+      maxAttempts: 3,
+      limit: 1,
+    });
+    expect(normalizedDelivery?.event.type).toBe("job.normalized.v1");
+    if (!normalizedDelivery) throw new Error("Expected normalized event delivery");
+    await delivery.acknowledge({
+      item: normalizedDelivery,
+      workerId: "delivery:integration",
+      now: deliveryAt,
+    });
+    await delivery.acknowledge({
+      item: normalizedDelivery,
+      workerId: "delivery:integration",
+      now: deliveryAt,
+    });
+
+    const [abandoned] = await delivery.claim({
+      workerId: "delivery:integration",
+      now: deliveryAt,
+      claimExpiresAt: new Date(deliveryAt.getTime() + 30_000),
+      maxAttempts: 3,
+      limit: 1,
+    });
+    if (!abandoned) throw new Error("Expected verified event delivery");
+    const recoveredAt = new Date("2026-09-01T13:02:00.000Z");
+    const [recovered] = await delivery.claim({
+      workerId: "delivery:recovery",
+      now: recoveredAt,
+      claimExpiresAt: new Date(recoveredAt.getTime() + 30_000),
+      maxAttempts: 3,
+      limit: 1,
+    });
+    expect(recovered).toMatchObject({ attempt: 2, event: { type: "job.verified.v1" } });
+    expect(recovered?.claimToken).not.toBe(abandoned.claimToken);
+    if (!recovered) throw new Error("Expected recovered event delivery");
+    await delivery.retry({
+      item: recovered,
+      workerId: "delivery:recovery",
+      now: recoveredAt,
+      retryAt: new Date(recoveredAt.getTime() + 1_000),
+      errorCode: "transport_unavailable",
+      terminal: false,
+    });
+    const [finalClaim] = await delivery.claim({
+      workerId: "delivery:final",
+      now: new Date(recoveredAt.getTime() + 1_000),
+      claimExpiresAt: new Date(recoveredAt.getTime() + 31_000),
+      maxAttempts: 3,
+      limit: 1,
+    });
+    expect(finalClaim?.attempt).toBe(3);
+    if (!finalClaim) throw new Error("Expected final event delivery");
+    await delivery.retry({
+      item: finalClaim,
+      workerId: "delivery:final",
+      now: new Date(recoveredAt.getTime() + 1_000),
+      retryAt: new Date(recoveredAt.getTime() + 1_000),
+      errorCode: "transport_unavailable",
+      terminal: true,
+    });
+    const deliveryStates = await client<{ state: string; attempt: number }[]>`
+      SELECT delivery.state, delivery.attempt
+      FROM jobs.job_contribution_processing_event_deliveries AS delivery
+      JOIN jobs.job_contribution_processing_outbox AS event ON event.id = delivery.event_id
+      WHERE event.contribution_id = ${contributionId}
+      ORDER BY delivery.created_at, delivery.event_id
+    `;
+    expect(deliveryStates).toEqual([
+      { state: "published", attempt: 1 },
+      { state: "dead", attempt: 3 },
+    ]);
+    await expect(
+      client`UPDATE jobs.job_contribution_processing_outbox SET data = data
+        WHERE contribution_id = ${contributionId}`,
+    ).rejects.toThrow("append-only");
+
     const withdrawalId = uuidv7();
     value = await processing.recordTrustDecision({
       contributionId,
@@ -261,6 +344,7 @@ describeWithDatabase("durable contribution processing persistence", () => {
       occurredAt: new Date("2026-09-01T13:05:00.000Z"),
     });
     expect(value.ownerState).toBe("removed");
+    await expect(intake.get(ownerId, contributionId)).resolves.toMatchObject({ state: "removed" });
     const [truth] = await client<
       { jobStatus: string; withdrawnAt: Date | null; contentHash: string }[]
     >`

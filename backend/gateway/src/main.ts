@@ -12,6 +12,7 @@ import {
   UnavailableDocumentStore,
 } from "@ai-job-apply/documents-service";
 import {
+  contributionCapabilityPolicySourceFromEnvironment,
   JobContributionService,
   JobModerationService,
   JobReportingService,
@@ -88,9 +89,14 @@ const ugcContributionConsents = new PostgresUgcContributionConsentStore(database
 const ugcContributionPolicyVersion = configuredUgcContributionPolicyVersion(
   process.env.UGC_CONTRIBUTION_POLICY_VERSION,
 );
+const contributionCapabilityPolicy = contributionCapabilityPolicySourceFromEnvironment(
+  process.env,
+  () => new Date(),
+);
 const jobContributions = new JobContributionService(
   new PostgresJobContributionStore(database.client),
   new ProfileJobContributionConsentVerifier(ugcContributionConsents, ugcContributionPolicyVersion),
+  contributionCapabilityPolicy ?? undefined,
 );
 const moderation = new JobModerationService(
   new PostgresJobModerationStore(database.client, deriveModerationCursorKey(config.DATABASE_URL)),
@@ -143,6 +149,7 @@ const app = await createGatewayApplication({
   catalog,
   jobReports,
   jobContributions,
+  ...(contributionCapabilityPolicy ? { contributionCapabilityPolicy } : {}),
   ugcContributionConsents,
   ...(ugcContributionPolicyVersion ? { ugcContributionPolicyVersion } : {}),
   moderation,

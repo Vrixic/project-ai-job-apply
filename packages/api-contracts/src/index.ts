@@ -49,6 +49,9 @@ export type PrivateSavedPageCaptureResolution =
 export type CreateJobReportRequest = components["schemas"]["CreateJobReportRequest"];
 export type CreateJobContributionRequest = components["schemas"]["CreateJobContributionRequest"];
 export type JobContribution = components["schemas"]["JobContribution"];
+export type ContributionCapabilityPolicy = components["schemas"]["ContributionCapabilityPolicy"];
+export type SignedContributionCapabilityPolicy =
+  components["schemas"]["SignedContributionCapabilityPolicy"];
 export type OwnerTrustCase = components["schemas"]["OwnerTrustCase"];
 export type ReviewerTrustCase = components["schemas"]["ReviewerTrustCase"];
 export type WithdrawTrustContributionRequest =

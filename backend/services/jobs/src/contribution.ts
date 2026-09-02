@@ -28,9 +28,25 @@ export interface CreateJobContributionCommand {
   input: JobContributionInput;
 }
 
+export const jobContributionStates = [
+  "queued",
+  "normalized",
+  "awaiting_independent_verification",
+  "independently_verified",
+  "awaiting_trust",
+  "rejected",
+  "ready_for_publication",
+  "published",
+  "consent_invalid",
+  "withdrawn",
+  "taken_down",
+  "removed",
+] as const;
+export type JobContributionState = (typeof jobContributionStates)[number];
+
 export interface JobContributionStatus {
   id: string;
-  state: "queued";
+  state: JobContributionState;
   submittedAt: string;
   updatedAt: string;
 }

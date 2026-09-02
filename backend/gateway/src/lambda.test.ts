@@ -83,6 +83,27 @@ function invoke(
 }
 
 describe("API Gateway Lambda boundary", () => {
+  it("keeps the public contribution capability policy route dark by default", async () => {
+    const principalBridge = createInvocationPrincipalBridge();
+    const inject = vi.fn();
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge,
+    });
+    const input = routedEvent("GET", "/v1/extension/contribution-capability-policy", {
+      headers: {},
+    });
+    delete input.requestContext.authorizer;
+
+    const response = await invoke(handler, input);
+
+    expect(response.statusCode).toBe(404);
+    expect(response.headers?.["cache-control"]).toBe("no-store");
+    expect(inject).not.toHaveBeenCalled();
+  });
+
   it("allows the exact public health route without authorizer context", async () => {
     const principalBridge = createInvocationPrincipalBridge();
     const inject = vi.fn().mockResolvedValue({

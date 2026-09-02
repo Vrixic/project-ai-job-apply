@@ -143,7 +143,7 @@ describeWithDatabase("Jobs contribution candidate rights ownership", () => {
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });
     expect(first.stdout.trim()).toBe(
-      "Jobs migrations through 0017_job_contribution_processing applied and verified.",
+      "Jobs migrations through 0018_job_contribution_processing_delivery applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(first.stdout.trim());
   });
@@ -157,6 +157,26 @@ describeWithDatabase("Jobs contribution candidate rights ownership", () => {
     const otherCommand = contributionCommand(otherOwner, `other-${uuidv7()}`);
     const ownerContribution = await store.create(ownerCommand);
     const otherContribution = await store.create(otherCommand);
+    const processingEventId = uuidv7();
+    const processingEventAt = new Date();
+    await client`
+      INSERT INTO jobs.job_contribution_processing_outbox (
+        id, contribution_id, event_type, subject, data, created_at
+      ) VALUES (
+        ${processingEventId}, ${ownerContribution.id}, 'job.normalized.v1',
+        ${ownerContribution.id},
+        ${client.json({ contributionId: ownerContribution.id, normalizationId: uuidv7() })},
+        ${processingEventAt}
+      )
+    `;
+    await client`
+      INSERT INTO jobs.job_contribution_processing_event_deliveries (
+        event_id, state, attempt, available_at, created_at, updated_at
+      ) VALUES (
+        ${processingEventId}, 'pending', 0, ${processingEventAt},
+        ${processingEventAt}, ${processingEventAt}
+      )
+    `;
 
     const [catalogBefore] = await client<
       {
@@ -277,6 +297,10 @@ describeWithDatabase("Jobs contribution candidate rights ownership", () => {
           WHERE contribution_id = ${ownerContribution.id}`,
       ).rejects.toThrow("candidate deletion authority");
       await expect(
+        client`DELETE FROM jobs.job_contribution_processing_event_deliveries
+          WHERE event_id = ${processingEventId}`,
+      ).rejects.toThrow("candidate deletion authority");
+      await expect(
         client`SELECT jobs.delete_candidate_data(${owner}, ${uuidv7()})`,
       ).rejects.toThrow("candidate deletion is not authorized");
       await expect(
@@ -291,7 +315,8 @@ describeWithDatabase("Jobs contribution candidate rights ownership", () => {
         reportsDeleted: 0,
         contributionsDeleted: 1,
         contributionOutboxDeleted: 1,
-        processingOutboxDeleted: 0,
+        processingEventDeliveriesDeleted: 1,
+        processingOutboxDeleted: 1,
         processingQueueDeleted: 1,
         reconciliationsDeleted: 0,
         stateEventsDeleted: 0,
@@ -307,6 +332,7 @@ describeWithDatabase("Jobs contribution candidate rights ownership", () => {
         reportsDeleted: 0,
         contributionsDeleted: 0,
         contributionOutboxDeleted: 0,
+        processingEventDeliveriesDeleted: 0,
         processingOutboxDeleted: 0,
         processingQueueDeleted: 0,
         reconciliationsDeleted: 0,
@@ -317,7 +343,12 @@ describeWithDatabase("Jobs contribution candidate rights ownership", () => {
       });
 
       const [remaining] = await client<
-        { otherContributions: number; otherOutbox: number; ownerContributions: number }[]
+        {
+          otherContributions: number;
+          otherOutbox: number;
+          ownerContributions: number;
+          ownerDelivery: number;
+        }[]
       >`
         SELECT
           count(*) FILTER (WHERE owner_user_id = ${owner})::int AS "ownerContributions",
@@ -325,13 +356,18 @@ describeWithDatabase("Jobs contribution candidate rights ownership", () => {
           (
             SELECT count(*)::int FROM jobs.job_contribution_outbox
             WHERE contribution_id = ${otherContribution.id}
-          ) AS "otherOutbox"
+          ) AS "otherOutbox",
+          (
+            SELECT count(*)::int FROM jobs.job_contribution_processing_event_deliveries
+            WHERE event_id = ${processingEventId}
+          ) AS "ownerDelivery"
         FROM jobs.job_contributions
       `;
       expect(remaining).toEqual({
         ownerContributions: 0,
         otherContributions: 1,
         otherOutbox: 1,
+        ownerDelivery: 0,
       });
 
       const [catalogAfter] = await client<(typeof catalogBefore)[]>`

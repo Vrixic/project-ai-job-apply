@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { JobContributionInput } from "./contribution.js";
+import type { JobContributionInput, JobContributionState } from "./contribution.js";
 import {
   contributionCapabilityPolicyDigestInput,
   evaluateContributionCapability,
@@ -20,19 +20,7 @@ function createProcessingDigest(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-export type ContributionOwnerState =
-  | "queued"
-  | "normalized"
-  | "awaiting_independent_verification"
-  | "independently_verified"
-  | "awaiting_trust"
-  | "rejected"
-  | "ready_for_publication"
-  | "published"
-  | "consent_invalid"
-  | "withdrawn"
-  | "taken_down"
-  | "removed";
+export type ContributionOwnerState = JobContributionState;
 
 export type ContributionOwnerReasonCode =
   | "normalization_complete"

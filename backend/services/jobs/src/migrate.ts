@@ -26,6 +26,7 @@ const migrationVersions = [
   "0015_source_revalidation_lifecycle",
   "0016_job_contribution_candidate_rights",
   "0017_job_contribution_processing",
+  "0018_job_contribution_processing_delivery",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -224,6 +225,7 @@ try {
           + (to_regclass('jobs.job_contribution_state_events') IS NOT NULL)::int
           + (to_regclass('jobs.job_contribution_reconciliations') IS NOT NULL)::int
           + (to_regclass('jobs.job_contribution_processing_outbox') IS NOT NULL)::int
+          + (to_regclass('jobs.job_contribution_processing_event_deliveries') IS NOT NULL)::int
         )::int AS "tableCount",
         (
           SELECT count(*)::int FROM jobs.schema_migrations
@@ -911,7 +913,8 @@ try {
               'job_contribution_trust_decisions',
               'job_contribution_state_events',
               'job_contribution_reconciliations',
-              'job_contribution_processing_outbox'
+              'job_contribution_processing_outbox',
+              'job_contribution_processing_event_deliveries'
             ])
         ) AS "processingTableCount"
         , (
@@ -924,7 +927,8 @@ try {
               'jobs.job_contribution_trust_decisions'::regclass,
               'jobs.job_contribution_state_events'::regclass,
               'jobs.job_contribution_reconciliations'::regclass,
-              'jobs.job_contribution_processing_outbox'::regclass
+              'jobs.job_contribution_processing_outbox'::regclass,
+              'jobs.job_contribution_processing_event_deliveries'::regclass
             ])
         ) AS "processingTriggerCount"
         , (
@@ -934,12 +938,13 @@ try {
             AND procedure.proname = ANY(ARRAY[
               'guard_job_contribution_processing_append_only',
               'guard_job_contribution_processing_queue',
-              'guard_job_contribution_reconciliation'
+              'guard_job_contribution_reconciliation',
+              'guard_job_contribution_processing_event_delivery'
             ])
         ) AS "processingTriggerFunctionCount"
     `;
     if (
-      verification?.tableCount !== 25 ||
+      verification?.tableCount !== 26 ||
       verification.migrationCount !== migrationVersions.length ||
       verification.identityIndexCount !== 3 ||
       verification.sourceWithdrawalColumnCount !== 1 ||
@@ -999,9 +1004,9 @@ try {
       JSON.stringify(verification.revalidationTriggerFunctionBodies) !==
         JSON.stringify(expectedRevalidationTriggerBodies) ||
       verification.revalidationForeignKeyCount !== 4 ||
-      verification.processingTableCount !== 7 ||
-      verification.processingTriggerCount !== 7 ||
-      verification.processingTriggerFunctionCount !== 3
+      verification.processingTableCount !== 8 ||
+      verification.processingTriggerCount !== 8 ||
+      verification.processingTriggerFunctionCount !== 4
     ) {
       throw new Error(
         `Jobs database migration verification failed: ${JSON.stringify({

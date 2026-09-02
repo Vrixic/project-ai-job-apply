@@ -46,6 +46,7 @@ import type {
   SavedJob,
   SavedJobPage,
   SavedJobSearchRequest,
+  SignedContributionCapabilityPolicy,
   TakeDownTrustCaseRequest,
   UgcContributionConsentGrant,
   UpdateProfileFactRequest,
@@ -70,6 +71,8 @@ import {
   ResumeDocumentLimitError,
 } from "@ai-job-apply/documents-service";
 import {
+  type ContributionCapabilityPolicySource,
+  ContributionCapabilityPolicySourceUnavailableError,
   InvalidJobSearchError,
   InvalidModerationCursorError,
   JobAlreadyReportedError,
@@ -168,6 +171,7 @@ const PROFILE_STORE = Symbol("PROFILE_STORE");
 const JOB_CATALOG = Symbol("JOB_CATALOG");
 const JOB_REPORTS = Symbol("JOB_REPORTS");
 const JOB_CONTRIBUTIONS = Symbol("JOB_CONTRIBUTIONS");
+const CONTRIBUTION_CAPABILITY_POLICY = Symbol("CONTRIBUTION_CAPABILITY_POLICY");
 const UGC_CONTRIBUTION_CONSENTS = Symbol("UGC_CONTRIBUTION_CONSENTS");
 const UGC_CONTRIBUTION_POLICY_VERSION = Symbol("UGC_CONTRIBUTION_POLICY_VERSION");
 const JOB_MODERATION = Symbol("JOB_MODERATION");
@@ -249,6 +253,7 @@ const SAFE_ROUTE_TEMPLATES = new Set([
   "/v1/jobs/:jobId/reports",
   "/v1/jobs/contributions",
   "/v1/jobs/contributions/:contributionId",
+  "/v1/extension/contribution-capability-policy",
   "/v1/trust/contributions/:contributionId",
   "/v1/trust/contributions/:contributionId/withdraw",
   "/v1/trust/contributions/:contributionId/appeals",
@@ -508,6 +513,11 @@ class ProblemDetailsFilter implements ExceptionFilter {
       code = "job_contribution_unavailable";
       title = "Job contribution unavailable";
       detail = "Job contribution intake is temporarily unavailable";
+    } else if (exception instanceof ContributionCapabilityPolicySourceUnavailableError) {
+      status = HttpStatus.SERVICE_UNAVAILABLE;
+      code = "contribution_capability_policy_unavailable";
+      title = "Contribution capability policy unavailable";
+      detail = "The contribution capability policy is temporarily unavailable";
     } else if (exception instanceof UgcContributionConsentConflictError) {
       status = HttpStatus.CONFLICT;
       code = "ugc_contribution_consent_conflict";
@@ -729,6 +739,46 @@ class HealthController {
   }
 }
 
+const validateSignedContributionCapabilityPolicy = compileComponentValidator(
+  "SignedContributionCapabilityPolicy",
+);
+const MAXIMUM_PUBLIC_CONTRIBUTION_CAPABILITY_POLICY_BYTES = 32 * 1024;
+
+@Controller("/v1/extension")
+@UseFilters(ProblemDetailsFilter)
+class ExtensionContributionCapabilityPolicyController {
+  constructor(
+    @Inject(CONTRIBUTION_CAPABILITY_POLICY)
+    private readonly source: ContributionCapabilityPolicySource,
+  ) {}
+
+  @Get("/contribution-capability-policy")
+  @Header("cache-control", "no-store")
+  async getPolicy(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<SignedContributionCapabilityPolicy> {
+    if (
+      Object.keys((request.query ?? {}) as Record<string, unknown>).length > 0 ||
+      request.body !== undefined ||
+      (request.headers["content-length"] !== undefined &&
+        request.headers["content-length"] !== "0") ||
+      request.headers["transfer-encoding"] !== undefined
+    ) {
+      throw new HttpException("The policy request must not contain input", HttpStatus.BAD_REQUEST);
+    }
+    const envelope = await this.source.readPublicEnvelope();
+    if (
+      !envelope ||
+      !validateSignedContributionCapabilityPolicy(envelope) ||
+      Buffer.byteLength(JSON.stringify(envelope), "utf8") >
+        MAXIMUM_PUBLIC_CONTRIBUTION_CAPABILITY_POLICY_BYTES
+    ) {
+      throw new ContributionCapabilityPolicySourceUnavailableError();
+    }
+    return structuredClone(envelope) as SignedContributionCapabilityPolicy;
+  }
+}
+
 const validatePreferences = compileComponentValidator("PutJobPreferencesRequest");
 const validateCreateCandidateDataExport = compileComponentValidator(
   "CreateCandidateDataExportRequest",
@@ -947,7 +997,7 @@ function exactJobContribution(value: unknown): value is JobContribution {
     UUID_V7_PATTERN.test(contribution.id) &&
     exactCanonicalDateTime(contribution.submittedAt) &&
     exactCanonicalDateTime(contribution.updatedAt) &&
-    contribution.submittedAt === contribution.updatedAt
+    Date.parse(contribution.updatedAt) >= Date.parse(contribution.submittedAt)
   );
 }
 
@@ -2106,6 +2156,7 @@ export interface AppModuleOptions {
   catalog: JobCatalogReader;
   jobReports: JobReports;
   jobContributions: JobContributions;
+  contributionCapabilityPolicy?: ContributionCapabilityPolicySource;
   ugcContributionConsents: UgcContributionConsentStore;
   ugcContributionPolicyVersion?: string;
   moderation: JobModeration;
@@ -2135,6 +2186,9 @@ export class AppModule {
         OwnerTrustController,
         AdminModerationController,
         AdminTrustController,
+        ...(options.contributionCapabilityPolicy
+          ? [ExtensionContributionCapabilityPolicyController]
+          : []),
       ],
       providers: [
         RequestIdentity,
@@ -2142,6 +2196,10 @@ export class AppModule {
         { provide: JOB_CATALOG, useValue: options.catalog },
         { provide: JOB_REPORTS, useValue: options.jobReports },
         { provide: JOB_CONTRIBUTIONS, useValue: options.jobContributions },
+        {
+          provide: CONTRIBUTION_CAPABILITY_POLICY,
+          useValue: options.contributionCapabilityPolicy ?? null,
+        },
         { provide: UGC_CONTRIBUTION_CONSENTS, useValue: options.ugcContributionConsents },
         {
           provide: UGC_CONTRIBUTION_POLICY_VERSION,

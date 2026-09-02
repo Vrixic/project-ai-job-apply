@@ -761,6 +761,32 @@
         }
       }
     },
+    "/extension/contribution-capability-policy": {
+      "get": {
+        "operationId": "getExtensionContributionCapabilityPolicy",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The currently verified, signed extension contribution capability policy",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedContributionCapabilityPolicy"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
     "/jobs/contributions": {
       "post": {
         "operationId": "createJobContribution",
@@ -3152,9 +3178,115 @@
             "type": "string",
             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
           },
-          "state": { "const": "queued" },
+          "state": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "normalized",
+              "awaiting_independent_verification",
+              "independently_verified",
+              "awaiting_trust",
+              "rejected",
+              "ready_for_publication",
+              "published",
+              "consent_invalid",
+              "withdrawn",
+              "taken_down",
+              "removed"
+            ]
+          },
           "submittedAt": { "type": "string", "format": "date-time" },
           "updatedAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      },
+      "ContributionCapabilityPolicy": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "revision",
+          "issuedAt",
+          "expiresAt",
+          "intakeEnabled",
+          "processingEnabled",
+          "clients",
+          "providers",
+          "variants",
+          "domains"
+        ],
+        "properties": {
+          "schemaVersion": { "const": 1 },
+          "revision": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9][a-z0-9._-]{2,99}$"
+          },
+          "issuedAt": { "type": "string", "format": "date-time" },
+          "expiresAt": { "type": "string", "format": "date-time" },
+          "intakeEnabled": { "type": "boolean" },
+          "processingEnabled": { "type": "boolean" },
+          "clients": {
+            "type": "object",
+            "minProperties": 1,
+            "maxProperties": 100,
+            "propertyNames": {
+              "pattern": "^(?:0|[1-9][0-9]{0,5})\\.(?:0|[1-9][0-9]{0,5})\\.(?:0|[1-9][0-9]{0,5})(?:-[0-9A-Za-z][0-9A-Za-z.-]{0,15})?$"
+            },
+            "additionalProperties": { "type": "boolean" }
+          },
+          "providers": {
+            "type": "object",
+            "required": ["ashby", "greenhouse", "lever"],
+            "properties": {
+              "ashby": { "type": "boolean" },
+              "greenhouse": { "type": "boolean" },
+              "lever": { "type": "boolean" }
+            },
+            "additionalProperties": false
+          },
+          "variants": {
+            "type": "object",
+            "required": ["ashby-job-board-v1", "greenhouse-board-v1", "lever-posting-v1"],
+            "properties": {
+              "ashby-job-board-v1": { "type": "boolean" },
+              "greenhouse-board-v1": { "type": "boolean" },
+              "lever-posting-v1": { "type": "boolean" }
+            },
+            "additionalProperties": false
+          },
+          "domains": {
+            "type": "object",
+            "minProperties": 1,
+            "properties": {
+              "boards.greenhouse.io": { "type": "boolean" },
+              "job-boards.greenhouse.io": { "type": "boolean" },
+              "jobs.lever.co": { "type": "boolean" },
+              "jobs.eu.lever.co": { "type": "boolean" },
+              "jobs.ashbyhq.com": { "type": "boolean" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "SignedContributionCapabilityPolicy": {
+        "type": "object",
+        "required": ["keyId", "payload", "signature"],
+        "properties": {
+          "keyId": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 100,
+            "pattern": "^[a-z0-9][a-z0-9._-]{2,99}$"
+          },
+          "payload": { "$ref": "#/components/schemas/ContributionCapabilityPolicy" },
+          "signature": {
+            "type": "string",
+            "minLength": 86,
+            "maxLength": 86,
+            "pattern": "^[A-Za-z0-9_-]{86}$"
+          }
         },
         "additionalProperties": false
       },

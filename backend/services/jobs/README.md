@@ -21,7 +21,9 @@ source detector identity, content hash, and a Profile-owned consent reference. J
 digest over the final preview payload before persisting it. Creation and the identifier-only
 `job.contributed.v1` outbox record are atomic, semantic retries replay one acknowledgement, changed
 payloads conflict, and status reads require the same owner plus the dedicated `jobs:contribute`
-scope. The only implemented state is `queued`. These tables have no mutation path or foreign key
+scope. Owner status projects the latest append-only processing state, with the immutable intake
+`queued` state as its fallback; it exposes no internal reason, evidence, or processing identity.
+These tables have no mutation path or foreign key
 into provider source or canonical job truth, retain no DOM/HTML/raw page snapshot, and cannot
 activate, refresh, extend, or overwrite catalog provenance.
 
@@ -29,6 +31,15 @@ The contribution service and extension share one pure canonicalization helper fr
 Before persistence, the gateway adapter verifies the exact owner, policy, preview digest, current
 nonexpired Profile grant, and exact server-issued grant timestamp. Missing Profile wiring remains
 fail closed.
+
+`src/contribution-capability-policy-source.ts` is the single concrete signed-policy source for
+intake, processing, and the public extension policy projection. It requires an exact signed
+envelope plus an explicit pinned Ed25519 public-key map, validates freshness and bounded shape,
+and rejects unknown keys, revision reuse, same-time forks, and process-local rollback. There is no
+embedded signing key, live policy, or activation default. Local composition enables both intake
+and the public route only when `JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON` and
+`JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON` are both present and valid; partial or malformed
+configuration fails closed.
 
 Migration `0015_source_revalidation_lifecycle` adds a source-scoped durable revalidation queue and
 an append-only verification-evidence ledger for the D2 Greenhouse, Lever, and Ashby page variants.

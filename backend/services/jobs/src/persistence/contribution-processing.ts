@@ -282,6 +282,45 @@ async function insertState(
   `;
 }
 
+async function insertProcessingEvent(
+  client: postgres.Sql | postgres.TransactionSql,
+  input: {
+    contributionId: string;
+    eventType: "job.normalized.v1" | "job.verified.v1";
+    data: postgres.JSONValue;
+    occurredAt: Date;
+  },
+): Promise<void> {
+  const proposedEventId = uuidv7();
+  const [created] = await client<{ id: string }[]>`
+    INSERT INTO jobs.job_contribution_processing_outbox (
+      id, contribution_id, event_type, subject, data, created_at
+    ) VALUES (
+      ${proposedEventId}, ${input.contributionId}, ${input.eventType}, ${input.contributionId},
+      ${client.json(input.data)}, ${input.occurredAt}
+    ) ON CONFLICT (contribution_id, event_type) DO NOTHING
+    RETURNING id
+  `;
+  let eventId = created?.id;
+  if (!eventId) {
+    const [existing] = await client<{ id: string; exact: boolean }[]>`
+      SELECT id, subject = ${input.contributionId}
+        AND data = ${client.json(input.data)} AS exact
+      FROM jobs.job_contribution_processing_outbox
+      WHERE contribution_id = ${input.contributionId} AND event_type = ${input.eventType}
+    `;
+    if (!existing?.exact) throw new Error("Contribution processing event replay changed");
+    eventId = existing.id;
+  }
+  await client`
+    INSERT INTO jobs.job_contribution_processing_event_deliveries (
+      event_id, state, attempt, available_at, created_at, updated_at
+    ) VALUES (
+      ${eventId}, 'pending', 0, ${input.occurredAt}, ${input.occurredAt}, ${input.occurredAt}
+    ) ON CONFLICT (event_id) DO NOTHING
+  `;
+}
+
 export class PostgresContributionProcessingStore implements ContributionProcessingStore {
   constructor(private readonly client: postgres.Sql) {}
 
@@ -343,15 +382,12 @@ export class PostgresContributionProcessingStore implements ContributionProcessi
             ${input.processingPolicyVersion}, ${input.occurredAt}
           )
         `;
-        await transaction`
-          INSERT INTO jobs.job_contribution_processing_outbox (
-            id, contribution_id, event_type, subject, data, created_at
-          ) VALUES (
-            ${uuidv7()}, ${input.contributionId}, 'job.normalized.v1', ${input.contributionId},
-            ${transaction.json({ contributionId: input.contributionId, normalizationId })},
-            ${input.occurredAt}
-          )
-        `;
+        await insertProcessingEvent(transaction, {
+          contributionId: input.contributionId,
+          eventType: "job.normalized.v1",
+          data: { contributionId: input.contributionId, normalizationId },
+          occurredAt: input.occurredAt,
+        });
       }
       await insertState(transaction, {
         contributionId: input.contributionId,
@@ -581,20 +617,16 @@ export class PostgresContributionProcessingStore implements ContributionProcessi
         processingPolicyVersion: input.command.processingPolicyVersion,
         occurredAt: input.occurredAt,
       });
-      await transaction`
-        INSERT INTO jobs.job_contribution_processing_outbox (
-          id, contribution_id, event_type, subject, data, created_at
-        ) VALUES (
-          ${uuidv7()}, ${input.command.contributionId}, 'job.verified.v1',
-          ${input.command.contributionId},
-          ${transaction.json({
-            jobId: input.result.jobId,
-            sourceId: input.result.sourceId,
-            verificationId: input.result.verificationId,
-          })},
-          ${input.occurredAt}
-        ) ON CONFLICT (contribution_id, event_type) DO NOTHING
-      `;
+      await insertProcessingEvent(transaction, {
+        contributionId: input.command.contributionId,
+        eventType: "job.verified.v1",
+        data: {
+          jobId: input.result.jobId,
+          sourceId: input.result.sourceId,
+          verificationId: input.result.verificationId,
+        },
+        occurredAt: input.occurredAt,
+      });
       const value = await loadWith(transaction, input.command.contributionId);
       if (!value) throw new Error("Contribution disappeared during publication");
       return value;

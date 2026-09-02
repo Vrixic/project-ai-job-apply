@@ -64,10 +64,10 @@ describeWithDatabase("dedicated public job reader boundary", () => {
     const first = await runMigrationVerifier();
     const replay = await runMigrationVerifier();
     expect(first.stdout.trim()).toBe(
-      "Jobs migrations through 0017_job_contribution_processing applied and verified.",
+      "Jobs migrations through 0018_job_contribution_processing_delivery applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(
-      "Jobs migrations through 0017_job_contribution_processing applied and verified.",
+      "Jobs migrations through 0018_job_contribution_processing_delivery applied and verified.",
     );
 
     const [databaseClock] = await client<Array<{ now: Date }>>`
@@ -402,7 +402,7 @@ describeWithDatabase("dedicated public job reader boundary", () => {
     await client.unsafe(`ALTER ROLE ${readerRole} PASSWORD 'synthetic-password-drift'`);
     await expect(runMigrationVerifier()).resolves.toMatchObject({
       stdout: expect.stringContaining(
-        "0017_job_contribution_processing applied and verified",
+        "0018_job_contribution_processing_delivery applied and verified",
       ),
     });
     const [afterPasswordRepair] = await client<{ passwordIsNull: boolean }[]>`
@@ -421,7 +421,7 @@ describeWithDatabase("dedicated public job reader boundary", () => {
     }
     await expect(runMigrationVerifier()).resolves.toMatchObject({
       stdout: expect.stringContaining(
-        "0017_job_contribution_processing applied and verified",
+        "0018_job_contribution_processing_delivery applied and verified",
       ),
     });
 
@@ -435,7 +435,7 @@ describeWithDatabase("dedicated public job reader boundary", () => {
     }
     await expect(runMigrationVerifier()).resolves.toMatchObject({
       stdout: expect.stringContaining(
-        "0017_job_contribution_processing applied and verified",
+        "0018_job_contribution_processing_delivery applied and verified",
       ),
     });
 
@@ -463,7 +463,7 @@ describeWithDatabase("dedicated public job reader boundary", () => {
     }
     await expect(runMigrationVerifier()).resolves.toMatchObject({
       stdout: expect.stringContaining(
-        "0017_job_contribution_processing applied and verified",
+        "0018_job_contribution_processing_delivery applied and verified",
       ),
     });
   });
@@ -488,7 +488,7 @@ describeWithDatabase("dedicated public job reader boundary", () => {
     }
     await expect(runMigrationVerifier()).resolves.toMatchObject({
       stdout: expect.stringContaining(
-        "0017_job_contribution_processing applied and verified",
+        "0018_job_contribution_processing_delivery applied and verified",
       ),
     });
   });
