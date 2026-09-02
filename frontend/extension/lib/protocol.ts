@@ -2,11 +2,13 @@ import { extensionConfiguration } from "./config";
 import { pkceChallenge, randomBase64Url, validateAuthorizationCallback } from "./pkce";
 
 const SESSION_KEY = "auth0Session";
-const REQUIRED_SCOPE = "openid profile email offline_access profile:read profile:write";
+const REQUIRED_SCOPE =
+  "openid profile email offline_access profile:read profile:write jobs:read jobs:write jobs:contribute";
 
 interface StoredSession {
   accessToken: string;
   expiresAt: number;
+  identityFence: string;
   refreshToken?: string;
 }
 
@@ -50,13 +52,16 @@ async function tokenRequest(parameters: URLSearchParams): Promise<StoredSession>
   const grantedScopes = typeof body.scope === "string" ? body.scope.split(" ") : undefined;
   if (
     grantedScopes &&
-    !["profile:read", "profile:write"].every((scope) => grantedScopes.includes(scope))
+    !["profile:read", "profile:write", "jobs:read", "jobs:write", "jobs:contribute"].every(
+      (scope) => grantedScopes.includes(scope),
+    )
   ) {
     throw new Error("required_scope_missing");
   }
   return {
     accessToken: body.access_token,
     expiresAt: Date.now() + body.expires_in * 1_000,
+    identityFence: randomBase64Url(32),
     ...(typeof body.refresh_token === "string" && body.refresh_token.length > 0
       ? { refreshToken: body.refresh_token }
       : {}),
@@ -132,8 +137,28 @@ export async function refresh(): Promise<void> {
   );
   await writeSession({
     ...replacement,
+    identityFence: current.identityFence,
     refreshToken: replacement.refreshToken ?? current.refreshToken,
   });
+}
+
+export async function authenticatedApiSession(): Promise<{
+  accessToken: string;
+  identityFence: string;
+}> {
+  configured();
+  let current = await readSession();
+  if (!current) {
+    throw new Error("authentication_required");
+  }
+  if (current.expiresAt <= Date.now() + 30_000) {
+    await refresh();
+    current = await readSession();
+  }
+  if (!current || current.expiresAt <= Date.now()) {
+    throw new Error("authentication_required");
+  }
+  return { accessToken: current.accessToken, identityFence: current.identityFence };
 }
 
 export async function logout(): Promise<void> {
@@ -167,15 +192,22 @@ export async function logout(): Promise<void> {
 }
 
 export async function authenticationStatus(): Promise<{
+  apiConfigured: boolean;
   authenticated: boolean;
   configured: boolean;
   refreshAvailable: boolean;
 }> {
   if (!extensionConfiguration.configured) {
-    return { authenticated: false, configured: false, refreshAvailable: false };
+    return {
+      apiConfigured: extensionConfiguration.apiConfigured,
+      authenticated: false,
+      configured: false,
+      refreshAvailable: false,
+    };
   }
   const session = await readSession();
   return {
+    apiConfigured: extensionConfiguration.apiConfigured,
     authenticated: Boolean(session && session.expiresAt > Date.now()),
     configured: true,
     refreshAvailable: Boolean(session?.refreshToken),

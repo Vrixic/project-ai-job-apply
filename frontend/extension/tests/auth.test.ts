@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extensionPublicConfiguration } from "../lib/config";
+import { extensionPublicConfiguration, safeApiOrigin } from "../lib/config";
 import { pkceChallenge, validateAuthorizationCallback } from "../lib/pkce";
 
 describe("extension public-client authentication", () => {
@@ -56,5 +56,9 @@ describe("extension public-client authentication", () => {
         domain: "tenant.example.test",
       }).configured,
     ).toBe(true);
+    expect(safeApiOrigin("https://api.example.test")).toBe("https://api.example.test");
+    expect(safeApiOrigin("http://api.example.test")).toBeUndefined();
+    expect(safeApiOrigin("https://api.example.test/path")).toBeUndefined();
+    expect(safeApiOrigin("https://user:secret@api.example.test")).toBeUndefined();
   });
 });

@@ -1,10 +1,11 @@
-import { readFile, rm, mkdir, writeFile, copyFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build, context } from "esbuild";
 
 const extensionRoot = dirname(fileURLToPath(import.meta.url));
 const outputDirectory = join(extensionRoot, "dist");
+const packageMetadata = JSON.parse(await readFile(join(extensionRoot, "package.json"), "utf8"));
 
 async function localEnvironment() {
   let source = "";
@@ -43,6 +44,27 @@ const audience = (
   fileEnvironment.EXTENSION_AUTH0_AUDIENCE ??
   "ai-job-apply-api"
 ).trim();
+const apiOriginValue = (
+  process.env.EXTENSION_API_ORIGIN ??
+  fileEnvironment.EXTENSION_API_ORIGIN ??
+  ""
+).trim();
+let apiOrigin = "";
+try {
+  const parsed = new URL(apiOriginValue);
+  if (
+    parsed.protocol === "https:" &&
+    !parsed.username &&
+    !parsed.password &&
+    parsed.pathname === "/" &&
+    !parsed.search &&
+    !parsed.hash
+  ) {
+    apiOrigin = parsed.origin;
+  }
+} catch {
+  apiOrigin = "";
+}
 const configured =
   domain.length > 0 &&
   !domain.includes("://") &&
@@ -60,6 +82,7 @@ const buildOptions = {
     __AUTH0_AUDIENCE__: JSON.stringify(configured ? audience : ""),
     __AUTH0_CLIENT_ID__: JSON.stringify(configured ? clientId : ""),
     __AUTH0_DOMAIN__: JSON.stringify(configured ? domain : ""),
+    __EXTENSION_API_ORIGIN__: JSON.stringify(apiOrigin),
   },
   entryPoints: {
     background: join(extensionRoot, "entrypoints", "background.ts"),
@@ -75,34 +98,51 @@ const buildOptions = {
 
 const manifest = {
   manifest_version: 3,
-  name: "ApplyDash Identity Conformance",
-  version: "0.1.0",
-  description: "Development-only Auth0 public-client conformance shell.",
-  permissions: ["identity", "storage"],
-  ...(configured ? { host_permissions: [`https://${domain}/*`] } : {}),
+  name: "ApplyDash Job Capture (Default Dark)",
+  version: packageMetadata.version,
+  description: "Synthetic-only current-tab job capture and explicit contribution preview.",
+  permissions: ["activeTab", "alarms", "identity", "scripting", "sidePanel", "storage"],
+  ...(configured || apiOrigin
+    ? {
+        host_permissions: [
+          ...(configured ? [`https://${domain}/*`] : []),
+          ...(apiOrigin ? [`${apiOrigin}/*`] : []),
+        ],
+      }
+    : {}),
   background: {
     service_worker: "background.js",
     type: "module",
   },
   action: {
     default_popup: "popup.html",
-    default_title: "ApplyDash identity conformance",
+    default_title: "Save or contribute this job",
   },
+  content_security_policy: {
+    extension_pages: "script-src 'self'; object-src 'self'",
+  },
+  side_panel: { default_path: "sidepanel.html" },
 };
 
 await writeFile(join(outputDirectory, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 await copyFile(join(extensionRoot, "static", "popup.html"), join(outputDirectory, "popup.html"));
 await copyFile(join(extensionRoot, "static", "popup.css"), join(outputDirectory, "popup.css"));
+await copyFile(
+  join(extensionRoot, "static", "popup.html"),
+  join(outputDirectory, "sidepanel.html"),
+);
 
 if (process.argv.includes("--watch")) {
   const buildContext = await context(buildOptions);
   await buildContext.watch();
-  console.log("Watching the extension authentication shell.");
+  console.log("Watching the default-dark extension product shell.");
 } else {
   await build(buildOptions);
   console.log(
     configured
-      ? "Built the configured extension authentication shell."
+      ? apiOrigin
+        ? "Built the configured default-dark extension shell."
+        : "Built identity with API delivery disabled; configure an exact API origin for testing."
       : "Built a fail-closed shell; add public Auth0 settings to .env.local for conformance.",
   );
 }

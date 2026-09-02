@@ -1,68 +1,203 @@
 :root {
   color-scheme: light;
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-synthesis: none;
 }
 
+* {
+  box-sizing: border-box;
+}
 body {
-  background: #f7f7f4;
-  color: #191b1f;
+  background: #f1f4ee;
+  color: #17211b;
   margin: 0;
-  min-width: 320px;
+  min-width: 360px;
 }
-
 main {
-  padding: 20px;
+  display: grid;
+  gap: 14px;
+  padding: 18px;
 }
-
+header {
+  padding: 4px 2px 2px;
+}
 .eyebrow {
-  color: #59616e;
+  color: #49604f;
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  margin: 0 0 8px;
+  font-weight: 750;
+  letter-spacing: 0.13em;
+  margin: 0 0 6px;
   text-transform: uppercase;
 }
-
 h1 {
-  font-size: 23px;
-  margin: 0 0 18px;
+  font-family: Georgia, serif;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0;
 }
-
-.status {
-  font-size: 17px;
-  font-weight: 700;
-  margin-bottom: 6px;
+h2 {
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  margin: 0;
 }
-
+.lede,
 .detail,
 .privacy {
-  color: #505865;
+  color: #526057;
   font-size: 13px;
-  line-height: 1.45;
+  line-height: 1.48;
 }
-
+.lede {
+  margin: 8px 0 0;
+}
+.detail {
+  margin: 10px 0 0;
+}
+.card {
+  background: #fff;
+  border: 1px solid #dce4dc;
+  border-radius: 14px;
+  box-shadow: 0 8px 30px rgb(30 51 36 / 6%);
+  padding: 14px;
+}
+.section-heading {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+.status {
+  background: #edf3ed;
+  border-radius: 999px;
+  color: #385542;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 8px;
+}
 .actions {
   display: grid;
   gap: 8px;
-  margin: 18px 0;
+  margin-top: 12px;
 }
-
+.actions.compact {
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+}
 button {
-  background: #173f7a;
-  border: 0;
-  border-radius: 8px;
+  background: #185b3b;
+  border: 1px solid #185b3b;
+  border-radius: 9px;
   color: #fff;
   cursor: pointer;
   font: inherit;
-  font-weight: 650;
-  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  min-height: 40px;
+  padding: 9px 12px;
 }
-
+button:hover:not(:disabled) {
+  background: #10492f;
+}
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid #e3a72f;
+  outline-offset: 2px;
+}
 button.secondary {
-  background: #7a2730;
+  background: #eef4ef;
+  border-color: #bdd0c2;
+  color: #244b34;
+  margin: 10px 0;
+  width: 100%;
 }
-
+button.quiet {
+  background: transparent;
+  border-color: #bdc8bf;
+  color: #46554b;
+}
 button:disabled {
-  cursor: wait;
-  opacity: 0.55;
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+.primary-action {
+  min-height: 46px;
+  width: 100%;
+}
+.field-list {
+  border-bottom: 1px solid #e4e9e4;
+  display: grid;
+  margin: 10px 0;
+}
+.field-row {
+  align-items: start;
+  border-top: 1px solid #edf0ed;
+  display: grid;
+  gap: 9px;
+  grid-template-columns: 22px 1fr;
+  padding: 9px 0;
+}
+.field-row:first-child {
+  border-top: 0;
+}
+.field-row strong {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: capitalize;
+}
+.field-value {
+  color: #59655d;
+  display: -webkit-box;
+  font-size: 12px;
+  line-height: 1.4;
+  margin-top: 2px;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+.required-field {
+  color: #68756c;
+  font-size: 9px;
+  font-weight: 700;
+  padding-top: 2px;
+  text-transform: uppercase;
+}
+.consent-row {
+  align-items: start;
+  background: #f7f9f6;
+  border-radius: 9px;
+  color: #3d4c42;
+  display: grid;
+  font-size: 12px;
+  gap: 8px;
+  grid-template-columns: 18px 1fr;
+  line-height: 1.45;
+  margin: 4px 0 10px;
+  padding: 10px;
+}
+.consent-row input,
+.field-row input {
+  accent-color: #185b3b;
+  margin: 2px 0 0;
+}
+.queue {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: 2px;
+}
+.queue p {
+  color: #5a665e;
+  font-size: 12px;
+  margin: 4px 0 0;
+}
+.queue button {
+  min-height: 34px;
+}
+.privacy {
+  border-top: 1px solid #d9e0d9;
+  font-size: 11px;
+  margin: 0;
+  padding-top: 12px;
 }

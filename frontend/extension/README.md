@@ -1,51 +1,80 @@
 # Browser Extension
 
-The Manifest V3 Chrome/Edge extension provides explicit job saving/community contribution,
-current-page job detection, application inspection, conservative autofill, user takeover, and
-submission confirmation.
+This directory contains the Manifest V3 Chrome/Edge client for explicit current-tab job capture.
+Its Phase 2 source is implemented as a **synthetic, default-dark release candidate**. Greenhouse,
+Lever, and Ashby detection is disabled until D2-011 supplies authorized sanitized fixtures and
+separate QA representativeness acceptance. The build is not approved for real candidate use,
+public contribution, or browser-store distribution.
 
-Phase 0 contains only a narrow public-client Auth0 conformance shell. It uses
-`chrome.identity.launchWebAuthFlow`, authorization code with PKCE S256, an exact
-`chromiumapp.org` callback, rotating refresh tokens held in `chrome.storage.session`, current-device
-revocation, and provider logout. It never requests page access, injects content scripts, or renders
-or logs tokens or claims.
+## Implemented source boundary
 
-## Current structure
+- A popup and side-panel product shell with separate **Save privately** and
+  **Contribute selected fields** actions.
+- Auth0 public-client authorization code + PKCE, rotating refresh, revocation, and tokens confined
+  to trusted `chrome.storage.session` contexts.
+- Explicit `activeTab` inspection through `chrome.scripting.executeScript`; there are no persistent
+  content scripts or provider host grants.
+- Exact provider-domain adapters for Greenhouse, Lever, and Ashby behind a version/domain/provider
+  policy whose accepted default enables no provider.
+- A strict structured allowlist: canonical HTTPS URL, provider, adapter version, timestamp, title,
+  company, location, description, and external job ID. Text is bounded and stripped of markup and
+  control characters; URLs reject credentials, fragments, trackers, and local/private targets.
+- Field-level contribution preview and removal. Required source identity fields are visible and
+  cannot be silently removed. Private save never implies contribution approval.
+- A bounded-attempt persistent local queue with one stable client intent/Idempotency-Key,
+  exponential retry, service-worker restart recovery, and login-session fencing. Tokens are never
+  included in UI messages or local pending records.
+- An exact background-only HTTPS API origin. Contribution transport targets the ADR-028
+  `POST /v1/jobs/contributions` boundary. The temporary private-source-save boundary must be
+  replaced by the generated `POST /v1/saved-job-captures` contract before activation.
 
-- `entrypoints/` — Popup and background authentication worker.
-- `lib/` — PKCE, configuration, and Auth0 protocol helpers.
-- `static/` — Popup markup and styling copied into the loadable bundle.
-- `tests/` — PKCE, callback, and fail-closed configuration tests.
-- `build.mjs` — Environment-aware MV3 bundler and exact host-permission generator.
+The normal path never retains or uploads raw DOM, page HTML, browsing history, cookies, request
+headers, form values, authentication material, or private notes. No telemetry provider is active.
 
-## Planned structure
+## Manifest permissions
 
-- `entrypoints/` — Side panel and content scripts in addition to the current auth shell.
-- `features/` — Job capture, contribution preview, autofill, and task handoff.
-- `adapters/` — Thin browser bindings that consume `packages/ats-sdk`.
-- `permissions/` — Optional-host permission and disclosure logic.
-- `tests/` — Additional MV3, permission, privacy, fixture, and end-to-end tests.
+- `activeTab` — temporary access only after the candidate presses **Inspect current tab**.
+- `scripting` — executes the self-contained structured field reader in that selected tab.
+- `identity` — launches the Auth0 system-browser flow.
+- `storage` — session credentials and the sanitized pending queue.
+- `alarms` — resumes bounded pending delivery after worker suspension.
+- `sidePanel` — exposes the same review surface as the popup.
 
-## Development conformance
+The generated manifest contains no `history`, `cookies`, `webRequest`, `<all_urls>`, provider host,
+or remote-code permission. Its only optional generated hosts are the exact configured Auth0 tenant
+and API origin.
 
-Create a separate Auth0 Native Application for this public client. The extension has no client
-secret. Copy `.env.example` to `.env.local`, set the public tenant domain and client ID, then run:
+## Development
+
+Create a separate Auth0 Native Application for this public client. It has no client secret. Copy
+`.env.example` to `.env.local` and set the public tenant, client ID, audience, and exact HTTPS API
+origin, then run:
 
 ```powershell
+pnpm --filter @ai-job-apply/extension typecheck
+pnpm --filter @ai-job-apply/extension test
 pnpm --filter @ai-job-apply/extension build
 ```
 
-Load `frontend/extension/dist` as an unpacked extension and copy the generated extension ID. Its
-exact callback and logout URL is:
+Load `frontend/extension/dist` as an unpacked extension. Register the generated extension ID's
+exact callback/logout URL in the development Auth0 Native Application:
 
 ```text
 https://EXTENSION_ID.chromiumapp.org/auth0
 ```
 
-Register that URL in the development application's Allowed Callback URLs and Allowed Logout URLs,
-rebuild, then use the popup to test login, credential renewal, cancellation, and logout. The
-generated `dist/manifest.json` grants `identity`, `storage`, and only the exact configured Auth0
-tenant host. A build without valid public configuration remains loadable but fails closed.
+The access grant must include `jobs:read`, `jobs:write`, and the dedicated `jobs:contribute` scope
+in addition to the existing profile scopes. A missing or malformed identity/API configuration
+fails closed. Even with valid configuration, current provider capture remains disabled by
+`DEFAULT_DARK_POLICY` until its external evidence gate passes.
 
-The extension must request minimum permissions, run collection only for disclosed user-facing
-actions, and never upload unrelated browsing history, cookies, or form data.
+## Remaining activation gates
+
+- Generated API types and accepted server contracts, including private source resolution.
+- Authorized provider-derived fixtures and independent representative-variant acceptance.
+- Dedicated extension Auth0 Chrome/Edge conformance.
+- Accountable UGC, permission, privacy, security, accessibility, and store approval.
+- Final archive, malicious-page, offline/replay, deployed rollback, alert, and kill-switch evidence.
+
+Synthetic detector unit tests prove only local invariants. They are not provider evidence and do
+not make the extension live-ready or store-ready.

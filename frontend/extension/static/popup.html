@@ -3,21 +3,55 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ApplyDash identity conformance</title>
+    <title>ApplyDash job capture</title>
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
     <main>
-      <p class="eyebrow">Phase 0 conformance</p>
-      <h1>Extension identity</h1>
-      <p id="status" class="status" aria-live="polite">Checking…</p>
-      <p id="detail" class="detail" aria-live="polite"></p>
-      <div class="actions">
-        <button id="login" type="button" hidden>Log in with Auth0</button>
-        <button id="refresh" type="button" hidden>Rotate session</button>
-        <button id="logout" class="secondary" type="button" hidden>Revoke and log out</button>
-      </div>
-      <p class="privacy">Tokens and identity claims are never displayed or logged.</p>
+      <header>
+        <p class="eyebrow">Private by default</p>
+        <h1>Save this job</h1>
+        <p class="lede">Inspect only the page you choose. Nothing is shared without a separate preview and approval.</p>
+      </header>
+
+      <section class="card" aria-labelledby="session-heading">
+        <div class="section-heading">
+          <h2 id="session-heading">Session</h2>
+          <span id="auth-status" class="status" aria-live="polite">Checking…</span>
+        </div>
+        <p id="detail" class="detail" aria-live="polite"></p>
+        <div class="actions compact">
+          <button id="login" type="button" hidden>Sign in</button>
+          <button id="refresh" class="secondary" type="button" hidden>Refresh session</button>
+          <button id="logout" class="quiet" type="button" hidden>Sign out</button>
+        </div>
+      </section>
+
+      <button id="inspect" class="primary-action" type="button">Inspect current tab</button>
+
+      <section id="preview" class="card" aria-labelledby="preview-heading" hidden>
+        <div class="section-heading">
+          <h2 id="preview-heading">Contribution preview</h2>
+          <span class="status">Public job fields</span>
+        </div>
+        <div id="field-list" class="field-list"></div>
+        <button id="save-private" class="secondary" type="button">Save privately</button>
+        <label class="consent-row">
+          <input id="contribution-consent" type="checkbox" />
+          <span>I approve sharing only the selected public fields.</span>
+        </label>
+        <button id="contribute" type="button" disabled>Contribute selected fields</button>
+      </section>
+
+      <section class="queue" aria-labelledby="queue-heading">
+        <div>
+          <h2 id="queue-heading">Delivery queue</h2>
+          <p id="queue-status" aria-live="polite">0 pending · 0 stopped</p>
+        </div>
+        <button id="retry" class="quiet" type="button" hidden>Retry now</button>
+      </section>
+
+      <p class="privacy">No raw page, browsing history, cookies, form values, tokens, or private notes are collected.</p>
     </main>
     <script type="module" src="popup.js"></script>
   </body>
