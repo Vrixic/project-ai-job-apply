@@ -195,6 +195,15 @@ button:disabled {
 .queue button {
   min-height: 34px;
 }
+.queue-actions {
+  display: grid;
+  gap: 6px;
+  margin-left: 10px;
+}
+button.danger {
+  border-color: #a94a43;
+  color: #7a2f2a;
+}
 .privacy {
   border-top: 1px solid #d9e0d9;
   font-size: 11px;

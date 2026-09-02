@@ -229,6 +229,7 @@ async function main() {
       EXTENSION_AUTH0_AUDIENCE: "",
       EXTENSION_AUTH0_CLIENT_ID: "",
       EXTENSION_AUTH0_DOMAIN: "",
+      EXTENSION_PENDING_RETENTION_HOURS: "",
     },
   });
   const temporaryOutput = await mkdtemp(join(tmpdir(), "applydash-extension-release-"));

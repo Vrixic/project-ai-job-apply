@@ -49,6 +49,18 @@ const apiOriginValue = (
   fileEnvironment.EXTENSION_API_ORIGIN ??
   ""
 ).trim();
+const pendingRetentionHoursValue = (
+  process.env.EXTENSION_PENDING_RETENTION_HOURS ??
+  fileEnvironment.EXTENSION_PENDING_RETENTION_HOURS ??
+  ""
+).trim();
+const pendingRetentionHours = Number(pendingRetentionHoursValue);
+const pendingRetentionMilliseconds =
+  Number.isInteger(pendingRetentionHours) &&
+  pendingRetentionHours >= 1 &&
+  pendingRetentionHours <= 720
+    ? pendingRetentionHours * 60 * 60 * 1_000
+    : 0;
 let apiOrigin = "";
 try {
   const parsed = new URL(apiOriginValue);
@@ -83,6 +95,7 @@ const buildOptions = {
     __AUTH0_CLIENT_ID__: JSON.stringify(configured ? clientId : ""),
     __AUTH0_DOMAIN__: JSON.stringify(configured ? domain : ""),
     __EXTENSION_API_ORIGIN__: JSON.stringify(apiOrigin),
+    __PENDING_RETENTION_MILLISECONDS__: JSON.stringify(pendingRetentionMilliseconds),
   },
   entryPoints: {
     background: join(extensionRoot, "entrypoints", "background.ts"),

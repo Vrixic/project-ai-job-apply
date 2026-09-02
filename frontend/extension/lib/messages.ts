@@ -2,7 +2,18 @@ import { CAPTURE_FIELDS, type CaptureField } from "./job-capture";
 import type { JobIntentKind } from "./pending-queue";
 
 export type ExtensionMessage =
-  | { action: "capture" | "login" | "logout" | "pending" | "refresh" | "retry" | "status" }
+  | {
+      action:
+        | "capture"
+        | "clear_queue"
+        | "clear_stopped"
+        | "login"
+        | "logout"
+        | "pending"
+        | "refresh"
+        | "retry"
+        | "status";
+    }
   | { action: "enqueue"; approvedFields: readonly CaptureField[]; intent: JobIntentKind };
 
 export function parseExtensionMessage(value: unknown): ExtensionMessage | undefined {
@@ -10,7 +21,17 @@ export function parseExtensionMessage(value: unknown): ExtensionMessage | undefi
   const record = value as Record<string, unknown>;
   if (typeof record.action !== "string") return undefined;
   if (
-    ["capture", "login", "logout", "pending", "refresh", "retry", "status"].includes(record.action)
+    [
+      "capture",
+      "clear_queue",
+      "clear_stopped",
+      "login",
+      "logout",
+      "pending",
+      "refresh",
+      "retry",
+      "status",
+    ].includes(record.action)
   ) {
     return Object.keys(record).length === 1
       ? ({ action: record.action } as ExtensionMessage)

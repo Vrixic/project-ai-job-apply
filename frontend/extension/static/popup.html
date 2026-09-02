@@ -48,7 +48,11 @@
           <h2 id="queue-heading">Delivery queue</h2>
           <p id="queue-status" aria-live="polite">0 pending · 0 stopped</p>
         </div>
-        <button id="retry" class="quiet" type="button" hidden>Retry now</button>
+        <div class="queue-actions">
+          <button id="retry" class="quiet" type="button" hidden>Retry now</button>
+          <button id="clear-stopped" class="quiet" type="button" hidden>Remove stopped</button>
+          <button id="clear-queue" class="quiet danger" type="button" hidden>Remove all</button>
+        </div>
       </section>
 
       <p class="privacy">No raw page, browsing history, cookies, form values, tokens, or private notes are collected.</p>

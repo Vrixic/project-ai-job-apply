@@ -61,4 +61,25 @@ describe("extension public-client authentication", () => {
     expect(safeApiOrigin("https://api.example.test/path")).toBeUndefined();
     expect(safeApiOrigin("https://user:secret@api.example.test")).toBeUndefined();
   });
+
+  it("accepts only a bounded explicitly configured pending retention", () => {
+    const base = {
+      audience: "ai-job-apply-api",
+      clientId: "public-client",
+      domain: "tenant.example.test",
+    };
+    expect(extensionPublicConfiguration(base).pendingRetentionMilliseconds).toBeUndefined();
+    expect(
+      extensionPublicConfiguration({
+        ...base,
+        pendingRetentionMilliseconds: 24 * 60 * 60 * 1_000,
+      }).pendingRetentionMilliseconds,
+    ).toBe(24 * 60 * 60 * 1_000);
+    expect(
+      extensionPublicConfiguration({
+        ...base,
+        pendingRetentionMilliseconds: 31 * 24 * 60 * 60 * 1_000,
+      }).pendingRetentionMilliseconds,
+    ).toBeUndefined();
+  });
 });

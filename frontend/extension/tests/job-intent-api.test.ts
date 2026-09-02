@@ -19,6 +19,7 @@ describe("background-only job intent transport", () => {
       identityFence: "account-a",
       intent: "contribute",
       randomId: () => "018f0000-0000-7000-8000-000000000004",
+      retentionMilliseconds: 24 * 60 * 60 * 1_000,
     });
     const capture = {
       adapterVersion: intent.capture.adapterVersion,

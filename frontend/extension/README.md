@@ -22,8 +22,9 @@ public contribution, or browser-store distribution.
 - Field-level contribution preview and removal. Required source identity fields are visible and
   cannot be silently removed. Private save never implies contribution approval.
 - A bounded-attempt persistent local queue with one stable client intent/Idempotency-Key,
-  exponential retry, service-worker restart recovery, and login-session fencing. Tokens are never
-  included in UI messages or local pending records.
+  exponential retry, service-worker restart recovery, login-session fencing, expiry, and explicit
+  stopped/all-item removal. Explicit logout clears both the queue and last capture. Tokens are
+  never included in UI messages or local pending records.
 - An exact background-only HTTPS API origin. Contribution transport targets the ADR-028
   `POST /v1/jobs/contributions` boundary. The temporary private-source-save boundary must be
   replaced by the generated `POST /v1/saved-job-captures` contract before activation.
@@ -48,7 +49,9 @@ and API origin.
 
 Create a separate Auth0 Native Application for this public client. It has no client secret. Copy
 `.env.example` to `.env.local` and set the public tenant, client ID, audience, and exact HTTPS API
-origin, then run:
+origin. Saving or contributing additionally requires `EXTENSION_PENDING_RETENTION_HOURS` to be an
+integer from 1 through 720. Source selects no live default: accountable review must select the
+duration within the enforced 30-day ceiling. Then run:
 
 ```powershell
 pnpm --filter @ai-job-apply/extension typecheck

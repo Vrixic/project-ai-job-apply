@@ -1,4 +1,5 @@
 import { capabilityForPage, jobIntentDeliveryAllowed } from "../lib/capability-policy";
+import { extensionConfiguration } from "../lib/config";
 import { detectPublicJob } from "../lib/detectors";
 import type { CaptureField, SanitizedJobCapture } from "../lib/job-capture";
 import { sendJobIntent } from "../lib/job-intent-api";
@@ -11,6 +12,7 @@ import {
   MAXIMUM_QUEUE_ITEMS,
   PENDING_QUEUE_KEY,
   type PendingJobIntent,
+  retainUnexpiredIntents,
   settleDispatch,
 } from "../lib/pending-queue";
 import {
@@ -40,6 +42,9 @@ function safeMessage(error: unknown): string {
     return "Log in again to continue.";
   }
   if (message === "capture_required") return "Inspect the current page again before continuing.";
+  if (message === "retention_policy_required") {
+    return "Pending-item retention must be configured before saving or contributing.";
+  }
   return "The action did not complete.";
 }
 
@@ -54,8 +59,11 @@ function trustedSender(sender: chrome.runtime.MessageSender): boolean {
 
 async function pendingQueue(): Promise<PendingJobIntent[]> {
   const result = await chrome.storage.local.get(PENDING_QUEUE_KEY);
-  const queue = result[PENDING_QUEUE_KEY];
-  return Array.isArray(queue) ? (queue as PendingJobIntent[]) : [];
+  const stored = result[PENDING_QUEUE_KEY];
+  const queue = Array.isArray(stored) ? (stored as PendingJobIntent[]) : [];
+  const retained = retainUnexpiredIntents(queue);
+  if (retained.length !== queue.length) await writePendingQueue(retained);
+  return retained;
 }
 
 async function writePendingQueue(queue: PendingJobIntent[]): Promise<void> {
@@ -152,6 +160,9 @@ async function enqueue(
     throw new Error("capture_required");
   }
   const session = await authenticatedApiSession();
+  if (!extensionConfiguration.pendingRetentionMilliseconds) {
+    throw new Error("retention_policy_required");
+  }
   const queue = await pendingQueue();
   if (queue.length >= MAXIMUM_QUEUE_ITEMS) throw new Error("queue_capacity_reached");
   queue.push(
@@ -160,6 +171,7 @@ async function enqueue(
       capture: last.capture,
       identityFence: session.identityFence,
       intent,
+      retentionMilliseconds: extensionConfiguration.pendingRetentionMilliseconds,
     }),
   );
   await writePendingQueue(queue);
@@ -182,9 +194,20 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
   void (async () => {
     try {
       if (message.action === "login") await login();
-      else if (message.action === "logout") await logout();
-      else if (message.action === "refresh") await refresh();
-      else if (message.action === "capture") return captureCurrentPage();
+      else if (message.action === "logout") {
+        try {
+          await logout();
+        } finally {
+          await chrome.storage.session.remove(LAST_CAPTURE_KEY);
+          await writePendingQueue([]);
+        }
+      } else if (message.action === "refresh") await refresh();
+      else if (message.action === "clear_queue") await writePendingQueue([]);
+      else if (message.action === "clear_stopped") {
+        await writePendingQueue(
+          (await pendingQueue()).filter((intent) => intent.state === "pending"),
+        );
+      } else if (message.action === "capture") return captureCurrentPage();
       else if (message.action === "enqueue") {
         return {
           ok: true,

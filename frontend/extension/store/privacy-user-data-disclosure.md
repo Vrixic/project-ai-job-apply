@@ -27,8 +27,10 @@ tabs, or background browsing activity. Private save and public contribution are 
   idempotency key and an account/session fence. Access tokens are not stored in those records.
 - Delivery, when separately enabled, uses HTTPS to one exact API origin. Contribution transport
   sends only the selected structured capture and operational identifiers.
-- Accepted queue entries are removed. Today, blocked or terminal entries can remain locally and no
-  user-facing removal control exists; that is a release blocker, not an approved retention promise.
+- Accepted queue entries are removed. Users can remove stopped entries or the entire queue, logout
+  clears all local pending entries and the last capture, and configured expiry removes stale items.
+  Source selects no live duration; accountable review must approve and configure one within the
+  enforced 1-hour to 30-day range.
 - Ordinary contribution processing retains no raw page snapshot. Server retention, export,
   deletion, withdrawal, and appeal behavior require the separately approved platform policy and
   implemented owner-scoped endpoints.

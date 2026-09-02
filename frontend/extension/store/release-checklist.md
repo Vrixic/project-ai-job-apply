@@ -22,7 +22,8 @@ Every box applies independently to Chrome and Edge unless the evidence explicitl
   cancellation, sign-out, and revocation tests.
 - [ ] Private-save and contribution APIs, consent binding, Trust review, withdrawal, deletion/export,
   takedown, and restoration behavior pass deployed owner/cross-owner tests.
-- [ ] Local blocked/terminal queue removal and the approved retention policy are implemented.
+- [x] Local stopped/all-item removal, logout clearing, and fail-closed expiry enforcement are implemented.
+- [ ] The accountable local pending-item retention duration is approved and configured.
 - [ ] Permission rationale, user-data form, privacy notice, subprocessor register, support/removal
   channels, screenshots, and listing copy match the exact binary and deployed endpoints.
 - [ ] Accessibility, keyboard/zoom/screen-reader, malicious-page, offline/restart, update, rollback,

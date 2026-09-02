@@ -13,6 +13,7 @@ export interface PendingJobIntent {
   attempt: number;
   capture: SanitizedJobCapture;
   createdAt: string;
+  expiresAt: string;
   id: string;
   idempotencyKey: string;
   identityFence: string;
@@ -54,8 +55,16 @@ export function createPendingIntent(input: {
   intent: JobIntentKind;
   now?: Date;
   randomId?: () => string;
+  retentionMilliseconds: number;
 }): PendingJobIntent {
   const now = input.now ?? new Date();
+  if (
+    !Number.isInteger(input.retentionMilliseconds) ||
+    input.retentionMilliseconds < 60 * 60 * 1_000 ||
+    input.retentionMilliseconds > 30 * 24 * 60 * 60 * 1_000
+  ) {
+    throw new TypeError("Pending-intent retention is not configured");
+  }
   const randomId = input.randomId ?? (() => uuidV7(now.getTime()));
   const id = randomId();
   return {
@@ -63,6 +72,7 @@ export function createPendingIntent(input: {
     attempt: 0,
     capture: input.capture,
     createdAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + input.retentionMilliseconds).toISOString(),
     id,
     idempotencyKey: `extension-job-intent-${id}`,
     identityFence: input.identityFence,
@@ -80,7 +90,20 @@ export function dueForDispatch(
   return (
     intent.state === "pending" &&
     intent.identityFence === identityFence &&
+    Date.parse(intent.expiresAt) > now.getTime() &&
     Date.parse(intent.nextAttemptAt) <= now.getTime()
+  );
+}
+
+export function retainUnexpiredIntents(
+  intents: readonly PendingJobIntent[],
+  now = new Date(),
+): PendingJobIntent[] {
+  return intents.filter(
+    (intent) =>
+      typeof intent.expiresAt === "string" &&
+      Number.isFinite(Date.parse(intent.expiresAt)) &&
+      Date.parse(intent.expiresAt) > now.getTime(),
   );
 }
 

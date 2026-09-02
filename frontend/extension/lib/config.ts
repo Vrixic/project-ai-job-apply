@@ -2,6 +2,7 @@ declare const __AUTH0_AUDIENCE__: string;
 declare const __AUTH0_CLIENT_ID__: string;
 declare const __AUTH0_DOMAIN__: string;
 declare const __EXTENSION_API_ORIGIN__: string;
+declare const __PENDING_RETENTION_MILLISECONDS__: number;
 
 export interface ExtensionPublicConfiguration {
   apiOrigin?: string;
@@ -10,6 +11,7 @@ export interface ExtensionPublicConfiguration {
   clientId: string;
   configured: boolean;
   domain: string;
+  pendingRetentionMilliseconds?: number;
 }
 
 export function extensionPublicConfiguration(values: {
@@ -17,11 +19,13 @@ export function extensionPublicConfiguration(values: {
   audience: string;
   clientId: string;
   domain: string;
+  pendingRetentionMilliseconds?: number;
 }): ExtensionPublicConfiguration {
   const domain = values.domain.trim();
   const clientId = values.clientId.trim();
   const audience = values.audience.trim();
   const apiOrigin = safeApiOrigin(values.apiOrigin ?? "");
+  const pendingRetentionMilliseconds = values.pendingRetentionMilliseconds;
   return {
     apiConfigured: apiOrigin !== undefined,
     audience,
@@ -35,6 +39,11 @@ export function extensionPublicConfiguration(values: {
       audience === "ai-job-apply-api",
     domain,
     ...(apiOrigin ? { apiOrigin } : {}),
+    ...(Number.isInteger(pendingRetentionMilliseconds) &&
+    (pendingRetentionMilliseconds ?? 0) >= 60 * 60 * 1_000 &&
+    (pendingRetentionMilliseconds ?? 0) <= 30 * 24 * 60 * 60 * 1_000
+      ? { pendingRetentionMilliseconds }
+      : {}),
   };
 }
 
@@ -65,4 +74,7 @@ export const extensionConfiguration = extensionPublicConfiguration({
   audience: typeof __AUTH0_AUDIENCE__ === "string" ? __AUTH0_AUDIENCE__ : "",
   clientId: typeof __AUTH0_CLIENT_ID__ === "string" ? __AUTH0_CLIENT_ID__ : "",
   domain: typeof __AUTH0_DOMAIN__ === "string" ? __AUTH0_DOMAIN__ : "",
+  ...(typeof __PENDING_RETENTION_MILLISECONDS__ === "number"
+    ? { pendingRetentionMilliseconds: __PENDING_RETENTION_MILLISECONDS__ }
+    : {}),
 });

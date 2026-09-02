@@ -39,6 +39,8 @@ const inspectButton = node<HTMLButtonElement>("#inspect");
 const saveButton = node<HTMLButtonElement>("#save-private");
 const contributeButton = node<HTMLButtonElement>("#contribute");
 const retryButton = node<HTMLButtonElement>("#retry");
+const clearStoppedButton = node<HTMLButtonElement>("#clear-stopped");
+const clearQueueButton = node<HTMLButtonElement>("#clear-queue");
 
 let currentCapture: SanitizedJobCapture | undefined;
 
@@ -51,6 +53,8 @@ function controls(): HTMLButtonElement[] {
     saveButton,
     contributeButton,
     retryButton,
+    clearStoppedButton,
+    clearQueueButton,
   ];
 }
 
@@ -77,6 +81,8 @@ function renderStatus(response: ExtensionResponse): void {
   if (response.queue) {
     queueStatus.textContent = `${response.queue.pending} pending · ${response.queue.stopped} stopped`;
     retryButton.hidden = response.queue.pending === 0;
+    clearStoppedButton.hidden = response.queue.stopped === 0;
+    clearQueueButton.hidden = response.queue.pending + response.queue.stopped === 0;
   }
   if (response.error) detail.textContent = response.error;
 }
@@ -153,6 +159,8 @@ logoutButton.addEventListener("click", () => {
 });
 inspectButton.addEventListener("click", () => void invoke({ action: "capture" }));
 retryButton.addEventListener("click", () => void invoke({ action: "retry" }));
+clearStoppedButton.addEventListener("click", () => void invoke({ action: "clear_stopped" }));
+clearQueueButton.addEventListener("click", () => void invoke({ action: "clear_queue" }));
 saveButton.addEventListener("click", () => {
   if (currentCapture) {
     void invoke({ action: "enqueue", approvedFields: CAPTURE_FIELDS, intent: "private_save" });

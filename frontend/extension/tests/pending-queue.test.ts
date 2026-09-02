@@ -5,6 +5,7 @@ import {
   createPendingIntent,
   dueForDispatch,
   fenceMismatchedIntent,
+  retainUnexpiredIntents,
   settleDispatch,
   uuidV7,
 } from "../lib/pending-queue";
@@ -33,6 +34,7 @@ describe("persistent pending job intents", () => {
       intent: "contribute",
       now: new Date("2026-09-01T12:00:00.000Z"),
       randomId: () => "018f0000-0000-7000-8000-000000000001",
+      retentionMilliseconds: 24 * 60 * 60 * 1_000,
     });
     expect(intent.idempotencyKey).toBe("extension-job-intent-018f0000-0000-7000-8000-000000000001");
     expect(intent.approvedFields).toEqual(["title"]);
@@ -48,6 +50,7 @@ describe("persistent pending job intents", () => {
       intent: "contribute",
       now: new Date("2026-09-01T12:00:00.000Z"),
       randomId: () => "018f0000-0000-7000-8000-000000000002",
+      retentionMilliseconds: 24 * 60 * 60 * 1_000,
     });
     const key = intent.idempotencyKey;
     for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -68,6 +71,7 @@ describe("persistent pending job intents", () => {
       identityFence: "account-a",
       intent: "private_save",
       randomId: () => "018f0000-0000-7000-8000-000000000003",
+      retentionMilliseconds: 24 * 60 * 60 * 1_000,
     });
     expect(settleDispatch(intent, { outcome: "accepted" })).toBeUndefined();
     expect(fenceMismatchedIntent(intent)).toMatchObject({
@@ -76,5 +80,31 @@ describe("persistent pending job intents", () => {
     });
     expect(classifyResponse(503).outcome).toBe("retryable");
     expect(classifyResponse(409).outcome).toBe("terminal");
+  });
+
+  it("expires local intents at the configured boundary and rejects missing policy", () => {
+    const now = new Date("2026-09-01T12:00:00.000Z");
+    const intent = createPendingIntent({
+      approvedFields: ["title"],
+      capture,
+      identityFence: "account-a",
+      intent: "contribute",
+      now,
+      randomId: () => "018f0000-0000-7000-8000-000000000004",
+      retentionMilliseconds: 60 * 60 * 1_000,
+    });
+    expect(retainUnexpiredIntents([intent], new Date("2026-09-01T12:59:59.999Z"))).toEqual([
+      intent,
+    ]);
+    expect(retainUnexpiredIntents([intent], new Date(intent.expiresAt))).toEqual([]);
+    expect(() =>
+      createPendingIntent({
+        approvedFields: ["title"],
+        capture,
+        identityFence: "account-a",
+        intent: "contribute",
+        retentionMilliseconds: 0,
+      }),
+    ).toThrow("retention");
   });
 });
