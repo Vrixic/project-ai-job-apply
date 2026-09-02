@@ -13,7 +13,6 @@ import {
 import {
   type ContributionProcessingPolicy,
   ContributionProcessingService,
-  type ContributionPublicationReconciler,
   type ContributionTrustDecisionPort,
   type CurrentContributionConsentPort,
   type IndependentProviderVerificationPort,
@@ -23,6 +22,7 @@ import { PostgresContributionProcessingEventDeliveryStore } from "./persistence/
 import {
   PostgresContributionProcessingQueueStore,
   PostgresContributionProcessingStore,
+  PostgresContributionPublicationReconciler,
 } from "./persistence/contribution-processing.js";
 
 export interface ContributionProcessingRuntimeBatchInput {
@@ -52,7 +52,6 @@ interface EnabledContributionProcessingRuntime {
   independentVerifier: IndependentProviderVerificationPort;
   trust: ContributionTrustDecisionPort;
   capability: SignedContributionCapabilityPolicyPort;
-  reconciler: ContributionPublicationReconciler;
   publisher: ContributionProcessingEventPublisher;
   now: () => Date;
 }
@@ -82,8 +81,6 @@ export async function runContributionProcessingRuntimeBatch(
     typeof configuration.independentVerifier?.verify !== "function" ||
     typeof configuration.trust?.evaluate !== "function" ||
     typeof configuration.capability?.load !== "function" ||
-    typeof configuration.reconciler?.publish !== "function" ||
-    typeof configuration.reconciler?.remove !== "function" ||
     typeof configuration.publisher?.publish !== "function"
   ) {
     throw new TypeError("Every contribution-processing runtime authority must be injected");
@@ -100,7 +97,10 @@ export async function runContributionProcessingRuntimeBatch(
       independentVerifier: configuration.independentVerifier,
       trust: configuration.trust,
       capability: configuration.capability,
-      reconciler: configuration.reconciler,
+      reconciler: new PostgresContributionPublicationReconciler(
+        configuration.client,
+        configuration.now,
+      ),
       policy: configuration.processingPolicy,
       now: configuration.now,
     }),
