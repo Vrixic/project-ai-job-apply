@@ -6,7 +6,11 @@ import postgres from "postgres";
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
 
-const migrationVersions = ["0001_saved_jobs", "0002_candidate_rights"] as const;
+const migrationVersions = [
+  "0001_saved_jobs",
+  "0002_candidate_rights",
+  "0003_private_saved_page_captures",
+] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
     const migrationPath = fileURLToPath(
@@ -45,26 +49,46 @@ try {
       }
     }
     const [verification] = await transaction<
-      { tableCount: number; auditTriggerCount: number; supportingIndexCount: number }[]
+      {
+        tableCount: number;
+        auditTriggerCount: number;
+        immutableTriggerCount: number;
+        supportingIndexCount: number;
+      }[]
     >`
       SELECT
         ((to_regclass('matching.saved_jobs') IS NOT NULL)::int +
          (to_regclass('matching.saved_job_list_state') IS NOT NULL)::int +
          (to_regclass('matching.idempotency_keys') IS NOT NULL)::int +
          (to_regclass('matching.audit_events') IS NOT NULL)::int +
+         (to_regclass('matching.private_saved_page_captures') IS NOT NULL)::int +
+         (to_regclass('matching.private_saved_page_capture_commands') IS NOT NULL)::int +
+         (to_regclass('matching.private_saved_page_capture_resolutions') IS NOT NULL)::int +
+         (to_regclass('matching.private_saved_page_capture_audit_events') IS NOT NULL)::int +
          (to_regclass('matching.schema_migrations') IS NOT NULL)::int)::int AS "tableCount",
         (SELECT count(*)::int FROM pg_trigger
           WHERE tgname = 'matching_audit_events_immutable' AND NOT tgisinternal) AS "auditTriggerCount",
+        (SELECT count(*)::int FROM pg_trigger
+          WHERE tgname IN (
+            'matching_private_saved_page_captures_immutable',
+            'matching_private_saved_page_capture_resolutions_immutable',
+            'matching_private_saved_page_capture_audit_immutable'
+          ) AND NOT tgisinternal) AS "immutableTriggerCount",
         (SELECT count(*)::int FROM pg_indexes
           WHERE schemaname = 'matching' AND indexname IN (
             'saved_jobs_owner_page_idx',
-            'matching_idempotency_keys_owner_expiry_idx'
+            'matching_idempotency_keys_owner_expiry_idx',
+            'private_saved_page_captures_owner_saved_idx',
+            'private_saved_page_capture_commands_owner_expiry_idx',
+            'private_saved_page_capture_resolutions_owner_idx',
+            'private_saved_page_capture_audit_owner_idx'
           )) AS "supportingIndexCount"
     `;
     if (
-      verification?.tableCount !== 5 ||
+      verification?.tableCount !== 9 ||
       verification.auditTriggerCount !== 1 ||
-      verification.supportingIndexCount !== 2
+      verification.immutableTriggerCount !== 3 ||
+      verification.supportingIndexCount !== 6
     ) {
       throw new Error("Matching saved-job migration verification failed");
     }

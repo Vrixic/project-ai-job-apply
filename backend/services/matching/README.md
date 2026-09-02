@@ -64,6 +64,22 @@ deterministic semantics. The separate exact PR #312 v1 evaluation candidate belo
 generated-synthetic D1 baseline under D1-R2; that acceptance does not broaden these source claims
 or complete D1-005.
 
+## Private saved-page capture foundation
+
+The default-dark Phase 2 foundation stores a private owner-scoped capture independently of public
+job contribution. It accepts only exact Greenhouse, Lever (including `jobs.eu.lever.co`), and Ashby
+provider/variant/HTTPS path combinations and typed bounded text fields. It rejects markup, control
+and bidirectional-override characters, credentials, queries, fragments, arbitrary fields, and raw
+DOM. No token, cookie, form value, page body, arbitrary JSON, public event, or outbox is stored.
+
+The original capture is immutable and create commands use a client UUIDv7 plus a value-bound,
+24-hour idempotency receipt. Reads and deletes always bind the authenticated owner. A later
+canonical job link is a separate append-only row and identifier-only audit transition that the
+service performs only after an injected independent verifier accepts the exact source and evidence
+identifiers. It never publishes, activates, refreshes, or changes Jobs-owned catalog truth.
+Account-active and resolution-verification dependencies default deny. No API, gateway, extension,
+deployment, or feature-switch wiring is included in this foundation.
+
 ## D1 evaluation candidate
 
 The versioned generated-synthetic

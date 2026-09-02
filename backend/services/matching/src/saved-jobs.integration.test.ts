@@ -48,10 +48,10 @@ describeWithDatabase("PostgresSavedJobStore", () => {
       env: environment,
     });
     expect(first.stdout.trim()).toBe(
-      "Matching migrations through 0002_candidate_rights applied and verified.",
+      "Matching migrations through 0003_private_saved_page_captures applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(
-      "Matching migrations through 0002_candidate_rights applied and verified.",
+      "Matching migrations through 0003_private_saved_page_captures applied and verified.",
     );
     await store.ping();
   });
