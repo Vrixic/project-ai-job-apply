@@ -156,3 +156,27 @@ output "document_scan_event_source_mapping_uuid" {
 output "document_scan_event_rule_arn" {
   value = module.platform.document_scan_event_rule_arn
 }
+
+output "d2_community_scheduled_alias_arn" {
+  value = module.platform.d2_community_scheduled_alias_arn
+}
+
+output "d2_trust_signal_alias_arn" {
+  value = module.platform.d2_trust_signal_alias_arn
+}
+
+output "d2_trust_signal_queue_arn" {
+  value = module.platform.d2_trust_signal_queue_arn
+}
+
+output "d2_community_schedule_rule_arn" {
+  value = module.platform.d2_community_schedule_rule_arn
+}
+
+output "d2_trust_signal_mapping_uuid" {
+  value = module.platform.d2_trust_signal_mapping_uuid
+}
+
+output "d2_community_route_ids" {
+  value = module.platform.d2_community_route_ids
+}

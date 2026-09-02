@@ -960,15 +960,7 @@ resource "aws_apigatewayv2_route" "gateway" {
   authorizer_id      = aws_apigatewayv2_authorizer.gateway[0].id
   authorization_scopes = concat(
     ["jobs:moderate", "jobs:read", "jobs:write", "profile:read", "profile:write"],
-    var.deploy_document_intake ? ["documents:read", "documents:write"] : [],
-    var.d2_community_runtime.stage == "gateway-dark" ? [
-      "jobs:contribute",
-      "trust:appeal:resolve",
-      "trust:case:decide",
-      "trust:case:open",
-      "trust:case:takedown",
-      "trust:review"
-    ] : []
+    var.deploy_document_intake ? ["documents:read", "documents:write"] : []
   )
 }
 
@@ -1007,15 +999,25 @@ resource "aws_apigatewayv2_stage" "gateway" {
   auto_deploy = true
 
   dynamic "route_settings" {
-    for_each = local.public_job_route_enabled ? toset([
-      aws_apigatewayv2_route.public_job[0].route_key,
-      aws_apigatewayv2_route.public_job_sitemap[0].route_key
-    ]) : toset([])
+    for_each = toset(concat(
+      local.public_job_route_enabled ? [
+        aws_apigatewayv2_route.public_job[0].route_key,
+        aws_apigatewayv2_route.public_job_sitemap[0].route_key
+      ] : [],
+      local.d2_community_enabled ? concat(
+        [for route in values(aws_apigatewayv2_route.d2_community_protected) : route.route_key],
+        [aws_apigatewayv2_route.d2_contribution_policy[0].route_key]
+      ) : []
+    ))
     content {
       route_key                = route_settings.value
       detailed_metrics_enabled = true
-      throttling_rate_limit    = var.public_job_route_throttling_rate_limit
-      throttling_burst_limit   = var.public_job_route_throttling_burst_limit
+      throttling_rate_limit = contains(local.d2_route_keys, route_settings.value) ? (
+        var.d2_community_runtime.route_throttling_rate_limit
+      ) : var.public_job_route_throttling_rate_limit
+      throttling_burst_limit = contains(local.d2_route_keys, route_settings.value) ? (
+        var.d2_community_runtime.route_throttling_burst_limit
+      ) : var.public_job_route_throttling_burst_limit
     }
   }
 }
@@ -1721,7 +1723,9 @@ data "aws_iam_policy_document" "secrets_endpoint" {
         var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["coordinator"].arn : "",
         var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["starter"].arn : "",
         var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["activity"].arn : "",
-        var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["terminal"].arn : ""
+        var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["terminal"].arn : "",
+        local.d2_community_deployed ? aws_iam_role.d2_community_scheduled[0].arn : "",
+        local.d2_community_deployed ? aws_iam_role.d2_trust_signal[0].arn : ""
       ])
     }
   }
@@ -1730,7 +1734,7 @@ data "aws_iam_policy_document" "secrets_endpoint" {
 resource "aws_vpc_endpoint" "secretsmanager" {
   count = (
     var.persistent_data_plane_enabled && (
-      var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime
+      var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime || local.d2_community_deployed
     )
   ) ? 1 : 0
   vpc_id              = aws_vpc.this.id
@@ -1795,8 +1799,19 @@ resource "aws_lambda_function" "gateway" {
         CANDIDATE_RIGHTS_OWNER_INVENTORY             = var.candidate_rights_owner_inventory
         CANDIDATE_RIGHTS_SUBPROCESSOR_INVENTORY      = var.candidate_rights_subprocessor_inventory
       } : {},
-      var.d2_community_runtime.stage == "gateway-dark" ? {
-        UGC_CONTRIBUTION_POLICY_VERSION = var.d2_community_runtime.ugc_contribution_policy_version
+      local.d2_community_enabled ? {
+        D2_PRIVATE_CAPTURE_ROUTES_ENABLED            = "true"
+        D2_CONTRIBUTION_POLICY_ROUTE_ENABLED         = "true"
+        D2_CONTRIBUTION_ROUTES_ENABLED               = "true"
+        D2_TRUST_REVIEWER_ROUTES_ENABLED             = "true"
+        UGC_CONTRIBUTION_POLICY_VERSION              = var.d2_community_runtime.ugc_contribution_policy_version
+        JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON      = var.d2_community_runtime.signed_policy_json
+        JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON = var.d2_community_runtime.signed_public_keys_json
+        D2_TRUST_REVIEWER_ASSIGNMENTS_JSON           = var.d2_community_runtime.trust_reviewer_assignments_json
+        D2_TRUST_EVIDENCE_ALLOWLIST_JSON             = var.d2_community_runtime.trust_evidence_allowlist_json
+        D2_TRUST_POLICY_VERSION                      = var.d2_community_runtime.trust_policy_version
+        D2_TRUST_APPEAL_WINDOW_MILLISECONDS          = tostring(var.d2_community_runtime.trust_appeal_window_milliseconds)
+        D2_TRUST_SYSTEM_ACTOR_ID                     = var.d2_community_runtime.trust_system_actor_id
       } : {}
     )
   }
@@ -2368,7 +2383,7 @@ resource "aws_iam_role_policy" "outbox_reconciler" {
 }
 
 data "aws_iam_policy_document" "outbox_sqs_endpoint" {
-  count = var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
+  count = var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime || local.d2_community_deployed ? 1 : 0
 
   dynamic "statement" {
     for_each = var.deploy_serverless_outbox ? [1] : []
@@ -2445,10 +2460,38 @@ data "aws_iam_policy_document" "outbox_sqs_endpoint" {
       }
     }
   }
+
+  dynamic "statement" {
+    for_each = local.d2_community_deployed ? [1] : []
+    content {
+      sid    = "ExactD2TrustSignalRolesOnly"
+      effect = "Allow"
+      actions = [
+        "sqs:ChangeMessageVisibility",
+        "sqs:DeleteMessage",
+        "sqs:GetQueueAttributes",
+        "sqs:ReceiveMessage",
+        "sqs:SendMessage"
+      ]
+      resources = [aws_sqs_queue.d2_trust_signal[0].arn]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values = [
+          aws_iam_role.d2_community_scheduled[0].arn,
+          aws_iam_role.d2_trust_signal[0].arn
+        ]
+      }
+    }
+  }
 }
 
 resource "aws_vpc_endpoint" "sqs" {
-  count               = (var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime) && var.persistent_data_plane_enabled ? 1 : 0
+  count               = (var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime || local.d2_community_deployed) && var.persistent_data_plane_enabled ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.sqs"
   vpc_endpoint_type   = "Interface"

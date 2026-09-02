@@ -111,12 +111,9 @@ module "platform" {
   document_processor_extension_layer_arn        = var.document_processor_extension_layer_arn
   document_parser_version                       = var.document_parser_version
   serverless_runtime_enabled                    = var.serverless_runtime_enabled
-  d2_community_runtime = {
-    stage                           = var.d2_community_runtime_stage
-    ugc_contribution_policy_version = var.d2_ugc_contribution_policy_version
-  }
-  deploy_serverless_outbox         = var.deploy_serverless_outbox
-  workflow_ingress_artifact_s3_key = var.workflow_ingress_artifact_s3_key
+  d2_community_runtime                          = var.d2_community_runtime
+  deploy_serverless_outbox                      = var.deploy_serverless_outbox
+  workflow_ingress_artifact_s3_key              = var.workflow_ingress_artifact_s3_key
   workflow_ingress_artifact_s3_object_version = (
     var.workflow_ingress_artifact_s3_object_version
   )

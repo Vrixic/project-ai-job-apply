@@ -11,20 +11,23 @@ false, the Lambda integration remains deployable but no public route or workflow
 when true, the JWT-protected default route, two public health routes, SQS starter, reconciler
 schedule, and terminal-recovery rule activate together. There is no ECS or Temporal fallback.
 
-Phase 2 community composition has a separate, default-off `d2_community_runtime_stage`. Its only
-non-disabled value, `gateway-dark`, injects an explicitly reviewed
-`d2_ugc_contribution_policy_version` into the gateway and adds the exact contribution and Trust
-JWT scopes to the existing authenticated default route. It does not add a contribution or Trust
-path to the gateway application's exact route allowlist, and it creates no processor, trigger, or
-schedule. The current source therefore remains structurally dark even when this configuration
-stage is selected.
+Phase 2 community composition uses one independent `d2_community_runtime` deploy/activation
+boundary. Its all-empty default creates no D2 function, queue, schedule, mapping, route, or NAT.
+`deploy = true` requires exact immutable artifact identities, bounded Lambda concurrency/timeout,
+queue retention/redrive values, alarm thresholds, the persistent data plane, and the reviewed
+Secrets extension. It can create two versioned aliases, the dedicated encrypted Trust-signal
+queue/DLQ, split least-privilege roles, and Lambda/queue alarms while all schedules, mappings, and
+routes remain structurally absent.
 
-Advancing beyond `gateway-dark` depends on application-owned exact route handlers and allowlist
-tests, a deployed signed-capability policy/key delivery boundary, Trust persistence and reviewer
-assignment composition, and a contribution-processing Lambda entry point. No reviewed production
-processing interval or D2-specific metric/signal contract exists yet, so this module intentionally
-defines no contribution scheduler or dedicated D2 alarm. Existing gateway Lambda alarms still
-cover errors, throttles, and duration during controlled dark-runtime verification.
+`enabled = true` is a separate activation and additionally requires an explicit schedule; the
+processing, contribution-delivery, and Trust-delivery worker, batch, lease, and retry policies; a
+complete signed contribution policy/key pair; complete Trust reviewer/evidence/policy inputs;
+route rate/burst budgets; runtime activation authority; and an accountable release-authority
+token. Activation creates only exact routes: anonymous policy GET uses `NONE`, private capture
+uses existing read/write scopes, candidate contribution/consent/owner Trust uses
+`jobs:contribute`, and reviewer Trust uses its exact role scopes. D2 scopes are never added to the
+generic `$default` route. No provider host, credential, NAT, egress rule, policy content, reviewer,
+appeal timing, or activation value is supplied by module defaults.
 
 The gateway and reconciler are the only producers for the platform-CMK-encrypted outbox queue.
 The durable orchestrator is outside the VPC and invokes an exact activity version; database

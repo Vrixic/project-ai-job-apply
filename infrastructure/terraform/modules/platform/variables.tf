@@ -558,26 +558,216 @@ variable "serverless_runtime_enabled" {
 }
 
 variable "d2_community_runtime" {
-  description = "Default-off Phase 2 community gateway composition. gateway-dark supplies only reviewed gateway configuration and JWT scopes; it activates no contribution or trust route, processor, or schedule."
+  description = "Independent default-off Phase 2 community deployment and activation boundary. Empty values are deliberate: Terraform selects no artifact, authority, timing, policy, route budget, or alarm threshold."
   type = object({
-    stage                           = string
-    ugc_contribution_policy_version = string
+    deploy                                         = bool
+    enabled                                        = bool
+    artifact_s3_key                                = string
+    artifact_s3_object_version                     = string
+    artifact_sha256                                = string
+    artifact_base64sha256                          = string
+    lambda_extension_layer_arn                     = string
+    scheduled_reserved_concurrency                 = number
+    signal_reserved_concurrency                    = number
+    lambda_timeout_seconds                         = number
+    queue_visibility_timeout_seconds               = number
+    queue_message_retention_seconds                = number
+    dead_letter_retention_seconds                  = number
+    queue_max_receive_count                        = number
+    schedule_expression                            = string
+    processing_policy_version                      = string
+    processing_worker_id                           = string
+    processing_batch_limit                         = number
+    processing_max_attempts                        = number
+    processing_claim_lease_milliseconds            = number
+    processing_retry_delay_milliseconds            = list(number)
+    contribution_delivery_worker_id                = string
+    contribution_delivery_batch_limit              = number
+    contribution_delivery_max_attempts             = number
+    contribution_delivery_claim_lease_milliseconds = number
+    contribution_delivery_retry_delay_milliseconds = list(number)
+    trust_delivery_worker_id                       = string
+    trust_delivery_batch_limit                     = number
+    trust_delivery_max_attempts                    = number
+    trust_delivery_claim_lease_milliseconds        = number
+    trust_delivery_retry_delay_milliseconds        = list(number)
+    trust_signal_batch_size                        = number
+    ugc_contribution_policy_version                = string
+    signed_policy_json                             = string
+    signed_public_keys_json                        = string
+    trust_reviewer_assignments_json                = string
+    trust_evidence_allowlist_json                  = string
+    trust_policy_version                           = string
+    trust_appeal_window_milliseconds               = number
+    trust_system_actor_id                          = string
+    route_throttling_rate_limit                    = number
+    route_throttling_burst_limit                   = number
+    lambda_error_alarm_threshold                   = number
+    lambda_throttle_alarm_threshold                = number
+    lambda_duration_alarm_threshold_milliseconds   = number
+    queue_age_alarm_threshold_seconds              = number
+    dead_letter_alarm_threshold                    = number
+    release_authority                              = string
   })
   default = {
-    stage                           = "disabled"
-    ugc_contribution_policy_version = ""
+    deploy                                         = false
+    enabled                                        = false
+    artifact_s3_key                                = ""
+    artifact_s3_object_version                     = ""
+    artifact_sha256                                = ""
+    artifact_base64sha256                          = ""
+    lambda_extension_layer_arn                     = ""
+    scheduled_reserved_concurrency                 = 0
+    signal_reserved_concurrency                    = 0
+    lambda_timeout_seconds                         = 0
+    queue_visibility_timeout_seconds               = 0
+    queue_message_retention_seconds                = 0
+    dead_letter_retention_seconds                  = 0
+    queue_max_receive_count                        = 0
+    schedule_expression                            = ""
+    processing_policy_version                      = ""
+    processing_worker_id                           = ""
+    processing_batch_limit                         = 0
+    processing_max_attempts                        = 0
+    processing_claim_lease_milliseconds            = 0
+    processing_retry_delay_milliseconds            = []
+    contribution_delivery_worker_id                = ""
+    contribution_delivery_batch_limit              = 0
+    contribution_delivery_max_attempts             = 0
+    contribution_delivery_claim_lease_milliseconds = 0
+    contribution_delivery_retry_delay_milliseconds = []
+    trust_delivery_worker_id                       = ""
+    trust_delivery_batch_limit                     = 0
+    trust_delivery_max_attempts                    = 0
+    trust_delivery_claim_lease_milliseconds        = 0
+    trust_delivery_retry_delay_milliseconds        = []
+    trust_signal_batch_size                        = 0
+    ugc_contribution_policy_version                = ""
+    signed_policy_json                             = ""
+    signed_public_keys_json                        = ""
+    trust_reviewer_assignments_json                = ""
+    trust_evidence_allowlist_json                  = ""
+    trust_policy_version                           = ""
+    trust_appeal_window_milliseconds               = 0
+    trust_system_actor_id                          = ""
+    route_throttling_rate_limit                    = 0
+    route_throttling_burst_limit                   = 0
+    lambda_error_alarm_threshold                   = 0
+    lambda_throttle_alarm_threshold                = 0
+    lambda_duration_alarm_threshold_milliseconds   = 0
+    queue_age_alarm_threshold_seconds              = 0
+    dead_letter_alarm_threshold                    = 0
+    release_authority                              = ""
   }
 
   validation {
-    condition = (
-      var.d2_community_runtime.stage == "disabled" &&
-      var.d2_community_runtime.ugc_contribution_policy_version == ""
-      ) || (
-      var.d2_community_runtime.stage == "gateway-dark" &&
-      var.deploy_gateway_lambda &&
-      can(regex("^[a-z0-9][a-z0-9._-]{2,99}$", var.d2_community_runtime.ugc_contribution_policy_version))
+    condition = !var.d2_community_runtime.deploy || (
+      var.persistent_data_plane_enabled &&
+      var.d2_community_runtime.artifact_s3_key != "" &&
+      var.d2_community_runtime.artifact_s3_object_version != "" &&
+      can(regex("^[a-f0-9]{64}$", var.d2_community_runtime.artifact_sha256)) &&
+      can(regex("^[A-Za-z0-9+/]{43}=$", var.d2_community_runtime.artifact_base64sha256)) &&
+      can(regex("^arn:aws:lambda:[a-z0-9-]+:[0-9]{12}:layer:[A-Za-z0-9_-]+:[1-9][0-9]*$", var.d2_community_runtime.lambda_extension_layer_arn)) &&
+      var.d2_community_runtime.scheduled_reserved_concurrency >= 1 &&
+      var.d2_community_runtime.scheduled_reserved_concurrency <= 5 &&
+      floor(var.d2_community_runtime.scheduled_reserved_concurrency) == var.d2_community_runtime.scheduled_reserved_concurrency &&
+      var.d2_community_runtime.signal_reserved_concurrency >= 1 &&
+      var.d2_community_runtime.signal_reserved_concurrency <= 5 &&
+      floor(var.d2_community_runtime.signal_reserved_concurrency) == var.d2_community_runtime.signal_reserved_concurrency &&
+      var.d2_community_runtime.lambda_timeout_seconds >= 1 &&
+      var.d2_community_runtime.lambda_timeout_seconds <= 900 &&
+      floor(var.d2_community_runtime.lambda_timeout_seconds) == var.d2_community_runtime.lambda_timeout_seconds &&
+      var.d2_community_runtime.queue_visibility_timeout_seconds > var.d2_community_runtime.lambda_timeout_seconds &&
+      var.d2_community_runtime.queue_visibility_timeout_seconds <= 43200 &&
+      var.d2_community_runtime.queue_message_retention_seconds >= 60 &&
+      var.d2_community_runtime.queue_message_retention_seconds <= 1209600 &&
+      var.d2_community_runtime.dead_letter_retention_seconds >= var.d2_community_runtime.queue_message_retention_seconds &&
+      var.d2_community_runtime.dead_letter_retention_seconds <= 1209600 &&
+      var.d2_community_runtime.queue_max_receive_count >= 1 &&
+      var.d2_community_runtime.queue_max_receive_count <= 10 &&
+      floor(var.d2_community_runtime.queue_max_receive_count) == var.d2_community_runtime.queue_max_receive_count &&
+      var.d2_community_runtime.lambda_error_alarm_threshold >= 0 &&
+      var.d2_community_runtime.lambda_throttle_alarm_threshold >= 0 &&
+      var.d2_community_runtime.lambda_duration_alarm_threshold_milliseconds >= 1 &&
+      var.d2_community_runtime.lambda_duration_alarm_threshold_milliseconds <= var.d2_community_runtime.lambda_timeout_seconds * 1000 &&
+      var.d2_community_runtime.queue_age_alarm_threshold_seconds >= 1 &&
+      var.d2_community_runtime.queue_age_alarm_threshold_seconds <= var.d2_community_runtime.queue_message_retention_seconds &&
+      var.d2_community_runtime.dead_letter_alarm_threshold >= 0
     )
-    error_message = "Phase 2 community composition must be disabled with no policy, or gateway-dark with the dark gateway and one explicit 3-100 character lowercase policy version token."
+    error_message = "A Phase 2 dark deployment requires an immutable versioned artifact, reviewed Secrets extension, explicit bounded concurrency/timeout, queue retention/redrive, alarm thresholds, and the persistent data plane."
+  }
+
+  validation {
+    condition = !var.d2_community_runtime.enabled || (
+      var.d2_community_runtime.deploy &&
+      var.deploy_applications &&
+      var.deploy_gateway_lambda &&
+      var.runtime_activation_allowed &&
+      can(regex("^(rate|cron)\\([^\r\n]{1,240}\\)$", var.d2_community_runtime.schedule_expression)) &&
+      can(regex("^[a-z0-9][a-z0-9._-]{2,99}$", var.d2_community_runtime.processing_policy_version)) &&
+      can(regex("^[A-Za-z0-9:_-]{3,100}$", var.d2_community_runtime.processing_worker_id)) &&
+      var.d2_community_runtime.processing_batch_limit >= 1 &&
+      var.d2_community_runtime.processing_batch_limit <= 100 &&
+      floor(var.d2_community_runtime.processing_batch_limit) == var.d2_community_runtime.processing_batch_limit &&
+      var.d2_community_runtime.processing_max_attempts >= 1 &&
+      var.d2_community_runtime.processing_max_attempts <= 5 &&
+      floor(var.d2_community_runtime.processing_max_attempts) == var.d2_community_runtime.processing_max_attempts &&
+      var.d2_community_runtime.processing_claim_lease_milliseconds >= 1000 &&
+      var.d2_community_runtime.processing_claim_lease_milliseconds <= 900000 &&
+      floor(var.d2_community_runtime.processing_claim_lease_milliseconds) == var.d2_community_runtime.processing_claim_lease_milliseconds &&
+      length(var.d2_community_runtime.processing_retry_delay_milliseconds) == var.d2_community_runtime.processing_max_attempts - 1 &&
+      alltrue([for value in var.d2_community_runtime.processing_retry_delay_milliseconds : value >= 1000 && value <= 86400000]) &&
+      can(regex("^[A-Za-z0-9:_-]{3,100}$", var.d2_community_runtime.contribution_delivery_worker_id)) &&
+      var.d2_community_runtime.contribution_delivery_batch_limit >= 1 &&
+      var.d2_community_runtime.contribution_delivery_batch_limit <= 100 &&
+      floor(var.d2_community_runtime.contribution_delivery_batch_limit) == var.d2_community_runtime.contribution_delivery_batch_limit &&
+      var.d2_community_runtime.contribution_delivery_max_attempts >= 1 &&
+      var.d2_community_runtime.contribution_delivery_max_attempts <= 5 &&
+      floor(var.d2_community_runtime.contribution_delivery_max_attempts) == var.d2_community_runtime.contribution_delivery_max_attempts &&
+      var.d2_community_runtime.contribution_delivery_claim_lease_milliseconds >= 1000 &&
+      var.d2_community_runtime.contribution_delivery_claim_lease_milliseconds <= 900000 &&
+      floor(var.d2_community_runtime.contribution_delivery_claim_lease_milliseconds) == var.d2_community_runtime.contribution_delivery_claim_lease_milliseconds &&
+      length(var.d2_community_runtime.contribution_delivery_retry_delay_milliseconds) == var.d2_community_runtime.contribution_delivery_max_attempts - 1 &&
+      alltrue([for value in var.d2_community_runtime.contribution_delivery_retry_delay_milliseconds : value >= 1000 && value <= 86400000]) &&
+      can(regex("^[A-Za-z0-9:_-]{3,100}$", var.d2_community_runtime.trust_delivery_worker_id)) &&
+      var.d2_community_runtime.trust_delivery_batch_limit >= 1 &&
+      var.d2_community_runtime.trust_delivery_batch_limit <= 100 &&
+      floor(var.d2_community_runtime.trust_delivery_batch_limit) == var.d2_community_runtime.trust_delivery_batch_limit &&
+      var.d2_community_runtime.trust_delivery_max_attempts >= 1 &&
+      var.d2_community_runtime.trust_delivery_max_attempts <= 5 &&
+      floor(var.d2_community_runtime.trust_delivery_max_attempts) == var.d2_community_runtime.trust_delivery_max_attempts &&
+      var.d2_community_runtime.trust_delivery_claim_lease_milliseconds >= 1000 &&
+      var.d2_community_runtime.trust_delivery_claim_lease_milliseconds <= 900000 &&
+      floor(var.d2_community_runtime.trust_delivery_claim_lease_milliseconds) == var.d2_community_runtime.trust_delivery_claim_lease_milliseconds &&
+      length(var.d2_community_runtime.trust_delivery_retry_delay_milliseconds) == var.d2_community_runtime.trust_delivery_max_attempts - 1 &&
+      alltrue([for value in var.d2_community_runtime.trust_delivery_retry_delay_milliseconds : value >= 1000 && value <= 86400000]) &&
+      var.d2_community_runtime.trust_signal_batch_size >= 1 &&
+      var.d2_community_runtime.trust_signal_batch_size <= 10 &&
+      floor(var.d2_community_runtime.trust_signal_batch_size) == var.d2_community_runtime.trust_signal_batch_size &&
+      can(regex("^[a-z0-9][a-z0-9._-]{2,99}$", var.d2_community_runtime.ugc_contribution_policy_version)) &&
+      try(length(keys(jsondecode(var.d2_community_runtime.signed_policy_json))) > 0, false) &&
+      try(length(keys(jsondecode(var.d2_community_runtime.signed_public_keys_json))) > 0, false) &&
+      try(length(tolist(jsondecode(var.d2_community_runtime.trust_reviewer_assignments_json))) > 0, false) &&
+      try(length(tolist(jsondecode(var.d2_community_runtime.trust_evidence_allowlist_json))) >= 0, false) &&
+      length(base64encode(join("", [
+        var.d2_community_runtime.signed_policy_json,
+        var.d2_community_runtime.signed_public_keys_json,
+        var.d2_community_runtime.trust_reviewer_assignments_json,
+        var.d2_community_runtime.trust_evidence_allowlist_json
+      ]))) <= 3700 &&
+      can(regex("^[a-z0-9][a-z0-9._-]{2,99}$", var.d2_community_runtime.trust_policy_version)) &&
+      var.d2_community_runtime.trust_appeal_window_milliseconds >= 1 &&
+      var.d2_community_runtime.trust_appeal_window_milliseconds <= 31536000000 &&
+      floor(var.d2_community_runtime.trust_appeal_window_milliseconds) == var.d2_community_runtime.trust_appeal_window_milliseconds &&
+      can(regex("^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", var.d2_community_runtime.trust_system_actor_id)) &&
+      var.d2_community_runtime.route_throttling_rate_limit > 0 &&
+      var.d2_community_runtime.route_throttling_rate_limit <= 10000 &&
+      var.d2_community_runtime.route_throttling_burst_limit >= 1 &&
+      var.d2_community_runtime.route_throttling_burst_limit <= 5000 &&
+      floor(var.d2_community_runtime.route_throttling_burst_limit) == var.d2_community_runtime.route_throttling_burst_limit &&
+      can(regex("^[A-Za-z0-9][A-Za-z0-9._:@/-]{2,255}$", var.d2_community_runtime.release_authority))
+    )
+    error_message = "Phase 2 activation requires the dark deployment, application gateway, explicit schedule, processing/delivery lease-retry-batch policies, signed contribution policy, complete Trust policy/authority, route budgets, runtime activation authority, and accountable release authority."
   }
 }
 

@@ -161,3 +161,30 @@ output "profile_readiness_terminal_alias_arn" {
 output "profile_readiness_terminal_rule_arn" {
   value = var.deploy_profile_readiness_durable ? aws_cloudwatch_event_rule.profile_readiness_terminal[0].arn : null
 }
+
+output "d2_community_scheduled_alias_arn" {
+  value = local.d2_community_deployed ? aws_lambda_alias.d2_community_scheduled[0].arn : null
+}
+
+output "d2_trust_signal_alias_arn" {
+  value = local.d2_community_deployed ? aws_lambda_alias.d2_trust_signal[0].arn : null
+}
+
+output "d2_trust_signal_queue_arn" {
+  value = local.d2_community_deployed ? aws_sqs_queue.d2_trust_signal[0].arn : null
+}
+
+output "d2_community_schedule_rule_arn" {
+  value = local.d2_community_enabled ? aws_cloudwatch_event_rule.d2_community_schedule[0].arn : null
+}
+
+output "d2_trust_signal_mapping_uuid" {
+  value = local.d2_community_enabled ? aws_lambda_event_source_mapping.d2_trust_signal[0].uuid : null
+}
+
+output "d2_community_route_ids" {
+  value = local.d2_community_enabled ? merge(
+    { for route_key, route in aws_apigatewayv2_route.d2_community_protected : route_key => route.id },
+    { (aws_apigatewayv2_route.d2_contribution_policy[0].route_key) = aws_apigatewayv2_route.d2_contribution_policy[0].id }
+  ) : {}
+}

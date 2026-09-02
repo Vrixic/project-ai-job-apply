@@ -287,14 +287,59 @@ variable "serverless_runtime_enabled" {
   default = false
 }
 
-variable "d2_community_runtime_stage" {
-  type    = string
-  default = "disabled"
-}
-
-variable "d2_ugc_contribution_policy_version" {
-  type    = string
-  default = ""
+variable "d2_community_runtime" {
+  description = "Complete Phase 2 deploy/activation input passed to the platform module. The default creates and activates nothing."
+  type        = any
+  default = {
+    deploy                                         = false
+    enabled                                        = false
+    artifact_s3_key                                = ""
+    artifact_s3_object_version                     = ""
+    artifact_sha256                                = ""
+    artifact_base64sha256                          = ""
+    lambda_extension_layer_arn                     = ""
+    scheduled_reserved_concurrency                 = 0
+    signal_reserved_concurrency                    = 0
+    lambda_timeout_seconds                         = 0
+    queue_visibility_timeout_seconds               = 0
+    queue_message_retention_seconds                = 0
+    dead_letter_retention_seconds                  = 0
+    queue_max_receive_count                        = 0
+    schedule_expression                            = ""
+    processing_policy_version                      = ""
+    processing_worker_id                           = ""
+    processing_batch_limit                         = 0
+    processing_max_attempts                        = 0
+    processing_claim_lease_milliseconds            = 0
+    processing_retry_delay_milliseconds            = []
+    contribution_delivery_worker_id                = ""
+    contribution_delivery_batch_limit              = 0
+    contribution_delivery_max_attempts             = 0
+    contribution_delivery_claim_lease_milliseconds = 0
+    contribution_delivery_retry_delay_milliseconds = []
+    trust_delivery_worker_id                       = ""
+    trust_delivery_batch_limit                     = 0
+    trust_delivery_max_attempts                    = 0
+    trust_delivery_claim_lease_milliseconds        = 0
+    trust_delivery_retry_delay_milliseconds        = []
+    trust_signal_batch_size                        = 0
+    ugc_contribution_policy_version                = ""
+    signed_policy_json                             = ""
+    signed_public_keys_json                        = ""
+    trust_reviewer_assignments_json                = ""
+    trust_evidence_allowlist_json                  = ""
+    trust_policy_version                           = ""
+    trust_appeal_window_milliseconds               = 0
+    trust_system_actor_id                          = ""
+    route_throttling_rate_limit                    = 0
+    route_throttling_burst_limit                   = 0
+    lambda_error_alarm_threshold                   = 0
+    lambda_throttle_alarm_threshold                = 0
+    lambda_duration_alarm_threshold_milliseconds   = 0
+    queue_age_alarm_threshold_seconds              = 0
+    dead_letter_alarm_threshold                    = 0
+    release_authority                              = ""
+  }
 }
 
 variable "deploy_profile_readiness_durable" {
