@@ -24,6 +24,31 @@ describe("event schemas", () => {
     ).toBe(false);
   });
 
+  it("accepts only an identifier-only Trust decision signal", () => {
+    const decisionId = "8c22280f-3fc3-8f8b-8a0f-1fc74152d8c9";
+    const contributionId = "019b4e12-7ea3-7c36-9357-aea35ab542ca";
+    expect(
+      validateEventData(eventTypes.trustContributionDecisionChanged, {
+        decisionId,
+        contributionId,
+      }),
+    ).toBe(true);
+    expect(
+      validateEventData(eventTypes.trustContributionDecisionChanged, {
+        decisionId,
+        contributionId,
+        contributorUserId: "019b4e12-7ea3-7c36-9357-aea35ab542cb",
+      }),
+    ).toBe(false);
+    expect(
+      validateEventData(eventTypes.trustContributionDecisionChanged, {
+        decisionId,
+        contributionId,
+        reasonCode: "malicious_or_deceptive",
+      }),
+    ).toBe(false);
+  });
+
   it("accepts only identifier-only job lifecycle events", () => {
     const contributionId = "019b4e12-7ea3-7c36-9357-aea35ab542ca";
     const normalizationId = "019b4e12-7ea3-7c36-9357-aea35ab542cb";
@@ -32,12 +57,12 @@ describe("event schemas", () => {
     const verificationId = "019b4e12-7ea3-7c36-9357-aea35ab542ce";
     const statusEventId = "019b4e12-7ea3-7c36-9357-aea35ab542cf";
 
-    expect(
-      validateEventData(eventTypes.jobNormalized, { contributionId, normalizationId }),
-    ).toBe(true);
-    expect(
-      validateEventData(eventTypes.jobVerified, { jobId, sourceId, verificationId }),
-    ).toBe(true);
+    expect(validateEventData(eventTypes.jobNormalized, { contributionId, normalizationId })).toBe(
+      true,
+    );
+    expect(validateEventData(eventTypes.jobVerified, { jobId, sourceId, verificationId })).toBe(
+      true,
+    );
     expect(validateEventData(eventTypes.jobExpired, { jobId, statusEventId })).toBe(true);
 
     expect(

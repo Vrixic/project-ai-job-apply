@@ -16,3 +16,7 @@ owner, public posting fields, URLs, source metadata, and consent references.
 `job.normalized.v1`, `job.verified.v1`, and `job.expired.v1` carry only immutable workflow,
 canonical-job, source, verification, and status-event UUIDv7 references. They intentionally exclude
 posting content, source URLs, contributor identity, trust evidence, and lifecycle reasons.
+
+`trust.contribution-decision.changed.v1` carries only the stable Trust transition UUID and the
+Jobs-owned contribution UUID. It excludes contributor and reviewer identities, decision status,
+reason/evidence, source URL, and contribution content. Consumers reload exact authoritative truth.

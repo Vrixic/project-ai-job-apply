@@ -5,6 +5,7 @@ import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PostgresTrustStore, TrustVersionConflictError } from "./store.js";
+import { PostgresTrustDecisionSignalStore } from "./decision-signal-store.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -16,6 +17,7 @@ describeWithDatabase("PostgreSQL UGC trust foundation", () => {
     onnotice: () => undefined,
   });
   const store = new PostgresTrustStore(client);
+  const signals = new PostgresTrustDecisionSignalStore(client);
   const owner = uuidv7();
   const otherOwner = uuidv7();
   const systemActor = uuidv7();
@@ -31,7 +33,7 @@ describeWithDatabase("PostgreSQL UGC trust foundation", () => {
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });
     expect(first.stdout.trim()).toBe(
-      "Trust migrations through 0002_candidate_rights applied and verified.",
+      "Trust migrations through 0003_decision_signals applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(first.stdout.trim());
     await store.ping();
@@ -71,6 +73,32 @@ describeWithDatabase("PostgreSQL UGC trust foundation", () => {
       SELECT count(*)::text AS count FROM trust.case_events WHERE case_id = ${caseId}
     `;
     expect(openEventCount?.count).toBe("1");
+    const [openedSignal] = await client<{ decisionId: string }[]>`
+      SELECT event_id AS "decisionId" FROM trust.case_events
+      WHERE case_id = ${caseId} AND case_version = 1
+    `;
+    expect(openedSignal?.decisionId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    if (!openedSignal) throw new Error("Expected the deterministic open decision signal");
+    expect(await signals.readSignal(openedSignal.decisionId)).toEqual({
+      decisionId: openedSignal.decisionId,
+      contributionId,
+    });
+    expect(
+      await signals.readDecision({
+        decisionId: openedSignal.decisionId,
+        contributionId,
+        contributorUserId: owner,
+      }),
+    ).toMatchObject({ status: "needs_review", contributionId });
+    expect(
+      await signals.readDecision({
+        decisionId: openedSignal.decisionId,
+        contributionId,
+        contributorUserId: otherOwner,
+      }),
+    ).toBeNull();
 
     const rejected = await store.review(caseId, 1, {
       reviewerId: firstReviewer,
@@ -152,16 +180,42 @@ describeWithDatabase("PostgreSQL UGC trust foundation", () => {
     ).rejects.toBeInstanceOf(TrustVersionConflictError);
 
     const [counts] = await client<
-      { events: string; contributorSignals: string; sourceSignals: string }[]
+      {
+        events: string;
+        decisionOutbox: string;
+        decisionDeliveries: string;
+        contributorSignals: string;
+        sourceSignals: string;
+      }[]
     >`
       SELECT
         (SELECT count(*)::text FROM trust.case_events WHERE case_id = ${caseId}) AS events,
+        (SELECT count(*)::text FROM trust.contribution_decision_outbox
+          WHERE case_id = ${caseId}) AS "decisionOutbox",
+        (SELECT count(*)::text FROM trust.contribution_decision_deliveries AS delivery
+          JOIN trust.contribution_decision_outbox AS event ON event.id = delivery.event_id
+          WHERE event.case_id = ${caseId}) AS "decisionDeliveries",
         (SELECT count(*)::text FROM trust.reputation_evidence
           WHERE case_id = ${caseId} AND subject_kind = 'contributor') AS "contributorSignals",
         (SELECT count(*)::text FROM trust.reputation_evidence
           WHERE case_id = ${caseId} AND subject_kind = 'source') AS "sourceSignals"
     `;
-    expect(counts).toEqual({ events: "4", contributorSignals: "1", sourceSignals: "1" });
+    expect(counts).toEqual({
+      events: "4",
+      decisionOutbox: "4",
+      decisionDeliveries: "4",
+      contributorSignals: "1",
+      sourceSignals: "1",
+    });
+
+    await expect(
+      client`UPDATE trust.contribution_decision_outbox SET event_type = event_type
+        WHERE case_id = ${caseId}`,
+    ).rejects.toThrow("append-only");
+    await expect(
+      client`DELETE FROM trust.contribution_decision_deliveries
+        WHERE event_id = ${openedSignal.decisionId}`,
+    ).rejects.toThrow("candidate deletion authority");
 
     await expect(
       client`UPDATE trust.case_events SET reason_code = 'decision_upheld'

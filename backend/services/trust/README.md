@@ -16,6 +16,14 @@ catalog truth.
   fixture only.
 - PostgreSQL owns a current case projection plus database-generated, append-only case events and
   append-only contributor/source reputation evidence.
+- Every case transition now has one deterministic UUID and atomically appends an identifier-only
+  `trust.contribution-decision.changed.v1` outbox record. Mutable lease/retry/acknowledgement state
+  lives in a separate guarded delivery ledger; an ambiguous transport retry republishes the same
+  event identifier.
+- The reconciliation reader first exposes only decision and contribution identifiers, then
+  requires the exact decision, contribution, and contributor-owner tuple before returning a
+  fixed status, policy version, and timestamp. Reviewer identity, evidence, reasons, source URL,
+  and contribution content never enter the signal or transport nudge.
 - Owner reads require the exact contributor identifier and expose only the owner's case status and
   contributor signal codes. They omit reviewer identities, evidence digests, source signals, and
   other contributors. Source signals remain reviewer-internal.
@@ -69,9 +77,10 @@ the protected history may be removed.
 
 ## Not implemented or authorized
 
-- Gateway/API routes and a source-only administrative review surface are implemented, but no live
-  reviewer assignment, verified-requester authority, approved policy provider, durable workflow,
-  notification, or Jobs reconciliation consumer is wired.
+- Gateway/API routes, a source-only administrative review surface, durable decision signals, and a
+  default-uncomposed Jobs consumer boundary are implemented, but no live reviewer assignment,
+  verified-requester authority, approved policy provider, queue, scheduler, or deployment
+  composition is wired.
 - No decision automatically publishes, activates, refreshes, blocks, restores, or removes a job.
 - No aggregate reputation score, automatic sanction, reward, or contributor-facing ranking exists.
 - No live policy version, appeal timing, response SLA, retention period, license, takedown channel,

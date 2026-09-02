@@ -261,6 +261,9 @@ importers:
 
   backend/services/trust:
     dependencies:
+      '@ai-job-apply/event-contracts':
+        specifier: workspace:*
+        version: link:../../../packages/event-contracts
       postgres:
         specifier: 3.4.9
         version: 3.4.9

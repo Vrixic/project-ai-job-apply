@@ -26,6 +26,9 @@ import jobContributedSchema from "../schemas/job.contributed.v1.json" with { typ
 import jobExpiredSchema from "../schemas/job.expired.v1.json" with { type: "json" };
 import jobNormalizedSchema from "../schemas/job.normalized.v1.json" with { type: "json" };
 import jobVerifiedSchema from "../schemas/job.verified.v1.json" with { type: "json" };
+import trustContributionDecisionChangedSchema from "../schemas/trust.contribution-decision.changed.v1.json" with {
+  type: "json",
+};
 
 export const eventTypes = {
   jobContributed: "job.contributed.v1",
@@ -37,6 +40,7 @@ export const eventTypes = {
   profilePreferencesUpdated: "profile.preferences.updated.v1",
   profileReadinessCalculated: "profile.readiness.calculated.v1",
   subscriptionEntitlementChanged: "subscription.entitlement_changed.v1",
+  trustContributionDecisionChanged: "trust.contribution-decision.changed.v1",
 } as const;
 
 export const outboxNudgeSchemaVersion = 1 as const;
@@ -176,6 +180,11 @@ export interface JobExpiredData {
   statusEventId: string;
 }
 
+export interface TrustContributionDecisionChangedData {
+  decisionId: string;
+  contributionId: string;
+}
+
 export type ProfilePreferencesUpdatedEvent = CloudEvent<
   typeof eventTypes.profilePreferencesUpdated,
   ProfilePreferencesUpdatedData
@@ -200,6 +209,10 @@ const validators = new Map<string, ValidateFunction<unknown>>([
   [eventTypes.profilePreferencesUpdated, ajv.compile(preferencesUpdatedSchema)],
   [eventTypes.profileReadinessCalculated, ajv.compile(readinessCalculatedSchema)],
   [eventTypes.subscriptionEntitlementChanged, ajv.compile(entitlementChangedSchema)],
+  [
+    eventTypes.trustContributionDecisionChanged,
+    ajv.compile(trustContributionDecisionChangedSchema),
+  ],
 ]);
 const outboxNudgeValidator = ajv.compile<OutboxNudgeV1>(outboxNudgeSchema);
 const documentScanResultValidator = ajv.compile<DocumentScanResultV1>(documentScanResultSchema);

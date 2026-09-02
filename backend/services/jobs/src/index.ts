@@ -7,6 +7,7 @@ export * from "./contribution-processing-adapters.js";
 export * from "./contribution-processing.js";
 export * from "./contribution-processing-runner.js";
 export * from "./contribution-processing-runtime.js";
+export * from "./contribution-trust-signal.js";
 export * from "./domain/canonical-job.js";
 export * from "./freshness-policy.js";
 export * from "./persistence/catalog.js";

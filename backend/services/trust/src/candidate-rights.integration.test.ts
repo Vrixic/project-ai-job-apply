@@ -31,7 +31,7 @@ describeWithDatabase("Trust candidate rights ownership", () => {
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });
     expect(first.stdout.trim()).toBe(
-      "Trust migrations through 0002_candidate_rights applied and verified.",
+      "Trust migrations through 0003_decision_signals applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(first.stdout.trim());
   });
@@ -208,6 +208,9 @@ describeWithDatabase("Trust candidate rights ownership", () => {
       ],
       caseEvents: [
         {
+          eventId: expect.stringMatching(
+            /^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+          ),
           caseId: ownerCaseId,
           caseVersion: 1,
           contributionId: ownerContributionId,
@@ -219,6 +222,9 @@ describeWithDatabase("Trust candidate rights ownership", () => {
           evidenceDigestSha256: null,
         },
         {
+          eventId: expect.stringMatching(
+            /^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+          ),
           caseId: ownerCaseId,
           caseVersion: 2,
           contributionId: ownerContributionId,
@@ -338,13 +344,25 @@ describeWithDatabase("Trust candidate rights ownership", () => {
       });
 
       const [otherCounts] = await client<
-        { cases: number; events: number; contributorEvidence: number; sourceEvidence: number }[]
+        {
+          cases: number;
+          events: number;
+          decisionOutbox: number;
+          decisionDeliveries: number;
+          contributorEvidence: number;
+          sourceEvidence: number;
+        }[]
       >`
         SELECT
           (SELECT count(*)::int FROM trust.contribution_cases
             WHERE id = ${otherCaseId} AND contributor_user_id = ${otherOwner}) AS cases,
           (SELECT count(*)::int FROM trust.case_events
             WHERE case_id = ${otherCaseId}) AS events,
+          (SELECT count(*)::int FROM trust.contribution_decision_outbox
+            WHERE case_id = ${otherCaseId}) AS "decisionOutbox",
+          (SELECT count(*)::int FROM trust.contribution_decision_deliveries AS delivery
+            JOIN trust.contribution_decision_outbox AS event ON event.id = delivery.event_id
+            WHERE event.case_id = ${otherCaseId}) AS "decisionDeliveries",
           (SELECT count(*)::int FROM trust.reputation_evidence
             WHERE case_id = ${otherCaseId} AND subject_kind = 'contributor') AS "contributorEvidence",
           (SELECT count(*)::int FROM trust.reputation_evidence
@@ -353,6 +371,8 @@ describeWithDatabase("Trust candidate rights ownership", () => {
       expect(otherCounts).toEqual({
         cases: 1,
         events: 2,
+        decisionOutbox: 2,
+        decisionDeliveries: 2,
         contributorEvidence: 1,
         sourceEvidence: 1,
       });

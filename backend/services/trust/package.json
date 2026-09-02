@@ -18,6 +18,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@ai-job-apply/event-contracts": "workspace:*",
     "postgres": "3.4.9",
     "uuid": "14.0.1"
   }
