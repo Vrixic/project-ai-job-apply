@@ -14,7 +14,7 @@ $helperSource = Get-Content -LiteralPath $helperPath -Raw
 $package = Get-Content -LiteralPath $packagePath -Raw | ConvertFrom-D1RestoreJson
 if (
   [string]$package.scripts."test:staging-restore:ps7" -cne `
-    "pwsh -NoProfile -File scripts/tests/staging-postgresql-restore-verifier.tests.ps1" -or
+    "node scripts/run-powershell.mjs --require-core -File scripts/tests/staging-postgresql-restore-verifier.tests.ps1" -or
   [string]$package.scripts."test:staging-restore:ps5" -cne `
     "powershell.exe -NoProfile -File scripts/tests/staging-postgresql-restore-verifier.tests.ps1" -or
   -not ([string]$package.scripts."infrastructure:validate").Contains(
@@ -106,10 +106,13 @@ if (@($errors).Count -ne 0) { throw "The shared workload inspector did not parse
 
 $boundary = Get-D1RestoreManifestBoundary $repositoryRoot
 if (
-  [string]$boundary.ManifestId -cne "d1-public-sitemap-profile-jobs-documents-matching-billing-v1" -or
-  [int]$boundary.OwnerCount -ne 5 -or
-  [int]$boundary.RelationCount -ne 45 -or
-  [int]$boundary.MigrationCount -ne 27 -or
+  [string]$boundary.ManifestId -cne `
+    "d2-extension-ugc-profile-jobs-documents-matching-billing-trust-v1" -or
+  [int]$boundary.OwnerCount -ne 6 -or
+  (@($boundary.OwnerNames) -join ",") -cne "billing,documents,jobs,matching,profile,trust" -or
+  [int]$boundary.SchemaCount -ne 10 -or
+  [int]$boundary.RelationCount -ne 66 -or
+  [int]$boundary.MigrationCount -ne 37 -or
   [string]$boundary.ManifestSha256 -cnotmatch "^[a-f0-9]{64}$"
 ) {
   throw "The current restore manifest boundary is unexpected."
@@ -128,6 +131,29 @@ $event = [ordered]@{
 } | ConvertTo-Json -Compress
 $parsed = ConvertFrom-D1RestoreVerifierEvents @($event) $boundary "test"
 if ([string]$parsed.Digest -cne (("c" * 64) -join "")) { throw "The exact aggregate was not parsed." }
+
+$d1Boundary = [pscustomobject]@{
+  ManifestId = "d1-public-sitemap-profile-jobs-documents-matching-billing-v1"
+  ManifestSha256 = ("1" * 64) -join ""
+  OwnerCount = 5
+  RelationCount = 45
+  MigrationCount = 27
+}
+$d1Event = [ordered]@{
+  event = "d1_restore_verification"
+  schema_version = 1
+  kind = "read_only_aggregate"
+  manifest_id = [string]$d1Boundary.ManifestId
+  manifest_sha256 = [string]$d1Boundary.ManifestSha256
+  owner_count = [int]$d1Boundary.OwnerCount
+  relation_count = [int]$d1Boundary.RelationCount
+  migration_count = [int]$d1Boundary.MigrationCount
+  digest = ("2" * 64) -join ""
+} | ConvertTo-Json -Compress
+Assert-Throws { ConvertFrom-D1RestoreVerifierEvents @($d1Event) $boundary "test" } `
+  "Historical D1 aggregate receipt"
+Assert-Throws { Assert-D1RestoreContextBoundary (New-TestContext $d1Boundary) $boundary } `
+  "Historical D1 restore context"
 
 foreach ($mutation in @(
   { (($event | ConvertFrom-Json) | Select-Object *, @{n = "extra"; e = { $true } }) | ConvertTo-Json -Compress },

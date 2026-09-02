@@ -56,7 +56,9 @@ database is unsafe.
 - `publish-development-migration-image.ps1` — Provides the corresponding fail-closed development
   fallback for the migration-only container. Its cloud-independent `LocalBuild` action proves two
   source-bound `linux/amd64` builds have identical configuration and rootfs identities and passes a
-  hardened runtime smoke. Publication separately resolves the Terraform-owned immutable KMS ECR
+  hardened runtime smoke against the exact six-owner, ten-schema, 66-relation, 37-migration Phase 2 manifest,
+  including the Trust runner and checksum-bound migration files. Publication separately resolves
+  the Terraform-owned immutable KMS ECR
   repository, publishes the exact commit tag, requires a completed zero-High/zero-Critical scan,
   and emits a checksum-reviewed ignored receipt without changing Terraform or executing a migration. See
   `infrastructure/runbooks/deployments/development-migration-image-publication.md`.
@@ -67,10 +69,11 @@ database is unsafe.
   `infrastructure/runbooks/deployments/development-gateway-release.md`.
 
 Artifacts are normally published by the protected GitHub workflows; the development-only local
-publishers preserve the same immutable boundary when that route is unavailable. The migration-only container is built
-from `Dockerfile.migration` and runs the fail-fast profile/jobs/documents/matching migration
-orchestrator. Its source package also includes the strict restore-verifier CLI and canonical
-manifest; source inclusion does not claim image publication, task-definition deployment,
+publishers preserve the same immutable boundary when that route is unavailable. The migration-only
+container is built from `Dockerfile.migration` and runs the fail-fast
+profile/jobs/documents/matching/billing/trust migration orchestrator. Its source package also
+includes the strict restore-verifier CLI and canonical manifest; source inclusion does not claim
+deployed Trust candidate-rights behavior, image publication, task-definition deployment,
 migration execution, or AWS restore execution. No gateway or general worker image exists.
 
 ## Deployed verification and evidence

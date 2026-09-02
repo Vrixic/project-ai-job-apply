@@ -92,13 +92,13 @@ describe("current restore manifest", () => {
     expect([...migrationRunners].map((runner) => runner.owner).sort()).toEqual(
       source.manifest.contributors.map((contributor) => contributor.owner),
     );
-    expect(expectedRelations(source)).toHaveLength(56);
+    expect(expectedRelations(source)).toHaveLength(66);
     expect(
       source.manifest.contributors.reduce(
         (total, contributor) => total + contributor.migrations.length,
         0,
       ),
-    ).toBe(31);
+    ).toBe(37);
     expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 
     for (const contributor of source.manifest.contributors) {
@@ -241,8 +241,8 @@ describe("read-only aggregate restore verification", () => {
       manifestId: "d2-extension-ugc-profile-jobs-documents-matching-billing-trust-v1",
       manifestSha256: source.sha256,
       ownerCount: 6,
-      relationCount: 56,
-      migrationCount: 31,
+      relationCount: 66,
+      migrationCount: 37,
     });
     expect(result.aggregateDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.keys(result)).toEqual([

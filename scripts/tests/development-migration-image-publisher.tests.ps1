@@ -289,6 +289,8 @@ foreach ($required in @(
     'oci-layout://', '--network none', '--read-only', '--cap-drop ALL', 'migration-runtime-smoke:ok',
     'profile/dist/src/run-private-feature-acceptance.js',
     'profile/migrations/0007_candidate_rights_export_null_omission.sql',
+    'profile/migrations/0008_ugc_contribution_consents.sql',
+    'profile/migrations/0009_ugc_contribution_consent_candidate_rights.sql',
     'jobs/dist/src/search-acceptance.js', 'jobs/dist/src/run-search-acceptance.js',
     'documents/dist/src/run-document-processing-acceptance.js',
     'matching/dist/src/run-private-feature-acceptance.js',
@@ -298,10 +300,25 @@ foreach ($required in @(
     'jobs/migrations/0011_positive_source_withdrawal.sql',
     'jobs/migrations/0012_candidate_rights.sql',
     'jobs/migrations/0013_public_job_sitemap.sql',
-    'profile,jobs,documents,matching,billing',
-    'matching:["0001_saved_jobs.sql","0002_candidate_rights.sql"]',
+    'jobs/migrations/0014_job_contribution_intake.sql',
+    'jobs/migrations/0015_source_revalidation_lifecycle.sql',
+    'jobs/migrations/0016_job_contribution_candidate_rights.sql',
+    'jobs/migrations/0017_job_contribution_processing.sql',
+    'jobs/migrations/0018_job_contribution_processing_delivery.sql',
+    'matching/migrations/0003_private_saved_page_captures.sql',
+    'trust/dist/src/migrate.js',
+    'trust/migrations/0001_ugc_trust_foundation.sql',
+    'trust/migrations/0002_candidate_rights.sql',
+    'profile,jobs,documents,matching,billing,trust',
+    'matching:["0001_saved_jobs.sql","0002_candidate_rights.sql","0003_private_saved_page_captures.sql"]',
     'billing:["0001_entitlement_projection.sql","0002_candidate_rights.sql"]',
-    'manifest.contributors.length!==5', 'createRequire', './billing/package.json',
+    'trust:["0001_ugc_trust_foundation.sql","0002_candidate_rights.sql"]',
+    'manifest.manifestId!=="d2-extension-ugc-profile-jobs-documents-matching-billing-trust-v1"',
+    'manifest.contributors.length!==6',
+    'manifest.contributors.flatMap(x=>x.schemas).length!==10',
+    'manifest.contributors.flatMap(x=>x.relations).length!==66',
+    'manifest.contributors.flatMap(x=>x.migrations).length!==37',
+    'createRequire', './${owner}/package.json',
     'schemaVersion     = 2', 'indexDigest', 'platformDigest', 'rootfsDiffIdSetSha256',
     'compressedLayerSetSha256', 'imageUri = "$($boundary.RepositoryUri)@$($readback.PlatformDigest)"',
     'ReviewedReceiptSha256', '[IO.File]::Replace($temporary, $Path, $backup)',
@@ -322,7 +339,8 @@ $backendInitialization = $source.LastIndexOf('Initialize-Backend', [StringCompar
 if ($localBuildBranch -lt 0 -or $backendInitialization -lt 0 -or $localBuildBranch -gt $backendInitialization) {
   throw "LocalBuild must exit before Terraform-state and AWS-boundary initialization."
 }
-if (-not $source.Contains('for(const entrypoint of ["profile/dist/src/run-private-feature-acceptance.js","profile/migrations/0007_candidate_rights_export_null_omission.sql","jobs/dist/src/search-acceptance.js","jobs/dist/src/run-search-acceptance.js","documents/dist/src/run-document-processing-acceptance.js","matching/dist/src/run-private-feature-acceptance.js","runner/dist/src/restore-verifier-cli.js","runner/restore-manifest.v1.json","jobs/migrations/0009_provider_ingestion_sources.sql","jobs/migrations/0010_public_job_truth_fields.sql","jobs/migrations/0011_positive_source_withdrawal.sql","jobs/migrations/0012_candidate_rights.sql","jobs/migrations/0013_public_job_sitemap.sql"])await access(entrypoint)')) {
+$requiredEntrypointSet = 'for(const entrypoint of ["profile/dist/src/run-private-feature-acceptance.js","profile/migrations/0007_candidate_rights_export_null_omission.sql","profile/migrations/0008_ugc_contribution_consents.sql","profile/migrations/0009_ugc_contribution_consent_candidate_rights.sql","jobs/dist/src/search-acceptance.js","jobs/dist/src/run-search-acceptance.js","documents/dist/src/run-document-processing-acceptance.js","matching/dist/src/run-private-feature-acceptance.js","runner/dist/src/restore-verifier-cli.js","runner/restore-manifest.v1.json","jobs/migrations/0009_provider_ingestion_sources.sql","jobs/migrations/0010_public_job_truth_fields.sql","jobs/migrations/0011_positive_source_withdrawal.sql","jobs/migrations/0012_candidate_rights.sql","jobs/migrations/0013_public_job_sitemap.sql","jobs/migrations/0014_job_contribution_intake.sql","jobs/migrations/0015_source_revalidation_lifecycle.sql","jobs/migrations/0016_job_contribution_candidate_rights.sql","jobs/migrations/0017_job_contribution_processing.sql","jobs/migrations/0018_job_contribution_processing_delivery.sql","matching/migrations/0003_private_saved_page_captures.sql","trust/dist/src/migrate.js","trust/migrations/0001_ugc_trust_foundation.sql","trust/migrations/0002_candidate_rights.sql"])await access(entrypoint)'
+if (-not $source.Contains($requiredEntrypointSet)) {
   throw "The migration runtime smoke gate does not require the exact acceptance entrypoint set."
 }
 foreach ($forbidden in @("terraform apply", "ecs run-task", "register-task-definition", "BatchDeleteImage")) {
@@ -335,17 +353,34 @@ foreach ($required in @(
   '@ai-job-apply/matching-service deploy --prod --legacy /migration/matching',
   '@ai-job-apply/billing-service build',
   '@ai-job-apply/billing-service deploy --prod --legacy /migration/billing',
+  '@ai-job-apply/trust-service build',
+  '@ai-job-apply/trust-service deploy --prod --legacy /migration/trust',
   'runner/dist/src/restore-verifier-cli.js',
   'runner/restore-manifest.v1.json',
   'profile/dist/src/run-private-feature-acceptance.js',
   'profile/migrations/0007_candidate_rights_export_null_omission.sql',
+  'profile/migrations/0008_ugc_contribution_consents.sql',
+  'profile/migrations/0009_ugc_contribution_consent_candidate_rights.sql',
   'matching/dist/src/run-private-feature-acceptance.js',
+  'matching/migrations/0003_private_saved_page_captures.sql',
   'jobs/migrations/0009_provider_ingestion_sources.sql',
   'jobs/migrations/0010_public_job_truth_fields.sql',
   'jobs/migrations/0011_positive_source_withdrawal.sql',
+  'jobs/migrations/0014_job_contribution_intake.sql',
+  'jobs/migrations/0015_source_revalidation_lifecycle.sql',
+  'jobs/migrations/0016_job_contribution_candidate_rights.sql',
+  'jobs/migrations/0017_job_contribution_processing.sql',
+  'jobs/migrations/0018_job_contribution_processing_delivery.sql',
+  'trust/dist/src/migrate.js',
+  'trust/migrations/0001_ugc_trust_foundation.sql',
+  'trust/migrations/0002_candidate_rights.sql',
   'restore-verifier-package-smoke:ok',
-  'file:///migration/billing/package.json',
-  'expected exactly five generated .modules.yaml files',
+  'file:///migration/${owner}/package.json',
+  'source.manifest.contributors.length!==6',
+  'source.manifest.contributors.flatMap(x=>x.schemas).length!==10',
+  'source.manifest.contributors.flatMap(x=>x.relations).length!==66',
+  'source.manifest.contributors.flatMap(x=>x.migrations).length!==37',
+  'expected exactly six generated .modules.yaml files',
   'FROM node:24.18.0-alpine3.23@sha256:595398b0081eacda8e1c4c5b97b76cd1020e4d58a8ebcb4843b9bca1e79e7436 AS runtime',
   'libcrypto3-3.5.8-r0.apk',
   'a5592b5cf276bc7a30ac7b161d46446085490b640faa1f839ea98eb15aacad31',
@@ -372,20 +407,4 @@ if ($dockerfile.Contains('gcr.io/distroless') -or $dockerfile.Contains('FROM scr
 if ($dockerfile.Contains('apk upgrade')) {
   throw "The migration runtime must use checksum-pinned security packages instead of a moving upgrade."
 }
-$workflow = Get-Content -LiteralPath `
-  (Join-Path $repositoryRoot ".github\workflows\publish-environment-images.yml") -Raw
-foreach ($required in @(
-  'profile,jobs,documents,matching,billing',
-  'runner/dist/src/restore-verifier-cli.js',
-  'runner/restore-manifest.v1.json',
-  'jobs:["0001_job_catalog.sql","0002_duplicate_resolution.sql","0003_duplicate_resolution_audit_guard.sql","0004_job_search.sql","0005_ingestion_orchestration.sql","0006_public_job_reader.sql","0007_matchable_job_attributes.sql","0008_job_reporting_and_moderation.sql"]',
-  './billing/package.json',
-  'matching:["0001_saved_jobs.sql"]',
-  'billing:["0001_entitlement_projection.sql"]'
-)) {
-  if (-not $workflow.Contains($required)) {
-    throw "The hosted migration runtime smoke boundary is missing: $required"
-  }
-}
-
 Write-Host "Development migration image publisher OCI guard tests passed."

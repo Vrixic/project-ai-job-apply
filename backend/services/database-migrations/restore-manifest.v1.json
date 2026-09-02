@@ -111,6 +111,22 @@
         {
           "version": "0014_job_contribution_intake",
           "checksum": "940a9d2c6b7d1dfde4e10e12f24677572672b38afd1f4ea24c44a886d43faf6d"
+        },
+        {
+          "version": "0015_source_revalidation_lifecycle",
+          "checksum": "6ca918a9df5350f1c648ba00da1c8ce84f2a32e506962780d8d2bfbc65e66ee7"
+        },
+        {
+          "version": "0016_job_contribution_candidate_rights",
+          "checksum": "c1028c6a9bedabaa57cdb803de48261f9ed1a83aec1abbeb59104970ddb4bff8"
+        },
+        {
+          "version": "0017_job_contribution_processing",
+          "checksum": "3337961fa2021c6b0d86a5021e7d60bfb6cb47477ad9de030b0732ff8f6b1562"
+        },
+        {
+          "version": "0018_job_contribution_processing_delivery",
+          "checksum": "08765c8679d2b65b80ac51dd588267d3111b2729e6abd773d2dd5a974e75a972"
         }
       ],
       "relations": [
@@ -122,13 +138,23 @@
         "jobs.ingestion_checkpoints",
         "jobs.ingestion_dispatches",
         "jobs.ingestion_run_events",
+        "jobs.job_contribution_independent_verifications",
+        "jobs.job_contribution_normalizations",
         "jobs.job_contribution_outbox",
+        "jobs.job_contribution_processing_event_deliveries",
+        "jobs.job_contribution_processing_outbox",
+        "jobs.job_contribution_processing_queue",
+        "jobs.job_contribution_reconciliations",
+        "jobs.job_contribution_state_events",
+        "jobs.job_contribution_trust_decisions",
         "jobs.job_contributions",
         "jobs.job_reports",
         "jobs.job_sources",
         "jobs.moderation_cases",
         "jobs.moderation_events",
         "jobs.schema_migrations",
+        "jobs.source_revalidation_queue",
+        "jobs.source_verification_evidence",
         "jobs.status_events"
       ]
     },
@@ -198,6 +224,10 @@
         {
           "version": "0008_ugc_contribution_consents",
           "checksum": "71d63b600c81aab4ec79bb0d3793fbfedb4f7de98da761f92bd46e46053a7e69"
+        },
+        {
+          "version": "0009_ugc_contribution_consent_candidate_rights",
+          "checksum": "94ec1bdf4956eda831cbe9dbcd6a5f70b11941d679e84a9cd0d11355be05905a"
         }
       ],
       "relations": [
@@ -227,6 +257,10 @@
         {
           "version": "0001_ugc_trust_foundation",
           "checksum": "4e6e603ec9405321dbcb0b95c3f81514ab3230fff9fb6d5388bd674ef3402a7d"
+        },
+        {
+          "version": "0002_candidate_rights",
+          "checksum": "ff3a95ffedbf3cb59870ff69cd34593338787af27c3d311f87ed95fda4f728a6"
         }
       ],
       "relations": [

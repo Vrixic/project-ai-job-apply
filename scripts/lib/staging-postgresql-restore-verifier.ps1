@@ -178,6 +178,12 @@ function Get-D1RestoreManifestBoundary {
   )
 
   $root = [IO.Path]::GetFullPath($RepositoryRoot)
+  $expectedManifestId = "d2-extension-ugc-profile-jobs-documents-matching-billing-trust-v1"
+  $expectedOwners = @("billing", "documents", "jobs", "matching", "profile", "trust")
+  $expectedSchemas = @(
+    "billing", "documents", "identity", "jobs", "jobs_public",
+    "matching", "platform", "privacy", "profile", "trust"
+  )
   $path = [IO.Path]::GetFullPath((Join-Path $root `
     "backend/services/database-migrations/restore-manifest.v1.json"))
   $rootPrefix = $root.TrimEnd([char[]]@("\", "/")) + [IO.Path]::DirectorySeparatorChar
@@ -193,7 +199,7 @@ function Get-D1RestoreManifestBoundary {
   if (
     -not (Test-D1RestoreBoundedInteger $manifest.schemaVersion) -or
     [long]$manifest.schemaVersion -ne 1 -or
-    [string]$manifest.manifestId -cnotmatch "^[a-z0-9][a-z0-9-]{0,95}$"
+    [string]$manifest.manifestId -cne $expectedManifestId
   ) {
     throw "The restore manifest identity is invalid."
   }
@@ -202,6 +208,9 @@ function Get-D1RestoreManifestBoundary {
     throw "The restore manifest has no contributors."
   }
   $owners = @()
+  $schemaNames = @()
+  $relationNames = @()
+  $migrationIdentities = @()
   $relationCount = 0
   $migrationCount = 0
   foreach ($contributor in $contributors) {
@@ -218,6 +227,33 @@ function Get-D1RestoreManifestBoundary {
     if ($schemas.Count -eq 0 -or $migrations.Count -eq 0 -or $relations.Count -eq 0) {
       throw "The restore contributor boundary is empty."
     }
+    foreach ($schema in $schemas) {
+      if ([string]$schema -cnotmatch "^[a-z][a-z0-9_]{0,62}$") {
+        throw "The restore schema identity is invalid."
+      }
+      $schemaNames += [string]$schema
+    }
+    if (
+      [string]$contributor.migrationLedger -cnotmatch `
+        "^[a-z][a-z0-9_]{0,62}\.[a-z][a-z0-9_]{0,62}$" -or
+      @($relations | Where-Object {
+        [string]$_ -cnotmatch "^[a-z][a-z0-9_]{0,62}\.[a-z][a-z0-9_]{0,62}$"
+      }).Count -ne 0
+    ) {
+      throw "The restore relation identity is invalid."
+    }
+    if (
+      (@($schemas | Select-Object -Unique)).Count -ne $schemas.Count -or
+      ($schemas -join "`n") -cne ((@($schemas | Sort-Object)) -join "`n") -or
+      (@($relations | Select-Object -Unique)).Count -ne $relations.Count -or
+      ($relations -join "`n") -cne ((@($relations | Sort-Object)) -join "`n") -or
+      @($relations | Where-Object {
+        [string]$_ -ceq [string]$contributor.migrationLedger
+      }).Count -ne 1
+    ) {
+      throw "The restore contributor schema or relation boundary is ambiguous."
+    }
+    $migrationVersions = @()
     foreach ($migration in $migrations) {
       Assert-D1RestoreExactObjectKeys $migration @("version", "checksum") "Restore migration"
       if (
@@ -226,22 +262,43 @@ function Get-D1RestoreManifestBoundary {
       ) {
         throw "The restore migration identity is invalid."
       }
+      $migrationVersions += [string]$migration.version
+      $migrationIdentities += "$([string]$contributor.owner)/$([string]$migration.version)"
     }
+    if (
+      (@($migrationVersions | Select-Object -Unique)).Count -ne $migrationVersions.Count -or
+      ($migrationVersions -join "`n") -cne ((@($migrationVersions | Sort-Object)) -join "`n")
+    ) {
+      throw "The restore contributor migration boundary is ambiguous."
+    }
+    $relationNames += @($relations | ForEach-Object { [string]$_ })
     $relationCount += $relations.Count
     $migrationCount += $migrations.Count
   }
   $sortedOwners = @($owners | Sort-Object)
+  $sortedSchemas = @($schemaNames | Sort-Object)
   if (
     (@($owners | Select-Object -Unique)).Count -ne $owners.Count -or
-    ($owners -join "`n") -cne ($sortedOwners -join "`n")
+    ($owners -join "`n") -cne ($sortedOwners -join "`n") -or
+    ($owners -join "`n") -cne ($expectedOwners -join "`n") -or
+    (@($schemaNames | Select-Object -Unique)).Count -ne $schemaNames.Count -or
+    ($sortedSchemas -join "`n") -cne ($expectedSchemas -join "`n") -or
+    (@($relationNames | Select-Object -Unique)).Count -ne $relationNames.Count -or
+    (@($migrationIdentities | Select-Object -Unique)).Count -ne $migrationIdentities.Count -or
+    $contributors.Count -ne 6 -or
+    $schemaNames.Count -ne 10 -or
+    $relationCount -ne 66 -or
+    $migrationCount -ne 37
   ) {
-    throw "The restore contributor order or uniqueness is invalid."
+    throw "The restore manifest does not match the exact Phase 2 contributor boundary."
   }
 
   return [pscustomobject]@{
     ManifestId    = [string]$manifest.manifestId
     ManifestSha256 = Get-D1RestoreFileSha256 $path
     OwnerCount    = $contributors.Count
+    OwnerNames    = @($owners)
+    SchemaCount   = $schemaNames.Count
     RelationCount = $relationCount
     MigrationCount = $migrationCount
   }

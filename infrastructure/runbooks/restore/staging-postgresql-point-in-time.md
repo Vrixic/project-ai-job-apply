@@ -76,9 +76,10 @@ The operator:
 
 1. repeats all source/application/no-drift guards;
 2. starts the immutable one-off Fargate verifier against the source-managed connection secret;
-3. runs one read-only PostgreSQL transaction that proves the canonical four-owner boundary of 31
-   regular relations and 12 checksum-bound migration journal entries, hashes only ordered
-   migration evidence and per-relation counts in memory, and emits one sanitized digest event;
+3. runs one read-only PostgreSQL transaction that proves the current Phase 2 manifest boundary of
+   six owners, ten schemas, 66 regular relations, and the exact checksum-bound migration journal
+   entries (37 at this boundary), including the separately owned Trust schema, hashes only ordered migration evidence
+   and per-relation counts in memory, and emits one sanitized digest event;
 4. records the latest-restorable-point lag;
 5. saves only an ignored local target/context record;
 6. requests `use-latest-restorable-time` into the uniquely tagged target; and
@@ -112,7 +113,8 @@ configuration. It then runs the same immutable read-only verifier while keeping 
 
 Require:
 
-- the exact manifest-bound Profile, Jobs, Documents, and Matching relations and migration ledgers;
+- the exact manifest-bound Profile, Jobs, Documents, Matching, Billing, and Trust relations and
+  migration ledgers;
 - exact aggregate digest equality with the source baseline;
 - verifier exit code `0`;
 - zero forbidden credential/candidate/email/JWT patterns in the two verifier streams; and
@@ -160,13 +162,15 @@ For an uninterrupted reviewed exercise,
 Start, Verify, and Cleanup in sequence, stopping at the first failed gate and retaining the
 context/target for safe recovery.
 
-The verifier digest is an exact hash of the manifest, migration-ledger versions/checksums, and
+The verifier digest is an exact hash of the current Phase 2 manifest, migration-ledger
+versions/checksums, and
 per-relation counts. It is not a row-value/content checksum and does not by itself detect
 same-count data corruption. Repository tests may prove the verifier with generated-synthetic data
 and a local PostgreSQL backup/restore; that evidence is not RDS PITR execution, deployment,
-production data authorization, or an RTO/RPO result. Matching composition and verifier packaging
+production data authorization, or an RTO/RPO result. Phase 2 composition and verifier packaging
 remain source changes until an immutable migration image and task definition are separately
-published, deployed, and exercised under this runbook.
+published, deployed, and exercised under this runbook. Manifest inclusion also does not prove
+deployed Trust candidate-rights behavior; that requires its own application and recovery acceptance.
 
 This PostgreSQL packet also does not by itself prove versioned object/artifact recovery, durable
 outbox/workflow/event reconciliation, candidate-deletion recovery replay, or cross-region recovery.

@@ -34,6 +34,15 @@ two deterministic OCI exports, byte-identity comparison, and hardened runtime sm
 `Publish`, then records only ignored local logs/layouts. It does not contact AWS, run a
 vulnerability scan, publish an image, or satisfy the publication/scan/recovery gate.
 
+The current package boundary is the Phase 2 manifest
+`d2-extension-ugc-profile-jobs-documents-matching-billing-trust-v1`: six ordered owners (Profile,
+Jobs, Documents, Matching, Billing, and Trust), ten schemas, 66 regular relations, and 37 exact
+checksum-bound migrations. The smoke gate also requires the Trust
+runner and every Phase 2 migration file before an image can be considered locally buildable.
+This is a generated-synthetic/default-dark source and artifact boundary. It does not establish
+deployed Trust candidate-rights behavior, image publication, task-definition deployment,
+migration execution, or a deployed restore.
+
 For publication, first run read-only status:
 
 ```powershell
@@ -116,4 +125,5 @@ pwsh -NoProfile -File scripts/tests/development-migration-image-publisher.tests.
 It covers account/repository/KMS substitutions, missing/extra/wrong platforms, index/platform/config/
 layer digest confusion, deterministic-build mismatch, wrong handoffs, incomplete or vulnerable
 scans, version-1 and unsafe recovery states, receipt path traversal, and the absence of Terraform,
-ECS execution, and ECR deletion operations.
+ECS execution, and ECR deletion operations. It also rejects an older D1 manifest/package boundary
+instead of treating a previously valid receipt or image as current Phase 2 evidence.
