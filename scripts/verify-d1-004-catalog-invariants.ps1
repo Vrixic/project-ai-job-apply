@@ -10,13 +10,22 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
-$currentPowerShellExecutable = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+$preferredPowerShell = Get-Command "pwsh" -ErrorAction SilentlyContinue
+$currentPowerShellExecutable = if ($null -ne $preferredPowerShell) {
+  [string]$preferredPowerShell.Source
+} else {
+  [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+}
 if ([string]::IsNullOrWhiteSpace($currentPowerShellExecutable) -or
     -not (Test-Path -LiteralPath $currentPowerShellExecutable -PathType Leaf)) {
   throw "The current PowerShell executable could not be resolved."
 }
 
 function Get-D1CatalogTestInventory {
+  param(
+    [string]$PowerShellExecutable = "pwsh"
+  )
+
   return @(
     [pscustomobject]@{
       Mode = "Unit"
@@ -116,7 +125,7 @@ function Get-D1CatalogTestInventory {
     [pscustomobject]@{
       Mode = "Unit"
       Name = "Gateway boundary verifier self-test"
-      Executable = $currentPowerShellExecutable
+      Executable = $PowerShellExecutable
       Arguments = @("-NoProfile", "-File", "scripts/tests/gateway-boundary-verifier.tests.ps1")
       RepositoryPaths = @(
         "scripts/verify-gateway-lambda-boundary.ps1",
@@ -219,7 +228,7 @@ function Invoke-D1CatalogTestEntry {
   }
 }
 
-$inventory = @(Get-D1CatalogTestInventory)
+$inventory = @(Get-D1CatalogTestInventory -PowerShellExecutable $currentPowerShellExecutable)
 Assert-D1CatalogTestInventory -Inventory $inventory
 
 $selected = @(if ($Mode -ceq "All") {
