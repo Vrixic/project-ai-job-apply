@@ -7,13 +7,14 @@ describe("database migration orchestrator", () => {
     await runDatabaseMigrations(async (runner) => {
       visited.push(runner.owner);
     });
-    expect(visited).toEqual(["profile", "jobs", "documents", "matching", "billing"]);
+    expect(visited).toEqual(["profile", "jobs", "documents", "matching", "billing", "trust"]);
     expect(migrationRunners.map((runner) => runner.executable)).toEqual([
       "profile/dist/src/migrate.js",
       "jobs/dist/src/migrate.js",
       "documents/dist/src/migrate.js",
       "matching/dist/src/migrate.js",
       "billing/dist/src/migrate.js",
+      "trust/dist/src/migrate.js",
     ]);
   });
 

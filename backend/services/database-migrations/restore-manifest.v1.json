@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "manifestId": "d1-public-sitemap-profile-jobs-documents-matching-billing-v1",
+  "manifestId": "d2-extension-ugc-profile-jobs-documents-matching-billing-trust-v1",
   "contributors": [
     {
       "owner": "billing",
@@ -107,6 +107,10 @@
         {
           "version": "0013_public_job_sitemap",
           "checksum": "6cf9ccf4f9fcf3502024fbcf8c2a8d023eaa3320da0bfac4a1b3f6d20e08d44f"
+        },
+        {
+          "version": "0014_job_contribution_intake",
+          "checksum": "940a9d2c6b7d1dfde4e10e12f24677572672b38afd1f4ea24c44a886d43faf6d"
         }
       ],
       "relations": [
@@ -118,6 +122,8 @@
         "jobs.ingestion_checkpoints",
         "jobs.ingestion_dispatches",
         "jobs.ingestion_run_events",
+        "jobs.job_contribution_outbox",
+        "jobs.job_contributions",
         "jobs.job_reports",
         "jobs.job_sources",
         "jobs.moderation_cases",
@@ -138,11 +144,19 @@
         {
           "version": "0002_candidate_rights",
           "checksum": "fa4c2bce9c702b10f17a0bee1ba63378ac852554ee89b68198ba215d10934611"
+        },
+        {
+          "version": "0003_private_saved_page_captures",
+          "checksum": "93d3318282ad79bd6a8dc159a82133b748e1006a501fd4271bb4a21bd79bd93d"
         }
       ],
       "relations": [
         "matching.audit_events",
         "matching.idempotency_keys",
+        "matching.private_saved_page_capture_audit_events",
+        "matching.private_saved_page_capture_commands",
+        "matching.private_saved_page_capture_resolutions",
+        "matching.private_saved_page_captures",
         "matching.saved_job_list_state",
         "matching.saved_jobs",
         "matching.schema_migrations"
@@ -180,6 +194,10 @@
         {
           "version": "0007_candidate_rights_export_null_omission",
           "checksum": "9e5dcd9e6125a51d138f7580f27b989fcdf3f3a10bd7a31bf1e68ddac39e3ae3"
+        },
+        {
+          "version": "0008_ugc_contribution_consents",
+          "checksum": "71d63b600c81aab4ec79bb0d3793fbfedb4f7de98da761f92bd46e46053a7e69"
         }
       ],
       "relations": [
@@ -197,7 +215,25 @@
         "profile.profile_fact_evidence",
         "profile.profile_fact_versions",
         "profile.profile_facts",
-        "profile.resume_fact_imports"
+        "profile.resume_fact_imports",
+        "profile.ugc_contribution_consents"
+      ]
+    },
+    {
+      "owner": "trust",
+      "schemas": ["trust"],
+      "migrationLedger": "trust.schema_migrations",
+      "migrations": [
+        {
+          "version": "0001_ugc_trust_foundation",
+          "checksum": "4e6e603ec9405321dbcb0b95c3f81514ab3230fff9fb6d5388bd674ef3402a7d"
+        }
+      ],
+      "relations": [
+        "trust.case_events",
+        "trust.contribution_cases",
+        "trust.reputation_evidence",
+        "trust.schema_migrations"
       ]
     }
   ]

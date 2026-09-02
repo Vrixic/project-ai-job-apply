@@ -75,11 +75,11 @@ function successfulExecutor(source: RestoreManifestSource, count = "0"): Restore
 }
 
 describe("current restore manifest", () => {
-  it("binds the exact current Profile, Jobs, Documents, Matching, and Billing bytes", async () => {
+  it("binds the exact Phase 2 Profile, Jobs, Documents, Matching, Billing, and Trust bytes", async () => {
     const source = loadCurrentRestoreManifest();
 
     expect(source.manifest.manifestId).toBe(
-      "d1-public-sitemap-profile-jobs-documents-matching-billing-v1",
+      "d2-extension-ugc-profile-jobs-documents-matching-billing-trust-v1",
     );
     expect(source.manifest.contributors.map((contributor) => contributor.owner)).toEqual([
       "billing",
@@ -87,17 +87,18 @@ describe("current restore manifest", () => {
       "jobs",
       "matching",
       "profile",
+      "trust",
     ]);
     expect([...migrationRunners].map((runner) => runner.owner).sort()).toEqual(
       source.manifest.contributors.map((contributor) => contributor.owner),
     );
-    expect(expectedRelations(source)).toHaveLength(45);
+    expect(expectedRelations(source)).toHaveLength(56);
     expect(
       source.manifest.contributors.reduce(
         (total, contributor) => total + contributor.migrations.length,
         0,
       ),
-    ).toBe(27);
+    ).toBe(31);
     expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 
     for (const contributor of source.manifest.contributors) {
@@ -131,7 +132,7 @@ describe("current restore manifest", () => {
       relations: ["recommendations.schema_migrations"],
     } satisfies RestoreContributor;
 
-    const extended = createRestoreManifest(source.manifest, [future], "d1-with-future-v1");
+    const extended = createRestoreManifest(source.manifest, [future], "d2-with-future-v1");
 
     expect(extended.contributors.map((contributor) => contributor.owner)).toEqual([
       "billing",
@@ -140,10 +141,13 @@ describe("current restore manifest", () => {
       "matching",
       "profile",
       "recommendations",
+      "trust",
     ]);
-    expect(source.manifest.contributors).toHaveLength(5);
+    expect(source.manifest.contributors).toHaveLength(6);
     expect(JSON.stringify(source.manifest.contributors)).toBe(existingContributors);
-    expect(extended.contributors.slice(0, 5)).toEqual(source.manifest.contributors);
+    expect(
+      extended.contributors.filter((contributor) => contributor.owner !== "recommendations"),
+    ).toEqual(source.manifest.contributors);
     expect(Object.isFrozen(extended)).toBe(true);
     expect(Object.isFrozen(extended.contributors)).toBe(true);
     expect(Object.isFrozen(extended.contributors[4]?.migrations)).toBe(true);
@@ -234,11 +238,11 @@ describe("read-only aggregate restore verification", () => {
 
     expect(transactionModes).toEqual(["read only isolation level repeatable read"]);
     expect(result).toMatchObject({
-      manifestId: "d1-public-sitemap-profile-jobs-documents-matching-billing-v1",
+      manifestId: "d2-extension-ugc-profile-jobs-documents-matching-billing-trust-v1",
       manifestSha256: source.sha256,
-      ownerCount: 5,
-      relationCount: 45,
-      migrationCount: 27,
+      ownerCount: 6,
+      relationCount: 56,
+      migrationCount: 31,
     });
     expect(result.aggregateDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.keys(result)).toEqual([

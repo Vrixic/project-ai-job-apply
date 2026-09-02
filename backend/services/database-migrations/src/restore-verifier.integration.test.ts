@@ -81,6 +81,37 @@ describe.skipIf(!requested)("restored PostgreSQL aggregate verification", () => 
     expect(targetIdentity?.database_name).not.toBe(sourceIdentity?.database_name);
 
     for (const client of [source, restored]) {
+      const phaseTwoBoundary = await client.unsafe<{
+        consent_present: boolean;
+        contribution_present: boolean;
+        contribution_outbox_present: boolean;
+        private_capture_present: boolean;
+        trust_case_present: boolean;
+        trust_event_present: boolean;
+        trust_reputation_present: boolean;
+      }>(`
+        SELECT
+          to_regclass('profile.ugc_contribution_consents') IS NOT NULL AS consent_present,
+          to_regclass('jobs.job_contributions') IS NOT NULL AS contribution_present,
+          to_regclass('jobs.job_contribution_outbox') IS NOT NULL
+            AS contribution_outbox_present,
+          to_regclass('matching.private_saved_page_captures') IS NOT NULL
+            AS private_capture_present,
+          to_regclass('trust.contribution_cases') IS NOT NULL AS trust_case_present,
+          to_regclass('trust.case_events') IS NOT NULL AS trust_event_present,
+          to_regclass('trust.reputation_evidence') IS NOT NULL AS trust_reputation_present
+      `);
+      expect(phaseTwoBoundary).toEqual([
+        {
+          consent_present: true,
+          contribution_present: true,
+          contribution_outbox_present: true,
+          private_capture_present: true,
+          trust_case_present: true,
+          trust_event_present: true,
+          trust_reputation_present: true,
+        },
+      ]);
       const publicProjectionBoundary = await client.unsafe<{
         schema_present: boolean;
         detail_function_present: boolean;

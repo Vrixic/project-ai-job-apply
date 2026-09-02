@@ -14,6 +14,7 @@ export const migrationRunners: readonly MigrationRunner[] = [
   { owner: "documents", executable: "documents/dist/src/migrate.js" },
   { owner: "matching", executable: "matching/dist/src/migrate.js" },
   { owner: "billing", executable: "billing/dist/src/migrate.js" },
+  { owner: "trust", executable: "trust/dist/src/migrate.js" },
 ];
 
 export async function executeMigrationProcess(runner: MigrationRunner): Promise<void> {

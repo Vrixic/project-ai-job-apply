@@ -14,3 +14,7 @@ migration. It never prints the database URL or candidate values.
 The verifier's digest covers the canonical manifest, exact migration-ledger evidence, and
 per-relation row counts. It deliberately excludes row values and does not claim content-level
 integrity or corruption detection.
+
+The Phase 2 manifest composes Profile consent, Jobs contribution intake, Matching private capture,
+and Trust foundation migrations. Trust candidate export/delete behavior is intentionally not
+composed here because the owning service has not implemented those functions.
