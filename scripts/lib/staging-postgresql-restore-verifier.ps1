@@ -178,7 +178,7 @@ function Get-D1RestoreManifestBoundary {
   )
 
   $root = [IO.Path]::GetFullPath($RepositoryRoot)
-  $expectedManifestId = "d2-extension-ugc-profile-jobs-documents-matching-billing-trust-v1"
+  $expectedManifestId = "d2-provider-truth-profile-jobs-documents-matching-billing-trust-v1"
   $expectedOwners = @("billing", "documents", "jobs", "matching", "profile", "trust")
   $expectedSchemas = @(
     "billing", "documents", "identity", "jobs", "jobs_public",
@@ -288,7 +288,7 @@ function Get-D1RestoreManifestBoundary {
     $contributors.Count -ne 6 -or
     $schemaNames.Count -ne 10 -or
     $relationCount -ne 68 -or
-    $migrationCount -ne 38
+    $migrationCount -ne 39
   ) {
     throw "The restore manifest does not match the exact Phase 2 contributor boundary."
   }

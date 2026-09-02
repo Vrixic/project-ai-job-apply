@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "manifestId": "d2-extension-ugc-profile-jobs-documents-matching-billing-trust-v1",
+  "manifestId": "d2-provider-truth-profile-jobs-documents-matching-billing-trust-v1",
   "contributors": [
     {
       "owner": "billing",
@@ -127,6 +127,10 @@
         {
           "version": "0018_job_contribution_processing_delivery",
           "checksum": "08765c8679d2b65b80ac51dd588267d3111b2729e6abd773d2dd5a974e75a972"
+        },
+        {
+          "version": "0019_job_contribution_provider_publication",
+          "checksum": "4da15bc6cdb347c65ff71c71b266b3d857962bb91e3dc4bc970a45a09dbe9fae"
         }
       ],
       "relations": [

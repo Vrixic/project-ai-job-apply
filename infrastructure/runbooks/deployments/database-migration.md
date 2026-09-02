@@ -14,9 +14,9 @@ service and must return to zero running tasks after every migration.
   checksum-verifying service-owned migration package. The orchestrator must run owners in declared
   order and stop before later owners if any owner fails.
 - For the Phase 2 package, require the exact
-  `d2-extension-ugc-profile-jobs-documents-matching-billing-trust-v1` manifest, the ordered Profile,
+  `d2-provider-truth-profile-jobs-documents-matching-billing-trust-v1` manifest, the ordered Profile,
   Jobs, Documents, Matching, Billing, and Trust runners, ten declared schemas, 68 declared regular
-  relations, and 38 checksum-bound migrations. Reject older D1 package and
+  relations, and 39 checksum-bound migrations. Reject older D1 package and
   receipt boundaries.
 - Require the exact platform digest to have a complete scan with zero High or Critical findings.
 - Review the SQL for transactional behavior, replay safety, bounded locks, data classification,

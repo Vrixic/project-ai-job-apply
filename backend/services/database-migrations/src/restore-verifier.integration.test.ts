@@ -120,6 +120,44 @@ describe.skipIf(!requested)("restored PostgreSQL aggregate verification", () => 
           trust_reputation_present: true,
         },
       ]);
+      const providerPublicationBoundary = await client.unsafe<{
+        nullable_catalog_columns: number;
+        catalog_foreign_keys: number;
+        provider_observation_columns: number;
+      }>(`
+        SELECT
+          (SELECT count(*)::int FROM information_schema.columns
+            WHERE table_schema='jobs'
+              AND table_name IN (
+                'job_contribution_independent_verifications',
+                'job_contribution_reconciliations'
+              )
+              AND column_name IN ('job_id', 'source_id')
+              AND is_nullable='YES') AS nullable_catalog_columns,
+          (SELECT count(*)::int FROM pg_constraint AS constraint_definition
+            WHERE constraint_definition.contype='f'
+              AND constraint_definition.conrelid IN (
+                'jobs.job_contribution_independent_verifications'::regclass,
+                'jobs.job_contribution_reconciliations'::regclass
+              )
+              AND constraint_definition.confrelid IN (
+                'jobs.canonical_jobs'::regclass,
+                'jobs.job_sources'::regclass
+              )) AS catalog_foreign_keys,
+          (SELECT count(*)::int FROM information_schema.columns
+            WHERE table_schema='jobs'
+              AND table_name='job_contribution_independent_verifications'
+              AND column_name='provider_observation'
+              AND data_type='jsonb'
+              AND is_nullable='NO') AS provider_observation_columns
+      `);
+      expect(providerPublicationBoundary).toEqual([
+        {
+          nullable_catalog_columns: 4,
+          catalog_foreign_keys: 4,
+          provider_observation_columns: 1,
+        },
+      ]);
       const publicProjectionBoundary = await client.unsafe<{
         schema_present: boolean;
         detail_function_present: boolean;
