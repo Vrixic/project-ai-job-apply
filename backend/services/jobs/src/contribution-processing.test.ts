@@ -15,6 +15,7 @@ import {
   type PreparedTerminalReconciliation,
   type TrustContributionDecision,
 } from "./contribution-processing.js";
+import { normalizeContributionForProcessing } from "./contribution-processing-policy.js";
 
 const ids = {
   contribution: "018f47a6-7b2c-7ee1-8c09-3ea174e80e20",
@@ -454,6 +455,26 @@ describe("ContributionProcessingService", () => {
       expect(outcome).toBe(decision.status === "needs_review" ? "awaiting_trust" : "rejected");
       expect(reconciler.publish).not.toHaveBeenCalled();
     }
+  });
+
+  it("reuses an accepted Trust decision copied from the authoritative signal", async () => {
+    const normalization = normalizeContributionForProcessing(contributionInput());
+    const store = new MemoryProcessingStore({
+      ownerState: "ready_for_publication",
+      normalization: { id: ids.normalization, proposal: normalization },
+      independentVerification: verified() as Extract<
+        IndependentProviderVerificationResult,
+        { status: "verified" }
+      >,
+      trustDecision: accepted() as Extract<
+        TrustContributionDecision,
+        { status: "accepted" }
+      >,
+    });
+    const trust = { evaluate: vi.fn(async () => ({ status: "unavailable" as const })) };
+
+    await expect(service(store, { trust }).process(ids.contribution)).resolves.toBe("published");
+    expect(trust.evaluate).not.toHaveBeenCalled();
   });
 
   it("rechecks consent after slow gates and stops a revoked grant before publication", async () => {

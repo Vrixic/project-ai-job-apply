@@ -495,7 +495,7 @@ export class ContributionProcessingService {
     const verification = contribution.independentVerification;
     if (!verification) throw new ContributionProcessingDependencyUnavailableError();
 
-    if (!contribution.trustDecision || contribution.trustDecision.status === "accepted") {
+    if (!contribution.trustDecision) {
       const contributorUserId = contribution.ownerUserId;
       const trustDecision = await dependency(() =>
         this.trust.evaluate({
