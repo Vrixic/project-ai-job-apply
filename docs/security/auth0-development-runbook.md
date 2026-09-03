@@ -26,7 +26,7 @@ Create **Applications → APIs → Create API** with:
 | Allow offline access | Enabled for the server-held web session |
 
 Add the permissions `documents:read`, `documents:write`, `jobs:read`, `jobs:write`,
-`jobs:moderate`, `profile:read`, and `profile:write`. Keep RBAC and access-token permission claims
+`jobs:contribute`, `jobs:moderate`, `profile:read`, and `profile:write`. Keep RBAC and access-token permission claims
 disabled: the gateway enforces exact OAuth scopes, the candidate and moderation clients receive
 disjoint per-application grants, and the gateway derives a non-reversible opaque moderation audit
 identifier instead of persisting raw identity-provider claims.
@@ -212,6 +212,11 @@ fresh passkey enrollment.
 Create two separate **Native Applications**, one for Expo and one for the browser extension. Public
 clients have no client secret. Enable Authorization Code and Refresh Token grants, rotating and
 expiring refresh tokens, and only the development database connection.
+
+For the browser extension, add or edit its entry under the Platform API's **Application Access**
+tab, grant only user-delegated access, and allow `profile:read`, `profile:write`, `jobs:read`,
+`jobs:write`, and `jobs:contribute`. Do not grant client access. Defining `jobs:contribute` on the
+API does not automatically expand an existing per-application grant.
 
 Provision each application only when its owning delivery begins. Extension conformance belongs to
 D2; mobile Native Application provisioning and device conformance belong to D6 and do not block

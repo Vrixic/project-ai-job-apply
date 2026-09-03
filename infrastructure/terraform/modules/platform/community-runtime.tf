@@ -5,6 +5,11 @@ locals {
     var.d2_community_runtime.enabled &&
     var.runtime_activation_allowed
   )
+  d2_policy_endpoint_enabled = (
+    var.d2_community_runtime.policy_endpoint_enabled &&
+    var.deploy_applications &&
+    var.deploy_gateway_lambda
+  )
   d2_community_schedule_function_name = "${var.name}-${var.environment}-d2-community-scheduled"
   d2_community_signal_function_name   = "${var.name}-${var.environment}-d2-trust-signal"
   d2_community_schedule_rule_name     = "${var.name}-${var.environment}-d2-community-batch"
@@ -37,10 +42,7 @@ locals {
     local.d2_candidate_routes,
     local.d2_reviewer_routes
   )
-  d2_route_keys = local.d2_community_enabled ? concat(
-    keys(local.d2_protected_routes),
-    ["GET /v1/extension/contribution-capability-policy"]
-  ) : []
+  d2_route_keys = local.d2_community_enabled ? keys(local.d2_protected_routes) : []
   d2_runtime_policy = {
     processing = {
       version                = var.d2_community_runtime.processing_policy_version
@@ -433,7 +435,7 @@ resource "aws_apigatewayv2_route" "d2_community_protected" {
 }
 
 resource "aws_apigatewayv2_route" "d2_contribution_policy" {
-  count              = local.d2_community_enabled ? 1 : 0
+  count              = local.d2_policy_endpoint_enabled ? 1 : 0
   api_id             = aws_apigatewayv2_api.gateway[0].id
   route_key          = "GET /v1/extension/contribution-capability-policy"
   target             = "integrations/${aws_apigatewayv2_integration.gateway_lambda[0].id}"

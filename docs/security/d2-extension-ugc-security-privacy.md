@@ -69,8 +69,9 @@ free of markup/control characters, and never interpreted as instructions.
 ## Retention and deletion
 
 - Normal contributions retain zero raw page snapshots.
-- Pending device intents are removed after acknowledged terminal handling or a bounded configured
-  expiry; exact duration requires product/security/privacy acceptance before real use.
+- Pending device intents are removed after acknowledged terminal handling or after 24 hours. The
+  product owner selected this minimum practical offline-retry window for the Phase 2 candidate on
+  2026-09-03; accountable security/privacy acceptance remains required before real use.
 - Sanitized contribution records follow the approved lifecycle; removed/expired records retain only
   a minimal non-PII integrity/deduplication tombstone.
 - Contributor associations participate in authenticated export/deletion and contribution

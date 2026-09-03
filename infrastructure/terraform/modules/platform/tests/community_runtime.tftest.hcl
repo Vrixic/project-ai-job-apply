@@ -65,6 +65,7 @@ run "d2_defaults_create_nothing" {
     condition = (
       !var.d2_community_runtime.deploy &&
       !var.d2_community_runtime.enabled &&
+      !var.d2_community_runtime.policy_endpoint_enabled &&
       length(aws_lambda_function.d2_community_scheduled) == 0 &&
       length(aws_lambda_function.d2_trust_signal) == 0 &&
       length(aws_sqs_queue.d2_trust_signal) == 0 &&
@@ -87,6 +88,7 @@ run "d2_dark_deploy_has_immutable_compute_queues_and_alarms_without_triggers" {
     d2_community_runtime = {
       deploy                                         = true
       enabled                                        = false
+      policy_endpoint_enabled                        = true
       artifact_s3_key                                = "lambda/d2/community.zip"
       artifact_s3_object_version                     = "d2-community-version"
       artifact_sha256                                = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -122,8 +124,8 @@ run "d2_dark_deploy_has_immutable_compute_queues_and_alarms_without_triggers" {
       provider_sources_json                          = ""
       provider_verification_registrations_json       = ""
       ugc_contribution_policy_version                = ""
-      signed_policy_json                             = ""
-      signed_public_keys_json                        = ""
+      signed_policy_json                             = "{\"synthetic\":true}"
+      signed_public_keys_json                        = "{\"synthetic-key\":\"public\"}"
       trust_reviewer_assignments_json                = ""
       trust_evidence_allowlist_json                  = ""
       trust_policy_version                           = ""
@@ -161,12 +163,14 @@ run "d2_dark_deploy_has_immutable_compute_queues_and_alarms_without_triggers" {
       length(aws_cloudwatch_event_rule.d2_community_schedule) == 0 &&
       length(aws_lambda_event_source_mapping.d2_trust_signal) == 0 &&
       length(aws_apigatewayv2_route.d2_community_protected) == 0 &&
-      length(aws_apigatewayv2_route.d2_contribution_policy) == 0 &&
+      length(aws_apigatewayv2_route.d2_contribution_policy) == 1 &&
       aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_RUNTIME_ENABLED == "false" &&
       !contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "D2_CONTRIBUTION_ROUTES_ENABLED") &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_CONTRIBUTION_POLICY_ROUTE_ENABLED == "true" &&
+      aws_lambda_function.gateway[0].environment[0].variables.JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON == "{\"synthetic\":true}" &&
       length(aws_nat_gateway.this) == 0
     )
-    error_message = "Dark deployment must create only immutable compute, exact queues, IAM, and alarms; triggers and routes must remain structurally absent."
+    error_message = "Dark deployment must create immutable compute, exact queues, IAM, alarms, and only the public signed-policy route; triggers and mutating routes must remain structurally absent."
   }
 }
 
@@ -177,6 +181,7 @@ run "d2_activation_requires_and_wires_every_explicit_boundary" {
     d2_community_runtime = {
       deploy                                         = true
       enabled                                        = true
+      policy_endpoint_enabled                        = true
       artifact_s3_key                                = "lambda/d2/community.zip"
       artifact_s3_object_version                     = "d2-community-version"
       artifact_sha256                                = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"

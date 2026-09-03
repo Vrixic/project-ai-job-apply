@@ -2,6 +2,31 @@
 
 These source operators do not authorize activation. Keep contribution routes, the scheduled rule,
 and the Trust signal event-source mapping disabled until every Phase 2 accountable gate passes.
+The independently gated anonymous policy endpoint may be enabled with a current signed all-disabled
+envelope. It communicates the fail-closed state to installed clients and does not authorize intake.
+
+Before a future activation, create the offline development signing key and a short-lived signed
+policy below the ignored operator directory. The default `Sign` action enables no capability:
+
+```powershell
+pnpm --filter @ai-job-apply/jobs-service build
+node scripts/operate-development-d2-contribution-policy.mjs `
+  --action GenerateKey `
+  --key-id d2-development-20260903-v1
+
+node scripts/operate-development-d2-contribution-policy.mjs `
+  --action Sign `
+  --key-directory infrastructure/terraform/environments/development/.terraform/development-d2-contribution-policy/d2-development-20260903-v1 `
+  --key-id d2-development-20260903-v1 `
+  --revision d2-development-dark-20260903-v1 `
+  --client-version 0.2.0 `
+  --lifetime-minutes 60
+```
+
+Never copy the private key into Terraform, an extension environment file, source, evidence, logs,
+or chat. Terraform receives only the signed envelope and PEM public-key map; the extension embeds
+only the base64url DER SPKI public-key map. A future enabled signing run requires the exact
+activation-authority token printed by `--action Help` plus independently reviewed dimensions.
 
 1. Run `operate-development-d2-community-artifact.ps1 -Action Status` with the exact development
    account and versioned encrypted state bucket.

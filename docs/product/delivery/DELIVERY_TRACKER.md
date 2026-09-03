@@ -334,8 +334,9 @@ This is the master record for the delivery phases defined in the [product and sy
   rights, lazy Lambda composition, guarded operations, aggregate telemetry, Terraform, and local
   migration/recovery evidence are present. No production provider is configured, no D2 AWS
   runtime is deployed or activated, and no extension is distributed. Remaining gates are the D1
-  prerequisites; authorized provider fixtures and QA disposition; a dedicated Auth0 Native
-  Application with real Chrome/Edge lifecycle evidence; final listing assets, support endpoint, and
+  prerequisites; authorized provider fixtures and QA disposition; completion of Chrome parity,
+  cancellation, refresh rotation/replay, logout, and revocation after the dedicated Native
+  Application's initial installed-Edge PKCE login; final listing assets, support endpoint, and
   store review; accountable UGC/privacy/security approval; installed Chrome geometry parity, axe,
   and human assistive-technology acceptance; and AWS dark-deploy, rollback, restore, load/abuse,
   and ALARM/OK acceptance.

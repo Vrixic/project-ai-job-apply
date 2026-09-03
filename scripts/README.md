@@ -88,6 +88,11 @@ migration execution, or AWS restore execution. No gateway or general worker imag
   numeric ingestion durable/activity versions while every scheduler, provider, NAT, queue mapping,
   and normal synthetic-source gate remains off. See
   `infrastructure/runbooks/observability/development-d1-provider-failure-acceptance.md`.
+- `operate-development-d2-contribution-policy.mjs` — Generates non-overwriting Ed25519 development
+  key material, signs a bounded default-dark contribution capability policy with the Jobs-owned
+  canonical digest, and independently verifies the current envelope. All private material and
+  receipts remain below the ignored development `.terraform` directory; enabling any policy
+  dimension requires a separate exact activation-authority token.
 - `operate-development-candidate-rights-acceptance.ps1` — Plans, executes, recovers, and verifies
   one generated-synthetic candidate export/deletion lifecycle only after exact policy, backup,
   Auth0, identity, runtime, and zero-drift prerequisites pass. See

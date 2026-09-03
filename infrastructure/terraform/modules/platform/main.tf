@@ -1004,10 +1004,12 @@ resource "aws_apigatewayv2_stage" "gateway" {
         aws_apigatewayv2_route.public_job[0].route_key,
         aws_apigatewayv2_route.public_job_sitemap[0].route_key
       ] : [],
-      local.d2_community_enabled ? concat(
-        [for route in values(aws_apigatewayv2_route.d2_community_protected) : route.route_key],
-        [aws_apigatewayv2_route.d2_contribution_policy[0].route_key]
-      ) : []
+      local.d2_community_enabled ? [
+        for route in values(aws_apigatewayv2_route.d2_community_protected) : route.route_key
+      ] : [],
+      local.d2_policy_endpoint_enabled ? [
+        aws_apigatewayv2_route.d2_contribution_policy[0].route_key
+      ] : []
     ))
     content {
       route_key                = route_settings.value
@@ -1799,19 +1801,21 @@ resource "aws_lambda_function" "gateway" {
         CANDIDATE_RIGHTS_OWNER_INVENTORY             = var.candidate_rights_owner_inventory
         CANDIDATE_RIGHTS_SUBPROCESSOR_INVENTORY      = var.candidate_rights_subprocessor_inventory
       } : {},
-      local.d2_community_enabled ? {
-        D2_PRIVATE_CAPTURE_ROUTES_ENABLED            = "true"
+      local.d2_policy_endpoint_enabled ? {
         D2_CONTRIBUTION_POLICY_ROUTE_ENABLED         = "true"
-        D2_CONTRIBUTION_ROUTES_ENABLED               = "true"
-        D2_TRUST_REVIEWER_ROUTES_ENABLED             = "true"
-        UGC_CONTRIBUTION_POLICY_VERSION              = var.d2_community_runtime.ugc_contribution_policy_version
         JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON      = var.d2_community_runtime.signed_policy_json
         JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON = var.d2_community_runtime.signed_public_keys_json
-        D2_TRUST_REVIEWER_ASSIGNMENTS_JSON           = var.d2_community_runtime.trust_reviewer_assignments_json
-        D2_TRUST_EVIDENCE_ALLOWLIST_JSON             = var.d2_community_runtime.trust_evidence_allowlist_json
-        D2_TRUST_POLICY_VERSION                      = var.d2_community_runtime.trust_policy_version
-        D2_TRUST_APPEAL_WINDOW_MILLISECONDS          = tostring(var.d2_community_runtime.trust_appeal_window_milliseconds)
-        D2_TRUST_SYSTEM_ACTOR_ID                     = var.d2_community_runtime.trust_system_actor_id
+      } : {},
+      local.d2_community_enabled ? {
+        D2_PRIVATE_CAPTURE_ROUTES_ENABLED   = "true"
+        D2_CONTRIBUTION_ROUTES_ENABLED      = "true"
+        D2_TRUST_REVIEWER_ROUTES_ENABLED    = "true"
+        UGC_CONTRIBUTION_POLICY_VERSION     = var.d2_community_runtime.ugc_contribution_policy_version
+        D2_TRUST_REVIEWER_ASSIGNMENTS_JSON  = var.d2_community_runtime.trust_reviewer_assignments_json
+        D2_TRUST_EVIDENCE_ALLOWLIST_JSON    = var.d2_community_runtime.trust_evidence_allowlist_json
+        D2_TRUST_POLICY_VERSION             = var.d2_community_runtime.trust_policy_version
+        D2_TRUST_APPEAL_WINDOW_MILLISECONDS = tostring(var.d2_community_runtime.trust_appeal_window_milliseconds)
+        D2_TRUST_SYSTEM_ACTOR_ID            = var.d2_community_runtime.trust_system_actor_id
       } : {}
     )
   }

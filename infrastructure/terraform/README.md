@@ -25,8 +25,11 @@ runs in private bounded Lambdas, and SQS/EventBridge drive exact-version Lambda 
 second provider.
 
 The Phase 2 community seam is independently default-off. Its environment object defaults to
-`deploy = false` and `enabled = false`, creating no D2 function, queue, schedule, mapping, route, or
-NAT. A reviewed dark deployment can publish immutable scheduled and Trust-signal Lambda aliases,
+`deploy = false`, `enabled = false`, and `policy_endpoint_enabled = false`, creating no D2 function,
+queue, schedule, mapping, route, or NAT. The separately gated anonymous policy endpoint may expose
+only a verified signed all-disabled envelope through the existing Gateway; that gate never creates
+an intake/reviewer route, schedule, queue consumer, or provider egress. A reviewed dark deployment
+can publish immutable scheduled and Trust-signal Lambda aliases,
 an exact encrypted Trust-signal queue/DLQ, least-privilege roles, and standard alarms while leaving
 every trigger and route structurally absent. Activation is a separate change requiring the exact
 artifact identities, concurrency, schedule, lease/retry/batch policy, signed contribution policy,

@@ -562,6 +562,7 @@ variable "d2_community_runtime" {
   type = object({
     deploy                                         = bool
     enabled                                        = bool
+    policy_endpoint_enabled                        = bool
     artifact_s3_key                                = string
     artifact_s3_object_version                     = string
     artifact_sha256                                = string
@@ -617,6 +618,7 @@ variable "d2_community_runtime" {
   default = {
     deploy                                         = false
     enabled                                        = false
+    policy_endpoint_enabled                        = false
     artifact_s3_key                                = ""
     artifact_s3_object_version                     = ""
     artifact_sha256                                = ""
@@ -711,8 +713,23 @@ variable "d2_community_runtime" {
   }
 
   validation {
+    condition = !var.d2_community_runtime.policy_endpoint_enabled || (
+      var.deploy_applications &&
+      var.deploy_gateway_lambda &&
+      try(length(keys(jsondecode(var.d2_community_runtime.signed_policy_json))) > 0, false) &&
+      try(length(keys(jsondecode(var.d2_community_runtime.signed_public_keys_json))) > 0, false) &&
+      length(base64encode(join("", [
+        var.d2_community_runtime.signed_policy_json,
+        var.d2_community_runtime.signed_public_keys_json
+      ]))) <= 1200
+    )
+    error_message = "The public Phase 2 policy endpoint requires a deployed Gateway plus a bounded signed policy and pinned public-key map."
+  }
+
+  validation {
     condition = !var.d2_community_runtime.enabled || (
       var.d2_community_runtime.deploy &&
+      var.d2_community_runtime.policy_endpoint_enabled &&
       var.deploy_applications &&
       var.deploy_gateway_lambda &&
       var.runtime_activation_allowed &&
