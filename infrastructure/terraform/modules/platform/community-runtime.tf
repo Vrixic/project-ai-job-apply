@@ -399,6 +399,11 @@ resource "aws_cloudwatch_event_target" "d2_community_schedule" {
   rule      = aws_cloudwatch_event_rule.d2_community_schedule[0].name
   target_id = "d2-community-scheduled"
   arn       = aws_lambda_alias.d2_community_scheduled[0].arn
+  input = jsonencode({
+    schemaVersion   = 1
+    action          = "run-d2-community-batch"
+    scheduleRuleArn = local.d2_community_schedule_rule_arn
+  })
 }
 
 resource "aws_lambda_permission" "d2_community_schedule" {

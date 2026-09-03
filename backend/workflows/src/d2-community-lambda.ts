@@ -16,7 +16,7 @@ import type {
   TrustDecisionDeliveryBatchMetrics,
   TrustDecisionDeliveryRunner,
 } from "@ai-job-apply/trust-service";
-import type { EventBridgeEvent, SQSBatchResponse, SQSEvent, SQSRecord } from "aws-lambda";
+import type { SQSBatchResponse, SQSEvent, SQSRecord } from "aws-lambda";
 import { d2CommunityEmf } from "./d2-community-observability.js";
 import {
   createConfiguredD2CommunityLambdaConfiguration,
@@ -126,34 +126,17 @@ function exactDate(value: Date): Date {
 function assertScheduledEvent(
   value: unknown,
   boundary: D2CommunityLambdaBoundary,
-): asserts value is EventBridgeEvent<"Scheduled Event", Record<string, never>> {
+): asserts value is {
+  schemaVersion: 1;
+  action: "run-d2-community-batch";
+  scheduleRuleArn: string;
+} {
   if (
     !record(value) ||
-    !exactKeys(value, [
-      "version",
-      "id",
-      "detail-type",
-      "source",
-      "account",
-      "time",
-      "region",
-      "resources",
-      "detail",
-    ]) ||
-    value.version !== "0" ||
-    typeof value.id !== "string" ||
-    !UUID_PATTERN.test(value.id) ||
-    value["detail-type"] !== "Scheduled Event" ||
-    value.source !== "aws.events" ||
-    value.account !== boundary.accountId ||
-    value.region !== boundary.region ||
-    typeof value.time !== "string" ||
-    !Number.isFinite(Date.parse(value.time)) ||
-    !Array.isArray(value.resources) ||
-    value.resources.length !== 1 ||
-    value.resources[0] !== boundary.scheduleRuleArn ||
-    !record(value.detail) ||
-    Object.keys(value.detail).length !== 0
+    !exactKeys(value, ["schemaVersion", "action", "scheduleRuleArn"]) ||
+    value.schemaVersion !== 1 ||
+    value.action !== "run-d2-community-batch" ||
+    value.scheduleRuleArn !== boundary.scheduleRuleArn
   ) {
     throw new Error("D2CommunityScheduleEventRejected");
   }

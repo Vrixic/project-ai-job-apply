@@ -16,15 +16,9 @@ const ruleArn = "arn:aws:events:us-east-2:123456789012:rule/development-d2-commu
 
 function scheduledEvent(extra: Record<string, unknown> = {}) {
   return {
-    version: "0",
-    id: "019b4e12-7ea3-7c36-9357-aea35ab542cc",
-    "detail-type": "Scheduled Event",
-    source: "aws.events",
-    account: "123456789012",
-    time: "2026-09-02T16:00:00Z",
-    region: "us-east-2",
-    resources: [ruleArn],
-    detail: {},
+    schemaVersion: 1,
+    action: "run-d2-community-batch",
+    scheduleRuleArn: ruleArn,
     ...extra,
   };
 }
@@ -155,6 +149,9 @@ describe("D2 community Lambda", () => {
     await expect(handlers.scheduled(scheduledEvent({ unexpected: true }))).rejects.toThrow(
       "D2CommunityScheduleEventRejected",
     );
+    await expect(
+      handlers.scheduled(scheduledEvent({ scheduleRuleArn: `${ruleArn}-other` })),
+    ).rejects.toThrow("D2CommunityScheduleEventRejected");
   });
 
   it("returns partial batch failures while exact valid records remain idempotently retryable", async () => {
