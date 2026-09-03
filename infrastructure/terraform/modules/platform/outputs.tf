@@ -183,8 +183,12 @@ output "d2_trust_signal_mapping_uuid" {
 }
 
 output "d2_community_route_ids" {
-  value = local.d2_community_enabled ? merge(
-    { for route_key, route in aws_apigatewayv2_route.d2_community_protected : route_key => route.id },
-    { (aws_apigatewayv2_route.d2_contribution_policy[0].route_key) = aws_apigatewayv2_route.d2_contribution_policy[0].id }
-  ) : {}
+  value = merge(
+    local.d2_community_enabled ? {
+      for route_key, route in aws_apigatewayv2_route.d2_community_protected : route_key => route.id
+    } : {},
+    local.d2_policy_endpoint_enabled ? {
+      (aws_apigatewayv2_route.d2_contribution_policy[0].route_key) = aws_apigatewayv2_route.d2_contribution_policy[0].id
+    } : {}
+  )
 }
