@@ -41,7 +41,7 @@ if ($algorithm -notin @("AES256","aws:kms")) { throw "The artifact bucket must e
 if ($Action -ceq "Status") { [pscustomobject]@{ Action="Status"; AccountMatched=$true; BucketVersioning="Enabled" }; exit 0 }
 if ($SourceSha -notmatch '^[a-f0-9]{40}$') { throw "An exact reviewed source SHA is required." }
 if ($Action -ceq "Publish") {
-  if ((git -C $root status --porcelain).Count -ne 0 -or (git -C $root rev-parse HEAD).Trim() -cne $SourceSha) { throw "Publication requires the exact clean reviewed source." }
+  if (@(git -C $root status --porcelain).Count -ne 0 -or (git -C $root rev-parse HEAD).Trim() -cne $SourceSha) { throw "Publication requires the exact clean reviewed source." }
   pnpm --filter @ai-job-apply/workflows test; if ($LASTEXITCODE) { throw "Workflow tests failed." }
   pnpm audit:dependencies; if ($LASTEXITCODE) { throw "Dependency audit failed." }
   pnpm --filter @ai-job-apply/workflows build:lambda:d2-community; if ($LASTEXITCODE) { throw "D2 build failed." }
