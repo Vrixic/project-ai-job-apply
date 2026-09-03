@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { captureCurrentPublicJobPage } from "../lib/page-inspection";
 
@@ -6,6 +7,55 @@ afterEach(() => {
 });
 
 describe("explicit current-page inspection", () => {
+  it("reads the accepted sanitized Greenhouse board fixture", () => {
+    const fixture = readFileSync(
+      new URL(
+        "../../../packages/test-fixtures/ats/greenhouse/job-page-board-v1/job-page.html",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const visibleText = (pattern: RegExp): string | undefined => {
+      const value = fixture.match(pattern)?.[1];
+      return value
+        ?.replace(/<[^>]+>/gu, " ")
+        .replace(/\s+/gu, " ")
+        .trim();
+    };
+    const values = new Map<string, string | undefined>([
+      ["h1", visibleText(/<h1[^>]*>([\s\S]*?)<\/h1>/u)],
+      [
+        ".job__location",
+        visibleText(/<[^>]+class="[^"]*job__location[^"]*"[^>]*>([\s\S]*?)<\/[^>]+>/u),
+      ],
+      [
+        ".job__description",
+        visibleText(/<[^>]+class="[^"]*job__description[^"]*"[^>]*>([\s\S]*?)<\/div>/u),
+      ],
+    ]);
+    vi.stubGlobal("location", {
+      href: "https://job-boards.greenhouse.io/example/jobs/12345",
+    });
+    vi.stubGlobal("document", {
+      querySelector(selector: string) {
+        const textContent = values.get(selector);
+        return textContent ? { firstElementChild: null, textContent } : null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+    });
+
+    expect(captureCurrentPublicJobPage()).toEqual({
+      canonicalUrl: "https://job-boards.greenhouse.io/example/jobs/12345",
+      description:
+        "About Example Organization Example Organization builds dependable software for reserved-example customers. This paragraph contains synthetic public-job text only. What you bring Experience building and operating production software. Clear written communication and careful technical judgment.",
+      location: "EXAMPLE-REGION",
+      title: "Example Platform Engineer",
+      workMode: "remote",
+    });
+  });
+
   it("uses the authorized HTTPS tab instead of a page-owned insecure canonical URL", () => {
     const values = new Map<string, string>([
       ['link[rel="canonical"]', "http://job-boards.greenhouse.io/remotecom/jobs/7774935003"],

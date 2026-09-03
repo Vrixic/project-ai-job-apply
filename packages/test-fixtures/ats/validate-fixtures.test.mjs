@@ -42,8 +42,11 @@ afterEach(() => {
   }
 });
 
-test("accepts the repository synthetic fixture without a representative claim", () => {
-  assert.deepEqual(validateTree(atsDirectory), ["synthetic-foundation-v1"]);
+test("accepts the repository fixtures with their exact evidence classes", () => {
+  assert.deepEqual(validateTree(atsDirectory), [
+    "greenhouse-job-page-board-v1",
+    "synthetic-foundation-v1",
+  ]);
 });
 
 test("rejects a payload whose declared checksum does not match", () => {
