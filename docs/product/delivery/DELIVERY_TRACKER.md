@@ -339,10 +339,10 @@ This is the master record for the delivery phases defined in the [product and sy
   contribution/private/Trust routes and D2 triggers absent. Terraform has zero drift. No
   production provider is configured, no D2 worker trigger is activated, and no extension is
   distributed. A complete post-deployment repository gate passes all 34 tasks. The immediate
-  development-activation gates are a dedicated least-privilege Auth0 workflow identity for the
-  Trust `case_opener` role and the authorized, scanned, human-sanitized, separately QA-accepted
-  Greenhouse fixture; the existing generated-synthetic candidate-rights M2M credential is not
-  repurposed. Remaining gates are the D1
+  development-activation gates are confirmation of the received dedicated Auth0 workflow
+  identity's exact `trust:review trust:case:open` grant and the authorized, scanned,
+  human-sanitized, separately QA-accepted Greenhouse fixture; the existing generated-synthetic
+  candidate-rights M2M credential is not repurposed. Remaining gates are the D1
   prerequisites; authorized provider fixtures and QA disposition; completion of Chrome parity,
   cancellation, refresh rotation/replay, logout, and revocation after the dedicated Native
   Application's initial installed-Edge PKCE login; final listing assets, support endpoint, and
