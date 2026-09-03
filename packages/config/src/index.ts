@@ -264,13 +264,14 @@ export function loadD2LambdaGatewayConfig(
     });
   }
 
-  const contributionRequested =
-    value.D2_CONTRIBUTION_POLICY_ROUTE_ENABLED || value.D2_CONTRIBUTION_ROUTES_ENABLED;
+  if (value.D2_CONTRIBUTION_POLICY_ROUTE_ENABLED && !signedContributionPolicyConfigured) {
+    throw new Error("The contribution policy route requires the complete signed policy boundary");
+  }
   if (
-    contributionRequested &&
+    value.D2_CONTRIBUTION_ROUTES_ENABLED &&
     (!signedContributionPolicyConfigured || !value.UGC_CONTRIBUTION_POLICY_VERSION)
   ) {
-    throw new Error("Contribution routes require the complete signed policy boundary");
+    throw new Error("Contribution mutation routes require the signed capability and consent policies");
   }
   if ((value.D2_CONTRIBUTION_ROUTES_ENABLED || value.D2_TRUST_REVIEWER_ROUTES_ENABLED) && !trust) {
     throw new Error("Contribution and reviewer routes require the complete Trust boundary");

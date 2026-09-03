@@ -114,10 +114,13 @@ describe("Lambda gateway configuration", () => {
   });
 });
 
-const signedPolicyEnvironment = {
-  UGC_CONTRIBUTION_POLICY_VERSION: "d2-synthetic-policy.v1",
+const signedCapabilityEnvironment = {
   JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON: '{"synthetic":true}',
   JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON: '{"synthetic-key":"public"}',
+};
+const signedPolicyEnvironment = {
+  UGC_CONTRIBUTION_POLICY_VERSION: "d2-synthetic-policy.v1",
+  ...signedCapabilityEnvironment,
 };
 const trustEnvironment = {
   D2_TRUST_REVIEWER_ASSIGNMENTS_JSON: JSON.stringify([
@@ -173,29 +176,32 @@ describe("Phase 2 Lambda gateway configuration", () => {
     });
   });
 
-  it("requires the exact signed policy pair and consent policy before any contribution route", () => {
+  it("requires the exact signed policy pair but no mutation consent policy for the read-only policy route", () => {
     expect(() =>
       loadD2LambdaGatewayConfig({
         D2_CONTRIBUTION_POLICY_ROUTE_ENABLED: "true",
         JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON: "{}",
       }),
     ).toThrow("signed contribution policy boundary must be complete");
-    expect(() =>
-      loadD2LambdaGatewayConfig({
-        D2_CONTRIBUTION_POLICY_ROUTE_ENABLED: "true",
-        JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON: "{}",
-        JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON: "{}",
-      }),
-    ).toThrow("complete signed policy boundary");
     expect(
       loadD2LambdaGatewayConfig({
         D2_CONTRIBUTION_POLICY_ROUTE_ENABLED: "true",
-        ...signedPolicyEnvironment,
+        ...signedCapabilityEnvironment,
       }),
     ).toMatchObject({
       contributionPolicyRouteEnabled: true,
       signedContributionPolicyConfigured: true,
     });
+  });
+
+  it("still requires the consent policy before any contribution mutation route", () => {
+    expect(() =>
+      loadD2LambdaGatewayConfig({
+        D2_CONTRIBUTION_ROUTES_ENABLED: "true",
+        ...signedCapabilityEnvironment,
+        ...trustEnvironment,
+      }),
+    ).toThrow("signed capability and consent policies");
   });
 
   it("requires a complete bounded Trust authority and policy for candidate or reviewer routes", () => {
