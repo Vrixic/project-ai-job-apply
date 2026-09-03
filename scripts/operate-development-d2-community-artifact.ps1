@@ -24,18 +24,18 @@ function Resolve-Private([string]$Path) {
   if (-not $value.StartsWith($privateRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw "D2 evidence must remain below its ignored private operator directory." }
   $value
 }
-function Aws([string[]]$Arguments) {
-  $raw = & aws @Arguments 2>$null
+function Invoke-AwsJson([string[]]$Arguments) {
+  $raw = & aws.exe @Arguments 2>$null
   if ($LASTEXITCODE -ne 0) { throw "An exact AWS operation failed." }
   if ($raw) { $raw -join "`n" | ConvertFrom-Json } else { $null }
 }
 if ($ExpectedAccountId -notmatch '^[0-9]{12}$' -or -not $StateBucket) { throw "The exact account and encrypted state bucket are required." }
 $env:AWS_PROFILE=$AwsProfile; $env:AWS_REGION=$region; $env:AWS_DEFAULT_REGION=$region; $env:AWS_PAGER=""
-$caller = Aws @("sts","get-caller-identity","--output","json")
+$caller = Invoke-AwsJson @("sts","get-caller-identity","--output","json")
 if ([string]$caller.Account -cne $ExpectedAccountId) { throw "AWS account mismatch." }
-$bucket = Aws @("s3api","get-bucket-versioning","--bucket",$StateBucket,"--output","json")
+$bucket = Invoke-AwsJson @("s3api","get-bucket-versioning","--bucket",$StateBucket,"--output","json")
 if ([string]$bucket.Status -cne "Enabled") { throw "The artifact bucket must be versioned." }
-$encryption = Aws @("s3api","get-bucket-encryption","--bucket",$StateBucket,"--output","json")
+$encryption = Invoke-AwsJson @("s3api","get-bucket-encryption","--bucket",$StateBucket,"--output","json")
 $algorithm = [string]$encryption.ServerSideEncryptionConfiguration.Rules[0].ApplyServerSideEncryptionByDefault.SSEAlgorithm
 if ($algorithm -notin @("AES256","aws:kms")) { throw "The artifact bucket must enforce server-side encryption." }
 if ($Action -ceq "Status") { [pscustomobject]@{ Action="Status"; AccountMatched=$true; BucketVersioning="Enabled" }; exit 0 }
@@ -51,7 +51,7 @@ if ($Action -ceq "Publish") {
   $key = "lambda/d2-community/$SourceSha/$first/d2-community-runtime-lambda.zip"
   $existing = & aws s3api head-object --bucket $StateBucket --key $key 2>$null
   if ($LASTEXITCODE -eq 0) { throw "The immutable D2 artifact key already exists." }
-  $put = Aws @("s3api","put-object","--bucket",$StateBucket,"--key",$key,"--body",$artifact,"--checksum-algorithm","SHA256","--if-none-match","*","--output","json")
+  $put = Invoke-AwsJson @("s3api","put-object","--bucket",$StateBucket,"--key",$key,"--body",$artifact,"--checksum-algorithm","SHA256","--if-none-match","*","--output","json")
   if (-not $put.VersionId) { throw "The publication did not return an immutable version." }
   $path = Resolve-Private $(if ($ReceiptPath) {$ReceiptPath} else { Join-Path $privateRoot "receipt-$($SourceSha.Substring(0,12)).json" })
   $null = New-Item -ItemType Directory -Force -Path (Split-Path $path)
@@ -62,6 +62,6 @@ $path = Resolve-Private $ReceiptPath
 if ((Get-Sha $path) -cne $ReviewedReceiptSha256) { throw "Receipt checksum mismatch." }
 $receipt = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
 if ($receipt.kind -cne "development-d2-community-artifact-publication" -or $receipt.sourceSha -cne $SourceSha -or $receipt.phase -cne "published") { throw "Receipt boundary mismatch." }
-$remote = Aws @("s3api","head-object","--bucket",$StateBucket,"--key",[string]$receipt.key,"--version-id",[string]$receipt.versionId,"--checksum-mode","ENABLED","--output","json")
+$remote = Invoke-AwsJson @("s3api","head-object","--bucket",$StateBucket,"--key",[string]$receipt.key,"--version-id",[string]$receipt.versionId,"--checksum-mode","ENABLED","--output","json")
 if (-not $remote.VersionId -or [string]$remote.ChecksumSHA256 -cne [string]$receipt.artifactBase64Sha256) { throw "The exact immutable object version or checksum is unavailable." }
 [pscustomobject]@{ Action="Verify"; SourceSha=$SourceSha; ArtifactSha256=[string]$receipt.artifactSha256; LambdaDeploymentChanged=$false; TriggerChanged=$false }
