@@ -5,7 +5,7 @@ const staticRoot = new URL("../static/", import.meta.url);
 const entrypoint = new URL("../entrypoints/popup.ts", import.meta.url);
 
 describe("popup and side-panel source assurance", () => {
-  it("provides semantic controls, live status, a skip link, and visible focus treatment", async () => {
+  it("provides semantic controls, live status, disclosures, and visible focus treatment", async () => {
     const [html, css] = await Promise.all([
       readFile(new URL("popup.html", staticRoot), "utf8"),
       readFile(new URL("popup.css", staticRoot), "utf8"),
@@ -13,18 +13,48 @@ describe("popup and side-panel source assurance", () => {
 
     expect(html).toContain('href="#main-content"');
     expect(html).toContain('id="main-content"');
-    expect(html.match(/aria-live="polite"/gu)).toHaveLength(4);
+    expect(html.match(/aria-live="polite"/gu)).toHaveLength(6);
     expect(html).toContain('role="status"');
+    expect(html).toContain('id="queue-panel" class="disclosure');
+    expect(html).toContain('id="contributions-panel" class="disclosure');
+    expect(html).toContain('id="selection-summary"');
+    expect(html).toContain('id="delivery-readiness"');
+    expect(html).toContain('name="appeal-evidence"');
+    expect(html).toContain('autocomplete="off"');
     expect(html).toContain('maxlength="2000"');
+    expect(html).toContain(">Save privately</button>");
+    expect(html).toContain(">Contribute selected fields</button>");
     expect(html).not.toMatch(/<(?:div|span)[^>]+onclick=/iu);
     expect(html).not.toContain("user-scalable=no");
     expect(css).toContain(":focus-visible");
+    expect(css).toContain("button:active:not(:disabled)");
+    expect(css).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(css).toContain("min-width: 0");
+    expect(css).toContain("max-width: 400px");
+    expect(css).toContain("grid-template-columns: 22px minmax(0, 1fr)");
     expect(css).not.toContain("outline: none");
     expect(css).not.toContain("transition: all");
+    expect(css).not.toMatch(/font-size:\s*(?:9|10|11)px/gu);
   });
 
-  it("binds optional-field removal to both actions and confirms destructive queue clearing", async () => {
+  it("renders complete grounded field states with reversible expansion and dynamic selection", async () => {
     const source = await readFile(entrypoint, "utf8");
+    expect(source).toContain('jobHeading.textContent = "Job details"');
+    expect(source).toContain('sourceDetails.id = "source-details"');
+    expect(source).toContain('body.textContent = value ?? "Not detected on this page"');
+    expect(source).toContain('expandButton.setAttribute("aria-controls", valueId)');
+    expect(source).toContain('expandButton.setAttribute("aria-expanded", "false")');
+    expect(source).toContain("function updateSelectionSummary(): void");
+    expect(source).toContain("5 required fields always included");
+    expect(source).toContain('"Next action: Contribute selected fields"');
+    expect(source).toContain('"Next action: Save privately"');
+  });
+
+  it("fails delivery closed, binds the same selection to both actions, and confirms destructive clearing", async () => {
+    const source = await readFile(entrypoint, "utf8");
+    expect(source).toContain("currentDelivery?.privateSave.ready !== true");
+    expect(source).toContain("currentDelivery?.contribution.ready !== true");
+    expect(source).toContain("Private save and public contribution are unavailable");
     expect(source).toContain('approvedFields: selectedFields(), intent: "private_save"');
     expect(source).toContain('approvedFields: selectedFields(), intent: "contribute"');
     expect(source).toContain("window.confirm(");

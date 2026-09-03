@@ -80,6 +80,7 @@ try {
 } catch {
   detectorActivationPolicy = {};
 }
+const detectorActivationSupplied = Object.keys(detectorActivationPolicy).length > 0;
 let capabilityPolicyPublicKeys = {};
 try {
   const parsed = JSON.parse(capabilityPolicyPublicKeysValue);
@@ -204,11 +205,14 @@ if (process.argv.includes("--watch")) {
   console.log("Watching the default-dark extension product shell.");
 } else {
   await build(buildOptions);
-  console.log(
-    configured
-      ? apiOrigin
-        ? "Built the configured default-dark extension shell."
-        : "Built identity with API delivery disabled; configure an exact API origin for testing."
-      : "Built a fail-closed shell; add public Auth0 settings to .env.local for conformance.",
-  );
+  const inspectionStatus = detectorActivationSupplied
+    ? "Built with machine-local current-page detector activation."
+    : "Current-page inspection remains default-dark.";
+  const deliveryStatus =
+    configured && apiOrigin
+      ? "Authenticated API delivery is configured."
+      : configured
+        ? "Identity is configured, but API delivery remains disabled."
+        : "Authenticated saving and contribution remain disabled until public Auth0 and API settings are configured.";
+  console.log(`${inspectionStatus} ${deliveryStatus}`);
 }

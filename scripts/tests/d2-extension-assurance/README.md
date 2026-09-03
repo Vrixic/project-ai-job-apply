@@ -16,7 +16,11 @@ persistent Edge/Chromium profile against loopback-only malicious synthetic provi
 harness aborts every external request, deletes its profile, and emits aggregate metrics only.
 
 The installed-browser profile executes MV3 loading, background-worker startup, exact permission
-denial, three malicious loopback fixtures, keyboard focus, 200% zoom/reflow, storage leakage, and
+denial, and three malicious loopback fixtures. It also renders the real popup module against
+synthetic configured, unconfigured, long-value, and missing-value responses. Browser assertions
+cover 320, 360, and 480 CSS-pixel layouts, 200% zoom/reflow, required-marker and control geometry,
+semantic control names, keyboard focus and disclosures, selection and delivery live regions,
+consent/delivery gating, expandable long values, explicit unavailable values, storage leakage, and
 zero-network/zero-telemetry checks. Deterministic extension unit tests separately cover worker
 restart cache restoration, offline queue/retry, cancellation and logout/account fencing, signed
 kill-switch isolation, sanitization, and provider/variant/domain rejection. Those source-level

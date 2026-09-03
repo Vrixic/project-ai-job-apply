@@ -4,9 +4,6 @@ import {
   extensionDetectorActivationPolicy,
 } from "../lib/capability-policy";
 import { extensionConfiguration } from "../lib/config";
-import { detectPublicJob } from "../lib/detectors";
-import type { CaptureField, SanitizedJobCapture } from "../lib/job-capture";
-import { sendJobIntent } from "../lib/job-intent-api";
 import {
   fileContributionAppeal,
   getContributionStatus,
@@ -16,21 +13,18 @@ import {
 import {
   CONTRIBUTION_RECEIPTS_KEY,
   type ContributionReceipt,
-  receiptFromContribution,
   parseContributionReceipts,
+  receiptFromContribution,
   receiptsForIdentity,
   updateContributionStatus,
   updateTrustStatus,
   upsertContributionReceipt,
 } from "../lib/contribution-receipts";
+import { detectPublicJob } from "../lib/detectors";
+import type { CaptureField, SanitizedJobCapture } from "../lib/job-capture";
+import { sendJobIntent } from "../lib/job-intent-api";
 import { parseExtensionMessage } from "../lib/messages";
 import { captureCurrentPublicJobPage } from "../lib/page-inspection";
-import {
-  CONTRIBUTION_CAPABILITY_POLICY_CACHE_KEY,
-  ExtensionContributionPolicyRuntime,
-  fetchSignedContributionCapabilityPolicy,
-  type SignedExtensionContributionCapabilityPolicy,
-} from "../lib/signed-capability-policy";
 import {
   createPendingIntent,
   dueForDispatch,
@@ -48,6 +42,12 @@ import {
   logout,
   refresh,
 } from "../lib/protocol";
+import {
+  CONTRIBUTION_CAPABILITY_POLICY_CACHE_KEY,
+  ExtensionContributionPolicyRuntime,
+  fetchSignedContributionCapabilityPolicy,
+  type SignedExtensionContributionCapabilityPolicy,
+} from "../lib/signed-capability-policy";
 import { restrictExtensionStorageToTrustedContexts } from "../lib/storage-boundary";
 
 const LAST_CAPTURE_KEY = "d2LastJobCaptureV1";
@@ -87,12 +87,31 @@ interface LastCapture {
   tabUrl: string;
 }
 
+type DeliveryReadinessReason =
+  | "api_configuration_required"
+  | "identity_configuration_required"
+  | "policy_configuration_required"
+  | "preview_required"
+  | "ready"
+  | "retention_configuration_required"
+  | "sign_in_required"
+  | "signed_policy_disabled"
+  | "signed_policy_unavailable";
+
+interface DeliveryReadiness {
+  contribution: { ready: boolean; reason: DeliveryReadinessReason };
+  privateSave: { ready: boolean; reason: DeliveryReadinessReason };
+}
+
 function safeMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : "";
   if (message.includes("cancel") || message.includes("access_denied")) {
     return "Authentication action cancelled.";
   }
   if (message === "configuration_required") return "Public Auth0 configuration is required.";
+  if (message === "api_configuration_required") {
+    return "Configure the API origin before using account delivery.";
+  }
   if (message === "reauthentication_required" || message === "authentication_required") {
     return "Log in again to continue.";
   }
@@ -102,6 +121,9 @@ function safeMessage(error: unknown): string {
   }
   if (message === "contribution_capability_disabled") {
     return "Public contribution is currently disabled by its signed capability policy.";
+  }
+  if (message === "queue_capacity_reached") {
+    return "The delivery queue is full. Retry pending items or remove stopped items.";
   }
   return "The action did not complete.";
 }
@@ -113,6 +135,66 @@ function trustedSender(sender: chrome.runtime.MessageSender): boolean {
     typeof sender.url === "string" &&
     sender.url.startsWith(chrome.runtime.getURL(""))
   );
+}
+
+function unavailable(reason: DeliveryReadinessReason) {
+  return { ready: false, reason } as const;
+}
+
+async function activeStoredCapture(): Promise<SanitizedJobCapture | undefined> {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const stored = await chrome.storage.session.get(LAST_CAPTURE_KEY);
+  const last = stored[LAST_CAPTURE_KEY] as LastCapture | undefined;
+  return last && tab?.id === last.tabId && tab.url === last.tabUrl ? last.capture : undefined;
+}
+
+async function deliveryReadiness(
+  capture: SanitizedJobCapture | undefined,
+): Promise<DeliveryReadiness> {
+  const status = await authenticationStatus();
+  const baseReason = !status.configured
+    ? "identity_configuration_required"
+    : !status.authenticated
+      ? "sign_in_required"
+      : !status.apiConfigured
+        ? "api_configuration_required"
+        : !extensionConfiguration.pendingRetentionMilliseconds
+          ? "retention_configuration_required"
+          : undefined;
+  if (baseReason) {
+    return { contribution: unavailable(baseReason), privateSave: unavailable(baseReason) };
+  }
+
+  if (!capture) {
+    return {
+      contribution: unavailable("preview_required"),
+      privateSave: unavailable("preview_required"),
+    };
+  }
+  const privateSave = { ready: true, reason: "ready" } as const;
+  if (
+    !extensionConfiguration.ugcContributionPolicyVersion ||
+    Object.keys(extensionConfiguration.capabilityPolicyPublicKeys).length === 0
+  ) {
+    return { contribution: unavailable("policy_configuration_required"), privateSave };
+  }
+  try {
+    await contributionPolicyStartup;
+  } catch {
+    return { contribution: unavailable("signed_policy_unavailable"), privateSave };
+  }
+  const decision = contributionPolicy.decision(capture, chrome.runtime.getManifest().version);
+  if (!decision.allowed) {
+    return {
+      contribution: unavailable(
+        decision.reason === "policy_missing"
+          ? "signed_policy_unavailable"
+          : "signed_policy_disabled",
+      ),
+      privateSave,
+    };
+  }
+  return { contribution: { ready: true, reason: "ready" }, privateSave };
 }
 
 async function pendingQueue(): Promise<PendingJobIntent[]> {
@@ -218,7 +300,9 @@ async function dispatchPending(): Promise<{ pending: number; stopped: number }> 
 async function ownerAction(
   message: Extract<ReturnType<typeof parseExtensionMessage>, { contributionId: string }>,
 ) {
-  if (!message || !extensionConfiguration.apiOrigin) throw new Error("configuration_required");
+  if (!message || !extensionConfiguration.apiOrigin) {
+    throw new Error("api_configuration_required");
+  }
   const session = await authenticatedApiSession();
   const all = await contributionReceipts();
   const receipt = receiptsForIdentity(all, session.identityFence).find(
@@ -383,24 +467,37 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
         await writePendingQueue(
           (await pendingQueue()).filter((intent) => intent.state === "pending"),
         );
-      } else if (message.action === "capture") return captureCurrentPage();
-      else if (message.action === "enqueue") {
+      } else if (message.action === "capture") {
+        const result = await captureCurrentPage();
+        return {
+          ...result,
+          delivery: await deliveryReadiness(result.ok ? result.capture : undefined),
+          status: await authenticationStatus(),
+        };
+      } else if (message.action === "enqueue") {
         const queue = await enqueue(message.intent, message.approvedFields);
         const session = await authenticatedApiSession();
         return {
+          delivery: await deliveryReadiness(await activeStoredCapture()),
           ok: true,
           queue,
           receipts: receiptsForIdentity(await contributionReceipts(), session.identityFence),
           status: await authenticationStatus(),
         };
       } else if (message.action === "retry") {
-        return { ok: true, queue: await dispatchPending(), status: await authenticationStatus() };
+        return {
+          delivery: await deliveryReadiness(await activeStoredCapture()),
+          ok: true,
+          queue: await dispatchPending(),
+          status: await authenticationStatus(),
+        };
       } else if (
         ["contribution_refresh", "trust_refresh", "withdraw", "appeal"].includes(message.action)
       ) {
         const outcome = await ownerAction(message as Parameters<typeof ownerAction>[0]);
         const session = await authenticatedApiSession();
         return {
+          delivery: await deliveryReadiness(await activeStoredCapture()),
           ok: outcome === "ok",
           ownerAction: outcome,
           receipts: receiptsForIdentity(await contributionReceipts(), session.identityFence),
@@ -416,6 +513,7 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
         /* signed-out responses never expose fenced receipts */
       }
       return {
+        delivery: await deliveryReadiness(await activeStoredCapture()),
         ok: true,
         queue: {
           pending: queue.filter((intent) => intent.state === "pending").length,
@@ -425,7 +523,12 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
         status: await authenticationStatus(),
       };
     } catch (error) {
-      return { error: safeMessage(error), ok: false, status: await authenticationStatus() };
+      return {
+        delivery: await deliveryReadiness(await activeStoredCapture()),
+        error: safeMessage(error),
+        ok: false,
+        status: await authenticationStatus(),
+      };
     }
   })().then(sendResponse);
   return true;

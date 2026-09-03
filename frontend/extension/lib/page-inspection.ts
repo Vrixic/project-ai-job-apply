@@ -3,14 +3,47 @@ import type { RawPageSnapshot } from "./job-capture";
 // This function is serialized by chrome.scripting and therefore must remain self-contained.
 // It reads a strict public-job allowlist only after the user invokes the extension action.
 export function captureCurrentPublicJobPage(): RawPageSnapshot {
+  const normalize = (value: string | null | undefined): string | undefined => {
+    const normalized = value?.replace(/\s+/gu, " ").trim();
+    return normalized ? normalized.slice(0, 50_000) : undefined;
+  };
   const text = (...selectors: string[]): string | undefined => {
     for (const selector of selectors) {
-      const value = document.querySelector(selector)?.textContent?.replace(/\s+/gu, " ").trim();
+      const value = normalize(document.querySelector(selector)?.textContent);
       if (value) {
-        return value.slice(0, 50_000);
+        return value;
       }
     }
     return undefined;
+  };
+  const attribute = (name: string, ...selectors: string[]): string | undefined => {
+    for (const selector of selectors) {
+      const value = normalize(document.querySelector(selector)?.getAttribute(name));
+      if (value) {
+        return value;
+      }
+    }
+    return undefined;
+  };
+  const descriptionText = (
+    root: Pick<Element, "firstElementChild" | "textContent">,
+  ): string | undefined => {
+    const fullText = normalize(root.textContent);
+    const firstElement = root.firstElementChild;
+    if (!fullText || !firstElement || !/^H[1-6]$/u.test(firstElement.tagName)) {
+      return fullText;
+    }
+    const heading = normalize(firstElement.textContent);
+    if (!heading || !fullText.toLowerCase().startsWith(heading.toLowerCase())) {
+      return fullText;
+    }
+    const afterHeading = fullText.slice(heading.length).trimStart();
+    const repeatedPrefix = afterHeading.slice(0, heading.length);
+    const boundary = afterHeading.at(heading.length);
+    return repeatedPrefix.toLowerCase() === heading.toLowerCase() &&
+      (!boundary || /[\s.,:;!?—–-]/u.test(boundary))
+      ? normalize(afterHeading)
+      : fullText;
   };
   let structured: Record<string, unknown> | undefined;
   for (const node of document.querySelectorAll<HTMLScriptElement>(
@@ -20,13 +53,24 @@ export function captureCurrentPublicJobPage(): RawPageSnapshot {
       const source = node.textContent ?? "";
       if (source.length > 200_000) continue;
       const parsed = JSON.parse(source) as unknown;
-      const candidates = Array.isArray(parsed) ? parsed : [parsed];
+      const roots = Array.isArray(parsed) ? parsed : [parsed];
+      const candidates = roots.flatMap((candidate) => {
+        if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+          return [candidate];
+        }
+        const graph = (candidate as { "@graph"?: unknown })["@graph"];
+        return Array.isArray(graph) ? [candidate, ...graph] : [candidate];
+      });
       structured = candidates.find((candidate): candidate is Record<string, unknown> =>
         Boolean(
           candidate &&
             typeof candidate === "object" &&
             !Array.isArray(candidate) &&
-            (candidate as { "@type"?: unknown })["@type"] === "JobPosting",
+            ((candidate as { "@type"?: unknown })["@type"] === "JobPosting" ||
+              (Array.isArray((candidate as { "@type"?: unknown })["@type"]) &&
+                ((candidate as { "@type": unknown[] })["@type"] as unknown[]).includes(
+                  "JobPosting",
+                ))),
         ),
       );
       if (structured) break;
@@ -39,6 +83,16 @@ export function captureCurrentPublicJobPage(): RawPageSnapshot {
     organization && typeof organization === "object" && !Array.isArray(organization)
       ? (organization as { name?: unknown }).name
       : undefined;
+  const identifier = structured?.identifier;
+  const identifierValue = Array.isArray(identifier)
+    ? identifier.find(
+        (candidate) =>
+          candidate &&
+          typeof candidate === "object" &&
+          !Array.isArray(candidate) &&
+          typeof (candidate as { value?: unknown }).value === "string",
+      )
+    : identifier;
   const jobLocation = structured?.jobLocation;
   const locationValue = Array.isArray(jobLocation) ? jobLocation[0] : jobLocation;
   const address =
@@ -54,31 +108,64 @@ export function captureCurrentPublicJobPage(): RawPageSnapshot {
         .filter((part): part is string => typeof part === "string" && part.length > 0)
         .join(", ")
     : undefined;
-  const canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.href;
   const description =
     typeof structured?.description === "string"
-      ? (new DOMParser()
-          .parseFromString(structured.description.slice(0, 200_000), "text/html")
-          .body.textContent?.slice(0, 50_000) ?? undefined)
-      : text("[data-job-description]", ".job__description", ".content", "main article");
-  const result: RawPageSnapshot = { canonicalUrl: canonical || location.href };
-  const company =
-    typeof organizationName === "string"
-      ? organizationName
-      : text("[data-company-name]", ".company-name", ".posting-categories + h2");
+      ? descriptionText(
+          new DOMParser().parseFromString(structured.description.slice(0, 200_000), "text/html")
+            .body,
+        )
+      : (() => {
+          for (const selector of [
+            "[data-job-description]",
+            ".job__description",
+            ".content",
+            "main article",
+          ]) {
+            const node = document.querySelector(selector);
+            if (node) return descriptionText(node);
+          }
+          return undefined;
+        })();
+  // The already-authorized active tab is the source identity. Page-owned canonical links are
+  // untrusted input and can incorrectly downgrade HTTPS or point at another origin.
+  const result: RawPageSnapshot = { canonicalUrl: location.href };
+  let activeHostname: string | undefined;
+  try {
+    activeHostname = new URL(location.href).hostname.toLowerCase();
+  } catch {
+    // The detector will reject malformed active-tab URLs.
+  }
+  const visibleCompany =
+    activeHostname === "boards.greenhouse.io" || activeHostname === "job-boards.greenhouse.io"
+      ? text("[data-company-name]", ".company-name") ||
+        attribute("alt", "#logo img[alt]", ".logo img[alt]", ".company-logo img[alt]")
+      : activeHostname === "jobs.lever.co" || activeHostname === "jobs.eu.lever.co"
+        ? text("[data-company-name]", '[data-qa="company-name"]', ".company-name") ||
+          attribute("alt", ".main-header-logo img[alt]", ".company-logo img[alt]")
+        : activeHostname === "jobs.ashbyhq.com"
+          ? text(
+              '[data-testid="company-name"]',
+              ".ashby-job-posting-heading__company-name",
+              "[data-company-name]",
+            ) || attribute("alt", '[data-testid="job-posting-header"] img[alt]')
+          : undefined;
+  const company = typeof organizationName === "string" ? organizationName : visibleCompany;
   const externalJobId =
     typeof structured?.identifier === "string"
       ? structured.identifier
-      : text("[data-job-id]", "[data-requisition-id]");
+      : identifierValue && typeof identifierValue === "object" && !Array.isArray(identifierValue)
+        ? (identifierValue as { value?: unknown }).value
+        : text("[data-job-id]", "[data-requisition-id]");
   const publicLocation =
-    structuredLocation || text("[data-job-location]", ".location", ".posting-categories .location");
+    structuredLocation ||
+    text("[data-job-location]", ".job__location", ".location", ".posting-categories .location");
   const title =
     typeof structured?.title === "string"
       ? structured.title
       : text("h1", "[data-job-title]", ".posting-headline h2");
   if (company) result.company = company;
   if (description) result.description = description;
-  if (externalJobId) result.externalJobId = externalJobId;
+  if (typeof externalJobId === "string" && externalJobId) result.externalJobId = externalJobId;
   if (publicLocation) result.location = publicLocation;
   if (title) result.title = title;
   return result;

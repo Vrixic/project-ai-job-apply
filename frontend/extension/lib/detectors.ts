@@ -46,9 +46,20 @@ function detector(
     provider,
     variant,
     detect(snapshot, capturedAt) {
-      return exactProviderPage(snapshot.canonicalUrl, provider, domains)
-        ? sanitizeSnapshot(snapshot, provider, variant, capturedAt)
-        : undefined;
+      if (!exactProviderPage(snapshot.canonicalUrl, provider, domains)) {
+        return undefined;
+      }
+      let externalJobId = snapshot.externalJobId;
+      if (!externalJobId) {
+        const segments = new URL(snapshot.canonicalUrl).pathname.split("/").filter(Boolean);
+        externalJobId = segments.at(-1);
+      }
+      return sanitizeSnapshot(
+        { ...snapshot, ...(externalJobId ? { externalJobId } : {}) },
+        provider,
+        variant,
+        capturedAt,
+      );
     },
   };
 }

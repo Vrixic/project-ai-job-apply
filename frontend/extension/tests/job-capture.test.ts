@@ -8,37 +8,54 @@ import {
 
 describe("strict public job capture", () => {
   it.each([
-    ["greenhouse", "https://boards.greenhouse.io/example/jobs/123"],
-    ["lever", "https://jobs.lever.co/example/123"],
-    ["ashby", "https://jobs.ashbyhq.com/example/123"],
-  ] as const)("detects a synthetic %s-shaped public URL", (provider, canonicalUrl) => {
+    ["greenhouse", "https://boards.greenhouse.io/example/jobs/123", "123"],
+    ["lever", "https://jobs.lever.co/example/lever-posting-id", "lever-posting-id"],
+    ["ashby", "https://jobs.ashbyhq.com/example/ashby-posting-id", "ashby-posting-id"],
+  ] as const)(
+    "detects a synthetic %s-shaped public URL",
+    (provider, canonicalUrl, externalJobId) => {
+      expect(
+        detectPublicJob(
+          {
+            canonicalUrl: `${canonicalUrl}?utm_source=test#private-fragment`,
+            company: " Example Company ",
+            description: "Build <b>safe</b> systems\u0000",
+            location: "Remote",
+            title: "Software Engineer",
+          },
+          "2026-09-01T12:00:00.000Z",
+        ),
+      ).toEqual({
+        adapterVersion: "d2-job-page-v1",
+        capturedAt: "2026-09-01T12:00:00.000Z",
+        company: "Example Company",
+        description: "Build safe systems",
+        externalJobId,
+        location: "Remote",
+        pageVariant:
+          provider === "greenhouse"
+            ? "greenhouse-board-v1"
+            : provider === "lever"
+              ? "lever-posting-v1"
+              : "ashby-job-board-v1",
+        provider,
+        sourceUrl: canonicalUrl,
+        title: "Software Engineer",
+      });
+    },
+  );
+
+  it("keeps an explicit provider identifier instead of replacing it with the URL identity", () => {
     expect(
       detectPublicJob(
         {
-          canonicalUrl: `${canonicalUrl}?utm_source=test#private-fragment`,
-          company: " Example Company ",
-          description: "Build <b>safe</b> systems\u0000",
-          location: "Remote",
-          title: "Software Engineer",
+          canonicalUrl: "https://boards.greenhouse.io/example/jobs/url-identity",
+          externalJobId: "requisition-identity",
+          title: "Platform Engineer",
         },
         "2026-09-01T12:00:00.000Z",
-      ),
-    ).toEqual({
-      adapterVersion: "d2-job-page-v1",
-      capturedAt: "2026-09-01T12:00:00.000Z",
-      company: "Example Company",
-      description: "Build safe systems",
-      location: "Remote",
-      pageVariant:
-        provider === "greenhouse"
-          ? "greenhouse-board-v1"
-          : provider === "lever"
-            ? "lever-posting-v1"
-            : "ashby-job-board-v1",
-      provider,
-      sourceUrl: canonicalUrl,
-      title: "Software Engineer",
-    });
+      )?.externalJobId,
+    ).toBe("requisition-identity");
   });
 
   it("uses exact supported hosts and refuses lookalikes", () => {

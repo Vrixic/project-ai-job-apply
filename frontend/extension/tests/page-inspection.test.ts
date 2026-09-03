@@ -1,0 +1,110 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { captureCurrentPublicJobPage } from "../lib/page-inspection";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("explicit current-page inspection", () => {
+  it("uses the authorized HTTPS tab instead of a page-owned insecure canonical URL", () => {
+    const values = new Map<string, string>([
+      ['link[rel="canonical"]', "http://job-boards.greenhouse.io/remotecom/jobs/7774935003"],
+      ["h1", "Senior Forward Deployed Engineer (Remote Build)"],
+      [".job__description", "Public job description"],
+      [".job__location", "Remote-NORAM"],
+    ]);
+    vi.stubGlobal("location", {
+      href: "https://job-boards.greenhouse.io/remotecom/jobs/7774935003?source=test#apply",
+    });
+    vi.stubGlobal("document", {
+      querySelector(selector: string) {
+        const textContent = values.get(selector);
+        return textContent ? { href: textContent, textContent } : null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+    });
+
+    expect(captureCurrentPublicJobPage()).toEqual({
+      canonicalUrl: "https://job-boards.greenhouse.io/remotecom/jobs/7774935003?source=test#apply",
+      description: "Public job description",
+      location: "Remote-NORAM",
+      title: "Senior Forward Deployed Engineer (Remote Build)",
+    });
+  });
+
+  it("reads grounded organization and PropertyValue identity from graph structured data", () => {
+    vi.stubGlobal("location", {
+      href: "https://jobs.ashbyhq.com/example/ashby-posting-id",
+    });
+    vi.stubGlobal(
+      "DOMParser",
+      class {
+        parseFromString() {
+          return {
+            body: {
+              firstElementChild: { tagName: "H2", textContent: "About Example" },
+              textContent: "About Example About Example Public job description",
+            },
+          };
+        }
+      },
+    );
+    vi.stubGlobal("document", {
+      querySelector() {
+        return null;
+      },
+      querySelectorAll() {
+        return [
+          {
+            textContent: JSON.stringify({
+              "@graph": [
+                { "@type": "WebPage", name: "Synthetic page" },
+                {
+                  "@type": ["Thing", "JobPosting"],
+                  description: "<h2>About Example</h2><p>About Example Public job description</p>",
+                  hiringOrganization: { name: "Example Incorporated" },
+                  identifier: { "@type": "PropertyValue", value: "REQ-42" },
+                  title: "Systems Engineer",
+                },
+              ],
+            }),
+          },
+        ];
+      },
+    });
+
+    expect(captureCurrentPublicJobPage()).toEqual({
+      canonicalUrl: "https://jobs.ashbyhq.com/example/ashby-posting-id",
+      company: "Example Incorporated",
+      description: "About Example Public job description",
+      externalJobId: "REQ-42",
+      title: "Systems Engineer",
+    });
+  });
+
+  it("uses provider-specific visible company text without inferring it from the URL", () => {
+    vi.stubGlobal("location", {
+      href: "https://job-boards.greenhouse.io/example/jobs/123",
+    });
+    vi.stubGlobal("document", {
+      querySelector(selector: string) {
+        if (selector === "h1") return { textContent: "Security Engineer" };
+        if (selector === "#logo img[alt]") {
+          return { getAttribute: (name: string) => (name === "alt" ? "Example Company" : null) };
+        }
+        return null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+    });
+
+    expect(captureCurrentPublicJobPage()).toEqual({
+      canonicalUrl: "https://job-boards.greenhouse.io/example/jobs/123",
+      company: "Example Company",
+      title: "Security Engineer",
+    });
+  });
+});

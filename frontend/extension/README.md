@@ -88,6 +88,10 @@ adapter or remote URL and does not authorize public contribution. A signed contr
 therefore cannot disable an otherwise reviewed private-save path, while an absent detector policy
 still keeps both current-page actions dark because there is no accepted page to save.
 
+Current-page inspection is a local-only explicit action and does not require sign-in or an API
+origin. Saving or contributing the sanitized preview remains independently fail-closed unless the
+required identity, API, retention, consent, and capability gates pass.
+
 Then run:
 
 ```powershell

@@ -3,6 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f1f4ee" />
     <title>ApplyDash job capture</title>
     <link rel="stylesheet" href="popup.css" />
   </head>
@@ -15,12 +16,12 @@
         <p class="lede">Inspect only the page you choose. Nothing is shared without a separate preview and approval.</p>
       </header>
 
-      <section class="card" aria-labelledby="session-heading">
+      <section class="card session-card" aria-labelledby="session-heading">
         <div class="section-heading">
           <h2 id="session-heading">Session</h2>
           <span id="auth-status" class="status" aria-live="polite">Checking…</span>
         </div>
-        <p id="detail" class="detail" aria-live="polite"></p>
+        <p id="detail" class="detail" aria-live="polite">Inspection works without signing in.</p>
         <div class="actions compact">
           <button id="login" type="button" hidden>Sign in</button>
           <button id="refresh" class="secondary" type="button" hidden>Refresh session</button>
@@ -28,50 +29,81 @@
         </div>
       </section>
 
-      <button id="inspect" class="primary-action" type="button">Inspect current tab</button>
+      <div class="inspection-action">
+        <button id="inspect" class="primary-action" type="button">Inspect current tab</button>
+        <p>Creates a local preview from supported public job fields.</p>
+      </div>
 
-      <section id="preview" class="card" aria-labelledby="preview-heading" hidden>
-        <div class="section-heading">
-          <h2 id="preview-heading">Job preview</h2>
-          <span class="status">Selected page fields</span>
+      <section id="preview" class="card preview-card" aria-labelledby="preview-heading" hidden>
+        <div class="section-heading preview-heading">
+          <div>
+            <h2 id="preview-heading" tabindex="-1">Job preview</h2>
+            <p id="selection-summary" class="selection-summary" aria-live="polite"></p>
+          </div>
+          <span class="status">Local preview</span>
         </div>
+
         <div id="field-list" class="field-list"></div>
-        <button id="save-private" class="secondary" type="button">Save Selected Fields Privately</button>
-        <label class="consent-row">
-          <input id="contribution-consent" type="checkbox" />
-          <span>I approve sharing only the selected public fields.</span>
-        </label>
-        <button id="contribute" type="button" disabled>Contribute Selected Fields</button>
+
+        <section class="delivery-actions" aria-labelledby="delivery-heading">
+          <h3 id="delivery-heading">Save to your account</h3>
+          <p id="delivery-readiness" class="delivery-readiness" role="status" aria-live="polite"></p>
+          <button id="save-private" class="secondary" type="button" disabled>Save privately</button>
+
+          <details class="contribution-controls">
+            <summary>Share a public contribution</summary>
+            <p class="supporting-copy">This is separate from private saving and requires your explicit approval.</p>
+            <label class="consent-row">
+              <input id="contribution-consent" name="contribution-consent" type="checkbox" />
+              <span>I approve sharing only the selected public fields.</span>
+            </label>
+            <button id="contribute" type="button" disabled>Contribute selected fields</button>
+          </details>
+        </section>
       </section>
 
-      <section class="queue" aria-labelledby="queue-heading">
-        <div>
-          <h2 id="queue-heading">Delivery queue</h2>
-          <p id="queue-status" aria-live="polite">0 pending · 0 stopped</p>
+      <details id="queue-panel" class="disclosure queue-disclosure">
+        <summary>
+          <h2 class="summary-heading">Delivery queue</h2>
+          <span id="queue-status" class="summary-status" aria-live="polite">0 pending · 0 stopped</span>
+        </summary>
+        <div class="disclosure-content">
+          <p>Items stay on this device until delivery succeeds, they stop, or you remove them.</p>
+          <div class="queue-actions">
+            <button id="retry" class="quiet" type="button" hidden>Retry now</button>
+            <button id="clear-stopped" class="quiet" type="button" hidden>Remove stopped</button>
+            <button id="clear-queue" class="quiet danger" type="button" hidden>Remove all</button>
+          </div>
         </div>
-        <div class="queue-actions">
-          <button id="retry" class="quiet" type="button" hidden>Retry now</button>
-          <button id="clear-stopped" class="quiet" type="button" hidden>Remove stopped</button>
-          <button id="clear-queue" class="quiet danger" type="button" hidden>Remove all</button>
-        </div>
-      </section>
+      </details>
 
-      <section class="card" aria-labelledby="contributions-heading">
-        <h2 id="contributions-heading">Your contributions</h2>
-        <p>User-initiated refresh only. No background status polling.</p>
-        <div id="contribution-list"></div>
-        <p id="owner-action-status" role="status" aria-live="polite" tabindex="-1"></p>
-      </section>
+      <details id="contributions-panel" class="disclosure contributions-disclosure">
+        <summary>
+          <h2 class="summary-heading">Your contributions</h2>
+          <span id="contributions-status" class="summary-status">Review status</span>
+        </summary>
+        <div class="disclosure-content">
+          <p>User-initiated refresh only. No background status polling.</p>
+          <div id="contribution-list"></div>
+          <p id="owner-action-status" role="status" aria-live="polite" tabindex="-1"></p>
+        </div>
+      </details>
 
       <dialog id="appeal-dialog" aria-labelledby="appeal-heading">
         <form id="appeal-form" method="dialog">
           <h2 id="appeal-heading">Appeal contribution decision</h2>
           <label for="appeal-evidence">Evidence supporting this appeal</label>
-          <textarea id="appeal-evidence" maxlength="2000" required></textarea>
+          <textarea
+            id="appeal-evidence"
+            name="appeal-evidence"
+            autocomplete="off"
+            maxlength="2000"
+            required
+          ></textarea>
           <p>Only a SHA-256 digest is sent. This text is cleared after submission.</p>
           <div class="actions compact">
             <button id="cancel-appeal" class="quiet" type="button">Cancel</button>
-            <button type="submit">Confirm and submit appeal</button>
+            <button type="submit">Confirm &amp; submit appeal</button>
           </div>
         </form>
       </dialog>
