@@ -57,6 +57,10 @@ export interface SourcePollContext {
   readonly attempt: number;
 }
 
+export interface SourceExactPollContext extends SourcePollContext {
+  readonly externalJobId: string;
+}
+
 export type SourceRetryReason = "rate_limited" | "source_unavailable" | "timeout";
 
 export type SourcePollResult =
@@ -71,6 +75,7 @@ export interface IngestionSourceAdapter {
   readonly sourceId: string;
   readonly adapterVersion: string;
   poll(context: SourcePollContext): Promise<SourcePollResult>;
+  pollExact?(context: SourceExactPollContext): Promise<SourcePollResult>;
 }
 
 export interface SourceRegistration {

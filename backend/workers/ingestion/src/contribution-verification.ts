@@ -172,11 +172,17 @@ export class RegisteredIndependentProviderVerifier implements IndependentProvide
       registration = registeredSource(this.registry, config);
       observedAt = this.#clock();
       if (!Number.isFinite(observedAt.getTime())) throw new TypeError("Invalid verification clock");
-      const response = await registration.adapter.poll({
+      const pollContext = {
         observedAt: new Date(observedAt),
         attempt: 1,
         signal: new AbortController().signal,
-      });
+      };
+      const response = registration.adapter.pollExact
+        ? await registration.adapter.pollExact({
+            ...pollContext,
+            externalJobId: proposal.provenance.externalJobId,
+          })
+        : await registration.adapter.poll(pollContext);
       if (response.kind !== "success") return { status: "unavailable", ...base };
 
       for (const withdrawal of response.withdrawals ?? []) {

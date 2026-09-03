@@ -71,6 +71,9 @@ export class SourceRegistry {
         sourceId: registration.adapter.sourceId,
         adapterVersion: registration.adapter.adapterVersion,
         poll: registration.adapter.poll.bind(registration.adapter),
+        ...(registration.adapter.pollExact
+          ? { pollExact: registration.adapter.pollExact.bind(registration.adapter) }
+          : {}),
       });
       this.#registrations.set(
         registration.sourceId,

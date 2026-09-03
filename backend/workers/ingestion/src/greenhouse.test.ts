@@ -69,6 +69,54 @@ describe("GreenhouseJobBoardAdapter", () => {
     await expect(adapter(fetch).poll(context())).resolves.toEqual({ kind: "retry", reason });
   });
 
+  it("fetches one exact job for contribution verification without downloading the whole board", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(
+      async () =>
+        new Response(
+          JSON.stringify({
+            id: 7774935003,
+            title: "Platform Engineer",
+            absolute_url: "https://job-boards.greenhouse.io/reviewed_board/jobs/7774935003",
+            location: { name: "Remote" },
+            content: "<p>Build reliable systems.</p>",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    );
+    await expect(
+      adapter(fetch).pollExact?.({ ...context(), externalJobId: "7774935003" }),
+    ).resolves.toMatchObject({
+      kind: "success",
+      observations: [{ externalJobId: "7774935003", title: "Platform Engineer" }],
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      "https://boards-api.greenhouse.io/v1/boards/reviewed_board/jobs/7774935003",
+      expect.objectContaining({ method: "GET", redirect: "error" }),
+    );
+  });
+
+  it("rejects malformed or mismatched exact job identities", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(
+      async () =>
+        new Response(
+          JSON.stringify({
+            id: 2,
+            title: "Job",
+            absolute_url: "https://job-boards.greenhouse.io/reviewed_board/jobs/2",
+            location: { name: "Remote" },
+            content: "Text",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    );
+    await expect(
+      adapter(fetch).pollExact?.({ ...context(), externalJobId: "../2" }),
+    ).rejects.toThrow("identifier is invalid");
+    await expect(adapter(fetch).pollExact?.({ ...context(), externalJobId: "1" })).rejects.toThrow(
+      "exact response identity",
+    );
+  });
+
   it("rejects redirects, foreign job URLs, oversized bodies, and oversized batches", async () => {
     const foreign = vi.fn<typeof globalThis.fetch>(
       async () =>

@@ -1,5 +1,6 @@
 import type {
   IngestionSourceAdapter,
+  SourceExactPollContext,
   SourceJobObservation,
   SourcePollContext,
   SourcePollResult,
@@ -11,6 +12,7 @@ const domainPattern = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+
 const supportedJobHosts = new Set(["boards.greenhouse.io", "job-boards.greenhouse.io"]);
 const maximumJobs = 100;
 const maximumTextLength = 100_000;
+const externalJobIdPattern = /^[1-9][0-9]{0,15}$/;
 
 export const greenhouseJobBoardAdapterVersion = "greenhouse-job-board-v1";
 
@@ -212,28 +214,33 @@ export class GreenhouseJobBoardAdapter implements IngestionSourceAdapter {
     }
   }
 
-  async poll({ signal }: SourcePollContext): Promise<SourcePollResult> {
+  async #request(url: string, signal: AbortSignal): Promise<Response | SourcePollResult> {
     const timeout = AbortSignal.timeout(this.#requestTimeoutMs);
     const combined = AbortSignal.any([signal, timeout]);
-    let response: Response;
     try {
-      response = await this.#fetch(
-        `https://boards-api.greenhouse.io/v1/boards/${this.#boardToken}/jobs?content=true`,
-        {
-          method: "GET",
-          redirect: "error",
-          signal: combined,
-          headers: { accept: "application/json" },
-        },
-      );
+      const response = await this.#fetch(url, {
+        method: "GET",
+        redirect: "error",
+        signal: combined,
+        headers: { accept: "application/json" },
+      });
+      if (response.status === 429) return { kind: "retry", reason: "rate_limited" };
+      if (!response.ok) return { kind: "retry", reason: "source_unavailable" };
+      return response;
     } catch {
       return {
         kind: "retry",
         reason: timeout.aborted && !signal.aborted ? "timeout" : "source_unavailable",
       };
     }
-    if (response.status === 429) return { kind: "retry", reason: "rate_limited" };
-    if (!response.ok) return { kind: "retry", reason: "source_unavailable" };
+  }
+
+  async poll({ signal }: SourcePollContext): Promise<SourcePollResult> {
+    const response = await this.#request(
+      `https://boards-api.greenhouse.io/v1/boards/${this.#boardToken}/jobs?content=true`,
+      signal,
+    );
+    if (!(response instanceof Response)) return response;
     const payload = await readBoundedJson(response, this.#maximumResponseBytes);
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
       throw new Error("The Greenhouse response is invalid");
@@ -253,5 +260,26 @@ export class GreenhouseJobBoardAdapter implements IngestionSourceAdapter {
       ),
       withdrawals: [],
     };
+  }
+
+  async pollExact({ externalJobId, signal }: SourceExactPollContext): Promise<SourcePollResult> {
+    if (!externalJobIdPattern.test(externalJobId)) {
+      throw new Error("The Greenhouse exact job identifier is invalid");
+    }
+    const response = await this.#request(
+      `https://boards-api.greenhouse.io/v1/boards/${this.#boardToken}/jobs/${externalJobId}`,
+      signal,
+    );
+    if (!(response instanceof Response)) return response;
+    const payload = await readBoundedJson(response, this.#maximumResponseBytes);
+    const observation = parseJob(payload, {
+      boardToken: this.#boardToken,
+      companyName: this.#companyName,
+      verifiedCompanyDomain: this.#verifiedCompanyDomain,
+    });
+    if (observation.externalJobId !== externalJobId) {
+      throw new Error("The Greenhouse exact response identity does not match its request");
+    }
+    return { kind: "success", observations: [observation], withdrawals: [] };
   }
 }

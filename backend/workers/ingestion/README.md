@@ -31,8 +31,11 @@ configured by default. Public UGC remains outside this worker and belongs to D2.
   employer, tenant, or real job.
 - `greenhouse.ts` — fixed-host public Job Board GET adapter with redirect refusal, bounded timeout
   and streaming response bytes, strict response mapping, plain-text conversion, tracking-query
-  removal, and reviewed company/domain inputs. It is tested with generated responses and remains
-  impossible to enable through the default registry policy without explicit runtime authority.
+  removal, and reviewed company/domain inputs. Independent contribution verification uses the
+  exact public job endpoint so a large board cannot force weakening the one-megabyte response cap;
+  scheduled ingestion retains the bounded board endpoint. It is tested with generated responses
+  and remains impossible to enable through the default registry policy without explicit runtime
+  authority.
 - `lever.ts` — fixed global/EU Postings GET adapter with paired API/hosted-job hosts, bounded
   pagination and overflow refusal, plaintext-only descriptions, tracking-query removal, and exact
   site/posting identity. It never calls Lever's application endpoint.

@@ -129,6 +129,61 @@ describe("RegisteredIndependentProviderVerifier", () => {
     expect(result).not.toHaveProperty("providerObservation.rawSnapshot");
   });
 
+  it("prefers an adapter's exact-job fetch for independent verification", async () => {
+    const poll = vi.fn(
+      async (): Promise<SourcePollResult> => ({
+        kind: "retry",
+        reason: "source_unavailable",
+      }),
+    );
+    const pollExact = vi.fn(
+      async (): Promise<SourcePollResult> => ({
+        kind: "success",
+        observations: [observation],
+      }),
+    );
+    const adapter: IngestionSourceAdapter = {
+      sourceId: "greenhouse-acme",
+      adapterVersion: "greenhouse-v1",
+      poll,
+      pollExact,
+    };
+    const verifier = new RegisteredIndependentProviderVerifier(
+      new SourceRegistry(
+        [
+          {
+            sourceId: adapter.sourceId,
+            provider: "greenhouse",
+            provenance: "permitted_api",
+            adapter,
+            enabled: true,
+          },
+        ],
+        () => true,
+        { providerActivationAllowed: true },
+      ),
+      { findExact: async () => [] },
+      [
+        {
+          sourceId: adapter.sourceId,
+          provider: "greenhouse",
+          pageVariant: "greenhouse-board-v1",
+          atsTenant: "acme",
+          sourcePolicyVersion: "provider-policy-v1",
+        },
+      ],
+      { clock: () => new Date("2026-09-02T12:01:00.000Z"), createId: () => ids[0] },
+    );
+
+    await expect(
+      verifier.verify({ contributionId, normalizationId, proposal: proposal() }),
+    ).resolves.toMatchObject({ status: "verified" });
+    expect(pollExact).toHaveBeenCalledWith(
+      expect.objectContaining({ externalJobId: "123", attempt: 1 }),
+    );
+    expect(poll).not.toHaveBeenCalled();
+  });
+
   it("returns mismatch, closed, and unavailable without treating contribution as truth", async () => {
     await expect(
       harness({
