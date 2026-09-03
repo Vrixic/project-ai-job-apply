@@ -333,7 +333,7 @@ This is the master record for the delivery phases defined in the [product and sy
   independent provider verification and atomic catalog publication, Trust/reputation and candidate
   rights, lazy Lambda composition, guarded operations, aggregate telemetry, Terraform, and local
   migration/recovery evidence are present. The independent development signed-policy endpoint is
-  deployed default-dark at state `254`: its exact Ed25519 envelope is current and all-disabled,
+  deployed default-dark at state `255`: its exact Ed25519 envelope is current and all-disabled,
   the endpoint is `no-store`, and the two healthy immutable D2 worker aliases, encrypted Trust
   queue/DLQ, least-privilege IAM, and thirteen alarms remain inert with all
   contribution/private/Trust routes and D2 triggers absent. Terraform has zero drift. No
