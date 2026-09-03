@@ -35,9 +35,9 @@ function assert(condition, message) {
   if (!condition) fail(message);
 }
 
-async function openAssurancePopup(context, extensionId, scenario) {
+async function openAssurancePopup(context, extensionId, scenario, surface = "popup") {
   const popup = await context.newPage();
-  await popup.goto(`chrome-extension://${extensionId}/popup.html?assurance=${scenario}`);
+  await popup.goto(`chrome-extension://${extensionId}/${surface}.html?assurance=${scenario}`);
   await popup.waitForFunction(
     () => document.querySelector("#auth-status")?.textContent !== "Checking…",
   );
@@ -314,11 +314,18 @@ try {
   const preferredPopupWidth = await popup.evaluate(
     () => document.documentElement.getBoundingClientRect().width,
   );
-  assert(preferredPopupWidth >= 420, "the extension popup does not request a wider review surface");
+  assert(preferredPopupWidth >= 448, "the extension popup is not twice the original width");
 
+  const responsiveSurface = await openAssurancePopup(
+    context,
+    extensionId,
+    "unconfigured-long",
+    "sidepanel",
+  );
+  await inspectSyntheticCapture(responsiveSurface);
   const layoutProfiles = [];
   for (const width of [320, 360, 480]) {
-    const result = await inspectLayout(popup, width);
+    const result = await inspectLayout(responsiveSurface, width);
     assert(
       !result.horizontalOverflow,
       `${width}px layout has horizontal overflow (${result.scrollWidth}/${result.clientWidth})`,
@@ -327,7 +334,7 @@ try {
     assert(result.clippedControls.length === 0, `${width}px layout clips controls`);
     layoutProfiles.push({ width, zoom: 1 });
   }
-  const zoomedLayout = await inspectLayout(popup, 640, 2);
+  const zoomedLayout = await inspectLayout(responsiveSurface, 640, 2);
   assert(!zoomedLayout.horizontalOverflow, "200% zoom layout has horizontal overflow");
   assert(zoomedLayout.overlappingFieldRows.length === 0, "200% zoom field markers overlap labels");
   assert(zoomedLayout.clippedControls.length === 0, "200% zoom layout clips controls");
@@ -376,7 +383,7 @@ try {
   assert(sensitiveStorageAbsent, "synthetic page artifacts were retained in extension storage");
 
   process.stdout.write(
-    `${JSON.stringify({ profile: "d2_extension_installed_synthetic_v2", browserExecuted: true, manifestVersion: manifest.manifest_version, syntheticProviderPages: 3, popupScenarios: 3, preferredPopupWidth, layoutProfiles, externalRequestsAllowed, optionalProviderPermissionDenied: optionalDenied, keyboardFocusVisible: focusStyleVisible, semanticControlFailures: semanticControlFailures.length, horizontalOverflowProfiles: 0, fieldOverlapProfiles: 0, clippedControlProfiles: 0, longValueExpanders: await expanders.count(), progressiveDisclosures: 3, missingFieldStatesValidated: await unavailableFields.count(), separatedLocationAndWorkTypeFields: 2, deliveryStatesValidated: 2, sensitiveArtifactsRetained: !sensitiveStorageAbsent, telemetryRequests: 0 })}\n`,
+    `${JSON.stringify({ profile: "d2_extension_installed_synthetic_v3", browserExecuted: true, manifestVersion: manifest.manifest_version, syntheticProviderPages: 3, popupScenarios: 3, sidePanelScenarios: 1, preferredPopupWidth, layoutProfiles, externalRequestsAllowed, optionalProviderPermissionDenied: optionalDenied, keyboardFocusVisible: focusStyleVisible, semanticControlFailures: semanticControlFailures.length, horizontalOverflowProfiles: 0, fieldOverlapProfiles: 0, clippedControlProfiles: 0, longValueExpanders: await expanders.count(), progressiveDisclosures: 3, missingFieldStatesValidated: await unavailableFields.count(), separatedLocationAndWorkTypeFields: 2, deliveryStatesValidated: 2, sensitiveArtifactsRetained: !sensitiveStorageAbsent, telemetryRequests: 0 })}\n`,
   );
 } finally {
   await context?.close();

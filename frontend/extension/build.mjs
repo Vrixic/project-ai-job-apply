@@ -192,12 +192,17 @@ const manifest = {
 };
 
 await writeFile(join(outputDirectory, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
-await copyFile(join(extensionRoot, "static", "popup.html"), join(outputDirectory, "popup.html"));
-await copyFile(join(extensionRoot, "static", "popup.css"), join(outputDirectory, "popup.css"));
-await copyFile(
-  join(extensionRoot, "static", "popup.html"),
-  join(outputDirectory, "sidepanel.html"),
+const popupHtml = await readFile(join(extensionRoot, "static", "popup.html"), "utf8");
+const sidePanelHtml = popupHtml.replace(
+  'data-extension-surface="popup"',
+  'data-extension-surface="side-panel"',
 );
+if (sidePanelHtml === popupHtml) {
+  throw new Error("The popup surface marker is missing");
+}
+await writeFile(join(outputDirectory, "popup.html"), popupHtml);
+await writeFile(join(outputDirectory, "sidepanel.html"), sidePanelHtml);
+await copyFile(join(extensionRoot, "static", "popup.css"), join(outputDirectory, "popup.css"));
 
 if (process.argv.includes("--watch")) {
   const buildContext = await context(buildOptions);

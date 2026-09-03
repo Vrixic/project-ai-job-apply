@@ -22,6 +22,7 @@ describe("popup and side-panel source assurance", () => {
     expect(html).toContain('name="appeal-evidence"');
     expect(html).toContain('autocomplete="off"');
     expect(html).toContain('maxlength="2000"');
+    expect(html).toContain('data-extension-surface="popup"');
     expect(html).toContain(">Add job to shared database</button>");
     expect(html).not.toContain('id="save-private"');
     expect(html).not.toContain('id="contribution-consent"');
@@ -31,7 +32,10 @@ describe("popup and side-panel source assurance", () => {
     expect(css).toContain("button:active:not(:disabled)");
     expect(css).toContain("@media (prefers-reduced-motion: reduce)");
     expect(css).toContain("min-width: 0");
-    expect(css).toContain("width: 27.5rem");
+    expect(css).toContain('html[data-extension-surface="popup"]');
+    expect(css).toContain("min-width: 28rem");
+    expect(css).toContain("width: 28rem");
+    expect(css).toContain("min-height: 37.5rem");
     expect(css).toContain("grid-template-columns: 22px minmax(0, 1fr)");
     expect(css).not.toContain("outline: none");
     expect(css).not.toContain("transition: all");
