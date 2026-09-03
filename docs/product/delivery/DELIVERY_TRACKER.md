@@ -327,29 +327,28 @@ This is the master record for the delivery phases defined in the [product and sy
 - Exit gate: Users can preview selected public job fields and explicitly add them to the shared
   database without unrelated browsing or profile data being collected.
 - Current engineering status: Phase 2 started on 2026-09-01 from the clean Phase 1 checkpoint.
-  Repository-local Phase 2 is implemented default-dark end to end: the minimum-permission MV3
+  Repository-local Phase 2 is implemented end to end: the minimum-permission MV3
   extension, grounded responsive preview with separate location/work type, one readiness-gated
   public-add command, durable owner-visible processing,
   independent provider verification and atomic catalog publication, Trust/reputation and candidate
   rights, lazy Lambda composition, guarded operations, aggregate telemetry, Terraform, and local
-  migration/recovery evidence are present. The independent development signed-policy endpoint is
-  deployed default-dark at state `255`: its exact Ed25519 envelope is current and all-disabled,
-  the endpoint is `no-store`, and the two healthy immutable D2 worker aliases, encrypted Trust
-  queue/DLQ, least-privilege IAM, and thirteen alarms remain inert with all
-  contribution/private/Trust routes and D2 triggers absent. Terraform has zero drift. No
-  production provider is configured, no D2 worker trigger is activated, and no extension is
-  distributed. A complete post-deployment repository gate passes all 34 tasks. The immediate
-  dedicated Auth0 workflow identity and the authorized, scanned, human-sanitized, separately
-  accepted Greenhouse fixture are now complete without repurposing the generated-synthetic
-  candidate-rights M2M credential. Immediate development activation remains blocked by the
-  still-unapproved LR-D2-01 public-UGC disposition and accountable D2 security/privacy approval;
-  technical confirmation is not recorded as legal or security approval. Remaining gates are the D1
+  migration/recovery evidence are present. Under an exact product-owner controlled exception,
+  development state `260` now activates only extension client `0.2.0`, the accepted Greenhouse
+  variant and two reviewed domains, one exact provider registration, and the dedicated workflow
+  `case_opener`. Production, extension-store distribution, Lever, Ashby, and all human decision
+  roles remain dark. The no-store signed policy expires at `2026-09-04T18:24:32.188Z`. All 39
+  deployed migrations/68 relations are verified; unweighted scheduled/Trust aliases `4`, the real
+  five-minute schedule, one Trust mapping, 15 JWT routes, one anonymous policy route, provider-only
+  egress, and both empty Trust queues are healthy. Manual and automatic batches succeeded with
+  zero work, all 13 D2 alarms are `OK`, ECS is idle, and Terraform has zero drift. This development
+  exception is not LR-D2-01/LR-D2-02, counsel, accountable security/privacy, production, or store
+  approval. Remaining gates are the D1
   prerequisites; authorized provider fixtures and QA disposition; completion of Chrome parity,
   cancellation, refresh rotation/replay, logout, and revocation after the dedicated Native
   Application's initial installed-Edge PKCE login; final listing assets, support endpoint, and
   store review; accountable UGC/privacy/security approval; installed Chrome geometry parity, axe,
-  and human assistive-technology acceptance; and AWS dark-deploy, rollback, restore, load/abuse,
-  and ALARM/OK acceptance.
+  and human assistive-technology acceptance; and AWS rollback, deployed restore, representative
+  load/abuse, alert-recipient acceptance, and final accountable production acceptance.
   [Phase 2 tasks](phase-2-extension-and-community.md)
 
 ## D3 — High-quality application preparation
@@ -409,6 +408,7 @@ Append only material cross-delivery events.
 
 | Date | Delivery | Update | Evidence |
 |---|---|---|---|
+| 2026-09-03 | D2 | Activated the time-bounded Greenhouse-only development contribution boundary under the exact product-owner exception. The first real batch exposed missing deployed D2 migrations; reviewed task revision `47` then applied and verified all 39 migrations/68 relations. The next automatic batch exposed an invalid generated EventBridge-envelope assumption; source `9a8fb5f` replaced it with a strict Terraform-owned versioned command and was deployed through a five-update/no-destroy saved plan at state `260`. Manual and automatic batches now succeed with zero work, both Trust queues are empty, all 13 alarms are `OK`, ECS is idle, and zero drift passes. Production/store, Lever/Ashby, and human Trust decisions remain dark; the signed policy expires `2026-09-04T18:24:32.188Z`. | [Phase 2 activation record](phase-2-extension-and-community.md#work-log) |
 | 2026-08-31 | D1 | Completed the local Phase 1 source/integration verification repair without changing deployed state. An uncached production build passed `19/19`. The root PostgreSQL integration command now serializes database-owner suites so intentional Jobs drift tests cannot race ingestion migration verification; document registration writes structured JSONB instead of double-encoded JSON strings; and the sitemap integration test preserves and correctly keysets around retained generated-synthetic catalog rows. Documents unit `93/93`, Jobs integration `42/42`, root integration `27/27`, and the D1-004 `All` catalog verifier pass. Docker Compose, Docker Desktop, and WSL were stopped after database verification. No AWS, Auth0, Vercel, provider, Terraform, or real-candidate state changed; Phase 1 remains in progress behind its recorded accountable gates. | [Phase 1 work log](phase-1-web-and-job-catalog.md#work-log), [document persistence](../../../backend/services/documents/src/index.ts), [public-reader integration](../../../backend/services/jobs/src/public-detail.integration.test.ts), [root test command](../../../package.json) |
 | 2026-08-27 | D1 | Deployed exact clean presentation source `4ec8f810c9ae69ed262c99be7ffeb876fb1eff65` to the isolated candidate and admin Vercel projects. Both immutable production deployments are `READY` in `iad1`, protected, identity-dark, and non-indexed. Reviewed aggregates pass root `200`/non-cacheable, fixed unknown `404`/cacheable, sanitized BFF `503`/non-cacheable, and exact security/crawler headers with zero token, cookie, body, or restricted-value retention. This closes only protected identity-dark hosting; authenticated/public/admin behavior and all accountable human gates remain open. | [Hosted acceptance](evidence/d1-vercel-identity-dark-hosted-acceptance-2026-08-27.md), [Phase 1 tasks](phase-1-web-and-job-catalog.md) |
 | 2026-08-25 | D1 | Accepted Vercel as the Next.js host through ADR-026 and implemented the source-side two-project boundary: candidate/admin root isolation, `iad1` Functions, minimum response headers, admin crawler denial, exact Auth0 origins, identity-dark previews, separate server-held secrets/grants, provider/privacy records, and a synthetic deployment/rollback runbook. Candidate web 510/510 and admin 8/8 tests, both typechecks/builds, scoped Biome/diff checks, and loopback `200` header inspection pass. AWS remains authoritative and indexing remains false; no provider project, credential, deployment, or hosted acceptance is claimed. | [ADR-026](../../adr/026-vercel-nextjs-presentation-hosting.md), [Vercel runbook](../../../infrastructure/runbooks/deployments/vercel-nextjs-hosting.md), [Phase 1 tasks](phase-1-web-and-job-catalog.md) |
