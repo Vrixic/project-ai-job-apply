@@ -33,8 +33,10 @@ activation-authority token printed by `--action Help` plus independently reviewe
 2. From clean reviewed `main`, publish the deterministic artifact with `-Action Publish -SourceSha`.
 3. Independently hash and review the private receipt, then use `-Action Verify` to read the exact S3
    object version back. Publication never updates Lambda or a trigger.
-4. Use `verify-development-d2-community-dark.ps1` for read-only checks that routes, schedule targets,
-   and queue mappings remain dark.
+4. Use `verify-development-d2-community-dark.ps1` for read-only checks that all D2 routes, schedule
+   targets, and queue mappings remain dark. After intentionally deploying only the anonymous,
+   all-disabled policy endpoint, add `-AllowPolicyEndpoint`; this permits exactly that one GET route
+   while continuing to reject every contribution, private-read, and Trust route.
 5. `plan-development-d2-community-recovery.ps1` produces only rollback/alarm prerequisites. Actual
    rollback must use a checksum-reviewed Terraform plan. Alarm injection requires accountable metric
    thresholds, alarm ARN, SNS recipients, and both ALARM and OK delivery confirmation; none are
