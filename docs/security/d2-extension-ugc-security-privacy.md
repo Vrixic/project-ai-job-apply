@@ -1,8 +1,9 @@
 # Phase 2 Extension and UGC Security/Privacy Delta
 
 - Status: Engineering design; accountable approval pending
-- Last updated: 2026-09-01
-- Decision boundary: [ADR-028](../adr/028-extension-ugc-ownership-and-processing.md)
+- Last updated: 2026-09-03
+- Decision boundary: [ADR-028](../adr/028-extension-ugc-ownership-and-processing.md) and
+  [ADR-029](../adr/029-one-step-public-job-addition.md)
 
 This is the single D2 engineering delta for the extension, contribution, and community trust
 surface. It authorizes synthetic/default-dark implementation only. It does not approve real
@@ -15,7 +16,7 @@ distribution.
 explicit current-tab action
   → local provider detector and strict field sanitizer
   → candidate preview and field removal
-  → separate private-save and public-contribution choices
+  → explicit Add job to shared database command
   → extension background session + bounded pending queue
   → authenticated gateway (`jobs:contribute`)
   → Jobs atomic queued intake + identifier-only outbox
@@ -36,7 +37,7 @@ free of markup/control characters, and never interpreted as instructions.
 |---|---|---|---|
 | Selected job fields and canonical public URL | Public before submission; Internal while pending | Jobs | Strict allowlist, digest binding, source-safe verification |
 | Contributor association and contribution status | Confidential | Jobs for owner-scoped command/status | Never public or placed in events/telemetry |
-| Consent record and policy version | Confidential | Profile | Immutable, exact payload digest, revocable before publication |
+| Command-authorization record and policy version (v1 API name: contribution consent) | Confidential | Profile | Immutable, exact payload digest, revocable before publication; not presented as permission to read a public page |
 | Reputation, sanctions, takedown, withdrawal, appeal | Confidential/Internal | Trust | Private, appealable, human-controlled where policy requires |
 | Pending extension intent | Confidential local device data | Extension client | Minimum fields, bounded retention, account fencing, clear on acknowledgement/withdrawal |
 | Authorized provider fixture raw capture | Restricted evidence outside Git | QA/security evidence owner | Encrypted quarantine, access audit, maximum 30 days, disposition evidence |
@@ -56,6 +57,8 @@ free of markup/control characters, and never interpreted as instructions.
   withdrawal, and appeal enforce the authenticated owner.
 - **Offline duplication or account mix-up:** durable local state machine, stable keys, bounded
   retry, timeout-after-commit replay, and logout/identity-change fencing.
+- **Ambiguous destination or duplicate approval:** one labelled public-add command after the exact
+  field preview; no private-save control or second approval checkbox in this extension candidate.
 - **Contributor exposure:** contributor identity and reputation absent from catalog responses,
   events, logs, analytics, public moderation summaries, and other contributors' views.
 - **Remote-code/update abuse:** no remote executable code; versioned signed package/config data,

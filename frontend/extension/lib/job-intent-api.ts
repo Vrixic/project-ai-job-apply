@@ -1,6 +1,6 @@
 import type {
-  CreatePrivateSavedPageCaptureRequest,
   CreateJobContributionRequest,
+  CreatePrivateSavedPageCaptureRequest,
   GrantUgcContributionConsentRequest,
   JobContribution,
   PrivateSavedPageCapture,
@@ -12,6 +12,7 @@ import {
   jobContributionPreviewDigestInput,
   UGC_CONTRIBUTION_DOCUMENT_VERSION,
 } from "@ai-job-apply/api-contracts/job-contribution-canonical";
+import { EXTENSION_CLIENT_VERSION_PATTERN } from "./client-version";
 import { extensionConfiguration } from "./config";
 import { type SanitizedJobCapture, selectContributionFields } from "./job-capture";
 import {
@@ -20,7 +21,6 @@ import {
   type PendingJobIntent,
   type UgcConsentBinding,
 } from "./pending-queue";
-import { EXTENSION_CLIENT_VERSION_PATTERN } from "./client-version";
 
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
@@ -191,6 +191,7 @@ function mappedContributionSkeleton(
       ...(capture.company ? { companyName: capture.company } : {}),
       title: capture.title,
       ...(capture.location ? { locations: [capture.location] } : {}),
+      ...(capture.workMode ? { workMode: capture.workMode } : {}),
       ...(capture.description ? { description: capture.description } : {}),
     },
     observation: { observedAt: capture.capturedAt, contentSha256: "0".repeat(64) },

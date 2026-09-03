@@ -117,7 +117,7 @@ function safeMessage(error: unknown): string {
   }
   if (message === "capture_required") return "Inspect the current page again before continuing.";
   if (message === "retention_policy_required") {
-    return "Pending-item retention must be configured before saving or contributing.";
+    return "Pending-item retention must be configured before adding a job.";
   }
   if (message === "contribution_capability_disabled") {
     return "Public contribution is currently disabled by its signed capability policy.";

@@ -4,14 +4,14 @@ Status: copy draft only; do not upload or publish.
 
 ## Short description
 
-Preview selected public job details before privately saving or explicitly contributing them.
+Preview selected public job details before adding them to a shared, verified job database.
 
 ## Detailed description
 
 ApplyDash Job Capture is designed to inspect only the current job page you explicitly choose. It
-shows the structured public fields it detected and keeps **Save privately** separate from
-**Contribute selected fields**. A contribution requires a field-level preview and separate
-approval.
+shows the structured public fields it detected, separates location from work type, and lets you
+remove optional fields before pressing **Add job to shared database**. That button is the explicit
+command; there is no separate private-save mode or redundant approval checkbox.
 
 The design uses temporary current-tab access rather than persistent browsing access. It does not
 request browsing history, cookies, broad website access, or remote executable code. Delivery is
@@ -22,7 +22,7 @@ silently duplicate an intent or assign it to a different signed-in account.
 
 This synthetic/default-dark build has all provider variants and network hosts disabled. It is for
 repository and installed-browser assurance only and does not currently provide functional job
-capture, private save, or public contribution. It must not be submitted as a functional public
+capture or public contribution. It must not be submitted as a functional public
 listing.
 
 ## Assets still required

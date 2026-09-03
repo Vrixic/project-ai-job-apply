@@ -7,6 +7,31 @@ export function captureCurrentPublicJobPage(): RawPageSnapshot {
     const normalized = value?.replace(/\s+/gu, " ").trim();
     return normalized ? normalized.slice(0, 50_000) : undefined;
   };
+  const normalizedWorkMode = (value: unknown): "hybrid" | "on_site" | "remote" | undefined => {
+    if (typeof value !== "string") return undefined;
+    const token = value
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_-]+/gu, "_");
+    if (token === "remote" || token === "telecommute") return "remote";
+    if (token === "hybrid") return "hybrid";
+    if (token === "on_site" || token === "onsite") return "on_site";
+    return undefined;
+  };
+  const splitLocation = (
+    value: string | undefined,
+    explicitWorkMode: "hybrid" | "on_site" | "remote" | undefined,
+  ): { location?: string; workMode?: "hybrid" | "on_site" | "remote" } => {
+    if (!value) return explicitWorkMode ? { workMode: explicitWorkMode } : {};
+    const combined = value.match(/^(remote|hybrid|on[\s_-]?site)\s*(?:[-–—|·]|,)\s*(\S.*)$/iu);
+    const prefixMode = normalizedWorkMode(combined?.[1]);
+    const location = normalize(combined?.[2] ?? value);
+    const workMode = explicitWorkMode ?? prefixMode;
+    return {
+      ...(location ? { location } : {}),
+      ...(workMode ? { workMode } : {}),
+    };
+  };
   const text = (...selectors: string[]): string | undefined => {
     for (const selector of selectors) {
       const value = normalize(document.querySelector(selector)?.textContent);
@@ -159,6 +184,10 @@ export function captureCurrentPublicJobPage(): RawPageSnapshot {
   const publicLocation =
     structuredLocation ||
     text("[data-job-location]", ".job__location", ".location", ".posting-categories .location");
+  const explicitWorkMode =
+    normalizedWorkMode(structured?.jobLocationType) ??
+    normalizedWorkMode(text("[data-job-work-mode]", "[data-workplace-type]", ".workplace-type"));
+  const separatedLocation = splitLocation(publicLocation, explicitWorkMode);
   const title =
     typeof structured?.title === "string"
       ? structured.title
@@ -166,7 +195,8 @@ export function captureCurrentPublicJobPage(): RawPageSnapshot {
   if (company) result.company = company;
   if (description) result.description = description;
   if (typeof externalJobId === "string" && externalJobId) result.externalJobId = externalJobId;
-  if (publicLocation) result.location = publicLocation;
+  if (separatedLocation.location) result.location = separatedLocation.location;
+  if (separatedLocation.workMode) result.workMode = separatedLocation.workMode;
   if (title) result.title = title;
   return result;
 }

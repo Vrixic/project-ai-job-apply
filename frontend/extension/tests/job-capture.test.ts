@@ -22,6 +22,7 @@ describe("strict public job capture", () => {
             description: "Build <b>safe</b> systems\u0000",
             location: "Remote",
             title: "Software Engineer",
+            workMode: "remote",
           },
           "2026-09-01T12:00:00.000Z",
         ),
@@ -41,6 +42,7 @@ describe("strict public job capture", () => {
         provider,
         sourceUrl: canonicalUrl,
         title: "Software Engineer",
+        workMode: "remote",
       });
     },
   );
@@ -92,18 +94,18 @@ describe("strict public job capture", () => {
   });
 
   it("removes markup, extended controls, and bidirectional controls locally", () => {
-    expect(
-      sanitizeSnapshot(
-        {
-          canonicalUrl: "https://jobs.lever.co/example/123",
-          title:
-            "Safe\u200b\u200d\ufeff\u202e misleading\u2066 title\u0085 <script>ignored</script>",
-        },
-        "lever",
-        "lever-posting-v1",
-        "2026-09-01T12:00:00.000Z",
-      )?.title,
-    ).toBe("Safe misleading title ignored");
+    const capture = sanitizeSnapshot(
+      {
+        canonicalUrl: "https://jobs.lever.co/example/123",
+        title: "Safe\u200b\u200d\ufeff\u202e misleading\u2066 title\u0085 <script>ignored</script>",
+        workMode: "remote<script>",
+      },
+      "lever",
+      "lever-posting-v1",
+      "2026-09-01T12:00:00.000Z",
+    );
+    expect(capture?.title).toBe("Safe misleading title ignored");
+    expect(capture?.workMode).toBeUndefined();
   });
 
   it("requires URL and title and sends only selected removable fields", () => {
@@ -114,6 +116,7 @@ describe("strict public job capture", () => {
         description: "Public description",
         location: "Remote",
         title: "Engineer",
+        workMode: "remote",
       },
       "lever",
       "lever-posting-v1",
@@ -121,7 +124,7 @@ describe("strict public job capture", () => {
     );
     expect(capture).toBeDefined();
     if (!capture) throw new Error("Expected a sanitized capture");
-    expect(selectContributionFields(capture, ["location"])).toEqual({
+    expect(selectContributionFields(capture, ["location", "workMode"])).toEqual({
       adapterVersion: "d2-job-page-v1",
       capturedAt: "2026-09-01T12:00:00.000Z",
       location: "Remote",
@@ -129,6 +132,7 @@ describe("strict public job capture", () => {
       provider: "lever",
       sourceUrl: "https://jobs.lever.co/example/123",
       title: "Engineer",
+      workMode: "remote",
     });
     expect(
       sanitizeSnapshot({ canonicalUrl: "https://example.test/job" }, "lever", "lever-posting-v1"),

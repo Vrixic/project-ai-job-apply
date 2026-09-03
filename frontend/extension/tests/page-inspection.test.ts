@@ -29,8 +29,9 @@ describe("explicit current-page inspection", () => {
     expect(captureCurrentPublicJobPage()).toEqual({
       canonicalUrl: "https://job-boards.greenhouse.io/remotecom/jobs/7774935003?source=test#apply",
       description: "Public job description",
-      location: "Remote-NORAM",
+      location: "NORAM",
       title: "Senior Forward Deployed Engineer (Remote Build)",
+      workMode: "remote",
     });
   });
 
@@ -66,6 +67,7 @@ describe("explicit current-page inspection", () => {
                   description: "<h2>About Example</h2><p>About Example Public job description</p>",
                   hiringOrganization: { name: "Example Incorporated" },
                   identifier: { "@type": "PropertyValue", value: "REQ-42" },
+                  jobLocationType: "TELECOMMUTE",
                   title: "Systems Engineer",
                 },
               ],
@@ -81,6 +83,7 @@ describe("explicit current-page inspection", () => {
       description: "About Example Public job description",
       externalJobId: "REQ-42",
       title: "Systems Engineer",
+      workMode: "remote",
     });
   });
 

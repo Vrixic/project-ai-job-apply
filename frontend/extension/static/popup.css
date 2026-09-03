@@ -17,13 +17,19 @@
 
 html {
   background: var(--canvas);
+  width: 27.5rem;
+}
+
+@media (max-width: 27.49rem) {
+  html {
+    width: auto;
+  }
 }
 
 body {
   background: var(--canvas);
   color: var(--ink);
   margin: 0;
-  max-width: 400px;
   min-width: 0;
   overflow-x: hidden;
   width: 100%;
@@ -165,8 +171,7 @@ h3 {
 }
 
 button,
-summary,
-.consent-row {
+summary {
   -webkit-tap-highlight-color: rgb(24 91 59 / 16%);
   touch-action: manipulation;
 }
@@ -345,8 +350,7 @@ button:disabled {
   font-style: italic;
 }
 
-.field-row input[type="checkbox"],
-.consent-row input[type="checkbox"] {
+.field-row input[type="checkbox"] {
   accent-color: var(--accent);
   block-size: 18px;
   inline-size: 18px;
@@ -374,14 +378,12 @@ button:disabled {
   border-color: #c8d7cb;
 }
 
-.source-details,
-.contribution-controls {
+.source-details {
   border-top: 1px solid #e7ece7;
   padding-top: 10px;
 }
 
-.source-details > summary,
-.contribution-controls > summary {
+.source-details > summary {
   color: #2c4735;
   cursor: pointer;
   font-size: 13px;
@@ -418,27 +420,7 @@ button:disabled {
   margin: 4px 0 10px;
 }
 
-.consent-row {
-  align-items: start;
-  background: var(--surface);
-  border: 1px solid #dce4dc;
-  border-radius: 9px;
-  color: #35463a;
-  cursor: pointer;
-  display: grid;
-  font-size: 13px;
-  gap: 8px;
-  grid-template-columns: 22px minmax(0, 1fr);
-  line-height: 1.45;
-  margin: 4px 0 10px;
-  padding: 10px;
-}
-
-.consent-row:focus-within {
-  border-color: #789a80;
-}
-
-.contribution-controls button {
+.delivery-actions > button {
   width: 100%;
 }
 

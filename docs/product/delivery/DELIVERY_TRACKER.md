@@ -324,11 +324,12 @@ This is the master record for the delivery phases defined in the [product and sy
 - Depends on: D0 consent/security foundations and D1 catalog, saved-job, and moderation foundations;
   the public-contribution API is D2-owned work
 - Task document: [Phase 2 tasks](phase-2-extension-and-community.md)
-- Exit gate: Users can privately save and explicitly contribute a public job without unrelated browsing or profile data being collected.
+- Exit gate: Users can preview selected public job fields and explicitly add them to the shared
+  database without unrelated browsing or profile data being collected.
 - Current engineering status: Phase 2 started on 2026-09-01 from the clean Phase 1 checkpoint.
   Repository-local Phase 2 is implemented default-dark end to end: the minimum-permission MV3
-  extension, grounded narrow-width preview, independently readiness-gated private save and explicit
-  contribution controls, durable owner-visible processing,
+  extension, grounded responsive preview with separate location/work type, one readiness-gated
+  public-add command, durable owner-visible processing,
   independent provider verification and atomic catalog publication, Trust/reputation and candidate
   rights, lazy Lambda composition, guarded operations, aggregate telemetry, Terraform, and local
   migration/recovery evidence are present. No production provider is configured, no D2 AWS

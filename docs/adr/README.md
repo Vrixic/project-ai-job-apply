@@ -31,6 +31,7 @@ Records important technical decisions, their context, alternatives, consequences
 - [ADR-025: Govern public ATS feed activation without a separate counsel gate](025-public-ats-feed-activation-governance.md)
 - [ADR-026: Host Next.js presentation boundaries on Vercel](026-vercel-nextjs-presentation-hosting.md)
 - [ADR-028: Separate private saves, public contributions, Jobs truth, and UGC trust](028-extension-ugc-ownership-and-processing.md)
+- [ADR-029: Use one explicit public-job addition command in the extension](029-one-step-public-job-addition.md)
 
 ## Proposed delivery decisions
 

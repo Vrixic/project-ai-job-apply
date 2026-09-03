@@ -65,12 +65,10 @@ const previewHeading = node<HTMLElement>("#preview-heading");
 const fieldList = node<HTMLElement>("#field-list");
 const selectionSummary = node<HTMLElement>("#selection-summary");
 const deliveryReadiness = node<HTMLElement>("#delivery-readiness");
-const consent = node<HTMLInputElement>("#contribution-consent");
 const loginButton = node<HTMLButtonElement>("#login");
 const refreshButton = node<HTMLButtonElement>("#refresh");
 const logoutButton = node<HTMLButtonElement>("#logout");
 const inspectButton = node<HTMLButtonElement>("#inspect");
-const saveButton = node<HTMLButtonElement>("#save-private");
 const contributeButton = node<HTMLButtonElement>("#contribute");
 const retryButton = node<HTMLButtonElement>("#retry");
 const clearStoppedButton = node<HTMLButtonElement>("#clear-stopped");
@@ -104,10 +102,9 @@ const busyCopy: Record<string, string> = {
   clear_queue: "Removing queued items…",
   clear_stopped: "Removing stopped items…",
   contribution_refresh: "Refreshing contribution status…",
-  contribute: "Adding the contribution to the delivery queue…",
+  contribute: "Adding the job to the shared review queue…",
   login: "Opening sign in…",
   logout: "Signing out…",
-  private_save: "Adding the private save to the delivery queue…",
   refresh: "Refreshing the session…",
   retry: "Retrying queued delivery…",
   status: "Checking extension readiness…",
@@ -127,7 +124,6 @@ function controls(): HTMLButtonElement[] {
     refreshButton,
     logoutButton,
     inspectButton,
-    saveButton,
     contributeButton,
     retryButton,
     clearStoppedButton,
@@ -139,13 +135,10 @@ function controls(): HTMLButtonElement[] {
 
 function updateControlState(): void {
   for (const button of controls()) button.disabled = busy;
-  consent.disabled = busy || !currentCapture;
   if (busy) return;
 
   inspectButton.disabled = false;
-  saveButton.disabled = !currentCapture || currentDelivery?.privateSave.ready !== true;
-  contributeButton.disabled =
-    !currentCapture || !consent.checked || currentDelivery?.contribution.ready !== true;
+  contributeButton.disabled = !currentCapture || currentDelivery?.contribution.ready !== true;
 }
 
 function setBusy(nextBusy: boolean, action?: string): void {
@@ -158,16 +151,12 @@ function setBusy(nextBusy: boolean, action?: string): void {
 function renderDeliveryReadiness(): void {
   if (!currentDelivery) {
     deliveryReadiness.textContent =
-      "Private save and public contribution are unavailable until delivery readiness is confirmed.";
+      "Adding this job is unavailable until delivery readiness is confirmed.";
     return;
   }
-  const privateSave = currentDelivery.privateSave.ready
-    ? "Private save: ready."
-    : `Private save: ${readinessCopy[currentDelivery.privateSave.reason]}`;
-  const contribution = currentDelivery.contribution.ready
-    ? "Public contribution: ready after approval below."
-    : `Public contribution: ${readinessCopy[currentDelivery.contribution.reason]}`;
-  deliveryReadiness.textContent = `${privateSave} ${contribution}`;
+  deliveryReadiness.textContent = currentDelivery.contribution.ready
+    ? "Ready to add the selected public fields."
+    : readinessCopy[currentDelivery.contribution.reason];
 }
 
 function renderSessionStatus(status: AuthStatus): void {
@@ -181,15 +170,13 @@ function renderSessionStatus(status: AuthStatus): void {
   logoutButton.hidden = !status.authenticated;
 
   if (!status.configured) {
-    detail.textContent =
-      "Inspection is ready. Add public Auth0 settings to enable account delivery.";
+    detail.textContent = "Inspection is ready. Add public Auth0 settings to enable shared jobs.";
   } else if (!status.authenticated) {
-    detail.textContent = "Inspection is ready. Sign in before saving or contributing.";
+    detail.textContent = "Inspection is ready. Sign in before adding a shared job.";
   } else if (!status.apiConfigured) {
-    detail.textContent =
-      "Inspection is ready. Configure the API origin to enable account delivery.";
+    detail.textContent = "Inspection is ready. Configure the API origin to enable shared jobs.";
   } else {
-    detail.textContent = "Inspection is ready. You are signed in for account delivery.";
+    detail.textContent = "Inspection is ready. You are signed in to add shared jobs.";
   }
 }
 
@@ -376,6 +363,14 @@ function selectedFields(): CaptureField[] {
   );
 }
 
+function displayWorkMode(value: SanitizedJobCapture["workMode"]): string | undefined {
+  if (value === "remote") return "Remote";
+  if (value === "hybrid") return "Hybrid";
+  if (value === "on_site") return "On-site";
+  if (value === "unknown") return "Unknown";
+  return undefined;
+}
+
 function updateSelectionSummary(): void {
   if (!currentCapture) {
     selectionSummary.textContent = "";
@@ -386,12 +381,9 @@ function updateSelectionSummary(): void {
   ).length;
   const selectedOptional = selectedFields().length;
   const missing = CAPTURE_FIELDS.length - detectedOptional - 1;
-  const nextAction =
-    consent.checked && currentDelivery?.contribution.ready
-      ? "Next action: Contribute selected fields"
-      : currentDelivery?.privateSave.ready
-        ? "Next action: Save privately"
-        : "Delivery unavailable: review readiness below";
+  const nextAction = currentDelivery?.contribution.ready
+    ? "Next action: Add job to shared database"
+    : "Delivery unavailable: review readiness below";
   selectionSummary.textContent = `5 required fields always included · ${selectedOptional} of ${detectedOptional} detected optional fields selected · ${nextAction}${
     missing > 0 ? ` · ${missing} not detected` : ""
   }`;
@@ -424,6 +416,10 @@ function renderCapture(capture: SanitizedJobCapture): void {
   appendField(jobGroup, "Title", capture.title, { kind: "required" });
   appendField(jobGroup, "Company", capture.company, { field: "company", kind: "system" });
   appendField(jobGroup, "Location", capture.location, { field: "location", kind: "system" });
+  appendField(jobGroup, "Work type", displayWorkMode(capture.workMode), {
+    field: "workMode",
+    kind: "system",
+  });
   appendField(jobGroup, "Description", capture.description, {
     expandable: "description",
     field: "description",
@@ -466,7 +462,6 @@ function renderCapture(capture: SanitizedJobCapture): void {
   sourceDetails.append(sourceHeading, sourceFields);
   fieldList.append(jobGroup, sourceDetails);
 
-  consent.checked = false;
   preview.hidden = false;
   detail.textContent =
     "Preview ready. Review the detected fields before choosing a delivery action.";
@@ -478,7 +473,7 @@ function renderCapture(capture: SanitizedJobCapture): void {
 function successMessage(action: string, response: ExtensionResponse): string | undefined {
   if (!response.ok) return undefined;
   if (action === "enqueue") {
-    return "Selected fields were added to the delivery queue.";
+    return "The selected public fields were added to the shared job review queue.";
   }
   if (action === "retry") return "Queued delivery was retried. Review the queue counts below.";
   if (action === "clear_stopped") return "Stopped items were removed from this device.";
@@ -531,17 +526,11 @@ clearQueueButton.addEventListener("click", () => {
     void invoke({ action: "clear_queue" });
   }
 });
-saveButton.addEventListener("click", () => {
-  if (currentCapture && currentDelivery?.privateSave.ready) {
-    void invoke({ action: "enqueue", approvedFields: selectedFields(), intent: "private_save" });
-  }
-});
 contributeButton.addEventListener("click", () => {
-  if (currentCapture && consent.checked && currentDelivery?.contribution.ready) {
+  if (currentCapture && currentDelivery?.contribution.ready) {
     void invoke({ action: "enqueue", approvedFields: selectedFields(), intent: "contribute" });
   }
 });
-consent.addEventListener("change", updateSelectionSummary);
 cancelAppeal.addEventListener("click", () => appealDialog.close());
 appealDialog.addEventListener("close", () => {
   appealEvidence.value = "";

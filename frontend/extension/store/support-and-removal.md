@@ -14,8 +14,8 @@ Before distribution, the release owner must provide and test:
 - acknowledgement/escalation routing, abuse protection, and audit evidence.
 
 Uninstalling the extension is not a substitute for withdrawing a previously acknowledged server
-contribution. Conversely, contribution withdrawal must not delete the user's separate private save.
-Store copy must explain those boundaries using the final implemented behavior and approved policy.
+contribution. The current extension does not expose a private-save action. Store copy must explain
+the contribution boundary using the final implemented behavior and approved policy.
 
 Until these controls and a real monitored channel exist, the only truthful operational statement is
 that the extension is not available for public use or store distribution.

@@ -54,6 +54,9 @@ async function inspectSyntheticCapture(popup) {
 async function inspectLayout(popup, width, zoom = 1) {
   await popup.setViewportSize({ width, height: 900 });
   await popup.evaluate((nextZoom) => {
+    // CSS zoom does not reduce the layout viewport the way browser page zoom does. Constrain the
+    // root to the equivalent CSS-pixel viewport so this exercises real 200% reflow geometry.
+    document.documentElement.style.width = nextZoom === 1 ? "" : `${100 / nextZoom}%`;
     document.documentElement.style.zoom = String(nextZoom);
     window.scrollTo(0, 0);
   }, zoom);
@@ -164,6 +167,7 @@ try {
             description: longDescription,
             externalJobId: "synthetic-12345",
             location: "Distributed · North America",
+            workMode: "remote",
           }),
     };
     const status = {
@@ -205,12 +209,25 @@ try {
   assert(await popup.locator("#inspect").isEnabled(), "inspection is gated by delivery setup");
   await inspectSyntheticCapture(popup);
   assert(
-    await popup.locator("#save-private").isDisabled(),
-    "private save is enabled when unconfigured",
+    (await popup.locator("#save-private").count()) === 0,
+    "private-save action is still shown",
   );
   assert(
     await popup.locator("#contribute").isDisabled(),
-    "public contribution is enabled without delivery setup and consent",
+    "shared-job action is enabled without delivery setup",
+  );
+  const locationRow = popup.locator('.field-row:has(.field-label:text-is("Location"))');
+  const workTypeRow = popup.locator('.field-row:has(.field-label:text-is("Work type"))');
+  assert((await locationRow.count()) === 1, "location does not have its own preview row");
+  assert((await workTypeRow.count()) === 1, "work type does not have its own preview row");
+  assert(
+    (await locationRow.locator(".field-value").textContent())?.trim() ===
+      "Distributed · North America",
+    "location preview value is not preserved independently",
+  );
+  assert(
+    (await workTypeRow.locator(".field-value").textContent())?.trim() === "Remote",
+    "work type preview value is not displayed independently",
   );
   const deliveryReadiness = popup.locator("#delivery-readiness");
   assert((await deliveryReadiness.count()) === 1, "delivery readiness status is missing");
@@ -294,6 +311,11 @@ try {
   });
   assert(semanticControlFailures.length === 0, "visible controls lack semantic names");
 
+  const preferredPopupWidth = await popup.evaluate(
+    () => document.documentElement.getBoundingClientRect().width,
+  );
+  assert(preferredPopupWidth >= 420, "the extension popup does not request a wider review surface");
+
   const layoutProfiles = [];
   for (const width of [320, 360, 480]) {
     const result = await inspectLayout(popup, width);
@@ -325,30 +347,15 @@ try {
   const configuredPopup = await openAssurancePopup(context, extensionId, "configured-long");
   await inspectSyntheticCapture(configuredPopup);
   assert(
-    await configuredPopup.locator("#save-private").isEnabled(),
-    "ready private save is disabled",
-  );
-  assert(
-    await configuredPopup.locator("#contribute").isDisabled(),
-    "contribution does not begin consent-gated",
-  );
-  const contributionControls = configuredPopup.locator("details.contribution-controls");
-  assert((await contributionControls.count()) === 1, "contribution disclosure is missing");
-  const contributionSummary = contributionControls.locator(":scope > summary");
-  await contributionSummary.focus();
-  await contributionSummary.press("Enter");
-  assert(
-    await contributionControls.evaluate((element) => element.open),
-    "contribution disclosure is not keyboard operable",
-  );
-  await configuredPopup.locator("#contribution-consent").check();
-  assert(
     await configuredPopup.locator("#contribute").isEnabled(),
-    "ready contribution remains disabled after explicit consent",
+    "ready shared-job action remains disabled",
+  );
+  assert(
+    (await configuredPopup.locator("#contribution-consent").count()) === 0,
+    "a redundant contribution-consent checkbox is still shown",
   );
 
-  await configuredPopup.locator("#contribution-consent").focus();
-  await configuredPopup.keyboard.press("Tab");
+  await configuredPopup.locator("#contribute").focus();
   const focusedControl = await configuredPopup.evaluate(
     () => document.activeElement instanceof HTMLElement && document.activeElement.id,
   );
@@ -356,7 +363,7 @@ try {
     const style = getComputedStyle(element);
     return style.outlineStyle !== "none" && Number.parseFloat(style.outlineWidth) > 0;
   });
-  assert(focusedControl === "contribute", "keyboard order does not reach contribution action");
+  assert(focusedControl === "contribute", "keyboard order does not reach shared-job action");
   assert(focusStyleVisible, "keyboard focus indicator is not visible");
 
   const sensitiveStorageAbsent = await worker.evaluate(async () => {
@@ -369,7 +376,7 @@ try {
   assert(sensitiveStorageAbsent, "synthetic page artifacts were retained in extension storage");
 
   process.stdout.write(
-    `${JSON.stringify({ profile: "d2_extension_installed_synthetic_v2", browserExecuted: true, manifestVersion: manifest.manifest_version, syntheticProviderPages: 3, popupScenarios: 3, layoutProfiles, externalRequestsAllowed, optionalProviderPermissionDenied: optionalDenied, keyboardFocusVisible: focusStyleVisible, semanticControlFailures: semanticControlFailures.length, horizontalOverflowProfiles: 0, fieldOverlapProfiles: 0, clippedControlProfiles: 0, longValueExpanders: await expanders.count(), progressiveDisclosures: 4, missingFieldStatesValidated: await unavailableFields.count(), deliveryStatesValidated: 2, sensitiveArtifactsRetained: !sensitiveStorageAbsent, telemetryRequests: 0 })}\n`,
+    `${JSON.stringify({ profile: "d2_extension_installed_synthetic_v2", browserExecuted: true, manifestVersion: manifest.manifest_version, syntheticProviderPages: 3, popupScenarios: 3, preferredPopupWidth, layoutProfiles, externalRequestsAllowed, optionalProviderPermissionDenied: optionalDenied, keyboardFocusVisible: focusStyleVisible, semanticControlFailures: semanticControlFailures.length, horizontalOverflowProfiles: 0, fieldOverlapProfiles: 0, clippedControlProfiles: 0, longValueExpanders: await expanders.count(), progressiveDisclosures: 3, missingFieldStatesValidated: await unavailableFields.count(), separatedLocationAndWorkTypeFields: 2, deliveryStatesValidated: 2, sensitiveArtifactsRetained: !sensitiveStorageAbsent, telemetryRequests: 0 })}\n`,
   );
 } finally {
   await context?.close();

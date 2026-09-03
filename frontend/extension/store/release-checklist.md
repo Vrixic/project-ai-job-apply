@@ -23,8 +23,10 @@ Every box applies independently to Chrome and Edge unless the evidence explicitl
   still contains no persistent provider host permission.
 - [ ] Dedicated extension Auth0 Native Application passes Chrome/Edge PKCE, rotation/replay,
   cancellation, sign-out, and revocation tests.
-- [ ] Private-save and contribution APIs, consent binding, Trust review, withdrawal, deletion/export,
-  takedown, and restoration behavior pass deployed owner/cross-owner tests.
+- [ ] Contribution API, command-authorization receipt binding, Trust review, withdrawal,
+  deletion/export, takedown, and restoration behavior pass deployed owner/cross-owner tests. The
+  backward-compatible private-capture API is tested separately and is not presented by this
+  extension candidate.
 - [x] Local stopped/all-item removal, logout clearing, and fail-closed expiry enforcement are implemented.
 - [ ] The accountable local pending-item retention duration is approved and configured.
 - [ ] The accountable UGC policy version is approved, recorded once, and configured identically as
@@ -35,7 +37,7 @@ Every box applies independently to Chrome and Edge unless the evidence explicitl
   `EXTENSION_CAPABILITY_POLICY_PUBLIC_KEYS_JSON`; the default-dark archive contains no live key.
 - [ ] Installed-browser tests prove global, exact client-version, provider, variant, and domain
   disable independently; invalid/stale/tampered/unknown-key updates deny, a verified offline cache
-  lasts no longer than its signed expiry, and private save plus web/catalog remain available.
+  lasts no longer than its signed expiry, and web/catalog remain available.
 - [ ] Permission rationale, user-data form, privacy notice, subprocessor register, support/removal
   channels, screenshots, and listing copy match the exact binary and deployed endpoints.
 - [ ] Accessibility, keyboard/zoom/screen-reader, malicious-page, offline/restart, update, rollback,

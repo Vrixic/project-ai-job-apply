@@ -213,6 +213,6 @@ if (process.argv.includes("--watch")) {
       ? "Authenticated API delivery is configured."
       : configured
         ? "Identity is configured, but API delivery remains disabled."
-        : "Authenticated saving and contribution remain disabled until public Auth0 and API settings are configured.";
+        : "Adding a job remains disabled until public Auth0 and API settings are configured.";
   console.log(`${inspectionStatus} ${deliveryStatus}`);
 }

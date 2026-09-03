@@ -12,12 +12,13 @@ No telemetry or advertising SDK is configured.
 
 Only after the user chooses **Inspect current tab**, the bundled reader derives an allowlisted
 public-job capture: canonical HTTPS URL, provider/variant and adapter version, capture time, title,
-company, location, description, and public external job identifier when present. The user sees the
-contribution preview, can remove optional fields, and must separately approve contribution.
+company, location, work type, description, and public external job identifier when present. The
+user sees the contribution preview, can remove optional fields, and explicitly commands delivery
+by pressing **Add job to shared database**. No second approval checkbox is required.
 
 The extension must not collect or transmit raw DOM/HTML, browsing history, cookies, request
 headers, third-party form values, authentication material from the page, private notes, unrelated
-tabs, or background browsing activity. Private save and public contribution are distinct actions.
+tabs, or background browsing activity. This extension surface offers public contribution only.
 
 ## Storage and transmission
 
@@ -37,8 +38,8 @@ tabs, or background browsing activity. Private save and public contribution are 
 
 ## Use and sharing
 
-The intended use is the user-facing private-save or explicitly approved public-job contribution
-feature. The design does not sell data, use it for advertising, credit, eligibility, or candidate
+The intended use is the user-commanded public-job contribution feature. The design does not sell
+data, use it for advertising, credit, eligibility, or candidate
 ranking, or expose contributor identity publicly. Processors and subprocessors must match the final
 approved subprocessor register before release.
 

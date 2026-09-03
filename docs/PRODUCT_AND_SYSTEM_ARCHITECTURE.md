@@ -640,17 +640,25 @@ Greenhouse, Lever, and Ashby publish official job-posting APIs. Their applicatio
 
 ### 8.2 User contribution flow
 
-The extension exposes a clear `Save to Platform` or `Share public job` action on a job detail page:
+Under [ADR-029](adr/029-one-step-public-job-addition.md), the extension exposes one clear
+`Add job to shared database` action after previewing a public job detail page:
 
 1. Detect source and ATS.
-2. Extract only the current public job posting and canonical URL.
-3. Preview the fields the user is contributing.
-4. Let the user remove notes/private data.
-5. Send an idempotent contribution with source URL, extracted fields, content hash, page timestamp, and adapter version.
-6. Immediately save the job privately for the contributor.
+2. Extract only the current public job posting and canonical URL, separating grounded location and
+   work type.
+3. Preview every field the user would add.
+4. Let the user remove optional public fields; do not collect notes or private page data.
+5. Treat the labelled add-button click as the explicit command and bind an immutable internal
+   authorization receipt to the exact selected payload.
+6. Send an idempotent contribution with source URL, extracted fields, content hash, page timestamp,
+   and adapter version.
 7. Normalize, deduplicate, trust-score, malware/sanitize-check, and verify server-side.
 8. Publish to the shared catalog only when it passes policy.
 9. Reward the user with useful feedback, not cash or incentives that encourage spam.
+
+The extension does not expose private saved-page capture or require a second approval checkbox.
+The backward-compatible private-capture API remains independently owner-scoped for other clients
+and existing records.
 
 The extension must not upload unrelated pages, browsing history, cookies, form values, or other candidates' data. Chrome's user-data policy restricts browsing-activity collection to disclosed user-facing features and requires minimum permissions.
 

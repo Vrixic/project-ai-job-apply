@@ -11,9 +11,9 @@
     <a class="skip-link" href="#main-content">Skip to job capture</a>
     <main id="main-content" tabindex="-1" aria-busy="false">
       <header>
-        <p class="eyebrow">Private by default</p>
-        <h1>Save this job</h1>
-        <p class="lede">Inspect only the page you choose. Nothing is shared without a separate preview and approval.</p>
+        <p class="eyebrow">Public job preview</p>
+        <h1>Add this job</h1>
+        <p class="lede">Inspect the page you choose, review its public fields, then add it to the shared job database.</p>
       </header>
 
       <section class="card session-card" aria-labelledby="session-heading">
@@ -46,19 +46,10 @@
         <div id="field-list" class="field-list"></div>
 
         <section class="delivery-actions" aria-labelledby="delivery-heading">
-          <h3 id="delivery-heading">Save to your account</h3>
+          <h3 id="delivery-heading">Add to shared jobs</h3>
           <p id="delivery-readiness" class="delivery-readiness" role="status" aria-live="polite"></p>
-          <button id="save-private" class="secondary" type="button" disabled>Save privately</button>
-
-          <details class="contribution-controls">
-            <summary>Share a public contribution</summary>
-            <p class="supporting-copy">This is separate from private saving and requires your explicit approval.</p>
-            <label class="consent-row">
-              <input id="contribution-consent" name="contribution-consent" type="checkbox" />
-              <span>I approve sharing only the selected public fields.</span>
-            </label>
-            <button id="contribute" type="button" disabled>Contribute selected fields</button>
-          </details>
+          <p class="supporting-copy">Only the selected public fields enter the review queue. Provider verification happens before publication.</p>
+          <button id="contribute" type="button" disabled>Add job to shared database</button>
         </section>
       </section>
 
@@ -79,7 +70,7 @@
 
       <details id="contributions-panel" class="disclosure contributions-disclosure">
         <summary>
-          <h2 class="summary-heading">Your contributions</h2>
+          <h2 class="summary-heading">Your shared jobs</h2>
           <span id="contributions-status" class="summary-status">Review status</span>
         </summary>
         <div class="disclosure-content">

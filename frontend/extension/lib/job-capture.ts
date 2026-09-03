@@ -2,6 +2,7 @@ export const CAPTURE_FIELDS = [
   "title",
   "company",
   "location",
+  "workMode",
   "description",
   "externalJobId",
 ] as const;
@@ -9,6 +10,7 @@ export const CAPTURE_FIELDS = [
 export type CaptureField = (typeof CAPTURE_FIELDS)[number];
 export type AtsProvider = "ashby" | "greenhouse" | "lever";
 export type JobPageVariant = "ashby-job-board-v1" | "greenhouse-board-v1" | "lever-posting-v1";
+export type WorkMode = "hybrid" | "on_site" | "remote" | "unknown";
 
 export interface RawPageSnapshot {
   canonicalUrl: string;
@@ -17,6 +19,7 @@ export interface RawPageSnapshot {
   externalJobId?: string;
   location?: string;
   title?: string;
+  workMode?: string;
 }
 
 export interface SanitizedJobCapture {
@@ -30,6 +33,7 @@ export interface SanitizedJobCapture {
   provider: AtsProvider;
   sourceUrl: string;
   title: string;
+  workMode?: WorkMode;
 }
 
 const LIMITS: Record<CaptureField, number> = {
@@ -38,7 +42,14 @@ const LIMITS: Record<CaptureField, number> = {
   externalJobId: 200,
   location: 500,
   title: 240,
+  workMode: 20,
 };
+
+function sanitizeWorkMode(value: unknown): WorkMode | undefined {
+  return value === "remote" || value === "hybrid" || value === "on_site" || value === "unknown"
+    ? value
+    : undefined;
+}
 
 export function sanitizeText(value: unknown, maximum: number): string | undefined {
   if (typeof value !== "string") {
@@ -111,10 +122,11 @@ export function sanitizeSnapshot(
     return undefined;
   }
   const optional = Object.fromEntries(
-    CAPTURE_FIELDS.filter((field) => field !== "title")
+    CAPTURE_FIELDS.filter((field) => field !== "title" && field !== "workMode")
       .map((field) => [field, sanitizeText(snapshot[field], LIMITS[field])])
       .filter((entry): entry is [CaptureField, string] => typeof entry[1] === "string"),
   );
+  const workMode = sanitizeWorkMode(snapshot.workMode);
   return {
     adapterVersion: "d2-job-page-v1",
     capturedAt,
@@ -123,6 +135,7 @@ export function sanitizeSnapshot(
     sourceUrl,
     title,
     ...optional,
+    ...(workMode ? { workMode } : {}),
   };
 }
 
@@ -141,6 +154,12 @@ export function selectContributionFields(
   };
   for (const field of CAPTURE_FIELDS) {
     if (field === "title" || !selected.has(field)) {
+      continue;
+    }
+    if (field === "workMode") {
+      if (capture.workMode) {
+        result.workMode = capture.workMode;
+      }
       continue;
     }
     const value = capture[field];

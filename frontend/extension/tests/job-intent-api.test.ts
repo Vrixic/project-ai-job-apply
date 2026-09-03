@@ -3,15 +3,15 @@ import { extensionConfiguration } from "../lib/config";
 import {
   createConsentGrantRequest,
   createContributionRequest,
-  preparePrivateSavedPageCapture,
   prepareContribution,
+  preparePrivateSavedPageCapture,
   sendJobIntent,
 } from "../lib/job-intent-api";
 import { createPendingIntent, settleDispatch } from "../lib/pending-queue";
 
 function intent() {
   return createPendingIntent({
-    approvedFields: ["location"],
+    approvedFields: ["location", "workMode"],
     capture: {
       adapterVersion: "d2-job-page-v1",
       capturedAt: "2026-09-01T12:00:00.000Z",
@@ -21,6 +21,7 @@ function intent() {
       provider: "lever",
       sourceUrl: "https://jobs.lever.co/example/123",
       title: "Engineer",
+      workMode: "remote",
     },
     identityFence: "account-a",
     intent: "contribute",
@@ -66,12 +67,12 @@ describe("background-only contribution consent transport", () => {
         pageVariant: "lever-posting-v1",
         sourceUrl: "https://jobs.lever.co/example/123",
       },
-      posting: { title: "Engineer", locations: ["Remote"] },
+      posting: { title: "Engineer", locations: ["Remote"], workMode: "remote" },
       observation: { observedAt: "2026-09-01T12:00:00.000Z" },
       approval: {
         consentVersion: "ugc-contribution-preview.v1",
         policyVersion: "d2-synthetic-policy.v1",
-        approvedFields: ["provider", "pageVariant", "sourceUrl", "title", "locations"],
+        approvedFields: ["provider", "pageVariant", "sourceUrl", "title", "locations", "workMode"],
       },
     });
     expect(prepared.body.posting).not.toHaveProperty("companyName");

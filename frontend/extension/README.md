@@ -8,8 +8,9 @@ public contribution, or browser-store distribution.
 
 ## Implemented source boundary
 
-- A popup and side-panel product shell with separate **Save privately** and
-  **Contribute selected fields** actions.
+- A popup and side-panel product shell with one explicit **Add job to shared database** action
+  after a field-level preview. The extension does not present a separate private-save action or a
+  redundant approval checkbox.
 - Auth0 public-client authorization code + PKCE, rotating refresh, revocation, and tokens confined
   to trusted `chrome.storage.session` contexts.
 - Explicit `activeTab` inspection through `chrome.scripting.executeScript`; there are no persistent
@@ -24,24 +25,28 @@ public contribution, or browser-store distribution.
   exact extension version, provider, page variant, and domain. Unknown keys, invalid signatures,
   incomplete policies, received-invalid updates, future policies, and policies older than their
   signed expiry deny contribution. A verified cache can bridge a service-worker restart or network
-  outage only until its signed expiry; it never enables private save or executes remote code.
+  outage only until its signed expiry; it never enables contribution after expiry or executes
+  remote code.
 - A strict structured allowlist: canonical HTTPS URL, provider, adapter version, timestamp, title,
-  company, location, description, and external job ID. Text is bounded and stripped of markup and
-  control characters; URLs reject credentials, fragments, trackers, and local/private targets.
-- One field-level preview shared by the two explicit actions. Optional-field removal is honored by
-  both private save and public contribution; required source identity fields remain visible and
-  cannot be silently removed. Private save never implies contribution approval.
+  company, location, work type, description, and external job ID. Text is bounded and stripped of
+  markup and control characters; URLs reject credentials, fragments, trackers, and local/private
+  targets. A work arrangement embedded in a combined location such as `Remote-NORAM` is separated
+  into grounded work type `Remote` and location `NORAM`.
+- One field-level preview for the explicit public-add command. Optional-field removal is honored;
+  required source identity fields remain visible and cannot be silently removed. Pressing the add
+  button is the user's instruction to enqueue only the selected public fields.
 - A bounded-attempt persistent local queue with one stable client intent/Idempotency-Key,
   exponential retry, service-worker restart recovery, login-session fencing, expiry, and explicit
   stopped/all-item removal. Explicit logout clears both the queue and last capture. Tokens are
   never included in UI messages or local pending records.
-- An exact background-only HTTPS API origin. Contribution transport first targets the ADR-028
-  Profile consent grant and then `POST /v1/jobs/contributions`. It maps only selected fields,
-  uses shared canonical digest inputs, accepts only exact `no-store` server receipts, persists the
-  server-issued consent across ambiguous contribution retries, and uses separate stable
-  idempotency keys. Private save independently sends the exact generated
-  `POST /v1/saved-job-captures` shape, uses its own stable idempotency key, and requires an exact
-  non-cacheable acknowledgement before removing the queued intent.
+- An exact background-only HTTPS API origin. Contribution transport records an immutable,
+  digest-bound command authorization through the existing v1 Profile consent endpoint and then
+  calls `POST /v1/jobs/contributions`. The authorization receipt is an audit, replay, attribution,
+  and withdrawal control; it is not a claim that a public posting needs permission to be read. The
+  transport maps only selected fields, accepts only exact `no-store` server receipts, persists the
+  server-issued receipt across ambiguous retries, and uses separate stable idempotency keys. The
+  backward-compatible private-capture transport remains implemented but is not exposed by the
+  public-add-only extension surface.
 
 Both session and local extension storage are restricted to trusted extension contexts before any
 session, policy-cache, capture, or pending-queue access. The normal path never retains or uploads
@@ -65,9 +70,9 @@ and API origin.
 
 Create a separate Auth0 Native Application for this public client. It has no client secret. Copy
 `.env.example` to `.env.local` and set the public tenant, client ID, audience, and exact HTTPS API
-origin. Saving or contributing additionally requires `EXTENSION_PENDING_RETENTION_HOURS` to be an
-integer from 1 through 720. Source selects no live default: accountable review must select the
-duration within the enforced 30-day ceiling.
+origin. Adding a job additionally requires `EXTENSION_PENDING_RETENTION_HOURS` to be an integer
+from 1 through 720. Source selects no live default: accountable review must select the duration
+within the enforced 30-day ceiling.
 
 Contribution delivery also requires `EXTENSION_UGC_CONTRIBUTION_POLICY_VERSION` to equal the
 accountably selected server value. No value is selected in source or `.env.example`; absence keeps
@@ -80,17 +85,16 @@ The signed policy is read only from `/v1/extension/contribution-capability-polic
 HTTPS API origin. A received envelope may live for at most 24 hours; source selects no policy,
 signing key, refresh interval, or activation value.
 
-Page inspection and private capture use the independent `EXTENSION_DETECTOR_ACTIVATION_JSON`
+Page inspection uses the independent `EXTENSION_DETECTOR_ACTIVATION_JSON`
 build-time policy. Its exact shape is `schemaVersion`, a reviewed `revision`, `extensionVersion`,
 and complete boolean `enabledProviders`, `enabledVariants`, and `enabledDomains` maps covering only
 the three source adapters and five domains documented above. This setting contains no executable
-adapter or remote URL and does not authorize public contribution. A signed contribution disable
-therefore cannot disable an otherwise reviewed private-save path, while an absent detector policy
-still keeps both current-page actions dark because there is no accepted page to save.
+adapter or remote URL and does not authorize public contribution. An absent detector policy keeps
+current-page inspection dark because there is no accepted page to add.
 
 Current-page inspection is a local-only explicit action and does not require sign-in or an API
-origin. Saving or contributing the sanitized preview remains independently fail-closed unless the
-required identity, API, retention, consent, and capability gates pass.
+origin. Adding the sanitized preview remains fail-closed unless the required identity, API,
+retention, authorization-receipt, and capability gates pass.
 
 Then run:
 
@@ -110,9 +114,9 @@ https://EXTENSION_ID.chromiumapp.org/auth0
 The access grant must include `jobs:read`, `jobs:write`, and the dedicated `jobs:contribute` scope
 in addition to the existing profile scopes. A missing or malformed identity/API configuration
 fails closed. Even with valid configuration, current provider capture remains disabled by
-the absent detector activation policy until its external evidence gate passes. Private saved-page
-transport is not controlled by the public-contribution policy and remains independently available
-whenever its own identity, API, retention, and detector gates pass.
+the absent detector activation policy until its external evidence gate passes. The implemented
+private saved-page API transport remains backward compatible but has no control in this extension
+release candidate.
 
 ## Remaining activation gates
 

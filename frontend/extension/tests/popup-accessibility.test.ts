@@ -22,15 +22,16 @@ describe("popup and side-panel source assurance", () => {
     expect(html).toContain('name="appeal-evidence"');
     expect(html).toContain('autocomplete="off"');
     expect(html).toContain('maxlength="2000"');
-    expect(html).toContain(">Save privately</button>");
-    expect(html).toContain(">Contribute selected fields</button>");
+    expect(html).toContain(">Add job to shared database</button>");
+    expect(html).not.toContain('id="save-private"');
+    expect(html).not.toContain('id="contribution-consent"');
     expect(html).not.toMatch(/<(?:div|span)[^>]+onclick=/iu);
     expect(html).not.toContain("user-scalable=no");
     expect(css).toContain(":focus-visible");
     expect(css).toContain("button:active:not(:disabled)");
     expect(css).toContain("@media (prefers-reduced-motion: reduce)");
     expect(css).toContain("min-width: 0");
-    expect(css).toContain("max-width: 400px");
+    expect(css).toContain("width: 27.5rem");
     expect(css).toContain("grid-template-columns: 22px minmax(0, 1fr)");
     expect(css).not.toContain("outline: none");
     expect(css).not.toContain("transition: all");
@@ -46,17 +47,17 @@ describe("popup and side-panel source assurance", () => {
     expect(source).toContain('expandButton.setAttribute("aria-expanded", "false")');
     expect(source).toContain("function updateSelectionSummary(): void");
     expect(source).toContain("5 required fields always included");
-    expect(source).toContain('"Next action: Contribute selected fields"');
-    expect(source).toContain('"Next action: Save privately"');
+    expect(source).toContain('"Next action: Add job to shared database"');
+    expect(source).toContain('appendField(jobGroup, "Work type"');
   });
 
-  it("fails delivery closed, binds the same selection to both actions, and confirms destructive clearing", async () => {
+  it("fails the single public-add action closed and confirms destructive clearing", async () => {
     const source = await readFile(entrypoint, "utf8");
-    expect(source).toContain("currentDelivery?.privateSave.ready !== true");
     expect(source).toContain("currentDelivery?.contribution.ready !== true");
-    expect(source).toContain("Private save and public contribution are unavailable");
-    expect(source).toContain('approvedFields: selectedFields(), intent: "private_save"');
+    expect(source).toContain("Adding this job is unavailable");
     expect(source).toContain('approvedFields: selectedFields(), intent: "contribute"');
+    expect(source).not.toContain('intent: "private_save"');
+    expect(source).not.toContain("consent.checked");
     expect(source).toContain("window.confirm(");
   });
 });
