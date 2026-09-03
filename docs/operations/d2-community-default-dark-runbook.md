@@ -29,7 +29,7 @@ only the base64url DER SPKI public-key map. A future enabled signing run require
 activation-authority token printed by `--action Help` plus independently reviewed dimensions.
 
 1. Run `operate-development-d2-community-artifact.ps1 -Action Status` with the exact development
-   account and versioned encrypted state bucket.
+   account, versioned encrypted state bucket, and the separate versioned encrypted artifact bucket.
 2. From clean reviewed `main`, publish the deterministic artifact with `-Action Publish -SourceSha`.
 3. Independently hash and review the private receipt, then use `-Action Verify` to read the exact S3
    object version back. Publication never updates Lambda or a trigger.
