@@ -42,6 +42,28 @@ describe("persistent pending job intents", () => {
     expect(dueForDispatch(intent, "account-b", new Date(intent.nextAttemptAt))).toBe(false);
   });
 
+  it("lets an explicit retry bypass only the backoff boundary", () => {
+    const now = new Date("2026-09-01T12:00:00.000Z");
+    const intent = createPendingIntent({
+      approvedFields: ["title"],
+      capture,
+      identityFence: "account-a",
+      intent: "contribute",
+      now,
+      randomId: () => "018f0000-0000-7000-8000-000000000005",
+      retentionMilliseconds: 24 * 60 * 60 * 1_000,
+    });
+    const backedOff = { ...intent, nextAttemptAt: "2026-09-01T14:00:00.000Z" };
+
+    expect(dueForDispatch(backedOff, "account-a", now)).toBe(false);
+    expect(dueForDispatch(backedOff, "account-a", now, true)).toBe(true);
+    expect(dueForDispatch(backedOff, "account-b", now, true)).toBe(false);
+    expect(
+      dueForDispatch({ ...backedOff, expiresAt: now.toISOString() }, "account-a", now, true),
+    ).toBe(false);
+    expect(dueForDispatch({ ...backedOff, state: "terminal" }, "account-a", now, true)).toBe(false);
+  });
+
   it("retries ambiguous/server failures with the same key and bounds attempts", () => {
     let intent = createPendingIntent({
       approvedFields: ["title"],

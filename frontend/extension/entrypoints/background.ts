@@ -238,7 +238,9 @@ async function writeContributionReceipts(receipts: ContributionReceipt[]): Promi
   await chrome.storage.local.set({ [CONTRIBUTION_RECEIPTS_KEY]: receipts });
 }
 
-async function dispatchPending(): Promise<{ pending: number; stopped: number }> {
+async function dispatchPending(
+  ignoreBackoff = false,
+): Promise<{ pending: number; stopped: number }> {
   const queue = await pendingQueue();
   if (queue.length === 0) return { pending: 0, stopped: 0 };
   if (queue.some((intent) => intent.state === "pending" && intent.intent === "contribute")) {
@@ -261,7 +263,7 @@ async function dispatchPending(): Promise<{ pending: number; stopped: number }> 
       replacement.push(fenceMismatchedIntent(intent));
       continue;
     }
-    if (!dueForDispatch(intent, session.identityFence, now)) {
+    if (!dueForDispatch(intent, session.identityFence, now, ignoreBackoff)) {
       replacement.push(intent);
       continue;
     }
@@ -488,7 +490,7 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
         return {
           delivery: await deliveryReadiness(await activeStoredCapture()),
           ok: true,
-          queue: await dispatchPending(),
+          queue: await dispatchPending(true),
           status: await authenticationStatus(),
         };
       } else if (

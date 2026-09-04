@@ -97,12 +97,13 @@ export function dueForDispatch(
   intent: PendingJobIntent,
   identityFence: string,
   now: Date,
+  ignoreBackoff = false,
 ): boolean {
   return (
     intent.state === "pending" &&
     intent.identityFence === identityFence &&
     Date.parse(intent.expiresAt) > now.getTime() &&
-    Date.parse(intent.nextAttemptAt) <= now.getTime()
+    (ignoreBackoff || Date.parse(intent.nextAttemptAt) <= now.getTime())
   );
 }
 
