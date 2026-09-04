@@ -71,6 +71,35 @@ activation-authority token printed by `--action Help` plus independently reviewe
    Actual rollback must use a checksum-reviewed Terraform plan. Alarm injection still requires both
    notification confirmations; the repository never invents either confirmation.
 
+6. Use the dedicated D2 alarm operator to bind the actual exercise to the Terraform-owned
+   `TrustSignalFailed` metric alarm and current confirmed-recipient set. `Status` is read-only and
+   returns only aggregate state plus the two required digests:
+
+   ```powershell
+   node scripts/run-powershell.mjs `
+     -File scripts/exercise-development-d2-alarm.ps1 `
+     -Action Status
+   ```
+
+   Review the aggregate. It must report one or more confirmed recipients, zero pending recipients,
+   all thirteen D2 alarms healthy, and target state `OK`. Execute only as the final alert-delivery
+   gate, using the exact current digests printed by `Status`:
+
+   ```powershell
+   node scripts/run-powershell.mjs `
+     -File scripts/exercise-development-d2-alarm.ps1 `
+     -Action Exercise `
+     -ReviewedPlanSha256 <status-plan-sha256> `
+     -ReviewedRecipientSetSha256 <status-recipient-set-sha256> `
+     -Execute
+   ```
+
+   The operator publishes one generated-synthetic breach and then a zero-value recovery datum; it
+   does not use `set-alarm-state`, invoke a runtime, or touch queue, database, application, or
+   candidate data. After directly receiving both sanitized notifications, type the exact
+   confirmation requested by the operator. Retain only its final aggregate JSON. Any changed alarm,
+   route, recipient set, threshold, region, plan digest, or missing recovery fails closed.
+
 ## Public policy and unauthenticated abuse boundary
 
 This fixed development-only workload covers the anonymous signed-policy contract and the protected
