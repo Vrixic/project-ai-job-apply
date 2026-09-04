@@ -278,7 +278,7 @@ const SAFE_ROUTE_TEMPLATES = new Set([
 ]);
 
 export function privacySafeRequestFailure(exception: unknown, routeTemplate: string | undefined) {
-  const candidate = exception as { code?: unknown; name?: unknown };
+  const candidate = exception as { cause?: unknown; code?: unknown; name?: unknown };
   const errorType =
     typeof candidate?.name === "string" && SAFE_ERROR_IDENTIFIER.test(candidate.name)
       ? candidate.name
@@ -287,6 +287,14 @@ export function privacySafeRequestFailure(exception: unknown, routeTemplate: str
     typeof candidate?.code === "string" && SAFE_ERROR_CODE.test(candidate.code)
       ? candidate.code
       : "UNKNOWN";
+  const cause = candidate?.cause as { code?: unknown } | undefined;
+  const postgresCauseCode =
+    errorType === "JobContributionUnavailableError" &&
+    routeTemplate === "/v1/jobs/contributions" &&
+    typeof cause?.code === "string" &&
+    /^(?:08|0A|22|23|25|2D|3D|3F|40|42|53|54|55|57|58|F0|HV|P0|XX)[0-9A-Z]{3}$/u.test(cause.code)
+      ? cause.code
+      : undefined;
   return {
     event: "unhandled_request_failure",
     route:
@@ -295,6 +303,7 @@ export function privacySafeRequestFailure(exception: unknown, routeTemplate: str
         : "unknown",
     error_type: errorType,
     error_code: errorCode,
+    ...(postgresCauseCode ? { postgres_cause_code: postgresCauseCode } : {}),
   } as const;
 }
 

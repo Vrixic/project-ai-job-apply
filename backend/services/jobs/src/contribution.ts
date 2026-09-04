@@ -110,21 +110,28 @@ export type JobContributionDiagnosticCode =
   | "JOB_RESPONSE_CONTRACT"
   | "JOB_STORE_CHRONOLOGY"
   | "JOB_STORE_CLIENT"
+  | "JOB_STORE_CONNECTION"
   | "JOB_STORE_CONSTRAINT"
+  | "JOB_STORE_DATA"
+  | "JOB_STORE_DATABASE"
   | "JOB_STORE_FOREIGN_KEY"
   | "JOB_STORE_OUTBOX"
   | "JOB_STORE_PAYLOAD"
   | "JOB_STORE_PERMISSION"
   | "JOB_STORE_READ"
+  | "JOB_STORE_RESOURCE"
+  | "JOB_STORE_RUNTIME"
+  | "JOB_STORE_SCHEMA"
   | "JOB_STORE_SOURCE_BOUNDARY"
   | "JOB_STORE_SOURCE_URL"
+  | "JOB_STORE_TRANSACTION"
   | "JOB_STORE_TRIGGER"
   | "JOB_STORE_UNIQUE"
   | "JOB_STORE_WRITE"
   | "JOB_UNAVAILABLE";
 
 function contributionStoreDiagnostic(error: unknown): JobContributionDiagnosticCode {
-  const candidate = error as { code?: unknown; constraint?: unknown };
+  const candidate = error as { code?: unknown; constraint?: unknown; name?: unknown };
   switch (candidate?.constraint) {
     case "job_contributions_chronology_ck":
       return "JOB_STORE_CHRONOLOGY";
@@ -154,8 +161,24 @@ function contributionStoreDiagnostic(error: unknown): JobContributionDiagnosticC
     case "55000":
       return "JOB_STORE_TRIGGER";
     default:
-      return "JOB_STORE_WRITE";
+      break;
   }
+  if (typeof candidate?.code === "string") {
+    const sqlStateClass = candidate.code.slice(0, 2);
+    if (sqlStateClass === "08") return "JOB_STORE_CONNECTION";
+    if (sqlStateClass === "22") return "JOB_STORE_DATA";
+    if (sqlStateClass === "23") return "JOB_STORE_CONSTRAINT";
+    if (["25", "2D", "40"].includes(sqlStateClass)) return "JOB_STORE_TRANSACTION";
+    if (["0A", "3D", "3F", "42"].includes(sqlStateClass)) return "JOB_STORE_SCHEMA";
+    if (["53", "54", "55", "57", "58"].includes(sqlStateClass)) {
+      return "JOB_STORE_RESOURCE";
+    }
+  }
+  if (candidate?.name === "PostgresError") return "JOB_STORE_DATABASE";
+  if (["TypeError", "RangeError", "ReferenceError"].includes(String(candidate?.name))) {
+    return "JOB_STORE_RUNTIME";
+  }
+  return "JOB_STORE_WRITE";
 }
 
 export class JobContributionConsentRequiredError extends Error {

@@ -391,6 +391,28 @@ describe("JobContributionService", () => {
     expect((failure as Error).message).not.toContain("candidate-private");
   });
 
+  it.each([
+    ["08006", "PostgresError", "JOB_STORE_CONNECTION"],
+    ["22007", "PostgresError", "JOB_STORE_DATA"],
+    ["40001", "PostgresError", "JOB_STORE_TRANSACTION"],
+    ["42883", "PostgresError", "JOB_STORE_SCHEMA"],
+    ["53300", "PostgresError", "JOB_STORE_RESOURCE"],
+    [undefined, "PostgresError", "JOB_STORE_DATABASE"],
+    [undefined, "TypeError", "JOB_STORE_RUNTIME"],
+  ])("classifies safe store failure family %s", async (code, name, expected) => {
+    const privateFailure = Object.assign(new Error("private database detail"), { code, name });
+    const store = new MemoryStore();
+    store.create = async () => {
+      throw privateFailure;
+    };
+
+    await expect(
+      new JobContributionService(store, allowConsent, allowCapability, intakeNow).contribute(
+        command(),
+      ),
+    ).rejects.toMatchObject({ code: expected });
+  });
+
   it("passes the exact owner, purpose, client, policy, and preview binding to Profile", async () => {
     const input = command();
     let observed: Parameters<JobContributionConsentVerifier["verify"]>[0] | undefined;

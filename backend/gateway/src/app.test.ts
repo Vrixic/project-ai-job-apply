@@ -1304,17 +1304,26 @@ describe("candidate API", () => {
 
     const contributionFailure = new JobContributionUnavailableError(
       "JOB_STORE_CHRONOLOGY",
-      new Error("private posting data"),
+      Object.assign(new Error("private posting data"), { code: "42883" }),
     );
     expect(privacySafeRequestFailure(contributionFailure, "/v1/jobs/contributions")).toEqual({
       event: "unhandled_request_failure",
       route: "/v1/jobs/contributions",
       error_type: "JobContributionUnavailableError",
       error_code: "JOB_STORE_CHRONOLOGY",
+      postgres_cause_code: "42883",
     });
     expect(
       JSON.stringify(privacySafeRequestFailure(contributionFailure, "/v1/jobs/contributions")),
     ).not.toContain("private posting data");
+
+    const untrustedCause = new JobContributionUnavailableError(
+      "JOB_STORE_WRITE",
+      Object.assign(new Error("private posting data"), { code: "SEC01" }),
+    );
+    expect(privacySafeRequestFailure(untrustedCause, "/v1/jobs/contributions")).not.toHaveProperty(
+      "postgres_cause_code",
+    );
   });
 
   it("preserves an API Gateway principal through the real Fastify injection lifecycle", async () => {
