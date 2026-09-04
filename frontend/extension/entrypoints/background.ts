@@ -3,6 +3,7 @@ import {
   DEFAULT_DARK_DETECTOR_POLICY_REVISION,
   extensionDetectorActivationPolicy,
 } from "../lib/capability-policy";
+import { safeActionErrorMessage } from "../lib/action-error";
 import { extensionConfiguration } from "../lib/config";
 import {
   fileContributionAppeal,
@@ -103,31 +104,6 @@ type DeliveryReadinessReason =
 interface DeliveryReadiness {
   contribution: { ready: boolean; reason: DeliveryReadinessReason };
   privateSave: { ready: boolean; reason: DeliveryReadinessReason };
-}
-
-function safeMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : "";
-  if (message.includes("cancel") || message.includes("access_denied")) {
-    return "Authentication action cancelled.";
-  }
-  if (message === "configuration_required") return "Public Auth0 configuration is required.";
-  if (message === "api_configuration_required") {
-    return "Configure the API origin before using account delivery.";
-  }
-  if (message === "reauthentication_required" || message === "authentication_required") {
-    return "Log in again to continue.";
-  }
-  if (message === "capture_required") return "Inspect the current page again before continuing.";
-  if (message === "retention_policy_required") {
-    return "Pending-item retention must be configured before adding a job.";
-  }
-  if (message === "contribution_capability_disabled") {
-    return "Public contribution is currently disabled by its signed capability policy.";
-  }
-  if (message === "queue_capacity_reached") {
-    return "The delivery queue is full. Retry pending items or remove stopped items.";
-  }
-  return "The action did not complete.";
 }
 
 function trustedSender(sender: chrome.runtime.MessageSender): boolean {
@@ -555,7 +531,7 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
     } catch (error) {
       return {
         delivery: await deliveryReadiness(await activeStoredCapture()),
-        error: safeMessage(error),
+        error: safeActionErrorMessage(error, message.action),
         ok: false,
         status: await authenticationStatus(),
       };
