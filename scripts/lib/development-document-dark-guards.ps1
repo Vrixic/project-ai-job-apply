@@ -973,6 +973,7 @@ function Assert-DevelopmentDocumentAcceptedResourceDrift {
     ))
   $processorRole = "module.platform.aws_iam_role.document_processor[0]"
   $completeDarkMapping = "module.platform.aws_lambda_event_source_mapping.document_scan_results[0]"
+  $d2TrustSignalMapping = "module.platform.aws_lambda_event_source_mapping.d2_trust_signal[0]"
   $completeDarkTagOnly = @(
     "module.platform.aws_lambda_function.document_processor[0]",
     "module.platform.aws_vpc_endpoint.sts[0]"
@@ -995,6 +996,7 @@ function Assert-DevelopmentDocumentAcceptedResourceDrift {
   $allowedTypes["module.platform.aws_db_instance.postgres[0]"] = "aws_db_instance"
   $allowedTypes["module.platform.aws_ecs_task_definition.migration[0]"] = "aws_ecs_task_definition"
   $allowedTypes[$completeDarkMapping] = "aws_lambda_event_source_mapping"
+  $allowedTypes[$d2TrustSignalMapping] = "aws_lambda_event_source_mapping"
   $allowedTypes["module.platform.aws_lambda_function.document_parser[0]"] = "aws_lambda_function"
   $allowedTypes["module.platform.aws_lambda_function.document_processor[0]"] = "aws_lambda_function"
   $allowedTypes["module.platform.aws_s3_bucket.candidate_documents[0]"] = "aws_s3_bucket"
@@ -1111,6 +1113,26 @@ function Assert-DevelopmentDocumentAcceptedResourceDrift {
       Assert-DevelopmentDocumentNullToEmptyArray $before $after topics "Event-source mapping topic drift"
       Assert-DevelopmentDocumentNullToEmptyObject $before $after tags "Event-source mapping tag drift"
       $sensitivity += @("event_source_mapping_filters", "tags")
+    } elseif ($address -ceq $d2TrustSignalMapping) {
+      $expected = $planned[$address]
+      if ($null -eq $expected -or (ConvertTo-DeploymentCanonicalValue $after -SortArrays) -cne
+        (ConvertTo-DeploymentCanonicalValue $expected -SortArrays)) {
+        throw "The D2 Trust mapping refresh differs from the exact source-evaluated value."
+      }
+      $beforeValue = [string]$before.last_modified
+      $afterValue = [string]$after.last_modified
+      $timestampPattern = '^20\d{2}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$'
+      $beforeTimestamp = [DateTimeOffset]::MinValue
+      $afterTimestamp = [DateTimeOffset]::MinValue
+      if ($beforeValue -cnotmatch $timestampPattern -or $afterValue -cnotmatch $timestampPattern -or
+        -not [DateTimeOffset]::TryParse($beforeValue, [Globalization.CultureInfo]::InvariantCulture,
+          [Globalization.DateTimeStyles]::RoundtripKind, [ref]$beforeTimestamp) -or
+        -not [DateTimeOffset]::TryParse($afterValue, [Globalization.CultureInfo]::InvariantCulture,
+          [Globalization.DateTimeStyles]::RoundtripKind, [ref]$afterTimestamp) -or
+        $afterTimestamp -le $beforeTimestamp) {
+        throw "The D2 Trust mapping refresh clock did not move strictly forward."
+      }
+      $after.last_modified = $before.last_modified
     } elseif ($address -cin $completeDarkTagOnly) {
       $expected = $planned[$address]
       if ($null -eq $expected -or (ConvertTo-DeploymentCanonicalValue $after -SortArrays) -cne

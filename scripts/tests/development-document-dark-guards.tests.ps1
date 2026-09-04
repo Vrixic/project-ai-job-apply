@@ -1058,6 +1058,31 @@ $s3EndpointCidrRoot = [pscustomobject]@{ resources = @(
 Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($s3EndpointCidrDrift) `
   -RootModule $s3EndpointCidrRoot
 
+$d2MappingAddress = "module.platform.aws_lambda_event_source_mapping.d2_trust_signal[0]"
+$d2MappingDrift = New-DriftRecord $d2MappingAddress "aws_lambda_event_source_mapping" `
+  ([pscustomobject]@{ id = "d2-mapping"; enabled = $true; last_modified = "2026-09-04T12:00:00.000Z" }) `
+  ([pscustomobject]@{ id = "d2-mapping"; enabled = $true; last_modified = "2026-09-04T12:00:01.000Z" })
+$d2MappingRoot = [pscustomobject]@{ resources = @(
+    [pscustomobject]@{ address = "module.platform.aws_kms_key.platform"; values = [pscustomobject]@{ arn = $kmsArn } },
+    [pscustomobject]@{ address = $d2MappingAddress; values = $d2MappingDrift.change.after }
+  ) }
+Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($d2MappingDrift) -RootModule $d2MappingRoot
+foreach ($mutation in @("backward", "other", "planned", "sensitivity")) {
+  $record = $d2MappingDrift | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $root = $d2MappingRoot | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $plannedMapping = @($root.resources | Where-Object address -eq $d2MappingAddress)[0]
+  switch ($mutation) {
+    "backward" { $record.change.after.last_modified = "2026-09-04T11:59:59.000Z"; $plannedMapping.values = $record.change.after }
+    "other" { $record.change.after.enabled = $false; $plannedMapping.values = $record.change.after }
+    "planned" { $plannedMapping.values.last_modified = "2026-09-04T12:00:02.000Z" }
+    "sensitivity" { $record.change.after_sensitive = [pscustomobject]@{ last_modified = $true } }
+  }
+  $rejected = $false
+  try { Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($record) -RootModule $root }
+  catch { $rejected = $true }
+  if (-not $rejected) { throw "The D2 Trust mapping drift guard accepted '$mutation'." }
+}
+
 foreach ($mutation in @("removal", "duplicate", "invalid", "other", "planned", "sensitivity")) {
   $record = $s3EndpointCidrDrift | ConvertTo-Json -Depth 100 | ConvertFrom-Json
   $root = $s3EndpointCidrRoot | ConvertTo-Json -Depth 100 | ConvertFrom-Json
