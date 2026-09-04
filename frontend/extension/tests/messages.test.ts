@@ -5,6 +5,9 @@ describe("extension message boundary", () => {
   it("accepts only exact known requests", () => {
     expect(parseExtensionMessage({ action: "status" })).toEqual({ action: "status" });
     expect(parseExtensionMessage({ action: "clear_queue" })).toEqual({ action: "clear_queue" });
+    expect(parseExtensionMessage({ action: "retry_stopped" })).toEqual({
+      action: "retry_stopped",
+    });
     expect(
       parseExtensionMessage({
         action: "enqueue",

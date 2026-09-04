@@ -5,6 +5,7 @@ import {
   createPendingIntent,
   dueForDispatch,
   fenceMismatchedIntent,
+  restartStoppedIntent,
   retainUnexpiredIntents,
   settleDispatch,
   uuidV7,
@@ -84,6 +85,29 @@ describe("persistent pending job intents", () => {
     expect(intent.idempotencyKey).toBe(key);
     expect(intent.attempt).toBe(5);
     expect(intent.state).toBe("terminal");
+    expect(intent.lastError).toBe("retry_exhausted");
+    const restarted = restartStoppedIntent(intent, new Date("2026-09-01T15:00:00.000Z"));
+    expect(restarted).toMatchObject({
+      attempt: 0,
+      idempotencyKey: key,
+      nextAttemptAt: "2026-09-01T15:00:00.000Z",
+      state: "pending",
+    });
+    expect(restarted).not.toHaveProperty("lastError");
+  });
+
+  it("does not restart account-fenced or already-pending intents", () => {
+    const intent = createPendingIntent({
+      approvedFields: ["title"],
+      capture,
+      identityFence: "account-a",
+      intent: "contribute",
+      randomId: () => "018f0000-0000-7000-8000-000000000006",
+      retentionMilliseconds: 24 * 60 * 60 * 1_000,
+    });
+    expect(restartStoppedIntent(intent)).toBe(intent);
+    const blocked = fenceMismatchedIntent(intent);
+    expect(restartStoppedIntent(blocked)).toBe(blocked);
   });
 
   it("removes only acknowledged intents and fences account changes", () => {

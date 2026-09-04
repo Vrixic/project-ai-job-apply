@@ -7,6 +7,15 @@ const BACKOFF_MILLISECONDS = [60_000, 5 * 60_000, 30 * 60_000, 2 * 60 * 60_000] 
 
 export type JobIntentKind = "contribute" | "private_save";
 export type PendingState = "blocked" | "pending" | "terminal";
+export type DispatchFailureCode =
+  | "contribution_capability_policy_unavailable"
+  | "http_429"
+  | "http_5xx"
+  | "internal_error"
+  | "invalid_response"
+  | "job_contribution_unavailable"
+  | "network_error"
+  | "ugc_contribution_consent_unavailable";
 
 export interface UgcConsentBinding {
   grantedAt: string;
@@ -26,7 +35,13 @@ export interface PendingJobIntent {
   idempotencyKey: string;
   identityFence: string;
   intent: JobIntentKind;
-  lastError?: "authentication_required" | "identity_changed" | "request_rejected" | "retryable";
+  lastError?:
+    | "authentication_required"
+    | DispatchFailureCode
+    | "identity_changed"
+    | "request_rejected"
+    | "retry_exhausted"
+    | "retryable";
   nextAttemptAt: string;
   state: PendingState;
 }
@@ -34,6 +49,7 @@ export interface PendingJobIntent {
 export interface DispatchResult {
   contribution?: import("@ai-job-apply/api-contracts").JobContribution;
   consent?: UgcConsentBinding;
+  failureCode?: DispatchFailureCode;
   outcome: "accepted" | "retryable" | "terminal";
 }
 
@@ -134,7 +150,9 @@ export function settleDispatch(
       ...intent,
       ...(consent ? { consent } : {}),
       attempt,
-      lastError: "request_rejected",
+      lastError:
+        result.failureCode ??
+        (result.outcome === "terminal" ? "request_rejected" : "retry_exhausted"),
       state: "terminal",
     };
   }
@@ -143,9 +161,21 @@ export function settleDispatch(
     ...intent,
     ...(consent ? { consent } : {}),
     attempt,
-    lastError: "retryable",
+    lastError: result.failureCode ?? "retryable",
     nextAttemptAt: new Date(now.getTime() + delay).toISOString(),
   };
+}
+
+export function restartStoppedIntent(intent: PendingJobIntent, now = new Date()): PendingJobIntent {
+  if (intent.state !== "terminal") return intent;
+  const restarted = {
+    ...intent,
+    attempt: 0,
+    nextAttemptAt: now.toISOString(),
+    state: "pending" as const,
+  };
+  delete restarted.lastError;
+  return restarted;
 }
 
 export function fenceMismatchedIntent(intent: PendingJobIntent): PendingJobIntent {

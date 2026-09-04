@@ -17,6 +17,7 @@ import { extensionConfiguration } from "./config";
 import { type SanitizedJobCapture, selectContributionFields } from "./job-capture";
 import {
   classifyResponse,
+  type DispatchFailureCode,
   type DispatchResult,
   type PendingJobIntent,
   type UgcConsentBinding,
@@ -37,6 +38,40 @@ function exactNoStoreJson(response: Response): boolean {
     response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() ===
       "application/json"
   );
+}
+
+const SAFE_RETRYABLE_PROBLEM_CODES = new Set<DispatchFailureCode>([
+  "contribution_capability_policy_unavailable",
+  "internal_error",
+  "job_contribution_unavailable",
+  "ugc_contribution_consent_unavailable",
+]);
+
+async function classifyFailedResponse(response: Response): Promise<DispatchResult> {
+  const classified = classifyResponse(response.status);
+  if (classified.outcome === "accepted") return classified;
+  let failureCode: DispatchFailureCode | undefined =
+    response.status === 429 ? "http_429" : response.status >= 500 ? "http_5xx" : undefined;
+  if (
+    response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() ===
+    "application/problem+json"
+  ) {
+    try {
+      const value: unknown = await response.json();
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        const code = (value as Record<string, unknown>).code;
+        if (
+          typeof code === "string" &&
+          SAFE_RETRYABLE_PROBLEM_CODES.has(code as DispatchFailureCode)
+        ) {
+          failureCode = code as DispatchFailureCode;
+        }
+      }
+    } catch {
+      // The fixed status classification remains authoritative for malformed error bodies.
+    }
+  }
+  return { ...classified, ...(failureCode ? { failureCode } : {}) };
 }
 
 function exactConsentGrant(
@@ -298,11 +333,20 @@ async function sendContribution(
       policyVersion,
     );
     const response = await fetchImplementation(grantRequest.url, grantRequest.init);
-    const classified = classifyResponse(response.status);
+    const classified = await classifyFailedResponse(response);
     if (classified.outcome !== "accepted") return classified;
-    if (response.status !== 201 || !exactNoStoreJson(response)) return { outcome: "terminal" };
-    const payload: unknown = await response.json();
-    if (!exactConsentGrant(payload, policyVersion)) return { outcome: "terminal" };
+    if (response.status !== 201 || !exactNoStoreJson(response)) {
+      return { failureCode: "invalid_response", outcome: "terminal" };
+    }
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      return { failureCode: "invalid_response", outcome: "terminal" };
+    }
+    if (!exactConsentGrant(payload, policyVersion)) {
+      return { failureCode: "invalid_response", outcome: "terminal" };
+    }
     consent = {
       grantedAt: payload.grantedAt,
       id: payload.id,
@@ -320,17 +364,22 @@ async function sendContribution(
   try {
     response = await fetchImplementation(contributionRequest.url, contributionRequest.init);
   } catch {
-    return { consent, outcome: "retryable" };
+    return { consent, failureCode: "network_error", outcome: "retryable" };
   }
-  const classified = classifyResponse(response.status);
+  const classified = await classifyFailedResponse(response);
   if (classified.outcome !== "accepted") return { ...classified, consent };
   if (response.status !== 202 || !exactNoStoreJson(response)) {
-    return { consent, outcome: "terminal" };
+    return { consent, failureCode: "invalid_response", outcome: "terminal" };
   }
-  const payload: unknown = await response.json();
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    return { consent, failureCode: "invalid_response", outcome: "terminal" };
+  }
   return exactContribution(payload, intent.id)
     ? { contribution: payload, outcome: "accepted" }
-    : { consent, outcome: "terminal" };
+    : { consent, failureCode: "invalid_response", outcome: "terminal" };
 }
 
 export async function sendJobIntent(
@@ -350,7 +399,11 @@ export async function sendJobIntent(
         clientVersion,
       );
     } catch {
-      return { ...(intent.consent ? { consent: intent.consent } : {}), outcome: "retryable" };
+      return {
+        ...(intent.consent ? { consent: intent.consent } : {}),
+        failureCode: "network_error",
+        outcome: "retryable",
+      };
     }
   }
   try {
@@ -368,19 +421,21 @@ export async function sendJobIntent(
         method: "POST",
       },
     );
-    const classified = classifyResponse(response.status);
+    const classified = await classifyFailedResponse(response);
     if (classified.outcome !== "accepted") return classified;
-    if (response.status !== 201 || !exactNoStoreJson(response)) return { outcome: "terminal" };
+    if (response.status !== 201 || !exactNoStoreJson(response)) {
+      return { failureCode: "invalid_response", outcome: "terminal" };
+    }
     let payload: unknown;
     try {
       payload = await response.json();
     } catch {
-      return { outcome: "terminal" };
+      return { failureCode: "invalid_response", outcome: "terminal" };
     }
     return exactPrivateSavedPageCapture(payload, capture)
       ? { outcome: "accepted" }
-      : { outcome: "terminal" };
+      : { failureCode: "invalid_response", outcome: "terminal" };
   } catch {
-    return { outcome: "retryable" };
+    return { failureCode: "network_error", outcome: "retryable" };
   }
 }

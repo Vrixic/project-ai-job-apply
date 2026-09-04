@@ -32,6 +32,7 @@ import {
   MAXIMUM_QUEUE_ITEMS,
   PENDING_QUEUE_KEY,
   type PendingJobIntent,
+  restartStoppedIntent,
   retainUnexpiredIntents,
   settleDispatch,
 } from "../lib/pending-queue";
@@ -226,6 +227,15 @@ async function writePendingQueue(queue: PendingJobIntent[]): Promise<void> {
   }
 }
 
+function summarizeQueue(queue: readonly PendingJobIntent[]) {
+  const lastError = [...queue].reverse().find((intent) => intent.lastError)?.lastError;
+  return {
+    pending: queue.filter((intent) => intent.state === "pending").length,
+    stopped: queue.filter((intent) => intent.state !== "pending").length,
+    ...(lastError ? { lastError } : {}),
+  };
+}
+
 async function contributionReceipts(): Promise<ContributionReceipt[]> {
   await storageBoundaryStartup;
   const stored = (await chrome.storage.local.get(CONTRIBUTION_RECEIPTS_KEY))[
@@ -238,11 +248,9 @@ async function writeContributionReceipts(receipts: ContributionReceipt[]): Promi
   await chrome.storage.local.set({ [CONTRIBUTION_RECEIPTS_KEY]: receipts });
 }
 
-async function dispatchPending(
-  ignoreBackoff = false,
-): Promise<{ pending: number; stopped: number }> {
+async function dispatchPending(ignoreBackoff = false): Promise<ReturnType<typeof summarizeQueue>> {
   const queue = await pendingQueue();
-  if (queue.length === 0) return { pending: 0, stopped: 0 };
+  if (queue.length === 0) return summarizeQueue(queue);
   if (queue.some((intent) => intent.state === "pending" && intent.intent === "contribute")) {
     await contributionPolicyStartup;
     await contributionPolicy.refresh();
@@ -251,10 +259,7 @@ async function dispatchPending(
   try {
     session = await authenticatedApiSession();
   } catch {
-    return {
-      pending: queue.filter((intent) => intent.state === "pending").length,
-      stopped: queue.filter((intent) => intent.state !== "pending").length,
-    };
+    return summarizeQueue(queue);
   }
   const now = new Date();
   const replacement: PendingJobIntent[] = [];
@@ -293,10 +298,7 @@ async function dispatchPending(
     if (settled) replacement.push(settled);
   }
   await writePendingQueue(replacement);
-  return {
-    pending: replacement.filter((intent) => intent.state === "pending").length,
-    stopped: replacement.filter((intent) => intent.state !== "pending").length,
-  };
+  return summarizeQueue(replacement);
 }
 
 async function ownerAction(
@@ -493,6 +495,15 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
           queue: await dispatchPending(true),
           status: await authenticationStatus(),
         };
+      } else if (message.action === "retry_stopped") {
+        const restarted = (await pendingQueue()).map((intent) => restartStoppedIntent(intent));
+        await writePendingQueue(restarted);
+        return {
+          delivery: await deliveryReadiness(await activeStoredCapture()),
+          ok: true,
+          queue: await dispatchPending(true),
+          status: await authenticationStatus(),
+        };
       } else if (
         ["contribution_refresh", "trust_refresh", "withdraw", "appeal"].includes(message.action)
       ) {
@@ -517,10 +528,7 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
       return {
         delivery: await deliveryReadiness(await activeStoredCapture()),
         ok: true,
-        queue: {
-          pending: queue.filter((intent) => intent.state === "pending").length,
-          stopped: queue.filter((intent) => intent.state !== "pending").length,
-        },
+        queue: summarizeQueue(queue),
         receipts,
         status: await authenticationStatus(),
       };

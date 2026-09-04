@@ -165,8 +165,48 @@ describe("background-only contribution consent transport", () => {
       fetcher as typeof fetch,
       "0.2.0",
     );
-    expect(result).toMatchObject({ outcome: "retryable", consent: { id: expect.any(String) } });
+    expect(result).toMatchObject({
+      failureCode: "network_error",
+      outcome: "retryable",
+      consent: { id: expect.any(String) },
+    });
     expect(settleDispatch(pending, result)?.consent).toEqual(result.consent);
+  });
+
+  it("retains only an allowlisted privacy-safe server failure code", async () => {
+    extensionConfiguration.apiOrigin = "https://api.example.test";
+    extensionConfiguration.ugcContributionPolicyVersion = "d2-synthetic-policy.v1";
+    const pending = intent();
+    const safeFailure = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            code: "ugc_contribution_consent_unavailable",
+            detail: "must not be retained",
+            status: 503,
+            title: "Unavailable",
+            traceId: "must-not-be-retained",
+            type: "urn:example",
+          }),
+          { status: 503, headers: { "content-type": "application/problem+json" } },
+        ),
+    );
+    await expect(
+      sendJobIntent(pending, "token", safeFailure as typeof fetch, "0.2.0"),
+    ).resolves.toEqual({
+      failureCode: "ugc_contribution_consent_unavailable",
+      outcome: "retryable",
+    });
+    const arbitraryFailure = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ code: "secret_database_detail" }), {
+          status: 503,
+          headers: { "content-type": "application/problem+json" },
+        }),
+    );
+    await expect(
+      sendJobIntent(pending, "token", arbitraryFailure as typeof fetch, "0.2.0"),
+    ).resolves.toEqual({ failureCode: "http_5xx", outcome: "retryable" });
   });
 
   it("fails closed on missing policy, malformed grants, and digest drift", async () => {
@@ -192,6 +232,7 @@ describe("background-only contribution consent transport", () => {
     await expect(
       sendJobIntent(pending, "token", malformed as typeof fetch, "0.2.0"),
     ).resolves.toEqual({
+      failureCode: "invalid_response",
       outcome: "terminal",
     });
     const prepared = await prepareContribution(pending, "d2-synthetic-policy.v1", "0.2.0");
@@ -285,6 +326,7 @@ describe("background-only private saved-page transport", () => {
     const expected = preparePrivateSavedPageCapture(pending);
     const unavailable = vi.fn(async () => jsonResponse(503, { code: "unavailable" }));
     await expect(sendJobIntent(pending, "token", unavailable as typeof fetch)).resolves.toEqual({
+      failureCode: "http_5xx",
       outcome: "retryable",
     });
 
@@ -299,6 +341,7 @@ describe("background-only private saved-page transport", () => {
       }),
     );
     await expect(sendJobIntent(pending, "token", malformed as typeof fetch)).resolves.toEqual({
+      failureCode: "invalid_response",
       outcome: "terminal",
     });
   });

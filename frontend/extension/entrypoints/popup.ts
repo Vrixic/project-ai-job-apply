@@ -30,6 +30,7 @@ interface DeliveryReadiness {
 }
 
 interface QueueStatus {
+  lastError?: string;
   pending: number;
   stopped: number;
 }
@@ -71,6 +72,7 @@ const logoutButton = node<HTMLButtonElement>("#logout");
 const inspectButton = node<HTMLButtonElement>("#inspect");
 const contributeButton = node<HTMLButtonElement>("#contribute");
 const retryButton = node<HTMLButtonElement>("#retry");
+const retryStoppedButton = node<HTMLButtonElement>("#retry-stopped");
 const clearStoppedButton = node<HTMLButtonElement>("#clear-stopped");
 const clearQueueButton = node<HTMLButtonElement>("#clear-queue");
 const main = node<HTMLElement>("main");
@@ -107,6 +109,7 @@ const busyCopy: Record<string, string> = {
   logout: "Signing out…",
   refresh: "Refreshing the session…",
   retry: "Retrying queued delivery…",
+  retry_stopped: "Retrying stopped delivery…",
   status: "Checking extension readiness…",
   trust_refresh: "Refreshing Trust status…",
   withdraw: "Withdrawing the contribution…",
@@ -126,6 +129,7 @@ function controls(): HTMLButtonElement[] {
     inspectButton,
     contributeButton,
     retryButton,
+    retryStoppedButton,
     clearStoppedButton,
     clearQueueButton,
     ...fieldList.querySelectorAll<HTMLButtonElement>("button"),
@@ -188,8 +192,24 @@ function renderStatus(response: ExtensionResponse): void {
   renderDeliveryReadiness();
 
   if (response.queue) {
-    queueStatus.textContent = `${response.queue.pending} pending · ${response.queue.stopped} stopped`;
+    const failure = response.queue.lastError
+      ? {
+          contribution_capability_policy_unavailable: "Policy service unavailable",
+          http_429: "Rate limited",
+          http_5xx: "Server unavailable",
+          internal_error: "Internal server error",
+          invalid_response: "Invalid server response",
+          job_contribution_unavailable: "Contribution service unavailable",
+          network_error: "Network unavailable",
+          request_rejected: "Request rejected",
+          retry_exhausted: "Retries exhausted",
+          retryable: "Delivery unavailable",
+          ugc_contribution_consent_unavailable: "Consent service unavailable",
+        }[response.queue.lastError]
+      : undefined;
+    queueStatus.textContent = `${response.queue.pending} pending · ${response.queue.stopped} stopped${failure ? ` · ${failure}` : ""}`;
     retryButton.hidden = response.queue.pending === 0;
+    retryStoppedButton.hidden = response.queue.stopped === 0;
     clearStoppedButton.hidden = response.queue.stopped === 0;
     clearQueueButton.hidden = response.queue.pending + response.queue.stopped === 0;
     if (response.queue.stopped > 0) queuePanel.open = true;
@@ -476,6 +496,9 @@ function successMessage(action: string, response: ExtensionResponse): string | u
     return "The selected public fields were added to the shared job review queue.";
   }
   if (action === "retry") return "Queued delivery was retried. Review the queue counts below.";
+  if (action === "retry_stopped") {
+    return "Stopped delivery was restarted with its original idempotency key.";
+  }
   if (action === "clear_stopped") return "Stopped items were removed from this device.";
   if (action === "clear_queue") return "All queued items were removed from this device.";
   return undefined;
@@ -520,6 +543,15 @@ logoutButton.addEventListener("click", () => {
 });
 inspectButton.addEventListener("click", () => void invoke({ action: "capture" }));
 retryButton.addEventListener("click", () => void invoke({ action: "retry" }));
+retryStoppedButton.addEventListener("click", () => {
+  if (
+    window.confirm(
+      "Retry stopped deliveries now? The original selected fields and idempotency keys will be reused.",
+    )
+  ) {
+    void invoke({ action: "retry_stopped" });
+  }
+});
 clearStoppedButton.addEventListener("click", () => void invoke({ action: "clear_stopped" }));
 clearQueueButton.addEventListener("click", () => {
   if (window.confirm("Remove every pending and stopped item from this device?")) {

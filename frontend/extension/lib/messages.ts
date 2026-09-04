@@ -12,6 +12,7 @@ export type ExtensionMessage =
         | "pending"
         | "refresh"
         | "retry"
+        | "retry_stopped"
         | "status";
     }
   | { action: "enqueue"; approvedFields: readonly CaptureField[]; intent: JobIntentKind }
@@ -38,6 +39,7 @@ export function parseExtensionMessage(value: unknown): ExtensionMessage | undefi
       "pending",
       "refresh",
       "retry",
+      "retry_stopped",
       "status",
     ].includes(record.action)
   ) {
