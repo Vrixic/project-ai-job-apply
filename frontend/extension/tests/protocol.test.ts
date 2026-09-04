@@ -4,11 +4,42 @@ interface SessionRecord {
   accessToken: string;
   expiresAt: number;
   identityFence: string;
+  identityFenceVersion: "auth0-subject-sha256-v1";
   refreshToken?: string;
 }
 
 const completeScope =
   "openid profile email offline_access profile:read profile:write jobs:read jobs:write jobs:contribute";
+
+function base64UrlJson(value: unknown): string {
+  return btoa(JSON.stringify(value)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
+}
+
+function accessToken(subject: string, nonce = "one", overrides: Record<string, unknown> = {}) {
+  return [
+    base64UrlJson({ alg: "RS256", typ: "JWT" }),
+    base64UrlJson({
+      aud: "ai-job-apply-api",
+      azp: "extension-native-client",
+      exp: Math.floor(Date.now() / 1_000) + 3_600,
+      iss: "https://tenant.example.test/",
+      jti: nonce,
+      sub: subject,
+      ...overrides,
+    }),
+    "test-signature",
+  ].join(".");
+}
+
+async function accountFence(subject: string): Promise<string> {
+  const { accountFenceFromAccessToken } = await import("../lib/account-fence");
+  return accountFenceFromAccessToken({
+    accessToken: accessToken(subject),
+    audience: "ai-job-apply-api",
+    clientId: "extension-native-client",
+    issuer: "https://tenant.example.test/",
+  });
+}
 
 function tokenResponse(
   accessToken: string,
@@ -40,7 +71,7 @@ function installPublicConfiguration(): void {
 
 function installChrome(options: {
   callback?: string;
-  initialSession?: SessionRecord;
+  initialSession?: unknown;
   launchError?: Error;
 }) {
   const records = new Map<string, unknown>();
@@ -90,6 +121,23 @@ describe("extension Auth0 protocol lifecycle", () => {
     expect(browser.records.has("auth0Session")).toBe(false);
   });
 
+  it("removes a legacy random-fence session before reporting authentication", async () => {
+    const browser = installChrome({
+      initialSession: {
+        accessToken: accessToken("auth0|candidate-one"),
+        expiresAt: Date.now() + 60_000,
+        identityFence: "a".repeat(43),
+        refreshToken: "refresh-one",
+      },
+    });
+
+    await expect((await protocol()).authenticationStatus()).resolves.toMatchObject({
+      authenticated: false,
+      refreshAvailable: false,
+    });
+    expect(browser.records.has("auth0Session")).toBe(false);
+  });
+
   it("rejects a callback whose state does not match before token exchange", async () => {
     const browser = installChrome({
       callback: "https://extension-id.chromiumapp.org/auth0?code=short-code&state=wrong",
@@ -121,23 +169,59 @@ describe("extension Auth0 protocol lifecycle", () => {
       expect(parameters.get("grant_type")).toBe("authorization_code");
       expect(parameters.get("code")).toBe("short-code");
       expect(parameters.get("code_verifier")).toMatch(/^[A-Za-z0-9_-]{86}$/u);
-      return tokenResponse("access-one", "refresh-one");
+      return tokenResponse(accessToken("auth0|candidate-one"), "refresh-one");
     });
     vi.stubGlobal("fetch", fetchMock);
     await (await protocol()).login();
     const stored = browser.records.get("auth0Session") as SessionRecord;
-    expect(stored).toMatchObject({ accessToken: "access-one", refreshToken: "refresh-one" });
+    expect(stored).toMatchObject({
+      accessToken: accessToken("auth0|candidate-one"),
+      identityFenceVersion: "auth0-subject-sha256-v1",
+      refreshToken: "refresh-one",
+    });
     expect(stored.expiresAt).toBeGreaterThan(Date.now());
-    expect(stored.identityFence).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+    expect(stored.identityFence).toBe(await accountFence("auth0|candidate-one"));
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("rotates refresh tokens while preserving the account fence", async () => {
+  it("reuses the same pseudonymous account fence after a full login to the same account", async () => {
+    const firstFence = await accountFence("auth0|candidate-one");
+    let authorizationState = "";
     const browser = installChrome({
       initialSession: {
-        accessToken: "access-one",
+        accessToken: accessToken("auth0|candidate-one", "old"),
         expiresAt: Date.now() + 60_000,
-        identityFence: "stable-account-fence",
+        identityFence: firstFence,
+        identityFenceVersion: "auth0-subject-sha256-v1",
+        refreshToken: "refresh-old",
+      },
+    });
+    browser.launchWebAuthFlow.mockImplementationOnce(async ({ url }: { url: string }) => {
+      authorizationState = new URL(url).searchParams.get("state") ?? "";
+      return `https://extension-id.chromiumapp.org/auth0?code=short-code&state=${authorizationState}`;
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => tokenResponse(accessToken("auth0|candidate-one", "new"), "refresh-new")),
+    );
+
+    await (await protocol()).login();
+
+    expect(browser.records.get("auth0Session")).toMatchObject({
+      identityFence: firstFence,
+      identityFenceVersion: "auth0-subject-sha256-v1",
+      refreshToken: "refresh-new",
+    });
+  });
+
+  it("rotates refresh tokens while preserving the account fence", async () => {
+    const identityFence = await accountFence("auth0|candidate-one");
+    const browser = installChrome({
+      initialSession: {
+        accessToken: accessToken("auth0|candidate-one", "one"),
+        expiresAt: Date.now() + 60_000,
+        identityFence,
+        identityFenceVersion: "auth0-subject-sha256-v1",
         refreshToken: "refresh-one",
       },
     });
@@ -145,22 +229,43 @@ describe("extension Auth0 protocol lifecycle", () => {
       const parameters = init.body as URLSearchParams;
       expect(parameters.get("grant_type")).toBe("refresh_token");
       expect(parameters.get("refresh_token")).toBe("refresh-one");
-      return tokenResponse("access-two", "refresh-two");
+      return tokenResponse(accessToken("auth0|candidate-one", "two"), "refresh-two");
     });
     vi.stubGlobal("fetch", fetchMock);
     await (await protocol()).refresh();
     expect(browser.records.get("auth0Session")).toMatchObject({
-      accessToken: "access-two",
-      identityFence: "stable-account-fence",
+      accessToken: accessToken("auth0|candidate-one", "two"),
+      identityFence,
       refreshToken: "refresh-two",
     });
   });
 
-  it("retains the last valid session when a replayed refresh token is rejected", async () => {
+  it("rejects a refresh that resolves to a different account without replacing the session", async () => {
+    const identityFence = await accountFence("auth0|candidate-one");
     const original: SessionRecord = {
-      accessToken: "access-one",
+      accessToken: accessToken("auth0|candidate-one"),
+      expiresAt: Date.now() + 60_000,
+      identityFence,
+      identityFenceVersion: "auth0-subject-sha256-v1",
+      refreshToken: "refresh-one",
+    };
+    const browser = installChrome({ initialSession: original });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => tokenResponse(accessToken("auth0|candidate-two"), "refresh-two")),
+    );
+
+    await expect((await protocol()).refresh()).rejects.toThrow("identity_changed");
+    expect(browser.records.get("auth0Session")).toEqual(original);
+  });
+
+  it("retains the last valid session when a replayed refresh token is rejected", async () => {
+    const identityFence = await accountFence("auth0|candidate-one");
+    const original: SessionRecord = {
+      accessToken: accessToken("auth0|candidate-one"),
       expiresAt: Date.now() - 1,
-      identityFence: "stable-account-fence",
+      identityFence,
+      identityFenceVersion: "auth0-subject-sha256-v1",
       refreshToken: "refresh-one",
     };
     const browser = installChrome({ initialSession: original });
@@ -173,35 +278,39 @@ describe("extension Auth0 protocol lifecycle", () => {
   });
 
   it("refreshes an expiring session before returning API credentials", async () => {
+    const identityFence = await accountFence("auth0|candidate-one");
     const browser = installChrome({
       initialSession: {
-        accessToken: "access-one",
+        accessToken: accessToken("auth0|candidate-one", "one"),
         expiresAt: Date.now() + 10_000,
-        identityFence: "stable-account-fence",
+        identityFence,
+        identityFenceVersion: "auth0-subject-sha256-v1",
         refreshToken: "refresh-one",
       },
     });
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => tokenResponse("access-two", "refresh-two")),
+      vi.fn(async () => tokenResponse(accessToken("auth0|candidate-one", "two"), "refresh-two")),
     );
     await expect((await protocol()).authenticatedApiSession()).resolves.toEqual({
-      accessToken: "access-two",
-      identityFence: "stable-account-fence",
+      accessToken: accessToken("auth0|candidate-one", "two"),
+      identityFence,
     });
     expect(browser.records.get("auth0Session")).toMatchObject({
-      accessToken: "access-two",
+      accessToken: accessToken("auth0|candidate-one", "two"),
       refreshToken: "refresh-two",
     });
   });
 
   it("revokes the refresh token, completes provider logout, and clears the session", async () => {
+    const identityFence = await accountFence("auth0|candidate-one");
     const browser = installChrome({
       callback: "https://extension-id.chromiumapp.org/auth0",
       initialSession: {
-        accessToken: "access-one",
+        accessToken: accessToken("auth0|candidate-one"),
         expiresAt: Date.now() + 60_000,
-        identityFence: "stable-account-fence",
+        identityFence,
+        identityFenceVersion: "auth0-subject-sha256-v1",
         refreshToken: "refresh-one",
       },
     });
@@ -226,11 +335,13 @@ describe("extension Auth0 protocol lifecycle", () => {
   });
 
   it("clears local credentials even when provider revocation fails", async () => {
+    const identityFence = await accountFence("auth0|candidate-one");
     const browser = installChrome({
       initialSession: {
-        accessToken: "access-one",
+        accessToken: accessToken("auth0|candidate-one"),
         expiresAt: Date.now() + 60_000,
-        identityFence: "stable-account-fence",
+        identityFence,
+        identityFenceVersion: "auth0-subject-sha256-v1",
         refreshToken: "refresh-one",
       },
     });

@@ -36,9 +36,11 @@ public contribution, or browser-store distribution.
   required source identity fields remain visible and cannot be silently removed. Pressing the add
   button is the user's instruction to enqueue only the selected public fields.
 - A bounded-attempt persistent local queue with one stable client intent/Idempotency-Key,
-  exponential retry, service-worker restart recovery, login-session fencing, expiry, and explicit
-  stopped/all-item removal. Explicit logout clears both the queue and last capture. Tokens are
-  never included in UI messages or local pending records.
+  exponential retry, service-worker restart recovery, pseudonymous account fencing, expiry, and
+  explicit stopped/all-item removal. The fence is a one-way digest of bounded Auth0 token identity
+  claims: it remains stable when the same account reauthenticates, changes for a different account,
+  and never stores the raw subject. Explicit logout clears both the queue and last capture. Tokens
+  are never included in UI messages or local pending records.
 - An exact background-only HTTPS API origin. Contribution transport records an immutable,
   digest-bound command authorization through the existing v1 Profile consent endpoint and then
   calls `POST /v1/jobs/contributions`. The authorization receipt is an audit, replay, attribution,

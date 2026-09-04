@@ -1,3 +1,4 @@
+import { ACCOUNT_FENCE_VERSION, accountFenceFromAccessToken } from "./account-fence";
 import { extensionConfiguration } from "./config";
 import { pkceChallenge, randomBase64Url, validateAuthorizationCallback } from "./pkce";
 
@@ -9,6 +10,7 @@ interface StoredSession {
   accessToken: string;
   expiresAt: number;
   identityFence: string;
+  identityFenceVersion: typeof ACCOUNT_FENCE_VERSION;
   refreshToken?: string;
 }
 
@@ -58,10 +60,17 @@ async function tokenRequest(parameters: URLSearchParams): Promise<StoredSession>
   ) {
     throw new Error("required_scope_missing");
   }
+  const identityFence = await accountFenceFromAccessToken({
+    accessToken: body.access_token,
+    audience: extensionConfiguration.audience,
+    clientId: extensionConfiguration.clientId,
+    issuer: `https://${extensionConfiguration.domain}/`,
+  });
   return {
     accessToken: body.access_token,
     expiresAt: Date.now() + body.expires_in * 1_000,
-    identityFence: randomBase64Url(32),
+    identityFence,
+    identityFenceVersion: ACCOUNT_FENCE_VERSION,
     ...(typeof body.refresh_token === "string" && body.refresh_token.length > 0
       ? { refreshToken: body.refresh_token }
       : {}),
@@ -70,7 +79,26 @@ async function tokenRequest(parameters: URLSearchParams): Promise<StoredSession>
 
 async function readSession(): Promise<StoredSession | undefined> {
   const result = await chrome.storage.session.get(SESSION_KEY);
-  return result[SESSION_KEY] as StoredSession | undefined;
+  const candidate = result[SESSION_KEY] as Partial<StoredSession> | undefined;
+  if (candidate === undefined) return undefined;
+  if (
+    typeof candidate.accessToken !== "string" ||
+    candidate.accessToken.length === 0 ||
+    candidate.accessToken.length > 16_384 ||
+    !Number.isFinite(candidate.expiresAt) ||
+    (candidate.expiresAt ?? 0) <= 0 ||
+    typeof candidate.identityFence !== "string" ||
+    !/^[A-Za-z0-9_-]{43}$/u.test(candidate.identityFence) ||
+    candidate.identityFenceVersion !== ACCOUNT_FENCE_VERSION ||
+    (candidate.refreshToken !== undefined &&
+      (typeof candidate.refreshToken !== "string" ||
+        candidate.refreshToken.length === 0 ||
+        candidate.refreshToken.length > 4_096))
+  ) {
+    await chrome.storage.session.remove(SESSION_KEY);
+    return undefined;
+  }
+  return candidate as StoredSession;
 }
 
 async function writeSession(session: StoredSession | undefined): Promise<void> {
@@ -135,9 +163,11 @@ export async function refresh(): Promise<void> {
       refresh_token: current.refreshToken,
     }),
   );
+  if (replacement.identityFence !== current.identityFence) {
+    throw new Error("identity_changed");
+  }
   await writeSession({
     ...replacement,
-    identityFence: current.identityFence,
     refreshToken: replacement.refreshToken ?? current.refreshToken,
   });
 }

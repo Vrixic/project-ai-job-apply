@@ -1,7 +1,7 @@
 # Phase 2 Extension and UGC Security/Privacy Delta
 
 - Status: Engineering design; accountable approval pending
-- Last updated: 2026-09-03
+- Last updated: 2026-09-04
 - Decision boundary: [ADR-028](../adr/028-extension-ugc-ownership-and-processing.md) and
   [ADR-029](../adr/029-one-step-public-job-addition.md)
 
@@ -56,7 +56,10 @@ free of markup/control characters, and never interpreted as instructions.
 - **Cross-user replay:** owner-scoped semantic UUID plus request digest and idempotency key; status,
   withdrawal, and appeal enforce the authenticated owner.
 - **Offline duplication or account mix-up:** durable local state machine, stable keys, bounded
-  retry, timeout-after-commit replay, and logout/identity-change fencing.
+  retry, timeout-after-commit replay, and a versioned one-way account fence derived from the exact
+  Auth0 issuer, API audience, Native Application, and token subject. The same account reproduces
+  the fence after full reauthentication; a different account or mismatched refresh remains blocked.
+  Raw token subjects are never stored, and explicit logout clears local queue/session state.
 - **Ambiguous destination or duplicate approval:** one labelled public-add command after the exact
   field preview; no private-save control or second approval checkbox in this extension candidate.
 - **Contributor exposure:** contributor identity and reputation absent from catalog responses,

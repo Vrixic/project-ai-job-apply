@@ -22,6 +22,16 @@ describe("extension privacy-safe action errors", () => {
       "The Auth0 application grant is missing a required API permission.",
     ],
     [
+      "invalid_token_identity",
+      "login",
+      "Auth0 returned an invalid account identity. Sign in again to continue.",
+    ],
+    [
+      "identity_changed",
+      "refresh",
+      "Auth0 returned a different account during refresh. Sign in again before adding a job.",
+    ],
+    [
       "The authorization callback state did not match",
       "login",
       "The authentication response was rejected. Start sign in again.",

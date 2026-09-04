@@ -355,9 +355,13 @@ This is the master record for the delivery phases defined in the [product and sy
   bundle Edge profile; the local queue still separates account-held from retryable stopped items.
   The retained pre-reauthentication item was correctly fenced before transmission, so one fresh
   preview and explicit public-add action under the current signed-in session reached the route but
-  failed pre-commit in the Jobs store with the aggregate generic runtime category. The retained
-  item now requires one explicit retry against the fixed-stage diagnostic release before
-  contribution success is claimed. Remaining gates are the D1
+  failed pre-commit in the Jobs store with the aggregate generic runtime category. Its retry was
+  then account-held locally with zero route requests because the original fence changed on every
+  full login even for the same provider account. The extension now derives a versioned one-way
+  fence from bounded Auth0 token identity claims, reproduces it for the same account, rejects a
+  different account or account-changing refresh, and stores no raw subject. All 111 extension
+  tests, the configured build, and release-source assurance pass; an installed reload, sign-in,
+  and fresh public-add journey remain before contribution success is claimed. Remaining gates are the D1
   prerequisites; authorized provider fixtures and QA disposition; completion of Chrome parity,
   cancellation, refresh rotation/replay, logout, and revocation after the dedicated Native
   Application's initial installed-Edge PKCE login; exact installed listing screenshots, a monitored

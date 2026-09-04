@@ -34,6 +34,12 @@ export function safeActionErrorMessage(error: unknown, action: string): string {
   if (message === "invalid_token_response") {
     return "Auth0 returned an invalid session response. Sign in again to continue.";
   }
+  if (message === "invalid_token_identity") {
+    return "Auth0 returned an invalid account identity. Sign in again to continue.";
+  }
+  if (message === "identity_changed") {
+    return "Auth0 returned a different account during refresh. Sign in again before adding a job.";
+  }
   if (message === "required_scope_missing") {
     return "The Auth0 application grant is missing a required API permission.";
   }
