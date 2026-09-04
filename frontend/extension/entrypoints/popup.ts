@@ -30,6 +30,7 @@ interface DeliveryReadiness {
 }
 
 interface QueueStatus {
+  blocked: number;
   lastError?: string;
   pending: number;
   stopped: number;
@@ -195,10 +196,12 @@ function renderStatus(response: ExtensionResponse): void {
     const failure = response.queue.lastError
       ? {
           contribution_capability_policy_unavailable: "Policy service unavailable",
+          authentication_required: "Sign in again to deliver",
           http_429: "Rate limited",
           http_5xx: "Server unavailable",
           internal_error: "Internal server error",
           invalid_response: "Invalid server response",
+          identity_changed: "Held for a different signed-in session",
           job_contribution_unavailable: "Contribution service unavailable",
           network_error: "Network unavailable",
           request_rejected: "Request rejected",
@@ -207,12 +210,14 @@ function renderStatus(response: ExtensionResponse): void {
           ugc_contribution_consent_unavailable: "Consent service unavailable",
         }[response.queue.lastError]
       : undefined;
-    queueStatus.textContent = `${response.queue.pending} pending · ${response.queue.stopped} stopped${failure ? ` · ${failure}` : ""}`;
+    const blocked = response.queue.blocked > 0 ? ` · ${response.queue.blocked} account-held` : "";
+    queueStatus.textContent = `${response.queue.pending} pending · ${response.queue.stopped} stopped${blocked}${failure ? ` · ${failure}` : ""}`;
     retryButton.hidden = response.queue.pending === 0;
     retryStoppedButton.hidden = response.queue.stopped === 0;
-    clearStoppedButton.hidden = response.queue.stopped === 0;
-    clearQueueButton.hidden = response.queue.pending + response.queue.stopped === 0;
-    if (response.queue.stopped > 0) queuePanel.open = true;
+    clearStoppedButton.hidden = response.queue.stopped + response.queue.blocked === 0;
+    clearQueueButton.hidden =
+      response.queue.pending + response.queue.stopped + response.queue.blocked === 0;
+    if (response.queue.stopped + response.queue.blocked > 0) queuePanel.open = true;
   }
   if (response.receipts) renderReceipts(response.receipts);
   if (response.ownerAction) {

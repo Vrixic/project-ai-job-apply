@@ -53,6 +53,10 @@ export interface DispatchResult {
   outcome: "accepted" | "retryable" | "terminal";
 }
 
+export type DeferredDispatchFailure =
+  | "authentication_required"
+  | "contribution_capability_policy_unavailable";
+
 export function uuidV7(
   now = Date.now(),
   random = crypto.getRandomValues(new Uint8Array(10)),
@@ -176,6 +180,13 @@ export function restartStoppedIntent(intent: PendingJobIntent, now = new Date())
   };
   delete restarted.lastError;
   return restarted;
+}
+
+export function deferPendingIntent(
+  intent: PendingJobIntent,
+  failure: DeferredDispatchFailure,
+): PendingJobIntent {
+  return intent.state === "pending" ? { ...intent, lastError: failure } : intent;
 }
 
 export function fenceMismatchedIntent(intent: PendingJobIntent): PendingJobIntent {

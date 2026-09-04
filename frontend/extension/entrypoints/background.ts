@@ -27,6 +27,7 @@ import { parseExtensionMessage } from "../lib/messages";
 import { captureCurrentPublicJobPage } from "../lib/page-inspection";
 import {
   createPendingIntent,
+  deferPendingIntent,
   dueForDispatch,
   fenceMismatchedIntent,
   MAXIMUM_QUEUE_ITEMS,
@@ -228,10 +229,13 @@ async function writePendingQueue(queue: PendingJobIntent[]): Promise<void> {
 }
 
 function summarizeQueue(queue: readonly PendingJobIntent[]) {
-  const lastError = [...queue].reverse().find((intent) => intent.lastError)?.lastError;
+  const lastError =
+    [...queue].reverse().find((intent) => intent.state === "pending" && intent.lastError)
+      ?.lastError ?? [...queue].reverse().find((intent) => intent.lastError)?.lastError;
   return {
+    blocked: queue.filter((intent) => intent.state === "blocked").length,
     pending: queue.filter((intent) => intent.state === "pending").length,
-    stopped: queue.filter((intent) => intent.state !== "pending").length,
+    stopped: queue.filter((intent) => intent.state === "terminal").length,
     ...(lastError ? { lastError } : {}),
   };
 }
@@ -252,14 +256,30 @@ async function dispatchPending(ignoreBackoff = false): Promise<ReturnType<typeof
   const queue = await pendingQueue();
   if (queue.length === 0) return summarizeQueue(queue);
   if (queue.some((intent) => intent.state === "pending" && intent.intent === "contribute")) {
-    await contributionPolicyStartup;
-    await contributionPolicy.refresh();
+    let policyReady = false;
+    try {
+      await contributionPolicyStartup;
+      policyReady = await contributionPolicy.refresh();
+    } catch {
+      // The pending item remains local and records the actionable delivery gate below.
+    }
+    if (!policyReady) {
+      const deferred = queue.map((intent) =>
+        intent.intent === "contribute"
+          ? deferPendingIntent(intent, "contribution_capability_policy_unavailable")
+          : intent,
+      );
+      await writePendingQueue(deferred);
+      return summarizeQueue(deferred);
+    }
   }
   let session: Awaited<ReturnType<typeof authenticatedApiSession>>;
   try {
     session = await authenticatedApiSession();
   } catch {
-    return summarizeQueue(queue);
+    const deferred = queue.map((intent) => deferPendingIntent(intent, "authentication_required"));
+    await writePendingQueue(deferred);
+    return summarizeQueue(deferred);
   }
   const now = new Date();
   const replacement: PendingJobIntent[] = [];
@@ -277,7 +297,7 @@ async function dispatchPending(ignoreBackoff = false): Promise<ReturnType<typeof
       !contributionPolicy.decision(intent.capture, chrome.runtime.getManifest().version, now)
         .allowed
     ) {
-      replacement.push(intent);
+      replacement.push(deferPendingIntent(intent, "contribution_capability_policy_unavailable"));
       continue;
     }
     const result = await sendJobIntent(

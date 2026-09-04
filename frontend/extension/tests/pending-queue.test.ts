@@ -3,6 +3,7 @@ import type { SanitizedJobCapture } from "../lib/job-capture";
 import {
   classifyResponse,
   createPendingIntent,
+  deferPendingIntent,
   dueForDispatch,
   fenceMismatchedIntent,
   restartStoppedIntent,
@@ -108,6 +109,25 @@ describe("persistent pending job intents", () => {
     expect(restartStoppedIntent(intent)).toBe(intent);
     const blocked = fenceMismatchedIntent(intent);
     expect(restartStoppedIntent(blocked)).toBe(blocked);
+  });
+
+  it("records local delivery gates without consuming a delivery attempt", () => {
+    const intent = createPendingIntent({
+      approvedFields: ["title"],
+      capture,
+      identityFence: "account-a",
+      intent: "contribute",
+      randomId: () => "018f0000-0000-7000-8000-000000000007",
+      retentionMilliseconds: 24 * 60 * 60 * 1_000,
+    });
+
+    expect(deferPendingIntent(intent, "authentication_required")).toMatchObject({
+      attempt: 0,
+      lastError: "authentication_required",
+      state: "pending",
+    });
+    const blocked = fenceMismatchedIntent(intent);
+    expect(deferPendingIntent(blocked, "authentication_required")).toBe(blocked);
   });
 
   it("removes only acknowledged intents and fences account changes", () => {
