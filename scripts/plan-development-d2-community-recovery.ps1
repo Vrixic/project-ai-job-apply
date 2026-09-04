@@ -22,6 +22,10 @@ param(
   [ValidatePattern("^[a-f0-9]{64}$")]
   [string]$ReviewedPreviousReceiptSha256 = "",
 
+  [switch]$CurrentObjectVersionVerified,
+
+  [switch]$PreviousObjectVersionVerified,
+
   [ValidatePattern("^arn:aws:cloudwatch:us-east-2:[0-9]{12}:alarm:ai-job-apply-development-d2-[a-z0-9-]+$")]
   [string]$ReviewedAlarmArn = "",
 
@@ -79,6 +83,9 @@ if ($Action -ceq "RollbackPlan") {
   if ($ReviewedCurrentReceiptSha256 -ceq $ReviewedPreviousReceiptSha256) {
     throw "Rollback requires distinct independently reviewed publication receipts."
   }
+  if (-not $CurrentObjectVersionVerified -or -not $PreviousObjectVersionVerified) {
+    throw "Both exact immutable artifact object versions must be verified before rollback planning."
+  }
 
   $details = [ordered]@{
     currentArtifactSha256  = $ReviewedCurrentArtifactSha256
@@ -87,6 +94,7 @@ if ($Action -ceq "RollbackPlan") {
     previousSourceSha      = $ReviewedPreviousSourceSha
     currentReceiptSha256   = $ReviewedCurrentReceiptSha256
     previousReceiptSha256  = $ReviewedPreviousReceiptSha256
+    objectVersionsVerified = $true
     requiredSequence       = @(
       "verify both immutable publication receipts and object versions",
       "require empty D2 queues and healthy alarms",

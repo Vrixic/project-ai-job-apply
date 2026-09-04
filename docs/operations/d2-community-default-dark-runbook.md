@@ -38,8 +38,9 @@ activation-authority token printed by `--action Help` plus independently reviewe
    all-disabled policy endpoint, add `-AllowPolicyEndpoint`; this permits exactly that one GET route
    while continuing to reject every contribution, private-read, and Trust route.
 5. `plan-development-d2-community-recovery.ps1` produces only deterministic rollback/alarm
-   prerequisites. A rollback plan requires distinct reviewed current/previous artifact, source, and
-   publication-receipt digests. Its eight-step sequence requires empty queues, healthy alarms,
+   prerequisites. First verify both exact receipt-bound object versions with the publication
+   operator. A rollback plan then requires distinct reviewed current/previous artifact, source, and
+   publication-receipt digests plus both verification switches. Its eight-step sequence requires empty queues, healthy alarms,
    pausing the exact schedule/mapping, separate checksum-reviewed rollback and restoration Terraform
    plans, immutable-alias checks, bounded probes, trigger restoration, and final zero drift. An alarm
    plan requires the exact development D2 alarm ARN, its reviewed threshold, and only the confirmed
@@ -56,7 +57,9 @@ activation-authority token printed by `--action Help` plus independently reviewe
      -ReviewedCurrentSourceSha <40-lowercase-hex> `
      -ReviewedPreviousSourceSha <different-40-lowercase-hex> `
      -ReviewedCurrentReceiptSha256 <64-lowercase-hex> `
-     -ReviewedPreviousReceiptSha256 <different-64-lowercase-hex>
+     -ReviewedPreviousReceiptSha256 <different-64-lowercase-hex> `
+     -CurrentObjectVersionVerified `
+     -PreviousObjectVersionVerified
 
    .\scripts\plan-development-d2-community-recovery.ps1 `
      -Action AlarmInjectionPlan `
