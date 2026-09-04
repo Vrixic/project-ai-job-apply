@@ -5,10 +5,10 @@ import {
   type CreateJobContributionCommand,
   type JobContributionConsentVerifier,
   type JobContributionInput,
-  JobContributionUnavailableError,
   JobContributionService,
   type JobContributionStatus,
   type JobContributionStore,
+  JobContributionUnavailableError,
   jobContributionContentDigestInput,
   jobContributionPreviewDigestInput,
 } from "./contribution.js";
@@ -411,6 +411,33 @@ describe("JobContributionService", () => {
         command(),
       ),
     ).rejects.toMatchObject({ code: expected });
+  });
+
+  it("uses a fixed store stage for runtime failures while preserving database families", async () => {
+    const staged = (cause: unknown) =>
+      Object.assign(new Error("private staged persistence detail"), {
+        cause,
+        code: "JOB_STORE_INSERT",
+        name: "JobContributionStoreStageError",
+      });
+    const store = new MemoryStore();
+    store.create = async () => {
+      throw staged(Object.assign(new Error("private runtime detail"), { name: "TypeError" }));
+    };
+    await expect(
+      new JobContributionService(store, allowConsent, allowCapability, intakeNow).contribute(
+        command(),
+      ),
+    ).rejects.toMatchObject({ code: "JOB_STORE_INSERT" });
+
+    store.create = async () => {
+      throw staged(Object.assign(new Error("private database detail"), { code: "23514" }));
+    };
+    await expect(
+      new JobContributionService(store, allowConsent, allowCapability, intakeNow).contribute(
+        command(),
+      ),
+    ).rejects.toMatchObject({ code: "JOB_STORE_CONSTRAINT" });
   });
 
   it("passes the exact owner, purpose, client, policy, and preview binding to Profile", async () => {

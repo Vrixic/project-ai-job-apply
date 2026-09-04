@@ -1317,6 +1317,27 @@ describe("candidate API", () => {
       JSON.stringify(privacySafeRequestFailure(contributionFailure, "/v1/jobs/contributions")),
     ).not.toContain("private posting data");
 
+    const stagedContributionFailure = new JobContributionUnavailableError(
+      "JOB_STORE_SCHEMA",
+      Object.assign(new Error("private stage detail"), {
+        cause: Object.assign(new Error("private database detail"), { code: "42883" }),
+        code: "JOB_STORE_INSERT",
+        name: "JobContributionStoreStageError",
+      }),
+    );
+    expect(privacySafeRequestFailure(stagedContributionFailure, "/v1/jobs/contributions")).toEqual({
+      event: "unhandled_request_failure",
+      route: "/v1/jobs/contributions",
+      error_type: "JobContributionUnavailableError",
+      error_code: "JOB_STORE_SCHEMA",
+      postgres_cause_code: "42883",
+    });
+    expect(
+      JSON.stringify(
+        privacySafeRequestFailure(stagedContributionFailure, "/v1/jobs/contributions"),
+      ),
+    ).not.toContain("private");
+
     const untrustedCause = new JobContributionUnavailableError(
       "JOB_STORE_WRITE",
       Object.assign(new Error("private posting data"), { code: "SEC01" }),

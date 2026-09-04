@@ -17,6 +17,45 @@ interface ContributionRow {
   updatedAt: Date | string;
 }
 
+type JobContributionStoreStageCode =
+  | "JOB_STORE_IDENTITY_READ"
+  | "JOB_STORE_INSERT"
+  | "JOB_STORE_LOCK"
+  | "JOB_STORE_OUTBOX"
+  | "JOB_STORE_PAYLOAD"
+  | "JOB_STORE_QUEUE"
+  | "JOB_STORE_REPLAY_READ"
+  | "JOB_STORE_RESULT"
+  | "JOB_STORE_TRANSACTION";
+
+class JobContributionStoreStageError extends Error {
+  override readonly name = "JobContributionStoreStageError";
+
+  constructor(
+    readonly code: JobContributionStoreStageCode,
+    options: { cause: unknown },
+  ) {
+    super("Job contribution persistence stage failed", options);
+  }
+}
+
+async function atStoreStage<T>(
+  code: JobContributionStoreStageCode,
+  operation: () => T | Promise<T>,
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (
+      error instanceof JobContributionIdempotencyConflictError ||
+      error instanceof JobContributionStoreStageError
+    ) {
+      throw error;
+    }
+    throw new JobContributionStoreStageError(code, { cause: error });
+  }
+}
+
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -56,49 +95,66 @@ export class PostgresJobContributionStore implements JobContributionStore {
   }
 
   async create(command: CreateJobContributionCommand): Promise<JobContributionStatus> {
-    const idempotencyKeyHash = sha256(command.idempotencyKey);
-    const requestHash = sha256(JSON.stringify(command.input));
-    return this.client.begin(async (transaction) => {
-      await transaction`
+    const { idempotencyKeyHash, requestHash } = await atStoreStage("JOB_STORE_PAYLOAD", () => ({
+      idempotencyKeyHash: sha256(command.idempotencyKey),
+      requestHash: sha256(JSON.stringify(command.input)),
+    }));
+    return atStoreStage("JOB_STORE_TRANSACTION", () =>
+      this.client.begin(async (transaction) => {
+        await atStoreStage(
+          "JOB_STORE_LOCK",
+          () => transaction`
         SELECT pg_advisory_xact_lock(hashtext(${`jobs:contribution:${command.ownerUserId}`}))
-      `;
-      await transaction`
+      `,
+        );
+        await atStoreStage(
+          "JOB_STORE_LOCK",
+          () => transaction`
         SELECT pg_advisory_xact_lock(hashtext(${`jobs:contribution-id:${command.input.contributionId}`}))
-      `;
-      const [replay] = await transaction<ContributionRow[]>`
+      `,
+        );
+        const [replay] = await atStoreStage(
+          "JOB_STORE_REPLAY_READ",
+          () => transaction<ContributionRow[]>`
         SELECT id, state, request_hash AS "requestHash",
           created_at AS "submittedAt", updated_at AS "updatedAt"
         FROM jobs.job_contributions
         WHERE owner_user_id = ${command.ownerUserId}
           AND idempotency_key_hash = ${idempotencyKeyHash}
-      `;
-      if (replay) {
-        if (replay.requestHash !== requestHash) {
-          throw new JobContributionIdempotencyConflictError();
+      `,
+        );
+        if (replay) {
+          if (replay.requestHash !== requestHash) {
+            throw new JobContributionIdempotencyConflictError();
+          }
+          return atStoreStage("JOB_STORE_RESULT", () => status(replay));
         }
-        return status(replay);
-      }
 
-      const [identityReplay] = await transaction<(ContributionRow & { ownerUserId: string })[]>`
+        const [identityReplay] = await atStoreStage(
+          "JOB_STORE_IDENTITY_READ",
+          () => transaction<(ContributionRow & { ownerUserId: string })[]>`
         SELECT id, owner_user_id AS "ownerUserId", state, request_hash AS "requestHash",
           created_at AS "submittedAt", updated_at AS "updatedAt"
         FROM jobs.job_contributions WHERE id = ${command.input.contributionId}
-      `;
-      if (identityReplay) {
-        if (
-          identityReplay.ownerUserId !== command.ownerUserId ||
-          identityReplay.requestHash !== requestHash
-        ) {
-          throw new JobContributionIdempotencyConflictError();
+      `,
+        );
+        if (identityReplay) {
+          if (
+            identityReplay.ownerUserId !== command.ownerUserId ||
+            identityReplay.requestHash !== requestHash
+          ) {
+            throw new JobContributionIdempotencyConflictError();
+          }
+          return atStoreStage("JOB_STORE_RESULT", () => status(identityReplay));
         }
-        return status(identityReplay);
-      }
 
-      const contributionId = command.input.contributionId;
-      const outboxId = uuidv7();
-      const createdAt = new Date();
-      const input = command.input;
-      const [created] = await transaction<ContributionRow[]>`
+        const contributionId = command.input.contributionId;
+        const outboxId = uuidv7();
+        const createdAt = new Date();
+        const input = command.input;
+        const [created] = await atStoreStage(
+          "JOB_STORE_INSERT",
+          () => transaction<ContributionRow[]>`
         INSERT INTO jobs.job_contributions (
           id, owner_user_id, state, client_surface, client_version,
           provider, page_variant, source_url, external_job_id,
@@ -118,17 +174,27 @@ export class PostgresJobContributionStore implements JobContributionStore {
         )
         RETURNING id, state, request_hash AS "requestHash",
           created_at AS "submittedAt", updated_at AS "updatedAt"
-      `;
-      if (!created) throw new Error("Contribution insert returned no row");
-      await transaction`
+      `,
+        );
+        if (!created) {
+          throw new JobContributionStoreStageError("JOB_STORE_RESULT", {
+            cause: new Error("Contribution insert returned no row"),
+          });
+        }
+        await atStoreStage(
+          "JOB_STORE_OUTBOX",
+          () => transaction`
         INSERT INTO jobs.job_contribution_outbox (
           id, contribution_id, event_type, subject, data, created_at
         ) VALUES (
           ${outboxId}, ${contributionId}, 'job.contributed.v1', ${contributionId},
           ${transaction.json({ contributionId })}, ${createdAt}
         )
-      `;
-      await transaction`
+      `,
+        );
+        await atStoreStage(
+          "JOB_STORE_QUEUE",
+          () => transaction`
         INSERT INTO jobs.job_contribution_processing_queue (
           id, contribution_id, state, attempt, available_at,
           created_at, updated_at
@@ -136,9 +202,11 @@ export class PostgresJobContributionStore implements JobContributionStore {
           ${uuidv7()}, ${contributionId}, 'pending', 0, ${createdAt},
           ${createdAt}, ${createdAt}
         )
-      `;
-      return status(created);
-    });
+      `,
+        );
+        return atStoreStage("JOB_STORE_RESULT", () => status(created));
+      }),
+    );
   }
 
   async get(ownerUserId: string, contributionId: string): Promise<JobContributionStatus | null> {

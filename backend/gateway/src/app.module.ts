@@ -287,7 +287,17 @@ export function privacySafeRequestFailure(exception: unknown, routeTemplate: str
     typeof candidate?.code === "string" && SAFE_ERROR_CODE.test(candidate.code)
       ? candidate.code
       : "UNKNOWN";
-  const cause = candidate?.cause as { code?: unknown } | undefined;
+  const directCause = candidate?.cause as
+    | { cause?: unknown; code?: unknown; name?: unknown }
+    | undefined;
+  const cause =
+    directCause?.name === "JobContributionStoreStageError" &&
+    typeof directCause.code === "string" &&
+    /^JOB_STORE_(?:IDENTITY_READ|INSERT|LOCK|OUTBOX|PAYLOAD|QUEUE|REPLAY_READ|RESULT|TRANSACTION)$/u.test(
+      directCause.code,
+    )
+      ? (directCause.cause as { code?: unknown } | undefined)
+      : directCause;
   const postgresCauseCode =
     errorType === "JobContributionUnavailableError" &&
     routeTemplate === "/v1/jobs/contributions" &&

@@ -115,11 +115,17 @@ export type JobContributionDiagnosticCode =
   | "JOB_STORE_DATA"
   | "JOB_STORE_DATABASE"
   | "JOB_STORE_FOREIGN_KEY"
+  | "JOB_STORE_IDENTITY_READ"
+  | "JOB_STORE_INSERT"
+  | "JOB_STORE_LOCK"
   | "JOB_STORE_OUTBOX"
   | "JOB_STORE_PAYLOAD"
   | "JOB_STORE_PERMISSION"
+  | "JOB_STORE_QUEUE"
   | "JOB_STORE_READ"
+  | "JOB_STORE_REPLAY_READ"
   | "JOB_STORE_RESOURCE"
+  | "JOB_STORE_RESULT"
   | "JOB_STORE_RUNTIME"
   | "JOB_STORE_SCHEMA"
   | "JOB_STORE_SOURCE_BOUNDARY"
@@ -131,7 +137,34 @@ export type JobContributionDiagnosticCode =
   | "JOB_UNAVAILABLE";
 
 function contributionStoreDiagnostic(error: unknown): JobContributionDiagnosticCode {
-  const candidate = error as { code?: unknown; constraint?: unknown; name?: unknown };
+  const candidate = error as {
+    cause?: unknown;
+    code?: unknown;
+    constraint?: unknown;
+    name?: unknown;
+  };
+  const stageCodes = new Set<JobContributionDiagnosticCode>([
+    "JOB_STORE_IDENTITY_READ",
+    "JOB_STORE_INSERT",
+    "JOB_STORE_LOCK",
+    "JOB_STORE_OUTBOX",
+    "JOB_STORE_PAYLOAD",
+    "JOB_STORE_QUEUE",
+    "JOB_STORE_REPLAY_READ",
+    "JOB_STORE_RESULT",
+    "JOB_STORE_TRANSACTION",
+  ]);
+  if (
+    candidate?.name === "JobContributionStoreStageError" &&
+    typeof candidate.code === "string" &&
+    stageCodes.has(candidate.code as JobContributionDiagnosticCode)
+  ) {
+    if (candidate.cause === error) return candidate.code as JobContributionDiagnosticCode;
+    const nested = contributionStoreDiagnostic(candidate.cause);
+    return nested === "JOB_STORE_RUNTIME" || nested === "JOB_STORE_WRITE"
+      ? (candidate.code as JobContributionDiagnosticCode)
+      : nested;
+  }
   switch (candidate?.constraint) {
     case "job_contributions_chronology_ck":
       return "JOB_STORE_CHRONOLOGY";
