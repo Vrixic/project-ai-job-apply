@@ -183,6 +183,11 @@ $baselineMetadataV5 | Add-Member DocumentOperatorDeltaSha256 ("f" * 64)
 $baselineMetadataV5 | Add-Member BaselineToReleaseDeltaSha256 ("1" * 64)
 $null = Assert-RetainedGatewayBaselineMetadata $baselineMetadataV5 $metadataPlan $baselinePath $baselineSha `
   $sourceSha $account "us-east-2" $repositoryUrl $currentState; $passed++
+$baselineMetadataV6 = Copy-Fixture $baselineMetadataV2
+$baselineMetadataV6.SchemaVersion = "6"
+$baselineMetadataV6 | Add-Member DocumentReleaseSourceSha ("d" * 40)
+$null = Assert-RetainedGatewayBaselineMetadata $baselineMetadataV6 $metadataPlan $baselinePath $baselineSha `
+  $sourceSha $account "us-east-2" $repositoryUrl $currentState; $passed++
 $advancedState = [pscustomobject]@{ Lineage = $lineage; Serial = 43 }
 $null = Assert-RetainedGatewayBaselineMetadata $baselineMetadataV5 $metadataPlan $baselinePath $baselineSha `
   $sourceSha $account "us-east-2" $repositoryUrl $advancedState -AllowOneSerialAdvance; $passed++
@@ -223,6 +228,19 @@ foreach ($property in @(
     Assert-RetainedGatewayBaselineMetadata $badSplitMetadata $metadataPlan $baselinePath $baselineSha `
       $sourceSha $account "us-east-2" $repositoryUrl $currentState
   } "A version-5 baseline accepted invalid $property."
+}
+foreach ($mutation in @("source", "document release", "migration", "extra")) {
+  $badCurrentMetadata = Copy-Fixture $baselineMetadataV6
+  switch ($mutation) {
+    "source" { $badCurrentMetadata.SourceSha = "e" * 40 }
+    "document release" { $badCurrentMetadata.DocumentReleaseSourceSha = "invalid" }
+    "migration" { $badCurrentMetadata.MigrationImage = "$repositoryUrl@sha256:$('2' * 64)" }
+    "extra" { $badCurrentMetadata | Add-Member Unexpected "value" }
+  }
+  Assert-Rejected {
+    Assert-RetainedGatewayBaselineMetadata $badCurrentMetadata $metadataPlan $baselinePath $baselineSha `
+      $sourceSha $account "us-east-2" $repositoryUrl $currentState
+  } "A current-state schema-6 baseline accepted $mutation tampering."
 }
 $badMetadata = Copy-Fixture $baselineMetadata; $badMetadata.Applyable = $true
 Assert-Rejected { Assert-RetainedGatewayBaselineMetadata $badMetadata $metadataPlan $baselinePath $baselineSha $sourceSha $account "us-east-2" $repositoryUrl $currentState } "Applyable retained metadata was accepted."

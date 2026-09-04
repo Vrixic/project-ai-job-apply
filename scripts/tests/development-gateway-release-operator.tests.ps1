@@ -11,7 +11,9 @@ foreach ($required in @(
     'The gateway baseline variable inventory is empty or duplicated.',
     'DocumentReleaseSourceSha', 'DocumentOperatorSourceSha',
     'DocumentOperatorDeltaSha256', 'BaselineToReleaseDeltaSha256',
-    '9c1b4d52b1bfc7d3901a8d6131a77ff714f85d61fb549114e0165634e49eb4b6'
+    '9c1b4d52b1bfc7d3901a8d6131a77ff714f85d61fb549114e0165634e49eb4b6',
+    'SchemaVersion = "6"', 'DocumentReceiptPath', 'ReviewedDocumentReceiptSha256',
+    'Outcome = "captured-current-zero-drift"', 'Baseline capture did not produce an exact zero-drift plan.'
   )) {
   if (-not $operator.Contains($required)) {
     throw "The gateway operator does not preserve the exact split-source migration handoff."
@@ -284,7 +286,7 @@ Assert-Rejected {
 } "The retained parser binding accepted an unsupported stage."
 
 foreach ($required in @(
-    'ValidateSet("Status", "Publish", "VerifyPublication", "Plan", "Apply", "Verify")',
+    'ValidateSet("Status", "CaptureBaseline", "Publish", "VerifyPublication", "Plan", "Apply", "Verify")',
     'SourceSha must equal the exact merged main checkout', 'ARTIFACT_SOURCE_SHA',
     'Assert-GatewayPublicationReceipt', 'Assert-GatewayReleaseVariables', 'Assert-ExactGatewayReleasePlan',
     'Assert-RetainedGatewayBaselineMetadata', 'Assert-RetainedGatewayBaselinePlan',

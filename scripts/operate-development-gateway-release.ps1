@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [ValidateSet("Status", "Publish", "VerifyPublication", "Plan", "Apply", "Verify")]
+  [ValidateSet("Status", "CaptureBaseline", "Publish", "VerifyPublication", "Plan", "Apply", "Verify")]
   [string]$Action = "Status",
   [string]$AwsProfile = "ai-job-apply-development-admin",
   [string]$Region = "us-east-2",
@@ -9,6 +9,8 @@ param(
   [ValidatePattern("^[a-f0-9]{40}$")][string]$SourceSha = "",
   [string]$ReceiptPath = "",
   [ValidatePattern("^[a-f0-9]{64}$")][string]$ReviewedReceiptSha256 = "",
+  [string]$DocumentReceiptPath = "",
+  [ValidatePattern("^(?:|[a-f0-9]{64})$")][string]$ReviewedDocumentReceiptSha256 = "",
   [string]$BaselinePlanPath = "",
   [ValidatePattern("^[a-f0-9]{64}$")][string]$ReviewedBaselineSha256 = "",
   [string]$BaselineMetadataPath = "",
@@ -29,6 +31,11 @@ if ($Help) {
 Usage:
   .\scripts\operate-development-gateway-release.ps1 -Action Publish -ExpectedAccountId ACCOUNT_ID `
     -StateBucket STATE_BUCKET -SourceSha MERGED_COMMIT
+  .\scripts\operate-development-gateway-release.ps1 -Action CaptureBaseline `
+    -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET -SourceSha MERGED_COMMIT `
+    -BaselinePlanPath REVIEWED_ZERO_DRIFT_SEED -ReviewedBaselineSha256 SEED_SHA256 `
+    -DocumentReceiptPath VERIFIED_DOCUMENT_RECEIPT `
+    -ReviewedDocumentReceiptSha256 DOCUMENT_RECEIPT_SHA256
   .\scripts\operate-development-gateway-release.ps1 -Action VerifyPublication `
     -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET -SourceSha MERGED_COMMIT `
     -ReceiptPath RECEIPT -ReviewedReceiptSha256 RECEIPT_SHA256
@@ -471,6 +478,8 @@ function Read-Baseline {
       throw "The retained document baseline operator delta does not match the current gateway release source."
     }
     [string]$metadata.ReleaseSourceSha
+  } elseif ([string]$metadata.SchemaVersion -ceq "6") {
+    [string]$metadata.DocumentReleaseSourceSha
   } else { $SourceSha }
   $documentReceipt = Read-BaselineDocumentReceipt -ReceiptSha256 ([string]$metadata.ReceiptSha256)
   $null = Assert-GatewayDocumentBaselineReceipt -Receipt $documentReceipt `
@@ -588,6 +597,91 @@ $null = New-Item -ItemType Directory -Path $operatorRoot -Force
 
 if ($Action -ceq "Status") {
   [pscustomobject]@{ Environment = "development"; SourceSha = $commit; TerraformOwnedBucket = $true; CustomerKmsEncrypted = $true; MutationPerformed = $false } | ConvertTo-Json
+  exit 0
+}
+
+if ($Action -ceq "CaptureBaseline") {
+  if ([string]::IsNullOrWhiteSpace($BaselinePlanPath) -or
+      $ReviewedBaselineSha256 -notmatch '^[a-f0-9]{64}$' -or
+      [string]::IsNullOrWhiteSpace($DocumentReceiptPath) -or
+      $ReviewedDocumentReceiptSha256 -notmatch '^[a-f0-9]{64}$') {
+    throw "Baseline capture requires a reviewed zero-drift seed and verified document receipt."
+  }
+  $seedPath = Resolve-GatewayOperatorPath $BaselinePlanPath -MustExist
+  if ((Get-FileSha256 $seedPath) -cne $ReviewedBaselineSha256) {
+    throw "The zero-drift seed checksum does not match review."
+  }
+  $seed = Read-Plan $seedPath
+  $terraformFiles = @(Get-ChildItem -LiteralPath $terraformDirectory -File -Filter "*.tf" | Sort-Object Name)
+  $declaredVariables = @($terraformFiles | ForEach-Object {
+      $variableSource = Get-Content -LiteralPath $_.FullName -Raw
+      [regex]::Matches($variableSource, '(?m)^\s*variable\s+"([a-zA-Z0-9_]+)"\s*\{') |
+        ForEach-Object { $_.Groups[1].Value }
+    })
+  if ($terraformFiles.Count -eq 0 -or $declaredVariables.Count -eq 0 -or
+      @($declaredVariables | Sort-Object -Unique).Count -ne $declaredVariables.Count) {
+    throw "The baseline capture variable inventory is empty or duplicated."
+  }
+  $null = Assert-RetainedGatewayBaselinePlan $seed $declaredVariables
+
+  $documentPath = Resolve-GatewayOperatorPath $DocumentReceiptPath -MustExist
+  if ((Get-FileSha256 $documentPath) -cne $ReviewedDocumentReceiptSha256) {
+    throw "The document receipt checksum does not match review."
+  }
+  $documentReceipt = Get-Content -LiteralPath $documentPath -Raw | ConvertFrom-Json
+  $null = Assert-GatewayDocumentBaselineReceipt -Receipt $documentReceipt `
+    -ReceiptSha256 $ReviewedDocumentReceiptSha256 -Plan $seed `
+    -SourceSha ([string]$documentReceipt.sourceSha) -ExpectedBoundarySha256 $boundary.BoundarySha256
+
+  $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+  $capturedPath = Resolve-GatewayOperatorPath `
+    (Join-Path $operatorRoot "baseline-$($SourceSha.Substring(0,12))-$timestamp.tfplan") -ReleaseOnly
+  $saved = Save-AndClearTerraformVariables
+  try {
+    Set-VariablesFromPlan $seed $null
+    & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m `
+      -detailed-exitcode "-out=$capturedPath" *> "$capturedPath.log"
+    $exitCode = $LASTEXITCODE
+  } finally { Restore-TerraformVariables $saved }
+  if ($exitCode -ne 0) {
+    if (Test-Path -LiteralPath $capturedPath) { Remove-Item -LiteralPath $capturedPath -Force }
+    throw "Baseline capture did not produce an exact zero-drift plan."
+  }
+  $captured = Read-Plan $capturedPath
+  $null = Assert-RetainedGatewayBaselinePlan $captured $declaredVariables
+  $null = Assert-GatewayDocumentBaselineReceipt -Receipt $documentReceipt `
+    -ReceiptSha256 $ReviewedDocumentReceiptSha256 -Plan $captured `
+    -SourceSha ([string]$documentReceipt.sourceSha) -ExpectedBoundarySha256 $boundary.BoundarySha256
+  $state = Get-StateIdentity
+  $stage = [string](Get-GatewayPlanVariableValue $captured.variables "document_processing_deployment_stage")
+  $parserArn = [string](Get-GatewayPlanVariableValue $captured.variables "document_parser_invocation_qualified_arn")
+  $null = Assert-RetainedGatewayParserBinding -Stage $stage -PlanParserQualifiedArn $parserArn `
+    -MetadataParserQualifiedArn $parserArn -StateParserQualifiedArn $boundary.ParserQualifiedArn `
+    -StateProcessorParserQualifiedArn $boundary.ProcessorParserQualifiedArn `
+    -AccountId $ExpectedAccountId -Region $Region
+  $migrationImage = [string](Get-GatewayPlanVariableValue $captured.variables "migration_image")
+  if ($migrationImage -cnotmatch "^$([regex]::Escape([string]$boundary.MigrationRepositoryUrl))@sha256:[a-f0-9]{64}$") {
+    throw "The captured baseline migration digest is outside the exact Terraform-owned repository."
+  }
+  $capturedSha = Get-FileSha256 $capturedPath
+  $metadata = [ordered]@{
+    SchemaVersion = "6"; Kind = "development-document-zero-drift-baseline"
+    Environment = "development"; AccountId = $ExpectedAccountId; Region = $Region
+    SourceSha = $SourceSha; DocumentReleaseSourceSha = [string]$documentReceipt.sourceSha
+    StateLineage = $state.Lineage; StateSerial = $state.Serial; Stage = $stage
+    ReceiptSha256 = $ReviewedDocumentReceiptSha256; ParserQualifiedArn = $parserArn
+    MigrationImage = $migrationImage; PlanPath = $capturedPath; PlanSha256 = $capturedSha
+    Applyable = $false; MeaningfulChanges = 0
+    CreatedAt = (Get-Date).ToUniversalTime().ToString("o")
+  }
+  $metadataPath = "$capturedPath.baseline.json"
+  Write-ExclusiveJson $metadataPath $metadata
+  [pscustomobject]@{
+    Outcome = "captured-current-zero-drift"; BaselinePlanPath = $capturedPath
+    BaselinePlanSha256 = $capturedSha; BaselineMetadataPath = $metadataPath
+    BaselineMetadataSha256 = Get-FileSha256 $metadataPath; StateSerial = $state.Serial
+    MeaningfulChanges = 0; MutationPerformed = $false
+  } | ConvertTo-Json
   exit 0
 }
 

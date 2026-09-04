@@ -20,6 +20,11 @@ migration image, public-route switch, identity settings, data resources, or dura
   variable inventory and have no meaningful resource or output changes. The
   release guard preserves every non-gateway variable and explicitly requires processing-dark
   triggers, the applied parser boundary, and an immutable migration digest.
+- When a newer delivery has legitimately advanced shared Terraform state after the latest document
+  handoff, run `CaptureBaseline` with a reviewed zero-drift seed and the exact verified document
+  publication receipt. It refreshes a new plan from the seed's complete variable inventory,
+  accepts only exit code zero, revalidates the document artifacts and live parser binding, and
+  writes a source/state-bound schema-6 sidecar without mutating AWS resources.
 - A migration `Verify` handoff uses the canonical version-2 sidecar and additionally binds the
   immutable migration image explicitly. The gateway operator hashes the plan and sidecar before
   parsing, requires the exact version-2 key set, resolves the one local document-publication
@@ -33,6 +38,20 @@ migration image, public-route switch, identity settings, data resources, or dura
 All generated receipts, plans, metadata, and logs remain under the ignored development
 `.terraform` directory. Commands below use placeholders intentionally; resolve them only in the
 operator shell.
+
+## Capture a current baseline after shared-state advancement
+
+```powershell
+.\scripts\operate-development-gateway-release.ps1 -Action CaptureBaseline `
+  -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET -SourceSha MERGED_COMMIT `
+  -BaselinePlanPath REVIEWED_ZERO_DRIFT_SEED -ReviewedBaselineSha256 SEED_SHA256 `
+  -DocumentReceiptPath VERIFIED_DOCUMENT_RECEIPT `
+  -ReviewedDocumentReceiptSha256 DOCUMENT_RECEIPT_SHA256
+```
+
+Review and retain both returned SHA-256 values. `CaptureBaseline` performs a refresh-backed plan
+and is valid only when it is complete, nonapplyable, contains the exact declared variable set, and
+has zero meaningful resource or output changes. It does not publish or deploy an artifact.
 
 ## Publish and independently verify
 
