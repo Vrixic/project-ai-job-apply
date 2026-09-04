@@ -1,6 +1,15 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalPassThroughEnv": ["D2_EXTENSION_BROWSER"],
+  "globalPassThroughEnv": [
+    "D2_EXTENSION_BROWSER",
+    "D2_EXTENSION_BROWSER_NAME",
+    "D2_EXTENSION_CHROME_FOR_TESTING",
+    "D2_EXTENSION_EDGE_BROWSER",
+    "LOCALAPPDATA",
+    "PLAYWRIGHT_BROWSERS_PATH",
+    "ProgramFiles",
+    "ProgramFiles(x86)"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

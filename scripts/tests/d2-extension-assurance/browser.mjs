@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import axe from "axe-core";
 import { chromium } from "playwright-core";
 
 const root = resolve(import.meta.dirname, "../../..");
@@ -13,6 +14,7 @@ const fixture = await readFile(
 const executable =
   process.env.D2_EXTENSION_BROWSER ||
   "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
+const browserName = process.env.D2_EXTENSION_BROWSER_NAME || "edge";
 const profile = await mkdtemp(join(tmpdir(), "applydash-extension-assurance-"));
 const server = createServer((request, response) => {
   if (request.url?.startsWith("/synthetic/")) {
@@ -105,11 +107,25 @@ async function inspectLayout(popup, width, zoom = 1) {
   });
 }
 
+async function assertAxeClean(page, surface) {
+  await page.evaluate(axe.source);
+  const violations = await page.evaluate(async () => {
+    const result = await globalThis.axe.run(document, {
+      runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"] },
+    });
+    return result.violations.map((violation) => violation.id).sort();
+  });
+  assert(violations.length === 0, `${surface} has axe violations: ${violations.join(",")}`);
+  return violations.length;
+}
+
 await new Promise((resolveReady) => server.listen(0, "127.0.0.1", resolveReady));
 const address = server.address();
 if (!address || typeof address === "string") throw new Error("Synthetic server did not bind");
 let context;
-let externalRequestsAllowed = 0;
+let externalRequestsBlocked = 0;
+let operationalPolicyRequestsBlocked = 0;
+let unexpectedExternalRequests = 0;
 try {
   context = await chromium.launchPersistentContext(profile, {
     executablePath: executable,
@@ -124,7 +140,15 @@ try {
     ) {
       await route.continue();
     } else {
-      externalRequestsAllowed += 1;
+      externalRequestsBlocked += 1;
+      if (
+        route.request().method() === "GET" &&
+        url.pathname === "/v1/extension/contribution-capability-policy"
+      ) {
+        operationalPolicyRequestsBlocked += 1;
+      } else {
+        unexpectedExternalRequests += 1;
+      }
       await route.abort("blockedbyclient");
     }
   });
@@ -188,13 +212,19 @@ try {
     };
     const response = async (message) => {
       if (message?.action === "capture") {
-        return { capture, delivery, ok: true, queue: { pending: 0, stopped: 0 }, status };
+        return {
+          capture,
+          delivery,
+          ok: true,
+          queue: { blocked: 0, pending: 0, stopped: 0 },
+          status,
+        };
       }
       return {
         delivery,
         ok: true,
         ownerAction: message?.action === "enqueue" ? "ok" : undefined,
-        queue: { pending: 0, stopped: 0 },
+        queue: { blocked: 0, pending: 0, stopped: 0 },
         receipts: [],
         status,
       };
@@ -315,6 +345,7 @@ try {
     () => document.documentElement.getBoundingClientRect().width,
   );
   assert(preferredPopupWidth >= 448, "the extension popup is not twice the original width");
+  const popupAxeViolations = await assertAxeClean(popup, "popup");
 
   const responsiveSurface = await openAssurancePopup(
     context,
@@ -339,6 +370,7 @@ try {
   assert(zoomedLayout.overlappingFieldRows.length === 0, "200% zoom field markers overlap labels");
   assert(zoomedLayout.clippedControls.length === 0, "200% zoom layout clips controls");
   layoutProfiles.push({ width: 640, zoom: 2 });
+  const sidePanelAxeViolations = await assertAxeClean(responsiveSurface, "side panel");
 
   const missingPopup = await openAssurancePopup(context, extensionId, "unconfigured-missing");
   await inspectSyntheticCapture(missingPopup);
@@ -379,11 +411,11 @@ try {
     const value = JSON.stringify({ local, session });
     return !value.includes("must-never-leave-page") && !value.includes("javascript:alert");
   });
-  assert(externalRequestsAllowed === 0, "the harness allowed an external request");
+  assert(unexpectedExternalRequests === 0, "the harness observed unexpected external traffic");
   assert(sensitiveStorageAbsent, "synthetic page artifacts were retained in extension storage");
 
   process.stdout.write(
-    `${JSON.stringify({ profile: "d2_extension_installed_synthetic_v3", browserExecuted: true, manifestVersion: manifest.manifest_version, syntheticProviderPages: 3, popupScenarios: 3, sidePanelScenarios: 1, preferredPopupWidth, layoutProfiles, externalRequestsAllowed, optionalProviderPermissionDenied: optionalDenied, keyboardFocusVisible: focusStyleVisible, semanticControlFailures: semanticControlFailures.length, horizontalOverflowProfiles: 0, fieldOverlapProfiles: 0, clippedControlProfiles: 0, longValueExpanders: await expanders.count(), progressiveDisclosures: 3, missingFieldStatesValidated: await unavailableFields.count(), separatedLocationAndWorkTypeFields: 2, deliveryStatesValidated: 2, sensitiveArtifactsRetained: !sensitiveStorageAbsent, telemetryRequests: 0 })}\n`,
+    `${JSON.stringify({ profile: "d2_extension_installed_synthetic_v4", browserName, browserExecuted: true, manifestVersion: manifest.manifest_version, syntheticProviderPages: 3, popupScenarios: 3, sidePanelScenarios: 1, preferredPopupWidth, layoutProfiles, externalRequestsAllowed: 0, externalRequestsBlocked, operationalPolicyRequestsBlocked, unexpectedExternalRequests, optionalProviderPermissionDenied: optionalDenied, keyboardFocusVisible: focusStyleVisible, semanticControlFailures: semanticControlFailures.length, axeViolations: popupAxeViolations + sidePanelAxeViolations, axeSurfaces: 2, horizontalOverflowProfiles: 0, fieldOverlapProfiles: 0, clippedControlProfiles: 0, longValueExpanders: await expanders.count(), progressiveDisclosures: 3, missingFieldStatesValidated: await unavailableFields.count(), separatedLocationAndWorkTypeFields: 2, deliveryStatesValidated: 2, sensitiveArtifactsRetained: !sensitiveStorageAbsent, telemetryRequests: 0 })}\n`,
   );
 } finally {
   await context?.close();

@@ -11,9 +11,19 @@ Run from the repository root:
 pnpm test:d2-extension-assurance
 ```
 
-`pnpm --filter @ai-job-apply/extension test:browser` launches the unpacked extension in a fresh
-persistent Edge/Chromium profile against loopback-only malicious synthetic provider pages. The
-harness aborts every external request, deletes its profile, and emits aggregate metrics only.
+`pnpm --filter @ai-job-apply/extension test:browser` launches the unpacked extension in fresh
+persistent Microsoft Edge and Google Chrome for Testing profiles against loopback-only malicious
+synthetic provider pages. The
+harness aborts every external request, distinguishes an expected configured signed-policy fetch
+from unexpected external or telemetry traffic, deletes its profile, and emits aggregate metrics
+only.
+
+The matrix discovers Edge from its standard Windows install and the newest local Playwright Chrome
+for Testing binary. `D2_EXTENSION_EDGE_BROWSER` and `D2_EXTENSION_CHROME_FOR_TESTING` may pin exact
+executables. The single-browser harness remains available as `test:browser:single` with
+`D2_EXTENSION_BROWSER` and optional aggregate label `D2_EXTENSION_BROWSER_NAME`. Branded Chrome is
+reserved for manual installed testing because current branded releases reject command-line unpacked
+extension loading.
 
 The installed-browser profile executes MV3 loading, background-worker startup, exact permission
 denial, and three malicious loopback fixtures. It also renders the real popup module against
@@ -22,7 +32,8 @@ cover 320, 360, and 480 CSS-pixel side-panel layouts, 200% zoom/reflow, required
 geometry, semantic control names, keyboard focus and disclosures, selection and delivery live
 regions, a fixed 448-pixel popup width (twice the original 224-pixel target), direct public-add delivery gating, absence
 of private-save and redundant-consent controls, expandable long values, explicit unavailable
-values, storage leakage, and zero-network/zero-telemetry checks. Deterministic extension unit tests separately cover worker
+values, storage leakage, axe WCAG 2.0/2.1 A/AA scans on the popup and side panel, and
+zero-allowed-network/zero-telemetry checks. Deterministic extension unit tests separately cover worker
 restart cache restoration, offline queue/retry, cancellation and logout/account fencing, signed
 kill-switch isolation, sanitization, and provider/variant/domain rejection. Those source-level
 tests are not reported as browser-executed behavior.
