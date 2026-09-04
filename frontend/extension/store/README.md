@@ -16,9 +16,10 @@ unexpected permissions/files, and writes a deterministic ZIP plus release manife
 `frontend/extension/dist/release/`. Generated archives are ignored and must not be committed.
 
 The package is intentionally not upload-ready. Accountable privacy/security/legal approval,
-Chrome and Edge installed-browser evidence, authorized provider fixtures, working user removal and
-support channels, an accountably selected and identically configured UGC policy version, final
-listing assets, and browser-store review remain external gates.
+Chrome and Edge installed-browser evidence, authorized provider fixtures, a hosted and accepted
+version of the source `/extension-support` route, a monitored support channel, an accountably
+selected and identically configured UGC policy version, final listing assets, and browser-store
+review remain external gates.
 
 The default-dark archive pins no contribution capability signing key. A release candidate that can
 receive signed capability data must embed only the accountably approved Ed25519 public-key mapping;

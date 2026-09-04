@@ -349,13 +349,14 @@ This is the master record for the delivery phases defined in the [product and sy
   before contribution success is claimed. Remaining gates are the D1
   prerequisites; authorized provider fixtures and QA disposition; completion of Chrome parity,
   cancellation, refresh rotation/replay, logout, and revocation after the dedicated Native
-  Application's initial installed-Edge PKCE login; final listing assets, support endpoint, and
-  store review; accountable UGC/privacy/security approval; installed Chrome geometry parity, axe,
-  and human assistive-technology acceptance; and AWS rollback, deployed restore, representative
-  authenticated branded-browser lifecycle/contribution, human assistive-technology review, AWS
-  rollback, deployed restore, representative load/abuse, alert-recipient acceptance, and final
-  accountable production acceptance. Automated Edge/Google Chrome for Testing geometry, keyboard,
-  delivery-state, and two-surface axe coverage passes.
+  Application's initial installed-Edge PKCE login; final listing assets, hosted support-route
+  acceptance, a monitored support channel, and store review; accountable UGC/privacy/security
+  approval; authenticated branded-browser contribution/lifecycle and human assistive-technology
+  review; AWS rollback, deployed restore, representative load/abuse, alert-recipient acceptance,
+  and final accountable production acceptance. Automated Edge/Google Chrome for Testing geometry,
+  keyboard, delivery-state, and two-surface axe coverage passes. A static `/extension-support`
+  source route also passes all web tests/build plus local desktop/mobile axe, overflow, and focus
+  checks, but it is not yet a hosted or monitored support-channel claim.
   [Phase 2 tasks](phase-2-extension-and-community.md)
 
 ## D3 — High-quality application preparation

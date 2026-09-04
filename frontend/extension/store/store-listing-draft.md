@@ -30,7 +30,7 @@ listing.
 - Final approved product name and publisher identity
 - Store icon set and promotional images produced from the exact reviewed UI
 - Chrome and Edge screenshots with no synthetic-only or unsupported claims
-- Approved privacy-policy and support URLs
+- Approved privacy-policy URL, hosted support URL, and monitored support channel
 - Category, locale, territory, pricing, and accessibility dispositions
 
 No statement about provider support may be added until the exact variant has authorized sanitized
