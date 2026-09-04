@@ -10,6 +10,7 @@
     "build": "node build.mjs",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "release:package": "node package-release.mjs",
+    "store:assets:validate": "node store/validate-assets.mjs",
     "test:browser": "node ../../scripts/tests/d2-extension-assurance/browser-matrix.mjs",
     "test:browser:single": "node ../../scripts/tests/d2-extension-assurance/browser.mjs",
     "test": "vitest run",

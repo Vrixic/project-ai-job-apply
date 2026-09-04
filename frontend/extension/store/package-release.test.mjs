@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -14,6 +15,16 @@ const icons = {
   48: "icon-48.png",
   128: "icon-128.png",
 };
+const iconSha256 = Object.fromEntries(
+  await Promise.all(
+    Object.entries(icons).map(async ([size, fileName]) => [
+      size,
+      createHash("sha256")
+        .update(await readFile(join(iconRoot, fileName)))
+        .digest("hex"),
+    ]),
+  ),
+);
 const policy = {
   schemaVersion: 1,
   releaseChannel: "synthetic-default-dark",
@@ -33,6 +44,7 @@ const policy = {
   manifest: {
     name: "ApplyDash Job Capture (Default Dark)",
     icons,
+    iconSha256,
     requiredPermissions: ["activeTab", "alarms", "identity", "scripting", "sidePanel", "storage"],
     forbiddenPermissions: ["cookies", "history", "webRequest"],
     contentSecurityPolicy: "script-src 'self'; object-src 'self'",
@@ -149,6 +161,21 @@ describe("extension release packaging", () => {
         policy,
       }),
     ).rejects.toThrow("128x128 PNG");
+  });
+
+  it("rejects an unreviewed icon digest", async () => {
+    const { dist, firstOutput } = await fixture();
+    const icon = await readFile(join(dist, "icon-16.png"));
+    icon[icon.length - 1] ^= 1;
+    await writeFile(join(dist, "icon-16.png"), icon);
+    await expect(
+      createReleaseArchive({
+        distDirectory: dist,
+        outputDirectory: firstOutput,
+        packageVersion: "0.2.0",
+        policy,
+      }),
+    ).rejects.toThrow("icon digest");
   });
 
   it("rejects remote executable JavaScript and dynamic code construction", async () => {

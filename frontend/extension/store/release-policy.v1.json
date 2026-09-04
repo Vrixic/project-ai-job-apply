@@ -22,6 +22,12 @@
       "48": "icon-48.png",
       "128": "icon-128.png"
     },
+    "iconSha256": {
+      "16": "5f561970e45e09d42a12ef068ca2829b4151cffffdf38af282bc39426b28754f",
+      "32": "9e1325502965a48f8abce2bd9b199aebfbbe685629b86975b0e6acdf9a5fd093",
+      "48": "58e07dffedec8ae55c55d88efc6a9771b3b78a8deada4e77ed883bc157f42cee",
+      "128": "d4adb00a542ab22873f7559f34d3b49b20cfedc1856f2f2dc768906289c65a74"
+    },
     "requiredPermissions": ["activeTab", "alarms", "identity", "scripting", "sidePanel", "storage"],
     "forbiddenPermissions": [
       "bookmarks",

@@ -43,4 +43,12 @@ committed square sRGB derivatives with metadata removed. The release validator c
 signature and exact dimensions, and the manifest/release policy must map all four sizes exactly.
 
 This is an original candidate asset, not final product-owner or browser-store artwork approval.
-Promotional artwork and exact installed screenshots remain open.
+The same restrained mark anchors the text-free 440-by-280-pixel small promotional tile and the
+transparent 300-by-300-pixel Edge listing logo under `store/assets/`. The repository validator
+requires exactly those two regular PNG files, checks every PNG chunk checksum, rejects embedded
+text/EXIF metadata and trailing data, and enforces the exact dimensions, color boundary, and size
+limit. These dimensions follow the current
+[Chrome Web Store image specification](https://developer.chrome.com/docs/webstore/images) and
+[Microsoft Edge Add-ons listing specification](https://learn.microsoft.com/en-us/microsoft-edge/extensions/publish/publish-extension).
+
+Product-owner artwork approval and exact installed screenshots remain open.

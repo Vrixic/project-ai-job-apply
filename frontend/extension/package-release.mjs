@@ -134,7 +134,13 @@ export async function validateReleaseFiles({ distDirectory, packageVersion, poli
     const data = await readFile(join(distDirectory, name));
     if (data.length === 0) throw new Error(`Release file is empty: ${name}`);
     const iconMatch = /^icon-(16|32|48|128)\.png$/u.exec(name);
-    if (iconMatch) validatePngIcon({ name, data }, Number(iconMatch[1]));
+    if (iconMatch) {
+      const size = iconMatch[1];
+      validatePngIcon({ name, data }, Number(size));
+      if (sha256(data) !== policy.manifest.iconSha256?.[size]) {
+        throw new Error(`Release icon digest does not match the reviewed policy: ${name}`);
+      }
+    }
     if (data.includes(Buffer.from("sourceMappingURL="))) {
       throw new Error(`Source map reference is forbidden: ${name}`);
     }
