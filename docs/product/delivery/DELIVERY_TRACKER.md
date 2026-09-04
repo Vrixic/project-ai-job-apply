@@ -333,7 +333,7 @@ This is the master record for the delivery phases defined in the [product and sy
   independent provider verification and atomic catalog publication, Trust/reputation and candidate
   rights, lazy Lambda composition, guarded operations, aggregate telemetry, Terraform, and local
   migration/recovery evidence are present. Under an exact product-owner controlled exception,
-  development state `268` now activates only extension client `0.2.0`, the accepted Greenhouse
+  development state `269` now activates only extension client `0.2.0`, the accepted Greenhouse
   variant and two reviewed domains, one exact provider registration, and the dedicated workflow
   `case_opener`. Production, extension-store distribution, Lever, Ashby, and all human decision
   roles remain dark. No-store signed policy revision `d2-development-greenhouse-20260904-v2`
@@ -347,8 +347,9 @@ This is the master record for the delivery phases defined in the [product and sy
   zero restore target, snapshot, target automated-backup, or context residue; the primary remained
   healthy and zero drift was independently rechecked. This development
   exception is not LR-D2-01/LR-D2-02, counsel, accountable security/privacy, production, or store
-  approval. Privacy-safe fixed-stage contribution diagnostics from source `21befbe` are deployed
-  on unweighted Gateway alias `46`; their exact two-update release is independently verified and
+  approval. Privacy-safe fixed-stage contribution diagnostics and the explicit contribution JSON
+  persistence boundary from source `d8490a4` are deployed on unweighted Gateway alias `47`; their
+  exact two-update release is independently verified and
   Terraform is zero drift. The next
   installed retry was correctly held locally after the prior signed policy expired. The replacement
   exact Greenhouse policy is live and verified by both the public endpoint and a fresh configured-
@@ -360,8 +361,12 @@ This is the master record for the delivery phases defined in the [product and sy
   full login even for the same provider account. The extension now derives a versioned one-way
   fence from bounded Auth0 token identity claims, reproduces it for the same account, rejects a
   different account or account-changing refresh, and stores no raw subject. All 111 extension
-  tests, the configured build, and release-source assurance pass; an installed reload, sign-in,
-  and fresh public-add journey remain before contribution success is claimed. Remaining gates are the D1
+  tests, the configured build, and release-source assurance pass. A fresh stable-fence intent then
+  reached the store and isolated two pre-commit failures at `JOB_STORE_INSERT`. The remediated store
+  serializes and hashes the validated payload once and binds those exact bytes through an explicit
+  text-to-`jsonb` boundary; clean PostgreSQL transactional integration and the complete repository
+  gate pass. State `269` and alias `47` are zero drift, but the retained item has not attempted the
+  remediated release, so contribution success is not yet claimed. Remaining gates are the D1
   prerequisites; authorized provider fixtures and QA disposition; completion of Chrome parity,
   cancellation, refresh rotation/replay, logout, and revocation after the dedicated Native
   Application's initial installed-Edge PKCE login; exact installed listing screenshots, a monitored
