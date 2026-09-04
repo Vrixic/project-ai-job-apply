@@ -11,7 +11,7 @@ param(
   [ValidatePattern("^[a-z0-9.-]+$")]
   [string]$StateBucket = "",
   [string]$RuntimePlanPath = "",
-  [ValidateSet("Phase0", "D1Read", "D1SavedJob", "D1Match")]
+  [ValidateSet("Phase0", "D1Read", "D1SavedJob", "D1Match", "D2Public")]
   [string]$WorkloadProfile = "Phase0",
   [string]$AwsProfile = "",
   [string]$Region = "us-east-2",
@@ -44,8 +44,10 @@ non-secret immutable artifact inputs for fresh read-only steady-state verificati
 
 WorkloadProfile selects the fixed aggregate request floor: Phase0 requires 552 requests and 100
 expected 4xx responses, D1Read requires 254 requests and 50 expected 401 responses,
-D1SavedJob requires 10 requests and one expected 409 response, and D1Match requires two reads with
-no expected 4xx response.
+D1SavedJob requires 10 requests and one expected 409 response, D1Match requires two reads with no
+expected 4xx response, and D2Public requires 40 requests with 20 expected fail-closed unauthenticated
+responses. D2Public also selects the exact Gateway plus D2 Lambda, Trust-queue, and sixteen-alarm
+boundary.
 
 Both actions are read-only. No account identifier, endpoint, resource ARN, trace, log message,
 identity, token, preference, operation identifier, or raw provider record is printed.
@@ -55,6 +57,9 @@ identity, token, preference, operation identifier, or raw provider record is pri
 
 if ($Region -ne "us-east-2") {
   throw "The Phase 0 $Environment environment is restricted to us-east-2."
+}
+if ($WorkloadProfile -ceq "D2Public" -and $Environment -cne "development") {
+  throw "The D2 public-boundary workload is restricted to development."
 }
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
@@ -538,8 +543,14 @@ $apiId = [string]$apiMatches[0].ApiId
 
 $apiDimensions = @("Name=ApiId,Value=$apiId")
 $databaseDimensions = @("Name=DBInstanceIdentifier,Value=ai-job-apply-$Environment")
-$eventQueueDimensions = @("Name=QueueName,Value=ai-job-apply-$Environment-events")
-$deadLetterDimensions = @("Name=QueueName,Value=ai-job-apply-$Environment-dead-letter")
+$eventQueueName = if ($WorkloadProfile -ceq "D2Public") {
+  "ai-job-apply-$Environment-d2-trust-signals"
+} else { "ai-job-apply-$Environment-events" }
+$deadLetterQueueName = if ($WorkloadProfile -ceq "D2Public") {
+  "ai-job-apply-$Environment-d2-trust-signals-dead-letter"
+} else { "ai-job-apply-$Environment-dead-letter" }
+$eventQueueDimensions = @("Name=QueueName,Value=$eventQueueName")
+$deadLetterDimensions = @("Name=QueueName,Value=$deadLetterQueueName")
 $durableDeadLetterDimensions = @(
   "Name=QueueName,Value=ai-job-apply-$Environment-profile-readiness-dead-letter"
 )
@@ -548,14 +559,22 @@ $requestCount = Get-MetricAggregate "AWS/ApiGateway" "Count" $apiDimensions $win
 $clientErrors = Get-MetricAggregate "AWS/ApiGateway" "4xx" $apiDimensions $window.Start $window.End
 $serverErrors = Get-MetricAggregate "AWS/ApiGateway" "5xx" $apiDimensions $window.Start $window.End
 $latency = Get-MetricAggregate "AWS/ApiGateway" "Latency" $apiDimensions $window.Start $window.End
-$lambdaFunctionNames = @(
-  "ai-job-apply-$Environment-gateway",
-  "ai-job-apply-$Environment-outbox-starter",
-  "ai-job-apply-$Environment-outbox-reconciler",
-  "ai-job-apply-$Environment-profile-readiness-activity",
-  "ai-job-apply-$Environment-profile-readiness-terminal",
-  "ai-job-apply-$Environment-profile-readiness-durable"
-)
+$lambdaFunctionNames = if ($WorkloadProfile -ceq "D2Public") {
+  @(
+    "ai-job-apply-$Environment-gateway",
+    "ai-job-apply-$Environment-d2-community-scheduled",
+    "ai-job-apply-$Environment-d2-trust-signal"
+  )
+} else {
+  @(
+    "ai-job-apply-$Environment-gateway",
+    "ai-job-apply-$Environment-outbox-starter",
+    "ai-job-apply-$Environment-outbox-reconciler",
+    "ai-job-apply-$Environment-profile-readiness-activity",
+    "ai-job-apply-$Environment-profile-readiness-terminal",
+    "ai-job-apply-$Environment-profile-readiness-durable"
+  )
+}
 [decimal]$lambdaInvocations = 0
 [decimal]$lambdaErrors = 0
 [decimal]$lambdaThrottles = 0
@@ -584,18 +603,39 @@ $durableDeadLetters = Get-MetricAggregate `
   "AWS/SQS" "ApproximateNumberOfMessagesVisible" `
   $durableDeadLetterDimensions $window.Start $window.End
 $logs = Get-LogAggregate $window.Start $window.End
-$alarmNames = @(
-  "ai-job-apply-$Environment-outbox-reconciler-errors",
-  "ai-job-apply-$Environment-outbox-starter-errors",
-  "ai-job-apply-$Environment-outbox-starter-throttles",
-  "ai-job-apply-$Environment-profile-readiness-activity-errors",
-  "ai-job-apply-$Environment-profile-readiness-dead-letter",
-  "ai-job-apply-$Environment-profile-readiness-durable-failed",
-  "ai-job-apply-$Environment-profile-readiness-durable-timed-out",
-  "ai-job-apply-$Environment-gateway-lambda-errors",
-  "ai-job-apply-$Environment-gateway-lambda-throttles",
-  "ai-job-apply-$Environment-gateway-lambda-duration"
-)
+$alarmNames = if ($WorkloadProfile -ceq "D2Public") {
+  @(
+    "ai-job-apply-$Environment-gateway-lambda-errors",
+    "ai-job-apply-$Environment-gateway-lambda-throttles",
+    "ai-job-apply-$Environment-gateway-lambda-duration",
+    "ai-job-apply-$Environment-d2-scheduled-errors",
+    "ai-job-apply-$Environment-d2-scheduled-throttles",
+    "ai-job-apply-$Environment-d2-scheduled-duration",
+    "ai-job-apply-$Environment-d2-trust-signal-errors",
+    "ai-job-apply-$Environment-d2-trust-signal-throttles",
+    "ai-job-apply-$Environment-d2-trust-signal-duration",
+    "ai-job-apply-$Environment-d2-scheduledbatchfailed",
+    "ai-job-apply-$Environment-d2-jobsdead",
+    "ai-job-apply-$Environment-d2-jobsdeliverydead",
+    "ai-job-apply-$Environment-d2-trustdeliverydead",
+    "ai-job-apply-$Environment-d2-trustsignalfailed",
+    "ai-job-apply-$Environment-d2-trust-signal-queue-age",
+    "ai-job-apply-$Environment-d2-trust-signal-dead-letter"
+  )
+} else {
+  @(
+    "ai-job-apply-$Environment-outbox-reconciler-errors",
+    "ai-job-apply-$Environment-outbox-starter-errors",
+    "ai-job-apply-$Environment-outbox-starter-throttles",
+    "ai-job-apply-$Environment-profile-readiness-activity-errors",
+    "ai-job-apply-$Environment-profile-readiness-dead-letter",
+    "ai-job-apply-$Environment-profile-readiness-durable-failed",
+    "ai-job-apply-$Environment-profile-readiness-durable-timed-out",
+    "ai-job-apply-$Environment-gateway-lambda-errors",
+    "ai-job-apply-$Environment-gateway-lambda-throttles",
+    "ai-job-apply-$Environment-gateway-lambda-duration"
+  )
+}
 $alarms = Invoke-AwsJson (
   @("cloudwatch", "describe-alarms", "--alarm-names") + $alarmNames + @("--output", "json")
 )
@@ -617,12 +657,14 @@ $minimumApiRequests = switch ($WorkloadProfile) {
   "D1Read" { 254 }
   "D1SavedJob" { 10 }
   "D1Match" { 2 }
+  "D2Public" { 40 }
   default { 552 }
 }
 $minimumExpected4xx = switch ($WorkloadProfile) {
   "D1Read" { 50 }
   "D1SavedJob" { 1 }
   "D1Match" { 0 }
+  "D2Public" { 20 }
   default { 100 }
 }
 
@@ -638,7 +680,8 @@ if ([decimal]$deadLetters.Maximum -ne 0) { $failedChecks += "event_dead_letters"
 if ([decimal]$durableDeadLetters.Maximum -ne 0) { $failedChecks += "durable_dead_letters" }
 if ($logs.ErrorMatches -ne 0) { $failedChecks += "error_logs" }
 if ($logs.ForbiddenMatches -ne 0) { $failedChecks += "forbidden_log_content" }
-if ($healthyAlarms -ne 10) { $failedChecks += "alarm_health" }
+$expectedHealthyAlarmCount = if ($WorkloadProfile -ceq "D2Public") { 16 } else { 10 }
+if ($healthyAlarms -ne $expectedHealthyAlarmCount) { $failedChecks += "alarm_health" }
 if ($activeServices -ne 0) { $failedChecks += "active_ecs_services" }
 if ($runningTasks -ne 0) { $failedChecks += "running_ecs_tasks" }
 if ($failedChecks.Count -ne 0) {

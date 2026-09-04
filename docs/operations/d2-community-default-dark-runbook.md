@@ -71,5 +71,43 @@ activation-authority token printed by `--action Help` plus independently reviewe
    Actual rollback must use a checksum-reviewed Terraform plan. Alarm injection still requires both
    notification confirmations; the repository never invents either confirmation.
 
+## Public policy and unauthenticated abuse boundary
+
+This fixed development-only workload covers the anonymous signed-policy contract and the protected
+contribution route's fail-closed behavior without using a token, identity, contribution payload, or
+database mutation. It deliberately paces 20 policy reads below the shared one-request-per-second
+public-edge ceiling, then sends a separate 20-request unauthenticated burst. Policy reads must all
+return the exact bounded no-store contract; the burst may return only `401` or managed `429`.
+
+Build the executable contract validator, resolve the exact Terraform-owned API origin in memory,
+and run the explicit profile:
+
+```powershell
+pnpm --filter @ai-job-apply/api-contracts build
+$apiOrigin = terraform `
+  -chdir=infrastructure/terraform/environments/development output -raw gateway_url
+node scripts/run-development-d2-public-boundary.mjs `
+  --origin $apiOrigin `
+  --confirm run-d2-development-public-boundary-v1
+```
+
+Retain only the printed aggregate. Corroborate its exact timestamps with the read-only inspector and
+the already applied steady-state plan:
+
+```powershell
+.\scripts\inspect-development-workload-and-cost.ps1 `
+  -Action Measure `
+  -StartTime <aggregate-startedAt> `
+  -EndTime <aggregate-endedAt> `
+  -WorkloadProfile D2Public `
+  -ExpectedAccountId <development-account-id> `
+  -StateBucket <development-state-bucket> `
+  -RuntimePlanPath <applied-steady-state-plan>
+```
+
+This profile proves only the public-policy and unauthenticated abuse boundary. Authenticated
+contribution, idempotent replay, processing, provider verification, Trust transitions, and owner
+lifecycle remain separate representative work.
+
 All receipts stay below the ignored development `.terraform` directory. Never retain account IDs,
 bucket names, tokens, raw messages, contribution data, source URLs, or provider artifacts in Git.

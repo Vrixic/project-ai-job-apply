@@ -356,8 +356,10 @@ This is the master record for the delivery phases defined in the [product and sy
   Application's initial installed-Edge PKCE login; exact installed listing screenshots, a monitored
   support channel, and store review; accountable UGC/privacy/security
   approval; authenticated branded-browser contribution/lifecycle and human assistive-technology
-  review; representative load/abuse, alert-recipient acceptance, and final accountable production
-  acceptance. Automated Edge/Google Chrome for Testing geometry,
+  review; authenticated contribution/processing load and abuse, alert-recipient acceptance, and
+  final accountable production acceptance. The public-policy/unauthenticated-abuse slice passes
+  40/40 requests with zero server failure, healthy exact alarms/queues/logs, idle ECS, and zero
+  drift. Automated Edge/Google Chrome for Testing geometry,
   keyboard, delivery-state, and two-surface axe coverage passes. The `/extension-support` source
   route passes all web tests/build plus local desktop/mobile axe, overflow, and focus checks. Its
   Vercel production alias now serves the expected route with HTTP `200`, the required security
