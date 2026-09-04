@@ -4,6 +4,10 @@
   "archivePrefix": "applydash-job-capture",
   "allowedFiles": [
     "background.js",
+    "icon-128.png",
+    "icon-16.png",
+    "icon-32.png",
+    "icon-48.png",
     "manifest.json",
     "popup.css",
     "popup.html",
@@ -12,6 +16,12 @@
   ],
   "manifest": {
     "name": "ApplyDash Job Capture (Default Dark)",
+    "icons": {
+      "16": "icon-16.png",
+      "32": "icon-32.png",
+      "48": "icon-48.png",
+      "128": "icon-128.png"
+    },
     "requiredPermissions": ["activeTab", "alarms", "identity", "scripting", "sidePanel", "storage"],
     "forbiddenPermissions": [
       "bookmarks",

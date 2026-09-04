@@ -31,3 +31,16 @@ in addition to the manifest, CSP, and host-permission checks.
 Detector activation is a separate reviewed build-time data object. It cannot carry code or add host
 permissions, must bind the exact package version/provider/variant/domain tuple, and does not enable
 public contribution. The default-dark archive injects no detector policy.
+
+## Candidate icon provenance
+
+The manifest and toolbar action use the same stripped transparent PNG mark at 16, 32, 48, and 128
+pixels. The original concept was generated with OpenAI's built-in image-generation tool on
+2026-09-04, then reduced to a document, one forward path, and a receiving catalog in forest green,
+warm off-white, and muted sage. The generation prompt prohibited text, third-party/browser marks,
+people, padlocks, resumes, briefcases, photography, and watermarks. ImageMagick 7 produced the four
+committed square sRGB derivatives with metadata removed. The release validator checks their PNG
+signature and exact dimensions, and the manifest/release policy must map all four sizes exactly.
+
+This is an original candidate asset, not final product-owner or browser-store artwork approval.
+Promotional artwork and exact installed screenshots remain open.

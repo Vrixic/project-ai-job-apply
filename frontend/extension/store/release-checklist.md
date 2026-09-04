@@ -7,7 +7,7 @@ Every box applies independently to Chrome and Edge unless the evidence explicitl
 - [ ] Package version is a new monotonically increasing numeric browser version and matches the
   generated manifest, listing record, and release evidence.
 - [ ] `release:package` succeeds twice from the same commit and produces the same archive SHA-256.
-- [ ] The release manifest contains only the six allowlisted files and every digest is reviewed.
+- [ ] The release manifest contains only the ten allowlisted files and every digest is reviewed.
 - [ ] Manifest permissions, CSP, service worker, side panel, absence of remote code/source maps,
   and absence of default-dark host permissions match `release-policy.v1.json`.
 - [ ] No secret, token, raw fixture, production PII, `.env` value, or unrelated build output exists

@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -76,11 +76,30 @@ function validateManifest(manifest, packageVersion, policy) {
   ) {
     throw new Error("Unexpected background worker boundary");
   }
+  if (JSON.stringify(manifest.icons) !== JSON.stringify(policy.manifest.icons)) {
+    throw new Error("Manifest icons do not match the reviewed release policy");
+  }
+  if (JSON.stringify(manifest.action?.default_icon) !== JSON.stringify(policy.manifest.icons)) {
+    throw new Error("Action icons do not match the reviewed release policy");
+  }
   if (manifest.side_panel?.default_path !== "sidepanel.html") {
     throw new Error("Unexpected side-panel boundary");
   }
   if (manifest.content_security_policy?.extension_pages !== policy.manifest.contentSecurityPolicy) {
     throw new Error("Manifest CSP does not match the reviewed policy");
+  }
+}
+
+function validatePngIcon(record, expectedSize) {
+  const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  if (
+    record.data.length < 24 ||
+    !record.data.subarray(0, pngSignature.length).equals(pngSignature) ||
+    record.data.subarray(12, 16).toString("ascii") !== "IHDR" ||
+    record.data.readUInt32BE(16) !== expectedSize ||
+    record.data.readUInt32BE(20) !== expectedSize
+  ) {
+    throw new Error(`Release icon must be a ${expectedSize}x${expectedSize} PNG: ${record.name}`);
   }
 }
 
@@ -114,6 +133,8 @@ export async function validateReleaseFiles({ distDirectory, packageVersion, poli
   for (const name of names) {
     const data = await readFile(join(distDirectory, name));
     if (data.length === 0) throw new Error(`Release file is empty: ${name}`);
+    const iconMatch = /^icon-(16|32|48|128)\.png$/u.exec(name);
+    if (iconMatch) validatePngIcon({ name, data }, Number(iconMatch[1]));
     if (data.includes(Buffer.from("sourceMappingURL="))) {
       throw new Error(`Source map reference is forbidden: ${name}`);
     }

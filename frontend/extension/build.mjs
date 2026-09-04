@@ -6,6 +6,12 @@ import { build, context } from "esbuild";
 const extensionRoot = dirname(fileURLToPath(import.meta.url));
 const outputDirectory = join(extensionRoot, "dist");
 const packageMetadata = JSON.parse(await readFile(join(extensionRoot, "package.json"), "utf8"));
+const iconPaths = {
+  16: "icon-16.png",
+  32: "icon-32.png",
+  48: "icon-48.png",
+  128: "icon-128.png",
+};
 
 async function localEnvironment() {
   let source = "";
@@ -182,12 +188,14 @@ const manifest = {
     type: "module",
   },
   action: {
+    default_icon: iconPaths,
     default_popup: "popup.html",
     default_title: "Save or contribute this job",
   },
   content_security_policy: {
     extension_pages: "script-src 'self'; object-src 'self'",
   },
+  icons: iconPaths,
   side_panel: { default_path: "sidepanel.html" },
 };
 
@@ -203,6 +211,11 @@ if (sidePanelHtml === popupHtml) {
 await writeFile(join(outputDirectory, "popup.html"), popupHtml);
 await writeFile(join(outputDirectory, "sidepanel.html"), sidePanelHtml);
 await copyFile(join(extensionRoot, "static", "popup.css"), join(outputDirectory, "popup.css"));
+await Promise.all(
+  Object.entries(iconPaths).map(([, fileName]) =>
+    copyFile(join(extensionRoot, "static", "icons", fileName), join(outputDirectory, fileName)),
+  ),
+);
 
 if (process.argv.includes("--watch")) {
   const buildContext = await context(buildOptions);

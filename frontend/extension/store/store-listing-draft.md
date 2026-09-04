@@ -28,7 +28,8 @@ listing.
 ## Assets still required
 
 - Final approved product name and publisher identity
-- Store icon set and promotional images produced from the exact reviewed UI
+- Final approval of the candidate icon set plus promotional images produced from the exact reviewed
+  UI
 - Chrome and Edge screenshots with no synthetic-only or unsupported claims
 - Approved privacy-policy URL and monitored support channel; the hosted support-route candidate is
   `https://ai-job-apply-candidate.vercel.app/extension-support`

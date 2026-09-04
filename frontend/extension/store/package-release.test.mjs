@@ -1,16 +1,29 @@
-import { readFile, rm, writeFile, mkdir, mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { createReleaseArchive } from "../package-release.mjs";
 
 const roots = [];
+const storeRoot = dirname(fileURLToPath(import.meta.url));
+const iconRoot = join(storeRoot, "..", "static", "icons");
+const icons = {
+  16: "icon-16.png",
+  32: "icon-32.png",
+  48: "icon-48.png",
+  128: "icon-128.png",
+};
 const policy = {
   schemaVersion: 1,
   releaseChannel: "synthetic-default-dark",
   archivePrefix: "applydash-job-capture",
   allowedFiles: [
     "background.js",
+    "icon-128.png",
+    "icon-16.png",
+    "icon-32.png",
+    "icon-48.png",
     "manifest.json",
     "popup.css",
     "popup.html",
@@ -19,6 +32,7 @@ const policy = {
   ],
   manifest: {
     name: "ApplyDash Job Capture (Default Dark)",
+    icons,
     requiredPermissions: ["activeTab", "alarms", "identity", "scripting", "sidePanel", "storage"],
     forbiddenPermissions: ["cookies", "history", "webRequest"],
     contentSecurityPolicy: "script-src 'self'; object-src 'self'",
@@ -39,8 +53,9 @@ async function fixture() {
     description: "Synthetic-only current-tab job capture and explicit contribution preview.",
     permissions: policy.manifest.requiredPermissions,
     background: { service_worker: "background.js", type: "module" },
-    action: { default_popup: "popup.html" },
+    action: { default_icon: icons, default_popup: "popup.html" },
     content_security_policy: { extension_pages: policy.manifest.contentSecurityPolicy },
+    icons,
     side_panel: { default_path: "sidepanel.html" },
   };
   await Promise.all([
@@ -50,6 +65,9 @@ async function fixture() {
     writeFile(join(dist, "popup.css"), "body { color: #111; }\n"),
     writeFile(join(dist, "popup.html"), '<script type="module" src="popup.js"></script>\n'),
     writeFile(join(dist, "sidepanel.html"), '<script type="module" src="popup.js"></script>\n'),
+    ...Object.values(icons).map(async (fileName) =>
+      writeFile(join(dist, fileName), await readFile(join(iconRoot, fileName))),
+    ),
   ]);
   return { dist, firstOutput, secondOutput, manifest };
 }
@@ -104,6 +122,33 @@ describe("extension release packaging", () => {
         policy,
       }),
     ).rejects.toThrow("cannot contain host permissions");
+  });
+
+  it("rejects mismatched manifest icons and malformed icon dimensions", async () => {
+    const { dist, firstOutput, manifest } = await fixture();
+    await writeFile(
+      join(dist, "manifest.json"),
+      `${JSON.stringify({ ...manifest, icons: { ...icons, 128: "icon-48.png" } })}\n`,
+    );
+    await expect(
+      createReleaseArchive({
+        distDirectory: dist,
+        outputDirectory: firstOutput,
+        packageVersion: "0.2.0",
+        policy,
+      }),
+    ).rejects.toThrow("Manifest icons");
+
+    await writeFile(join(dist, "manifest.json"), `${JSON.stringify(manifest)}\n`);
+    await writeFile(join(dist, "icon-128.png"), await readFile(join(iconRoot, "icon-48.png")));
+    await expect(
+      createReleaseArchive({
+        distDirectory: dist,
+        outputDirectory: firstOutput,
+        packageVersion: "0.2.0",
+        policy,
+      }),
+    ).rejects.toThrow("128x128 PNG");
   });
 
   it("rejects remote executable JavaScript and dynamic code construction", async () => {
