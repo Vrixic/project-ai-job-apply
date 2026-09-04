@@ -114,7 +114,7 @@ $allowedVariableNames = @(
   "candidate_rights_backup_retention_days", "candidate_rights_recent_auth_max_age_seconds",
   "candidate_rights_owner_inventory", "candidate_rights_subprocessor_inventory",
   "candidate_rights_id_token_audience", "candidate_rights_auth0_authorized_owner",
-  "candidate_rights_auth0_secret_provisioned"
+  "candidate_rights_auth0_secret_provisioned", "d2_community_runtime"
 )
 $applicationLogGroup = "/ai-job-apply/$Environment/application"
 

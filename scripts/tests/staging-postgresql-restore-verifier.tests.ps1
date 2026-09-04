@@ -341,6 +341,7 @@ foreach ($required in @(
   '"candidate_rights_id_token_audience"',
   '"candidate_rights_auth0_authorized_owner"',
   '"candidate_rights_auth0_secret_provisioned"',
+  '"d2_community_runtime"',
   '$savedTerraformDataDirectory = $env:TF_DATA_DIR',
   '$env:TF_DATA_DIR = $terraformDataDirectory',
   '$env:TF_DATA_DIR = $savedTerraformDataDirectory',

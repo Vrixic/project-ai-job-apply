@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-09-03
+Last updated: 2026-09-04
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -340,7 +340,11 @@ This is the master record for the delivery phases defined in the [product and sy
   deployed migrations/68 relations are verified; unweighted scheduled/Trust aliases `6`, the real
   five-minute schedule, one Trust mapping, 15 JWT routes, one anonymous policy route, provider-only
   egress, and both empty Trust queues are healthy. Manual and automatic batches succeeded with
-  zero work, all 13 D2 alarms are `OK`, ECS is idle, and Terraform has zero drift. This development
+  zero work, all 13 D2 alarms are `OK`, ECS is idle, and Terraform has zero drift. One deployed,
+  isolated point-in-time copy matched the exact six-owner/ten-schema/68-relation/39-migration
+  aggregate and source digest, reached functional recovery in 1,948 seconds, and was removed with
+  zero restore target, snapshot, target automated-backup, or context residue; the primary remained
+  healthy and zero drift was independently rechecked. This development
   exception is not LR-D2-01/LR-D2-02, counsel, accountable security/privacy, production, or store
   approval. Privacy-safe contribution diagnostics are deployed on Gateway alias `43`. A subsequent
   installed retry produced no API request or intake row; the configured local rebuild now exposes
@@ -352,8 +356,8 @@ This is the master record for the delivery phases defined in the [product and sy
   Application's initial installed-Edge PKCE login; exact installed listing screenshots, a monitored
   support channel, and store review; accountable UGC/privacy/security
   approval; authenticated branded-browser contribution/lifecycle and human assistive-technology
-  review; deployed database restore, representative load/abuse, alert-recipient acceptance,
-  and final accountable production acceptance. Automated Edge/Google Chrome for Testing geometry,
+  review; representative load/abuse, alert-recipient acceptance, and final accountable production
+  acceptance. Automated Edge/Google Chrome for Testing geometry,
   keyboard, delivery-state, and two-surface axe coverage passes. The `/extension-support` source
   route passes all web tests/build plus local desktop/mobile axe, overflow, and focus checks. Its
   Vercel production alias now serves the expected route with HTTP `200`, the required security
