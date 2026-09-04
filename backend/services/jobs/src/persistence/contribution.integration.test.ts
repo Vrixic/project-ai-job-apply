@@ -147,12 +147,13 @@ describeWithDatabase("Jobs queued contribution intake persistence", () => {
         state: string;
         eventType: string;
         data: unknown;
+        payload: unknown;
         eventCount: string;
         jobCount: string;
         sourceCount: string;
       }[]
     >`
-      SELECT contribution.state, event.event_type AS "eventType", event.data,
+      SELECT contribution.state, contribution.payload, event.event_type AS "eventType", event.data,
         (SELECT count(*)::text FROM jobs.job_contribution_outbox
           WHERE contribution_id = contribution.id) AS "eventCount",
         (SELECT count(*)::text FROM jobs.canonical_jobs) AS "jobCount",
@@ -165,6 +166,7 @@ describeWithDatabase("Jobs queued contribution intake persistence", () => {
       state: "queued",
       eventType: "job.contributed.v1",
       data: { contributionId: first.id },
+      payload: initial.input,
       eventCount: "1",
       jobCount: before[0]?.jobs,
       sourceCount: before[0]?.sources,

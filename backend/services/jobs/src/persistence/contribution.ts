@@ -95,10 +95,20 @@ export class PostgresJobContributionStore implements JobContributionStore {
   }
 
   async create(command: CreateJobContributionCommand): Promise<JobContributionStatus> {
-    const { idempotencyKeyHash, requestHash } = await atStoreStage("JOB_STORE_PAYLOAD", () => ({
-      idempotencyKeyHash: sha256(command.idempotencyKey),
-      requestHash: sha256(JSON.stringify(command.input)),
-    }));
+    const { idempotencyKeyHash, payloadJson, requestHash } = await atStoreStage(
+      "JOB_STORE_PAYLOAD",
+      () => {
+        const payloadJson = JSON.stringify(command.input);
+        if (typeof payloadJson !== "string") {
+          throw new TypeError("The contribution payload is not serializable");
+        }
+        return {
+          idempotencyKeyHash: sha256(command.idempotencyKey),
+          payloadJson,
+          requestHash: sha256(payloadJson),
+        };
+      },
+    );
     return atStoreStage("JOB_STORE_TRANSACTION", () =>
       this.client.begin(async (transaction) => {
         await atStoreStage(
@@ -169,7 +179,7 @@ export class PostgresJobContributionStore implements JobContributionStore {
           ${input.observation.observedAt}, ${input.approval.approvedAt}, ${input.approval.consentId},
           ${input.approval.consentVersion}, ${input.approval.policyVersion},
           ${input.approval.previewDigestSha256},
-          ${transaction.json(input as unknown as postgres.JSONValue)},
+          ${payloadJson}::text::jsonb,
           ${idempotencyKeyHash}, ${requestHash}, ${createdAt}, ${createdAt}
         )
         RETURNING id, state, request_hash AS "requestHash",
@@ -188,7 +198,7 @@ export class PostgresJobContributionStore implements JobContributionStore {
           id, contribution_id, event_type, subject, data, created_at
         ) VALUES (
           ${outboxId}, ${contributionId}, 'job.contributed.v1', ${contributionId},
-          ${transaction.json({ contributionId })}, ${createdAt}
+          ${JSON.stringify({ contributionId })}::text::jsonb, ${createdAt}
         )
       `,
         );
