@@ -37,10 +37,36 @@ activation-authority token printed by `--action Help` plus independently reviewe
    targets, and queue mappings remain dark. After intentionally deploying only the anonymous,
    all-disabled policy endpoint, add `-AllowPolicyEndpoint`; this permits exactly that one GET route
    while continuing to reject every contribution, private-read, and Trust route.
-5. `plan-development-d2-community-recovery.ps1` produces only rollback/alarm prerequisites. Actual
-   rollback must use a checksum-reviewed Terraform plan. Alarm injection requires accountable metric
-   thresholds, alarm ARN, SNS recipients, and both ALARM and OK delivery confirmation; none are
-   invented by the repository.
+5. `plan-development-d2-community-recovery.ps1` produces only deterministic rollback/alarm
+   prerequisites. A rollback plan requires distinct reviewed current/previous artifact, source, and
+   publication-receipt digests. Its eight-step sequence requires empty queues, healthy alarms,
+   pausing the exact schedule/mapping, separate checksum-reviewed rollback and restoration Terraform
+   plans, immutable-alias checks, bounded probes, trigger restoration, and final zero drift. An alarm
+   plan requires the exact development D2 alarm ARN, its reviewed threshold, and only the confirmed
+   recipient count; the output retains a digest of the ARN rather than the ARN itself. Its five-step
+   sequence requires both ALARM and OK transitions plus recipient confirmation. Both actions emit a
+   stable plan SHA-256 and `mutationPerformed: false`; neither performs the exercise or grants
+   approval.
+
+   ```powershell
+   .\scripts\plan-development-d2-community-recovery.ps1 `
+     -Action RollbackPlan `
+     -ReviewedCurrentArtifactSha256 <64-lowercase-hex> `
+     -ReviewedPreviousArtifactSha256 <different-64-lowercase-hex> `
+     -ReviewedCurrentSourceSha <40-lowercase-hex> `
+     -ReviewedPreviousSourceSha <different-40-lowercase-hex> `
+     -ReviewedCurrentReceiptSha256 <64-lowercase-hex> `
+     -ReviewedPreviousReceiptSha256 <different-64-lowercase-hex>
+
+   .\scripts\plan-development-d2-community-recovery.ps1 `
+     -Action AlarmInjectionPlan `
+     -ReviewedAlarmArn <exact-development-d2-alarm-arn> `
+     -ReviewedAlarmThreshold <reviewed-number> `
+     -ReviewedRecipientCount <confirmed-count>
+   ```
+
+   Actual rollback must use a checksum-reviewed Terraform plan. Alarm injection still requires both
+   notification confirmations; the repository never invents either confirmation.
 
 All receipts stay below the ignored development `.terraform` directory. Never retain account IDs,
 bucket names, tokens, raw messages, contribution data, source URLs, or provider artifacts in Git.
