@@ -333,7 +333,7 @@ This is the master record for the delivery phases defined in the [product and sy
   independent provider verification and atomic catalog publication, Trust/reputation and candidate
   rights, lazy Lambda composition, guarded operations, aggregate telemetry, Terraform, and local
   migration/recovery evidence are present. Under an exact product-owner controlled exception,
-  development state `267` now activates only extension client `0.2.0`, the accepted Greenhouse
+  development state `268` now activates only extension client `0.2.0`, the accepted Greenhouse
   variant and two reviewed domains, one exact provider registration, and the dedicated workflow
   `case_opener`. Production, extension-store distribution, Lever, Ashby, and all human decision
   roles remain dark. No-store signed policy revision `d2-development-greenhouse-20260904-v2`
@@ -347,13 +347,17 @@ This is the master record for the delivery phases defined in the [product and sy
   zero restore target, snapshot, target automated-backup, or context residue; the primary remained
   healthy and zero drift was independently rechecked. This development
   exception is not LR-D2-01/LR-D2-02, counsel, accountable security/privacy, production, or store
-  approval. Privacy-safe contribution diagnostics are deployed on Gateway alias `45`. The next
+  approval. Privacy-safe fixed-stage contribution diagnostics from source `21befbe` are deployed
+  on unweighted Gateway alias `46`; their exact two-update release is independently verified and
+  Terraform is zero drift. The next
   installed retry was correctly held locally after the prior signed policy expired. The replacement
   exact Greenhouse policy is live and verified by both the public endpoint and a fresh configured-
   bundle Edge profile; the local queue still separates account-held from retryable stopped items.
   The retained pre-reauthentication item was correctly fenced before transmission, so one fresh
-  preview and explicit public-add action under the current signed-in session remain
-  before contribution success is claimed. Remaining gates are the D1
+  preview and explicit public-add action under the current signed-in session reached the route but
+  failed pre-commit in the Jobs store with the aggregate generic runtime category. The retained
+  item now requires one explicit retry against the fixed-stage diagnostic release before
+  contribution success is claimed. Remaining gates are the D1
   prerequisites; authorized provider fixtures and QA disposition; completion of Chrome parity,
   cancellation, refresh rotation/replay, logout, and revocation after the dedicated Native
   Application's initial installed-Edge PKCE login; exact installed listing screenshots, a monitored
