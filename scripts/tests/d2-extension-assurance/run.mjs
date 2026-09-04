@@ -15,13 +15,16 @@ const requiredPermissions = [
 const forbiddenPermissions = new Set([
   "bookmarks",
   "browsingData",
+  "clipboardRead",
   "cookies",
   "debugger",
   "declarativeNetRequest",
+  "downloads",
   "geolocation",
   "history",
   "management",
   "nativeMessaging",
+  "notifications",
   "proxy",
   "tabs",
   "topSites",
@@ -72,6 +75,18 @@ if (
   fail("background worker boundary is invalid");
 }
 if (manifest.side_panel?.default_path !== "sidepanel.html") fail("side panel is missing");
+const expectedIcons = {
+  16: "icon-16.png",
+  32: "icon-32.png",
+  48: "icon-48.png",
+  128: "icon-128.png",
+};
+if (
+  JSON.stringify(manifest.icons) !== JSON.stringify(expectedIcons) ||
+  JSON.stringify(manifest.action?.default_icon) !== JSON.stringify(expectedIcons)
+) {
+  fail("manifest and toolbar icon mappings differ from the reviewed four-size set");
+}
 
 const providerHosts = new Set([
   "boards.greenhouse.io",
@@ -94,6 +109,10 @@ for (const pattern of manifest.host_permissions ?? []) {
 const outputFiles = await files(output);
 const allowedNames = new Set([
   "background.js",
+  "icon-128.png",
+  "icon-16.png",
+  "icon-32.png",
+  "icon-48.png",
   "manifest.json",
   "popup.css",
   "popup.html",
