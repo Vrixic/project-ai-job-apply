@@ -1,5 +1,14 @@
 Set-StrictMode -Version Latest
 
+function ConvertFrom-DevelopmentDocumentJson {
+  param([Parameter(Mandatory)][string]$Json)
+  $command = Get-Command ConvertFrom-Json -CommandType Cmdlet
+  if ($command.Parameters.ContainsKey("DateKind")) {
+    return ConvertFrom-Json -InputObject $Json -DateKind String
+  }
+  return ConvertFrom-Json -InputObject $Json
+}
+
 function ConvertTo-ExactBoolean {
   param(
     [Parameter(Mandatory)][AllowNull()][object]$Value,
@@ -522,8 +531,8 @@ function Assert-ExactDocumentParserSourceTransition {
     [string]$function.change.after.environment[0].variables.RELEASE_SHA -cne [string]$artifact.artifactSha256) {
     throw "The parser function transition is not bound from the retained artifact/version to the exact-current receipt."
   }
-  $functionBefore = $function.change.before | ConvertTo-Json -Depth 60 | ConvertFrom-Json
-  $functionAfter = $function.change.after | ConvertTo-Json -Depth 60 | ConvertFrom-Json
+  $functionBefore = ConvertFrom-DevelopmentDocumentJson -Json ($function.change.before | ConvertTo-Json -Depth 60)
+  $functionAfter = ConvertFrom-DevelopmentDocumentJson -Json ($function.change.after | ConvertTo-Json -Depth 60)
   $functionBefore.environment[0].variables.PSObject.Properties.Remove("RELEASE_SHA")
   $functionAfter.environment[0].variables.PSObject.Properties.Remove("RELEASE_SHA")
   foreach ($field in @("code_sha256", "last_modified", "qualified_arn", "qualified_invoke_arn", "s3_key", "s3_object_version", "source_code_hash", "version")) {
@@ -552,8 +561,8 @@ function Assert-ExactDocumentParserSourceTransition {
   if ([string]$alias.change.before.function_version -cne $pinnedVersion) {
     throw "The parser alias transition does not start at the exact pinned parser version."
   }
-  $aliasBefore = $alias.change.before | ConvertTo-Json -Depth 40 | ConvertFrom-Json
-  $aliasAfter = $alias.change.after | ConvertTo-Json -Depth 40 | ConvertFrom-Json
+  $aliasBefore = ConvertFrom-DevelopmentDocumentJson -Json ($alias.change.before | ConvertTo-Json -Depth 40)
+  $aliasAfter = ConvertFrom-DevelopmentDocumentJson -Json ($alias.change.after | ConvertTo-Json -Depth 40)
   foreach ($field in @("function_version")) {
     $aliasBefore.PSObject.Properties.Remove($field); $aliasAfter.PSObject.Properties.Remove($field)
   }
@@ -629,8 +638,8 @@ function Assert-ExactDocumentProcessorRefresh {
     [string]$function.change.after.code_sha256 -cne [string]$function.change.before.code_sha256) {
     throw "The processor function refresh is not bound to the exact artifact and new parser pin."
   }
-  $beforeFunction = $function.change.before | ConvertTo-Json -Depth 60 | ConvertFrom-Json
-  $afterFunction = $function.change.after | ConvertTo-Json -Depth 60 | ConvertFrom-Json
+  $beforeFunction = ConvertFrom-DevelopmentDocumentJson -Json ($function.change.before | ConvertTo-Json -Depth 60)
+  $afterFunction = ConvertFrom-DevelopmentDocumentJson -Json ($function.change.after | ConvertTo-Json -Depth 60)
   foreach ($copy in @($beforeFunction, $afterFunction)) {
     $copy.environment[0].variables.PSObject.Properties.Remove("RELEASE_SHA")
     $copy.environment[0].variables.PSObject.Properties.Remove("DOCUMENT_PARSER_FUNCTION_ARN")
@@ -653,8 +662,8 @@ function Assert-ExactDocumentProcessorRefresh {
     (ConvertTo-DeploymentCanonicalValue $expectedFunctionUnknown)) {
     throw "The processor refresh Lambda unknowns differ from the exact provider shape."
   }
-  $aliasBefore = $alias.change.before | ConvertTo-Json -Depth 30 | ConvertFrom-Json
-  $aliasAfter = $alias.change.after | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+  $aliasBefore = ConvertFrom-DevelopmentDocumentJson -Json ($alias.change.before | ConvertTo-Json -Depth 30)
+  $aliasAfter = ConvertFrom-DevelopmentDocumentJson -Json ($alias.change.after | ConvertTo-Json -Depth 30)
   $aliasBefore.PSObject.Properties.Remove("function_version"); $aliasAfter.PSObject.Properties.Remove("function_version")
   if ([string]$alias.change.before.function_version -cnotmatch '^[1-9][0-9]*$' -or
     (ConvertTo-DeploymentCanonicalValue $aliasBefore -SortArrays) -cne (ConvertTo-DeploymentCanonicalValue $aliasAfter -SortArrays) -or
@@ -675,8 +684,8 @@ function Assert-ExactDocumentProcessorRefresh {
     (ConvertTo-DeploymentCanonicalValue $afterPolicy -SortArrays)) {
     throw "The processor policy refresh changes more than the exact parser-version resource."
   }
-  $beforePolicyRecord = $policy.change.before | ConvertTo-Json -Depth 30 | ConvertFrom-Json
-  $afterPolicyRecord = $policy.change.after | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+  $beforePolicyRecord = ConvertFrom-DevelopmentDocumentJson -Json ($policy.change.before | ConvertTo-Json -Depth 30)
+  $afterPolicyRecord = ConvertFrom-DevelopmentDocumentJson -Json ($policy.change.after | ConvertTo-Json -Depth 30)
   $beforePolicyRecord.PSObject.Properties.Remove("policy"); $afterPolicyRecord.PSObject.Properties.Remove("policy")
   if ((ConvertTo-DeploymentCanonicalValue $beforePolicyRecord -SortArrays) -cne
       (ConvertTo-DeploymentCanonicalValue $afterPolicyRecord -SortArrays) -or
@@ -790,8 +799,8 @@ function Assert-DevelopmentDocumentAcceptedDriftSensitivity {
   $afterValue = Get-OptionalTerraformChangeValue $Record.change "after_sensitive"
   if ($null -eq $beforeValue) { $beforeValue = [pscustomobject]@{} }
   if ($null -eq $afterValue) { $afterValue = [pscustomobject]@{} }
-  $before = $beforeValue | ConvertTo-Json -Depth 100 | ConvertFrom-Json
-  $after = $afterValue | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $before = ConvertFrom-DevelopmentDocumentJson -Json ($beforeValue | ConvertTo-Json -Depth 100)
+  $after = ConvertFrom-DevelopmentDocumentJson -Json ($afterValue | ConvertTo-Json -Depth 100)
   foreach ($normalization in $Normalizations) {
     switch ($normalization) {
       "tags" {
@@ -1032,8 +1041,8 @@ function Assert-DevelopmentDocumentAcceptedResourceDrift {
       throw "Accepted provider-observed drift has an unsafe action or metadata shape."
     }
 
-    $before = $record.change.before | ConvertTo-Json -Depth 100 | ConvertFrom-Json
-    $after = $record.change.after | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+    $before = ConvertFrom-DevelopmentDocumentJson -Json ($record.change.before | ConvertTo-Json -Depth 100)
+    $after = ConvertFrom-DevelopmentDocumentJson -Json ($record.change.after | ConvertTo-Json -Depth 100)
     $sensitivity = @()
     if ($address -ceq $processorRole) {
       $beforePolicies = $before.PSObject.Properties["inline_policy"]
@@ -1587,7 +1596,7 @@ function Get-PolicyAddedStatements {
 function Assert-OnlyPolicyAttributeChanged {
   param([Parameter(Mandatory)][object]$Change)
   Assert-NoTerraformReplacementPaths $Change
-  $afterCopy = $Change.after | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $afterCopy = ConvertFrom-DevelopmentDocumentJson -Json ($Change.after | ConvertTo-Json -Depth 100)
   $afterCopy.policy = $Change.before.policy
   if ((ConvertTo-DeploymentCanonicalValue $Change.before -SortArrays) -cne
     (ConvertTo-DeploymentCanonicalValue $afterCopy -SortArrays)) { throw "An approved update changed more than its policy document." }
@@ -1626,7 +1635,7 @@ function Assert-SecretEndpointPolicyDelta {
     if (@($afterValues | Where-Object { [string]$_ -cne $processor -and [string]$_ -notin @($beforeValues | ForEach-Object { [string]$_ }) }).Count -ne 0 -or
       @($afterValues | Where-Object { [string]$_ -ceq $processor }).Count -ne 1 -or
       $afterValues.Count -ne ($beforeValues.Count + 1)) { throw "The Secrets endpoint added more than the exact processor role." }
-    $copy = $match[0] | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+    $copy = ConvertFrom-DevelopmentDocumentJson -Json ($match[0] | ConvertTo-Json -Depth 50)
     $copy.Condition.ArnEquals."aws:PrincipalArn" = $statement.Condition.ArnEquals."aws:PrincipalArn"
     if ((ConvertTo-DeploymentCanonicalValue $statement -SortArrays) -cne (ConvertTo-DeploymentCanonicalValue $copy -SortArrays)) {
       throw "The Secrets endpoint broadened another permission."
