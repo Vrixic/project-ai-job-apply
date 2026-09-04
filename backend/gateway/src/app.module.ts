@@ -678,10 +678,10 @@ class ProblemDetailsFilter implements ExceptionFilter {
       detail = exception.message;
     }
 
-    if (status === HttpStatus.INTERNAL_SERVER_ERROR) {
+    if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
       request.log.error(
         privacySafeRequestFailure(exception, request.routeOptions.url),
-        "Request failed with an unhandled privacy-safe error classification",
+        "Request failed with a privacy-safe server error classification",
       );
     }
 
@@ -1760,7 +1760,9 @@ class CandidateController {
       }
       throw error;
     }
-    if (!exactJobContribution(created)) throw new JobContributionUnavailableError();
+    if (!exactJobContribution(created)) {
+      throw new JobContributionUnavailableError("JOB_RESPONSE_CONTRACT");
+    }
     return created as JobContribution;
   }
 
@@ -1855,7 +1857,9 @@ class CandidateController {
     if (!contribution) {
       throw new HttpException("Job contribution was not found", HttpStatus.NOT_FOUND);
     }
-    if (!exactJobContribution(contribution)) throw new JobContributionUnavailableError();
+    if (!exactJobContribution(contribution)) {
+      throw new JobContributionUnavailableError("JOB_RESPONSE_CONTRACT");
+    }
     return contribution as JobContribution;
   }
 

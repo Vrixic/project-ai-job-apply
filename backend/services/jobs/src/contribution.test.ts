@@ -5,6 +5,7 @@ import {
   type CreateJobContributionCommand,
   type JobContributionConsentVerifier,
   type JobContributionInput,
+  JobContributionUnavailableError,
   JobContributionService,
   type JobContributionStatus,
   type JobContributionStore,
@@ -365,6 +366,29 @@ describe("JobContributionService", () => {
     ).rejects.toThrow("disabled for this client or source");
     expect(reads).toBe(2);
     expect(store.command).toBeUndefined();
+  });
+
+  it("classifies store failures without retaining their private details", async () => {
+    const privateFailure = Object.assign(new Error("candidate-private database detail"), {
+      code: "23514",
+      constraint: "job_contributions_chronology_ck",
+    });
+    const store = new MemoryStore();
+    store.create = async () => {
+      throw privateFailure;
+    };
+
+    let failure: unknown;
+    try {
+      await new JobContributionService(store, allowConsent, allowCapability, intakeNow).contribute(
+        command(),
+      );
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeInstanceOf(JobContributionUnavailableError);
+    expect((failure as JobContributionUnavailableError).code).toBe("JOB_STORE_CHRONOLOGY");
+    expect((failure as Error).message).not.toContain("candidate-private");
   });
 
   it("passes the exact owner, purpose, client, policy, and preview binding to Profile", async () => {

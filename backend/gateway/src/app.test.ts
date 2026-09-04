@@ -48,6 +48,7 @@ import {
   JobAlreadyReportedError,
   type JobCatalogReader,
   type JobContributions,
+  JobContributionUnavailableError,
   type JobModeration,
   JobReportIdempotencyConflictError,
   JobReportLimitError,
@@ -1300,6 +1301,20 @@ describe("candidate API", () => {
     expect(
       JSON.stringify(privacySafeRequestFailure(registrationFailure, "/v1/resumes/uploads")),
     ).not.toContain("candidate content");
+
+    const contributionFailure = new JobContributionUnavailableError(
+      "JOB_STORE_CHRONOLOGY",
+      new Error("private posting data"),
+    );
+    expect(privacySafeRequestFailure(contributionFailure, "/v1/jobs/contributions")).toEqual({
+      event: "unhandled_request_failure",
+      route: "/v1/jobs/contributions",
+      error_type: "JobContributionUnavailableError",
+      error_code: "JOB_STORE_CHRONOLOGY",
+    });
+    expect(
+      JSON.stringify(privacySafeRequestFailure(contributionFailure, "/v1/jobs/contributions")),
+    ).not.toContain("private posting data");
   });
 
   it("preserves an API Gateway principal through the real Fastify injection lifecycle", async () => {

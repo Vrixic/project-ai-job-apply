@@ -94,9 +94,67 @@ export class JobContributionIdempotencyConflictError extends Error {
 }
 
 export class JobContributionUnavailableError extends Error {
-  constructor() {
-    super("Job contribution intake is temporarily unavailable");
+  readonly code: JobContributionDiagnosticCode;
+
+  constructor(code: JobContributionDiagnosticCode = "JOB_UNAVAILABLE", cause?: unknown) {
+    super("Job contribution intake is temporarily unavailable", { cause });
     this.name = "JobContributionUnavailableError";
+    this.code = code;
+  }
+}
+
+export type JobContributionDiagnosticCode =
+  | "JOB_CAPABILITY_LOAD"
+  | "JOB_CAPABILITY_VERIFY"
+  | "JOB_CONSENT_VERIFY"
+  | "JOB_RESPONSE_CONTRACT"
+  | "JOB_STORE_CHRONOLOGY"
+  | "JOB_STORE_CLIENT"
+  | "JOB_STORE_CONSTRAINT"
+  | "JOB_STORE_FOREIGN_KEY"
+  | "JOB_STORE_OUTBOX"
+  | "JOB_STORE_PAYLOAD"
+  | "JOB_STORE_PERMISSION"
+  | "JOB_STORE_READ"
+  | "JOB_STORE_SOURCE_BOUNDARY"
+  | "JOB_STORE_SOURCE_URL"
+  | "JOB_STORE_TRIGGER"
+  | "JOB_STORE_UNIQUE"
+  | "JOB_STORE_WRITE"
+  | "JOB_UNAVAILABLE";
+
+function contributionStoreDiagnostic(error: unknown): JobContributionDiagnosticCode {
+  const candidate = error as { code?: unknown; constraint?: unknown };
+  switch (candidate?.constraint) {
+    case "job_contributions_chronology_ck":
+      return "JOB_STORE_CHRONOLOGY";
+    case "job_contributions_client_ck":
+      return "JOB_STORE_CLIENT";
+    case "job_contributions_provider_boundary_ck":
+      return "JOB_STORE_SOURCE_BOUNDARY";
+    case "job_contributions_source_url_ck":
+      return "JOB_STORE_SOURCE_URL";
+    case "job_contributions_payload_ck":
+      return "JOB_STORE_PAYLOAD";
+    case "job_contribution_outbox_data_ck":
+    case "job_contribution_outbox_subject_ck":
+      return "JOB_STORE_OUTBOX";
+    default:
+      break;
+  }
+  switch (candidate?.code) {
+    case "23503":
+      return "JOB_STORE_FOREIGN_KEY";
+    case "23505":
+      return "JOB_STORE_UNIQUE";
+    case "23514":
+      return "JOB_STORE_CONSTRAINT";
+    case "42501":
+      return "JOB_STORE_PERMISSION";
+    case "55000":
+      return "JOB_STORE_TRIGGER";
+    default:
+      return "JOB_STORE_WRITE";
   }
 }
 
@@ -312,8 +370,8 @@ export class JobContributionService implements JobContributions {
         approvedAt: command.input.approval.approvedAt,
         clientVersion: command.input.client.version,
       });
-    } catch {
-      throw new JobContributionUnavailableError();
+    } catch (error) {
+      throw new JobContributionUnavailableError("JOB_CONSENT_VERIFY", error);
     }
     if (!consentValid) throw new JobContributionConsentRequiredError();
     await this.requireCapability(command.input);
@@ -321,7 +379,7 @@ export class JobContributionService implements JobContributions {
       return Object.freeze({ ...(await this.store.create(command)) });
     } catch (error) {
       if (error instanceof JobContributionIdempotencyConflictError) throw error;
-      throw new JobContributionUnavailableError();
+      throw new JobContributionUnavailableError(contributionStoreDiagnostic(error), error);
     }
   }
 
@@ -329,10 +387,10 @@ export class JobContributionService implements JobContributions {
     let loaded: Awaited<ReturnType<JobContributionCapabilityPolicyLoader["load"]>>;
     try {
       loaded = await this.capabilityPolicy.load();
-    } catch {
-      throw new JobContributionUnavailableError();
+    } catch (error) {
+      throw new JobContributionUnavailableError("JOB_CAPABILITY_LOAD", error);
     }
-    if (!loaded) throw new JobContributionUnavailableError();
+    if (!loaded) throw new JobContributionUnavailableError("JOB_CAPABILITY_LOAD");
     let policy: D2ContributionCapabilityPolicy;
     let domain: string;
     let now: Date;
@@ -341,8 +399,8 @@ export class JobContributionService implements JobContributions {
       domain = new URL(input.source.sourceUrl).hostname;
       now = this.now();
       if (!Number.isFinite(now.getTime())) throw new Error("invalid clock");
-    } catch {
-      throw new JobContributionUnavailableError();
+    } catch (error) {
+      throw new JobContributionUnavailableError("JOB_CAPABILITY_VERIFY", error);
     }
     const decision = evaluateContributionCapability(policy, {
       stage: "intake",
@@ -362,8 +420,8 @@ export class JobContributionService implements JobContributions {
     try {
       const result = await this.store.get(ownerUserId, contributionId);
       return result ? Object.freeze({ ...result }) : null;
-    } catch {
-      throw new JobContributionUnavailableError();
+    } catch (error) {
+      throw new JobContributionUnavailableError("JOB_STORE_READ", error);
     }
   }
 }
