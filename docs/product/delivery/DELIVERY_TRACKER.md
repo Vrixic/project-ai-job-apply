@@ -368,8 +368,14 @@ This is the master record for the delivery phases defined in the [product and sy
   text-to-`jsonb` boundary; clean PostgreSQL transactional integration and the complete repository
   gate pass. The retained item attempted the remediated release once and again failed pre-commit at
   `JOB_STORE_INSERT` without a PostgreSQL SQLSTATE. State `270` and alias `48` are zero drift; one
-  controlled retry is now needed to obtain only an allowlisted driver/runtime category or succeed,
-  so contribution success is not yet claimed. Remaining gates are the D1
+  stopped-item restart was reported, and the latest installed queue shows one pending, zero stopped,
+  and two account-held items with `Contribution service unavailable`. Earlier empty telemetry
+  queries do not prove non-transmission: the log query checked nested fields although the Gateway
+  logger writes root fields, and the route metric series was not found. The prepared aggregate
+  query checks both field layouts; execution is blocked by the expired development AWS SSO session
+  on 2026-09-05. The next step is to inspect existing diagnostic records; contribution success
+  remains unverified.
+  Remaining gates are the D1
   prerequisites; authorized provider fixtures and QA disposition; completion of Chrome parity,
   cancellation, refresh rotation/replay, logout, and revocation after the dedicated Native
   Application's initial installed-Edge PKCE login; exact installed listing screenshots, a monitored
