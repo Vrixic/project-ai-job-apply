@@ -1338,12 +1338,40 @@ describe("candidate API", () => {
       ),
     ).not.toContain("private");
 
+    const stagedClientFailure = new JobContributionUnavailableError(
+      "JOB_STORE_INSERT",
+      Object.assign(new Error("private stage detail"), {
+        cause: Object.assign(new TypeError("private binding detail"), {
+          code: "UNDEFINED_VALUE",
+        }),
+        code: "JOB_STORE_INSERT",
+        name: "JobContributionStoreStageError",
+      }),
+    );
+    expect(privacySafeRequestFailure(stagedClientFailure, "/v1/jobs/contributions")).toEqual({
+      event: "unhandled_request_failure",
+      route: "/v1/jobs/contributions",
+      error_type: "JobContributionUnavailableError",
+      error_code: "JOB_STORE_INSERT",
+      contribution_cause_code: "UNDEFINED_VALUE",
+      contribution_cause_type: "TypeError",
+    });
+    expect(
+      JSON.stringify(privacySafeRequestFailure(stagedClientFailure, "/v1/jobs/contributions")),
+    ).not.toContain("private");
+
     const untrustedCause = new JobContributionUnavailableError(
       "JOB_STORE_WRITE",
       Object.assign(new Error("private posting data"), { code: "SEC01" }),
     );
     expect(privacySafeRequestFailure(untrustedCause, "/v1/jobs/contributions")).not.toHaveProperty(
       "postgres_cause_code",
+    );
+    expect(privacySafeRequestFailure(untrustedCause, "/v1/jobs/contributions")).toMatchObject({
+      contribution_cause_type: "Error",
+    });
+    expect(privacySafeRequestFailure(untrustedCause, "/v1/jobs/contributions")).not.toHaveProperty(
+      "contribution_cause_code",
     );
   });
 

@@ -233,6 +233,31 @@ export interface CandidateDataExportDownloadSigner {
 
 const SAFE_ERROR_IDENTIFIER = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 const SAFE_ERROR_CODE = /^[A-Z0-9_]{2,32}$/;
+const SAFE_CONTRIBUTION_CAUSE_CODES = new Set([
+  "CONNECT_TIMEOUT",
+  "CONNECTION_CLOSED",
+  "CONNECTION_DESTROYED",
+  "CONNECTION_ENDED",
+  "COPY_IN_PROGRESS",
+  "ERR_BUFFER_TOO_LARGE",
+  "ERR_INVALID_ARG_TYPE",
+  "ERR_INVALID_ARG_VALUE",
+  "ERR_OUT_OF_RANGE",
+  "ERR_STRING_TOO_LONG",
+  "MAX_PARAMETERS_EXCEEDED",
+  "MESSAGE_NOT_SUPPORTED",
+  "NOT_TAGGED_CALL",
+  "SASL_SIGNATURE_MISMATCH",
+  "UNDEFINED_VALUE",
+  "UNSAFE_TRANSACTION",
+]);
+const SAFE_CONTRIBUTION_CAUSE_TYPES = new Set([
+  "Error",
+  "PostgresError",
+  "RangeError",
+  "ReferenceError",
+  "TypeError",
+]);
 const SAFE_ROUTE_TEMPLATES = new Set([
   "/health/live",
   "/health/ready",
@@ -296,7 +321,7 @@ export function privacySafeRequestFailure(exception: unknown, routeTemplate: str
     /^JOB_STORE_(?:IDENTITY_READ|INSERT|LOCK|OUTBOX|PAYLOAD|QUEUE|REPLAY_READ|RESULT|TRANSACTION)$/u.test(
       directCause.code,
     )
-      ? (directCause.cause as { code?: unknown } | undefined)
+      ? (directCause.cause as { code?: unknown; name?: unknown } | undefined)
       : directCause;
   const postgresCauseCode =
     errorType === "JobContributionUnavailableError" &&
@@ -304,6 +329,21 @@ export function privacySafeRequestFailure(exception: unknown, routeTemplate: str
     typeof cause?.code === "string" &&
     /^(?:08|0A|22|23|25|2D|3D|3F|40|42|53|54|55|57|58|F0|HV|P0|XX)[0-9A-Z]{3}$/u.test(cause.code)
       ? cause.code
+      : undefined;
+  const contributionCauseCode =
+    errorType === "JobContributionUnavailableError" &&
+    routeTemplate === "/v1/jobs/contributions" &&
+    typeof cause?.code === "string" &&
+    SAFE_CONTRIBUTION_CAUSE_CODES.has(cause.code)
+      ? cause.code
+      : undefined;
+  const contributionCauseType =
+    !postgresCauseCode &&
+    errorType === "JobContributionUnavailableError" &&
+    routeTemplate === "/v1/jobs/contributions" &&
+    typeof cause?.name === "string" &&
+    SAFE_CONTRIBUTION_CAUSE_TYPES.has(cause.name)
+      ? cause.name
       : undefined;
   return {
     event: "unhandled_request_failure",
@@ -314,6 +354,8 @@ export function privacySafeRequestFailure(exception: unknown, routeTemplate: str
     error_type: errorType,
     error_code: errorCode,
     ...(postgresCauseCode ? { postgres_cause_code: postgresCauseCode } : {}),
+    ...(contributionCauseCode ? { contribution_cause_code: contributionCauseCode } : {}),
+    ...(contributionCauseType ? { contribution_cause_type: contributionCauseType } : {}),
   } as const;
 }
 
