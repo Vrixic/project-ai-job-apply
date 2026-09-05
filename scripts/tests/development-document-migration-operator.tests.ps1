@@ -49,6 +49,51 @@ if ($source -notmatch '\[string\]\$ReviewedBaselineToCurrentDeltaSha256 = ""' -o
 }
 
 $currentSuccessMarkers = @(
+  "Database migrations through 0009_ugc_contribution_consent_candidate_rights applied and verified.",
+  "Jobs migrations through 0020_contribution_trust_reprocessing applied and verified.",
+  "Documents migrations through 0003_candidate_rights applied and verified.",
+  "Matching migrations through 0003_private_saved_page_captures applied and verified.",
+  "Billing migrations through 0002_candidate_rights applied and verified.",
+  "Trust migrations through 0003_decision_signals applied and verified.",
+  "All service-owned database migrations applied and verified."
+)
+if (@([regex]::Matches($source, 'AggregateSuccessLogCount\s+= \$stoppedTask.AggregateSuccessLogCount')).Count -ne 3 -or
+    $source -match 'AggregateSuccessLogCount\s+= [0-9]' -or
+    $source -notmatch 'Get-MigrationAggregateSuccessMessages -ReleaseSourceSha \$SourceSha') {
+  throw "Execute, Recover, and Verify must report the actual exact-release validated event count."
+}
+$logFunctions = @($ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+      $node.Name -in @("Read-MigrationReleaseSource", "Get-MigrationAggregateSuccessMessages",
+        "Assert-TaskResultAndLogs", "Test-NoEffectiveOverrides", "Resolve-TaskLogStreamName", "Get-OptionalProperty")
+    }, $true))
+if ($logFunctions.Count -ne 6) { throw "Exact migration log guards must each be defined once." }
+foreach ($function in $logFunctions) { Invoke-Expression $function.Extent.Text }
+$logReleaseSha = (& git -C $repositoryRoot rev-parse HEAD).Trim()
+if ($LASTEXITCODE -ne 0) { throw "Could not resolve the current migration-source test commit." }
+$actualMessages = @(Get-MigrationAggregateSuccessMessages -ReleaseSourceSha $logReleaseSha)
+if (($actualMessages -join "`n") -cne ($currentSuccessMarkers -join "`n")) {
+  throw "The source-bound current migration contract does not match the exact seven expected events."
+}
+$logSourceFiles = @{}
+foreach ($path in @("backend/services/database-migrations/src/index.ts", "backend/services/database-migrations/src/main.ts") +
+    @("profile", "jobs", "documents", "matching", "billing", "trust" | ForEach-Object { "backend/services/$_/src/migrate.ts" })) {
+  $logSourceFiles[$path] = Read-MigrationReleaseSource -ReleaseSourceSha $logReleaseSha -Path $path
+}
+$historicalLogFiles = @{} + $logSourceFiles
+$historicalLogFiles["backend/services/database-migrations/src/index.ts"] =
+  $historicalLogFiles["backend/services/database-migrations/src/index.ts"].Replace(
+    '  { owner: "trust", executable: "trust/dist/src/migrate.js" },' + "`n", "")
+foreach ($ownerAndMaximum in @(@("profile", 7), @("jobs", 13), @("matching", 2))) {
+  $path = "backend/services/$($ownerAndMaximum[0])/src/migrate.ts"
+  $versionBlock = [regex]::Match($historicalLogFiles[$path], '(?s)const migrationVersions = \[(.*?)\] as const;')
+  $versions = @([regex]::Matches($versionBlock.Groups[1].Value, '"([0-9]{4}_[a-z][a-z0-9_]{0,99})",') |
+    Select-Object -First $ownerAndMaximum[1] | ForEach-Object { '  "' + $_.Groups[1].Value + '",' })
+  $historicalLogFiles[$path] = $historicalLogFiles[$path].Replace($versionBlock.Value,
+    "const migrationVersions = [`n" + ($versions -join "`n") + "`n] as const;")
+}
+$historicalSuccessMarkers = @(
   "Database migrations through 0007_candidate_rights_export_null_omission applied and verified.",
   "Jobs migrations through 0013_public_job_sitemap applied and verified.",
   "Documents migrations through 0003_candidate_rights applied and verified.",
@@ -56,19 +101,93 @@ $currentSuccessMarkers = @(
   "Billing migrations through 0002_candidate_rights applied and verified.",
   "All service-owned database migrations applied and verified."
 )
-$retiredJobsSuccessMarker =
-  "Jobs migrations through 0003_duplicate_resolution_audit_guard applied and verified."
-foreach ($marker in $currentSuccessMarkers) {
-  if (-not $source.Contains($marker)) {
-    throw "The development migration operator does not require every current migration marker."
+$script:logFixtureFiles = $logSourceFiles
+$script:logGitFailure = $false
+function git {
+  $arguments = @($args)
+  $global:LASTEXITCODE = 1
+  if ($arguments.Count -ne 4 -or $arguments[2] -cne "show" -or
+      -not $arguments[3].StartsWith("$logReleaseSha`:", [StringComparison]::Ordinal)) {
+    throw "The log contract did not read the immutable migration release source."
   }
+  $path = $arguments[3].Substring(41)
+  if ($script:logGitFailure -or -not $script:logFixtureFiles.ContainsKey($path)) { return }
+  $global:LASTEXITCODE = 0
+  return $script:logFixtureFiles[$path] -split "`n"
 }
-if ($source.Contains($retiredJobsSuccessMarker)) {
-  throw "The development migration operator still accepts the retired Jobs migration marker."
-}
-if ($source -notmatch 'AggregateSuccessLogCount\s+= 6' -or
-    $source -match 'AggregateSuccessLogCount\s+= 4') {
-  throw "The development migration operator does not report the current six-event aggregate contract."
+try {
+  $script:logFixtureFiles = $historicalLogFiles
+  $historicalMessages = @(Get-MigrationAggregateSuccessMessages -ReleaseSourceSha $logReleaseSha)
+  if (($historicalMessages -join "`n") -cne ($historicalSuccessMarkers -join "`n")) {
+    throw "Historical applied-source recovery lost its exact six-event contract."
+  }
+  foreach ($invalidSource in @("missing", "git-error", "unknown-owner", "owner-order", "dynamic-version", "version-gap", "extra-log", "unknown-main")) {
+    $script:logFixtureFiles = @{} + $logSourceFiles
+    $script:logGitFailure = $false
+    switch ($invalidSource) {
+      "missing" { $script:logFixtureFiles.Remove("backend/services/trust/src/migrate.ts") }
+      "git-error" { $script:logGitFailure = $true }
+      "unknown-owner" { $script:logFixtureFiles["backend/services/database-migrations/src/index.ts"] = $logSourceFiles["backend/services/database-migrations/src/index.ts"].Replace('owner: "trust"', 'owner: "unknown"') }
+      "owner-order" { $script:logFixtureFiles["backend/services/database-migrations/src/index.ts"] = $historicalLogFiles["backend/services/database-migrations/src/index.ts"].Replace('  { owner: "profile"', '  { owner: "trust", executable: "trust/dist/src/migrate.js" },' + "`n" + '  { owner: "profile"') }
+      "dynamic-version" { $script:logFixtureFiles["backend/services/trust/src/migrate.ts"] = $logSourceFiles["backend/services/trust/src/migrate.ts"].Replace('"0003_decision_signals",', 'process.env.LATEST_VERSION,') }
+      "version-gap" { $script:logFixtureFiles["backend/services/trust/src/migrate.ts"] = $logSourceFiles["backend/services/trust/src/migrate.ts"].Replace('0003_decision_signals', '0004_decision_signals') }
+      "extra-log" { $script:logFixtureFiles["backend/services/trust/src/migrate.ts"] += '`nconsole.log("unexpected");' }
+      "unknown-main" { $script:logFixtureFiles["backend/services/database-migrations/src/main.ts"] += '`nconsole.log("unexpected");' }
+    }
+    $rejected = $false
+    try { $null = Get-MigrationAggregateSuccessMessages -ReleaseSourceSha $logReleaseSha } catch { $rejected = $true }
+    if (-not $rejected) { throw "The migration contract accepted invalid source: $invalidSource." }
+  }
+  $script:logGitFailure = $false
+  $SourceSha = $logReleaseSha
+  $operatorSourceSha = "b" * 40
+  $MigrationImage = "synthetic.invalid/migration@sha256:$('a' * 64)"
+  $script:logTask = [pscustomobject]@{
+    taskArn = "arn:aws:ecs:us-east-2:000000000000:task/synthetic/$('a' * 32)"
+    taskDefinitionArn = "synthetic-definition"; launchType = "FARGATE"; lastStatus = "STOPPED"; overrides = $null
+    stoppedAt = [datetime]"2026-09-05T00:00:00Z"
+    containers = @([pscustomobject]@{ name = "database-migration"; exitCode = 0; image = $MigrationImage; imageDigest = "sha256:$('a' * 64)" })
+  }
+  function Assert-TaskDefinition {
+    [pscustomobject]@{ containerDefinitions = @([pscustomobject]@{
+        name = "database-migration"; logConfiguration = [pscustomobject]@{
+          options = [pscustomobject]@{ 'awslogs-group' = "synthetic"; 'awslogs-stream-prefix' = "ecs" }
+        }
+      }) }
+  }
+  function Invoke-AwsJson {
+    param($Arguments, $Operation)
+    if ($Arguments[0] -ceq "ecs") { return [pscustomobject]@{ failures = @(); tasks = @($script:logTask) } }
+    if ($Arguments[0] -cne "logs") { throw "Unexpected mock AWS operation." }
+    $script:logReadCount++
+    $items = if ($script:logMode -ceq "eventual" -and $script:logReadCount -eq 1) { @($script:logMessages[0]) } else { $script:logMessages }
+    return [pscustomobject]@{ events = @($items | ForEach-Object { [pscustomobject]@{ message = $_ } }) }
+  }
+  function Start-Sleep { param($Seconds) }
+  foreach ($logMode in @("current", "historical", "eventual", "missing", "duplicate", "reordered", "extra", "wrong-release")) {
+    $script:logFixtureFiles = if ($logMode -ceq "historical") { $historicalLogFiles } else { $logSourceFiles }
+    $script:logMessages = if ($logMode -ceq "historical") { $historicalSuccessMarkers } else { $currentSuccessMarkers }
+    $script:logMode = $logMode; $script:logReadCount = 0
+    switch ($logMode) {
+      "missing" { $script:logMessages = $currentSuccessMarkers[0..5] }
+      "duplicate" { $script:logMessages = @($currentSuccessMarkers[0]) + $currentSuccessMarkers[0..5] }
+      "reordered" { $script:logMessages = @($currentSuccessMarkers[1], $currentSuccessMarkers[0]) + $currentSuccessMarkers[2..6] }
+      "extra" { $script:logMessages = @($currentSuccessMarkers) + @("unexpected") }
+      "wrong-release" { $script:logMessages = $historicalSuccessMarkers }
+    }
+    $rejected = $false
+    try { $result = Assert-TaskResultAndLogs -ClusterArn "synthetic" -TaskArn $script:logTask.taskArn -TaskDefinitionArn "synthetic-definition" } catch { $rejected = $true }
+    if ($logMode -in @("current", "historical", "eventual")) {
+      $expectedCount = if ($logMode -ceq "historical") { 6 } else { 7 }
+      if ($rejected -or $result.AggregateSuccessLogCount -ne $expectedCount -or $result.Task.stoppedAt -ne $script:logTask.stoppedAt) {
+        throw "Exact release-bound task logs were not validated: $logMode."
+      }
+    } elseif (-not $rejected) { throw "Invalid migration log stream was accepted: $logMode." }
+    if ($logMode -ceq "missing" -and $script:logReadCount -ne 30) { throw "Missing migration logs did not respect the bounded polling window." }
+  }
+} finally {
+  Remove-Item -LiteralPath Function:\git -Force
+  Remove-Item -LiteralPath Function:\Invoke-AwsJson, Function:\Assert-TaskDefinition, Function:\Start-Sleep -Force -ErrorAction SilentlyContinue
 }
 foreach ($schemaFiveMarker in @(
     'SchemaVersion                    = "5"',

@@ -2193,6 +2193,84 @@ function Set-RecoveredReceiptEvidence {
   return $Receipt
 }
 
+function Read-MigrationReleaseSource {
+  param(
+    [Parameter(Mandatory)][ValidatePattern('^[a-f0-9]{40}$')][string]$ReleaseSourceSha,
+    [Parameter(Mandatory)][string]$Path
+  )
+
+  if ($Path -cnotmatch '^backend/services/(?:database-migrations/src/(?:index|main)\.ts|(?:profile|jobs|documents|matching|billing|trust)/src/migrate\.ts)$') {
+    throw "The migration success contract requested an unknown source path."
+  }
+  $lines = @(& git -C $repositoryRoot show "$ReleaseSourceSha`:$Path" 2>$null)
+  if ($LASTEXITCODE -ne 0 -or $lines.Count -eq 0) {
+    throw "The exact migration release source could not be read."
+  }
+  $text = $lines -join "`n"
+  if ($text.Length -gt 1048576) { throw "The migration release source exceeds its inspection bound." }
+  return $text
+}
+
+function Get-MigrationAggregateSuccessMessages {
+  param([Parameter(Mandatory)][ValidatePattern('^[a-f0-9]{40}$')][string]$ReleaseSourceSha)
+
+  # Inspect immutable release blobs, not current worktree files: Recover/Verify may run from an
+  # operator-only descendant after the reviewed image has already executed successfully.
+  $runnerSource = Read-MigrationReleaseSource -ReleaseSourceSha $ReleaseSourceSha `
+    -Path "backend/services/database-migrations/src/index.ts"
+  $runnerDeclarations = [regex]::Matches($runnerSource,
+    '(?s)export const migrationRunners: readonly MigrationRunner\[\] = \[(.*?)\];')
+  if ($runnerDeclarations.Count -ne 1 -or
+      -not $runnerSource.Contains("for (const runner of migrationRunners) {`n    await execute(runner);`n  }")) {
+    throw "The migration release has an unknown ordered-runner contract."
+  }
+  $runnerPattern = '\{ owner: "(profile|jobs|documents|matching|billing|trust)", executable: "\1/dist/src/migrate\.js" \},'
+  $runnerText = $runnerDeclarations[0].Groups[1].Value
+  $runners = [regex]::Matches($runnerText, $runnerPattern)
+  $owners = @($runners | ForEach-Object { $_.Groups[1].Value })
+  if (-not [string]::IsNullOrWhiteSpace([regex]::Replace($runnerText, $runnerPattern, "")) -or
+      ($owners -join ',') -cnotin @("profile,jobs,documents,matching,billing", "profile,jobs,documents,matching,billing,trust")) {
+    throw "The migration release does not declare one known exact owner order."
+  }
+  $mainSource = Read-MigrationReleaseSource -ReleaseSourceSha $ReleaseSourceSha `
+    -Path "backend/services/database-migrations/src/main.ts"
+  $finalMessage = "All service-owned database migrations applied and verified."
+  $expectedMain = 'import { runDatabaseMigrations } from "./index.js";' + "`n`n" +
+    'await runDatabaseMigrations();' + "`n" + 'console.log("' + $finalMessage + '");'
+  if ($mainSource.TrimEnd() -cne $expectedMain) {
+    throw "The migration release has an unknown orchestrator success contract."
+  }
+  $labels = @{ profile = "Database"; jobs = "Jobs"; documents = "Documents"; matching = "Matching"; billing = "Billing"; trust = "Trust" }
+  $messages = [Collections.Generic.List[string]]::new()
+  foreach ($owner in $owners) {
+    $migrationSource = Read-MigrationReleaseSource -ReleaseSourceSha $ReleaseSourceSha `
+      -Path "backend/services/$owner/src/migrate.ts"
+    $declarations = [regex]::Matches($migrationSource, '(?s)const migrationVersions = \[(.*?)\] as const;')
+    if ($declarations.Count -ne 1) { throw "The migration owner has an unknown version declaration." }
+    $versionPattern = '"([0-9]{4}_[a-z][a-z0-9_]{0,99})"'
+    $versionText = $declarations[0].Groups[1].Value
+    $versions = @([regex]::Matches($versionText, $versionPattern) | ForEach-Object { $_.Groups[1].Value })
+    if ($versions.Count -lt 1 -or $versions.Count -gt 999 -or
+        $versionText -cnotmatch ('^\s*' + $versionPattern + '(?:\s*,\s*' + $versionPattern + ')*\s*,?\s*$')) {
+      throw "The migration owner does not declare exact bounded literal versions."
+    }
+    for ($index = 0; $index -lt $versions.Count; $index++) {
+      if (-not $versions[$index].StartsWith(("{0:D4}_" -f ($index + 1)), [StringComparison]::Ordinal)) {
+        throw "The migration owner versions are not an exact sequential inventory."
+      }
+    }
+    $label = [string]$labels[$owner]
+    $successStatement = 'console.log(`' + $label + ' migrations through ${migrationVersions.at(-1)} applied and verified.`);'
+    if ([regex]::Matches($migrationSource, 'console\.log\s*\(').Count -ne 1 -or
+        -not $migrationSource.Contains($successStatement)) {
+      throw "The migration owner has an unknown aggregate success statement."
+    }
+    $messages.Add("$label migrations through $($versions[-1]) applied and verified.")
+  }
+  $messages.Add($finalMessage)
+  return $messages.ToArray()
+}
+
 function Assert-TaskResultAndLogs {
   param(
     [Parameter(Mandatory)][string]$ClusterArn,
@@ -2220,14 +2298,7 @@ function Assert-TaskResultAndLogs {
   $logGroup = [string]@($definition.containerDefinitions)[0].logConfiguration.options.'awslogs-group'
   $logStream = Resolve-TaskLogStreamName -Task $task -Container $containers[0] `
     -TaskDefinition $definition
-  $expectedMessages = @(
-    'Database migrations through 0007_candidate_rights_export_null_omission applied and verified.',
-    'Jobs migrations through 0013_public_job_sitemap applied and verified.',
-    'Documents migrations through 0003_candidate_rights applied and verified.',
-    'Matching migrations through 0002_candidate_rights applied and verified.',
-    'Billing migrations through 0002_candidate_rights applied and verified.',
-    'All service-owned database migrations applied and verified.'
-  )
+  $expectedMessages = @(Get-MigrationAggregateSuccessMessages -ReleaseSourceSha $SourceSha)
   for ($attempt = 0; $attempt -lt 30; $attempt++) {
     $logs = Invoke-AwsJson -Arguments @(
       "logs", "get-log-events", "--log-group-name", $logGroup,
@@ -2235,21 +2306,20 @@ function Assert-TaskResultAndLogs {
       "--limit", "100", "--output", "json"
     ) -Operation "Migration aggregate-log validation"
     $messages = @($logs.events | ForEach-Object { [string]$_.message })
-    $unexpected = @($messages | Where-Object { $_ -cnotin $expectedMessages })
-    if ($unexpected.Count -ne 0) {
-      throw "The migration log stream contains an unexpected event; inspect it locally without recording payloads."
+    if ($messages.Count -gt $expectedMessages.Count) {
+      throw "The migration log stream contains extra events; inspect it locally without recording payloads."
+    }
+    for ($index = 0; $index -lt $messages.Count; $index++) {
+      if ($messages[$index] -cne $expectedMessages[$index]) {
+        throw "The migration log stream violates the exact ordered aggregate-only success contract."
+      }
     }
     if ($messages.Count -eq $expectedMessages.Count) {
-      foreach ($expectedMessage in $expectedMessages) {
-        if (@($messages | Where-Object { $_ -ceq $expectedMessage }).Count -ne 1) {
-          throw "The migration log stream failed the aggregate-only success contract."
-        }
-      }
-      return $task
+      return [pscustomobject]@{ Task = $task; AggregateSuccessLogCount = $messages.Count }
     }
     Start-Sleep -Seconds 2
   }
-  throw "The exact six aggregate success events did not become visible within the bounded CloudWatch polling window."
+  throw "The exact release-bound aggregate success events did not become visible within the bounded CloudWatch polling window."
 }
 
 function Read-ExecutionPlan {
@@ -2735,7 +2805,7 @@ if ($Action -eq "Execute") {
   $stoppedTask = Assert-TaskResultAndLogs -ClusterArn $clusterArn -TaskArn $taskArn -TaskDefinitionArn $taskDefinitionArn
   Assert-ZeroMigrationCompute -ClusterArn $clusterArn
   $receiptValue.phase = "verified"
-  $receiptValue.stoppedAt = ([datetime]$stoppedTask.stoppedAt).ToUniversalTime().ToString("o")
+  $receiptValue.stoppedAt = ([datetime]$stoppedTask.Task.stoppedAt).ToUniversalTime().ToString("o")
   $receiptValue.exitCode = 0
   Write-JsonFile -Path $receipt -Value $receiptValue -AllowReplace
   [pscustomobject]@{
@@ -2746,7 +2816,7 @@ if ($Action -eq "Execute") {
     ArtifactDigest            = $artifact.Digest
     ExecutedTaskCount         = 1
     ExitCode                  = 0
-    AggregateSuccessLogCount  = 6
+    AggregateSuccessLogCount  = $stoppedTask.AggregateSuccessLogCount
     ActiveMigrationTaskCount  = 0
     ContinuousEcsServiceCount = 0
   }
@@ -2784,7 +2854,7 @@ if ($Action -eq "Recover") {
     -TaskArn ([string]$receiptValue.taskArn) -TaskDefinitionArn $taskDefinitionArn
   Assert-ZeroMigrationCompute -ClusterArn $clusterArn
   $receiptValue = Set-RecoveredReceiptEvidence -Receipt $receiptValue `
-    -StoppedAt ([datetime]$stoppedTask.stoppedAt) -RecoveryOperatorSourceSha $operatorSourceSha
+    -StoppedAt ([datetime]$stoppedTask.Task.stoppedAt) -RecoveryOperatorSourceSha $operatorSourceSha
   Write-JsonFile -Path $receipt -Value $receiptValue -AllowReplace
   [pscustomobject]@{
     Outcome                   = "recovered"
@@ -2793,7 +2863,7 @@ if ($Action -eq "Recover") {
     ExecutionPlanSha256       = $ReviewedExecutionPlanSha256
     ExecutedTaskCount         = 1
     ExitCode                  = 0
-    AggregateSuccessLogCount  = 6
+    AggregateSuccessLogCount  = $stoppedTask.AggregateSuccessLogCount
     ActiveMigrationTaskCount  = 0
     ContinuousEcsServiceCount = 0
   }
@@ -2824,7 +2894,7 @@ if ([string]$receiptValue.environment -cne "development" -or
     [string]$receiptValue.taskArn -notmatch "^arn:aws:ecs:$([regex]::Escape($Region)):$ExpectedAccountId`:task/") {
   throw "The migration execution receipt is incomplete or belongs to a different reviewed release."
 }
-$null = Assert-TaskResultAndLogs -ClusterArn $clusterArn -TaskArn ([string]$receiptValue.taskArn) -TaskDefinitionArn $taskDefinitionArn
+$stoppedTask = Assert-TaskResultAndLogs -ClusterArn $clusterArn -TaskArn ([string]$receiptValue.taskArn) -TaskDefinitionArn $taskDefinitionArn
 Assert-ZeroMigrationCompute -ClusterArn $clusterArn
 
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -2889,7 +2959,7 @@ try {
   ArtifactDigest             = $artifact.Digest
   ExecutedTaskCount          = 1
   ExitCode                   = 0
-  AggregateSuccessLogCount   = 6
+  AggregateSuccessLogCount   = $stoppedTask.AggregateSuccessLogCount
   ActiveMigrationTaskCount   = 0
   ContinuousEcsServiceCount  = 0
   StateCustomerKmsEncrypted  = $true
