@@ -4,7 +4,12 @@ Owns private UGC moderation decisions, contributor/source reputation evidence, c
 withdrawal, takedown, and one bounded appeal. It must not rank candidates or directly mutate Jobs
 catalog truth.
 
-## Implemented synthetic/default-dark foundation
+## Implemented boundary
+
+Repository defaults remain dark. Controlled development enables only the dedicated workflow's
+`case_opener` role; human decision roles are unassigned. Case creation is not Trust acceptance or
+catalog publication. See the [Phase 2 register](../../../docs/product/delivery/phase-2-extension-and-community.md)
+for the current deployment and reviewer/acceptance gates.
 
 - A pure contribution-trust state machine starts every case in `needs_review`.
 - Initial acceptance requires the fixed `independently_verified` reason. Rejection, withdrawal,

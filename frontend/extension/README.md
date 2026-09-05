@@ -1,10 +1,13 @@
 # Browser Extension
 
 This directory contains the Manifest V3 Chrome/Edge client for explicit current-tab job capture.
-Its Phase 2 source is implemented as a **synthetic, default-dark release candidate**. Greenhouse,
-Lever, and Ashby detection is disabled until D2-011 supplies authorized sanitized fixtures and
-separate QA representativeness acceptance. The build is not approved for real candidate use,
-public contribution, or browser-store distribution.
+Its repository defaults remain a **synthetic, default-dark release candidate**. The configured
+development candidate separately enables the accepted Greenhouse variant and signed-policy-bound
+contribution; initial installed Edge sign-in and server acknowledgement are confirmed. Lever and
+Ashby remain disabled pending D2-011 fixtures and QA acceptance. Acknowledgement is not publication:
+independent provider verification and Trust acceptance still apply. Production, general candidate
+release, and browser-store distribution are not approved. See the current
+[Phase 2 register](../../docs/product/delivery/phase-2-extension-and-community.md) for live gates.
 
 ## Implemented source boundary
 

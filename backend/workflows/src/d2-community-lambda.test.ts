@@ -62,6 +62,7 @@ function harness(
     consume?: ReturnType<typeof vi.fn>;
     runJobsBatch?: ReturnType<typeof vi.fn>;
     runTrustDelivery?: ReturnType<typeof vi.fn>;
+    providerRecovery?: { inspect: ReturnType<typeof vi.fn>; retry: ReturnType<typeof vi.fn> };
   } = {},
 ) {
   const consume = overrides.consume ?? vi.fn(async () => ({ handled: 1, copied: 1, requeued: 1 }));
@@ -95,6 +96,9 @@ function harness(
       limit: 5,
     },
     trustSignal: { consume: consume as never },
+    ...(overrides.providerRecovery
+      ? { providerRecovery: overrides.providerRecovery as never }
+      : {}),
     now: () => new Date(now),
     logger,
   });
@@ -102,6 +106,65 @@ function harness(
 }
 
 describe("D2 community Lambda", () => {
+  it("inspects and retries only exact rule-bound maintenance commands without running a batch", async () => {
+    const providerRecovery = {
+      inspect: vi.fn(async () => ({ inspected: 1, fingerprint: "a".repeat(64) })),
+      retry: vi.fn(async () => ({ requeued: 1 })),
+    };
+    const { handlers, runJobsBatch, runTrustDelivery, logger } = harness({ providerRecovery });
+    await expect(
+      handlers.scheduled(scheduledEvent({ action: "inspect-provider-verification" })),
+    ).resolves.toMatchObject({ inspected: 1 });
+    await expect(
+      handlers.scheduled(
+        scheduledEvent({
+          action: "retry-provider-verification",
+          expectedFingerprint: "a".repeat(64),
+          confirmation: "RETRY-REVIEWED-PROVIDER-VERIFICATION",
+        }),
+      ),
+    ).resolves.toEqual({ requeued: 1 });
+    expect(providerRecovery.retry).toHaveBeenCalledWith("a".repeat(64), now);
+    expect(runJobsBatch).not.toHaveBeenCalled();
+    expect(runTrustDelivery).not.toHaveBeenCalled();
+    expect(logger.info).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { action: "inspect-provider-verification", unexpected: true },
+    { action: "inspect-provider-verification", scheduleRuleArn: "wrong" },
+    { action: "retry-provider-verification", expectedFingerprint: "a".repeat(64) },
+    {
+      action: "retry-provider-verification",
+      expectedFingerprint: "invalid",
+      confirmation: "RETRY-REVIEWED-PROVIDER-VERIFICATION",
+    },
+  ])("rejects malformed maintenance without store access", async (event) => {
+    const providerRecovery = { inspect: vi.fn(), retry: vi.fn() };
+    const { handlers } = harness({ providerRecovery });
+    await expect(handlers.scheduled(scheduledEvent(event))).rejects.toThrow(
+      "D2CommunityRecoveryCommandRejected",
+    );
+    expect(providerRecovery.inspect).not.toHaveBeenCalled();
+    expect(providerRecovery.retry).not.toHaveBeenCalled();
+  });
+
+  it("scrubs recovery driver failures and rejects missing recovery composition", async () => {
+    await expect(
+      harness().handlers.scheduled(scheduledEvent({ action: "inspect-provider-verification" })),
+    ).rejects.toThrow("D2CommunityRecoveryCommandRejected");
+    const providerRecovery = {
+      inspect: vi.fn(async () => {
+        throw new Error("SYNTHETIC_SENSITIVE_DRIVER_PARAMETERS");
+      }),
+      retry: vi.fn(),
+    };
+    await expect(
+      harness({ providerRecovery }).handlers.scheduled(
+        scheduledEvent({ action: "inspect-provider-verification" }),
+      ),
+    ).rejects.toThrow("D2CommunityRecoveryUnavailableOrSnapshotChanged");
+  });
   it("is import-safe and default-off", async () => {
     await expect(defaultScheduled(undefined)).resolves.toEqual({
       enabled: false,

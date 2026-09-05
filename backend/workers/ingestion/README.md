@@ -9,7 +9,8 @@ them and keep provider activation disabled. The registry rejects an enabled prov
 runtime supplies explicit provider-activation authority; every source also has its own `enabled`
 flag and exact Jobs-owned `sourceId + adapterVersion + adapterConfigSha256` pause gate. No real
 board/site identifier, company configuration, schedule, queue mapping, egress, or provider data is
-configured by default. Public UGC remains outside this worker and belongs to D2.
+configured by default. Public UGC intake remains Jobs-owned; D2 reuses this worker's independent
+provider verifier without treating candidate-supplied content as catalog truth.
 
 ## Implemented boundaries
 
@@ -23,10 +24,12 @@ configured by default. Public UGC remains outside this worker and belongs to D2.
   idempotent catalog-port calls, and aggregate-only results.
 - `contribution-verification.ts` — a default-dark independent-provider verification port. It polls
   only an explicitly enabled registry source bound to an exact provider, page variant, tenant, and
-  source-policy version; reuses the reviewed ingestion boundary; returns only identifier/digest
-  evidence; resolves existing job/source IDs through an injected read-only exact catalog lookup;
-  and never writes catalog observations or advances source freshness. Missing or ambiguous catalog
-  identity denies verification.
+  source-policy version; reuses the reviewed ingestion boundary; returns bounded independent
+  provider evidence for Jobs-owned staging; resolves existing job/source IDs through an injected
+  read-only exact catalog lookup; and never writes catalog observations or advances freshness.
+  Ambiguous identity parks; a genuinely new exact provider identity may be staged without catalog
+  IDs and published only through the separate gated reconciler. Optional field omission and exact
+  grounded location/work-type splits compare equivalently while original provider truth is retained.
 - `synthetic.ts` — deterministic generated `.example.test` observations representing no provider,
   employer, tenant, or real job.
 - `greenhouse.ts` — fixed-host public Job Board GET adapter with redirect refusal, bounded timeout
@@ -90,7 +93,10 @@ provider snapshots and does not authorize another provider request or an enabled
 Run unit tests with `pnpm --filter @ai-job-apply/ingestion-worker test`. PostgreSQL integration
 requires an explicit `DATABASE_URL` and is separate from the default suite.
 
-Contribution verification has no live registrations. Enabling one requires the same reviewed
-provider adapter registration and provider-activation authority as ingestion, plus an exact
-verification registration and an accountable source-policy version supplied by runtime
-configuration. Repository fixtures and synthetic tests do not authorize a provider or live host.
+Contribution verification defaults to no registrations. Controlled development has one accepted
+Greenhouse registration in the separate D2 scheduled runtime; this does not activate the general
+ingestion runtime or other providers. Every registration requires an enabled reviewed adapter,
+explicit provider authority, and an exact verification/source-policy binding. Repository fixtures
+and synthetic tests alone do not authorize a provider or live host. The
+[Phase 2 register](../../../docs/product/delivery/phase-2-extension-and-community.md) tracks the
+current deployment and remaining acceptance gates.

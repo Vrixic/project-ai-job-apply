@@ -9,6 +9,7 @@ import {
   type ContributionProcessingRuntimeBatchInput,
   type ContributionProcessingRuntimeBatchMetrics,
   type ContributionProcessingRuntimeConfiguration,
+  type ContributionRecoverySnapshot,
   type ContributionTrustDecisionSignalConsumer,
   runContributionProcessingRuntimeBatch,
 } from "@ai-job-apply/jobs-service";
@@ -59,6 +60,10 @@ interface EnabledD2CommunityLambdaConfiguration {
     limit: number;
   }>;
   trustSignal: Pick<ContributionTrustDecisionSignalConsumer, "consume">;
+  providerRecovery?: {
+    inspect(): Promise<ContributionRecoverySnapshot>;
+    retry(fingerprint: string, now: Date): Promise<{ requeued: number }>;
+  };
   now(): Date;
   logger: D2CommunityAggregateLogger;
 }
@@ -282,7 +287,52 @@ export function createD2CommunityLambdaHandlers(
   });
 
   return Object.freeze({
-    scheduled: async (event: unknown): Promise<D2CommunityScheduledMetrics> => {
+    scheduled: async (
+      event: unknown,
+    ): Promise<
+      D2CommunityScheduledMetrics | ContributionRecoverySnapshot | { requeued: number }
+    > => {
+      if (
+        record(event) &&
+        (event.action === "inspect-provider-verification" ||
+          event.action === "retry-provider-verification")
+      ) {
+        const retry = event.action === "retry-provider-verification";
+        if (
+          !exactKeys(
+            event,
+            retry
+              ? [
+                  "schemaVersion",
+                  "action",
+                  "scheduleRuleArn",
+                  "expectedFingerprint",
+                  "confirmation",
+                ]
+              : ["schemaVersion", "action", "scheduleRuleArn"],
+          ) ||
+          event.schemaVersion !== 1 ||
+          event.scheduleRuleArn !== configuration.boundary.scheduleRuleArn ||
+          !configuration.providerRecovery ||
+          (retry &&
+            (typeof event.expectedFingerprint !== "string" ||
+              !/^[a-f0-9]{64}$/u.test(event.expectedFingerprint) ||
+              event.confirmation !== "RETRY-REVIEWED-PROVIDER-VERIFICATION"))
+        ) {
+          throw new Error("D2CommunityRecoveryCommandRejected");
+        }
+        try {
+          return retry
+            ? await configuration.providerRecovery.retry(
+                event.expectedFingerprint as string,
+                exactDate(configuration.now()),
+              )
+            : await configuration.providerRecovery.inspect();
+        } catch {
+          // A driver error may retain bound identifiers: never propagate it to Lambda logs.
+          throw new Error("D2CommunityRecoveryUnavailableOrSnapshotChanged");
+        }
+      }
       assertScheduledEvent(event, configuration.boundary);
       const now = exactDate(configuration.now());
       let jobs: ContributionProcessingRuntimeBatchMetrics;

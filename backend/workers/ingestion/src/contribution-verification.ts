@@ -87,17 +87,37 @@ function registeredSource(
 }
 
 function providerContent(observation: CatalogObservation) {
+  // The v1 page inspector separates exact location prefixes for presentation.
+  // Compare that equivalent representation without rewriting provider evidence.
+  const separated = observation.locations.map((location) => {
+    const combined = normalizeText(location).match(
+      /^(remote|hybrid|on[\s_-]?site)\s*(?:[-–—|·]|,)\s*(\S.*)$/iu,
+    );
+    const prefix = combined?.[1]?.replace(/[\s_-]/gu, "");
+    const workMode =
+      prefix === "remote"
+        ? "remote"
+        : prefix === "hybrid"
+          ? "hybrid"
+          : prefix === "onsite"
+            ? "on_site"
+            : undefined;
+    return { location: normalizeText(combined?.[2] ?? location), workMode };
+  });
+  const prefixModes = new Set(separated.map((item) => item.workMode));
+  const prefixMode = prefixModes.size === 1 ? separated[0]?.workMode : undefined;
   return {
     companyName: normalizeText(observation.companyName),
     title: normalizeText(observation.title),
     locations: [...new Set(observation.locations.map(normalizeText))].sort(),
+    separatedLocations: [...new Set(separated.map((item) => item.location))].sort(),
     descriptionSha256: sha256(normalizeText(observation.description)),
     department: observation.department ? normalizeText(observation.department) : undefined,
     applicationUrlSha256: observation.applicationUrl
       ? sha256(canonicalizeJobUrl(observation.applicationUrl))
       : undefined,
     employmentType: observation.employmentType,
-    workMode: observation.workMode,
+    workMode: observation.workMode ?? prefixMode,
   };
 }
 
@@ -107,7 +127,9 @@ function contentMatches(proposal: NormalizedContributionProposal, observation: C
     proposal.normalizedTitle === truth.title &&
     (proposal.normalizedCompanyName === undefined ||
       proposal.normalizedCompanyName === truth.companyName) &&
-    JSON.stringify(proposal.normalizedLocations) === JSON.stringify(truth.locations) &&
+    (proposal.normalizedLocations.length === 0 ||
+      JSON.stringify(proposal.normalizedLocations) === JSON.stringify(truth.locations) ||
+      JSON.stringify(proposal.normalizedLocations) === JSON.stringify(truth.separatedLocations)) &&
     (proposal.normalizedDescriptionSha256 === undefined ||
       proposal.normalizedDescriptionSha256 === truth.descriptionSha256) &&
     (proposal.normalizedDepartment === undefined ||

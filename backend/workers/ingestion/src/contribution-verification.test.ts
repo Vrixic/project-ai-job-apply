@@ -184,6 +184,51 @@ describe("RegisteredIndependentProviderVerifier", () => {
     expect(poll).not.toHaveBeenCalled();
   });
 
+  it("verifies a preview that omits the optional location without discarding provider truth", async () => {
+    const { verifier } = harness({ kind: "success", observations: [observation] });
+    const result = await verifier.verify({
+      contributionId,
+      normalizationId,
+      proposal: proposal({ normalizedLocations: [] }),
+    });
+    expect(result).toMatchObject({
+      status: "verified",
+      providerObservation: { locations: ["New York"] },
+    });
+  });
+
+  it.each(["Remote-NORAM", "Remote — NORAM", "remote | NORAM"])(
+    "matches the exact preview location/work-type split for %s",
+    async (location) => {
+      const { verifier } = harness({
+        kind: "success",
+        observations: [{ ...observation, locations: [location] }],
+      });
+      const result = await verifier.verify({
+        contributionId,
+        normalizationId,
+        proposal: proposal({ normalizedLocations: ["noram"], workMode: "remote" }),
+      });
+      expect(result).toMatchObject({
+        status: "verified",
+        providerObservation: { locations: [location] },
+      });
+    },
+  );
+
+  it.each([
+    { normalizedLocations: ["emea"], workMode: "remote" as const },
+    { normalizedLocations: ["noram"], workMode: "hybrid" as const },
+  ])("does not hide a conflicting selected location or work type", async (override) => {
+    const { verifier } = harness({
+      kind: "success",
+      observations: [{ ...observation, locations: ["Remote-NORAM"] }],
+    });
+    await expect(
+      verifier.verify({ contributionId, normalizationId, proposal: proposal(override) }),
+    ).resolves.toMatchObject({ status: "mismatch" });
+  });
+
   it("returns mismatch, closed, and unavailable without treating contribution as truth", async () => {
     await expect(
       harness({
@@ -199,6 +244,27 @@ describe("RegisteredIndependentProviderVerifier", () => {
       }),
     ).resolves.toMatchObject({ status: "unavailable" });
   });
+
+  it.each([
+    { locations: ["Remote-NORAM", "Hybrid-EMEA"] },
+    { locations: ["Remote-NORAM", "EMEA"] },
+    { locations: ["Remote-NORAM"], workMode: "hybrid" as const },
+  ])(
+    "does not infer agreement from ambiguous or conflicting provider work modes",
+    async (fields) => {
+      const { verifier } = harness({
+        kind: "success",
+        observations: [{ ...observation, ...fields }],
+      });
+      await expect(
+        verifier.verify({
+          contributionId,
+          normalizationId,
+          proposal: proposal({ normalizedLocations: [], workMode: "remote" }),
+        }),
+      ).resolves.toMatchObject({ status: "mismatch" });
+    },
+  );
 
   it("reports closed only for an exact provider withdrawal", async () => {
     const ashbyUrl = "https://jobs.ashbyhq.com/acme/abcdefgh";

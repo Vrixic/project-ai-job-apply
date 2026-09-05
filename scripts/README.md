@@ -78,6 +78,14 @@ migration execution, or AWS restore execution. No gateway or general worker imag
 
 ## Deployed verification and evidence
 
+- `operate-development-d2-provider-recovery.ps1` — Inspects at most 25 provider-held
+  contribution queue items through the exact reviewed immutable development function. It returns
+  only fixed reason counts and an opaque snapshot fingerprint. `Retry` requires that unchanged
+  fingerprint plus `RETRY-REVIEWED-PROVIDER-VERIFICATION`, and requeues only temporary provider
+  unavailability or observation mismatch. Closed jobs, probable duplicates, Trust holds, payloads,
+  and catalog truth are unchanged; ordinary processing rechecks every gate. The command requires
+  the expected account and reviewed Lambda code checksum and rejects weighted aliases, wrong
+  artifacts, malformed results, and stale snapshots. No public route or job identifier is exposed.
 - `operate-d1-representative-acceptance.ps1` — Validates a checksum-reviewed, aggregate-only D1
   representative-assurance packet with explicit thresholds and recipients. It composes already
   produced workload, provider-failure, alert-delivery, and zero-drift aggregates and never performs

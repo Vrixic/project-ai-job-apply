@@ -13,6 +13,7 @@ import {
   IdentifierOnlyContributionProcessingEventPublisher,
   PostgresContributionProcessingQueueStore,
   PostgresContributionProcessingStore,
+  PostgresContributionRecoveryStore,
   PostgresJobCatalog,
   ProfileCurrentContributionConsentAdapter,
 } from "@ai-job-apply/jobs-service";
@@ -536,6 +537,7 @@ export async function createConfiguredD2CommunityLambdaConfiguration(
       queueStore,
       policy.processing.version,
     ),
+    providerRecovery: new PostgresContributionRecoveryStore(client),
     now,
     logger,
   });

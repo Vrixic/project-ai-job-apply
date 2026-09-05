@@ -398,6 +398,11 @@ This is the master record for the delivery phases defined in the [product and sy
   by the current aggregate record. Refresh reads status only; it does not requeue the parked work.
   Do not resubmit the acknowledged contribution. Trust, publication, and remaining lifecycle
   acceptance are not implied by this successful intake.
+  The 2026-09-05 completion pass has locally verified regression-backed provider compatibility
+  for omitted optional location and exact location/work-type separation, plus bounded
+  aggregate-only provider-hold inspection and snapshot-fenced recovery. Repository checks and
+  fresh-PostgreSQL regressions pass; runtime release and recovery remain next. Human review
+  boundaries stay unchanged.
   Remaining gates are the D1
   prerequisites; authorized provider fixtures and QA disposition; completion of Chrome parity,
   cancellation, refresh rotation/replay, logout, and revocation after the dedicated Native

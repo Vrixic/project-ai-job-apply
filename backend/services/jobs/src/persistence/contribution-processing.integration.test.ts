@@ -12,6 +12,7 @@ import {
   PostgresContributionPublicationReconciler,
 } from "./contribution-processing.js";
 import { PostgresContributionProcessingEventDeliveryStore } from "./contribution-processing-event-delivery.js";
+import { PostgresContributionRecoveryStore } from "./contribution-recovery.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -494,5 +495,97 @@ describeWithDatabase("durable contribution processing persistence", () => {
           WHERE id = ${newVerificationId} AND job_id = ${first.jobId} AND source_id = ${first.sourceId}) AS evidence
     `;
     expect(counts).toEqual({ jobs: 1, sources: 1, evidence: 1 });
+  });
+  it("inspects fixed backlog categories and requeues only an unchanged eligible snapshot", async () => {
+    const recovery = new PostgresContributionRecoveryStore(client);
+    const reasons = [
+      "provider_temporarily_unavailable",
+      "provider_observation_mismatch",
+      "provider_posting_closed",
+      "provider_probable_duplicate",
+      "provider_observation_mismatch",
+    ] as const;
+    const identities: string[] = [];
+    const originalInputs = new Map<string, CreateJobContributionCommand["input"]>();
+    for (const reason of reasons) {
+      const id = uuidv7();
+      identities.push(id);
+      const base = command();
+      const input = { ...base.input, contributionId: id };
+      originalInputs.set(id, input);
+      await intake.create({
+        ...base,
+        idempotencyKey: `recovery-${id}`,
+        input,
+      });
+      await processing.recordOwnerState({
+        contributionId: id,
+        state: "awaiting_independent_verification",
+        reasonCode: reason,
+        processingPolicyVersion: "synthetic-processing-v1",
+        occurredAt: new Date(),
+      });
+    }
+    const now = new Date(Date.now() + 2_000);
+    const claims = await queue.claim({
+      workerId: "recovery:test",
+      now,
+      claimExpiresAt: new Date(now.getTime() + 30_000),
+      limit: 25,
+    });
+    for (const id of identities) {
+      const item = claims.find((row) => row.contributionId === id);
+      if (!item) throw new Error("Expected synthetic recovery claim");
+      await queue.park({
+        item,
+        workerId: "recovery:test",
+        now,
+        reason: identities.indexOf(id) === 4 ? "trust_pending" : "provider_pending",
+      });
+    }
+    const first = await recovery.inspect();
+    expect(first).toMatchObject({
+      inspected: 4,
+      retryable: 2,
+      unavailable: 1,
+      mismatch: 1,
+      closed: 1,
+      duplicate: 1,
+      other: 0,
+    });
+    for (const id of identities) expect(JSON.stringify(first)).not.toContain(id);
+    expect(JSON.stringify(first)).not.toContain(sourceUrl);
+    await processing.recordOwnerState({
+      contributionId: identities[0] as string,
+      state: "awaiting_independent_verification",
+      reasonCode: "provider_observation_mismatch",
+      processingPolicyVersion: "synthetic-processing-v1",
+      occurredAt: now,
+    });
+    await expect(recovery.retry(first.fingerprint, now)).rejects.toThrow(
+      "ContributionRecoverySnapshotChanged",
+    );
+    const current = await recovery.inspect();
+    await expect(recovery.retry(current.fingerprint, now)).resolves.toEqual({ requeued: 2 });
+    await expect(recovery.retry(current.fingerprint, now)).rejects.toThrow(
+      "ContributionRecoverySnapshotChanged",
+    );
+    expect(await recovery.inspect()).toMatchObject({
+      inspected: 2,
+      retryable: 0,
+      closed: 1,
+      duplicate: 1,
+    });
+    for (const id of identities) {
+      const [row] = await client<{ state: string; attempt: number; payload: unknown }[]>`
+        SELECT queue.state, queue.attempt, contribution.payload
+        FROM jobs.job_contribution_processing_queue AS queue
+        JOIN jobs.job_contributions AS contribution ON contribution.id = queue.contribution_id
+        WHERE contribution.id = ${id}
+      `;
+      expect(row?.state).toBe(identities.indexOf(id) < 2 ? "pending" : "parked");
+      if (identities.indexOf(id) < 2) expect(row?.attempt).toBe(0);
+      expect(row?.payload).toEqual(originalInputs.get(id));
+    }
   });
 });
