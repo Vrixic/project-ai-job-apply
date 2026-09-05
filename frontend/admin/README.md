@@ -40,7 +40,7 @@ not implemented or authorized by this slice.
   `aria-live` result region. The same-origin BFF strictly validates bounded requests and redacted
   responses and emits `no-store` fixed problem details.
 - The Gateway and Terraform D2 route inventories are wired. The completed 2026-09-05 backend
-  release at state `281` deploys source `3f20462` on Gateway version `51` with 18 JWT-protected D2
+  release, now at state `283`, deploys application source `3f20462` on Gateway version `51` with 18 JWT-protected D2
   routes and the anonymous policy endpoint. The new queue/evidence handlers are deployed after
   migration and worker upgrade/drain; direct boundary and zero Terraform drift checks pass.
 - This source and its protected preview do not establish human reviewer assignments, authenticated

@@ -20,7 +20,7 @@ and independently gated Terraform routes. Repository defaults remain dark; the c
 Greenhouse-only development exception is recorded in the
 [Phase 2 register](../../docs/product/delivery/phase-2-extension-and-community.md).
 
-The ordered development release completed on 2026-09-05 at state `281`, running source `3f20462`
+The ordered development release completed on 2026-09-05; current state `283` runs application source `3f20462`
 on immutable Gateway/scheduled/Trust versions `51`/`13`/`11`. All three are healthy; direct Gateway
 boundary checks and zero Terraform drift pass. The 18 exact JWT-protected D2 routes include the
 deployed owner cancellation and reviewer queue/evidence handlers, alongside the anonymous
@@ -28,7 +28,9 @@ signed-policy route. Migration image `116b272` completed once with exit `0` and 
 aggregate success events, verifying 40 migrations across six owners and 68 relations, including
 Jobs `0020`. Its receipt was recovered and post-verified without rerunning the task; both workers
 were upgraded and old invocations drained before Gateway release. This migration result does not
-extend the historical 39-migration point-in-time restore evidence to the new boundary.
+extend the historical 39-migration point-in-time restore evidence to the new boundary. The later
+`7420dfa` configuration update aligns the Trust consumer/mapping concurrency at two without changing
+Gateway code, aliases, authorization, or alarms.
 
 Profile-owned immutable contribution-consent grant/revoke routes wire Jobs intake to the real
 Profile verification store. Consent identifiers and times are server-issued, responses are

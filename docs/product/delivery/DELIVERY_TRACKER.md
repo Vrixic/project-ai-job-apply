@@ -324,7 +324,8 @@ This is the master record for the delivery phases defined in the [product and sy
 - Active implementation follow-up (2026-09-05): signed-policy readiness, exact Greenhouse preview
   compatibility, owner pre-verification cancellation, discoverable reviewer queue/evidence,
   terminal reconciliation and lost-signal fixes, and bounded authenticated workload tooling are
-  implemented with targeted regressions. Deployed source `3f20462` passes `pnpm check`;
+  implemented with targeted regressions. Application source `3f20462` and current configuration
+  source `7420dfa` pass `pnpm check`;
   application source `116b272` also passed `scripts/verify-phase0.ps1`, including all 33 typecheck
   and 34 unit-test tasks; installed
   synthetic Edge/Chrome-for-Testing layout/privacy checks pass. Fresh-database integration passes
@@ -332,7 +333,7 @@ This is the master record for the delivery phases defined in the [product and sy
   at the 40-migration/68-relation boundary. Ordered migration/worker/Gateway release is complete
   in controlled development. D2-029's schema-7 handoff passes local adversarial/round-trip checks without
   weakening state/document provenance or changing historical baseline compatibility.
-  Current state `281` runs Gateway `51`, scheduled `13`, and Trust `11` from `3f20462`, with
+  Current state `283` runs Gateway `51`, scheduled `13`, and Trust `11` from `3f20462`, with
   immutable matching artifacts, 18 JWT routes/budgets, and zero Terraform drift. One migration
   task from `116b272` stopped with exit 0 and seven exact six-owner success messages, including
   Jobs `0020`; the corrected operator recovered and verified the original task, without rerun.
@@ -342,7 +343,12 @@ This is the master record for the delivery phases defined in the [product and sy
   Snapshot-fenced recovery requeued two description-held contributions; both claimed/parked with
   no completion/retry/dead/publication, and fresh inspection now finds zero provider-verification
   holds. Refresh the existing owner Processing/Trust state; aggregate parking counts alone do not
-  establish a precise Trust status. No immutable payload or account-held browser item was changed.
+  establish a precise Trust status. Both resulting Trust signals were handled, with zero failed
+  signals and two queue messages sent/received/deleted. One real throttle recovered; its alarm's OK
+  transition used missing-data handling, not an observed zero. Configuration `7420dfa` now aligns
+  the mapping maximum and Trust reservation at two, with eight Terraform regressions and exact
+  two-update/zero-drift deployment verification. No artifact, alias, alarm threshold, immutable
+  payload, or account-held browser item was changed by that correction.
   The remaining human identity, browser, workload, accessibility, alarm receipt, provider/store,
   and accountable acceptance gates are listed in the phase document; Phase 2 is not fully accepted.
 - Depends on: D0 consent/security foundations and D1 catalog, saved-job, and moderation foundations;

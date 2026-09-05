@@ -11,7 +11,7 @@ Repository defaults remain dark. Controlled development enables only the dedicat
 catalog publication. See the [Phase 2 register](../../../docs/product/delivery/phase-2-extension-and-community.md)
 for the current deployment and reviewer/acceptance gates.
 
-The ordered development release completed on 2026-09-05 at state `281`: source `3f20462` runs on
+The ordered development release completed on 2026-09-05; current state `283` runs application source `3f20462` on
 healthy immutable scheduled/Trust/Gateway versions `13`/`11`/`51`, with the real scheduler, Trust
 SQS input/DLQ, enabled alias-targeted consumer, and 18 exact JWT-protected D2 routes plus the
 anonymous signed-policy route. The 40-migration/six-owner/68-relation boundary, including Jobs
@@ -20,7 +20,11 @@ events; receipt recovery did not rerun the task. The worker upgrade and old-invo
 preceded the Gateway release. Reviewer queue/evidence, pre-verification cancellation, and terminal
 reconciliation are deployed; direct Gateway boundary and zero Terraform drift checks pass.
 Historical point-in-time restore evidence covers 39 migrations, not this new boundary. Human
-reviewer assignments and hosted admin Auth0 acceptance remain open.
+reviewer assignments and hosted admin Auth0 acceptance remain open. Configuration `7420dfa` now
+binds the enabled SQS mapping maximum and Trust Lambda reservation at two. The receive-only runtime
+still awaits batch records sequentially with one shared database connection per invocation; no
+provisioned capacity, artifact, alias, reviewer authority, or alarm threshold changed. See the Phase 2
+record for the recovered throttle and its bounded configuration remedy.
 
 - A pure contribution-trust state machine starts every case in `needs_review`.
 - Initial acceptance requires the fixed `independently_verified` reason. Rejection, withdrawal,
