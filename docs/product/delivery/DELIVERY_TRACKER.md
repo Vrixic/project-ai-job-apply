@@ -404,7 +404,10 @@ This is the master record for the delivery phases defined in the [product and sy
   fresh-PostgreSQL regressions pass. Source `46a8076` is deployed at state `272` on scheduled alias
   `8` and Trust alias `7`, with exact artifact checks, zero drift, and 13/13 alarms OK. Two mismatch
   holds were safely requeued but returned to mismatch; fixed field-level diagnostics are the next
-  deployment, not a claim of resolution. Human review boundaries stay unchanged. The phase document
+  deployment, not a claim of resolution. Diagnostic source `e0ff15d` is now deployed at state `273`
+  on scheduled/Trust aliases `9`/`8`; both holds have only company/description mismatches. Corrective
+  provider-company and encoded-HTML mapping passes 127 ingestion tests and is awaiting release.
+  Human review boundaries stay unchanged. The phase document
   now contains one explicit outstanding acceptance/input table.
   Remaining gates are the D1
   prerequisites; authorized provider fixtures and QA disposition; completion of Chrome parity,

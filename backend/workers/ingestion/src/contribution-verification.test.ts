@@ -6,6 +6,7 @@ import {
   type IndependentProviderVerificationRegistration,
   RegisteredIndependentProviderVerifier,
 } from "./contribution-verification.js";
+import { GreenhouseJobBoardAdapter } from "./greenhouse.js";
 import { SourceRegistry } from "./registry.js";
 
 const contributionId = "018f0000-0000-7000-8000-000000000001";
@@ -105,6 +106,48 @@ const observation = {
 };
 
 describe("RegisteredIndependentProviderVerifier", () => {
+  it("verifies the complete selected preview against encoded exact-job provider truth", async () => {
+    const adapter = new GreenhouseJobBoardAdapter({
+      sourceId: "greenhouse-acme",
+      boardToken: "acme",
+      companyName: "Configured fallback",
+      verifiedCompanyDomain: "acme.example",
+      fetch: async () =>
+        new Response(
+          JSON.stringify({
+            id: 123,
+            company_name: "Acme",
+            title: "Engineer",
+            absolute_url: sourceUrl,
+            location: { name: "Remote-NORAM" },
+            content: "&lt;p&gt;Build things&lt;/p&gt;",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    });
+    const response = await adapter.pollExact({
+      externalJobId: "123",
+      observedAt: new Date("2026-09-02T12:01:00.000Z"),
+      signal: new AbortController().signal,
+      attempt: 1,
+    });
+    const { verifier, onContentMismatch } = harness(response);
+    await expect(
+      verifier.verify({
+        contributionId,
+        normalizationId,
+        proposal: proposal({ normalizedLocations: ["noram"], workMode: "remote" }),
+      }),
+    ).resolves.toMatchObject({
+      status: "verified",
+      providerObservation: {
+        companyName: "Acme",
+        description: "Build things",
+        locations: ["Remote-NORAM"],
+      },
+    });
+    expect(onContentMismatch).not.toHaveBeenCalled();
+  });
   it("emits only eight fixed mismatch counts and never changes disposition on diagnostic failure", async () => {
     const { verifier, onContentMismatch } = harness({
       kind: "success",

@@ -18,6 +18,85 @@ function adapter(fetch: typeof globalThis.fetch) {
 }
 
 describe("GreenhouseJobBoardAdapter", () => {
+  it("preserves inline words and full HTML entities while excluding inert and form content", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(
+      async () =>
+        new Response(
+          JSON.stringify({
+            id: 123,
+            title: "Engineer",
+            absolute_url: "https://job-boards.greenhouse.io/reviewed_board/jobs/123",
+            location: { name: "Remote" },
+            content:
+              '<p title="a > b">We&rsquo;re <strong>build</strong>ing &#x1F680; systems.</p><!--SYNTHETIC_SECRET--><template>SYNTHETIC_SECRET</template><form><input value="SYNTHETIC_SECRET">SYNTHETIC_SECRET</form>',
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    );
+    const result = await adapter(fetch).pollExact({ ...context(), externalJobId: "123" });
+    expect(result).toMatchObject({
+      kind: "success",
+      observations: [{ description: "We’re building 🚀 systems." }],
+    });
+    expect(JSON.stringify(result)).not.toContain("SYNTHETIC_SECRET");
+  });
+
+  it.each([null, "x".repeat(201)])(
+    "refuses a malformed provider company instead of silently substituting configuration",
+    async (companyName) => {
+      const fetch = vi.fn<typeof globalThis.fetch>(
+        async () =>
+          new Response(
+            JSON.stringify({
+              id: 123,
+              title: "Engineer",
+              company_name: companyName,
+              absolute_url: "https://job-boards.greenhouse.io/reviewed_board/jobs/123",
+              location: { name: "Remote" },
+              content: "Build things",
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+      );
+      await expect(
+        adapter(fetch).pollExact({ ...context(), externalJobId: "123" }),
+      ).rejects.toThrow("provider company name");
+    },
+  );
+  it.each([
+    "&lt;p&gt;Build &amp;amp; maintain systems.&lt;/p&gt;&lt;script&gt;SYNTHETIC_SECRET&lt;/script&gt;",
+    "&amp;lt;p&amp;gt;Build &amp;amp;amp; maintain systems.&amp;lt;/p&amp;gt;&amp;lt;script&amp;gt;SYNTHETIC_SECRET&amp;lt;/script&amp;gt;",
+    "<p>Build &amp; maintain systems.</p><style>SYNTHETIC_SECRET</style>",
+  ])(
+    "normalizes encoded provider HTML and uses the exact provider company field",
+    async (content) => {
+      const fetch = vi.fn<typeof globalThis.fetch>(
+        async () =>
+          new Response(
+            JSON.stringify({
+              id: 123,
+              title: "Engineer",
+              company_name: "Provider Company",
+              absolute_url: "https://job-boards.greenhouse.io/reviewed_board/jobs/123",
+              location: { name: "Remote" },
+              content,
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+      );
+      const result = await adapter(fetch).pollExact({ ...context(), externalJobId: "123" });
+      expect(result).toMatchObject({
+        kind: "success",
+        observations: [
+          {
+            companyName: "Provider Company",
+            description: "Build & maintain systems.",
+          },
+        ],
+      });
+      expect(JSON.stringify(result)).not.toContain("SYNTHETIC_SECRET");
+    },
+  );
   it("uses only the fixed public GET endpoint and maps a bounded response", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>(
       async () =>

@@ -34,7 +34,10 @@ provider verifier without treating candidate-supplied content as catalog truth.
   employer, tenant, or real job.
 - `greenhouse.ts` — fixed-host public Job Board GET adapter with redirect refusal, bounded timeout
   and streaming response bytes, strict response mapping, plain-text conversion, tracking-query
-  removal, and reviewed company/domain inputs. Independent contribution verification uses the
+  removal, and reviewed company/domain inputs. Exact-job responses use their own validated company
+  field when present, with the configured label only as an absent-field fallback. Bounded outer
+  entity decoding and inert HTML parsing handle description markup without executing/fetching
+  embedded content or retaining scripts, forms, templates, styles, or raw pages. Independent contribution verification uses the
   exact public job endpoint so a large board cannot force weakening the one-megabyte response cap;
   scheduled ingestion retains the bounded board endpoint. It is tested with generated responses
   and remains impossible to enable through the default registry policy without explicit runtime

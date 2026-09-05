@@ -1,3 +1,5 @@
+import { decodeHTML } from "entities";
+import { type DefaultTreeAdapterTypes, parseFragment } from "parse5";
 import type {
   IngestionSourceAdapter,
   SourceExactPollContext,
@@ -42,25 +44,95 @@ function canonicalText(value: unknown, label: string, maximum = maximumTextLengt
 }
 
 function htmlToPlainText(value: unknown): string {
-  const html = canonicalText(value, "The Greenhouse job content");
-  const withoutActiveContent = html.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, " ");
+  let html = canonicalText(value, "The Greenhouse job content");
+  // The provider can wrap its HTML in one or two entity-encoding layers. Decode only the
+  // outer envelope before parsing; entities inside actual markup remain text, not new tags.
+  for (
+    let layer = 0;
+    layer < 2 && !/<\/?[a-z][^>]*>/iu.test(html) && /&(?:amp;)?lt;/iu.test(html);
+    layer++
+  ) {
+    html = decodeHTML(html);
+  }
+  if (!/<\/?[a-z][^>]*>/iu.test(html) && /&(?:amp;)?lt;/iu.test(html)) {
+    throw new Error("The Greenhouse job content encoding is unsupported");
+  }
+  const fragment = parseFragment(html);
+  const skipped = new Set([
+    "script",
+    "style",
+    "template",
+    "noscript",
+    "iframe",
+    "object",
+    "svg",
+    "math",
+    "form",
+    "input",
+    "textarea",
+    "select",
+    "button",
+  ]);
+  const blocks = new Set([
+    "p",
+    "div",
+    "section",
+    "article",
+    "header",
+    "footer",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "ul",
+    "ol",
+    "li",
+    "blockquote",
+    "pre",
+    "table",
+    "tr",
+    "td",
+    "th",
+    "hr",
+  ]);
+  const pending: (DefaultTreeAdapterTypes.ChildNode | string)[] = [];
+  for (let index = fragment.childNodes.length - 1; index >= 0; index--) {
+    const child = fragment.childNodes[index];
+    if (child) pending.push(child);
+  }
+  const parts: string[] = [];
+  let visited = 0;
+  while (pending.length > 0) {
+    const node = pending.pop();
+    if (++visited > 100_000) throw new Error("The Greenhouse job content is too complex");
+    if (typeof node === "string") {
+      parts.push(node);
+      continue;
+    }
+    if (!node) continue;
+    if ("value" in node) {
+      parts.push(node.value);
+      continue;
+    }
+    if (!("tagName" in node) || skipped.has(node.tagName)) continue;
+    if (node.tagName === "br") {
+      parts.push("\n");
+      continue;
+    }
+    if (blocks.has(node.tagName)) {
+      parts.push("\n");
+      pending.push("\n");
+    }
+    for (let index = node.childNodes.length - 1; index >= 0; index--) {
+      const child = node.childNodes[index];
+      if (child) pending.push(child);
+    }
+  }
   return canonicalText(
-    withoutActiveContent
-      .replace(/<br\s*\/?>/gi, "\n")
-      .replace(/<\/p\s*>/gi, "\n")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&nbsp;|&#160;/gi, " ")
-      .replace(/&amp;/gi, "&")
-      .replace(/&lt;/gi, "<")
-      .replace(/&gt;/gi, ">")
-      .replace(/&quot;/gi, '"')
-      .replace(/&#39;|&apos;/gi, "'")
-      .replace(/&#(\d{1,7});/g, (_, digits: string) => {
-        const codePoint = Number(digits);
-        return Number.isInteger(codePoint) && codePoint > 0 && codePoint <= 0x10ffff
-          ? String.fromCodePoint(codePoint)
-          : " ";
-      })
+    parts
+      .join("")
       .replace(/[ \t]+/g, " ")
       .replace(/\s*\n\s*/g, "\n")
       .replace(/\n{3,}/g, "\n\n"),
@@ -128,7 +200,10 @@ function parseJob(
     }
   }
   return {
-    companyName: options.companyName,
+    companyName:
+      job.company_name === undefined
+        ? options.companyName
+        : canonicalText(job.company_name, "The Greenhouse provider company name", 200),
     title: canonicalText(job.title, "The Greenhouse job title", 500),
     locations: [location],
     description: htmlToPlainText(job.content),
