@@ -389,9 +389,15 @@ This is the master record for the delivery phases defined in the [product and sy
   acknowledged delivery and local retention expiry both remove pending items. The inspected
   post-release logs contain no contribution-store failures, while 19 scheduled batches spanning
   the release/follow-up window report zero claimed/completed/parked/retried/dead contributions.
-  These aggregates do not establish an acknowledgement or publication. The next step is checking
-  the owner's `Your shared jobs` receipt and `Refresh processing` status without collecting its ID
-  or posting data. Installed success and downstream lifecycle remain unverified.
+  Those earlier aggregates did not establish acknowledgement or publication. The subsequent
+  owner-refreshed receipt now confirms one saved contribution in `awaiting_independent_verification`.
+  A later successful scheduled batch independently reports one claimed and one parked contribution,
+  with zero completed, retried, dead, or delivery-published items. Installed intake and the owner
+  processing-status read are now confirmed; the server delivery failure is resolved. Independent
+  provider verification remains the next unresolved boundary, and its precise cause is not exposed
+  by the current aggregate record. Refresh reads status only; it does not requeue the parked work.
+  Do not resubmit the acknowledged contribution. Trust, publication, and remaining lifecycle
+  acceptance are not implied by this successful intake.
   Remaining gates are the D1
   prerequisites; authorized provider fixtures and QA disposition; completion of Chrome parity,
   cancellation, refresh rotation/replay, logout, and revocation after the dedicated Native
