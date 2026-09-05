@@ -327,18 +327,19 @@ This is the master record for the delivery phases defined in the [product and sy
 - Exit gate: Users can preview selected public job fields and explicitly add them to the shared
   database without unrelated browsing or profile data being collected.
 - Current engineering status: Phase 2 started on 2026-09-01 from the clean Phase 1 checkpoint.
-  Repository-local Phase 2 is implemented end to end: the minimum-permission MV3
+  Repository-local Phase 2 foundations are implemented: the minimum-permission MV3
   extension, grounded responsive preview with separate location/work type, one readiness-gated
   public-add command, durable owner-visible processing,
   independent provider verification and atomic catalog publication, Trust/reputation and candidate
   rights, lazy Lambda composition, guarded operations, aggregate telemetry, Terraform, and local
   migration/recovery evidence are present. Under an exact product-owner controlled exception,
-  development state `270` now activates only extension client `0.2.0`, the accepted Greenhouse
+  development state `275` is configured for only extension client `0.2.0`, the accepted Greenhouse
   variant and two reviewed domains, one exact provider registration, and the dedicated workflow
   `case_opener`. Production, extension-store distribution, Lever, Ashby, and all human decision
   roles remain dark. No-store signed policy revision `d2-development-greenhouse-20260904-v2`
-  expires at `2026-09-05T19:11:27.298Z`. All 39 deployed migrations/68 relations are verified;
-  unweighted scheduled alias `7` and Trust alias `6`, the real
+  expired at `2026-09-05T19:11:27.298Z`; the public policy endpoint now returns no-store `503`,
+  and delivery/processing deny pending separately authorized bounded renewal. All 39 deployed
+  migrations/68 relations are verified; unweighted scheduled alias `11` and Trust alias `10`, the real
   five-minute schedule, one Trust mapping, 15 JWT routes, one anonymous policy route, provider-only
   egress, and both empty Trust queues are healthy. Manual and automatic batches succeeded with
   zero work, all 13 D2 alarms are `OK`, ECS is idle, and Terraform has zero drift. One deployed,
@@ -394,8 +395,8 @@ This is the master record for the delivery phases defined in the [product and sy
   A later successful scheduled batch independently reports one claimed and one parked contribution,
   with zero completed, retried, dead, or delivery-published items. Installed intake and the owner
   processing-status read are now confirmed; the server delivery failure is resolved. Independent
-  provider verification remains the next unresolved boundary, and its precise cause is not exposed
-  by the current aggregate record. Refresh reads status only; it does not requeue the parked work.
+  provider verification remains unresolved. The latest fixed aggregate identifies only description
+  mismatch on two held submissions. Refresh reads status only; it does not requeue parked work.
   Do not resubmit the acknowledged contribution. Trust, publication, and remaining lifecycle
   acceptance are not implied by this successful intake.
   The 2026-09-05 completion pass has locally verified regression-backed provider compatibility
@@ -408,8 +409,16 @@ This is the master record for the delivery phases defined in the [product and sy
   on scheduled/Trust aliases `9`/`8`; both holds have only company/description mismatches. Corrective
   provider-company and encoded-HTML mapping passed 127 ingestion tests and full repository checks,
   and is deployed at state `274` on scheduled/Trust aliases `10`/`9`, with zero drift. Both submissions
-  remain mismatch-held. Narrow legacy-preview compatibility passes 133 ingestion tests; its release
-  is pending. The compatibility preserves provider truth and rejects arbitrary excerpts/aliases.
+  remained mismatch-held. Narrow legacy-preview compatibility source `ed8dd9a` now passes 133
+  ingestion tests and full repository checks and is deployed at state `275`, scheduled/Trust `11`/`10`,
+  with exact artifacts and zero drift. The latest bounded retry claimed/parked both records, with
+  zero completion/retry/dead/publication; company mismatch is resolved, and only description
+  mismatch remains in two aggregate events. A bounded read-only current public-page/API comparison
+  also differs beyond whitespace, so no broader matching relaxation is justified. No submitted
+  content was rewritten, and no raw page or posting values were retained. The signed development
+  policy has now expired; recommend explicit renewal for 24 hours with unchanged Greenhouse-only
+  scope before further deployed recovery. The compatibility preserves provider truth and rejects
+  arbitrary excerpts/aliases.
   Human review boundaries stay unchanged. The phase document
   now contains one explicit outstanding acceptance/input table.
   Remaining gates are the D1
