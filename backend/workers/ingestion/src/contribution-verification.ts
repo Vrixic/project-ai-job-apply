@@ -112,7 +112,6 @@ function providerContent(observation: CatalogObservation) {
     title: normalizeText(observation.title),
     locations: [...new Set(observation.locations.map(normalizeText))].sort(),
     separatedLocations: [...new Set(separated.map((item) => item.location))].sort(),
-    descriptionSha256: sha256(normalizeText(observation.description)),
     department: observation.department ? normalizeText(observation.department) : undefined,
     applicationUrlSha256: observation.applicationUrl
       ? sha256(canonicalizeJobUrl(observation.applicationUrl))
@@ -122,16 +121,64 @@ function providerContent(observation: CatalogObservation) {
   };
 }
 
+// Compatibility with the exact d2-job-page-v1 preview, not a fuzzy content comparison.
+// This never replaces the independent observation used by publication.
+function legacyPreviewDescription(value: string): string {
+  const withoutControls = [...value]
+    .map((character) => {
+      const code = character.codePointAt(0) ?? 0;
+      return (code >= 0 && code <= 8) ||
+        code === 11 ||
+        code === 12 ||
+        (code >= 14 && code <= 31) ||
+        (code >= 127 && code <= 159) ||
+        (code >= 0x200b && code <= 0x200f) ||
+        (code >= 0x202a && code <= 0x202e) ||
+        (code >= 0x2060 && code <= 0x206f) ||
+        code === 0xfeff
+        ? " "
+        : character;
+    })
+    .join("");
+  return withoutControls
+    .replace(/<[^>]*>/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim()
+    .slice(0, 12_000);
+}
+
+function descriptionDigests(observation: CatalogObservation, legacy: boolean): ReadonlySet<string> {
+  const values = [normalizeText(observation.description)];
+  if (legacy) {
+    values.push(normalizeText(legacyPreviewDescription(observation.description)));
+    const firstLine = observation.description.split(/\r?\n/u).find((line) => line.trim());
+    const heading = firstLine ? normalizeText(firstLine) : "";
+    const full = normalizeText(observation.description);
+    if (heading.length > 0 && heading.length <= 200 && full.startsWith(`${heading} ${heading} `)) {
+      const deduplicated = full.slice(heading.length + 1);
+      values.push(deduplicated, normalizeText(legacyPreviewDescription(deduplicated)));
+    }
+  }
+  return new Set(values.map(sha256));
+}
+
 function contentMismatchMetrics(
   proposal: NormalizedContributionProposal,
   observation: CatalogObservation,
 ) {
   const truth = providerContent(observation);
+  const legacy = proposal.provenance.adapterVersion === "d2-job-page-v1";
+  const companyNames = new Set([truth.companyName]);
+  if (legacy) {
+    // The installed v1 reader also used a provider logo's accessible label as its fallback.
+    companyNames.add(`${truth.companyName} logo`);
+    companyNames.add(`${truth.companyName} company logo`);
+  }
   return Object.freeze({
     VerificationMismatchTitle: Number(proposal.normalizedTitle !== truth.title),
     VerificationMismatchCompany: Number(
       proposal.normalizedCompanyName !== undefined &&
-        proposal.normalizedCompanyName !== truth.companyName,
+        !companyNames.has(proposal.normalizedCompanyName),
     ),
     VerificationMismatchLocation: Number(
       proposal.normalizedLocations.length !== 0 &&
@@ -140,7 +187,7 @@ function contentMismatchMetrics(
     ),
     VerificationMismatchDescription: Number(
       proposal.normalizedDescriptionSha256 !== undefined &&
-        proposal.normalizedDescriptionSha256 !== truth.descriptionSha256,
+        !descriptionDigests(observation, legacy).has(proposal.normalizedDescriptionSha256),
     ),
     VerificationMismatchDepartment: Number(
       proposal.normalizedDepartment !== undefined &&

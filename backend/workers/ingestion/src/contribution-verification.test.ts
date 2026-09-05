@@ -106,6 +106,111 @@ const observation = {
 };
 
 describe("RegisteredIndependentProviderVerifier", () => {
+  it.each(["acme logo", "acme company logo"])(
+    "recognizes only the exact provider name plus legacy logo-label suffix",
+    async (company) => {
+      const { verifier } = harness({ kind: "success", observations: [observation] });
+      await expect(
+        verifier.verify({
+          contributionId,
+          normalizationId,
+          proposal: proposal({ normalizedCompanyName: company }),
+        }),
+      ).resolves.toMatchObject({
+        status: "verified",
+        providerObservation: { companyName: "Acme" },
+      });
+      await expect(
+        verifier.verify({
+          contributionId,
+          normalizationId,
+          proposal: proposal({ normalizedCompanyName: "other company logo" }),
+        }),
+      ).resolves.toMatchObject({ status: "mismatch" });
+    },
+  );
+
+  it("recognizes the exact 12000-character v1 capture boundary, never an arbitrary or edited excerpt", async () => {
+    const description = "a".repeat(12_050);
+    const { verifier } = harness({
+      kind: "success",
+      observations: [{ ...observation, description }],
+    });
+    const input = {
+      contributionId,
+      normalizationId,
+      proposal: proposal({ normalizedDescriptionSha256: digest("a".repeat(12_000)) }),
+    };
+    await expect(verifier.verify(input)).resolves.toMatchObject({
+      status: "verified",
+      providerObservation: { description },
+    });
+    for (const excerpt of ["a".repeat(11_999), `b${"a".repeat(11_999)}`]) {
+      await expect(
+        verifier.verify({
+          ...input,
+          proposal: proposal({ normalizedDescriptionSha256: digest(excerpt) }),
+        }),
+      ).resolves.toMatchObject({ status: "mismatch" });
+    }
+  });
+
+  it("recognizes the exact repeated leading heading removed by the v1 preview while preserving provider text", async () => {
+    const description = "About Acme\nAbout Acme Build things";
+    const { verifier } = harness({
+      kind: "success",
+      observations: [{ ...observation, description }],
+    });
+    await expect(
+      verifier.verify({
+        contributionId,
+        normalizationId,
+        proposal: proposal({ normalizedDescriptionSha256: digest("about acme build things") }),
+      }),
+    ).resolves.toMatchObject({ status: "verified", providerObservation: { description } });
+    await expect(
+      verifier.verify({
+        contributionId,
+        normalizationId,
+        proposal: proposal({ normalizedDescriptionSha256: digest("build things") }),
+      }),
+    ).resolves.toMatchObject({ status: "mismatch" });
+  });
+
+  it("does not extend frozen preview compatibility to another adapter version", async () => {
+    const { verifier } = harness({
+      kind: "success",
+      observations: [{ ...observation, description: "a".repeat(12_050) }],
+    });
+    const original = proposal();
+    await expect(
+      verifier.verify({
+        contributionId,
+        normalizationId,
+        proposal: proposal({
+          normalizedCompanyName: "acme logo",
+          normalizedDescriptionSha256: digest("a".repeat(12_000)),
+          provenance: { ...original.provenance, adapterVersion: "d2-job-page-v2" },
+        }),
+      }),
+    ).resolves.toMatchObject({ status: "mismatch" });
+  });
+
+  it("mirrors v1 control removal before truncation without modifying independent evidence", async () => {
+    const description = "Build\u200bthings <literal> safely";
+    const { verifier } = harness({
+      kind: "success",
+      observations: [{ ...observation, description }],
+    });
+    await expect(
+      verifier.verify({
+        contributionId,
+        normalizationId,
+        proposal: proposal({ normalizedDescriptionSha256: digest("build things safely") }),
+      }),
+    ).resolves.toMatchObject({ status: "verified", providerObservation: { description } });
+  });
+
   it("verifies the complete selected preview against encoded exact-job provider truth", async () => {
     const adapter = new GreenhouseJobBoardAdapter({
       sourceId: "greenhouse-acme",

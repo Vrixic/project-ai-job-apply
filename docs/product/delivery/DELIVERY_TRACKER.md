@@ -406,7 +406,10 @@ This is the master record for the delivery phases defined in the [product and sy
   holds were safely requeued but returned to mismatch; fixed field-level diagnostics are the next
   deployment, not a claim of resolution. Diagnostic source `e0ff15d` is now deployed at state `273`
   on scheduled/Trust aliases `9`/`8`; both holds have only company/description mismatches. Corrective
-  provider-company and encoded-HTML mapping passes 127 ingestion tests and is awaiting release.
+  provider-company and encoded-HTML mapping passed 127 ingestion tests and full repository checks,
+  and is deployed at state `274` on scheduled/Trust aliases `10`/`9`, with zero drift. Both submissions
+  remain mismatch-held. Narrow legacy-preview compatibility passes 133 ingestion tests; its release
+  is pending. The compatibility preserves provider truth and rejects arbitrary excerpts/aliases.
   Human review boundaries stay unchanged. The phase document
   now contains one explicit outstanding acceptance/input table.
   Remaining gates are the D1
