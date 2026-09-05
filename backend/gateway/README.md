@@ -13,28 +13,48 @@ The gateway is the authenticated entry point for web, mobile, extension, and adm
 
 The gateway must not perform long-running AI, ingestion, or browser work. It creates durable resources and returns their identifiers.
 
-The source-only Phase 2 seam exposes Profile-owned immutable contribution-consent grant/revoke
-routes in local application composition and wires Jobs intake to the real Profile verification
-store. Consent identifiers and times are server-issued, responses are `no-store`, and both routes
-require `jobs:contribute`. An exact `UGC_CONTRIBUTION_POLICY_VERSION` must be injected; absence or
-mismatch fails closed. The Lambda method/path allowlist intentionally omits consent and
-contribution routes, so deployed intake remains default-dark.
+## Phase 2 implementation and deployment boundary
 
-The source-only private saved-page seam exposes Matching-owned create, owner read, and idempotent
+The Phase 2 routes are wired through application composition, the Lambda method/path allowlist,
+and independently gated Terraform routes. Repository defaults remain dark; the controlled
+Greenhouse-only development exception is recorded in the
+[Phase 2 register](../../docs/product/delivery/phase-2-extension-and-community.md).
+
+The ordered development release completed on 2026-09-05 at state `281`, running source `3f20462`
+on immutable Gateway/scheduled/Trust versions `51`/`13`/`11`. All three are healthy; direct Gateway
+boundary checks and zero Terraform drift pass. The 18 exact JWT-protected D2 routes include the
+deployed owner cancellation and reviewer queue/evidence handlers, alongside the anonymous
+signed-policy route. Migration image `116b272` completed once with exit `0` and seven exact
+aggregate success events, verifying 40 migrations across six owners and 68 relations, including
+Jobs `0020`. Its receipt was recovered and post-verified without rerunning the task; both workers
+were upgraded and old invocations drained before Gateway release. This migration result does not
+extend the historical 39-migration point-in-time restore evidence to the new boundary.
+
+Profile-owned immutable contribution-consent grant/revoke routes wire Jobs intake to the real
+Profile verification store. Consent identifiers and times are server-issued, responses are
+`no-store`, and both routes require `jobs:contribute`. An exact `UGC_CONTRIBUTION_POLICY_VERSION`
+must be injected; absence or mismatch fails closed. Contribution and consent routes are included
+in the exact Lambda allowlist and enabled only within the controlled development activation.
+
+The private saved-page seam exposes Matching-owned create, owner read, and idempotent
 owner delete routes independently of contribution. Gateway derives the internal owner from the
 managed principal, rechecks the Profile-owned active-account row through a fail-unavailable
 adapter, strips owner and internal verification identifiers from responses, and exposes no
-canonical-resolution write route. The Lambda method/path allowlist intentionally omits these
-routes, so deployed capture remains default-dark.
+canonical-resolution write route. These scoped routes are deployed in controlled development;
+the public-add-only extension does not surface a private-save action.
 
-The source-only Trust seam exposes contribution-keyed candidate status, withdrawal, and appeal
-routes plus reviewer case open/read/decision/takedown/appeal-resolution routes. Candidate identity
+The Trust seam exposes contribution-keyed candidate status, withdrawal, and appeal routes plus
+reviewer case queue/evidence/open/read/decision/takedown/appeal-resolution routes. Candidate identity
 comes only from the managed principal. Reviewer identity and role come from exact issuer/subject
 assignments plus route-specific scopes; ordinary admin sessions do not receive the separate
 verified-requester takedown scope. Responses are redacted and `no-store`. Case opening is
 deterministic and retry-safe, and Trust has no direct Jobs mutation. Missing assignments, policy,
-evidence, or dependencies fail closed. These routes are intentionally absent from the Lambda
-method/path allowlist, so deployed behavior remains default-dark.
+evidence, or dependencies fail closed. Only the dedicated workflow `case_opener` is assigned in
+development; no human decision authority or authenticated admin acceptance is implied by route
+deployment. The bounded queue and Jobs-owned sanitized evidence projection are implemented,
+locally verified, and deployed in the release described above. Initial review binds the
+current case version to the exact independent-verification digest; takedown and appeal evidence
+retain their separate approval boundary.
 
 ## Phase 0 implementation
 
@@ -54,8 +74,9 @@ principal and exact scope without creating or updating a profile identity record
 profile and operation routes continue resolving the provider identity to an internal user UUID.
 
 `POST /v1/jobs/search` uses the same exact `jobs:read` boundary. Its strict, size-bounded JSON body
-keeps query and filter values out of URLs, and the Lambda route continues rejecting every raw query
-string before framework dispatch. The gateway returns only active canonical summaries and an
+keeps query and filter values out of URLs, and this Lambda route rejects every raw query string
+before framework dispatch. The only query-bearing Lambda exception is the exact bounded Trust
+review queue, not catalog search. The gateway returns only active canonical summaries and an
 opaque continuation cursor; it does not log, audit, or emit search values and does not perform
 profile matching.
 

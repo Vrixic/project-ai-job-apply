@@ -71,12 +71,25 @@ scopes validate; test tokens are unavailable outside `NODE_ENV=test`.
 ## Current status
 
 Phase 2's extension and community backend are implemented in controlled Greenhouse-only
-development, with remaining engineering and acceptance tracked in the
-[Phase 2 register](docs/product/delivery/phase-2-extension-and-community.md). The active follow-up
-adds warm-policy refresh, exact page/provider description compatibility, pre-verification owner
-cancellation, reviewer queue/evidence, and complete Trust decision reconciliation. These follow-up
-changes are locally verified, not yet deployed. Production/store distribution, other provider
-activation, human reviewer assignments, and accountable acceptance are not implied by a build.
+development, with remaining rollout and acceptance tracked in the
+[Phase 2 register](docs/product/delivery/phase-2-extension-and-community.md). The follow-up adds
+warm-policy refresh, exact page/provider description compatibility, pre-verification owner
+cancellation, reviewer queue/evidence, and complete Trust decision reconciliation. The ordered
+backend rollout completed on 2026-09-05: development state `281` runs source `3f20462` on healthy
+immutable Gateway/scheduled/Trust versions `51`/`13`/`11`, with 18 exact JWT-protected D2 routes plus
+the anonymous signed-policy endpoint. The migration image from `116b272` completed once with exit
+`0` and seven exact aggregate success events, verifying 40 migrations across six owners and 68
+relations; operator recovery did not rerun it. Direct Gateway boundary checks and zero Terraform
+drift pass. Historical point-in-time restore evidence still covers the prior 39-migration boundary.
+The configured extension is rebuilt; reload the unpacked extension and complete installed
+acceptance. Snapshot-fenced recovery cleared both provider-verification holds, but both submissions
+remain parked and unpublished; refresh their existing Processing/Trust state rather than resubmit.
+
+The admin preview from source `116b` is `READY` behind Vercel SSO protection (`302`, `no-store`);
+see the [admin hosting boundary](frontend/admin/README.md#vercel-hosting-boundary). This is a
+presentation deployment, not authenticated moderation acceptance: human reviewer roles and hosted
+admin Auth0 acceptance remain open. Production/store distribution, other provider activation, and
+accountable acceptance are not implied by a build, a route resource, or a protected preview.
 
 The following Phase 0/1 overview is historical; use the linked delivery records for the current
 status of each individual gate.

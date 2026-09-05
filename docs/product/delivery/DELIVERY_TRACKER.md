@@ -324,26 +324,40 @@ This is the master record for the delivery phases defined in the [product and sy
 - Active implementation follow-up (2026-09-05): signed-policy readiness, exact Greenhouse preview
   compatibility, owner pre-verification cancellation, discoverable reviewer queue/evidence,
   terminal reconciliation and lost-signal fixes, and bounded authenticated workload tooling are
-  implemented with targeted regressions. All 33 typecheck and 34 unit-test tasks pass; installed
+  implemented with targeted regressions. Deployed source `3f20462` passes `pnpm check`;
+  application source `116b272` also passed `scripts/verify-phase0.ps1`, including all 33 typecheck
+  and 34 unit-test tasks; installed
   synthetic Edge/Chrome-for-Testing layout/privacy checks pass. Fresh-database integration passes
   all 107 tests in 21 files with no skips. The packaged six-owner migration runner succeeds twice
-  at the 40-migration/68-relation boundary. Ordered migration/worker/Gateway release remains in
-  progress. D2-029's schema-7 handoff repair passes local adversarial/round-trip checks without
+  at the 40-migration/68-relation boundary. Ordered migration/worker/Gateway release is complete
+  in controlled development. D2-029's schema-7 handoff passes local adversarial/round-trip checks without
   weakening state/document provenance or changing historical baseline compatibility.
-  These changes are not yet deployed and do not close external acceptance gates.
+  Current state `281` runs Gateway `51`, scheduled `13`, and Trust `11` from `3f20462`, with
+  immutable matching artifacts, 18 JWT routes/budgets, and zero Terraform drift. One migration
+  task from `116b272` stopped with exit 0 and seven exact six-owner success messages, including
+  Jobs `0020`; the corrected operator recovered and verified the original task, without rerun.
+  Two ordinary new-version scheduled ticks, old-version drain, and corroborating async/queue
+  observations passed before Gateway cancellation went live. The unchanged admin UI from
+  `116b272` has a READY protected Vercel preview, not authenticated human reviewer acceptance.
+  Snapshot-fenced recovery requeued two description-held contributions; both claimed/parked with
+  no completion/retry/dead/publication, and fresh inspection now finds zero provider-verification
+  holds. Refresh the existing owner Processing/Trust state; aggregate parking counts alone do not
+  establish a precise Trust status. No immutable payload or account-held browser item was changed.
+  The remaining human identity, browser, workload, accessibility, alarm receipt, provider/store,
+  and accountable acceptance gates are listed in the phase document; Phase 2 is not fully accepted.
 - Depends on: D0 consent/security foundations and D1 catalog, saved-job, and moderation foundations;
   the public-contribution API is D2-owned work
 - Task document: [Phase 2 tasks](phase-2-extension-and-community.md)
 - Exit gate: Users can preview selected public job fields and explicitly add them to the shared
   database without unrelated browsing or profile data being collected.
-- Current engineering status: Phase 2 started on 2026-09-01 from the clean Phase 1 checkpoint.
+- Engineering foundations and preceding deployment history: Phase 2 started on 2026-09-01 from the clean Phase 1 checkpoint.
   Repository-local Phase 2 foundations are implemented: the minimum-permission MV3
   extension, grounded responsive preview with separate location/work type, one readiness-gated
   public-add command, durable owner-visible processing,
   independent provider verification and atomic catalog publication, Trust/reputation and candidate
   rights, lazy Lambda composition, guarded operations, aggregate telemetry, Terraform, and local
   migration/recovery evidence are present. Under an exact product-owner controlled exception,
-  development state `276` is configured for only extension client `0.2.0`, the accepted Greenhouse
+  the preceding development state `276` was configured for only extension client `0.2.0`, the accepted Greenhouse
   variant and two reviewed domains, one exact provider registration, and the dedicated workflow
   `case_opener`. Production, extension-store distribution, Lever, Ashby, and all human decision
   roles remain dark. On explicit user approval, no-store signed policy revision

@@ -56,6 +56,64 @@ variables {
   gateway_lambda_artifact_sha256            = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   gateway_lambda_artifact_base64sha256      = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="
   gateway_lambda_extension_layer_arn        = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
+
+  # Test-only reusable active input; it is not a platform-module variable or deployment default.
+  d2_active_runtime_fixture = {
+    deploy                                         = true
+    enabled                                        = true
+    policy_endpoint_enabled                        = true
+    artifact_s3_key                                = "lambda/d2/community.zip"
+    artifact_s3_object_version                     = "d2-community-version"
+    artifact_sha256                                = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    artifact_base64sha256                          = "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI="
+    lambda_extension_layer_arn                     = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
+    scheduled_reserved_concurrency                 = 1
+    signal_reserved_concurrency                    = 2
+    lambda_timeout_seconds                         = 60
+    queue_visibility_timeout_seconds               = 120
+    queue_message_retention_seconds                = 86400
+    dead_letter_retention_seconds                  = 1209600
+    queue_max_receive_count                        = 3
+    schedule_expression                            = "rate(5 minutes)"
+    processing_policy_version                      = "d2-synthetic-processing.v1"
+    processing_worker_id                           = "d2:processing"
+    processing_batch_limit                         = 5
+    processing_max_attempts                        = 3
+    processing_claim_lease_milliseconds            = 60000
+    processing_retry_delay_milliseconds            = [1000, 5000]
+    contribution_delivery_worker_id                = "d2:contribution-delivery"
+    contribution_delivery_batch_limit              = 5
+    contribution_delivery_max_attempts             = 3
+    contribution_delivery_claim_lease_milliseconds = 60000
+    contribution_delivery_retry_delay_milliseconds = [1000, 5000]
+    trust_delivery_worker_id                       = "d2:trust-delivery"
+    trust_delivery_batch_limit                     = 5
+    trust_delivery_max_attempts                    = 3
+    trust_delivery_claim_lease_milliseconds        = 60000
+    trust_delivery_retry_delay_milliseconds        = [1000, 5000]
+    trust_signal_batch_size                        = 5
+    provider_activation_allowed                    = true
+    provider_private_egress                        = true
+    provider_sources_json                          = "[{\"schemaVersion\":1,\"provider\":\"lever\",\"sourceId\":\"synthetic-lever\",\"enabled\":true,\"site\":\"synthetic\",\"region\":\"global\",\"companyName\":\"Synthetic Company\",\"verifiedCompanyDomain\":\"example.test\"}]"
+    provider_verification_registrations_json       = "[{\"sourceId\":\"synthetic-lever\",\"provider\":\"lever\",\"pageVariant\":\"lever-posting-v1\",\"atsTenant\":\"synthetic\",\"sourcePolicyVersion\":\"d2-synthetic-source.v1\"}]"
+    ugc_contribution_policy_version                = "d2-synthetic-consent.v1"
+    signed_policy_json                             = "{\"synthetic\":true}"
+    signed_public_keys_json                        = "{\"synthetic-key\":\"public\"}"
+    trust_reviewer_assignments_json                = "[{\"issuer\":\"https://identity.example.test/\",\"subject\":\"auth0|synthetic\",\"roles\":[\"case_reader\"],\"verifiedRequesterTakedown\":false}]"
+    trust_evidence_allowlist_json                  = "[]"
+    trust_policy_version                           = "d2-synthetic-trust.v1"
+    trust_appeal_window_milliseconds               = 86400000
+    trust_system_actor_id                          = "019d04cf-1f80-7000-8000-000000000099"
+    route_throttling_rate_limit                    = 5
+    route_throttling_burst_limit                   = 5
+    lambda_error_alarm_threshold                   = 0
+    lambda_throttle_alarm_threshold                = 0
+    lambda_duration_alarm_threshold_milliseconds   = 45000
+    application_failure_alarm_threshold            = 0
+    queue_age_alarm_threshold_seconds              = 300
+    dead_letter_alarm_threshold                    = 0
+    release_authority                              = "synthetic-release-authority"
+  }
 }
 
 run "d2_defaults_create_nothing" {
@@ -65,6 +123,7 @@ run "d2_defaults_create_nothing" {
     condition = (
       !var.d2_community_runtime.deploy &&
       !var.d2_community_runtime.enabled &&
+      var.d2_community_runtime.signal_reserved_concurrency == 0 &&
       !var.d2_community_runtime.policy_endpoint_enabled &&
       length(aws_lambda_function.d2_community_scheduled) == 0 &&
       length(aws_lambda_function.d2_trust_signal) == 0 &&
@@ -178,62 +237,7 @@ run "d2_activation_requires_and_wires_every_explicit_boundary" {
   command = plan
 
   variables {
-    d2_community_runtime = {
-      deploy                                         = true
-      enabled                                        = true
-      policy_endpoint_enabled                        = true
-      artifact_s3_key                                = "lambda/d2/community.zip"
-      artifact_s3_object_version                     = "d2-community-version"
-      artifact_sha256                                = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-      artifact_base64sha256                          = "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI="
-      lambda_extension_layer_arn                     = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
-      scheduled_reserved_concurrency                 = 1
-      signal_reserved_concurrency                    = 1
-      lambda_timeout_seconds                         = 60
-      queue_visibility_timeout_seconds               = 120
-      queue_message_retention_seconds                = 86400
-      dead_letter_retention_seconds                  = 1209600
-      queue_max_receive_count                        = 3
-      schedule_expression                            = "rate(5 minutes)"
-      processing_policy_version                      = "d2-synthetic-processing.v1"
-      processing_worker_id                           = "d2:processing"
-      processing_batch_limit                         = 5
-      processing_max_attempts                        = 3
-      processing_claim_lease_milliseconds            = 60000
-      processing_retry_delay_milliseconds            = [1000, 5000]
-      contribution_delivery_worker_id                = "d2:contribution-delivery"
-      contribution_delivery_batch_limit              = 5
-      contribution_delivery_max_attempts             = 3
-      contribution_delivery_claim_lease_milliseconds = 60000
-      contribution_delivery_retry_delay_milliseconds = [1000, 5000]
-      trust_delivery_worker_id                       = "d2:trust-delivery"
-      trust_delivery_batch_limit                     = 5
-      trust_delivery_max_attempts                    = 3
-      trust_delivery_claim_lease_milliseconds        = 60000
-      trust_delivery_retry_delay_milliseconds        = [1000, 5000]
-      trust_signal_batch_size                        = 5
-      provider_activation_allowed                    = true
-      provider_private_egress                        = true
-      provider_sources_json                          = "[{\"schemaVersion\":1,\"provider\":\"lever\",\"sourceId\":\"synthetic-lever\",\"enabled\":true,\"site\":\"synthetic\",\"region\":\"global\",\"companyName\":\"Synthetic Company\",\"verifiedCompanyDomain\":\"example.test\"}]"
-      provider_verification_registrations_json       = "[{\"sourceId\":\"synthetic-lever\",\"provider\":\"lever\",\"pageVariant\":\"lever-posting-v1\",\"atsTenant\":\"synthetic\",\"sourcePolicyVersion\":\"d2-synthetic-source.v1\"}]"
-      ugc_contribution_policy_version                = "d2-synthetic-consent.v1"
-      signed_policy_json                             = "{\"synthetic\":true}"
-      signed_public_keys_json                        = "{\"synthetic-key\":\"public\"}"
-      trust_reviewer_assignments_json                = "[{\"issuer\":\"https://identity.example.test/\",\"subject\":\"auth0|synthetic\",\"roles\":[\"case_reader\"],\"verifiedRequesterTakedown\":false}]"
-      trust_evidence_allowlist_json                  = "[]"
-      trust_policy_version                           = "d2-synthetic-trust.v1"
-      trust_appeal_window_milliseconds               = 86400000
-      trust_system_actor_id                          = "019d04cf-1f80-7000-8000-000000000099"
-      route_throttling_rate_limit                    = 5
-      route_throttling_burst_limit                   = 5
-      lambda_error_alarm_threshold                   = 0
-      lambda_throttle_alarm_threshold                = 0
-      lambda_duration_alarm_threshold_milliseconds   = 45000
-      application_failure_alarm_threshold            = 0
-      queue_age_alarm_threshold_seconds              = 300
-      dead_letter_alarm_threshold                    = 0
-      release_authority                              = "synthetic-release-authority"
-    }
+    d2_community_runtime = var.d2_active_runtime_fixture
   }
 
   assert {
@@ -242,7 +246,10 @@ run "d2_activation_requires_and_wires_every_explicit_boundary" {
       aws_cloudwatch_event_rule.d2_community_schedule[0].schedule_expression == "rate(5 minutes)" &&
       length(aws_lambda_event_source_mapping.d2_trust_signal) == 1 &&
       aws_lambda_event_source_mapping.d2_trust_signal[0].batch_size == 5 &&
-      length(aws_apigatewayv2_route.d2_community_protected) == 15 &&
+      aws_lambda_event_source_mapping.d2_trust_signal[0].scaling_config[0].maximum_concurrency == 2 &&
+      aws_lambda_event_source_mapping.d2_trust_signal[0].scaling_config[0].maximum_concurrency == aws_lambda_function.d2_trust_signal[0].reserved_concurrent_executions &&
+      aws_lambda_function.d2_community_scheduled[0].reserved_concurrent_executions == 1 &&
+      length(aws_apigatewayv2_route.d2_community_protected) == 18 &&
       length(aws_apigatewayv2_route.d2_contribution_policy) == 1 &&
       aws_apigatewayv2_route.d2_contribution_policy[0].authorization_type == "NONE" &&
       toset(aws_apigatewayv2_route.d2_community_protected["POST /v1/jobs/contributions"].authorization_scopes) == toset(["jobs:contribute"]) &&
@@ -263,5 +270,73 @@ run "d2_activation_requires_and_wires_every_explicit_boundary" {
       aws_lambda_function.d2_trust_signal[0].environment[0].variables.D2_COMMUNITY_PROCESSING_POLICY_VERSION == "d2-synthetic-processing.v1"
     )
     error_message = "Activation must bind the exact schedule, batch, policy, Trust, and separately scoped API routes."
+  }
+}
+
+
+run "d2_active_signal_concurrency_rejects_one" {
+  command = plan
+
+  variables {
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      signal_reserved_concurrency = 1
+    })
+  }
+
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_active_signal_concurrency_rejects_zero" {
+  command = plan
+
+  variables {
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      signal_reserved_concurrency = 0
+    })
+  }
+
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_active_signal_concurrency_rejects_fractional" {
+  command = plan
+
+  variables {
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      signal_reserved_concurrency = 2.5
+    })
+  }
+
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_active_signal_concurrency_rejects_over_limit" {
+  command = plan
+
+  variables {
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      signal_reserved_concurrency = 6
+    })
+  }
+
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_active_signal_concurrency_upper_bound_is_shared" {
+  command = plan
+
+  variables {
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      signal_reserved_concurrency = 5
+    })
+  }
+
+  assert {
+    condition = (
+      aws_lambda_event_source_mapping.d2_trust_signal[0].scaling_config[0].maximum_concurrency == 5 &&
+      aws_lambda_function.d2_trust_signal[0].reserved_concurrent_executions == 5 &&
+      aws_lambda_function.d2_community_scheduled[0].reserved_concurrent_executions == 1
+    )
+    error_message = "The SQS mapping and Trust reservation must share the reviewed upper bound without changing scheduled concurrency."
   }
 }

@@ -1,15 +1,17 @@
 # Admin Console
 
-The restricted internal console supports the Phase 1 job/source moderation slice and a source-only,
-default-dark Phase 2 Trust review slice. Later customer service, workflow, provider, entitlement,
+The restricted internal console implements the Phase 1 job/source moderation slice and the
+default-dark Phase 2 Trust review slice. A protected development preview is deployed; authenticated
+human moderation is not accepted. Later customer service, workflow, provider, entitlement,
 privacy, and emergency-control surfaces are not implemented or authorized by this application.
 
 ## Implemented Phase 1 moderation slice
 
 - `app/` — A responsive, non-indexable moderation console plus narrow same-origin BFF routes.
-- `lib/auth0.ts` — A dedicated server-held Auth0 session requesting only `jobs:moderate`, requiring
-  an MFA `amr`, reauthentication after 15 minutes, and a one-hour absolute session. It does not
-  request offline access.
+- `lib/auth0.ts` — A dedicated server-held Auth0 session requesting `jobs:moderate` and the explicit
+  D2 review/open/decide/takedown/appeal scopes listed below, requiring an MFA `amr`, reauthentication
+  after 15 minutes, and a one-hour absolute session. It requests neither offline access nor the
+  separate verified-requester takedown scope. Requested scopes do not assign reviewer roles.
 - `lib/moderation-bff.ts` — Bounded strict request/response validation, token isolation, redirect
   refusal, fixed problem projection, and operator-identity refusal.
 - `lib/moderation-bff.test.ts` — Scope/session, strict-input, routing, redaction, and fail-closed
@@ -21,10 +23,11 @@ privacy, and emergency-control surfaces are not implemented or authorized by thi
 Admin access is least-privilege and audited. Sensitive values remain redacted. Break-glass access is
 not implemented or authorized by this slice.
 
-## Source-only Phase 2 Trust review
+## Implemented Phase 2 Trust review
 
 - The console opens and reads redacted Trust cases and records fixed-code, version-fenced initial
-  decisions, takedowns, and appeal resolutions using SHA-256 evidence references only.
+  decisions, takedowns, and appeal resolutions with SHA-256 evidence references bound to the
+  reviewed content; a digest alone is not readable review evidence.
 - The explicit initial-review/appeal queue returns at most 25 cases per page with a bounded opaque
   continuation. Selecting a case loads full sanitized independently verified provider content,
   its source link and verification timestamp. Initial decisions bind the loaded case version and
@@ -36,16 +39,24 @@ not implemented or authorized by this slice.
 - Controls use native labels, explicit destructive confirmation, keyboard focus on failures, and an
   `aria-live` result region. The same-origin BFF strictly validates bounded requests and redacted
   responses and emits `no-store` fixed problem details.
-- This source does not establish live reviewer assignments, policy/timing approval, verified-
-  requester authority, deployment, or accessibility acceptance. Gateway Lambda routing remains
-  default-dark.
+- The Gateway and Terraform D2 route inventories are wired. The completed 2026-09-05 backend
+  release at state `281` deploys source `3f20462` on Gateway version `51` with 18 JWT-protected D2
+  routes and the anonymous policy endpoint. The new queue/evidence handlers are deployed after
+  migration and worker upgrade/drain; direct boundary and zero Terraform drift checks pass.
+- This source and its protected preview do not establish human reviewer assignments, authenticated
+  admin Auth0 acceptance, accountable policy/timing approval, verified-requester authority, or
+  human accessibility acceptance. Development assigns only the dedicated workflow case opener.
 
 ## Local managed OIDC configuration
 
 Create a dedicated Auth0 Regular Web Application with callback
-`http://localhost:3001/auth/callback`, delegated `jobs:moderate` access only, and MFA required for
-every assigned synthetic moderator. Do not enable refresh-token grants or reuse candidate-web
-credentials. From the repository root, write the ignored local environment file with:
+`http://localhost:3001/auth/callback` and MFA required for every assigned synthetic moderator. The
+console requests `jobs:moderate`, `trust:review`, `trust:case:open`, `trust:case:decide`,
+`trust:case:takedown`, and `trust:appeal:resolve`; grant only the explicitly approved scope/role
+combination for each reviewer. Initial/takedown and appeal reviewer assignments remain separate,
+and the gateway independently enforces exact managed identities and roles. Do not enable
+refresh-token grants, assign the verified-requester scope, or reuse candidate-web credentials.
+From the repository root, write the ignored local environment file with:
 
 ```powershell
 .\scripts\configure-auth0-admin-local.ps1 -Auth0Domain "YOUR_TENANT.us.auth0.com" -ClientId "YOUR_DEDICATED_MODERATION_CLIENT_ID" -PlatformApiBaseUrl "https://YOUR_API_ID.execute-api.us-east-2.amazonaws.com"
@@ -58,10 +69,19 @@ This slice supports fixed-code aggregate report review, open/resolved case queue
 blocking, exact-source pausing, and no-action resolution. Candidate reports never automatically
 change catalog state. Source resume, free-form evidence, automated thresholds, general support,
 privacy requests, entitlement support, and break-glass controls are not implemented here. The app
-requires a separately configured admin Regular Web Application and is not deployed or accepted
-through managed OIDC by these source bytes.
+requires a separately configured admin Regular Web Application. The preview deployment below does
+not establish an accepted managed-OIDC moderation session.
 
 ## Vercel hosting boundary
+
+The 2026-09-05 preview built from source `116b272` is `READY`:
+[protected admin preview](https://ai-job-apply-admin-6ewxee4ci-applydash2026-5637.vercel.app).
+Its unauthenticated root returns a Vercel SSO protection redirect (`302`, `no-store`), not the admin
+application or proof of an Auth0 reviewer session. No human reviewer roles or hosted admin Auth0
+acceptance are established. The preview includes the new review UI, unchanged in the completed
+`3f20462` backend release; the matching queue/evidence handlers are now deployed. Consult the
+[Phase 2 register](../../docs/product/delivery/phase-2-extension-and-community.md) before attempting
+the authenticated end-to-end review journey.
 
 [ADR-026](../../docs/adr/026-vercel-nextjs-presentation-hosting.md) assigns this directory its own
 Vercel project, isolated from candidate web. The source configuration runs Functions in `iad1` and

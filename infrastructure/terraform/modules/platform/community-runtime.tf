@@ -428,6 +428,10 @@ resource "aws_lambda_event_source_mapping" "d2_trust_signal" {
   maximum_batching_window_in_seconds = 0
   function_response_types            = ["ReportBatchItemFailures"]
 
+  scaling_config {
+    maximum_concurrency = var.d2_community_runtime.signal_reserved_concurrency
+  }
+
   depends_on = [aws_iam_role_policy.d2_trust_signal]
 }
 

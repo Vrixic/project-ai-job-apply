@@ -713,6 +713,15 @@ variable "d2_community_runtime" {
   }
 
   validation {
+    condition = !var.d2_community_runtime.enabled || (
+      var.d2_community_runtime.signal_reserved_concurrency >= 2 &&
+      var.d2_community_runtime.signal_reserved_concurrency <= 5 &&
+      floor(var.d2_community_runtime.signal_reserved_concurrency) == var.d2_community_runtime.signal_reserved_concurrency
+    )
+    error_message = "An enabled Phase 2 standard SQS consumer requires integer signal concurrency from 2 through 5, shared by its mapping maximum and Lambda reservation."
+  }
+
+  validation {
     condition = !var.d2_community_runtime.policy_endpoint_enabled || (
       var.deploy_applications &&
       var.deploy_gateway_lambda &&

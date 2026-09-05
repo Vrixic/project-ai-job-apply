@@ -53,6 +53,36 @@ const developmentGatewayReleaseOperator = "scripts/operate-development-gateway-r
 const candidateDocuments = "infrastructure/terraform/modules/platform/candidate-documents.tf";
 const ingestionWorkflow = "infrastructure/terraform/modules/platform/ingestion-workflow.tf";
 const ingestionBuilder = "scripts/build-ingestion-lambdas.mjs";
+const communityRuntime = "infrastructure/terraform/modules/platform/community-runtime.tf";
+
+const trustSignalMapping = section(
+  communityRuntime,
+  'resource "aws_lambda_event_source_mapping" "d2_trust_signal"',
+  'resource "aws_apigatewayv2_route" "d2_community_protected"',
+);
+if (
+  !/scaling_config\s*\{\s*maximum_concurrency\s*=\s*var\.d2_community_runtime\.signal_reserved_concurrency\s*\}/u.test(
+    trustSignalMapping,
+  ) ||
+  trustSignalMapping.includes("provisioned_poller_config")
+) {
+  failures.push("D2 Trust SQS must cap standard polling at the exact reserved Lambda concurrency.");
+}
+requirePattern(
+  communityRuntime,
+  /reserved_concurrent_executions\s*=\s*var\.d2_community_runtime\.signal_reserved_concurrency/u,
+  "D2 Trust Lambda reservation must share the SQS maximum-concurrency input.",
+);
+requirePattern(
+  variables,
+  /condition\s*=\s*!var\.d2_community_runtime\.enabled\s*\|\|\s*\(\s*var\.d2_community_runtime\.signal_reserved_concurrency\s*>=\s*2\s*&&\s*var\.d2_community_runtime\.signal_reserved_concurrency\s*<=\s*5\s*&&\s*floor\(var\.d2_community_runtime\.signal_reserved_concurrency\)\s*==\s*var\.d2_community_runtime\.signal_reserved_concurrency\s*\)/u,
+  "Active D2 standard SQS must reject non-integer concurrency or values outside 2 through 5.",
+);
+forbidText(
+  communityRuntime,
+  "aws_lambda_provisioned_concurrency_config",
+  "D2 concurrency must remain a ceiling, not provisioned compute.",
+);
 
 for (const required of [
   'variable "deploy_ingestion_runtime"',

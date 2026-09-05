@@ -11,6 +11,17 @@ Repository defaults remain dark. Controlled development enables only the dedicat
 catalog publication. See the [Phase 2 register](../../../docs/product/delivery/phase-2-extension-and-community.md)
 for the current deployment and reviewer/acceptance gates.
 
+The ordered development release completed on 2026-09-05 at state `281`: source `3f20462` runs on
+healthy immutable scheduled/Trust/Gateway versions `13`/`11`/`51`, with the real scheduler, Trust
+SQS input/DLQ, enabled alias-targeted consumer, and 18 exact JWT-protected D2 routes plus the
+anonymous signed-policy route. The 40-migration/six-owner/68-relation boundary, including Jobs
+`0020`, was verified from migration image `116b272` with exit `0` and seven exact aggregate success
+events; receipt recovery did not rerun the task. The worker upgrade and old-invocation drain
+preceded the Gateway release. Reviewer queue/evidence, pre-verification cancellation, and terminal
+reconciliation are deployed; direct Gateway boundary and zero Terraform drift checks pass.
+Historical point-in-time restore evidence covers 39 migrations, not this new boundary. Human
+reviewer assignments and hosted admin Auth0 acceptance remain open.
+
 - A pure contribution-trust state machine starts every case in `needs_review`.
 - Initial acceptance requires the fixed `independently_verified` reason. Rejection, withdrawal,
   takedown, appeal filing, and appeal resolution use closed reason-code sets.
@@ -74,12 +85,13 @@ for the current deployment and reviewer/acceptance gates.
 ```powershell
 pnpm --filter @ai-job-apply/trust-service typecheck
 pnpm --filter @ai-job-apply/trust-service test
-pnpm --filter @ai-job-apply/trust-service build
+pnpm --filter @ai-job-apply/profile-service... --filter @ai-job-apply/trust-service... build
 $env:DATABASE_URL = "postgres://ai_job_apply:local_only@127.0.0.1:55432/ai_job_apply"
 pnpm --filter @ai-job-apply/trust-service test:integration
 ```
 
-The integration suite applies and replays both explicit migrations, then proves owner isolation,
+The integration suites initialize the built Profile prerequisite through `0009`, apply and replay
+Trust migrations through `0003_decision_signals`, then prove owner isolation,
 idempotent case opening,
 different-reviewer enforcement at the SQL boundary, version conflicts, immutable audit/evidence,
 private signal projection, candidate export redaction, no-public-execute function ACLs,
@@ -87,19 +99,25 @@ unauthorized and cross-owner deletion denial, transactional child-first candidat
 absence of Trust-to-Jobs database dependencies. Candidate deletion is the only context in which
 the protected history may be removed.
 
-## Not implemented or authorized
+## Remaining authority and acceptance
 
-- Gateway/API routes, a source-only administrative review surface, durable decision signals, and a
-  default-uncomposed Jobs consumer boundary are implemented, but no live reviewer assignment,
-  verified-requester authority, approved policy provider, queue, scheduler, or deployment
-  composition is wired.
-- No decision automatically publishes, activates, refreshes, blocks, restores, or removes a job.
+- Gateway/API routes, the administrative review surface, durable decision signals, the Jobs-owned
+  consumer, queue, scheduler, and deployment composition are implemented. Controlled development
+  assigns only the machine case opener; human decision roles and verified-requester takedown
+  authority remain unassigned.
+- Trust never directly changes catalog truth. The Jobs-owned processor reconciles an authoritative
+  Trust decision only after its own exact owner, verification, authorization, and lifecycle checks.
+  An accepted case is therefore not itself proof of publication or website visibility.
 - No aggregate reputation score, automatic sanction, reward, or contributor-facing ranking exists.
-- No live policy version, appeal timing, response SLA, retention period, license, takedown channel,
-  requester-verification process, or reviewer organization has accountable approval.
-- No real-candidate, public-contribution, provider-fixture, cloud-deployment, or store-release
-  evidence is claimed. ADR-028 and the D2 release gates keep all such behavior disabled.
+- Development has explicitly configured policy/timing values under the bounded Greenhouse
+  exception. That does not establish accountable production policy, response SLA, retention,
+  license, takedown-channel, requester-verification, or reviewer-organization approval.
+- Controlled development and accepted Greenhouse fixture evidence exist. Production/store
+  distribution, broader provider activation, human moderation acceptance, and final accountable
+  security/privacy/product acceptance remain separate D2 gates.
 
-The eventual orchestration boundary must authenticate contributors and reviewers, authorize exact
-scopes, recheck consent and independent verification, pass identifiers only, consume Trust results
-idempotently, and make any Jobs lifecycle change through a separately reviewed Jobs-owned command.
+The implemented orchestration boundary authenticates contributors and reviewers, authorizes exact
+scopes, rechecks contribution authorization and independent verification, transports identifier-only
+signals, and consumes Trust results idempotently through Jobs-owned commands. Repository tests and
+a protected admin preview do not replace an authorized human moderation lifecycle against the
+released backend.
