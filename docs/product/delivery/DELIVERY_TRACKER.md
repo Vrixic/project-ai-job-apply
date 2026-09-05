@@ -372,9 +372,15 @@ This is the master record for the delivery phases defined in the [product and sy
   and two account-held items with `Contribution service unavailable`. Earlier empty telemetry
   queries do not prove non-transmission: the log query checked nested fields although the Gateway
   logger writes root fields, and the route metric series was not found. The prepared aggregate
-  query checks both field layouts; execution is blocked by the expired development AWS SSO session
-  on 2026-09-05. The next step is to inspect existing diagnostic records; contribution success
-  remains unverified.
+  query checks both field layouts. After AWS SSO renewal on 2026-09-05 it identified three
+  `JOB_STORE_INSERT` failures with `TypeError` / `ERR_INVALID_ARG_TYPE`. The gateway initializes
+  its shared PostgreSQL client through Drizzle, which replaces timestamp serializers with
+  pass-through functions. The intake store's `Date` bindings therefore failed before SQL execution;
+  the plain-client integration did not reproduce this composition. The regression now tests both
+  client setups against real PostgreSQL: the Drizzle case fails before the fix, and both pass with
+  ISO-text timestamps across intake, outbox, and queue, including replay and owner isolation.
+  The server fix is locally verified and awaiting development release; installed contribution
+  success remains unverified.
   Remaining gates are the D1
   prerequisites; authorized provider fixtures and QA disposition; completion of Chrome parity,
   cancellation, refresh rotation/replay, logout, and revocation after the dedicated Native

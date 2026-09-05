@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { drizzle } from "drizzle-orm/postgres-js";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
@@ -17,11 +18,19 @@ const databaseUrl = process.env.DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
 const execFileAsync = promisify(execFile);
 
-describeWithDatabase("Jobs queued contribution intake persistence", () => {
+const describeClient = describeWithDatabase.each(["plain", "drizzle"] as const);
+describeClient("Jobs queued contribution intake persistence (%s client)", (mode) => {
   const client = createJobCatalogDatabase(databaseUrl ?? "postgres://invalid", {
     maxConnections: 2,
   });
-  const store = new PostgresJobContributionStore(client);
+  // The gateway shares a client initialized by Drizzle; it changes PostgreSQL
+  // timestamp/JSON serializers. Keep verification and cleanup on a plain client.
+  const storeClient =
+    mode === "drizzle"
+      ? createJobCatalogDatabase(databaseUrl ?? "postgres://invalid", { maxConnections: 2 })
+      : client;
+  if (mode === "drizzle") drizzle(storeClient);
+  const store = new PostgresJobContributionStore(storeClient);
   const ownerA = uuidv7();
   const ownerB = uuidv7();
   const migrationExecutable = fileURLToPath(new URL("../../dist/src/migrate.js", import.meta.url));
@@ -128,6 +137,7 @@ describeWithDatabase("Jobs queued contribution intake persistence", () => {
       await client`DELETE FROM identity.users WHERE id = ${ownerUserId}`;
     }
     await client.end();
+    if (storeClient !== client) await storeClient.end();
   });
 
   it("atomically queues one identifier-only event and isolates owner status", async () => {
@@ -149,6 +159,8 @@ describeWithDatabase("Jobs queued contribution intake persistence", () => {
         data: unknown;
         payload: unknown;
         eventCount: string;
+        queueCount: string;
+        timestampsMatch: boolean;
         jobCount: string;
         sourceCount: string;
       }[]
@@ -156,10 +168,18 @@ describeWithDatabase("Jobs queued contribution intake persistence", () => {
       SELECT contribution.state, contribution.payload, event.event_type AS "eventType", event.data,
         (SELECT count(*)::text FROM jobs.job_contribution_outbox
           WHERE contribution_id = contribution.id) AS "eventCount",
+        (SELECT count(*)::text FROM jobs.job_contribution_processing_queue
+          WHERE contribution_id = contribution.id) AS "queueCount",
+        (contribution.created_at = contribution.updated_at
+          AND contribution.created_at = event.created_at
+          AND contribution.created_at = queue.created_at
+          AND contribution.created_at = queue.updated_at
+          AND contribution.created_at = queue.available_at) AS "timestampsMatch",
         (SELECT count(*)::text FROM jobs.canonical_jobs) AS "jobCount",
         (SELECT count(*)::text FROM jobs.job_sources) AS "sourceCount"
       FROM jobs.job_contributions AS contribution
       JOIN jobs.job_contribution_outbox AS event ON event.contribution_id = contribution.id
+      JOIN jobs.job_contribution_processing_queue AS queue ON queue.contribution_id = contribution.id
       WHERE contribution.id = ${first.id}
     `;
     expect(persisted).toEqual({
@@ -168,6 +188,8 @@ describeWithDatabase("Jobs queued contribution intake persistence", () => {
       data: { contributionId: first.id },
       payload: initial.input,
       eventCount: "1",
+      queueCount: "1",
+      timestampsMatch: true,
       jobCount: before[0]?.jobs,
       sourceCount: before[0]?.sources,
     });

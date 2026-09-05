@@ -160,7 +160,10 @@ export class PostgresJobContributionStore implements JobContributionStore {
 
         const contributionId = command.input.contributionId;
         const outboxId = uuidv7();
-        const createdAt = new Date();
+        // Gateway clients are also initialized by Drizzle, whose timestamp
+        // serializer passes values through. Bind ISO text, not a Date object,
+        // so intake, outbox, and queue writes work with either client setup.
+        const createdAt = new Date().toISOString();
         const input = command.input;
         const [created] = await atStoreStage(
           "JOB_STORE_INSERT",
