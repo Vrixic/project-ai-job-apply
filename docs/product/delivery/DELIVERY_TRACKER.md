@@ -349,7 +349,8 @@ This is the master record for the delivery phases defined in the [product and sy
   exception is not LR-D2-01/LR-D2-02, counsel, accountable security/privacy, production, or store
   approval. Privacy-safe fixed-stage contribution diagnostics and the explicit contribution JSON
   persistence boundary from source `d8490a4` and the narrower fixed-category diagnostic from source
-  `77d73df` are deployed on unweighted Gateway alias `48`; their
+  `77d73df`, plus the shared-client timestamp fix from `ff3689c`, are deployed on unweighted
+  Gateway alias `49` at state `271`; their
   exact two-update release is independently verified and
   Terraform is zero drift. The next
   installed retry was correctly held locally after the prior signed policy expired. The replacement
@@ -367,7 +368,7 @@ This is the master record for the delivery phases defined in the [product and sy
   serializes and hashes the validated payload once and binds those exact bytes through an explicit
   text-to-`jsonb` boundary; clean PostgreSQL transactional integration and the complete repository
   gate pass. The retained item attempted the remediated release once and again failed pre-commit at
-  `JOB_STORE_INSERT` without a PostgreSQL SQLSTATE. State `270` and alias `48` are zero drift; one
+  `JOB_STORE_INSERT` without a PostgreSQL SQLSTATE. The prior state `270` and alias `48` were zero drift; one
   stopped-item restart was reported, and the latest installed queue shows one pending, zero stopped,
   and two account-held items with `Contribution service unavailable`. Earlier empty telemetry
   queries do not prove non-transmission: the log query checked nested fields although the Gateway
@@ -379,8 +380,13 @@ This is the master record for the delivery phases defined in the [product and sy
   the plain-client integration did not reproduce this composition. The regression now tests both
   client setups against real PostgreSQL: the Drizzle case fails before the fix, and both pass with
   ISO-text timestamps across intake, outbox, and queue, including replay and owner isolation.
-  The server fix is locally verified and awaiting development release; installed contribution
-  success remains unverified.
+  The complete repository gate passed, and source `ff3689c` is now deployed on unweighted Gateway
+  alias `49` at state `271`. The exact two-update/no-replacement release passed immutable artifact,
+  direct API-boundary, and refresh-backed zero-drift verification. The public policy still returns
+  HTTP `200` with `no-store` and the unchanged Greenhouse-only expiry. No extension rebuild,
+  sign-out, or account-held-item removal is required. Retry the existing eligible delivery using
+  `Retry now`, or `Retry stopped` if its bounded retry budget has exhausted; installed contribution
+  success and downstream lifecycle remain unverified until that authenticated journey completes.
   Remaining gates are the D1
   prerequisites; authorized provider fixtures and QA disposition; completion of Chrome parity,
   cancellation, refresh rotation/replay, logout, and revocation after the dedicated Native
