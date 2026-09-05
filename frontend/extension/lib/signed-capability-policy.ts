@@ -1,5 +1,5 @@
-import type { AtsProvider, JobPageVariant, SanitizedJobCapture } from "./job-capture";
 import { EXTENSION_CLIENT_VERSION_PATTERN } from "./client-version";
+import type { AtsProvider, JobPageVariant, SanitizedJobCapture } from "./job-capture";
 
 export const CONTRIBUTION_CAPABILITY_POLICY_CACHE_KEY = "d2SignedContributionCapabilityPolicyV1";
 export const CONTRIBUTION_CAPABILITY_POLICY_PATH = "/v1/extension/contribution-capability-policy";

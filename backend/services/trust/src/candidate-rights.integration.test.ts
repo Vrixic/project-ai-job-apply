@@ -22,8 +22,18 @@ describeWithDatabase("Trust candidate rights ownership", () => {
   });
   const store = new PostgresTrustStore(client);
   const migrationExecutable = fileURLToPath(new URL("../dist/src/migrate.js", import.meta.url));
+  const profileMigrationExecutable = fileURLToPath(
+    new URL("../../profile/dist/src/migrate.js", import.meta.url),
+  );
 
   beforeAll(async () => {
+    // Rights assertions require Profile authorization, not Turbo package execution order.
+    const profile = await execFileAsync(process.execPath, [profileMigrationExecutable], {
+      env: { ...process.env, DATABASE_URL: databaseUrl },
+    });
+    expect(profile.stdout.trim()).toBe(
+      "Database migrations through 0009_ugc_contribution_consent_candidate_rights applied and verified.",
+    );
     const first = await execFileAsync(process.execPath, [migrationExecutable], {
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });

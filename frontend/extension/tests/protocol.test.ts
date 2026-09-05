@@ -150,6 +150,7 @@ describe("extension Auth0 protocol lifecycle", () => {
   });
 
   it("exchanges one valid PKCE callback and stores the bounded session", async () => {
+    const issuedAccessToken = accessToken("auth0|candidate-one");
     let authorizationState = "";
     const browser = installChrome({});
     browser.launchWebAuthFlow.mockImplementationOnce(async ({ url }: { url: string }) => {
@@ -169,13 +170,13 @@ describe("extension Auth0 protocol lifecycle", () => {
       expect(parameters.get("grant_type")).toBe("authorization_code");
       expect(parameters.get("code")).toBe("short-code");
       expect(parameters.get("code_verifier")).toMatch(/^[A-Za-z0-9_-]{86}$/u);
-      return tokenResponse(accessToken("auth0|candidate-one"), "refresh-one");
+      return tokenResponse(issuedAccessToken, "refresh-one");
     });
     vi.stubGlobal("fetch", fetchMock);
     await (await protocol()).login();
     const stored = browser.records.get("auth0Session") as SessionRecord;
     expect(stored).toMatchObject({
-      accessToken: accessToken("auth0|candidate-one"),
+      accessToken: issuedAccessToken,
       identityFenceVersion: "auth0-subject-sha256-v1",
       refreshToken: "refresh-one",
     });
@@ -215,6 +216,7 @@ describe("extension Auth0 protocol lifecycle", () => {
   });
 
   it("rotates refresh tokens while preserving the account fence", async () => {
+    const rotatedAccessToken = accessToken("auth0|candidate-one", "two");
     const identityFence = await accountFence("auth0|candidate-one");
     const browser = installChrome({
       initialSession: {
@@ -229,12 +231,12 @@ describe("extension Auth0 protocol lifecycle", () => {
       const parameters = init.body as URLSearchParams;
       expect(parameters.get("grant_type")).toBe("refresh_token");
       expect(parameters.get("refresh_token")).toBe("refresh-one");
-      return tokenResponse(accessToken("auth0|candidate-one", "two"), "refresh-two");
+      return tokenResponse(rotatedAccessToken, "refresh-two");
     });
     vi.stubGlobal("fetch", fetchMock);
     await (await protocol()).refresh();
     expect(browser.records.get("auth0Session")).toMatchObject({
-      accessToken: accessToken("auth0|candidate-one", "two"),
+      accessToken: rotatedAccessToken,
       identityFence,
       refreshToken: "refresh-two",
     });
@@ -278,6 +280,7 @@ describe("extension Auth0 protocol lifecycle", () => {
   });
 
   it("refreshes an expiring session before returning API credentials", async () => {
+    const rotatedAccessToken = accessToken("auth0|candidate-one", "two");
     const identityFence = await accountFence("auth0|candidate-one");
     const browser = installChrome({
       initialSession: {
@@ -290,14 +293,14 @@ describe("extension Auth0 protocol lifecycle", () => {
     });
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => tokenResponse(accessToken("auth0|candidate-one", "two"), "refresh-two")),
+      vi.fn(async () => tokenResponse(rotatedAccessToken, "refresh-two")),
     );
     await expect((await protocol()).authenticatedApiSession()).resolves.toEqual({
-      accessToken: accessToken("auth0|candidate-one", "two"),
+      accessToken: rotatedAccessToken,
       identityFence,
     });
     expect(browser.records.get("auth0Session")).toMatchObject({
-      accessToken: accessToken("auth0|candidate-one", "two"),
+      accessToken: rotatedAccessToken,
       refreshToken: "refresh-two",
     });
   });

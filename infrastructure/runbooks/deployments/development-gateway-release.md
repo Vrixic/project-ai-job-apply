@@ -24,7 +24,9 @@ migration image, public-route switch, identity settings, data resources, or dura
   handoff, run `CaptureBaseline` with a reviewed zero-drift seed and the exact verified document
   publication receipt. It refreshes a new plan from the seed's complete variable inventory,
   accepts only exit code zero, revalidates the document artifacts and live parser binding, and
-  writes a source/state-bound schema-6 sidecar without mutating AWS resources.
+  writes a source/state-bound schema-7 sidecar without mutating AWS resources. Historical gateway
+  schema-6 captures remain readable by the gateway operator; they are not the different historical
+  document Bootstrap schema-6 format and cannot be relabeled as migration inputs.
 - A migration `Verify` handoff uses the canonical version-2 sidecar and additionally binds the
   immutable migration image explicitly. The gateway operator hashes the plan and sidecar before
   parsing, requires the exact version-2 key set, resolves the one local document-publication
@@ -52,6 +54,29 @@ operator shell.
 Review and retain both returned SHA-256 values. `CaptureBaseline` performs a refresh-backed plan
 and is valid only when it is complete, nonapplyable, contains the exact declared variable set, and
 has zero meaningful resource or output changes. It does not publish or deploy an artifact.
+
+Schema 7 is shared with the migration operator. It preserves `DocumentReleaseSourceSha` from the
+exact checksum-matched document publication receipt separately from the current `SourceSha`.
+`DocumentSourceDeltaSha256` binds their Git ancestry and the full no-renames, full-index binary
+patch using `development-document-current-baseline-delta-v1`. Added, modified, and deleted regular
+blobs are accepted; renames, gitlinks, symlinks, incomplete Git results, and unexpected metadata
+keys are rejected. This is provenance for retained immutable artifacts, not permission to deploy
+the intervening product changes. The independent review covers both returned file checksums;
+there is no additional ancestor-delta override for this exact-current capture.
+
+Both consumers revalidate the document receipt's source and all immutable parser/processor
+coordinates against the captured variables and planned functions, the plan-owned artifact
+bucket/KMS key and migration repository, and the processor's exact numeric parser pin. Migration
+`PlanTask`/`ApplyTask` require the capture's exact current source and state lineage/serial. After
+an authorized migration, its `Verify` emits another schema-7 handoff with the new migration image
+and current state while retaining the original document release and receipt. It never labels old
+document artifacts with the migration source. Gateway post-apply `Verify` retains only its existing
+one-serial reviewed-release exception; schema 7 adds no stale-state allowance.
+
+After any other legitimate shared-state change, capture and review a fresh zero-drift baseline;
+do not reuse an older sidecar by changing its serial, source, schema, or checksum fields. A seed
+that produces additional routes or other changes is not a zero-drift baseline: first resolve that
+separate staged rollout boundary, not the migration task guard.
 
 ## Publish and independently verify
 

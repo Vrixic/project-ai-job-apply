@@ -84,6 +84,27 @@ migration execution, or AWS restore execution. No gateway or general worker imag
 
 ## Deployed verification and evidence
 
+- `run-development-d2-authenticated-intake.mjs` — Runs one explicitly approved disposable
+  contribution, with aggregate-only output and exact-run cleanup. The paused-intake profile
+  requires processing disabled and checks owner reads/replay/conflict/cancellation. The separate
+  active-processing profile waits for independent verification and an owner Trust review case,
+  then performs exact-version owner withdrawal from the observed pending-review case and checks
+  its terminal disposition. A copied withdrawal suffices only after this run successfully withdrew
+  that exact pending-review version; earlier ambiguous withdrawals require actual removal evidence
+  or explicit scoped recovery. Accepted/published cases are not silently rebased into cleanup.
+  Primary consent cleanup shares the cancellation revocation key; each ambiguous revocation gets
+  at most one identical retry within the original deadline. It is bounded to
+  one contribution, one concurrent request, 192 requests, ten-second polling, and twenty minutes,
+  allowing the existing five-minute scheduler to complete normal processing/removal ticks.
+  It does not decide cases or prove moderation, publication, or throughput capacity. Import its
+  exported confirmation/actions/digest helpers to prepare the exact privately approved scope;
+  execute with no arguments and the process-local `D2_AUTHENTICATED_INTAKE_CONFIRMATION`,
+  `D2_AUTHENTICATED_INTAKE_SCOPE_JSON`, and `D2_AUTHENTICATED_INTAKE_ACCESS_TOKEN`. Never paste the
+  token or scope into chat, command arguments, retained logs, or Turbo inputs. The signed policy,
+  account identity digest, source/preview, and time window must match the approval exactly.
+  If `recoveryRequired` is true, retain the same private scope/run identity; inspect and recover
+  it without creating another contribution or silently rebasing a Trust version. Mocked tests:
+  `pnpm test:d2-authenticated-intake`. No live profile runs as part of repository verification.
 - `operate-development-d2-provider-recovery.ps1` — Inspects at most 25 provider-held
   contribution queue items through the exact reviewed immutable development function. It returns
   only fixed reason counts and an opaque snapshot fingerprint. `Retry` requires that unchanged

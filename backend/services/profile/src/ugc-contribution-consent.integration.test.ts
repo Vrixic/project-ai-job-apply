@@ -1,3 +1,6 @@
+import { execFile } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDatabase } from "./index.js";
@@ -8,6 +11,7 @@ import {
 
 const databaseUrl = process.env.DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
+const execFileAsync = promisify(execFile);
 
 describeWithDatabase("PostgresUgcContributionConsentStore", () => {
   const database = createDatabase(databaseUrl ?? "postgres://invalid");
@@ -48,6 +52,14 @@ describeWithDatabase("PostgresUgcContributionConsentStore", () => {
   }
 
   beforeAll(async () => {
+    // This suite must initialize its own identity/privacy prerequisites when run on its own.
+    const migrationExecutable = fileURLToPath(new URL("../dist/src/migrate.js", import.meta.url));
+    const migration = await execFileAsync(process.execPath, [migrationExecutable], {
+      env: { ...process.env, DATABASE_URL: databaseUrl },
+    });
+    expect(migration.stdout.trim()).toBe(
+      "Database migrations through 0009_ugc_contribution_consent_candidate_rights applied and verified.",
+    );
     await database.client`
       INSERT INTO identity.users (id, account_state) VALUES
         (${ownerUserId}::uuid, 'active'),

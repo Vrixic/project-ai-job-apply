@@ -3,6 +3,8 @@ $ErrorActionPreference = "Stop"
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 . (Join-Path $repositoryRoot "scripts\lib\deployment-operator-guards.ps1")
 . (Join-Path $repositoryRoot "scripts\lib\development-document-dark-guards.ps1")
+. (Join-Path $repositoryRoot "scripts\lib\development-gateway-release-guards.ps1")
+. (Join-Path $repositoryRoot "scripts\lib\development-current-document-baseline.ps1")
 $operatorPath = Join-Path $repositoryRoot "scripts\operate-development-document-migration.ps1"
 $source = Get-Content -LiteralPath $operatorPath -Raw
 $tokens = $null
@@ -146,11 +148,11 @@ $baselineFunctions = @($ast.FindAll({
         "Assert-ExactTerraformStateIdentity",
         "Read-RetainedMigrationBaseline", "Assert-TaskMetadataBaselineBinding", "Read-TaskPlanMetadata",
         "Get-FileSha256", "Get-TextSha256", "Write-JsonFile", "Get-ExactStringPlanVariable",
-        "New-PostMigrationBaselineMetadata", "Assert-PostMigrationBaselineMetadata",
+        "Read-TaskCurrentDocumentBaselineMetadata", "New-PostMigrationBaselineMetadata", "Assert-PostMigrationBaselineMetadata",
         "Save-PostMigrationBaselineMetadata", "Remove-NewPostMigrationBaselineArtifacts"
       )
     }, $true))
-if ($baselineFunctions.Count -ne 46) { throw "The input, plan, and retained-handoff guards must each be defined once." }
+if ($baselineFunctions.Count -ne 47) { throw "The input, plan, and retained-handoff guards must each be defined once." }
 foreach ($function in $baselineFunctions | Sort-Object { $_.Extent.StartOffset }) {
   Invoke-Expression $function.Extent.Text
 }
@@ -2334,3 +2336,4 @@ foreach ($unsafeFaultValue in @($true, $null, "false")) {
 }
 
 Write-Host "Development document migration operator path and baseline tests passed."
+& (Join-Path $PSScriptRoot "development-current-document-baseline.tests.ps1")

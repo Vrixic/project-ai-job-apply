@@ -24,8 +24,18 @@ describeWithDatabase("PostgreSQL UGC trust foundation", () => {
   const firstReviewer = uuidv7();
   const appealReviewer = uuidv7();
   const migrationExecutable = fileURLToPath(new URL("../dist/src/migrate.js", import.meta.url));
+  const profileMigrationExecutable = fileURLToPath(
+    new URL("../../profile/dist/src/migrate.js", import.meta.url),
+  );
 
   beforeAll(async () => {
+    // Deletion guards use the Profile-owned privacy boundary, regardless of suite order.
+    const profile = await execFileAsync(process.execPath, [profileMigrationExecutable], {
+      env: { ...process.env, DATABASE_URL: databaseUrl },
+    });
+    expect(profile.stdout.trim()).toBe(
+      "Database migrations through 0009_ugc_contribution_consent_candidate_rights applied and verified.",
+    );
     const first = await execFileAsync(process.execPath, [migrationExecutable], {
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });

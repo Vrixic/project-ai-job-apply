@@ -52,7 +52,17 @@ describeWithDatabase("PostgresBillingStore", () => {
 
   beforeAll(async () => {
     const migrationExecutable = fileURLToPath(new URL("../dist/src/migrate.js", import.meta.url));
+    const profileMigrationExecutable = fileURLToPath(
+      new URL("../../profile/dist/src/migrate.js", import.meta.url),
+    );
     const environment = { ...process.env, DATABASE_URL: databaseUrl };
+    // Guard rejection must come from authorization, not an absent privacy schema.
+    const profile = await execFileAsync(process.execPath, [profileMigrationExecutable], {
+      env: environment,
+    });
+    expect(profile.stdout.trim()).toBe(
+      "Database migrations through 0009_ugc_contribution_consent_candidate_rights applied and verified.",
+    );
     const first = await execFileAsync(process.execPath, [migrationExecutable], {
       env: environment,
     });
@@ -429,11 +439,15 @@ describeWithDatabase("PostgresBillingStore", () => {
 
   it("enforces append-only audit, receipt, and event payload boundaries", async () => {
     await expect(client`UPDATE billing.entitlement_changes SET plan = 'free'`).rejects.toThrow();
-    await expect(client`DELETE FROM billing.entitlement_command_receipts`).rejects.toThrow();
+    await expect(client`DELETE FROM billing.entitlement_command_receipts`).rejects.toThrow(
+      "billing history is append-only",
+    );
     await expect(
       client`UPDATE billing.entitlement_outbox SET payload = payload || '{"plan":"pro"}'::jsonb`,
     ).rejects.toThrow();
-    await expect(client`DELETE FROM billing.entitlement_outbox`).rejects.toThrow();
+    await expect(client`DELETE FROM billing.entitlement_outbox`).rejects.toThrow(
+      "billing history is append-only",
+    );
   });
 
   it("enforces owner-consistent account relationships in persistence", async () => {

@@ -1068,7 +1068,12 @@ export class PostgresContributionProcessingQueueStore implements ContributionPro
   }
 
   async park(input: Parameters<ContributionProcessingQueueStore["park"]>[0]): Promise<void> {
-    const rows = await this.client`
+    await this.client.begin(async (transaction) => {
+      // Serialize the handoff with authoritative Trust decision copying. A
+      // signal that saw this attempt claimed must not be lost when it parks;
+      // a later signal sees the committed parked row and wakes it normally.
+      await transaction`SELECT pg_advisory_xact_lock(hashtext(${`jobs:contribution-processing:${input.item.contributionId}`}))`;
+      const rows = await transaction`
       UPDATE jobs.job_contribution_processing_queue
       SET state = 'parked', claimed_at = NULL, claim_expires_at = NULL, claimed_by = NULL,
         last_error_code = ${input.reason}, updated_at = ${input.now}
@@ -1077,7 +1082,25 @@ export class PostgresContributionProcessingQueueStore implements ContributionPro
         AND attempt = ${input.item.attempt}
       RETURNING id
     `;
-    if (rows.count !== 1) throw new Error("Contribution processing park lost its lease");
+      if (rows.count !== 1) throw new Error("Contribution processing park lost its lease");
+      if (input.reason !== "trust_pending") return;
+      // The owner-held/provider-held cases are not retried merely because a
+      // nudge arrived. This wakeup requires actual decision truth, including
+      // rejection, which must finish processing rather than wait for a review
+      // that already happened.
+      await transaction`
+        UPDATE jobs.job_contribution_processing_queue
+        SET state = 'pending', attempt = 0, available_at = ${input.now},
+          last_error_code = NULL, updated_at = ${input.now}
+        WHERE id = ${input.item.id} AND contribution_id = ${input.item.contributionId}
+          AND state = 'parked' AND last_error_code = 'trust_pending'
+          AND EXISTS (SELECT 1 FROM jobs.job_contribution_trust_decisions
+            WHERE contribution_id = ${input.item.contributionId}
+              AND status IN ('accepted', 'rejected', 'withdrawn', 'taken_down'))
+          AND NOT EXISTS (SELECT 1 FROM jobs.job_contribution_state_events
+            WHERE contribution_id = ${input.item.contributionId} AND state = 'consent_invalid')
+      `;
+    });
   }
 
   async requeue(

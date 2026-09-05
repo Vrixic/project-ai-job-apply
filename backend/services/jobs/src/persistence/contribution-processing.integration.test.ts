@@ -511,6 +511,92 @@ describeWithDatabase("durable contribution processing persistence", () => {
     `;
     expect(counts).toEqual({ jobs: 1, sources: 1, evidence: 1 });
   });
+  it.each(["accepted", "rejected", "withdrawn", "taken_down"] as const)(
+    "does not lose a copied %s Trust decision between the claimed attempt and parking",
+    async (decisionStatus) => {
+      const id = uuidv7();
+      const base = command();
+      await intake.create({
+        ...base,
+        idempotencyKey: `park-race-${id}`,
+        input: { ...base.input, contributionId: id },
+      });
+      const now = new Date(Date.now() + 1_000);
+      const claims = await queue.claim({
+        workerId: "park-race:test",
+        now,
+        claimExpiresAt: new Date(now.getTime() + 30_000),
+        limit: 25,
+      });
+      const item = claims.find((row) => row.contributionId === id);
+      if (!item) throw new Error("Expected synthetic park-race claim");
+
+      // Model the exact handoff: processing already observed needs_review;
+      // then the authoritative decision-copy port commits while still claimed.
+      await processing.recordTrustDecision({
+        contributionId: id,
+        decision: {
+          status: decisionStatus,
+          contributionId: id,
+          decisionId: uuidv7(),
+          policyVersion: "synthetic-trust-v1",
+          decidedAt: now.toISOString(),
+        },
+        processingPolicyVersion: "synthetic-processing-v1",
+        occurredAt: now,
+      });
+      expect(await queue.requeue({ contributionId: id, now, signal: "trust_decision" })).toBe(
+        false,
+      );
+      await queue.park({ item, workerId: "park-race:test", now, reason: "trust_pending" });
+      const [row] = await client`
+        SELECT state, attempt, last_error_code FROM jobs.job_contribution_processing_queue
+        WHERE contribution_id = ${id}
+      `;
+      expect(row).toEqual({ state: "pending", attempt: 0, lastErrorCode: null });
+      const [intakeRow] = await client`
+        SELECT state, payload FROM jobs.job_contributions WHERE id = ${id}
+      `;
+      expect(intakeRow).toEqual({
+        state: "queued",
+        payload: { ...base.input, contributionId: id },
+      });
+    },
+  );
+
+  it.each(["trust_pending", "provider_pending", "capability_disabled"] as const)(
+    "keeps %s parked when only a provider nudge arrived during its claim",
+    async (reason) => {
+      const id = uuidv7();
+      const base = command();
+      await intake.create({
+        ...base,
+        idempotencyKey: `park-hold-${id}`,
+        input: { ...base.input, contributionId: id },
+      });
+      const now = new Date(Date.now() + 1_000);
+      const claims = await queue.claim({
+        workerId: "park-hold:test",
+        now,
+        claimExpiresAt: new Date(now.getTime() + 30_000),
+        limit: 25,
+      });
+      const item = claims.find((row) => row.contributionId === id);
+      if (!item) throw new Error("Expected synthetic held claim");
+      expect(
+        await queue.requeue({ contributionId: id, now, signal: "independent_verification" }),
+      ).toBe(false);
+      await queue.park({ item, workerId: "park-hold:test", now, reason });
+      const [row] = await client`
+        SELECT state, attempt, last_error_code FROM jobs.job_contribution_processing_queue
+        WHERE contribution_id = ${id}
+      `;
+      expect(row).toEqual({ state: "parked", attempt: item.attempt, lastErrorCode: reason });
+      // Keep the later recovery snapshot test scoped to its own parked fixtures.
+      await queue.requeue({ contributionId: id, now, signal: "independent_verification" });
+    },
+  );
+
   it("inspects fixed backlog categories and requeues only an unchanged eligible snapshot", async () => {
     const recovery = new PostgresContributionRecoveryStore(client);
     const reasons = [

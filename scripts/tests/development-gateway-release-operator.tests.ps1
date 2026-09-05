@@ -12,7 +12,7 @@ foreach ($required in @(
     'DocumentReleaseSourceSha', 'DocumentOperatorSourceSha',
     'DocumentOperatorDeltaSha256', 'BaselineToReleaseDeltaSha256',
     '9c1b4d52b1bfc7d3901a8d6131a77ff714f85d61fb549114e0165634e49eb4b6',
-    'SchemaVersion = "6"', 'DocumentReceiptPath', 'ReviewedDocumentReceiptSha256',
+    'New-CurrentDocumentBaselineMetadata', 'Assert-CurrentDocumentBaselineEvidence', 'DocumentReceiptPath', 'ReviewedDocumentReceiptSha256',
     'Outcome = "captured-current-zero-drift"', 'Baseline capture did not produce an exact zero-drift plan.'
   )) {
   if (-not $operator.Contains($required)) {

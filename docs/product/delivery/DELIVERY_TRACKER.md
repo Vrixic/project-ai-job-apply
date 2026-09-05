@@ -321,11 +321,16 @@ This is the master record for the delivery phases defined in the [product and sy
 - Status: In progress
 - Start: 2026-09-01
 - Completion: Not completed
-- Active implementation follow-up (2026-09-05): signed-policy readiness renewal is locally fixed;
-  exact Greenhouse page/API description regressions pass. Additional engineering work is explicitly
-  tracked as D2-025–D2-028: pre-verification cancellation, discoverable reviewer queue/evidence,
-  composed Trust-to-Jobs lifecycle and terminal-removal wake-up, and an authenticated workload
-  runner. These changes are not yet deployed and do not close external acceptance gates.
+- Active implementation follow-up (2026-09-05): signed-policy readiness, exact Greenhouse preview
+  compatibility, owner pre-verification cancellation, discoverable reviewer queue/evidence,
+  terminal reconciliation and lost-signal fixes, and bounded authenticated workload tooling are
+  implemented with targeted regressions. All 33 typecheck and 34 unit-test tasks pass; installed
+  synthetic Edge/Chrome-for-Testing layout/privacy checks pass. Fresh-database integration passes
+  all 107 tests in 21 files with no skips. The packaged six-owner migration runner succeeds twice
+  at the 40-migration/68-relation boundary. Ordered migration/worker/Gateway release remains in
+  progress. D2-029's schema-7 handoff repair passes local adversarial/round-trip checks without
+  weakening state/document provenance or changing historical baseline compatibility.
+  These changes are not yet deployed and do not close external acceptance gates.
 - Depends on: D0 consent/security foundations and D1 catalog, saved-job, and moderation foundations;
   the public-contribution API is D2-owned work
 - Task document: [Phase 2 tasks](phase-2-extension-and-community.md)

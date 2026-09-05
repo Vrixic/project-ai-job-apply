@@ -2,12 +2,12 @@ import { generateKeyPairSync, sign } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import type { SanitizedJobCapture } from "../lib/job-capture";
 import {
-  contributionCapabilityPolicyDigestInput,
   ContributionCapabilityPolicyTransportError,
-  evaluateExtensionContributionCapability,
-  ExtensionContributionPolicyRuntime,
-  fetchSignedContributionCapabilityPolicy,
+  contributionCapabilityPolicyDigestInput,
   type ExtensionContributionCapabilityPolicy,
+  ExtensionContributionPolicyRuntime,
+  evaluateExtensionContributionCapability,
+  fetchSignedContributionCapabilityPolicy,
   type SignedExtensionContributionCapabilityPolicy,
   verifySignedContributionCapabilityPolicy,
 } from "../lib/signed-capability-policy";

@@ -49,6 +49,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib\deployment-operator-guards.ps1")
 . (Join-Path $PSScriptRoot "lib\development-document-dark-guards.ps1")
+. (Join-Path $PSScriptRoot "lib\development-gateway-release-guards.ps1")
+. (Join-Path $PSScriptRoot "lib\development-current-document-baseline.ps1")
 
 if ($Help) {
   @"
@@ -1094,6 +1096,25 @@ function Get-ExactStringPlanVariable {
   return [string]$valueProperty.Value
 }
 
+function Read-TaskCurrentDocumentBaselineMetadata {
+  param([Parameter(Mandatory)][object]$TaskMetadata)
+  $sidecar = [string](Get-OptionalProperty $TaskMetadata "appliedBaselineMetadataPath")
+  if ([string]::IsNullOrEmpty($sidecar)) { return $null }
+  $path = Resolve-OperatorPath -Candidate $sidecar -MustExist
+  if ((Get-FileSha256 -Path $path) -cne [string]$TaskMetadata.appliedBaselineMetadataSha256) {
+    throw "The original current-baseline sidecar changed after migration planning."
+  }
+  $metadata = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+  if ([string]$metadata.SchemaVersion -cne "7") { return $null }
+  $baseline = Read-RetainedMigrationBaseline -PlanPath ([string]$TaskMetadata.appliedPlanPath) `
+    -PlanSha256 ([string]$TaskMetadata.appliedPlanSha256) -MetadataSha256 ([string]$TaskMetadata.appliedBaselineMetadataSha256)
+  # A verifier-only descendant may run after apply, but the original task was planned at SourceSha.
+  # Revalidate that exact task/sidecar binding without pretending its document receipt is current.
+  $baseline.CurrentOperatorSourceSha = $SourceSha
+  Assert-TaskMetadataBaselineBinding -TaskMetadata $TaskMetadata -Baseline $baseline
+  return $metadata
+}
+
 function New-PostMigrationBaselineMetadata {
   param(
     [Parameter(Mandatory)][object]$Plan,
@@ -1116,6 +1137,12 @@ function New-PostMigrationBaselineMetadata {
         (Get-DocumentOperatorDeltaSha256 -ReleaseSha ([string]$TaskMetadata.appliedBaselineReleaseSourceSha) `
           -OperatorSha ([string]$TaskMetadata.appliedBaselineOperatorSourceSha))) {
     throw "The post-migration baseline does not preserve the exact stage, parser, receipt, and migration-image handoff."
+  }
+  $currentBaseline = Read-TaskCurrentDocumentBaselineMetadata -TaskMetadata $TaskMetadata
+  if ($null -ne $currentBaseline) {
+    return New-CurrentDocumentBaselineMetadata -Plan $Plan -PlanPath $PlanPath -PlanSha256 $PlanSha256 `
+      -State $State -SourceSha $operatorSourceSha -DocumentReleaseSourceSha ([string]$currentBaseline.DocumentReleaseSourceSha) `
+      -ReceiptSha256 ([string]$currentBaseline.ReceiptSha256) -AccountId $ExpectedAccountId -Region $Region -RepositoryRoot $repositoryRoot
   }
   $hasReviewedReleaseHandoff =
     [string](Get-OptionalProperty $TaskMetadata "appliedBaselineCurrentOperatorSourceSha") -ceq $SourceSha -and
@@ -1182,6 +1209,21 @@ function Assert-PostMigrationBaselineMetadata {
     [Parameter(Mandatory)][object]$State,
     [Parameter(Mandatory)][object]$TaskMetadata
   )
+  if ([string]$Metadata.SchemaVersion -ceq "7") {
+    $currentBaseline = Read-TaskCurrentDocumentBaselineMetadata -TaskMetadata $TaskMetadata
+    if ($null -eq $currentBaseline -or
+        [string]$Metadata.DocumentReleaseSourceSha -cne [string]$currentBaseline.DocumentReleaseSourceSha -or
+        [string]$Metadata.ReceiptSha256 -cne [string]$TaskMetadata.appliedBaselineReceiptSha256 -or
+        [string]$Metadata.Stage -cne [string]$TaskMetadata.appliedBaselineStage -or
+        [string]$Metadata.ParserQualifiedArn -cne [string]$TaskMetadata.appliedBaselineParserQualifiedArn -or
+        [string]$Metadata.MigrationImage -cne $MigrationImage) {
+      throw "The post-migration current baseline lost its original document provenance."
+    }
+    $null = Assert-CurrentDocumentBaselineEvidence -Metadata $Metadata -Plan $Plan -PlanPath $PlanPath `
+      -PlanSha256 $PlanSha256 -CurrentState $State -SourceSha $operatorSourceSha -AccountId $ExpectedAccountId `
+      -Region $Region -RepositoryRoot $repositoryRoot -ReceiptDirectory (Join-Path $terraformRoot "development-document-artifacts")
+    return
+  }
   $v4Keys = @(
     "AccountId", "Applyable", "CreatedAt", "Environment", "Kind", "MeaningfulChanges",
     "MigrationImage", "ParserQualifiedArn", "PlanPath", "PlanSha256", "ReceiptSha256", "Region",
@@ -1373,6 +1415,27 @@ function Read-RetainedMigrationBaseline {
     throw "The retained baseline metadata checksum does not match review."
   }
   $metadata = Get-Content -LiteralPath $sidecarPath -Raw | ConvertFrom-Json
+  if ([string]$metadata.SchemaVersion -ceq "7") {
+    if (-not [string]::IsNullOrEmpty($ReviewedBaselineToCurrentDeltaSha256)) {
+      throw "An exact-current schema-7 baseline cannot accept an ancestor-delta override."
+    }
+    $currentPlan = Get-PlanJson -Path $resolvedPlan
+    Assert-RetainedMigrationBaselinePlan -Plan $currentPlan
+    $currentState = if ($RequireCurrentState) { Get-CurrentTerraformStateIdentity } else {
+      [pscustomobject]@{ Lineage = [string]$metadata.StateLineage; Serial = [long]$metadata.StateSerial }
+    }
+    $null = Assert-CurrentDocumentBaselineEvidence -Metadata $metadata -Plan $currentPlan -PlanPath $resolvedPlan `
+      -PlanSha256 $PlanSha256 -CurrentState $currentState -SourceSha $SourceSha -AccountId $ExpectedAccountId `
+      -Region $Region -RepositoryRoot $repositoryRoot -ReceiptDirectory (Join-Path $terraformRoot "development-document-artifacts")
+    $sameSourceDelta = Get-DocumentOperatorDeltaSha256 -ReleaseSha $SourceSha -OperatorSha $SourceSha
+    return [pscustomobject]@{
+      Plan = $currentPlan; PlanPath = $resolvedPlan; PlanSha256 = $PlanSha256
+      Metadata = $metadata; MetadataPath = $sidecarPath; MetadataSha256 = $sidecarSha256
+      ReleaseSourceSha = $SourceSha; OperatorSourceSha = $SourceSha; OperatorDeltaSha256 = $sameSourceDelta
+      CurrentOperatorSourceSha = $operatorSourceSha; BaselineToCurrentDeltaSha256 = $sameSourceDelta
+      PlanningState = $currentState
+    }
+  }
   $createdAtValid = if ($metadata.CreatedAt -is [datetime]) {
     $metadata.CreatedAt.Year -ge 2000 -and $metadata.CreatedAt.Year -le 2099
   } else { [string]$metadata.CreatedAt -match '^20[0-9]{2}-[0-9]{2}-[0-9]{2}T' }

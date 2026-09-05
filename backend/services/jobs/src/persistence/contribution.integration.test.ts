@@ -41,6 +41,9 @@ describeClient("Jobs queued contribution intake persistence (%s client)", (mode)
   const ownerA = uuidv7();
   const ownerB = uuidv7();
   const migrationExecutable = fileURLToPath(new URL("../../dist/src/migrate.js", import.meta.url));
+  const profileMigrationExecutable = fileURLToPath(
+    new URL("../../../profile/dist/src/migrate.js", import.meta.url),
+  );
 
   function command(ownerUserId = ownerA): CreateJobContributionCommand {
     const value: CreateJobContributionCommand = {
@@ -96,6 +99,13 @@ describeClient("Jobs queued contribution intake persistence (%s client)", (mode)
   }
 
   beforeAll(async () => {
+    // Cleanup uses the Profile-owned deletion authorization boundary, regardless of suite order.
+    const profile = await execFileAsync(process.execPath, [profileMigrationExecutable], {
+      env: { ...process.env, DATABASE_URL: databaseUrl },
+    });
+    expect(profile.stdout.trim()).toBe(
+      "Database migrations through 0009_ugc_contribution_consent_candidate_rights applied and verified.",
+    );
     const result = await execFileAsync(process.execPath, [migrationExecutable], {
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });

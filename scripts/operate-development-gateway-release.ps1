@@ -25,6 +25,7 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib\deployment-operator-guards.ps1")
 . (Join-Path $PSScriptRoot "lib\development-document-dark-guards.ps1")
 . (Join-Path $PSScriptRoot "lib\development-gateway-release-guards.ps1")
+. (Join-Path $PSScriptRoot "lib\development-current-document-baseline.ps1")
 
 if ($Help) {
   @"
@@ -455,6 +456,13 @@ function Read-Baseline {
     -AccountId $ExpectedAccountId -Region $Region `
     -ExpectedMigrationRepositoryUrl $boundary.MigrationRepositoryUrl -CurrentState $state `
     -AllowOneSerialAdvance:($Action -ceq "Verify")
+  if ([string]$metadata.SchemaVersion -ceq "7") {
+    $null = Assert-CurrentDocumentBaselineEvidence -Metadata $metadata -Plan $plan -PlanPath $planPath `
+      -PlanSha256 $ReviewedBaselineSha256 -CurrentState $state -SourceSha $SourceSha `
+      -AccountId $ExpectedAccountId -Region $Region -RepositoryRoot $repositoryRoot `
+      -ReceiptDirectory (Join-Path $terraformRoot "development-document-artifacts") `
+      -AllowOneSerialAdvance:($Action -ceq "Verify")
+  }
   $documentReleaseSha = if ([string]$metadata.SchemaVersion -ceq "5") {
     if ([string]$metadata.DocumentReleaseSourceSha -cne 'a6d0fba09082b8bc61ee7b604ee1d5c47bd71624' -or
       [string]$metadata.DocumentOperatorSourceSha -cne '9d290416c61847f1682157c08312cdb920d42107' -or
@@ -478,7 +486,7 @@ function Read-Baseline {
       throw "The retained document baseline operator delta does not match the current gateway release source."
     }
     [string]$metadata.ReleaseSourceSha
-  } elseif ([string]$metadata.SchemaVersion -ceq "6") {
+  } elseif ([string]$metadata.SchemaVersion -in @("6", "7")) {
     [string]$metadata.DocumentReleaseSourceSha
   } else { $SourceSha }
   $documentReceipt = Read-BaselineDocumentReceipt -ReceiptSha256 ([string]$metadata.ReceiptSha256)
@@ -636,6 +644,7 @@ if ($Action -ceq "CaptureBaseline") {
   $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
   $capturedPath = Resolve-GatewayOperatorPath `
     (Join-Path $operatorRoot "baseline-$($SourceSha.Substring(0,12))-$timestamp.tfplan") -ReleaseOnly
+  $captureStateBefore = Get-StateIdentity
   $saved = Save-AndClearTerraformVariables
   try {
     Set-VariablesFromPlan $seed $null
@@ -653,6 +662,9 @@ if ($Action -ceq "CaptureBaseline") {
     -ReceiptSha256 $ReviewedDocumentReceiptSha256 -Plan $captured `
     -SourceSha ([string]$documentReceipt.sourceSha) -ExpectedBoundarySha256 $boundary.BoundarySha256
   $state = Get-StateIdentity
+  if ([string]$state.Lineage -cne [string]$captureStateBefore.Lineage -or [long]$state.Serial -ne [long]$captureStateBefore.Serial) {
+    throw "Terraform state changed while capturing the current document baseline."
+  }
   $stage = [string](Get-GatewayPlanVariableValue $captured.variables "document_processing_deployment_stage")
   $parserArn = [string](Get-GatewayPlanVariableValue $captured.variables "document_parser_invocation_qualified_arn")
   $null = Assert-RetainedGatewayParserBinding -Stage $stage -PlanParserQualifiedArn $parserArn `
@@ -664,16 +676,14 @@ if ($Action -ceq "CaptureBaseline") {
     throw "The captured baseline migration digest is outside the exact Terraform-owned repository."
   }
   $capturedSha = Get-FileSha256 $capturedPath
-  $metadata = [ordered]@{
-    SchemaVersion = "6"; Kind = "development-document-zero-drift-baseline"
-    Environment = "development"; AccountId = $ExpectedAccountId; Region = $Region
-    SourceSha = $SourceSha; DocumentReleaseSourceSha = [string]$documentReceipt.sourceSha
-    StateLineage = $state.Lineage; StateSerial = $state.Serial; Stage = $stage
-    ReceiptSha256 = $ReviewedDocumentReceiptSha256; ParserQualifiedArn = $parserArn
-    MigrationImage = $migrationImage; PlanPath = $capturedPath; PlanSha256 = $capturedSha
-    Applyable = $false; MeaningfulChanges = 0
-    CreatedAt = (Get-Date).ToUniversalTime().ToString("o")
-  }
+  $metadata = New-CurrentDocumentBaselineMetadata -Plan $captured -PlanPath $capturedPath `
+    -PlanSha256 $capturedSha -State $state -SourceSha $SourceSha `
+    -DocumentReleaseSourceSha ([string]$documentReceipt.sourceSha) -ReceiptSha256 $ReviewedDocumentReceiptSha256 `
+    -AccountId $ExpectedAccountId -Region $Region -RepositoryRoot $repositoryRoot
+  $null = Assert-CurrentDocumentBaselineEvidence -Metadata ([pscustomobject]$metadata) -Plan $captured `
+    -PlanPath $capturedPath -PlanSha256 $capturedSha -CurrentState $state -SourceSha $SourceSha `
+    -AccountId $ExpectedAccountId -Region $Region -RepositoryRoot $repositoryRoot `
+    -ReceiptDirectory (Join-Path $terraformRoot "development-document-artifacts")
   $metadataPath = "$capturedPath.baseline.json"
   Write-ExclusiveJson $metadataPath $metadata
   [pscustomobject]@{

@@ -38,6 +38,31 @@ evidence.
 
 The task release is deliberately review-separated:
 
+For a current development release, the supported direct handoff is schema 7 from
+`scripts/operate-development-gateway-release.ps1 -Action CaptureBaseline`. Capture uses a reviewed
+zero-drift seed and the exact verified document publication receipt; it returns a new plan and
+adjacent `.baseline.json` with separately reviewable SHA-256 values. Pass those returned values
+unchanged to `PlanTask` as `AppliedPlanPath`, `AppliedPlanSha256`, and
+`AppliedPlanMetadataSha256`. Omit `ReviewedBaselineToCurrentDeltaSha256`: this path requires exact
+current source and state and rejects an ancestor override.
+
+Schema 7 binds the real `DocumentReleaseSourceSha` separately from the current capture source,
+plus their domain-separated `DocumentSourceDeltaSha256`, all document receipt/artifact/function
+coordinates, plan-owned bucket/KMS/repository, stage, and numeric parser pin. The task metadata
+continues to bind the original sidecar's exact bytes. Post-migration `Verify` reauthenticates that
+sidecar and emits schema 7 with the new migration image/current state and the original document
+release/receipt. It must not normalize the old document receipt to the new migration source.
+
+Historical schema-6 Bootstrap baselines retain their original validation; gateway's older
+schema-6 captures have a different shape and remain invalid migration inputs. Obtain a fresh
+schema-7 capture rather than relabeling either format, accepting a stale serial, weakening
+zero-drift checks, or deploying unrelated ingestion artifacts just to regenerate old evidence.
+
+Release ordering remains migration package publication and scan, `PlanTask`/`ApplyTask`, reviewed
+`PlanExecution`/single `Execute`/`Verify`, compatible D2 worker upgrade and old-worker drain, and
+then the Gateway release. Other route or runtime changes require their own exact reviewed plan;
+none may enter the migration task-only replacement plan.
+
 When an ancestor `CompleteDark` baseline is required, derive the review value independently from
 the exact merged commits before invoking `PlanTask`. Run this from clean `main == origin/main`,
 inspect the detected records and `numstat` before accepting the digest, and stop on any rename,
