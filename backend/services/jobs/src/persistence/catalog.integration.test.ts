@@ -71,10 +71,10 @@ describeWithDatabase("PostgresJobCatalog", () => {
     const first = await runMigrationVerifier();
     const replay = await runMigrationVerifier();
     expect(first.stdout.trim()).toBe(
-      "Jobs migrations through 0019_job_contribution_provider_publication applied and verified.",
+      "Jobs migrations through 0020_contribution_trust_reprocessing applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(
-      "Jobs migrations through 0019_job_contribution_provider_publication applied and verified.",
+      "Jobs migrations through 0020_contribution_trust_reprocessing applied and verified.",
     );
     await catalog.ping();
   });

@@ -4,7 +4,7 @@ $repository = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $verifier = Join-Path $repository 'scripts/verify-development-d2-community-dark.ps1'
 $composition = Get-Content -Raw -LiteralPath (Join-Path $repository 'infrastructure/terraform/modules/platform/community-runtime.tf')
 $routes = @([regex]::Matches($composition, '"((?:GET|POST|DELETE) /v1/[^"]+)"\s*=\s*\[') | ForEach-Object { $_.Groups[1].Value })
-if ($routes.Count -ne 15) { throw 'The exact D2 Terraform route inventory changed; review its acceptance matrix.' }
+if ($routes.Count -ne 18) { throw 'The exact D2 Terraform route inventory changed; review its acceptance matrix.' }
 $global:D2DarkBoundaryMock = @{ routes=@() }
 function global:aws {
   $global:LASTEXITCODE=0
@@ -35,4 +35,4 @@ foreach ($route in @($routes + 'ANY /v1/admin/trust/future-review-action' + 'PAT
   try { $null = & $verifier -ExpectedAccountId '123456789012' } catch { $rejected=$true }
   if (-not $rejected) { throw "A deployed D2 route was incorrectly accepted as dark: $route" }
 }
-'Development D2 dark-route boundary passed for all 15 deployed routes and future namespace variants (mock AWS only).'
+'Development D2 dark-route boundary passed for all 18 configured routes and future namespace variants (mock AWS only).'

@@ -74,6 +74,12 @@ export class SourceRegistry {
         ...(registration.adapter.pollExact
           ? { pollExact: registration.adapter.pollExact.bind(registration.adapter) }
           : {}),
+        ...(registration.adapter.pagePreviewDescriptionDigests
+          ? {
+              pagePreviewDescriptionDigests:
+                registration.adapter.pagePreviewDescriptionDigests.bind(registration.adapter),
+            }
+          : {}),
       });
       this.#registrations.set(
         registration.sourceId,

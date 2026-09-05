@@ -28,6 +28,7 @@ const migrationVersions = [
   "0017_job_contribution_processing",
   "0018_job_contribution_processing_delivery",
   "0019_job_contribution_provider_publication",
+  "0020_contribution_trust_reprocessing",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -1135,6 +1136,36 @@ try {
       );
     }
   });
+  const reprocessingMigration = migrations.find(
+    (migration) => migration.version === "0020_contribution_trust_reprocessing",
+  );
+  if (!reprocessingMigration) throw new Error("Trust reprocessing migration is missing");
+  for (const [name, args, language] of [
+    ["contribution_requires_trust_processing", 2, "sql"],
+    ["guard_job_contribution_processing_queue", 0, "plpgsql"],
+  ] as const) {
+    const source = new RegExp(
+      `CREATE (?:OR REPLACE )?FUNCTION jobs\\.${name}\\([\\s\\S]*?AS \\$\\$([\\s\\S]*?)\\$\\$;`,
+      "u",
+    ).exec(reprocessingMigration.sql)?.[1];
+    const [actual] = await client<Array<{ body: string }>>`
+      SELECT procedure.prosrc AS body FROM pg_proc AS procedure
+      JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+      JOIN pg_language AS language ON language.oid = procedure.prolang
+      WHERE namespace.nspname = 'jobs' AND procedure.proname = ${name}
+        AND procedure.pronargs = ${args} AND language.lanname = ${language}
+        AND NOT procedure.prosecdef AND procedure.proconfig IS NULL
+    `;
+    if (!source || actual?.body !== source)
+      throw new Error("Trust reprocessing function verification failed");
+  }
+  const [marker] = await client<Array<{ present: boolean }>>`
+    SELECT EXISTS (SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'jobs' AND table_name = 'job_contribution_processing_queue'
+        AND column_name = 'completed_trust_decision_id' AND data_type = 'uuid'
+        AND is_nullable = 'YES') AS present
+  `;
+  if (!marker?.present) throw new Error("Trust reprocessing decision marker is missing");
   console.log(`Jobs migrations through ${migrationVersions.at(-1)} applied and verified.`);
 } finally {
   await client.end();

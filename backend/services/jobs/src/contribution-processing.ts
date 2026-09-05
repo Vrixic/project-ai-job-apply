@@ -444,6 +444,8 @@ export class ContributionProcessingService {
     if (!contribution) return "not_found";
     assertLoaded(contribution, contributionId);
 
+    if (contribution.ownerState === "consent_invalid") return "consent_invalid";
+
     const terminal = await this.reconcileTerminal(contribution);
     if (terminal) return terminal;
     if (contribution.publication || contribution.ownerState === "published") return "published";
@@ -472,6 +474,7 @@ export class ContributionProcessingService {
       assertLoaded(contribution, contributionId);
     }
     const normalization = contribution.normalization;
+    if (contribution.ownerState === "consent_invalid") return "consent_invalid";
     if (!normalization || !UUID_V7_PATTERN.test(normalization.id)) {
       throw new ContributionProcessingDependencyUnavailableError();
     }
@@ -506,6 +509,7 @@ export class ContributionProcessingService {
       assertLoaded(contribution, contributionId);
     }
     const verification = contribution.independentVerification;
+    if (contribution.ownerState === "consent_invalid") return "consent_invalid";
     if (!verification) throw new ContributionProcessingDependencyUnavailableError();
 
     if (!contribution.trustDecision) {

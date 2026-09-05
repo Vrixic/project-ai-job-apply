@@ -4,15 +4,22 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { v7 as uuidv7 } from "uuid";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   type CreateJobContributionCommand,
+  JobContributionCancellationConflictError,
   JobContributionIdempotencyConflictError,
   jobContributionContentDigestInput,
   jobContributionPreviewDigestInput,
 } from "../contribution.js";
+import { normalizeContributionForProcessing } from "../contribution-processing-policy.js";
+import { canonicalizeObservation } from "../domain/canonical-job.js";
 import { createJobCatalogDatabase } from "./catalog.js";
 import { PostgresJobContributionStore } from "./contribution.js";
+import {
+  PostgresContributionProcessingQueueStore,
+  PostgresContributionProcessingStore,
+} from "./contribution-processing.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -93,9 +100,182 @@ describeClient("Jobs queued contribution intake persistence (%s client)", (mode)
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });
     expect(result.stdout.trim()).toBe(
-      "Jobs migrations through 0019_job_contribution_provider_publication applied and verified.",
+      "Jobs migrations through 0020_contribution_trust_reprocessing applied and verified.",
     );
     await store.ping();
+  });
+
+  it("cancels only the owner, preserves immutable intake and cannot resurrect through late worker writes", async () => {
+    const initial = command();
+    initial.idempotencyKey = `cancel-${initial.input.contributionId}`;
+    await store.create(initial);
+    const cancel = {
+      ownerUserId: ownerA,
+      contributionId: initial.input.contributionId,
+      idempotencyKey: `cancel-request-${initial.input.contributionId}`,
+      traceId: "synthetic-cancellation",
+    };
+    const revoke = vi.fn(async () => undefined);
+    await expect(store.cancel({ ...cancel, ownerUserId: ownerB }, { revoke })).resolves.toBeNull();
+    expect(revoke).not.toHaveBeenCalled();
+    const processing = new PostgresContributionProcessingStore(client);
+    const proposal = normalizeContributionForProcessing(initial.input);
+    await processing.recordNormalization({
+      contributionId: cancel.contributionId,
+      proposal,
+      processingPolicyVersion: "synthetic-processing-v1",
+      occurredAt: new Date(),
+    });
+    let release: () => void = () => undefined;
+    let entered: () => void = () => undefined;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const cancellation = store.cancel(cancel, {
+      revoke: async (binding) => {
+        expect(binding).toMatchObject({
+          ownerUserId: ownerA,
+          consentId: initial.input.approval.consentId,
+          previewDigestSha256: initial.input.approval.previewDigestSha256,
+        });
+        entered();
+        await blocked;
+      },
+    });
+    await started;
+    const observation = {
+      provider: "lever" as const,
+      provenance: "permitted_api" as const,
+      sourceUrl: initial.input.source.sourceUrl,
+      atsTenant: "synthetic",
+      externalJobId: "synthetic-123",
+      companyName: "Synthetic Contribution Company",
+      title: initial.input.posting.title,
+      description: "Generated public posting text for persistence acceptance.",
+      locations: ["New York, NY"],
+      adapterVersion: "lever-v1",
+      observedAt: new Date(),
+    };
+    const verification = processing.recordIndependentVerification({
+      contributionId: cancel.contributionId,
+      evidence: {
+        status: "verified",
+        origin: "independent_provider_fetch",
+        contributionId: cancel.contributionId,
+        verificationId: uuidv7(),
+        provider: "lever",
+        pageVariant: "lever-posting-v1",
+        canonicalSourceUrlSha256: proposal.provenance.canonicalSourceUrlSha256,
+        evidenceDigestSha256: "c".repeat(64),
+        verifiedContentSha256: canonicalizeObservation(observation).contentHash,
+        sourcePolicyVersion: "synthetic-source-v1",
+        verifiedAt: observation.observedAt.toISOString(),
+        providerObservation: observation,
+      },
+      processingPolicyVersion: "synthetic-processing-v1",
+      occurredAt: new Date(),
+    });
+    release();
+    const cancelled = await cancellation;
+    expect(cancelled?.state).toBe("consent_invalid");
+    expect((await verification).ownerState).toBe("consent_invalid");
+    await expect(store.cancel(cancel, { revoke })).resolves.toEqual(cancelled);
+    await processing.recordOwnerState({
+      contributionId: cancel.contributionId,
+      state: "awaiting_independent_verification",
+      reasonCode: "provider_observation_mismatch",
+      processingPolicyVersion: "synthetic-processing-v1",
+      occurredAt: new Date(Date.now() + 1000),
+    });
+    expect((await store.get(ownerA, cancel.contributionId))?.state).toBe("consent_invalid");
+    const [unchanged] = await client<Array<{ payload: unknown; state: string; verified: boolean }>>`
+      SELECT payload, state, EXISTS (SELECT 1 FROM jobs.job_contribution_independent_verifications
+        WHERE contribution_id = ${cancel.contributionId}) AS verified
+      FROM jobs.job_contributions WHERE id = ${cancel.contributionId}
+    `;
+    expect(unchanged).toEqual({ payload: initial.input, state: "queued", verified: false });
+    const queue = new PostgresContributionProcessingQueueStore(client);
+    const claims = await queue.claim({
+      now: new Date(Date.now() + 2000),
+      workerId: "synthetic-cancel-test",
+      claimExpiresAt: new Date(Date.now() + 32000),
+      limit: 25,
+    });
+    expect(claims.some((item) => item.contributionId === cancel.contributionId)).toBe(false);
+  });
+
+  it("retries a partial revocation and refuses cancellation once independent verification has committed", async () => {
+    const initial = command();
+    initial.idempotencyKey = `cancel-recovery-${initial.input.contributionId}`;
+    await store.create(initial);
+    const cancel = {
+      ownerUserId: ownerA,
+      contributionId: initial.input.contributionId,
+      idempotencyKey: `cancel-request-${initial.input.contributionId}`,
+      traceId: "synthetic-cancellation",
+    };
+    await expect(
+      store.cancel(cancel, {
+        revoke: async () => {
+          throw new Error("synthetic-unavailable");
+        },
+      }),
+    ).rejects.toThrow();
+    expect((await store.get(ownerA, cancel.contributionId))?.state).toBe("consent_invalid");
+    await store.cancel(cancel, { revoke: async () => undefined });
+    expect((await store.get(ownerA, cancel.contributionId))?.state).toBe("consent_invalid");
+
+    const later = command();
+    later.idempotencyKey = `verified-${later.input.contributionId}`;
+    await store.create(later);
+    const processing = new PostgresContributionProcessingStore(client);
+    const proposal = normalizeContributionForProcessing(later.input);
+    await processing.recordNormalization({
+      contributionId: later.input.contributionId,
+      proposal,
+      processingPolicyVersion: "synthetic-processing-v1",
+      occurredAt: new Date(),
+    });
+    const observation = {
+      provider: "lever" as const,
+      provenance: "permitted_api" as const,
+      sourceUrl: later.input.source.sourceUrl,
+      atsTenant: "synthetic",
+      externalJobId: "synthetic-123",
+      companyName: "Synthetic Contribution Company",
+      title: later.input.posting.title,
+      description: "Generated public posting text for persistence acceptance.",
+      locations: ["New York, NY"],
+      adapterVersion: "lever-v1",
+      observedAt: new Date(),
+    };
+    await processing.recordIndependentVerification({
+      contributionId: later.input.contributionId,
+      evidence: {
+        status: "verified",
+        origin: "independent_provider_fetch",
+        contributionId: later.input.contributionId,
+        verificationId: uuidv7(),
+        provider: "lever",
+        pageVariant: "lever-posting-v1",
+        canonicalSourceUrlSha256: proposal.provenance.canonicalSourceUrlSha256,
+        evidenceDigestSha256: "c".repeat(64),
+        verifiedContentSha256: canonicalizeObservation(observation).contentHash,
+        sourcePolicyVersion: "synthetic-source-v1",
+        verifiedAt: observation.observedAt.toISOString(),
+        providerObservation: observation,
+      },
+      processingPolicyVersion: "synthetic-processing-v1",
+      occurredAt: new Date(),
+    });
+    const revoke = vi.fn(async () => undefined);
+    await expect(
+      store.cancel({ ...cancel, contributionId: later.input.contributionId }, { revoke }),
+    ).rejects.toBeInstanceOf(JobContributionCancellationConflictError);
+    expect(revoke).not.toHaveBeenCalled();
   });
 
   afterAll(async () => {

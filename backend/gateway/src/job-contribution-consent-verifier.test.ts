@@ -1,13 +1,57 @@
-import type { UgcContributionConsentVerifier } from "@ai-job-apply/profile-service";
+import {
+  UgcContributionConsentConflictError,
+  type UgcContributionConsentStore,
+  type UgcContributionConsentVerifier,
+} from "@ai-job-apply/profile-service";
 import { describe, expect, it, vi } from "vitest";
 import {
   configuredUgcContributionPolicyVersion,
+  ProfileJobContributionConsentRevoker,
   ProfileJobContributionConsentVerifier,
 } from "./job-contribution-consent-verifier.js";
 
 const ownerUserId = "019d04cf-1f80-7000-8000-000000000001";
 const consentId = "019d04cf-1f80-7000-8000-000000000002";
 const grantedAt = "2026-09-01T12:00:00.000Z";
+
+describe("ProfileJobContributionConsentRevoker", () => {
+  it("uses a contribution-stable replay identity across partial retries without requiring active intake policy", async () => {
+    const revoke = vi.fn(async () => ({}));
+    const store = { revoke } as unknown as UgcContributionConsentStore;
+    const revoker = new ProfileJobContributionConsentRevoker(store);
+    const command = { ...input(), occurredAt: grantedAt, traceId: "synthetic-revoke" };
+    await revoker.revoke(command);
+    await revoker.revoke({ ...command, occurredAt: "2026-09-01T12:10:00.000Z" });
+    expect(
+      revoke.mock.calls.map(
+        (call) => (call as unknown as [{ idempotencyKey: string }])[0].idempotencyKey,
+      ),
+    ).toEqual([
+      `contribution-cancel-${command.contributionId}`,
+      `contribution-cancel-${command.contributionId}`,
+    ]);
+  });
+
+  it.each(["not_current", "not_found", "expired", "mismatch", "unavailable"] as const)(
+    "accepts only existing permanent invalidation, not %s as a substitute for revocation",
+    async (reason) => {
+      const conflict = new UgcContributionConsentConflictError();
+      const store = {
+        revoke: async () => {
+          throw conflict;
+        },
+        verify: async () => ({ valid: false, reason }),
+      } as unknown as UgcContributionConsentStore;
+      const result = new ProfileJobContributionConsentRevoker(store).revoke({
+        ...input(),
+        occurredAt: grantedAt,
+        traceId: "synthetic-revoke",
+      });
+      if (reason === "not_current") await expect(result).resolves.toBeUndefined();
+      else await expect(result).rejects.toBe(conflict);
+    },
+  );
+});
 
 function input() {
   return {

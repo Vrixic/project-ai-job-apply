@@ -96,12 +96,14 @@ const readinessCopy: Record<DeliveryReadinessReason, string> = {
   retention_configuration_required: "Configure pending-item retention before delivery.",
   sign_in_required: "Sign in to continue.",
   signed_policy_disabled: "The signed policy currently disables public contribution.",
-  signed_policy_unavailable: "The signed contribution policy is unavailable. Try again later.",
+  signed_policy_unavailable:
+    "The signed contribution policy is unavailable or expired. Wait 15 seconds, then inspect the current tab again to recheck.",
 };
 
 const busyCopy: Record<string, string> = {
   appeal: "Submitting the appeal…",
   capture: "Inspecting the current tab…",
+  cancel_contribution: "Cancelling the contribution before verification…",
   clear_queue: "Removing queued items…",
   clear_stopped: "Removing stopped items…",
   contribution_refresh: "Refreshing contribution status…",
@@ -252,7 +254,10 @@ function renderReceipts(receipts: ContributionReceipt[]): void {
     const heading = document.createElement("h3");
     heading.textContent = `Contribution ${receipt.contributionId.slice(0, 8)}`;
     const state = document.createElement("p");
-    state.textContent = `Processing: ${receipt.state.replaceAll("_", " ")}`;
+    state.textContent =
+      receipt.state === "consent_invalid"
+        ? "Contribution authorization ended. It cannot be published under this authorization."
+        : `Processing: ${receipt.state.replaceAll("_", " ")}`;
     const trust = document.createElement("p");
     trust.textContent = receipt.trust
       ? `Trust: ${receipt.trust.state.replaceAll("_", " ")}${receipt.trust.appealed ? " · appealed" : ""}`
@@ -277,10 +282,17 @@ function renderReceipts(receipts: ContributionReceipt[]): void {
           !window.confirm("Withdraw this contribution from Trust eligibility?")
         )
           return;
+        if (
+          action === "cancel_contribution" &&
+          !window.confirm(
+            "Cancel this contribution before verification? This ends its publication authorization and keeps the receipt.",
+          )
+        )
+          return;
         void invoke({
           action,
           contributionId: receipt.contributionId,
-          ...(action === "withdraw" ? { confirmed: true } : {}),
+          ...(action === "withdraw" || action === "cancel_contribution" ? { confirmed: true } : {}),
         });
       });
       actions.append(button);
@@ -290,6 +302,10 @@ function renderReceipts(receipts: ContributionReceipt[]): void {
     if (receipt.trust) {
       add("Withdraw", "withdraw");
       add("Appeal", "appeal");
+    } else if (
+      ["queued", "normalized", "awaiting_independent_verification"].includes(receipt.state)
+    ) {
+      add("Cancel contribution", "cancel_contribution");
     }
     article.append(heading, state, trust, actions);
     contributionList.append(article);

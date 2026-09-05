@@ -535,6 +535,17 @@ class MemoryJobContributions implements JobContributions {
 
   async ping(): Promise<void> {}
 
+  async cancel(command: {
+    ownerUserId: string;
+    contributionId: string;
+  }): Promise<JobContribution | null> {
+    if (this.failure) throw this.failure;
+    const record = this.records.get(command.contributionId);
+    if (!record || record.ownerUserId !== command.ownerUserId) return null;
+    record.contribution = { ...record.contribution, state: "consent_invalid" };
+    return record.contribution;
+  }
+
   async contribute(command: CreateJobContributionCommand): Promise<JobContribution> {
     if (this.failure) throw this.failure;
     const key = `${command.ownerUserId}\0${command.idempotencyKey}`;
@@ -2336,6 +2347,66 @@ describe("candidate API", () => {
     expect(revoked.headers["cache-control"]).toBe("no-store");
   });
 
+  it("validates owner-bound cancellation, terminal conflicts and fail-closed no-store responses", async () => {
+    const ownerToken = await issuer.issue("candidate-cancellation", { scope: "jobs:contribute" });
+    const otherToken = await issuer.issue("other-cancellation", { scope: "jobs:contribute" });
+    const scopeToken = await issuer.issue("candidate-cancellation", { scope: "jobs:read" });
+    const owner = await store.resolveUser(await issuer.verifier.verify(ownerToken));
+    const id = uuidv7();
+    jobContributions.records.set(id, {
+      ownerUserId: owner.id,
+      contribution: {
+        id,
+        state: "awaiting_independent_verification",
+        submittedAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      },
+    });
+    const request = {
+      method: "POST" as const,
+      url: `/v1/jobs/contributions/${id}/cancel`,
+      headers: { authorization: `Bearer ${ownerToken}`, "idempotency-key": `cancel-${id}` },
+      payload: { schemaVersion: 1 },
+    };
+    const cross = await app.inject({
+      ...request,
+      headers: { ...request.headers, authorization: `Bearer ${otherToken}` },
+    });
+    expect(cross.statusCode).toBe(404);
+    const forbidden = await app.inject({
+      ...request,
+      headers: { ...request.headers, authorization: `Bearer ${scopeToken}` },
+    });
+    expect(forbidden.statusCode).toBe(403);
+    expect(
+      (await app.inject({ ...request, payload: { ...request.payload, ownerUserId: owner.id } }))
+        .statusCode,
+    ).toBe(400);
+    expect((await app.inject({ ...request, url: `${request.url}?owner=forged` })).statusCode).toBe(
+      400,
+    );
+    const cancelled = await app.inject(request);
+    expect(cancelled.statusCode).toBe(200);
+    expect(cancelled.headers["cache-control"]).toBe("no-store");
+    expect(cancelled.json()).toEqual({
+      id,
+      state: "consent_invalid",
+      submittedAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    });
+    expect((await app.inject(request)).json()).toEqual(cancelled.json());
+    const { JobContributionCancellationConflictError } = await import("@ai-job-apply/jobs-service");
+    jobContributions.failure = new JobContributionCancellationConflictError();
+    const conflict = await app.inject(request);
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json().code).toBe("job_contribution_requires_trust_withdrawal");
+    jobContributions.failure = new Error("synthetic-private-database-canary");
+    const unavailable = await app.inject(request);
+    expect(unavailable.statusCode).toBe(500);
+    expect(unavailable.body).not.toContain("synthetic-private-database-canary");
+    jobContributions.failure = undefined;
+  });
+
   it("rejects contribution payload leakage and incomplete preview approval", async () => {
     const token = await issuer.issue("candidate-contribution-invalid", {
       scope: "jobs:contribute",
@@ -3001,6 +3072,26 @@ describe("Phase 2 Trust routes", () => {
       async readReviewerCase() {
         return reviewerCase;
       },
+      async listReviewerCases() {
+        return { items: [{ ...reviewerCase, state: "needs_review" }] };
+      },
+      async readReviewerEvidence() {
+        return {
+          caseId,
+          caseVersion: 2,
+          evidence: {
+            contributionId,
+            evidenceDigestSha256: "a".repeat(64),
+            verifiedAt: "2026-09-05T12:00:00.000Z",
+            provider: "greenhouse",
+            sourceUrl: "https://job-boards.greenhouse.io/synthetic/jobs/123",
+            title: "Synthetic role",
+            companyName: "Synthetic company",
+            locations: [],
+            description: "Complete independently verified public content.",
+          },
+        };
+      },
       async openReview() {
         return { ...reviewerCase, state: "needs_review" as const, version: 1 };
       },
@@ -3094,6 +3185,63 @@ describe("Phase 2 Trust routes", () => {
       expect(accepted.statusCode).toBe(200);
       expect(accepted.json()).not.toHaveProperty("contributorUserId");
       expect(accepted.json()).not.toHaveProperty("reviewerId");
+    } finally {
+      await setup.app.close();
+    }
+  });
+
+  it("requires exact case-reader authority for bounded queues and readable evidence", async () => {
+    const subject = "synthetic-trust-case-reader";
+    const setup = await createApp({
+      trust: fakeTrust([]),
+      trustReviewerAssignments: [
+        { issuer: "https://test-issuer.invalid/", subject, roles: ["case_reader"] },
+      ],
+    });
+    try {
+      const token = await setup.issuer.issue(subject, { scope: "trust:review" });
+      for (const url of [
+        "/v1/admin/trust/cases?state=needs_review&pageSize=25",
+        `/v1/admin/trust/cases/${caseId}/evidence`,
+      ]) {
+        const response = await setup.app.inject({
+          method: "GET",
+          url,
+          headers: { authorization: `Bearer ${token}` },
+        });
+        expect(response.statusCode).toBe(200);
+        expect(response.headers["cache-control"]).toBe("no-store");
+        expect(response.body).not.toContain("contributorUserId");
+        expect(response.body).not.toContain("reviewerId");
+        const unassigned = await setup.issuer.issue("unassigned-reviewer", {
+          scope: "trust:review",
+        });
+        expect(
+          (
+            await setup.app.inject({
+              method: "GET",
+              url,
+              headers: { authorization: `Bearer ${unassigned}` },
+            })
+          ).statusCode,
+        ).toBe(403);
+      }
+      for (const query of [
+        "pageSize=26",
+        "query=unrestricted",
+        "pageSize=01",
+        "state=accepted",
+        "state=needs_review&state=appeal_pending",
+      ])
+        expect(
+          (
+            await setup.app.inject({
+              method: "GET",
+              url: `/v1/admin/trust/cases?${query}`,
+              headers: { authorization: `Bearer ${token}` },
+            })
+          ).statusCode,
+        ).toBe(400);
     } finally {
       await setup.app.close();
     }

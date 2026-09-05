@@ -7,6 +7,7 @@ import type {
   SourcePollContext,
   SourcePollResult,
 } from "./contract.js";
+import { greenhouseLegacyPageDescriptionDigests } from "./page-preview-compatibility.js";
 
 const boardTokenPattern = /^[a-z0-9][a-z0-9_-]{1,62}$/;
 const sourceIdPattern = /^greenhouse-[a-z0-9][a-z0-9-]{2,52}$/;
@@ -43,7 +44,7 @@ function canonicalText(value: unknown, label: string, maximum = maximumTextLengt
   return normalized;
 }
 
-function htmlToPlainText(value: unknown): string {
+function htmlToPlainText(value: unknown, onPreview?: (digests: readonly string[]) => void): string {
   let html = canonicalText(value, "The Greenhouse job content");
   // The provider can wrap its HTML in one or two entity-encoding layers. Decode only the
   // outer envelope before parsing; entities inside actual markup remain text, not new tags.
@@ -103,6 +104,7 @@ function htmlToPlainText(value: unknown): string {
     if (child) pending.push(child);
   }
   const parts: string[] = [];
+  const pageParts: string[] = [];
   let visited = 0;
   while (pending.length > 0) {
     const node = pending.pop();
@@ -114,6 +116,7 @@ function htmlToPlainText(value: unknown): string {
     if (!node) continue;
     if ("value" in node) {
       parts.push(node.value);
+      pageParts.push(node.value);
       continue;
     }
     if (!("tagName" in node) || skipped.has(node.tagName)) continue;
@@ -129,6 +132,23 @@ function htmlToPlainText(value: unknown): string {
       const child = node.childNodes[index];
       if (child) pending.push(child);
     }
+  }
+  if (onPreview) {
+    const firstElement = fragment.childNodes.find((node) => "tagName" in node);
+    let heading: string | undefined;
+    if (firstElement && "tagName" in firstElement && /^h[1-6]$/u.test(firstElement.tagName)) {
+      const headingParts: string[] = [];
+      const headingNodes = [...firstElement.childNodes].reverse();
+      while (headingNodes.length > 0) {
+        const node = headingNodes.pop();
+        if (node && "value" in node) headingParts.push(node.value);
+        else if (node && "tagName" in node && !skipped.has(node.tagName)) {
+          headingNodes.push(...[...node.childNodes].reverse());
+        }
+      }
+      heading = headingParts.join("");
+    }
+    onPreview(greenhouseLegacyPageDescriptionDigests(pageParts.join(""), heading));
   }
   return canonicalText(
     parts
@@ -166,6 +186,7 @@ function parseJob(
   options: Readonly<
     Pick<GreenhouseJobBoardAdapterOptions, "boardToken" | "companyName" | "verifiedCompanyDomain">
   >,
+  onPreview?: (digests: readonly string[]) => void,
 ): SourceJobObservation {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("The Greenhouse job record is invalid");
@@ -206,7 +227,7 @@ function parseJob(
         : canonicalText(job.company_name, "The Greenhouse provider company name", 200),
     title: canonicalText(job.title, "The Greenhouse job title", 500),
     locations: [location],
-    description: htmlToPlainText(job.content),
+    description: htmlToPlainText(job.content, onPreview),
     sourceUrl: canonicalJobUrl(job.absolute_url, options.boardToken, String(job.id)),
     atsTenant: options.boardToken,
     externalJobId: String(job.id),
@@ -258,6 +279,16 @@ export class GreenhouseJobBoardAdapter implements IngestionSourceAdapter {
   readonly #fetch: Fetch;
   readonly #requestTimeoutMs: number;
   readonly #maximumResponseBytes: number;
+  readonly #pagePreviews = new WeakMap<SourceJobObservation, readonly string[]>();
+
+  pagePreviewDescriptionDigests(
+    observation: SourceJobObservation,
+    captureAdapterVersion: string,
+  ): readonly string[] {
+    return captureAdapterVersion === "d2-job-page-v1"
+      ? (this.#pagePreviews.get(observation) ?? [])
+      : [];
+  }
 
   constructor(options: GreenhouseJobBoardAdapterOptions) {
     if (!sourceIdPattern.test(options.sourceId) || !boardTokenPattern.test(options.boardToken)) {
@@ -347,14 +378,22 @@ export class GreenhouseJobBoardAdapter implements IngestionSourceAdapter {
     );
     if (!(response instanceof Response)) return response;
     const payload = await readBoundedJson(response, this.#maximumResponseBytes);
-    const observation = parseJob(payload, {
-      boardToken: this.#boardToken,
-      companyName: this.#companyName,
-      verifiedCompanyDomain: this.#verifiedCompanyDomain,
-    });
+    let previewDigests: readonly string[] = [];
+    const observation = parseJob(
+      payload,
+      {
+        boardToken: this.#boardToken,
+        companyName: this.#companyName,
+        verifiedCompanyDomain: this.#verifiedCompanyDomain,
+      },
+      (digests) => {
+        previewDigests = digests;
+      },
+    );
     if (observation.externalJobId !== externalJobId) {
       throw new Error("The Greenhouse exact response identity does not match its request");
     }
+    this.#pagePreviews.set(observation, previewDigests);
     return { kind: "success", observations: [observation], withdrawals: [] };
   }
 }

@@ -1,11 +1,12 @@
+import { safeActionErrorMessage } from "../lib/action-error";
 import {
   capabilityForPage,
   DEFAULT_DARK_DETECTOR_POLICY_REVISION,
   extensionDetectorActivationPolicy,
 } from "../lib/capability-policy";
-import { safeActionErrorMessage } from "../lib/action-error";
 import { extensionConfiguration } from "../lib/config";
 import {
+  cancelContribution,
   fileContributionAppeal,
   getContributionStatus,
   getOwnerTrustStatus,
@@ -55,6 +56,7 @@ import { restrictExtensionStorageToTrustedContexts } from "../lib/storage-bounda
 
 const LAST_CAPTURE_KEY = "d2LastJobCaptureV1";
 const RETRY_ALARM = "d2PendingJobIntentRetry";
+let identityGeneration = 0;
 
 const contributionPolicy = new ExtensionContributionPolicyRuntime(
   extensionConfiguration.capabilityPolicyPublicKeys,
@@ -158,6 +160,7 @@ async function deliveryReadiness(
   }
   try {
     await contributionPolicyStartup;
+    await contributionPolicy.refreshForReadiness();
   } catch {
     return { contribution: unavailable("signed_policy_unavailable"), privateSave };
   }
@@ -165,7 +168,7 @@ async function deliveryReadiness(
   if (!decision.allowed) {
     return {
       contribution: unavailable(
-        decision.reason === "policy_missing"
+        ["policy_missing", "policy_expired", "policy_not_yet_valid"].includes(decision.reason)
           ? "signed_policy_unavailable"
           : "signed_policy_disabled",
       ),
@@ -300,6 +303,7 @@ async function dispatchPending(ignoreBackoff = false): Promise<ReturnType<typeof
 async function ownerAction(
   message: Extract<ReturnType<typeof parseExtensionMessage>, { contributionId: string }>,
 ) {
+  const generation = identityGeneration;
   if (!message || !extensionConfiguration.apiOrigin) {
     throw new Error("api_configuration_required");
   }
@@ -310,37 +314,53 @@ async function ownerAction(
   );
   if (!receipt) throw new Error("contribution_required");
   const result =
-    message.action === "contribution_refresh"
-      ? await getContributionStatus(
+    message.action === "cancel_contribution" && !receipt.trust
+      ? await cancelContribution(
           receipt.contributionId,
           session.accessToken,
           extensionConfiguration.apiOrigin,
         )
-      : message.action === "trust_refresh"
-        ? await getOwnerTrustStatus(
+      : message.action === "contribution_refresh"
+        ? await getContributionStatus(
             receipt.contributionId,
             session.accessToken,
             extensionConfiguration.apiOrigin,
           )
-        : message.action === "withdraw" && receipt.trust
-          ? await withdrawContribution(
+        : message.action === "trust_refresh"
+          ? await getOwnerTrustStatus(
               receipt.contributionId,
-              receipt.trust.version,
               session.accessToken,
               extensionConfiguration.apiOrigin,
             )
-          : message.action === "appeal" && receipt.trust
-            ? await fileContributionAppeal(
+          : message.action === "withdraw" && receipt.trust
+            ? await withdrawContribution(
                 receipt.contributionId,
                 receipt.trust.version,
-                message.evidenceDigestSha256,
                 session.accessToken,
                 extensionConfiguration.apiOrigin,
               )
-            : { outcome: "rejected" as const };
+            : message.action === "appeal" && receipt.trust
+              ? await fileContributionAppeal(
+                  receipt.contributionId,
+                  receipt.trust.version,
+                  message.evidenceDigestSha256,
+                  session.accessToken,
+                  extensionConfiguration.apiOrigin,
+                )
+              : { outcome: "rejected" as const };
   if (result.outcome === "ok") {
+    const currentSession = await authenticatedApiSession();
+    if (generation !== identityGeneration || currentSession.identityFence !== session.identityFence)
+      return "rejected" as const;
+    const currentReceipts = await contributionReceipts();
+    if (
+      !receiptsForIdentity(currentReceipts, session.identityFence).some(
+        (item) => item.contributionId === receipt.contributionId,
+      )
+    )
+      return "rejected" as const;
     const updated =
-      message.action === "contribution_refresh"
+      message.action === "contribution_refresh" || message.action === "cancel_contribution"
         ? updateContributionStatus(
             receipt,
             result.value as import("@ai-job-apply/api-contracts").JobContribution,
@@ -349,7 +369,8 @@ async function ownerAction(
             receipt,
             result.value as import("@ai-job-apply/api-contracts").OwnerTrustCase,
           );
-    await writeContributionReceipts(upsertContributionReceipt(all, updated));
+    if (generation !== identityGeneration) return "rejected" as const;
+    await writeContributionReceipts(upsertContributionReceipt(currentReceipts, updated));
   }
   return result.outcome;
 }
@@ -449,6 +470,7 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
     sendResponse({ error: "Invalid extension request.", ok: false });
     return false;
   }
+  if (message.action === "login" || message.action === "logout") identityGeneration++;
   void (async () => {
     try {
       await storageBoundaryStartup;
@@ -501,7 +523,13 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
           status: await authenticationStatus(),
         };
       } else if (
-        ["contribution_refresh", "trust_refresh", "withdraw", "appeal"].includes(message.action)
+        [
+          "contribution_refresh",
+          "trust_refresh",
+          "withdraw",
+          "appeal",
+          "cancel_contribution",
+        ].includes(message.action)
       ) {
         const outcome = await ownerAction(message as Parameters<typeof ownerAction>[0]);
         const session = await authenticatedApiSession();

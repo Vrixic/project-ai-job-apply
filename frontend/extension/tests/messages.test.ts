@@ -35,6 +35,20 @@ describe("extension message boundary", () => {
       contributionId,
     });
     expect(parseExtensionMessage({ action: "withdraw", contributionId })).toBeUndefined();
+    expect(
+      parseExtensionMessage({ action: "cancel_contribution", contributionId }),
+    ).toBeUndefined();
+    expect(
+      parseExtensionMessage({ action: "cancel_contribution", contributionId, confirmed: true }),
+    ).toEqual({ action: "cancel_contribution", contributionId, confirmed: true });
+    expect(
+      parseExtensionMessage({
+        action: "cancel_contribution",
+        contributionId,
+        confirmed: true,
+        token: "forbidden",
+      }),
+    ).toBeUndefined();
     const evidenceDigestSha256 = "a".repeat(64);
     expect(
       parseExtensionMessage({

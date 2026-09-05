@@ -1,4 +1,5 @@
 import type { D2LambdaGatewayTrustConfiguration } from "@ai-job-apply/config";
+import { PostgresContributionReviewEvidenceReader } from "@ai-job-apply/jobs-service";
 import {
   PostgresTrustStore,
   TrustApplicationService,
@@ -80,6 +81,8 @@ export function createConfiguredD2TrustRuntime(
       },
     },
     contributionEvidence: {
+      readReviewEvidence: (input) =>
+        new PostgresContributionReviewEvidenceReader(client).read(input),
       async readEligibility(contributionId) {
         const [row] = await client<
           { contributionId: string; contributorUserId: string; independentlyVerified: boolean }[]
@@ -102,7 +105,12 @@ export function createConfiguredD2TrustRuntime(
           : null;
       },
       async verifyEvidence({ contributionId, evidenceDigestSha256, purpose }) {
-        if (purpose !== "independent_verification") {
+        if (
+          purpose === "initial_review" &&
+          evidence.has(evidenceKey(contributionId, evidenceDigestSha256, purpose))
+        )
+          return true;
+        if (purpose !== "independent_verification" && purpose !== "initial_review") {
           return evidence.has(evidenceKey(contributionId, evidenceDigestSha256, purpose));
         }
         const [row] = await client<{ verified: boolean }[]>`

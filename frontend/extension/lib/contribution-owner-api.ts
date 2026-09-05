@@ -93,34 +93,91 @@ function headers(token: string, body = false): HeadersInit {
     ...(body ? { "content-type": "application/json" } : {}),
   };
 }
+export const OWNER_ACTION_TIMEOUT_MILLISECONDS = 10_000;
+const MAXIMUM_OWNER_RESPONSE_BYTES = 16_384;
 async function request<T>(
   url: URL,
   init: RequestInit,
   parser: (value: unknown) => value is T,
   fetcher: typeof fetch,
 ): Promise<OwnerActionResult<T>> {
-  let response: Response;
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    response = await fetcher(url, init);
+    const work = async (): Promise<OwnerActionResult<T>> => {
+      const response = await fetcher(url, {
+        ...init,
+        cache: "no-store",
+        credentials: "omit",
+        redirect: "error",
+        signal: controller.signal,
+      });
+      if (response.status === 404) return { outcome: "not_found" };
+      if (response.status === 409) return { outcome: "version_conflict" };
+      if ([408, 425, 429].includes(response.status) || response.status >= 500)
+        return { outcome: "unavailable" };
+      if (response.status !== 200 || !exactNoStoreJson(response) || !response.body)
+        return { outcome: "rejected" };
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      try {
+        while (true) {
+          const next = await reader.read();
+          if (next.done) break;
+          total += next.value.byteLength;
+          if (total > MAXIMUM_OWNER_RESPONSE_BYTES) {
+            void reader.cancel().catch(() => undefined);
+            return { outcome: "rejected" };
+          }
+          chunks.push(next.value);
+        }
+      } finally {
+        reader.releaseLock();
+      }
+      const bytes = new Uint8Array(total);
+      let offset = 0;
+      for (const chunk of chunks) {
+        bytes.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
+      const value: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+      return parser(value) ? { outcome: "ok", value } : { outcome: "rejected" };
+    };
+    return await Promise.race([
+      work(),
+      new Promise<OwnerActionResult<T>>((resolve) => {
+        timer = setTimeout(() => {
+          controller.abort();
+          resolve({ outcome: "unavailable" });
+        }, OWNER_ACTION_TIMEOUT_MILLISECONDS);
+      }),
+    ]);
   } catch {
     return { outcome: "unavailable" };
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
   }
-  if (response.status === 404) return { outcome: "not_found" };
-  if (response.status === 409) return { outcome: "version_conflict" };
-  if (
-    response.status === 408 ||
-    response.status === 425 ||
-    response.status === 429 ||
-    response.status >= 500
-  )
-    return { outcome: "unavailable" };
-  if (response.status !== 200 || !exactNoStoreJson(response)) return { outcome: "rejected" };
-  try {
-    const value: unknown = await response.json();
-    return parser(value) ? { outcome: "ok", value } : { outcome: "rejected" };
-  } catch {
-    return { outcome: "rejected" };
-  }
+}
+
+export function cancelContribution(
+  id: string,
+  token: string,
+  origin: string,
+  fetcher: typeof fetch = fetch,
+) {
+  if (!UUID.test(id)) return Promise.resolve({ outcome: "rejected" as const });
+  return request(
+    new URL(`/v1/jobs/contributions/${id}/cancel`, origin),
+    {
+      method: "POST",
+      body: JSON.stringify({ schemaVersion: 1 }),
+      headers: { ...headers(token, true), "idempotency-key": `cancel-${id}` },
+    },
+    (value): value is JobContribution =>
+      exactContribution(value, id) && value.state === "consent_invalid",
+    fetcher,
+  );
 }
 
 export function getContributionStatus(

@@ -29,7 +29,11 @@ release, and browser-store distribution are not approved. See the current
   incomplete policies, received-invalid updates, future policies, and policies older than their
   signed expiry deny contribution. A verified cache can bridge a service-worker restart or network
   outage only until its signed expiry; it never enables contribution after expiry or executes
-  remote code.
+  remote code. Opening the popup or explicitly inspecting a page rechecks delivery readiness in a
+  warm worker: policy requests share one in-flight fetch, readiness requests have a 15-second
+  cooldown, and each fetch has a 10-second deadline. No timer polls readiness or contribution
+  status. This can recognize a renewed server policy without reloading the extension, signing in
+  again, or resubmitting an acknowledged job; existing identity and preview gates still apply.
 - A strict structured allowlist: canonical HTTPS URL, provider, adapter version, timestamp, title,
   company, location, work type, description, and external job ID. Text is bounded and stripped of
   markup and control characters; URLs reject credentials, fragments, trackers, and local/private
@@ -52,6 +56,11 @@ release, and browser-store distribution are not approved. See the current
   server-issued receipt across ambiguous retries, and uses separate stable idempotency keys. The
   backward-compatible private-capture transport remains implemented but is not exposed by the
   public-add-only extension surface.
+- Acknowledged jobs still waiting on independent verification can be cancelled explicitly without
+  an existing Trust case or an enabled intake policy. The exact owner command ends publication
+  authorization, uses one stable replay key, and keeps its receipt. Jobs already entering Trust
+  require the existing withdrawal workflow instead. Owner requests refuse redirects, bound response
+  bytes and whole-response time, and cannot restore a receipt after logout supersedes the request.
 
 Both session and local extension storage are restricted to trusted extension contexts before any
 session, policy-cache, capture, or pending-queue access. The normal path never retains or uploads
@@ -88,7 +97,11 @@ lowercase key ID to that Ed25519 public key's base64url-encoded DER SPKI bytes. 
 material, not a secret, but source and the default-dark store package intentionally pin no live key.
 The signed policy is read only from `/v1/extension/contribution-capability-policy` at the configured
 HTTPS API origin. A received envelope may live for at most 24 hours; source selects no policy,
-signing key, refresh interval, or activation value.
+signing key, background polling interval, or activation value. The local 15-second readiness
+cooldown limits user-initiated requests; it does not extend signed validity. After renewal, wait
+at least 15 seconds since the last check and press **Inspect current tab**, or reopen the popup.
+Existing builds need one rebuild/reload to receive this readiness fix; subsequent policy renewals
+do not require an extension reload.
 
 Page inspection uses the independent `EXTENSION_DETECTOR_ACTIVATION_JSON`
 build-time policy. Its exact shape is `schemaVersion`, a reviewed `revision`, `extensionVersion`,

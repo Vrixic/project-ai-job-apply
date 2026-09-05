@@ -150,6 +150,11 @@ button:disabled {
 code {
   overflow-wrap: anywhere;
 }
+.review-evidence pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
 output {
   display: block;
   min-height: 24px;
@@ -163,6 +168,10 @@ dl div {
 }
 dd {
   margin: 0;
+}
+.review-evidence dd {
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 @media (max-width: 680px) {
   form {

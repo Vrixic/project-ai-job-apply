@@ -15,6 +15,7 @@ export * from "./persistence/contribution.js";
 export * from "./persistence/contribution-processing.js";
 export * from "./persistence/contribution-processing-event-delivery.js";
 export * from "./persistence/contribution-recovery.js";
+export * from "./persistence/contribution-review-evidence.js";
 export * from "./persistence/ingestion-orchestration.js";
 export * from "./persistence/reporting.js";
 export * from "./persistence/revalidation.js";

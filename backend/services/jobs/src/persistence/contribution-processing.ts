@@ -270,7 +270,7 @@ async function loadWith(
     LEFT JOIN LATERAL (
       SELECT event.state FROM jobs.job_contribution_state_events AS event
       WHERE event.contribution_id = contribution.id
-      ORDER BY event.occurred_at DESC, event.id DESC LIMIT 1
+      ORDER BY (event.state = 'consent_invalid') DESC, event.occurred_at DESC, event.id DESC LIMIT 1
     ) AS state_event ON true
     LEFT JOIN LATERAL (
       SELECT decision.id, decision.status, decision.trust_policy_version, decision.decided_at
@@ -296,6 +296,11 @@ async function insertState(
     occurredAt: Date;
   },
 ): Promise<void> {
+  const [cancelled] = await client<Array<{ present: boolean }>>`
+    SELECT EXISTS (SELECT 1 FROM jobs.job_contribution_state_events
+      WHERE contribution_id = ${input.contributionId} AND state = 'consent_invalid') AS present
+  `;
+  if (cancelled?.present) return;
   await client`
     INSERT INTO jobs.job_contribution_state_events (
       id, contribution_id, state, reason_code, processing_policy_version, occurred_at
@@ -356,6 +361,7 @@ export class PostgresContributionProcessingStore implements ContributionProcessi
     input: Parameters<ContributionProcessingStore["recordOwnerState"]>[0],
   ): Promise<LoadedContributionProcessing> {
     return this.client.begin(async (transaction) => {
+      await transaction`SELECT pg_advisory_xact_lock(hashtext(${`jobs:contribution-processing:${input.contributionId}`}))`;
       await insertState(transaction, input);
       const value = await loadWith(transaction, input.contributionId);
       if (!value) throw new Error("Contribution disappeared during state recording");
@@ -371,6 +377,8 @@ export class PostgresContributionProcessingStore implements ContributionProcessi
         SELECT pg_advisory_xact_lock(hashtext(${`jobs:contribution-processing:${input.contributionId}`}))
       `;
       const proposal = input.proposal;
+      const current = await loadWith(transaction, input.contributionId);
+      if (current?.ownerState === "consent_invalid") return current;
       const provenance = proposal.provenance;
       const [existing] = await transaction<{ proposalSha256: string }[]>`
         SELECT proposal_sha256 AS "proposalSha256"
@@ -430,8 +438,10 @@ export class PostgresContributionProcessingStore implements ContributionProcessi
     input: Parameters<ContributionProcessingStore["recordIndependentVerification"]>[0],
   ): Promise<LoadedContributionProcessing> {
     return this.client.begin(async (transaction) => {
+      await transaction`SELECT pg_advisory_xact_lock(hashtext(${`jobs:contribution-processing:${input.contributionId}`}))`;
       const evidence = input.evidence;
       const normalization = await loadWith(transaction, input.contributionId);
+      if (normalization?.ownerState === "consent_invalid") return normalization;
       if (!normalization?.normalization) throw new Error("Normalization is required");
       if (
         normalization.normalization.proposal.provenance.provider !== evidence.provider ||
@@ -475,6 +485,9 @@ export class PostgresContributionProcessingStore implements ContributionProcessi
     input: Parameters<ContributionProcessingStore["recordTrustDecision"]>[0],
   ): Promise<LoadedContributionProcessing> {
     return this.client.begin(async (transaction) => {
+      await transaction`SELECT pg_advisory_xact_lock(hashtext(${`jobs:contribution-processing:${input.contributionId}`}))`;
+      const current = await loadWith(transaction, input.contributionId);
+      if (current?.ownerState === "consent_invalid") return current;
       const decision = input.decision;
       await transaction`
         INSERT INTO jobs.job_contribution_trust_decisions (
@@ -533,6 +546,8 @@ export class PostgresContributionProcessingStore implements ContributionProcessi
           ORDER BY decision.decided_at DESC, decision.id DESC LIMIT 1
         ) AS trust ON trust.status = 'accepted'
         WHERE contribution.id = ${input.contributionId}
+          AND NOT EXISTS (SELECT 1 FROM jobs.job_contribution_state_events AS cancelled
+            WHERE cancelled.contribution_id = contribution.id AND cancelled.state = 'consent_invalid')
           AND contribution.client_surface = 'browser_extension'
           AND contribution.client_version IS NOT NULL
           AND contribution.payload #>> '{client,surface}' = contribution.client_surface
@@ -801,6 +816,8 @@ export class PostgresContributionPublicationReconciler
           WHERE reconciliation.id = ${command.reconciliationId}
             AND reconciliation.contribution_id = ${command.contributionId}
             AND reconciliation.kind = 'publication'
+            AND NOT EXISTS (SELECT 1 FROM jobs.job_contribution_state_events AS cancelled
+              WHERE cancelled.contribution_id = reconciliation.contribution_id AND cancelled.state = 'consent_invalid')
             AND reconciliation.normalization_id = ${command.normalizationId}
             AND reconciliation.independent_verification_id = ${command.independentVerificationId}
             AND reconciliation.trust_decision_id = ${command.trustDecisionId}
@@ -976,6 +993,9 @@ export class PostgresContributionProcessingQueueStore implements ContributionPro
         WITH claimable AS (
           SELECT id FROM jobs.job_contribution_processing_queue
           WHERE state = 'pending' AND available_at <= ${input.now}
+            AND NOT EXISTS (SELECT 1 FROM jobs.job_contribution_state_events AS cancelled
+              WHERE cancelled.contribution_id = jobs.job_contribution_processing_queue.contribution_id
+                AND cancelled.state = 'consent_invalid')
           ORDER BY available_at, created_at, id
           FOR UPDATE SKIP LOCKED LIMIT ${input.limit}
         )
@@ -997,13 +1017,40 @@ export class PostgresContributionProcessingQueueStore implements ContributionPro
     const rows = await this.client`
       UPDATE jobs.job_contribution_processing_queue
       SET state = 'completed', claimed_at = NULL, claim_expires_at = NULL, claimed_by = NULL,
-        last_error_code = NULL, updated_at = ${input.now}
+        last_error_code = NULL, updated_at = ${input.now},
+        completed_trust_decision_id = (
+          SELECT decision.id FROM jobs.job_contribution_trust_decisions AS decision
+          WHERE decision.contribution_id = ${input.item.contributionId}
+            AND (
+              (${input.outcome} = 'published' AND decision.status = 'accepted' AND EXISTS (
+                SELECT 1 FROM jobs.job_contribution_reconciliations AS reconciliation
+                WHERE reconciliation.contribution_id = decision.contribution_id
+                  AND reconciliation.kind = 'publication' AND reconciliation.state = 'applied'
+                  AND reconciliation.trust_decision_id = decision.id
+              )) OR (${input.outcome} = 'rejected' AND decision.status = 'rejected')
+              OR (${input.outcome} IN ('withdrawn', 'taken_down') AND decision.status = ${input.outcome})
+              OR (${input.outcome} = 'removed' AND decision.status IN ('withdrawn', 'taken_down') AND EXISTS (
+                SELECT 1 FROM jobs.job_contribution_reconciliations AS reconciliation
+                WHERE reconciliation.contribution_id = decision.contribution_id
+                  AND reconciliation.kind = 'removal' AND reconciliation.state = 'applied'
+                  AND reconciliation.trust_decision_id = decision.id
+              ))
+            )
+          ORDER BY decision.decided_at DESC, decision.id DESC LIMIT 1
+        )
       WHERE id = ${input.item.id} AND contribution_id = ${input.item.contributionId}
         AND state = 'claimed' AND claimed_by = ${input.workerId}
         AND attempt = ${input.item.attempt}
       RETURNING id
     `;
     if (rows.count !== 1) throw new Error("Contribution processing completion lost its lease");
+    // A Trust signal may have arrived while the queue was claimed. Recheck after
+    // completion so that signal cannot be lost between copy and lease release.
+    await this.requeue({
+      contributionId: input.item.contributionId,
+      now: input.now,
+      signal: "trust_decision",
+    });
   }
 
   async retry(input: Parameters<ContributionProcessingQueueStore["retry"]>[0]): Promise<void> {
@@ -1040,7 +1087,11 @@ export class PostgresContributionProcessingQueueStore implements ContributionPro
       UPDATE jobs.job_contribution_processing_queue
       SET state = 'pending', attempt = 0, available_at = ${input.now},
         last_error_code = NULL, updated_at = ${input.now}
-      WHERE contribution_id = ${input.contributionId} AND state = 'parked'
+      WHERE contribution_id = ${input.contributionId} AND (
+        state = 'parked' OR (state = 'completed'
+          AND ${input.signal} IN ('trust_decision', 'withdrawal', 'takedown')
+          AND jobs.contribution_requires_trust_processing(contribution_id, completed_trust_decision_id))
+      )
       RETURNING id
     `;
     return rows.count === 1;

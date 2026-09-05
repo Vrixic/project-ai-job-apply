@@ -761,6 +761,72 @@
         }
       }
     },
+    "/jobs/contributions/{contributionId}/cancel": {
+      "post": {
+        "operationId": "cancelUnverifiedJobContribution",
+        "description": "Owner-only cancellation before independent verification. Revokes the exact Profile authorization and permanently stops publication without fabricating a Trust decision. The contribution UUID is the semantic replay identity; retries return its existing consent_invalid status. Already verified or published contributions require the Trust withdrawal route. Cancellation remains available when contribution intake policy is disabled or expired.",
+        "security": [{ "oidc": ["jobs:contribute"] }],
+        "parameters": [
+          {
+            "name": "contributionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "minLength": 16, "maxLength": 128 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CancelJobContributionRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorization revoked and unverified processing cancelled, or semantic replay",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/JobContribution" } }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "description": "Contribution not found for this owner" },
+          "409": {
+            "description": "Independent verification or a later lifecycle stage requires Trust withdrawal",
+            "content": {
+              "application/problem+json": {
+                "schema": { "$ref": "#/components/schemas/ProblemDetails" }
+              }
+            }
+          },
+          "503": {
+            "description": "Cancellation could not safely complete; retry the same contribution",
+            "content": {
+              "application/problem+json": {
+                "schema": { "$ref": "#/components/schemas/ProblemDetails" }
+              }
+            }
+          }
+        }
+      }
+    },
     "/extension/contribution-capability-policy": {
       "get": {
         "operationId": "getExtensionContributionCapabilityPolicy",
@@ -1146,6 +1212,103 @@
       }
     },
     "/admin/trust/cases": {
+      "get": {
+        "operationId": "listReviewerTrustCases",
+        "security": [
+          {
+            "oidc": ["trust:review"]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["needs_review", "appeal_pending"]
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 25
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 400,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Strict reviewer-only no-store projection; no contributor or reviewer identity",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewerTrustCasePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bounded request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Exact reviewer authority required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Reviewer dependency unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "operationId": "openTrustCase",
         "security": [{ "oidc": ["trust:review", "trust:case:open"] }],
@@ -1212,6 +1375,107 @@
           "403": { "$ref": "#/components/responses/Forbidden" },
           "404": { "$ref": "#/components/responses/NotFound" },
           "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/admin/trust/cases/{caseId}/evidence": {
+      "get": {
+        "operationId": "getReviewerTrustEvidence",
+        "security": [
+          {
+            "oidc": ["trust:review"]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "caseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Strict reviewer-only no-store projection; no contributor or reviewer identity",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewerTrustEvidence"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bounded request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Exact reviewer authority required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No reviewer-visible evidence",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The Trust case changed during evidence reading",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Reviewer dependency unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -3162,6 +3426,12 @@
         },
         "additionalProperties": false
       },
+      "CancelJobContributionRequest": {
+        "type": "object",
+        "required": ["schemaVersion"],
+        "properties": { "schemaVersion": { "const": 1 } },
+        "additionalProperties": false
+      },
       "RevokeUgcContributionConsentRequest": {
         "type": "object",
         "required": ["schemaVersion"],
@@ -3336,6 +3606,142 @@
           },
           "createdAt": { "type": "string", "format": "date-time" },
           "updatedAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      },
+      "ReviewerTrustCaseQueueRequest": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": ["needs_review", "appeal_pending"]
+          },
+          "pageSize": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 25
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReviewerTrustCasePage": {
+        "type": "object",
+        "required": ["items"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "$ref": "#/components/schemas/ReviewerTrustCase"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "IndependentJobReviewEvidence": {
+        "type": "object",
+        "required": [
+          "contributionId",
+          "evidenceDigestSha256",
+          "verifiedAt",
+          "provider",
+          "sourceUrl",
+          "title",
+          "companyName",
+          "description",
+          "locations"
+        ],
+        "properties": {
+          "contributionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "evidenceDigestSha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "verifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "provider": {
+            "type": "string",
+            "enum": ["greenhouse", "lever", "ashby"]
+          },
+          "sourceUrl": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048,
+            "pattern": "^https://"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "companyName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100000
+          },
+          "locations": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            }
+          },
+          "department": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "workMode": {
+            "type": "string",
+            "enum": ["remote", "hybrid", "on_site", "unknown"]
+          },
+          "employmentType": {
+            "type": "string",
+            "enum": ["full_time", "part_time", "contract", "internship", "unknown"]
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReviewerTrustEvidence": {
+        "type": "object",
+        "required": ["caseId", "caseVersion", "evidence"],
+        "properties": {
+          "caseId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "caseVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/IndependentJobReviewEvidence"
+          }
         },
         "additionalProperties": false
       },

@@ -10,6 +10,8 @@ const BASE64URL_SIGNATURE_PATTERN = /^[A-Za-z0-9_-]{86}$/u;
 const BASE64URL_SPKI_PATTERN = /^[A-Za-z0-9_-]{40,256}$/u;
 const MAXIMUM_POLICY_LIFETIME_MILLISECONDS = 24 * 60 * 60 * 1_000;
 const MAXIMUM_POLICY_RESPONSE_BYTES = 64 * 1_024;
+const POLICY_REQUEST_TIMEOUT_MILLISECONDS = 10_000;
+const READINESS_REFRESH_COOLDOWN_MILLISECONDS = 15_000;
 
 const EXACT_VARIANT = {
   ashby: "ashby-job-board-v1",
@@ -303,6 +305,23 @@ export async function fetchSignedContributionCapabilityPolicy(
   apiOrigin: string,
   fetchImplementation: typeof fetch = fetch,
 ): Promise<unknown> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), POLICY_REQUEST_TIMEOUT_MILLISECONDS);
+  try {
+    return await fetchPolicyResponse(apiOrigin, fetchImplementation, controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) throw new ContributionCapabilityPolicyTransportError();
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchPolicyResponse(
+  apiOrigin: string,
+  fetchImplementation: typeof fetch,
+  signal: AbortSignal,
+): Promise<unknown> {
   let response: Response;
   try {
     response = await fetchImplementation(new URL(CONTRIBUTION_CAPABILITY_POLICY_PATH, apiOrigin), {
@@ -311,6 +330,7 @@ export async function fetchSignedContributionCapabilityPolicy(
       headers: { accept: "application/json" },
       method: "GET",
       redirect: "error",
+      signal,
     });
   } catch {
     throw new ContributionCapabilityPolicyTransportError();
@@ -348,6 +368,10 @@ export async function fetchSignedContributionCapabilityPolicy(
 
 export class ExtensionContributionPolicyRuntime {
   #activePolicy: ExtensionContributionCapabilityPolicy | undefined;
+  // An invalid update denies delivery, but must not erase the warm worker's rollback floor.
+  #lastAcceptedPolicy: ExtensionContributionCapabilityPolicy | undefined;
+  #refreshInFlight: Promise<boolean> | undefined;
+  #lastRefreshStartedAt: number | undefined;
 
   constructor(
     private readonly publicKeys: Readonly<Record<string, string>>,
@@ -380,6 +404,7 @@ export class ExtensionContributionPolicyRuntime {
         throw new Error("The cached contribution capability policy is not current");
       }
       this.#activePolicy = verified.policy;
+      this.#lastAcceptedPolicy = verified.policy;
       return true;
     } catch {
       this.#activePolicy = undefined;
@@ -388,7 +413,29 @@ export class ExtensionContributionPolicyRuntime {
     }
   }
 
-  async refresh(now = new Date()): Promise<boolean> {
+  refresh(now = new Date()): Promise<boolean> {
+    if (this.#refreshInFlight) return this.#refreshInFlight;
+    this.#lastRefreshStartedAt = now.getTime();
+    this.#refreshInFlight = this.#refresh(now).finally(() => {
+      this.#refreshInFlight = undefined;
+    });
+    return this.#refreshInFlight;
+  }
+
+  async refreshForReadiness(now = new Date()): Promise<boolean> {
+    if (this.#refreshInFlight) return this.#refreshInFlight;
+    const elapsed = now.getTime() - (this.#lastRefreshStartedAt ?? -Infinity);
+    if (elapsed >= 0 && elapsed < READINESS_REFRESH_COOLDOWN_MILLISECONDS) {
+      return (
+        this.#activePolicy !== undefined &&
+        now.getTime() >= Date.parse(this.#activePolicy.issuedAt) &&
+        now.getTime() < Date.parse(this.#activePolicy.expiresAt)
+      );
+    }
+    return this.refresh(now);
+  }
+
+  async #refresh(now: Date): Promise<boolean> {
     let fetched: unknown;
     try {
       fetched = await this.fetchEnvelope();
@@ -413,20 +460,21 @@ export class ExtensionContributionPolicyRuntime {
       ) {
         throw new Error("The contribution capability policy is not current");
       }
-      if (this.#activePolicy) {
-        const activeIssuedAt = Date.parse(this.#activePolicy.issuedAt);
+      if (this.#lastAcceptedPolicy) {
+        const activeIssuedAt = Date.parse(this.#lastAcceptedPolicy.issuedAt);
         const receivedIssuedAt = Date.parse(verified.policy.issuedAt);
         if (
           receivedIssuedAt < activeIssuedAt ||
           (receivedIssuedAt === activeIssuedAt &&
             contributionCapabilityPolicyDigestInput(verified.policy) !==
-              contributionCapabilityPolicyDigestInput(this.#activePolicy))
+              contributionCapabilityPolicyDigestInput(this.#lastAcceptedPolicy))
         ) {
           throw new Error("The contribution capability policy update is a rollback or fork");
         }
       }
       await this.cache.write(verified.envelope);
       this.#activePolicy = verified.policy;
+      this.#lastAcceptedPolicy = verified.policy;
       return true;
     } catch {
       this.#activePolicy = undefined;

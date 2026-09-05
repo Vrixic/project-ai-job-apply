@@ -30,6 +30,11 @@ provider verifier without treating candidate-supplied content as catalog truth.
   Ambiguous identity parks; a genuinely new exact provider identity may be staged without catalog
   IDs and published only through the separate gated reconciler. Optional field omission and exact
   grounded location/work-type splits compare equivalently while original provider truth is retained.
+  The Greenhouse exact-fetch adapter also supplies bounded, response-object-bound v1 preview
+  digests derived from inert API HTML text nodes. These account for DOM block concatenation and the
+  displayed dollar-range separator without changing words, amounts, or full provider catalog text.
+  Digests exist only in a weakly held in-memory association: no raw HTML or extra source field is
+  persisted, published, or returned to clients, and other reader versions do not inherit it.
 - `synthetic.ts` — deterministic generated `.example.test` observations representing no provider,
   employer, tenant, or real job.
 - `greenhouse.ts` — fixed-host public Job Board GET adapter with redirect refusal, bounded timeout

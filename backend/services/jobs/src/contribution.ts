@@ -29,6 +29,29 @@ export interface CreateJobContributionCommand {
   input: JobContributionInput;
 }
 
+export interface CancelJobContributionCommand {
+  ownerUserId: string;
+  contributionId: string;
+  idempotencyKey: string;
+  traceId: string;
+}
+
+export interface JobContributionConsentRevoker {
+  revoke(
+    input: Parameters<JobContributionConsentVerifier["verify"]>[0] & {
+      occurredAt: string;
+      traceId: string;
+    },
+  ): Promise<void>;
+}
+
+export class JobContributionCancellationConflictError extends Error {
+  constructor() {
+    super("This contribution requires the Trust withdrawal path");
+    this.name = "JobContributionCancellationConflictError";
+  }
+}
+
 export const jobContributionStates = [
   "queued",
   "normalized",
@@ -56,6 +79,10 @@ export interface JobContributionStore {
   ping(): Promise<void>;
   create(command: CreateJobContributionCommand): Promise<JobContributionStatus>;
   get(ownerUserId: string, contributionId: string): Promise<JobContributionStatus | null>;
+  cancel?(
+    command: CancelJobContributionCommand,
+    revoker: JobContributionConsentRevoker,
+  ): Promise<JobContributionStatus | null>;
 }
 
 export interface JobContributionConsentVerifier {
@@ -84,6 +111,7 @@ export interface JobContributions {
   ping(): Promise<void>;
   contribute(command: CreateJobContributionCommand): Promise<JobContributionStatus>;
   get(ownerUserId: string, contributionId: string): Promise<JobContributionStatus | null>;
+  cancel?(command: CancelJobContributionCommand): Promise<JobContributionStatus | null>;
 }
 
 export class JobContributionIdempotencyConflictError extends Error {
@@ -403,10 +431,33 @@ export class JobContributionService implements JobContributions {
       },
     },
     private readonly now: () => Date = () => new Date(),
+    private readonly consentRevoker?: JobContributionConsentRevoker,
   ) {}
 
   ping(): Promise<void> {
     return this.store.ping();
+  }
+
+  async cancel(command: CancelJobContributionCommand): Promise<JobContributionStatus | null> {
+    if (
+      !UUID_V7_PATTERN.test(command.ownerUserId) ||
+      !UUID_V7_PATTERN.test(command.contributionId) ||
+      command.idempotencyKey.length < 16 ||
+      command.idempotencyKey.length > 128 ||
+      command.traceId.length < 1 ||
+      command.traceId.length > 128 ||
+      /[\r\n]/u.test(command.traceId)
+    ) {
+      throw new TypeError("Contribution cancellation input is invalid");
+    }
+    if (!this.store.cancel || !this.consentRevoker) throw new JobContributionUnavailableError();
+    // Revocation is deliberately independent of intake capability/policy freshness.
+    try {
+      return await this.store.cancel(command, this.consentRevoker);
+    } catch (error) {
+      if (error instanceof JobContributionCancellationConflictError) throw error;
+      throw new JobContributionUnavailableError("JOB_STORE_TRANSACTION", error);
+    }
   }
 
   async contribute(command: CreateJobContributionCommand): Promise<JobContributionStatus> {

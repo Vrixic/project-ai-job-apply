@@ -7,7 +7,9 @@ renames.
 
 This monorepo will contain the candidate-first job discovery and application Platform described in the [product and system architecture](docs/PRODUCT_AND_SYSTEM_ARCHITECTURE.md).
 
-The repository is currently scaffolded at the responsibility-boundary level. Every directory contains a README explaining what it owns, how it fits into the system, and the implementation subfolders expected inside it.
+The repository contains implemented web, extension, API, persistence, and workflow boundaries.
+Boundary READMEs explain ownership; the delivery tracker distinguishes local implementation,
+controlled development deployment, and remaining release acceptance.
 
 ## Repository map
 
@@ -67,6 +69,17 @@ provider-neutral. Deployed APIs fail closed unless the exact environment issuer,
 scopes validate; test tokens are unavailable outside `NODE_ENV=test`.
 
 ## Current status
+
+Phase 2's extension and community backend are implemented in controlled Greenhouse-only
+development, with remaining engineering and acceptance tracked in the
+[Phase 2 register](docs/product/delivery/phase-2-extension-and-community.md). The active follow-up
+adds warm-policy refresh, exact page/provider description compatibility, pre-verification owner
+cancellation, reviewer queue/evidence, and complete Trust decision reconciliation. These follow-up
+changes are locally verified, not yet deployed. Production/store distribution, other provider
+activation, human reviewer assignments, and accountable acceptance are not implied by a build.
+
+The following Phase 0/1 overview is historical; use the linked delivery records for the current
+status of each individual gate.
 
 The repository foundation, Auth0 web slice, isolated AWS environments, scale-to-zero Lambda
 application runtime, durable workflow path, restore operators, observability, and provider

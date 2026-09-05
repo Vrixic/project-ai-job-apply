@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 import type postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import {
+  type CancelJobContributionCommand,
   type CreateJobContributionCommand,
+  JobContributionCancellationConflictError,
+  type JobContributionConsentRevoker,
   JobContributionIdempotencyConflictError,
   type JobContributionState,
   type JobContributionStatus,
@@ -78,6 +81,77 @@ function status(row: ContributionRow): JobContributionStatus {
 export class PostgresJobContributionStore implements JobContributionStore {
   constructor(private readonly client: postgres.Sql) {}
 
+  async cancel(
+    command: CancelJobContributionCommand,
+    revoker: JobContributionConsentRevoker,
+  ): Promise<JobContributionStatus | null> {
+    const cancellation = await this.client.begin(async (transaction) => {
+      // The same fence used to commit verification makes the owner's permanent
+      // cancellation marker win or lose atomically against that lifecycle step.
+      await transaction`SELECT pg_advisory_xact_lock(hashtext(${`jobs:contribution-processing:${command.contributionId}`}))`;
+      const [row] = await transaction<
+        Array<{
+          consentId: string;
+          consentVersion: "ugc-contribution-preview.v1";
+          policyVersion: string;
+          previewDigestSha256: string;
+          approvedAt: string;
+          clientVersion: string;
+        }>
+      >`
+        SELECT consent_id AS "consentId", consent_version AS "consentVersion",
+          policy_version AS "policyVersion", preview_digest_sha256 AS "previewDigestSha256",
+          approved_at AS "approvedAt", client_version AS "clientVersion"
+        FROM jobs.job_contributions
+        WHERE id = ${command.contributionId} AND owner_user_id = ${command.ownerUserId}
+      `;
+      if (!row) return null;
+      const [laterStage] = await transaction<Array<{ present: boolean }>>`
+        SELECT (
+          EXISTS (SELECT 1 FROM jobs.job_contribution_independent_verifications WHERE contribution_id = ${command.contributionId})
+          OR EXISTS (SELECT 1 FROM jobs.job_contribution_trust_decisions WHERE contribution_id = ${command.contributionId})
+          OR EXISTS (SELECT 1 FROM jobs.job_contribution_reconciliations WHERE contribution_id = ${command.contributionId})
+        ) AS present
+      `;
+      if (laterStage?.present) throw new JobContributionCancellationConflictError();
+      const occurredAt = new Date().toISOString();
+      await transaction`
+        INSERT INTO jobs.job_contribution_state_events (
+          id, contribution_id, state, reason_code, processing_policy_version, occurred_at
+        ) VALUES (
+          ${uuidv7()}, ${command.contributionId}, 'consent_invalid', 'consent_not_current',
+          'owner-cancellation-v1', ${occurredAt}
+        ) ON CONFLICT (contribution_id, state, reason_code) DO NOTHING
+      `;
+      const [result] = await transaction<ContributionRow[]>`
+        SELECT contribution.id, 'consent_invalid' AS state, contribution.request_hash AS "requestHash",
+          contribution.created_at AS "submittedAt", event.occurred_at AS "updatedAt"
+        FROM jobs.job_contributions AS contribution
+        JOIN jobs.job_contribution_state_events AS event ON event.contribution_id = contribution.id
+          AND event.state = 'consent_invalid' AND event.reason_code = 'consent_not_current'
+        WHERE contribution.id = ${command.contributionId}
+      `;
+      if (!result) throw new Error("Contribution cancellation result is unavailable");
+      return { binding: row, result: status(result) };
+    });
+    if (!cancellation) return null;
+    // Do not hold a pooled Jobs connection while Profile takes its own owned
+    // transaction. Two concurrent requests must work with the two-connection
+    // Lambda pool. If Profile fails, the durable marker still blocks publication;
+    // a semantic retry finishes revocation before reporting complete success.
+    await revoker.revoke({
+      ...cancellation.binding,
+      approvedAt: timestamp(cancellation.binding.approvedAt),
+      ownerUserId: command.ownerUserId,
+      contributionId: command.contributionId,
+      purpose: "ugc_contribution",
+      clientSurface: "browser_extension",
+      occurredAt: new Date().toISOString(),
+      traceId: command.traceId,
+    });
+    return cancellation.result;
+  }
+
   async ping(): Promise<void> {
     const [result] = await this.client<{ ready: boolean }[]>`
       SELECT (
@@ -87,7 +161,7 @@ export class PostgresJobContributionStore implements JobContributionStore {
         AND to_regclass('jobs.job_contribution_processing_event_deliveries') IS NOT NULL
         AND EXISTS (
           SELECT 1 FROM jobs.schema_migrations
-          WHERE version = '0019_job_contribution_provider_publication'
+          WHERE version = '0020_contribution_trust_reprocessing'
         )
       ) AS ready
     `;
@@ -232,7 +306,7 @@ export class PostgresJobContributionStore implements JobContributionStore {
         SELECT event.state, event.occurred_at
         FROM jobs.job_contribution_state_events AS event
         WHERE event.contribution_id = contribution.id
-        ORDER BY event.occurred_at DESC, event.id DESC LIMIT 1
+        ORDER BY (event.state = 'consent_invalid') DESC, event.occurred_at DESC, event.id DESC LIMIT 1
       ) AS latest ON true
       WHERE contribution.id = ${contributionId} AND contribution.owner_user_id = ${ownerUserId}
     `;

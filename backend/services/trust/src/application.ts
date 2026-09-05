@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { parseTrustReviewQueue, trustReviewQueueCursor } from "./review-queue.js";
 import {
   type TrustCase,
   type TrustPolicy,
@@ -96,12 +97,31 @@ export interface ContributionEligibilityEvidence {
 }
 
 export interface ContributionEligibilityEvidencePort {
+  readReviewEvidence?(input: {
+    contributionId: string;
+    contributorUserId: string;
+  }): Promise<ReviewerContributionEvidence | null>;
   readEligibility(contributionId: string): Promise<ContributionEligibilityEvidence | null>;
   verifyEvidence(input: {
     contributionId: string;
     evidenceDigestSha256: string;
     purpose: TrustEvidencePurpose;
   }): Promise<boolean>;
+}
+
+export interface ReviewerContributionEvidence {
+  contributionId: string;
+  evidenceDigestSha256: string;
+  verifiedAt: string;
+  provider: "greenhouse" | "lever" | "ashby";
+  sourceUrl: string;
+  title: string;
+  companyName: string;
+  description: string;
+  locations: string[];
+  department?: string;
+  workMode?: "remote" | "hybrid" | "on_site" | "unknown";
+  employmentType?: "full_time" | "part_time" | "contract" | "internship" | "unknown";
 }
 
 export interface ApprovedTrustPolicyPort {
@@ -141,6 +161,7 @@ export interface TrustApplicationStore {
     contributionId: string,
   ): Promise<OwnerTrustCaseView | null>;
   readReviewerCase(caseId: string): Promise<TrustCase | null>;
+  listReviewerCases?: PostgresTrustStore["listReviewerCases"];
 }
 
 export interface TrustApplicationDependencies {
@@ -388,6 +409,65 @@ export class TrustApplicationService {
     const trustCase = await storeOperation(() => this.store.readReviewerCase(caseId));
     if (!trustCase) throw new TrustApplicationError("not_found");
     return trustCase;
+  }
+
+  async listReviewerCases(input: {
+    reviewerId: string;
+    state?: string;
+    pageSize?: number;
+    cursor?: string;
+  }): Promise<{ items: TrustCase[]; nextCursor?: string }> {
+    const reviewerId = uuid(input.reviewerId);
+    await this.authorizeReviewer(reviewerId, "case_reader");
+    let query: ReturnType<typeof parseTrustReviewQueue>;
+    try {
+      query = parseTrustReviewQueue(input);
+    } catch {
+      throw new TrustApplicationError("invalid_request");
+    }
+    const listReviewerCases = this.store.listReviewerCases?.bind(this.store);
+    if (!listReviewerCases) throw new TrustApplicationError("dependency_unavailable");
+    const rows = await storeOperation(() => listReviewerCases(query));
+    if (rows.length > query.pageSize + 1 || rows.some((row) => row.state !== query.state))
+      throw new TrustApplicationError("dependency_unavailable");
+    const items = rows.slice(0, query.pageSize);
+    const last = items.at(-1);
+    return {
+      items,
+      ...(rows.length > query.pageSize && last
+        ? { nextCursor: trustReviewQueueCursor(query, last) }
+        : {}),
+    };
+  }
+
+  async readReviewerEvidence(input: {
+    reviewerId: string;
+    caseId: string;
+  }): Promise<{ caseId: string; caseVersion: number; evidence: ReviewerContributionEvidence }> {
+    const current = await this.readReviewerCase(input);
+    const readReviewEvidence = this.contributionEvidence.readReviewEvidence?.bind(
+      this.contributionEvidence,
+    );
+    if (!readReviewEvidence) throw new TrustApplicationError("dependency_unavailable");
+    const evidence = await dependency(() =>
+      readReviewEvidence({
+        contributionId: current.contributionId,
+        contributorUserId: current.contributorUserId,
+      }),
+    );
+    if (!evidence) throw new TrustApplicationError("not_found");
+    if (
+      evidence.contributionId !== current.contributionId ||
+      !SHA256_PATTERN.test(evidence.evidenceDigestSha256)
+    )
+      throw new TrustApplicationError("dependency_unavailable");
+    await this.verifyEvidence(
+      current.contributionId,
+      evidence.evidenceDigestSha256,
+      "independent_verification",
+    );
+    await this.requireReviewerCase(current.id, current.version);
+    return { caseId: current.id, caseVersion: current.version, evidence };
   }
 
   async decideInitialReview(input: {

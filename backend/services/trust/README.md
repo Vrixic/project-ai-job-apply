@@ -41,6 +41,13 @@ for the current deployment and reviewer/acceptance gates.
   eligibility and evidence, approved policy, and persistence. Contributor reads, withdrawals, and
   appeals are owner scoped. Case opening, initial decisions, takedowns, and appeal decisions require
   exact reviewer roles; verified-requester takedowns require an additional dedicated authority.
+- Exact `case_reader` authority can read a 1–25-item initial-review or appeal queue, ordered by
+  update time and case ID with a bounded filter-bound keyset continuation. It grants no decision
+  role and supports no unrestricted text search. Readable evidence comes through a Jobs-owned
+  exact contribution/owner port; Trust binds the returned verification digest to the case version
+  and rechecks that version before returning. The projection contains complete bounded plaintext
+  provider job fields, not contributor/reviewer identity or raw page HTML. Initial reviews can use
+  the exact Jobs verification digest; takedown and appeal evidence remain separately approved.
 - The application service accepts identifiers, fixed codes, versions, timestamps from its injected
   clock, and SHA-256 evidence references only. Missing ports deny or report dependency unavailability,
   and lower-level errors are projected to a fixed safe error taxonomy.

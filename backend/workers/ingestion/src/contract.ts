@@ -76,6 +76,11 @@ export interface IngestionSourceAdapter {
   readonly adapterVersion: string;
   poll(context: SourcePollContext): Promise<SourcePollResult>;
   pollExact?(context: SourceExactPollContext): Promise<SourcePollResult>;
+  /** Ephemeral, exact-response-bound preview digests; never persisted as catalog evidence. */
+  pagePreviewDescriptionDigests?(
+    observation: SourceJobObservation,
+    captureAdapterVersion: string,
+  ): readonly string[];
 }
 
 export interface SourceRegistration {

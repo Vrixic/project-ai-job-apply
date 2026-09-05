@@ -19,6 +19,7 @@ locals {
   d2_candidate_routes = {
     "POST /v1/jobs/contributions"                                   = ["jobs:contribute"]
     "GET /v1/jobs/contributions/{contributionId}"                   = ["jobs:contribute"]
+    "POST /v1/jobs/contributions/{contributionId}/cancel"           = ["jobs:contribute"]
     "POST /v1/profile/ugc-contribution-consents"                    = ["jobs:contribute"]
     "POST /v1/profile/ugc-contribution-consents/{consentId}/revoke" = ["jobs:contribute"]
     "GET /v1/trust/contributions/{contributionId}"                  = ["jobs:contribute"]
@@ -31,6 +32,8 @@ locals {
     "DELETE /v1/saved-job-captures/{captureId}" = ["jobs:write"]
   }
   d2_reviewer_routes = {
+    "GET /v1/admin/trust/cases"                             = ["trust:review"]
+    "GET /v1/admin/trust/cases/{caseId}/evidence"           = ["trust:review"]
     "POST /v1/admin/trust/cases"                            = ["trust:review", "trust:case:open"]
     "GET /v1/admin/trust/cases/{caseId}"                    = ["trust:review"]
     "POST /v1/admin/trust/cases/{caseId}/decision"          = ["trust:review", "trust:case:decide"]

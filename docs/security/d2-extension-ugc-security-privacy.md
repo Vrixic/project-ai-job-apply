@@ -1,7 +1,7 @@
 # Phase 2 Extension and UGC Security/Privacy Delta
 
 - Status: Engineering design; accountable approval pending
-- Last updated: 2026-09-04
+- Last updated: 2026-09-05
 - Decision boundary: [ADR-028](../adr/028-extension-ugc-ownership-and-processing.md) and
   [ADR-029](../adr/029-one-step-public-job-addition.md)
 
@@ -64,6 +64,17 @@ free of markup/control characters, and never interpreted as instructions.
   field preview; no private-save control or second approval checkbox in this extension candidate.
 - **Contributor exposure:** contributor identity and reputation absent from catalog responses,
   events, logs, analytics, public moderation summaries, and other contributors' views.
+- **Pre-verification owner cancellation:** an owner-locked permanent Jobs state marker blocks
+  verification/publication before Profile revocation completes. A Profile outage returns an
+  incomplete response but cannot revive eligibility; replay completes the exact revocation. The
+  existing Trust withdrawal path remains required once verification or later evidence exists.
+- **Stale terminal reconciliation:** completed processing work can be reawakened only by a new
+  actionable authoritative Trust decision. A consumed-decision marker fences repeated/old signals;
+  provider nudges cannot reopen terminal work, and exhausted work remains terminal.
+- **Reviewer evidence exposure:** reader-role-protected bounded case pages and version-bound
+  plaintext provider evidence omit contributor identifiers and raw HTML. The exact verification
+  digest can support initial review, while takedown and appeal evidence remain separately approved.
+  Reading evidence does not grant decision authority or bypass the distinct appeal reviewer.
 - **Remote-code/update abuse:** no remote executable code; versioned signed package/config data,
   reproducible bundle inspection, minimum CSP, and version/domain kill switches.
 - **Store/disclosure mismatch:** generated manifest permissions must match the reviewed disclosure,

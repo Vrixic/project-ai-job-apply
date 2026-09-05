@@ -1,8 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   appealEvidenceDigest,
+  cancelContribution,
   fileContributionAppeal,
   getContributionStatus,
+  OWNER_ACTION_TIMEOUT_MILLISECONDS,
   withdrawContribution,
 } from "../lib/contribution-owner-api";
 
@@ -24,6 +26,74 @@ const response = (status: number, body: unknown) =>
   });
 
 describe("owner contribution transport", () => {
+  afterEach(() => vi.useRealTimers());
+  it("cancels with one stable replay identity and accepts only an exact ended authorization", async () => {
+    const value = {
+      id,
+      state: "consent_invalid",
+      submittedAt: trust.createdAt,
+      updatedAt: trust.updatedAt,
+    };
+    const fetcher = vi.fn(async (_url: URL | RequestInfo, init?: RequestInit) => {
+      expect(String(_url)).toBe(`https://api.test/v1/jobs/contributions/${id}/cancel`);
+      expect(init).toMatchObject({
+        method: "POST",
+        redirect: "error",
+        credentials: "omit",
+        cache: "no-store",
+      });
+      expect(new Headers(init?.headers).get("idempotency-key")).toBe(`cancel-${id}`);
+      expect(JSON.parse(String(init?.body))).toEqual({ schemaVersion: 1 });
+      return response(200, value);
+    });
+    await expect(cancelContribution(id, "token", "https://api.test", fetcher)).resolves.toEqual({
+      outcome: "ok",
+      value,
+    });
+    await expect(cancelContribution(id, "token", "https://api.test", fetcher)).resolves.toEqual({
+      outcome: "ok",
+      value,
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    await expect(
+      cancelContribution(id, "token", "https://api.test", async () =>
+        response(200, { ...value, state: "published" }),
+      ),
+    ).resolves.toEqual({ outcome: "rejected" });
+  });
+  it("keeps cancellation ambiguity retryable and never reports success for a conflict or oversized receipt", async () => {
+    await expect(
+      cancelContribution(id, "token", "https://api.test", async () => response(409, {})),
+    ).resolves.toEqual({ outcome: "version_conflict" });
+    await expect(
+      cancelContribution(id, "token", "https://api.test", async () =>
+        response(200, { padding: "x".repeat(16_385) }),
+      ),
+    ).resolves.toEqual({ outcome: "rejected" });
+    const fetcher = vi.fn(async () => response(200, {}));
+    await expect(
+      cancelContribution("not-an-id", "token", "https://api.test", fetcher),
+    ).resolves.toEqual({ outcome: "rejected" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it.each(["headers", "body"])(
+    "settles a stalled %s deadline without clearing a receipt",
+    async (stage) => {
+      vi.useFakeTimers();
+      const fetcher =
+        stage === "headers"
+          ? vi.fn(() => new Promise<Response>(() => undefined))
+          : vi.fn(
+              async () =>
+                new Response(new ReadableStream({ start() {} }), {
+                  headers: { "content-type": "application/json", "cache-control": "no-store" },
+                }),
+            );
+      const request = cancelContribution(id, "token", "https://api.test", fetcher);
+      await vi.advanceTimersByTimeAsync(OWNER_ACTION_TIMEOUT_MILLISECONDS);
+      await expect(request).resolves.toEqual({ outcome: "unavailable" });
+    },
+  );
   it("keeps an offline status refresh retryable without synthetic state", async () => {
     await expect(
       getContributionStatus(

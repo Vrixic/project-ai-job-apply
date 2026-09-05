@@ -96,4 +96,78 @@ describe("Trust admin BFF", () => {
     );
     expect(result.status).toBe(401);
   });
+
+  it("forwards only a bounded fixed-state queue query and rejects duplicates or free text", async () => {
+    const queued = await forwardTrust(
+      new Request("https://admin.example.test/api/trust/cases?state=needs_review&pageSize=25"),
+      { path: "/v1/admin/trust/cases", method: "GET", responseKind: "queue" },
+      dependencies(async (input) => {
+        expect(String(input)).toBe(
+          "https://api.example.test/v1/admin/trust/cases?state=needs_review&pageSize=25",
+        );
+        return Response.json({ items: [] });
+      }),
+    );
+    expect(queued.status).toBe(200);
+    for (const query of [
+      "state=needs_review&state=appeal_pending",
+      "pageSize=26",
+      "query=private",
+      "cursor=../other",
+      "pageSize=01",
+    ]) {
+      const denied = await forwardTrust(
+        new Request(`https://admin.example.test/api/trust/cases?${query}`),
+        { path: "/v1/admin/trust/cases", method: "GET", responseKind: "queue" },
+        dependencies(async () => {
+          throw new Error("Must not forward");
+        }),
+      );
+      expect(denied.status).toBe(400);
+    }
+  });
+
+  it("validates readable evidence and blocks extra contributor or raw-page fields", async () => {
+    const value = {
+      caseId: CASE_ID,
+      caseVersion: 1,
+      evidence: {
+        contributionId: CONTRIBUTION_ID,
+        evidenceDigestSha256: "a".repeat(64),
+        verifiedAt: "2026-09-05T12:00:00.000Z",
+        provider: "greenhouse",
+        sourceUrl: "https://job-boards.greenhouse.io/synthetic/jobs/123",
+        title: "Synthetic role",
+        companyName: "Synthetic company",
+        description: "Complete verified content",
+        locations: [],
+      },
+    };
+    const options = {
+      path: `/v1/admin/trust/cases/${CASE_ID}/evidence`,
+      method: "GET" as const,
+      responseKind: "evidence" as const,
+    };
+    const accepted = await forwardTrust(
+      request(),
+      options,
+      dependencies(async () => Response.json(value)),
+    );
+    expect(accepted.status).toBe(200);
+    expect(await accepted.json()).toEqual(value);
+    for (const extra of [
+      { contributorUserId: CONTRIBUTION_ID },
+      { rawHtml: "private raw document" },
+    ]) {
+      const denied = await forwardTrust(
+        request(),
+        options,
+        dependencies(async () =>
+          Response.json({ ...value, evidence: { ...value.evidence, ...extra } }),
+        ),
+      );
+      expect(denied.status).toBe(503);
+      expect(await denied.text()).not.toContain("private raw document");
+    }
+  });
 });

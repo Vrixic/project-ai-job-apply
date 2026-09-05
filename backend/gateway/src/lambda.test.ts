@@ -111,6 +111,12 @@ describe("API Gateway Lambda boundary", () => {
     ["contribution status", "GET", "/v1/jobs/contributions/019d04cf-1f80-7000-8000-000000000010"],
     ["owner Trust read", "GET", "/v1/trust/contributions/019d04cf-1f80-7000-8000-000000000010"],
     ["reviewer Trust open", "POST", "/v1/admin/trust/cases"],
+    ["reviewer Trust queue", "GET", "/v1/admin/trust/cases"],
+    [
+      "reviewer Trust evidence",
+      "GET",
+      "/v1/admin/trust/cases/019d04cf-1f80-8000-8000-000000000010/evidence",
+    ],
     ["reviewer Trust read", "GET", "/v1/admin/trust/cases/019d04cf-1f80-8000-8000-000000000010"],
   ])(
     "keeps %s dark by default before authentication or application dispatch",
@@ -160,6 +166,58 @@ describe("API Gateway Lambda boundary", () => {
     expect(inject).toHaveBeenCalledOnce();
   });
 
+  it("allows bounded reviewer queue queries only on the exact enabled queue route", async () => {
+    const principalBridge = createInvocationPrincipalBridge();
+    const inject = vi.fn().mockResolvedValue({ statusCode: 200, body: "{}", headers: {} });
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge,
+      d2Routes: { trustReviewer: true },
+    });
+    const queued = routedEvent("GET", "/v1/admin/trust/cases", {
+      rawQueryString: "state=needs_review&pageSize=25",
+    });
+    expect((await invoke(handler, queued)).statusCode).toBe(200);
+    expect(inject).toHaveBeenLastCalledWith(
+      expect.objectContaining({ url: "/v1/admin/trust/cases?state=needs_review&pageSize=25" }),
+    );
+    for (const query of [
+      "query=private",
+      "state=accepted",
+      "pageSize=26",
+      "pageSize=01",
+      "state=needs_review&state=appeal_pending",
+      `cursor=${"a".repeat(401)}`,
+    ])
+      expect(
+        (
+          await invoke(
+            handler,
+            routedEvent("GET", "/v1/admin/trust/cases", { rawQueryString: query }),
+          )
+        ).statusCode,
+      ).toBe(400);
+    const evidence = routedEvent(
+      "GET",
+      "/v1/admin/trust/cases/019d04cf-1f80-8000-8000-000000000010/evidence",
+    );
+    evidence.routeKey = "GET /v1/admin/trust/cases/{caseId}/evidence";
+    evidence.requestContext.routeKey = evidence.routeKey;
+    expect((await invoke(handler, evidence)).statusCode).toBe(200);
+    expect((await invoke(handler, { ...evidence, rawQueryString: "pageSize=25" })).statusCode).toBe(
+      400,
+    );
+    const fallback = {
+      ...evidence,
+      routeKey: "$default",
+      requestContext: { ...evidence.requestContext, routeKey: "$default" },
+    };
+    expect((await invoke(handler, fallback)).statusCode).toBe(404);
+    expect(inject).toHaveBeenCalledTimes(2);
+  });
+
   it("allows only the exact anonymous capability-policy route key when its gate is enabled", async () => {
     const principalBridge = createInvocationPrincipalBridge();
     const inject = vi.fn().mockResolvedValue({ statusCode: 200, body: "{}", headers: {} });
@@ -193,6 +251,13 @@ describe("API Gateway Lambda boundary", () => {
       "POST",
       "/v1/jobs/contributions",
       "POST /v1/jobs/contributions",
+    ],
+    [
+      "candidate contribution cancellation",
+      { candidateContribution: true },
+      "POST",
+      "/v1/jobs/contributions/019d04cf-1f80-7000-8000-000000000010/cancel",
+      "POST /v1/jobs/contributions/{contributionId}/cancel",
     ],
     [
       "candidate owner Trust appeal",
@@ -829,6 +894,11 @@ describe("API Gateway Lambda boundary", () => {
     ["malformed job identifier", "GET", "/v1/jobs/not-a-uuid"],
     ["malformed profile fact identifier", "PATCH", "/v1/profile/facts/not-a-uuid"],
     ["default-dark contribution intake", "POST", "/v1/jobs/contributions"],
+    [
+      "default-dark contribution cancellation",
+      "POST",
+      "/v1/jobs/contributions/019c0000-0000-7000-8000-000000000010/cancel",
+    ],
     ["default-dark contribution consent grant", "POST", "/v1/profile/ugc-contribution-consents"],
     [
       "default-dark contribution consent revoke",

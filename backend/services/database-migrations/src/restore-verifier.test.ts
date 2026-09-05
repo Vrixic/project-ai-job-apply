@@ -79,7 +79,7 @@ describe("current restore manifest", () => {
     const source = loadCurrentRestoreManifest();
 
     expect(source.manifest.manifestId).toBe(
-      "d2-provider-truth-profile-jobs-documents-matching-billing-trust-v1",
+      "d2-community-lifecycle-profile-jobs-documents-matching-billing-trust-v1",
     );
     expect(source.manifest.contributors.map((contributor) => contributor.owner)).toEqual([
       "billing",
@@ -98,7 +98,7 @@ describe("current restore manifest", () => {
         (total, contributor) => total + contributor.migrations.length,
         0,
       ),
-    ).toBe(39);
+    ).toBe(40);
     expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 
     for (const contributor of source.manifest.contributors) {
@@ -238,11 +238,11 @@ describe("read-only aggregate restore verification", () => {
 
     expect(transactionModes).toEqual(["read only isolation level repeatable read"]);
     expect(result).toMatchObject({
-      manifestId: "d2-provider-truth-profile-jobs-documents-matching-billing-trust-v1",
+      manifestId: "d2-community-lifecycle-profile-jobs-documents-matching-billing-trust-v1",
       manifestSha256: source.sha256,
       ownerCount: 6,
       relationCount: 68,
-      migrationCount: 39,
+      migrationCount: 40,
     });
     expect(result.aggregateDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.keys(result)).toEqual([

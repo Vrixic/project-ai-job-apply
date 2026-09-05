@@ -25,6 +25,12 @@ not implemented or authorized by this slice.
 
 - The console opens and reads redacted Trust cases and records fixed-code, version-fenced initial
   decisions, takedowns, and appeal resolutions using SHA-256 evidence references only.
+- The explicit initial-review/appeal queue returns at most 25 cases per page with a bounded opaque
+  continuation. Selecting a case loads full sanitized independently verified provider content,
+  its source link and verification timestamp. Initial decisions bind the loaded case version and
+  digest without manual identifier copying. Missing or version-mismatched readable evidence keeps
+  initial decisions disabled; stale responses cannot replace a newer selection. Takedown and appeal
+  actions still require separately approved evidence and their exact reviewer authority.
 - Ordinary reviewer sessions request review/open/decide/takedown/appeal scopes but never the
   separately privileged verified-requester takedown scope.
 - Controls use native labels, explicit destructive confirmation, keyboard focus on failures, and an

@@ -13,6 +13,7 @@ import {
 } from "./contribution-processing.js";
 import { PostgresContributionProcessingEventDeliveryStore } from "./contribution-processing-event-delivery.js";
 import { PostgresContributionRecoveryStore } from "./contribution-recovery.js";
+import { PostgresContributionReviewEvidenceReader } from "./contribution-review-evidence.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -196,6 +197,20 @@ describeWithDatabase("durable contribution processing persistence", () => {
       occurredAt: new Date("2026-09-01T12:56:00.000Z"),
     });
     expect(value.independentVerification?.verificationId).toBe(evidenceId);
+    const reviewEvidence = new PostgresContributionReviewEvidenceReader(client);
+    const readableEvidence = await reviewEvidence.read({
+      contributionId,
+      contributorUserId: ownerId,
+    });
+    expect(readableEvidence).toMatchObject({
+      contributionId,
+      evidenceDigestSha256,
+      description: providerObservation.description,
+      companyName: providerObservation.companyName,
+    });
+    expect(readableEvidence).not.toHaveProperty("ownerUserId");
+    expect(readableEvidence).not.toHaveProperty("providerObservation");
+    expect(await reviewEvidence.read({ contributionId, contributorUserId: uuidv7() })).toBeNull();
     value = await processing.recordTrustDecision({
       contributionId,
       decision: {

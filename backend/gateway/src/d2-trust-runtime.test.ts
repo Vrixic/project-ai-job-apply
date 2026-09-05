@@ -1,4 +1,5 @@
 import type { D2LambdaGatewayTrustConfiguration } from "@ai-job-apply/config";
+import { PostgresTrustStore, type TrustCase } from "@ai-job-apply/trust-service";
 import type postgres from "postgres";
 import { describe, expect, it, vi } from "vitest";
 import { createConfiguredD2TrustRuntime } from "./d2-trust-runtime.js";
@@ -58,5 +59,83 @@ describe("configured D2 Trust runtime", () => {
       }),
     ).rejects.toMatchObject({ code: "access_denied" });
     expect(client).toHaveBeenCalledOnce();
+  });
+
+  it("uses exact Jobs verification evidence for initial review without granting takedown evidence", async () => {
+    const contributionId = "019d04cf-1f80-7000-8000-000000000010";
+    const contributorUserId = "019d04cf-1f80-7000-8000-000000000011";
+    const caseId = "019d04cf-1f80-8000-8000-000000000012";
+    const reviewerId = trustReviewerId(
+      "https://identity.example.test/",
+      "auth0|reviewer-synthetic",
+    );
+    const current: TrustCase = {
+      id: caseId,
+      contributionId,
+      contributorUserId,
+      state: "needs_review",
+      policyVersion: configuration.policyVersion,
+      appealWindowMilliseconds: 1_000,
+      version: 1,
+      appealCount: 0,
+      adverseDecision: null,
+      pendingAppealEvidenceDigestSha256: null,
+      createdAt: new Date("2026-09-05T12:00:00.000Z"),
+      updatedAt: new Date("2026-09-05T12:00:00.000Z"),
+    };
+    let verified = true;
+    const query = vi.fn(async (strings: TemplateStringsArray) =>
+      strings.join("").includes('AS "independentlyVerified"')
+        ? [{ contributionId, contributorUserId, independentlyVerified: true }]
+        : [{ verified }],
+    );
+    const read = vi
+      .spyOn(PostgresTrustStore.prototype, "readReviewerCase")
+      .mockResolvedValue(current);
+    const review = vi
+      .spyOn(PostgresTrustStore.prototype, "review")
+      .mockResolvedValue({ ...current, state: "rejected", version: 2 });
+    try {
+      const assignment = configuration.reviewerAssignments[0];
+      if (!assignment) throw new Error("Expected a synthetic reviewer assignment");
+      const runtime = createConfiguredD2TrustRuntime(query as unknown as postgres.Sql, {
+        ...configuration,
+        reviewerAssignments: [
+          { ...assignment, roles: ["case_reader", "initial_reviewer", "takedown_reviewer"] },
+        ],
+      });
+      const input = {
+        reviewerId,
+        caseId,
+        expectedVersion: 1,
+        outcome: "rejected" as const,
+        reasonCode: "insufficient_evidence" as const,
+        evidenceDigestSha256: "a".repeat(64),
+      };
+      await expect(runtime.service.decideInitialReview(input)).resolves.toMatchObject({
+        state: "rejected",
+      });
+      expect(review).toHaveBeenCalledOnce();
+      expect(query.mock.calls.at(-1)?.[0].join("")).toContain("evidence_digest_sha256");
+      verified = false;
+      await expect(runtime.service.decideInitialReview(input)).rejects.toMatchObject({
+        code: "evidence_not_verified",
+      });
+      read.mockResolvedValue({ ...current, state: "accepted" });
+      query.mockClear();
+      await expect(
+        runtime.service.takeDownAcceptedContribution({
+          reviewerId,
+          caseId,
+          expectedVersion: 1,
+          reasonCode: "rights_or_policy_violation",
+          evidenceDigestSha256: "a".repeat(64),
+        }),
+      ).rejects.toMatchObject({ code: "evidence_not_verified" });
+      expect(query).not.toHaveBeenCalled();
+    } finally {
+      read.mockRestore();
+      review.mockRestore();
+    }
   });
 });

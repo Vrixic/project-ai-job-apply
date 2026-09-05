@@ -4,7 +4,7 @@ const JSON_TYPE = /^application\/json(?:\s*;\s*charset=utf-8)?$/i;
 const PROBLEM_TYPE = /^application\/problem\+json(?:\s*;\s*charset=utf-8)?$/i;
 const TRUST_CASE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const MAX_REQUEST_BYTES = 16 * 1024;
-const MAX_RESPONSE_BYTES = 64 * 1024;
+const MAX_RESPONSE_BYTES = 512 * 1024;
 
 const validators = {
   open: compileComponentValidator("OpenTrustCaseRequest"),
@@ -12,6 +12,9 @@ const validators = {
   takedown: compileComponentValidator("TakeDownTrustCaseRequest"),
   resolveAppeal: compileComponentValidator("ResolveTrustAppealRequest"),
   trustCase: compileComponentValidator("ReviewerTrustCase"),
+  queue: compileComponentValidator("ReviewerTrustCasePage"),
+  queueRequest: compileComponentValidator("ReviewerTrustCaseQueueRequest"),
+  evidence: compileComponentValidator("ReviewerTrustEvidence"),
   problem: compileComponentValidator("ProblemDetails"),
 };
 
@@ -96,10 +99,27 @@ async function decodeRequest(request: Request, kind: TrustRequestKind): Promise<
 
 export async function forwardTrust(
   request: Request,
-  options: { path: string; method: "GET" | "POST"; requestKind?: TrustRequestKind },
+  options: {
+    path: string;
+    method: "GET" | "POST";
+    requestKind?: TrustRequestKind;
+    responseKind?: "trustCase" | "queue" | "evidence";
+  },
   dependencies: TrustBffDependencies,
 ): Promise<Response> {
-  if (new URL(request.url).search) return trustProblem(400, "invalid_request", "Invalid request");
+  const requestUrl = new URL(request.url);
+  let path = options.path;
+  if (options.responseKind === "queue") {
+    const query: Record<string, unknown> = {};
+    for (const [key, value] of requestUrl.searchParams) {
+      if (key in query) return trustProblem(400, "invalid_request", "Invalid request");
+      query[key] =
+        key === "pageSize" && /^(?:[1-9]|1[0-9]|2[0-5])$/u.test(value) ? Number(value) : value;
+    }
+    if (!validators.queueRequest(query))
+      return trustProblem(400, "invalid_request", "Invalid request");
+    path += requestUrl.search;
+  } else if (requestUrl.search) return trustProblem(400, "invalid_request", "Invalid request");
   let body: string | undefined;
   if (options.requestKind) {
     const decoded = await decodeRequest(request, options.requestKind);
@@ -113,25 +133,22 @@ export async function forwardTrust(
       return trustProblem(401, "authentication_required", "Authentication required");
     }
     const { token } = await dependencies.getAccessToken();
-    const response = await dependencies.fetch(
-      new URL(options.path, safeBaseUrl(dependencies.baseUrl)),
-      {
-        method: options.method,
-        ...(body ? { body, headers: { "content-type": "application/json" } } : {}),
-        cache: "no-store",
-        redirect: "error",
-        signal: request.signal,
-        headers: {
-          ...(body ? { "content-type": "application/json" } : {}),
-          authorization: `Bearer ${token}`,
-        },
+    const response = await dependencies.fetch(new URL(path, safeBaseUrl(dependencies.baseUrl)), {
+      method: options.method,
+      ...(body ? { body, headers: { "content-type": "application/json" } } : {}),
+      cache: "no-store",
+      redirect: "error",
+      signal: request.signal,
+      headers: {
+        ...(body ? { "content-type": "application/json" } : {}),
+        authorization: `Bearer ${token}`,
       },
-    );
+    });
     const contentType = response.headers.get("content-type") ?? "";
     if (!(response.ok ? JSON_TYPE : PROBLEM_TYPE).test(contentType)) throw new Error();
     const value: unknown = JSON.parse(await bounded(response, MAX_RESPONSE_BYTES));
     if (response.ok) {
-      if (!validators.trustCase(value)) throw new Error();
+      if (!validators[options.responseKind ?? "trustCase"](value)) throw new Error();
       return Response.json(value, {
         status: response.status,
         headers: { "cache-control": "no-store" },

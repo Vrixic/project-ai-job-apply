@@ -217,6 +217,7 @@ describe("signed extension contribution capability policy", () => {
         headers: { accept: "application/json" },
         method: "GET",
         redirect: "error",
+        signal: expect.any(AbortSignal),
       },
     );
     await expect(
@@ -380,5 +381,110 @@ describe("signed extension contribution capability policy", () => {
     );
     await expect(fork.start(new Date("2026-09-01T13:00:00.000Z"))).resolves.toBe(false);
     expect(cache.value).toBeUndefined();
+  });
+
+  it("bounds a stalled policy request and its response body to ten seconds", async () => {
+    vi.useFakeTimers();
+    try {
+      for (const stalledBody of [false, true]) {
+        let signal: AbortSignal | undefined;
+        const fetcher = vi.fn(async (_url: URL | RequestInfo, init?: RequestInit) => {
+          signal = init?.signal ?? undefined;
+          if (stalledBody) {
+            return new Response(
+              new ReadableStream({
+                start(controller) {
+                  signal?.addEventListener("abort", () => controller.error(new Error("aborted")));
+                },
+              }),
+              {
+                headers: { "cache-control": "no-store", "content-type": "application/json" },
+              },
+            );
+          }
+          return new Promise<Response>((_resolve, reject) => {
+            signal?.addEventListener("abort", () => reject(new Error("aborted")));
+          });
+        });
+        const request = fetchSignedContributionCapabilityPolicy(
+          "https://api.example.test",
+          fetcher,
+        );
+        const result = expect(request).rejects.toBeInstanceOf(
+          ContributionCapabilityPolicyTransportError,
+        );
+        await vi.advanceTimersByTimeAsync(9_999);
+        expect(signal?.aborted).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        await result;
+        expect(signal?.aborted).toBe(true);
+        expect(vi.getTimerCount()).toBe(0);
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("coalesces readiness and delivery refreshes and bounds readiness requests without polling", async () => {
+    const cache = new MemoryCache();
+    const fetcher = vi.fn<() => Promise<unknown>>(async () => signed());
+    const runtime = new ExtensionContributionPolicyRuntime(publicKeys, cache, fetcher);
+    const firstCheck = new Date("2026-09-01T13:00:00.000Z");
+    await runtime.start(firstCheck);
+    await Promise.all(Array.from({ length: 20 }, () => runtime.refreshForReadiness(firstCheck)));
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    await runtime.refreshForReadiness(new Date(firstCheck.getTime() + 14_999));
+    expect(fetcher).toHaveBeenCalledTimes(1);
+
+    let finishFetch!: (envelope: unknown) => void;
+    fetcher.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishFetch = resolve;
+        }),
+    );
+    const nextCheck = new Date(firstCheck.getTime() + 15_000);
+    const checks = Array.from({ length: 20 }, () => runtime.refreshForReadiness(nextCheck));
+    const delivery = runtime.refresh(nextCheck);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    finishFetch(signed());
+    await expect(Promise.all([...checks, delivery])).resolves.toEqual(Array(21).fill(true));
+    expect(fetcher).toHaveBeenCalledTimes(2);
+
+    // Cooldown does not grant validity, and reading the decision never starts network work.
+    expect(runtime.decision(leverCapture, "0.2.0", new Date(basePolicy.expiresAt))).toEqual({
+      allowed: false,
+      reason: "policy_expired",
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the rollback floor after invalidation during repeated readiness refresh", async () => {
+    const cache = new MemoryCache();
+    const newer = { ...basePolicy, issuedAt: "2026-09-01T12:30:00.000Z", revision: "renewed-v2" };
+    let envelope: unknown = signed(newer);
+    const runtime = new ExtensionContributionPolicyRuntime(publicKeys, cache, async () => envelope);
+    await runtime.start(new Date("2026-09-01T13:00:00.000Z"));
+    envelope = { ...signed(newer), signature: "A".repeat(86) };
+    await expect(runtime.refreshForReadiness(new Date("2026-09-01T13:01:00.000Z"))).resolves.toBe(
+      false,
+    );
+    envelope = signed();
+    await expect(runtime.refreshForReadiness(new Date("2026-09-01T13:02:00.000Z"))).resolves.toBe(
+      false,
+    );
+    envelope = signed({ ...newer, revision: "forked-v2" });
+    await expect(runtime.refreshForReadiness(new Date("2026-09-01T13:03:00.000Z"))).resolves.toBe(
+      false,
+    );
+    expect(cache.value).toBeUndefined();
+    expect(runtime.decision(leverCapture, "0.2.0")).toEqual({
+      allowed: false,
+      reason: "policy_missing",
+    });
+    envelope = signed({ ...newer, issuedAt: "2026-09-01T13:03:00.000Z", revision: "renewed-v3" });
+    await expect(runtime.refreshForReadiness(new Date("2026-09-01T13:04:00.000Z"))).resolves.toBe(
+      true,
+    );
   });
 });

@@ -260,6 +260,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/jobs/contributions/{contributionId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Owner-only cancellation before independent verification. Revokes the exact Profile authorization and permanently stops publication without fabricating a Trust decision. The contribution UUID is the semantic replay identity; retries return its existing consent_invalid status. Already verified or published contributions require the Trust withdrawal route. Cancellation remains available when contribution intake policy is disabled or expired. */
+        post: operations["cancelUnverifiedJobContribution"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/extension/contribution-capability-policy": {
         parameters: {
             query?: never;
@@ -411,7 +428,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        get: operations["listReviewerTrustCases"];
         put?: never;
         post: operations["openTrustCase"];
         delete?: never;
@@ -428,6 +445,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["getReviewerTrustCase"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/trust/cases/{caseId}/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getReviewerTrustEvidence"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1175,6 +1208,10 @@ export interface components {
             /** Format: date-time */
             grantedAt: string;
         };
+        CancelJobContributionRequest: {
+            /** @constant */
+            schemaVersion: 1;
+        };
         RevokeUgcContributionConsentRequest: {
             /** @constant */
             schemaVersion: 1;
@@ -1238,6 +1275,41 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        ReviewerTrustCaseQueueRequest: {
+            /** @enum {string} */
+            state?: "needs_review" | "appeal_pending";
+            pageSize?: number;
+            cursor?: string;
+        };
+        ReviewerTrustCasePage: {
+            items: components["schemas"]["ReviewerTrustCase"][];
+            nextCursor?: string;
+        };
+        IndependentJobReviewEvidence: {
+            /** Format: uuid */
+            contributionId: string;
+            evidenceDigestSha256: string;
+            /** Format: date-time */
+            verifiedAt: string;
+            /** @enum {string} */
+            provider: "greenhouse" | "lever" | "ashby";
+            /** Format: uri */
+            sourceUrl: string;
+            title: string;
+            companyName: string;
+            description: string;
+            locations: string[];
+            department?: string;
+            /** @enum {string} */
+            workMode?: "remote" | "hybrid" | "on_site" | "unknown";
+            /** @enum {string} */
+            employmentType?: "full_time" | "part_time" | "contract" | "internship" | "unknown";
+        };
+        ReviewerTrustEvidence: {
+            caseId: string;
+            caseVersion: number;
+            evidence: components["schemas"]["IndependentJobReviewEvidence"];
         };
         ReviewerTrustCase: {
             id: string;
@@ -2415,6 +2487,63 @@ export interface operations {
             };
         };
     };
+    cancelUnverifiedJobContribution: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                contributionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CancelJobContributionRequest"];
+            };
+        };
+        responses: {
+            /** @description Authorization revoked and unverified processing cancelled, or semantic replay */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobContribution"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Contribution not found for this owner */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Independent verification or a later lifecycle stage requires Trust withdrawal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Cancellation could not safely complete; retry the same contribution */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     getExtensionContributionCapabilityPolicy: {
         parameters: {
             query?: never;
@@ -2699,6 +2828,67 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    listReviewerTrustCases: {
+        parameters: {
+            query?: {
+                state?: "needs_review" | "appeal_pending";
+                pageSize?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Strict reviewer-only no-store projection; no contributor or reviewer identity */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewerTrustCasePage"];
+                };
+            };
+            /** @description Invalid bounded request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Exact reviewer authority required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Reviewer dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     openTrustCase: {
         parameters: {
             query?: never;
@@ -2756,6 +2946,83 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getReviewerTrustEvidence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                caseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Strict reviewer-only no-store projection; no contributor or reviewer identity */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewerTrustEvidence"];
+                };
+            };
+            /** @description Invalid bounded request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Exact reviewer authority required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No reviewer-visible evidence */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The Trust case changed during evidence reading */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Reviewer dependency unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     decideTrustCase: {

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type postgres from "postgres";
+import type { TrustReviewQueueInput } from "./review-queue.js";
 import {
   decideContributionReview,
   decideTrustAppeal,
@@ -294,6 +295,24 @@ export class PostgresTrustStore {
       SELECT ${this.client.unsafe(caseSelection)} FROM trust.contribution_cases WHERE id = ${caseId}
     `;
     return row ? mapCase(row) : null;
+  }
+
+  async listReviewerCases(input: TrustReviewQueueInput): Promise<TrustCase[]> {
+    if (
+      !["needs_review", "appeal_pending"].includes(input.state) ||
+      !Number.isInteger(input.pageSize) ||
+      input.pageSize < 1 ||
+      input.pageSize > 25
+    )
+      throw new Error("Invalid review queue request");
+    const after = input.after;
+    const rows = await this.client<CaseRow[]>`
+      SELECT ${this.client.unsafe(caseSelection)} FROM trust.contribution_cases
+      WHERE state = ${input.state}
+        ${after ? this.client`AND (updated_at, id) > (${after.updatedAt}::timestamptz, ${after.id}::uuid)` : this.client``}
+      ORDER BY updated_at, id LIMIT ${input.pageSize + 1}
+    `;
+    return rows.map(mapCase);
   }
 
   async recordReputationEvidence(input: {

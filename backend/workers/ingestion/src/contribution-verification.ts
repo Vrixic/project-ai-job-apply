@@ -10,6 +10,7 @@ import {
 } from "@ai-job-apply/jobs-service";
 import { v7 as uuidv7 } from "uuid";
 import type { SourceRegistration } from "./contract.js";
+import { legacyPreviewDescription } from "./page-preview-compatibility.js";
 import type { SourceRegistry } from "./registry.js";
 import {
   canonicalizeRegisteredSourceObservation,
@@ -121,32 +122,6 @@ function providerContent(observation: CatalogObservation) {
   };
 }
 
-// Compatibility with the exact d2-job-page-v1 preview, not a fuzzy content comparison.
-// This never replaces the independent observation used by publication.
-function legacyPreviewDescription(value: string): string {
-  const withoutControls = [...value]
-    .map((character) => {
-      const code = character.codePointAt(0) ?? 0;
-      return (code >= 0 && code <= 8) ||
-        code === 11 ||
-        code === 12 ||
-        (code >= 14 && code <= 31) ||
-        (code >= 127 && code <= 159) ||
-        (code >= 0x200b && code <= 0x200f) ||
-        (code >= 0x202a && code <= 0x202e) ||
-        (code >= 0x2060 && code <= 0x206f) ||
-        code === 0xfeff
-        ? " "
-        : character;
-    })
-    .join("");
-  return withoutControls
-    .replace(/<[^>]*>/gu, " ")
-    .replace(/\s+/gu, " ")
-    .trim()
-    .slice(0, 12_000);
-}
-
 function descriptionDigests(observation: CatalogObservation, legacy: boolean): ReadonlySet<string> {
   const values = [normalizeText(observation.description)];
   if (legacy) {
@@ -165,6 +140,7 @@ function descriptionDigests(observation: CatalogObservation, legacy: boolean): R
 function contentMismatchMetrics(
   proposal: NormalizedContributionProposal,
   observation: CatalogObservation,
+  pageDescriptionDigests: readonly string[] = [],
 ) {
   const truth = providerContent(observation);
   const legacy = proposal.provenance.adapterVersion === "d2-job-page-v1";
@@ -187,7 +163,8 @@ function contentMismatchMetrics(
     ),
     VerificationMismatchDescription: Number(
       proposal.normalizedDescriptionSha256 !== undefined &&
-        !descriptionDigests(observation, legacy).has(proposal.normalizedDescriptionSha256),
+        !descriptionDigests(observation, legacy).has(proposal.normalizedDescriptionSha256) &&
+        !pageDescriptionDigests.includes(proposal.normalizedDescriptionSha256),
     ),
     VerificationMismatchDepartment: Number(
       proposal.normalizedDepartment !== undefined &&
@@ -300,7 +277,24 @@ export class RegisteredIndependentProviderVerifier implements IndependentProvide
           normalizeText(observation.externalJobId ?? "") !== proposal.provenance.externalJobId
         )
           continue;
-        const mismatches = contentMismatchMetrics(proposal, observation);
+        const previewDigests =
+          registration.provider === "greenhouse" &&
+          proposal.provenance.adapterVersion === "d2-job-page-v1"
+            ? (registration.adapter.pagePreviewDescriptionDigests?.(
+                source,
+                proposal.provenance.adapterVersion,
+              ) ?? [])
+            : [];
+        if (
+          !Array.isArray(previewDigests) ||
+          previewDigests.length > 4 ||
+          previewDigests.some(
+            (value) => typeof value !== "string" || !/^[0-9a-f]{64}$/u.test(value),
+          )
+        ) {
+          return { status: "unavailable", ...base };
+        }
+        const mismatches = contentMismatchMetrics(proposal, observation, previewDigests);
         if (Object.values(mismatches).some((count) => count !== 0)) {
           try {
             this.#onContentMismatch?.(mismatches);

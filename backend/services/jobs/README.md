@@ -28,6 +28,11 @@ into provider source or canonical job truth, retain no DOM/HTML/raw page snapsho
 activate, refresh, extend, or overwrite catalog provenance.
 
 The contribution service and extension share one pure canonicalization helper from API contracts.
+The Jobs-owned `PostgresContributionReviewEvidenceReader` supplies bounded, full plaintext provider
+evidence to an authorized Trust case through the exact contribution/owner binding. It excludes
+candidate/reviewer identity, raw HTML, snapshots, and internal provenance fields. The reader does
+not publish jobs or grant decision authority; its verification digest is immutable review evidence.
+
 Before persistence, the gateway adapter verifies the exact owner, policy, preview digest, current
 nonexpired Profile grant, and exact server-issued grant timestamp. Missing Profile wiring remains
 fail closed.

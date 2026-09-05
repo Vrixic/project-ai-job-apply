@@ -64,6 +64,7 @@ import { MAXIMUM_GATEWAY_BODY_BYTES } from "./gateway-boundary.js";
 import {
   configuredUgcContributionPolicyVersion,
   ProfileJobContributionConsentVerifier,
+  ProfileJobContributionConsentRevoker,
 } from "./job-contribution-consent-verifier.js";
 import { deriveJobSearchCursorKeys, deriveModerationCursorKey } from "./job-search-cursor-key.js";
 import { PostgresProfilePrivateCaptureAccountStatus } from "./private-capture-account-status.js";
@@ -179,6 +180,10 @@ const D2_UUID_V7 = "[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a
 const D2_UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
 const PRIVATE_CAPTURE_PATH_PATTERN = new RegExp(`^/v1/saved-job-captures/${D2_UUID_V7}$`, "u");
 const CONTRIBUTION_PATH_PATTERN = new RegExp(`^/v1/jobs/contributions/${D2_UUID_V7}$`, "u");
+const CONTRIBUTION_CANCEL_PATH_PATTERN = new RegExp(
+  `^/v1/jobs/contributions/${D2_UUID_V7}/cancel$`,
+  "u",
+);
 const CONSENT_REVOKE_PATH_PATTERN = new RegExp(
   `^/v1/profile/ugc-contribution-consents/${D2_UUID_V7}/revoke$`,
   "u",
@@ -193,6 +198,10 @@ const OWNER_TRUST_APPEAL_PATH_PATTERN = new RegExp(
   "u",
 );
 const REVIEWER_TRUST_CASE_PATH_PATTERN = new RegExp(`^/v1/admin/trust/cases/${D2_UUID}$`, "u");
+const REVIEWER_TRUST_EVIDENCE_PATH_PATTERN = new RegExp(
+  `^/v1/admin/trust/cases/${D2_UUID}/evidence$`,
+  "u",
+);
 const REVIEWER_TRUST_DECISION_PATH_PATTERN = new RegExp(
   `^/v1/admin/trust/cases/${D2_UUID}/decision$`,
   "u",
@@ -227,6 +236,7 @@ const MAXIMUM_BEARER_TOKEN_BYTES = 16 * 1024;
 interface AllowedRoute {
   acceptsBody: boolean;
   protected: boolean;
+  acceptsReviewQueueQuery?: true;
 }
 
 function exactD2RouteKey(routeKey: string, expected: string): boolean {
@@ -307,6 +317,13 @@ function allowedRoute(
   if (d2Routes.candidateContribution) {
     if (
       method === "POST" &&
+      CONTRIBUTION_CANCEL_PATH_PATTERN.test(path) &&
+      exactD2RouteKey(routeKey, "POST /v1/jobs/contributions/{contributionId}/cancel")
+    ) {
+      return { acceptsBody: true, protected: true };
+    }
+    if (
+      method === "POST" &&
       path === "/v1/jobs/contributions" &&
       exactD2RouteKey(routeKey, "POST /v1/jobs/contributions")
     ) {
@@ -356,6 +373,18 @@ function allowedRoute(
     }
   }
   if (d2Routes.trustReviewer) {
+    if (
+      method === "GET" &&
+      path === "/v1/admin/trust/cases" &&
+      exactD2RouteKey(routeKey, "GET /v1/admin/trust/cases")
+    )
+      return { acceptsBody: false, protected: true, acceptsReviewQueueQuery: true };
+    if (
+      method === "GET" &&
+      REVIEWER_TRUST_EVIDENCE_PATH_PATTERN.test(path) &&
+      exactD2RouteKey(routeKey, "GET /v1/admin/trust/cases/{caseId}/evidence")
+    )
+      return { acceptsBody: false, protected: true };
     if (
       method === "POST" &&
       path === "/v1/admin/trust/cases" &&
@@ -434,7 +463,10 @@ function requestPayload(
   event: APIGatewayProxyEventV2,
   route: AllowedRoute,
 ): { failure?: APIGatewayProxyStructuredResultV2; payload?: string } {
-  if (event.rawQueryString) {
+  if (
+    event.rawQueryString &&
+    (!route.acceptsReviewQueueQuery || !validReviewQueueQuery(event.rawQueryString))
+  ) {
     return {
       failure: boundaryFailure(event, 400, "invalid_request", "Invalid request"),
     };
@@ -472,6 +504,20 @@ function requestPayload(
     };
   }
   return { payload: body.toString("utf8") };
+}
+
+function validReviewQueueQuery(raw: string): boolean {
+  if (raw.length > 512) return false;
+  const seen = new Set<string>();
+  for (const [key, value] of new URLSearchParams(raw)) {
+    if (seen.has(key)) return false;
+    seen.add(key);
+    if (key === "state" && ["needs_review", "appeal_pending"].includes(value)) continue;
+    if (key === "pageSize" && /^(?:[1-9]|1[0-9]|2[0-5])$/u.test(value)) continue;
+    if (key === "cursor" && /^[A-Za-z0-9_-]{1,400}$/u.test(value)) continue;
+    return false;
+  }
+  return seen.size > 0;
 }
 
 function claimStrings(value: JwtClaimValue): string[] {
@@ -724,7 +770,10 @@ export function createApiGatewayHandler(options: ApiGatewayHandlerOptions): ApiG
       }
       return app.inject({
         method,
-        url: path,
+        url:
+          route.acceptsReviewQueueQuery && event.rawQueryString
+            ? `${path}?${event.rawQueryString}`
+            : path,
         headers,
         ...(decodedRequest.payload !== undefined ? { payload: decodedRequest.payload } : {}),
       });
@@ -856,6 +905,8 @@ async function createConfiguredApplication(
       ugcContributionPolicyVersion,
     ),
     d2.contributionCapabilityPolicy,
+    undefined,
+    new ProfileJobContributionConsentRevoker(ugcContributionConsents),
   );
   const moderation = new JobModerationService(
     new PostgresJobModerationStore(database.client, deriveModerationCursorKey(databaseUrl)),

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "manifestId": "d2-provider-truth-profile-jobs-documents-matching-billing-trust-v1",
+  "manifestId": "d2-community-lifecycle-profile-jobs-documents-matching-billing-trust-v1",
   "contributors": [
     {
       "owner": "billing",
@@ -131,6 +131,10 @@
         {
           "version": "0019_job_contribution_provider_publication",
           "checksum": "4da15bc6cdb347c65ff71c71b266b3d857962bb91e3dc4bc970a45a09dbe9fae"
+        },
+        {
+          "version": "0020_contribution_trust_reprocessing",
+          "checksum": "2f6a993927d54b90d0a9880fa9277927cb4da5e5c022efb074424e63719b346a"
         }
       ],
       "relations": [

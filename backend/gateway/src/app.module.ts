@@ -43,6 +43,9 @@ import type {
   ResolveTrustAppealRequest,
   ResumeDocumentCollection,
   ReviewerTrustCase,
+  ReviewerTrustCasePage,
+  ReviewerTrustCaseQueueRequest,
+  ReviewerTrustEvidence,
   SavedJob,
   SavedJobPage,
   SavedJobSearchRequest,
@@ -78,6 +81,7 @@ import {
   JobAlreadyReportedError,
   type JobCatalogReader,
   JobContributionConsentRequiredError,
+  JobContributionCancellationConflictError,
   JobContributionIdempotencyConflictError,
   type JobContributions,
   JobContributionUnavailableError,
@@ -278,12 +282,14 @@ const SAFE_ROUTE_TEMPLATES = new Set([
   "/v1/jobs/:jobId/reports",
   "/v1/jobs/contributions",
   "/v1/jobs/contributions/:contributionId",
+  "/v1/jobs/contributions/:contributionId/cancel",
   "/v1/extension/contribution-capability-policy",
   "/v1/trust/contributions/:contributionId",
   "/v1/trust/contributions/:contributionId/withdraw",
   "/v1/trust/contributions/:contributionId/appeals",
   "/v1/admin/trust/cases",
   "/v1/admin/trust/cases/:caseId",
+  "/v1/admin/trust/cases/:caseId/evidence",
   "/v1/admin/trust/cases/:caseId/decision",
   "/v1/admin/trust/cases/:caseId/takedown",
   "/v1/admin/trust/cases/:caseId/appeal-resolution",
@@ -560,6 +566,11 @@ class ProblemDetailsFilter implements ExceptionFilter {
       status = HttpStatus.CONFLICT;
       code = "idempotency_conflict";
       title = "Idempotency key conflict";
+      detail = exception.message;
+    } else if (exception instanceof JobContributionCancellationConflictError) {
+      status = HttpStatus.CONFLICT;
+      code = "job_contribution_requires_trust_withdrawal";
+      title = "Trust withdrawal required";
       detail = exception.message;
     } else if (exception instanceof JobContributionConsentRequiredError) {
       status = HttpStatus.CONFLICT;
@@ -868,6 +879,11 @@ const validateCreateJobContribution = compileComponentValidator("CreateJobContri
 const validateJobContribution = compileComponentValidator("JobContribution");
 const validateOwnerTrustCase = compileComponentValidator("OwnerTrustCase");
 const validateReviewerTrustCase = compileComponentValidator("ReviewerTrustCase");
+const validateReviewerTrustQueueRequest = compileComponentValidator(
+  "ReviewerTrustCaseQueueRequest",
+);
+const validateReviewerTrustCasePage = compileComponentValidator("ReviewerTrustCasePage");
+const validateReviewerTrustEvidence = compileComponentValidator("ReviewerTrustEvidence");
 const validateWithdrawTrustContribution = compileComponentValidator(
   "WithdrawTrustContributionRequest",
 );
@@ -885,6 +901,7 @@ const validateUgcContributionConsentGrant = compileComponentValidator(
 const validateRevokeUgcContributionConsent = compileComponentValidator(
   "RevokeUgcContributionConsentRequest",
 );
+const validateCancelJobContribution = compileComponentValidator("CancelJobContributionRequest");
 const validateOpenModerationCase = compileComponentValidator("OpenModerationCaseRequest");
 const validateResolveModerationCase = compileComponentValidator("ResolveModerationCaseRequest");
 const validateModerationCaseSearch = compileComponentValidator("ModerationCaseSearchRequest");
@@ -1251,6 +1268,46 @@ class AdminTrustController {
   ): Promise<{ principal: AuthPrincipal; reviewerId: string }> {
     const principal = await this.identity.authorize(request, "trust:review");
     return { principal, reviewerId: this.reviewers.resolve(principal, role) };
+  }
+
+  @Get("/cases")
+  @Header("cache-control", "no-store")
+  async list(@Req() request: AuthenticatedRequest): Promise<ReviewerTrustCasePage> {
+    const { reviewerId } = await this.reviewer(request, "case_reader");
+    const query = { ...((request.query as Record<string, unknown>) ?? {}) };
+    if (query.pageSize !== undefined) {
+      if (typeof query.pageSize !== "string" || !/^(?:[1-9]|1[0-9]|2[0-5])$/u.test(query.pageSize))
+        throw new TrustApplicationError("invalid_request");
+      query.pageSize = Number(query.pageSize);
+    }
+    if (request.body !== undefined || !validateReviewerTrustQueueRequest(query))
+      throw new TrustApplicationError("invalid_request");
+    const page = await this.trust.listReviewerCases({
+      reviewerId,
+      ...(query as ReviewerTrustCaseQueueRequest),
+    });
+    const projected = {
+      items: page.items.map(projectReviewerTrustCase),
+      ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
+    };
+    if (!validateReviewerTrustCasePage(projected))
+      throw new TrustApplicationError("dependency_unavailable");
+    return projected;
+  }
+
+  @Get("/cases/:caseId/evidence")
+  @Header("cache-control", "no-store")
+  async evidence(
+    @Req() request: AuthenticatedRequest,
+    @Param("caseId") caseId: string,
+  ): Promise<ReviewerTrustEvidence> {
+    const { reviewerId } = await this.reviewer(request, "case_reader");
+    if (!hasNoQuery(request) || request.body !== undefined || !TRUST_CASE_ID_PATTERN.test(caseId))
+      throw new TrustApplicationError("invalid_request");
+    const value = await this.trust.readReviewerEvidence({ reviewerId, caseId });
+    if (!validateReviewerTrustEvidence(value))
+      throw new TrustApplicationError("dependency_unavailable");
+    return value;
   }
 
   @Get("/cases/:caseId")
@@ -1898,6 +1955,37 @@ class CandidateController {
       ownerUserId: user.id,
       traceId: request.traceId ?? correlationId(undefined),
     });
+  }
+
+  @Post("/jobs/contributions/:contributionId/cancel")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async cancelJobContribution(
+    @Req() request: AuthenticatedRequest,
+    @Param("contributionId") contributionId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<JobContribution> {
+    if (
+      !UUID_V7_PATTERN.test(contributionId) ||
+      (request.query && Object.keys(request.query as Record<string, unknown>).length > 0) ||
+      !validateCancelJobContribution(request.body)
+    ) {
+      throw new HttpException("Contribution cancellation input is invalid", HttpStatus.BAD_REQUEST);
+    }
+    const user = await this.identity.resolve(request, "jobs:contribute");
+    if (!this.jobContributions.cancel) throw new JobContributionUnavailableError();
+    const contribution = await this.jobContributions.cancel({
+      ownerUserId: user.id,
+      contributionId,
+      idempotencyKey: requireIdempotencyKey(idempotencyKey),
+      traceId: request.traceId ?? correlationId(undefined),
+    });
+    if (!contribution)
+      throw new HttpException("Job contribution was not found", HttpStatus.NOT_FOUND);
+    if (!exactJobContribution(contribution) || contribution.state !== "consent_invalid") {
+      throw new JobContributionUnavailableError("JOB_RESPONSE_CONTRACT");
+    }
+    return contribution as JobContribution;
   }
 
   @Get("/jobs/contributions/:contributionId")

@@ -19,6 +19,12 @@ database-owner suites exercise fail-closed migration verification by temporarily
 then restoring schema drift, so parallel package execution against the shared local PostgreSQL
 database is unsafe.
 
+The composed D2 cancellation and Trust-to-Jobs suites require separate disposable, loopback-only
+PostgreSQL clusters via `D2_CANCELLATION_DATABASE_URL` and `D2_COMPOSED_DATABASE_URL`. They create
+and remove only uniquely generated test databases. Do not point either variable at a cluster whose
+other test database is already migrated: the public-reader migration verifier intentionally checks
+cluster-wide database grants. Missing opt-ins are reported as skipped, not passing evidence.
+
 ## Immutable artifact construction
 
 - `build-gateway-lambda.mjs` — Builds the gateway Lambda artifact and provenance manifest.

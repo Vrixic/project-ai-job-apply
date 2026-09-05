@@ -43,6 +43,35 @@ describeWithDatabase("PostgreSQL UGC trust foundation", () => {
     await client.end();
   });
 
+  it("pages the fixed review queue with a stable keyset and no unrelated case states", async () => {
+    const at = new Date("2020-01-01T00:00:00.000Z");
+    const ids = [uuidv7(), uuidv7(), uuidv7()].sort();
+    const firstId = ids[0];
+    if (!firstId) throw new Error("Expected a synthetic queue case");
+    for (const caseId of ids)
+      await store.open({
+        caseId,
+        contributionId: uuidv7(),
+        contributorUserId: owner,
+        systemActorId: systemActor,
+        policy: { version: "synthetic-review-queue-v1", appealWindowMilliseconds: 1_000 },
+        occurredAt: at,
+      });
+    const first = await store.listReviewerCases({ state: "needs_review", pageSize: 1 });
+    expect(first).toHaveLength(2); // One bounded lookahead row.
+    expect(first.map((item) => item.id)).toEqual(ids.slice(0, 2));
+    const next = await store.listReviewerCases({
+      state: "needs_review",
+      pageSize: 1,
+      after: { updatedAt: at.toISOString(), id: firstId },
+    });
+    expect(next.map((item) => item.id)).toEqual(ids.slice(1));
+    expect(await store.listReviewerCases({ state: "appeal_pending", pageSize: 25 })).toEqual([]);
+    await expect(
+      store.listReviewerCases({ state: "needs_review", pageSize: 26 }),
+    ).rejects.toThrow();
+  });
+
   it("persists an owner-private, independently reviewed, immutable one-appeal lifecycle", async () => {
     const caseId = uuidv7();
     const contributionId = uuidv7();

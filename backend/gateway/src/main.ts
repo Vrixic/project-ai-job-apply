@@ -46,6 +46,7 @@ import { S3CandidateDataExportDownloadSigner } from "./candidate-data-export-dow
 import { S3CandidateDeletionConfirmationJournal } from "./candidate-deletion-confirmation-journal.js";
 import {
   configuredUgcContributionPolicyVersion,
+  ProfileJobContributionConsentRevoker,
   ProfileJobContributionConsentVerifier,
 } from "./job-contribution-consent-verifier.js";
 import { deriveJobSearchCursorKeys, deriveModerationCursorKey } from "./job-search-cursor-key.js";
@@ -97,6 +98,8 @@ const jobContributions = new JobContributionService(
   new PostgresJobContributionStore(database.client),
   new ProfileJobContributionConsentVerifier(ugcContributionConsents, ugcContributionPolicyVersion),
   contributionCapabilityPolicy ?? undefined,
+  undefined,
+  new ProfileJobContributionConsentRevoker(ugcContributionConsents),
 );
 const moderation = new JobModerationService(
   new PostgresJobModerationStore(database.client, deriveModerationCursorKey(config.DATABASE_URL)),

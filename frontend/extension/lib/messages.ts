@@ -17,7 +17,7 @@ export type ExtensionMessage =
     }
   | { action: "enqueue"; approvedFields: readonly CaptureField[]; intent: JobIntentKind }
   | {
-      action: "contribution_refresh" | "trust_refresh" | "withdraw";
+      action: "contribution_refresh" | "trust_refresh" | "withdraw" | "cancel_contribution";
       confirmed?: true;
       contributionId: string;
     }
@@ -47,22 +47,26 @@ export function parseExtensionMessage(value: unknown): ExtensionMessage | undefi
       ? ({ action: record.action } as ExtensionMessage)
       : undefined;
   }
-  if (["contribution_refresh", "trust_refresh", "withdraw"].includes(record.action)) {
-    const allowed =
-      record.action === "withdraw"
-        ? ["action", "confirmed", "contributionId"]
-        : ["action", "contributionId"];
+  if (
+    ["contribution_refresh", "trust_refresh", "withdraw", "cancel_contribution"].includes(
+      record.action,
+    )
+  ) {
+    const mutation = record.action === "withdraw" || record.action === "cancel_contribution";
+    const allowed = mutation
+      ? ["action", "confirmed", "contributionId"]
+      : ["action", "contributionId"];
     if (
       Object.keys(record).some((key) => !allowed.includes(key)) ||
       typeof record.contributionId !== "string" ||
       !UUID_V7.test(record.contributionId) ||
-      (record.action === "withdraw" && record.confirmed !== true)
+      (mutation && record.confirmed !== true)
     )
       return undefined;
     return {
       action: record.action,
       contributionId: record.contributionId,
-      ...(record.action === "withdraw" ? { confirmed: true as const } : {}),
+      ...(mutation ? { confirmed: true as const } : {}),
     } as ExtensionMessage;
   }
   if (record.action === "appeal") {
