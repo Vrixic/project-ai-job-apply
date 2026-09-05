@@ -71,6 +71,7 @@ function harness(
     { providerActivationAllowed: true },
   );
   const findExact = vi.fn(async () => identityMatches);
+  const onContentMismatch = vi.fn();
   const verifier = new RegisteredIndependentProviderVerifier(
     registry,
     { findExact },
@@ -83,9 +84,13 @@ function harness(
         sourcePolicyVersion: "provider-policy-v1",
       },
     ],
-    { clock: () => new Date("2026-09-02T12:01:00.000Z"), createId: () => ids[0] },
+    {
+      clock: () => new Date("2026-09-02T12:01:00.000Z"),
+      createId: () => ids[0],
+      onContentMismatch,
+    },
   );
-  return { verifier, poll, findExact };
+  return { verifier, poll, findExact, onContentMismatch };
 }
 
 const observation = {
@@ -100,6 +105,31 @@ const observation = {
 };
 
 describe("RegisteredIndependentProviderVerifier", () => {
+  it("emits only eight fixed mismatch counts and never changes disposition on diagnostic failure", async () => {
+    const { verifier, onContentMismatch } = harness({
+      kind: "success",
+      observations: [{ ...observation, title: "Another title", companyName: "Other company" }],
+    });
+    const input = { contributionId, normalizationId, proposal: proposal() };
+    await expect(verifier.verify(input)).resolves.toMatchObject({ status: "mismatch" });
+    expect(onContentMismatch).toHaveBeenCalledWith({
+      VerificationMismatchTitle: 1,
+      VerificationMismatchCompany: 1,
+      VerificationMismatchLocation: 0,
+      VerificationMismatchDescription: 0,
+      VerificationMismatchDepartment: 0,
+      VerificationMismatchApplicationUrl: 0,
+      VerificationMismatchEmploymentType: 0,
+      VerificationMismatchWorkMode: 0,
+    });
+    onContentMismatch.mockImplementation(() => {
+      throw new Error("SYNTHETIC_DIAGNOSTIC_FAILURE");
+    });
+    await expect(verifier.verify(input)).resolves.toMatchObject({ status: "mismatch" });
+    const successful = harness({ kind: "success", observations: [observation] });
+    await expect(successful.verifier.verify(input)).resolves.toMatchObject({ status: "verified" });
+    expect(successful.onContentMismatch).not.toHaveBeenCalled();
+  });
   it("is default-dark and never polls without explicit registration", async () => {
     const { verifier, poll } = harness({ kind: "success", observations: [observation] }, []);
     await expect(

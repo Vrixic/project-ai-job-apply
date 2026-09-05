@@ -35,6 +35,7 @@ export interface IndependentProviderVerificationRegistration {
 export interface IndependentProviderVerifierOptions {
   clock?: () => Date;
   createId?: () => string;
+  onContentMismatch?: (metrics: Readonly<Record<string, number>>) => void;
 }
 
 export interface ExactProviderCatalogIdentity {
@@ -121,24 +122,41 @@ function providerContent(observation: CatalogObservation) {
   };
 }
 
-function contentMatches(proposal: NormalizedContributionProposal, observation: CatalogObservation) {
+function contentMismatchMetrics(
+  proposal: NormalizedContributionProposal,
+  observation: CatalogObservation,
+) {
   const truth = providerContent(observation);
-  return (
-    proposal.normalizedTitle === truth.title &&
-    (proposal.normalizedCompanyName === undefined ||
-      proposal.normalizedCompanyName === truth.companyName) &&
-    (proposal.normalizedLocations.length === 0 ||
-      JSON.stringify(proposal.normalizedLocations) === JSON.stringify(truth.locations) ||
-      JSON.stringify(proposal.normalizedLocations) === JSON.stringify(truth.separatedLocations)) &&
-    (proposal.normalizedDescriptionSha256 === undefined ||
-      proposal.normalizedDescriptionSha256 === truth.descriptionSha256) &&
-    (proposal.normalizedDepartment === undefined ||
-      proposal.normalizedDepartment === truth.department) &&
-    (proposal.applicationUrlSha256 === undefined ||
-      proposal.applicationUrlSha256 === truth.applicationUrlSha256) &&
-    (proposal.employmentType === undefined || proposal.employmentType === truth.employmentType) &&
-    (proposal.workMode === undefined || proposal.workMode === truth.workMode)
-  );
+  return Object.freeze({
+    VerificationMismatchTitle: Number(proposal.normalizedTitle !== truth.title),
+    VerificationMismatchCompany: Number(
+      proposal.normalizedCompanyName !== undefined &&
+        proposal.normalizedCompanyName !== truth.companyName,
+    ),
+    VerificationMismatchLocation: Number(
+      proposal.normalizedLocations.length !== 0 &&
+        JSON.stringify(proposal.normalizedLocations) !== JSON.stringify(truth.locations) &&
+        JSON.stringify(proposal.normalizedLocations) !== JSON.stringify(truth.separatedLocations),
+    ),
+    VerificationMismatchDescription: Number(
+      proposal.normalizedDescriptionSha256 !== undefined &&
+        proposal.normalizedDescriptionSha256 !== truth.descriptionSha256,
+    ),
+    VerificationMismatchDepartment: Number(
+      proposal.normalizedDepartment !== undefined &&
+        proposal.normalizedDepartment !== truth.department,
+    ),
+    VerificationMismatchApplicationUrl: Number(
+      proposal.applicationUrlSha256 !== undefined &&
+        proposal.applicationUrlSha256 !== truth.applicationUrlSha256,
+    ),
+    VerificationMismatchEmploymentType: Number(
+      proposal.employmentType !== undefined && proposal.employmentType !== truth.employmentType,
+    ),
+    VerificationMismatchWorkMode: Number(
+      proposal.workMode !== undefined && proposal.workMode !== truth.workMode,
+    ),
+  });
 }
 
 /**
@@ -149,6 +167,7 @@ export class RegisteredIndependentProviderVerifier implements IndependentProvide
   readonly #configs = new Map<string, IndependentProviderVerificationRegistration>();
   readonly #clock: () => Date;
   readonly #createId: () => string;
+  readonly #onContentMismatch: IndependentProviderVerifierOptions["onContentMismatch"];
 
   constructor(
     private readonly registry: SourceRegistry,
@@ -159,6 +178,7 @@ export class RegisteredIndependentProviderVerifier implements IndependentProvide
     if (configurations.length > 100) throw new TypeError("Too many verification registrations");
     this.#clock = options.clock ?? (() => new Date());
     this.#createId = options.createId ?? uuidv7;
+    this.#onContentMismatch = options.onContentMismatch;
     for (const configuration of configurations) {
       registeredSource(registry, configuration);
       const key = `${configuration.provider}:${configuration.atsTenant}`;
@@ -233,7 +253,15 @@ export class RegisteredIndependentProviderVerifier implements IndependentProvide
           normalizeText(observation.externalJobId ?? "") !== proposal.provenance.externalJobId
         )
           continue;
-        if (!contentMatches(proposal, observation)) return { status: "mismatch", ...base };
+        const mismatches = contentMismatchMetrics(proposal, observation);
+        if (Object.values(mismatches).some((count) => count !== 0)) {
+          try {
+            this.#onContentMismatch?.(mismatches);
+          } catch {
+            // Diagnostics cannot change the verification disposition or expose driver errors.
+          }
+          return { status: "mismatch", ...base };
+        }
 
         const identities = await this.catalogIdentities.findExact({
           provider: config.provider,

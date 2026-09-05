@@ -21,7 +21,9 @@ if(-not $gatewayMatch.Success){throw "The exact development gateway API ID is un
 $apiId=$gatewayMatch.Groups[1].Value
 $routes=Json @("apigatewayv2","get-routes","--api-id",$apiId.Trim(),"--output","json")
 $policyRouteKey='GET /v1/extension/contribution-capability-policy'
-$mutationRoutePattern='^((POST /v1/saved-job-captures)|(GET|DELETE) /v1/saved-job-captures/\{captureId\}|(POST /v1/profile/ugc-contribution-consents)|(POST /v1/profile/ugc-contribution-consents/\{consentId\}/revoke)|(POST /v1/jobs/contributions)|(GET /v1/jobs/contributions/\{contributionId\})|(GET /v1/trust/contributions/\{contributionId\})|(POST /v1/trust/contributions/\{contributionId\}/(withdraw|appeals))|(GET /v1/admin/trust/cases/\{caseId\})|(POST /v1/admin/trust/(contributions/\{contributionId\}/cases|cases/\{caseId\}/(decisions|takedowns|appeal-decisions))))$'
+# A dark boundary must reject every D2 namespace, including new methods/actions, not a stale
+# spelling of individual reviewer routes. The separate anonymous policy route is handled below.
+$mutationRoutePattern='^\S+ /v1/(saved-job-captures|profile/ugc-contribution-consents|jobs/contributions|trust|admin/trust)(/.*)?$'
 $mutationRoutes=@($routes.Items|Where-Object RouteKey -match $mutationRoutePattern)
 if($mutationRoutes.Count -ne 0){throw "A D2 mutation, private-read, or Trust route is live."}
 $policyRoutes=@($routes.Items|Where-Object RouteKey -ceq $policyRouteKey)

@@ -35,6 +35,7 @@ import type {
   D2CommunityLambdaConfiguration,
   D2TrustSignalLambdaConfiguration,
 } from "./d2-community-lambda.js";
+import { d2CommunityEmf } from "./d2-community-observability.js";
 import { parseProviderSourceConfigurations } from "./ingestion-lambda.js";
 
 const POLICY_VERSION = /^[a-z0-9][a-z0-9._-]{2,99}$/u;
@@ -426,7 +427,11 @@ export async function createConfiguredD2CommunityLambdaConfiguration(
       },
     },
     verificationRegistrations,
-    { clock: now },
+    {
+      clock: now,
+      onContentMismatch: (metrics) =>
+        logger.info(d2CommunityEmf(metrics, now()), "d2_provider_verification_mismatch"),
+    },
   );
   const queueUrl = exactQueueUrl(
     environment.D2_TRUST_SIGNAL_QUEUE_URL as string,

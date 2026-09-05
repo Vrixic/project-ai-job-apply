@@ -401,8 +401,11 @@ This is the master record for the delivery phases defined in the [product and sy
   The 2026-09-05 completion pass has locally verified regression-backed provider compatibility
   for omitted optional location and exact location/work-type separation, plus bounded
   aggregate-only provider-hold inspection and snapshot-fenced recovery. Repository checks and
-  fresh-PostgreSQL regressions pass; runtime release and recovery remain next. Human review
-  boundaries stay unchanged.
+  fresh-PostgreSQL regressions pass. Source `46a8076` is deployed at state `272` on scheduled alias
+  `8` and Trust alias `7`, with exact artifact checks, zero drift, and 13/13 alarms OK. Two mismatch
+  holds were safely requeued but returned to mismatch; fixed field-level diagnostics are the next
+  deployment, not a claim of resolution. Human review boundaries stay unchanged. The phase document
+  now contains one explicit outstanding acceptance/input table.
   Remaining gates are the D1
   prerequisites; authorized provider fixtures and QA disposition; completion of Chrome parity,
   cancellation, refresh rotation/replay, logout, and revocation after the dedicated Native
