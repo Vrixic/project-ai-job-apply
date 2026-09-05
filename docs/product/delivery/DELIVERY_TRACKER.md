@@ -384,9 +384,14 @@ This is the master record for the delivery phases defined in the [product and sy
   alias `49` at state `271`. The exact two-update/no-replacement release passed immutable artifact,
   direct API-boundary, and refresh-backed zero-drift verification. The public policy still returns
   HTTP `200` with `no-store` and the unchanged Greenhouse-only expiry. No extension rebuild,
-  sign-out, or account-held-item removal is required. Retry the existing eligible delivery using
-  `Retry now`, or `Retry stopped` if its bounded retry budget has exhausted; installed contribution
-  success and downstream lifecycle remain unverified until that authenticated journey completes.
+  sign-out, or account-held-item removal is required. The 2026-09-05 installed follow-up now shows
+  zero pending, zero stopped, and two account-held items. That alone does not prove acceptance:
+  acknowledged delivery and local retention expiry both remove pending items. The inspected
+  post-release logs contain no contribution-store failures, while 19 scheduled batches spanning
+  the release/follow-up window report zero claimed/completed/parked/retried/dead contributions.
+  These aggregates do not establish an acknowledgement or publication. The next step is checking
+  the owner's `Your shared jobs` receipt and `Refresh processing` status without collecting its ID
+  or posting data. Installed success and downstream lifecycle remain unverified.
   Remaining gates are the D1
   prerequisites; authorized provider fixtures and QA disposition; completion of Chrome parity,
   cancellation, refresh rotation/replay, logout, and revocation after the dedicated Native
