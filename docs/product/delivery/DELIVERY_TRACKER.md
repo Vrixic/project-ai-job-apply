@@ -333,13 +333,16 @@ This is the master record for the delivery phases defined in the [product and sy
   independent provider verification and atomic catalog publication, Trust/reputation and candidate
   rights, lazy Lambda composition, guarded operations, aggregate telemetry, Terraform, and local
   migration/recovery evidence are present. Under an exact product-owner controlled exception,
-  development state `275` is configured for only extension client `0.2.0`, the accepted Greenhouse
+  development state `276` is configured for only extension client `0.2.0`, the accepted Greenhouse
   variant and two reviewed domains, one exact provider registration, and the dedicated workflow
   `case_opener`. Production, extension-store distribution, Lever, Ashby, and all human decision
-  roles remain dark. No-store signed policy revision `d2-development-greenhouse-20260904-v2`
-  expired at `2026-09-05T19:11:27.298Z`; the public policy endpoint now returns no-store `503`,
-  and delivery/processing deny pending separately authorized bounded renewal. All 39 deployed
-  migrations/68 relations are verified; unweighted scheduled alias `11` and Trust alias `10`, the real
+  roles remain dark. On explicit user approval, no-store signed policy revision
+  `d2-development-greenhouse-20260905-v3` renews the same dimensions for exactly 24 hours, from
+  `2026-09-05T19:24:54.670Z` through `2026-09-06T19:24:54.670Z`. Two public reads verify the exact
+  current signature/envelope with `200`/`no-store`. The policy-only four-update release changed
+  Gateway/scheduled environments and aliases, retaining every code artifact and permission.
+  Gateway alias `50`, scheduled alias `12`, and unchanged Trust alias `10` are healthy, and state
+  `276` has zero drift. All 39 deployed migrations/68 relations remain verified. The real
   five-minute schedule, one Trust mapping, 15 JWT routes, one anonymous policy route, provider-only
   egress, and both empty Trust queues are healthy. Manual and automatic batches succeeded with
   zero work, all 13 D2 alarms are `OK`, ECS is idle, and Terraform has zero drift. One deployed,
@@ -416,8 +419,11 @@ This is the master record for the delivery phases defined in the [product and sy
   mismatch remains in two aggregate events. A bounded read-only current public-page/API comparison
   also differs beyond whitespace, so no broader matching relaxation is justified. No submitted
   content was rewritten, and no raw page or posting values were retained. The signed development
-  policy has now expired; recommend explicit renewal for 24 hours with unchanged Greenhouse-only
-  scope before further deployed recovery. The compatibility preserves provider truth and rejects
+  policy subsequently expired and was then renewed on explicit user approval through
+  `2026-09-06T19:24:54.670Z` with unchanged Greenhouse-only scope. Renewal did not manually retry
+  either held contribution; description verification remains open. D2-024 records the separate
+  warm-extension policy-readiness refresh gap found during renewal; this policy-only change does
+  not claim to fix that client behavior. The compatibility preserves provider truth and rejects
   arbitrary excerpts/aliases.
   Human review boundaries stay unchanged. The phase document
   now contains one explicit outstanding acceptance/input table.
