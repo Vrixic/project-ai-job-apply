@@ -385,6 +385,12 @@ This is the master record for the delivery phases defined in the [product and sy
   token, deployment, or case changed. D2-030 now needs a different dedicated Regular Web Application
   Client ID, followed by secure human identity/secret setup and MFA acceptance; see D2-R12 in the
   [Phase 2 reviewer record](phase-2-extension-and-community.md#delegated-reviewer-assignment).
+- Replacement appeal-client check (2026-09-06): the newly supplied Client ID is distinct from the
+  two configured local clients and two retained reviewer assignments. A separate masked local
+  appeal collector is prepared and launched; eleven synthetic input checks, a DPAPI round trip,
+  context/expiry/ACL/output preflight, and independent source review pass. No existing environment,
+  credential, grant, token, role, policy, or case was changed. Client type/grant, secure collection,
+  exact human identity, and managed-MFA acceptance remain open under D2-030.
 - Depends on: D0 consent/security foundations and D1 catalog, saved-job, and moderation foundations;
   the public-contribution API is D2-owned work
 - Task document: [Phase 2 tasks](phase-2-extension-and-community.md)
