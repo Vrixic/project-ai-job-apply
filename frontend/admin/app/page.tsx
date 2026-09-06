@@ -1,4 +1,4 @@
-import { getAuth0Client, isAuth0Configured } from "../lib/auth0";
+import { getAdminAuthorizationProfile, getAuth0Client, isAuth0Configured } from "../lib/auth0";
 import { ModerationConsole } from "./moderation-console";
 import { TrustConsole } from "./trust-console";
 
@@ -10,15 +10,17 @@ export default async function AdminPage({
   searchParams: Promise<{ auth_error?: string | string[] }>;
 }) {
   const parameters = await searchParams;
+  const appealOnly = getAdminAuthorizationProfile() === "appeals";
   const configured = isAuth0Configured();
   const session = configured ? await getAuth0Client().getSession() : null;
   return (
     <main>
       <p className="eyebrow">Restricted internal console</p>
-      <h1>Job and source moderation</h1>
+      <h1>{appealOnly ? "Independent contribution appeals" : "Job and source moderation"}</h1>
       <p className="lede">
-        Candidate reports are evidence only. Every block or source pause below requires an explicit,
-        version-fenced human decision and is recorded in the append-only audit ledger.
+        {appealOnly
+          ? "Review appeals independently from the initial or takedown reviewer. Every appeal decision requires your assigned role, approved evidence, and the current case version."
+          : "Candidate reports are evidence only. Every block or source pause below requires an explicit, version-fenced human decision and is recorded in the append-only audit ledger."}
       </p>
       {!configured ? (
         <div className="notice" role="status">
@@ -32,7 +34,7 @@ export default async function AdminPage({
             </p>
           ) : null}
           <a className="button-link" href="/auth/login">
-            Sign in as moderator
+            {appealOnly ? "Sign in as appeal reviewer" : "Sign in as moderator"}
           </a>
         </div>
       ) : (
@@ -41,8 +43,8 @@ export default async function AdminPage({
             <span>Privileged session active</span>
             <a href="/auth/logout">Sign out</a>
           </nav>
-          <ModerationConsole />
-          <TrustConsole />
+          {!appealOnly ? <ModerationConsole /> : null}
+          <TrustConsole appealOnly={appealOnly} />
         </>
       )}
     </main>

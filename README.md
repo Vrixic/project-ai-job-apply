@@ -75,14 +75,18 @@ development, with remaining rollout and acceptance tracked in the
 [Phase 2 register](docs/product/delivery/phase-2-extension-and-community.md). The follow-up adds
 warm-policy refresh, exact page/provider description compatibility, pre-verification owner
 cancellation, reviewer queue/evidence, and complete Trust decision reconciliation. The ordered
-backend rollout completed on 2026-09-05: development state `283` runs application source `3f20462` on healthy
-immutable Gateway/scheduled/Trust versions `51`/`13`/`11`, with 18 exact JWT-protected D2 routes plus
+backend rollout completed on 2026-09-05; the 2026-09-06 reviewer-only configuration `b703e56` advances
+development to state `284`, running unchanged application source `3f20462` on healthy immutable
+Gateway/scheduled/Trust versions `52`/`14`/`11`, with 18 exact JWT-protected D2 routes plus
 the anonymous signed-policy endpoint. The migration image from `116b272` completed once with exit
 `0` and seven exact aggregate success events, verifying 40 migrations across six owners and 68
 relations; operator recovery did not rerun it. Direct Gateway boundary checks and zero Terraform
 drift pass. Configuration `7420dfa` aligns the Trust consumer and SQS mapping at two concurrent
 invocations; code, aliases, permissions, and alarms are unchanged. Historical point-in-time restore
 evidence still covers the prior 39-migration boundary.
+The distinct delegated agent reviewer is now bound for read/initial/takedown, with all 18 bounded
+pre/post-deployment access checks passing and no valid case decision submitted. The workflow
+remains case-opener-only; separate human appeal identity/MFA acceptance is still pending.
 The configured extension is rebuilt; reload the unpacked extension and complete installed
 acceptance. Snapshot-fenced recovery cleared both provider-verification holds, but both submissions
 remain parked and unpublished; refresh their existing Processing/Trust state rather than resubmit.

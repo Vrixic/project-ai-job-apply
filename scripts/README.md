@@ -11,6 +11,9 @@ both AWS environments accepted the steady-state serverless runtime.
 - `configure-auth0-local.ps1` — Writes ignored local Auth0 web settings with compatibility-safe
   session-secret generation.
 - `configure-auth0-public-clients.ps1` — Configures the reviewed public-client boundaries.
+- `configure-auth0-admin-local.ps1` — Configures the separate MFA admin client. Use
+  `-AuthorizationProfile appeals` for the human appeal-only login; the default `standard` profile
+  preserves existing console behavior. Profile selection requests scopes but grants no server role.
 - `verify-auth0-tenant.mjs` — Validates managed OIDC discovery and signing configuration without
   exposing credentials.
 

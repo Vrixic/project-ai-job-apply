@@ -3,6 +3,7 @@ param(
   [string]$Auth0Domain,
   [string]$ClientId,
   [string]$PlatformApiBaseUrl = "http://localhost:4000",
+  [ValidateSet("standard", "appeals")][string]$AuthorizationProfile = "standard",
   [switch]$Force
 )
 
@@ -32,7 +33,7 @@ if ([string]::IsNullOrWhiteSpace($Auth0Domain)) {
   $Auth0Domain = Read-Host "Auth0 development tenant domain (without https://)"
 }
 if ([string]::IsNullOrWhiteSpace($ClientId)) {
-  $ClientId = Read-Host "Dedicated moderation Regular Web Application Client ID"
+  $ClientId = Read-Host "Dedicated admin Regular Web Application Client ID"
 }
 Require-SingleLineValue "Auth0Domain" $Auth0Domain
 Require-SingleLineValue "ClientId" $ClientId
@@ -63,7 +64,7 @@ if (-not [string]::IsNullOrEmpty($webClientId) -and $ClientId -ceq $webClientId)
   throw "The moderation client must not reuse the candidate web client ID."
 }
 
-$secureClientSecret = Read-Host "Dedicated moderation client secret" -AsSecureString
+$secureClientSecret = Read-Host "Dedicated admin client secret" -AsSecureString
 $secretPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureClientSecret)
 try {
   $clientSecret = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($secretPointer)
@@ -91,6 +92,7 @@ $adminEnvironment = @(
   "AUTH0_SECRET=$sessionSecret"
   "APP_BASE_URL=http://localhost:3001"
   "AUTH0_AUDIENCE=ai-job-apply-api"
+  "ADMIN_AUTHORIZATION_PROFILE=$($AuthorizationProfile.ToLowerInvariant())"
   "PLATFORM_API_BASE_URL=$PlatformApiBaseUrl"
 ) -join [Environment]::NewLine
 [IO.File]::WriteAllText(
@@ -104,5 +106,6 @@ $sessionSecret = $null
 $webClientSecret = $null
 [Array]::Clear($randomBytes, 0, $randomBytes.Length)
 
-Write-Host "Dedicated moderation Auth0 configuration written to the ignored admin environment file."
+Write-Host "Dedicated admin Auth0 configuration written to the ignored admin environment file."
+Write-Host "Authorization profile: $($AuthorizationProfile.ToLowerInvariant()). This selects requested scopes, not server-side roles."
 Write-Host "No secret values were printed. Restart the admin application before testing."

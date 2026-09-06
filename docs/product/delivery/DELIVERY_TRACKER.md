@@ -333,7 +333,8 @@ This is the master record for the delivery phases defined in the [product and sy
   at the 40-migration/68-relation boundary. Ordered migration/worker/Gateway release is complete
   in controlled development. D2-029's schema-7 handoff passes local adversarial/round-trip checks without
   weakening state/document provenance or changing historical baseline compatibility.
-  Current state `283` runs Gateway `51`, scheduled `13`, and Trust `11` from `3f20462`, with
+  Current state `284` runs Gateway `52`, scheduled `14`, and Trust `11` from `3f20462`, with
+  reviewer configuration `b703e56`,
   immutable matching artifacts, 18 JWT routes/budgets, and zero Terraform drift. One migration
   task from `116b272` stopped with exit 0 and seven exact six-owner success messages, including
   Jobs `0020`; the corrected operator recovered and verified the original task, without rerun.
@@ -362,9 +363,22 @@ This is the master record for the delivery phases defined in the [product and sy
   and its RS256 token verifies the exact issuer/audience/subject/client and three intended scopes
   with no extras. The explicit M2M/human role matrix passes all 12 authority tests and Gateway
   typecheck. Offline proposed configuration preserves the opener and fits existing Lambda limits.
-  AWS SSO is expired, preventing the reviewed role deployment and live permission checks; the
-  optional human appeal identity was not supplied and fresh-MFA acceptance remains open. D2-030
-  remains in progress. No live permissions, policy, case, or catalog record changed.
+  Renewed SSO enabled an independently reviewed four-update assignment-only plan. State `284`
+  binds the agent's read/initial/takedown roles and preserves the workflow opener, all other
+  inputs, and application artifacts. Eight pre-deployment and ten post-deployment API access
+  checks pass with zero valid decisions; immutable aliases, zero drift, 13 healthy D2 alarms,
+  empty observed Trust queues, and unchanged schedule/mapping/concurrency pass. The optional
+  human appeal identity was not supplied and fresh-MFA acceptance remains open. D2-030 remains
+  in progress. No policy, case, or catalog record changed.
+- Appeal-client follow-up (2026-09-06): the server-only `appeals` admin profile now requests only
+  `openid profile trust:review trust:appeal:resolve`, presents only independent appeal actions,
+  and preserves MFA and Gateway authorization. The standard default is unchanged; invalid values
+  fail closed. Admin 40 tests/seven files, typecheck/build, and five local setup cases on both
+  Windows PowerShell 5.1 and PowerShell 7 pass. The full repository verifier passes 33 typecheck,
+  34 unit-test, and 20 build tasks plus its guards; 30 database-gated tests are skipped in this
+  unit run. This source is not configured with the owner's admin credentials or deployed to the
+  protected preview. Human identity/client, exact role binding, and fresh-MFA acceptance remain
+  open; the single decision/rationale record stays in the Phase 2 document.
 - Depends on: D0 consent/security foundations and D1 catalog, saved-job, and moderation foundations;
   the public-contribution API is D2-owned work
 - Task document: [Phase 2 tasks](phase-2-extension-and-community.md)

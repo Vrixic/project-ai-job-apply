@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   adminAbsoluteSessionSeconds,
   adminMfaAcr,
   adminReauthenticationSeconds,
+  appealAuthScopes,
+  getAdminAuthorizationProfile,
   getAuth0Client,
   isAuth0Configured,
   requestedAuthScopes,
@@ -10,6 +12,13 @@ import {
   validateAppBaseUrl,
   validateAuth0Domain,
 } from "./auth0.js";
+
+const { auth0Constructor } = vi.hoisted(() => ({
+  auth0Constructor: vi.fn(function (this: object, _options: unknown) {
+    return this;
+  }),
+}));
+vi.mock("@auth0/nextjs-auth0/server", () => ({ Auth0Client: auth0Constructor }));
 
 const configuredEnvironment = {
   AUTH0_DOMAIN: "development.example.auth0.com",
@@ -20,8 +29,11 @@ const configuredEnvironment = {
   AUTH0_AUDIENCE: "ai-job-apply-api",
 };
 
+beforeEach(() => vi.clearAllMocks());
+afterEach(() => vi.unstubAllEnvs());
+
 describe("admin Auth0 policy constants", () => {
-  it("freezes the least-privilege short-session MFA candidate", () => {
+  it("preserves the standard short-session MFA candidate", () => {
     expect(requestedAuthScopes).toBe(
       "openid profile jobs:moderate trust:review trust:case:open trust:case:decide trust:case:takedown trust:appeal:resolve",
     );
@@ -42,6 +54,82 @@ describe("admin Auth0 policy constants", () => {
   it("accepts a complete localhost configuration", () => {
     expect(isAuth0Configured(configuredEnvironment)).toBe(true);
     expect(getAuth0Client(configuredEnvironment)).toBeDefined();
+  });
+
+  it.each([
+    [undefined, "standard", requestedAuthScopes],
+    ["standard", "standard", requestedAuthScopes],
+    ["appeals", "appeals", "openid profile trust:review trust:appeal:resolve"],
+  ] as const)(
+    "passes the exact %s authorization profile and unchanged MFA controls to Auth0",
+    async (configuredProfile, expectedProfile, expectedScopes) => {
+      const environment = {
+        ...configuredEnvironment,
+        ADMIN_AUTHORIZATION_PROFILE: configuredProfile,
+      };
+      expect(getAdminAuthorizationProfile(environment)).toBe(expectedProfile);
+      getAuth0Client(environment);
+      expect(auth0Constructor).toHaveBeenCalledOnce();
+      const options = auth0Constructor.mock.calls[0]?.[0] as {
+        beforeSessionSaved(session: { user: Record<string, unknown> }): Promise<unknown>;
+      };
+      expect(options).toMatchObject({
+        authorizationParameters: {
+          audience: "ai-job-apply-api",
+          scope: expectedScopes,
+          acr_values: adminMfaAcr,
+          max_age: 900,
+        },
+        session: { rolling: true, inactivityDuration: 900, absoluteDuration: 3600 },
+        enableAccessTokenEndpoint: false,
+        logoutStrategy: "oidc",
+      });
+      await expect(options.beforeSessionSaved({ user: { amr: ["pwd"] } })).rejects.toThrow(
+        "did not prove MFA",
+      );
+      const mfaSession = { user: { amr: ["pwd", "mfa"] } };
+      await expect(options.beforeSessionSaved(mfaSession)).resolves.toBe(mfaSession);
+    },
+  );
+
+  it("requests no initial, takedown, case-opening, moderator, or offline scopes for appeals", () => {
+    expect(appealAuthScopes.split(" ")).toEqual([
+      "openid",
+      "profile",
+      "trust:review",
+      "trust:appeal:resolve",
+    ]);
+  });
+
+  it.each(["", "APPEALS", "appeals ", " standard", "all", "initial_reviewer"])(
+    "fails closed for invalid authorization profile %j",
+    (profile) => {
+      const environment = { ...configuredEnvironment, ADMIN_AUTHORIZATION_PROFILE: profile };
+      for (const resolve of [getAdminAuthorizationProfile, isAuth0Configured, getAuth0Client]) {
+        expect(() => resolve(environment)).toThrow(
+          "ADMIN_AUTHORIZATION_PROFILE must be standard or appeals",
+        );
+      }
+      expect(auth0Constructor).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not reuse a broader cached client when the server profile changes or becomes invalid", () => {
+    for (const [key, value] of Object.entries(configuredEnvironment)) vi.stubEnv(key, value);
+    vi.stubEnv("ADMIN_AUTHORIZATION_PROFILE", "standard");
+    const standard = getAuth0Client();
+    expect(getAuth0Client()).toBe(standard);
+    vi.stubEnv("ADMIN_AUTHORIZATION_PROFILE", "appeals");
+    expect(getAuth0Client()).not.toBe(standard);
+    expect(auth0Constructor).toHaveBeenCalledTimes(2);
+    expect(auth0Constructor.mock.calls[1]?.[0]).toMatchObject({
+      authorizationParameters: { scope: appealAuthScopes },
+    });
+    vi.stubEnv("ADMIN_AUTHORIZATION_PROFILE", "invalid");
+    expect(() => getAuth0Client()).toThrow(
+      "ADMIN_AUTHORIZATION_PROFILE must be standard or appeals",
+    );
+    expect(auth0Constructor).toHaveBeenCalledTimes(2);
   });
 
   it("accepts only an exact canonical Auth0 HTTPS issuer hostname", () => {

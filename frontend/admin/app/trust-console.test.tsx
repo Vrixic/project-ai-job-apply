@@ -104,4 +104,111 @@ describe("interactive Trust reviewer console", () => {
       "The case changed. Reload it before reviewing evidence.",
     );
   });
+
+  it.each([
+    ["uphold", "upheld"],
+    ["reverse", "reversed"],
+  ])(
+    "narrows the appeal queue and sends only an evidence-bound %s appeal decision",
+    async (action, outcome) => {
+      await act(async () =>
+        root.render(React.createElement(TrustConsole, { appealOnly: true, key: "appeals" })),
+      );
+      const appealedCase = { ...trustCase, state: "appeal_pending", version: 3, appealed: true };
+      const fetcher = vi.fn(async (url: string, _init?: RequestInit) => {
+        if (url.includes("?")) return Response.json({ items: [appealedCase] });
+        if (url.endsWith("/evidence")) return Response.json({ ...evidence, caseVersion: 3 });
+        return Response.json(appealedCase);
+      });
+      vi.stubGlobal("fetch", fetcher);
+      const queue = container.querySelector<HTMLSelectElement>("#trust-queue-state");
+      expect(queue?.value).toBe("appeal_pending");
+      expect(Array.from(queue?.options ?? []).map((option) => option.value)).toEqual([
+        "appeal_pending",
+      ]);
+      expect(container.querySelector("#trust-contribution-id")).toBeNull();
+      expect(container.querySelector('input[type="checkbox"]')).toBeNull();
+      expect(container.textContent).not.toContain("Open review case");
+      expect(container.textContent).not.toContain("Accept independently verified");
+      expect(container.textContent).not.toContain("Take down:");
+
+      await act(async () => button("Load review queue").click());
+      expect(fetcher.mock.calls[0]?.[0]).toBe("/api/trust/cases?state=appeal_pending&pageSize=25");
+      await act(async () => button("Review case and evidence").click());
+      const select = container.querySelector<HTMLSelectElement>("#trust-action");
+      expect(Array.from(select?.options ?? []).map((option) => option.value)).toEqual([
+        "uphold",
+        "reverse",
+      ]);
+      const digest = container.querySelector<HTMLInputElement>("#trust-evidence-digest");
+      if (!select || !digest) throw new Error("Missing synthetic appeal controls");
+      expect(digest.required).toBe(true);
+      expect(digest.disabled).toBe(false);
+      expect(digest.value).toBe("");
+      digest.value = "b".repeat(64);
+      await act(async () => {
+        select.value = action;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      await act(async () => {
+        button("Record version-fenced decision")
+          .closest("form")
+          ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      });
+      const writes = fetcher.mock.calls.filter(([, init]) => init?.method === "POST");
+      expect(writes).toHaveLength(1);
+      expect(writes[0]?.[0]).toBe(`/api/trust/cases/${trustCase.id}/appeal-resolution`);
+      expect(JSON.parse(String(writes[0]?.[1]?.body))).toEqual({
+        expectedVersion: 3,
+        outcome,
+        evidenceDigestSha256: "b".repeat(64),
+      });
+    },
+  );
+
+  it("refuses a forged non-appeal action without sending a request", async () => {
+    await act(async () =>
+      root.render(React.createElement(TrustConsole, { appealOnly: true, key: "appeals" })),
+    );
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    const action = container.querySelector<HTMLSelectElement>("#trust-action");
+    if (!action) throw new Error("Missing synthetic appeal action");
+    const forgedOption = document.createElement("option");
+    forgedOption.value = "accept";
+    action.append(forgedOption);
+    action.value = "accept";
+    await act(async () => {
+      button("Record version-fenced decision")
+        .closest("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("This profile supports appeal decisions only.");
+  });
+
+  it("does not decide a non-appeal case through the appeal profile", async () => {
+    await act(async () =>
+      root.render(React.createElement(TrustConsole, { appealOnly: true, key: "appeals" })),
+    );
+    const fetcher = vi.fn(async (url: string) => {
+      if (url.includes("?")) return Response.json({ items: [trustCase] });
+      if (url.endsWith("/evidence")) return Response.json(evidence);
+      return Response.json(trustCase);
+    });
+    vi.stubGlobal("fetch", fetcher);
+    await act(async () => button("Load review queue").click());
+    await act(async () => button("Review case and evidence").click());
+    expect(button("Record version-fenced decision").disabled).toBe(true);
+    fetcher.mockClear();
+    await act(async () => {
+      button("Record version-fenced decision")
+        .closest("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(container.textContent).toContain(
+      "Load a case awaiting independent appeal review before deciding.",
+    );
+  });
 });

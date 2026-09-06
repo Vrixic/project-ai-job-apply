@@ -10,7 +10,9 @@ const requiredKeys = [
 ] as const;
 
 type Environment = Record<string, string | undefined>;
+export type AdminAuthorizationProfile = "standard" | "appeals";
 let auth0Client: Auth0Client | undefined;
+let auth0ClientProfile: AdminAuthorizationProfile | undefined;
 
 const canonicalDnsHostname =
   /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/u;
@@ -19,11 +21,23 @@ const canonicalIpv6Address = /^\[[0-9a-f:.]+\]$/u;
 
 export const requestedAuthScopes =
   "openid profile jobs:moderate trust:review trust:case:open trust:case:decide trust:case:takedown trust:appeal:resolve";
+export const appealAuthScopes = "openid profile trust:review trust:appeal:resolve";
 export const adminMfaAcr = "http://schemas.openid.net/pape/policies/2007/06/multi-factor";
 export const adminReauthenticationSeconds = 15 * 60;
 export const adminAbsoluteSessionSeconds = 60 * 60;
 
+/** Server configuration narrows the requested scopes and UI; it never assigns reviewer roles. */
+export function getAdminAuthorizationProfile(
+  environment: Environment = process.env,
+): AdminAuthorizationProfile {
+  const profile = environment.ADMIN_AUTHORIZATION_PROFILE;
+  if (profile === undefined || profile === "standard") return "standard";
+  if (profile === "appeals") return "appeals";
+  throw new Error("ADMIN_AUTHORIZATION_PROFILE must be standard or appeals");
+}
+
 export function isAuth0Configured(environment: Environment = process.env): boolean {
+  getAdminAuthorizationProfile(environment);
   return requiredKeys.every((key) => Boolean(environment[key]?.trim()));
 }
 
@@ -95,7 +109,9 @@ export function requireAdminMfa<T extends { user: Record<string, unknown> }>(ses
 }
 
 export function getAuth0Client(environment: Environment = process.env): Auth0Client {
-  if (environment === process.env && auth0Client) return auth0Client;
+  const authorizationProfile = getAdminAuthorizationProfile(environment);
+  if (environment === process.env && auth0Client && auth0ClientProfile === authorizationProfile)
+    return auth0Client;
   if (!isAuth0Configured(environment)) throw new Error("Admin Auth0 is not configured");
   const domain = validateAuth0Domain(environment.AUTH0_DOMAIN as string);
   const secret = environment.AUTH0_SECRET as string;
@@ -109,7 +125,7 @@ export function getAuth0Client(environment: Environment = process.env): Auth0Cli
     appBaseUrl,
     authorizationParameters: {
       audience: environment.AUTH0_AUDIENCE?.trim() || "ai-job-apply-api",
-      scope: requestedAuthScopes,
+      scope: authorizationProfile === "appeals" ? appealAuthScopes : requestedAuthScopes,
       acr_values: adminMfaAcr,
       max_age: adminReauthenticationSeconds,
     },
@@ -128,6 +144,9 @@ export function getAuth0Client(environment: Environment = process.env): Auth0Cli
     },
     signInReturnToPath: "/",
   });
-  if (environment === process.env) auth0Client = client;
+  if (environment === process.env) {
+    auth0Client = client;
+    auth0ClientProfile = authorizationProfile;
+  }
   return client;
 }

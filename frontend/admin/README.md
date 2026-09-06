@@ -8,10 +8,11 @@ privacy, and emergency-control surfaces are not implemented or authorized by thi
 ## Implemented Phase 1 moderation slice
 
 - `app/` — A responsive, non-indexable moderation console plus narrow same-origin BFF routes.
-- `lib/auth0.ts` — A dedicated server-held Auth0 session requesting `jobs:moderate` and the explicit
-  D2 review/open/decide/takedown/appeal scopes listed below, requiring an MFA `amr`, reauthentication
-  after 15 minutes, and a one-hour absolute session. It requests neither offline access nor the
-  separate verified-requester takedown scope. Requested scopes do not assign reviewer roles.
+- `lib/auth0.ts` — A dedicated server-held Auth0 session with an explicit server-only authorization
+  profile. The default `standard` profile preserves the moderator/reviewer scope request; `appeals`
+  requests only `openid profile trust:review trust:appeal:resolve`. Both require an MFA `amr`,
+  reauthentication after 15 minutes, and a one-hour absolute session. Neither requests offline
+  access or the separate verified-requester takedown scope. Requested scopes do not assign roles.
 - `lib/moderation-bff.ts` — Bounded strict request/response validation, token isolation, redirect
   refusal, fixed problem projection, and operator-identity refusal.
 - `lib/moderation-bff.test.ts` — Scope/session, strict-input, routing, redaction, and fail-closed
@@ -34,36 +35,58 @@ not implemented or authorized by this slice.
   digest without manual identifier copying. Missing or version-mismatched readable evidence keeps
   initial decisions disabled; stale responses cannot replace a newer selection. Takedown and appeal
   actions still require separately approved evidence and their exact reviewer authority.
-- Ordinary reviewer sessions request review/open/decide/takedown/appeal scopes but never the
-  separately privileged verified-requester takedown scope.
+- The `standard` profile requests review/open/decide/takedown/appeal scopes but never the separately
+  privileged verified-requester takedown scope. The `appeals` profile hides D1 moderation, case
+  opening, initial decisions, and takedown controls; it uses only the `appeal_pending` queue and
+  evidence-bound uphold/reverse actions. The server remains the authority for every operation.
 - Controls use native labels, explicit destructive confirmation, keyboard focus on failures, and an
   `aria-live` result region. The same-origin BFF strictly validates bounded requests and redacted
   responses and emits `no-store` fixed problem details.
-- The Gateway and Terraform D2 route inventories are wired. The completed 2026-09-05 backend
-  release, now at state `283`, deploys application source `3f20462` on Gateway version `51` with 18 JWT-protected D2
-  routes and the anonymous policy endpoint. The new queue/evidence handlers are deployed after
-  migration and worker upgrade/drain; direct boundary and zero Terraform drift checks pass.
+- The Gateway and Terraform D2 route inventories are wired. The 2026-09-06 reviewer-binding update
+  reached development state `284`, with Gateway/scheduled/Trust versions `52`/`14`/`11`, preserving
+  application artifacts from `3f20462`, 18 JWT-protected D2 routes, and the anonymous policy endpoint.
+  Before/after access probes, immutable artifact/environment checks, and zero Terraform drift pass.
+  The existing workflow case opener is unchanged; a separate delegated M2M identity can read and
+  make initial/takedown decisions under the recorded development assignment. Invalid-input probes
+  are not completed case decisions or publication evidence.
 - This source and its protected preview do not establish human reviewer assignments, authenticated
   admin Auth0 acceptance, accountable policy/timing approval, verified-requester authority, or
-  human accessibility acceptance. Development assigns only the dedicated workflow case opener.
+  human accessibility acceptance. Human appeal binding and MFA login remain unconfigured; the
+  locally implemented appeal-only profile does not activate either.
 
 ## Local managed OIDC configuration
 
 Create a dedicated Auth0 Regular Web Application with callback
-`http://localhost:3001/auth/callback` and MFA required for every assigned synthetic moderator. The
-console requests `jobs:moderate`, `trust:review`, `trust:case:open`, `trust:case:decide`,
-`trust:case:takedown`, and `trust:appeal:resolve`; grant only the explicitly approved scope/role
-combination for each reviewer. Initial/takedown and appeal reviewer assignments remain separate,
-and the gateway independently enforces exact managed identities and roles. Do not enable
-refresh-token grants, assign the verified-requester scope, or reuse candidate-web credentials.
-From the repository root, write the ignored local environment file with:
+`http://localhost:3001/auth/callback`, logout/web origin `http://localhost:3001`, and MFA required for
+the assigned human reviewer. Select the server-only `ADMIN_AUTHORIZATION_PROFILE` in its local or
+hosted environment:
+
+| Profile | Requested OAuth scopes | Presented controls |
+|---|---|---|
+| `standard` or unset | `openid profile jobs:moderate trust:review trust:case:open trust:case:decide trust:case:takedown trust:appeal:resolve` | Existing moderation and Trust review surface |
+| `appeals` | `openid profile trust:review trust:appeal:resolve` | Independent appeal queue, case/evidence reads, uphold/reverse |
+
+Any other value, including an empty string or whitespace, fails closed. A cached standard client
+is not reused after selection changes to appeals. Restart and sign out/sign in when configuring a
+different profile; this setting does not revoke an existing provider token or change its grants.
+Only the exact approved scope/role combination may be granted. The human appeal identity requires
+`case_reader` and `appeal_reviewer`, separate from the initial/takedown identity, with the Gateway
+independently checking both managed identity and scopes. Do not enable refresh-token grants,
+assign verified-requester authority, or reuse candidate-web or M2M credentials. The sole assignment
+and rationale record is the [Phase 2 reviewer section](../../docs/product/delivery/phase-2-extension-and-community.md#delegated-reviewer-assignment).
+
+From the repository root, prepare the appeal profile with the local helper (supply the exact tenant,
+dedicated admin client, and development API when prompted/configured):
 
 ```powershell
-.\scripts\configure-auth0-admin-local.ps1 -Auth0Domain "YOUR_TENANT.us.auth0.com" -ClientId "YOUR_DEDICATED_MODERATION_CLIENT_ID" -PlatformApiBaseUrl "https://YOUR_API_ID.execute-api.us-east-2.amazonaws.com"
+.\scripts\configure-auth0-admin-local.ps1 -AuthorizationProfile appeals
 ```
 
-The command prompts securely for the dedicated client secret and does not print it. The complete
-tenant setup and acceptance procedure is in `../../docs/security/auth0-development-runbook.md`.
+The helper defaults the API target to local `http://localhost:4000`; pass `-PlatformApiBaseUrl` with
+the exact development API origin when testing against AWS. It prompts securely for the dedicated
+client secret, generates a fresh session secret, and refuses an existing file unless replacement
+is explicitly selected. No credentials or human subjects belong in these instructions. The Auth0
+development runbook's historical D1 moderation scopes do not replace the narrower D2 profile.
 
 This slice supports fixed-code aggregate report review, open/resolved case queues, explicit job
 blocking, exact-source pausing, and no-action resolution. Candidate reports never automatically
@@ -78,8 +101,9 @@ The 2026-09-05 preview built from source `116b272` is `READY`:
 [protected admin preview](https://ai-job-apply-admin-6ewxee4ci-applydash2026-5637.vercel.app).
 Its unauthenticated root returns a Vercel SSO protection redirect (`302`, `no-store`), not the admin
 application or proof of an Auth0 reviewer session. No human reviewer roles or hosted admin Auth0
-acceptance are established. The preview includes the new review UI, unchanged in the completed
-`3f20462` backend release; the matching queue/evidence handlers are now deployed. Consult the
+acceptance are established. This preview predates the local appeal-only profile; it includes the
+earlier review UI while the matching queue/evidence handlers are deployed in AWS. A fresh protected
+admin deployment and exact-host Auth0 configuration are still required for hosted appeal acceptance. Consult the
 [Phase 2 register](../../docs/product/delivery/phase-2-extension-and-community.md) before attempting
 the authenticated end-to-end review journey.
 

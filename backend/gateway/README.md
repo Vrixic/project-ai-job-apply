@@ -20,8 +20,9 @@ and independently gated Terraform routes. Repository defaults remain dark; the c
 Greenhouse-only development exception is recorded in the
 [Phase 2 register](../../docs/product/delivery/phase-2-extension-and-community.md).
 
-The ordered development release completed on 2026-09-05; current state `283` runs application source `3f20462`
-on immutable Gateway/scheduled/Trust versions `51`/`13`/`11`. All three are healthy; direct Gateway
+The ordered development release completed on 2026-09-05. Reviewer-only configuration `b703e56` on
+2026-09-06 advances current state to `284`, retaining application source `3f20462` on immutable
+Gateway/scheduled/Trust versions `52`/`14`/`11`. All three are healthy; direct Gateway
 boundary checks and zero Terraform drift pass. The 18 exact JWT-protected D2 routes include the
 deployed owner cancellation and reviewer queue/evidence handlers, alongside the anonymous
 signed-policy route. Migration image `116b272` completed once with exit `0` and seven exact
@@ -51,9 +52,10 @@ comes only from the managed principal. Reviewer identity and role come from exac
 assignments plus route-specific scopes; ordinary admin sessions do not receive the separate
 verified-requester takedown scope. Responses are redacted and `no-store`. Case opening is
 deterministic and retry-safe, and Trust has no direct Jobs mutation. Missing assignments, policy,
-evidence, or dependencies fail closed. Only the dedicated workflow `case_opener` is assigned in
-development; no human decision authority or authenticated admin acceptance is implied by route
-deployment. The bounded queue and Jobs-owned sanitized evidence projection are implemented,
+evidence, or dependencies fail closed. Development retains the workflow `case_opener` and now binds
+a distinct delegated agent for `case_reader`, `initial_reviewer`, and `takedown_reviewer`. Eight
+pre-deployment and ten post-deployment access/contract checks pass, with no valid case decision.
+Human appeal assignment and MFA admin acceptance remain pending. The bounded queue and Jobs-owned sanitized evidence projection are implemented,
 locally verified, and deployed in the release described above. Initial review binds the
 current case version to the exact independent-verification digest; takedown and appeal evidence
 retain their separate approval boundary.

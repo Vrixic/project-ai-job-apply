@@ -21,13 +21,15 @@ async function requestTrust<T = ReviewerTrustCase>(url: string, init: RequestIni
   return (await response.json()) as T;
 }
 
-export function TrustConsole() {
+export function TrustConsole({ appealOnly = false }: { appealOnly?: boolean }) {
   const [trustCase, setTrustCase] = useState<ReviewerTrustCase>();
   const [reviewEvidence, setReviewEvidence] = useState<ReviewerTrustEvidence>();
   const [cases, setCases] = useState<ReviewerTrustCase[]>([]);
   const [nextCursor, setNextCursor] = useState<string>();
-  const [queueState, setQueueState] = useState<"needs_review" | "appeal_pending">("needs_review");
-  const [action, setAction] = useState("accept");
+  const [queueState, setQueueState] = useState<"needs_review" | "appeal_pending">(
+    appealOnly ? "appeal_pending" : "needs_review",
+  );
+  const [action, setAction] = useState(appealOnly ? "uphold" : "accept");
   const [message, setMessage] = useState("Load the review queue to choose a case.");
   const [busy, setBusy] = useState(false);
   const [confirmTakedown, setConfirmTakedown] = useState(false);
@@ -42,7 +44,7 @@ export function TrustConsole() {
     setMessage("Loading review queue…");
     try {
       const query = new URLSearchParams({
-        state: queueState,
+        state: appealOnly ? "appeal_pending" : queueState,
         pageSize: "25",
         ...(cursor ? { cursor } : {}),
       });
@@ -120,27 +122,40 @@ export function TrustConsole() {
     <section aria-labelledby="trust-console-heading" className="console">
       <div>
         <p className="eyebrow">Phase 2 restricted surface</p>
-        <h2 id="trust-console-heading">Contribution Trust review</h2>
+        <h2 id="trust-console-heading">
+          {appealOnly ? "Independent appeal review" : "Contribution Trust review"}
+        </h2>
         <p>
           Review the independently verified public job content before deciding. Decisions bind the
           loaded case version and exact evidence digest. Contributor and reviewer identities are
           never shown.
         </p>
+        {appealOnly ? (
+          <p>
+            This profile requests appeal access only. The server still verifies your exact identity,
+            reviewer role, and independence from the adverse decision. A profile is not a permission
+            grant.
+          </p>
+        ) : null}
       </div>
 
       <section aria-label="Trust review queue">
         <label htmlFor="trust-queue-state">Review queue</label>
         <select
           id="trust-queue-state"
-          value={queueState}
+          value={appealOnly ? "appeal_pending" : queueState}
           disabled={busy}
           onChange={(event) => {
-            setQueueState(event.target.value as "needs_review" | "appeal_pending");
+            setQueueState(
+              appealOnly
+                ? "appeal_pending"
+                : (event.target.value as "needs_review" | "appeal_pending"),
+            );
             setCases([]);
             setNextCursor(undefined);
           }}
         >
-          <option value="needs_review">Awaiting initial review</option>
+          {!appealOnly ? <option value="needs_review">Awaiting initial review</option> : null}
           <option value="appeal_pending">Awaiting independent appeal review</option>
         </select>
         <button type="button" disabled={busy} onClick={() => void loadCases()}>
@@ -205,40 +220,42 @@ export function TrustConsole() {
         </button>
       </form>
 
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          const contributionId = String(
-            new FormData(event.currentTarget).get("contributionId") ?? "",
-          );
-          if (!UUID_V7.test(contributionId)) {
-            setMessage("Enter a lowercase UUIDv7 contribution identifier.");
-            focusControl(event.currentTarget, "contributionId");
-            return;
-          }
-          void run(
-            () =>
-              requestTrust("/api/trust/cases", {
-                method: "POST",
-                body: JSON.stringify({ contributionId }),
-              }),
-            "Opening Trust case…",
-          );
-        }}
-      >
-        <label htmlFor="trust-contribution-id">Eligible contribution UUIDv7</label>
-        <input
-          id="trust-contribution-id"
-          name="contributionId"
-          required
-          pattern="[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
-          autoComplete="off"
-          spellCheck={false}
-        />
-        <button type="submit" disabled={busy}>
-          Open review case
-        </button>
-      </form>
+      {!appealOnly ? (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            const contributionId = String(
+              new FormData(event.currentTarget).get("contributionId") ?? "",
+            );
+            if (!UUID_V7.test(contributionId)) {
+              setMessage("Enter a lowercase UUIDv7 contribution identifier.");
+              focusControl(event.currentTarget, "contributionId");
+              return;
+            }
+            void run(
+              () =>
+                requestTrust("/api/trust/cases", {
+                  method: "POST",
+                  body: JSON.stringify({ contributionId }),
+                }),
+              "Opening Trust case…",
+            );
+          }}
+        >
+          <label htmlFor="trust-contribution-id">Eligible contribution UUIDv7</label>
+          <input
+            id="trust-contribution-id"
+            name="contributionId"
+            required
+            pattern="[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <button type="submit" disabled={busy}>
+            Open review case
+          </button>
+        </form>
+      ) : null}
 
       {trustCase ? (
         <section aria-label="Current Trust case">
@@ -343,6 +360,14 @@ export function TrustConsole() {
           const form = new FormData(event.currentTarget);
           const id = caseId(form);
           const action = String(form.get("action"));
+          if (appealOnly && action !== "uphold" && action !== "reverse") {
+            setMessage("This profile supports appeal decisions only.");
+            return;
+          }
+          if (appealOnly && trustCase?.state !== "appeal_pending") {
+            setMessage("Load a case awaiting independent appeal review before deciding.");
+            return;
+          }
           const expectedVersion = Number(form.get("expectedVersion"));
           const evidenceDigestSha256 =
             action === "accept" || action === "reject"
@@ -438,7 +463,9 @@ export function TrustConsole() {
           readOnly
         />
         <label htmlFor="trust-evidence-digest">
-          Separately approved takedown or appeal evidence SHA-256
+          {appealOnly
+            ? "Separately approved appeal evidence SHA-256"
+            : "Separately approved takedown or appeal evidence SHA-256"}
         </label>
         <input
           id="trust-evidence-digest"
@@ -461,25 +488,34 @@ export function TrustConsole() {
             setConfirmTakedown(false);
           }}
         >
-          <option value="accept">Accept independently verified</option>
-          <option value="reject">Reject: insufficient evidence</option>
-          <option value="takedown">Take down: rights or policy violation</option>
+          {!appealOnly ? (
+            <>
+              <option value="accept">Accept independently verified</option>
+              <option value="reject">Reject: insufficient evidence</option>
+              <option value="takedown">Take down: rights or policy violation</option>
+            </>
+          ) : null}
           <option value="uphold">Uphold appeal</option>
           <option value="reverse">Reverse appeal</option>
         </select>
-        <label>
-          <input
-            type="checkbox"
-            checked={confirmTakedown}
-            onChange={(event) => setConfirmTakedown(event.target.checked)}
-          />
-          Confirm takedown (required only for the takedown action)
-        </label>
+        {!appealOnly ? (
+          <label>
+            <input
+              type="checkbox"
+              checked={confirmTakedown}
+              onChange={(event) => setConfirmTakedown(event.target.checked)}
+            />
+            Confirm takedown (required only for the takedown action)
+          </label>
+        ) : null}
         <button
           type="submit"
           className="danger"
           disabled={
-            busy || !trustCase || ((action === "accept" || action === "reject") && !reviewEvidence)
+            busy ||
+            !trustCase ||
+            (appealOnly && trustCase.state !== "appeal_pending") ||
+            ((action === "accept" || action === "reject") && !reviewEvidence)
           }
         >
           Record version-fenced decision
