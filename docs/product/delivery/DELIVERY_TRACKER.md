@@ -405,6 +405,19 @@ This is the master record for the delivery phases defined in the [product and sy
   eight assets, narrow SDK request, anonymous queue denial, disabled token endpoint, and sanitized
   missing-state callback pass. Human sign-in/MFA, exact identity/granted scopes, appeal-role binding,
   and hosted acceptance remain open under D2-030/D2-R12. No cloud, case, or policy change occurred.
+- Local appeal window expiry (2026-09-06): the supervisor stopped the console at
+  `19:24:54.689Z` with `window_expired`; read-only inspection at `20:41:14Z` confirms no runtime
+  processes or port-3001 listener. This explains localhost connection refusal, not a new Auth0
+  configuration failure. A fresh local sign-in window is required. The contribution policy also
+  expired at its recorded deadline and must be renewed separately, if authorized. No restart,
+  credential decryption, permission, cloud, or case change occurred; D2-R11/D2-R12 remain open.
+- Local appeal restart (2026-09-06): the user approved only a two-hour local sign-in window,
+  fixed at `20:55:31Z`–`22:55:31Z`. The server restarted at `20:58:31.024Z` on loopback;
+  page/eight assets, exact SDK authorization request, and all four anonymous-boundary probes pass.
+  Independent source review and the explicit-local-mode guard pass. Original encrypted setup,
+  original runtime status, and both client environment files remain unchanged. No contribution
+  policy, AWS permission, role, or case changed. Human sign-in/MFA and exact identity/granted scopes
+  remain open; the expired contribution policy requires separate authorization under D2-R11.
 - Depends on: D0 consent/security foundations and D1 catalog, saved-job, and moderation foundations;
   the public-contribution API is D2-owned work
 - Task document: [Phase 2 tasks](phase-2-extension-and-community.md)
