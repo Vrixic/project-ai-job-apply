@@ -101,9 +101,16 @@ export function validateAppBaseUrl(value: string): string {
   return value;
 }
 
+export class AdminMfaRequiredError extends Error {
+  constructor() {
+    super("Admin authentication did not prove MFA");
+    this.name = "AdminMfaRequiredError";
+  }
+}
+
 export function requireAdminMfa<T extends { user: Record<string, unknown> }>(session: T): T {
   if (!Array.isArray(session.user.amr) || !session.user.amr.includes("mfa")) {
-    throw new Error("Admin authentication did not prove MFA");
+    throw new AdminMfaRequiredError();
   }
   return session;
 }

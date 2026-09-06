@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  AdminMfaRequiredError,
   adminAbsoluteSessionSeconds,
   adminMfaAcr,
   adminReauthenticationSeconds,
@@ -45,11 +46,26 @@ describe("admin Auth0 policy constants", () => {
   });
 
   it("fails closed unless the identity-provider session proves MFA", () => {
+    expect(() => requireAdminMfa({ user: {} })).toThrow(AdminMfaRequiredError);
     expect(() => requireAdminMfa({ user: {} })).toThrow("did not prove MFA");
     expect(() => requireAdminMfa({ user: { amr: ["pwd"] } })).toThrow("did not prove MFA");
     const session = { user: { amr: ["pwd", "mfa"] } };
     expect(requireAdminMfa(session)).toBe(session);
   });
+
+  it.each([undefined, null, "mfa", [], ["pwd"], ["MFA"]])(
+    "returns only a fixed typed failure for missing or invalid MFA proof %j",
+    (amr) => {
+      try {
+        requireAdminMfa({ user: { amr, sub: "synthetic-private-subject" } });
+        expect.fail("Missing MFA must not create an admin session");
+      } catch (error) {
+        expect(error).toBeInstanceOf(AdminMfaRequiredError);
+        expect((error as Error).message).toBe("Admin authentication did not prove MFA");
+        expect(String(error)).not.toContain("synthetic-private-subject");
+      }
+    },
+  );
 
   it("accepts a complete localhost configuration", () => {
     expect(isAuth0Configured(configuredEnvironment)).toBe(true);

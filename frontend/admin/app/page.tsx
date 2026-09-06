@@ -28,7 +28,13 @@ export default async function AdminPage({
         </div>
       ) : !session ? (
         <div className="notice">
-          {parameters.auth_error === "authentication_failed" ? (
+          {parameters.auth_error === "mfa_required" ? (
+            <p role="alert">
+              Sign-in did not provide the required multi-factor authentication (MFA) proof. Sign in
+              again and complete MFA. If no MFA prompt appears, ask the identity administrator to
+              enable MFA for this application.
+            </p>
+          ) : parameters.auth_error === "authentication_failed" ? (
             <p role="alert">
               Authentication failed. Try again or contact the identity administrator.
             </p>

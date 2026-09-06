@@ -25,8 +25,8 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-async function markup() {
-  return renderToStaticMarkup(await AdminPage({ searchParams: Promise.resolve({}) }));
+async function markup(parameters: { auth_error?: string | string[] } = {}) {
+  return renderToStaticMarkup(await AdminPage({ searchParams: Promise.resolve(parameters) }));
 }
 
 describe("server-selected admin authorization profile", () => {
@@ -68,5 +68,69 @@ describe("server-selected admin authorization profile", () => {
       "ADMIN_AUTHORIZATION_PROFILE must be standard or appeals",
     );
     expect(getSession).not.toHaveBeenCalled();
+  });
+});
+
+describe.each(["standard", "appeals"])("%s unauthenticated admin errors", (profile) => {
+  beforeEach(() => {
+    vi.stubEnv("ADMIN_AUTHORIZATION_PROFILE", profile);
+    getSession.mockResolvedValue(null);
+  });
+
+  it("explains missing MFA proof accessibly without granting a privileged session", async () => {
+    const html = await markup({ auth_error: "mfa_required" });
+    expect(html).toContain('role="alert"');
+    expect(html).toContain("required multi-factor authentication (MFA) proof");
+    expect(html).toContain("in again and complete MFA.");
+    expect(html).toContain("to enable MFA for this application.");
+    expect(html).toContain('href="/auth/login"');
+    expect(html).toContain(
+      profile === "appeals" ? "Sign in as appeal reviewer" : "Sign in as moderator",
+    );
+    expect(html).not.toContain("Authentication failed.");
+    expect(html).not.toContain("Privileged session active");
+    expect(html).not.toContain("Open review case");
+    expect(html).not.toContain("Accept independently verified");
+    expect(html).not.toContain("Take down: rights or policy violation");
+    expect(html).not.toContain("Uphold appeal");
+    expect(html).not.toContain("Reverse appeal");
+  });
+
+  it("preserves the fixed generic authentication failure", async () => {
+    const html = await markup({ auth_error: "authentication_failed" });
+    expect(html).toContain('role="alert"');
+    expect(html).toContain(
+      "Authentication failed. Try again or contact the identity administrator.",
+    );
+    expect(html).not.toContain("required multi-factor authentication (MFA) proof");
+    expect(html).not.toContain("Privileged session active");
+  });
+
+  it.each([
+    { auth_error: "untrusted-auth-error-<script>" },
+    { auth_error: "mfa_required?untrusted-auth-error" },
+    { auth_error: ["mfa_required"] },
+    { auth_error: ["authentication_failed", "untrusted-auth-error"] },
+  ])("does not render arbitrary or array-valued auth errors: %j", async (parameters) => {
+    const html = await markup(parameters);
+    expect(html).not.toContain('role="alert"');
+    expect(html).not.toContain("untrusted-auth-error");
+    expect(html).not.toContain("Privileged session active");
+  });
+
+  it("does not show a query error when identity is unconfigured", async () => {
+    configured.mockReturnValue(false);
+    const html = await markup({ auth_error: "mfa_required" });
+    expect(html).toContain("Configure the dedicated admin Auth0 client");
+    expect(html).not.toContain('role="alert"');
+    expect(html).not.toContain('href="/auth/login"');
+    expect(getSession).not.toHaveBeenCalled();
+  });
+
+  it("does not let a query error replace an existing session", async () => {
+    getSession.mockResolvedValue({ user: { amr: ["mfa"] } });
+    const html = await markup({ auth_error: "mfa_required" });
+    expect(html).toContain("Privileged session active");
+    expect(html).not.toContain("required multi-factor authentication (MFA) proof");
   });
 });

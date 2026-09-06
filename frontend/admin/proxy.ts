@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { getAuth0Client, isAuth0Configured } from "./lib/auth0";
+import {
+  AdminMfaRequiredError,
+  getAuth0Client,
+  isAuth0Configured,
+  validateAppBaseUrl,
+} from "./lib/auth0";
 
 export async function proxy(request: Request) {
   if (!isAuth0Configured()) {
@@ -16,7 +21,21 @@ export async function proxy(request: Request) {
     }
     return NextResponse.next();
   }
-  return getAuth0Client().middleware(request);
+  try {
+    // The SDK runs beforeSessionSaved after onCallback. Await here so a rejected
+    // MFA check cannot escape as a generic server error or persist a session.
+    return await getAuth0Client().middleware(request);
+  } catch (error) {
+    if (new URL(request.url).pathname === "/auth/callback") {
+      const target = new URL("/", validateAppBaseUrl(process.env.APP_BASE_URL as string));
+      target.searchParams.set(
+        "auth_error",
+        error instanceof AdminMfaRequiredError ? "mfa_required" : "authentication_failed",
+      );
+      return NextResponse.redirect(target, { headers: { "cache-control": "no-store" } });
+    }
+    throw error;
+  }
 }
 
 export const config = {
