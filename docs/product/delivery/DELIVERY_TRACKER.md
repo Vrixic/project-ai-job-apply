@@ -379,6 +379,12 @@ This is the master record for the delivery phases defined in the [product and sy
   unit run. This source is not configured with the owner's admin credentials or deployed to the
   protected preview. Human identity/client, exact role binding, and fresh-MFA acceptance remain
   open; the single decision/rationale record stays in the Phase 2 document.
+- Appeal-client selection check (2026-09-06): the supplied Client ID exactly matches the configured
+  candidate website application, so it was not accepted as the separate admin client. The existing
+  helper rejects reuse before prompting for a secret. No local environment, credential, grant,
+  token, deployment, or case changed. D2-030 now needs a different dedicated Regular Web Application
+  Client ID, followed by secure human identity/secret setup and MFA acceptance; see D2-R12 in the
+  [Phase 2 reviewer record](phase-2-extension-and-community.md#delegated-reviewer-assignment).
 - Depends on: D0 consent/security foundations and D1 catalog, saved-job, and moderation foundations;
   the public-contribution API is D2-owned work
 - Task document: [Phase 2 tasks](phase-2-extension-and-community.md)
