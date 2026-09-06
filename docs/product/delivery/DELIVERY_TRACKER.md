@@ -351,6 +351,12 @@ This is the master record for the delivery phases defined in the [product and sy
   payload, or account-held browser item was changed by that correction.
   The remaining human identity, browser, workload, accessibility, alarm receipt, provider/store,
   and accountable acceptance gates are listed in the phase document; Phase 2 is not fully accepted.
+- Reviewer-selection follow-up (2026-09-06): the product owner delegates initial/takedown review
+  to Codex and retains appeals through a distinct human identity. Selection is resolved; exact
+  managed-identity bindings, least-privilege grants, secure credentials, cross-role verification,
+  and deployed decision acceptance remain pending. No reviewer permission or case changed.
+  The sole assignment/rationale record is in the
+  [Phase 2 reviewer section](phase-2-extension-and-community.md#delegated-reviewer-assignment).
 - Depends on: D0 consent/security foundations and D1 catalog, saved-job, and moderation foundations;
   the public-contribution API is D2-owned work
 - Task document: [Phase 2 tasks](phase-2-extension-and-community.md)
