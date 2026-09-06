@@ -418,6 +418,15 @@ This is the master record for the delivery phases defined in the [product and sy
   original runtime status, and both client environment files remain unchanged. No contribution
   policy, AWS permission, role, or case changed. Human sign-in/MFA and exact identity/granted scopes
   remain open; the expired contribution policy requires separate authorization under D2-R11.
+- Admin callback error follow-up (2026-09-06): the reported server error exposed an installed-SDK
+  error-handling path reproduced with generated fixtures, not a confirmed diagnosis of the user's
+  MFA state. Source `ecfb607` preserves MFA rejection and returns only fixed uncached callback
+  errors with accessible guidance. All 71 admin tests/eight files, independent review, and the
+  full verifier pass (33 typecheck, 34 unit-test, 20 build tasks; 30 database-gated skips).
+  The rebuilt local console restarted at `21:12:59.290Z`; page/eight assets and five anonymous/error/
+  SDK probes pass. The local deadline remains `22:55:31Z`, original encrypted/environment files
+  are unchanged, and no AWS, role, policy, case, or hosted deployment changed. D2-031 is locally
+  implemented; actual human sign-in/MFA and separate binding remain open under D2-030/D2-R12.
 - Depends on: D0 consent/security foundations and D1 catalog, saved-job, and moderation foundations;
   the public-contribution API is D2-owned work
 - Task document: [Phase 2 tasks](phase-2-extension-and-community.md)

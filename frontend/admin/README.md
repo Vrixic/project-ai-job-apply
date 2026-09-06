@@ -13,6 +13,10 @@ privacy, and emergency-control surfaces are not implemented or authorized by thi
   requests only `openid profile trust:review trust:appeal:resolve`. Both require an MFA `amr`,
   reauthentication after 15 minutes, and a one-hour absolute session. Neither requests offline
   access or the separate verified-requester takedown scope. Requested scopes do not assign roles.
+- `proxy.ts` — Awaits the SDK callback/session checks and turns rejected callbacks into fixed,
+  uncached errors at the configured application origin. Missing MFA still refuses session
+  persistence; the login page explains the required proof without exposing provider errors,
+  callback parameters, or claims. Other request failures remain fail-closed.
 - `lib/moderation-bff.ts` — Bounded strict request/response validation, token isolation, redirect
   refusal, fixed problem projection, and operator-identity refusal.
 - `lib/moderation-bff.test.ts` — Scope/session, strict-input, routing, redaction, and fail-closed
