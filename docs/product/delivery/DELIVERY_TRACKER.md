@@ -357,6 +357,10 @@ This is the master record for the delivery phases defined in the [product and sy
   and deployed decision acceptance remain pending. No reviewer permission or case changed.
   The sole assignment/rationale record is in the
   [Phase 2 reviewer section](phase-2-extension-and-community.md#delegated-reviewer-assignment).
+- Reviewer-credential follow-up (2026-09-06): the dedicated agent Client ID is received and
+  distinct from the retained workflow identity. D2-030 is in progress with masked, Windows-user
+  encrypted local setup prepared; actual token/scopes, human appeal binding, and role deployment
+  remain unverified. No live permissions or case decisions changed.
 - Depends on: D0 consent/security foundations and D1 catalog, saved-job, and moderation foundations;
   the public-contribution API is D2-owned work
 - Task document: [Phase 2 tasks](phase-2-extension-and-community.md)
