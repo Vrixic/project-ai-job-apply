@@ -358,9 +358,13 @@ This is the master record for the delivery phases defined in the [product and sy
   The sole assignment/rationale record is in the
   [Phase 2 reviewer section](phase-2-extension-and-community.md#delegated-reviewer-assignment).
 - Reviewer-credential follow-up (2026-09-06): the dedicated agent Client ID is received and
-  distinct from the retained workflow identity. D2-030 is in progress with masked, Windows-user
-  encrypted local setup prepared; actual token/scopes, human appeal binding, and role deployment
-  remain unverified. No live permissions or case decisions changed.
+  distinct from the retained workflow identity. The Windows-user encrypted setup is captured,
+  and its RS256 token verifies the exact issuer/audience/subject/client and three intended scopes
+  with no extras. The explicit M2M/human role matrix passes all 12 authority tests and Gateway
+  typecheck. Offline proposed configuration preserves the opener and fits existing Lambda limits.
+  AWS SSO is expired, preventing the reviewed role deployment and live permission checks; the
+  optional human appeal identity was not supplied and fresh-MFA acceptance remains open. D2-030
+  remains in progress. No live permissions, policy, case, or catalog record changed.
 - Depends on: D0 consent/security foundations and D1 catalog, saved-job, and moderation foundations;
   the public-contribution API is D2-owned work
 - Task document: [Phase 2 tasks](phase-2-extension-and-community.md)
