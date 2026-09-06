@@ -398,6 +398,13 @@ This is the master record for the delivery phases defined in the [product and sy
   in the [Phase 2 reviewer record](phase-2-extension-and-community.md#delegated-reviewer-assignment).
   No credential or human subject was sent, and no token exchange, human login/MFA verification,
   local environment overwrite, deployment, role, policy, or case change occurred.
+- Human appeal login preparation (2026-09-06): after the user's Auth0 settings update, public
+  authorization redirects to login with no callback mismatch. The existing verified production
+  admin build is running loopback-only with process-held appeal configuration, no environment-file
+  overwrite, discarded raw logs, and automatic stop at `2026-09-06T19:24:54.670Z`. The appeal page,
+  eight assets, narrow SDK request, anonymous queue denial, disabled token endpoint, and sanitized
+  missing-state callback pass. Human sign-in/MFA, exact identity/granted scopes, appeal-role binding,
+  and hosted acceptance remain open under D2-030/D2-R12. No cloud, case, or policy change occurred.
 - Depends on: D0 consent/security foundations and D1 catalog, saved-job, and moderation foundations;
   the public-contribution API is D2-owned work
 - Task document: [Phase 2 tasks](phase-2-extension-and-community.md)
