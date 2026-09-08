@@ -329,6 +329,9 @@ This is the master record for the delivery phases defined in the [product and sy
   42 migrations/68 relations, while the live environment remains on 41 migrations and Greenhouse
   alone. Follow-up posting-ID, optional-field/location, and full-description fixes pass 284 ingestion
   and 237 extension tests plus the generated actual-DOM matrix in both Edge and Chrome for Testing.
+  Integrated commits `54002a7` and `df9ac1d` pass the full repository verifier at `df9ac1d`
+  (33 typecheck, 34 test, and 20 build tasks); the rebuilt development extension retains unchanged
+  ignored provider settings. All agent changes are integrated on `main`, with no new branches.
   Representative provider-derived fixtures, release, and activation remain. Live
   delegated review is awaiting authorization to reuse its retained encrypted credential after the
   original setup-use window expired (D2-R14). Server roles and persistent development contribution

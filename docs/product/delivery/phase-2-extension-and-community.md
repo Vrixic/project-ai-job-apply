@@ -205,6 +205,14 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
   before success is emitted. Independent source review accepts the helpers/adapters/detector and
   harness after the HTML-only fallback fix; the verifier has a separate root review. No real
   provider fixture, authentication, migration deployment, or publication is implied.
+- Integrated on shared `main` as `54002a7` (provider configuration/lease migration) and `df9ac1d`
+  (paired extraction/verification fixes). The full `scripts/verify-phase0.ps1` run at `df9ac1d`
+  completes successfully: source-bound operator guards, formatting/lint, all 33 typecheck tasks,
+  dependency-security regressions, all 34 test tasks, all 20 builds, Compose configuration, and
+  product-scope checks. Existing nonfatal lint warnings remain. Database-gated skips in ordinary
+  unit tasks are not counted as integration acceptance; the separate fresh Jobs run passed 77/77.
+  The configured unpacked extension is rebuilt without changing its ignored provider settings.
+  No additional agent branches or worktrees were created; the user-owned stash is preserved.
 - Keep both providers disabled until their representative fixture and exact registration acceptance
   passes. The previously waived blanket provider legal approval is not being requested again.
 - Evidence: [extension development boundary](../../../frontend/extension/lib/development-contributions.ts),
@@ -690,6 +698,8 @@ completed development adoption step is no longer in the outstanding list below.
 | 2026-09-08 | Implemented D2-035 fixed provider descriptors, bounded development-only provider selection, extension/runtime/Terraform wiring, and forward Jobs `0022`. Existing Greenhouse defaults/digest and all independent verification/Trust controls are preserved. Local extension/config/Jobs/migration/Terraform checks pass, including 77/77 fresh PostgreSQL tests and an actual clean migration-image build, packaged three-provider smoke, six-owner fresh migration/replay, and read-only 42-migration recovery check. Fixed the clean-image Config dependency and stale migration-log test expectations; retained-fixture retries were not counted as acceptance. Removed only the three disposable synthetic test containers and stopped Docker/WSL. No live inputs, credentials, roles, provider registrations, or deployment changed. Paired provider extraction/verification work remains under D2-035. | D2-035 | [Implementation and local evidence](#d2-035--complete-multi-provider-development-contributions); shared-main implementation with bounded agent ownership, no additional branches |
 
 | 2026-09-08 | Fixed generated page/API pairing failures: URL posting identity takes precedence over requisition labels; omitted optional IDs derive only internal fetch identity; exact singleton/structured locations preserve full provider truth; independently corroborated HTML handles bounded v1 block/heading representations without fuzzy matching. Lever uses exact global/EU GET and retains complete body/list/salary/closing sections, including bounded HTML fallback when plaintext is absent. Edge and Chrome-for-Testing each pass the actual-DOM 3-variant matrix (57 inspections, 144 payloads, 114 verified, 43 expected denials, 145 synthetic API calls, zero real fetches). Ingestion 284 and extension 237 tests pass. Two admin fork-start timeouts prompted the existing two-worker pattern; all 148 admin tests pass. Independent review caught and verified the HTML-only omission fix. No credentials, real provider captures, deployments, or activation changed. | D2-035; D2-015 | [Provider pairing command](../../../scripts/tests/d2-extension-assurance/README.md#generated-provider-pairing-regression), [source plan and verification](#d2-035--complete-multi-provider-development-contributions); all work stays on shared `main` with no additional branches |
+
+| 2026-09-08 | Integrated coordinated implementation in `54002a7` and `df9ac1d`, then passed the full repository verifier at `df9ac1d`: 33 typecheck tasks, 34 test tasks, 20 build tasks, source-bound guards, dependency-security regressions, Compose and scope checks. The previously failing admin suite passes all 148 tests within the full run. Existing lint warnings and ordinary database-gated skips remain explicit; separate Jobs integration is 77/77. The development extension rebuilt using unchanged ignored settings; no provider activation or cloud release occurred. All agent changes are on `main`, without new branches/worktrees, and the unrelated user stash is untouched. | D2-035 | `scripts/verify-phase0.ps1` exit 0; [local integration and browser aggregates](#d2-035--complete-multi-provider-development-contributions) |
 
 ## Decisions and scope changes
 
