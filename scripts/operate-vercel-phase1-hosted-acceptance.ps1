@@ -121,6 +121,9 @@ function Assert-ExactVercelIgnoreBoundary {
     "!pnpm-workspace.yaml",
     "!tsconfig.base.json",
     "!turbo.json",
+    "!patches",
+    "patches/*",
+    "!patches/image-size@1.2.1.patch",
     "!frontend",
     "!frontend/**",
     "!packages",
@@ -153,6 +156,51 @@ function Assert-ExactVercelIgnoreBoundary {
   )
   if (($rules -join "`n") -cne ($expectedRules -join "`n")) {
     throw "The repository Vercel upload boundary does not match the exact canonical allowlist."
+  }
+  return $true
+}
+
+function Assert-DependencyPatchBoundary {
+  # The frozen monorepo install reads root patches even when their consumer is not uploaded.
+  # Keep this exact reviewed security patch, not a wildcard directory of future local files.
+  $dependency = "image-size@1.2.1"
+  $relativePath = "patches/image-size@1.2.1.patch"
+  $expectedSha256 = "37a40e9556d8c610cb8627de7b5a141d10ae9a78b768915aefda1809f9aed608"
+  $package = ConvertFrom-BoundedFile (Join-Path $repositoryRoot "package.json") "The root package manifest" 65536
+  Assert-ExactProperties $package.pnpm.patchedDependencies @($dependency) "The approved dependency patches" | Out-Null
+  if ($package.pnpm.patchedDependencies.$dependency -cne $relativePath) {
+    throw "The dependency patch path is outside the exact approved upload boundary."
+  }
+  $patchPath = Join-Path $repositoryRoot $relativePath
+  foreach ($path in @((Join-Path $repositoryRoot "patches"), $patchPath)) {
+    $item = Get-Item -LiteralPath $path -Force -ErrorAction Stop
+    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+      throw "The dependency patch boundary cannot contain filesystem links."
+    }
+  }
+  if (-not (Test-Path -LiteralPath $patchPath -PathType Leaf) -or
+    (Get-FileSha256 $patchPath) -cne $expectedSha256) {
+    throw "The dependency patch is missing or differs from its reviewed SHA256."
+  }
+  $tracked = @(Invoke-GitText @("ls-files", "--error-unmatch", "--", $relativePath) "The tracked dependency patch")
+  if ($tracked.Count -ne 1 -or $tracked[0] -cne $relativePath) {
+    throw "The dependency patch must be the exact tracked source file."
+  }
+
+  $lockBytes = [IO.File]::ReadAllBytes((Join-Path $repositoryRoot "pnpm-lock.yaml"))
+  if ($lockBytes.Length -eq 0 -or $lockBytes.Length -gt 2097152 -or
+    ($lockBytes.Length -ge 3 -and $lockBytes[0] -eq 0xef -and $lockBytes[1] -eq 0xbb -and $lockBytes[2] -eq 0xbf)) {
+    throw "The lockfile is empty, BOM-prefixed, or outside its source-size bound."
+  }
+  $encoder = New-Object Text.UTF8Encoding($false, $true)
+  try { $lockText = $encoder.GetString($lockBytes).Replace("`r`n", "`n") } catch {
+    throw "The lockfile is not strict UTF-8."
+  }
+  # Validate only pnpm's canonical top-level patch block; do not implement a YAML parser.
+  $blocks = [regex]::Matches($lockText, '(?ms)^patchedDependencies:\n(.*?)(?=^[^ \t\n]|\z)')
+  $expectedBlock = "  ${dependency}:`n    hash: $expectedSha256`n    path: $relativePath"
+  if ($blocks.Count -ne 1 -or $blocks[0].Groups[1].Value.TrimEnd("`n") -cne $expectedBlock) {
+    throw "The lockfile does not bind the exact approved dependency patch path and SHA256."
   }
   return $true
 }
@@ -270,6 +318,7 @@ function Assert-SourceHostingConfiguration {
     throw "The surface Vercel configuration does not match the reviewed Phase 1 boundary."
   }
   Assert-ExactVercelIgnoreBoundary (Join-Path $repositoryRoot ".vercelignore") | Out-Null
+  Assert-DependencyPatchBoundary | Out-Null
 }
 
 function ConvertFrom-BoundedFile {

@@ -67,7 +67,7 @@ target-identity guards.
 2. Require the task image to be digest-pinned, scanned, and compatible with `linux/amd64`.
 3. Run a read-only one-off Fargate verifier against the source connection secret. It must:
    - find the exact six-owner/ten-schema/68-relation Phase 2 manifest;
-   - find all 39 expected migration journal entries through Profile `0009`, Jobs `0019`,
+   - find all 42 expected migration journal entries through Profile `0009`, Jobs `0022`,
      Documents `0003`, Matching `0003`, Billing `0002`, and Trust `0003`;
    - query only aggregate row counts; and
    - emit one aggregate result for in-memory hashing.
@@ -104,7 +104,7 @@ After the target becomes available:
 2. Run the same immutable one-off verifier. Keep the Terraform-managed source `DATABASE_URL` in
    Secrets Manager; pass only the non-secret restored hostname as `RESTORE_HOST`, and replace the
    hostname in memory inside the task.
-3. Require the exact six-owner/ten-schema/68-relation/39-migration manifest and an exact
+3. Require the exact six-owner/ten-schema/68-relation/42-migration manifest and an exact
    aggregate digest match with the source baseline.
 4. Measure functional recovery through the successful verifier exit.
 5. Inspect only the two verifier streams in memory. Require zero credential/candidate-field,

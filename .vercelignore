@@ -9,6 +9,9 @@
 !pnpm-workspace.yaml
 !tsconfig.base.json
 !turbo.json
+!patches
+patches/*
+!patches/image-size@1.2.1.patch
 !frontend
 !frontend/**
 !packages

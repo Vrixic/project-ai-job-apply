@@ -44,6 +44,7 @@ foreach ($requiredText in @(
     '"frontend/web"',
     '"frontend/admin"',
     '"d1_vercel_hosted_acceptance_v1"',
+    'Assert-DependencyPatchBoundary | Out-Null',
     'clean main with HEAD and origin/main exactly equal to SourceSha.',
     '"Admin identity activation"',
     '"Public indexing"'
@@ -68,7 +69,8 @@ if ([regex]::Matches($source, '& pnpm dlx \$vercelCliPackage').Count -ne 1) {
 }
 
 foreach ($name in @(
-    "Get-TextSha256", "ConvertFrom-OperatorJson", "ConvertFrom-BoundedFile", "Assert-ExactProperties",
+    "Get-FileSha256", "Get-TextSha256", "ConvertFrom-OperatorJson", "ConvertFrom-BoundedFile", "Assert-ExactProperties",
+    "Invoke-GitText", "Assert-DependencyPatchBoundary",
     "Assert-ExactVercelIgnoreBoundary", "Test-CanonicalTimestamp", "Get-SurfaceConfiguration", "Read-ProjectBinding",
     "Assert-ExactHttpsOrigin", "Assert-InputBoundary", "Assert-Boolean", "Test-JsonInteger",
     "Assert-HostedObservation"
@@ -150,6 +152,7 @@ foreach ($invalidIdentity in @("zach", "zach-becker", "ZBecker", "approved owner
 }
 $AuthorizedVercelIdentity = "approved-owner"
 Assert-InputBoundary
+Assert-DependencyPatchBoundary | Out-Null
 
 $originalRepositoryRoot = $repositoryRoot
 $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) "vercel-hosted-operator-$PID-$([guid]::NewGuid().ToString('N'))"
@@ -169,8 +172,90 @@ try {
   $nonRecursiveIgnore = $nonRecursiveIgnore.Replace("!frontend/**`n", "")
   [IO.File]::WriteAllText($vercelIgnorePath, $nonRecursiveIgnore)
   Assert-Rejected { Assert-ExactVercelIgnoreBoundary $vercelIgnorePath } "non-recursive Vercel frontend allowlist"
+  $canonicalIgnore = Get-Content -LiteralPath (Join-Path $originalRepositoryRoot ".vercelignore") -Raw
+  foreach ($changedIgnore in @(
+      $canonicalIgnore.Replace("!patches/image-size@1.2.1.patch", ""),
+      $canonicalIgnore.Replace("!patches/image-size@1.2.1.patch", "!patches/**"),
+      $canonicalIgnore.Replace("patches/*", ""),
+      $canonicalIgnore.Replace("!patches/image-size@1.2.1.patch", "!patches/../private.patch")
+    )) {
+    [IO.File]::WriteAllText($vercelIgnorePath, $changedIgnore)
+    Assert-Rejected { Assert-ExactVercelIgnoreBoundary $vercelIgnorePath } "missing or broadened exact dependency patch upload rule"
+  }
+  [IO.File]::WriteAllText($vercelIgnorePath, $canonicalIgnore)
+  Assert-ExactVercelIgnoreBoundary $vercelIgnorePath | Out-Null
 
   $repositoryRoot = $temporaryRoot
+  $patchDirectory = Join-Path $temporaryRoot "patches"
+  $patchPath = Join-Path $patchDirectory "image-size@1.2.1.patch"
+  $manifestPath = Join-Path $temporaryRoot "package.json"
+  $lockPath = Join-Path $temporaryRoot "pnpm-lock.yaml"
+  $null = New-Item -ItemType Directory -Path $patchDirectory
+  Copy-Item -LiteralPath (Join-Path $originalRepositoryRoot "patches/image-size@1.2.1.patch") -Destination $patchPath
+  Copy-Item -LiteralPath (Join-Path $originalRepositoryRoot "package.json") -Destination $manifestPath
+  Copy-Item -LiteralPath (Join-Path $originalRepositoryRoot "pnpm-lock.yaml") -Destination $lockPath
+  $canonicalManifest = Get-Content -LiteralPath $manifestPath -Raw
+  $canonicalLock = (Get-Content -LiteralPath $lockPath -Raw).Replace("`r`n", "`n")
+  $trackedPatch = "patches/image-size@1.2.1.patch"
+  function global:Invoke-GitText {
+    param([string[]]$Arguments, [string]$Description)
+    if (($Arguments -join "|") -cne "ls-files|--error-unmatch|--|patches/image-size@1.2.1.patch") {
+      throw "Unexpected Git operation in the generated dependency-patch fixture."
+    }
+    return @($trackedPatch)
+  }
+  Assert-DependencyPatchBoundary | Out-Null
+  foreach ($wrongPath in @("patches/../private.patch", "patches/*.patch", "patches/other.patch", "D:/private.patch")) {
+    $changedManifest = ConvertFrom-OperatorJson $canonicalManifest "The generated patch manifest"
+    $changedManifest.pnpm.patchedDependencies.'image-size@1.2.1' = $wrongPath
+    [IO.File]::WriteAllText($manifestPath, ($changedManifest | ConvertTo-Json -Depth 20))
+    Assert-Rejected { Assert-DependencyPatchBoundary } "dependency patch outside the exact approved path"
+  }
+  foreach ($mutation in @("missing", "additional", "wrong-version")) {
+    $changedManifest = ConvertFrom-OperatorJson $canonicalManifest "The generated patch manifest"
+    switch ($mutation) {
+      "missing" { $changedManifest.pnpm.patchedDependencies.PSObject.Properties.Remove('image-size@1.2.1') }
+      "additional" { $changedManifest.pnpm.patchedDependencies | Add-Member -NotePropertyName 'future@1.0.0' -NotePropertyValue 'patches/future.patch' }
+      "wrong-version" {
+        $changedManifest.pnpm.patchedDependencies.PSObject.Properties.Remove('image-size@1.2.1')
+        $changedManifest.pnpm.patchedDependencies | Add-Member -NotePropertyName 'image-size@1.2.2' -NotePropertyValue 'patches/image-size@1.2.1.patch'
+      }
+    }
+    [IO.File]::WriteAllText($manifestPath, ($changedManifest | ConvertTo-Json -Depth 20))
+    Assert-Rejected { Assert-DependencyPatchBoundary } "changed dependency patch declaration '$mutation'"
+  }
+  [IO.File]::WriteAllText($manifestPath, $canonicalManifest)
+  Assert-DependencyPatchBoundary | Out-Null
+  Remove-Item -LiteralPath $patchPath
+  Assert-Rejected { Assert-DependencyPatchBoundary } "missing dependency patch file"
+  [IO.File]::WriteAllText($patchPath, "generated changed patch bytes")
+  Assert-Rejected { Assert-DependencyPatchBoundary } "changed dependency patch bytes"
+  Copy-Item -LiteralPath (Join-Path $originalRepositoryRoot "patches/image-size@1.2.1.patch") -Destination $patchPath -Force
+  foreach ($invalidTracking in @("", "patches/other.patch")) {
+    $trackedPatch = $invalidTracking
+    Assert-Rejected { Assert-DependencyPatchBoundary } "untracked or differently tracked dependency patch"
+  }
+  $trackedPatch = "patches/image-size@1.2.1.patch"
+  Assert-DependencyPatchBoundary | Out-Null
+  $patchSha256 = Get-FileSha256 $patchPath
+  foreach ($changedLock in @(
+      $canonicalLock.Replace($patchSha256, ("a" * 64)),
+      $canonicalLock.Replace("path: patches/image-size@1.2.1.patch", "path: patches/other.patch"),
+      $canonicalLock.Replace("patchedDependencies:", "unrelatedDependencies:"),
+      $canonicalLock.Replace("    path: patches/image-size@1.2.1.patch", "    path: patches/image-size@1.2.1.patch`n  future@1.0.0:`n    path: patches/future.patch"),
+      ($canonicalLock + "`npatchedDependencies:`n  image-size@1.2.1:`n    hash: $patchSha256`n    path: patches/image-size@1.2.1.patch`n")
+    )) {
+    [IO.File]::WriteAllText($lockPath, $changedLock)
+    Assert-Rejected { Assert-DependencyPatchBoundary } "missing, duplicated, or altered lockfile patch binding"
+  }
+  [IO.File]::WriteAllBytes($lockPath, [byte[]]@(0xff, 0xfe))
+  Assert-Rejected { Assert-DependencyPatchBoundary } "non-UTF8 patch lockfile"
+  [IO.File]::WriteAllBytes($lockPath, (New-Object byte[] 2097153))
+  Assert-Rejected { Assert-DependencyPatchBoundary } "oversized patch lockfile"
+  [IO.File]::WriteAllText($lockPath, $canonicalLock)
+  Assert-DependencyPatchBoundary | Out-Null
+  Import-OperatorFunction "Invoke-GitText"
+
   $candidateProjectRoot = Join-Path $temporaryRoot "frontend\web\.vercel"
   $adminProjectRoot = Join-Path $temporaryRoot "frontend\admin\.vercel"
   $null = New-Item -ItemType Directory -Path $candidateProjectRoot -Force
@@ -200,7 +285,16 @@ try {
   Assert-Rejected { Read-ProjectBinding $candidateConfiguration } "extra local project binding field"
 } finally {
   $repositoryRoot = $originalRepositoryRoot
-  if (Test-Path -LiteralPath $temporaryRoot) { Remove-Item -LiteralPath $temporaryRoot -Recurse -Force }
+  Import-OperatorFunction "Invoke-GitText"
+  if (Test-Path -LiteralPath $temporaryRoot) {
+    $resolvedTemporaryRoot = [IO.Path]::GetFullPath($temporaryRoot)
+    $temporaryParent = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+    if (-not $resolvedTemporaryRoot.StartsWith($temporaryParent, [StringComparison]::OrdinalIgnoreCase) -or
+      [IO.Path]::GetFileName($resolvedTemporaryRoot) -notmatch '^vercel-hosted-operator-[0-9]+-[a-f0-9]{32}$') {
+      throw "Refusing cleanup outside the exact generated Vercel operator test directory."
+    }
+    Remove-Item -LiteralPath $resolvedTemporaryRoot -Recurse -Force
+  }
 }
 
 $candidate = Get-SurfaceConfiguration "Candidate"

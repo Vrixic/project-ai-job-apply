@@ -1,7 +1,7 @@
 # Vercel Next.js Hosting
 
 - Status: Identity-dark protected-host acceptance passed; managed OIDC, publication, and authority gates remain
-- Last updated: 2026-08-27
+- Last updated: 2026-09-08
 - Scope: Synthetic development acceptance only
 
 This runbook implements [ADR-026](../../../docs/adr/026-vercel-nextjs-presentation-hosting.md).
@@ -17,9 +17,10 @@ authority.
 
 Both source roots contain `vercel.json` with the Next.js framework, monorepo-aware frozen install
 and dependency build commands, and single `iad1` Function region. The repository `.vercelignore`
-allowlist recursively re-includes only the root pnpm/Turbo configuration plus `frontend` and
-`packages` source, then re-excludes credentials, dependencies, generated output, caches, mobile,
-and extension source, including the directory entries themselves.
+allowlist includes the root pnpm/Turbo configuration, the exact tracked
+`patches/image-size@1.2.1.patch`, and the required `frontend` and `packages` source, then
+re-excludes credentials, dependencies, generated output, caches, mobile, and extension source,
+including the directory entries themselves. No other patch-directory file is uploaded.
 AWS `us-east-2` API Gateway/Lambda remains the server-side target and PostgreSQL remains truth.
 Vercel stores no product database or workflow state.
 
@@ -63,6 +64,10 @@ The operator fails closed unless the branch is `main`, the worktree is clean, an
 `origin/main` equal the supplied SHA. It also validates the exact source-owned root, build command,
 frozen installation, upload boundary, and `iad1` region. It rejects an identity containing `zach`
 or `becker`; do not weaken that check or substitute a temporary account.
+Offline validation also requires the exact approved `pnpm.patchedDependencies` entry, an existing
+tracked non-link patch with its reviewed SHA-256, and the same path/hash in the canonical lockfile
+patch block. A root-level pnpm patch is an installation input even when its package consumer is
+outside the Vercel upload. Missing patches must fail before deployment, not during frozen install.
 
 ## Provider login and project creation
 
@@ -117,7 +122,8 @@ roots, each ignored `.vercel/project.json` must contain the exact `orgId`, `proj
 The CLI deployment is launched from the repository root because Vercel applies the project Root
 Directory after creating the upload. The canonical `.vercelignore` therefore contains the closed
 union needed by the two projects: both Next.js roots, `packages/api-contracts`, `packages/config`,
-and the six root workspace/build controls. It excludes all other workspaces, tests, documentation,
+the six root workspace/build controls, and the single approved image-size patch. It excludes all
+other patch files, workspaces, tests, documentation,
 compiler caches, credentials, dependencies, and build outputs. Use pinned dry runs from the root
 for both projects and reject any manifest outside that union before deploying:
 
