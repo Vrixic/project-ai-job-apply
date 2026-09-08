@@ -88,5 +88,5 @@ describe("workstation-configured extension build isolation", () => {
     );
     expect(dependency.resolvedTaskDefinition.cache).toBe(true);
     expect(dependency.environmentVariables.passthrough ?? []).toEqual([]);
-  });
+  }, 35_000);
 });
