@@ -452,6 +452,15 @@ This is the master record for the delivery phases defined in the [product and sy
   assignment operator passes 59 synthetic checks and source review. Actual human proof and
   assignment deployment remain open under D2-030/D2-R12. No role, case, grant, or contribution-policy change occurred.
   The existing local deadline remains `2026-09-08T13:38:16Z`.
+- Human appeal assignment deployed (2026-09-08): the explicit private check at `13:19:45Z`
+  verifies exact human identity/client/audience, fresh MFA, and two intended privileged scopes
+  with zero extras. Source `01f6e94` applies the reviewed four-update assignment-only plan at
+  `13:23:01Z`, reaching state `285`. Only human appeal/read roles are added; both machine
+  assignments, application artifacts, and expired contribution policy are preserved. Gateway
+  `53`, scheduled `15`, and unchanged Trust `11` pass exact readback; the follow-up plan proposes
+  no changes. The operational snapshot shows 13 alarms OK and both Trust queues observed empty.
+  Human queue-access confirmation and hosted acceptance remain open under D2-030/D2-R12; no
+  case decision was submitted. The local deadline remains `2026-09-08T13:38:16Z`.
 - Depends on: D0 consent/security foundations and D1 catalog, saved-job, and moderation foundations;
   the public-contribution API is D2-owned work
 - Task document: [Phase 2 tasks](phase-2-extension-and-community.md)
