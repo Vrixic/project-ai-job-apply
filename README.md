@@ -89,9 +89,10 @@ pre/post-deployment access checks passing and no valid case decision submitted. 
 remains case-opener-only. The separate human identity/MFA/scope check and appeal/read assignment
 pass, and the user confirms a successful empty local appeal-queue read. Hosted reviewer and
 appeal-decision journey acceptance remain pending.
-At the user's request, D2-033 is removing recurring signed contribution-policy setup from
-development in favor of persistent explicit development configuration. Implementation and
-verification are underway; no policy renewal or replacement deployment is claimed yet.
+At the user's request, D2-033 removes recurring signed contribution-policy setup from development
+in favor of persistent explicit development configuration. Implementation and local verification
+pass in `6ea1d56`. Deployment is blocked by the unrelated expired mobile `image-size` dependency
+exception (D2-R13); no policy renewal or replacement deployment has occurred.
 The configured extension is rebuilt; reload the unpacked extension and complete installed
 acceptance. Snapshot-fenced recovery cleared both provider-verification holds, but both submissions
 remain parked and unpublished; refresh their existing Processing/Trust state rather than resubmit.

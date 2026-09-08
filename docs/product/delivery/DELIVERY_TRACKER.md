@@ -469,8 +469,12 @@ This is the master record for the delivery phases defined in the [product and sy
   created or decided, no policy renewed, and no browser credentials or case details collected.
 - Development friction removal (2026-09-08): at the user's request, D2-033 replaces recurring
   development signing/policy-fetch/expiry requirements with persistent opt-in development
-  configuration. No renewal was executed. Implementation and local checks are underway;
-  rollout remains pending. Exact supported scope, authentication, independent verification,
+  configuration. Source `6ea1d56` is merged; the full verifier passes with 34 test tasks and
+  20 build tasks, plus 156 extension tests, 66 fresh-PostgreSQL Jobs integrations, and 59
+  Terraform tests. Rollout is blocked by the unrelated expired mobile `image-size` dependency
+  exception (D2-R13); no artifact upload, database migration, runtime apply, or policy renewal
+  occurred. A narrow local security patch is recommended pending scope approval. Docker/WSL
+  are stopped and generated test databases removed. Exact supported scope, authentication, independent verification,
   Trust review, and production/store isolation remain enforced. The Phase 2 document holds
   the single decision/rationale record.
 - Depends on: D0 consent/security foundations and D1 catalog, saved-job, and moderation foundations;
