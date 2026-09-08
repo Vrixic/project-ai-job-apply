@@ -15,12 +15,12 @@
       "fast-uri@3.1.4": "3.1.6",
       "fast-uri@4.1.1": "4.1.4",
       "fastify@<5.12.1": "5.12.1",
-      "js-yaml@>=4.0.0 <4.3.1": "4.3.1",
+      "js-yaml@>=4.0.0 <4.3.2": "4.3.2",
       "minimatch@10.2.6>brace-expansion": "5.0.9",
       "minimatch@5.1.9>brace-expansion": "5.0.9",
       "nanoid@<3.3.18": "3.3.18",
       "next@16.2.12>postcss": "8.5.24",
-      "next@16.2.12>sharp": "0.35.0",
+      "next@16.3.3>sharp": "0.35.4",
       "qs@<6.16.0": "6.16.0",
       "xcode@3.0.1>uuid": "11.1.1"
     },
@@ -66,7 +66,7 @@
     "playwright-core": "1.62.1",
     "turbo": "2.10.9",
     "typescript": "5.9.3",
-    "vitest": "4.1.10",
+    "vitest": "4.1.11",
     "yazl": "3.3.1"
   }
 }

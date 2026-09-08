@@ -14,7 +14,7 @@
     "@ai-job-apply/api-contracts": "workspace:*",
     "@ai-job-apply/config": "workspace:*",
     "@auth0/nextjs-auth0": "4.26.0",
-    "next": "16.3.0",
+    "next": "16.3.3",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },

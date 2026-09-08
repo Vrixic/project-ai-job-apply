@@ -330,6 +330,16 @@ This is the master record for the delivery phases defined in the [product and sy
   contribution-policy renewal is needed. Read-only release preparation confirms state 287,
   exact runtime/Greenhouse scope, backup coverage, and zero ECS tasks/services; current-source
   deployment remains separate from the reviewer grant. Full Phase 2 scope remains unchanged.
+- Latest continuation (2026-09-08, 22:14Z onward): the reviewer API-access denial persists after
+  the user's next confirmation; one exact retry obtained no token or case access. Requested the
+  exact Client Access entry with secrets hidden. Independent Gateway publication passed 189 tests
+  but stopped before uploads on current Next/sharp/js-yaml/Vitest advisory records. D2-037 tracks
+  narrow compatible patch remediation: frozen install, audit, 136 security regressions, focused
+  suites, both frontend builds and the full repository verifier pass, preserving image-size and
+  all audit gates. New immutable releases are next. A fresh
+  `4f2462f` schema-7 baseline proves state 287/zero drift only and must be recaptured for the
+  repaired source. Docker/WSL were stopped while image publication was blocked; no runtime or
+  provider scope changed.
 - Completion continuation (2026-09-08): the user explicitly requests autonomous work toward full
   Phase 2 completion, pausing for required input and resuming after the answer. Development SSO is
   available in the configured account. D2-035's fixed Lever/Ashby descriptors, development-only
@@ -996,6 +1006,7 @@ Append only material cross-delivery events.
 | 2026-09-08 | D2 | Completed D2-036's maintained generated logical recovery command: actual dump/restore matches all 68 relation row sets after 42-migration apply/replay, with 18 nonempty D2 relations and restored three-provider publication, authorization, immutable-lease and cross-owner checks. Agent and primary exact-command runs pass, along with 15 ownership guards, fresh 2/2 composed and 1/1 cancellation suites, and the full repository verifier. Temporary containers were removed and Docker/WSL stopped; no cloud, real provider, or reviewer credential was used. D2 remains In progress behind the recorded live/input gates. | [Phase 2 recovery results](phase-2-extension-and-community.md#d2-036--repeatable-synthetic-logical-recovery) |
 | 2026-09-08 | D2 | Revalidated clean synchronized `b4f8b52` and remaining gates. The independent development release path cannot proceed: repeated read-only STS checks confirm SSO renewal is required at 20:46:39Z. Reviewer credential reuse authority also remains unanswered. Phase 2 is Blocked pending these inputs, without reducing its scope or changing cloud/provider/case state. Prior recovery work stays Complete. | [Current input checkpoint](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs), [D2-R14/D2-R15](phase-2-extension-and-community.md#risks-and-blockers) |
 | 2026-09-08 | D2 | Resumed after the user's SSO/reviewer-credential confirmation. Exact development STS and live reviewer boundaries pass; R14/R15 are Closed. Auth0 refuses two bounded agent-token requests with 403/access_denied, classified as application API access not authorized; R16 now specifies the exact existing three-scope grant to restore. No token, case read, decision, grant, provider activation, or cloud mutation occurred. Independent read-only release preparation confirms state 287, exact runtime/Greenhouse scope, current backup coverage, and zero ECS tasks/services. The phase is In progress, with logical recovery Complete and the full remaining scope retained. | [Reviewer continuation and next action](phase-2-extension-and-community.md#delegated-reviewer-assignment), [D2-R16](phase-2-extension-and-community.md#risks-and-blockers) |
+| 2026-09-08 | D2 | A fresh reviewer exchange after the user's next confirmation still fails at Auth0 API access, with no token/case operation; requested the exact application-access screenshot. Continued independent release work: 189 Gateway tests pass, then current registry advisories stop publication before uploads. D2-037's compatible Next/sharp/js-yaml/Vitest patches now pass frozen install, audit, security regressions, focused suites, frontend builds and the full repository verifier without exemptions. Fresh pre-repair baseline capture confirms state 287/zero drift only; new exact-source releases remain. Docker/WSL stopped while image work is blocked; runtime/provider settings remain unchanged. | [Dependency remediation](phase-2-extension-and-community.md#d2-037--release-candidate-dependency-remediation), [remaining steps](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs) |
 
 ## Cross-delivery decisions and changes
 

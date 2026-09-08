@@ -250,7 +250,7 @@ as `ReviewedBaselineToCurrentDeltaSha256`; do not reuse a digest after the merge
 
 If the local waiter exits after a durable claim and ECS submission, never call `Execute` again.
 Use `Recover` with the exact submitted receipt and reviewed descriptor. It has no submission path;
-it accepts only the exact claimed task already stopped with exit `0`, the six aggregate success
+it accepts only the exact claimed task already stopped with exit `0`, the seven aggregate success
 records, and zero remaining migration compute, then finalizes the existing receipt for `Verify`.
 
 Run `Get-Help` through the script's `-Help` switch for exact commands. Never reuse an execution
