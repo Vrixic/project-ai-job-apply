@@ -1,8 +1,9 @@
 # Admin Console
 
 The restricted internal console implements the Phase 1 job/source moderation slice and the
-default-dark Phase 2 Trust review slice. A protected development preview is deployed; authenticated
-human moderation is not accepted. Later customer service, workflow, provider, entitlement,
+default-dark Phase 2 Trust review slice. A protected development preview is deployed, and the
+separate human appeal identity and local empty-queue read are accepted in development. Hosted
+reviewer and actual decision journeys remain open. Later customer service, workflow, provider, entitlement,
 privacy, and emergency-control surfaces are not implemented or authorized by this application.
 
 ## Implemented Phase 1 moderation slice
@@ -46,18 +47,16 @@ not implemented or authorized by this slice.
 - Controls use native labels, explicit destructive confirmation, keyboard focus on failures, and an
   `aria-live` result region. The same-origin BFF strictly validates bounded requests and redacted
   responses and emits `no-store` fixed problem details.
-- The Gateway and Terraform D2 route inventories are wired. The 2026-09-06 reviewer-binding update
-  reached development state `284`, with Gateway/scheduled/Trust versions `52`/`14`/`11`, preserving
-  application artifacts from `3f20462`, 18 JWT-protected D2 routes, and the anonymous policy endpoint.
-  Before/after access probes, immutable artifact/environment checks, and zero Terraform drift pass.
-  The existing workflow case opener is unchanged; a separate delegated M2M identity can read and
-  make initial/takedown decisions under the recorded development assignment. Invalid-input probes
-  are not completed case decisions or publication evidence.
-- This source and its protected preview do not establish human reviewer assignments, authenticated
-  admin Auth0 acceptance, accountable policy/timing approval, verified-requester authority, or
-  human accessibility acceptance. Local MFA login is user-confirmed, but exact human identity/scope
-  comparison, backend appeal binding, and hosted acceptance remain open; the appeal-only profile
-  does not itself assign permissions.
+- The Gateway and Terraform D2 route inventories are deployed. The verified 2026-09-08 development
+  rollout preserves all three reviewer assignments: workflow case opener, separate delegated M2M
+  read/initial/takedown reviewer, and separate human read/appeal reviewer. Exact runtime readback
+  and zero Terraform drift pass. See the [Phase 2 register](../../docs/product/delivery/phase-2-extension-and-community.md)
+  for the exact release evidence rather than treating a presentation build as backend deployment.
+- The human identity/MFA/scope check and separate backend appeal binding pass; the user confirms
+  a successful empty local appeal-queue read. The appeal-only profile does not itself assign
+  permissions. Hosted admin Auth0 and actual reviewed-decision journeys, verified-requester
+  authority, human accessibility acceptance, and accountable production approval remain open.
+  Invalid-input probes and an empty queue are not completed case decisions or publication evidence.
 
 ## Local managed OIDC configuration
 
@@ -124,9 +123,10 @@ acceptance. The sole assignment and rationale record remains the
 ## Vercel hosting boundary
 The 2026-09-05 preview built from source `116b272` is `READY`:
 [protected admin preview](https://ai-job-apply-admin-6ewxee4ci-applydash2026-5637.vercel.app).
-Its unauthenticated root returns a Vercel SSO protection redirect (`302`, `no-store`), not the admin
-application or proof of an Auth0 reviewer session. No human reviewer roles or hosted admin Auth0
-acceptance are established. This preview predates the local appeal-only profile; it includes the
+Its recorded unauthenticated root returns a Vercel SSO protection redirect (`302`, `no-store`), not
+the admin application or proof of an Auth0 reviewer session. Human appeal/read roles were later
+bound and local access accepted, but hosted admin Auth0 acceptance remains open. This preview
+predates the local appeal-only profile; it includes the
 earlier review UI while the matching queue/evidence handlers are deployed in AWS. A fresh protected
 admin deployment and exact-host Auth0 configuration are still required for hosted appeal acceptance. Consult the
 [Phase 2 register](../../docs/product/delivery/phase-2-extension-and-community.md) before attempting

@@ -71,37 +71,31 @@ scopes validate; test tokens are unavailable outside `NODE_ENV=test`.
 ## Current status
 
 Phase 2's extension and community backend are implemented in controlled Greenhouse-only
-development, with remaining rollout and acceptance tracked in the
-[Phase 2 register](docs/product/delivery/phase-2-extension-and-community.md). The follow-up adds
-warm-policy refresh, exact page/provider description compatibility, pre-verification owner
-cancellation, reviewer queue/evidence, and complete Trust decision reconciliation. The ordered
-backend rollout completed on 2026-09-05; the 2026-09-08 reviewer-only configuration `01f6e94` advances
-development to state `285`, running unchanged application source `3f20462` on healthy immutable
-Gateway/scheduled/Trust versions `53`/`15`/`11`, with 18 exact JWT-protected D2 routes plus
-the anonymous signed-policy endpoint. The migration image from `116b272` completed once with exit
-`0` and seven exact aggregate success events, verifying 40 migrations across six owners and 68
-relations; operator recovery did not rerun it. Direct Gateway boundary checks and zero Terraform
-drift pass. Configuration `7420dfa` aligns the Trust consumer and SQS mapping at two concurrent
-invocations; code, aliases, permissions, and alarms are unchanged. Historical point-in-time restore
-evidence still covers the prior 39-migration boundary.
-The distinct delegated agent reviewer is now bound for read/initial/takedown, with all 18 bounded
-pre/post-deployment access checks passing and no valid case decision submitted. The workflow
-remains case-opener-only. The separate human identity/MFA/scope check and appeal/read assignment
-pass, and the user confirms a successful empty local appeal-queue read. Hosted reviewer and
-appeal-decision journey acceptance remain pending.
-At the user's request, D2-033 removes recurring signed contribution-policy setup from development
-in favor of persistent explicit development configuration. Implementation and local verification
-pass in `6ea1d56`. Deployment is blocked by the unrelated expired mobile `image-size` dependency
-exception (D2-R13); no policy renewal or replacement deployment has occurred.
-The configured extension is rebuilt; reload the unpacked extension and complete installed
-acceptance. Snapshot-fenced recovery cleared both provider-verification holds, but both submissions
-remain parked and unpublished; refresh their existing Processing/Trust state rather than resubmit.
+development. The [Phase 2 register](docs/product/delivery/phase-2-extension-and-community.md)
+owns the exact release evidence and remaining acceptance; Phase 2 is still In progress.
 
-The admin preview from source `116b` is `READY` behind Vercel SSO protection (`302`, `no-store`);
-see the [admin hosting boundary](frontend/admin/README.md#vercel-hosting-boundary). This is a
-presentation deployment, not authenticated moderation acceptance: hosted admin Auth0 acceptance
-remains open. Production/store distribution, other provider activation, and
-accountable acceptance are not implied by a build, a route resource, or a protected preview.
+The verified 2026-09-08 rollout deploys persistent opt-in development contributions without
+signing, remote policy fetching, expiry, or renewal. Authentication, exact client/provider/host
+scope, independent provider verification, and Trust review remain enforced. Jobs migration `0021`
+ran once, verifying 41 migrations and 68 relations across six owners and ten schemas; exact runtime
+readback and zero Terraform drift pass. The migration-image and dependency remediation is complete
+(D2-034/D2-R13). Historical point-in-time restore evidence covers 39 migrations, not this release.
+
+The user confirms reloading the rebuilt development extension, signing in, and adding a job
+successfully on 2026-09-08, completing D2-033 and closing D2-R11. This is user-confirmed installed
+acceptance, not provider verification, Trust acceptance, website publication, or the full browser
+lifecycle. Refresh existing acknowledged contributions' Processing/Trust state rather than resubmit;
+the prior processing snapshot is not a current owner-state observation.
+
+All three reviewer assignments are bound: the workflow is case-opener-only, the distinct delegated
+agent can read and make initial/takedown decisions, and the separate human can read and resolve
+appeals. Exact human identity/MFA/scope checks and the user-confirmed empty local appeal-queue read
+pass. Hosted reviewer and actual reviewed-decision journey acceptance remain open; assignments
+and empty-queue access do not constitute case decisions.
+
+The [admin hosting boundary](frontend/admin/README.md#vercel-hosting-boundary) records the earlier
+protected presentation preview, not hosted Auth0 moderation acceptance. Other provider activation,
+production/store distribution, and final accountable acceptance remain separate gates.
 
 The following Phase 0/1 overview is historical; use the linked delivery records for the current
 status of each individual gate.
