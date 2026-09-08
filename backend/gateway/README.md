@@ -20,18 +20,21 @@ and independently gated Terraform routes. Repository defaults remain dark; the c
 Greenhouse-only development exception is recorded in the
 [Phase 2 register](../../docs/product/delivery/phase-2-extension-and-community.md).
 
-The ordered development release completed on 2026-09-05. Reviewer-only configuration `b703e56` on
-2026-09-06 advances current state to `284`, retaining application source `3f20462` on immutable
-Gateway/scheduled/Trust versions `52`/`14`/`11`. All three are healthy; direct Gateway
-boundary checks and zero Terraform drift pass. The 18 exact JWT-protected D2 routes include the
-deployed owner cancellation and reviewer queue/evidence handlers, alongside the anonymous
-signed-policy route. Migration image `116b272` completed once with exit `0` and seven exact
-aggregate success events, verifying 40 migrations across six owners and 68 relations, including
-Jobs `0020`. Its receipt was recovered and post-verified without rerunning the task; both workers
-were upgraded and old invocations drained before Gateway release. This migration result does not
-extend the historical 39-migration point-in-time restore evidence to the new boundary. The later
-`7420dfa` configuration update aligns the Trust consumer/mapping concurrency at two without changing
-Gateway code, aliases, authorization, or alarms.
+The latest verified development release on 2026-09-08 is application source `90f3740`, state `287`,
+with immutable Gateway/scheduled/Trust versions `54`/`16`/`12`. Exact artifacts/environments,
+the 18 JWT-protected D2 routes, preserved reviewer assignments, and zero Terraform drift pass.
+Jobs `0021` completed once with exit `0` and seven exact aggregate success events, verifying
+41 migrations across six owners and 68 relations. The historical 39-migration PITR is not a
+restore of that later schema. The subsequent source-only Jobs `0022` and Lever/Ashby pairing
+changes remain undeployed; use the phase register for their separate acceptance and activation.
+The Trust consumer and mapping retain concurrency two.
+
+Explicit development contribution mode no longer requires signing, remote policy fetching,
+expiry, or renewal. Authentication, preview authorization, independent provider verification,
+Trust, and exact provider/variant/domain boundaries still apply. The user confirms extension
+reload, successful sign-in, and job addition on 2026-09-08; that is not website publication or
+full browser lifecycle acceptance. The anonymous signed-policy route remains compatible for
+default/non-development consumers, but is not a development delivery prerequisite.
 
 Profile-owned immutable contribution-consent grant/revoke routes wire Jobs intake to the real
 Profile verification store. Consent identifiers and times are server-issued, responses are
@@ -55,7 +58,9 @@ deterministic and retry-safe, and Trust has no direct Jobs mutation. Missing ass
 evidence, or dependencies fail closed. Development retains the workflow `case_opener` and now binds
 a distinct delegated agent for `case_reader`, `initial_reviewer`, and `takedown_reviewer`. Eight
 pre-deployment and ten post-deployment access/contract checks pass, with no valid case decision.
-Human appeal assignment and MFA admin acceptance remain pending. The bounded queue and Jobs-owned sanitized evidence projection are implemented,
+The distinct human appeal/read assignment and exact identity/MFA/scope setup check also pass;
+the user confirms an authenticated empty appeal-queue read from the local console. Hosted review
+and actual decision journeys remain open. The bounded queue and Jobs-owned sanitized evidence projection are implemented,
 locally verified, and deployed in the release described above. Initial review binds the
 current case version to the exact independent-verification digest; takedown and appeal evidence
 retain their separate approval boundary.
