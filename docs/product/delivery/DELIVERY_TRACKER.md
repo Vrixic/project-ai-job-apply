@@ -321,10 +321,10 @@ This is the master record for the delivery phases defined in the [product and sy
 - Status: In progress
 - Start: 2026-09-01
 - Completion: Not completed
-- Active implementation follow-up (2026-09-05): signed-policy readiness, exact Greenhouse preview
+- Preceding implementation/release record (2026-09-05, superseded by the 2026-09-08 rollout below): signed-policy readiness, exact Greenhouse preview
   compatibility, owner pre-verification cancellation, discoverable reviewer queue/evidence,
   terminal reconciliation and lost-signal fixes, and bounded authenticated workload tooling are
-  implemented with targeted regressions. Application source `3f20462` and current configuration
+  implemented with targeted regressions. Application source `3f20462` and then-current configuration
   source `7420dfa` pass `pnpm check`;
   application source `116b272` also passed `scripts/verify-phase0.ps1`, including all 33 typecheck
   and 34 unit-test tasks; installed
@@ -333,7 +333,7 @@ This is the master record for the delivery phases defined in the [product and sy
   at the 40-migration/68-relation boundary. Ordered migration/worker/Gateway release is complete
   in controlled development. D2-029's schema-7 handoff passes local adversarial/round-trip checks without
   weakening state/document provenance or changing historical baseline compatibility.
-  Current state `284` runs Gateway `52`, scheduled `14`, and Trust `11` from `3f20462`, with
+  That release reached state `284`, Gateway `52`, scheduled `14`, and Trust `11` from `3f20462`, with
   reviewer configuration `b703e56`,
   immutable matching artifacts, 18 JWT routes/budgets, and zero Terraform drift. One migration
   task from `116b272` stopped with exit 0 and seven exact six-owner success messages, including
@@ -467,24 +467,34 @@ This is the master record for the delivery phases defined in the [product and sy
   development API page. Local identity setup and queue access are no longer blockers; hosted
   reviewer and appeal-decision journey acceptance remain open under D2-030/D2-R12. No case was
   created or decided, no policy renewed, and no browser credentials or case details collected.
-- Development friction removal (2026-09-08): at the user's request, D2-033 replaces recurring
-  development signing/policy-fetch/expiry requirements with persistent opt-in development
-  configuration. Source `6ea1d56` is merged; the full verifier passes with 34 test tasks and
-  20 build tasks, plus 156 extension tests, 66 fresh-PostgreSQL Jobs integrations, and 59
-  Terraform tests. Rollout is blocked by the unrelated expired mobile `image-size` dependency
-  exception (D2-R13); no artifact upload, database migration, runtime apply, or policy renewal
-  occurred in those initial attempts. The user-approved D2-034 patch now passes 136 focused
-  regressions, independent review, frozen installation, the full repository verifier, and the
-  dependency audit with no risk exceptions. Coordinated publication/deployment resumes next. Docker/WSL
-  are stopped and generated test databases removed. Exact supported scope, authentication, independent verification,
-  Trust review, and production/store isolation remain enforced. The Phase 2 document holds
-  the single decision/rationale record.
+- Development friction removal (2026-09-08): D2-033's persistent opt-in development mode is
+  deployed from application/artifact source `90f3740fa8b2bab1a7bbcd8a7f12b2680a3798b8`,
+  without contribution signing, remote policy fetching, expiry, or renewal. State `287` runs
+  Gateway `54`, scheduled `16`, and Trust `12`; six in-place updates created/deleted no
+  resources and preserved all three reviewer assignments byte-for-byte. Jobs `0021` ran once
+  through task revision `49` with exit 0 and seven exact success logs, verifying 41 migrations,
+  68 relations, six owners, and ten schemas. Exact artifacts/environment and zero drift pass.
+  At `18:31:21Z`, reservations `2/1/2`, 13 alarms OK, both approximately empty Trust queues,
+  and unchanged mapping/schedule match. Twenty unauthenticated contribution POSTs all return
+  `401`, with zero unexpected/5xx responses or policy requests; this is not authenticated throughput.
+  The initial expired mobile exception and later image transport failures are historical;
+  a manual Docker stop was clarified, with no OOM cause established. D2-034 is Complete and
+  D2-R13 Closed: the exact user-approved parser patch passes 136 focused regressions, independent
+  review, frozen installation, full verification, and audit without exceptions; two matching
+  no-cache image builds, isolated smoke, and ECR scan COMPLETE with zero High/Critical findings pass.
+  The configured unpacked development extension is rebuilt with its development marker, exact
+  Auth0/API host grants, and no persistent content scripts. D2-033 remains In progress and D2-R11
+  mitigated pending installed reload/authenticated acceptance; do not automatically resubmit old items.
+  Production/store and unsupported providers remain dark; authentication, independent verification,
+  Trust review, and reviewer separation are unchanged. Historical PITR covers 39 migrations,
+  not the new 41-migration boundary. Docker/WSL are stopped; the PC remains on. Phase 2 is still
+  In progress behind the acceptance list in the phase document, which retains the sole decision/rationale record.
 - Depends on: D0 consent/security foundations and D1 catalog, saved-job, and moderation foundations;
   the public-contribution API is D2-owned work
 - Task document: [Phase 2 tasks](phase-2-extension-and-community.md)
 - Exit gate: Users can preview selected public job fields and explicitly add them to the shared
   database without unrelated browsing or profile data being collected.
-- Engineering foundations and preceding deployment history: Phase 2 started on 2026-09-01 from the clean Phase 1 checkpoint.
+- Engineering foundations and preceding deployment history (historical snapshots, not current policy or reviewer status): Phase 2 started on 2026-09-01 from the clean Phase 1 checkpoint.
   Repository-local Phase 2 foundations are implemented: the minimum-permission MV3
   extension, grounded responsive preview with separate location/work type, one readiness-gated
   public-add command, durable owner-visible processing,
@@ -948,6 +958,7 @@ Append only material cross-delivery events.
 | 2026-08-10 | D0 | Completed D0-017's first deployed staging shutdown through separately checksum-reviewed `active -> quiesced -> dormant` plans. Final read-back proves no synthetic RDS, managed interface endpoint, public route, enabled trigger, or queued work; 119 retained state resources preserve the isolated control plane. No staging snapshot was retained by design. Activation/return replay and a complete posted dormant interval remain. | [First-shutdown evidence](evidence/d0-staging-on-demand-first-shutdown-2026-08-10.md), [lifecycle tasks](phase-0-staging-on-demand-runtime.md) |
 | 2026-08-10 | D0 | Completed D0-017 dark recreation and migration: the exact approved nine-action plan restored protected encrypted RDS plus three endpoints without traffic, and one scanned digest-pinned migration task applied/verified through `0003_retire_legacy_dispatch` before ECS returned to zero. Exact traffic enable/disable and dark-failure recovery source is locally verified; staging remains active but dark pending merge, acceptance, and return to dormant. | [Reactivation/migration evidence](evidence/d0-staging-reactivation-and-migration-2026-08-10.md), [lifecycle tasks](phase-0-staging-on-demand-runtime.md) |
 | 2026-08-10 | D0 | Completed D0-017's first full on-demand staging replay. The separately approved traffic release passed deployed health/auth denial, persistence, durable readiness, two-account isolation, 500/500 public probes, 25/25 workflows, idempotent replay, clean AWS metrics/logs/alarms/queues, idle ECS, and zero drift. Separately reviewed disable, quiesce, and dormant plans returned staging to no database, managed endpoint, route, trigger, or queued work; 119 retained resources and zero disposable resources preserve the control plane. Only a complete posted dormant billing interval remains. | [Reactivation acceptance](evidence/d0-staging-on-demand-reactivation-acceptance-2026-08-10.md), [lifecycle tasks](phase-0-staging-on-demand-runtime.md) |
+| 2026-09-08 | D2 | Deployed persistent development contributions from `90f3740` after one successful Jobs `0021` migration (41 migrations/68 relations). Six in-place updates reach state `287`, Gateway/scheduled/Trust `54`/`16`/`12`; three reviewer assignments are preserved, exact readback and zero drift pass. Verified image build/smoke/scan closes D2-034/D2-R13. Health shows 13 alarms OK, approximately empty queues, and 20/20 unauthenticated denials with no policy requests. Rebuilt the explicitly configured development extension; installed reload/authenticated acceptance remains, so D2-033 and Phase 2 stay In progress. No policy renewal, automatic resubmission, case decision, authenticated throughput, or fresh restore is claimed. | [Phase 2 rollout and aggregate evidence](phase-2-extension-and-community.md#work-log), [development mode](../../../frontend/extension/lib/development-contributions.ts), [dependency remediation](../../security/dependency-vulnerability-exceptions.md) |
 
 ## Cross-delivery decisions and changes
 
