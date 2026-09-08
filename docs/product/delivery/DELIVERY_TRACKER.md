@@ -13,7 +13,7 @@ This is the master record for the delivery phases defined in the [product and sy
 |---|---|---|---|---|---|
 | D0 | Product, data, and legal foundation | Complete | 2026-07-27 | 2026-08-12 | [Phase 0 tasks](phase-0-foundation.md) |
 | D1 | Useful web product and canonical job catalog | In progress | 2026-08-11 | Not completed | [Phase 1 tasks](phase-1-web-and-job-catalog.md) |
-| D2 | Extension and community loop | In progress | 2026-09-01 | Not completed | [Phase 2 tasks](phase-2-extension-and-community.md) |
+| D2 | Extension and community loop | Blocked | 2026-09-01 | Not completed | [Phase 2 tasks](phase-2-extension-and-community.md) |
 | D3 | High-quality application preparation | Not started | Not started | Not completed | [Phase 3 tasks](phase-3-application-preparation.md) |
 | D4 | Workday and remote preparation | Not started | Not started | Not completed | [Phase 4 tasks](phase-4-workday-and-remote.md) |
 | D5 | Personalized outreach and application notifications | Not started | Not started | Not completed | [Phase 5 tasks](phase-5-outreach-and-notifications.md) |
@@ -318,9 +318,15 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## D2 — Extension and community loop
 
-- Status: In progress
+- Status: Blocked
 - Start: 2026-09-01
 - Completion: Not completed
+- Current input checkpoint (`2026-09-08T20:46:39Z`): clean synchronized `main` is at `b4f8b52`.
+  Local recovery work is complete. Repeated read-only STS checks confirm development SSO now
+  needs renewal (D2-R15), superseding earlier available-session observations. The requested
+  reviewer-credential reuse authority remains unanswered (D2-R14). Further release and live
+  review are blocked pending those inputs; no cloud, credential, provider, or case mutation was
+  attempted. The complete Phase 2 objective and remaining acceptance scope are unchanged.
 - Completion continuation (2026-09-08): the user explicitly requests autonomous work toward full
   Phase 2 completion, pausing for required input and resuming after the answer. Development SSO is
   available in the configured account. D2-035's fixed Lever/Ashby descriptors, development-only
@@ -985,6 +991,7 @@ Append only material cross-delivery events.
 | 2026-09-08 | D2 | The user confirms reloading the rebuilt development extension, successful sign-in, and successful job addition. D2-033 is Complete and D2-R11 Closed on this user-reported installed acceptance plus the preceding verified rollout. No cloud, credential, or job-data inspection was performed; provider/Trust verification, website publication, broader browser lifecycle and remaining phase acceptance are not implied. Phase 2 remains In progress. | [Development adoption acceptance](phase-2-extension-and-community.md#work-log), [remaining Phase 2 acceptance](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs) |
 | 2026-09-08 | D2 | Resumed the user's full Phase 2 completion goal. Confirmed development SSO availability without exposing account identity. Added D2-035 for the real Lever/Ashby capability/lease-migration gap and D2-R14 for fresh authority to reuse the expired-window encrypted reviewer setup. No credential decryption, token exchange, case operation, provider activation, or cloud mutation occurred. Updated stale README current-state summaries; the Phase 2 document remains the sole decision/rationale record. | [Provider implementation plan](phase-2-extension-and-community.md#d2-035--complete-multi-provider-development-contributions), [reviewer authority blocker](phase-2-extension-and-community.md#risks-and-blockers) |
 | 2026-09-08 | D2 | Completed D2-036's maintained generated logical recovery command: actual dump/restore matches all 68 relation row sets after 42-migration apply/replay, with 18 nonempty D2 relations and restored three-provider publication, authorization, immutable-lease and cross-owner checks. Agent and primary exact-command runs pass, along with 15 ownership guards, fresh 2/2 composed and 1/1 cancellation suites, and the full repository verifier. Temporary containers were removed and Docker/WSL stopped; no cloud, real provider, or reviewer credential was used. D2 remains In progress behind the recorded live/input gates. | [Phase 2 recovery results](phase-2-extension-and-community.md#d2-036--repeatable-synthetic-logical-recovery) |
+| 2026-09-08 | D2 | Revalidated clean synchronized `b4f8b52` and remaining gates. The independent development release path cannot proceed: repeated read-only STS checks confirm SSO renewal is required at 20:46:39Z. Reviewer credential reuse authority also remains unanswered. Phase 2 is Blocked pending these inputs, without reducing its scope or changing cloud/provider/case state. Prior recovery work stays Complete. | [Current input checkpoint](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs), [D2-R14/D2-R15](phase-2-extension-and-community.md#risks-and-blockers) |
 
 ## Cross-delivery decisions and changes
 
