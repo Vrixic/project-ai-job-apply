@@ -205,7 +205,20 @@ function parseBoundedJson<T>(value: string, schema: z.ZodType<T>): T {
 export function loadD2LambdaGatewayConfig(
   environment: NodeJS.ProcessEnv = process.env,
 ): D2LambdaGatewayConfiguration {
-  const value = d2LambdaGatewayEnvironmentSchema.parse(environment);
+  const explicitDevelopment =
+    environment.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED === "true" &&
+    environment.D2_DEPLOYMENT_ENVIRONMENT === "development";
+  // Retired signature inputs and the retained legacy route flag cannot invalidate development
+  // intake. They never create an unsigned projection or weaken any other deployment environment.
+  const value = d2LambdaGatewayEnvironmentSchema.parse(
+    explicitDevelopment
+      ? {
+          ...environment,
+          JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON: undefined,
+          JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON: undefined,
+        }
+      : environment,
+  );
   if (
     value.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED &&
     value.D2_DEPLOYMENT_ENVIRONMENT !== "development"
@@ -278,7 +291,11 @@ export function loadD2LambdaGatewayConfig(
     });
   }
 
-  if (value.D2_CONTRIBUTION_POLICY_ROUTE_ENABLED && !signedContributionPolicyConfigured) {
+  if (
+    !value.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED &&
+    value.D2_CONTRIBUTION_POLICY_ROUTE_ENABLED &&
+    !signedContributionPolicyConfigured
+  ) {
     throw new Error("The contribution policy route requires the complete signed policy boundary");
   }
   if (
@@ -301,7 +318,8 @@ export function loadD2LambdaGatewayConfig(
     valid: true,
     developmentContributionsEnabled: value.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED,
     privateCaptureRoutesEnabled: value.D2_PRIVATE_CAPTURE_ROUTES_ENABLED,
-    contributionPolicyRouteEnabled: value.D2_CONTRIBUTION_POLICY_ROUTE_ENABLED,
+    contributionPolicyRouteEnabled:
+      !value.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED && value.D2_CONTRIBUTION_POLICY_ROUTE_ENABLED,
     contributionRoutesEnabled: value.D2_CONTRIBUTION_ROUTES_ENABLED,
     trustReviewerRoutesEnabled: value.D2_TRUST_REVIEWER_ROUTES_ENABLED,
     ...(value.UGC_CONTRIBUTION_POLICY_VERSION

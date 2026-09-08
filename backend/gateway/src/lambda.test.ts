@@ -16,6 +16,7 @@ describe("development contribution Lambda composition", () => {
     D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED: "true",
     D2_DEPLOYMENT_ENVIRONMENT: "development",
     D2_CONTRIBUTION_ROUTES_ENABLED: "true",
+    D2_CONTRIBUTION_POLICY_ROUTE_ENABLED: "true",
     UGC_CONTRIBUTION_POLICY_VERSION: "d2-synthetic-ugc.v1",
     D2_TRUST_REVIEWER_ASSIGNMENTS_JSON: JSON.stringify([
       {
@@ -42,6 +43,22 @@ describe("development contribution Lambda composition", () => {
     expect(composition.contributionCapability).toHaveProperty("mode", "development");
     expect(composition).not.toHaveProperty("contributionCapabilityPolicy");
   });
+  it("ignores stale signed settings and keeps the retained anonymous projection disabled", () => {
+    const composition = loadD2LambdaComposition(config, {
+      ...values(),
+      JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON: '{"stale":true}',
+      JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON: '{"retired-key":"retired"}',
+    });
+    expect(composition.configuration).toMatchObject({
+      valid: true,
+      signedContributionPolicyConfigured: false,
+    });
+    expect(composition.routes).toMatchObject({
+      candidateContribution: true,
+      contributionPolicy: false,
+    });
+    expect(composition).not.toHaveProperty("contributionCapabilityPolicy");
+  });
   it("fails closed outside development, without Trust, or when route activation is off", () => {
     for (const change of [
       { D2_DEPLOYMENT_ENVIRONMENT: "production" },
@@ -52,6 +69,10 @@ describe("development contribution Lambda composition", () => {
         loadD2LambdaComposition(config, { ...values(), ...change }).routes.candidateContribution,
       ).toBe(false);
     }
+    expect(
+      loadD2LambdaComposition({ ...config, OIDC_ISSUER: "https://other.example.test/" }, values())
+        .routes.candidateContribution,
+    ).toBe(false);
   });
 });
 

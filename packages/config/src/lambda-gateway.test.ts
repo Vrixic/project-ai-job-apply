@@ -144,6 +144,7 @@ describe("Phase 2 Lambda gateway configuration", () => {
       D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED: "true",
       D2_CONTRIBUTION_ROUTES_ENABLED: "true",
       UGC_CONTRIBUTION_POLICY_VERSION: "d2-ugc.v1",
+      D2_CONTRIBUTION_POLICY_ROUTE_ENABLED: "true",
       ...trustEnvironment,
     };
     expect(loadD2LambdaGatewayConfig(values)).toMatchObject({
@@ -158,9 +159,12 @@ describe("Phase 2 Lambda gateway configuration", () => {
         loadD2LambdaGatewayConfig({ ...values, D2_DEPLOYMENT_ENVIRONMENT: target }),
       ).toThrow();
     }
-    expect(() =>
-      loadD2LambdaGatewayConfig({ ...values, D2_CONTRIBUTION_POLICY_ROUTE_ENABLED: "true" }),
-    ).toThrow("policy route");
+    expect(loadD2LambdaGatewayConfig({ ...values, ...signedCapabilityEnvironment })).toMatchObject({
+      valid: true,
+      contributionRoutesEnabled: true,
+      contributionPolicyRouteEnabled: false,
+      signedContributionPolicyConfigured: false,
+    });
     expect(() =>
       loadD2LambdaGatewayConfig({ ...values, UGC_CONTRIBUTION_POLICY_VERSION: undefined }),
     ).toThrow("consent policies");

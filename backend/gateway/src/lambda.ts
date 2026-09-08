@@ -817,7 +817,10 @@ export function loadD2LambdaComposition(
     }
   }
   let contributionCapabilityPolicy: ContributionCapabilityPolicySource | undefined;
-  if (configuration.signedContributionPolicyConfigured) {
+  if (
+    !configuration.developmentContributionsEnabled &&
+    configuration.signedContributionPolicyConfigured
+  ) {
     try {
       contributionCapabilityPolicy =
         contributionCapabilityPolicySourceFromEnvironment(environment, () => new Date()) ??

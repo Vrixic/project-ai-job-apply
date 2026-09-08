@@ -142,6 +142,14 @@ pnpm --filter @ai-job-apply/extension test
 pnpm --filter @ai-job-apply/extension build
 ```
 
+The direct package build above always reads this workstation's public configuration. Root
+`pnpm build` also rebuilds this extension instead of restoring or publishing a cached bundle:
+its package-local Turbo build task disables caching because ignored `.env.local` settings affect
+the output. Strict-mode builds pass only the nine explicitly listed public `EXTENSION_*` settings,
+including the development-mode flag; no client secret, access token, or signing private key is
+allowed through that list. Other packages retain their existing cache settings. Rebuild and reload
+the unpacked extension after changing its public configuration.
+
 Load `frontend/extension/dist` as an unpacked extension. Register the generated extension ID's
 exact callback/logout URL in the development Auth0 Native Application:
 
