@@ -13,7 +13,7 @@
     "store:assets:validate": "node store/validate-assets.mjs",
     "test:browser": "node ../../scripts/tests/d2-extension-assurance/browser-matrix.mjs",
     "test:browser:single": "node ../../scripts/tests/d2-extension-assurance/browser.mjs",
-    "test": "vitest run",
+    "test": "vitest run --maxWorkers=2",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "watch": "node build.mjs --watch"
   },
