@@ -690,6 +690,12 @@ const dockerIgnore = ".dockerignore";
 for (const required of ["**/node_modules/", "**/dist/", "**/.env", "**/.env.*"]) {
   requireText(dockerIgnore, required, `container context exclusion is missing: ${required}`);
 }
+requireText(
+  dockerIgnore,
+  "!patches/image-size@1.2.1.patch",
+  "the frozen migration build must include its reviewed dependency patch",
+);
+forbidText(dockerIgnore, "!patches/**", "only the reviewed dependency patch may enter the context");
 for (const retired of ["Dockerfile.gateway", "Dockerfile.worker", "ai-job-apply/worker"]) {
   forbidText(publishWorkflow, retired, `retired container publisher remains: ${retired}`);
 }

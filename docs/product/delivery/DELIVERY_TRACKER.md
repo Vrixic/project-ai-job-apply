@@ -473,7 +473,9 @@ This is the master record for the delivery phases defined in the [product and sy
   20 build tasks, plus 156 extension tests, 66 fresh-PostgreSQL Jobs integrations, and 59
   Terraform tests. Rollout is blocked by the unrelated expired mobile `image-size` dependency
   exception (D2-R13); no artifact upload, database migration, runtime apply, or policy renewal
-  occurred. A narrow local security patch is recommended pending scope approval. Docker/WSL
+  occurred in those initial attempts. The user-approved D2-034 patch now passes 136 focused
+  regressions, independent review, frozen installation, the full repository verifier, and the
+  dependency audit with no risk exceptions. Coordinated publication/deployment resumes next. Docker/WSL
   are stopped and generated test databases removed. Exact supported scope, authentication, independent verification,
   Trust review, and production/store isolation remain enforced. The Phase 2 document holds
   the single decision/rationale record.

@@ -19,6 +19,11 @@ overrides:
   qs@<6.16.0: 6.16.0
   xcode@3.0.1>uuid: 11.1.1
 
+patchedDependencies:
+  image-size@1.2.1:
+    hash: 37a40e9556d8c610cb8627de7b5a141d10ae9a78b768915aefda1809f9aed608
+    path: patches/image-size@1.2.1.patch
+
 importers:
 
   .:
@@ -7931,7 +7936,7 @@ snapshots:
 
   ignore@5.3.2: {}
 
-  image-size@1.2.1:
+  image-size@1.2.1(patch_hash=37a40e9556d8c610cb8627de7b5a141d10ae9a78b768915aefda1809f9aed608):
     dependencies:
       queue: 6.0.2
 
@@ -8309,7 +8314,7 @@ snapshots:
       flow-enums-runtime: 0.0.6
       graceful-fs: 4.2.11
       hermes-parser: 0.35.0
-      image-size: 1.2.1
+      image-size: 1.2.1(patch_hash=37a40e9556d8c610cb8627de7b5a141d10ae9a78b768915aefda1809f9aed608)
       invariant: 2.2.4
       jest-worker: 29.7.0
       jsc-safe-url: 0.2.4

@@ -208,8 +208,12 @@ migration execution, or AWS restore execution. No gateway or general worker imag
   `infrastructure/runbooks/deployments/development-document-dark-deployment.md`.
 - `validate-serverless-workflow-infrastructure.mjs` — Enforces the steady-state Lambda durable,
   migration-only container, and retired-path absence policies.
-- `audit-dependencies.mjs` — Applies the centralized lockfile audit policy and exact expiring
-  exceptions.
+- `audit-dependencies.mjs` — Audits the complete lockfile and verifies the exact local
+  `image-size@1.2.1` remediation: patch, lock binding, installed package bytes, and mobile-only
+  dependency paths. No vulnerability exception or expiry renewal is used. Unexpected advisories
+  and registry/tool failures remain blocking.
+- `pnpm test:dependency-security` — Runs bounded parser regressions and applied-remediation audit
+  tests. Included in `pnpm check` and `verify-phase0.ps1`.
 - `validate-skills.mjs` — Validates repository-local agent skills.
 - `verify-phase0.ps1` — Runs the complete repository-side Phase 0 verification sequence.
 

@@ -122,6 +122,7 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-031 | Handle rejected admin callback/session checks without exposing a generic server error or weakening MFA. | Implemented; local verification | Platform engineering | D2-030 | Three generated fixtures reproduce the installed SDK's post-callback MFA-hook rejection: missing/password-only proof refuses persistence; MFA proof permits it. A typed refusal and awaited proxy boundary select only fixed, uncached same-origin errors, with no session cookie or request continuation on failure. Both profiles explain missing MFA without reflecting arbitrary query data. All 71 admin tests/eight files, independent review, and full repository verifier pass. Source `ecfb607` is rebuilt and running only in the local appeal console; page/eight assets and five anonymous/error/SDK probes pass. On 2026-09-08 the user reported the fixed `mfa_required` error, then confirmed an active session after MFA setup guidance. This classifies that retry, not the earlier generic error, and does not establish exact human role binding or hosted acceptance. |
 | D2-032 | Privately verify the local human appeal session against the independently supplied identity before backend assignment. | Complete | Platform engineering | D2-030 | A default-dark, finite-window localhost server action checks SDK MFA freshness, exact issuer/subject/client, independently verified RS256 API token, and only appeal/read scopes. No browser-supplied identity, token export, refresh, Gateway call, role, or case mutation. Exclusive-create aggregate proof remains in the current-user-only ignored setup directory; private binding fingerprints never enter browser output. All 148 admin tests/11 files, typecheck, formatting/lint, independent source review, and the full repository verifier/fresh admin build pass. Actual human verification passes at `2026-09-08T13:19:45Z` before the separately authorized assignment under D2-030. |
 | D2-033 | Remove recurring development contribution signing, policy fetching, and renewal. | Blocked | Platform engineering | D2-005, D2-006, D2-014 | Implementation merged in main; full repository verifier, 156 extension tests, 66 fresh-database Jobs integrations, and 59 Terraform tests pass. Development artifact publication stops at the separate expired mobile dependency exception (D2-R13), before uploads or migration. See details below. |
+| D2-034 | Replace the expired mobile parser exception with a narrow, verified dependency security patch. | In progress; local verification passed | Platform engineering | D2-033 | User-approved local `image-size@1.2.1` patch independently reviewed: 121 parser and 15 audit regressions pass, as do frozen installation, 3 mobile tests, mobile build, the complete dependency audit, and the full repository verifier. Deterministic migration image verification remains before release. No exception renewal or broad advisory suppression. |
 
 ### D2-033 — Remove recurring development contribution policy setup
 
@@ -145,10 +146,33 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
   `image-size@1.2.1` dependency exception, which expired on 2026-09-08. No cloud apply, database
   migration, replacement live configuration, policy renewal, or installed development-mode
   acceptance occurred. Local extension configuration is unchanged pending coordinated rollout.
-  D2-R13 records the recommended remediation and required scope decision.
+  Those initial attempts are historical: D2-034 now passes the audit and full local verifier;
+  coordinated artifact publication and deployment are next. No further patch approval is needed.
 - Evidence: [backend authority](../../../backend/services/jobs/src/contribution-capability-source.ts),
   [extension development mode](../../../frontend/extension/lib/development-contributions.ts),
   [Terraform composition](../../../infrastructure/terraform/modules/platform/community-runtime.tf).
+
+### D2-034 — Remediate the mobile parser dependency
+
+- Five narrow patched files retain `image-size@1.2.1` and the existing Expo/Metro versions.
+  Validate complete box headers and positive bounded progress before matching/advancing; bound
+  HEIF children to their parents and ICNS entries to the declared file. Preserve supported
+  512 KiB prefix sampling in both filesystem APIs and the callable API used by Metro.
+- Reproduced the two installed-package hangs before patching using bounded child processes.
+  The patched installation passes 121 malformed/valid parser regressions and independent code
+  review, plus 15 audit-integrity tests. Frozen installation, 3 mobile tests, and mobile build pass.
+- The audit now verifies the exact patch, lock binding, full installed package tree, and all
+  10 mobile/Expo/Metro dependency paths before interpreting registry results. Both known advisory
+  records are locally remediated; no risk exception, renewed expiry, or unrelated suppression is used.
+- Patch/lock SHA-256: `37a40e9556d8c610cb8627de7b5a141d10ae9a78b768915aefda1809f9aed608`.
+  Installed-tree digest: `69353bb092411adf01d204d8d1d423770834e57af1a15e42b9c7ca4e4a937c07`.
+- `pnpm check` and the full repository verifier include `pnpm test:dependency-security`.
+  The migration build context allows only this exact patch file for the frozen install.
+  The full repository verifier passes; deterministic migration image verification is still pending.
+  source remediation is not an upstream release or mobile/public-launch acceptance.
+- Evidence: [patch](../../../patches/image-size@1.2.1.patch),
+  [parser regressions](../../../scripts/tests/image-size-security.test.mjs),
+  [audit integrity](../../../scripts/lib/dependency-remediations.mjs).
 
 ## D2-023 installed narrow-layout acceptance
 
@@ -581,6 +605,11 @@ artifact verification in the audit. This is a proposed additional security remed
 approved date extension, scanner bypass, Expo upgrade, or completed fix. Obtain direction before
 vendoring that third-party patch; keep existing mobile/public-launch restrictions meanwhile.
 
+The user subsequently approved that recommended local security patch on 2026-09-08. D2-034
+implements only the vulnerable parser progress/bounds checks and exact dependency/audit/build
+integration needed to resume D2-033. Preserve the pinned Expo/Metro versions and all unrelated
+advisory failures; this approval does not extend the expired exception or approve mobile launch.
+
 The 2026-09-08 setup uses a local-only server action to compare the actual authenticated human
 with the separately collected assignment identity before granting roles. A page title or accepted
 MFA session does not establish that identity/scope match. Keeping tokens and raw claims inside the
@@ -641,7 +670,7 @@ These are local checks; deployed migration, human review, and publication eviden
 | D2-R10 | Provider holds cleared; owner follow-up open | The exact representation fix is deployed. Two unchanged submissions were requeued and claimed/parked once; fresh inspection shows zero provider-verification holds and the batch published nothing. | Platform engineering; QA/automation | Refresh the existing owner-visible Processing/Trust state. Preserve the delegated split under D2-030: both reviewer identities are bound, the local human queue read passes, while hosted reviewer and appeal-decision journey acceptance remain open, and normal evidence/publication gates still apply. Aggregate parking counts do not establish a precise Trust status. Do not resubmit or rewrite either submission. |
 | D2-R11 | Implementation complete; rollout blocked | The deployed signed revision is expired. On 2026-09-08 the user removed the recurring development policy requirement; its replacement is implemented and locally verified, but D2-R13 stops artifact publication. | Platform engineering | Resolve D2-R13 and deploy D2-033. No fresh contribution signing or renewal approval is needed. Production/store, unsupported providers, authentication, and reviewer roles remain unchanged. |
 | D2-R12 | Open; hosted reviewer and appeal-decision journey acceptance pending | The private exact identity/fresh-MFA/two-scope check passes on 2026-09-08. The authorized human appeal/read assignment is deployed at state `285`; exact artifact/environment readback and zero proposed Terraform changes pass, preserving both machine identities and expired policy. The user confirms the signed-in local console successfully loads an empty appeal queue; local identity setup and read access are no longer blockers. The local-only window still ends at `2026-09-08T13:38:16Z`. | Product owner; platform engineering | Complete hosted reviewer and appeal-decision journey acceptance under separately scoped testing. Do not manufacture a case or submit a decision merely to test access. D2-033 separately removes contribution-policy renewal without changing reviewer authentication or roles. |
-| D2-R13 | Open | The exact mobile-only `image-size@1.2.1` vulnerability exception expired at 2026-09-08T00:00:00Z. All three attempted D2 artifact publications stop before uploads; no published patched upstream version exists for the two recorded parser-loop advisories. | Platform engineering; product owner | Recommended: authorize a narrow local dependency security patch and regression tests, then verify its exact applied bytes instead of extending the expired exception. Do not suppress new advisories, bypass audit, or claim the development policy replacement is deployed. |
+| D2-R13 | Locally remediated; image verification pending | The expired mobile-only exception blocked the initial publications. The user-approved exact local parser patch now passes 136 focused tests, independent review, frozen installation, the full repository verifier, and the dependency audit without exceptions. | Platform engineering | Complete the deterministic migration image build and resume D2-033 publication/deployment. Maintain the exact local patch until a compatible upstream fix is verified. No mobile/public-launch acceptance is implied. |
 
 ## Completion record
 

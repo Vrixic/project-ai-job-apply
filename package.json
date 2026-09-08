@@ -23,13 +23,16 @@
       "next@16.2.12>sharp": "0.35.0",
       "qs@<6.16.0": "6.16.0",
       "xcode@3.0.1>uuid": "11.1.1"
+    },
+    "patchedDependencies": {
+      "image-size@1.2.1": "patches/image-size@1.2.1.patch"
     }
   },
   "scripts": {
     "audit:dependencies": "node scripts/audit-dependencies.mjs",
     "build": "turbo run build",
     "auth0:verify": "node scripts/verify-auth0-tenant.mjs",
-    "check": "pnpm skills:validate && pnpm infrastructure:validate && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
+    "check": "pnpm skills:validate && pnpm infrastructure:validate && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:dependency-security && pnpm test",
     "clean": "turbo run clean",
     "contracts:generate": "pnpm --filter @ai-job-apply/api-contracts generate",
     "dev": "turbo run dev",
@@ -41,6 +44,7 @@
     "lint": "biome lint .",
     "skills:validate": "node scripts/validate-skills.mjs",
     "test": "turbo run test",
+    "test:dependency-security": "node --test scripts/tests/image-size-security.test.mjs scripts/tests/dependency-remediations.test.mjs",
     "test:d1-browser-assurance": "node scripts/tests/d1-browser-assurance/run.mjs",
     "test:d1-admin-browser-assurance": "node scripts/tests/d1-admin-browser-assurance/run.mjs",
     "test:d1-public-job-page-assurance": "turbo run build --filter=@ai-job-apply/web && node scripts/tests/d1-public-job-page-assurance/run.mjs",

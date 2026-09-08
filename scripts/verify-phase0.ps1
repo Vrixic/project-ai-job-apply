@@ -23,6 +23,7 @@ Invoke-CheckedCommand "Admin Auth0 authorization profile setup" { & scripts/test
 Invoke-CheckedCommand "Formatting" { pnpm format:check }
 Invoke-CheckedCommand "Lint" { pnpm lint }
 Invoke-CheckedCommand "Type checking" { pnpm typecheck }
+Invoke-CheckedCommand "Dependency security regressions" { pnpm test:dependency-security }
 Invoke-CheckedCommand "Tests" { pnpm test }
 Invoke-CheckedCommand "Build" { pnpm build }
 Invoke-CheckedCommand "Compose validation" { docker compose config --quiet }

@@ -8,6 +8,10 @@
 !turbo.json
 !tsconfig.base.json
 
+# The frozen workspace install applies this exact reviewed dependency patch.
+!patches/
+!patches/image-size@1.2.1.patch
+
 !backend/
 !backend/**
 !frontend/
