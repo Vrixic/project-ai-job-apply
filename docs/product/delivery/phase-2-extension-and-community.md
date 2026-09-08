@@ -1,6 +1,6 @@
 # D2 — Extension and Community Loop
 
-- Status: Blocked
+- Status: In progress
 - Start: 2026-09-01
 - Completion: Not completed
 - Owners: Platform engineering; product owner
@@ -378,6 +378,17 @@ three agent scopes, with no extra permissions. The secret and token stayed in pr
 during exchange/verification; only the encrypted setup and aggregate result were retained.
 The development window limits use of that setup; it does not automatically revoke the Auth0 secret.
 
+On 2026-09-08 the user explicitly confirmed reuse of the saved encrypted credential for the
+remaining Phase 2 development initial/takedown work. This closes D2-R14 without rewriting the
+historical setup window, granting additional roles, or changing the separate human appeal
+assignment. Current-user-only file access, unchanged encrypted bytes, exact development AWS
+account, and the live Gateway's exact issuer/audience/three reviewer assignments were checked.
+Two bounded token requests were refused by Auth0 with `403` / `access_denied`; the second retained
+only the classification **application API access not authorized**. No token was obtained, no
+Gateway case request was made, and no case decision or role change occurred. D2-R16 tracks the
+existing agent application's Platform API client-access grant; it is not a contribution-policy
+renewal or a request for a new secret.
+
 The proposed agent-only binding passes both existing runtime configuration parsers, preserves
 the case opener, and fits the existing limits: combined encoded policy/configuration `2,072/2,400`
 characters; Gateway environment `3,108/4,096` bytes; scheduled environment `3,111/4,096` bytes.
@@ -576,15 +587,22 @@ signed policy as authority or promote the workflow's machine identity to a decis
 D2-033 is closed following the user's 2026-09-08 reload/sign-in/job-add confirmation; that
 completed development adoption step is no longer in the outstanding list below.
 
-Continuation checkpoint at `2026-09-08T20:46:39Z`: `main` is clean and synchronized at
-`b4f8b52`; D2-036 is complete. Repeated read-only development STS checks now report that the
-SSO session requires renewal. The earlier SSO-available observations are historical, not current
-access. D2-R14's reviewer-credential reuse question also remains unanswered. Further deployment
-and live review require those inputs; no cloud change, decryption, token exchange, or new provider
-activation was attempted. Run `aws sso login --profile ai-job-apply-development-admin` locally and
-confirm reuse of the existing encrypted reviewer credential for development initial/takedown work;
-appeals remain assigned to the separate human reviewer. This is a blocked continuation, not Phase 2
-completion or a reduction of its remaining scope.
+Resumed continuation on 2026-09-08: the user confirmed both requested inputs. Development STS
+now succeeds in the exact configured account/region, and fresh authority permits reuse of the
+existing encrypted initial/takedown reviewer credential. D2-R14/D2-R15 are Closed. The first
+reviewer token request and one bounded diagnostic retry returned Auth0 `403 access_denied`,
+classified as application API access not authorized. No token, case read, or decision resulted.
+D2-R16 requires restoring only that existing agent application's client-access grant for the
+Platform API, preserving its three approved scopes and the separate human appeal assignment.
+No new secret, contribution-policy renewal, or AWS login is requested at this checkpoint.
+
+Independent read-only release preparation confirms state `287`, exact Gateway/scheduled/Trust
+versions `54`/`16`/`12`, unchanged Greenhouse-only source/verification registrations and all three
+reviewer assignments, RDS backup coverage, and zero ECS tasks/services. Current-source release
+can proceed separately while keeping additional providers disabled; the old one-time
+development-mode cutover operator must not be replayed against the already-enabled mode.
+No artifact was published, migration executed, cloud configuration changed, or provider activated
+in this continuation. D2-036 remains Complete; Phase 2 remains In progress, not complete.
 
 | Remaining item | Existing implementation | Required next action / recommended choice |
 |---|---|---|
@@ -741,8 +759,16 @@ completion or a reduction of its remaining scope.
 | 2026-09-08 | Integrated coordinated implementation in `54002a7` and `df9ac1d`, then passed the full repository verifier at `df9ac1d`: 33 typecheck tasks, 34 test tasks, 20 build tasks, source-bound guards, dependency-security regressions, Compose and scope checks. The previously failing admin suite passes all 148 tests within the full run. Existing lint warnings and ordinary database-gated skips remain explicit; separate Jobs integration is 77/77. The development extension rebuilt using unchanged ignored settings; no provider activation or cloud release occurred. All agent changes are on `main`, without new branches/worktrees, and the unrelated user stash is untouched. | D2-035 | `scripts/verify-phase0.ps1` exit 0; [local integration and browser aggregates](#d2-035--complete-multi-provider-development-contributions) |
 | 2026-09-08 | Completed D2-036's repeatable generated-only logical recovery command: all 42 migrations fresh/replay, real dump/restore, 68 exact row sets and aggregate equality, 18 nonempty D2 relations, resumed three-provider publication, owner isolation, immutable leases, and authorization/cancellation refusals. Final agent and primary command runs pass, as do 15 ownership guards, the separate 2/2 composed and 1/1 cancellation suites, and the full repository verifier. Corrected fixture clocks/client composition without changing domain safeguards. Updated stale gateway release/reviewer notes, removed exact temporary containers, and stopped Docker/WSL. No reviewer credential, real provider capture, cloud release, or live case was used. | D2-036; D2-020 | [Recovery implementation](../../../scripts/tests/d2-recovery/run.mjs), [results and limits](#d2-036--repeatable-synthetic-logical-recovery) |
 | 2026-09-08 | Revalidated the clean/synchronized `b4f8b52` checkpoint and remaining gates after D2-036. Checked the independent Greenhouse-only release path without publishing or applying: development STS is unavailable, and a repeated read-only check classifies the failure as SSO renewal required. Reviewer reuse authority remains unanswered under D2-R14. Marked Phase 2 Blocked pending these inputs; retained the full scope and existing implemented/verified results. No new test cycle, credential access, cloud mutation, or provider activation occurred. | D2-R14; D2-R15 | Read-only STS classification at `2026-09-08T20:46:39Z`; [current next actions](#remaining-acceptance-and-operator-inputs) |
+| 2026-09-08 | Resumed after the user confirmed renewed SSO and encrypted reviewer-credential reuse. Exact account and live role/identity boundaries pass; the original encrypted setup remains unchanged. Auth0 refuses the existing agent's token request with 403/access_denied, classified on one diagnostic retry as application API access not authorized. No token, case read, decision, grant, or cloud mutation occurred. Closed the answered R14/R15 inputs and recorded the distinct R16 client-grant blocker. Independent read-only release preparation confirms state 287, exact runtime/Greenhouse scope, backup coverage, and zero ECS tasks/services. Corrected the migration runbook's stale 40-migration/six-message wording to the current 42-migration/seven-message package. | D2-030, D2-035; D2-R14–D2-R16 | [Reviewer continuation](#delegated-reviewer-assignment), [remaining steps](#remaining-acceptance-and-operator-inputs), [migration runbook](../../../infrastructure/runbooks/deployments/database-migration.md) |
 
 ## Decisions and scope changes
+
+For the 2026-09-08 reviewer continuation, accept the user's fresh authority for the already
+assigned development initial/takedown work while preserving the original encrypted setup as
+history. Do not attach this authority to the removed contribution-policy expiry or seek recurring
+approval for the same unchanged assignment. Auth0's observed API-access refusal is a separate
+provider configuration issue: restore only the existing agent's exact three-scope client grant,
+not its own identity-administration rights, the human appeal grant, or a tenant-wide permission.
 
 For D2-036 on 2026-09-08, maintain one generated-only logical recovery command because a fresh
 migration/replay and a schema inventory do not test recovery of saved data. Use actual dump/restore,
@@ -848,8 +874,9 @@ These are local checks; deployed migration, human review, and publication eviden
 | D2-R11 | Closed | Recurring development signing/policy fetch/expiry is removed from the deployed Gateway/scheduled runtime and rebuilt unpacked extension. The user confirms installed reload, successful sign-in, and successful job addition on 2026-09-08, closing this development adoption blocker. Exact scope, authentication, independent verification, and Trust remain enforced. | Platform engineering | Preserve the fixed development scope and remaining independent publication/lifecycle checks. No fresh contribution signing or renewal approval is needed. Production/store and unsupported providers remain disabled; do not automatically resubmit old items. |
 | D2-R12 | Open; hosted reviewer and appeal-decision journey acceptance pending | The private exact identity/fresh-MFA/two-scope check passes on 2026-09-08. The authorized human appeal/read assignment was deployed at state `285` with exact readback and zero drift, preserving both machine identities and the then-expired policy. All three reviewer assignments are unchanged at current state `287`; D2-033 now uses persistent development mode. The user confirms the signed-in local console successfully loads an empty appeal queue; local identity setup and read access are no longer blockers. The local-only window ended at `2026-09-08T13:38:16Z`; the assignments remain preserved at state `287`. | Product owner; platform engineering | Complete hosted reviewer and appeal-decision journey acceptance under separately scoped testing. Do not manufacture a case or submit a decision merely to test access. D2-033 separately removes contribution-policy renewal without changing reviewer authentication or roles. |
 | D2-R13 | Closed | The expired mobile-only exception blocked initial publication attempts. The exact user-approved parser patch passes 136 focused tests, independent review, frozen installation, the full repository verifier, and the dependency audit without exceptions. Two matching no-cache migration-image builds, isolated smoke, and ECR scan COMPLETE with zero High/Critical findings now pass; that image was published and used successfully. | Platform engineering | Maintain the exact local patch until a compatible upstream fix is verified. No mobile/public-launch acceptance is implied. |
-| D2-R14 | Open; reviewer credential reuse authority needed | The retained encrypted agent-reviewer setup limits use to a development window that ended at 2026-09-06T19:24:54.670Z; no fresh reuse approval has been received. The server reviewer assignment remains unchanged. This is separate from both the removed contribution-policy renewal requirement and the now-expired AWS SSO session under D2-R15. | Product owner; platform engineering | Ask to reuse the existing encrypted agent-reviewer credential for Phase 2 development review work under the already assigned roles. Do not decrypt or exchange it before fresh authority, borrow the human appeal session, change roles, or submit unsupported decisions. No new secret needs to be pasted into chat. |
-| D2-R15 | Open; development SSO renewal required | Repeated read-only STS checks at the 2026-09-08T20:46:39Z checkpoint fail with the recognized SSO renewal condition. This supersedes earlier SSO-available observations; no deployment or cloud mutation was attempted. | Product owner; platform engineering | Run `aws sso login --profile ai-job-apply-development-admin` locally, then signal readiness. Recheck exact account/region/caller before any release; preserve Greenhouse-only activation and all reviewer/provider gates. |
+| D2-R14 | Closed | The user confirmed reuse of the existing encrypted agent-reviewer credential on 2026-09-08 for the remaining Phase 2 development initial/takedown work. Private current-user access, unchanged encrypted bytes, and the live exact assignment pass. The historical collection window remains unchanged; the subsequent Auth0 refusal is separately tracked as R16. | Product owner; platform engineering | Preserve the existing roles and separate human appeal reviewer. No recurring contribution-policy approval or new secret is required for this unchanged assignment; do not borrow another identity, expand roles, or submit unsupported decisions. |
+| D2-R15 | Closed | Following the user's 2026-09-08 confirmation, fresh STS checks pass in the exact configured development account and us-east-2 assumed-role boundary. The earlier 20:46:39Z expiry observation is historical. | Product owner; platform engineering | Recheck exact account/region/caller before releases; preserve Greenhouse-only activation and all reviewer/provider gates. |
+| D2-R16 | Open; reviewer application API access refused | Two bounded requests using the existing exact agent setup return Auth0 403/access_denied; the safe diagnostic classification is application API access not authorized. No token, case read, or decision was obtained. AWS access and server role assignments are intact; the underlying grant has not been inspected through a Management API. | Product owner; platform engineering | In the development Auth0 tenant, open Applications → APIs → the API with identifier `ai-job-apply-api` → Application Access (or Machine to Machine Applications), select the existing dedicated agent application, and grant Client Access for only `trust:review`, `trust:case:decide`, `trust:case:takedown`. Do not grant all permissions, authorize Management API, change human/candidate/workflow grants, or paste secrets. Confirm completion, then retry exact token verification and bounded review. [Auth0 procedure](https://auth0.com/docs/get-started/apis/api-access-policies-for-applications) |
 
 ## Completion record
 

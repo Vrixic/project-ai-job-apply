@@ -16,7 +16,7 @@ service and must return to zero running tasks after every migration.
 - For the Phase 2 package, require the exact
   `d2-community-lifecycle-profile-jobs-documents-matching-billing-trust-v1` manifest, the ordered Profile,
   Jobs, Documents, Matching, Billing, and Trust runners, ten declared schemas, 68 declared regular
-  relations, and 40 checksum-bound migrations, including Jobs `0020` before updating the Gateway
+  relations, and 42 checksum-bound migrations, including Jobs `0022` before updating the Gateway
   or either D2 worker. Reject older D1 package and
   receipt boundaries.
 - Require the exact platform digest to have a complete scan with zero High or Critical findings.
@@ -227,7 +227,7 @@ as `ReviewedBaselineToCurrentDeltaSha256`; do not reuse a digest after the merge
 4. `Execute` accepts only that checksum-reviewed descriptor, submits it through
    `--cli-input-json`, first conditionally creates an immutable customer-KMS execution claim in
    the versioned state bucket, writes a local receipt immediately, waits for `STOPPED`, and
-   requires the exact image digest, exit code `0`, no effective override, six aggregate-only
+   requires the exact image digest, exit code `0`, no effective override, seven aggregate-only
    success messages, zero active migration tasks, and zero ECS services.
 5. `Verify` repeats the task/log/zero-compute checks and retains a refresh-backed zero-drift plan
    plus its adjacent `.baseline.json` sidecar. The operator rejects overwrites, removes only newly
