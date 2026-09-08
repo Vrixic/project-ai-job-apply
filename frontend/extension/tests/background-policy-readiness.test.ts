@@ -98,16 +98,25 @@ function storageArea(records: Map<string, unknown>) {
   };
 }
 
-async function background(fetcher: typeof fetch, development = false) {
+async function background(
+  fetcher: typeof fetch,
+  development = false,
+  configuration: { providers?: unknown; capture?: SanitizedJobCapture; detector?: unknown } = {},
+) {
+  const currentCapture = configuration.capture ?? capture;
   vi.stubGlobal("__DEVELOPMENT_CONTRIBUTIONS__", development);
-  vi.stubGlobal("__DETECTOR_ACTIVATION_POLICY__", {
-    schemaVersion: 1,
-    revision: "synthetic-detector-v1",
-    extensionVersion: "0.2.0",
-    enabledProviders: policy.providers,
-    enabledVariants: policy.variants,
-    enabledDomains: policy.domains,
-  });
+  vi.stubGlobal("__DEVELOPMENT_CONTRIBUTION_PROVIDERS__", configuration.providers);
+  vi.stubGlobal(
+    "__DETECTOR_ACTIVATION_POLICY__",
+    configuration.detector ?? {
+      schemaVersion: 1,
+      revision: "synthetic-detector-v1",
+      extensionVersion: "0.2.0",
+      enabledProviders: policy.providers,
+      enabledVariants: policy.variants,
+      enabledDomains: policy.domains,
+    },
+  );
   vi.stubGlobal("__AUTH0_AUDIENCE__", "ai-job-apply-api");
   vi.stubGlobal("__AUTH0_CLIENT_ID__", "synthetic-native-client");
   vi.stubGlobal("__AUTH0_DOMAIN__", "tenant.example.test");
@@ -128,11 +137,11 @@ async function background(fetcher: typeof fetch, development = false) {
 
   const local = new Map<string, unknown>();
   const session = new Map<string, unknown>([
-    ["d2LastJobCaptureV1", { capture, tabId: 7, tabUrl: capture.sourceUrl }],
+    ["d2LastJobCaptureV1", { capture: currentCapture, tabId: 7, tabUrl: currentCapture.sourceUrl }],
   ]);
   const queued = createPendingIntent({
     approvedFields: ["title"],
-    capture,
+    capture: currentCapture,
     identityFence,
     intent: "contribute",
     retentionMilliseconds: 86_400_000,
@@ -177,7 +186,7 @@ async function background(fetcher: typeof fetch, development = false) {
       onInstalled: { addListener: vi.fn() },
     },
     storage: { local: storageArea(local), session: storageArea(session) },
-    tabs: { query: vi.fn(async () => [{ id: 7, url: capture.sourceUrl }]) },
+    tabs: { query: vi.fn(async () => [{ id: 7, url: currentCapture.sourceUrl }]) },
     alarms: { create: vi.fn(), clear: vi.fn(async () => true), onAlarm: { addListener: vi.fn() } },
   };
   vi.stubGlobal("chrome", browser);
@@ -218,6 +227,91 @@ describe("warm background worker signed-policy readiness", () => {
     vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
+
+  it.each([
+    ["greenhouse", "greenhouse-board-v1", "boards.greenhouse.io"],
+    ["greenhouse", "greenhouse-board-v1", "job-boards.greenhouse.io"],
+    ["lever", "lever-posting-v1", "jobs.lever.co"],
+    ["lever", "lever-posting-v1", "jobs.eu.lever.co"],
+    ["ashby", "ashby-job-board-v1", "jobs.ashbyhq.com"],
+  ] as const)(
+    "wires exact build selection into %s %s %s delivery without policy calls",
+    async (provider, pageVariant, domain) => {
+      const currentCapture: SanitizedJobCapture = {
+        ...capture,
+        provider,
+        pageVariant,
+        sourceUrl: `https://${domain}/synthetic${provider === "greenhouse" ? "/jobs" : ""}/123`,
+      };
+      const fetcher = vi.fn<typeof fetch>(async (url, init) => {
+        const body = JSON.parse(String(init?.body));
+        if (String(url).endsWith("/ugc-contribution-consents")) {
+          return response(
+            {
+              documentVersion: "ugc-contribution-preview.v1",
+              grantedAt: now,
+              id: "01991000-0000-7000-8000-000000000009",
+              policyVersion: "synthetic-policy-v1",
+              schemaVersion: 1,
+              state: "granted",
+            },
+            201,
+          );
+        }
+        if (String(url).endsWith("/jobs/contributions")) {
+          return response(
+            { id: body.contributionId, state: "queued", submittedAt: now, updatedAt: now },
+            202,
+          );
+        }
+        throw new Error("Unexpected request");
+      });
+      const worker = await background(fetcher, true, {
+        providers: [provider],
+        capture: currentCapture,
+        detector: {
+          schemaVersion: 1,
+          revision: "synthetic-provider-v1",
+          extensionVersion: "0.2.0",
+          enabledProviders: { ...policy.providers, [provider]: true },
+          enabledVariants: { ...policy.variants, [pageVariant]: true },
+          enabledDomains: { ...policy.domains, [domain]: true },
+        },
+      });
+      expect((await worker.status()).delivery.contribution.ready).toBe(true);
+      expect(fetcher).not.toHaveBeenCalled();
+      const result = await worker.send({ action: "retry" });
+      expect(result.queue).toMatchObject({ pending: 0, stopped: 0, blocked: 1 });
+      expect(fetcher.mock.calls.map(([url]) => String(url))).toEqual([
+        "https://api.example.test/v1/profile/ugc-contribution-consents",
+        "https://api.example.test/v1/jobs/contributions",
+      ]);
+      const contribution = JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body));
+      expect(contribution.source).toMatchObject({
+        provider,
+        pageVariant,
+        sourceUrl: currentCapture.sourceUrl,
+      });
+      expect(worker.browser.storage.local.get).not.toHaveBeenCalledWith(
+        "d2SignedContributionCapabilityPolicyV1",
+      );
+    },
+  );
+
+  it.each(
+    [[], ["lever"], ["unknown"], ["greenhouse", "greenhouse"], null].map((providers) => [
+      providers,
+    ]),
+  )(
+    "keeps a Greenhouse item undelivered for disabled or malformed injected provider selection %j",
+    async (providers) => {
+      const fetcher = vi.fn<typeof fetch>();
+      const worker = await background(fetcher, true, { providers });
+      expect((await worker.status()).delivery.contribution.ready).toBe(false);
+      await worker.send({ action: "retry" });
+      expect(fetcher).not.toHaveBeenCalled();
+    },
+  );
 
   it("has persistent development readiness without fetching policy or accessing its signed cache", async () => {
     vi.setSystemTime(new Date("2099-01-01T00:00:00.000Z"));

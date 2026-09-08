@@ -10,10 +10,12 @@ locals {
     var.environment == "development" &&
     var.d2_community_runtime.development_contributions_enabled
   )
-  d2_development_contribution_environment = local.d2_development_contributions_enabled ? {
+  d2_development_contribution_environment = local.d2_development_contributions_enabled ? merge({
     D2_DEPLOYMENT_ENVIRONMENT            = "development"
     D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED = "true"
-  } : {}
+    }, var.d2_community_runtime.development_contribution_providers != tolist(["greenhouse"]) ? {
+    D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON = jsonencode(var.d2_community_runtime.development_contribution_providers)
+  } : {}) : {}
   d2_policy_endpoint_enabled = (
     var.d2_community_runtime.policy_endpoint_enabled &&
     var.deploy_applications &&

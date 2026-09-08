@@ -5,7 +5,6 @@ import {
   extensionDetectorActivationPolicy,
 } from "../lib/capability-policy";
 import { extensionConfiguration } from "../lib/config";
-import { DevelopmentContributionRuntime } from "../lib/development-contributions";
 import {
   cancelContribution,
   fileContributionAppeal,
@@ -24,6 +23,7 @@ import {
   upsertContributionReceipt,
 } from "../lib/contribution-receipts";
 import { detectPublicJob } from "../lib/detectors";
+import { DevelopmentContributionRuntime } from "../lib/development-contributions";
 import type { CaptureField, SanitizedJobCapture } from "../lib/job-capture";
 import { sendJobIntent } from "../lib/job-intent-api";
 import { parseExtensionMessage } from "../lib/messages";
@@ -60,7 +60,10 @@ const RETRY_ALARM = "d2PendingJobIntentRetry";
 let identityGeneration = 0;
 
 const contributionPolicy = extensionConfiguration.developmentContributions
-  ? new DevelopmentContributionRuntime(extensionDetectorActivationPolicy)
+  ? new DevelopmentContributionRuntime(
+      extensionDetectorActivationPolicy,
+      extensionConfiguration.developmentContributionProviders,
+    )
   : new ExtensionContributionPolicyRuntime(
       extensionConfiguration.capabilityPolicyPublicKeys,
       {

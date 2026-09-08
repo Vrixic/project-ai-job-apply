@@ -110,6 +110,19 @@ const trustEvidencePurposes = [
 const lowercaseUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const lowercaseUuidV7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const policyVersion = /^[a-z0-9][a-z0-9._-]{2,99}$/;
+const d2DevelopmentContributionProviders = ["greenhouse", "lever", "ashby"] as const;
+export type D2DevelopmentContributionProvider = (typeof d2DevelopmentContributionProviders)[number];
+const d2DevelopmentContributionProviderSchema = z
+  .array(z.enum(d2DevelopmentContributionProviders))
+  .max(d2DevelopmentContributionProviders.length)
+  .superRefine((providers, context) => {
+    if (new Set(providers).size !== providers.length) {
+      context.addIssue({
+        code: "custom",
+        message: "Development contribution providers must be unique",
+      });
+    }
+  });
 
 const d2LambdaGatewayEnvironmentSchema = z.object({
   D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED: exactDisabledBoolean,
@@ -166,6 +179,7 @@ export interface D2LambdaGatewayTrustConfiguration {
 export interface D2LambdaGatewayConfiguration {
   valid: boolean;
   developmentContributionsEnabled: boolean;
+  developmentContributionProviders?: readonly D2DevelopmentContributionProvider[];
   privateCaptureRoutesEnabled: boolean;
   contributionPolicyRouteEnabled: boolean;
   contributionRoutesEnabled: boolean;
@@ -195,6 +209,29 @@ function parseBoundedJson<T>(value: string, schema: z.ZodType<T>): T {
   const result = schema.safeParse(parsed);
   if (!result.success) throw new Error("Phase 2 Gateway configuration is malformed");
   return result.data;
+}
+
+/** Explicit development provider selection; absence preserves existing Greenhouse-only behavior. */
+export function loadD2DevelopmentContributionProviders(
+  environment: NodeJS.ProcessEnv = process.env,
+): readonly D2DevelopmentContributionProvider[] {
+  const configured = environment.D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON;
+  const explicitDevelopment =
+    environment.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED === "true" &&
+    environment.D2_DEPLOYMENT_ENVIRONMENT === "development";
+  if (!explicitDevelopment) {
+    if (configured !== undefined || environment.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED === "true") {
+      throw new Error(
+        "Development contribution provider selection requires explicit development mode",
+      );
+    }
+    return Object.freeze([]);
+  }
+  if (configured === undefined) return Object.freeze(["greenhouse"]);
+  if (configured.length > 128) {
+    throw new Error("Development contribution provider selection exceeds its configuration bound");
+  }
+  return Object.freeze(parseBoundedJson(configured, d2DevelopmentContributionProviderSchema));
 }
 
 /**
@@ -227,6 +264,7 @@ export function loadD2LambdaGatewayConfig(
       "Persistent development contributions require the exact development environment",
     );
   }
+  const developmentContributionProviders = loadD2DevelopmentContributionProviders(environment);
   const policyPair =
     Boolean(value.JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON) ===
     Boolean(value.JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON);
@@ -317,6 +355,7 @@ export function loadD2LambdaGatewayConfig(
   return Object.freeze({
     valid: true,
     developmentContributionsEnabled: value.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED,
+    ...(value.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED ? { developmentContributionProviders } : {}),
     privateCaptureRoutesEnabled: value.D2_PRIVATE_CAPTURE_ROUTES_ENABLED,
     contributionPolicyRouteEnabled:
       !value.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED && value.D2_CONTRIBUTION_POLICY_ROUTE_ENABLED,

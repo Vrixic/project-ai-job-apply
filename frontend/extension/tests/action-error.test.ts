@@ -9,7 +9,7 @@ describe("extension privacy-safe action errors", () => {
     [
       "development_contribution_disabled",
       "enqueue",
-      "This unpacked development build accepts only enabled Greenhouse job pages for extension version 0.2.0.",
+      "This unpacked development build accepts only explicitly selected and detector-enabled provider pages for extension version 0.2.0.",
     ],
     [
       "token_request_failed",

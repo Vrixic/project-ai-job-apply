@@ -1,5 +1,5 @@
-import { appealEvidenceDigest } from "../lib/contribution-owner-api";
 import { extensionConfiguration } from "../lib/config";
+import { appealEvidenceDigest } from "../lib/contribution-owner-api";
 import { CAPTURE_FIELDS, type CaptureField, type SanitizedJobCapture } from "../lib/job-capture";
 
 interface AuthStatus {
@@ -91,7 +91,7 @@ const cancelAppeal = node<HTMLButtonElement>("#cancel-appeal");
 
 const readinessCopy: Record<DeliveryReadinessReason, string> = {
   development_capture_disabled:
-    "This development build accepts only enabled Greenhouse job pages for extension version 0.2.0.",
+    "This development build accepts only explicitly selected and detector-enabled provider pages for extension version 0.2.0.",
   api_configuration_required: "Configure the API origin to deliver selected fields.",
   identity_configuration_required: "Add public Auth0 settings, then sign in.",
   policy_configuration_required: extensionConfiguration.developmentContributions

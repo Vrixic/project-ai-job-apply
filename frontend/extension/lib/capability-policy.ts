@@ -1,6 +1,6 @@
+import { EXTENSION_CLIENT_VERSION_PATTERN } from "./client-version";
 import { PROVIDER_DETECTORS } from "./detectors";
 import type { AtsProvider, JobPageVariant } from "./job-capture";
-import { EXTENSION_CLIENT_VERSION_PATTERN } from "./client-version";
 
 declare const __DETECTOR_ACTIVATION_POLICY__: unknown;
 

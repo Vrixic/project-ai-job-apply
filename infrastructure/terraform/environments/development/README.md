@@ -39,3 +39,9 @@ This flag defaults false and changes no provider registry, verification, identit
 role, queue, schedule, concurrency, or alarm setting. It cannot activate an otherwise disabled
 runtime. The shared platform module rejects this flag outside development; this is not a
 production or browser-store release configuration.
+
+The optional `d2_community_runtime.development_contribution_providers` list selects unique
+`greenhouse`, `lever`, and/or `ashby` names only in that explicit development mode. Omission
+preserves Greenhouse-only behavior without a new environment key; `[]` denies every provider.
+It does not change enable flags or create verification registrations, and additional providers
+remain subject to their separate source, fixture acceptance, and activation configuration.

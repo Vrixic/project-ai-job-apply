@@ -323,8 +323,11 @@ This is the master record for the delivery phases defined in the [product and sy
 - Completion: Not completed
 - Completion continuation (2026-09-08): the user explicitly requests autonomous work toward full
   Phase 2 completion, pausing for required input and resuming after the answer. Development SSO is
-  available in the configured account. D2-035 now tracks the discovered Lever/Ashby development
-  capability and forward-migration gap; detector configuration alone cannot enable them. Live
+  available in the configured account. D2-035's fixed Lever/Ashby descriptors, development-only
+  provider selection, and forward Jobs `0022` are now implemented and locally verified. All 77
+  Jobs PostgreSQL tests pass; a clean packaged migration/replay and read-only recovery check cover
+  42 migrations/68 relations, while the live environment remains on 41 migrations and Greenhouse
+  alone. Paired page/API acceptance, representative fixtures, release, and activation remain. Live
   delegated review is awaiting authorization to reuse its retained encrypted credential after the
   original setup-use window expired (D2-R14). Server roles and persistent development contribution
   mode remain unchanged; no secret, token, case content, or cloud mutation was needed for this audit.

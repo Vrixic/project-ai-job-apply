@@ -10,6 +10,7 @@ import {
   parseRestoreManifest,
   type RestoreContributor,
   type RestoreManifestSource,
+  type RestoreSqlClient,
   type RestoreSqlExecutor,
   verifyRestoreDatabase,
 } from "./restore-verifier.js";
@@ -98,7 +99,7 @@ describe("current restore manifest", () => {
         (total, contributor) => total + contributor.migrations.length,
         0,
       ),
-    ).toBe(41);
+    ).toBe(42);
     expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 
     for (const contributor of source.manifest.contributors) {
@@ -242,7 +243,7 @@ describe("read-only aggregate restore verification", () => {
       manifestSha256: source.sha256,
       ownerCount: 6,
       relationCount: 68,
-      migrationCount: 41,
+      migrationCount: 42,
     });
     expect(result.aggregateDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.keys(result)).toEqual([
@@ -334,6 +335,40 @@ describe("read-only aggregate restore verification", () => {
         source,
       ),
     ).rejects.toThrow("migration boundary mismatch for jobs");
+  });
+
+  it("keeps the prior 41-migration release verifiable only against its own boundary", async () => {
+    const current = loadCurrentRestoreManifest();
+    const historicalManifest = parseRestoreManifest({
+      ...current.manifest,
+      contributors: current.manifest.contributors.map((contributor) => ({
+        ...contributor,
+        migrations: contributor.migrations.filter(
+          (migration) => migration.version !== "0022_development_contribution_provider_leases",
+        ),
+      })),
+    });
+    const historical: RestoreManifestSource = {
+      manifest: historicalManifest,
+      sha256: createHash("sha256").update(JSON.stringify(historicalManifest)).digest("hex"),
+    };
+    const executor = successfulExecutor(historical);
+    const client: RestoreSqlClient = {
+      async begin(_options, work) {
+        return work(executor);
+      },
+    };
+
+    expect(historical.sha256).not.toBe(current.sha256);
+    await expect(verifyRestoreDatabase(client, historical)).resolves.toMatchObject({
+      manifestSha256: historical.sha256,
+      ownerCount: 6,
+      relationCount: 68,
+      migrationCount: 41,
+    });
+    await expect(verifyRestoreDatabase(client, current)).rejects.toThrow(
+      "migration boundary mismatch for jobs",
+    );
   });
 
   it("rejects a missing owned schema even when that schema contains no relations", async () => {

@@ -1,11 +1,10 @@
 import { createHash } from "node:crypto";
-import {
-  DEVELOPMENT_CONTRIBUTION_CAPABILITY_DIGEST,
-  DEVELOPMENT_CONTRIBUTION_CAPABILITY_VERSION,
-  DEVELOPMENT_CONTRIBUTION_OPERATION_LEASE_MS,
-} from "../contribution-capability-source.js";
 import type postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
+import {
+  DEVELOPMENT_CONTRIBUTION_OPERATION_LEASE_MS,
+  developmentContributionDescriptorForLease,
+} from "../contribution-capability-source.js";
 import type {
   ContributionOwnerReasonCode,
   ContributionOwnerState,
@@ -526,10 +525,15 @@ export class PostgresContributionProcessingStore implements ContributionProcessi
   async preparePublication(
     input: Parameters<ContributionProcessingStore["preparePublication"]>[0],
   ): Promise<PreparedPublicationReconciliation> {
+    const developmentDescriptor = input.developmentOperationLease
+      ? developmentContributionDescriptorForLease(
+          input.capabilityPolicyVersion,
+          input.capabilityConfigurationDigestSha256,
+        )
+      : undefined;
     if (
       input.developmentOperationLease &&
-      (input.capabilityPolicyVersion !== DEVELOPMENT_CONTRIBUTION_CAPABILITY_VERSION ||
-        input.capabilityConfigurationDigestSha256 !== DEVELOPMENT_CONTRIBUTION_CAPABILITY_DIGEST ||
+      (!developmentDescriptor ||
         Date.parse(input.capabilityExpiresAt) - Date.parse(input.capabilityEvaluatedAt) !==
           DEVELOPMENT_CONTRIBUTION_OPERATION_LEASE_MS ||
         Date.parse(input.capabilityEvaluatedAt) > input.occurredAt.getTime() ||
@@ -546,10 +550,16 @@ export class PostgresContributionProcessingStore implements ContributionProcessi
           normalizationId: string;
           verificationId: string;
           trustDecisionId: string;
+          provider: string;
+          pageVariant: string;
+          sourceUrl: string;
+          clientVersion: string;
         }[]
       >`
         SELECT normalization.id AS "normalizationId", verification.id AS "verificationId",
-          trust.id AS "trustDecisionId"
+          trust.id AS "trustDecisionId", contribution.provider,
+          contribution.page_variant AS "pageVariant", contribution.source_url AS "sourceUrl",
+          contribution.client_version AS "clientVersion"
         FROM jobs.job_contributions AS contribution
         JOIN jobs.job_contribution_normalizations AS normalization
           ON normalization.contribution_id = contribution.id
@@ -570,6 +580,21 @@ export class PostgresContributionProcessingStore implements ContributionProcessi
           AND contribution.payload #>> '{client,version}' = contribution.client_version
       `;
       if (!gates) throw new Error("Publication gates are not complete");
+      if (developmentDescriptor) {
+        const source = new URL(gates.sourceUrl);
+        if (
+          gates.provider !== developmentDescriptor.provider ||
+          gates.pageVariant !== developmentDescriptor.pageVariant ||
+          gates.clientVersion !== developmentDescriptor.clientVersion ||
+          source.protocol !== "https:" ||
+          source.username ||
+          source.password ||
+          source.port ||
+          !developmentDescriptor.domains.includes(source.hostname)
+        ) {
+          throw new Error("Development publication descriptor does not match the contribution");
+        }
+      }
       const [existing] = await transaction<
         Array<PreparedPublicationReconciliation & { state: "prepared" | "applied" }>
       >`

@@ -36,9 +36,9 @@ vulnerability scan, publish an image, or satisfy the publication/scan/recovery g
 
 The current package boundary is the Phase 2 manifest
 `d2-community-lifecycle-profile-jobs-documents-matching-billing-trust-v1`: six ordered owners (Profile,
-Jobs, Documents, Matching, Billing, and Trust), ten schemas, 68 regular relations, and 40 exact
+Jobs, Documents, Matching, Billing, and Trust), ten schemas, 68 regular relations, and 42 exact
 checksum-bound migrations. The smoke gate also requires the Trust
-runner and every Phase 2 migration file, including Jobs `0020_contribution_trust_reprocessing`,
+runner and every Phase 2 migration file, including Jobs `0022_development_contribution_provider_leases`,
 before an image can be considered locally buildable.
 This is a generated-synthetic/default-dark source and artifact boundary. It does not establish
 deployed Trust candidate-rights behavior, image publication, task-definition deployment,

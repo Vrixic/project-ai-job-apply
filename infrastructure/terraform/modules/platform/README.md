@@ -44,6 +44,17 @@ independent verification, Trust assignments/evidence, worker limits, alarms, rol
 or production/store release boundaries. Configuration remains bounded to 2,400 encoded bytes.
 Staging, production, and default development behavior retain signed-policy verification.
 
+`development_contribution_providers` is an optional list of unique exact `greenhouse`, `lever`,
+and `ashby` names, defaulting to `["greenhouse"]` for backward compatibility. An explicit `[]`
+denies all development providers. Every non-default selection requires the development
+environment and the explicit development-contribution flag; it does not enable the deployment,
+runtime, provider fetches, or registrations by itself. Only an already enabled development
+Gateway and scheduled processor receive `D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON`, identically
+encoded. The default Greenhouse-only selection omits this new environment key, preserving the
+existing runtime environment shape. The Trust-signal runtime never receives it. Additional
+provider activation still requires the corresponding reviewed source and independent-verification
+registrations; contribution selection alone does not establish provider or publication readiness.
+
 The gateway and reconciler are the only producers for the platform-CMK-encrypted outbox queue.
 The durable orchestrator is outside the VPC and invokes an exact activity version; database
 activity and terminal handlers remain private and retrieve only the database secret. A narrow

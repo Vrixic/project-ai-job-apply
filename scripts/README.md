@@ -65,7 +65,7 @@ cluster-wide database grants. Missing opt-ins are reported as skipped, not passi
 - `publish-development-migration-image.ps1` — Provides the corresponding fail-closed development
   fallback for the migration-only container. Its cloud-independent `LocalBuild` action proves two
   source-bound `linux/amd64` builds have identical configuration and rootfs identities and passes a
-  hardened runtime smoke against the exact six-owner, ten-schema, 68-relation, 41-migration Phase 2
+  hardened runtime smoke against the exact six-owner, ten-schema, 68-relation, 42-migration Phase 2
   manifest, including the Trust runner and checksum-bound migration files. Publication separately
   resolves the Terraform-owned immutable KMS ECR
   repository, publishes the exact commit tag, requires a completed zero-High/zero-Critical scan,

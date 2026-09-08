@@ -7,6 +7,45 @@ export function parseDevelopmentContributions(value) {
   throw new Error("EXTENSION_DEVELOPMENT_CONTRIBUTIONS must be exactly true or false");
 }
 
+export function developmentContributionProvidersForBuild(
+  environment,
+  fileEnvironment,
+  development,
+) {
+  const processValue = environment.EXTENSION_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON;
+  const fileValue = fileEnvironment.EXTENSION_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON;
+  if (development !== true) {
+    if (processValue !== undefined || fileValue !== undefined) {
+      throw new Error(
+        "Development contribution providers require explicit unpacked development mode",
+      );
+    }
+    return Object.freeze([]);
+  }
+  const value = processValue ?? fileValue;
+  if (value === undefined) return Object.freeze(["greenhouse"]);
+  let parsed;
+  try {
+    if (typeof value === "string" && value.length <= 128) parsed = JSON.parse(value);
+  } catch {
+    // Invalid explicit selection must fail the build, not broaden its provider scope.
+  }
+  if (
+    !Array.isArray(parsed) ||
+    parsed.length > 3 ||
+    new Set(parsed).size !== parsed.length ||
+    parsed.some(
+      (provider) =>
+        typeof provider !== "string" || !["greenhouse", "lever", "ashby"].includes(provider),
+    )
+  ) {
+    throw new Error(
+      "EXTENSION_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON must be a JSON array of at most three unique known provider names",
+    );
+  }
+  return Object.freeze([...parsed].sort());
+}
+
 export function capabilityPolicyPublicKeysForBuild(environment, fileEnvironment, development) {
   // Retired key configuration is irrelevant in unpacked development; do not even read it.
   if (development === true) return {};
@@ -43,6 +82,7 @@ export function assertStoreContributionMode(environment, fileEnvironment) {
   ) {
     throw new Error("Development contributions are unpacked-only and cannot be store-packaged");
   }
+  developmentContributionProvidersForBuild(environment, fileEnvironment, false);
 }
 
 export async function localExtensionEnvironment(extensionRoot) {

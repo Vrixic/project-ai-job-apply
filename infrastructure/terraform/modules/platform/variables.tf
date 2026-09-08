@@ -564,6 +564,7 @@ variable "d2_community_runtime" {
     enabled                                        = bool
     policy_endpoint_enabled                        = bool
     development_contributions_enabled              = optional(bool, false)
+    development_contribution_providers             = optional(list(string), ["greenhouse"])
     artifact_s3_key                                = string
     artifact_s3_object_version                     = string
     artifact_sha256                                = string
@@ -621,6 +622,7 @@ variable "d2_community_runtime" {
     enabled                                        = false
     policy_endpoint_enabled                        = false
     development_contributions_enabled              = false
+    development_contribution_providers             = ["greenhouse"]
     artifact_s3_key                                = ""
     artifact_s3_object_version                     = ""
     artifact_sha256                                = ""
@@ -729,6 +731,18 @@ variable "d2_community_runtime" {
   }
 
   validation {
+    condition = (
+      length(var.d2_community_runtime.development_contribution_providers) <= 3 &&
+      length(distinct(var.d2_community_runtime.development_contribution_providers)) == length(var.d2_community_runtime.development_contribution_providers) &&
+      alltrue([for provider in var.d2_community_runtime.development_contribution_providers : try(contains(["greenhouse", "lever", "ashby"], provider), false)]) &&
+      (var.d2_community_runtime.development_contribution_providers == tolist(["greenhouse"]) || (
+        var.environment == "development" && var.d2_community_runtime.development_contributions_enabled
+      ))
+    )
+    error_message = "Development contribution providers must be an exact list of at most three unique greenhouse, lever, or ashby names. Any choice other than the existing Greenhouse-only default (including empty deny-all) requires explicit development contribution mode."
+  }
+
+  validation {
     condition = !var.d2_community_runtime.policy_endpoint_enabled || (
       var.deploy_applications &&
       var.deploy_gateway_lambda &&
@@ -806,6 +820,7 @@ variable "d2_community_runtime" {
       length(base64encode(join("", [
         var.d2_community_runtime.development_contributions_enabled ? "" : var.d2_community_runtime.signed_policy_json,
         var.d2_community_runtime.development_contributions_enabled ? "" : var.d2_community_runtime.signed_public_keys_json,
+        var.d2_community_runtime.development_contributions_enabled && var.d2_community_runtime.development_contribution_providers != tolist(["greenhouse"]) ? jsonencode(var.d2_community_runtime.development_contribution_providers) : "",
         var.d2_community_runtime.trust_reviewer_assignments_json,
         var.d2_community_runtime.trust_evidence_allowlist_json,
         var.d2_community_runtime.provider_sources_json,

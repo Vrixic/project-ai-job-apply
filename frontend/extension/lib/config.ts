@@ -1,3 +1,6 @@
+import { parseDevelopmentContributionProviders } from "./development-contribution-providers";
+import type { AtsProvider } from "./job-capture";
+
 declare const __AUTH0_AUDIENCE__: string;
 declare const __AUTH0_CLIENT_ID__: string;
 declare const __AUTH0_DOMAIN__: string;
@@ -6,6 +9,7 @@ declare const __PENDING_RETENTION_MILLISECONDS__: number;
 declare const __CAPABILITY_POLICY_PUBLIC_KEYS__: Readonly<Record<string, string>>;
 declare const __UGC_CONTRIBUTION_POLICY_VERSION__: string;
 declare const __DEVELOPMENT_CONTRIBUTIONS__: boolean;
+declare const __DEVELOPMENT_CONTRIBUTION_PROVIDERS__: unknown;
 
 const POLICY_VERSION = /^[a-z0-9][a-z0-9._-]{2,99}$/u;
 
@@ -18,6 +22,7 @@ export interface ExtensionPublicConfiguration {
   configured: boolean;
   domain: string;
   developmentContributions: boolean;
+  developmentContributionProviders: readonly AtsProvider[];
   pendingRetentionMilliseconds?: number;
   ugcContributionPolicyVersion?: string;
 }
@@ -29,6 +34,7 @@ export function extensionPublicConfiguration(values: {
   clientId: string;
   domain: string;
   developmentContributions?: boolean;
+  developmentContributionProviders?: unknown;
   pendingRetentionMilliseconds?: number;
   ugcContributionPolicyVersion?: string;
 }): ExtensionPublicConfiguration {
@@ -65,6 +71,13 @@ export function extensionPublicConfiguration(values: {
       audience === "ai-job-apply-api",
     domain,
     developmentContributions: values.developmentContributions === true,
+    developmentContributionProviders: parseDevelopmentContributionProviders(
+      values.developmentContributions === true
+        ? values.developmentContributionProviders === undefined
+          ? ["greenhouse"]
+          : values.developmentContributionProviders
+        : [],
+    ),
     ...(apiOrigin ? { apiOrigin } : {}),
     ...(Number.isInteger(pendingRetentionMilliseconds) &&
     (pendingRetentionMilliseconds ?? 0) >= 60 * 60 * 1_000 &&
@@ -100,6 +113,10 @@ export function safeApiOrigin(value: string): string | undefined {
 }
 
 export const extensionConfiguration = extensionPublicConfiguration({
+  developmentContributionProviders:
+    typeof __DEVELOPMENT_CONTRIBUTION_PROVIDERS__ === "undefined"
+      ? undefined
+      : __DEVELOPMENT_CONTRIBUTION_PROVIDERS__,
   developmentContributions:
     typeof __DEVELOPMENT_CONTRIBUTIONS__ === "boolean" && __DEVELOPMENT_CONTRIBUTIONS__ === true,
   apiOrigin: typeof __EXTENSION_API_ORIGIN__ === "string" ? __EXTENSION_API_ORIGIN__ : "",

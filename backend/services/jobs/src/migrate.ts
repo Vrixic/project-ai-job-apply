@@ -30,6 +30,7 @@ const migrationVersions = [
   "0019_job_contribution_provider_publication",
   "0020_contribution_trust_reprocessing",
   "0021_development_contribution_operation_lease",
+  "0022_development_contribution_provider_leases",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -1168,7 +1169,7 @@ try {
   `;
   if (!marker?.present) throw new Error("Trust reprocessing decision marker is missing");
   const leaseMigration = migrations.find(
-    (migration) => migration.version === "0021_development_contribution_operation_lease",
+    (migration) => migration.version === "0022_development_contribution_provider_leases",
   );
   const expectedLeaseGuard =
     leaseMigration &&
@@ -1193,7 +1194,7 @@ try {
       AND conname = 'job_contribution_reconciliations_chronology_ck' AND contype = 'c'
   `;
   const expectedLeaseChronology =
-    "CHECK (updated_at >= created_at AND capability_expires_at > capability_evaluated_at AND (capability_evaluated_at <= created_at OR kind = 'publication'::text AND capability_policy_version = 'd2-development-greenhouse-v1'::text AND capability_configuration_digest_sha256 = '8405c7ba82d4d5d127b9bfb0f2f753533d6709d0b89e148a02a1db89c03f1f3b'::text AND capability_evaluated_at <= updated_at AND capability_expires_at = (capability_evaluated_at + '00:01:00'::interval)))";
+    "CHECK (updated_at >= created_at AND capability_expires_at > capability_evaluated_at AND (capability_evaluated_at <= created_at OR kind = 'publication'::text AND (capability_policy_version = 'd2-development-greenhouse-v1'::text AND capability_configuration_digest_sha256 = '8405c7ba82d4d5d127b9bfb0f2f753533d6709d0b89e148a02a1db89c03f1f3b'::text OR capability_policy_version = 'd2-development-lever-v1'::text AND capability_configuration_digest_sha256 = '73a8de43f172d1af75c19e355774ccbb63c10d08485b5cabeb8df524571c3d5c'::text OR capability_policy_version = 'd2-development-ashby-v1'::text AND capability_configuration_digest_sha256 = '5b03a431328af9850b9c08bd8f1508089e4de2d2c31f91b490ebb63a573ae8f5'::text) AND capability_evaluated_at <= updated_at AND capability_expires_at = (capability_evaluated_at + '00:01:00'::interval)))";
   if (!leaseChronology?.validated || leaseChronology.definition !== expectedLeaseChronology) {
     throw new Error("Development contribution operation lease chronology verification failed");
   }

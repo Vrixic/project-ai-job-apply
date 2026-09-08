@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  loadD2DevelopmentContributionProviders,
   loadD2LambdaGatewayConfig,
   loadD2LambdaGatewayConfigSafely,
   loadLambdaGatewayConfig,
@@ -138,6 +139,128 @@ const trustEnvironment = {
 };
 
 describe("Phase 2 Lambda gateway configuration", () => {
+  const developmentEnvironment = {
+    D2_DEPLOYMENT_ENVIRONMENT: "development",
+    D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED: "true",
+  };
+
+  it("keeps the existing Greenhouse default without activating any route", () => {
+    const configured = loadD2LambdaGatewayConfig(developmentEnvironment);
+    expect(configured).toMatchObject({
+      valid: true,
+      developmentContributionsEnabled: true,
+      developmentContributionProviders: ["greenhouse"],
+      privateCaptureRoutesEnabled: false,
+      contributionRoutesEnabled: false,
+      trustReviewerRoutesEnabled: false,
+    });
+    expect(Object.isFrozen(configured.developmentContributionProviders)).toBe(true);
+    expect(loadD2DevelopmentContributionProviders({})).toEqual([]);
+  });
+
+  it("rereads provider selection and the development boundary on every call", () => {
+    const environment = {
+      ...developmentEnvironment,
+      D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON: '["greenhouse","lever"]',
+    };
+    const previous = loadD2DevelopmentContributionProviders(environment);
+    environment.D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON = "[]";
+    expect(loadD2DevelopmentContributionProviders(environment)).toEqual([]);
+    expect(previous).toEqual(["greenhouse", "lever"]);
+    environment.D2_DEPLOYMENT_ENVIRONMENT = "staging";
+    expect(() => loadD2DevelopmentContributionProviders(environment)).toThrow();
+  });
+
+  it.each(
+    [
+      [],
+      ["greenhouse"],
+      ["lever"],
+      ["ashby"],
+      ["greenhouse", "lever"],
+      ["greenhouse", "ashby"],
+      ["lever", "ashby"],
+      ["ashby", "greenhouse", "lever"],
+    ].map((providers) => ({ providers })),
+  )("accepts an exact immutable development provider selection: $providers", ({ providers }) => {
+    const configured = loadD2LambdaGatewayConfig({
+      ...developmentEnvironment,
+      D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON: JSON.stringify(providers),
+    });
+    expect(configured.developmentContributionProviders).toEqual(providers);
+    expect(Object.isFrozen(configured.developmentContributionProviders)).toBe(true);
+    expect(configured.contributionRoutesEnabled).toBe(false);
+    expect(configured.contributionPolicyRouteEnabled).toBe(false);
+    expect(configured.trustReviewerRoutesEnabled).toBe(false);
+  });
+
+  it.each([
+    "",
+    " ",
+    "null",
+    "true",
+    "{}",
+    '"greenhouse"',
+    "greenhouse,lever",
+    '["Greenhouse"]',
+    '["lever "]',
+    '["workday"]',
+    "[1]",
+    "[null]",
+    '["greenhouse","greenhouse"]',
+    '["greenhouse","lever","ashby","lever"]',
+    `${" ".repeat(128)}[]`,
+  ])(
+    "rejects invalid development provider JSON %j without disabling private capture",
+    (providers) => {
+      const environment = {
+        ...developmentEnvironment,
+        D2_PRIVATE_CAPTURE_ROUTES_ENABLED: "true",
+        D2_CONTRIBUTION_ROUTES_ENABLED: "true",
+        UGC_CONTRIBUTION_POLICY_VERSION: "d2-ugc.v1",
+        ...trustEnvironment,
+        D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON: providers,
+      };
+      expect(() => loadD2LambdaGatewayConfig(environment)).toThrow();
+      expect(loadD2LambdaGatewayConfigSafely(environment)).toMatchObject({
+        valid: false,
+        developmentContributionsEnabled: false,
+        privateCaptureRoutesEnabled: true,
+        contributionRoutesEnabled: false,
+      });
+    },
+  );
+
+  it.each([undefined, "staging", "production", "development "])(
+    "rejects provider configuration outside the exact deployment environment %j",
+    (deploymentEnvironment) => {
+      for (const flag of [undefined, "false", "true"]) {
+        for (const providers of ["[]", '["greenhouse"]', '["lever","ashby"]']) {
+          const environment = {
+            D2_DEPLOYMENT_ENVIRONMENT: deploymentEnvironment,
+            D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED: flag,
+            D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON: providers,
+          };
+          expect(() => loadD2LambdaGatewayConfig(environment)).toThrow();
+          expect(() => loadD2DevelopmentContributionProviders(environment)).toThrow();
+        }
+      }
+    },
+  );
+
+  it.each([undefined, "false", "TRUE", "yes"])(
+    "rejects provider configuration unless the development flag is exactly true: %j",
+    (flag) => {
+      expect(() =>
+        loadD2LambdaGatewayConfig({
+          D2_DEPLOYMENT_ENVIRONMENT: "development",
+          D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED: flag,
+          D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON: "[]",
+        }),
+      ).toThrow();
+    },
+  );
+
   it("permits the explicit development-only contribution mode without signed-policy inputs", () => {
     const values = {
       D2_DEPLOYMENT_ENVIRONMENT: "development",

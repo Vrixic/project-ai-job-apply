@@ -85,15 +85,23 @@ free of markup/control characters, and never interpreted as instructions.
 Development contributions can use an explicit persistent server setting and an unpacked-only
 extension setting instead of the signed capability envelope. The server rejects the setting
 outside development; extension-store packaging rejects the configured mode and marked artifacts.
-This path uses no signing keys, remote policy fetch, or deployment-expiry check. Exact client,
-Greenhouse variant, two HTTPS hosts, runtime enable flags, authentication, preview-bound command
-authorization, independent provider evidence, Trust decisions, and account fencing remain enforced.
+This path uses no signing keys, remote policy fetch, or deployment-expiry check. Development
+defaults to Greenhouse alone. Source configuration can independently select the fixed Greenhouse,
+Lever, and Ashby descriptors; explicit empty selection denies all, invalid input fails closed,
+and provider selection outside explicit development is rejected. Exact client, provider variant,
+HTTPS hosts, runtime enable flags, authentication, preview-bound command authorization,
+independent provider evidence, Trust decisions, and account fencing remain enforced. Detector
+activation and exact provider registrations are separate; Lever/Ashby remain disabled in the
+current deployment pending representative page/API acceptance.
 Consent and contribution HTTP requests refuse redirects, including cross-origin redirects.
 
 Prepared development publication operations use a 60-second automatically refreshed lease after
 fresh authority/evidence checks. Jobs migration `0021` permits only that narrowly scoped update;
-created time, identity, evidence, and signed/terminal rows remain immutable. Deploy the forward
-migration before the new runtime. Existing signed-mode binaries remain compatible with the schema;
+forward migration `0022` retains the original Greenhouse descriptor and enumerates two additional
+exact provider version/digest pairs. Stored provider/variant/client and source host must match
+the descriptor; another provider's lease cannot substitute. Created time, identity, evidence,
+and signed/terminal rows remain immutable. Deploy the forward migration before enabling new
+providers. Existing signed-mode binaries remain compatible with the schema;
 rollback disables development contributions before reverting code. This is a technical boundary
 description; the single decision and rationale are in the
 [Phase 2 record](../product/delivery/phase-2-extension-and-community.md#decisions-and-scope-changes).

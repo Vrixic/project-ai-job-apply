@@ -37,9 +37,12 @@ release, and browser-store distribution are not approved. See the current
   again, or resubmitting an acknowledged job; existing identity and preview gates still apply.
 - `EXTENSION_DEVELOPMENT_CONTRIBUTIONS=true` selects a separate unpacked-development runtime.
   It never loads signing keys or a signed cache, requests the capability-policy endpoint, or checks
-  a renewal/expiry clock. It accepts only extension `0.2.0`, Greenhouse `greenhouse-board-v1`, and
-  the exact `boards.greenhouse.io` / `job-boards.greenhouse.io` HTTPS hosts, while still enforcing
-  the independent detector configuration. Authentication, API, retention, selected-field preview,
+  a renewal/expiry clock. It accepts only extension `0.2.0` and defaults to Greenhouse
+  `greenhouse-board-v1` on `boards.greenhouse.io` / `job-boards.greenhouse.io`. The optional
+  `EXTENSION_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON` selects among fixed descriptors: Lever
+  `lever-posting-v1` on `jobs.lever.co` / `jobs.eu.lever.co`, and Ashby `ashby-job-board-v1` on
+  `jobs.ashbyhq.com`. Exact HTTPS domains and independent detector activation remain mandatory;
+  listing a provider does not activate its detector or server registration. Authentication, API, retention, selected-field preview,
   command authorization, account fencing, retry limits and server authorization remain required.
   This client setting cannot enable a development-disabled server or authorize publication.
   The build is visibly labelled Development; store packaging refuses active development settings
@@ -123,6 +126,17 @@ failures still remain in the bounded queue for retry. Returning to signed mode r
 with `false`; store packaging requires both the process and local-file setting to be absent or
 `false` and will not silently convert an active development configuration into a store archive.
 
+Only in explicit development mode, `EXTENSION_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON` may be an
+exact JSON array of up to three unique names from `greenhouse`, `lever`, and `ashby`. Absence
+preserves `["greenhouse"]`; `[]` explicitly denies every provider. Unknown names, duplicates,
+non-string entries, malformed JSON, and configuration outside development mode fail the build.
+The selected array is copied and frozen at runtime. Both the process and `.env.local` provider
+setting must be removed entirely before signed/store packaging, even if the array is empty.
+This setting adds no provider host permission, remote policy request, or automatic activation:
+keep Lever/Ashby disabled until their separate representative-fixture and server-registration
+acceptance passes. Rebuild/reload after an accepted selection changes; existing Greenhouse
+configuration needs no change.
+
 Page inspection uses the independent `EXTENSION_DETECTOR_ACTIVATION_JSON`
 build-time policy. Its exact shape is `schemaVersion`, a reviewed `revision`, `extensionVersion`,
 and complete boolean `enabledProviders`, `enabledVariants`, and `enabledDomains` maps covering only
@@ -145,8 +159,8 @@ pnpm --filter @ai-job-apply/extension build
 The direct package build above always reads this workstation's public configuration. Root
 `pnpm build` also rebuilds this extension instead of restoring or publishing a cached bundle:
 its package-local Turbo build task disables caching because ignored `.env.local` settings affect
-the output. Strict-mode builds pass only the nine explicitly listed public `EXTENSION_*` settings,
-including the development-mode flag; no client secret, access token, or signing private key is
+the output. Strict-mode builds pass only the ten explicitly listed public `EXTENSION_*` settings,
+including the development-mode flag and provider selection; no client secret, access token, or signing private key is
 allowed through that list. Other packages retain their existing cache settings. Rebuild and reload
 the unpacked extension after changing its public configuration.
 

@@ -1,10 +1,21 @@
 import { capabilityForPage, type ExtensionDetectorActivationPolicy } from "./capability-policy";
-import type { SanitizedJobCapture } from "./job-capture";
+import {
+  DEVELOPMENT_CONTRIBUTION_PROVIDERS,
+  parseDevelopmentContributionProviders,
+} from "./development-contribution-providers";
+import type { AtsProvider, SanitizedJobCapture } from "./job-capture";
 import type { ExtensionContributionCapabilityDecision } from "./signed-capability-policy";
 
 /** An unpacked-only client boundary, not a server authorization or publication decision. */
 export class DevelopmentContributionRuntime {
-  constructor(private readonly detectorPolicy: ExtensionDetectorActivationPolicy | undefined) {}
+  private readonly enabledProviders: readonly AtsProvider[];
+
+  constructor(
+    private readonly detectorPolicy: ExtensionDetectorActivationPolicy | undefined,
+    enabledProviders: readonly AtsProvider[] = ["greenhouse"],
+  ) {
+    this.enabledProviders = parseDevelopmentContributionProviders(enabledProviders);
+  }
 
   async start(): Promise<boolean> {
     return true;
@@ -22,8 +33,10 @@ export class DevelopmentContributionRuntime {
     _now?: Date,
   ): ExtensionContributionCapabilityDecision {
     if (clientVersion !== "0.2.0") return { allowed: false, reason: "client_disabled" };
-    if (capture.provider !== "greenhouse") return { allowed: false, reason: "provider_disabled" };
-    if (capture.pageVariant !== "greenhouse-board-v1")
+    if (!this.enabledProviders.includes(capture.provider))
+      return { allowed: false, reason: "provider_disabled" };
+    const descriptor = DEVELOPMENT_CONTRIBUTION_PROVIDERS[capture.provider];
+    if (capture.pageVariant !== descriptor.variant)
       return { allowed: false, reason: "variant_disabled" };
     let url: URL;
     try {
@@ -36,7 +49,7 @@ export class DevelopmentContributionRuntime {
       url.username ||
       url.password ||
       url.port ||
-      !["boards.greenhouse.io", "job-boards.greenhouse.io"].includes(url.hostname)
+      !descriptor.domains.includes(url.hostname)
     ) {
       return { allowed: false, reason: "domain_disabled" };
     }
@@ -49,6 +62,6 @@ export class DevelopmentContributionRuntime {
     ) {
       return { allowed: false, reason: "global_disabled" };
     }
-    return { allowed: true, policyRevision: "d2-development-greenhouse-persistent-v1" };
+    return { allowed: true, policyRevision: descriptor.revision };
   }
 }

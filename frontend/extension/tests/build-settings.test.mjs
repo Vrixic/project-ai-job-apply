@@ -2,10 +2,84 @@ import { describe, expect, it } from "vitest";
 import {
   assertStoreContributionMode,
   capabilityPolicyPublicKeysForBuild,
+  developmentContributionProvidersForBuild,
   parseDevelopmentContributions,
 } from "../build-settings.mjs";
 
 describe("development contribution build and store boundary", () => {
+  it("retains Greenhouse by default only in explicit development mode", () => {
+    expect(developmentContributionProvidersForBuild({}, {}, true)).toEqual(["greenhouse"]);
+    expect(developmentContributionProvidersForBuild({}, {}, false)).toEqual([]);
+    expect(Object.isFrozen(developmentContributionProvidersForBuild({}, {}, true))).toBe(true);
+  });
+  it.each([[], ["greenhouse"], ["lever"], ["ashby"], ["greenhouse", "lever", "ashby"]])(
+    "parses and freezes exact opt-in selection %j from either source",
+    (...providers) => {
+      const configured = {
+        EXTENSION_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON: JSON.stringify(providers),
+      };
+      for (const [environment, file] of [
+        [configured, {}],
+        [{}, configured],
+      ]) {
+        const parsed = developmentContributionProvidersForBuild(environment, file, true);
+        expect(parsed).toEqual([...providers].sort());
+        expect(Object.isFrozen(parsed)).toBe(true);
+      }
+    },
+  );
+  it("allows an explicit empty process selection to deny all despite local configuration", () => {
+    expect(
+      developmentContributionProvidersForBuild(
+        { EXTENSION_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON: "[]" },
+        { EXTENSION_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON: '["greenhouse"]' },
+        true,
+      ),
+    ).toEqual([]);
+  });
+  it.each([
+    "",
+    " ",
+    "null",
+    "{}",
+    '"greenhouse"',
+    '["lever","lever"]',
+    '["unknown"]',
+    '["Greenhouse"]',
+    '[" lever"]',
+    '["lever",false]',
+    '["lever",null]',
+    "[1]",
+    '["__proto__"]',
+    '["greenhouse","lever","ashby","greenhouse"]',
+    "[",
+    "[]".padEnd(129),
+  ])("rejects malformed explicit provider selection %s", (value) => {
+    for (const [environment, file] of [
+      [{ EXTENSION_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON: value }, {}],
+      [{}, { EXTENSION_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON: value }],
+    ]) {
+      expect(() => developmentContributionProvidersForBuild(environment, file, true)).toThrow(
+        "must be a JSON array",
+      );
+    }
+  });
+  it("rejects any configured provider selection outside development and during store packaging", () => {
+    for (const value of ["[]", '["greenhouse"]', '["lever"]', '["ashby"]', "", "malformed"]) {
+      const configured = { EXTENSION_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON: value };
+      for (const [environment, file] of [
+        [configured, {}],
+        [{}, configured],
+      ]) {
+        expect(() => developmentContributionProvidersForBuild(environment, file, false)).toThrow(
+          "require explicit unpacked development mode",
+        );
+        expect(() => assertStoreContributionMode(environment, file)).toThrow(
+          "require explicit unpacked development mode",
+        );
+      }
+    }
+  });
   it("does not access or parse retired signing keys in development, even when malformed", () => {
     const inaccessible = Object.defineProperty({}, "EXTENSION_CAPABILITY_POLICY_PUBLIC_KEYS_JSON", {
       get() {

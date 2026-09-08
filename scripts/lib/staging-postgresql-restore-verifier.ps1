@@ -288,7 +288,7 @@ function Get-D1RestoreManifestBoundary {
     $contributors.Count -ne 6 -or
     $schemaNames.Count -ne 10 -or
     $relationCount -ne 68 -or
-    $migrationCount -ne 41
+    $migrationCount -ne 42
   ) {
     throw "The restore manifest does not match the exact Phase 2 contributor boundary."
   }

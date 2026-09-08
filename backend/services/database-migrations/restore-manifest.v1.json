@@ -139,6 +139,10 @@
         {
           "version": "0021_development_contribution_operation_lease",
           "checksum": "0445e53e4c0a5a6842b333dd6b750977ee618dde7310759b272b982309a25aa4"
+        },
+        {
+          "version": "0022_development_contribution_provider_leases",
+          "checksum": "21d2623fac89f89cc62ccdcfc39399bfcf7f1b9adaf5cb15a660dfa6ed33c500"
         }
       ],
       "relations": [

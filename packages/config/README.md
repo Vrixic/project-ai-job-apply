@@ -27,3 +27,11 @@ requires `D2_DEPLOYMENT_ENVIRONMENT=development` when enabled. This explicit dev
 does not require signed contribution-policy inputs. It does not enable routes or processing by
 itself, remove Profile consent or Trust configuration, or relax production/default policy expiry.
 The legacy public signed-policy route still requires its signed envelope and public-key map.
+
+`D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON` optionally selects up to three unique exact names
+from `greenhouse`, `lever`, and `ashby`. It is a JSON array, not a comma-separated string; an
+explicit empty array denies every provider. Absence preserves the existing Greenhouse-only
+development selection. Any presence outside explicit development mode is invalid, including
+empty text or an empty array. `loadD2DevelopmentContributionProviders` returns a frozen selection
+and is shared by Gateway and scheduled processing so their interpretation cannot diverge. This
+selection neither activates routes nor supplies provider-verification registrations.

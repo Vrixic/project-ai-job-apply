@@ -124,6 +124,7 @@ run "d2_defaults_create_nothing" {
       !var.d2_community_runtime.deploy &&
       !var.d2_community_runtime.enabled &&
       !var.d2_community_runtime.development_contributions_enabled &&
+      var.d2_community_runtime.development_contribution_providers == tolist(["greenhouse"]) &&
       var.d2_community_runtime.signal_reserved_concurrency == 0 &&
       !var.d2_community_runtime.policy_endpoint_enabled &&
       length(aws_lambda_function.d2_community_scheduled) == 0 &&
@@ -368,6 +369,8 @@ run "d2_development_contributions_work_without_signatures_or_policy_endpoint" {
       aws_lambda_function.gateway[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED == "true" &&
       aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_DEPLOYMENT_ENVIRONMENT == "development" &&
       aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED == "true" &&
+      !contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON") &&
+      !contains(keys(aws_lambda_function.d2_community_scheduled[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON") &&
       !contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON") &&
       !contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON") &&
       !contains(keys(aws_lambda_function.d2_community_scheduled[0].environment[0].variables), "JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON") &&
@@ -400,6 +403,436 @@ run "d2_development_contributions_work_without_signatures_or_policy_endpoint" {
       toset(aws_apigatewayv2_route.d2_community_protected["POST /v1/admin/trust/cases/{caseId}/appeal-resolution"].authorization_scopes) == toset(["trust:review", "trust:appeal:resolve"])
     )
     error_message = "Development contribution mode must preserve JWT identity, provider verification, Trust assignments/evidence, role scopes, and bounded concurrency; the Trust signal runtime must remain unchanged."
+  }
+}
+
+run "d2_development_provider_selection_greenhouse" {
+  command = plan
+
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled  = true
+      development_contribution_providers = ["greenhouse"]
+      policy_endpoint_enabled            = false
+    })
+  }
+
+  assert {
+    condition = (
+      !contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON") &&
+      !contains(keys(aws_lambda_function.d2_community_scheduled[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON") &&
+      !contains(keys(aws_lambda_function.d2_trust_signal[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON") &&
+      var.d2_community_runtime.deploy && var.d2_community_runtime.enabled &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_CONTRIBUTION_ROUTES_ENABLED == "true" &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_SOURCES_JSON == var.d2_active_runtime_fixture.provider_sources_json &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_VERIFICATION_REGISTRATIONS_JSON == var.d2_active_runtime_fixture.provider_verification_registrations_json &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_TRUST_REVIEWER_ASSIGNMENTS_JSON == var.d2_active_runtime_fixture.trust_reviewer_assignments_json &&
+      aws_lambda_function.d2_community_scheduled[0].reserved_concurrent_executions == 1 &&
+      aws_lambda_function.d2_trust_signal[0].reserved_concurrent_executions == 2
+    )
+    error_message = "The exact development provider selection must reach only Gateway and scheduled processing, without changing source registrations, Trust identity, activation flags, or concurrency; the existing Greenhouse-only shape must remain unchanged."
+  }
+}
+
+run "d2_development_provider_selection_lever" {
+  command = plan
+
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled  = true
+      development_contribution_providers = ["lever"]
+      policy_endpoint_enabled            = false
+    })
+  }
+
+  assert {
+    condition = (
+      aws_lambda_function.gateway[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON == jsonencode(["lever"]) &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON == jsonencode(["lever"]) &&
+      !contains(keys(aws_lambda_function.d2_trust_signal[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON") &&
+      var.d2_community_runtime.deploy && var.d2_community_runtime.enabled &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_CONTRIBUTION_ROUTES_ENABLED == "true" &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_SOURCES_JSON == var.d2_active_runtime_fixture.provider_sources_json &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_VERIFICATION_REGISTRATIONS_JSON == var.d2_active_runtime_fixture.provider_verification_registrations_json &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_TRUST_REVIEWER_ASSIGNMENTS_JSON == var.d2_active_runtime_fixture.trust_reviewer_assignments_json &&
+      aws_lambda_function.d2_community_scheduled[0].reserved_concurrent_executions == 1 &&
+      aws_lambda_function.d2_trust_signal[0].reserved_concurrent_executions == 2
+    )
+    error_message = "The exact development provider selection must reach only Gateway and scheduled processing, without changing source registrations, Trust identity, activation flags, or concurrency; the existing Greenhouse-only shape must remain unchanged."
+  }
+}
+
+run "d2_development_provider_selection_ashby" {
+  command = plan
+
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled  = true
+      development_contribution_providers = ["ashby"]
+      policy_endpoint_enabled            = false
+    })
+  }
+
+  assert {
+    condition = (
+      aws_lambda_function.gateway[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON == jsonencode(["ashby"]) &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON == jsonencode(["ashby"]) &&
+      !contains(keys(aws_lambda_function.d2_trust_signal[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON") &&
+      var.d2_community_runtime.deploy && var.d2_community_runtime.enabled &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_CONTRIBUTION_ROUTES_ENABLED == "true" &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_SOURCES_JSON == var.d2_active_runtime_fixture.provider_sources_json &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_VERIFICATION_REGISTRATIONS_JSON == var.d2_active_runtime_fixture.provider_verification_registrations_json &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_TRUST_REVIEWER_ASSIGNMENTS_JSON == var.d2_active_runtime_fixture.trust_reviewer_assignments_json &&
+      aws_lambda_function.d2_community_scheduled[0].reserved_concurrent_executions == 1 &&
+      aws_lambda_function.d2_trust_signal[0].reserved_concurrent_executions == 2
+    )
+    error_message = "The exact development provider selection must reach only Gateway and scheduled processing, without changing source registrations, Trust identity, activation flags, or concurrency; the existing Greenhouse-only shape must remain unchanged."
+  }
+}
+
+run "d2_development_provider_selection_greenhouse_lever" {
+  command = plan
+
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled  = true
+      development_contribution_providers = ["greenhouse", "lever"]
+      policy_endpoint_enabled            = false
+    })
+  }
+
+  assert {
+    condition = (
+      aws_lambda_function.gateway[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON == jsonencode(["greenhouse", "lever"]) &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON == jsonencode(["greenhouse", "lever"]) &&
+      !contains(keys(aws_lambda_function.d2_trust_signal[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON") &&
+      var.d2_community_runtime.deploy && var.d2_community_runtime.enabled &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_CONTRIBUTION_ROUTES_ENABLED == "true" &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_SOURCES_JSON == var.d2_active_runtime_fixture.provider_sources_json &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_VERIFICATION_REGISTRATIONS_JSON == var.d2_active_runtime_fixture.provider_verification_registrations_json &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_TRUST_REVIEWER_ASSIGNMENTS_JSON == var.d2_active_runtime_fixture.trust_reviewer_assignments_json &&
+      aws_lambda_function.d2_community_scheduled[0].reserved_concurrent_executions == 1 &&
+      aws_lambda_function.d2_trust_signal[0].reserved_concurrent_executions == 2
+    )
+    error_message = "The exact development provider selection must reach only Gateway and scheduled processing, without changing source registrations, Trust identity, activation flags, or concurrency; the existing Greenhouse-only shape must remain unchanged."
+  }
+}
+
+run "d2_development_provider_selection_greenhouse_ashby" {
+  command = plan
+
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled  = true
+      development_contribution_providers = ["greenhouse", "ashby"]
+      policy_endpoint_enabled            = false
+    })
+  }
+
+  assert {
+    condition = (
+      aws_lambda_function.gateway[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON == jsonencode(["greenhouse", "ashby"]) &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON == jsonencode(["greenhouse", "ashby"]) &&
+      !contains(keys(aws_lambda_function.d2_trust_signal[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON") &&
+      var.d2_community_runtime.deploy && var.d2_community_runtime.enabled &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_CONTRIBUTION_ROUTES_ENABLED == "true" &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_SOURCES_JSON == var.d2_active_runtime_fixture.provider_sources_json &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_VERIFICATION_REGISTRATIONS_JSON == var.d2_active_runtime_fixture.provider_verification_registrations_json &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_TRUST_REVIEWER_ASSIGNMENTS_JSON == var.d2_active_runtime_fixture.trust_reviewer_assignments_json &&
+      aws_lambda_function.d2_community_scheduled[0].reserved_concurrent_executions == 1 &&
+      aws_lambda_function.d2_trust_signal[0].reserved_concurrent_executions == 2
+    )
+    error_message = "The exact development provider selection must reach only Gateway and scheduled processing, without changing source registrations, Trust identity, activation flags, or concurrency; the existing Greenhouse-only shape must remain unchanged."
+  }
+}
+
+run "d2_development_provider_selection_lever_ashby" {
+  command = plan
+
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled  = true
+      development_contribution_providers = ["lever", "ashby"]
+      policy_endpoint_enabled            = false
+    })
+  }
+
+  assert {
+    condition = (
+      aws_lambda_function.gateway[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON == jsonencode(["lever", "ashby"]) &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON == jsonencode(["lever", "ashby"]) &&
+      !contains(keys(aws_lambda_function.d2_trust_signal[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON") &&
+      var.d2_community_runtime.deploy && var.d2_community_runtime.enabled &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_CONTRIBUTION_ROUTES_ENABLED == "true" &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_SOURCES_JSON == var.d2_active_runtime_fixture.provider_sources_json &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_VERIFICATION_REGISTRATIONS_JSON == var.d2_active_runtime_fixture.provider_verification_registrations_json &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_TRUST_REVIEWER_ASSIGNMENTS_JSON == var.d2_active_runtime_fixture.trust_reviewer_assignments_json &&
+      aws_lambda_function.d2_community_scheduled[0].reserved_concurrent_executions == 1 &&
+      aws_lambda_function.d2_trust_signal[0].reserved_concurrent_executions == 2
+    )
+    error_message = "The exact development provider selection must reach only Gateway and scheduled processing, without changing source registrations, Trust identity, activation flags, or concurrency; the existing Greenhouse-only shape must remain unchanged."
+  }
+}
+
+run "d2_development_provider_selection_all" {
+  command = plan
+
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled  = true
+      development_contribution_providers = ["greenhouse", "lever", "ashby"]
+      policy_endpoint_enabled            = false
+    })
+  }
+
+  assert {
+    condition = (
+      aws_lambda_function.gateway[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON == jsonencode(["greenhouse", "lever", "ashby"]) &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON == jsonencode(["greenhouse", "lever", "ashby"]) &&
+      !contains(keys(aws_lambda_function.d2_trust_signal[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON") &&
+      var.d2_community_runtime.deploy && var.d2_community_runtime.enabled &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_CONTRIBUTION_ROUTES_ENABLED == "true" &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_SOURCES_JSON == var.d2_active_runtime_fixture.provider_sources_json &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_VERIFICATION_REGISTRATIONS_JSON == var.d2_active_runtime_fixture.provider_verification_registrations_json &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_TRUST_REVIEWER_ASSIGNMENTS_JSON == var.d2_active_runtime_fixture.trust_reviewer_assignments_json &&
+      aws_lambda_function.d2_community_scheduled[0].reserved_concurrent_executions == 1 &&
+      aws_lambda_function.d2_trust_signal[0].reserved_concurrent_executions == 2
+    )
+    error_message = "The exact development provider selection must reach only Gateway and scheduled processing, without changing source registrations, Trust identity, activation flags, or concurrency; the existing Greenhouse-only shape must remain unchanged."
+  }
+}
+
+run "d2_development_provider_selection_none" {
+  command = plan
+
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled  = true
+      development_contribution_providers = []
+      policy_endpoint_enabled            = false
+    })
+  }
+
+  assert {
+    condition = (
+      aws_lambda_function.gateway[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON == jsonencode([]) &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON == jsonencode([]) &&
+      !contains(keys(aws_lambda_function.d2_trust_signal[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON") &&
+      var.d2_community_runtime.deploy && var.d2_community_runtime.enabled &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_CONTRIBUTION_ROUTES_ENABLED == "true" &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_SOURCES_JSON == var.d2_active_runtime_fixture.provider_sources_json &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_VERIFICATION_REGISTRATIONS_JSON == var.d2_active_runtime_fixture.provider_verification_registrations_json &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_TRUST_REVIEWER_ASSIGNMENTS_JSON == var.d2_active_runtime_fixture.trust_reviewer_assignments_json &&
+      aws_lambda_function.d2_community_scheduled[0].reserved_concurrent_executions == 1 &&
+      aws_lambda_function.d2_trust_signal[0].reserved_concurrent_executions == 2
+    )
+    error_message = "The exact development provider selection must reach only Gateway and scheduled processing, without changing source registrations, Trust identity, activation flags, or concurrency; the existing Greenhouse-only shape must remain unchanged."
+  }
+}
+
+run "d2_development_provider_selection_rejects_duplicate" {
+  command = plan
+
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled  = true
+      development_contribution_providers = ["lever", "lever"]
+    })
+  }
+
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_provider_selection_rejects_too_many" {
+  command = plan
+
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled  = true
+      development_contribution_providers = ["greenhouse", "lever", "ashby", "greenhouse"]
+    })
+  }
+
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_provider_selection_rejects_unknown" {
+  command = plan
+
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled  = true
+      development_contribution_providers = ["workday"]
+    })
+  }
+
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_provider_selection_rejects_case_changed" {
+  command = plan
+
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled  = true
+      development_contribution_providers = ["Lever"]
+    })
+  }
+
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_provider_selection_rejects_whitespace" {
+  command = plan
+
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled  = true
+      development_contribution_providers = ["ashby "]
+    })
+  }
+
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_provider_selection_rejects_null_element" {
+  command = plan
+
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled  = true
+      development_contribution_providers = [null]
+    })
+  }
+
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_provider_selection_rejects_flag_off" {
+  command = plan
+
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled  = false
+      development_contribution_providers = ["lever"]
+    })
+  }
+
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_provider_selection_rejects_deny_all_flag_off" {
+  command = plan
+
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled  = false
+      development_contribution_providers = []
+    })
+  }
+
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_provider_selection_rejects_staging" {
+  command = plan
+
+  variables {
+    environment = "staging"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled  = false
+      development_contribution_providers = ["lever"]
+    })
+  }
+
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_provider_selection_rejects_production" {
+  command = plan
+
+  variables {
+    environment = "production"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled  = false
+      development_contribution_providers = ["ashby"]
+    })
+  }
+
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_provider_selection_rejects_deny_all_staging" {
+  command = plan
+
+  variables {
+    environment = "staging"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled  = false
+      development_contribution_providers = []
+    })
+  }
+
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_provider_selection_rejects_deny_all_production" {
+  command = plan
+
+  variables {
+    environment = "production"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled  = false
+      development_contribution_providers = []
+    })
+  }
+
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_provider_selection_does_not_enable_dark_runtime" {
+  command = plan
+
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      deploy                             = true
+      enabled                            = false
+      policy_endpoint_enabled            = false
+      provider_private_egress            = false
+      development_contributions_enabled  = true
+      development_contribution_providers = ["greenhouse", "lever", "ashby"]
+    })
+  }
+
+  assert {
+    condition = (
+      !local.d2_community_enabled &&
+      !local.d2_development_contributions_enabled &&
+      !contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON") &&
+      !contains(keys(aws_lambda_function.d2_community_scheduled[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON") &&
+      length(aws_apigatewayv2_route.d2_community_protected) == 0 &&
+      length(aws_cloudwatch_event_rule.d2_community_schedule) == 0 &&
+      length(aws_lambda_event_source_mapping.d2_trust_signal) == 0 &&
+      length(aws_nat_gateway.ingestion_provider) == 0
+    )
+    error_message = "A development provider selection must not activate a dark runtime, enable routes/triggers/egress, or leak selection into inactive runtime environments."
   }
 }
 

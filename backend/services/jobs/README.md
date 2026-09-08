@@ -48,9 +48,14 @@ configuration fails closed.
 
 `src/contribution-capability-source.ts` also exposes explicit persistent development authority:
 `D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED=true` requires `D2_DEPLOYMENT_ENVIRONMENT=development`.
-It needs no signing key, envelope, or manual policy renewal; only extension `0.2.0`, Greenhouse
-`greenhouse-board-v1`, and the two reviewed `boards.greenhouse.io` / `job-boards.greenhouse.io`
-hosts are enabled. Intake and processing still honor their separate runtime-disable flags.
+It needs no signing key, envelope, or manual policy renewal. Absence of
+`D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON` preserves Greenhouse-only behavior; an explicit
+JSON array can independently select `greenhouse`, `lever`, and `ashby`, and `[]` denies all.
+Each fixed descriptor binds extension `0.2.0`, its exact variant, and its exact HTTPS hosts.
+Malformed selection or any selection outside explicit development is rejected. Intake and
+processing still honor their separate runtime-disable flags and current provider selection.
+This source support does not enable detectors, supply verification registrations, or activate
+Lever/Ashby in the deployed environment; their representative page/API acceptance remains open.
 Production/default composition retains signed-policy expiry checks. The legacy public policy API
 is not an unsigned-development projection and stays disabled when no signed policy is configured.
 
@@ -60,6 +65,13 @@ unchanged independent evidence, accepted Trust, and development authority checks
 marker, exact development configuration digest, and database trigger fence the update. Identity,
 evidence, original creation time, signed-policy rows, and terminal rows remain immutable; old lease
 commands cannot publish after renewal. This lease is not a manually renewed deployment deadline.
+
+Forward migration `0022_development_contribution_provider_leases` preserves the original Greenhouse
+descriptor and adds only the fixed Lever/Ashby version/digest pairs. Preparation and renewal also
+bind the persisted provider, variant, client, and source host; mismatched descriptors cannot renew
+across providers. The same 60-second duration, marker, chronology, immutable identity/evidence, and
+terminal-state guards apply. Deploy `0022` before enabling a new provider; the current recovery
+manifest covers 42 migrations and the unchanged 68 relations across six owners and ten schemas.
 
 Migration `0015_source_revalidation_lifecycle` adds a source-scoped durable revalidation queue and
 an append-only verification-evidence ledger for the D2 Greenhouse, Lever, and Ashby page variants.

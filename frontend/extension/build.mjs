@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { build, context } from "esbuild";
 import {
   capabilityPolicyPublicKeysForBuild,
+  developmentContributionProvidersForBuild,
   localExtensionEnvironment,
   parseDevelopmentContributions,
 } from "./build-settings.mjs";
@@ -22,6 +23,11 @@ const fileEnvironment = await localExtensionEnvironment(extensionRoot);
 const developmentContributions = parseDevelopmentContributions(
   process.env.EXTENSION_DEVELOPMENT_CONTRIBUTIONS ??
     fileEnvironment.EXTENSION_DEVELOPMENT_CONTRIBUTIONS,
+);
+const developmentContributionProviders = developmentContributionProvidersForBuild(
+  process.env,
+  fileEnvironment,
+  developmentContributions,
 );
 const domain = (
   process.env.EXTENSION_AUTH0_DOMAIN ??
@@ -129,6 +135,7 @@ const buildOptions = {
     __DETECTOR_ACTIVATION_POLICY__: JSON.stringify(detectorActivationPolicy),
     __EXTENSION_API_ORIGIN__: JSON.stringify(apiOrigin),
     __DEVELOPMENT_CONTRIBUTIONS__: JSON.stringify(developmentContributions),
+    __DEVELOPMENT_CONTRIBUTION_PROVIDERS__: JSON.stringify(developmentContributionProviders),
     __PENDING_RETENTION_MILLISECONDS__: JSON.stringify(pendingRetentionMilliseconds),
     __UGC_CONTRIBUTION_POLICY_VERSION__: JSON.stringify(safeUgcContributionPolicyVersion),
   },
@@ -154,7 +161,7 @@ const manifest = {
     ? { version_name: `${packageMetadata.version}-development-contributions` }
     : {}),
   description: developmentContributions
-    ? "Unpacked development-only Greenhouse contribution preview; not for store distribution."
+    ? "Unpacked development-only contribution preview; not for store distribution."
     : "Synthetic-only current-tab job capture and explicit contribution preview.",
   permissions: ["activeTab", "alarms", "identity", "scripting", "sidePanel", "storage"],
   ...(configured || apiOrigin
@@ -219,7 +226,7 @@ if (process.argv.includes("--watch")) {
         ? "Identity is configured, but API delivery remains disabled."
         : "Adding a job remains disabled until public Auth0 and API settings are configured.";
   const contributionMode = developmentContributions
-    ? " Unpacked development contributions use fixed Greenhouse readiness without signed-policy renewal; store packaging is prohibited."
+    ? " Unpacked development contributions use fixed opt-in provider readiness without signed-policy renewal; store packaging is prohibited."
     : "";
   console.log(`${inspectionStatus} ${deliveryStatus}${contributionMode}`);
 }

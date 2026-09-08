@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
+import { loadD2DevelopmentContributionProviders } from "@ai-job-apply/config";
 import type {
   ContributionCapabilityDecision,
   ContributionCapabilityInput,
   SignedD2ContributionCapabilityPolicy,
 } from "./contribution-capability-policy.js";
 import {
-  contributionCapabilityPolicySourceFromEnvironment,
   ContributionCapabilityPolicySourceUnavailableError,
+  contributionCapabilityPolicySourceFromEnvironment,
 } from "./contribution-capability-policy-source.js";
 
 /** Existing signed-policy callers retain their original port and verification requirements. */
@@ -17,27 +18,58 @@ export interface SignedContributionCapabilitySource {
   } | null>;
 }
 
-export const DEVELOPMENT_CONTRIBUTION_CAPABILITY_VERSION = "d2-development-greenhouse-v1";
 export const DEVELOPMENT_CONTRIBUTION_OPERATION_LEASE_MS = 60_000;
-const developmentDimensions = Object.freeze({
-  environment: "development",
-  version: DEVELOPMENT_CONTRIBUTION_CAPABILITY_VERSION,
-  clientVersion: "0.2.0",
-  provider: "greenhouse",
-  pageVariant: "greenhouse-board-v1",
-  domains: ["boards.greenhouse.io", "job-boards.greenhouse.io"],
-  operationLeaseMilliseconds: DEVELOPMENT_CONTRIBUTION_OPERATION_LEASE_MS,
+function developmentDescriptor<Provider extends ContributionCapabilityInput["provider"]>(
+  provider: Provider,
+  pageVariant: ContributionCapabilityInput["pageVariant"],
+  domains: readonly string[],
+) {
+  // Property order and the existing Greenhouse dimensions are part of its immutable digest.
+  // Adding an enabled provider must not invalidate already prepared Greenhouse operations.
+  const dimensions = Object.freeze({
+    environment: "development",
+    version: `d2-development-${provider}-v1` as const,
+    clientVersion: "0.2.0",
+    provider,
+    pageVariant,
+    domains: Object.freeze([...domains]),
+    operationLeaseMilliseconds: DEVELOPMENT_CONTRIBUTION_OPERATION_LEASE_MS,
+  });
+  return Object.freeze({
+    ...dimensions,
+    configurationDigestSha256: createHash("sha256")
+      .update(JSON.stringify(dimensions))
+      .digest("hex"),
+  });
+}
+
+/** Descriptors are not activation. Each provider still requires an explicit runtime opt-in. */
+export const DEVELOPMENT_CONTRIBUTION_CAPABILITIES = Object.freeze({
+  greenhouse: developmentDescriptor("greenhouse", "greenhouse-board-v1", [
+    "boards.greenhouse.io",
+    "job-boards.greenhouse.io",
+  ]),
+  lever: developmentDescriptor("lever", "lever-posting-v1", ["jobs.lever.co", "jobs.eu.lever.co"]),
+  ashby: developmentDescriptor("ashby", "ashby-job-board-v1", ["jobs.ashbyhq.com"]),
 });
-export const DEVELOPMENT_CONTRIBUTION_CAPABILITY_DIGEST = createHash("sha256")
-  .update(JSON.stringify(developmentDimensions))
-  .digest("hex");
+export const DEVELOPMENT_CONTRIBUTION_CAPABILITY_VERSION =
+  DEVELOPMENT_CONTRIBUTION_CAPABILITIES.greenhouse.version;
+export const DEVELOPMENT_CONTRIBUTION_CAPABILITY_DIGEST =
+  DEVELOPMENT_CONTRIBUTION_CAPABILITIES.greenhouse.configurationDigestSha256;
+
+export function developmentContributionDescriptorForLease(version: string, digest: string) {
+  return Object.values(DEVELOPMENT_CONTRIBUTION_CAPABILITIES).find(
+    (descriptor) =>
+      descriptor.version === version && descriptor.configurationDigestSha256 === digest,
+  );
+}
 
 type Environment = Readonly<Record<string, string | undefined>>;
 export type DevelopmentContributionCapabilityDecision =
   | Exclude<ContributionCapabilityDecision, { allowed: true }>
   | {
       allowed: true;
-      policyRevision: typeof DEVELOPMENT_CONTRIBUTION_CAPABILITY_VERSION;
+      policyRevision: string;
       configurationDigestSha256: string;
       evaluatedAt: string;
       expiresAt: string;
@@ -66,6 +98,7 @@ export class DevelopmentContributionCapabilitySource {
     if (!developmentEnabled(environment)) {
       throw new ContributionCapabilityPolicySourceUnavailableError();
     }
+    loadD2DevelopmentContributionProviders(environment);
   }
 
   async authorize(
@@ -82,22 +115,23 @@ export class DevelopmentContributionCapabilitySource {
     ) {
       return { allowed: false, reason: "global_disabled" };
     }
-    if (input.clientVersion !== developmentDimensions.clientVersion) {
+    if (input.clientVersion !== "0.2.0") {
       return { allowed: false, reason: "client_disabled" };
     }
-    if (input.provider !== developmentDimensions.provider) {
+    if (!loadD2DevelopmentContributionProviders(this.environment).includes(input.provider)) {
       return { allowed: false, reason: "provider_disabled" };
     }
-    if (input.pageVariant !== developmentDimensions.pageVariant) {
+    const descriptor = DEVELOPMENT_CONTRIBUTION_CAPABILITIES[input.provider];
+    if (input.pageVariant !== descriptor.pageVariant) {
       return { allowed: false, reason: "variant_disabled" };
     }
-    if (!developmentDimensions.domains.includes(input.domain)) {
+    if (!descriptor.domains.includes(input.domain)) {
       return { allowed: false, reason: "domain_disabled" };
     }
     return Object.freeze({
       allowed: true,
-      policyRevision: DEVELOPMENT_CONTRIBUTION_CAPABILITY_VERSION,
-      configurationDigestSha256: DEVELOPMENT_CONTRIBUTION_CAPABILITY_DIGEST,
+      policyRevision: descriptor.version,
+      configurationDigestSha256: descriptor.configurationDigestSha256,
       evaluatedAt: input.now.toISOString(),
       expiresAt: new Date(
         input.now.getTime() + DEVELOPMENT_CONTRIBUTION_OPERATION_LEASE_MS,
@@ -114,6 +148,7 @@ export function contributionCapabilitySourceFromEnvironment(
   environment: Environment,
   now: () => Date,
 ): ContributionCapabilitySource | null {
+  loadD2DevelopmentContributionProviders(environment);
   if (developmentEnabled(environment))
     return new DevelopmentContributionCapabilitySource(environment);
   return contributionCapabilityPolicySourceFromEnvironment(environment, now);

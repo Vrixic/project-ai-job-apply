@@ -112,7 +112,7 @@ if (
   (@($boundary.OwnerNames) -join ",") -cne "billing,documents,jobs,matching,profile,trust" -or
   [int]$boundary.SchemaCount -ne 10 -or
   [int]$boundary.RelationCount -ne 68 -or
-  [int]$boundary.MigrationCount -ne 41 -or
+  [int]$boundary.MigrationCount -ne 42 -or
   [string]$boundary.ManifestSha256 -cnotmatch "^[a-f0-9]{64}$"
 ) {
   throw "The current restore manifest boundary is unexpected."
@@ -154,6 +154,32 @@ Assert-Throws { ConvertFrom-D1RestoreVerifierEvents @($d1Event) $boundary "test"
   "Historical D1 aggregate receipt"
 Assert-Throws { Assert-D1RestoreContextBoundary (New-TestContext $d1Boundary) $boundary } `
   "Historical D1 restore context"
+
+# Prior release evidence remains valid only against its own exact source boundary.
+$priorD2Boundary = [pscustomobject]@{
+  ManifestId = [string]$boundary.ManifestId
+  ManifestSha256 = ("3" * 64) -join ""
+  OwnerCount = 6
+  RelationCount = 68
+  MigrationCount = 41
+}
+$priorD2Event = [ordered]@{
+  event = "d1_restore_verification"
+  schema_version = 1
+  kind = "read_only_aggregate"
+  manifest_id = [string]$priorD2Boundary.ManifestId
+  manifest_sha256 = [string]$priorD2Boundary.ManifestSha256
+  owner_count = [int]$priorD2Boundary.OwnerCount
+  relation_count = [int]$priorD2Boundary.RelationCount
+  migration_count = [int]$priorD2Boundary.MigrationCount
+  digest = ("4" * 64) -join ""
+} | ConvertTo-Json -Compress
+$null = ConvertFrom-D1RestoreVerifierEvents @($priorD2Event) $priorD2Boundary "historical"
+Assert-D1RestoreContextBoundary (New-TestContext $priorD2Boundary) $priorD2Boundary
+Assert-Throws { ConvertFrom-D1RestoreVerifierEvents @($priorD2Event) $boundary "current" } `
+  "Prior 41-migration D2 aggregate used as current 42-migration evidence"
+Assert-Throws { Assert-D1RestoreContextBoundary (New-TestContext $priorD2Boundary) $boundary } `
+  "Prior 41-migration D2 restore context used as current 42-migration evidence"
 
 foreach ($mutation in @(
   { (($event | ConvertFrom-Json) | Select-Object *, @{n = "extra"; e = { $true } }) | ConvertTo-Json -Compress },

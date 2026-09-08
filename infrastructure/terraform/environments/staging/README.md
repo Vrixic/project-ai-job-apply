@@ -39,3 +39,7 @@ The development-only `d2_community_runtime.development_contributions_enabled` fl
 false and is rejected in staging. Staging contribution activation continues to require the
 signed contribution policy and pinned verification keys; development convenience settings
 must not be carried into a release candidate.
+
+The optional `development_contribution_providers` input retains the inert `["greenhouse"]`
+compatibility default in staging. Any non-default selection, including `[]`, is rejected by the
+platform module because this setting belongs only to explicit development contribution mode.
