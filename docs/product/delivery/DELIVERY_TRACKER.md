@@ -327,7 +327,9 @@ This is the master record for the delivery phases defined in the [product and sy
   provider selection, and forward Jobs `0022` are now implemented and locally verified. All 77
   Jobs PostgreSQL tests pass; a clean packaged migration/replay and read-only recovery check cover
   42 migrations/68 relations, while the live environment remains on 41 migrations and Greenhouse
-  alone. Paired page/API acceptance, representative fixtures, release, and activation remain. Live
+  alone. Follow-up posting-ID, optional-field/location, and full-description fixes pass 284 ingestion
+  and 237 extension tests plus the generated actual-DOM matrix in both Edge and Chrome for Testing.
+  Representative provider-derived fixtures, release, and activation remain. Live
   delegated review is awaiting authorization to reuse its retained encrypted credential after the
   original setup-use window expired (D2-R14). Server roles and persistent development contribution
   mode remain unchanged; no secret, token, case content, or cloud mutation was needed for this audit.

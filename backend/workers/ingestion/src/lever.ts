@@ -1,9 +1,12 @@
 import type {
   IngestionSourceAdapter,
+  SourceExactPollContext,
   SourceJobObservation,
   SourcePollContext,
   SourcePollResult,
 } from "./contract.js";
+import { legacyPageDescriptionDigests } from "./page-preview-compatibility.js";
+import { parsePublicDescriptionHtml } from "./provider-description.js";
 import {
   approvedCompanyConfiguration,
   canonicalProviderText,
@@ -15,6 +18,8 @@ const sourceIdPattern = /^lever-[a-z0-9][a-z0-9-]{2,57}$/;
 const sitePattern = /^[a-z0-9][a-z0-9_-]{1,62}$/;
 const postingIdPattern = /^[A-Za-z0-9][A-Za-z0-9-]{7,99}$/;
 const maximumJobs = 100;
+const maximumDescriptionLength = 100_000;
+const maximumDescriptionLists = 25;
 
 export const leverPostingsAdapterVersion = "lever-postings-v1";
 
@@ -93,6 +98,98 @@ function workMode(value: unknown): SourceJobObservation["workMode"] | undefined 
   throw new Error("The Lever workplace type is invalid");
 }
 
+function fullDescription(
+  job: Record<string, unknown>,
+  onPreview?: (digests: readonly string[]) => void,
+): string {
+  const parts: string[] = [];
+  const previewParts: string[] = [];
+  let previewComplete = true;
+  let firstHeading: string | undefined;
+  const comparable = (value: string) => value.normalize("NFC").trim().replace(/\s+/gu, " ");
+
+  const plainSection = (value: unknown, html: unknown, label: string, required = false) => {
+    if (
+      (value !== undefined && value !== null && typeof value !== "string") ||
+      (typeof value === "string" && value.length > maximumDescriptionLength)
+    ) {
+      throw new Error(`${label} is invalid`);
+    }
+    if (value === undefined || value === null || value.trim() === "") {
+      if (typeof html === "string" && html.length > maximumDescriptionLength) {
+        throw new Error(`${label} HTML is invalid`);
+      }
+      const hasHtml =
+        html !== undefined && html !== null && (typeof html !== "string" || html.trim() !== "");
+      if (hasHtml) {
+        // HTML-only public sections remain provider truth even when the candidate deselects
+        // description. Invalid fallback content cannot silently disappear from publication.
+        const parsed = parsePublicDescriptionHtml(html);
+        if (parts.length === 0) firstHeading = parsed.firstHeading;
+        parts.push(parsed.plainText);
+        previewParts.push(parsed.textContent);
+      } else if (required && typeof value !== "string") {
+        throw new Error(`${label} is invalid`);
+      }
+      return;
+    }
+    const plainText = canonicalProviderText(value, label, maximumDescriptionLength);
+    if (onPreview) {
+      // Auxiliary HTML must corroborate the authoritative plain section. A missing, malformed,
+      // or contradictory representation cannot authorize a page-only compatibility digest.
+      try {
+        const parsed = parsePublicDescriptionHtml(html);
+        if (comparable(parsed.plainText) !== comparable(plainText)) previewComplete = false;
+        if (parts.length === 0) firstHeading = parsed.firstHeading;
+        previewParts.push(parsed.textContent);
+      } catch {
+        previewComplete = false;
+      }
+    }
+    parts.push(plainText);
+  };
+
+  // descriptionPlain already includes opening + body. Their separate fields must not be
+  // appended again; lists and the closing/salary descriptions are separate API sections.
+  plainSection(job.descriptionPlain, job.description, "The Lever job description", true);
+  if (job.lists !== undefined) {
+    if (!Array.isArray(job.lists) || job.lists.length > maximumDescriptionLists) {
+      throw new Error("The Lever description lists are invalid");
+    }
+    for (const item of job.lists) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        throw new Error("The Lever description list is invalid");
+      }
+      const list = item as Record<string, unknown>;
+      const heading = canonicalProviderText(list.text, "The Lever description list heading", 500);
+      const content = parsePublicDescriptionHtml(list.content);
+      if (parts.length === 0) firstHeading = heading;
+      parts.push(`${heading}\n${content.plainText}`);
+      previewParts.push(heading, content.textContent);
+    }
+  }
+  plainSection(job.salaryDescriptionPlain, job.salaryDescription, "The Lever salary description");
+  plainSection(job.additionalPlain, job.additional, "The Lever closing description");
+  const description = canonicalProviderText(
+    parts.join("\n\n"),
+    "The Lever complete job description",
+    maximumDescriptionLength,
+  );
+  if (onPreview && previewComplete) {
+    // The v1 reader observes textContent: adjacent block nodes can concatenate or retain
+    // template whitespace. Preserve every independently supplied chunk in both fixed layouts.
+    onPreview(
+      Object.freeze([
+        ...new Set([
+          ...legacyPageDescriptionDigests(previewParts.join(""), firstHeading),
+          ...legacyPageDescriptionDigests(previewParts.join("\n"), firstHeading),
+        ]),
+      ]),
+    );
+  }
+  return description;
+}
+
 function parseJob(
   value: unknown,
   options: Readonly<{
@@ -101,6 +198,7 @@ function parseJob(
     companyName: string;
     verifiedCompanyDomain: string;
   }>,
+  onPreview?: (digests: readonly string[]) => void,
 ): SourceJobObservation {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("The Lever job record is invalid");
@@ -117,7 +215,7 @@ function parseJob(
     companyName: options.companyName,
     title: canonicalProviderText(job.text, "The Lever job title", 500),
     locations: locationsFromCategories(job.categories),
-    description: canonicalProviderText(job.descriptionPlain, "The Lever job description", 100_000),
+    description: fullDescription(job, onPreview),
     sourceUrl: canonicalJobUrl(job.hostedUrl, options.jobsHost, options.site, externalJobId),
     atsTenant: options.site,
     externalJobId,
@@ -137,6 +235,16 @@ export class LeverPostingsAdapter implements IngestionSourceAdapter {
   readonly #fetch: Fetch;
   readonly #requestTimeoutMs: number;
   readonly #maximumResponseBytes: number;
+  readonly #pagePreviews = new WeakMap<SourceJobObservation, readonly string[]>();
+
+  pagePreviewDescriptionDigests(
+    observation: SourceJobObservation,
+    captureAdapterVersion: string,
+  ): readonly string[] {
+    return captureAdapterVersion === "d2-job-page-v1"
+      ? (this.#pagePreviews.get(observation) ?? [])
+      : [];
+  }
 
   constructor(options: LeverPostingsAdapterOptions) {
     if (!sourceIdPattern.test(options.sourceId) || !sitePattern.test(options.site)) {
@@ -196,5 +304,38 @@ export class LeverPostingsAdapter implements IngestionSourceAdapter {
       ),
       withdrawals: [],
     };
+  }
+
+  async pollExact({ externalJobId, signal }: SourceExactPollContext): Promise<SourcePollResult> {
+    if (!postingIdPattern.test(externalJobId)) {
+      throw new Error("The Lever exact posting identifier is invalid");
+    }
+    const result = await fetchPublicJson({
+      fetch: this.#fetch,
+      url: `https://${this.#hosts.api}/v0/postings/${this.#site}/${externalJobId}`,
+      signal,
+      requestTimeoutMs: this.#requestTimeoutMs,
+      maximumResponseBytes: this.#maximumResponseBytes,
+      provider: "Lever",
+    });
+    if (result.kind === "retry") return result;
+    let previewDigests: readonly string[] = [];
+    const observation = parseJob(
+      result.payload,
+      {
+        site: this.#site,
+        jobsHost: this.#hosts.jobs,
+        companyName: this.#companyName,
+        verifiedCompanyDomain: this.#verifiedCompanyDomain,
+      },
+      (digests) => {
+        previewDigests = digests;
+      },
+    );
+    if (observation.externalJobId !== externalJobId) {
+      throw new Error("The Lever exact response identity does not match its request");
+    }
+    this.#pagePreviews.set(observation, previewDigests);
+    return { kind: "success", observations: [observation], withdrawals: [] };
   }
 }

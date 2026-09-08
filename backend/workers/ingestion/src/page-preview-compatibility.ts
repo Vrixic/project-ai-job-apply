@@ -27,9 +27,24 @@ export function legacyPreviewDescription(value: string): string {
 }
 
 /** Exact textContent representations, derived only from the independently fetched API HTML. */
+export function legacyPageDescriptionDigests(
+  textContent: string,
+  firstHeading?: string,
+): readonly string[] {
+  return pageDescriptionDigests(textContent, firstHeading, false);
+}
+
 export function greenhouseLegacyPageDescriptionDigests(
   textContent: string,
   firstHeading?: string,
+): readonly string[] {
+  return pageDescriptionDigests(textContent, firstHeading, true);
+}
+
+function pageDescriptionDigests(
+  textContent: string,
+  firstHeading: string | undefined,
+  greenhouseCurrencyPresentation: boolean,
 ): readonly string[] {
   const normalizePage = (value: string) => value.replace(/\s+/gu, " ").trim().slice(0, 50_000);
   const full = normalizePage(textContent);
@@ -48,10 +63,12 @@ export function greenhouseLegacyPageDescriptionDigests(
   // The accepted Greenhouse presentation renders its dollar-range separator as a spaced
   // ASCII dash. Preserve both currency amounts, ordinary prose dashes, and other punctuation.
   // This is not punctuation removal, fuzzy matching, or acceptance of changed words/numbers.
-  const representations = values.flatMap((value) => [
-    value,
-    value.replace(/(\$\d[\d,]*(?:\.\d{2})?)—(?=\$\d)/gu, "$1 - "),
-  ]);
+  const representations = greenhouseCurrencyPresentation
+    ? values.flatMap((value) => [
+        value,
+        value.replace(/(\$\d[\d,]*(?:\.\d{2})?)—(?=\$\d)/gu, "$1 - "),
+      ])
+    : values;
   return Object.freeze([
     ...new Set(
       representations.map((value) =>

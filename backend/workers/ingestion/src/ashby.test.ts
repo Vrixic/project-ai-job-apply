@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { AshbyJobBoardAdapter } from "./ashby.js";
 
@@ -47,6 +48,82 @@ function adapter(fetch: typeof globalThis.fetch) {
 }
 
 describe("AshbyJobBoardAdapter", () => {
+  it("binds exact HTML-derived preview digests to fetched objects while retaining complete plaintext", async () => {
+    const source = adapter(
+      async () =>
+        new Response(
+          JSON.stringify({
+            apiVersion: "1",
+            jobs: [
+              job({
+                descriptionPlain: "Build reliable systems.\nSupport 12 regions.",
+                descriptionHtml: "<p>Build <b>reliable</b> systems.</p><p>Support 12 regions.</p>",
+              }),
+            ],
+          }),
+          { headers: { "content-type": "application/json" } },
+        ),
+    );
+    const response = await source.poll(context());
+    if (response.kind !== "success" || !response.observations[0])
+      throw new Error("Synthetic response missing");
+    const observation = response.observations[0];
+    const expected = createHash("sha256")
+      .update("build reliable systems.support 12 regions.")
+      .digest("hex");
+    expect(observation.description).toBe("Build reliable systems.\nSupport 12 regions.");
+    expect(source.pagePreviewDescriptionDigests(observation, "d2-job-page-v1")).toEqual([expected]);
+    expect(source.pagePreviewDescriptionDigests({ ...observation }, "d2-job-page-v1")).toEqual([]);
+    expect(source.pagePreviewDescriptionDigests(observation, "d2-job-page-v2")).toEqual([]);
+    expect(JSON.stringify(response)).not.toMatch(/descriptionHtml|Digests|<p>/u);
+  });
+
+  it.each([
+    undefined,
+    null,
+    "",
+    "<p>Build and maintain other systems.</p>",
+    "<p>Build and maintain systems.</p><p>Unexpected extra content.</p>",
+  ])(
+    "does not enable compatibility from absent or contradictory provider HTML",
+    async (descriptionHtml) => {
+      const source = adapter(
+        async () =>
+          new Response(
+            JSON.stringify({
+              apiVersion: "1",
+              jobs: [job({ descriptionHtml })],
+            }),
+            { headers: { "content-type": "application/json" } },
+          ),
+      );
+      const response = await source.poll(context());
+      if (response.kind !== "success" || !response.observations[0])
+        throw new Error("Synthetic response missing");
+      expect(
+        source.pagePreviewDescriptionDigests(response.observations[0], "d2-job-page-v1"),
+      ).toEqual([]);
+      expect(response.observations[0].description).toBe("Build and maintain systems.");
+    },
+  );
+
+  it.each([42, {}, "x".repeat(100_001)])(
+    "rejects malformed/oversized auxiliary HTML",
+    async (descriptionHtml) => {
+      const source = adapter(
+        async () =>
+          new Response(
+            JSON.stringify({
+              apiVersion: "1",
+              jobs: [job({ descriptionHtml })],
+            }),
+            { headers: { "content-type": "application/json" } },
+          ),
+      );
+      await expect(source.poll(context())).rejects.toThrow();
+    },
+  );
+
   it("uses only the fixed public job-board GET and emits identity-only unlisted withdrawals", async () => {
     const withdrawnId = "22345678-abcd-4abc-8abc-1234567890ab";
     const fetch = vi.fn<typeof globalThis.fetch>(

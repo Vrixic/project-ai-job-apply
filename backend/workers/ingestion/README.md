@@ -30,9 +30,16 @@ provider verifier without treating candidate-supplied content as catalog truth.
   Ambiguous identity parks; a genuinely new exact provider identity may be staged without catalog
   IDs and published only through the separate gated reconciler. Optional field omission and exact
   grounded location/work-type splits compare equivalently while original provider truth is retained.
-  The Greenhouse exact-fetch adapter also supplies bounded, response-object-bound v1 preview
-  digests derived from inert API HTML text nodes. These account for DOM block concatenation and the
-  displayed dollar-range separator without changing words, amounts, or full provider catalog text.
+  Optional posting-ID omission does not prevent verification: the required canonical provider URL
+  supplies only the internal exact-fetch identity, while any explicitly conflicting identifier
+  rejects before polling. Submitted payloads, normalizations, and their digests remain immutable.
+  Legacy singleton location previews may select one exact provider-original location or explicit
+  structured-address display; they do not replace the full independent location set.
+  The adapters also supply bounded, response-object-bound v1 preview digests derived from inert
+  API HTML text nodes. These account for exact DOM block concatenation without changing words,
+  amounts, or full provider catalog text. Lever/Ashby auxiliary HTML must corroborate the entire
+  corresponding provider plaintext. Only Greenhouse retains its reviewed dollar-range separator
+  representation; other providers do not inherit that transformation.
   Digests exist only in a weakly held in-memory association: no raw HTML or extra source field is
   persisted, published, or returned to clients, and other reader versions do not inherit it.
 - `synthetic.ts` — deterministic generated `.example.test` observations representing no provider,
@@ -48,11 +55,19 @@ provider verifier without treating candidate-supplied content as catalog truth.
   and remains impossible to enable through the default registry policy without explicit runtime
   authority.
 - `lever.ts` — fixed global/EU Postings GET adapter with paired API/hosted-job hosts, bounded
-  pagination and overflow refusal, plaintext-only descriptions, tracking-query removal, and exact
-  site/posting identity. It never calls Lever's application endpoint.
+  pagination and overflow refusal, tracking-query removal, and exact site/posting identity.
+  Contribution verification uses the documented exact-posting endpoint with unchanged timeout,
+  redirect refusal, and one-megabyte cap. The complete description retains the opening/body once,
+  bounded inert list headings/content, optional salary-description text, and closing text. No
+  application request or authenticated API is used; missing/failed exact responses never infer closure.
 - `ashby.ts` — fixed public Job Board GET adapter with exact API version, listed-only projection,
   bounded locations and response size, documented work-mode/employment mapping, and exact
   board/posting identity. It requests no compensation data and never calls an authenticated API.
+  Public API documentation provides only board acquisition, so the existing response/count caps
+  remain unchanged. An unlisted record causes catalog withdrawal, not a claim of employer closure.
+- `provider-description.ts` — bounded inert HTML-to-plaintext/textContent conversion for independent
+  Lever/Ashby evidence, excluding executable, form, and embedded-resource subtrees. It retains no
+  raw HTML and never executes or fetches page content.
 - `orchestration-store.ts` — the storage-neutral coordinator that commits every schedule, claim,
   settlement, pause, and retry through the Jobs-owned compare-and-swap port before returning a
   transport disposition.
@@ -100,6 +115,11 @@ provider snapshots and does not authorize another provider request or an enabled
 
 Run unit tests with `pnpm --filter @ai-job-apply/ingestion-worker test`. PostgreSQL integration
 requires an explicit `DATABASE_URL` and is separate from the default suite.
+
+`pnpm test:d2-provider-pairing` runs generated page/API pairs through the actual browser inspector,
+detector, selected payload, normalizer, provider adapters, and verifier. It uses an isolated local
+browser context and mocked provider responses, not a live provider or authenticated contribution.
+This catches cross-component representation errors that isolated detector/adapter unit tests miss.
 
 Contribution verification defaults to no registrations. Controlled development has one accepted
 Greenhouse registration in the separate D2 scheduled runtime; this does not activate the general

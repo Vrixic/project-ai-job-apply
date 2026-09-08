@@ -5,6 +5,8 @@ import type {
   SourcePollContext,
   SourcePollResult,
 } from "./contract.js";
+import { legacyPageDescriptionDigests } from "./page-preview-compatibility.js";
+import { parsePublicDescriptionHtml } from "./provider-description.js";
 import {
   approvedCompanyConfiguration,
   canonicalProviderText,
@@ -187,6 +189,7 @@ function parseJob(
     companyName: string;
     verifiedCompanyDomain: string;
   }>,
+  onPreview?: (digests: readonly string[]) => void,
 ): ParsedAshbyJob {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("The Ashby job record is invalid");
@@ -209,17 +212,31 @@ function parseJob(
   const team = optionalText(job.team, "The Ashby team");
   const mappedDepartment = department ?? team;
   const mappedEmploymentType = employmentType(job.employmentType);
+  const description = canonicalProviderText(
+    job.descriptionPlain,
+    "The Ashby job description",
+    100_000,
+  );
+  if (
+    job.descriptionHtml !== undefined &&
+    job.descriptionHtml !== null &&
+    job.descriptionHtml !== ""
+  ) {
+    const html = parsePublicDescriptionHtml(job.descriptionHtml);
+    const equivalentText = (value: string) => value.replace(/\s+/gu, " ").trim();
+    // The independently fetched HTML may explain textContent block boundaries only when
+    // it corroborates the complete provider plaintext, never changed words or numbers.
+    if (equivalentText(html.plainText) === equivalentText(description)) {
+      onPreview?.(legacyPageDescriptionDigests(html.textContent, html.firstHeading));
+    }
+  }
   return {
     kind: "observation",
     observation: {
       companyName: options.companyName,
       title: canonicalProviderText(job.title, "The Ashby job title", 500),
       locations: locations(job),
-      description: canonicalProviderText(
-        job.descriptionPlain,
-        "The Ashby job description",
-        100_000,
-      ),
+      description,
       sourceUrl: identity.sourceUrl,
       applicationUrl: canonicalApplicationUrl(
         job.applyUrl,
@@ -249,6 +266,7 @@ export class AshbyJobBoardAdapter implements IngestionSourceAdapter {
   readonly #fetch: Fetch;
   readonly #requestTimeoutMs: number;
   readonly #maximumResponseBytes: number;
+  readonly #pageDescriptions = new WeakMap<SourceJobObservation, readonly string[]>();
 
   constructor(options: AshbyJobBoardAdapterOptions) {
     if (!sourceIdPattern.test(options.sourceId) || !jobBoardPattern.test(options.jobBoardName)) {
@@ -266,6 +284,15 @@ export class AshbyJobBoardAdapter implements IngestionSourceAdapter {
     this.#requestTimeoutMs = options.requestTimeoutMs ?? 5_000;
     this.#maximumResponseBytes = options.maximumResponseBytes ?? 1_000_000;
     validateAcquisitionBounds(this.#requestTimeoutMs, this.#maximumResponseBytes, "Ashby");
+  }
+
+  pagePreviewDescriptionDigests(
+    observation: SourceJobObservation,
+    captureAdapterVersion: string,
+  ): readonly string[] {
+    return captureAdapterVersion === "d2-job-page-v1"
+      ? (this.#pageDescriptions.get(observation) ?? [])
+      : [];
   }
 
   async poll(context: SourcePollContext): Promise<SourcePollResult> {
@@ -289,13 +316,24 @@ export class AshbyJobBoardAdapter implements IngestionSourceAdapter {
     ) {
       throw new Error("The Ashby job batch exceeds its bounded size or version");
     }
-    const parsed = payload.jobs.map((job) =>
-      parseJob(job, {
-        jobBoardName: this.#jobBoardName,
-        companyName: this.#companyName,
-        verifiedCompanyDomain: this.#verifiedCompanyDomain,
-      }),
-    );
+    const parsed = payload.jobs.map((job) => {
+      let previewDigests: readonly string[] = [];
+      const parsedJob = parseJob(
+        job,
+        {
+          jobBoardName: this.#jobBoardName,
+          companyName: this.#companyName,
+          verifiedCompanyDomain: this.#verifiedCompanyDomain,
+        },
+        (digests) => {
+          previewDigests = digests;
+        },
+      );
+      if (parsedJob.kind === "observation") {
+        this.#pageDescriptions.set(parsedJob.observation, previewDigests);
+      }
+      return parsedJob;
+    });
     return {
       kind: "success",
       observations: parsed.flatMap((job) => (job.kind === "observation" ? [job.observation] : [])),

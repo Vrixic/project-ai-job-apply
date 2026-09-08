@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { NormalizedContributionProposal } from "@ai-job-apply/jobs-service";
 import { describe, expect, it, vi } from "vitest";
-import type { IngestionSourceAdapter, SourcePollResult } from "./contract.js";
+import type { IngestionSourceAdapter, SourceJobObservation, SourcePollResult } from "./contract.js";
 import {
   type IndependentProviderVerificationRegistration,
   RegisteredIndependentProviderVerifier,
@@ -105,7 +105,340 @@ const observation = {
   verifiedCompanyDomain: "acme.example",
 };
 
+const providerCases = [
+  ["greenhouse", "greenhouse-board-v1", "boards.greenhouse.io", "acme", "123"],
+  ["lever", "lever-posting-v1", "jobs.lever.co", "acme", "posting-12345"],
+  ["lever", "lever-posting-v1", "jobs.eu.lever.co", "acme", "posting-12345"],
+  ["ashby", "ashby-job-board-v1", "jobs.ashbyhq.com", "AcmeBoard", "Posting-12345"],
+] as const;
+
+function providerHarness(
+  [provider, pageVariant, host, tenant, externalJobId]: readonly [
+    (typeof providerCases)[number][0],
+    (typeof providerCases)[number][1],
+    string,
+    string,
+    string,
+  ],
+  fields: Partial<SourceJobObservation> = {},
+  pagePreviewDescriptionDigests?: IngestionSourceAdapter["pagePreviewDescriptionDigests"],
+) {
+  const canonicalSourceUrl = `https://${host}/${tenant}/${provider === "greenhouse" ? "jobs/" : ""}${externalJobId}`;
+  const independent = {
+    ...observation,
+    sourceUrl: canonicalSourceUrl,
+    atsTenant: tenant,
+    externalJobId,
+    ...fields,
+  };
+  const poll = vi.fn(
+    async (): Promise<SourcePollResult> => ({ kind: "success", observations: [independent] }),
+  );
+  const pollExact = vi.fn(
+    async (): Promise<SourcePollResult> => ({ kind: "success", observations: [independent] }),
+  );
+  const adapter: IngestionSourceAdapter = {
+    sourceId: `${provider}-synthetic`,
+    adapterVersion: "synthetic-v1",
+    poll,
+    pollExact,
+    ...(pagePreviewDescriptionDigests ? { pagePreviewDescriptionDigests } : {}),
+  };
+  const findExact = vi.fn(async () => []);
+  const verifier = new RegisteredIndependentProviderVerifier(
+    new SourceRegistry(
+      [
+        {
+          sourceId: adapter.sourceId,
+          provider,
+          provenance: "permitted_api",
+          enabled: true,
+          adapter,
+        },
+      ],
+      () => true,
+      { providerActivationAllowed: true },
+    ),
+    { findExact },
+    [
+      {
+        sourceId: adapter.sourceId,
+        provider,
+        pageVariant,
+        atsTenant: tenant.toLowerCase(),
+        sourcePolicyVersion: "synthetic-v1",
+      },
+    ],
+    { clock: () => new Date("2026-09-02T12:01:00.000Z"), createId: () => ids[0] },
+  );
+  const input = proposal({
+    provenance: {
+      ...proposal().provenance,
+      provider,
+      pageVariant,
+      canonicalSourceUrl,
+      canonicalSourceUrlSha256: digest(canonicalSourceUrl),
+      atsTenant: tenant.toLowerCase(),
+      externalJobId: externalJobId.toLowerCase(),
+    },
+  });
+  return { adapter, verifier, poll, pollExact, findExact, input, independent, externalJobId };
+}
+
 describe("RegisteredIndependentProviderVerifier", () => {
+  it.each(providerCases)(
+    "consumes only bounded source-object-associated v1 digests for %s on %s / %s",
+    async (...providerCase) => {
+      let expectedSource: SourceJobObservation | undefined;
+      const selectedDigest = digest("a synthetic page representation");
+      const pageDigests = vi.fn((source: SourceJobObservation) =>
+        source === expectedSource ? [selectedDigest] : [],
+      );
+      const { verifier, input, independent, pollExact } = providerHarness(
+        providerCase,
+        {},
+        pageDigests,
+      );
+      expectedSource = independent;
+      const selected = { ...input, normalizedDescriptionSha256: selectedDigest };
+      await expect(
+        verifier.verify({ contributionId, normalizationId, proposal: selected }),
+      ).resolves.toMatchObject({ status: "verified", providerObservation: independent });
+      expect(pageDigests).toHaveBeenCalledWith(independent, "d2-job-page-v1");
+      pollExact.mockResolvedValueOnce({ kind: "success", observations: [{ ...independent }] });
+      await expect(
+        verifier.verify({ contributionId, normalizationId, proposal: selected }),
+      ).resolves.toMatchObject({ status: "mismatch" });
+      pageDigests.mockClear();
+      await expect(
+        verifier.verify({
+          contributionId,
+          normalizationId,
+          proposal: {
+            ...selected,
+            provenance: { ...selected.provenance, adapterVersion: "d2-job-page-v2" },
+          },
+        }),
+      ).resolves.toMatchObject({ status: "mismatch" });
+      expect(pageDigests).not.toHaveBeenCalled();
+      for (const values of [
+        ["not-a-digest"],
+        [selectedDigest.toUpperCase()],
+        Array.from({ length: 5 }, () => selectedDigest),
+      ]) {
+        pageDigests.mockReturnValueOnce(values);
+        await expect(
+          verifier.verify({ contributionId, normalizationId, proposal: selected }),
+        ).resolves.toMatchObject({ status: "unavailable" });
+      }
+    },
+  );
+
+  it.each(providerCases)(
+    "rejects unrelated independent results when %s optional identity was omitted on %s / %s",
+    async (...providerCase) => {
+      const { verifier, input, independent, pollExact, findExact } = providerHarness(providerCase);
+      const { externalJobId: _omitted, ...provenance } = input.provenance;
+      const selected = { ...input, provenance };
+      for (const changed of [
+        { ...independent, atsTenant: "another-tenant" },
+        { ...independent, externalJobId: "different-posting" },
+        {
+          ...independent,
+          sourceUrl: independent.sourceUrl.replace(
+            providerCase[2],
+            `${providerCase[2]}.example.test`,
+          ),
+        },
+      ]) {
+        pollExact.mockResolvedValueOnce({ kind: "success", observations: [changed] });
+        await expect(
+          verifier.verify({ contributionId, normalizationId, proposal: selected }),
+        ).resolves.toMatchObject({ status: "unavailable" });
+      }
+      expect(findExact).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(providerCases)(
+    "derives an omitted optional posting identity from the exact %s URL on %s / %s",
+    async (...providerCase) => {
+      const { verifier, poll, pollExact, findExact, input, independent, externalJobId } =
+        providerHarness(providerCase);
+      const { externalJobId: _omitted, ...provenance } = input.provenance;
+      const unchanged = Object.freeze({ ...input, provenance: Object.freeze(provenance) });
+      const before = JSON.stringify(unchanged);
+      await expect(
+        verifier.verify({ contributionId, normalizationId, proposal: unchanged }),
+      ).resolves.toMatchObject({
+        status: "verified",
+        providerObservation: independent,
+      });
+      expect(pollExact).toHaveBeenCalledWith(expect.objectContaining({ externalJobId }));
+      expect(poll).not.toHaveBeenCalled();
+      expect(findExact).toHaveBeenCalledWith({
+        provider: providerCase[0],
+        atsTenant: providerCase[3].toLowerCase(),
+        externalJobId: externalJobId.toLowerCase(),
+        canonicalSourceUrl: input.provenance.canonicalSourceUrl,
+      });
+      expect(JSON.stringify(unchanged)).toBe(before);
+      expect(unchanged.provenance).not.toHaveProperty("externalJobId");
+    },
+  );
+
+  it.each(providerCases)(
+    "denies wrong URL/tenant/digest/explicit identity before polling %s on %s / %s",
+    async (...providerCase) => {
+      const { verifier, poll, pollExact, input } = providerHarness(providerCase);
+      const original = input.provenance;
+      const paths = [
+        original.canonicalSourceUrl.replace("https:", "http:"),
+        original.canonicalSourceUrl.replace("https://", "https://secret@"),
+        original.canonicalSourceUrl.replace(providerCase[2], `${providerCase[2]}:444`),
+        original.canonicalSourceUrl.replace(providerCase[2], `${providerCase[2]}.example.test`),
+        original.canonicalSourceUrl.replace(`/${providerCase[3]}/`, "/another-tenant/"),
+        original.canonicalSourceUrl.replace(`/${providerCase[3]}/`, `/${providerCase[3]}//`),
+        `${original.canonicalSourceUrl}/application`,
+        `${original.canonicalSourceUrl}/`,
+        `${original.canonicalSourceUrl}?tracking=1`,
+        `${original.canonicalSourceUrl}#application`,
+        original.canonicalSourceUrl.replace(providerCase[4], "%2e%2e"),
+      ];
+      const changes = [
+        ...paths.map((canonicalSourceUrl) => ({
+          canonicalSourceUrl,
+          canonicalSourceUrlSha256: digest(canonicalSourceUrl),
+        })),
+        { atsTenant: "another-tenant" },
+        { externalJobId: "different-posting" },
+        { externalJobId: "" },
+        { canonicalSourceUrlSha256: "f".repeat(64) },
+        {
+          pageVariant:
+            providerCase[0] === "lever"
+              ? ("ashby-job-board-v1" as const)
+              : ("lever-posting-v1" as const),
+        },
+      ];
+      for (const change of changes) {
+        await expect(
+          verifier.verify({
+            contributionId,
+            normalizationId,
+            proposal: {
+              ...input,
+              provenance: { ...original, ...change },
+            },
+          }),
+        ).resolves.toMatchObject({ status: "unavailable" });
+      }
+      expect(pollExact).not.toHaveBeenCalled();
+      expect(poll).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(providerCases)(
+    "accepts only exact legacy singleton location projections for %s on %s / %s",
+    async (...providerCase) => {
+      const fields = {
+        locations: ["Remote-NORAM", "South City"],
+        structuredLocations: [
+          {
+            address: {
+              addressLocality: "North City",
+              addressRegion: "North Region",
+              addressCountry: "EX",
+            },
+          },
+        ],
+        workMode: "remote" as const,
+      };
+      const { verifier, input, independent } = providerHarness(providerCase, fields);
+      for (const location of [
+        "remote-noram",
+        "noram",
+        "south city",
+        "north city, north region, ex",
+      ]) {
+        const selected = Object.freeze({
+          ...input,
+          normalizedLocations: Object.freeze([location]),
+          workMode: "remote" as const,
+        });
+        const before = JSON.stringify(selected);
+        await expect(
+          verifier.verify({ contributionId, normalizationId, proposal: selected }),
+        ).resolves.toMatchObject({ status: "verified", providerObservation: independent });
+        expect(JSON.stringify(selected)).toBe(before);
+      }
+      for (const normalizedLocations of [
+        ["unknown city"],
+        ["north city"],
+        ["north city, north region"],
+        ["north city, north region, exx"],
+        ["noram", "unknown city"],
+        ["noram", "remote-noram"],
+      ]) {
+        await expect(
+          verifier.verify({
+            contributionId,
+            normalizationId,
+            proposal: {
+              ...input,
+              normalizedLocations,
+            },
+          }),
+        ).resolves.toMatchObject({ status: "mismatch" });
+      }
+      await expect(
+        verifier.verify({
+          contributionId,
+          normalizationId,
+          proposal: {
+            ...input,
+            normalizedLocations: ["south city"],
+            workMode: "hybrid",
+          },
+        }),
+      ).resolves.toMatchObject({ status: "mismatch" });
+      await expect(
+        verifier.verify({
+          contributionId,
+          normalizationId,
+          proposal: {
+            ...input,
+            normalizedLocations: ["south city"],
+            provenance: { ...input.provenance, adapterVersion: "d2-job-page-v2" },
+          },
+        }),
+      ).resolves.toMatchObject({ status: "mismatch" });
+    },
+  );
+
+  it.each(providerCases)(
+    "allows omitted optional preview fields without discarding %s independent truth on %s / %s",
+    async (...providerCase) => {
+      const { verifier, input, independent } = providerHarness(providerCase);
+      const {
+        normalizedCompanyName: _company,
+        normalizedDescriptionSha256: _description,
+        ...required
+      } = input;
+      const { externalJobId: _externalJobId, ...provenance } = required.provenance;
+      const selected = Object.freeze({
+        ...required,
+        normalizedLocations: Object.freeze([]),
+        provenance: Object.freeze(provenance),
+      });
+      const before = JSON.stringify(selected);
+      await expect(
+        verifier.verify({ contributionId, normalizationId, proposal: selected }),
+      ).resolves.toMatchObject({ status: "verified", providerObservation: independent });
+      expect(JSON.stringify(selected)).toBe(before);
+    },
+  );
+
   it.each(["acme logo", "acme company logo"])(
     "recognizes only the exact provider name plus legacy logo-label suffix",
     async (company) => {

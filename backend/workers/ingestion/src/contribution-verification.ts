@@ -24,6 +24,20 @@ const pageVariantByProvider = Object.freeze({
   lever: "lever-posting-v1",
   ashby: "ashby-job-board-v1",
 } as const);
+const providerUrlBoundaries = Object.freeze({
+  greenhouse: {
+    domains: ["boards.greenhouse.io", "job-boards.greenhouse.io"],
+    path: /^\/([a-z0-9][a-z0-9_-]{1,62})\/jobs\/([1-9][0-9]{0,15})$/u,
+  },
+  lever: {
+    domains: ["jobs.lever.co", "jobs.eu.lever.co"],
+    path: /^\/([a-z0-9][a-z0-9_-]{1,62})\/([A-Za-z0-9][A-Za-z0-9-]{7,99})$/u,
+  },
+  ashby: {
+    domains: ["jobs.ashbyhq.com"],
+    path: /^\/([A-Za-z0-9][A-Za-z0-9_-]{1,62})\/([A-Za-z0-9][A-Za-z0-9-]{7,99})$/u,
+  },
+});
 
 export interface IndependentProviderVerificationRegistration {
   sourceId: string;
@@ -65,6 +79,47 @@ function resultBase(contributionId: string, proposal: NormalizedContributionProp
     pageVariant: proposal.provenance.pageVariant,
     canonicalSourceUrlSha256: proposal.provenance.canonicalSourceUrlSha256,
   } as const;
+}
+
+/** Fetch identity is derived from the required URL, not an omitted optional preview field. */
+function exactUrlIdentity(proposal: NormalizedContributionProposal) {
+  const provenance = proposal.provenance;
+  if (!Object.hasOwn(providerUrlBoundaries, provenance.provider)) return undefined;
+  const boundary = providerUrlBoundaries[provenance.provider];
+  let url: URL;
+  try {
+    url = new URL(provenance.canonicalSourceUrl);
+  } catch {
+    return undefined;
+  }
+  const parts = boundary.path.exec(url.pathname);
+  if (
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    url.port ||
+    url.search ||
+    url.hash ||
+    url.toString() !== provenance.canonicalSourceUrl ||
+    !boundary.domains.includes(url.hostname) ||
+    pageVariantByProvider[provenance.provider] !== provenance.pageVariant ||
+    !parts?.[1] ||
+    !parts[2] ||
+    normalizeText(parts[1]) !== provenance.atsTenant ||
+    sha256(provenance.canonicalSourceUrl) !== provenance.canonicalSourceUrlSha256
+  ) {
+    return undefined;
+  }
+  const normalizedExternalJobId = normalizeText(parts[2]);
+  if (
+    provenance.externalJobId !== undefined &&
+    provenance.externalJobId !== normalizedExternalJobId
+  ) {
+    return undefined;
+  }
+  // Preserve the original URL spelling for a provider fetch; keep normalized identity matching.
+  // Neither value is written back into the immutable proposal or its submitted payload/digests.
+  return { externalJobId: parts[2], normalizedExternalJobId };
 }
 
 function registeredSource(
@@ -113,6 +168,13 @@ function providerContent(observation: CatalogObservation) {
     title: normalizeText(observation.title),
     locations: [...new Set(observation.locations.map(normalizeText))].sort(),
     separatedLocations: [...new Set(separated.map((item) => item.location))].sort(),
+    structuredDisplayLocations: (observation.structuredLocations ?? []).map(({ address }) =>
+      normalizeText(
+        [address.addressLocality, address.addressRegion, address.addressCountry]
+          .filter((part) => typeof part === "string" && part.length > 0)
+          .join(", "),
+      ),
+    ),
     department: observation.department ? normalizeText(observation.department) : undefined,
     applicationUrlSha256: observation.applicationUrl
       ? sha256(canonicalizeJobUrl(observation.applicationUrl))
@@ -159,7 +221,16 @@ function contentMismatchMetrics(
     VerificationMismatchLocation: Number(
       proposal.normalizedLocations.length !== 0 &&
         JSON.stringify(proposal.normalizedLocations) !== JSON.stringify(truth.locations) &&
-        JSON.stringify(proposal.normalizedLocations) !== JSON.stringify(truth.separatedLocations),
+        JSON.stringify(proposal.normalizedLocations) !== JSON.stringify(truth.separatedLocations) &&
+        !(
+          legacy &&
+          proposal.normalizedLocations.length === 1 &&
+          [
+            ...truth.locations,
+            ...truth.separatedLocations,
+            ...truth.structuredDisplayLocations,
+          ].includes(proposal.normalizedLocations[0] as string)
+        ),
     ),
     VerificationMismatchDescription: Number(
       proposal.normalizedDescriptionSha256 !== undefined &&
@@ -224,11 +295,8 @@ export class RegisteredIndependentProviderVerifier implements IndependentProvide
     const config = this.#configs.get(
       `${proposal.provenance.provider}:${proposal.provenance.atsTenant}`,
     );
-    if (
-      !config ||
-      config.pageVariant !== proposal.provenance.pageVariant ||
-      !proposal.provenance.externalJobId
-    ) {
+    const urlIdentity = exactUrlIdentity(proposal);
+    if (!config || config.pageVariant !== proposal.provenance.pageVariant || !urlIdentity) {
       return { status: "unavailable", ...base };
     }
 
@@ -246,7 +314,7 @@ export class RegisteredIndependentProviderVerifier implements IndependentProvide
       const response = registration.adapter.pollExact
         ? await registration.adapter.pollExact({
             ...pollContext,
-            externalJobId: proposal.provenance.externalJobId,
+            externalJobId: urlIdentity.externalJobId,
           })
         : await registration.adapter.poll(pollContext);
       if (response.kind !== "success") return { status: "unavailable", ...base };
@@ -260,7 +328,7 @@ export class RegisteredIndependentProviderVerifier implements IndependentProvide
         if (
           canonical.sourceUrl === proposal.provenance.canonicalSourceUrl &&
           normalizeText(canonical.atsTenant) === proposal.provenance.atsTenant &&
-          normalizeText(canonical.externalJobId) === proposal.provenance.externalJobId
+          normalizeText(canonical.externalJobId) === urlIdentity.normalizedExternalJobId
         )
           return { status: "closed", ...base };
       }
@@ -274,11 +342,10 @@ export class RegisteredIndependentProviderVerifier implements IndependentProvide
         if (
           observation.sourceUrl !== proposal.provenance.canonicalSourceUrl ||
           normalizeText(observation.atsTenant ?? "") !== proposal.provenance.atsTenant ||
-          normalizeText(observation.externalJobId ?? "") !== proposal.provenance.externalJobId
+          normalizeText(observation.externalJobId ?? "") !== urlIdentity.normalizedExternalJobId
         )
           continue;
         const previewDigests =
-          registration.provider === "greenhouse" &&
           proposal.provenance.adapterVersion === "d2-job-page-v1"
             ? (registration.adapter.pagePreviewDescriptionDigests?.(
                 source,
@@ -307,7 +374,7 @@ export class RegisteredIndependentProviderVerifier implements IndependentProvide
         const identities = await this.catalogIdentities.findExact({
           provider: config.provider,
           atsTenant: proposal.provenance.atsTenant,
-          externalJobId: proposal.provenance.externalJobId,
+          externalJobId: urlIdentity.normalizedExternalJobId,
           canonicalSourceUrl: proposal.provenance.canonicalSourceUrl,
         });
         if (!Array.isArray(identities) || identities.length > 1) {

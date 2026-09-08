@@ -42,3 +42,12 @@ The verifier retains aggregate counts and file names only. It does not print con
 hosts, inspect `.env.local`, contact a provider, install the extension, or claim Chrome Web Store,
 human accessibility, managed-OIDC, provider-fixture, or deployed acceptance. Those remain separate
 D2 gates.
+
+## Generated provider-pairing regression
+
+Run `pnpm test:d2-provider-pairing` for a separate generated-only browser-to-verifier check. It
+uses the actual inspector/detector, selected public payload, Jobs normalizer, real provider
+adapters with injected responses, and independent verifier. All browser requests are intercepted
+or blocked and no provider, login, deployment, or workstation secret is used. This complements
+the installed-extension matrix; it does not replace representative provider fixtures, live
+account lifecycle, or activated end-to-end publication acceptance.

@@ -28,6 +28,7 @@ function exactProviderPage(
       url.protocol === "https:" &&
       !url.username &&
       !url.password &&
+      !url.port &&
       domains.includes(url.hostname.toLowerCase()) &&
       pathMatches
     );
@@ -49,13 +50,16 @@ function detector(
       if (!exactProviderPage(snapshot.canonicalUrl, provider, domains)) {
         return undefined;
       }
-      let externalJobId = snapshot.externalJobId;
-      if (!externalJobId) {
-        const segments = new URL(snapshot.canonicalUrl).pathname.split("/").filter(Boolean);
-        externalJobId = segments.at(-1);
-      }
+      // A page-owned identifier can be an employer requisition number, not the provider's
+      // posting identity. The exact validated active-tab path is authoritative for this field.
+      const url = new URL(snapshot.canonicalUrl);
+      // Supported provider APIs identify the posting without a trailing slash. Normalize only
+      // this already-validated provider path; arbitrary URL canonicalization stays unchanged.
+      url.pathname = url.pathname.replace(/\/$/u, "");
+      const segments = url.pathname.split("/").filter(Boolean);
+      const externalJobId = segments.at(-1);
       return sanitizeSnapshot(
-        { ...snapshot, ...(externalJobId ? { externalJobId } : {}) },
+        { ...snapshot, canonicalUrl: url.href, ...(externalJobId ? { externalJobId } : {}) },
         provider,
         variant,
         capturedAt,
