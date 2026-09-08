@@ -2,8 +2,9 @@
 
 This directory contains the Manifest V3 Chrome/Edge client for explicit current-tab job capture.
 Its repository defaults remain a **synthetic, default-dark release candidate**. The configured
-development candidate separately enables the accepted Greenhouse variant and signed-policy-bound
-contribution; initial installed Edge sign-in and server acknowledgement are confirmed. Lever and
+development candidate separately enables the accepted Greenhouse variant. An explicit unpacked-only
+development contribution mode avoids signed-policy renewal; the default distribution path remains
+signed-policy-bound. Initial installed Edge sign-in and server acknowledgement are confirmed. Lever and
 Ashby remain disabled pending D2-011 fixtures and QA acceptance. Acknowledgement is not publication:
 independent provider verification and Trust acceptance still apply. Production, general candidate
 release, and browser-store distribution are not approved. See the current
@@ -22,7 +23,7 @@ release, and browser-store distribution are not approved. See the current
   build-time detector policy. It requires the exact extension version plus complete provider,
   page-variant, and domain maps; absence, malformed/extra fields, or any disabled dimension denies
   inspection. Source and the default-dark package enable no detector.
-- Public contribution additionally requires a bounded Ed25519-signed capability policy fetched as
+- Default signed-mode public contribution additionally requires a bounded Ed25519-signed capability policy fetched as
   JSON data from the exact API origin. The extension pins an explicit key-ID-to-SPKI map at build
   time, verifies the server-compatible canonical envelope, and independently checks global intake,
   exact extension version, provider, page variant, and domain. Unknown keys, invalid signatures,
@@ -34,6 +35,15 @@ release, and browser-store distribution are not approved. See the current
   cooldown, and each fetch has a 10-second deadline. No timer polls readiness or contribution
   status. This can recognize a renewed server policy without reloading the extension, signing in
   again, or resubmitting an acknowledged job; existing identity and preview gates still apply.
+- `EXTENSION_DEVELOPMENT_CONTRIBUTIONS=true` selects a separate unpacked-development runtime.
+  It never loads signing keys or a signed cache, requests the capability-policy endpoint, or checks
+  a renewal/expiry clock. It accepts only extension `0.2.0`, Greenhouse `greenhouse-board-v1`, and
+  the exact `boards.greenhouse.io` / `job-boards.greenhouse.io` HTTPS hosts, while still enforcing
+  the independent detector configuration. Authentication, API, retention, selected-field preview,
+  command authorization, account fencing, retry limits and server authorization remain required.
+  This client setting cannot enable a development-disabled server or authorize publication.
+  The build is visibly labelled Development; store packaging refuses active development settings
+  and development-marked artifacts. The default signed implementation remains unchanged.
 - A strict structured allowlist: canonical HTTPS URL, provider, adapter version, timestamp, title,
   company, location, work type, description, and external job ID. Text is bounded and stripped of
   markup and control characters; URLs reject credentials, fragments, trackers, and local/private
@@ -92,7 +102,7 @@ Contribution delivery also requires `EXTENSION_UGC_CONTRIBUTION_POLICY_VERSION` 
 accountably selected server value. No value is selected in source or `.env.example`; absence keeps
 delivery off.
 
-It also requires `EXTENSION_CAPABILITY_POLICY_PUBLIC_KEYS_JSON`, a JSON object mapping each approved
+In default signed mode it also requires `EXTENSION_CAPABILITY_POLICY_PUBLIC_KEYS_JSON`, a JSON object mapping each approved
 lowercase key ID to that Ed25519 public key's base64url-encoded DER SPKI bytes. This is public key
 material, not a secret, but source and the default-dark store package intentionally pin no live key.
 The signed policy is read only from `/v1/extension/contribution-capability-policy` at the configured
@@ -102,6 +112,16 @@ cooldown limits user-initiated requests; it does not extend signed validity. Aft
 at least 15 seconds since the last check and press **Inspect current tab**, or reopen the popup.
 Existing builds need one rebuild/reload to receive this readiness fix; subsequent policy renewals
 do not require an extension reload.
+
+For an explicitly authorized **unpacked development** installation, set
+`EXTENSION_DEVELOPMENT_CONTRIBUTIONS=true`. Only exact `true` or `false` is accepted; absence selects
+`false`. This mode needs no capability signing-key setting, remote policy fetch, expiry, or renewal.
+Keep the independent detector, public identity/API, pending retention, and UGC command-authorization
+version configured. The development backend must be independently enabled; the extension cannot
+override backend scope, provider verification, Trust review, or publication checks. Offline/API
+failures still remain in the bounded queue for retry. Returning to signed mode requires rebuilding
+with `false`; store packaging requires both the process and local-file setting to be absent or
+`false` and will not silently convert an active development configuration into a store archive.
 
 Page inspection uses the independent `EXTENSION_DETECTOR_ACTIVATION_JSON`
 build-time policy. Its exact shape is `schemaVersion`, a reviewed `revision`, `extensionVersion`,

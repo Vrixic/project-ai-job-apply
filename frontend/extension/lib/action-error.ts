@@ -23,6 +23,9 @@ export function safeActionErrorMessage(error: unknown, action: string): string {
   if (message === "contribution_capability_disabled") {
     return "Public contribution is currently disabled by its signed capability policy.";
   }
+  if (message === "development_contribution_disabled") {
+    return "This unpacked development build accepts only enabled Greenhouse job pages for extension version 0.2.0.";
+  }
   if (message === "queue_capacity_reached") {
     return "The delivery queue is full. Retry pending items or remove stopped items.";
   }

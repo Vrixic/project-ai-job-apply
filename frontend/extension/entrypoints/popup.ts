@@ -1,4 +1,5 @@
 import { appealEvidenceDigest } from "../lib/contribution-owner-api";
+import { extensionConfiguration } from "../lib/config";
 import { CAPTURE_FIELDS, type CaptureField, type SanitizedJobCapture } from "../lib/job-capture";
 
 interface AuthStatus {
@@ -9,6 +10,7 @@ interface AuthStatus {
 }
 
 type DeliveryReadinessReason =
+  | "development_capture_disabled"
   | "api_configuration_required"
   | "identity_configuration_required"
   | "policy_configuration_required"
@@ -88,9 +90,13 @@ const appealEvidence = node<HTMLTextAreaElement>("#appeal-evidence");
 const cancelAppeal = node<HTMLButtonElement>("#cancel-appeal");
 
 const readinessCopy: Record<DeliveryReadinessReason, string> = {
+  development_capture_disabled:
+    "This development build accepts only enabled Greenhouse job pages for extension version 0.2.0.",
   api_configuration_required: "Configure the API origin to deliver selected fields.",
   identity_configuration_required: "Add public Auth0 settings, then sign in.",
-  policy_configuration_required: "Configure the public contribution policy before sharing.",
+  policy_configuration_required: extensionConfiguration.developmentContributions
+    ? "Configure the public-add preview authorization version before delivery."
+    : "Configure the public contribution policy before sharing.",
   preview_required: "Inspect a supported public job first.",
   ready: "Ready.",
   retention_configuration_required: "Configure pending-item retention before delivery.",
@@ -197,7 +203,10 @@ function renderStatus(response: ExtensionResponse): void {
   if (response.queue) {
     const failure = response.queue.lastError
       ? {
-          contribution_capability_policy_unavailable: "Policy service unavailable",
+          contribution_capability_policy_unavailable:
+            extensionConfiguration.developmentContributions
+              ? "Development contribution unavailable"
+              : "Policy service unavailable",
           authentication_required: "Sign in again to deliver",
           http_429: "Rate limited",
           http_5xx: "Server unavailable",

@@ -65,7 +65,7 @@ cluster-wide database grants. Missing opt-ins are reported as skipped, not passi
 - `publish-development-migration-image.ps1` — Provides the corresponding fail-closed development
   fallback for the migration-only container. Its cloud-independent `LocalBuild` action proves two
   source-bound `linux/amd64` builds have identical configuration and rootfs identities and passes a
-  hardened runtime smoke against the exact six-owner, ten-schema, 68-relation, 38-migration Phase 2
+  hardened runtime smoke against the exact six-owner, ten-schema, 68-relation, 41-migration Phase 2
   manifest, including the Trust runner and checksum-bound migration files. Publication separately
   resolves the Terraform-owned immutable KMS ECR
   repository, publishes the exact commit tag, requires a completed zero-High/zero-Critical scan,
@@ -87,6 +87,16 @@ migration execution, or AWS restore execution. No gateway or general worker imag
 
 ## Deployed verification and evidence
 
+- `run-development-d2-public-boundary.mjs` — Verifies bounded unauthenticated contribution
+  denials against the exact regional development API origin. The default signed mode also
+  validates 20 paced signed-policy contract reads. Explicit `--capability-mode development`
+  performs zero policy requests and still executes the 20 unauthenticated POST probes, with
+  only `401` or managed `429` accepted. Its separate aggregate profile marks policy checks
+  skipped and authenticated throughput unverified; it does not claim successful intake,
+  processing, publication, or signed-policy health. Both modes require
+  `--confirm run-d2-development-public-boundary-v1` and `--origin` with the exact API origin.
+  Invalid modes and duplicate/unknown arguments are rejected. Mocked tests:
+  `pnpm test:d2-public-boundary`.
 - `run-development-d2-authenticated-intake.mjs` — Runs one explicitly approved disposable
   contribution, with aggregate-only output and exact-run cleanup. The paused-intake profile
   requires processing disabled and checks owner reads/replay/conflict/cancellation. The separate
@@ -103,8 +113,14 @@ migration execution, or AWS restore execution. No gateway or general worker imag
   exported confirmation/actions/digest helpers to prepare the exact privately approved scope;
   execute with no arguments and the process-local `D2_AUTHENTICATED_INTAKE_CONFIRMATION`,
   `D2_AUTHENTICATED_INTAKE_SCOPE_JSON`, and `D2_AUTHENTICATED_INTAKE_ACCESS_TOKEN`. Never paste the
-  token or scope into chat, command arguments, retained logs, or Turbo inputs. The signed policy,
-  account identity digest, source/preview, and time window must match the approval exactly.
+  token or scope into chat, command arguments, retained logs, or Turbo inputs. The account
+  identity digest, source/preview, and workload time window must match the approval exactly.
+  Existing schema-version-1 scopes also bind the signed policy and public keys. For the active
+  processing profile only, schema version 2 uses `capabilityMode: "development"` instead of
+  `signedPolicySha256` and `publicKeys`; it makes no policy request and is restricted to client
+  `0.2.0`, Greenhouse `greenhouse-board-v1`, and the two accepted Greenhouse hosts. The deployed
+  server must independently enable development contributions. This removes the policy preflight,
+  not authentication, exact disposable-workload scope, cancellation, withdrawal, or cleanup.
   If `recoveryRequired` is true, retain the same private scope/run identity; inspect and recover
   it without creating another contribution or silently rebasing a Trust version. Mocked tests:
   `pnpm test:d2-authenticated-intake`. No live profile runs as part of repository verification.

@@ -135,6 +135,10 @@
         {
           "version": "0020_contribution_trust_reprocessing",
           "checksum": "2f6a993927d54b90d0a9880fa9277927cb4da5e5c022efb074424e63719b346a"
+        },
+        {
+          "version": "0021_development_contribution_operation_lease",
+          "checksum": "0445e53e4c0a5a6842b333dd6b750977ee618dde7310759b272b982309a25aa4"
         }
       ],
       "relations": [

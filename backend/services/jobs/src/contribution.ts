@@ -11,6 +11,10 @@ import {
   type SignedD2ContributionCapabilityPolicy,
   verifySignedContributionCapabilityPolicy,
 } from "./contribution-capability-policy.js";
+import {
+  type ContributionCapabilitySource,
+  isDevelopmentContributionCapabilitySource,
+} from "./contribution-capability-source.js";
 
 export const contributionProviders = ["greenhouse", "lever", "ashby"] as const;
 export type ContributionProvider = (typeof contributionProviders)[number];
@@ -425,7 +429,7 @@ export class JobContributionService implements JobContributions {
         return false;
       },
     },
-    private readonly capabilityPolicy: JobContributionCapabilityPolicyLoader = {
+    private readonly capabilityPolicy: ContributionCapabilitySource = {
       async load() {
         return null;
       },
@@ -491,6 +495,24 @@ export class JobContributionService implements JobContributions {
   }
 
   private async requireCapability(input: JobContributionInput): Promise<void> {
+    if (isDevelopmentContributionCapabilitySource(this.capabilityPolicy)) {
+      let allowed: boolean;
+      try {
+        const decision = await this.capabilityPolicy.authorize({
+          stage: "intake",
+          clientVersion: input.client.version,
+          provider: input.source.provider,
+          pageVariant: input.source.pageVariant,
+          domain: new URL(input.source.sourceUrl).hostname,
+          now: this.now(),
+        });
+        allowed = decision.allowed;
+      } catch (error) {
+        throw new JobContributionUnavailableError("JOB_CAPABILITY_VERIFY", error);
+      }
+      if (!allowed) throw new JobContributionCapabilityDisabledError();
+      return;
+    }
     let loaded: Awaited<ReturnType<JobContributionCapabilityPolicyLoader["load"]>>;
     try {
       loaded = await this.capabilityPolicy.load();

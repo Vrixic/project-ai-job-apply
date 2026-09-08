@@ -25,7 +25,8 @@ This matrix defines the first source-level detector scope. A row remains default
 accepts current authorized provider-derived fixtures for the exact variant and D2-016 records a
 bounded activation. Greenhouse alone was activated in development under the controlled exception
 recorded below; its renewal expired at 2026-09-06T19:24:54.670Z and fresh contribution authority
-remains required. Production and extension-store distribution remain dark. A provider family name
+is being replaced by persistent development configuration under D2-033 at the user's request.
+No renewal was executed. Production and extension-store distribution remain dark. A provider family name
 is not fixture evidence or activation authority.
 
 | Provider | Variant ID | Exact current-page hosts | Initial evidence state | Activation state |
@@ -70,7 +71,7 @@ provider truth was rewritten, and account-held browser items were untouched. The
 has a READY Vercel preview with a protected `302`/`no-store` boundary; this does not establish human
 reviewer identity or authenticated UI acceptance. The user explicitly authorized renewal of the same
 Greenhouse-only development policy for 24 hours. Revision `d2-development-greenhouse-20260905-v3`
-is live through **2026-09-06 15:24:54 America/New_York**, and two public reads verified the exact
+was live through **2026-09-06 15:24:54 America/New_York**, and two public reads verified the exact
 signed envelope with `200` and `no-store`. The remaining acceptance and input list is below.
 
 Final health follow-up: both resulting Trust signals were handled by version `11`, with two
@@ -120,6 +121,23 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-030 | Configure and verify the delegated agent initial/takedown identity and the separate human appeal identity. | In progress | Platform engineering; product owner | D2-007, D2-016, D2-026 | The distinct agent binding and its three scopes/access checks pass at state `284`. On 2026-09-08 the private human check verifies exact issuer/subject/client/audience, fresh MFA, two privileged scopes, and zero extras. The separately authorized four-update assignment-only deployment advances to state `285`, adding only human `case_reader` and `appeal_reviewer` while preserving both machine assignments, application artifacts, and expired contribution policy. Gateway `53`, scheduled `15`, and unchanged Trust `11` pass exact artifact/environment readback; the refresh-backed follow-up plan has zero proposed changes. All 13 alarms are OK and both Trust queues are observed empty. The user confirms the signed-in local appeal queue loads successfully with zero cases on 2026-09-08. Hosted reviewer and appeal-decision journey acceptance remain open; no case decision was submitted. The local window still ends at `2026-09-08T13:38:16Z`; original encrypted setup/environment files are unchanged. |
 | D2-031 | Handle rejected admin callback/session checks without exposing a generic server error or weakening MFA. | Implemented; local verification | Platform engineering | D2-030 | Three generated fixtures reproduce the installed SDK's post-callback MFA-hook rejection: missing/password-only proof refuses persistence; MFA proof permits it. A typed refusal and awaited proxy boundary select only fixed, uncached same-origin errors, with no session cookie or request continuation on failure. Both profiles explain missing MFA without reflecting arbitrary query data. All 71 admin tests/eight files, independent review, and full repository verifier pass. Source `ecfb607` is rebuilt and running only in the local appeal console; page/eight assets and five anonymous/error/SDK probes pass. On 2026-09-08 the user reported the fixed `mfa_required` error, then confirmed an active session after MFA setup guidance. This classifies that retry, not the earlier generic error, and does not establish exact human role binding or hosted acceptance. |
 | D2-032 | Privately verify the local human appeal session against the independently supplied identity before backend assignment. | Complete | Platform engineering | D2-030 | A default-dark, finite-window localhost server action checks SDK MFA freshness, exact issuer/subject/client, independently verified RS256 API token, and only appeal/read scopes. No browser-supplied identity, token export, refresh, Gateway call, role, or case mutation. Exclusive-create aggregate proof remains in the current-user-only ignored setup directory; private binding fingerprints never enter browser output. All 148 admin tests/11 files, typecheck, formatting/lint, independent source review, and the full repository verifier/fresh admin build pass. Actual human verification passes at `2026-09-08T13:19:45Z` before the separately authorized assignment under D2-030. |
+| D2-033 | Remove recurring development contribution signing, policy fetching, and renewal. | In progress | Platform engineering | D2-005, D2-006, D2-014 | Persistent exact-scope development configuration across extension, Gateway, worker, and Terraform; automatic retry lease migration, packaging isolation, regression tests, and development rollout. See the implementation details below. |
+
+### D2-033 — Remove recurring development contribution policy setup
+
+- State: In progress (2026-09-08); owner: Platform engineering.
+- Replace development signing keys, remote policy fetches, and expiry/renewal with explicit,
+  persistent development-only configuration in the extension, Gateway, and scheduled worker.
+- Preserve the exact accepted Greenhouse/client/variant/domain scope, authentication, account
+  isolation, preview-bound authorization, independent verification, Trust review, cancellation,
+  and publication checks. Production/store builds must not inherit this development setting.
+- Cover delayed/retried publication with an automatically refreshed operation lease, not another
+  user-renewed policy window; retain evidence, identity, and terminal-row immutability.
+- Source implementation and local checks are underway. Deployment and installed acceptance are
+  not yet claimed. Existing signed-mode compatibility is retained for other environments.
+- Evidence: [backend authority](../../../backend/services/jobs/src/contribution-capability-source.ts),
+  [extension development mode](../../../frontend/extension/lib/development-contributions.ts),
+  [Terraform composition](../../../infrastructure/terraform/modules/platform/community-runtime.tf).
 
 ## D2-023 installed narrow-layout acceptance
 
@@ -385,7 +403,7 @@ signed policy as authority or promote the workflow's machine identity to a decis
 
 | Remaining item | Existing implementation | Required next action / recommended choice |
 |---|---|---|
-| Development policy renewal | The explicitly authorized Greenhouse-only revision expired at `2026-09-06T19:24:54.670Z`; the earlier successful public reads are historical evidence, not current authority. | Obtain fresh bounded authority before renewing contribution activation. Restarting the local appeal sign-in alone does not renew this policy; production/store, Lever/Ashby, signing trust roots, and reviewer roles remain unchanged. |
+| Persistent development contributions (D2-033) | The user removed the recurring development policy requirement on 2026-09-08. The old signed revision remains expired; no renewal was executed. | Finish verification and deploy the explicit development-only configuration, then rebuild/reload the extension. No fresh signing key, policy digest, expiry, or renewal approval is required for this replacement. Production/store and unsupported providers remain disabled. |
 | Owner processing state through website publication | Application source `3f20462` is retained at state `285`, with reviewer configuration `01f6e94` and unchanged two-way Trust concurrency. The exact representation fix and snapshot-fenced retry cleared both provider-verification holds; both items remain parked and unpublished. | Refresh the existing owner receipt's Processing and Trust state, then review independently verified cases through the separately bound delegated initial/takedown agent and human appeal reviewer. Both identities are now bound; the user-confirmed local human queue read passes, while hosted reviewer and appeal-decision journey acceptance remain open under D2-030. Do not infer a particular Trust status from aggregate parking counts, resubmit acknowledged jobs, delete account-held items, or bypass Trust. |
 | Delegated initial/takedown review and human appeal acceptance | Reviewer API, admin console, role/scopes enforcement, outbox, and Jobs reconciliation exist. The agent's exact three scopes and live access checks pass. The private human identity/fresh-MFA/two-scope check passes on 2026-09-08; state `285` adds only human appeal/read roles alongside the unchanged workflow and agent. Exact runtime readback and zero proposed Terraform changes pass; the user confirms a successful empty appeal-queue read from the signed-in local console. | Complete hosted reviewer and appeal-decision journey acceptance under separately scoped testing. An empty appeal queue is a successful read, not a reason to manufacture a case or submit a decision. Preserve the workflow, policy expiry, and evidence gates. |
 | Lever and Ashby enablement | Detectors/adapters and synthetic tests exist. Both providers remain disabled. | Acquire authorized representative fixtures, complete scanning and human sanitization review, obtain separate QA acceptance, and then authorize exact development registrations/policy dimensions. Greenhouse evidence cannot substitute. |
@@ -529,6 +547,19 @@ signed policy as authority or promote the workflow's machine identity to a decis
 
 ## Decisions and scope changes
 
+On 2026-09-08 the user requested removal of the policy machinery because repeated expiry and
+renewal obstruct development. This supersedes the pending renewal request before any signing or
+renewal occurred. D2-033 replaces the development contribution capability envelope with persistent
+opt-in development configuration: no signing keys, remote policy request, expiry, or recurring
+approval window. The setting is rejected outside development and in extension-store packaging.
+The accepted scope remains client `0.2.0`, Greenhouse `greenhouse-board-v1`, and its two reviewed
+hosts. Authentication/MFA, account isolation, explicit preview addition, provider verification,
+Trust decisions, and publication integrity are separate controls and remain enforced. A short
+automatically refreshed publication-operation lease prevents stale concurrent writes without
+requiring user renewal. The signed mode remains compatible for default/staging/production use;
+this change is not public-launch or store approval. This section is the single decision/rationale
+record for the change.
+
 The 2026-09-08 setup uses a local-only server action to compare the actual authenticated human
 with the separately collected assignment identity before granting roles. A page title or accepted
 MFA session does not establish that identity/scope match. Keeping tokens and raw claims inside the
@@ -587,7 +618,7 @@ These are local checks; deployed migration, human review, and publication eviden
 | D2-R8 | Mitigated; acceptance open | A cramped or incomplete installed preview can cause a candidate to misunderstand what will be added or where it will go, weakening the explicit command even when the underlying payload is correct. | Product design; platform engineering; QA/automation | The wider responsive redesign, single public-add action, and automated Edge/Google Chrome for Testing geometry, keyboard, reflow, and two-surface axe checks are complete. Branded-browser authenticated lifecycle and human assistive-technology acceptance remain; do not relabel already-passing automated coverage as an open gate. |
 | D2-R9 | Closed | The dedicated D2 Trust workflow client and its exact `trust:review trust:case:open` grant are operator-confirmed. Its tenant-bound machine subject is bound only to `case_opener`; no secret is stored and the candidate-rights M2M identity remains separate. | Product owner; platform engineering | Preserve the workflow-only assignment and keep human decision roles separately assigned. |
 | D2-R10 | Provider holds cleared; owner follow-up open | The exact representation fix is deployed. Two unchanged submissions were requeued and claimed/parked once; fresh inspection shows zero provider-verification holds and the batch published nothing. | Platform engineering; QA/automation | Refresh the existing owner-visible Processing/Trust state. Preserve the delegated split under D2-030: both reviewer identities are bound, the local human queue read passes, while hosted reviewer and appeal-decision journey acceptance remain open, and normal evidence/publication gates still apply. Aggregate parking counts do not establish a precise Trust status. Do not resubmit or rewrite either submission. |
-| D2-R11 | Open; policy window expired | The deployed `d2-development-greenhouse-20260905-v3` renewal expired at `2026-09-06T19:24:54.670Z`. Earlier `200`/`no-store` and zero-drift evidence do not extend the window; no renewal occurred during local connection diagnosis. | Product owner; platform engineering | Renew only with fresh bounded contribution authority. Local sign-in restart is separate and cannot imply renewal. Production/store, Lever/Ashby, signing keys, and reviewer roles remain unchanged. |
+| D2-R11 | Open; replacement in progress | The deployed signed revision is expired. On 2026-09-08 the user removed the recurring development policy requirement; no renewal was executed. | Platform engineering | Complete D2-033 verification and development rollout with persistent exact-scope configuration. No fresh signing or renewal approval is needed for this replacement. Production/store, unsupported providers, authentication, and reviewer roles remain unchanged. |
 | D2-R12 | Open; hosted reviewer and appeal-decision journey acceptance pending | The private exact identity/fresh-MFA/two-scope check passes on 2026-09-08. The authorized human appeal/read assignment is deployed at state `285`; exact artifact/environment readback and zero proposed Terraform changes pass, preserving both machine identities and expired policy. The user confirms the signed-in local console successfully loads an empty appeal queue; local identity setup and read access are no longer blockers. The local-only window still ends at `2026-09-08T13:38:16Z`. | Product owner; platform engineering | Complete hosted reviewer and appeal-decision journey acceptance under separately scoped testing. Do not manufacture a case or submit a decision merely to test access; contribution-policy renewal remains separately gated. |
 
 ## Completion record

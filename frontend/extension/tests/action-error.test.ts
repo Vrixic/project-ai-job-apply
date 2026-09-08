@@ -7,6 +7,11 @@ describe("extension privacy-safe action errors", () => {
     ["access_denied", "login", "Authentication action cancelled."],
     ["configuration_required", "login", "Public Auth0 configuration is required."],
     [
+      "development_contribution_disabled",
+      "enqueue",
+      "This unpacked development build accepts only enabled Greenhouse job pages for extension version 0.2.0.",
+    ],
+    [
       "token_request_failed",
       "login",
       "Auth0 did not accept the sign-in token exchange. Check the exact callback URL and application grants, then try again.",

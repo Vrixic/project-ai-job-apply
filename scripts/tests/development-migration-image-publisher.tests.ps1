@@ -307,6 +307,7 @@ foreach ($required in @(
     'jobs/migrations/0018_job_contribution_processing_delivery.sql',
     'jobs/migrations/0019_job_contribution_provider_publication.sql',
     'jobs/migrations/0020_contribution_trust_reprocessing.sql',
+    'jobs/migrations/0021_development_contribution_operation_lease.sql',
     'matching/migrations/0003_private_saved_page_captures.sql',
     'trust/dist/src/migrate.js',
     'trust/migrations/0001_ugc_trust_foundation.sql',
@@ -320,7 +321,7 @@ foreach ($required in @(
     'manifest.contributors.length!==6',
     'manifest.contributors.flatMap(x=>x.schemas).length!==10',
     'manifest.contributors.flatMap(x=>x.relations).length!==68',
-    'manifest.contributors.flatMap(x=>x.migrations).length!==40',
+    'manifest.contributors.flatMap(x=>x.migrations).length!==41',
     'createRequire', './${owner}/package.json',
     'schemaVersion     = 2', 'indexDigest', 'platformDigest', 'rootfsDiffIdSetSha256',
     'compressedLayerSetSha256', 'imageUri = "$($boundary.RepositoryUri)@$($readback.PlatformDigest)"',
@@ -342,7 +343,7 @@ $backendInitialization = $source.LastIndexOf('Initialize-Backend', [StringCompar
 if ($localBuildBranch -lt 0 -or $backendInitialization -lt 0 -or $localBuildBranch -gt $backendInitialization) {
   throw "LocalBuild must exit before Terraform-state and AWS-boundary initialization."
 }
-$requiredEntrypointSet = 'for(const entrypoint of ["profile/dist/src/run-private-feature-acceptance.js","profile/migrations/0007_candidate_rights_export_null_omission.sql","profile/migrations/0008_ugc_contribution_consents.sql","profile/migrations/0009_ugc_contribution_consent_candidate_rights.sql","jobs/dist/src/search-acceptance.js","jobs/dist/src/run-search-acceptance.js","documents/dist/src/run-document-processing-acceptance.js","matching/dist/src/run-private-feature-acceptance.js","runner/dist/src/restore-verifier-cli.js","runner/restore-manifest.v1.json","jobs/migrations/0009_provider_ingestion_sources.sql","jobs/migrations/0010_public_job_truth_fields.sql","jobs/migrations/0011_positive_source_withdrawal.sql","jobs/migrations/0012_candidate_rights.sql","jobs/migrations/0013_public_job_sitemap.sql","jobs/migrations/0014_job_contribution_intake.sql","jobs/migrations/0015_source_revalidation_lifecycle.sql","jobs/migrations/0016_job_contribution_candidate_rights.sql","jobs/migrations/0017_job_contribution_processing.sql","jobs/migrations/0018_job_contribution_processing_delivery.sql","jobs/migrations/0019_job_contribution_provider_publication.sql","jobs/migrations/0020_contribution_trust_reprocessing.sql","matching/migrations/0003_private_saved_page_captures.sql","trust/dist/src/migrate.js","trust/migrations/0001_ugc_trust_foundation.sql","trust/migrations/0002_candidate_rights.sql","trust/migrations/0003_decision_signals.sql"])await access(entrypoint)'
+$requiredEntrypointSet = 'for(const entrypoint of ["profile/dist/src/run-private-feature-acceptance.js","profile/migrations/0007_candidate_rights_export_null_omission.sql","profile/migrations/0008_ugc_contribution_consents.sql","profile/migrations/0009_ugc_contribution_consent_candidate_rights.sql","jobs/dist/src/search-acceptance.js","jobs/dist/src/run-search-acceptance.js","documents/dist/src/run-document-processing-acceptance.js","matching/dist/src/run-private-feature-acceptance.js","runner/dist/src/restore-verifier-cli.js","runner/restore-manifest.v1.json","jobs/migrations/0009_provider_ingestion_sources.sql","jobs/migrations/0010_public_job_truth_fields.sql","jobs/migrations/0011_positive_source_withdrawal.sql","jobs/migrations/0012_candidate_rights.sql","jobs/migrations/0013_public_job_sitemap.sql","jobs/migrations/0014_job_contribution_intake.sql","jobs/migrations/0015_source_revalidation_lifecycle.sql","jobs/migrations/0016_job_contribution_candidate_rights.sql","jobs/migrations/0017_job_contribution_processing.sql","jobs/migrations/0018_job_contribution_processing_delivery.sql","jobs/migrations/0019_job_contribution_provider_publication.sql","jobs/migrations/0020_contribution_trust_reprocessing.sql","jobs/migrations/0021_development_contribution_operation_lease.sql","matching/migrations/0003_private_saved_page_captures.sql","trust/dist/src/migrate.js","trust/migrations/0001_ugc_trust_foundation.sql","trust/migrations/0002_candidate_rights.sql","trust/migrations/0003_decision_signals.sql"])await access(entrypoint)'
 if (-not $source.Contains($requiredEntrypointSet)) {
   throw "The migration runtime smoke gate does not require the exact acceptance entrypoint set."
 }
@@ -376,6 +377,7 @@ foreach ($required in @(
   'jobs/migrations/0018_job_contribution_processing_delivery.sql',
   'jobs/migrations/0019_job_contribution_provider_publication.sql',
   'jobs/migrations/0020_contribution_trust_reprocessing.sql',
+  'jobs/migrations/0021_development_contribution_operation_lease.sql',
   'trust/dist/src/migrate.js',
   'trust/migrations/0001_ugc_trust_foundation.sql',
   'trust/migrations/0002_candidate_rights.sql',
@@ -385,7 +387,7 @@ foreach ($required in @(
   'source.manifest.contributors.length!==6',
   'source.manifest.contributors.flatMap(x=>x.schemas).length!==10',
   'source.manifest.contributors.flatMap(x=>x.relations).length!==68',
-  'source.manifest.contributors.flatMap(x=>x.migrations).length!==40',
+  'source.manifest.contributors.flatMap(x=>x.migrations).length!==41',
   'expected exactly six generated .modules.yaml files',
   'FROM node:24.18.0-alpine3.23@sha256:595398b0081eacda8e1c4c5b97b76cd1020e4d58a8ebcb4843b9bca1e79e7436 AS runtime',
   'libcrypto3-3.5.8-r0.apk',

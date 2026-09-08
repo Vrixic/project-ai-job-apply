@@ -141,12 +141,17 @@ export async function runDevelopmentD2PublicBoundary(options) {
   if (options.confirmation !== CONFIRMATION) {
     throw new TypeError("Explicit D2 workload confirmation is required");
   }
-  const policyRequests = options.policyRequests ?? 20;
+  const capabilityMode = options.capabilityMode ?? "signed";
+  if (capabilityMode !== "signed" && capabilityMode !== "development") {
+    throw new TypeError("The D2 capability mode is invalid");
+  }
+  const developmentMode = capabilityMode === "development";
+  const policyRequests = options.policyRequests ?? (developmentMode ? 0 : 20);
   const unauthorizedRequests = options.unauthorizedRequests ?? 20;
   const abuseConcurrency = options.abuseConcurrency ?? 10;
   if (
     !Number.isInteger(policyRequests) ||
-    policyRequests < 1 ||
+    (developmentMode ? policyRequests !== 0 : policyRequests < 1) ||
     policyRequests > 50 ||
     !Number.isInteger(unauthorizedRequests) ||
     unauthorizedRequests < 1 ||
@@ -166,13 +171,15 @@ export async function runDevelopmentD2PublicBoundary(options) {
     ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
   const startedAt = wallNow().toISOString();
   const started = now();
-  const policyDurations = await runSteadyPolicyReads({
-    count: policyRequests,
-    fetchImpl,
-    now,
-    origin,
-    pause,
-  });
+  const policyDurations = developmentMode
+    ? []
+    : await runSteadyPolicyReads({
+        count: policyRequests,
+        fetchImpl,
+        now,
+        origin,
+        pause,
+      });
   const abuse = await runUnauthorizedBurst({
     concurrency: abuseConcurrency,
     count: unauthorizedRequests,
@@ -181,28 +188,41 @@ export async function runDevelopmentD2PublicBoundary(options) {
     origin,
   });
   return {
-    profile: "d2_deployed_public_policy_auth_boundary_v1",
+    profile: developmentMode
+      ? "d2_deployed_unauthenticated_contribution_boundary_v1"
+      : "d2_deployed_public_policy_auth_boundary_v1",
     startedAt,
     endedAt: wallNow().toISOString(),
     durationMs: Math.round(now() - started),
     policyRequests,
-    policyFailures: 0,
+    ...(developmentMode
+      ? {
+          capabilityMode: "development",
+          policyChecksSkipped: true,
+          authenticatedThroughputValidated: false,
+        }
+      : { policyFailures: 0, policyLatency: latencySummary(policyDurations) }),
     unauthorizedContributionRequests: unauthorizedRequests,
     unauthorizedResponses: abuse.unauthorized,
     throttledResponses: abuse.throttled,
     unexpectedResponses: 0,
     serverFailures: 0,
-    policyLatency: latencySummary(policyDurations),
     unauthorizedLatency: latencySummary(abuse.durations),
   };
 }
 
 function argumentsFrom(argv) {
+  const allowed = new Set(["origin", "confirm", "capability-mode"]);
   const values = new Map();
   for (let index = 0; index < argv.length; index += 2) {
     const key = argv[index];
     const value = argv[index + 1];
-    if (!key?.startsWith("--") || value === undefined) {
+    if (
+      !key?.startsWith("--") ||
+      value === undefined ||
+      !allowed.has(key.slice(2)) ||
+      values.has(key.slice(2))
+    ) {
       throw new TypeError("The D2 workload arguments are invalid");
     }
     values.set(key.slice(2), value);
@@ -213,6 +233,7 @@ function argumentsFrom(argv) {
 async function main() {
   const args = argumentsFrom(process.argv.slice(2));
   const result = await runDevelopmentD2PublicBoundary({
+    capabilityMode: args.get("capability-mode"),
     confirmation: args.get("confirm"),
     origin: args.get("origin"),
   });

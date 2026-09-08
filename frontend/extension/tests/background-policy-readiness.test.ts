@@ -70,8 +70,9 @@ function signed(payload = policy) {
   };
 }
 
-function response(envelope: unknown) {
+function response(envelope: unknown, status = 200) {
   return new Response(JSON.stringify(envelope), {
+    status,
     headers: { "cache-control": "no-store", "content-type": "application/json" },
   });
 }
@@ -97,17 +98,31 @@ function storageArea(records: Map<string, unknown>) {
   };
 }
 
-async function background(fetcher: typeof fetch) {
+async function background(fetcher: typeof fetch, development = false) {
+  vi.stubGlobal("__DEVELOPMENT_CONTRIBUTIONS__", development);
+  vi.stubGlobal("__DETECTOR_ACTIVATION_POLICY__", {
+    schemaVersion: 1,
+    revision: "synthetic-detector-v1",
+    extensionVersion: "0.2.0",
+    enabledProviders: policy.providers,
+    enabledVariants: policy.variants,
+    enabledDomains: policy.domains,
+  });
   vi.stubGlobal("__AUTH0_AUDIENCE__", "ai-job-apply-api");
   vi.stubGlobal("__AUTH0_CLIENT_ID__", "synthetic-native-client");
   vi.stubGlobal("__AUTH0_DOMAIN__", "tenant.example.test");
   vi.stubGlobal("__EXTENSION_API_ORIGIN__", "https://api.example.test");
   vi.stubGlobal("__PENDING_RETENTION_MILLISECONDS__", 86_400_000);
-  vi.stubGlobal("__CAPABILITY_POLICY_PUBLIC_KEYS__", {
-    "synthetic-key-v1": keys.publicKey
-      .export({ format: "der", type: "spki" })
-      .toString("base64url"),
-  });
+  vi.stubGlobal(
+    "__CAPABILITY_POLICY_PUBLIC_KEYS__",
+    development
+      ? {}
+      : {
+          "synthetic-key-v1": keys.publicKey
+            .export({ format: "der", type: "spki" })
+            .toString("base64url"),
+        },
+  );
   vi.stubGlobal("__UGC_CONTRIBUTION_POLICY_VERSION__", "synthetic-policy-v1");
   vi.stubGlobal("fetch", fetcher);
 
@@ -202,6 +217,130 @@ describe("warm background worker signed-policy readiness", () => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+  });
+
+  it("has persistent development readiness without fetching policy or accessing its signed cache", async () => {
+    vi.setSystemTime(new Date("2099-01-01T00:00:00.000Z"));
+    const fetcher = vi.fn<typeof fetch>(async () => {
+      throw new TypeError("offline");
+    });
+    const worker = await background(fetcher, true);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      expect((await worker.status()).delivery.contribution).toEqual({
+        ready: true,
+        reason: "ready",
+      });
+      await vi.advanceTimersByTimeAsync(30_000);
+    }
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(worker.browser.storage.local.get).not.toHaveBeenCalledWith(
+      "d2SignedContributionCapabilityPolicyV1",
+    );
+    expect(worker.browser.storage.local.remove).not.toHaveBeenCalledWith(
+      "d2SignedContributionCapabilityPolicyV1",
+    );
+    expect(worker.local.get(PENDING_QUEUE_KEY)).toEqual(worker.originalQueue);
+    expect(worker.local.get(CONTRIBUTION_RECEIPTS_KEY)).toEqual(worker.originalReceipts);
+  });
+
+  it("keeps development delivery pending on network failure without policy fetches or token disclosure", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => {
+      throw new TypeError("private-network-error");
+    });
+    const worker = await background(fetcher, true);
+    const result = await worker.send({ action: "retry" });
+    expect(result.queue).toMatchObject({ pending: 1, stopped: 0, blocked: 1 });
+    expect(fetcher).toHaveBeenCalled();
+    expect(
+      fetcher.mock.calls.some(([url]) => String(url).includes("contribution-capability-policy")),
+    ).toBe(false);
+    expect(JSON.stringify(result)).not.toContain("synthetic-token");
+    expect(JSON.stringify(result)).not.toContain("private-network-error");
+    expect(JSON.stringify([...worker.local.values()])).not.toContain("synthetic-token");
+  });
+
+  it("delivers selected development fields through the unchanged authenticated consent and contribution path", async () => {
+    const fetcher = vi.fn<typeof fetch>(async (url, init) => {
+      if (String(url).endsWith("/ugc-contribution-consents"))
+        return response(
+          {
+            documentVersion: "ugc-contribution-preview.v1",
+            grantedAt: now,
+            id: "01991000-0000-7000-8000-000000000099",
+            policyVersion: "synthetic-policy-v1",
+            schemaVersion: 1,
+            state: "granted",
+          },
+          201,
+        );
+      if (String(url).endsWith("/jobs/contributions")) {
+        const body = JSON.parse(String(init?.body));
+        return response(
+          { id: body.contributionId, state: "queued", submittedAt: now, updatedAt: now },
+          202,
+        );
+      }
+      throw new Error("Unexpected synthetic request");
+    });
+    const worker = await background(fetcher, true);
+    const result = await worker.send({ action: "retry" });
+    expect(result.queue).toMatchObject({ pending: 0, stopped: 0, blocked: 1 });
+    expect(fetcher.mock.calls.map(([url]) => String(url))).toEqual([
+      "https://api.example.test/v1/profile/ugc-contribution-consents",
+      "https://api.example.test/v1/jobs/contributions",
+    ]);
+    for (const [, init] of fetcher.mock.calls) {
+      expect(init?.headers).toMatchObject({ authorization: "Bearer synthetic-token" });
+      expect(init?.redirect).toBe("error");
+    }
+    expect(JSON.stringify([...worker.local.values()])).not.toContain("synthetic-token");
+  });
+
+  it.each([
+    ["configured", false, "identity_configuration_required"],
+    ["authenticated", false, "sign_in_required"],
+    ["apiConfigured", false, "api_configuration_required"],
+  ] as const)("still gates development readiness on %s", async (key, value, reason) => {
+    const fetcher = vi.fn<typeof fetch>();
+    const worker = await background(fetcher, true);
+    const protocol = await import("../lib/protocol");
+    const previous = await protocol.authenticationStatus();
+    vi.mocked(protocol.authenticationStatus).mockResolvedValue({ ...previous, [key]: value });
+    try {
+      expect((await worker.status()).delivery.contribution).toEqual({ ready: false, reason });
+      expect(fetcher).not.toHaveBeenCalled();
+    } finally {
+      vi.mocked(protocol.authenticationStatus).mockResolvedValue(previous);
+    }
+  });
+
+  it("still requires explicit retention, preview and UGC authorization in development", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const worker = await background(fetcher, true);
+    const { extensionConfiguration } = await import("../lib/config");
+    delete extensionConfiguration.pendingRetentionMilliseconds;
+    expect((await worker.status()).delivery.contribution.reason).toBe(
+      "retention_configuration_required",
+    );
+    extensionConfiguration.pendingRetentionMilliseconds = 86_400_000;
+    delete extensionConfiguration.ugcContributionPolicyVersion;
+    expect((await worker.status()).delivery.contribution.reason).toBe(
+      "policy_configuration_required",
+    );
+    extensionConfiguration.ugcContributionPolicyVersion = "synthetic-policy-v1";
+    worker.session.delete("d2LastJobCaptureV1");
+    expect((await worker.status()).delivery.contribution.reason).toBe("preview_required");
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("does not remove the signing-key requirement from the default path", async () => {
+    const worker = await background(vi.fn(async () => response(signed())));
+    const { extensionConfiguration } = await import("../lib/config");
+    extensionConfiguration.capabilityPolicyPublicKeys = {};
+    expect((await worker.status()).delivery.contribution).toEqual({
+      ready: false,
+      reason: "policy_configuration_required",
+    });
   });
 
   it("cancels an acknowledged pre-verification item without a Trust case or enabled intake policy", async () => {

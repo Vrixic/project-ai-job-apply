@@ -149,6 +149,7 @@ function prepareInput(scope) {
 
 function validateScope(scope, instant) {
   const processingProfile = scope?.kind === PROCESSING_KIND;
+  const developmentMode = scope?.schemaVersion === 2 && scope?.capabilityMode === "development";
   const actions = processingProfile ? PROCESSING_ACTIONS : AUTHORIZED_ACTIONS;
   const limits = processingProfile ? PROCESSING_LIMITS : LIMITS;
   if (
@@ -169,18 +170,17 @@ function validateScope(scope, instant) {
       "ugcPolicyVersion",
       "preview",
       "previewSha256",
-      "signedPolicySha256",
-      "publicKeys",
+      ...(developmentMode ? ["capabilityMode"] : ["signedPolicySha256", "publicKeys"]),
       "readRequests",
     ]) ||
-    scope.schemaVersion !== 1 ||
+    (developmentMode ? !processingProfile : scope.schemaVersion !== 1) ||
     (!processingProfile && scope.kind !== "d2_disposable_candidate_authenticated_v1") ||
     scope.disposableCandidate !== true ||
     scope.sourceAuthorized !== true ||
     !UUID_V7.test(scope.runId) ||
     !SHA256.test(scope.identitySha256) ||
     !SHA256.test(scope.previewSha256) ||
-    !SHA256.test(scope.signedPolicySha256) ||
+    (!developmentMode && !SHA256.test(scope.signedPolicySha256)) ||
     !VERSION.test(scope.ugcPolicyVersion) ||
     !Array.isArray(scope.actions) ||
     scope.actions.length !== actions.length ||
@@ -231,24 +231,32 @@ function validateScope(scope, instant) {
   )
     reject();
   if (
-    !scope.publicKeys ||
-    typeof scope.publicKeys !== "object" ||
-    Array.isArray(scope.publicKeys) ||
-    Object.keys(scope.publicKeys).length < 1 ||
-    Object.keys(scope.publicKeys).length > 5 ||
-    Object.entries(scope.publicKeys).some(
-      ([key, value]) =>
-        !VERSION.test(key) ||
-        typeof value !== "string" ||
-        value.length > 2_000 ||
-        !value.startsWith("-----BEGIN PUBLIC KEY-----") ||
-        value.includes("PRIVATE"),
-    )
+    !developmentMode &&
+    (!scope.publicKeys ||
+      typeof scope.publicKeys !== "object" ||
+      Array.isArray(scope.publicKeys) ||
+      Object.keys(scope.publicKeys).length < 1 ||
+      Object.keys(scope.publicKeys).length > 5 ||
+      Object.entries(scope.publicKeys).some(
+        ([key, value]) =>
+          !VERSION.test(key) ||
+          typeof value !== "string" ||
+          value.length > 2_000 ||
+          !value.startsWith("-----BEGIN PUBLIC KEY-----") ||
+          value.includes("PRIVATE"),
+      ))
   )
     reject();
   const input = prepareInput(scope);
   if (!validateContribution(input)) reject();
   const source = new URL(input.source.sourceUrl);
+  if (
+    developmentMode &&
+    (input.client.version !== "0.2.0" ||
+      input.source.provider !== "greenhouse" ||
+      input.source.pageVariant !== "greenhouse-board-v1")
+  )
+    reject();
   const hosts = {
     greenhouse: ["boards.greenhouse.io", "job-boards.greenhouse.io"],
     lever: ["jobs.lever.co", "jobs.eu.lever.co"],
@@ -275,7 +283,7 @@ function validateScope(scope, instant) {
   // public projection is sent; the separately authorized profile enforces its processing state.
   const strings = Object.values(input.posting).flat();
   if (strings.some((value) => typeof value === "string" && UNSAFE_TEXT.test(value))) reject();
-  return { origin, input, limits, processingProfile };
+  return { origin, input, limits, processingProfile, developmentMode };
 }
 
 function validateToken(token, scope, instant, limits) {
@@ -379,11 +387,15 @@ export async function runDevelopmentD2AuthenticatedIntake(options, dependencies 
   let token;
   let limits;
   let processingProfile;
+  let developmentMode;
   try {
     if (Buffer.byteLength(JSON.stringify(options.scope), "utf8") > LIMITS.maximumBodyBytes)
       reject();
     scope = structuredClone(options.scope);
-    ({ origin, input, limits, processingProfile } = validateScope(scope, wallNow().getTime()));
+    ({ origin, input, limits, processingProfile, developmentMode } = validateScope(
+      scope,
+      wallNow().getTime(),
+    ));
     let tokenTimer;
     try {
       token = await Promise.race([
@@ -638,26 +650,34 @@ export async function runDevelopmentD2AuthenticatedIntake(options, dependencies 
   }
 
   try {
-    const policyResponse = await request(POLICY_PATH, "GET", undefined, undefined, false);
-    if (
-      policyResponse.status !== 200 ||
-      signedEnvelopeDigest(policyResponse.body) !== scope.signedPolicySha256
-    )
-      reject();
-    const policy = verifySignedContributionCapabilityPolicy(policyResponse.body, scope.publicKeys);
-    if (
-      policy.processingEnabled !== processingProfile ||
-      Date.parse(policy.expiresAt) < wallNow().getTime() + limits.totalDeadlineMs ||
-      !evaluateContributionCapability(policy, {
-        stage: "intake",
-        provider: input.source.provider,
-        pageVariant: input.source.pageVariant,
-        domain: new URL(input.source.sourceUrl).hostname,
-        clientVersion: input.client.version,
-        now: wallNow(),
-      }).allowed
-    )
-      reject();
+    // Development uses persistent server-side capability configuration. This profile only
+    // removes signed-policy preflight; the deployed API remains the authority for every write.
+    // Keep the separate disposable-account/workload deadline and all cleanup/evidence fences.
+    if (!developmentMode) {
+      const policyResponse = await request(POLICY_PATH, "GET", undefined, undefined, false);
+      if (
+        policyResponse.status !== 200 ||
+        signedEnvelopeDigest(policyResponse.body) !== scope.signedPolicySha256
+      )
+        reject();
+      const policy = verifySignedContributionCapabilityPolicy(
+        policyResponse.body,
+        scope.publicKeys,
+      );
+      if (
+        policy.processingEnabled !== processingProfile ||
+        Date.parse(policy.expiresAt) < wallNow().getTime() + limits.totalDeadlineMs ||
+        !evaluateContributionCapability(policy, {
+          stage: "intake",
+          provider: input.source.provider,
+          pageVariant: input.source.pageVariant,
+          domain: new URL(input.source.sourceUrl).hostname,
+          clientVersion: input.client.version,
+          now: wallNow(),
+        }).allowed
+      )
+        reject();
+    }
     stage = "consent_grant";
     const primary = await grant("primary-grant");
     input.approval.consentId = primary.id;

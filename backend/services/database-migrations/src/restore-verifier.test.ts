@@ -98,7 +98,7 @@ describe("current restore manifest", () => {
         (total, contributor) => total + contributor.migrations.length,
         0,
       ),
-    ).toBe(40);
+    ).toBe(41);
     expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 
     for (const contributor of source.manifest.contributors) {
@@ -242,7 +242,7 @@ describe("read-only aggregate restore verification", () => {
       manifestSha256: source.sha256,
       ownerCount: 6,
       relationCount: 68,
-      migrationCount: 40,
+      migrationCount: 41,
     });
     expect(result.aggregateDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.keys(result)).toEqual([

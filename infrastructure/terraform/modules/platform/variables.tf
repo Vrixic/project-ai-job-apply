@@ -563,6 +563,7 @@ variable "d2_community_runtime" {
     deploy                                         = bool
     enabled                                        = bool
     policy_endpoint_enabled                        = bool
+    development_contributions_enabled              = optional(bool, false)
     artifact_s3_key                                = string
     artifact_s3_object_version                     = string
     artifact_sha256                                = string
@@ -598,8 +599,8 @@ variable "d2_community_runtime" {
     provider_sources_json                          = string
     provider_verification_registrations_json       = string
     ugc_contribution_policy_version                = string
-    signed_policy_json                             = string
-    signed_public_keys_json                        = string
+    signed_policy_json                             = optional(string, "")
+    signed_public_keys_json                        = optional(string, "")
     trust_reviewer_assignments_json                = string
     trust_evidence_allowlist_json                  = string
     trust_policy_version                           = string
@@ -619,6 +620,7 @@ variable "d2_community_runtime" {
     deploy                                         = false
     enabled                                        = false
     policy_endpoint_enabled                        = false
+    development_contributions_enabled              = false
     artifact_s3_key                                = ""
     artifact_s3_object_version                     = ""
     artifact_sha256                                = ""
@@ -722,23 +724,30 @@ variable "d2_community_runtime" {
   }
 
   validation {
+    condition     = !var.d2_community_runtime.development_contributions_enabled || var.environment == "development"
+    error_message = "The unsigned D2 development contribution mode is permitted only in the development environment. Staging and production must retain signed capability policy verification."
+  }
+
+  validation {
     condition = !var.d2_community_runtime.policy_endpoint_enabled || (
       var.deploy_applications &&
       var.deploy_gateway_lambda &&
-      try(length(keys(jsondecode(var.d2_community_runtime.signed_policy_json))) > 0, false) &&
-      try(length(keys(jsondecode(var.d2_community_runtime.signed_public_keys_json))) > 0, false) &&
-      length(base64encode(join("", [
-        var.d2_community_runtime.signed_policy_json,
-        var.d2_community_runtime.signed_public_keys_json
-      ]))) <= 1200
+      ((var.d2_community_runtime.enabled && var.d2_community_runtime.development_contributions_enabled) || (
+        try(length(keys(jsondecode(var.d2_community_runtime.signed_policy_json))) > 0, false) &&
+        try(length(keys(jsondecode(var.d2_community_runtime.signed_public_keys_json))) > 0, false) &&
+        length(base64encode(join("", [
+          var.d2_community_runtime.signed_policy_json,
+          var.d2_community_runtime.signed_public_keys_json
+        ]))) <= 1200
+      ))
     )
-    error_message = "The public Phase 2 policy endpoint requires a deployed Gateway plus a bounded signed policy and pinned public-key map."
+    error_message = "The public Phase 2 policy endpoint requires a deployed Gateway plus a bounded signed policy and pinned public-key map, except in explicitly enabled development contribution mode."
   }
 
   validation {
     condition = !var.d2_community_runtime.enabled || (
       var.d2_community_runtime.deploy &&
-      var.d2_community_runtime.policy_endpoint_enabled &&
+      (var.d2_community_runtime.policy_endpoint_enabled || var.d2_community_runtime.development_contributions_enabled) &&
       var.deploy_applications &&
       var.deploy_gateway_lambda &&
       var.runtime_activation_allowed &&
@@ -788,13 +797,15 @@ variable "d2_community_runtime" {
       try(length(tolist(jsondecode(var.d2_community_runtime.provider_sources_json))) > 0, false) &&
       try(length(tolist(jsondecode(var.d2_community_runtime.provider_verification_registrations_json))) > 0, false) &&
       can(regex("^[a-z0-9][a-z0-9._-]{2,99}$", var.d2_community_runtime.ugc_contribution_policy_version)) &&
-      try(length(keys(jsondecode(var.d2_community_runtime.signed_policy_json))) > 0, false) &&
-      try(length(keys(jsondecode(var.d2_community_runtime.signed_public_keys_json))) > 0, false) &&
+      (var.d2_community_runtime.development_contributions_enabled || (
+        try(length(keys(jsondecode(var.d2_community_runtime.signed_policy_json))) > 0, false) &&
+        try(length(keys(jsondecode(var.d2_community_runtime.signed_public_keys_json))) > 0, false)
+      )) &&
       try(length(tolist(jsondecode(var.d2_community_runtime.trust_reviewer_assignments_json))) > 0, false) &&
       try(length(tolist(jsondecode(var.d2_community_runtime.trust_evidence_allowlist_json))) >= 0, false) &&
       length(base64encode(join("", [
-        var.d2_community_runtime.signed_policy_json,
-        var.d2_community_runtime.signed_public_keys_json,
+        var.d2_community_runtime.development_contributions_enabled ? "" : var.d2_community_runtime.signed_policy_json,
+        var.d2_community_runtime.development_contributions_enabled ? "" : var.d2_community_runtime.signed_public_keys_json,
         var.d2_community_runtime.trust_reviewer_assignments_json,
         var.d2_community_runtime.trust_evidence_allowlist_json,
         var.d2_community_runtime.provider_sources_json,
@@ -812,7 +823,7 @@ variable "d2_community_runtime" {
       floor(var.d2_community_runtime.route_throttling_burst_limit) == var.d2_community_runtime.route_throttling_burst_limit &&
       can(regex("^[A-Za-z0-9][A-Za-z0-9._:@/-]{2,255}$", var.d2_community_runtime.release_authority))
     )
-    error_message = "Phase 2 activation requires the dark deployment, application gateway, explicit schedule, processing/delivery lease-retry-batch policies, non-empty explicitly authorized provider sources and independent-verification registrations, signed contribution policy, complete Trust policy/authority, route budgets, runtime activation authority, and accountable release authority."
+    error_message = "Phase 2 activation requires the dark deployment, application gateway, explicit schedule, processing/delivery lease-retry-batch policies, non-empty explicitly authorized provider sources and independent-verification registrations, signed contribution policy unless development contribution mode is explicitly enabled, complete Trust policy/authority, route budgets, runtime activation authority, and accountable release authority."
   }
 
   validation {

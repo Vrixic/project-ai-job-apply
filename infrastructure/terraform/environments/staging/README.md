@@ -34,3 +34,8 @@ and may be true only when `staging_runtime_mode = "active"`.
 Use saved checksum-reviewed Terraform plans for every release, migration, runtime disable/enable,
 restore, or infrastructure change. There is no continuously running ECS or external
 workflow-provider fallback.
+
+The development-only `d2_community_runtime.development_contributions_enabled` flag defaults
+false and is rejected in staging. Staging contribution activation continues to require the
+signed contribution policy and pinned verification keys; development convenience settings
+must not be carried into a release candidate.

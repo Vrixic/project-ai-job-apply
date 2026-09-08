@@ -5,6 +5,15 @@ locals {
     var.d2_community_runtime.enabled &&
     var.runtime_activation_allowed
   )
+  d2_development_contributions_enabled = (
+    local.d2_community_enabled &&
+    var.environment == "development" &&
+    var.d2_community_runtime.development_contributions_enabled
+  )
+  d2_development_contribution_environment = local.d2_development_contributions_enabled ? {
+    D2_DEPLOYMENT_ENVIRONMENT            = "development"
+    D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED = "true"
+  } : {}
   d2_policy_endpoint_enabled = (
     var.d2_community_runtime.policy_endpoint_enabled &&
     var.deploy_applications &&
@@ -280,14 +289,17 @@ resource "aws_lambda_function" "d2_community_scheduled" {
       D2_COMMUNITY_PROVIDER_ACTIVATION_ALLOWED              = tostring(var.d2_community_runtime.provider_activation_allowed)
       D2_COMMUNITY_PROVIDER_SOURCES_JSON                    = var.d2_community_runtime.provider_sources_json
       D2_COMMUNITY_PROVIDER_VERIFICATION_REGISTRATIONS_JSON = var.d2_community_runtime.provider_verification_registrations_json
-      JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON               = var.d2_community_runtime.signed_policy_json
-      JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON          = var.d2_community_runtime.signed_public_keys_json
       D2_TRUST_REVIEWER_ASSIGNMENTS_JSON                    = var.d2_community_runtime.trust_reviewer_assignments_json
       D2_TRUST_EVIDENCE_ALLOWLIST_JSON                      = var.d2_community_runtime.trust_evidence_allowlist_json
       D2_TRUST_POLICY_VERSION                               = var.d2_community_runtime.trust_policy_version
       D2_TRUST_APPEAL_WINDOW_MILLISECONDS                   = tostring(var.d2_community_runtime.trust_appeal_window_milliseconds)
       D2_TRUST_SYSTEM_ACTOR_ID                              = var.d2_community_runtime.trust_system_actor_id
-    } : {})
+      } : {}, local.d2_development_contribution_environment,
+      local.d2_community_enabled && !local.d2_development_contributions_enabled ? {
+        JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON      = var.d2_community_runtime.signed_policy_json
+        JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON = var.d2_community_runtime.signed_public_keys_json
+      } : {}
+    )
   }
 
   vpc_config {

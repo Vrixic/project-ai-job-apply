@@ -123,6 +123,7 @@ run "d2_defaults_create_nothing" {
     condition = (
       !var.d2_community_runtime.deploy &&
       !var.d2_community_runtime.enabled &&
+      !var.d2_community_runtime.development_contributions_enabled &&
       var.d2_community_runtime.signal_reserved_concurrency == 0 &&
       !var.d2_community_runtime.policy_endpoint_enabled &&
       length(aws_lambda_function.d2_community_scheduled) == 0 &&
@@ -227,6 +228,8 @@ run "d2_dark_deploy_has_immutable_compute_queues_and_alarms_without_triggers" {
       !contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "D2_CONTRIBUTION_ROUTES_ENABLED") &&
       aws_lambda_function.gateway[0].environment[0].variables.D2_CONTRIBUTION_POLICY_ROUTE_ENABLED == "true" &&
       aws_lambda_function.gateway[0].environment[0].variables.JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON == "{\"synthetic\":true}" &&
+      !contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED") &&
+      !contains(keys(aws_lambda_function.d2_community_scheduled[0].environment[0].variables), "D2_DEPLOYMENT_ENVIRONMENT") &&
       length(aws_nat_gateway.this) == 0
     )
     error_message = "Dark deployment must create immutable compute, exact queues, IAM, alarms, and only the public signed-policy route; triggers and mutating routes must remain structurally absent."
@@ -339,4 +342,185 @@ run "d2_active_signal_concurrency_upper_bound_is_shared" {
     )
     error_message = "The SQS mapping and Trust reservation must share the reviewed upper bound without changing scheduled concurrency."
   }
+}
+
+run "d2_development_contributions_work_without_signatures_or_policy_endpoint" {
+  command = plan
+
+  variables {
+    environment = "development"
+    d2_community_runtime = merge({
+      for key, value in var.d2_active_runtime_fixture : key => value
+      if !contains(["signed_policy_json", "signed_public_keys_json"], key)
+      }, {
+      development_contributions_enabled = true
+      policy_endpoint_enabled           = false
+    })
+  }
+
+  assert {
+    condition = (
+      local.d2_development_contributions_enabled &&
+      length(aws_apigatewayv2_route.d2_contribution_policy) == 0 &&
+      length(aws_apigatewayv2_route.d2_community_protected) == 18 &&
+      length(aws_cloudwatch_event_rule.d2_community_schedule) == 1 &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_DEPLOYMENT_ENVIRONMENT == "development" &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED == "true" &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_DEPLOYMENT_ENVIRONMENT == "development" &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED == "true" &&
+      !contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON") &&
+      !contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON") &&
+      !contains(keys(aws_lambda_function.d2_community_scheduled[0].environment[0].variables), "JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON") &&
+      !contains(keys(aws_lambda_function.d2_community_scheduled[0].environment[0].variables), "JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON")
+    )
+    error_message = "Explicit development mode must wire both environment markers to intake and processing without a signed-policy dependency or an obligatory policy route."
+  }
+
+  assert {
+    condition = (
+      aws_lambda_function.gateway[0].environment[0].variables.NODE_ENV == "production" &&
+      aws_lambda_function.gateway[0].environment[0].variables.OIDC_ISSUER == var.oidc_issuer &&
+      aws_lambda_function.gateway[0].environment[0].variables.OIDC_AUDIENCE == var.oidc_audience &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_TRUST_REVIEWER_ASSIGNMENTS_JSON == var.d2_community_runtime.trust_reviewer_assignments_json &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_TRUST_EVIDENCE_ALLOWLIST_JSON == var.d2_community_runtime.trust_evidence_allowlist_json &&
+      aws_lambda_function.gateway[0].environment[0].variables.UGC_CONTRIBUTION_POLICY_VERSION == var.d2_community_runtime.ugc_contribution_policy_version &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_ACTIVATION_ALLOWED == "true" &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_SOURCES_JSON == var.d2_community_runtime.provider_sources_json &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_VERIFICATION_REGISTRATIONS_JSON == var.d2_community_runtime.provider_verification_registrations_json &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_TRUST_REVIEWER_ASSIGNMENTS_JSON == var.d2_community_runtime.trust_reviewer_assignments_json &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_TRUST_EVIDENCE_ALLOWLIST_JSON == var.d2_community_runtime.trust_evidence_allowlist_json &&
+      !contains(keys(aws_lambda_function.d2_trust_signal[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED") &&
+      !contains(keys(aws_lambda_function.d2_trust_signal[0].environment[0].variables), "D2_DEPLOYMENT_ENVIRONMENT") &&
+      aws_lambda_function.d2_trust_signal[0].environment[0].variables.D2_COMMUNITY_PROCESSING_POLICY_VERSION == var.d2_community_runtime.processing_policy_version &&
+      aws_lambda_function.d2_community_scheduled[0].reserved_concurrent_executions == 1 &&
+      aws_lambda_function.d2_trust_signal[0].reserved_concurrent_executions == 2 &&
+      aws_lambda_event_source_mapping.d2_trust_signal[0].scaling_config[0].maximum_concurrency == 2 &&
+      alltrue([for route in aws_apigatewayv2_route.d2_community_protected : route.authorization_type == "JWT"]) &&
+      toset(aws_apigatewayv2_route.d2_community_protected["POST /v1/jobs/contributions"].authorization_scopes) == toset(["jobs:contribute"]) &&
+      toset(aws_apigatewayv2_route.d2_community_protected["POST /v1/admin/trust/cases/{caseId}/appeal-resolution"].authorization_scopes) == toset(["trust:review", "trust:appeal:resolve"])
+    )
+    error_message = "Development contribution mode must preserve JWT identity, provider verification, Trust assignments/evidence, role scopes, and bounded concurrency; the Trust signal runtime must remain unchanged."
+  }
+}
+
+run "d2_development_contributions_ignore_legacy_signatures" {
+  command = plan
+
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled = true
+      signed_policy_json                = "expired legacy signature data"
+      signed_public_keys_json           = "removed legacy signing keys"
+    })
+  }
+
+  assert {
+    condition = (
+      length(aws_apigatewayv2_route.d2_contribution_policy) == 1 &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_CONTRIBUTION_POLICY_ROUTE_ENABLED == "true" &&
+      !contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON") &&
+      !contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON") &&
+      !contains(keys(aws_lambda_function.d2_community_scheduled[0].environment[0].variables), "JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON") &&
+      !contains(keys(aws_lambda_function.d2_community_scheduled[0].environment[0].variables), "JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON")
+    )
+    error_message = "Retaining the legacy policy route must not reintroduce signed-policy data into enabled development intake or scheduled processing."
+  }
+}
+
+run "d2_development_flag_alone_cannot_activate_runtime" {
+  command = plan
+
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      deploy                            = false
+      enabled                           = false
+      policy_endpoint_enabled           = false
+      provider_private_egress           = false
+      development_contributions_enabled = true
+    })
+  }
+
+  assert {
+    condition = (
+      !local.d2_development_contributions_enabled &&
+      !contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED") &&
+      length(aws_lambda_function.d2_community_scheduled) == 0 &&
+      length(aws_apigatewayv2_route.d2_community_protected) == 0 &&
+      length(aws_cloudwatch_event_rule.d2_community_schedule) == 0 &&
+      length(aws_lambda_event_source_mapping.d2_trust_signal) == 0 &&
+      length(aws_nat_gateway.ingestion_provider) == 0
+    )
+    error_message = "The development mode flag must never implicitly activate deployment, routes, schedules, queues, or egress."
+  }
+}
+
+run "d2_development_mode_is_rejected_in_staging" {
+  command = plan
+
+  variables {
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled = true
+    })
+  }
+
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_mode_is_rejected_in_production" {
+  command = plan
+
+  variables {
+    environment = "production"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled = true
+    })
+  }
+
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_defaults_still_require_signed_policy" {
+  command = plan
+
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      signed_policy_json      = ""
+      signed_public_keys_json = ""
+    })
+  }
+
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_mode_preserves_configuration_size_limit" {
+  command = plan
+
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled = true
+      signed_policy_json                = ""
+      signed_public_keys_json           = ""
+      trust_evidence_allowlist_json     = jsonencode([join("", [for i in range(1000) : "aaa"])])
+    })
+  }
+
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_mode_still_requires_provider_verification" {
+  command = plan
+
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled        = true
+      provider_verification_registrations_json = "[]"
+    })
+  }
+
+  expect_failures = [var.d2_community_runtime]
 }

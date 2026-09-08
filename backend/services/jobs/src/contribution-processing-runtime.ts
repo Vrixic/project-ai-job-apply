@@ -5,8 +5,11 @@ import {
   type ContributionTrustDecisionPort,
   type CurrentContributionConsentPort,
   type IndependentProviderVerificationPort,
-  type SignedContributionCapabilityPolicyPort,
 } from "./contribution-processing.js";
+import {
+  type ContributionCapabilitySource,
+  isDevelopmentContributionCapabilitySource,
+} from "./contribution-capability-source.js";
 import {
   type ContributionProcessingEventDeliveryBatchMetrics,
   type ContributionProcessingEventDeliveryPolicy,
@@ -53,7 +56,7 @@ interface EnabledContributionProcessingRuntime {
   consent: CurrentContributionConsentPort;
   independentVerifier: IndependentProviderVerificationPort;
   trust: ContributionTrustDecisionPort;
-  capability: SignedContributionCapabilityPolicyPort;
+  capability: ContributionCapabilitySource;
   publicationCatalog: Pick<PostgresJobCatalog, "recordObservationInTransaction">;
   eventDelivery?: Readonly<{
     policy: ContributionProcessingEventDeliveryPolicy;
@@ -86,7 +89,8 @@ export async function runContributionProcessingRuntimeBatch(
     typeof configuration.consent?.verifyCurrent !== "function" ||
     typeof configuration.independentVerifier?.verify !== "function" ||
     typeof configuration.trust?.evaluate !== "function" ||
-    typeof configuration.capability?.load !== "function" ||
+    (!isDevelopmentContributionCapabilitySource(configuration.capability) &&
+      typeof configuration.capability?.load !== "function") ||
     typeof configuration.publicationCatalog?.recordObservationInTransaction !== "function"
   ) {
     throw new TypeError("Every contribution-processing runtime authority must be injected");

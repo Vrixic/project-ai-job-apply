@@ -281,6 +281,7 @@ export function createConsentGrantRequest(
         "idempotency-key": intent.consentIdempotencyKey,
       },
       method: "POST",
+      redirect: "error",
     },
     url: new URL("/v1/profile/ugc-contribution-consents", apiOrigin),
   };
@@ -305,6 +306,7 @@ export function createContributionRequest(
         "idempotency-key": intent.idempotencyKey,
       },
       method: "POST",
+      redirect: "error",
     },
     url: new URL("/v1/jobs/contributions", apiOrigin),
   };

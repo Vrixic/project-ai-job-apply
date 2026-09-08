@@ -73,6 +73,7 @@ function problem(status, code) {
 
 function fixture({
   processing = false,
+  development = false,
   processAfterMs = 300_000,
   withdrawalAfterMs = 600_000,
 } = {}) {
@@ -164,6 +165,12 @@ function fixture({
       keys.privateKey,
     ).toString("base64url");
     scope.signedPolicySha256 = signedEnvelopeDigest(envelope);
+  }
+  if (development) {
+    scope.schemaVersion = 2;
+    scope.capabilityMode = "development";
+    delete scope.signedPolicySha256;
+    delete scope.publicKeys;
   }
   let clock = 0;
   const calls = [];
@@ -926,6 +933,71 @@ test("accepted or ambiguously withdrawn cases never masquerade as completed clea
       false,
     );
   }
+});
+
+test("persistent development processing needs no signed policy, key, or policy request", async () => {
+  const f = fixture({ processing: true, development: true });
+  const result = await runDevelopmentD2AuthenticatedIntake(f.options, f.dependencies);
+  assert.equal(result.passed, true);
+  assert.equal(result.processingToReviewObserved, true);
+  assert.equal(result.cleanupSucceeded, true);
+  assert.equal(result.cleanupWithdrawals, 1);
+  assert.equal(Object.hasOwn(f.options.scope, "signedPolicySha256"), false);
+  assert.equal(Object.hasOwn(f.options.scope, "publicKeys"), false);
+  assert.equal(
+    f.calls.some((call) => call.path.includes("capability-policy")),
+    false,
+  );
+  assert.equal(
+    f.calls.some((call) => call.path.includes("/admin/")),
+    false,
+  );
+});
+
+test("development workload mode is explicit, processing-only, and exact Greenhouse scope", async () => {
+  for (const mutate of [
+    (scope) => {
+      scope.capabilityMode = "production";
+    },
+    (scope) => {
+      scope.schemaVersion = 1;
+    },
+    (scope) => {
+      scope.publicKeys = {};
+    },
+    (scope) => {
+      scope.signedPolicySha256 = "a".repeat(64);
+    },
+    (scope) => {
+      scope.preview.client.version = "0.3.0";
+    },
+    (scope) => {
+      scope.preview.source.provider = "lever";
+    },
+    (scope) => {
+      scope.preview.source.pageVariant = "lever-posting-v1";
+    },
+    (scope) => {
+      scope.preview.source.sourceUrl = "https://jobs.lever.co/synthetic/12345";
+    },
+    (scope) => {
+      scope.disposableCandidate = false;
+    },
+    (scope) => {
+      scope.sourceAuthorized = false;
+    },
+  ]) {
+    const f = fixture({ processing: true, development: true });
+    mutate(f.options.scope);
+    f.options.scope.previewSha256 = approvedPreviewDigest(f.options.scope.preview);
+    await assert.rejects(() => runDevelopmentD2AuthenticatedIntake(f.options, f.dependencies));
+    assert.equal(f.calls.length, 0);
+  }
+  const paused = fixture({ development: true });
+  await assert.rejects(() =>
+    runDevelopmentD2AuthenticatedIntake(paused.options, paused.dependencies),
+  );
+  assert.equal(paused.calls.length, 0);
 });
 
 test("withdrawal acknowledgement must bind the exact pending case and its next version", async () => {

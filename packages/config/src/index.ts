@@ -112,6 +112,8 @@ const lowercaseUuidV7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}
 const policyVersion = /^[a-z0-9][a-z0-9._-]{2,99}$/;
 
 const d2LambdaGatewayEnvironmentSchema = z.object({
+  D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED: exactDisabledBoolean,
+  D2_DEPLOYMENT_ENVIRONMENT: z.enum(["development", "staging", "production"]).optional(),
   D2_PRIVATE_CAPTURE_ROUTES_ENABLED: exactDisabledBoolean,
   D2_CONTRIBUTION_POLICY_ROUTE_ENABLED: exactDisabledBoolean,
   D2_CONTRIBUTION_ROUTES_ENABLED: exactDisabledBoolean,
@@ -163,6 +165,7 @@ export interface D2LambdaGatewayTrustConfiguration {
 
 export interface D2LambdaGatewayConfiguration {
   valid: boolean;
+  developmentContributionsEnabled: boolean;
   privateCaptureRoutesEnabled: boolean;
   contributionPolicyRouteEnabled: boolean;
   contributionRoutesEnabled: boolean;
@@ -174,6 +177,7 @@ export interface D2LambdaGatewayConfiguration {
 
 const disabledD2LambdaGatewayConfiguration = Object.freeze({
   valid: false,
+  developmentContributionsEnabled: false,
   privateCaptureRoutesEnabled: false,
   contributionPolicyRouteEnabled: false,
   contributionRoutesEnabled: false,
@@ -202,10 +206,20 @@ export function loadD2LambdaGatewayConfig(
   environment: NodeJS.ProcessEnv = process.env,
 ): D2LambdaGatewayConfiguration {
   const value = d2LambdaGatewayEnvironmentSchema.parse(environment);
+  if (
+    value.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED &&
+    value.D2_DEPLOYMENT_ENVIRONMENT !== "development"
+  ) {
+    throw new Error(
+      "Persistent development contributions require the exact development environment",
+    );
+  }
   const policyPair =
     Boolean(value.JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON) ===
     Boolean(value.JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON);
-  if (!policyPair) throw new Error("The signed contribution policy boundary must be complete");
+  if (!value.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED && !policyPair) {
+    throw new Error("The signed contribution policy boundary must be complete");
+  }
   const signedContributionPolicyConfigured = Boolean(
     value.JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON &&
       value.JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON,
@@ -269,7 +283,8 @@ export function loadD2LambdaGatewayConfig(
   }
   if (
     value.D2_CONTRIBUTION_ROUTES_ENABLED &&
-    (!signedContributionPolicyConfigured || !value.UGC_CONTRIBUTION_POLICY_VERSION)
+    ((!signedContributionPolicyConfigured && !value.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED) ||
+      !value.UGC_CONTRIBUTION_POLICY_VERSION)
   ) {
     throw new Error(
       "Contribution mutation routes require the signed capability and consent policies",
@@ -284,6 +299,7 @@ export function loadD2LambdaGatewayConfig(
 
   return Object.freeze({
     valid: true,
+    developmentContributionsEnabled: value.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED,
     privateCaptureRoutesEnabled: value.D2_PRIVATE_CAPTURE_ROUTES_ENABLED,
     contributionPolicyRouteEnabled: value.D2_CONTRIBUTION_POLICY_ROUTE_ENABLED,
     contributionRoutesEnabled: value.D2_CONTRIBUTION_ROUTES_ENABLED,

@@ -5,10 +5,55 @@ import {
   type AuthorizedHttpApiEvent,
   createApiGatewayHandler,
   createInvocationPrincipalBridge,
+  loadD2LambdaComposition,
 } from "./lambda.js";
 
 const ISSUER = "https://identity.example.test/";
 const AUDIENCE = "ai-job-apply-api";
+
+describe("development contribution Lambda composition", () => {
+  const values = () => ({
+    D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED: "true",
+    D2_DEPLOYMENT_ENVIRONMENT: "development",
+    D2_CONTRIBUTION_ROUTES_ENABLED: "true",
+    UGC_CONTRIBUTION_POLICY_VERSION: "d2-synthetic-ugc.v1",
+    D2_TRUST_REVIEWER_ASSIGNMENTS_JSON: JSON.stringify([
+      {
+        issuer: ISSUER,
+        subject: "synthetic|reviewer",
+        roles: ["case_opener"],
+        verifiedRequesterTakedown: false,
+      },
+    ]),
+    D2_TRUST_EVIDENCE_ALLOWLIST_JSON: "[]",
+    D2_TRUST_POLICY_VERSION: "d2-synthetic-trust.v1",
+    D2_TRUST_APPEAL_WINDOW_MILLISECONDS: "1000",
+    D2_TRUST_SYSTEM_ACTOR_ID: "019d04cf-1f80-7000-8000-000000000099",
+  });
+  const config = { OIDC_ISSUER: ISSUER } as Parameters<typeof loadD2LambdaComposition>[0];
+  it("enables authenticated intake but does not fabricate a public signed envelope", () => {
+    const composition = loadD2LambdaComposition(config, values());
+    expect(composition.routes).toMatchObject({
+      candidateContribution: true,
+      contributionPolicy: false,
+      privateCapture: false,
+      trustReviewer: false,
+    });
+    expect(composition.contributionCapability).toHaveProperty("mode", "development");
+    expect(composition).not.toHaveProperty("contributionCapabilityPolicy");
+  });
+  it("fails closed outside development, without Trust, or when route activation is off", () => {
+    for (const change of [
+      { D2_DEPLOYMENT_ENVIRONMENT: "production" },
+      { D2_TRUST_POLICY_VERSION: undefined },
+      { D2_CONTRIBUTION_ROUTES_ENABLED: "false" },
+    ]) {
+      expect(
+        loadD2LambdaComposition(config, { ...values(), ...change }).routes.candidateContribution,
+      ).toBe(false);
+    }
+  });
+});
 
 function bearerToken(claims: Record<string, unknown>): string {
   const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");

@@ -7,6 +7,10 @@ import {
   verifySignedContributionCapabilityPolicy,
 } from "./contribution-capability-policy.js";
 import {
+  type ContributionCapabilitySource,
+  isDevelopmentContributionCapabilitySource,
+} from "./contribution-capability-source.js";
+import {
   type ContributionProviderProvenance,
   type NormalizedContributionProposal,
   normalizeContributionForProcessing,
@@ -228,6 +232,7 @@ export interface ContributionProcessingStore {
     capabilityConfigurationDigestSha256: string;
     capabilityEvaluatedAt: string;
     capabilityExpiresAt: string;
+    developmentOperationLease?: true;
     occurredAt: Date;
   }): Promise<PreparedPublicationReconciliation>;
   completePublication(input: {
@@ -405,7 +410,7 @@ export interface ContributionProcessingDependencies {
   consent?: CurrentContributionConsentPort;
   independentVerifier?: IndependentProviderVerificationPort;
   trust?: ContributionTrustDecisionPort;
-  capability?: SignedContributionCapabilityPolicyPort;
+  capability?: ContributionCapabilitySource;
   reconciler?: ContributionPublicationReconciler;
   policy?: ContributionProcessingPolicy;
   now?: () => Date;
@@ -417,7 +422,7 @@ export class ContributionProcessingService {
   private readonly consent: CurrentContributionConsentPort;
   private readonly independentVerifier: IndependentProviderVerificationPort;
   private readonly trust: ContributionTrustDecisionPort;
-  private readonly capability: SignedContributionCapabilityPolicyPort;
+  private readonly capability: ContributionCapabilitySource;
   private readonly reconciler: ContributionPublicationReconciler;
   private readonly policy: ContributionProcessingPolicy;
   private readonly now: () => Date;
@@ -564,6 +569,9 @@ export class ContributionProcessingService {
         capabilityConfigurationDigestSha256: capability.configurationDigestSha256,
         capabilityEvaluatedAt: capability.evaluatedAt,
         capabilityExpiresAt: capability.expiresAt,
+        ...(isDevelopmentContributionCapabilitySource(this.capability)
+          ? { developmentOperationLease: true as const }
+          : {}),
         occurredAt: this.occurredAt(),
       }),
     );
@@ -646,7 +654,30 @@ export class ContributionProcessingService {
     ) {
       return "disabled";
     }
-    const loaded = await dependency(() => this.capability.load());
+    const source = this.capability;
+    if (isDevelopmentContributionCapabilitySource(source)) {
+      try {
+        const decision = await source.authorize({
+          stage: "processing",
+          clientVersion: contribution.clientVersion,
+          provider: contribution.input.source.provider,
+          pageVariant: contribution.input.source.pageVariant,
+          domain,
+          now: this.occurredAt(),
+        });
+        if (!decision.allowed) return "disabled";
+        return Object.freeze({
+          status: "authorized",
+          policyVersion: decision.policyRevision,
+          configurationDigestSha256: decision.configurationDigestSha256,
+          evaluatedAt: decision.evaluatedAt,
+          expiresAt: decision.expiresAt,
+        });
+      } catch {
+        return "unavailable";
+      }
+    }
+    const loaded = await dependency(() => source.load());
     if (!loaded) return "unavailable";
     let policy: ReturnType<typeof verifySignedContributionCapabilityPolicy>;
     try {

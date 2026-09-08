@@ -27,3 +27,15 @@ fail-closed boundary.
 Use Terraform saved plans and exact checksums for artifact releases, migrations, runtime
 disable/enable, restore, and infrastructure changes. Never reconstruct the removed continuous ECS
 or external workflow-provider runtime from historical evidence or console changes.
+
+Phase 2 development contributions can explicitly opt into
+`d2_community_runtime.development_contributions_enabled = true`. With the existing runtime
+deploy/activation inputs enabled, this removes expiring signed contribution-policy configuration
+from Gateway and the scheduled processor. `signed_policy_json` and `signed_public_keys_json`
+may be omitted, and `policy_endpoint_enabled` may remain false. The development marker and
+enable flag are injected together; production-mode Node.js execution is unchanged.
+
+This flag defaults false and changes no provider registry, verification, identity scope, Trust
+role, queue, schedule, concurrency, or alarm setting. It cannot activate an otherwise disabled
+runtime. The shared platform module rejects this flag outside development; this is not a
+production or browser-store release configuration.

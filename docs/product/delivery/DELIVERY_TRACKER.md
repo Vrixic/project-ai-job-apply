@@ -467,6 +467,12 @@ This is the master record for the delivery phases defined in the [product and sy
   development API page. Local identity setup and queue access are no longer blockers; hosted
   reviewer and appeal-decision journey acceptance remain open under D2-030/D2-R12. No case was
   created or decided, no policy renewed, and no browser credentials or case details collected.
+- Development friction removal (2026-09-08): at the user's request, D2-033 replaces recurring
+  development signing/policy-fetch/expiry requirements with persistent opt-in development
+  configuration. No renewal was executed. Implementation and local checks are underway;
+  rollout remains pending. Exact supported scope, authentication, independent verification,
+  Trust review, and production/store isolation remain enforced. The Phase 2 document holds
+  the single decision/rationale record.
 - Depends on: D0 consent/security foundations and D1 catalog, saved-job, and moderation foundations;
   the public-contribution API is D2-owned work
 - Task document: [Phase 2 tasks](phase-2-extension-and-community.md)

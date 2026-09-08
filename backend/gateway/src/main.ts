@@ -13,6 +13,8 @@ import {
 } from "@ai-job-apply/documents-service";
 import {
   contributionCapabilityPolicySourceFromEnvironment,
+  contributionCapabilitySourceFromEnvironment,
+  isDevelopmentContributionCapabilitySource,
   JobContributionService,
   JobModerationService,
   JobReportingService,
@@ -90,14 +92,18 @@ const ugcContributionConsents = new PostgresUgcContributionConsentStore(database
 const ugcContributionPolicyVersion = configuredUgcContributionPolicyVersion(
   process.env.UGC_CONTRIBUTION_POLICY_VERSION,
 );
-const contributionCapabilityPolicy = contributionCapabilityPolicySourceFromEnvironment(
+const contributionCapability = contributionCapabilitySourceFromEnvironment(
   process.env,
   () => new Date(),
 );
+const contributionCapabilityPolicy =
+  contributionCapability && isDevelopmentContributionCapabilitySource(contributionCapability)
+    ? null
+    : contributionCapabilityPolicySourceFromEnvironment(process.env, () => new Date());
 const jobContributions = new JobContributionService(
   new PostgresJobContributionStore(database.client),
   new ProfileJobContributionConsentVerifier(ugcContributionConsents, ugcContributionPolicyVersion),
-  contributionCapabilityPolicy ?? undefined,
+  contributionCapability ?? undefined,
   undefined,
   new ProfileJobContributionConsentRevoker(ugcContributionConsents),
 );

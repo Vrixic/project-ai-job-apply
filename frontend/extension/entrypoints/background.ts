@@ -5,6 +5,7 @@ import {
   extensionDetectorActivationPolicy,
 } from "../lib/capability-policy";
 import { extensionConfiguration } from "../lib/config";
+import { DevelopmentContributionRuntime } from "../lib/development-contributions";
 import {
   cancelContribution,
   fileContributionAppeal,
@@ -58,30 +59,32 @@ const LAST_CAPTURE_KEY = "d2LastJobCaptureV1";
 const RETRY_ALARM = "d2PendingJobIntentRetry";
 let identityGeneration = 0;
 
-const contributionPolicy = new ExtensionContributionPolicyRuntime(
-  extensionConfiguration.capabilityPolicyPublicKeys,
-  {
-    async read() {
-      return (await chrome.storage.local.get(CONTRIBUTION_CAPABILITY_POLICY_CACHE_KEY))[
-        CONTRIBUTION_CAPABILITY_POLICY_CACHE_KEY
-      ];
-    },
-    async remove() {
-      await chrome.storage.local.remove(CONTRIBUTION_CAPABILITY_POLICY_CACHE_KEY);
-    },
-    async write(envelope: SignedExtensionContributionCapabilityPolicy) {
-      await chrome.storage.local.set({
-        [CONTRIBUTION_CAPABILITY_POLICY_CACHE_KEY]: envelope,
-      });
-    },
-  },
-  async () => {
-    if (!extensionConfiguration.apiOrigin) {
-      throw new Error("The API origin is not configured");
-    }
-    return fetchSignedContributionCapabilityPolicy(extensionConfiguration.apiOrigin);
-  },
-);
+const contributionPolicy = extensionConfiguration.developmentContributions
+  ? new DevelopmentContributionRuntime(extensionDetectorActivationPolicy)
+  : new ExtensionContributionPolicyRuntime(
+      extensionConfiguration.capabilityPolicyPublicKeys,
+      {
+        async read() {
+          return (await chrome.storage.local.get(CONTRIBUTION_CAPABILITY_POLICY_CACHE_KEY))[
+            CONTRIBUTION_CAPABILITY_POLICY_CACHE_KEY
+          ];
+        },
+        async remove() {
+          await chrome.storage.local.remove(CONTRIBUTION_CAPABILITY_POLICY_CACHE_KEY);
+        },
+        async write(envelope: SignedExtensionContributionCapabilityPolicy) {
+          await chrome.storage.local.set({
+            [CONTRIBUTION_CAPABILITY_POLICY_CACHE_KEY]: envelope,
+          });
+        },
+      },
+      async () => {
+        if (!extensionConfiguration.apiOrigin) {
+          throw new Error("The API origin is not configured");
+        }
+        return fetchSignedContributionCapabilityPolicy(extensionConfiguration.apiOrigin);
+      },
+    );
 
 const storageBoundaryStartup = restrictExtensionStorageToTrustedContexts(chrome.storage);
 let contributionPolicyStartup = storageBoundaryStartup.then(() => contributionPolicy.start());
@@ -93,6 +96,7 @@ interface LastCapture {
 }
 
 type DeliveryReadinessReason =
+  | "development_capture_disabled"
   | "api_configuration_required"
   | "identity_configuration_required"
   | "policy_configuration_required"
@@ -154,7 +158,8 @@ async function deliveryReadiness(
   const privateSave = { ready: true, reason: "ready" } as const;
   if (
     !extensionConfiguration.ugcContributionPolicyVersion ||
-    Object.keys(extensionConfiguration.capabilityPolicyPublicKeys).length === 0
+    (!extensionConfiguration.developmentContributions &&
+      Object.keys(extensionConfiguration.capabilityPolicyPublicKeys).length === 0)
   ) {
     return { contribution: unavailable("policy_configuration_required"), privateSave };
   }
@@ -162,15 +167,24 @@ async function deliveryReadiness(
     await contributionPolicyStartup;
     await contributionPolicy.refreshForReadiness();
   } catch {
-    return { contribution: unavailable("signed_policy_unavailable"), privateSave };
+    return {
+      contribution: unavailable(
+        extensionConfiguration.developmentContributions
+          ? "development_capture_disabled"
+          : "signed_policy_unavailable",
+      ),
+      privateSave,
+    };
   }
   const decision = contributionPolicy.decision(capture, chrome.runtime.getManifest().version);
   if (!decision.allowed) {
     return {
       contribution: unavailable(
-        ["policy_missing", "policy_expired", "policy_not_yet_valid"].includes(decision.reason)
-          ? "signed_policy_unavailable"
-          : "signed_policy_disabled",
+        extensionConfiguration.developmentContributions
+          ? "development_capture_disabled"
+          : ["policy_missing", "policy_expired", "policy_not_yet_valid"].includes(decision.reason)
+            ? "signed_policy_unavailable"
+            : "signed_policy_disabled",
       ),
       privateSave,
     };
@@ -430,7 +444,11 @@ async function enqueue(
     await contributionPolicyStartup;
     await contributionPolicy.refresh();
     if (!contributionPolicy.decision(last.capture, chrome.runtime.getManifest().version).allowed) {
-      throw new Error("contribution_capability_disabled");
+      throw new Error(
+        extensionConfiguration.developmentContributions
+          ? "development_contribution_disabled"
+          : "contribution_capability_disabled",
+      );
     }
   }
   const session = await authenticatedApiSession();

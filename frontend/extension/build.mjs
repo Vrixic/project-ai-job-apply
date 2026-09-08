@@ -2,6 +2,11 @@ import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build, context } from "esbuild";
+import {
+  capabilityPolicyPublicKeysForBuild,
+  localExtensionEnvironment,
+  parseDevelopmentContributions,
+} from "./build-settings.mjs";
 
 const extensionRoot = dirname(fileURLToPath(import.meta.url));
 const outputDirectory = join(extensionRoot, "dist");
@@ -13,28 +18,11 @@ const iconPaths = {
   128: "icon-128.png",
 };
 
-async function localEnvironment() {
-  let source = "";
-  try {
-    source = await readFile(join(extensionRoot, ".env.local"), "utf8");
-  } catch (error) {
-    if (error?.code !== "ENOENT") {
-      throw error;
-    }
-  }
-  return Object.fromEntries(
-    source
-      .split(/\r?\n/u)
-      .map((line) => line.trim())
-      .filter((line) => line && !line.startsWith("#") && line.includes("="))
-      .map((line) => {
-        const separator = line.indexOf("=");
-        return [line.slice(0, separator).trim(), line.slice(separator + 1).trim()];
-      }),
-  );
-}
-
-const fileEnvironment = await localEnvironment();
+const fileEnvironment = await localExtensionEnvironment(extensionRoot);
+const developmentContributions = parseDevelopmentContributions(
+  process.env.EXTENSION_DEVELOPMENT_CONTRIBUTIONS ??
+    fileEnvironment.EXTENSION_DEVELOPMENT_CONTRIBUTIONS,
+);
 const domain = (
   process.env.EXTENSION_AUTH0_DOMAIN ??
   fileEnvironment.EXTENSION_AUTH0_DOMAIN ??
@@ -65,11 +53,6 @@ const ugcContributionPolicyVersion = (
   fileEnvironment.EXTENSION_UGC_CONTRIBUTION_POLICY_VERSION ??
   ""
 ).trim();
-const capabilityPolicyPublicKeysValue = (
-  process.env.EXTENSION_CAPABILITY_POLICY_PUBLIC_KEYS_JSON ??
-  fileEnvironment.EXTENSION_CAPABILITY_POLICY_PUBLIC_KEYS_JSON ??
-  ""
-).trim();
 const detectorActivationPolicyValue = (
   process.env.EXTENSION_DETECTOR_ACTIVATION_JSON ??
   fileEnvironment.EXTENSION_DETECTOR_ACTIVATION_JSON ??
@@ -87,25 +70,11 @@ try {
   detectorActivationPolicy = {};
 }
 const detectorActivationSupplied = Object.keys(detectorActivationPolicy).length > 0;
-let capabilityPolicyPublicKeys = {};
-try {
-  const parsed = JSON.parse(capabilityPolicyPublicKeysValue);
-  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-    capabilityPolicyPublicKeys = Object.fromEntries(
-      Object.entries(parsed)
-        .filter(
-          ([keyId, publicKey]) =>
-            /^[a-z0-9][a-z0-9._-]{2,99}$/u.test(keyId) &&
-            typeof publicKey === "string" &&
-            /^[A-Za-z0-9_-]{40,256}$/u.test(publicKey),
-        )
-        .sort(([left], [right]) => left.localeCompare(right))
-        .slice(0, 5),
-    );
-  }
-} catch {
-  capabilityPolicyPublicKeys = {};
-}
+const capabilityPolicyPublicKeys = capabilityPolicyPublicKeysForBuild(
+  process.env,
+  fileEnvironment,
+  developmentContributions,
+);
 const safeUgcContributionPolicyVersion = /^[a-z0-9][a-z0-9._-]{2,99}$/u.test(
   ugcContributionPolicyVersion,
 )
@@ -147,13 +116,19 @@ await mkdir(outputDirectory, { recursive: true });
 
 const buildOptions = {
   bundle: true,
+  ...(developmentContributions
+    ? { banner: { js: "// UNPACKED_DEVELOPMENT_CONTRIBUTIONS_ONLY" } }
+    : {}),
   define: {
     __AUTH0_AUDIENCE__: JSON.stringify(configured ? audience : ""),
     __AUTH0_CLIENT_ID__: JSON.stringify(configured ? clientId : ""),
     __AUTH0_DOMAIN__: JSON.stringify(configured ? domain : ""),
-    __CAPABILITY_POLICY_PUBLIC_KEYS__: JSON.stringify(capabilityPolicyPublicKeys),
+    __CAPABILITY_POLICY_PUBLIC_KEYS__: JSON.stringify(
+      developmentContributions ? {} : capabilityPolicyPublicKeys,
+    ),
     __DETECTOR_ACTIVATION_POLICY__: JSON.stringify(detectorActivationPolicy),
     __EXTENSION_API_ORIGIN__: JSON.stringify(apiOrigin),
+    __DEVELOPMENT_CONTRIBUTIONS__: JSON.stringify(developmentContributions),
     __PENDING_RETENTION_MILLISECONDS__: JSON.stringify(pendingRetentionMilliseconds),
     __UGC_CONTRIBUTION_POLICY_VERSION__: JSON.stringify(safeUgcContributionPolicyVersion),
   },
@@ -171,9 +146,16 @@ const buildOptions = {
 
 const manifest = {
   manifest_version: 3,
-  name: "ApplyDash Job Capture (Default Dark)",
+  name: developmentContributions
+    ? "ApplyDash Job Capture (Development)"
+    : "ApplyDash Job Capture (Default Dark)",
   version: packageMetadata.version,
-  description: "Synthetic-only current-tab job capture and explicit contribution preview.",
+  ...(developmentContributions
+    ? { version_name: `${packageMetadata.version}-development-contributions` }
+    : {}),
+  description: developmentContributions
+    ? "Unpacked development-only Greenhouse contribution preview; not for store distribution."
+    : "Synthetic-only current-tab job capture and explicit contribution preview.",
   permissions: ["activeTab", "alarms", "identity", "scripting", "sidePanel", "storage"],
   ...(configured || apiOrigin
     ? {
@@ -220,7 +202,11 @@ await Promise.all(
 if (process.argv.includes("--watch")) {
   const buildContext = await context(buildOptions);
   await buildContext.watch();
-  console.log("Watching the default-dark extension product shell.");
+  console.log(
+    developmentContributions
+      ? "Watching the unpacked development extension."
+      : "Watching the default-dark extension product shell.",
+  );
 } else {
   await build(buildOptions);
   const inspectionStatus = detectorActivationSupplied
@@ -232,5 +218,8 @@ if (process.argv.includes("--watch")) {
       : configured
         ? "Identity is configured, but API delivery remains disabled."
         : "Adding a job remains disabled until public Auth0 and API settings are configured.";
-  console.log(`${inspectionStatus} ${deliveryStatus}`);
+  const contributionMode = developmentContributions
+    ? " Unpacked development contributions use fixed Greenhouse readiness without signed-policy renewal; store packaging is prohibited."
+    : "";
+  console.log(`${inspectionStatus} ${deliveryStatus}${contributionMode}`);
 }

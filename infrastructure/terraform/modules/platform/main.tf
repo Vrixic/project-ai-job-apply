@@ -1802,10 +1802,13 @@ resource "aws_lambda_function" "gateway" {
         CANDIDATE_RIGHTS_SUBPROCESSOR_INVENTORY      = var.candidate_rights_subprocessor_inventory
       } : {},
       local.d2_policy_endpoint_enabled ? {
-        D2_CONTRIBUTION_POLICY_ROUTE_ENABLED         = "true"
+        D2_CONTRIBUTION_POLICY_ROUTE_ENABLED = "true"
+      } : {},
+      local.d2_policy_endpoint_enabled && !local.d2_development_contributions_enabled ? {
         JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON      = var.d2_community_runtime.signed_policy_json
         JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON = var.d2_community_runtime.signed_public_keys_json
       } : {},
+      local.d2_development_contribution_environment,
       local.d2_community_enabled ? {
         D2_PRIVATE_CAPTURE_ROUTES_ENABLED   = "true"
         D2_CONTRIBUTION_ROUTES_ENABLED      = "true"

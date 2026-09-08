@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { assertStoreContributionMode, localExtensionEnvironment } from "./build-settings.mjs";
 
 const execFileAsync = promisify(execFile);
 const extensionRoot = dirname(fileURLToPath(import.meta.url));
@@ -42,6 +43,9 @@ function exactStringSet(actual, expected, field) {
 }
 
 function validateManifest(manifest, packageVersion, policy) {
+  if ("version_name" in manifest || manifest.name === "ApplyDash Job Capture (Development)") {
+    throw new Error("Development contribution artifacts cannot be store-packaged");
+  }
   if (manifest.manifest_version !== 3) throw new Error("Only Manifest V3 can be packaged");
   if (manifest.name !== policy.manifest.name) throw new Error("Manifest name is not default-dark");
   if (manifest.version !== packageVersion) throw new Error("Manifest and package versions differ");
@@ -152,6 +156,9 @@ export async function validateReleaseFiles({ distDirectory, packageVersion, poli
     }
     if (name.endsWith(".js")) {
       const source = data.toString("utf8");
+      if (source.includes("UNPACKED_DEVELOPMENT_CONTRIBUTIONS_ONLY")) {
+        throw new Error(`Development contribution JavaScript cannot be store-packaged: ${name}`);
+      }
       if (
         /\b(?:import\s*\(|importScripts\s*\(|new\s+(?:Shared)?Worker\s*\()\s*["'](?:https?:|\/\/)/u.test(
           source,
@@ -270,6 +277,7 @@ export async function createReleaseArchive({
 }
 
 async function main() {
+  assertStoreContributionMode(process.env, await localExtensionEnvironment(extensionRoot));
   const packageMetadata = JSON.parse(await readFile(join(extensionRoot, "package.json"), "utf8"));
   const policy = JSON.parse(await readFile(policyPath, "utf8"));
   const distDirectory = join(extensionRoot, "dist");
@@ -283,6 +291,7 @@ async function main() {
       EXTENSION_AUTH0_DOMAIN: "",
       EXTENSION_CAPABILITY_POLICY_PUBLIC_KEYS_JSON: "",
       EXTENSION_DETECTOR_ACTIVATION_JSON: "",
+      EXTENSION_DEVELOPMENT_CONTRIBUTIONS: "false",
       EXTENSION_PENDING_RETENTION_HOURS: "",
       EXTENSION_UGC_CONTRIBUTION_POLICY_VERSION: "",
     },

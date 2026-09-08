@@ -46,6 +46,21 @@ and the public route only when `JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON` and
 `JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON` are both present and valid; partial or malformed
 configuration fails closed.
 
+`src/contribution-capability-source.ts` also exposes explicit persistent development authority:
+`D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED=true` requires `D2_DEPLOYMENT_ENVIRONMENT=development`.
+It needs no signing key, envelope, or manual policy renewal; only extension `0.2.0`, Greenhouse
+`greenhouse-board-v1`, and the two reviewed `boards.greenhouse.io` / `job-boards.greenhouse.io`
+hosts are enabled. Intake and processing still honor their separate runtime-disable flags.
+Production/default composition retains signed-policy expiry checks. The legacy public policy API
+is not an unsigned-development projection and stays disabled when no signed policy is configured.
+
+Migration `0021_development_contribution_operation_lease` permits automatic renewal of a short
+60-second operation lease only on a still-prepared development publication after current consent,
+unchanged independent evidence, accepted Trust, and development authority checks. A transaction-local
+marker, exact development configuration digest, and database trigger fence the update. Identity,
+evidence, original creation time, signed-policy rows, and terminal rows remain immutable; old lease
+commands cannot publish after renewal. This lease is not a manually renewed deployment deadline.
+
 Migration `0015_source_revalidation_lifecycle` adds a source-scoped durable revalidation queue and
 an append-only verification-evidence ledger for the D2 Greenhouse, Lever, and Ashby page variants.
 Community observations and fixed-code candidate closed reports store only a SHA-256 signal
@@ -69,7 +84,7 @@ The later `0017`–`0019` migrations add the durable normalizer, processing queu
 provider observation, Trust-decision copy, accepted publication/removal reconciliation, separate
 identifier-only delivery ledgers, and owner-safe processing state. Final publication records the
 independently fetched provider observation through the ordinary catalog transaction only after
-current consent, signed capability, independent verification, and accepted Trust gates pass.
+current consent, explicit capability authority, independent verification, and accepted Trust gates pass.
 Probable duplicates roll back without creating catalog truth and park for explicit review. The
 runtime remains synthetic/default-dark until exact provider registrations, policy, schedule,
 transport, deployment, and accountable activation gates are supplied; a queued acknowledgement

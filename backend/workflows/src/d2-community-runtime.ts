@@ -8,7 +8,7 @@ import {
 } from "@ai-job-apply/ingestion-worker";
 import {
   ContributionTrustDecisionSignalConsumer,
-  contributionCapabilityPolicySourceFromEnvironment,
+  contributionCapabilitySourceFromEnvironment,
   createJobCatalogDatabase,
   IdentifierOnlyContributionProcessingEventPublisher,
   PostgresContributionProcessingQueueStore,
@@ -354,7 +354,7 @@ export async function createConfiguredD2CommunityLambdaConfiguration(
     environment.D2_COMMUNITY_RUNTIME_POLICY_JSON as string,
   );
   const trustConfiguration = loadD2LambdaGatewayConfig(environment).trust;
-  const capability = contributionCapabilityPolicySourceFromEnvironment(environment, () => now());
+  const capability = contributionCapabilitySourceFromEnvironment(environment, () => now());
   if (!trustConfiguration || !capability) {
     throw new Error("D2CommunityRuntimeAuthorityRejected");
   }

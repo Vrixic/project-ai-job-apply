@@ -29,6 +29,7 @@ const migrationVersions = [
   "0018_job_contribution_processing_delivery",
   "0019_job_contribution_provider_publication",
   "0020_contribution_trust_reprocessing",
+  "0021_development_contribution_operation_lease",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -1166,6 +1167,36 @@ try {
         AND is_nullable = 'YES') AS present
   `;
   if (!marker?.present) throw new Error("Trust reprocessing decision marker is missing");
+  const leaseMigration = migrations.find(
+    (migration) => migration.version === "0021_development_contribution_operation_lease",
+  );
+  const expectedLeaseGuard =
+    leaseMigration &&
+    /CREATE OR REPLACE FUNCTION jobs\.guard_job_contribution_reconciliation\(\)[\s\S]*?AS \$\$([\s\S]*?)\$\$;/u.exec(
+      leaseMigration.sql,
+    )?.[1];
+  const [leaseGuard] = await client<Array<{ body: string }>>`
+    SELECT procedure.prosrc AS body FROM pg_proc AS procedure
+    JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+    JOIN pg_language AS language ON language.oid = procedure.prolang
+    WHERE namespace.nspname = 'jobs' AND procedure.proname = 'guard_job_contribution_reconciliation'
+      AND procedure.pronargs = 0 AND language.lanname = 'plpgsql'
+      AND NOT procedure.prosecdef AND procedure.proconfig IS NULL
+  `;
+  if (!expectedLeaseGuard || leaseGuard?.body !== expectedLeaseGuard) {
+    throw new Error("Development contribution operation lease guard verification failed");
+  }
+  const [leaseChronology] = await client<Array<{ definition: string; validated: boolean }>>`
+    SELECT pg_get_constraintdef(oid, true) AS definition, convalidated AS validated
+    FROM pg_constraint
+    WHERE conrelid = 'jobs.job_contribution_reconciliations'::regclass
+      AND conname = 'job_contribution_reconciliations_chronology_ck' AND contype = 'c'
+  `;
+  const expectedLeaseChronology =
+    "CHECK (updated_at >= created_at AND capability_expires_at > capability_evaluated_at AND (capability_evaluated_at <= created_at OR kind = 'publication'::text AND capability_policy_version = 'd2-development-greenhouse-v1'::text AND capability_configuration_digest_sha256 = '8405c7ba82d4d5d127b9bfb0f2f753533d6709d0b89e148a02a1db89c03f1f3b'::text AND capability_evaluated_at <= updated_at AND capability_expires_at = (capability_evaluated_at + '00:01:00'::interval)))";
+  if (!leaseChronology?.validated || leaseChronology.definition !== expectedLeaseChronology) {
+    throw new Error("Development contribution operation lease chronology verification failed");
+  }
   console.log(`Jobs migrations through ${migrationVersions.at(-1)} applied and verified.`);
 } finally {
   await client.end();

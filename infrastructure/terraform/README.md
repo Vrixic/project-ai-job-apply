@@ -48,6 +48,12 @@ anonymous policy GET and separately scoped private, candidate, and reviewer rout
 created explicitly; D2 scopes never enter the generic `$default` route. No provider host, egress,
 credential, or timing value is selected by the repository defaults.
 
+An explicit development-only `development_contributions_enabled` input removes the expiring
+signed contribution-policy dependency from the enabled Gateway and scheduled processor.
+It defaults false, cannot activate the runtime by itself, and is rejected outside development.
+Provider verification, Trust roles, identity, and all resource/runtime budgets remain intact.
+See the [platform module](modules/platform/README.md) for its exact environment boundary.
+
 The retained ECS cluster has no service. It exists only to run reviewed service-owned database
 migrations through a fail-fast orchestrator as a short-lived Fargate task.
 `ai-job-apply/migration` is the sole application ECR repository and must

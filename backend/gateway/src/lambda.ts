@@ -24,7 +24,9 @@ import {
 } from "@ai-job-apply/documents-service";
 import {
   type ContributionCapabilityPolicySource,
+  type ContributionCapabilitySource,
   contributionCapabilityPolicySourceFromEnvironment,
+  contributionCapabilitySourceFromEnvironment,
   JobContributionService,
   JobModerationService,
   JobReportingService,
@@ -794,16 +796,26 @@ export function createApiGatewayHandler(options: ApiGatewayHandlerOptions): ApiG
 
 interface D2LambdaComposition {
   configuration: D2LambdaGatewayConfiguration;
+  contributionCapability?: ContributionCapabilitySource;
   contributionCapabilityPolicy?: ContributionCapabilityPolicySource;
   trustConfiguration?: D2LambdaGatewayConfiguration["trust"];
   routes: Readonly<D2GatewayRouteGates>;
 }
 
-function loadD2LambdaComposition(
+export function loadD2LambdaComposition(
   config: LambdaGatewayConfig,
   environment: NodeJS.ProcessEnv = process.env,
 ): D2LambdaComposition {
   const configuration = loadD2LambdaGatewayConfigSafely(environment);
+  let contributionCapability: ContributionCapabilitySource | undefined;
+  if (configuration.valid) {
+    try {
+      contributionCapability =
+        contributionCapabilitySourceFromEnvironment(environment, () => new Date()) ?? undefined;
+    } catch {
+      contributionCapability = undefined;
+    }
+  }
   let contributionCapabilityPolicy: ContributionCapabilityPolicySource | undefined;
   if (configuration.signedContributionPolicyConfigured) {
     try {
@@ -825,12 +837,13 @@ function loadD2LambdaComposition(
       configuration.contributionPolicyRouteEnabled && Boolean(contributionCapabilityPolicy),
     candidateContribution:
       configuration.contributionRoutesEnabled &&
-      Boolean(contributionCapabilityPolicy) &&
+      Boolean(contributionCapability) &&
       Boolean(trustConfiguration),
     trustReviewer: configuration.trustReviewerRoutesEnabled && Boolean(trustConfiguration),
   });
   return Object.freeze({
     configuration,
+    ...(contributionCapability ? { contributionCapability } : {}),
     ...(contributionCapabilityPolicy ? { contributionCapabilityPolicy } : {}),
     ...(trustConfiguration ? { trustConfiguration } : {}),
     routes,
@@ -904,7 +917,7 @@ async function createConfiguredApplication(
       ugcContributionConsents,
       ugcContributionPolicyVersion,
     ),
-    d2.contributionCapabilityPolicy,
+    d2.contributionCapability,
     undefined,
     new ProfileJobContributionConsentRevoker(ugcContributionConsents),
   );

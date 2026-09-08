@@ -1,4 +1,5 @@
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
+import { DevelopmentContributionCapabilitySource } from "./contribution-capability-source.js";
 import { describe, expect, it, vi } from "vitest";
 import type { JobContributionInput } from "./contribution.js";
 import {
@@ -320,6 +321,36 @@ function service(
 }
 
 describe("ContributionProcessingService", () => {
+  it("uses a development operation lease without bypassing independent verification or Trust", async () => {
+    const values = {
+      D2_DEPLOYMENT_ENVIRONMENT: "development",
+      D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED: "true",
+      D2_COMMUNITY_RUNTIME_ENABLED: "true",
+    };
+    const capability = new DevelopmentContributionCapabilitySource(values);
+    const store = new MemoryProcessingStore();
+    const verifier = { verify: vi.fn(async () => verified()) };
+    const trust = { evaluate: vi.fn(async () => ({ status: "needs_review" as const })) };
+    const publish = vi.fn();
+    await expect(
+      service(store, {
+        capability,
+        independentVerifier: verifier,
+        trust,
+        reconciler: { publish, remove: vi.fn() },
+      }).process(ids.contribution),
+    ).resolves.toBe("awaiting_trust");
+    expect(verifier.verify).toHaveBeenCalledOnce();
+    expect(trust.evaluate).toHaveBeenCalledOnce();
+    expect(publish).not.toHaveBeenCalled();
+    values.D2_COMMUNITY_RUNTIME_ENABLED = "false";
+    await expect(
+      service(store, { capability, reconciler: { publish, remove: vi.fn() } }).process(
+        ids.contribution,
+      ),
+    ).resolves.toBe("capability_disabled");
+    expect(publish).not.toHaveBeenCalled();
+  });
   it("requires an explicit policy and defaults every external authority unavailable", async () => {
     expect(() => new ContributionProcessingService()).toThrow("explicit");
     const store = new MemoryProcessingStore();

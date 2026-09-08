@@ -1,6 +1,7 @@
 export * from "./contribution.js";
 export * from "./contribution-capability-policy.js";
 export * from "./contribution-capability-policy-source.js";
+export * from "./contribution-capability-source.js";
 export * from "./contribution-processing.js";
 export * from "./contribution-processing-adapters.js";
 export * from "./contribution-processing-event-delivery.js";

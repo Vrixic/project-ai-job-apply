@@ -70,6 +70,41 @@ function environment(): NodeJS.ProcessEnv {
 }
 
 describe("D2 community runtime composition", () => {
+  it("composes the exact development authority without signed policy and preserves the runtime kill switch", async () => {
+    const values: NodeJS.ProcessEnv = {
+      ...environment(),
+      D2_DEPLOYMENT_ENVIRONMENT: "development",
+      D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED: "true",
+    };
+    delete values.JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON;
+    delete values.JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON;
+    const resolveDatabaseUrl = vi.fn(async () => "postgres://resolved/private");
+    const configured = await createConfiguredD2CommunityLambdaConfiguration(values, {
+      resolveDatabaseUrl,
+      createDatabase: () => Object.assign(vi.fn(), { begin: vi.fn() }) as never,
+      createSqsSender: () => ({ send: vi.fn() }),
+      now: () => new Date("2050-09-08T12:00:00.000Z"),
+    });
+    expect(configured.enabled).toBe(true);
+    if (!configured.enabled || !configured.jobs.runtime.enabled) throw new Error("fixture");
+    expect(configured.jobs.runtime.capability).toHaveProperty("mode", "development");
+    expect(configured.jobs.runtime.independentVerifier).toBeDefined();
+    expect(configured.jobs.runtime.trust).toBeDefined();
+    await expect(
+      createConfiguredD2CommunityLambdaConfiguration({
+        ...values,
+        D2_DEPLOYMENT_ENVIRONMENT: "production",
+      }),
+    ).rejects.toThrow("development environment");
+    resolveDatabaseUrl.mockClear();
+    expect(
+      await createConfiguredD2CommunityLambdaConfiguration(
+        { ...values, D2_COMMUNITY_RUNTIME_ENABLED: "false" },
+        { resolveDatabaseUrl },
+      ),
+    ).toEqual({ enabled: false });
+    expect(resolveDatabaseUrl).not.toHaveBeenCalled();
+  });
   it("stays inert without the exact enabled value and does not resolve a secret", async () => {
     const resolveDatabaseUrl = vi.fn();
     await expect(

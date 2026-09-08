@@ -1,9 +1,12 @@
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
+import { DevelopmentContributionCapabilitySource } from "./contribution-capability-source.js";
 import { v7 as uuidv7 } from "uuid";
 import { describe, expect, it } from "vitest";
 import {
   type CreateJobContributionCommand,
   type JobContributionConsentVerifier,
+  JobContributionConsentRequiredError,
+  JobContributionCapabilityDisabledError,
   type JobContributionInput,
   JobContributionService,
   type JobContributionStatus,
@@ -171,6 +174,47 @@ describe("JobContributionService", () => {
     const service = new JobContributionService(store, allowConsent, allowCapability, intakeNow);
     await expect(service.contribute(command())).resolves.toEqual(store.record);
     expect(store.command?.input.posting.title).toBe("Software Engineer");
+  });
+
+  it("accepts development jobs without signed policy while rechecking authority around consent", async () => {
+    const values = {
+      D2_DEPLOYMENT_ENVIRONMENT: "development",
+      D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED: "true",
+      D2_CONTRIBUTION_ROUTES_ENABLED: "true",
+    };
+    const store = new MemoryStore();
+    const capability = new DevelopmentContributionCapabilitySource(values);
+    await expect(
+      new JobContributionService(
+        store,
+        allowConsent,
+        capability,
+        () => new Date("2050-09-08T12:00:00.000Z"),
+      ).contribute(command()),
+    ).resolves.toMatchObject({ state: "queued" });
+    await expect(
+      new JobContributionService(
+        new MemoryStore(),
+        { verify: async () => false },
+        capability,
+        intakeNow,
+      ).contribute(command()),
+    ).rejects.toThrow(JobContributionConsentRequiredError);
+    const stopped = new MemoryStore();
+    await expect(
+      new JobContributionService(
+        stopped,
+        {
+          verify: async () => {
+            values.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED = "false";
+            return true;
+          },
+        },
+        capability,
+        intakeNow,
+      ).contribute(command()),
+    ).rejects.toThrow(JobContributionCapabilityDisabledError);
+    expect(stopped.command).toBeUndefined();
   });
 
   it("accepts the exact supported Lever EU posting boundary", async () => {

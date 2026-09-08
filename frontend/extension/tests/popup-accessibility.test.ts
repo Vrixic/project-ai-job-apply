@@ -5,6 +5,12 @@ const staticRoot = new URL("../static/", import.meta.url);
 const entrypoint = new URL("../entrypoints/popup.ts", import.meta.url);
 
 describe("popup and side-panel source assurance", () => {
+  it("describes missing development UGC settings as preview authorization, not signed-policy renewal", async () => {
+    const source = await readFile(entrypoint, "utf8");
+    expect(source).toContain(
+      'policy_configuration_required: extensionConfiguration.developmentContributions\n    ? "Configure the public-add preview authorization version before delivery."',
+    );
+  });
   it("provides semantic controls, live status, disclosures, and visible focus treatment", async () => {
     const [html, css] = await Promise.all([
       readFile(new URL("popup.html", staticRoot), "utf8"),

@@ -5,6 +5,7 @@ declare const __EXTENSION_API_ORIGIN__: string;
 declare const __PENDING_RETENTION_MILLISECONDS__: number;
 declare const __CAPABILITY_POLICY_PUBLIC_KEYS__: Readonly<Record<string, string>>;
 declare const __UGC_CONTRIBUTION_POLICY_VERSION__: string;
+declare const __DEVELOPMENT_CONTRIBUTIONS__: boolean;
 
 const POLICY_VERSION = /^[a-z0-9][a-z0-9._-]{2,99}$/u;
 
@@ -16,6 +17,7 @@ export interface ExtensionPublicConfiguration {
   clientId: string;
   configured: boolean;
   domain: string;
+  developmentContributions: boolean;
   pendingRetentionMilliseconds?: number;
   ugcContributionPolicyVersion?: string;
 }
@@ -26,6 +28,7 @@ export function extensionPublicConfiguration(values: {
   capabilityPolicyPublicKeys?: Readonly<Record<string, string>>;
   clientId: string;
   domain: string;
+  developmentContributions?: boolean;
   pendingRetentionMilliseconds?: number;
   ugcContributionPolicyVersion?: string;
 }): ExtensionPublicConfiguration {
@@ -36,7 +39,9 @@ export function extensionPublicConfiguration(values: {
   const pendingRetentionMilliseconds = values.pendingRetentionMilliseconds;
   const ugcContributionPolicyVersion = values.ugcContributionPolicyVersion?.trim();
   const capabilityPolicyPublicKeys = Object.fromEntries(
-    Object.entries(values.capabilityPolicyPublicKeys ?? {})
+    Object.entries(
+      values.developmentContributions === true ? {} : (values.capabilityPolicyPublicKeys ?? {}),
+    )
       .filter(
         ([keyId, publicKey]) =>
           /^[a-z0-9][a-z0-9._-]{2,99}$/u.test(keyId) &&
@@ -59,6 +64,7 @@ export function extensionPublicConfiguration(values: {
       clientId.length > 0 &&
       audience === "ai-job-apply-api",
     domain,
+    developmentContributions: values.developmentContributions === true,
     ...(apiOrigin ? { apiOrigin } : {}),
     ...(Number.isInteger(pendingRetentionMilliseconds) &&
     (pendingRetentionMilliseconds ?? 0) >= 60 * 60 * 1_000 &&
@@ -94,6 +100,8 @@ export function safeApiOrigin(value: string): string | undefined {
 }
 
 export const extensionConfiguration = extensionPublicConfiguration({
+  developmentContributions:
+    typeof __DEVELOPMENT_CONTRIBUTIONS__ === "boolean" && __DEVELOPMENT_CONTRIBUTIONS__ === true,
   apiOrigin: typeof __EXTENSION_API_ORIGIN__ === "string" ? __EXTENSION_API_ORIGIN__ : "",
   audience: typeof __AUTH0_AUDIENCE__ === "string" ? __AUTH0_AUDIENCE__ : "",
   capabilityPolicyPublicKeys:

@@ -29,6 +29,21 @@ uses existing read/write scopes, candidate contribution/consent/owner Trust uses
 generic `$default` route. No provider host, credential, NAT, egress rule, policy content, reviewer,
 appeal timing, or activation value is supplied by module defaults.
 
+Development can explicitly set `d2_community_runtime.development_contributions_enabled = true`
+to remove the signed contribution-policy renewal dependency. This optional flag defaults false
+and is rejected unless `environment = "development"`. It does not activate the runtime on its
+own. When the existing deployment and activation gates are enabled, only Gateway and the
+scheduled contribution processor receive `D2_DEPLOYMENT_ENVIRONMENT=development` and
+`D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED=true`; signed policy and public-key environment values
+are omitted even if legacy input values remain. Signature inputs may be omitted or empty, and
+the legacy anonymous policy route is optional in this mode. A retained route does not reinstate
+the signature requirement. Dark policy-only deployments still require signed configuration.
+
+The development mode does not change managed OIDC/scopes, selected provider registries,
+independent verification, Trust assignments/evidence, worker limits, alarms, role separation,
+or production/store release boundaries. Configuration remains bounded to 2,400 encoded bytes.
+Staging, production, and default development behavior retain signed-policy verification.
+
 The gateway and reconciler are the only producers for the platform-CMK-encrypted outbox queue.
 The durable orchestrator is outside the VPC and invokes an exact activity version; database
 activity and terminal handlers remain private and retrieve only the database secret. A narrow

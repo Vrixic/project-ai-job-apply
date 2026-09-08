@@ -75,9 +75,9 @@ development, with remaining rollout and acceptance tracked in the
 [Phase 2 register](docs/product/delivery/phase-2-extension-and-community.md). The follow-up adds
 warm-policy refresh, exact page/provider description compatibility, pre-verification owner
 cancellation, reviewer queue/evidence, and complete Trust decision reconciliation. The ordered
-backend rollout completed on 2026-09-05; the 2026-09-06 reviewer-only configuration `b703e56` advances
-development to state `284`, running unchanged application source `3f20462` on healthy immutable
-Gateway/scheduled/Trust versions `52`/`14`/`11`, with 18 exact JWT-protected D2 routes plus
+backend rollout completed on 2026-09-05; the 2026-09-08 reviewer-only configuration `01f6e94` advances
+development to state `285`, running unchanged application source `3f20462` on healthy immutable
+Gateway/scheduled/Trust versions `53`/`15`/`11`, with 18 exact JWT-protected D2 routes plus
 the anonymous signed-policy endpoint. The migration image from `116b272` completed once with exit
 `0` and seven exact aggregate success events, verifying 40 migrations across six owners and 68
 relations; operator recovery did not rerun it. Direct Gateway boundary checks and zero Terraform
@@ -86,15 +86,20 @@ invocations; code, aliases, permissions, and alarms are unchanged. Historical po
 evidence still covers the prior 39-migration boundary.
 The distinct delegated agent reviewer is now bound for read/initial/takedown, with all 18 bounded
 pre/post-deployment access checks passing and no valid case decision submitted. The workflow
-remains case-opener-only; separate human appeal identity/MFA acceptance is still pending.
+remains case-opener-only. The separate human identity/MFA/scope check and appeal/read assignment
+pass, and the user confirms a successful empty local appeal-queue read. Hosted reviewer and
+appeal-decision journey acceptance remain pending.
+At the user's request, D2-033 is removing recurring signed contribution-policy setup from
+development in favor of persistent explicit development configuration. Implementation and
+verification are underway; no policy renewal or replacement deployment is claimed yet.
 The configured extension is rebuilt; reload the unpacked extension and complete installed
 acceptance. Snapshot-fenced recovery cleared both provider-verification holds, but both submissions
 remain parked and unpublished; refresh their existing Processing/Trust state rather than resubmit.
 
 The admin preview from source `116b` is `READY` behind Vercel SSO protection (`302`, `no-store`);
 see the [admin hosting boundary](frontend/admin/README.md#vercel-hosting-boundary). This is a
-presentation deployment, not authenticated moderation acceptance: human reviewer roles and hosted
-admin Auth0 acceptance remain open. Production/store distribution, other provider activation, and
+presentation deployment, not authenticated moderation acceptance: hosted admin Auth0 acceptance
+remains open. Production/store distribution, other provider activation, and
 accountable acceptance are not implied by a build, a route resource, or a protected preview.
 
 The following Phase 0/1 overview is historical; use the linked delivery records for the current

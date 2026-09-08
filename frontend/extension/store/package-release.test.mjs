@@ -89,6 +89,36 @@ afterEach(async () => {
 });
 
 describe("extension release packaging", () => {
+  it("rejects development JavaScript even if a default-dark manifest was copied over it", async () => {
+    const { dist, firstOutput } = await fixture();
+    await writeFile(
+      join(dist, "background.js"),
+      "// UNPACKED_DEVELOPMENT_CONTRIBUTIONS_ONLY\nexport const background = true;\n",
+    );
+    await expect(
+      createReleaseArchive({
+        distDirectory: dist,
+        outputDirectory: firstOutput,
+        packageVersion: "0.2.0",
+        policy,
+      }),
+    ).rejects.toThrow("Development contribution JavaScript cannot be store-packaged");
+  });
+  it("rejects a development-marked artifact even without live host permissions", async () => {
+    const { dist, firstOutput, manifest } = await fixture();
+    await writeFile(
+      join(dist, "manifest.json"),
+      JSON.stringify({ ...manifest, version_name: "0.2.0-development-contributions" }),
+    );
+    await expect(
+      createReleaseArchive({
+        distDirectory: dist,
+        outputDirectory: firstOutput,
+        packageVersion: "0.2.0",
+        policy,
+      }),
+    ).rejects.toThrow("Development contribution artifacts cannot be store-packaged");
+  });
   it("creates byte-identical archives and sorted digest manifests", async () => {
     const { dist, firstOutput, secondOutput } = await fixture();
     const first = await createReleaseArchive({

@@ -1,4 +1,9 @@
 import { createHash } from "node:crypto";
+import {
+  DEVELOPMENT_CONTRIBUTION_CAPABILITY_DIGEST,
+  DEVELOPMENT_CONTRIBUTION_CAPABILITY_VERSION,
+  DEVELOPMENT_CONTRIBUTION_OPERATION_LEASE_MS,
+} from "../contribution-capability-source.js";
 import type postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import type {
@@ -521,6 +526,17 @@ export class PostgresContributionProcessingStore implements ContributionProcessi
   async preparePublication(
     input: Parameters<ContributionProcessingStore["preparePublication"]>[0],
   ): Promise<PreparedPublicationReconciliation> {
+    if (
+      input.developmentOperationLease &&
+      (input.capabilityPolicyVersion !== DEVELOPMENT_CONTRIBUTION_CAPABILITY_VERSION ||
+        input.capabilityConfigurationDigestSha256 !== DEVELOPMENT_CONTRIBUTION_CAPABILITY_DIGEST ||
+        Date.parse(input.capabilityExpiresAt) - Date.parse(input.capabilityEvaluatedAt) !==
+          DEVELOPMENT_CONTRIBUTION_OPERATION_LEASE_MS ||
+        Date.parse(input.capabilityEvaluatedAt) > input.occurredAt.getTime() ||
+        Date.parse(input.capabilityExpiresAt) <= input.occurredAt.getTime())
+    ) {
+      throw new Error("Development publication operation lease is invalid");
+    }
     return this.client.begin(async (transaction) => {
       await transaction`
         SELECT pg_advisory_xact_lock(hashtext(${`jobs:contribution-reconcile:${input.contributionId}`}))
@@ -554,8 +570,11 @@ export class PostgresContributionProcessingStore implements ContributionProcessi
           AND contribution.payload #>> '{client,version}' = contribution.client_version
       `;
       if (!gates) throw new Error("Publication gates are not complete");
-      const [existing] = await transaction<PreparedPublicationReconciliation[]>`
+      const [existing] = await transaction<
+        Array<PreparedPublicationReconciliation & { state: "prepared" | "applied" }>
+      >`
         SELECT id AS "reconciliationId", contribution_id AS "contributionId",
+          state,
           normalization_id AS "normalizationId",
           independent_verification_id AS "independentVerificationId",
           trust_decision_id AS "trustDecisionId",
@@ -571,11 +590,44 @@ export class PostgresContributionProcessingStore implements ContributionProcessi
         if (
           existing.processingPolicyVersion !== input.processingPolicyVersion ||
           existing.capabilityPolicyVersion !== input.capabilityPolicyVersion ||
-          existing.capabilityConfigurationDigestSha256 !== input.capabilityConfigurationDigestSha256
+          existing.capabilityConfigurationDigestSha256 !==
+            input.capabilityConfigurationDigestSha256 ||
+          existing.normalizationId !== gates.normalizationId ||
+          existing.independentVerificationId !== gates.verificationId ||
+          existing.trustDecisionId !== gates.trustDecisionId
         ) {
           throw new Error("Publication policy changed after preparation");
         }
-        return existing;
+        const { state, ...command } = existing;
+        const existingCommand = {
+          ...command,
+          capabilityEvaluatedAt: timestamp(command.capabilityEvaluatedAt),
+          capabilityExpiresAt: timestamp(command.capabilityExpiresAt),
+        };
+        if (
+          input.developmentOperationLease &&
+          Date.parse(existingCommand.capabilityExpiresAt) <= Date.parse(input.capabilityEvaluatedAt)
+        ) {
+          if (state !== "prepared") throw new Error("Completed publication leases are immutable");
+          // Set only after fresh service capability/consent/verification/Trust checks and the
+          // locked exact evidence comparison above. This transaction-local marker is not authority.
+          await transaction`SELECT set_config('ai_job_apply.development_contribution_lease', 'renew', true)`;
+          const changed = await transaction<{ id: string }[]>`
+            UPDATE jobs.job_contribution_reconciliations
+            SET capability_evaluated_at = ${input.capabilityEvaluatedAt},
+              capability_expires_at = ${input.capabilityExpiresAt}, updated_at = ${input.occurredAt}
+            WHERE id = ${existing.reconciliationId} AND state = 'prepared'
+            RETURNING id
+          `;
+          if (changed.length !== 1)
+            throw new Error("Development operation lease changed concurrently");
+          return Object.freeze({
+            ...existingCommand,
+            capabilityEvaluatedAt: input.capabilityEvaluatedAt,
+            capabilityExpiresAt: input.capabilityExpiresAt,
+          });
+        }
+        return Object.freeze(existingCommand);
       }
       const command = {
         reconciliationId: uuidv7(),

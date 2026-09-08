@@ -294,6 +294,7 @@ variable "d2_community_runtime" {
     deploy                                         = false
     enabled                                        = false
     policy_endpoint_enabled                        = false
+    development_contributions_enabled              = false
     artifact_s3_key                                = ""
     artifact_s3_object_version                     = ""
     artifact_sha256                                = ""

@@ -138,9 +138,41 @@ const trustEnvironment = {
 };
 
 describe("Phase 2 Lambda gateway configuration", () => {
+  it("permits the explicit development-only contribution mode without signed-policy inputs", () => {
+    const values = {
+      D2_DEPLOYMENT_ENVIRONMENT: "development",
+      D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED: "true",
+      D2_CONTRIBUTION_ROUTES_ENABLED: "true",
+      UGC_CONTRIBUTION_POLICY_VERSION: "d2-ugc.v1",
+      ...trustEnvironment,
+    };
+    expect(loadD2LambdaGatewayConfig(values)).toMatchObject({
+      valid: true,
+      developmentContributionsEnabled: true,
+      contributionRoutesEnabled: true,
+      contributionPolicyRouteEnabled: false,
+      signedContributionPolicyConfigured: false,
+    });
+    for (const target of [undefined, "staging", "production", "development "]) {
+      expect(() =>
+        loadD2LambdaGatewayConfig({ ...values, D2_DEPLOYMENT_ENVIRONMENT: target }),
+      ).toThrow();
+    }
+    expect(() =>
+      loadD2LambdaGatewayConfig({ ...values, D2_CONTRIBUTION_POLICY_ROUTE_ENABLED: "true" }),
+    ).toThrow("policy route");
+    expect(() =>
+      loadD2LambdaGatewayConfig({ ...values, UGC_CONTRIBUTION_POLICY_VERSION: undefined }),
+    ).toThrow("consent policies");
+    expect(() =>
+      loadD2LambdaGatewayConfig({ ...values, D2_TRUST_POLICY_VERSION: undefined }),
+    ).toThrow("Trust");
+  });
+
   it("is independently default-dark without inventing policy, authority, or timing", () => {
     expect(loadD2LambdaGatewayConfig({})).toEqual({
       valid: true,
+      developmentContributionsEnabled: false,
       privateCaptureRoutesEnabled: false,
       contributionPolicyRouteEnabled: false,
       contributionRoutesEnabled: false,
@@ -168,6 +200,7 @@ describe("Phase 2 Lambda gateway configuration", () => {
       }),
     ).toEqual({
       valid: false,
+      developmentContributionsEnabled: false,
       privateCaptureRoutesEnabled: true,
       contributionPolicyRouteEnabled: false,
       contributionRoutesEnabled: false,
