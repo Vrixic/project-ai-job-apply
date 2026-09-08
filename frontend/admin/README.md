@@ -55,8 +55,9 @@ not implemented or authorized by this slice.
   are not completed case decisions or publication evidence.
 - This source and its protected preview do not establish human reviewer assignments, authenticated
   admin Auth0 acceptance, accountable policy/timing approval, verified-requester authority, or
-  human accessibility acceptance. Human appeal binding and MFA login remain unconfigured; the
-  locally implemented appeal-only profile does not activate either.
+  human accessibility acceptance. Local MFA login is user-confirmed, but exact human identity/scope
+  comparison, backend appeal binding, and hosted acceptance remain open; the appeal-only profile
+  does not itself assign permissions.
 
 ## Local managed OIDC configuration
 
@@ -99,8 +100,28 @@ privacy requests, entitlement support, and break-glass controls are not implemen
 requires a separately configured admin Regular Web Application. The preview deployment below does
 not establish an accepted managed-OIDC moderation session.
 
-## Vercel hosting boundary
+## Local appeal identity verification
 
+During a separately authorized local setup window, **Verify reviewer setup** compares the
+SDK-validated MFA session and independently verified RS256 access token with the expected human
+identity, dedicated client, issuer, audience, and two appeal/read scopes. The check is a same-origin
+server action, not a public Gateway endpoint. It makes no role, case, grant, or refresh request.
+
+It is absent by default and requires the `appeals` profile, exact `http://localhost:3001` origin,
+no Vercel environment, and valid process-only `ADMIN_APPEAL_SETUP_CONFIG` for a window no longer
+than two hours. The local launcher supplies its schema/version, expected identity and client,
+run identifier, exact timestamps, and exclusive-create result path under the repository's
+current-user-only `.tmp/d2-reviewer` directory. Never place this configuration in source,
+`.env.local`, Vercel, or browser props, and never paste a token or human subject into chat.
+
+The result file contains only verification aggregates and a private one-way identity-binding
+fingerprint; existing files and filesystem links are refused. Keep it in the private ignored setup
+directory, not shared evidence. The browser receives only a fixed result status. Successful
+verification does not deploy roles, load cases, renew contribution policy, or establish hosted
+acceptance. The sole assignment and rationale record remains the
+[Phase 2 reviewer section](../../docs/product/delivery/phase-2-extension-and-community.md#delegated-reviewer-assignment).
+
+## Vercel hosting boundary
 The 2026-09-05 preview built from source `116b272` is `READY`:
 [protected admin preview](https://ai-job-apply-admin-6ewxee4ci-applydash2026-5637.vercel.app).
 Its unauthenticated root returns a Vercel SSO protection redirect (`302`, `no-store`), not the admin

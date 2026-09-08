@@ -1,4 +1,6 @@
 import { getAdminAuthorizationProfile, getAuth0Client, isAuth0Configured } from "../lib/auth0";
+import { getAppealSetupConfig } from "../lib/appeal-setup";
+import { AppealSetupCheck } from "./appeal-setup-check";
 import { ModerationConsole } from "./moderation-console";
 import { TrustConsole } from "./trust-console";
 
@@ -49,6 +51,7 @@ export default async function AdminPage({
             <span>Privileged session active</span>
             <a href="/auth/logout">Sign out</a>
           </nav>
+          {getAppealSetupConfig() ? <AppealSetupCheck /> : null}
           {!appealOnly ? <ModerationConsole /> : null}
           <TrustConsole appealOnly={appealOnly} />
         </>

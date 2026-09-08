@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-09-05
+Last updated: 2026-09-08
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -433,6 +433,23 @@ This is the master record for the delivery phases defined in the [product and sy
   anonymous/error/SDK checks on loopback. Saved encrypted setup and existing environments/records
   are preserved. No AWS, role, contribution-policy, or case change occurred; actual human sign-in/
   MFA and separate appeal binding remain pending.
+- Local human appeal login (2026-09-08): after reporting the fixed `mfa_required` refusal and
+  receiving application-specific Auth0 MFA guidance, the user confirmed **Privileged session
+  active**. This is user-confirmed local login/MFA success under the unchanged session guard,
+  not independently inspected signed identity/scopes or backend reviewer access. No tokens,
+  cookies, callback parameters, human subjects, or MFA material were collected. The read-only
+  development SSO check is unavailable. D2-030/D2-R12 now require refreshed SSO, explicit scope
+  for the separate development-only appeal/read assignment, exact signed identity/scope checks,
+  and backend/hosted acceptance. No cloud permissions, case, environment, or contribution policy
+  changed; the local deadline remains `2026-09-08T13:38:16Z`.
+- Human appeal verification preparation (2026-09-08): refreshed SSO matches the exact development
+  account and temporary role. Fresh read-only state `284`, versions `52`/`14`/`11`, and unchanged
+  environments/two assignments pass; 13 D2 alarms are OK and both Trust queues empty. The proposed
+  human addition fits the existing configuration limits. D2-032 adds a default-dark local-only
+  private session/JWT identity check with 148 passing admin tests/11 files and independent source
+  review. The full repository verifier and fresh admin production build pass; actual human proof and assignment deployment
+  remain open under D2-030/D2-R12. No role, case, grant, or contribution-policy change occurred.
+  The existing local deadline remains `2026-09-08T13:38:16Z`.
 - Depends on: D0 consent/security foundations and D1 catalog, saved-job, and moderation foundations;
   the public-contribution API is D2-owned work
 - Task document: [Phase 2 tasks](phase-2-extension-and-community.md)

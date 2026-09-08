@@ -1,7 +1,7 @@
 # Phase 2 Extension and UGC Security/Privacy Delta
 
 - Status: Engineering design; accountable approval pending
-- Last updated: 2026-09-05
+- Last updated: 2026-09-08
 - Decision boundary: [ADR-028](../adr/028-extension-ugc-ownership-and-processing.md) and
   [ADR-029](../adr/029-one-step-public-job-addition.md)
 
@@ -79,6 +79,24 @@ free of markup/control characters, and never interpreted as instructions.
   reproducible bundle inspection, minimum CSP, and version/domain kill switches.
 - **Store/disclosure mismatch:** generated manifest permissions must match the reviewed disclosure,
   privacy statement, screenshots/copy, network behavior, and final archive.
+
+## Local human reviewer setup boundary
+
+The optional local appeal setup check is default-dark, finite-window, exact-localhost and
+same-origin only. It compares the server-held SDK session and independently verified signed API
+token with an independently supplied issuer/subject/client/audience configuration. Fresh MFA and
+only the approved appeal/read scopes are required. The client supplies no identity or token;
+the only outbound request retrieves the exact issuer's public JWKS with redirect, time, and body
+bounds. No Management API, Gateway, refresh-token, role, or case operation is performed.
+
+Expected identity/configuration remains process-only. An exclusive-create result in the private,
+Git-ignored setup directory contains verification aggregates and a one-way identity-binding
+fingerprint, not raw identifiers or tokens. Treat the fingerprint as pseudonymous confidential
+setup data rather than anonymous telemetry; do not publish it in docs, logs, or browser output.
+The local launcher verifies current-user-only access and preserves existing encrypted setup.
+The server rejects expired windows, unexpected paths, filesystem links, and overwrites. This
+check is not enabled on Vercel and cannot itself grant reviewer permissions. The assignment and
+decision rationale remain in the [Phase 2 record](../product/delivery/phase-2-extension-and-community.md#delegated-reviewer-assignment).
 
 ## Retention and deletion
 

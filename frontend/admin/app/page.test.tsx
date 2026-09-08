@@ -1,7 +1,10 @@
 import React from "react";
+import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AdminPage from "./page";
+
+vi.mock("server-only", () => ({}));
 
 const { getSession, configured } = vi.hoisted(() => ({
   getSession: vi.fn(),
@@ -16,6 +19,7 @@ vi.mock("../lib/auth0", async (original) => ({
 beforeEach(() => {
   vi.stubGlobal("React", React);
   vi.stubEnv("ADMIN_AUTHORIZATION_PROFILE", undefined);
+  vi.stubEnv("ADMIN_APPEAL_SETUP_CONFIG", undefined);
   getSession.mockResolvedValue({ user: { amr: ["mfa"] } });
   configured.mockReturnValue(true);
 });
@@ -30,6 +34,46 @@ async function markup(parameters: { auth_error?: string | string[] } = {}) {
 }
 
 describe("server-selected admin authorization profile", () => {
+  it("keeps reviewer setup dark by default even with an appeal session", async () => {
+    vi.stubEnv("ADMIN_AUTHORIZATION_PROFILE", "appeals");
+    expect(await markup()).not.toContain("Verify reviewer setup");
+  });
+
+  it("renders only a fixed setup button for a valid local window, never setup identifiers", async () => {
+    vi.stubEnv("ADMIN_AUTHORIZATION_PROFILE", "appeals");
+    vi.stubEnv("APP_BASE_URL", "http://localhost:3001");
+    vi.stubEnv("AUTH0_DOMAIN", "synthetic.example.test");
+    vi.stubEnv("AUTH0_CLIENT_ID", "synthetic-appeal-client");
+    vi.stubEnv("AUTH0_AUDIENCE", "ai-job-apply-api");
+    vi.stubEnv("VERCEL", undefined);
+    const now = Date.now();
+    const runId = "a".repeat(32);
+    vi.stubEnv(
+      "ADMIN_APPEAL_SETUP_CONFIG",
+      JSON.stringify({
+        schemaVersion: 1,
+        issuer: "https://synthetic.example.test/",
+        audience: "ai-job-apply-api",
+        clientId: "synthetic-appeal-client",
+        expectedSubject: "auth0|synthetic-human",
+        startsAt: new Date(now - 1000).toISOString(),
+        expiresAt: new Date(now + 60_000).toISOString(),
+        runId,
+        resultPath: path.resolve(".tmp", "d2-reviewer", `appeal-identity-${runId}.json`),
+      }),
+    );
+    const html = await markup();
+    expect(html).toContain("Verify reviewer setup");
+    expect(html).not.toContain("synthetic-appeal-client");
+    expect(html).not.toContain("synthetic-human");
+    expect(html).not.toContain("appeal-identity-");
+    getSession.mockResolvedValue(null);
+    expect(await markup()).not.toContain("Verify reviewer setup");
+    getSession.mockResolvedValue({ user: { amr: ["mfa"] } });
+    vi.stubEnv("VERCEL", "1");
+    expect(await markup()).not.toContain("Verify reviewer setup");
+  });
+
   it("preserves the standard moderation and Trust controls when the profile is unset", async () => {
     const html = await markup();
     expect(html).toContain("Job and source moderation");
