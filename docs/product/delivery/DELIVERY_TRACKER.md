@@ -427,6 +427,12 @@ This is the master record for the delivery phases defined in the [product and sy
   SDK probes pass. The local deadline remains `22:55:31Z`, original encrypted/environment files
   are unchanged, and no AWS, role, policy, case, or hosted deployment changed. D2-031 is locally
   implemented; actual human sign-in/MFA and separate binding remain open under D2-030/D2-R12.
+- Local appeal restart (2026-09-08): the user requested another two-hour local-only window,
+  fixed at `11:38:16Z`–`13:38:16Z`. The first startup readiness check failed and stopped; a bounded
+  retry succeeded at `11:40:58.376Z`. The unchanged `ecfb607` app passes page/eight-asset and five
+  anonymous/error/SDK checks on loopback. Saved encrypted setup and existing environments/records
+  are preserved. No AWS, role, contribution-policy, or case change occurred; actual human sign-in/
+  MFA and separate appeal binding remain pending.
 - Depends on: D0 consent/security foundations and D1 catalog, saved-job, and moderation foundations;
   the public-contribution API is D2-owned work
 - Task document: [Phase 2 tasks](phase-2-extension-and-community.md)
