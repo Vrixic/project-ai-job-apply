@@ -1720,6 +1720,7 @@ data "aws_iam_policy_document" "secrets_endpoint" {
         var.deploy_serverless_outbox ? aws_iam_role.outbox_starter[0].arn : "",
         var.deploy_serverless_outbox ? aws_iam_role.outbox_reconciler[0].arn : "",
         var.deploy_profile_readiness_durable ? aws_iam_role.profile_readiness_activity[0].arn : "",
+        var.candidate_deletion_restore_role_enabled ? local.candidate_deletion_restore_role_arn : "",
         var.deploy_profile_readiness_durable ? aws_iam_role.profile_readiness_terminal[0].arn : "",
         local.document_complete_dark_enabled ? local.document_processor_role_arn : "",
         var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["coordinator"].arn : "",

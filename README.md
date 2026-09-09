@@ -76,10 +76,12 @@ owns the exact release evidence and remaining acceptance; Phase 2 is still In pr
 
 The verified 2026-09-08 rollout deploys persistent opt-in development contributions without
 signing, remote policy fetching, expiry, or renewal. Authentication, exact client/provider/host
-scope, independent provider verification, and Trust review remain enforced. Jobs migration `0021`
-ran once, verifying 41 migrations and 68 relations across six owners and ten schemas; exact runtime
-readback and zero Terraform drift pass. The migration-image and dependency remediation is complete
-(D2-034/D2-R13). Historical point-in-time restore evidence covers 39 migrations, not this release.
+scope, independent provider verification, and Trust review remain enforced. The subsequent exact
+`42b9686` release applies Jobs `0022`, verifying 42 migrations and 68 relations across six migration
+contributors and ten schemas. State 290 runs Gateway/scheduled/Trust versions 55/17/13 with zero
+drift and 13 healthy D2 alarms; both existing Vercel targets are READY. The dependency/packaging
+repairs are complete (D2-034/D2-037). Historical cloud PITR covers 39 migrations, not this release;
+D2-038 adds a separate default-off isolated deletion-replay executor with local seven-owner tests.
 
 The user confirms reloading the rebuilt development extension, signing in, and adding a job
 successfully on 2026-09-08, completing D2-033 and closing D2-R11. This is user-confirmed installed
@@ -90,8 +92,9 @@ the prior processing snapshot is not a current owner-state observation.
 All three reviewer assignments are bound: the workflow is case-opener-only, the distinct delegated
 agent can read and make initial/takedown decisions, and the separate human can read and resolve
 appeals. Exact human identity/MFA/scope checks and the user-confirmed empty local appeal-queue read
-pass. Hosted reviewer and actual reviewed-decision journey acceptance remain open; assignments
-and empty-queue access do not constitute case decisions.
+pass. Hosted reviewer and actual reviewed-decision journey acceptance remain open; the agent's
+latest token exchange still fails at the existing Auth0 API client-access grant. Assignments and
+an empty human queue read do not constitute working agent token access or case decisions.
 
 The [admin hosting boundary](frontend/admin/README.md#vercel-hosting-boundary) records the earlier
 protected presentation preview, not hosted Auth0 moderation acceptance. Other provider activation,

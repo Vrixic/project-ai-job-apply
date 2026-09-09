@@ -32,6 +32,13 @@ cluster-wide database grants. Missing opt-ins are reported as skipped, not passi
 
 - `build-gateway-lambda.mjs` — Builds the gateway Lambda artifact and provenance manifest.
 - `build-workflow-ingress-lambda.mjs` — Builds the outbox-ingress Lambda artifact.
+- `build-candidate-deletion-restore-lambda.mjs` — Builds the separate temporary private restore
+  executor. It has no live rights mutation adapters, public handler, or trigger. The guarded
+  `operate-development-candidate-deletion-replay.ps1` performs Prepare/Create/Inspect/Replay/Cleanup
+  against the exact maintained PITR target, with read-only cloud inventory and restored-only SQL.
+  Its dedicated role remains default-off; see the existing
+  [replay runbook](../infrastructure/runbooks/restore/candidate-deletion-recovery-replay.md).
+  `pnpm test:deletion-restore` runs its synthetic PowerShell 7 contract/operator guards.
 - `build-profile-readiness-lambdas.mjs` — Builds durable definition, activity, and terminal
   artifacts with exact-version metadata.
 - `operate-development-workflow-lambda-publication.ps1` — Provides the fail-closed local

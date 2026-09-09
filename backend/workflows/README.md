@@ -71,3 +71,20 @@ success. This path is absent from the schedulable source registry, performs no d
 I/O, produces no catalog rows, and has no EventBridge, SQS, API, or resource-based trigger. It is
 reachable only through an explicitly authorized direct IAM invocation of an exact numeric durable
 version while the guarded acceptance operator proves every normal/provider gate remains off.
+
+## D2 isolated deletion recovery
+
+`candidate-deletion-restore-lambda.ts` is a temporary operator-only restore executor, not a durable
+application workflow or scheduled service. The exact version/configuration binds a verified private
+PITR copy; a fresh pool resolves only that target from the fixed source secret. Complete retained
+marker, historical policy, owner-collision and document-absence checks precede all restored writes.
+It reconciles the seven current owners through their deletion boundaries in one transaction and
+returns schema-validated aggregates. Its cloud role cannot mutate S3 documents, recovery markers,
+retention, or Auth0. No public API/event contract or SQL migration is introduced.
+
+Use `build:lambda:deletion-restore` to build and `replay:candidate-deletions -Help` for the maintained
+operator. The old direct-URL/per-marker replay path is removed. See the
+[existing recovery runbook](../../infrastructure/runbooks/restore/candidate-deletion-recovery-replay.md)
+and [Phase 2 record](../../docs/product/delivery/phase-2-extension-and-community.md#d2-038--isolated-deletion-recovery)
+for exact implementation, deployment and acceptance status. Local tests do not imply IAM activation
+or cloud replay acceptance.

@@ -16,6 +16,7 @@ Invoke-CheckedCommand "Contract generation" { pnpm contracts:generate }
 Invoke-CheckedCommand "Repository skill validation" { pnpm skills:validate }
 Invoke-CheckedCommand "Serverless workflow infrastructure policy validation" { node scripts/validate-serverless-workflow-infrastructure.mjs }
 Invoke-CheckedCommand "Deployment operator guard validation" { & scripts/tests/deployment-operator-guards.tests.ps1 }
+Invoke-CheckedCommand "Isolated deletion restore contract/operator validation" { pnpm test:deletion-restore }
 Invoke-CheckedCommand "Development document dark guard validation" { & scripts/tests/development-document-dark-guards.tests.ps1 }
 Invoke-CheckedCommand "Development document dark operator validation" { & scripts/tests/development-document-dark-operator.tests.ps1 }
 Invoke-CheckedCommand "Development document migration operator path validation" { powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tests/development-document-migration-operator.tests.ps1 }

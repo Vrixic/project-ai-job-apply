@@ -42,3 +42,33 @@ run "public_reader_boundary_is_username_and_account_scoped" {
     error_message = "The boundary must freeze the exact account, region, and public-reader username."
   }
 }
+
+run "restore_reads_default_absent" {
+  command = plan
+  assert {
+    condition     = length([for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement if startswith(statement.Sid, "RestoreOnly")]) == 0
+    error_message = "The retained-version restore allowance must remain absent by default."
+  }
+}
+
+run "restore_reads_only_exact_development_role" {
+  command = plan
+  variables {
+    environment                             = "development"
+    candidate_deletion_restore_role_enabled = true
+  }
+  assert {
+    condition     = alltrue([for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement.Condition.ArnEquals["aws:PrincipalArn"] == "arn:aws:iam::111122223333:role/ai-job-apply-development-deletion-restore" if startswith(statement.Sid, "RestoreOnly")])
+    error_message = "No existing role may inherit the new retained-version reads."
+  }
+  assert {
+    condition     = one([for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement if statement.Sid == "RestoreOnlyReadRetainedVersions"]).Action == ["s3:GetObjectVersion", "s3:GetObjectRetention"]
+    error_message = "Restore boundary additions must never include a mutation or wildcard action."
+  }
+}
+
+run "staging_restore_boundary_rejected" {
+  command = plan
+  variables { candidate_deletion_restore_role_enabled = true }
+  expect_failures = [var.candidate_deletion_restore_role_enabled]
+}

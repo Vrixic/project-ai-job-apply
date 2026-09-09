@@ -1,39 +1,112 @@
 # Candidate deletion recovery replay
 
-Use this gate only against a private, quiesced PostgreSQL restore before any application role or
-route can reach it. The recovery ledger is outside RDS, versioned, KMS-encrypted, and retained with
-S3 Compliance Object Lock through the configured backup window. Its locator is also encrypted with
-an exact KMS encryption context.
+Use this development-only operator against the exact private, quiesced PostgreSQL copy created
+and verified by [the maintained PITR procedure](development-postgresql-point-in-time.md). The
+restore must remain outside every application route and trigger. Structural verification and
+deletion reconciliation are separate operations; neither alone proves recovery acceptance.
 
-The operator must use the exact release candidate and the accountable policy values that created
-the retained markers. Never point this command at the primary database. Supply the restore URL only
-in process memory from the approved secret path; do not write it to a receipt or repository file.
+## Implementation and activation boundary
+
+[The operator](../../../scripts/operate-development-candidate-deletion-replay.ps1) creates one
+temporary, version-qualified private Lambda with no URL, alias, queue mapping, resource policy,
+or schedule. It uses a fresh one-connection PostgreSQL pool per invocation. Credentials are
+resolved only inside that Lambda through the local Secrets extension; only the authenticated
+target hostname is substituted into the exact source secret. Never supply a database URL,
+candidate identity, object key, SQL, Auth0 credential, or caller-selected endpoint.
+
+The dedicated `candidate_deletion_restore_role_enabled` flag defaults to false. Its separately
+reviewed development bootstrap boundary and platform role/private-endpoint allowances must be
+deployed before preparation. They do not activate candidate rights, alter an existing role's
+effective permissions, or create the executor. Do not enable this flag in staging or production,
+reuse a live mutation-capable rights role, or override the migration task into replay.
+
+The complete current manifest is six migration contributors, ten schemas, 42 migrations and
+68 relations. All seven current candidate-data owners are reconciled. Historical D1/D2 completed
+markers retain their original version/digest and retention values, using the compiled catalog in
+[candidate-deletion-restore-policy.ts](../../../backend/workflows/src/candidate-deletion-restore-policy.ts).
+This catalog is provenance validation, not a renewed contribution or candidate approval.
+
+## Build and local checks
+
+Use PowerShell 7.4 or newer and the pinned repository dependencies:
 
 ```powershell
-$env:RESTORE_DATABASE_URL = '<private restored database URL>'
-$env:CANDIDATE_DELETION_RECOVERY_BUCKET = '<candidate_deletion_recovery_bucket output>'
-$env:CANDIDATE_DOCUMENT_BUCKET = '<candidate_document_bucket output>'
-$env:CANDIDATE_DATA_EXPORT_KMS_KEY_ARN = '<platform KMS key ARN>'
-$env:CANDIDATE_RIGHTS_POLICY_VERSION = '<approved version>'
-$env:CANDIDATE_RIGHTS_POLICY_SHA256 = '<approved lowercase SHA-256>'
-$env:CANDIDATE_RIGHTS_EXPORT_LIFETIME_SECONDS = '<approved seconds>'
-$env:CANDIDATE_RIGHTS_DOWNLOAD_GRANT_SECONDS = '<approved seconds>'
-$env:CANDIDATE_RIGHTS_BACKUP_RETENTION_DAYS = '<approved days>'
-$env:CANDIDATE_RIGHTS_RECENT_AUTH_MAX_AGE_SECONDS = '<approved seconds>'
-$env:CANDIDATE_RIGHTS_OWNER_INVENTORY = 'identity,profile,documents,jobs,matching,billing,trust'
-$env:CANDIDATE_RIGHTS_SUBPROCESSOR_INVENTORY = 'none'
-$env:CANDIDATE_DELETION_RECOVERY_REPLAY_ACK = `
-  'RESTORED_DATABASE_IS_QUIESCED_AND_NOT_SERVING_TRAFFIC'
-
-pnpm --filter @ai-job-apply/workflows replay:candidate-deletions
+pnpm --filter @ai-job-apply/workflows build:lambda:deletion-restore
+pnpm test:deletion-restore
+pnpm --filter @ai-job-apply/workflows test
 ```
 
-The command emits aggregate counts only. It refuses an incomplete recovery marker, policy mismatch,
-invalid encrypted locator, primary/restore URL equality, non-empty exact document-object inventory
-after cleanup, or any owner deletion failure. Keep the restore isolated and investigate on any
-failure. A successful aggregate is necessary but not sufficient for recovery: complete the normal
-schema, integrity, workflow, alarm, and accountable restore acceptance before serving traffic.
+A local artifact is not publishable provenance. For actual execution, build twice from the exact
+clean merged commit with process-local `ARTIFACT_SOURCE_SHA` set to that commit and compare
+artifact/manifest/SBOM hashes. The operator requires that source, not `local`.
 
-Clear all process-scoped values after the run. The operator must separately attest that the RDS
-earliest restorable point and the complete manual/cross-account backup inventory are later than a
-deletion confirmation before declaring its backup window expired; elapsed time alone is not proof.
+The real PostgreSQL test additionally needs an explicitly owned fresh loopback cluster with a
+database named `d2_restore_replay_<suffix>`, plus process-local
+`CANDIDATE_DELETION_RESTORE_INTEGRATION=1` and
+`CANDIDATE_DELETION_RESTORE_TEST_DATABASE_URL`. Run only
+`src/candidate-deletion-restore-store.integration.test.ts` through the workflow integration config.
+The test never creates a cloud resource or accepts a non-loopback database. Do not share its
+cluster with other migrated suites; the Jobs reader-role verifier checks cluster-wide grants.
+Remove only the generated test resource, then stop Docker/WSL when no next step needs them.
+
+## Guarded execution
+
+Run `pnpm --filter @ai-job-apply/workflows replay:candidate-deletions -Help` for the exact command
+surface. The historical TypeScript CLI routes to this same operator; its direct-URL replay path
+and obsolete per-marker loop are removed.
+
+1. Run PITR `Start` and `Verify`, not the combined `Exercise` action, so the exact verified
+   target remains available for replay. Retain the original private restore context unchanged.
+2. Review the current refresh-backed zero-drift runtime plan with the restore role enabled, the
+   exact context bytes, the built artifact manifest, and the compiled accepted-policy catalog.
+3. Run `Prepare` with `-ExpectedAccountId`, `-StateBucket`, `-RuntimePlanPath`,
+   `-ReviewedRuntimePlanSha256`, `-ReviewedRestoreContextSha256`, `-SourceSha`,
+   `-ReviewedArtifactManifestSha256`, and `-AcceptedPolicyCatalogSha256`. Preparation is
+   cloud-read-only and writes a user-only private packet below the environment's ignored
+   `.terraform/development-candidate-deletion-replay` directory.
+4. Review that packet and use its exact `-PreparationPath` and `-ReviewedPreparationSha256`
+   for subsequent actions. `Create -Execute` publishes/verifies the immutable artifact and
+   creates only the packet's uniquely named temporary Lambda. Its configuration expires after
+   30 minutes and each invocation is bounded to 300 seconds. No automatic extension or retry.
+5. Run `Inspect`. The runtime validates the complete version-bound completed-marker set,
+   historical policies, decrypted locator bindings, restored owner collisions, and cloud document
+   absence before any replay. Both quarantine and normalized document namespaces are checked,
+   including the parser-write/database-acknowledgement gap. No document body is downloaded.
+6. Review the resulting aggregate response. Run `Replay -Execute` with its exact
+   `-InspectionPath` and `-ReviewedInspectionReceiptSha256`. The runtime recomputes the
+   inspection, rechecks the cloud authority, and transactionally revalidates the whole restored
+   preflight before the first database write. It calls the existing seven owner deletion
+   boundaries only against that copy.
+7. Run `Cleanup -Execute`. First it disables the temporary Lambda's concurrency and returns
+   an earliest deletion time and checksum-bound disabled receipt. After the full in-flight
+   timeout window, repeat cleanup with that receipt's `-ReviewedCleanupDisabledSha256`.
+   This removes only the exact tagged Lambda. The immutable artifact remains intentionally
+   retained; it contains code, not candidate data.
+8. Run the maintained PITR `Cleanup` separately to remove the exact restored database and
+   its temporary backups/context. Confirm source health, zero drift, no remaining temporary
+   compute, and unchanged live candidate/document/ledger state. Turn the dedicated restore
+   role allowances off only through a separately reviewed cleanup plan after executor cleanup.
+
+## Failure handling and aggregate meaning
+
+A malformed or incomplete marker, unexpected version/delete marker, unknown historical policy,
+locator/owner collision, nonempty document namespace, changed inspection, expired configuration,
+or failed owner boundary stops the operation. Retained cloud objects, Object Lock retention,
+completion tags, Auth0 identities, export objects, and production resources are never mutated.
+
+An invocation failure or lost response may be ambiguous after restored SQL committed. Keep the
+target dark; inspect again and review recovery. The same preparation cannot blindly retry a
+started replay, renew its expiry, or silently create a replacement executor.
+
+Responses conform to [the workflow-owned internal schema](../../../backend/workflows/schemas/candidate-deletion-restore.v1.schema.json).
+They contain only aggregate counts, status, run/source/configuration digests, and bounded times;
+no candidate IDs, object keys, database URLs, or secret values leave the executor.
+`documentKeysChecked` counts known reference keys covered by the stronger namespace absence
+checks; `documentVersionsObserved` must be zero. Reconciled, physically absent, and already
+reconciled tombstones are distinct counts. An empty valid inspection is not positive deletion
+acceptance. Do not relabel this response as the historical D1 acceptance receipt or assert cleanup
+until the separate temporary-Lambda and PITR cleanup steps actually succeed.
+
+Complete normal schema/integrity, workflow, alarm, RTO/RPO and accountable recovery acceptance
+before any traffic is considered. Backup-window expiry still requires actual recoverability and
+manual/cross-account backup inventory evidence; elapsed time alone is insufficient.

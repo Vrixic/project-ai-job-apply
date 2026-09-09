@@ -120,6 +120,53 @@ run "candidate_rights_auth0_secret_preprovisions_with_managed_tags" {
   }
 }
 
+run "candidate_deletion_restore_is_dedicated_and_read_only" {
+  command = plan
+
+  variables {
+    environment                                  = "development"
+    private_application_networking               = true
+    deploy_document_intake                       = true
+    serverless_runtime_enabled                   = true
+    candidate_rights_enabled                     = true
+    candidate_rights_policy_version              = "d1-reviewed-v1"
+    candidate_rights_policy_sha256               = "9999999999999999999999999999999999999999999999999999999999999999"
+    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing,trust"
+    candidate_rights_subprocessor_inventory      = "none"
+    candidate_rights_export_lifetime_seconds     = 3600
+    candidate_rights_download_grant_seconds      = 300
+    candidate_rights_backup_retention_days       = 7
+    candidate_rights_recent_auth_max_age_seconds = 900
+    candidate_rights_export_lifecycle_days       = 1
+    candidate_deletion_restore_role_enabled      = true
+    document_processing_deployment_stage         = "parser-dark"
+    document_parser_artifact_s3_key              = "lambda/parser.zip"
+    document_parser_artifact_s3_object_version   = "synthetic-parser-version"
+    document_parser_artifact_sha256              = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    document_parser_artifact_base64sha256        = "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo="
+  }
+
+  assert {
+    condition = (
+      aws_iam_role.candidate_deletion_restore[0].name == "ai-job-apply-development-deletion-restore" &&
+      alltrue([for statement in local.candidate_deletion_restore_policy.Statement :
+        alltrue([for action in statement.Action : contains([
+          "logs:CreateLogStream", "logs:PutLogEvents", "ec2:AssignPrivateIpAddresses", "ec2:CreateNetworkInterface",
+          "ec2:DeleteNetworkInterface", "ec2:DescribeNetworkInterfaces", "ec2:DescribeSubnets", "ec2:UnassignPrivateIpAddresses",
+          "secretsmanager:GetSecretValue", "kms:Decrypt", "s3:ListBucketVersions", "s3:GetObjectVersion",
+          "s3:GetObjectVersionTagging", "s3:GetObjectRetention"
+        ], action)])
+      ])
+    )
+    error_message = "Restore-only IAM must have no S3 mutation, object-content document read, identity-provider, export, or wildcard action."
+  }
+
+  assert {
+    condition     = one([for statement in local.candidate_deletion_restore_policy.Statement : statement if statement.Sid == "DecryptExactRecoveryLocators"]).Condition.StringEquals["kms:EncryptionContext:purpose"] == "candidate-deletion-recovery-v1"
+    error_message = "Direct KMS locator reads must retain their exact purpose binding."
+  }
+}
+
 run "candidate_rights_boundary_accepts_explicit_timing_policy" {
   command = plan
 

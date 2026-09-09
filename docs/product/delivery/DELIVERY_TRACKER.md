@@ -321,7 +321,25 @@ This is the master record for the delivery phases defined in the [product and sy
 - Status: In progress
 - Start: 2026-09-01
 - Completion: Not completed
-- Current input checkpoint (2026-09-08, after the user's confirmation): fresh development STS
+- Current release checkpoint (2026-09-08, 23:53Z): exact `42b9686` closes D2-037. Existing
+  candidate/admin Vercel targets are READY; the candidate route boundary passes, while the
+  protected admin preview remains identity-dark. One migration task succeeds with seven log
+  records, bringing development to 42 migrations/68 relations. State 290 runs verified
+  Gateway/scheduled/Trust versions 55/17/13 with zero drift, 13 alarms OK, approximately empty
+  Trust queues and unchanged reviewer assignments, Greenhouse-only scope and concurrency.
+  Docker/WSL are stopped. D2-038's restore-only Lambda/role/preflight/reconciliation is implemented
+  on shared main; its new IAM scope and cloud acceptance remain separate. The
+  reviewer application API-access blocker still requires the requested non-secret screenshot.
+- Local recovery implementation (2026-09-08): D2-038 adds a dedicated default-off read-only cloud
+  role and a temporary private version-qualified executor, strict shared operator/runtime schema,
+  complete historical marker and owner/document preflight, and transactional restored-only replay.
+  Workflow tests pass 533 with five explicit database opt-in skips; the three new seven-owner
+  replay/cross-owner tests separately pass against fresh disposable PostgreSQL. PowerShell guards
+  pass 279 assertions, platform/bootstrap Terraform tests pass 84/4, and the Lambda builds with a
+  35-component SBOM. Docker/WSL stopped after exact generated-resource cleanup. Full repository
+  verification is pending the required committed Terraform source checkpoint; no new IAM or
+  cloud restore/executor activation is claimed.
+- Earlier input checkpoint (2026-09-08, after the user's confirmation): fresh development STS
   and exact live reviewer-assignment checks pass. The user authorizes reuse of the existing
   encrypted agent credential; D2-R14/D2-R15 are Closed. Two bounded token requests fail with
   Auth0 `403 access_denied`, classified as application API access not authorized (D2-R16).
@@ -330,7 +348,7 @@ This is the master record for the delivery phases defined in the [product and sy
   contribution-policy renewal is needed. Read-only release preparation confirms state 287,
   exact runtime/Greenhouse scope, backup coverage, and zero ECS tasks/services; current-source
   deployment remains separate from the reviewer grant. Full Phase 2 scope remains unchanged.
-- Latest continuation (2026-09-08, 22:14Z onward): the reviewer API-access denial persists after
+- Earlier pre-release continuation (2026-09-08, 22:14Z onward): the reviewer API-access denial persists after
   the user's next confirmation; one exact retry obtained no token or case access. Requested the
   exact Client Access entry with secrets hidden. Independent Gateway publication passed 189 tests
   but stopped before uploads on current Next/sharp/js-yaml/Vitest advisory records. D2-037 tracks
@@ -340,7 +358,7 @@ This is the master record for the delivery phases defined in the [product and sy
   `4f2462f` schema-7 baseline proves state 287/zero drift only and must be recaptured for the
   repaired source. Docker/WSL were stopped while image publication was blocked; no runtime or
   provider scope changed.
-- Patch-release continuation: `c66c8a5` Gateway/D2 artifacts published with repeat-build equality,
+- Earlier patch-release attempt: `c66c8a5` Gateway/D2 artifacts published with repeat-build equality,
   but no migration or Lambda update was applied. Both Vercel frozen installs exposed a missing
   upload dependency: the existing exact image-size patch. Prior hosted targets remain READY;
   D2-037 includes the narrow upload repair before corrected-source releases. D2-038 now records
@@ -351,8 +369,8 @@ This is the master record for the delivery phases defined in the [product and sy
   available in the configured account. D2-035's fixed Lever/Ashby descriptors, development-only
   provider selection, and forward Jobs `0022` are now implemented and locally verified. All 77
   Jobs PostgreSQL tests pass; a clean packaged migration/replay and read-only recovery check cover
-  42 migrations/68 relations, while the live environment remains on 41 migrations and Greenhouse
-  alone. Follow-up posting-ID, optional-field/location, and full-description fixes pass 284 ingestion
+  42 migrations/68 relations; the subsequent `42b9686` release also advances the live environment
+  to 42 while retaining Greenhouse alone. Follow-up posting-ID, optional-field/location, and full-description fixes pass 284 ingestion
   and 237 extension tests plus the generated actual-DOM matrix in both Edge and Chrome for Testing.
   Integrated commits `54002a7` and `df9ac1d` pass the full repository verifier at `df9ac1d`
   (33 typecheck, 34 test, and 20 build tasks); the rebuilt development extension retains unchanged
@@ -1014,6 +1032,7 @@ Append only material cross-delivery events.
 | 2026-09-08 | D2 | Resumed after the user's SSO/reviewer-credential confirmation. Exact development STS and live reviewer boundaries pass; R14/R15 are Closed. Auth0 refuses two bounded agent-token requests with 403/access_denied, classified as application API access not authorized; R16 now specifies the exact existing three-scope grant to restore. No token, case read, decision, grant, provider activation, or cloud mutation occurred. Independent read-only release preparation confirms state 287, exact runtime/Greenhouse scope, current backup coverage, and zero ECS tasks/services. The phase is In progress, with logical recovery Complete and the full remaining scope retained. | [Reviewer continuation and next action](phase-2-extension-and-community.md#delegated-reviewer-assignment), [D2-R16](phase-2-extension-and-community.md#risks-and-blockers) |
 | 2026-09-08 | D2 | A fresh reviewer exchange after the user's next confirmation still fails at Auth0 API access, with no token/case operation; requested the exact application-access screenshot. Continued independent release work: 189 Gateway tests pass, then current registry advisories stop publication before uploads. D2-037's compatible Next/sharp/js-yaml/Vitest patches now pass frozen install, audit, security regressions, focused suites, frontend builds and the full repository verifier without exemptions. Fresh pre-repair baseline capture confirms state 287/zero drift only; new exact-source releases remain. Docker/WSL stopped while image work is blocked; runtime/provider settings remain unchanged. | [Dependency remediation](phase-2-extension-and-community.md#d2-037--release-candidate-dependency-remediation), [remaining steps](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs) |
 | 2026-09-08 | D2 | Published exact c66c8a5 Gateway/D2 artifacts without runtime changes. Vercel candidate/admin patch builds failed on an omitted required patch file; prior READY targets remain unchanged, and D2-037 now includes the exact-file upload repair. Added D2-038 for the missing isolated AWS deletion-replay executor found during current-schema recovery preparation. Structural PITR and completed local logical recovery remain distinct from that mutating cloud replay. | [Packaging repair and recovery next steps](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs) |
+| 2026-09-08 | D2 | Completed exact `42b9686` Vercel/AWS release at state 290, 42 migrations/68 relations and Gateway/scheduled/Trust 55/17/13, with zero drift and unchanged activation scope. Implemented isolated D2-038 restore-only replay on shared main; workflow 533, real PostgreSQL 3, PowerShell 279 and Terraform 84+4 checks pass locally. Full committed-source repository verification and actual isolated cloud replay remain separate; reviewer API client access still needs correction. | [Current release](phase-2-extension-and-community.md#d2-037--release-candidate-dependency-remediation), [recovery implementation](phase-2-extension-and-community.md#d2-038--isolated-deletion-recovery) |
 
 ## Cross-delivery decisions and changes
 

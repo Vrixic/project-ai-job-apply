@@ -287,7 +287,7 @@ resource "aws_iam_policy" "workload_boundary" {
   description = "Maximum runtime permissions for ${var.environment} ECS workload roles."
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Sid      = "PullApprovedImages"
         Effect   = "Allow"
@@ -446,7 +446,22 @@ resource "aws_iam_policy" "workload_boundary" {
         ]
         Resource = "${local.candidate_deletion_recovery_bucket_arn}/candidate-deletion-recovery/*"
       }
-    ]
+      ], var.candidate_deletion_restore_role_enabled ? [
+      {
+        Sid      = "RestoreOnlyListRetainedVersions", Effect = "Allow", Action = ["s3:ListBucketVersions"],
+        Resource = local.candidate_deletion_recovery_bucket_arn,
+        Condition = {
+          ArnEquals    = { "aws:PrincipalArn" = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/ai-job-apply-development-deletion-restore" },
+          StringEquals = { "s3:prefix" = "candidate-deletion-recovery/" }
+        }
+      },
+      {
+        Sid       = "RestoreOnlyReadRetainedVersions", Effect = "Allow",
+        Action    = ["s3:GetObjectVersion", "s3:GetObjectRetention"],
+        Resource  = "${local.candidate_deletion_recovery_bucket_arn}/candidate-deletion-recovery/*",
+        Condition = { ArnEquals = { "aws:PrincipalArn" = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/ai-job-apply-development-deletion-restore" } }
+      }
+    ] : [])
   })
 }
 

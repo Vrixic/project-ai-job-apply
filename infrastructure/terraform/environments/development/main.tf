@@ -131,6 +131,7 @@ module "platform" {
   profile_readiness_execution_timeout_seconds           = var.profile_readiness_execution_timeout_seconds
   profile_readiness_retention_days                      = var.profile_readiness_retention_days
   candidate_rights_enabled                              = var.candidate_rights_enabled
+  candidate_deletion_restore_role_enabled               = var.candidate_deletion_restore_role_enabled
   candidate_rights_auth0_secret_provisioned             = var.candidate_rights_auth0_secret_provisioned
   candidate_rights_auth0_authorized_owner               = var.candidate_rights_auth0_authorized_owner
   candidate_rights_id_token_audience                    = var.candidate_rights_id_token_audience

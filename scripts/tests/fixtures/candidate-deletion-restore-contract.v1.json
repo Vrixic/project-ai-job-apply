@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "classification": "generated-synthetic-no-live-identity",
+  "now": "2026-09-08T00:01:00.000Z",
+  "configuration": {
+    "schemaVersion": 1,
+    "runId": "0123456789abcdef0123456789abcdef",
+    "accountId": "123456789012",
+    "region": "us-east-2",
+    "sourceSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "restoreContextSha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "sourceIdentifier": "ai-job-apply-development",
+    "sourceDbiResourceId": "db-SYNTHETICSOURCE000000000001",
+    "sourceBoundarySha256": "2222222222222222222222222222222222222222222222222222222222222222",
+    "sourceHostname": "ai-job-apply-development.abcdefghijkl.us-east-2.rds.amazonaws.com",
+    "targetIdentifier": "ai-job-apply-development-restore-20260908000000",
+    "targetDbiResourceId": "db-SYNTHETICTARGET000000000002",
+    "targetBoundarySha256": "3333333333333333333333333333333333333333333333333333333333333333",
+    "targetHostname": "ai-job-apply-development-restore-20260908000000.abcdefghijkl.us-east-2.rds.amazonaws.com",
+    "databaseName": "ai_job_apply",
+    "databasePort": 5432,
+    "restoreManifestSha256": "54db7b5e45fb2be2eeaad1999a242c82eb452ddd2ab022951ca0f3301c0dd256",
+    "acceptedPolicyCatalogSha256": "4549e90155b66007655f118dd597fa41c9711a5d76ef5d1562185277df842627",
+    "issuedAt": "2026-09-08T00:00:00.000Z",
+    "expiresAt": "2026-09-08T00:30:00.000Z"
+  },
+  "environment": {
+    "NODE_ENV": "production",
+    "RELEASE_SHA": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "DATABASE_SECRET_ID": "arn:aws:secretsmanager:us-east-2:123456789012:secret:ai-job-apply/development/database-url-AbCdEf",
+    "CANDIDATE_DOCUMENT_BUCKET": "ai-job-apply-development-candidate-docs-123456789012",
+    "CANDIDATE_DELETION_RECOVERY_BUCKET": "ai-job-apply-development-candidate-del-recovery-123456789012",
+    "CANDIDATE_DELETION_RECOVERY_KMS_KEY_ARN": "arn:aws:kms:us-east-2:123456789012:key/11111111-2222-4333-8444-555555555555",
+    "RESTORE_REPLAY_CONFIG_JSON": "{\"schemaVersion\":1,\"runId\":\"0123456789abcdef0123456789abcdef\",\"accountId\":\"123456789012\",\"region\":\"us-east-2\",\"sourceSha\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"restoreContextSha256\":\"1111111111111111111111111111111111111111111111111111111111111111\",\"sourceIdentifier\":\"ai-job-apply-development\",\"sourceDbiResourceId\":\"db-SYNTHETICSOURCE000000000001\",\"sourceBoundarySha256\":\"2222222222222222222222222222222222222222222222222222222222222222\",\"sourceHostname\":\"ai-job-apply-development.abcdefghijkl.us-east-2.rds.amazonaws.com\",\"targetIdentifier\":\"ai-job-apply-development-restore-20260908000000\",\"targetDbiResourceId\":\"db-SYNTHETICTARGET000000000002\",\"targetBoundarySha256\":\"3333333333333333333333333333333333333333333333333333333333333333\",\"targetHostname\":\"ai-job-apply-development-restore-20260908000000.abcdefghijkl.us-east-2.rds.amazonaws.com\",\"databaseName\":\"ai_job_apply\",\"databasePort\":5432,\"restoreManifestSha256\":\"54db7b5e45fb2be2eeaad1999a242c82eb452ddd2ab022951ca0f3301c0dd256\",\"acceptedPolicyCatalogSha256\":\"4549e90155b66007655f118dd597fa41c9711a5d76ef5d1562185277df842627\",\"issuedAt\":\"2026-09-08T00:00:00.000Z\",\"expiresAt\":\"2026-09-08T00:30:00.000Z\"}",
+    "RESTORE_REPLAY_CONFIG_SHA256": "784a90f7b978229f515d5d15652234387559e3663509bc519987bf0997ddf7d2"
+  },
+  "configurationSha256": "784a90f7b978229f515d5d15652234387559e3663509bc519987bf0997ddf7d2",
+  "invokedFunctionArn": "arn:aws:lambda:us-east-2:123456789012:function:ai-job-apply-development-replay-0123456789abcdef0123456789abcdef:1",
+  "inspect": {
+    "schemaVersion": 1,
+    "action": "inspect",
+    "runId": "0123456789abcdef0123456789abcdef",
+    "configurationSha256": "784a90f7b978229f515d5d15652234387559e3663509bc519987bf0997ddf7d2",
+    "functionVersion": "1"
+  },
+  "replay": {
+    "schemaVersion": 1,
+    "action": "replay",
+    "runId": "0123456789abcdef0123456789abcdef",
+    "configurationSha256": "784a90f7b978229f515d5d15652234387559e3663509bc519987bf0997ddf7d2",
+    "functionVersion": "1",
+    "reviewedInspectionSha256": "31dc37bd4e8329d1f42407f6f14ed6ab04ef12384207a08f5c2c2663aa2fd77d"
+  },
+  "markerSnapshotSha256": "5555555555555555555555555555555555555555555555555555555555555555",
+  "storePreflightSha256": "6666666666666666666666666666666666666666666666666666666666666666",
+  "documentAbsenceSha256": "7777777777777777777777777777777777777777777777777777777777777777",
+  "restoredPreflightSha256": "9128aaae6a8059e519766b2e9554bf7ac739f36fb00c2f806682cf96bba62b40",
+  "inspectionSha256": "31dc37bd4e8329d1f42407f6f14ed6ab04ef12384207a08f5c2c2663aa2fd77d"
+}

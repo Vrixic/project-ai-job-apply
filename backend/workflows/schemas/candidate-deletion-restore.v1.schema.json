@@ -1,0 +1,415 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ai-job-apply.internal/operations/candidate-deletion-restore.v1.json",
+  "title": "Workflow-owned development-only isolated deletion restore",
+  "description": "Direct IAM operator transport, not a public API or event. Candidate locators, object keys, credentials and arbitrary targets cannot be supplied through requests.",
+  "$ref": "#/$defs/request",
+  "$defs": {
+    "configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "runId",
+        "accountId",
+        "region",
+        "sourceSha",
+        "restoreContextSha256",
+        "sourceIdentifier",
+        "sourceDbiResourceId",
+        "sourceBoundarySha256",
+        "sourceHostname",
+        "targetIdentifier",
+        "targetDbiResourceId",
+        "targetBoundarySha256",
+        "targetHostname",
+        "databaseName",
+        "databasePort",
+        "restoreManifestSha256",
+        "acceptedPolicyCatalogSha256",
+        "issuedAt",
+        "expiresAt"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "runId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{32}$"
+        },
+        "accountId": {
+          "type": "string",
+          "pattern": "^[0-9]{12}$"
+        },
+        "region": {
+          "const": "us-east-2"
+        },
+        "sourceSha": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "restoreContextSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "sourceIdentifier": {
+          "const": "ai-job-apply-development"
+        },
+        "sourceDbiResourceId": {
+          "type": "string",
+          "pattern": "^db-[A-Z0-9]{8,63}$"
+        },
+        "sourceBoundarySha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "sourceHostname": {
+          "type": "string",
+          "maxLength": 253,
+          "pattern": "^[a-z0-9-]+\\.[a-z0-9]+\\.us-east-2\\.rds\\.amazonaws\\.com$"
+        },
+        "targetIdentifier": {
+          "type": "string",
+          "pattern": "^ai-job-apply-development-restore-[0-9]{14}$"
+        },
+        "targetDbiResourceId": {
+          "type": "string",
+          "pattern": "^db-[A-Z0-9]{8,63}$"
+        },
+        "targetBoundarySha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "targetHostname": {
+          "type": "string",
+          "maxLength": 253,
+          "pattern": "^[a-z0-9-]+\\.[a-z0-9]+\\.us-east-2\\.rds\\.amazonaws\\.com$"
+        },
+        "databaseName": {
+          "const": "ai_job_apply"
+        },
+        "databasePort": {
+          "const": 5432
+        },
+        "restoreManifestSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "acceptedPolicyCatalogSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "issuedAt": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+        },
+        "expiresAt": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+        }
+      }
+    },
+    "request": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schemaVersion",
+            "action",
+            "runId",
+            "configurationSha256",
+            "functionVersion"
+          ],
+          "properties": {
+            "schemaVersion": {
+              "const": 1
+            },
+            "action": {
+              "const": "inspect"
+            },
+            "runId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{32}$"
+            },
+            "configurationSha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "functionVersion": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,9}$"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schemaVersion",
+            "action",
+            "runId",
+            "configurationSha256",
+            "functionVersion",
+            "reviewedInspectionSha256"
+          ],
+          "properties": {
+            "schemaVersion": {
+              "const": 1
+            },
+            "action": {
+              "const": "replay"
+            },
+            "runId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{32}$"
+            },
+            "configurationSha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "functionVersion": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,9}$"
+            },
+            "reviewedInspectionSha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        }
+      ]
+    },
+    "inspection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "action",
+        "outcome",
+        "runId",
+        "sourceSha",
+        "configurationSha256",
+        "functionVersion",
+        "expiresAt",
+        "markerSnapshotSha256",
+        "restoredPreflightSha256",
+        "inspectionSha256",
+        "markersValidated",
+        "historicalPolicyMarkers",
+        "currentPolicyMarkers",
+        "restoredSubjectsPresent",
+        "restoredSubjectsAbsent",
+        "documentKeysChecked",
+        "documentVersionsObserved"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "action": {
+          "const": "inspect"
+        },
+        "outcome": {
+          "const": "inspected"
+        },
+        "runId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{32}$"
+        },
+        "sourceSha": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "configurationSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "functionVersion": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,9}$"
+        },
+        "expiresAt": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+        },
+        "markerSnapshotSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "restoredPreflightSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "inspectionSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "markersValidated": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "historicalPolicyMarkers": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "currentPolicyMarkers": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "restoredSubjectsPresent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "restoredSubjectsAbsent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "documentKeysChecked": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20000
+        },
+        "documentVersionsObserved": {
+          "const": 0
+        }
+      }
+    },
+    "replayResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "action",
+        "outcome",
+        "runId",
+        "sourceSha",
+        "configurationSha256",
+        "functionVersion",
+        "expiresAt",
+        "markerSnapshotSha256",
+        "restoredPreflightSha256",
+        "inspectionSha256",
+        "markersValidated",
+        "historicalPolicyMarkers",
+        "currentPolicyMarkers",
+        "restoredSubjectsPresent",
+        "restoredSubjectsAbsent",
+        "documentKeysChecked",
+        "documentVersionsObserved",
+        "restoredUsersReconciled",
+        "restoredUsersAbsent",
+        "restoredUsersAlreadyReconciled",
+        "s3Writes",
+        "recoveryLedgerWrites",
+        "identityProviderCalls"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "action": {
+          "const": "replay"
+        },
+        "outcome": {
+          "const": "replayed"
+        },
+        "runId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{32}$"
+        },
+        "sourceSha": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "configurationSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "functionVersion": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,9}$"
+        },
+        "expiresAt": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+        },
+        "markerSnapshotSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "restoredPreflightSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "inspectionSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "markersValidated": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "historicalPolicyMarkers": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "currentPolicyMarkers": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "restoredSubjectsPresent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "restoredSubjectsAbsent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "documentKeysChecked": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20000
+        },
+        "documentVersionsObserved": {
+          "const": 0
+        },
+        "restoredUsersReconciled": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "restoredUsersAbsent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "restoredUsersAlreadyReconciled": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "s3Writes": {
+          "const": 0
+        },
+        "recoveryLedgerWrites": {
+          "const": 0
+        },
+        "identityProviderCalls": {
+          "const": 0
+        }
+      }
+    }
+  }
+}

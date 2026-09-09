@@ -32,3 +32,13 @@ variable "github_environment" {
   description = "GitHub Environment allowed to assume the deployment role."
   type        = string
 }
+
+variable "candidate_deletion_restore_role_enabled" {
+  description = "Separately reviewed read-only boundary allowance for the exact development restore role; changes no existing role's effective permissions."
+  type        = bool
+  default     = false
+  validation {
+    condition     = !var.candidate_deletion_restore_role_enabled || var.environment == "development"
+    error_message = "Restore-only boundary access is supported only in development."
+  }
+}

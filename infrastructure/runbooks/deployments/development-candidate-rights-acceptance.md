@@ -253,8 +253,11 @@ recovery marker.
 
 Account deletion is not restore-safe until the independent marker replay runs against a disposable,
 quiesced, generated-synthetic development restore. Use the existing restore procedure to create and
-clean that restore; invoke `run-candidate-deletion-recovery-replay` only with
-`RESTORED_DATABASE_IS_QUIESCED_AND_NOT_SERVING_TRAFFIC`; never point it at the primary database.
+clean that restore. The old direct-URL `run-candidate-deletion-recovery-replay` implementation is
+retired; use the [guarded isolated replay operator](../restore/candidate-deletion-recovery-replay.md).
+Its current schema-bound inspection/replay outputs are not automatically interchangeable with this
+historical D1 acceptance packet. Never fabricate this packet from a local unit test, empty cloud
+inspection, or replay result whose temporary resources have not actually been cleaned.
 Retain a separately reviewed aggregate receipt with exactly:
 
 ```json

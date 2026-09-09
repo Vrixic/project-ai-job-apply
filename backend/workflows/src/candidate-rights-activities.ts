@@ -7,10 +7,7 @@ import {
   type CandidateRightsActivityResultV1,
   validateCandidateRightsActivityInput,
 } from "./candidate-rights-durable.js";
-import type {
-  CandidateDeletionRecoveryEntry,
-  CandidateDeletionRecoveryLedger,
-} from "./candidate-rights-recovery-ledger.js";
+import type { CandidateDeletionRecoveryLedger } from "./candidate-rights-recovery-ledger.js";
 
 export interface CandidateExportArtifact {
   objectKey: string;
@@ -589,130 +586,6 @@ export class PostgresCandidateRightsActivityStore {
       `;
     });
     await this.dependencies.recoveryLedger.markCompleted(input.resourceId, new Date(now));
-  }
-
-  async replayDeletionRecovery(
-    entry: CandidateDeletionRecoveryEntry,
-  ): Promise<"absent" | "reconciled"> {
-    if (
-      entry.policyVersion !== this.dependencies.policy.version ||
-      entry.policySha256 !== this.dependencies.policy.accountablePolicySha256
-    ) {
-      throw new CandidateRightsActivityRejected("CandidateDeletionRecoveryPolicyMismatch");
-    }
-    const users = await this.dependencies.database.client<Array<{ id: string }>>`
-      SELECT id FROM identity.users WHERE id = ${entry.userId}::uuid
-    `;
-    if (users.length === 0) return "absent";
-    if (users.length !== 1) {
-      throw new CandidateRightsActivityRejected("CandidateDeletionRecoveryIdentityAmbiguous");
-    }
-    const ownerInventory = Object.fromEntries(
-      this.dependencies.policy.ownerInventory.map((owner) => [owner, "pending"]),
-    );
-    const subprocessorInventory = Object.fromEntries(
-      this.dependencies.policy.subprocessorInventory.map((processor) => [processor, "pending"]),
-    );
-    await this.dependencies.database.client.begin(async (transaction) => {
-      await transaction`
-        UPDATE identity.users SET account_state = 'quarantined',
-          quarantined_at = COALESCE(quarantined_at, ${entry.confirmedAt.toISOString()}::timestamptz)
-        WHERE id = ${entry.userId}::uuid
-      `;
-      await transaction`
-        INSERT INTO platform.operations (
-          id, user_id, kind, state, created_at, updated_at
-        ) VALUES (
-          ${entry.operationId}::uuid, ${entry.userId}::uuid, 'account_deletion', 'queued',
-          ${entry.confirmedAt.toISOString()}::timestamptz,
-          ${entry.confirmedAt.toISOString()}::timestamptz
-        ) ON CONFLICT (id) DO NOTHING
-      `;
-      await transaction`
-        INSERT INTO profile.account_deletion_requests (
-          id, user_id, operation_id, policy_version, state, version,
-          requested_at, updated_at, confirmed_at, backup_expires_at
-        ) VALUES (
-          ${entry.requestId}::uuid, ${entry.userId}::uuid, ${entry.operationId}::uuid,
-          ${entry.policyVersion}, 'quarantined', 2,
-          ${entry.confirmedAt.toISOString()}::timestamptz,
-          ${entry.confirmedAt.toISOString()}::timestamptz,
-          ${entry.confirmedAt.toISOString()}::timestamptz,
-          ${entry.backupExpiresAt.toISOString()}::timestamptz
-        ) ON CONFLICT (id) DO NOTHING
-      `;
-      await transaction`
-        INSERT INTO privacy.account_deletion_ledger (
-          request_id, subject_digest, policy_version, policy_sha256, state,
-          owner_inventory, subprocessor_inventory, confirmed_at, backup_expires_at, updated_at
-        ) VALUES (
-          ${entry.requestId}::uuid, ${entry.subjectDigest}, ${entry.policyVersion},
-          ${entry.policySha256}, 'quarantined', ${JSON.stringify(ownerInventory)}::jsonb,
-          ${JSON.stringify(subprocessorInventory)}::jsonb,
-          ${entry.confirmedAt.toISOString()}::timestamptz,
-          ${entry.backupExpiresAt.toISOString()}::timestamptz,
-          ${entry.confirmedAt.toISOString()}::timestamptz
-        ) ON CONFLICT (request_id) DO NOTHING
-      `;
-    });
-    const objectRows = await this.dependencies.database.client<Array<{ data: unknown }>>`
-      SELECT documents.candidate_object_inventory(${entry.userId}::uuid) AS data
-    `;
-    const objectData = objectRows[0]?.data;
-    if (!Array.isArray(objectData) || objectData.some((item) => !isRecord(item))) {
-      throw new CandidateRightsActivityRejected("CandidateDocumentInventoryInvalid");
-    }
-    const objectDeletion = await this.dependencies.documentObjectStore.deleteAllVersionsAndMarkers(
-      objectData as unknown as CandidateDocumentObjectRef[],
-    );
-    if (!objectDeletion.exactInventoryEmpty) {
-      throw new CandidateRightsActivityRejected("CandidateDocumentObjectsRemain");
-    }
-    const completedAt = entry.completedAt ?? this.clock();
-    await this.dependencies.database.client.begin(async (transaction) => {
-      await transaction`SELECT jobs.delete_candidate_data(${entry.userId}::uuid, ${entry.requestId}::uuid)`;
-      await transaction`SELECT matching.delete_candidate_data(${entry.userId}::uuid, ${entry.requestId}::uuid)`;
-      await transaction`SELECT billing.delete_candidate_data(${entry.userId}::uuid, ${entry.requestId}::uuid)`;
-      await transaction`SELECT trust.delete_candidate_data(${entry.userId}::uuid, ${entry.requestId}::uuid)`;
-      await transaction`SELECT documents.delete_candidate_data(${entry.userId}::uuid, ${entry.requestId}::uuid, true)`;
-      await transaction`SELECT profile.delete_candidate_data(${entry.userId}::uuid, ${entry.requestId}::uuid)`;
-      await transaction`DELETE FROM identity.external_identities WHERE user_id = ${entry.userId}::uuid`;
-      await transaction`
-        UPDATE profile.account_deletion_requests SET state = 'completed',
-          version = CASE WHEN state = 'completed' THEN version ELSE version + 1 END,
-          completed_at = COALESCE(completed_at, ${completedAt.toISOString()}::timestamptz),
-          updated_at = ${completedAt.toISOString()}::timestamptz
-        WHERE id = ${entry.requestId}::uuid AND state <> 'backup_expired'
-      `;
-      await transaction`
-        UPDATE privacy.account_deletion_ledger SET state = 'completed',
-          owner_inventory = ${JSON.stringify(
-            Object.fromEntries(
-              this.dependencies.policy.ownerInventory.map((owner) => [owner, "completed"]),
-            ),
-          )}::jsonb,
-          subprocessor_inventory = ${JSON.stringify(
-            Object.fromEntries(
-              this.dependencies.policy.subprocessorInventory.map((processor) => [
-                processor,
-                "completed",
-              ]),
-            ),
-          )}::jsonb,
-          completed_at = COALESCE(completed_at, ${completedAt.toISOString()}::timestamptz),
-          updated_at = ${completedAt.toISOString()}::timestamptz
-        WHERE request_id = ${entry.requestId}::uuid AND state <> 'backup_expired'
-      `;
-      await transaction`
-        UPDATE platform.operations SET state = 'succeeded', result = ${JSON.stringify({
-          resourceId: entry.requestId,
-          resourceType: "account_deletion_request",
-        })}::jsonb, error_code = NULL, updated_at = ${completedAt.toISOString()}::timestamptz
-        WHERE id = ${entry.operationId}::uuid AND kind = 'account_deletion'
-      `;
-    });
-    await this.dependencies.recoveryLedger.markCompleted(entry.requestId, completedAt);
-    return "reconciled";
   }
 
   async expireDueExports(limit = 25): Promise<{ scanned: number; expired: number }> {

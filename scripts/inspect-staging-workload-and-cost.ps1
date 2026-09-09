@@ -113,7 +113,7 @@ $allowedVariableNames = @(
   "public_job_lambda_artifact_s3_key", "public_job_lambda_artifact_s3_object_version",
   "public_job_lambda_artifact_sha256", "public_job_lambda_artifact_base64sha256",
   "database_backup_retention_days",
-  "candidate_rights_enabled", "candidate_rights_policy_version",
+  "candidate_rights_enabled", "candidate_rights_policy_version", "candidate_deletion_restore_role_enabled",
   "candidate_rights_policy_sha256", "candidate_rights_export_lifetime_seconds",
   "candidate_rights_export_lifecycle_days", "candidate_rights_download_grant_seconds",
   "candidate_rights_backup_retention_days", "candidate_rights_recent_auth_max_age_seconds",

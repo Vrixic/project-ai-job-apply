@@ -759,6 +759,70 @@ resource "aws_security_group" "document_parser" {
 
 data "aws_iam_policy_document" "candidate_documents_s3_endpoint" {
   count = local.document_parser_dark_enabled ? 1 : 0
+  dynamic "statement" {
+    for_each = var.candidate_deletion_restore_role_enabled ? [1] : []
+    content {
+      sid       = "RestoreOnlyRetainedVersionInventory"
+      effect    = "Allow"
+      actions   = ["s3:ListBucketVersions"]
+      resources = [aws_s3_bucket.candidate_deletion_recovery[0].arn]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = [local.candidate_deletion_restore_role_arn]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "s3:prefix"
+        values   = [local.candidate_deletion_recovery_prefix]
+      }
+    }
+  }
+  dynamic "statement" {
+    for_each = var.candidate_deletion_restore_role_enabled ? [1] : []
+    content {
+      sid       = "RestoreOnlyRetainedVersionReads"
+      effect    = "Allow"
+      actions   = ["s3:GetObjectVersion", "s3:GetObjectVersionTagging", "s3:GetObjectRetention"]
+      resources = ["${aws_s3_bucket.candidate_deletion_recovery[0].arn}/${local.candidate_deletion_recovery_prefix}*"]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = [local.candidate_deletion_restore_role_arn]
+      }
+    }
+  }
+  dynamic "statement" {
+    for_each = var.candidate_deletion_restore_role_enabled ? [1] : []
+    content {
+      sid       = "RestoreOnlyDocumentAbsenceInventory"
+      effect    = "Allow"
+      actions   = ["s3:ListBucketVersions"]
+      resources = [aws_s3_bucket.candidate_documents[0].arn]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = [local.candidate_deletion_restore_role_arn]
+      }
+      condition {
+        test     = "StringLike"
+        variable = "s3:prefix"
+        values   = ["quarantine/*", "normalized/*"]
+      }
+    }
+  }
   statement {
     sid    = "ExactParserQuarantineReadsOnly"
     effect = "Allow"
