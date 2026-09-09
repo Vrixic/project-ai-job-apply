@@ -271,4 +271,83 @@ Assert ($operator -match "AWS_MAX_ATTEMPTS = '1'" -and $operator -match 'Deletio
 Assert ($operator -match 'Assert-DeletionReplayHash \$disabledPath \$ReviewedCleanupDisabledSha256') 'cleanup drain journal checksum-bound'
 $inspector = [IO.File]::ReadAllText((Join-Path $root 'scripts/inspect-staging-workload-and-cost.ps1'))
 Assert ($inspector -match '"candidate_deletion_restore_role_enabled"') 'current exact runtime-plan reconstruction retains restore role flag'
+
+# Execute the real operator role reader without loading its top-level cloud actions. Only the
+# native AWS boundary is replaced; the plan lookup and policy/ARN comparisons remain unchanged.
+& {
+  $roleAst = [Management.Automation.Language.Parser]::ParseFile($operatorPath,[ref]$tokens,[ref]$errors)
+  foreach ($name in @('Get-ReplayPlanResource','Read-ReplayPolicy','Get-ReplayRoleBoundary')) {
+    $definitions = @($roleAst.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name},$true))
+    Assert ($definitions.Count -eq 1) "real operator $name found exactly once"
+    . ([scriptblock]::Create($definitions[0].Extent.Text))
+  }
+  $account = '111122223333'
+  $roleName = 'ai-job-apply-development-deletion-restore'
+  $roleArn = "arn:aws:iam::$account`:role/$roleName"
+  $boundaryArn = "arn:aws:iam::$account`:policy/ai-job-apply-development-workload-boundary"
+  $assumePolicy = @{Version='2012-10-17';Statement=@(@{Effect='Allow';Action='sts:AssumeRole';Principal=@{Service='lambda.amazonaws.com'}})}
+  $inlinePolicy = @{Version='2012-10-17';Statement=@(@{Effect='Allow';Action='s3:ListBucketVersions';Resource='arn:aws:s3:::synthetic-retained-markers'})}
+  $endpointPolicy = @{Version='2012-10-17';Statement=@(@{Effect='Allow';Action='s3:ListBucketVersions';Resource='arn:aws:s3:::synthetic-retained-markers';Principal=@{AWS=$roleArn}})}
+  $basePlan = Clone @{planned_values=@{root_module=@{child_modules=@(@{resources=@(
+    @{address='module.platform.aws_iam_role.candidate_deletion_restore[0]';values=@{name=$roleName;arn=$roleArn;permissions_boundary=$boundaryArn;assume_role_policy=($assumePolicy | ConvertTo-Json -Depth 10 -Compress)}}
+    @{address='module.platform.aws_iam_role_policy.candidate_deletion_restore[0]';values=@{name='candidate-deletion-restore-read-only';policy=($inlinePolicy | ConvertTo-Json -Depth 10 -Compress)}}
+    @{address='module.platform.aws_vpc_endpoint.candidate_documents_s3[0]';values=@{id='vpce-synthetic-s3';policy=($endpointPolicy | ConvertTo-Json -Depth 10 -Compress)}}
+    @{address='module.platform.aws_vpc_endpoint.secretsmanager[0]';values=@{id='vpce-synthetic-secrets';policy=($endpointPolicy | ConvertTo-Json -Depth 10 -Compress)}}
+  )})}}}
+  $baseCloud = Clone @{
+    role=@{Role=@{Arn=$roleArn;RoleId='AROA00000000000000000';PermissionsBoundary=@{PermissionsBoundaryArn=$boundaryArn};AssumeRolePolicyDocument=[Uri]::EscapeDataString(($assumePolicy | ConvertTo-Json -Depth 10 -Compress))}}
+    inline=@{PolicyNames=@('candidate-deletion-restore-read-only')}
+    attached=@{AttachedPolicies=@()}
+    policy=@{PolicyDocument=[Uri]::EscapeDataString(($inlinePolicy | ConvertTo-Json -Depth 10 -Compress))}
+    boundary=@{Policy=@{DefaultVersionId='v1'}}
+    boundaryVersion=@{PolicyVersion=@{Document=@{Version='2012-10-17';Statement=@(
+      @{Sid='RestoreOnlyListRetainedVersions';Effect='Allow';Condition=@{ArnEquals=@{'aws:PrincipalArn'=$roleArn}}}
+      @{Sid='RestoreOnlyReadRetainedVersions';Effect='Allow';Condition=@{ArnEquals=@{'aws:PrincipalArn'=$roleArn}}}
+    )}}}
+    s3=@{VpcEndpoints=@(@{VpcEndpointId='vpce-synthetic-s3';VpcId='vpc-synthetic';ServiceName='com.amazonaws.us-east-2.s3';State='available';PolicyDocument=($endpointPolicy | ConvertTo-Json -Depth 10 -Compress)})}
+    secrets=@{VpcEndpoints=@(@{VpcEndpointId='vpce-synthetic-secrets';VpcId='vpc-synthetic';ServiceName='com.amazonaws.us-east-2.secretsmanager';State='available';PolicyDocument=($endpointPolicy | ConvertTo-Json -Depth 10 -Compress)})}
+  }
+  function Invoke-ReplayAws([string[]]$Arguments) {
+    $request = $Arguments -join ' '
+    $resultKey = switch -CaseSensitive ($request) {
+      "iam get-role --role-name $roleName" { 'role' }
+      "iam list-role-policies --role-name $roleName" { 'inline' }
+      "iam list-attached-role-policies --role-name $roleName" { 'attached' }
+      "iam get-role-policy --role-name $roleName --policy-name candidate-deletion-restore-read-only" { 'policy' }
+      "iam get-policy --policy-arn $boundaryArn" { 'boundary' }
+      "iam get-policy-version --policy-arn $boundaryArn --version-id v1" { 'boundaryVersion' }
+      'ec2 describe-vpc-endpoints --vpc-endpoint-ids vpce-synthetic-s3' { 's3' }
+      'ec2 describe-vpc-endpoints --vpc-endpoint-ids vpce-synthetic-secrets' { 'secrets' }
+      default { throw 'UnexpectedSyntheticRoleBoundaryRequest' }
+    }
+    return $cloud.$resultKey
+  }
+  $plan = Clone $basePlan
+  $cloud = Clone $baseCloud
+  $result = Get-ReplayRoleBoundary $plan $account
+  Assert ($result.roleArn -ceq $roleArn -and $result.roleId -ceq $cloud.role.Role.RoleId) 'real operator accepts standard role/name IAM ARN'
+  Assert ($result.endpoints.Count -eq 2 -and $result.boundaryVersion -ceq 'v1') 'real operator validates both private endpoints and current workload boundary'
+  foreach ($case in @('colon-delimited-role','wrong-account','wrong-live-role','wrong-boundary','changed-trust','extra-inline-policy','attached-policy','changed-inline-policy','missing-boundary-grant','wrong-boundary-principal','changed-endpoint-policy','unavailable-endpoint')) {
+    $plan = Clone $basePlan
+    $cloud = Clone $baseCloud
+    $expectedRole = Get-ReplayPlanResource $plan 'module.platform.aws_iam_role.candidate_deletion_restore[0]'
+    switch ($case) {
+      'colon-delimited-role' { $expectedRole.arn=$roleArn.Replace(':role/',':role:'); $cloud.role.Role.Arn=$expectedRole.arn }
+      'wrong-account' { $expectedRole.arn=$roleArn.Replace($account,'999900001111'); $cloud.role.Role.Arn=$expectedRole.arn }
+      'wrong-live-role' { $cloud.role.Role.Arn=$roleArn + '-other' }
+      'wrong-boundary' { $cloud.role.Role.PermissionsBoundary.PermissionsBoundaryArn=$boundaryArn + '-other' }
+      'changed-trust' { $cloud.role.Role.AssumeRolePolicyDocument='{"Version":"2012-10-17","Statement":[]}' }
+      'extra-inline-policy' { $cloud.inline.PolicyNames+=@('unexpected') }
+      'attached-policy' { $cloud.attached.AttachedPolicies=@(@{PolicyArn=$boundaryArn}) }
+      'changed-inline-policy' { $cloud.policy.PolicyDocument='{"Version":"2012-10-17","Statement":[]}' }
+      'missing-boundary-grant' { $cloud.boundaryVersion.PolicyVersion.Document.Statement=@($cloud.boundaryVersion.PolicyVersion.Document.Statement[0]) }
+      'wrong-boundary-principal' { $cloud.boundaryVersion.PolicyVersion.Document.Statement[0].Condition.ArnEquals.'aws:PrincipalArn'=$roleArn + '-other' }
+      'changed-endpoint-policy' { $cloud.s3.VpcEndpoints[0].PolicyDocument='{"Version":"2012-10-17","Statement":[]}' }
+      'unavailable-endpoint' { $cloud.secrets.VpcEndpoints[0].State='pending' }
+    }
+    $failure = ''
+    try { $null = Get-ReplayRoleBoundary $plan $account } catch { $failure = $_.Exception.Message }
+    Assert ($failure -cmatch '^DeletionReplay(RoleIdentityChanged|RolePoliciesUnexpected|RolePolicyChanged|BoundaryCapabilityMissing|EndpointCapabilityChanged)$') "real operator rejects $case through its strict boundary"
+  }
+}
 [pscustomobject]@{suite='candidate-deletion-replay-generated-boundaries';checksPassed=$script:checks;cloudCalls=0;candidateDataRetained=$false} | ConvertTo-Json -Compress

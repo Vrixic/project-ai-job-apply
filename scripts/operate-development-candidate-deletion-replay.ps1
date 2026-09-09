@@ -107,7 +107,7 @@ function Get-ReplayRoleBoundary([object]$Plan, [string]$AccountId) {
   $expected = Get-ReplayPlanResource $Plan 'module.platform.aws_iam_role.candidate_deletion_restore[0]'
   $expectedPolicy = Get-ReplayPlanResource $Plan 'module.platform.aws_iam_role_policy.candidate_deletion_restore[0]'
   $role = (Invoke-ReplayAws @('iam','get-role','--role-name',$name)).Role
-  if ($expected.name -cne $name -or $expected.arn -cne "arn:aws:iam::$AccountId`:role:$name" -or $role.Arn -cne $expected.arn -or $role.PermissionsBoundary.PermissionsBoundaryArn -cne $expected.permissions_boundary -or (ConvertTo-DeletionReplayCanonicalJson (Read-ReplayPolicy $role.AssumeRolePolicyDocument)) -cne (ConvertTo-DeletionReplayCanonicalJson (Read-ReplayPolicy $expected.assume_role_policy))) { throw 'DeletionReplayRoleIdentityChanged' }
+  if ($expected.name -cne $name -or $expected.arn -cne "arn:aws:iam::$AccountId`:role/$name" -or $role.Arn -cne $expected.arn -or $role.PermissionsBoundary.PermissionsBoundaryArn -cne $expected.permissions_boundary -or (ConvertTo-DeletionReplayCanonicalJson (Read-ReplayPolicy $role.AssumeRolePolicyDocument)) -cne (ConvertTo-DeletionReplayCanonicalJson (Read-ReplayPolicy $expected.assume_role_policy))) { throw 'DeletionReplayRoleIdentityChanged' }
   $inline = @((Invoke-ReplayAws @('iam','list-role-policies','--role-name',$name)).PolicyNames)
   $attached = @((Invoke-ReplayAws @('iam','list-attached-role-policies','--role-name',$name)).AttachedPolicies)
   if ($inline.Count -ne 1 -or $inline[0] -cne $expectedPolicy.name -or $attached.Count -ne 0) { throw 'DeletionReplayRolePoliciesUnexpected' }
