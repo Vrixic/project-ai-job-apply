@@ -326,7 +326,7 @@ This is the master record for the delivery phases defined in the [product and sy
   Closed. Nine bounded requests read three existing initial-review cases, with no next page,
   role changes or decisions. R17 remains Closed: the isolated recovery drill is already approved.
   Fresh artifact/environment/role health matches state 290 and all 13 D2 alarms are OK.
-- New implementation gaps (2026-09-09): D2-039 adds append-only refresh for stale unpublished
+- Implemented follow-up (2026-09-09, `fab4960`/`cc2fa23`): D2-039 adds append-only refresh for stale unpublished
   provider evidence, exact decision/evidence binding, server freshness enforcement and monotonic
   catalog updates. D2-041 corrects the strict candidate-export schema for existing contribution
   authorizations, contributions/histories, private captures and Trust evidence. Actual full-export
@@ -335,7 +335,14 @@ This is the master record for the delivery phases defined in the [product and sy
   D2-040 addresses confirmed Terraform 1.9.8 incompatibility with the configured
   S3 state lock. No recovery activation plan/apply or new cloud resource was created; effective
   locking and a coherent toolchain transition are required before cloud continuation. The 296
-  restore-operator guards remain passing; no role or review fence is weakened.
+  restore-operator guards remain passing; no role or review fence is weakened. D2-041 is Complete
+  for repository implementation, with release pending. Final root PostgreSQL integration passes
+  136 tests; its seven opt-in skips pass separately as composed lifecycle 2/2, export/deletion 4/4
+  and cancellation 1/1. The full repository verifier passes 33 typecheck, 34 test/dependency and
+  20 build tasks. Full maintained infrastructure validation also passes, including current-source
+  migration/publication/restore and D2 operator guards. Fresh-database ordering and queue-backlog
+  regression fixes are included. All
+  agent work is integrated on shared `main`, with no new branches; Docker/WSL stopped after cleanup.
 - Current release checkpoint (2026-09-08, 23:53Z): exact `42b9686` closes D2-037. Existing
   candidate/admin Vercel targets are READY; the candidate route boundary passes, while the
   protected admin preview remains identity-dark. One migration task succeeds with seven log
@@ -1054,6 +1061,7 @@ Append only material cross-delivery events.
 | 2026-09-09 | D2 | User approved the new isolated development recovery role/drill/cleanup (R17 Closed) and supplied an Auth0 screenshot showing User-Delegated Access rather than the required machine Client Access grant. Fresh STS detects expired development SSO (R15 Open); no cloud mutation or token retry. Fixed the recovery operator's IAM ARN separator with real-function synthetic coverage; 296 checks pass. Exact activation-scope review excludes existing runtime/provider/reviewer/database changes. | [Recovery implementation](phase-2-extension-and-community.md#d2-038--isolated-deletion-recovery), [remaining inputs](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs) |
 
 | 2026-09-09 | D2 | User confirmation resolves the two immediate inputs: exact development SSO and reviewer authentication now pass; nine bounded requests read three initial-review cases with no decisions or role changes. All 13 D2 alarms remain healthy at unchanged state 290. Added D2-039 for stale-evidence refresh, real Trust UUIDv8 compatibility and monotonic catalog publication, and D2-040 for actual Terraform 1.9.8/S3-lock incompatibility. No recovery activation plan, apply or new cloud resource. R15/R16 are Closed, R17 remains authorized and R18 tracks the new tooling blocker. | [Current Phase 2 checkpoint](phase-2-extension-and-community.md#task-register), [single decision record](phase-2-extension-and-community.md#decisions-and-scope-changes) |
+| 2026-09-09 | D2 | `fab4960`/`cc2fa23` integrate stale-review refresh, explicit accepted provider proof, monotonic publication and complete strict seven-owner export coverage on shared main, without branches. D2-041 repository implementation is Complete. Root PostgreSQL integration passes 136 tests; the seven opt-in cases pass separately. Current-source logical recovery passes 44 migrations/68 row sets, and the full repository verifier passes. Docker/WSL stopped after exact disposable cleanup. D2-039 coordinated deployment and D2-038's already authorized cloud drill remain blocked by D2-040/R18, not by the resolved reviewer grant. | [Current implementation and tests](phase-2-extension-and-community.md#d2-039--fresh-review-evidence-and-monotonic-catalog-truth), [complete export coverage](phase-2-extension-and-community.md#d2-041--complete-candidate-data-export-coverage) |
 
 ## Cross-delivery decisions and changes
 
