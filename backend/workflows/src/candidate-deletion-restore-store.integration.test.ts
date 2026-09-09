@@ -2,8 +2,14 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { validateCandidateDataExportV1 } from "@ai-job-apply/domain";
 import { createJobCatalogDatabase } from "@ai-job-apply/jobs-service";
-import { createDatabase, type DatabaseHandle } from "@ai-job-apply/profile-service";
+import {
+  createDatabase,
+  type DatabaseHandle,
+  PostgresProfileStore,
+} from "@ai-job-apply/profile-service";
+import type { CandidateRightsPolicy } from "@ai-job-apply/profile-service/candidate-rights";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
@@ -11,6 +17,8 @@ import {
   RESTORED_CANDIDATE_RIGHTS_OWNERS,
 } from "./candidate-deletion-restore-policy.js";
 import { PostgresCandidateDeletionRestoreStore } from "./candidate-deletion-restore-store.js";
+import { PostgresCandidateRightsActivityStore } from "./candidate-rights-activities.js";
+import type { CandidateRightsActivityInputV1 } from "./candidate-rights-durable.js";
 import type { CandidateDeletionRecoveryEntry } from "./candidate-rights-recovery-ledger.js";
 
 const requested = process.env.CANDIDATE_DELETION_RESTORE_INTEGRATION === "1";
@@ -140,6 +148,172 @@ describe.skipIf(!requested)("isolated restored PostgreSQL seven-owner deletion r
     await database.client`DELETE FROM privacy.account_deletion_ledger WHERE request_id = ${entry.requestId}`;
     await database.client`DELETE FROM identity.users WHERE id = ${entry.userId}`;
   }
+
+  it("assembles a schema-valid owner-isolated export from all current nonempty PostgreSQL D2 owners", async () => {
+    const first = await seed(1);
+    const second = await seed(1);
+    const written: Uint8Array[] = [];
+    try {
+      expect(Object.values(await counts(first.entry.userId)).every((count) => count > 0)).toBe(
+        true,
+      );
+      const otherBefore = await counts(second.entry.userId);
+      const generatedAt = new Date();
+      const policy: CandidateRightsPolicy = {
+        version: "synthetic-d2-composed-export-v1",
+        accountablePolicySha256: "a".repeat(64),
+        exportArtifactLifetimeSeconds: 3_600,
+        downloadGrantLifetimeSeconds: 300,
+        backupRetentionDays: 35,
+        recentAuthenticationMaxAgeSeconds: 300,
+        ownerInventory: RESTORED_CANDIDATE_RIGHTS_OWNERS,
+        subprocessorInventory: [],
+      };
+      const profile = new PostgresProfileStore(database, {
+        candidateRightsPolicy: policy,
+        clock: () => generatedAt,
+      });
+      const principal = {
+        issuer,
+        subject: `generated-${first.entry.userId}`,
+        audience: ["synthetic-export"],
+        scopes: ["profile:export"],
+        authenticatedAt: Math.floor(generatedAt.getTime() / 1_000),
+      };
+      const requestedExport = await profile.createCandidateDataExport(
+        principal,
+        first.entry.userId,
+        "synthetic-composed-export",
+        "synthetic-composed-export",
+      );
+      expect(
+        await profile.createCandidateDataExport(
+          principal,
+          first.entry.userId,
+          "synthetic-composed-export",
+          "synthetic-composed-export",
+        ),
+      ).toEqual(requestedExport);
+      const requestedRecord = await profile.getCandidateDataExport(
+        first.entry.userId,
+        requestedExport.id,
+      );
+      if (!requestedRecord) throw new Error("Synthetic export request missing");
+      expect(await profile.getCandidateDataExport(second.entry.userId, requestedExport.id)).toBe(
+        null,
+      );
+      const unexpectedExternalCall = async (): Promise<never> => {
+        throw new Error("The generated export must not call an external deletion adapter");
+      };
+      const activities = new PostgresCandidateRightsActivityStore({
+        database,
+        policy,
+        clock: () => generatedAt,
+        // The real activity composes all six SQL exports and runs the shared validator before
+        // this in-memory sink. Nothing is uploaded, persisted on the host, or logged.
+        artifactStore: {
+          putIfAbsent: async ({ body, sha256, expiresAt }) => {
+            expect(createHash("sha256").update(body).digest("hex")).toBe(sha256);
+            expect(expiresAt.getTime()).toBe(generatedAt.getTime() + 3_600_000);
+            written.push(Uint8Array.from(body));
+            return { objectVersion: "synthetic-composed-export-version" };
+          },
+        },
+        documentObjectStore: { deleteAllVersionsAndMarkers: unexpectedExternalCall },
+        identityProvider: { revokeAndDelete: unexpectedExternalCall },
+        subprocessors: [],
+        recoveryLedger: {
+          recordConfirmed: unexpectedExternalCall,
+          markCompleted: unexpectedExternalCall,
+        },
+      });
+      const input: CandidateRightsActivityInputV1 = {
+        schemaVersion: 1,
+        workflowDefinitionVersion: 1,
+        action: "export_begin",
+        eventId: uuidv7(),
+        resourceId: requestedRecord.id,
+        operationId: requestedRecord.operationId,
+        policyVersion: policy.version,
+      };
+      await activities.beginExport(input);
+      await activities.assembleExport({ ...input, action: "export_assemble" });
+      await activities.assembleExport({ ...input, action: "export_assemble" });
+      expect(written).toHaveLength(1);
+      const serialized = Buffer.from(written[0] ?? []).toString("utf8");
+      const envelope = JSON.parse(serialized) as Record<string, unknown>;
+      expect(validateCandidateDataExportV1(envelope)).toBe(true);
+      const exported = envelope as unknown as {
+        candidate: { connectedAccounts: unknown[] };
+        profile: { contributionConsents: Record<string, unknown>[] };
+        documents: { resumes: Record<string, unknown>[] };
+        jobs: { contributions: Record<string, unknown>[] };
+        matching: { privateSavedPageCaptures: Record<string, unknown>[] };
+        billing: { entitlement: Record<string, unknown> };
+        trust: { cases: Record<string, unknown>[]; caseEvents: Record<string, unknown>[] };
+      };
+      expect(exported.candidate.connectedAccounts).toHaveLength(1);
+      expect(exported.profile.contributionConsents.length).toBeGreaterThan(0);
+      expect(
+        exported.profile.contributionConsents.some((consent) => consent.state === "revoked"),
+      ).toBe(true);
+      expect(exported.documents.resumes).toEqual([
+        expect.objectContaining({ id: first.documentId, status: "awaiting_upload" }),
+      ]);
+      expect(exported.jobs.contributions).toHaveLength(5);
+      expect(
+        exported.jobs.contributions.every((contribution) =>
+          Array.isArray(contribution.processingHistory),
+        ),
+      ).toBe(true);
+      expect(
+        exported.jobs.contributions.some(
+          (contribution) =>
+            Array.isArray(contribution.trustHistory) && contribution.trustHistory.length > 0,
+        ),
+      ).toBe(true);
+      expect(exported.matching.privateSavedPageCaptures).toEqual([
+        expect.objectContaining({ externalJobId: null, resolution: null }),
+      ]);
+      expect(exported.billing.entitlement).toMatchObject({ plan: "free", version: 1 });
+      expect(exported.trust.cases).toHaveLength(4);
+      expect(exported.trust.caseEvents.length).toBeGreaterThan(4);
+      expect(
+        exported.trust.cases.every(
+          (trustCase) => typeof trustCase.independentEvidenceDigestSha256 === "string",
+        ),
+      ).toBe(true);
+      const privateActors = await raw<{ actorId: string }[]>`
+        SELECT DISTINCT actor_id FROM trust.case_events AS event
+        JOIN trust.contribution_cases AS trust_case ON trust_case.id = event.case_id
+        WHERE trust_case.contributor_user_id = ${first.entry.userId}
+      `;
+      const otherContributions = await raw<{ id: string }[]>`
+        SELECT id FROM jobs.job_contributions WHERE owner_user_id = ${second.entry.userId}
+      `;
+      for (const value of [
+        first.entry.userId,
+        second.entry.userId,
+        principal.subject,
+        `quarantine/${first.documentId}/source`,
+        ...privateActors.map((actor) => actor.actorId),
+        ...otherContributions.map((contribution) => contribution.id),
+      ]) {
+        expect(serialized).not.toContain(value);
+      }
+      expect(
+        await profile.getCandidateDataExport(first.entry.userId, requestedExport.id),
+      ).toMatchObject({
+        state: "ready",
+        artifact: { objectVersion: "synthetic-composed-export-version" },
+      });
+      expect(await counts(second.entry.userId)).toEqual(otherBefore);
+    } finally {
+      for (const body of written) body.fill(0);
+      await finishAndRemove(first.entry);
+      await finishAndRemove(second.entry);
+    }
+  }, 60_000);
 
   it.each([0, 1])(
     "replays retained policy %i across all seven nonempty owners, preserves another owner and is idempotent",

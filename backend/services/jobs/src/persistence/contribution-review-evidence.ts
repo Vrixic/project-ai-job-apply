@@ -98,7 +98,7 @@ export class PostgresContributionReviewEvidenceReader {
       INNER JOIN jobs.job_contributions AS contribution ON contribution.id = verification.contribution_id
       WHERE contribution.id = ${input.contributionId}::uuid
         AND contribution.owner_user_id = ${input.contributorUserId}::uuid
-      ORDER BY verification.verified_at DESC LIMIT 1
+      ORDER BY verification.verified_at DESC, verification.id DESC LIMIT 1
     `;
     return row ? projectIndependentJobReviewEvidence(row) : null;
   }

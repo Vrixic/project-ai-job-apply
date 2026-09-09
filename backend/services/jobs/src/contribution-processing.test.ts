@@ -1,11 +1,11 @@
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { DevelopmentContributionCapabilitySource } from "./contribution-capability-source.js";
 import { describe, expect, it, vi } from "vitest";
 import type { JobContributionInput } from "./contribution.js";
 import {
   contributionCapabilityPolicyDigestInput,
   type D2ContributionCapabilityPolicy,
 } from "./contribution-capability-policy.js";
+import { DevelopmentContributionCapabilitySource } from "./contribution-capability-source.js";
 import {
   ContributionProcessingDependencyUnavailableError,
   ContributionProcessingService,
@@ -292,8 +292,181 @@ function accepted(): TrustContributionDecision {
     decisionId: ids.decision,
     policyVersion: "synthetic-trust-v1",
     decidedAt: "2026-09-01T12:56:00.000Z",
+    evidenceDigestSha256: "c".repeat(64),
+    independentEvidenceDigestSha256: "c".repeat(64),
   };
 }
+
+describe("immutable stale review refresh", () => {
+  it("accepts the authoritative UUIDv8 decision identity without confusing appeal and provider evidence", async () => {
+    const store = new MemoryProcessingStore();
+    const decision = {
+      ...accepted(),
+      decisionId: "8c22280f-3fc3-8f8b-8a0f-1fc74152d8c9",
+      evidenceDigestSha256: "e".repeat(64),
+    };
+    // The in-memory reconciliation fixture uses its fixed legacy decision identity; exercise
+    // copying through the real service and stop at a controlled publication dependency instead.
+    const prepare = vi
+      .spyOn(store, "preparePublication")
+      .mockRejectedValue(new Error("synthetic stop"));
+    await expect(
+      service(store, { trust: { evaluate: async () => decision } }).process(ids.contribution),
+    ).rejects.toBeInstanceOf(ContributionProcessingDependencyUnavailableError);
+    expect(store.value.trustDecision).toMatchObject({
+      decisionId: decision.decisionId,
+      evidenceDigestSha256: "e".repeat(64),
+      independentEvidenceDigestSha256: "c".repeat(64),
+    });
+    expect(prepare).toHaveBeenCalledOnce();
+  });
+
+  function staged() {
+    const proof = verified();
+    if (proof.status !== "verified") throw new Error("Expected proof");
+    const old = {
+      ...proof,
+      verificationId: "018f47a6-7b2c-7ee1-8c09-3ea174e80e30",
+      evidenceDigestSha256: "d".repeat(64),
+      verifiedAt: "2026-08-29T12:55:00.000Z",
+      providerObservation: {
+        ...proof.providerObservation,
+        observedAt: new Date("2026-08-29T12:55:00.000Z"),
+      },
+    };
+    const store = new MemoryProcessingStore({
+      ownerState: "awaiting_trust",
+      normalization: {
+        id: ids.normalization,
+        proposal: normalizeContributionForProcessing(contributionInput()),
+      },
+      independentVerification: old,
+    });
+    const beginVerificationRefresh = vi.fn(
+      async () =>
+        ({ attempt: 1, claimedBy: "synthetic:worker", claimedAt: now.toISOString() }) as {
+          attempt: number;
+          claimedBy: string;
+          claimedAt: string;
+        } | null,
+    );
+    const finishVerificationRefresh = vi.fn(async () => undefined);
+    Object.assign(store, { beginVerificationRefresh, finishVerificationRefresh });
+    const readForRefresh = vi.fn(
+      async (): Promise<TrustContributionDecision> => ({ status: "needs_review" }),
+    );
+    const verify = vi.fn(async (): Promise<IndependentProviderVerificationResult> => verified());
+    const evaluate = vi.fn(
+      async (): Promise<TrustContributionDecision> => ({ status: "needs_review" }),
+    );
+    return {
+      store,
+      old,
+      beginVerificationRefresh,
+      finishVerificationRefresh,
+      readForRefresh,
+      verify,
+      evaluate,
+      run: () =>
+        service(store, {
+          trust: { readForRefresh, evaluate },
+          independentVerifier: { verify },
+        }).process(ids.contribution),
+    };
+  }
+
+  it("appends a new actual proof while preserving original payload, normalization and historical object", async () => {
+    const f = staged();
+    const input = structuredClone(f.store.value.input);
+    const normalization = structuredClone(f.store.value.normalization);
+    await expect(f.run()).resolves.toBe("awaiting_trust");
+    expect(f.beginVerificationRefresh).toHaveBeenCalledOnce();
+    expect(f.readForRefresh).toHaveBeenCalledTimes(2);
+    expect(f.verify).toHaveBeenCalledWith({
+      contributionId: ids.contribution,
+      normalizationId: ids.normalization,
+      proposal: normalization?.proposal,
+    });
+    expect(f.store.value.independentVerification?.verificationId).toBe(ids.verification);
+    expect(f.old.verifiedAt).toBe("2026-08-29T12:55:00.000Z");
+    expect(f.store.value.input).toEqual(input);
+    expect(f.store.value.normalization).toEqual(normalization);
+    expect(f.store.preparedPublications).toHaveLength(0);
+  });
+
+  it.each(["unavailable", "mismatch", "closed"] as const)(
+    "retains old proof on %s and records bounded attempt result",
+    async (status) => {
+      const f = staged();
+      f.verify.mockResolvedValue({ ...f.old, status });
+      await expect(f.run()).resolves.toBe("awaiting_independent_verification");
+      expect(f.store.value.independentVerification).toBe(f.old);
+      expect(f.finishVerificationRefresh).toHaveBeenCalledWith(
+        expect.objectContaining({ attempt: 1, outcome: status }),
+      );
+    },
+  );
+
+  it("does not fetch when the persistent lifetime budget or cooldown refuses reservation", async () => {
+    const f = staged();
+    f.beginVerificationRefresh.mockResolvedValue(null);
+    await expect(f.run()).resolves.toBe("awaiting_independent_verification");
+    expect(f.verify).not.toHaveBeenCalled();
+  });
+
+  it("does not fetch when existing initial review cannot be established authoritatively", async () => {
+    const f = staged();
+    f.readForRefresh.mockResolvedValue({ status: "unavailable" });
+    await expect(f.run()).resolves.toBe("awaiting_trust");
+    expect(f.verify).not.toHaveBeenCalled();
+    expect(f.beginVerificationRefresh).not.toHaveBeenCalled();
+  });
+
+  it("discards fetched proof if initial review becomes terminal during the fetch", async () => {
+    const f = staged();
+    f.readForRefresh
+      .mockResolvedValueOnce({ status: "needs_review" })
+      .mockResolvedValueOnce(accepted());
+    await expect(f.run()).resolves.toBe("awaiting_trust");
+    expect(f.store.value.independentVerification).toBe(f.old);
+    expect(f.finishVerificationRefresh).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: "superseded" }),
+    );
+  });
+
+  it("holds an expired accepted proof without refreshing or changing the terminal case", async () => {
+    const f = staged();
+    f.store.value.trustDecision = {
+      ...accepted(),
+      status: "accepted",
+      contributionId: ids.contribution,
+      decisionId: ids.decision,
+      policyVersion: "synthetic-trust-v1",
+      decidedAt: now.toISOString(),
+      independentEvidenceDigestSha256: f.old.evidenceDigestSha256,
+    };
+    await expect(f.run()).resolves.toBe("awaiting_independent_verification");
+    expect(f.verify).not.toHaveBeenCalled();
+    expect(f.readForRefresh).not.toHaveBeenCalled();
+    expect(f.store.preparedPublications).toHaveLength(0);
+  });
+
+  it("holds a future-dated persisted proof without fetching or changing its timestamp", async () => {
+    const f = staged();
+    f.store.value.independentVerification = { ...f.old, verifiedAt: "2026-09-02T12:55:00.000Z" };
+    await expect(f.run()).resolves.toBe("awaiting_independent_verification");
+    expect(f.verify).not.toHaveBeenCalled();
+  });
+
+  it("never publishes a fresh proof using a decision bound to another digest", async () => {
+    const store = new MemoryProcessingStore();
+    const decision = { ...accepted(), independentEvidenceDigestSha256: "e".repeat(64) };
+    await expect(
+      service(store, { trust: { evaluate: async () => decision } }).process(ids.contribution),
+    ).resolves.toBe("awaiting_independent_verification");
+    expect(store.preparedPublications).toHaveLength(0);
+  });
+});
 
 function service(
   store: MemoryProcessingStore,

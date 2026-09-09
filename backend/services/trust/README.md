@@ -20,9 +20,12 @@ the scheduler, and the alias-targeted SQS consumer are deployed. The receive-onl
 awaits batch records sequentially with one shared database connection per invocation; the SQS
 mapping maximum and Lambda reservation remain aligned at two.
 
-Jobs `0021` ran once with exit `0` and seven exact aggregate success logs, verifying 41 migrations
-and 68 relations across six owners and ten schemas. Exact runtime readback and zero Terraform
-drift pass. Historical point-in-time restore evidence covers 39 migrations, not this boundary.
+The `42b9686` release ran Jobs `0022` with exit `0` and seven exact aggregate success logs,
+verifying 42 migrations and 68 relations across six owners and ten schemas. State 290 runs
+Gateway/scheduled/Trust 55/17/13 with exact runtime readback and a no-change plan. Fresh September 9
+health and exact three-scope agent authentication pass; three initial cases are readable and no
+decision has been submitted. Historical point-in-time restore evidence covers 39 migrations,
+not this boundary. Current-source Jobs `0023` and Trust `0004` remain undeployed.
 The dependency/image blocker is closed under D2-034/D2-R13. The user confirms extension reload,
 sign-in, and successful job addition, closing D2-033/D2-R11; that does not establish processing,
 Trust acceptance, or publication. Exact human identity/MFA/scope checks and the user-confirmed
@@ -31,6 +34,13 @@ empty local appeal-queue read pass. Hosted reviewer and actual decision journeys
 - A pure contribution-trust state machine starts every case in `needs_review`.
 - Initial acceptance requires the fixed `independently_verified` reason. Rejection, withdrawal,
   takedown, appeal filing, and appeal resolution use closed reason-code sets.
+- Forward migration `0004_accepted_independent_evidence` records the independent provider basis
+  separately from reviewer/appeal evidence on cases and immutable events. New initial acceptance
+  and appeal reversal require an exact, nonfuture provider proof no more than 24 hours old;
+  historical missing bases stay null. Initial review binds the reviewed digest, while an appeal
+  reversal retains its separate approved appeal digest. A nonaccepting transition cannot create
+  or substitute a basis, and withdrawal clears the active basis. Jobs still rechecks freshness
+  and the exact binding before publication. These changes are not deployed yet.
 - An adverse decision can receive at most one evidence-bound appeal. The appeal decision must be
   made by a reviewer other than the adverse-decision reviewer.
 - Each case binds an injected policy version and appeal-window duration. The repository does **not**
@@ -44,8 +54,10 @@ empty local appeal-queue read pass. Hosted reviewer and actual decision journeys
   event identifier.
 - The reconciliation reader first exposes only decision and contribution identifiers, then
   requires the exact decision, contribution, and contributor-owner tuple before returning a
-  fixed status, policy version, and timestamp. Reviewer identity, evidence, reasons, source URL,
-  and contribution content never enter the signal or transport nudge.
+  fixed status, policy version, timestamp and internal evidence bindings. Reviewer event evidence
+  and the independent provider-proof acceptance basis remain distinct. Neither enters the
+  identifier-only signal/transport nudge; reviewer identity, reasons, source URL and contribution
+  content also remain excluded.
 - Owner reads require the exact contributor identifier and expose only the owner's case status and
   contributor signal codes. They omit reviewer identities, evidence digests, source signals, and
   other contributors. Source signals remain reviewer-internal.
@@ -97,13 +109,17 @@ pnpm --filter @ai-job-apply/trust-service test:integration
 ```
 
 The integration suites initialize the built Profile prerequisite through `0009`, apply and replay
-Trust migrations through `0003_decision_signals`, then prove owner isolation,
+Trust migrations through `0004_accepted_independent_evidence`, then prove owner isolation,
 idempotent case opening,
 different-reviewer enforcement at the SQL boundary, version conflicts, immutable audit/evidence,
 private signal projection, candidate export redaction, no-public-execute function ACLs,
 unauthorized and cross-owner deletion denial, transactional child-first candidate deletion, and
 absence of Trust-to-Jobs database dependencies. Candidate deletion is the only context in which
 the protected history may be removed.
+
+Quiesce contribution processing and reviewer decisions before deploying Jobs `0023` and Trust
+`0004`, then release the coordinated Gateway and workers before resuming. The old singleton Jobs
+verification writer is not compatible with `0023`; do not roll it back onto the new schema.
 
 ## Remaining authority and acceptance
 

@@ -57,6 +57,10 @@ async function parked(client: postgres.Sql | postgres.TransactionSql, lock: bool
       ORDER BY occurred_at DESC, id DESC LIMIT 1
     ) AS latest ON true
     WHERE queue.state = 'parked' AND queue.last_error_code = 'provider_pending'
+      -- Refresh attempts have their own non-resettable budget/cooldown, driven by the scheduler.
+      AND queue.verification_refresh_attempts = 0
+      AND NOT EXISTS (SELECT 1 FROM jobs.job_contribution_trust_decisions
+        WHERE contribution_id = queue.contribution_id)
     ORDER BY CASE WHEN latest.reason_code IN
       ('provider_temporarily_unavailable', 'provider_observation_mismatch') THEN 0 ELSE 1 END,
       queue.id LIMIT 25

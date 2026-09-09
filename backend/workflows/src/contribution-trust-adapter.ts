@@ -31,6 +31,8 @@ function validDecision(
       value.contributionId === contributionId &&
       UUID_V8_PATTERN.test(value.decisionId) &&
       POLICY_VERSION_PATTERN.test(value.policyVersion) &&
+      (value.status !== "accepted" ||
+        SHA256_PATTERN.test(value.independentEvidenceDigestSha256 ?? "")) &&
       validInstant(value.decidedAt),
   );
 }
@@ -49,6 +51,25 @@ export class AuthoritativeContributionTrustDecisionAdapter
   ) {
     if (!UUID_PATTERN.test(caseOpenerReviewerId)) {
       throw new TypeError("An explicit Trust case-opener reviewer is required");
+    }
+  }
+
+  async readForRefresh(input: {
+    contributionId: string;
+    contributorUserId: string;
+  }): Promise<TrustContributionDecision> {
+    if (!UUID_V7_PATTERN.test(input.contributionId) || !UUID_PATTERN.test(input.contributorUserId))
+      return { status: "unavailable" };
+    try {
+      const latest = await this.decisions.readLatestDecision(input);
+      if (
+        !validDecision(latest, input.contributionId) ||
+        (latest.status === "needs_review" && latest.initialReviewPending !== true)
+      )
+        return { status: "unavailable" };
+      return latest;
+    } catch {
+      return { status: "unavailable" };
     }
   }
 

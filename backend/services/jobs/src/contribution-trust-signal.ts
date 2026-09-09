@@ -26,6 +26,8 @@ export interface TrustDecisionAuthorityPort {
     decisionId: string;
     policyVersion: string;
     decidedAt: string;
+    evidenceDigestSha256?: string;
+    independentEvidenceDigestSha256?: string;
   } | null>;
 }
 
@@ -105,6 +107,27 @@ export class ContributionTrustDecisionSignalConsumer {
       !POLICY_VERSION_PATTERN.test(decision.policyVersion) ||
       !exactInstant(decision.decidedAt)
     ) {
+      throw new Error("The exact authoritative Trust decision is unavailable");
+    }
+
+    if (
+      decision.status === "accepted" &&
+      !/^[a-f0-9]{64}$/u.test(decision.independentEvidenceDigestSha256 ?? "")
+    ) {
+      const copied = contribution.trustDecision;
+      // The authoritative reader binds this immutable event ID to its exact case/version.
+      // SQL0023 only made an already copied singleton basis explicit. A replay may acknowledge
+      // that same decision, but cannot derive a basis, copy again, wake work, or alter a case.
+      if (
+        decision.independentEvidenceDigestSha256 === undefined &&
+        copied?.status === "accepted" &&
+        copied.decisionId === decision.decisionId &&
+        copied.contributionId === decision.contributionId &&
+        copied.policyVersion === decision.policyVersion &&
+        copied.decidedAt === decision.decidedAt &&
+        /^[a-f0-9]{64}$/u.test(copied.independentEvidenceDigestSha256 ?? "")
+      )
+        return Object.freeze({ handled: 1, copied: 0, requeued: 0 });
       throw new Error("The exact authoritative Trust decision is unavailable");
     }
 

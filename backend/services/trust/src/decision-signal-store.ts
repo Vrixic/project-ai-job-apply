@@ -20,6 +20,7 @@ export interface TrustDecisionSignalReference {
 export type AuthoritativeTrustContributionDecision =
   | {
       status: "needs_review";
+      initialReviewPending?: boolean;
       contributionId: string;
       decisionId: string;
       policyVersion: string;
@@ -27,6 +28,8 @@ export type AuthoritativeTrustContributionDecision =
     }
   | {
       status: "accepted" | "rejected" | "withdrawn" | "taken_down";
+      evidenceDigestSha256?: string;
+      independentEvidenceDigestSha256?: string;
       contributionId: string;
       decisionId: string;
       policyVersion: string;
@@ -113,14 +116,18 @@ export class PostgresTrustDecisionSignalStore implements TrustDecisionDeliverySt
           | "withdrawn"
           | "taken_down";
         decidedAt: Date | string;
+        evidenceDigestSha256: string | null;
+        independentEvidenceDigestSha256: string | null;
       }[]
     >`
       SELECT event.event_id AS "decisionId", event.contribution_id AS "contributionId",
         event.policy_version AS "policyVersion", event.resulting_state AS "resultingState",
-        event.occurred_at AS "decidedAt"
+        event.occurred_at AS "decidedAt", event.evidence_digest_sha256 AS "evidenceDigestSha256",
+        event.independent_evidence_digest_sha256 AS "independentEvidenceDigestSha256"
       FROM trust.case_events AS event
       JOIN trust.contribution_cases AS trust_case ON trust_case.id = event.case_id
       WHERE event.event_id = ${input.decisionId}
+        AND event.event_id = trust.case_transition_event_id(event.case_id, event.case_version)
         AND event.contribution_id = ${input.contributionId}
         AND trust_case.contributor_user_id = ${input.contributorUserId}
     `;
@@ -128,7 +135,9 @@ export class PostgresTrustDecisionSignalStore implements TrustDecisionDeliverySt
       !row ||
       row.decisionId !== input.decisionId ||
       row.contributionId !== input.contributionId ||
-      !POLICY_VERSION_PATTERN.test(row.policyVersion)
+      !POLICY_VERSION_PATTERN.test(row.policyVersion) ||
+      (row.independentEvidenceDigestSha256 !== null &&
+        !/^[a-f0-9]{64}$/.test(row.independentEvidenceDigestSha256))
     ) {
       return null;
     }
@@ -141,6 +150,14 @@ export class PostgresTrustDecisionSignalStore implements TrustDecisionDeliverySt
       decisionId: row.decisionId,
       policyVersion: row.policyVersion,
       decidedAt: instant(row.decidedAt),
+      ...(row.resultingState === "accepted" && row.independentEvidenceDigestSha256
+        ? { independentEvidenceDigestSha256: row.independentEvidenceDigestSha256 }
+        : {}),
+      ...(row.resultingState === "needs_review" || row.resultingState === "appeal_pending"
+        ? { initialReviewPending: row.resultingState === "needs_review" }
+        : row.evidenceDigestSha256
+          ? { evidenceDigestSha256: row.evidenceDigestSha256 }
+          : {}),
     });
   }
 
@@ -167,14 +184,18 @@ export class PostgresTrustDecisionSignalStore implements TrustDecisionDeliverySt
           | "withdrawn"
           | "taken_down";
         decidedAt: Date | string;
+        evidenceDigestSha256: string | null;
+        independentEvidenceDigestSha256: string | null;
       }[]
     >`
       SELECT event.event_id AS "decisionId", event.contribution_id AS "contributionId",
         event.policy_version AS "policyVersion", event.resulting_state AS "resultingState",
-        event.occurred_at AS "decidedAt"
+        event.occurred_at AS "decidedAt", event.evidence_digest_sha256 AS "evidenceDigestSha256",
+        event.independent_evidence_digest_sha256 AS "independentEvidenceDigestSha256"
       FROM trust.case_events AS event
       JOIN trust.contribution_cases AS trust_case ON trust_case.id = event.case_id
       WHERE event.contribution_id = ${input.contributionId}
+        AND event.event_id = trust.case_transition_event_id(event.case_id, event.case_version)
         AND trust_case.contributor_user_id = ${input.contributorUserId}
       ORDER BY event.case_version DESC
       LIMIT 1
@@ -183,7 +204,9 @@ export class PostgresTrustDecisionSignalStore implements TrustDecisionDeliverySt
       !row ||
       row.contributionId !== input.contributionId ||
       !UUID_V8_PATTERN.test(row.decisionId) ||
-      !POLICY_VERSION_PATTERN.test(row.policyVersion)
+      !POLICY_VERSION_PATTERN.test(row.policyVersion) ||
+      (row.independentEvidenceDigestSha256 !== null &&
+        !/^[a-f0-9]{64}$/.test(row.independentEvidenceDigestSha256))
     ) {
       return null;
     }
@@ -196,6 +219,14 @@ export class PostgresTrustDecisionSignalStore implements TrustDecisionDeliverySt
       decisionId: row.decisionId,
       policyVersion: row.policyVersion,
       decidedAt: instant(row.decidedAt),
+      ...(row.resultingState === "accepted" && row.independentEvidenceDigestSha256
+        ? { independentEvidenceDigestSha256: row.independentEvidenceDigestSha256 }
+        : {}),
+      ...(row.resultingState === "needs_review" || row.resultingState === "appeal_pending"
+        ? { initialReviewPending: row.resultingState === "needs_review" }
+        : row.evidenceDigestSha256
+          ? { evidenceDigestSha256: row.evidenceDigestSha256 }
+          : {}),
     });
   }
 

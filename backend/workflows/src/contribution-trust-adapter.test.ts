@@ -25,10 +25,48 @@ function decision(status: "needs_review" | "accepted" | "rejected" = "needs_revi
     decisionId: ids.decision,
     policyVersion: "synthetic-trust-v1",
     decidedAt: "2026-09-02T12:00:00.000Z",
+    evidenceDigestSha256: "a".repeat(64),
+    independentEvidenceDigestSha256: "a".repeat(64),
+    initialReviewPending: status === "needs_review",
   } as const;
 }
 
 describe("AuthoritativeContributionTrustDecisionAdapter", () => {
+  it.each([true, false, undefined])(
+    "refresh requires explicit existing initial-review state (%s)",
+    async (initialReviewPending) => {
+      const openReview = vi.fn();
+      const latest = { ...decision(), initialReviewPending };
+      const adapter = new AuthoritativeContributionTrustDecisionAdapter(
+        { openReview },
+        { readLatestDecision: vi.fn(async () => latest) } as never,
+        ids.opener,
+      );
+      const result = await adapter.readForRefresh({
+        contributionId: ids.contribution,
+        contributorUserId: ids.owner,
+      });
+      expect(result.status).toBe(initialReviewPending === true ? "needs_review" : "unavailable");
+      expect(openReview).not.toHaveBeenCalled();
+    },
+  );
+
+  it("refresh never opens a missing case", async () => {
+    const openReview = vi.fn();
+    const adapter = new AuthoritativeContributionTrustDecisionAdapter(
+      { openReview },
+      { readLatestDecision: async () => null },
+      ids.opener,
+    );
+    expect(
+      await adapter.readForRefresh({
+        contributionId: ids.contribution,
+        contributorUserId: ids.owner,
+      }),
+    ).toEqual({ status: "unavailable" });
+    expect(openReview).not.toHaveBeenCalled();
+  });
+
   it("exact-reads an existing terminal owner-bound decision without opening", async () => {
     const openReview = vi.fn();
     const readLatestDecision = vi.fn(async () => decision("accepted"));

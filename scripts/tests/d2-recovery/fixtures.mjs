@@ -233,7 +233,8 @@ export async function seedD2RecoveryFixtures(client, profileClient, reportStage 
       reviewerId,
       outcome: appeal ? "rejected" : "accepted",
       reasonCode: appeal ? "content_mismatch" : "independently_verified",
-      evidenceDigestSha256: digest(`${id}-review`),
+      evidenceDigestSha256: appeal ? digest(`${id}-review`) : digest(id),
+      ...(!appeal ? { independentEvidenceDigestSha256: digest(id) } : {}),
       occurredAt: new Date(),
     });
     if (appeal) {
@@ -246,6 +247,7 @@ export async function seedD2RecoveryFixtures(client, profileClient, reportStage 
         reviewerId: appealReviewerId,
         outcome: "reversed",
         evidenceDigestSha256: digest(`${id}-reversal`),
+        independentEvidenceDigestSha256: digest(id),
         occurredAt: new Date(),
       });
     }

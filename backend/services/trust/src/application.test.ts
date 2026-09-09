@@ -175,6 +175,17 @@ function contributionEvidence(input: {
   verify?: boolean;
 }): ContributionEligibilityEvidencePort {
   return {
+    readReviewEvidence: async () => ({
+      contributionId: input.contributionId,
+      evidenceDigestSha256,
+      verifiedAt: now.toISOString(),
+      provider: "greenhouse",
+      sourceUrl: "https://job-boards.greenhouse.io/synthetic/jobs/123",
+      title: "Synthetic engineer",
+      companyName: "Synthetic",
+      description: "Synthetic public description",
+      locations: [],
+    }),
     readEligibility: async (contributionId) =>
       contributionId === input.contributionId
         ? {
@@ -208,7 +219,277 @@ function openFixture(store: MemoryTrustStore, input?: { reviewerId?: string; at?
   return { caseId, contributionId, contributorUserId, reviewerId, trustCase };
 }
 
+function appealFixture(store: MemoryTrustStore) {
+  const fixture = openFixture(store);
+  const rejected = decideContributionReview(fixture.trustCase, {
+    reviewerId: fixture.reviewerId,
+    outcome: "rejected",
+    reasonCode: "content_mismatch",
+    evidenceDigestSha256,
+    occurredAt: now,
+  }).trustCase;
+  const appealed = fileTrustAppeal(rejected, {
+    contributorUserId: fixture.contributorUserId,
+    evidenceDigestSha256: "c".repeat(64),
+    occurredAt: now,
+  }).trustCase;
+  store.cases.set(fixture.caseId, appealed);
+  return fixture;
+}
+
 describe("TrustApplicationService", () => {
+  it("keeps independently approved appeal evidence distinct from the fresh accepted provider basis", async () => {
+    const store = new MemoryTrustStore();
+    const fixture = appealFixture(store);
+    const verified: Array<Parameters<ContributionEligibilityEvidencePort["verifyEvidence"]>[0]> =
+      [];
+    const service = new TrustApplicationService({
+      store,
+      reviewerAuthority: allowReviewers(),
+      contributionEvidence: {
+        ...contributionEvidence(fixture),
+        verifyEvidence: async (input) => {
+          verified.push(input);
+          return true;
+        },
+      },
+      now: () => later,
+    });
+    const originalResolve = store.resolveAppeal.bind(store);
+    let command: Parameters<TrustApplicationStore["resolveAppeal"]>[2] | undefined;
+    store.resolveAppeal = async (caseId, version, input) => {
+      command = input;
+      return originalResolve(caseId, version, input);
+    };
+    const result = await service.resolveAppeal({
+      reviewerId: uuidv7(),
+      caseId: fixture.caseId,
+      expectedVersion: 3,
+      outcome: "reversed",
+      evidenceDigestSha256: secondEvidenceDigestSha256,
+    });
+    expect(result).toMatchObject({
+      state: "accepted",
+      independentEvidenceDigestSha256: evidenceDigestSha256,
+    });
+    expect(command).toMatchObject({
+      evidenceDigestSha256: secondEvidenceDigestSha256,
+      independentEvidenceDigestSha256: evidenceDigestSha256,
+      occurredAt: later,
+    });
+    expect(verified).toEqual([
+      {
+        contributionId: fixture.contributionId,
+        evidenceDigestSha256: secondEvidenceDigestSha256,
+        purpose: "appeal_resolution",
+      },
+      {
+        contributionId: fixture.contributionId,
+        evidenceDigestSha256,
+        purpose: "independent_verification",
+        freshAt: later.toISOString(),
+      },
+    ]);
+  });
+
+  it.each([
+    "missing",
+    "stale",
+    "future",
+    "malformed",
+    "noncanonical",
+    "other-contribution",
+    "bad-digest",
+    "unverified",
+  ] as const)("does not reverse an approved appeal with %s provider proof", async (failure) => {
+    const store = new MemoryTrustStore();
+    const fixture = appealFixture(store);
+    const port = contributionEvidence(fixture);
+    const original = await port.readReviewEvidence?.({
+      contributionId: fixture.contributionId,
+      contributorUserId: fixture.contributorUserId,
+    });
+    if (!original) throw new Error("Synthetic proof missing");
+    const proof = {
+      ...original,
+      ...(failure === "stale" ? { verifiedAt: "2026-08-31T12:59:59.999Z" } : {}),
+      ...(failure === "future" ? { verifiedAt: "2026-09-01T13:00:00.001Z" } : {}),
+      ...(failure === "malformed" ? { verifiedAt: "invalid" } : {}),
+      ...(failure === "noncanonical" ? { verifiedAt: "2026-09-01T12:00:00Z" } : {}),
+      ...(failure === "other-contribution" ? { contributionId: uuidv7() } : {}),
+      ...(failure === "bad-digest" ? { evidenceDigestSha256: "A".repeat(64) } : {}),
+    };
+    const service = new TrustApplicationService({
+      store,
+      reviewerAuthority: allowReviewers(),
+      contributionEvidence: {
+        ...port,
+        readReviewEvidence: async () => (failure === "missing" ? null : proof),
+        verifyEvidence: async (input) =>
+          input.purpose === "appeal_resolution" || failure !== "unverified",
+      },
+      now: () => later,
+    });
+    await expect(
+      service.resolveAppeal({
+        reviewerId: uuidv7(),
+        caseId: fixture.caseId,
+        expectedVersion: 3,
+        outcome: "reversed",
+        evidenceDigestSha256: secondEvidenceDigestSha256,
+      }),
+    ).rejects.toMatchObject({ code: "evidence_not_verified" });
+    expect(store.mutationCount).toBe(0);
+    expect(store.cases.get(fixture.caseId)).toMatchObject({
+      state: "appeal_pending",
+      version: 3,
+      independentEvidenceDigestSha256: null,
+    });
+  });
+
+  it("does not require new provider proof when upholding an adverse decision", async () => {
+    const store = new MemoryTrustStore();
+    const fixture = appealFixture(store);
+    const port = contributionEvidence(fixture);
+    const service = new TrustApplicationService({
+      store,
+      reviewerAuthority: allowReviewers(),
+      contributionEvidence: {
+        ...port,
+        readReviewEvidence: async () => {
+          throw new Error("must not read");
+        },
+      },
+      now: () => later,
+    });
+    await expect(
+      service.resolveAppeal({
+        reviewerId: uuidv7(),
+        caseId: fixture.caseId,
+        expectedVersion: 3,
+        outcome: "upheld",
+        evidenceDigestSha256: secondEvidenceDigestSha256,
+      }),
+    ).resolves.toMatchObject({ state: "rejected", independentEvidenceDigestSha256: null });
+  });
+
+  it.each(["initial", "appeal"] as const)(
+    "rejects an invalid acceptance clock for %s",
+    async (kind) => {
+      const store = new MemoryTrustStore();
+      const fixture = kind === "initial" ? openFixture(store) : appealFixture(store);
+      const service = new TrustApplicationService({
+        store,
+        reviewerAuthority: allowReviewers(),
+        contributionEvidence: contributionEvidence(fixture),
+        now: () => new Date(Number.NaN),
+      });
+      const promise =
+        kind === "initial"
+          ? service.decideInitialReview({
+              reviewerId: uuidv7(),
+              caseId: fixture.caseId,
+              expectedVersion: 1,
+              outcome: "accepted",
+              reasonCode: "independently_verified",
+              evidenceDigestSha256,
+            })
+          : service.resolveAppeal({
+              reviewerId: uuidv7(),
+              caseId: fixture.caseId,
+              expectedVersion: 3,
+              outcome: "reversed",
+              evidenceDigestSha256: secondEvidenceDigestSha256,
+            });
+      await expect(promise).rejects.toMatchObject({ code: "dependency_unavailable" });
+      expect(store.mutationCount).toBe(0);
+    },
+  );
+
+  it.each([
+    ["2026-08-31T13:00:00.000Z", true],
+    ["2026-08-31T12:59:59.999Z", false],
+    ["2026-09-01T13:00:00.001Z", false],
+    ["invalid", false],
+  ] as const)(
+    "enforces the exact initial acceptance freshness boundary for %s",
+    async (verifiedAt, allowed) => {
+      const store = new MemoryTrustStore();
+      const fixture = openFixture(store);
+      const port = contributionEvidence(fixture);
+      const original = await port.readReviewEvidence?.({
+        contributionId: fixture.contributionId,
+        contributorUserId: fixture.contributorUserId,
+      });
+      const observed: Array<string | undefined> = [];
+      if (!original) throw new Error("Synthetic proof missing");
+      const service = new TrustApplicationService({
+        store,
+        reviewerAuthority: allowReviewers(),
+        contributionEvidence: {
+          ...port,
+          readReviewEvidence: async () => ({ ...original, verifiedAt }),
+          verifyEvidence: async (input) => {
+            observed.push(input.freshAt);
+            return true;
+          },
+        },
+        now: () => later,
+      });
+      const request = service.decideInitialReview({
+        reviewerId: fixture.reviewerId,
+        caseId: fixture.caseId,
+        expectedVersion: 1,
+        outcome: "accepted",
+        reasonCode: "independently_verified",
+        evidenceDigestSha256,
+      });
+      if (allowed) {
+        await expect(request).resolves.toMatchObject({ state: "accepted" });
+        expect(observed).toEqual([later.toISOString()]);
+      } else {
+        await expect(request).rejects.toMatchObject({ code: "evidence_not_verified" });
+        expect(store.mutationCount).toBe(0);
+        expect(observed).toEqual([]);
+      }
+    },
+  );
+
+  it("rejects an earlier reviewed digest after the same case receives a new Jobs proof", async () => {
+    const store = new MemoryTrustStore();
+    const fixture = openFixture(store);
+    const port = contributionEvidence(fixture);
+    const original = await port.readReviewEvidence?.({
+      contributionId: fixture.contributionId,
+      contributorUserId: fixture.contributorUserId,
+    });
+    if (!original) throw new Error("Synthetic proof missing");
+    const service = new TrustApplicationService({
+      store,
+      reviewerAuthority: allowReviewers(),
+      contributionEvidence: {
+        ...port,
+        readReviewEvidence: async () => ({
+          ...original,
+          evidenceDigestSha256: secondEvidenceDigestSha256,
+        }),
+      },
+      now: () => later,
+    });
+    await expect(
+      service.decideInitialReview({
+        reviewerId: fixture.reviewerId,
+        caseId: fixture.caseId,
+        expectedVersion: 1,
+        outcome: "accepted",
+        reasonCode: "independently_verified",
+        evidenceDigestSha256,
+      }),
+    ).rejects.toMatchObject({ code: "evidence_not_verified" });
+    expect(store.mutationCount).toBe(0);
+    expect(store.cases.get(fixture.caseId)?.version).toBe(1);
+  });
+
   it("requires explicit reviewer read authority and returns no Jobs mutation", async () => {
     const store = new MemoryTrustStore();
     const fixture = openFixture(store);
@@ -363,6 +644,7 @@ describe("TrustApplicationService", () => {
       store,
       reviewerAuthority: allowReviewers(),
       contributionEvidence: {
+        ...contributionEvidence(fixture),
         readEligibility: async () => ({
           contributionId: fixture.contributionId,
           contributorUserId: fixture.contributorUserId,
@@ -396,7 +678,7 @@ describe("TrustApplicationService", () => {
       evidenceDigestSha256,
     });
     expect(accepted.state).toBe("accepted");
-    expect(observedPurposes).toEqual(["independent_verification", "independent_verification"]);
+    expect(observedPurposes).toEqual(["independent_verification"]);
 
     await expect(
       service.decideInitialReview({
@@ -453,6 +735,7 @@ describe("TrustApplicationService", () => {
         outcome: "accepted",
         reasonCode: "independently_verified",
         evidenceDigestSha256,
+        independentEvidenceDigestSha256: evidenceDigestSha256,
         occurredAt: later,
       }).trustCase,
     );

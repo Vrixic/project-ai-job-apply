@@ -59,6 +59,8 @@ export interface TrustCase {
   appealCount: 0 | 1;
   adverseDecision: AdverseDecision | null;
   pendingAppealEvidenceDigestSha256: string | null;
+  /** Last accepted independent provider proof; null for historical decisions without a basis. */
+  independentEvidenceDigestSha256: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -166,6 +168,7 @@ export function openTrustCase(input: {
     appealCount: 0,
     adverseDecision: null,
     pendingAppealEvidenceDigestSha256: null,
+    independentEvidenceDigestSha256: null,
     createdAt: occurredAt,
     updatedAt: occurredAt,
   };
@@ -191,6 +194,7 @@ export function decideContributionReview(
       | "malicious_or_deceptive"
       | "license_or_policy_block";
     evidenceDigestSha256: string;
+    independentEvidenceDigestSha256?: string;
     occurredAt: Date;
   },
 ): TrustTransition {
@@ -202,10 +206,20 @@ export function decideContributionReview(
     throw new TrustPolicyError("Review outcome and fixed reason code do not match");
   }
   const reviewerId = uuid(input.reviewerId, "reviewerId");
+  const independentEvidenceDigestSha256 = accepted
+    ? digest(input.independentEvidenceDigestSha256 ?? "", "independentEvidenceDigestSha256")
+    : null;
+  if (accepted && independentEvidenceDigestSha256 !== input.evidenceDigestSha256) {
+    throw new TrustPolicyError("Initial acceptance must bind the reviewed independent evidence");
+  }
+  if (!accepted && input.independentEvidenceDigestSha256 !== undefined) {
+    throw new TrustPolicyError("A rejected review cannot establish independent evidence");
+  }
   const updated = next(current, input.occurredAt);
   const trustCase: TrustCase = {
     ...updated,
     state: input.outcome,
+    independentEvidenceDigestSha256,
     adverseDecision: accepted
       ? null
       : adverse("rejected", reviewerId, updated.updatedAt, current.appealWindowMilliseconds),
@@ -233,6 +247,7 @@ export function withdrawContribution(
     ...next(current, input.occurredAt),
     state: "withdrawn" as const,
     pendingAppealEvidenceDigestSha256: null,
+    independentEvidenceDigestSha256: null,
   };
   return {
     trustCase,
@@ -326,9 +341,13 @@ export function decideTrustAppeal(
     reviewerId: string;
     outcome: "upheld" | "reversed";
     evidenceDigestSha256: string;
+    independentEvidenceDigestSha256?: string;
     occurredAt: Date;
   },
 ): TrustTransition {
+  if (input.outcome !== "upheld" && input.outcome !== "reversed") {
+    throw new TrustPolicyError("Appeal outcome is invalid");
+  }
   if (current.state !== "appeal_pending" || !current.adverseDecision) {
     throw new TrustPolicyError("No appeal is pending");
   }
@@ -336,10 +355,17 @@ export function decideTrustAppeal(
   if (reviewerId === current.adverseDecision.reviewerId) {
     throw new TrustPolicyError("An appeal requires a different reviewer");
   }
+  if (input.outcome === "upheld" && input.independentEvidenceDigestSha256 !== undefined) {
+    throw new TrustPolicyError("An upheld appeal cannot establish independent evidence");
+  }
   const trustCase: TrustCase = {
     ...next(current, input.occurredAt),
     state: input.outcome === "upheld" ? current.adverseDecision.state : "accepted",
     pendingAppealEvidenceDigestSha256: null,
+    independentEvidenceDigestSha256:
+      input.outcome === "reversed"
+        ? digest(input.independentEvidenceDigestSha256 ?? "", "independentEvidenceDigestSha256")
+        : current.independentEvidenceDigestSha256,
   };
   return {
     trustCase,

@@ -5,11 +5,18 @@ import {
   DEVELOPMENT_CONTRIBUTION_OPERATION_LEASE_MS,
   developmentContributionDescriptorForLease,
 } from "../contribution-capability-source.js";
+import {
+  CONTRIBUTION_EVIDENCE_MAX_AGE_MS,
+  CONTRIBUTION_VERIFICATION_REFRESH_COOLDOWN_MS,
+  CONTRIBUTION_VERIFICATION_REFRESH_MAX_ATTEMPTS,
+  isContributionEvidenceFresh,
+} from "../contribution-evidence-freshness.js";
 import type {
   ContributionOwnerReasonCode,
   ContributionOwnerState,
   ContributionProcessingStore,
   ContributionPublicationReconciler,
+  ContributionVerificationRefreshReservation,
   IndependentVerificationEvidence,
   LoadedContributionProcessing,
   PreparedPublicationReconciliation,
@@ -24,6 +31,7 @@ import type {
 import { canonicalizeJobUrl } from "../domain/canonical-job.js";
 import {
   type CatalogObservation,
+  ConflictingObservationError,
   type PostgresJobCatalog,
   ProbableDuplicateObservationError,
 } from "./catalog.js";
@@ -69,6 +77,7 @@ interface LoadedRow {
   trustDecisionId: string | null;
   trustPolicyVersion: string | null;
   trustDecidedAt: Date | string | null;
+  trustEvidenceDigestSha256: string | null;
   publicationReconciliationId: string | null;
   publicationJobId: string | null;
   publicationSourceId: string | null;
@@ -198,6 +207,9 @@ function loaded(row: LoadedRow): LoadedContributionProcessing {
       decisionId: row.trustDecisionId,
       policyVersion: row.trustPolicyVersion,
       decidedAt: timestamp(row.trustDecidedAt),
+      ...(row.trustEvidenceDigestSha256
+        ? { independentEvidenceDigestSha256: row.trustEvidenceDigestSha256 }
+        : {}),
     });
   }
 
@@ -263,21 +275,25 @@ async function loadWith(
       verification.verified_at AS "verifiedAt",
       trust.status AS "trustStatus", trust.id AS "trustDecisionId",
       trust.trust_policy_version AS "trustPolicyVersion", trust.decided_at AS "trustDecidedAt",
+      trust.evidence_digest_sha256 AS "trustEvidenceDigestSha256",
       publication.id AS "publicationReconciliationId", publication.job_id AS "publicationJobId",
       publication.source_id AS "publicationSourceId",
       publication.independent_verification_id AS "publicationVerificationId"
     FROM jobs.job_contributions AS contribution
     LEFT JOIN jobs.job_contribution_normalizations AS normalization
       ON normalization.contribution_id = contribution.id
-    LEFT JOIN jobs.job_contribution_independent_verifications AS verification
-      ON verification.contribution_id = contribution.id
+    LEFT JOIN LATERAL (
+      SELECT proof.* FROM jobs.job_contribution_independent_verifications AS proof
+      WHERE proof.contribution_id = contribution.id
+      ORDER BY proof.verified_at DESC, proof.id DESC LIMIT 1
+    ) AS verification ON true
     LEFT JOIN LATERAL (
       SELECT event.state FROM jobs.job_contribution_state_events AS event
       WHERE event.contribution_id = contribution.id
       ORDER BY (event.state = 'consent_invalid') DESC, event.occurred_at DESC, event.id DESC LIMIT 1
     ) AS state_event ON true
     LEFT JOIN LATERAL (
-      SELECT decision.id, decision.status, decision.trust_policy_version, decision.decided_at
+      SELECT decision.id, decision.status, decision.trust_policy_version, decision.decided_at, decision.evidence_digest_sha256
       FROM jobs.job_contribution_trust_decisions AS decision
       WHERE decision.contribution_id = contribution.id
       ORDER BY decision.decided_at DESC, decision.id DESC LIMIT 1
@@ -359,6 +375,60 @@ export class PostgresContributionProcessingStore implements ContributionProcessi
 
   load(contributionId: string): Promise<LoadedContributionProcessing | null> {
     return loadWith(this.client, contributionId);
+  }
+
+  async beginVerificationRefresh(input: {
+    contributionId: string;
+    previousVerificationId: string;
+    occurredAt: Date;
+  }): Promise<ContributionVerificationRefreshReservation | null> {
+    return this.client.begin(async (transaction) => {
+      await transaction`SELECT pg_advisory_xact_lock(hashtext(${`jobs:contribution-processing:${input.contributionId}`}))`;
+      const current = await loadWith(transaction, input.contributionId);
+      if (
+        !current ||
+        current.trustDecision ||
+        current.publication ||
+        current.ownerState === "consent_invalid" ||
+        current.independentVerification?.verificationId !== input.previousVerificationId ||
+        isContributionEvidenceFresh(current.independentVerification.verifiedAt, input.occurredAt)
+      )
+        return null;
+      const [reserved] = await transaction<
+        { attempt: number; claimedBy: string; claimedAt: Date | string }[]
+      >`
+        UPDATE jobs.job_contribution_processing_queue
+        SET verification_refresh_attempts = verification_refresh_attempts + 1,
+          last_verification_refresh_at = ${input.occurredAt}, verification_refresh_outcome = 'pending'
+        WHERE contribution_id = ${input.contributionId} AND state = 'claimed'
+          AND claim_expires_at > ${input.occurredAt}
+          AND verification_refresh_attempts < ${CONTRIBUTION_VERIFICATION_REFRESH_MAX_ATTEMPTS}
+          AND (last_verification_refresh_at IS NULL OR last_verification_refresh_at <=
+            ${new Date(input.occurredAt.getTime() - CONTRIBUTION_VERIFICATION_REFRESH_COOLDOWN_MS)})
+          AND (verification_refresh_outcome IS NULL OR verification_refresh_outcome NOT IN ('closed','superseded'))
+        RETURNING verification_refresh_attempts AS attempt, claimed_by AS "claimedBy", claimed_at AS "claimedAt"
+      `;
+      return reserved
+        ? Object.freeze({ ...reserved, claimedAt: timestamp(reserved.claimedAt) })
+        : null;
+    });
+  }
+
+  async finishVerificationRefresh(input: {
+    contributionId: string;
+    attempt: number;
+    claimedBy: string;
+    claimedAt: string;
+    outcome: "unavailable" | "mismatch" | "closed" | "superseded";
+    occurredAt: Date;
+  }): Promise<void> {
+    await this.client`
+      UPDATE jobs.job_contribution_processing_queue SET verification_refresh_outcome = ${input.outcome}
+      WHERE contribution_id = ${input.contributionId} AND state = 'claimed'
+        AND claim_expires_at > ${input.occurredAt} AND verification_refresh_attempts = ${input.attempt}
+        AND verification_refresh_outcome = 'pending'
+        AND claimed_by = ${input.claimedBy} AND claimed_at = ${input.claimedAt}
+    `;
   }
 
   async recordOwnerState(
@@ -447,6 +517,29 @@ export class PostgresContributionProcessingStore implements ContributionProcessi
       const normalization = await loadWith(transaction, input.contributionId);
       if (normalization?.ownerState === "consent_invalid") return normalization;
       if (!normalization?.normalization) throw new Error("Normalization is required");
+      if (normalization.publication || normalization.trustDecision) return normalization;
+      if (normalization.independentVerification) {
+        if (!input.refresh) return normalization;
+        if (
+          normalization.independentVerification.verificationId !==
+            input.refresh.previousVerificationId ||
+          Date.parse(evidence.verifiedAt) <=
+            Date.parse(normalization.independentVerification.verifiedAt) ||
+          !isContributionEvidenceFresh(evidence.verifiedAt, input.occurredAt)
+        )
+          throw new Error("Contribution verification refresh is no longer current");
+        const [reserved] = await transaction<{ present: boolean }[]>`
+          SELECT true AS present FROM jobs.job_contribution_processing_queue
+            WHERE contribution_id = ${input.contributionId} AND state = 'claimed'
+              AND claim_expires_at > ${input.occurredAt}
+              AND verification_refresh_attempts = ${input.refresh.attempt}
+              AND claimed_by = ${input.refresh.claimedBy} AND claimed_at = ${input.refresh.claimedAt}
+              AND verification_refresh_outcome = 'pending'
+          FOR UPDATE
+        `;
+        if (!reserved?.present)
+          throw new Error("Contribution verification refresh lost its reservation");
+      } else if (input.refresh) throw new Error("Refresh requires its original proof");
       if (
         normalization.normalization.proposal.provenance.provider !== evidence.provider ||
         normalization.normalization.proposal.provenance.pageVariant !== evidence.pageVariant ||
@@ -470,7 +563,13 @@ export class PostgresContributionProcessingStore implements ContributionProcessi
           ${evidence.verifiedAt},
           ${transaction.json(evidence.providerObservation as unknown as postgres.JSONValue)},
           ${input.processingPolicyVersion}, ${input.occurredAt}
-        ) ON CONFLICT (contribution_id) DO NOTHING
+        )
+      `;
+      if (input.refresh)
+        await transaction`
+        UPDATE jobs.job_contribution_processing_queue SET verification_refresh_outcome = 'verified'
+        WHERE contribution_id = ${input.contributionId} AND state = 'claimed'
+          AND verification_refresh_attempts = ${input.refresh.attempt} AND verification_refresh_outcome = 'pending'
       `;
       await insertState(transaction, {
         contributionId: input.contributionId,
@@ -493,16 +592,44 @@ export class PostgresContributionProcessingStore implements ContributionProcessi
       const current = await loadWith(transaction, input.contributionId);
       if (current?.ownerState === "consent_invalid") return current;
       const decision = input.decision;
+      if (
+        decision.status === "accepted" &&
+        !/^[a-f0-9]{64}$/u.test(decision.independentEvidenceDigestSha256 ?? "")
+      )
+        throw new Error("Accepted Trust decision lacks its exact evidence binding");
       await transaction`
         INSERT INTO jobs.job_contribution_trust_decisions (
           id, contribution_id, status, trust_policy_version,
-          processing_policy_version, decided_at, created_at
+          processing_policy_version, decided_at, created_at, evidence_digest_sha256
         ) VALUES (
           ${decision.decisionId}, ${input.contributionId}, ${decision.status},
           ${decision.policyVersion}, ${input.processingPolicyVersion},
-          ${decision.decidedAt}, ${input.occurredAt}
+          ${decision.decidedAt}, ${input.occurredAt}, ${decision.independentEvidenceDigestSha256 ?? null}
         ) ON CONFLICT (id) DO NOTHING
       `;
+      const [stored] = await transaction<
+        Array<{
+          contributionId: string;
+          status: string;
+          policyVersion: string;
+          decidedAt: Date | string;
+          independentEvidenceDigestSha256: string | null;
+        }>
+      >`
+        SELECT contribution_id AS "contributionId", status, trust_policy_version AS "policyVersion",
+          decided_at AS "decidedAt", evidence_digest_sha256 AS "independentEvidenceDigestSha256"
+        FROM jobs.job_contribution_trust_decisions WHERE id = ${decision.decisionId}
+      `;
+      if (
+        !stored ||
+        stored.contributionId !== input.contributionId ||
+        stored.status !== decision.status ||
+        stored.policyVersion !== decision.policyVersion ||
+        timestamp(stored.decidedAt) !== decision.decidedAt ||
+        stored.independentEvidenceDigestSha256 !==
+          (decision.independentEvidenceDigestSha256 ?? null)
+      )
+        throw new Error("Copied Trust decision conflicts with immutable evidence binding");
       await transaction`
         UPDATE jobs.job_contribution_processing_queue
         SET state = 'pending', attempt = 0, available_at = ${input.occurredAt},
@@ -566,12 +693,16 @@ export class PostgresContributionProcessingStore implements ContributionProcessi
         JOIN jobs.job_contribution_independent_verifications AS verification
           ON verification.contribution_id = contribution.id
         JOIN LATERAL (
-          SELECT decision.id, decision.status
+          SELECT decision.id, decision.status, decision.evidence_digest_sha256
           FROM jobs.job_contribution_trust_decisions AS decision
           WHERE decision.contribution_id = contribution.id
           ORDER BY decision.decided_at DESC, decision.id DESC LIMIT 1
-        ) AS trust ON trust.status = 'accepted'
+        ) AS trust ON trust.status = 'accepted' AND trust.evidence_digest_sha256 = verification.evidence_digest_sha256
         WHERE contribution.id = ${input.contributionId}
+          AND verification.verified_at <= ${input.occurredAt}
+          AND verification.verified_at >= ${new Date(input.occurredAt.getTime() - CONTRIBUTION_EVIDENCE_MAX_AGE_MS)}
+          AND NOT EXISTS (SELECT 1 FROM jobs.job_contribution_independent_verifications AS newer
+            WHERE newer.contribution_id = contribution.id AND (newer.verified_at, newer.id) > (verification.verified_at, verification.id))
           AND NOT EXISTS (SELECT 1 FROM jobs.job_contribution_state_events AS cancelled
             WHERE cancelled.contribution_id = contribution.id AND cancelled.state = 'consent_invalid')
           AND contribution.client_surface = 'browser_extension'
@@ -885,11 +1016,12 @@ export class PostgresContributionPublicationReconciler
           JOIN jobs.job_contribution_independent_verifications AS verification
             ON verification.id = reconciliation.independent_verification_id
           JOIN LATERAL (
-            SELECT decision.id, decision.status
+            SELECT decision.id, decision.status, decision.evidence_digest_sha256
             FROM jobs.job_contribution_trust_decisions AS decision
             WHERE decision.contribution_id = reconciliation.contribution_id
             ORDER BY decision.decided_at DESC, decision.id DESC LIMIT 1
           ) AS trust ON trust.id = reconciliation.trust_decision_id AND trust.status = 'accepted'
+            AND trust.evidence_digest_sha256 = verification.evidence_digest_sha256
           WHERE reconciliation.id = ${command.reconciliationId}
             AND reconciliation.contribution_id = ${command.contributionId}
             AND reconciliation.kind = 'publication'
@@ -906,6 +1038,10 @@ export class PostgresContributionPublicationReconciler
             AND reconciliation.capability_expires_at = ${command.capabilityExpiresAt}
             AND reconciliation.capability_evaluated_at <= ${now}
             AND reconciliation.capability_expires_at > ${now}
+            AND (reconciliation.state = 'applied' OR NOT EXISTS (
+              SELECT 1 FROM jobs.job_contribution_independent_verifications AS newer
+              WHERE newer.contribution_id = reconciliation.contribution_id
+                AND (newer.verified_at, newer.id) > (verification.verified_at, verification.id)))
           FOR UPDATE OF reconciliation
         `;
         if (!row) throw new Error("Contribution publication reconciliation is not authorized");
@@ -919,6 +1055,8 @@ export class PostgresContributionPublicationReconciler
             verificationId: row.verificationId,
           });
         }
+        if (!isContributionEvidenceFresh(timestamp(row.verifiedAt), this.now()))
+          throw new Error("Accepted contribution evidence expired before publication");
         const observation = providerObservation(row.providerObservation);
         const recorded = await this.catalog.recordObservationInTransaction(
           transaction,
@@ -989,6 +1127,8 @@ export class PostgresContributionPublicationReconciler
         });
       });
     } catch (error) {
+      if (error instanceof ConflictingObservationError)
+        return Object.freeze({ status: "evidence_conflict" as const });
       if (error instanceof ProbableDuplicateObservationError) {
         return Object.freeze({
           status: "probable_duplicate" as const,
@@ -1065,6 +1205,32 @@ export class PostgresContributionProcessingQueueStore implements ContributionPro
           claim_expires_at = NULL, claimed_by = NULL,
           last_error_code = 'processing_dependency', updated_at = ${input.now}
         WHERE state = 'claimed' AND claim_expires_at <= ${input.now}
+      `;
+      // Wake only a bounded set of stale unpublished reviews. The application re-reads the
+      // authoritative Trust case before reserving or fetching; appeals/terminal cases never refresh.
+      await transaction`
+        WITH stale AS (
+          SELECT queue.id FROM jobs.job_contribution_processing_queue AS queue
+          JOIN LATERAL (SELECT verified_at FROM jobs.job_contribution_independent_verifications
+            WHERE contribution_id = queue.contribution_id ORDER BY verified_at DESC, id DESC LIMIT 1) AS proof ON true
+          WHERE queue.state = 'parked'
+            AND (queue.last_error_code = 'trust_pending' OR
+              (queue.last_error_code = 'provider_pending' AND queue.verification_refresh_attempts > 0))
+            AND proof.verified_at < ${new Date(input.now.getTime() - CONTRIBUTION_EVIDENCE_MAX_AGE_MS)}
+            AND queue.verification_refresh_attempts < ${CONTRIBUTION_VERIFICATION_REFRESH_MAX_ATTEMPTS}
+            AND (queue.last_verification_refresh_at IS NULL OR queue.last_verification_refresh_at <=
+              ${new Date(input.now.getTime() - CONTRIBUTION_VERIFICATION_REFRESH_COOLDOWN_MS)})
+            AND queue.updated_at <= ${new Date(input.now.getTime() - CONTRIBUTION_VERIFICATION_REFRESH_COOLDOWN_MS)}
+            AND (queue.verification_refresh_outcome IS NULL OR queue.verification_refresh_outcome NOT IN ('closed','superseded'))
+            AND NOT EXISTS (SELECT 1 FROM jobs.job_contribution_trust_decisions WHERE contribution_id = queue.contribution_id)
+            AND NOT EXISTS (SELECT 1 FROM jobs.job_contribution_reconciliations WHERE contribution_id = queue.contribution_id)
+            AND NOT EXISTS (SELECT 1 FROM jobs.job_contribution_state_events
+              WHERE contribution_id = queue.contribution_id AND state = 'consent_invalid')
+          ORDER BY queue.updated_at, queue.id FOR UPDATE OF queue SKIP LOCKED LIMIT ${input.limit}
+        )
+        UPDATE jobs.job_contribution_processing_queue AS queue
+        SET state = 'pending', attempt = 0, available_at = ${input.now}, last_error_code = NULL, updated_at = ${input.now}
+        FROM stale WHERE queue.id = stale.id
       `;
       const rows = await transaction<QueueRow[]>`
         WITH claimable AS (

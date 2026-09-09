@@ -1,4 +1,5 @@
 import type { D2LambdaGatewayTrustConfiguration } from "@ai-job-apply/config";
+import { PostgresContributionReviewEvidenceReader } from "@ai-job-apply/jobs-service";
 import { PostgresTrustStore, type TrustCase } from "@ai-job-apply/trust-service";
 import type postgres from "postgres";
 import { describe, expect, it, vi } from "vitest";
@@ -21,6 +22,87 @@ const configuration: D2LambdaGatewayTrustConfiguration = {
 };
 
 describe("configured D2 Trust runtime", () => {
+  it("binds a new initial acceptance to the exact latest fresh provider proof in SQL", async () => {
+    const contributionId = "019d04cf-1f80-7000-8000-000000000010";
+    const contributorUserId = "019d04cf-1f80-7000-8000-000000000011";
+    const caseId = "019d04cf-1f80-8000-8000-000000000012";
+    const current: TrustCase = {
+      id: caseId,
+      contributionId,
+      contributorUserId,
+      state: "needs_review",
+      policyVersion: configuration.policyVersion,
+      appealWindowMilliseconds: 1_000,
+      version: 1,
+      appealCount: 0,
+      adverseDecision: null,
+      pendingAppealEvidenceDigestSha256: null,
+      independentEvidenceDigestSha256: null,
+      createdAt: new Date("2026-09-01T12:00:00.000Z"),
+      updatedAt: new Date("2026-09-01T12:00:00.000Z"),
+    };
+    const proof = {
+      contributionId,
+      evidenceDigestSha256: "a".repeat(64),
+      verifiedAt: new Date().toISOString(),
+      provider: "greenhouse" as const,
+      sourceUrl: "https://job-boards.greenhouse.io/synthetic/jobs/123",
+      title: "Synthetic engineer",
+      companyName: "Synthetic",
+      description: "Synthetic public evidence",
+      locations: ["Remote"],
+    };
+    const query = vi.fn(async (strings: TemplateStringsArray, ..._values: unknown[]) =>
+      strings.join("").includes('AS "independentlyVerified"')
+        ? [{ contributionId, contributorUserId, independentlyVerified: true }]
+        : [{ verified: true }],
+    );
+    const read = vi
+      .spyOn(PostgresTrustStore.prototype, "readReviewerCase")
+      .mockResolvedValue(current);
+    const evidence = vi
+      .spyOn(PostgresContributionReviewEvidenceReader.prototype, "read")
+      .mockResolvedValue(proof);
+    const review = vi.spyOn(PostgresTrustStore.prototype, "review").mockResolvedValue({
+      ...current,
+      state: "accepted",
+      version: 2,
+      independentEvidenceDigestSha256: proof.evidenceDigestSha256,
+    });
+    try {
+      const assignment = configuration.reviewerAssignments[0];
+      if (!assignment) throw new Error("Synthetic reviewer missing");
+      const runtime = createConfiguredD2TrustRuntime(query as unknown as postgres.Sql, {
+        ...configuration,
+        reviewerAssignments: [{ ...assignment, roles: ["initial_reviewer", "case_reader"] }],
+      });
+      await runtime.service.decideInitialReview({
+        reviewerId: trustReviewerId(assignment.issuer, assignment.subject),
+        caseId,
+        expectedVersion: 1,
+        outcome: "accepted",
+        reasonCode: "independently_verified",
+        evidenceDigestSha256: proof.evidenceDigestSha256,
+      });
+      const last = query.mock.calls.at(-1);
+      expect(last?.[0].join("")).toContain("interval '24 hours'");
+      expect(last?.[0].join("")).toContain("newer.verified_at, newer.id");
+      expect(
+        last?.slice(1).filter((value) => typeof value === "string" && value.endsWith("Z")).length,
+      ).toBeGreaterThan(0);
+      expect(review).toHaveBeenCalledWith(
+        caseId,
+        1,
+        expect.objectContaining({
+          independentEvidenceDigestSha256: proof.evidenceDigestSha256,
+        }),
+      );
+    } finally {
+      read.mockRestore();
+      evidence.mockRestore();
+      review.mockRestore();
+    }
+  });
   it("derives reviewer authority only from the exact configured issuer and subject", async () => {
     const client = vi.fn() as unknown as postgres.Sql;
     const runtime = createConfiguredD2TrustRuntime(client, configuration);
@@ -80,6 +162,7 @@ describe("configured D2 Trust runtime", () => {
       appealCount: 0,
       adverseDecision: null,
       pendingAppealEvidenceDigestSha256: null,
+      independentEvidenceDigestSha256: null,
       createdAt: new Date("2026-09-05T12:00:00.000Z"),
       updatedAt: new Date("2026-09-05T12:00:00.000Z"),
     };

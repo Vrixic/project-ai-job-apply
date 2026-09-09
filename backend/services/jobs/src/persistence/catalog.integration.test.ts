@@ -8,6 +8,7 @@ import {
 } from "../search-acceptance.js";
 import type { CatalogObservation, CatalogWithdrawal } from "./catalog.js";
 import {
+  ConflictingObservationError,
   createJobCatalogDatabase,
   PostgresJobCatalog,
   ProbableDuplicateObservationError,
@@ -71,10 +72,10 @@ describeWithDatabase("PostgresJobCatalog", () => {
     const first = await runMigrationVerifier();
     const replay = await runMigrationVerifier();
     expect(first.stdout.trim()).toBe(
-      "Jobs migrations through 0022_development_contribution_provider_leases applied and verified.",
+      "Jobs migrations through 0023_contribution_verification_refresh applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(
-      "Jobs migrations through 0022_development_contribution_provider_leases applied and verified.",
+      "Jobs migrations through 0023_contribution_verification_refresh applied and verified.",
     );
     await catalog.ping();
   });
@@ -211,7 +212,10 @@ describeWithDatabase("PostgresJobCatalog", () => {
   it("merges only exact identities and retains source provenance", async () => {
     const created = await catalog.recordObservation(fixture());
     const replay = await catalog.recordObservation(
-      fixture({ description: "The verified source supplied an updated synthetic description." }),
+      fixture({
+        description: "The verified source supplied an updated synthetic description.",
+        observedAt: new Date(observedAt.getTime() + 1_000),
+      }),
     );
 
     expect(created.outcome).toBe("created");
@@ -243,6 +247,7 @@ describeWithDatabase("PostgresJobCatalog", () => {
     const replayed = await catalog.recordObservation({
       ...withoutRawSnapshot,
       description: "The same synthetic observation remains snapshot-free after revalidation.",
+      observedAt: new Date(observedAt.getTime() + 1_000),
     });
     const [source] = await client<{ rawSnapshotIsNull: boolean }[]>`
       SELECT raw_snapshot IS NULL AS "rawSnapshotIsNull"
@@ -253,6 +258,266 @@ describeWithDatabase("PostgresJobCatalog", () => {
     expect(created.outcome).toBe("created");
     expect(replayed.outcome).toBe("exact_match_updated");
     expect(source?.rawSnapshotIsNull).toBe(true);
+  });
+
+  it("converges newer then older exact observations without regressing either materialized record", async () => {
+    const newer = fixture({
+      sourceUrl: `https://jobs.example.test/${runId}/out-of-order`,
+      externalJobId: "out-of-order",
+      employerRequisitionId: `req-${runId}-out-of-order`,
+      observedAt: new Date(observedAt.getTime() + 86_400_000),
+      title: "Current Synthetic Engineer",
+      locations: ["Current synthetic location"],
+      department: "Current synthetic department",
+      workMode: "hybrid",
+      employmentType: "full_time",
+      description: "Current independently verified synthetic description.",
+      datePosted: observedAt,
+      applicationUrl: `https://jobs.example.test/${runId}/current-application`,
+      structuredLocations: [{ address: { addressCountry: "US", addressLocality: "Current" } }],
+      rawSnapshot: { synthetic: "current" },
+    });
+    const created = await catalog.recordObservation(newer);
+    const readSnapshot = async () => {
+      const [snapshot] = await client`
+        SELECT to_jsonb(job) AS canonical,
+          (SELECT jsonb_agg(to_jsonb(source) ORDER BY source.id)
+           FROM jobs.job_sources source WHERE source.job_id=job.id) AS sources,
+          (SELECT count(*)::int FROM jobs.status_events WHERE job_id=job.id) AS events
+        FROM jobs.canonical_jobs job WHERE job.id=${created.job.id}
+      `;
+      return snapshot;
+    };
+    const before = await readSnapshot();
+    const revision = await catalog.getCatalogRevision();
+    const older = {
+      ...newer,
+      observedAt,
+      title: "Superseded Synthetic Engineer",
+      locations: ["Superseded synthetic location"],
+      department: "Superseded synthetic department",
+      workMode: "remote" as const,
+      employmentType: "contract" as const,
+      description: "Superseded independently verified synthetic description.",
+      validThrough: new Date("2027-08-11T12:00:00Z"),
+      applicationUrl: `https://jobs.example.test/${runId}/superseded-application`,
+      structuredLocations: [{ address: { addressCountry: "US", addressLocality: "Superseded" } }],
+      adapterVersion: "synthetic-old-v1",
+      rawSnapshot: { synthetic: "superseded" },
+    };
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const result = await catalog.recordObservation(older);
+      expect(result).toMatchObject({ outcome: "exact_match_updated", job: created.job });
+      expect(await readSnapshot()).toEqual(before);
+      expect(await catalog.getCatalogRevision()).toBe(revision);
+    }
+    const repeated = await catalog.recordObservation(newer);
+    expect(repeated.job).toEqual(created.job);
+    expect(await readSnapshot()).toEqual(before);
+    const [counts] = await client<{ jobs: number; sources: number }[]>`
+      SELECT count(DISTINCT job_id)::int AS jobs, count(*)::int AS sources
+      FROM jobs.job_sources WHERE provider=${newer.provider}
+        AND ats_tenant=${newer.atsTenant as string} AND external_job_id=${newer.externalJobId as string}
+    `;
+    expect(counts).toEqual({ jobs: 1, sources: 1 });
+  });
+
+  it("does not reverse a newer source withdrawal with an older or simultaneous positive observation", async () => {
+    const source = fixture({
+      sourceUrl: `https://jobs.example.test/${runId}/withdrawal-ordering`,
+      externalJobId: "withdrawal-ordering",
+      employerRequisitionId: `req-${runId}-withdrawal-ordering`,
+    });
+    const created = await catalog.recordObservation(source);
+    const withdrawnAt = new Date(observedAt.getTime() + 2_000);
+    await catalog.recordWithdrawal(withdrawal(source, withdrawnAt));
+    const before = await catalog.getById(created.job.id);
+    for (const at of [new Date(observedAt.getTime() + 1_000), withdrawnAt]) {
+      const late = await catalog.recordObservation({ ...source, observedAt: at });
+      expect(late.job).toEqual(before);
+      const [persisted] = await client`
+        SELECT withdrawn_at, last_verified_at, raw_snapshot FROM jobs.job_sources
+        WHERE job_id=${created.job.id}
+      `;
+      expect(persisted).toEqual({ withdrawnAt, lastVerifiedAt: withdrawnAt, rawSnapshot: null });
+    }
+    const relisted = await catalog.recordObservation({
+      ...source,
+      observedAt: new Date(withdrawnAt.getTime() + 1_000),
+    });
+    expect(relisted.job).toMatchObject({ id: created.job.id, status: "active" });
+  });
+
+  it("holds conflicting equal-time observations without overwriting source or canonical truth", async () => {
+    const source = fixture({
+      sourceUrl: `https://jobs.example.test/${runId}/equal-time-conflict`,
+      externalJobId: "equal-time-conflict",
+      employerRequisitionId: `req-${runId}-equal-time-conflict`,
+    });
+    const created = await catalog.recordObservation(source);
+    const [before] = await client`
+      SELECT to_jsonb(job) AS canonical, to_jsonb(source) AS source
+      FROM jobs.canonical_jobs job JOIN jobs.job_sources source ON source.job_id=job.id
+      WHERE job.id=${created.job.id}
+    `;
+    for (const change of [
+      { description: "Contradictory independently verified description at the same instant." },
+      { title: "Contradictory title at the same instant" },
+      { workMode: "hybrid" as const },
+      { validThrough: new Date("2027-08-11T12:00:00Z") },
+      { applicationUrl: `https://jobs.example.test/${runId}/conflicting-application` },
+    ]) {
+      await expect(catalog.recordObservation({ ...source, ...change })).rejects.toBeInstanceOf(
+        ConflictingObservationError,
+      );
+      const [after] = await client`
+        SELECT to_jsonb(job) AS canonical, to_jsonb(source) AS source
+        FROM jobs.canonical_jobs job JOIN jobs.job_sources source ON source.job_id=job.id
+        WHERE job.id=${created.job.id}
+      `;
+      expect(after).toEqual(before);
+    }
+  });
+
+  it("uses provider chronology rather than a later revalidation bookkeeping timestamp", async () => {
+    const source = fixture({
+      sourceUrl: `https://jobs.example.test/${runId}/recorded-time-ordering`,
+      externalJobId: "recorded-time-ordering",
+      employerRequisitionId: `req-${runId}-recorded-time-ordering`,
+    });
+    const created = await catalog.recordObservation(source);
+    const recordedAt = new Date(observedAt.getTime() + 3_000);
+    // Revalidation records arrival time separately from independently verified provider time.
+    await client`UPDATE jobs.canonical_jobs SET updated_at=${recordedAt} WHERE id=${created.job.id}`;
+    await client`UPDATE jobs.job_sources SET updated_at=${recordedAt} WHERE job_id=${created.job.id}`;
+    const verifiedAt = new Date(observedAt.getTime() + 2_000);
+    const newer = await catalog.recordObservation({
+      ...source,
+      observedAt: verifiedAt,
+      title: "Independently newer synthetic title",
+    });
+    expect(newer.job).toMatchObject({
+      id: created.job.id,
+      title: "Independently newer synthetic title",
+      lastVerifiedAt: verifiedAt,
+    });
+    const [persisted] = await client`
+      SELECT job.updated_at AS canonical_updated_at, source.updated_at AS source_updated_at,
+        source.last_verified_at AS source_verified_at
+      FROM jobs.canonical_jobs job JOIN jobs.job_sources source ON source.job_id=job.id
+      WHERE job.id=${created.job.id}
+    `;
+    expect(persisted).toEqual({
+      canonicalUpdatedAt: recordedAt,
+      sourceUpdatedAt: recordedAt,
+      sourceVerifiedAt: verifiedAt,
+    });
+  });
+
+  it("still rejects conflicting exact identities before classifying an observation as old", async () => {
+    const first = fixture({
+      sourceUrl: `https://jobs.example.test/${runId}/identity-conflict-first`,
+      externalJobId: "identity-conflict-first",
+      employerRequisitionId: `req-${runId}-identity-conflict-first`,
+    });
+    const second = fixture({
+      sourceUrl: `https://jobs.example.test/${runId}/identity-conflict-second`,
+      externalJobId: "identity-conflict-second",
+      employerRequisitionId: `req-${runId}-identity-conflict-second`,
+    });
+    const a = await catalog.recordObservation(first);
+    const b = await catalog.recordObservation(second);
+    await expect(
+      catalog.recordObservation({
+        ...first,
+        sourceUrl: second.sourceUrl,
+        observedAt: new Date(observedAt.getTime() - 1_000),
+      }),
+    ).rejects.toThrow("Conflicting exact job identities require manual resolution");
+    expect(await catalog.getById(a.job.id)).toEqual(a.job);
+    expect(await catalog.getById(b.job.id)).toEqual(b.job);
+  });
+
+  it("keeps a later expiry disposition intact when a delayed pre-expiry verification arrives", async () => {
+    const source = fixture({
+      sourceUrl: `https://jobs.example.test/${runId}/expiry-ordering`,
+      externalJobId: "expiry-ordering",
+      employerRequisitionId: `req-${runId}-expiry-ordering`,
+    });
+    const created = await catalog.recordObservation(source);
+    const expiredAt = new Date(created.job.expiresAt.getTime() + 1_000);
+    expect(await catalog.recordVerificationFailure(created.job.id, expiredAt)).toBe("expired");
+    const before = await catalog.getById(created.job.id);
+    const late = await catalog.recordObservation({
+      ...source,
+      observedAt: new Date(observedAt.getTime() + 86_400_000),
+    });
+    expect(late.job).toEqual(before);
+    expect(late.job).not.toHaveProperty("description");
+    const [persisted] = await client`
+      SELECT last_verified_at, updated_at, raw_snapshot FROM jobs.job_sources
+      WHERE job_id=${created.job.id}
+    `;
+    expect(persisted).toEqual({
+      lastVerifiedAt: new Date(observedAt.getTime() + 86_400_000),
+      updatedAt: expiredAt,
+      rawSnapshot: null,
+    });
+  });
+
+  it("advances an exact alias source independently without overwriting newer canonical truth", async () => {
+    const first = fixture({
+      sourceUrl: `https://jobs.example.test/${runId}/ordering-first`,
+      externalJobId: "ordering-first",
+      employerRequisitionId: `req-${runId}-ordering-first`,
+    });
+    const second = fixture({
+      provider: "lever",
+      sourceUrl: `https://jobs.example.test/${runId}/ordering-second`,
+      externalJobId: "ordering-second",
+      employerRequisitionId: `req-${runId}-ordering-second`,
+    });
+    const canonical = await catalog.recordObservation(first);
+    const alias = await catalog.recordObservation(second);
+    await catalog.reviewDuplicateCandidate({
+      jobId: canonical.job.id,
+      candidateJobId: alias.job.id,
+      resolution: "exact",
+      canonicalJobId: canonical.job.id,
+      reviewedBy: "operator:synthetic-test",
+      reasonCode: "synthetic.ordering_cluster",
+      reviewedAt: observedAt,
+    });
+    const newestAt = new Date(observedAt.getTime() + 3_000);
+    const newest = await catalog.recordObservation({
+      ...second,
+      observedAt: newestAt,
+      title: "Newest alias provider title",
+      description: "Newest independently verified synthetic provider description.",
+    });
+    const intermediateAt = new Date(observedAt.getTime() + 2_000);
+    const intermediate = await catalog.recordObservation({
+      ...first,
+      observedAt: intermediateAt,
+      title: "Intermediate provider title",
+      description: "Intermediate independently verified synthetic provider description.",
+    });
+    const repeatedOlder = await catalog.recordObservation(first);
+    expect(intermediate.job).toEqual(newest.job);
+    expect(repeatedOlder.job).toEqual(newest.job);
+    expect(newest.job).toMatchObject({
+      id: canonical.job.id,
+      title: "Newest alias provider title",
+    });
+    const sources = await client`
+      SELECT provider, job_id, last_verified_at FROM jobs.job_sources
+      WHERE job_id IN (${canonical.job.id}, ${alias.job.id}) ORDER BY provider
+    `;
+    expect(sources).toEqual([
+      { provider: "greenhouse", jobId: canonical.job.id, lastVerifiedAt: intermediateAt },
+      { provider: "lever", jobId: alias.job.id, lastVerifiedAt: newestAt },
+    ]);
+    expect((await catalog.getActiveJob(alias.job.id, newestAt))?.id).toBe(canonical.job.id);
   });
 
   it("withdraws a sole positive source idempotently and reactivates only from that reason", async () => {
@@ -477,6 +742,7 @@ describeWithDatabase("PostgresJobCatalog", () => {
         employerRequisitionId: `req-${runId}-matchable-canonical`,
         workMode: "remote",
         employmentType: "full_time",
+        observedAt: new Date(observedAt.getTime() - 1_000),
         validThrough: eligibleThrough,
       }),
     );
@@ -1406,6 +1672,7 @@ describeWithDatabase("PostgresJobCatalog", () => {
         employerRequisitionId: `req-${runId}-blocked`,
         description: "This content must not revive the blocked record.",
         rawSnapshot: { shouldNotPersist: true },
+        observedAt: new Date(observedAt.getTime() + 1_000),
       }),
     );
     expect(replay.job.status).toBe("blocked");

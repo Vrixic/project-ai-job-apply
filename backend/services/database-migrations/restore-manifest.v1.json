@@ -143,6 +143,10 @@
         {
           "version": "0022_development_contribution_provider_leases",
           "checksum": "21d2623fac89f89cc62ccdcfc39399bfcf7f1b9adaf5cb15a660dfa6ed33c500"
+        },
+        {
+          "version": "0023_contribution_verification_refresh",
+          "checksum": "ed90e3f451d5d1b5b1f8a1712ce3adb72351d577bc61a32a6da2c0ffd0a5f338"
         }
       ],
       "relations": [
@@ -281,6 +285,10 @@
         {
           "version": "0003_decision_signals",
           "checksum": "8500dd422334932508ae2588a91aa685846b989eb1d7e1b3e922f5d075ac0162"
+        },
+        {
+          "version": "0004_accepted_independent_evidence",
+          "checksum": "79a67de27d02d506bcecc72a20063ba9c128291fdf5db0cf97fe5f12eaf88b2a"
         }
       ],
       "relations": [

@@ -116,8 +116,8 @@ describeWithDatabase("durable contribution processing persistence", () => {
         ${jobId}, ${companyId}, 'Platform Engineer', 'platform engineer',
         ${client.json(["New York, NY"])}, ${client.array(["new york, ny"])},
         'Independently verified synthetic provider content', ${sourceContentSha256},
-        ${"e".repeat(64)}, 'active', 'positive_verification', ${observedAt}, ${verifiedAt},
-        ${new Date("2026-09-10T00:00:00.000Z")}, ${observedAt}, ${verifiedAt}
+        ${"e".repeat(64)}, 'active', 'positive_verification', ${observedAt}, ${observedAt},
+        ${new Date("2026-09-10T00:00:00.000Z")}, ${observedAt}, ${observedAt}
       )
     `;
     await client`
@@ -128,8 +128,8 @@ describeWithDatabase("durable contribution processing persistence", () => {
       ) VALUES (
         ${sourceId}, ${jobId}, 'lever', 'permitted_api', 'synthetic-processing',
         ${contributionId}, ${sourceUrl}, ${sourceUrl}, ${sourceUrlSha256},
-        ${sourceContentSha256}, 'd2-job-page-v1', ${observedAt}, ${verifiedAt}, ${verifiedAt},
-        ${observedAt}, ${verifiedAt}
+        ${sourceContentSha256}, 'd2-job-page-v1', ${observedAt}, ${observedAt}, ${observedAt},
+        ${observedAt}, ${observedAt}
       )
     `;
     await client`
@@ -219,6 +219,7 @@ describeWithDatabase("durable contribution processing persistence", () => {
         decisionId: trustDecisionId,
         policyVersion: "synthetic-trust-v1",
         decidedAt: "2026-09-01T12:57:00.000Z",
+        independentEvidenceDigestSha256: evidenceDigestSha256,
       },
       processingPolicyVersion: "synthetic-processing-v1",
       occurredAt: new Date("2026-09-01T12:57:00.000Z"),
@@ -243,10 +244,10 @@ describeWithDatabase("durable contribution processing persistence", () => {
     await client`UPDATE jobs.canonical_jobs SET status = 'blocked' WHERE id = ${jobId}`;
     await expect(reconciler.publish(prepared)).rejects.toThrow("not authorized");
     await client`UPDATE jobs.canonical_jobs SET status = 'active' WHERE id = ${jobId}`;
-    await client`UPDATE jobs.job_sources SET withdrawn_at = ${verifiedAt} WHERE id = ${sourceId}`;
+    await client`UPDATE jobs.job_sources SET withdrawn_at = ${observedAt} WHERE id = ${sourceId}`;
     const published = await reconciler.publish(prepared);
     expect(published).toEqual({ status: "published", jobId, sourceId, verificationId: evidenceId });
-    if (published.status === "probable_duplicate") throw new Error("Unexpected probable duplicate");
+    if (published.status !== "published") throw new Error("Unexpected held publication");
     value = await processing.completePublication({
       command: prepared,
       result: published,
@@ -470,6 +471,7 @@ describeWithDatabase("durable contribution processing persistence", () => {
       occurredAt: new Date("2026-09-01T12:56:00.000Z"),
     });
     expect(verified.independentVerification).not.toHaveProperty("jobId");
+    if (!verified.independentVerification) throw new Error("Expected independent verification");
     await processing.recordTrustDecision({
       contributionId: newContributionId,
       decision: {
@@ -478,6 +480,7 @@ describeWithDatabase("durable contribution processing persistence", () => {
         decisionId: newTrustDecisionId,
         policyVersion: "synthetic-trust-v1",
         decidedAt: "2026-09-01T12:57:00.000Z",
+        independentEvidenceDigestSha256: verified.independentVerification.evidenceDigestSha256,
       },
       processingPolicyVersion: "synthetic-processing-v1",
       occurredAt: new Date("2026-09-01T12:57:00.000Z"),
@@ -500,7 +503,7 @@ describeWithDatabase("durable contribution processing persistence", () => {
     const replay = await reconciler.publish(prepared);
     expect(first).toEqual(replay);
     expect(first.status).toBe("published");
-    if (first.status === "probable_duplicate") throw new Error("Unexpected probable duplicate");
+    if (first.status !== "published") throw new Error("Unexpected held publication");
     expect(first.verificationId).toBe(newVerificationId);
     const [counts] = await client<{ jobs: number; sources: number; evidence: number }[]>`
       SELECT
@@ -541,6 +544,9 @@ describeWithDatabase("durable contribution processing persistence", () => {
           decisionId: uuidv7(),
           policyVersion: "synthetic-trust-v1",
           decidedAt: now.toISOString(),
+          ...(decisionStatus === "accepted"
+            ? { independentEvidenceDigestSha256: "a".repeat(64) }
+            : {}),
         },
         processingPolicyVersion: "synthetic-processing-v1",
         occurredAt: now,

@@ -57,7 +57,7 @@ describeWithDatabase("Jobs reporting and moderation persistence", () => {
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });
     expect(result.stdout.trim()).toBe(
-      "Jobs migrations through 0022_development_contribution_provider_leases applied and verified.",
+      "Jobs migrations through 0023_contribution_verification_refresh applied and verified.",
     );
     await reports.ping();
   });

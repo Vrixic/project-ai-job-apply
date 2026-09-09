@@ -4,7 +4,194 @@ import * as addFormatsModule from "ajv-formats";
 import { describe, expect, it } from "vitest";
 import { validateCandidateDataExportV1 } from "./candidate-data-export.js";
 
+async function exportDefinition(name: string) {
+  const schema = JSON.parse(
+    await readFile(
+      new URL("../schemas/v1/candidate-data-export.schema.json", import.meta.url),
+      "utf8",
+    ),
+  ) as { $defs: object };
+  const ajv = new Ajv2020({ strict: true });
+  const addFormats = addFormatsModule.default as unknown as (instance: Ajv2020) => Ajv2020;
+  addFormats(ajv);
+  return ajv.compile({ $ref: `#/$defs/${name}`, $defs: schema.$defs });
+}
+
 describe("domain schema registry", () => {
+  it("exports the exact bounded contribution-consent history without owner or preview digests", async () => {
+    const validate = await exportDefinition("contributionConsent");
+    const consent = {
+      consentId: "019d04cf-1f80-7000-8000-000000000060",
+      purpose: "ugc_contribution",
+      client: "extension",
+      documentVersion: "ugc-contribution-preview.v1",
+      policyVersion: "synthetic-v1",
+      state: "granted",
+      grantedAt: "2026-09-09T12:00:00.000Z",
+      recordedAt: "2026-09-09T12:00:00.000Z",
+    };
+    expect(validate(consent)).toBe(true);
+    expect(validate({ ...consent, state: "revoked", expiresAt: "2026-09-10T12:00:00.000Z" })).toBe(
+      true,
+    );
+    expect(
+      validate({
+        ...consent,
+        state: "superseded",
+        replacementConsentId: "019d04cf-1f80-7000-8000-000000000061",
+      }),
+    ).toBe(true);
+    for (const extra of [
+      { state: "superseded" },
+      { replacementConsentId: consent.consentId },
+      { ownerUserId: consent.consentId },
+      { previewPayloadSha256: "a".repeat(64) },
+      { documentVersion: "A".repeat(101) },
+      { client: "web" },
+    ]) {
+      expect(validate({ ...consent, ...extra })).toBe(false);
+    }
+  });
+
+  it("exports public contribution fields and separate bounded processing and Trust history", async () => {
+    const validate = await exportDefinition("jobContribution");
+    const at = "2026-09-09T12:00:00.000Z";
+    const contribution = {
+      id: "019d04cf-1f80-7000-8000-000000000060",
+      state: "published",
+      source: {
+        provider: "greenhouse",
+        pageVariant: "greenhouse-board-v1",
+        sourceUrl: "https://job-boards.greenhouse.io/synthetic/jobs/123",
+        adapterVersion: "d2-job-page-v1",
+      },
+      posting: { title: "Synthetic engineer" },
+      observation: { observedAt: at },
+      approval: {
+        consentId: "019d04cf-1f80-7000-8000-000000000061",
+        consentVersion: "ugc-contribution-preview.v1",
+        policyVersion: "synthetic-v1",
+        approvedAt: at,
+      },
+      processingHistory: [
+        {
+          state: "published",
+          reasonCode: "publication_complete",
+          policyVersion: "synthetic-v1",
+          occurredAt: at,
+        },
+      ],
+      trustHistory: [{ status: "accepted", policyVersion: "synthetic-v1", decidedAt: at }],
+      createdAt: at,
+      updatedAt: at,
+    };
+    expect(validate(contribution)).toBe(true);
+    expect(
+      validate({
+        ...contribution,
+        state: "awaiting_independent_verification",
+        processingHistory: [
+          {
+            state: "awaiting_independent_verification",
+            reasonCode: "provider_probable_duplicate",
+            policyVersion: "synthetic-v1",
+            occurredAt: at,
+          },
+        ],
+      }),
+    ).toBe(true);
+    expect(
+      validate({
+        ...contribution,
+        publication: { state: "prepared", createdAt: at, updatedAt: at },
+      }),
+    ).toBe(true);
+    expect(
+      validate({
+        ...contribution,
+        publication: { state: "applied", createdAt: at, updatedAt: at },
+      }),
+    ).toBe(false);
+    expect(
+      validate({
+        ...contribution,
+        client: { surface: "browser_extension", version: "0.2.0" },
+        posting: {
+          title: "Synthetic engineer",
+          companyName: "Synthetic",
+          description: "Synthetic public description",
+          locations: ["Remote"],
+          workMode: "remote",
+          employmentType: "full_time",
+          department: "Engineering",
+          applicationUrl: "https://job-boards.greenhouse.io/synthetic/jobs/123",
+        },
+        publication: { jobId: contribution.id, state: "applied", createdAt: at, updatedAt: at },
+      }),
+    ).toBe(true);
+    for (const extra of [
+      { ownerUserId: contribution.id },
+      { accessToken: "secret" },
+      { posting: { title: "Synthetic", rawHtml: "forbidden" } },
+      { source: { ...contribution.source, provider: "lever" } },
+      { source: { ...contribution.source, sourceUrl: "https://unrelated.example.test/secret" } },
+      { approval: { ...contribution.approval, previewDigestSha256: "a".repeat(64) } },
+      { trustHistory: [{ ...contribution.trustHistory[0], reviewerId: contribution.id }] },
+      {
+        processingHistory: [{ ...contribution.processingHistory[0], reasonCode: "arbitrary_text" }],
+      },
+    ]) {
+      expect(validate({ ...contribution, ...extra })).toBe(false);
+    }
+  });
+
+  it("exports nullable private captures and exact resolutions without object or owner identities", async () => {
+    const validate = await exportDefinition("privateSavedPageCapture");
+    const at = "2026-09-09T12:00:00.000Z";
+    const capture = {
+      id: "019d04cf-1f80-7000-8000-000000000060",
+      provider: "lever",
+      pageVariant: "lever-posting-v1",
+      sourceUrl: "https://jobs.eu.lever.co/synthetic/123",
+      adapterVersion: "d2-job-page-v1",
+      title: "Synthetic engineer",
+      company: null,
+      location: null,
+      description: null,
+      externalJobId: null,
+      capturedAt: at,
+      savedAt: at,
+      resolution: null,
+    };
+    expect(validate(capture)).toBe(true);
+    const resolved = {
+      canonicalJobId: capture.id,
+      verificationEvidenceId: "019d04cf-1f80-7000-8000-000000000061",
+      resolvedAt: at,
+    };
+    expect(
+      validate({
+        ...capture,
+        company: "Synthetic",
+        location: "Remote",
+        description: "Synthetic public job",
+        externalJobId: "123",
+        resolution: resolved,
+      }),
+    ).toBe(true);
+    for (const extra of [
+      { ownerUserId: capture.id },
+      { requestHash: "a".repeat(64) },
+      { location: "x".repeat(501) },
+      { description: "x".repeat(12001) },
+      { sourceUrl: "https://jobs.eu.lever.co/synthetic/123?token=secret" },
+      { resolution: { ...resolved, rawObjectKey: "private/artifact" } },
+      { company: "" },
+    ]) {
+      expect(validate({ ...capture, ...extra })).toBe(false);
+    }
+  });
+
   it("compiles every version-one JSON Schema", async () => {
     const directory = new URL("../schemas/v1/", import.meta.url);
     const files = (await readdir(directory)).filter((file) => file.endsWith(".schema.json"));
@@ -204,6 +391,80 @@ describe("domain schema registry", () => {
 
     expect(validate(exported)).toBe(true);
     expect(validateCandidateDataExportV1(exported)).toBe(true);
+    const trustCase = {
+      id: "019d04cf-1f80-7000-8000-000000000050",
+      contributionId: "019d04cf-1f80-7000-8000-000000000051",
+      policyVersion: "synthetic-trust-v1",
+      appealWindowMilliseconds: 1_000,
+      state: "accepted",
+      version: 4,
+      appealCount: 1,
+      adverseState: "rejected",
+      adverseDecisionAt: exported.generatedAt,
+      appealDeadlineAt: exported.generatedAt,
+      pendingAppealEvidenceDigestSha256: null,
+      lastAction: "appeal_reversed",
+      lastActorKind: "reviewer",
+      lastReasonCode: "decision_reversed",
+      lastEvidenceDigestSha256: "a".repeat(64),
+      createdAt: exported.generatedAt,
+      updatedAt: exported.generatedAt,
+    };
+    const trustEvent = {
+      caseId: trustCase.id,
+      caseVersion: 4,
+      contributionId: trustCase.contributionId,
+      policyVersion: trustCase.policyVersion,
+      priorState: "appeal_pending",
+      resultingState: "accepted",
+      action: "appeal_reversed",
+      actorKind: "reviewer",
+      reasonCode: "decision_reversed",
+      evidenceDigestSha256: "a".repeat(64),
+      occurredAt: exported.generatedAt,
+    };
+    for (const basis of [undefined, null, "b".repeat(64)]) {
+      const additive = basis === undefined ? {} : { independentEvidenceDigestSha256: basis };
+      const withTrust = {
+        ...exported,
+        trust: {
+          ...exported.trust,
+          cases: [{ ...trustCase, ...additive }],
+          caseEvents: [{ ...trustEvent, ...additive }],
+        },
+      };
+      expect(validateCandidateDataExportV1(withTrust)).toBe(true);
+      expect(
+        validateCandidateDataExportV1({
+          ...withTrust,
+          trust: {
+            ...withTrust.trust,
+            caseEvents: [
+              { ...trustEvent, ...additive, eventId: "019d04cf-1f80-8000-8000-000000000052" },
+            ],
+          },
+        }),
+      ).toBe(true);
+    }
+    for (const extra of [
+      { independentEvidenceDigestSha256: "bad" },
+      { independentEvidenceDigestSha256: "A".repeat(64) },
+      { reviewerId: trustCase.id },
+      { secret: "forbidden" },
+    ]) {
+      expect(
+        validateCandidateDataExportV1({
+          ...exported,
+          trust: { ...exported.trust, cases: [{ ...trustCase, ...extra }] },
+        }),
+      ).toBe(false);
+      expect(
+        validateCandidateDataExportV1({
+          ...exported,
+          trust: { ...exported.trust, caseEvents: [{ ...trustEvent, ...extra }] },
+        }),
+      ).toBe(false);
+    }
     expect(validate({ ...exported, accessToken: "secret" })).toBe(false);
     expect(validateCandidateDataExportV1({ ...exported, accessToken: "secret" })).toBe(false);
     const { trust: _trust, ...withoutTrust } = exported;

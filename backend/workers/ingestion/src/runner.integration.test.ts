@@ -58,10 +58,10 @@ describeWithDatabase("source-neutral ingestion through PostgresJobCatalog", () =
       env: environment,
     });
     expect(first.stdout.trim()).toBe(
-      "Jobs migrations through 0021_development_contribution_operation_lease applied and verified.",
+      "Jobs migrations through 0023_contribution_verification_refresh applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(
-      "Jobs migrations through 0021_development_contribution_operation_lease applied and verified.",
+      "Jobs migrations through 0023_contribution_verification_refresh applied and verified.",
     );
     await catalog.ping();
   });

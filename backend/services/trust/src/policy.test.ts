@@ -31,6 +31,80 @@ function opened() {
 }
 
 describe("UGC trust policy", () => {
+  it.each([undefined, "", "A".repeat(64), "b".repeat(64)])(
+    "rejects missing, malformed or mismatched initial provider basis %s",
+    (basis) => {
+      expect(() =>
+        decideContributionReview(opened().trustCase, {
+          reviewerId: uuidv7(),
+          outcome: "accepted",
+          reasonCode: "independently_verified",
+          evidenceDigestSha256: evidence,
+          ...(basis !== undefined ? { independentEvidenceDigestSha256: basis } : {}),
+          occurredAt: new Date("2026-09-01T12:01:00.000Z"),
+        }),
+      ).toThrow(TrustPolicyError);
+    },
+  );
+
+  it("requires an explicit new provider basis for reversal while preserving distinct appeal evidence", () => {
+    const accepted = decideContributionReview(opened().trustCase, {
+      reviewerId: uuidv7(),
+      outcome: "accepted",
+      reasonCode: "independently_verified",
+      evidenceDigestSha256: evidence,
+      independentEvidenceDigestSha256: evidence,
+      occurredAt: new Date("2026-09-01T12:01:00.000Z"),
+    }).trustCase;
+    const takenDown = takeDownContribution(accepted, {
+      reviewerId: uuidv7(),
+      reasonCode: "credible_safety_risk",
+      evidenceDigestSha256: "b".repeat(64),
+      occurredAt: new Date("2026-09-01T12:02:00.000Z"),
+    }).trustCase;
+    const appealed = fileTrustAppeal(takenDown, {
+      contributorUserId: takenDown.contributorUserId,
+      evidenceDigestSha256: "c".repeat(64),
+      occurredAt: new Date("2026-09-01T12:03:00.000Z"),
+    }).trustCase;
+    expect(appealed.independentEvidenceDigestSha256).toBe(evidence);
+    const resolution = {
+      reviewerId: uuidv7(),
+      outcome: "reversed" as const,
+      evidenceDigestSha256: "d".repeat(64),
+      occurredAt: new Date("2026-09-01T12:04:00.000Z"),
+    };
+    expect(() => decideTrustAppeal(appealed, resolution)).toThrow(
+      "independentEvidenceDigestSha256",
+    );
+    const reversed = decideTrustAppeal(appealed, {
+      ...resolution,
+      independentEvidenceDigestSha256: "e".repeat(64),
+    });
+    expect(reversed.evidenceDigestSha256).toBe("d".repeat(64));
+    expect(reversed.trustCase.independentEvidenceDigestSha256).toBe("e".repeat(64));
+    expect(appealed.independentEvidenceDigestSha256).toBe(evidence);
+    expect(
+      withdrawContribution(reversed.trustCase, {
+        contributorUserId: accepted.contributorUserId,
+        occurredAt: new Date("2026-09-01T12:05:00.000Z"),
+      }).trustCase.independentEvidenceDigestSha256,
+    ).toBeNull();
+  });
+
+  it("rejects a provider basis supplied with a nonaccepting review", () => {
+    expect(() =>
+      decideContributionReview(opened().trustCase, {
+        reviewerId: uuidv7(),
+        outcome: "rejected",
+        reasonCode: "content_mismatch",
+        evidenceDigestSha256: evidence,
+        independentEvidenceDigestSha256: evidence,
+        occurredAt: new Date("2026-09-01T12:01:00.000Z"),
+      }),
+    ).toThrow("rejected review cannot establish");
+  });
+
   it("starts every contribution default-dark and makes acceptance an internal decision only", () => {
     const initial = opened();
     expect(initial.trustCase).toMatchObject({ state: "needs_review", version: 1, appealCount: 0 });
@@ -41,6 +115,7 @@ describe("UGC trust policy", () => {
       outcome: "accepted",
       reasonCode: "independently_verified",
       evidenceDigestSha256: evidence,
+      independentEvidenceDigestSha256: evidence,
       occurredAt: new Date("2026-09-01T12:01:00.000Z"),
     });
     expect(accepted.trustCase.state).toBe("accepted");
@@ -89,6 +164,7 @@ describe("UGC trust policy", () => {
       reviewerId: uuidv7(),
       outcome: "reversed",
       evidenceDigestSha256: "c".repeat(64),
+      independentEvidenceDigestSha256: "e".repeat(64),
       occurredAt: new Date("2026-09-03T13:00:00.000Z"),
     }).trustCase;
     expect(reversed).toMatchObject({ state: "accepted", appealCount: 1 });
@@ -146,6 +222,7 @@ describe("UGC trust policy", () => {
       outcome: "accepted",
       reasonCode: "independently_verified",
       evidenceDigestSha256: evidence,
+      independentEvidenceDigestSha256: evidence,
       occurredAt: new Date("2026-09-01T12:01:00.000Z"),
     }).trustCase;
     const takedownReviewer = uuidv7();
@@ -167,6 +244,8 @@ describe("UGC trust policy", () => {
       occurredAt: new Date("2026-09-01T12:04:00.000Z"),
     });
     expect(upheld.trustCase.state).toBe("taken_down");
+    expect(upheld.trustCase.independentEvidenceDigestSha256).toBe(evidence);
+    expect(upheld.evidenceDigestSha256).toBe("d".repeat(64));
     expect(upheld).not.toHaveProperty("catalogMutation");
   });
 

@@ -70,8 +70,29 @@ Forward migration `0022_development_contribution_provider_leases` preserves the 
 descriptor and adds only the fixed Lever/Ashby version/digest pairs. Preparation and renewal also
 bind the persisted provider, variant, client, and source host; mismatched descriptors cannot renew
 across providers. The same 60-second duration, marker, chronology, immutable identity/evidence, and
-terminal-state guards apply. Deploy `0022` before enabling a new provider; the current recovery
-manifest covers 42 migrations and the unchanged 68 relations across six owners and ten schemas.
+terminal-state guards apply. Deploy `0022` before enabling a new provider; the verified development
+release covers 42 migrations and 68 relations across six owners and ten schemas. Current source
+adds Jobs `0023` and Trust `0004`; their migration, release and recovery evidence are separate.
+
+`0023_contribution_verification_refresh` adds append-only independent proof generations and an
+explicit accepted provider-proof binding. The existing scheduler can reclaim stale unpublished
+initial reviews with a one-hour cooldown and at most three lifetime refresh fetches; it rechecks
+authoritative initial-review state before fetching and before appending. Submitted fields and old
+proofs never change. New acceptance and publication reject future or older-than-24-hour evidence.
+An accepted terminal case whose proof expires before publication remains held; it is not silently
+redecided or rebound. These finite source-freshness controls do not renew development authorization.
+Independent provider proof is distinct from a reviewer's appeal evidence. Trust `0004` records
+that separate immutable acceptance basis, and only the exact accepted basis can publish.
+
+This source boundary contains 44 migrations and the same 68 relations. Quiesce contribution
+processing and reviewer decisions before applying Jobs `0023` and Trust `0004`, then deploy
+the coordinated Gateway and workers before resuming. The prior singleton verification writer
+cannot run on `0023`; rollback must keep contributions disabled or use a compatible binary.
+
+Exact catalog observations are monotonic: later arrival does not mean newer source truth. Older
+observations cannot regress canonical/source fields or undo newer withdrawal/expiry. Exact tied
+replays are no-ops; contradictory tied truth parks for review. Source-specific chronology remains
+independent when several sources resolve to the same canonical job.
 
 Migration `0015_source_revalidation_lifecycle` adds a source-scoped durable revalidation queue and
 an append-only verification-evidence ledger for the D2 Greenhouse, Lever, and Ashby page variants.

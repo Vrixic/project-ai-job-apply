@@ -1,14 +1,14 @@
 # Phase 2 Extension and UGC Security/Privacy Delta
 
 - Status: Engineering design; accountable approval pending
-- Last updated: 2026-09-08
+- Last updated: 2026-09-09
 - Decision boundary: [ADR-028](../adr/028-extension-ugc-ownership-and-processing.md) and
   [ADR-029](../adr/029-one-step-public-job-addition.md)
 
 This is the single D2 engineering delta for the extension, contribution, and community trust
-surface. It authorizes synthetic/default-dark implementation only. It does not approve real
-candidate use, public contribution, provider-derived fixture capture, or browser-store
-distribution.
+surface, not a deployment authorization. The separately recorded controlled Greenhouse-only
+development activation and reviewer assignment remain in the Phase 2 record. This document does
+not extend those authorizations to other providers, production, or browser-store distribution.
 
 ## Minimum data flow
 
@@ -106,6 +106,37 @@ rollback disables development contributions before reverting code. This is a tec
 description; the single decision and rationale are in the
 [Phase 2 record](../product/delivery/phase-2-extension-and-community.md#decisions-and-scope-changes).
 
+## Fresh verification and accepted evidence
+
+The undeployed D2-039 source adds Jobs `0023` and Trust `0004`. Initial acceptance and appeal
+reversal require exact, independently fetched provider evidence no more than 24 hours old and
+not future-dated. Trust records the accepted provider basis separately from review/appeal
+evidence; a distinct appeal digest never becomes provider truth. Historical Trust rows retain
+unknown basis as null. Existing single-proof Jobs acceptance is explicitly bound before the
+singleton constraints are removed; only an exact already-copied legacy signal can be acknowledged
+without constructing a new binding.
+
+The existing scheduler can refresh stale, unpublished initial-review proof at most three times
+per contribution, with at least one hour between attempts. Proof generations remain append-only;
+the original submitted fields, review case, and one-time events are unchanged. The worker checks
+the authoritative initial-review state before and after the fetch, and the reservation binds the
+specific queue lease. Appeals, terminal cases, cancellation, and an exhausted refresh budget do
+not gain automatic approval or reset. Expired accepted-but-unpublished proof remains held; it is
+not silently rebound or re-decided.
+
+Publication checks the exact latest accepted provider basis again. Older observations cannot
+overwrite newer source, lifecycle, or canonical truth. Exact timestamp ties are idempotent when
+their persisted fields match; contradictory ties are held. Candidate export includes the separate
+case/event basis without reviewer identities, tokens, or transport details. Events remain
+identifier-only.
+
+Rollout must quiesce contribution processing and reviewer decisions before applying the two
+migrations, then deploy the coordinated Gateway and workers before resuming. The old singleton
+verification writer is not compatible with Jobs `0023`; rollback must keep contributions disabled
+or use a forward-compatible binary. Keep historical receipts and restore manifests distinct from
+the new 44-migration source boundary. Decision rationale is recorded only in the
+[Phase 2 decisions section](../product/delivery/phase-2-extension-and-community.md#decisions-and-scope-changes).
+
 ## Local human reviewer setup boundary
 
 The optional local appeal setup check is default-dark, finite-window, exact-localhost and
@@ -155,5 +186,6 @@ The following remain blocking and cannot be self-certified by repository impleme
    browser tests, default-dark deployment, rollback, restore, load/abuse, alerts, and kill-switch
    evidence.
 
-Until all applicable gates pass, provider detection, contribution intake/processing, and store
-distribution remain disabled and shared environments remain synthetic-only.
+Until all applicable gates pass, production and store distribution remain dark. The separately
+authorized development exception stays Greenhouse-only; contribution intake is not publication
+approval. Other providers and broader use remain subject to their recorded gates.

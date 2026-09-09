@@ -3039,6 +3039,7 @@ describe("Phase 2 Trust routes", () => {
     appealCount: 0,
     adverseDecision: null,
     pendingAppealEvidenceDigestSha256: null,
+    independentEvidenceDigestSha256: null,
     createdAt: new Date("2026-09-01T12:00:00.000Z"),
     updatedAt: new Date("2026-09-01T13:00:00.000Z"),
   };

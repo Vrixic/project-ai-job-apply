@@ -17,6 +17,7 @@ import {
   PostgresContributionProcessingQueueStore,
   PostgresContributionProcessingStore,
   PostgresContributionPublicationReconciler,
+  PostgresContributionReviewEvidenceReader,
   PostgresJobCatalog,
   PostgresJobContributionStore,
 } from "@ai-job-apply/jobs-service";
@@ -122,6 +123,7 @@ describeWithDatabase("composed PostgreSQL D2 Trust-to-Jobs lifecycle", () => {
     trustStore = new PostgresTrustStore(client);
     signals = new PostgresTrustDecisionSignalStore(client);
     const queue = new PostgresContributionProcessingQueueStore(client);
+    const reviewEvidence = new PostgresContributionReviewEvidenceReader(client);
     trust = new TrustApplicationService({
       store: trustStore,
       systemActorId: uuidv7(),
@@ -153,6 +155,7 @@ describeWithDatabase("composed PostgreSQL D2 Trust-to-Jobs lifecycle", () => {
         }),
       },
       contributionEvidence: {
+        readReviewEvidence: (input) => reviewEvidence.read(input),
         readEligibility: async (contributionId) => {
           const value = await processing.load(contributionId);
           return value
@@ -163,10 +166,16 @@ describeWithDatabase("composed PostgreSQL D2 Trust-to-Jobs lifecycle", () => {
               }
             : null;
         },
-        verifyEvidence: async ({ contributionId, evidenceDigestSha256, purpose }) => {
+        verifyEvidence: async ({ contributionId, evidenceDigestSha256, purpose, freshAt }) => {
           const value = await processing.load(contributionId);
           const fixture = fixtures.get(contributionId);
           if (!value?.independentVerification || !fixture) return false;
+          if (freshAt !== undefined) {
+            const proofAt = Date.parse(value.independentVerification.verifiedAt);
+            const decisionAt = Date.parse(freshAt);
+            const age = decisionAt - proofAt;
+            if (!Number.isFinite(age) || age < 0 || age > 24 * 60 * 60_000) return false;
+          }
           return (
             evidenceDigestSha256 ===
             (purpose === "independent_verification"

@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
-import { parseTrustReviewQueue, trustReviewQueueCursor } from "./review-queue.js";
 import {
   type TrustCase,
   type TrustPolicy,
   TrustPolicyError,
   type TrustReasonCode,
 } from "./policy.js";
+import { parseTrustReviewQueue, trustReviewQueueCursor } from "./review-queue.js";
 import {
   type OwnerTrustCaseView,
   type PostgresTrustStore,
@@ -106,6 +106,8 @@ export interface ContributionEligibilityEvidencePort {
     contributionId: string;
     evidenceDigestSha256: string;
     purpose: TrustEvidencePurpose;
+    /** Present for new acceptance (initial or reversed appeal); historical reads stay available. */
+    freshAt?: string;
   }): Promise<boolean>;
 }
 
@@ -245,10 +247,11 @@ function version(value: number): number {
 }
 
 function instant(value: Date): Date {
-  if (!Number.isFinite(value.getTime())) {
+  const timestamp = Date.prototype.getTime.call(value);
+  if (!Number.isFinite(timestamp)) {
     throw new TrustApplicationError("dependency_unavailable");
   }
-  return new Date(value.getTime());
+  return new Date(timestamp);
 }
 
 async function dependency<T>(operation: () => Promise<T>): Promise<T> {
@@ -486,18 +489,22 @@ export class TrustApplicationService {
     await this.authorizeReviewer(reviewerId, "initial_reviewer");
     const current = await this.requireReviewerCase(caseId, expectedVersion);
     await this.requireEligibleContribution(current);
-    await this.verifyEvidence(
-      current.contributionId,
-      evidenceDigestSha256,
-      input.outcome === "accepted" ? "independent_verification" : "initial_review",
-    );
+    const decisionAt = this.occurredAt();
+    const independentEvidenceDigestSha256 =
+      input.outcome === "accepted"
+        ? await this.acceptedProviderBasis(current, decisionAt, evidenceDigestSha256)
+        : undefined;
+    if (input.outcome === "rejected") {
+      await this.verifyEvidence(current.contributionId, evidenceDigestSha256, "initial_review");
+    }
     return storeOperation(() =>
       this.store.review(caseId, expectedVersion, {
         reviewerId,
         outcome: input.outcome,
         reasonCode: input.reasonCode,
         evidenceDigestSha256,
-        occurredAt: this.occurredAt(),
+        ...(independentEvidenceDigestSha256 ? { independentEvidenceDigestSha256 } : {}),
+        occurredAt: decisionAt,
       }),
     );
   }
@@ -555,14 +562,59 @@ export class TrustApplicationService {
       throw new TrustApplicationError("access_denied");
     }
     await this.verifyEvidence(current.contributionId, evidenceDigestSha256, "appeal_resolution");
+    const decisionAt = this.occurredAt();
+    const independentEvidenceDigestSha256 =
+      input.outcome === "reversed"
+        ? await this.acceptedProviderBasis(current, decisionAt)
+        : undefined;
     return storeOperation(() =>
       this.store.resolveAppeal(caseId, expectedVersion, {
         reviewerId,
         outcome: input.outcome,
         evidenceDigestSha256,
-        occurredAt: this.occurredAt(),
+        ...(independentEvidenceDigestSha256 ? { independentEvidenceDigestSha256 } : {}),
+        occurredAt: decisionAt,
       }),
     );
+  }
+
+  private async acceptedProviderBasis(
+    current: TrustCase,
+    decisionAt: Date,
+    expectedDigest?: string,
+  ): Promise<string> {
+    const read = this.contributionEvidence.readReviewEvidence?.bind(this.contributionEvidence);
+    if (!read) throw new TrustApplicationError("dependency_unavailable");
+    const proof = await dependency(() =>
+      read({
+        contributionId: current.contributionId,
+        contributorUserId: current.contributorUserId,
+      }),
+    );
+    const verifiedAt =
+      typeof proof?.verifiedAt === "string" ? Date.parse(proof.verifiedAt) : Number.NaN;
+    const age = decisionAt.getTime() - verifiedAt;
+    if (
+      !proof ||
+      proof.contributionId !== current.contributionId ||
+      typeof proof.evidenceDigestSha256 !== "string" ||
+      !SHA256_PATTERN.test(proof.evidenceDigestSha256) ||
+      (expectedDigest !== undefined && proof.evidenceDigestSha256 !== expectedDigest) ||
+      !Number.isFinite(verifiedAt) ||
+      new Date(verifiedAt).toISOString() !== proof.verifiedAt ||
+      age < 0 ||
+      age > 24 * 60 * 60_000
+    ) {
+      throw new TrustApplicationError("evidence_not_verified");
+    }
+    const independentEvidenceDigestSha256 = proof.evidenceDigestSha256;
+    await this.verifyEvidence(
+      current.contributionId,
+      independentEvidenceDigestSha256,
+      "independent_verification",
+      decisionAt.toISOString(),
+    );
+    return independentEvidenceDigestSha256;
   }
 
   private occurredAt(): Date {
@@ -672,12 +724,14 @@ export class TrustApplicationService {
     contributionId: string,
     evidenceDigestSha256: string,
     purpose: TrustEvidencePurpose,
+    freshAt?: string,
   ): Promise<void> {
     const verified = await dependency(() =>
       this.contributionEvidence.verifyEvidence({
         contributionId,
         evidenceDigestSha256,
         purpose,
+        ...(freshAt ? { freshAt } : {}),
       }),
     );
     if (!verified) throw new TrustApplicationError("evidence_not_verified");

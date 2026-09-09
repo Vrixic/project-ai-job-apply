@@ -104,7 +104,7 @@ export function createConfiguredD2TrustRuntime(
             })
           : null;
       },
-      async verifyEvidence({ contributionId, evidenceDigestSha256, purpose }) {
+      async verifyEvidence({ contributionId, evidenceDigestSha256, purpose, freshAt }) {
         if (
           purpose === "initial_review" &&
           evidence.has(evidenceKey(contributionId, evidenceDigestSha256, purpose))
@@ -115,9 +115,16 @@ export function createConfiguredD2TrustRuntime(
         }
         const [row] = await client<{ verified: boolean }[]>`
           SELECT EXISTS (
-            SELECT 1 FROM jobs.job_contribution_independent_verifications
+            SELECT 1 FROM jobs.job_contribution_independent_verifications AS verification
             WHERE contribution_id = ${contributionId}
               AND evidence_digest_sha256 = ${evidenceDigestSha256}
+              AND (${freshAt ?? null}::timestamptz IS NULL OR (
+                verification.verified_at <= ${freshAt ?? null}::timestamptz
+                AND verification.verified_at >= ${freshAt ?? null}::timestamptz - interval '24 hours'
+                AND NOT EXISTS (SELECT 1 FROM jobs.job_contribution_independent_verifications AS newer
+                  WHERE newer.contribution_id = verification.contribution_id
+                    AND (newer.verified_at, newer.id) > (verification.verified_at, verification.id))
+              ))
           ) AS verified
         `;
         return row?.verified === true;

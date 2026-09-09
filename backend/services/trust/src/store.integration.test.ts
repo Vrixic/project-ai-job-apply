@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import postgres from "postgres";
@@ -43,7 +44,7 @@ describeWithDatabase("PostgreSQL UGC trust foundation", () => {
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });
     expect(first.stdout.trim()).toBe(
-      "Trust migrations through 0003_decision_signals applied and verified.",
+      "Trust migrations through 0004_accepted_independent_evidence applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(first.stdout.trim());
     await store.ping();
@@ -51,6 +52,157 @@ describeWithDatabase("PostgreSQL UGC trust foundation", () => {
 
   afterAll(async () => {
     await client.end();
+  });
+
+  it("preserves historical acceptance without manufacturing a basis during the forward migration", async () => {
+    const namespace = `trust_history_${uuidv7().replaceAll("-", "")}`;
+    const rollback = new Error("rollback isolated synthetic historical Trust schema");
+    await expect(
+      client.begin(async (transaction) => {
+        const migration = async (name: string) => {
+          const source = await readFile(
+            new URL(`../migrations/${name}.sql`, import.meta.url),
+            "utf8",
+          );
+          await transaction.unsafe(
+            source
+              .replaceAll("trust.", `${namespace}.`)
+              .replaceAll("SCHEMA IF NOT EXISTS trust;", `SCHEMA IF NOT EXISTS ${namespace};`)
+              .replaceAll("pg_catalog, trust", `pg_catalog, ${namespace}`)
+              .replaceAll("pg_catalog, privacy, trust", `pg_catalog, privacy, ${namespace}`),
+          );
+        };
+        await migration("0001_ugc_trust_foundation");
+        await migration("0002_candidate_rights");
+        await migration("0003_decision_signals");
+        const caseId = uuidv7();
+        const contributionId = uuidv7();
+        await transaction.unsafe(
+          `INSERT INTO ${namespace}.contribution_cases (
+        id, contribution_id, contributor_user_id, policy_version, appeal_window_milliseconds,
+        state, version, appeal_count, last_action, last_actor_kind, last_actor_id,
+        last_reason_code, created_at, updated_at
+      ) VALUES ($1,$2,$3,'synthetic-history-v1',86400000,'needs_review',1,0,
+        'opened','system',$4,'queued_for_review','2020-01-01','2020-01-01')`,
+          [caseId, contributionId, owner, systemActor],
+        );
+        await transaction.unsafe(
+          `UPDATE ${namespace}.contribution_cases SET state='accepted',
+        version=2,last_action='review_accepted',last_actor_kind='reviewer',last_actor_id=$2,
+        last_reason_code='independently_verified',last_evidence_digest_sha256=$3,
+        updated_at='2020-01-02' WHERE id=$1`,
+          [caseId, firstReviewer, "a".repeat(64)],
+        );
+        const before = await transaction.unsafe(
+          `SELECT to_jsonb(event) AS event FROM ${namespace}.case_events event ORDER BY case_version`,
+        );
+        await migration("0004_accepted_independent_evidence");
+        const after = await transaction.unsafe(
+          `SELECT to_jsonb(event) AS event FROM ${namespace}.case_events event ORDER BY case_version`,
+        );
+        expect(after).toEqual(
+          before.map((row) => ({
+            event: { ...row.event, independent_evidence_digest_sha256: null },
+          })),
+        );
+        const [restored] = await transaction.unsafe(
+          `SELECT independent_evidence_digest_sha256 AS basis FROM ${namespace}.contribution_cases WHERE id=$1`,
+          [caseId],
+        );
+        expect(restored?.basis).toBeNull();
+        throw rollback;
+      }),
+    ).rejects.toBe(rollback);
+    const [cleaned] = await client<
+      { absent: boolean }[]
+    >`SELECT to_regnamespace(${namespace}) IS NULL AS absent`;
+    expect(cleaned?.absent).toBe(true);
+  });
+
+  it("binds new acceptance into immutable event truth and rejects direct SQL basis mismatches", async () => {
+    const caseId = uuidv7();
+    const contributionId = uuidv7();
+    const base = Date.now() - 30_000;
+    await store.open({
+      caseId,
+      contributionId,
+      contributorUserId: owner,
+      systemActorId: systemActor,
+      policy: { version: "synthetic-basis-v1", appealWindowMilliseconds: 86_400_000 },
+      occurredAt: new Date(base),
+    });
+    for (const basis of [null, "b".repeat(64)]) {
+      await expect(client`UPDATE trust.contribution_cases SET state='accepted',version=2,
+        last_action='review_accepted',last_actor_kind='reviewer',last_actor_id=${firstReviewer},
+        last_reason_code='independently_verified',last_evidence_digest_sha256=${"a".repeat(64)},
+        independent_evidence_digest_sha256=${basis},updated_at=${new Date(base + 1_000)}
+        WHERE id=${caseId}`).rejects.toThrow("acceptance requires a bound independent evidence");
+    }
+    expect(await store.readReviewerCase(caseId)).toMatchObject({
+      version: 1,
+      independentEvidenceDigestSha256: null,
+    });
+    const accepted = await store.review(caseId, 1, {
+      reviewerId: firstReviewer,
+      outcome: "accepted",
+      reasonCode: "independently_verified",
+      evidenceDigestSha256: "a".repeat(64),
+      independentEvidenceDigestSha256: "a".repeat(64),
+      occurredAt: new Date(base + 1_000),
+    });
+    expect(accepted.independentEvidenceDigestSha256).toBe("a".repeat(64));
+    const decision = await signals.readLatestDecision({ contributionId, contributorUserId: owner });
+    expect(decision).toMatchObject({
+      status: "accepted",
+      evidenceDigestSha256: "a".repeat(64),
+      independentEvidenceDigestSha256: "a".repeat(64),
+    });
+    if (!decision) throw new Error("Expected synthetic accepted decision");
+    await expect(client`UPDATE trust.case_events SET independent_evidence_digest_sha256=${"b".repeat(64)}
+      WHERE case_id=${caseId}`).rejects.toThrow("append-only");
+    await expect(client`INSERT INTO trust.case_events (
+      event_id,case_id,case_version,contribution_id,policy_version,prior_state,resulting_state,
+      action,actor_kind,actor_id,reason_code,evidence_digest_sha256,independent_evidence_digest_sha256,occurred_at)
+      SELECT event_id,case_id,case_version,contribution_id,policy_version,prior_state,resulting_state,
+        action,actor_kind,actor_id,reason_code,evidence_digest_sha256,${"b".repeat(64)},occurred_at
+      FROM trust.case_events WHERE case_id=${caseId} AND case_version=2`).rejects.toThrow(
+      "bind the exact case evidence",
+    );
+    await expect(client`UPDATE trust.contribution_cases SET state='taken_down',version=3,
+      adverse_state='taken_down',adverse_reviewer_id=${firstReviewer},adverse_decision_at=${new Date(base + 2_000)},
+      appeal_deadline_at=${new Date(base + 2_000 + 86_400_000)},last_action='taken_down',
+      last_actor_kind='reviewer',last_actor_id=${firstReviewer},last_reason_code='credible_safety_risk',
+      last_evidence_digest_sha256=${"b".repeat(64)},independent_evidence_digest_sha256=${"c".repeat(64)},
+      updated_at=${new Date(base + 2_000)} WHERE id=${caseId}`).rejects.toThrow(
+      "nonaccepting transition cannot change",
+    );
+    await store.takeDown(caseId, 2, {
+      reviewerId: firstReviewer,
+      reasonCode: "credible_safety_risk",
+      evidenceDigestSha256: "b".repeat(64),
+      occurredAt: new Date(base + 2_000),
+    });
+    expect(
+      await signals.readDecision({
+        decisionId: decision.decisionId,
+        contributionId,
+        contributorUserId: owner,
+      }),
+    ).toEqual(decision);
+    expect(
+      await signals.readLatestDecision({ contributionId, contributorUserId: owner }),
+    ).not.toHaveProperty("independentEvidenceDigestSha256");
+    await store.withdraw(caseId, 3, {
+      contributorUserId: owner,
+      occurredAt: new Date(base + 3_000),
+    });
+    expect(await store.readReviewerCase(caseId)).toMatchObject({
+      state: "withdrawn",
+      independentEvidenceDigestSha256: null,
+    });
+    expect(await store.readOwnerCase(owner, caseId)).not.toHaveProperty(
+      "independentEvidenceDigestSha256",
+    );
   });
 
   it("pages the fixed review queue with a stable keyset and no unrelated case states", async () => {
@@ -189,6 +341,7 @@ describeWithDatabase("PostgreSQL UGC trust foundation", () => {
       reviewerId: appealReviewer,
       outcome: "reversed",
       evidenceDigestSha256: "f".repeat(64),
+      independentEvidenceDigestSha256: "b".repeat(64),
       occurredAt: new Date(base + 4_000),
     });
     expect(reversed).toMatchObject({ state: "accepted", appealCount: 1, version: 4 });
@@ -198,7 +351,12 @@ describeWithDatabase("PostgreSQL UGC trust foundation", () => {
     ]);
     expect(
       await signals.readLatestDecision({ contributionId, contributorUserId: owner }),
-    ).toMatchObject({ status: "accepted", contributionId });
+    ).toMatchObject({
+      status: "accepted",
+      contributionId,
+      evidenceDigestSha256: "f".repeat(64),
+      independentEvidenceDigestSha256: "b".repeat(64),
+    });
     expect(
       await signals.readLatestDecision({ contributionId, contributorUserId: otherOwner }),
     ).toBeNull();
@@ -295,6 +453,7 @@ describeWithDatabase("PostgreSQL UGC trust foundation", () => {
       outcome: "accepted",
       reasonCode: "independently_verified",
       evidenceDigestSha256: "1".repeat(64),
+      independentEvidenceDigestSha256: "1".repeat(64),
       occurredAt: new Date(base + 1_000),
     });
     await store.takeDown(acceptedCaseId, 2, {

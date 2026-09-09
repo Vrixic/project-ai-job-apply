@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import type postgres from "postgres";
-import type { TrustReviewQueueInput } from "./review-queue.js";
 import {
   decideContributionReview,
   decideTrustAppeal,
@@ -13,6 +12,7 @@ import {
   validateTrustSignalForCase,
   withdrawContribution,
 } from "./policy.js";
+import type { TrustReviewQueueInput } from "./review-queue.js";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
@@ -31,6 +31,7 @@ interface CaseRow {
   adverseDecisionAt: Date | string | null;
   appealDeadlineAt: Date | string | null;
   pendingAppealEvidenceDigestSha256: string | null;
+  independentEvidenceDigestSha256: string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
 }
@@ -112,6 +113,9 @@ function date(value: Date | string, field: string): Date {
 }
 
 function mapCase(row: CaseRow): TrustCase {
+  if (row.independentEvidenceDigestSha256 !== null) {
+    assertDigest(row.independentEvidenceDigestSha256, "stored independent evidence");
+  }
   const hasAdverse = row.adverseState !== null;
   if (
     hasAdverse !==
@@ -139,6 +143,7 @@ function mapCase(row: CaseRow): TrustCase {
         }
       : null,
     pendingAppealEvidenceDigestSha256: row.pendingAppealEvidenceDigestSha256,
+    independentEvidenceDigestSha256: row.independentEvidenceDigestSha256,
     createdAt: date(row.createdAt, "creation timestamp"),
     updatedAt: date(row.updatedAt, "update timestamp"),
   };
@@ -165,6 +170,7 @@ const caseSelection = `
   adverse_reviewer_id AS "adverseReviewerId", adverse_decision_at AS "adverseDecisionAt",
   appeal_deadline_at AS "appealDeadlineAt",
   pending_appeal_evidence_digest_sha256 AS "pendingAppealEvidenceDigestSha256",
+  independent_evidence_digest_sha256 AS "independentEvidenceDigestSha256",
   created_at AS "createdAt", updated_at AS "updatedAt"
 `;
 
@@ -180,7 +186,7 @@ export class PostgresTrustStore {
         AND to_regclass('trust.contribution_decision_outbox') IS NOT NULL
         AND to_regclass('trust.contribution_decision_deliveries') IS NOT NULL
         AND EXISTS (SELECT 1 FROM trust.schema_migrations
-          WHERE version = '0003_decision_signals')
+          WHERE version = '0004_accepted_independent_evidence')
       ) AS ready
     `;
     if (!result?.ready) throw new Error("The Trust persistence boundary is unavailable");
@@ -415,6 +421,7 @@ export class PostgresTrustStore {
           adverse_decision_at = ${adverse?.decidedAt ?? null},
           appeal_deadline_at = ${adverse?.appealDeadlineAt ?? null},
           pending_appeal_evidence_digest_sha256 = ${value.pendingAppealEvidenceDigestSha256},
+          independent_evidence_digest_sha256 = ${value.independentEvidenceDigestSha256},
           last_action = ${transition.action}, last_actor_kind = ${transition.actorKind},
           last_actor_id = ${transition.actorId}, last_reason_code = ${transition.reasonCode},
           last_evidence_digest_sha256 = ${transition.evidenceDigestSha256},

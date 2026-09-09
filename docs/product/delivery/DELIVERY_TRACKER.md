@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-09-08
+Last updated: 2026-09-09
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -321,12 +321,21 @@ This is the master record for the delivery phases defined in the [product and sy
 - Status: In progress
 - Start: 2026-09-01
 - Completion: Not completed
-- Current inputs (2026-09-09): the user approved the isolated development recovery role/drill and
-  cleanup (R17 Closed). The supplied reviewer screenshot shows the intended three permissions on
-  User-Delegated Access; the distinct machine Client Access grant still needs confirmation (R16).
-  Fresh STS reports expired development SSO (R15 Open), so no recovery cloud changes have run.
-  Pre-execution review fixes the real operator's role ARN separator; 296 synthetic guards pass,
-  including actual role-reader success and mismatch paths. Scope remains development-only.
+- Current inputs (2026-09-09): renewed development SSO passes at `13:42:25Z`; the corrected
+  Auth0 Client Access grant passes exact three-scope authentication at `13:44:24Z`. R15/R16 are
+  Closed. Nine bounded requests read three existing initial-review cases, with no next page,
+  role changes or decisions. R17 remains Closed: the isolated recovery drill is already approved.
+  Fresh artifact/environment/role health matches state 290 and all 13 D2 alarms are OK.
+- New implementation gaps (2026-09-09): D2-039 adds append-only refresh for stale unpublished
+  provider evidence, exact decision/evidence binding, server freshness enforcement and monotonic
+  catalog updates. D2-041 corrects the strict candidate-export schema for existing contribution
+  authorizations, contributions/histories, private captures and Trust evidence. Actual full-export
+  assembly and the four-test seven-owner suite pass; current-source logical recovery passes all
+  44 migrations and 68 exact relation row sets, including 18 nonempty D2 relations and cleanup.
+  D2-040 addresses confirmed Terraform 1.9.8 incompatibility with the configured
+  S3 state lock. No recovery activation plan/apply or new cloud resource was created; effective
+  locking and a coherent toolchain transition are required before cloud continuation. The 296
+  restore-operator guards remain passing; no role or review fence is weakened.
 - Current release checkpoint (2026-09-08, 23:53Z): exact `42b9686` closes D2-037. Existing
   candidate/admin Vercel targets are READY; the candidate route boundary passes, while the
   protected admin preview remains identity-dark. One migration task succeeds with seven log
@@ -334,8 +343,8 @@ This is the master record for the delivery phases defined in the [product and sy
   Gateway/scheduled/Trust versions 55/17/13 with zero drift, 13 alarms OK, approximately empty
   Trust queues and unchanged reviewer assignments, Greenhouse-only scope and concurrency.
   Docker/WSL are stopped. D2-038's restore-only Lambda/role/preflight/reconciliation is implemented
-  on shared main; its new IAM scope and cloud acceptance remain separate. The
-  reviewer application API-access blocker still requires the requested non-secret screenshot.
+  on shared main; its new IAM scope and cloud acceptance remain separate. Reviewer API access
+  now works; current provider evidence and the remaining decision journeys are separate gates.
 - Local recovery implementation (2026-09-08): D2-038 adds a dedicated default-off read-only cloud
   role and a temporary private version-qualified executor, strict shared operator/runtime schema,
   complete historical marker and owner/document preflight, and transactional restored-only replay.
@@ -1043,6 +1052,8 @@ Append only material cross-delivery events.
 | 2026-09-08 | D2 | Completed exact `42b9686` Vercel/AWS release at state 290, 42 migrations/68 relations and Gateway/scheduled/Trust 55/17/13, with zero drift and unchanged activation scope. Implemented isolated D2-038 restore-only replay on shared main; workflow 533, real PostgreSQL 3, PowerShell 279 and Terraform 84+4 checks pass locally. Full committed-source repository verification and actual isolated cloud replay remain separate; reviewer API client access still needs correction. | [Current release](phase-2-extension-and-community.md#d2-037--release-candidate-dependency-remediation), [recovery implementation](phase-2-extension-and-community.md#d2-038--isolated-deletion-recovery) |
 | 2026-09-08 | D2 | Integrated recovery source `831b1db` passes the full repository verifier and maintained infrastructure validation. Two source-bound Lambda ZIP/manifest/SBOM builds match; all agents finished on shared main with no new branches. The completed application release remains unchanged at state 290. Auth0 client access and authorization of the new isolated development recovery drill remain inputs; no new cloud permissions, restore or executor are activated. Docker/WSL are stopped; the PC remains on. | [Recovery implementation](phase-2-extension-and-community.md#d2-038--isolated-deletion-recovery), [remaining steps](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs) |
 | 2026-09-09 | D2 | User approved the new isolated development recovery role/drill/cleanup (R17 Closed) and supplied an Auth0 screenshot showing User-Delegated Access rather than the required machine Client Access grant. Fresh STS detects expired development SSO (R15 Open); no cloud mutation or token retry. Fixed the recovery operator's IAM ARN separator with real-function synthetic coverage; 296 checks pass. Exact activation-scope review excludes existing runtime/provider/reviewer/database changes. | [Recovery implementation](phase-2-extension-and-community.md#d2-038--isolated-deletion-recovery), [remaining inputs](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs) |
+
+| 2026-09-09 | D2 | User confirmation resolves the two immediate inputs: exact development SSO and reviewer authentication now pass; nine bounded requests read three initial-review cases with no decisions or role changes. All 13 D2 alarms remain healthy at unchanged state 290. Added D2-039 for stale-evidence refresh, real Trust UUIDv8 compatibility and monotonic catalog publication, and D2-040 for actual Terraform 1.9.8/S3-lock incompatibility. No recovery activation plan, apply or new cloud resource. R15/R16 are Closed, R17 remains authorized and R18 tracks the new tooling blocker. | [Current Phase 2 checkpoint](phase-2-extension-and-community.md#task-register), [single decision record](phase-2-extension-and-community.md#decisions-and-scope-changes) |
 
 ## Cross-delivery decisions and changes
 

@@ -99,28 +99,35 @@ describe("current restore manifest", () => {
         (total, contributor) => total + contributor.migrations.length,
         0,
       ),
-    ).toBe(42);
+    ).toBe(44);
     expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 
-    for (const contributor of source.manifest.contributors) {
-      const migrationDirectory = new URL(`../../${contributor.owner}/migrations/`, import.meta.url);
-      expect(
-        (await readdir(migrationDirectory)).filter((name) => name.endsWith(".sql")).sort(),
-      ).toEqual(contributor.migrations.map((migration) => `${migration.version}.sql`));
-      for (const migration of contributor.migrations) {
-        const bytes = (
-          await readFile(
-            new URL(
-              `../../${contributor.owner}/migrations/${migration.version}.sql`,
-              import.meta.url,
-            ),
-            "utf8",
-          )
-        ).replaceAll("\r\n", "\n");
-        expect(createHash("sha256").update(bytes).digest("hex")).toBe(migration.checksum);
-      }
-    }
-  });
+    // The exact six-owner assertion above bounds I/O concurrency. Each owner still enumerates
+    // every SQL file and checks every checksum sequentially, including under full-workspace load.
+    await Promise.all(
+      source.manifest.contributors.map(async (contributor) => {
+        const migrationDirectory = new URL(
+          `../../${contributor.owner}/migrations/`,
+          import.meta.url,
+        );
+        expect(
+          (await readdir(migrationDirectory)).filter((name) => name.endsWith(".sql")).sort(),
+        ).toEqual(contributor.migrations.map((migration) => `${migration.version}.sql`));
+        for (const migration of contributor.migrations) {
+          const bytes = (
+            await readFile(
+              new URL(
+                `../../${contributor.owner}/migrations/${migration.version}.sql`,
+                import.meta.url,
+              ),
+              "utf8",
+            )
+          ).replaceAll("\r\n", "\n");
+          expect(createHash("sha256").update(bytes).digest("hex")).toBe(migration.checksum);
+        }
+      }),
+    );
+  }, 15_000);
 
   it("is recursively immutable and accepts a separate additive owner", () => {
     const source = loadCurrentRestoreManifest();
@@ -243,7 +250,7 @@ describe("read-only aggregate restore verification", () => {
       manifestSha256: source.sha256,
       ownerCount: 6,
       relationCount: 68,
-      migrationCount: 42,
+      migrationCount: 44,
     });
     expect(result.aggregateDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.keys(result)).toEqual([
@@ -337,39 +344,94 @@ describe("read-only aggregate restore verification", () => {
     ).rejects.toThrow("migration boundary mismatch for jobs");
   });
 
-  it("keeps the prior 41-migration release verifiable only against its own boundary", async () => {
-    const current = loadCurrentRestoreManifest();
-    const historicalManifest = parseRestoreManifest({
-      ...current.manifest,
-      contributors: current.manifest.contributors.map((contributor) => ({
-        ...contributor,
-        migrations: contributor.migrations.filter(
-          (migration) => migration.version !== "0022_development_contribution_provider_leases",
+  it.each(["missing", "wrong checksum"])(
+    "rejects %s Trust accepted-independent-evidence migration at the current boundary",
+    async (mutation) => {
+      const source = loadCurrentRestoreManifest();
+      const baseline = successfulExecutor(source);
+      const executor: RestoreSqlExecutor = {
+        async unsafe<T extends Record<string, unknown>>(query: string): Promise<T[]> {
+          const rows = await baseline.unsafe<T>(query);
+          if (!query.includes('"trust"."schema_migrations"')) {
+            return rows;
+          }
+          expect(rows.some((row) => row.version === "0004_accepted_independent_evidence")).toBe(
+            true,
+          );
+          return rows.flatMap((row) =>
+            row.version !== "0004_accepted_independent_evidence"
+              ? [row]
+              : mutation === "missing"
+                ? []
+                : [{ ...row, checksum: "f".repeat(64) }],
+          ) as T[];
+        },
+      };
+      await expect(
+        verifyRestoreDatabase(
+          {
+            async begin(_options, work) {
+              return work(executor);
+            },
+          },
+          source,
         ),
-      })),
-    });
-    const historical: RestoreManifestSource = {
-      manifest: historicalManifest,
-      sha256: createHash("sha256").update(JSON.stringify(historicalManifest)).digest("hex"),
-    };
-    const executor = successfulExecutor(historical);
-    const client: RestoreSqlClient = {
-      async begin(_options, work) {
-        return work(executor);
-      },
-    };
+      ).rejects.toThrow("migration boundary mismatch for trust");
+    },
+  );
 
-    expect(historical.sha256).not.toBe(current.sha256);
-    await expect(verifyRestoreDatabase(client, historical)).resolves.toMatchObject({
-      manifestSha256: historical.sha256,
-      ownerCount: 6,
-      relationCount: 68,
+  it.each([
+    {
       migrationCount: 41,
-    });
-    await expect(verifyRestoreDatabase(client, current)).rejects.toThrow(
-      "migration boundary mismatch for jobs",
-    );
-  });
+      omittedVersions: [
+        "0022_development_contribution_provider_leases",
+        "0023_contribution_verification_refresh",
+        "0004_accepted_independent_evidence",
+      ],
+    },
+    {
+      migrationCount: 42,
+      omittedVersions: [
+        "0023_contribution_verification_refresh",
+        "0004_accepted_independent_evidence",
+      ],
+    },
+  ])(
+    "keeps the prior $migrationCount-migration release verifiable only against its own boundary",
+    async ({ migrationCount, omittedVersions }) => {
+      const current = loadCurrentRestoreManifest();
+      const historicalManifest = parseRestoreManifest({
+        ...current.manifest,
+        contributors: current.manifest.contributors.map((contributor) => ({
+          ...contributor,
+          migrations: contributor.migrations.filter(
+            (migration) => !omittedVersions.includes(migration.version),
+          ),
+        })),
+      });
+      const historical: RestoreManifestSource = {
+        manifest: historicalManifest,
+        sha256: createHash("sha256").update(JSON.stringify(historicalManifest)).digest("hex"),
+      };
+      const executor = successfulExecutor(historical);
+      const client: RestoreSqlClient = {
+        async begin(_options, work) {
+          return work(executor);
+        },
+      };
+
+      expect(historical.sha256).not.toBe(current.sha256);
+      await expect(verifyRestoreDatabase(client, historical)).resolves.toMatchObject({
+        manifestSha256: historical.sha256,
+        ownerCount: 6,
+        relationCount: 68,
+        migrationCount,
+      });
+      await expect(verifyRestoreDatabase(client, current)).rejects.toThrow(
+        "migration boundary mismatch for jobs",
+      );
+    },
+  );
 
   it("rejects a missing owned schema even when that schema contains no relations", async () => {
     const source = loadCurrentRestoreManifest();

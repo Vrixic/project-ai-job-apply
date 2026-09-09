@@ -281,6 +281,10 @@ importers:
       uuid:
         specifier: 14.0.1
         version: 14.0.1
+    devDependencies:
+      '@ai-job-apply/domain':
+        specifier: workspace:*
+        version: link:../../../packages/domain
 
   backend/workers/ingestion:
     dependencies:

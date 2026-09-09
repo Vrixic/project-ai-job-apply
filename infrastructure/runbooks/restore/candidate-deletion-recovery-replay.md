@@ -20,7 +20,7 @@ deployed before preparation. They do not activate candidate rights, alter an exi
 effective permissions, or create the executor. Do not enable this flag in staging or production,
 reuse a live mutation-capable rights role, or override the migration task into replay.
 
-The complete current manifest is six migration contributors, ten schemas, 42 migrations and
+The complete current manifest is six migration contributors, ten schemas, 44 migrations and
 68 relations. All seven current candidate-data owners are reconciled. Historical D1/D2 completed
 markers retain their original version/digest and retention values, using the compiled catalog in
 [candidate-deletion-restore-policy.ts](../../../backend/workflows/src/candidate-deletion-restore-policy.ts).

@@ -10,6 +10,7 @@ import {
   type ContributionCapabilitySource,
   isDevelopmentContributionCapabilitySource,
 } from "./contribution-capability-source.js";
+import { isContributionEvidenceFresh } from "./contribution-evidence-freshness.js";
 import {
   type ContributionProviderProvenance,
   type NormalizedContributionProposal,
@@ -127,9 +128,18 @@ export type TrustContributionDecision =
       decisionId: string;
       policyVersion: string;
       decidedAt: string;
+      /** Actual review/appeal event evidence; not necessarily the provider proof. */
+      evidenceDigestSha256?: string;
+      /** Separately recorded provider basis. Missing bindings fail closed before publication. */
+      independentEvidenceDigestSha256?: string;
     };
 
 export interface ContributionTrustDecisionPort {
+  /** Reads an existing initial review only; never opens a case or treats an appeal as initial review. */
+  readForRefresh?(input: {
+    contributionId: string;
+    contributorUserId: string;
+  }): Promise<TrustContributionDecision>;
   evaluate(input: {
     contributionId: string;
     contributorUserId: string;
@@ -194,11 +204,31 @@ export interface ContributionPublicationReconciler {
   ): Promise<
     | { status?: "published"; jobId: string; sourceId: string; verificationId: string }
     | { status: "probable_duplicate"; probableDuplicateJobIds: readonly string[] }
+    | { status: "evidence_conflict" }
   >;
   remove(command: Readonly<PreparedTerminalReconciliation>): Promise<void>;
 }
 
+export interface ContributionVerificationRefreshReservation {
+  attempt: number;
+  claimedBy: string;
+  claimedAt: string;
+}
+
 export interface ContributionProcessingStore {
+  beginVerificationRefresh?(input: {
+    contributionId: string;
+    previousVerificationId: string;
+    occurredAt: Date;
+  }): Promise<ContributionVerificationRefreshReservation | null>;
+  finishVerificationRefresh?(input: {
+    contributionId: string;
+    attempt: number;
+    claimedBy: string;
+    claimedAt: string;
+    outcome: "unavailable" | "mismatch" | "closed" | "superseded";
+    occurredAt: Date;
+  }): Promise<void>;
   load(contributionId: string): Promise<LoadedContributionProcessing | null>;
   recordOwnerState(input: {
     contributionId: string;
@@ -218,6 +248,7 @@ export interface ContributionProcessingStore {
     evidence: IndependentVerificationEvidence;
     processingPolicyVersion: string;
     occurredAt: Date;
+    refresh?: ContributionVerificationRefreshReservation & { previousVerificationId: string };
   }): Promise<LoadedContributionProcessing>;
   recordTrustDecision(input: {
     contributionId: string;
@@ -397,7 +428,9 @@ function assertTrust(result: TrustContributionDecision, contributionId: string):
   if (result.status === "unavailable" || result.status === "needs_review") return;
   if (
     result.contributionId !== contributionId ||
-    !UUID_V7_PATTERN.test(result.decisionId) ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(
+      result.decisionId,
+    ) ||
     !POLICY_VERSION_PATTERN.test(result.policyVersion)
   ) {
     throw new ContributionProcessingDependencyUnavailableError();
@@ -484,7 +517,53 @@ export class ContributionProcessingService {
       throw new ContributionProcessingDependencyUnavailableError();
     }
 
-    if (!contribution.independentVerification) {
+    let refresh:
+      | (ContributionVerificationRefreshReservation & { previousVerificationId: string })
+      | undefined;
+    if (
+      contribution.independentVerification &&
+      !isContributionEvidenceFresh(
+        contribution.independentVerification.verifiedAt,
+        this.occurredAt(),
+      )
+    ) {
+      // A terminal decision is never silently rebound to a new proof. An accepted proof that
+      // expires before publication stays held and requires a separate explicit decision design.
+      if (contribution.trustDecision) return "awaiting_independent_verification";
+      if (Date.parse(contribution.independentVerification.verifiedAt) > this.occurredAt().getTime())
+        return "awaiting_independent_verification";
+      const read = this.trust.readForRefresh?.bind(this.trust);
+      const begin = this.store.beginVerificationRefresh?.bind(this.store);
+      if (!read || !begin || !this.store.finishVerificationRefresh)
+        return "awaiting_independent_verification";
+      const contributorUserId = contribution.ownerUserId;
+      const current = await dependency(() => read({ contributionId, contributorUserId }));
+      assertTrust(current, contributionId);
+      if (current.status !== "needs_review") {
+        if (current.status !== "unavailable") {
+          contribution = await dependency(() =>
+            this.store.recordTrustDecision({
+              contributionId,
+              decision: current,
+              processingPolicyVersion: this.policy.version,
+              occurredAt: this.occurredAt(),
+            }),
+          );
+          return (
+            (await this.reconcileTerminal(contribution)) ??
+            (current.status === "rejected" ? "rejected" : "awaiting_independent_verification")
+          );
+        }
+        return "awaiting_trust";
+      }
+      const previousVerificationId = contribution.independentVerification.verificationId;
+      const reservation = await dependency(() =>
+        begin({ contributionId, previousVerificationId, occurredAt: this.occurredAt() }),
+      );
+      if (reservation === null) return "awaiting_independent_verification";
+      refresh = { previousVerificationId, ...reservation };
+    }
+    if (!contribution.independentVerification || refresh) {
       const result = await dependency(() =>
         this.independentVerifier.verify({
           contributionId,
@@ -494,6 +573,17 @@ export class ContributionProcessingService {
       );
       assertVerification(result, contribution);
       if (result.status !== "verified") {
+        if (refresh) {
+          await this.store.finishVerificationRefresh?.({
+            contributionId,
+            ...refresh,
+            outcome: result.status,
+            occurredAt: this.occurredAt(),
+          });
+          // The existing case remains awaiting review. Keep retry diagnostics on the bounded
+          // queue instead of reusing immutable one-time milestone events as a refresh cycle.
+          return "awaiting_independent_verification";
+        }
         const reasonCode =
           result.status === "unavailable"
             ? "provider_temporarily_unavailable"
@@ -503,12 +593,35 @@ export class ContributionProcessingService {
         await this.recordState(contributionId, "awaiting_independent_verification", reasonCode);
         return "awaiting_independent_verification";
       }
+      if (!isContributionEvidenceFresh(result.verifiedAt, this.occurredAt()))
+        throw new ContributionProcessingDependencyUnavailableError();
+      if (refresh) {
+        const contributorUserId = contribution.ownerUserId;
+        const read = this.trust.readForRefresh?.bind(this.trust);
+        if (!read) throw new ContributionProcessingDependencyUnavailableError();
+        const current = await dependency(() =>
+          read({
+            contributionId,
+            contributorUserId,
+          }),
+        );
+        if (current.status !== "needs_review") {
+          await this.store.finishVerificationRefresh?.({
+            contributionId,
+            ...refresh,
+            outcome: "superseded",
+            occurredAt: this.occurredAt(),
+          });
+          return "awaiting_trust";
+        }
+      }
       contribution = await dependency(() =>
         this.store.recordIndependentVerification({
           contributionId,
           evidence: result,
           processingPolicyVersion: this.policy.version,
           occurredAt: this.occurredAt(),
+          ...(refresh ? { refresh } : {}),
         }),
       );
       assertLoaded(contribution, contributionId);
@@ -548,6 +661,12 @@ export class ContributionProcessingService {
     if (terminalAfterTrust) return terminalAfterTrust;
     if (contribution.trustDecision?.status === "rejected") return "rejected";
     if (contribution.trustDecision?.status !== "accepted") return "awaiting_trust";
+    if (
+      !isContributionEvidenceFresh(verification.verifiedAt, this.occurredAt()) ||
+      contribution.trustDecision.independentEvidenceDigestSha256 !==
+        verification.evidenceDigestSha256
+    )
+      return "awaiting_independent_verification";
 
     // Consent can be revoked while normalization, verification, or Trust review is in progress.
     const finalConsent = await this.verifyConsent(contribution);
@@ -577,6 +696,7 @@ export class ContributionProcessingService {
     );
     this.assertPublicationCommand(command, contribution);
     const published = await dependency(() => this.reconciler.publish(command));
+    if (published.status === "evidence_conflict") return "awaiting_independent_verification";
     if (published.status === "probable_duplicate") {
       if (
         published.probableDuplicateJobIds.length < 1 ||

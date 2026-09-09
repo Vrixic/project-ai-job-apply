@@ -10,6 +10,7 @@ const migrationVersions = [
   "0001_ugc_trust_foundation",
   "0002_candidate_rights",
   "0003_decision_signals",
+  "0004_accepted_independent_evidence",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -58,6 +59,9 @@ try {
         candidateDeletionGuardBodyCount: number;
         decisionSignalFunctionCount: number;
         decisionSignalPublicExecuteViolationCount: number;
+        independentEvidenceColumnCount: number;
+        independentEvidenceFunctionCount: number;
+        independentEvidencePublicExecuteViolationCount: number;
       }[]
     >`
       SELECT
@@ -73,7 +77,9 @@ try {
             'case_events_candidate_delete_guard', 'reputation_evidence_guard',
             'reputation_evidence_candidate_delete_guard') AND NOT tgisinternal
             OR (tgname IN ('contribution_decision_outbox_guard',
-              'contribution_decision_deliveries_guard') AND NOT tgisinternal)
+              'contribution_decision_deliveries_guard',
+              'contribution_cases_independent_evidence_guard',
+              'case_events_independent_evidence_guard') AND NOT tgisinternal)
         ) AS "triggerCount",
         (SELECT count(*)::int FROM pg_indexes WHERE schemaname = 'trust'
           AND indexname IN ('contribution_cases_owner_updated_idx',
@@ -136,10 +142,29 @@ try {
             to_regprocedure('trust.guard_contribution_decision_delivery()')
           ]) AND privilege.grantee = 0 AND privilege.privilege_type = 'EXECUTE'
         ) AS "decisionSignalPublicExecuteViolationCount"
+        ,(SELECT count(*)::int FROM information_schema.columns
+          WHERE table_schema = 'trust' AND table_name IN ('contribution_cases', 'case_events')
+            AND column_name = 'independent_evidence_digest_sha256'
+            AND data_type = 'text' AND is_nullable = 'YES'
+        ) AS "independentEvidenceColumnCount"
+        ,(SELECT count(*)::int FROM pg_proc procedure
+          WHERE procedure.oid = ANY(ARRAY[
+            to_regprocedure('trust.guard_accepted_independent_evidence()'),
+            to_regprocedure('trust.guard_case_event_independent_evidence()')
+          ])) AS "independentEvidenceFunctionCount"
+        ,(SELECT count(*)::int FROM pg_proc procedure
+          CROSS JOIN LATERAL aclexplode(
+            COALESCE(procedure.proacl, acldefault('f', procedure.proowner))
+          ) AS privilege
+          WHERE procedure.oid = ANY(ARRAY[
+            to_regprocedure('trust.guard_accepted_independent_evidence()'),
+            to_regprocedure('trust.guard_case_event_independent_evidence()')
+          ]) AND privilege.grantee = 0 AND privilege.privilege_type = 'EXECUTE'
+        ) AS "independentEvidencePublicExecuteViolationCount"
     `;
     if (
       verification?.tableCount !== 6 ||
-      verification.triggerCount !== 9 ||
+      verification.triggerCount !== 11 ||
       verification.indexCount !== 8 ||
       verification.migrationCount !== migrationVersions.length ||
       verification.candidateRightsFunctionCount !== 5 ||
@@ -147,7 +172,10 @@ try {
       verification.candidateRightsPublicExecuteViolationCount !== 0 ||
       verification.candidateDeletionGuardBodyCount !== 3 ||
       verification.decisionSignalFunctionCount !== 3 ||
-      verification.decisionSignalPublicExecuteViolationCount !== 0
+      verification.decisionSignalPublicExecuteViolationCount !== 0 ||
+      verification.independentEvidenceColumnCount !== 2 ||
+      verification.independentEvidenceFunctionCount !== 2 ||
+      verification.independentEvidencePublicExecuteViolationCount !== 0
     ) {
       throw new Error(`Trust migration verification failed: ${JSON.stringify(verification)}`);
     }

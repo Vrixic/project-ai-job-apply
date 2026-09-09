@@ -184,7 +184,7 @@ try {
   assert.equal(source.manifest.contributors.length, 6);
   assert.equal(source.manifest.contributors.flatMap((owner) => owner.schemas).length, 10);
   assert.equal(source.manifest.contributors.flatMap((owner) => owner.relations).length, 68);
-  assert.equal(source.manifest.contributors.flatMap((owner) => owner.migrations).length, 42);
+  assert.equal(source.manifest.contributors.flatMap((owner) => owner.migrations).length, 44);
   // Reapply while only the source DB exists. The Jobs reader-role CONNECT boundary
   // is cluster-wide; a second migrated database is deliberately not allowed here.
   for (const pass of ["fresh", "replay"]) {
@@ -280,7 +280,7 @@ try {
   assert.deepEqual(await exactRows(sourceReader, source.manifest), sourceRows);
   result = {
     profile: "d2_generated_logical_recovery_v1",
-    migrationCount: 42,
+    migrationCount: 44,
     ownerCount: 6,
     schemaCount: 10,
     exactRelationRowSetsMatched: 68,

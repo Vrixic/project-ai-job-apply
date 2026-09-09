@@ -31,6 +31,7 @@ const migrationVersions = [
   "0020_contribution_trust_reprocessing",
   "0021_development_contribution_operation_lease",
   "0022_development_contribution_provider_leases",
+  "0023_contribution_verification_refresh",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -1142,6 +1143,10 @@ try {
     (migration) => migration.version === "0020_contribution_trust_reprocessing",
   );
   if (!reprocessingMigration) throw new Error("Trust reprocessing migration is missing");
+  const refreshMigration = migrations.find(
+    (migration) => migration.version === "0023_contribution_verification_refresh",
+  );
+  if (!refreshMigration) throw new Error("Contribution refresh migration is missing");
   for (const [name, args, language] of [
     ["contribution_requires_trust_processing", 2, "sql"],
     ["guard_job_contribution_processing_queue", 0, "plpgsql"],
@@ -1149,7 +1154,11 @@ try {
     const source = new RegExp(
       `CREATE (?:OR REPLACE )?FUNCTION jobs\\.${name}\\([\\s\\S]*?AS \\$\\$([\\s\\S]*?)\\$\\$;`,
       "u",
-    ).exec(reprocessingMigration.sql)?.[1];
+    ).exec(
+      name === "guard_job_contribution_processing_queue"
+        ? refreshMigration.sql
+        : reprocessingMigration.sql,
+    )?.[1];
     const [actual] = await client<Array<{ body: string }>>`
       SELECT procedure.prosrc AS body FROM pg_proc AS procedure
       JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
@@ -1168,6 +1177,36 @@ try {
         AND is_nullable = 'YES') AS present
   `;
   if (!marker?.present) throw new Error("Trust reprocessing decision marker is missing");
+  const [refreshShape] = await client<
+    Array<{
+      columns: number;
+      constraints: number;
+      singletonConstraints: number;
+      latestIndex: boolean;
+    }>
+  >`
+    SELECT (SELECT count(*)::int FROM information_schema.columns WHERE table_schema = 'jobs' AND (
+      (table_name = 'job_contribution_processing_queue' AND column_name IN
+        ('verification_refresh_attempts','last_verification_refresh_at','verification_refresh_outcome')) OR
+      (table_name = 'job_contribution_trust_decisions' AND column_name = 'evidence_digest_sha256')
+    )) AS columns,
+    (SELECT count(*)::int FROM pg_constraint WHERE connamespace = 'jobs'::regnamespace AND convalidated
+      AND conname IN ('job_contribution_verification_digest_uq','job_contribution_verification_refresh_ck',
+        'job_contribution_trust_decisions_evidence_ck')) AS constraints,
+    (SELECT count(*)::int FROM pg_constraint
+      WHERE conrelid = 'jobs.job_contribution_independent_verifications'::regclass
+        AND conname IN ('job_contribution_independent_verifications_contribution_id_key',
+          'job_contribution_independent_verifications_normalization_id_key')) AS "singletonConstraints",
+    EXISTS (SELECT 1 FROM pg_index WHERE indexrelid = 'jobs.job_contribution_verification_latest_idx'::regclass
+      AND indisvalid AND indisready AND indrelid = 'jobs.job_contribution_independent_verifications'::regclass) AS "latestIndex"
+  `;
+  if (
+    refreshShape?.columns !== 4 ||
+    refreshShape.constraints !== 3 ||
+    refreshShape.singletonConstraints !== 0 ||
+    !refreshShape.latestIndex
+  )
+    throw new Error("Contribution verification refresh shape is invalid");
   const leaseMigration = migrations.find(
     (migration) => migration.version === "0022_development_contribution_provider_leases",
   );

@@ -153,6 +153,13 @@ export class ProbableDuplicateObservationError extends Error {
   }
 }
 
+export class ConflictingObservationError extends Error {
+  constructor() {
+    super("Conflicting provider observations require independent verification");
+    this.name = "ConflictingObservationError";
+  }
+}
+
 export interface RecordWithdrawalResult {
   outcome: "not_found" | "stale_ignored" | "source_withdrawn" | "already_withdrawn";
   canonicalJobWithdrawn: boolean;
@@ -220,6 +227,20 @@ interface ExistingJobRow {
   firstObservedAt: Date;
   expiresAt: Date;
   consecutiveVerificationFailures: number;
+}
+
+interface ObservationJobRow extends ExistingJobRow {
+  lastVerifiedAt: Date;
+  statusChangedAt: Date | null;
+  observationMatches: boolean;
+}
+
+interface ObservationSourceRow {
+  id: string;
+  lastObservedAt: Date;
+  lastVerifiedAt: Date;
+  withdrawnAt: Date | null;
+  observationMatches: boolean;
 }
 
 interface WithdrawalSourceRow {
@@ -700,17 +721,38 @@ export class PostgresJobCatalog {
       let jobId: string;
       let sourceId: string;
       let resolvedStatus: JobStatus;
+      let updateSource = true;
 
       if (matchedJobId) {
         await transaction`SELECT pg_advisory_xact_lock(hashtext(${`jobs:source-lifecycle:${matchedJobId}`}))`;
-        const [existing] = await transaction<ExistingJobRow[]>`
+        const [existing] = await transaction<ObservationJobRow[]>`
           SELECT
             id,
             company_id AS "companyId",
             status,
             status_reason AS "statusReason",
             first_observed_at AS "firstObservedAt",
+            last_verified_at AS "lastVerifiedAt",
             expires_at AS "expiresAt",
+            (SELECT max(occurred_at) FROM jobs.status_events
+              WHERE job_id = jobs.canonical_jobs.id
+                AND to_status = jobs.canonical_jobs.status) AS "statusChangedAt",
+            (title = ${observation.title}
+              AND locations = ${transaction.json(observation.locations)}::jsonb
+              AND department IS NOT DISTINCT FROM ${observation.department ?? null}
+              AND work_mode IS NOT DISTINCT FROM ${observation.workMode ?? null}
+              AND employment_type IS NOT DISTINCT FROM ${observation.employmentType ?? null}
+              AND description_hash IS NOT DISTINCT FROM ${observation.contentHash}
+              AND expires_at = ${observation.expiresAt}
+              AND valid_through IS NOT DISTINCT FROM ${observation.validThrough ?? null}
+              AND date_posted IS NOT DISTINCT FROM COALESCE(
+                LEAST(date_posted, ${observation.datePosted ?? null}), date_posted,
+                ${observation.datePosted ?? null})
+              AND application_url IS NOT DISTINCT FROM COALESCE(
+                ${observation.applicationUrl ?? null}, application_url)
+              AND structured_locations IS NOT DISTINCT FROM COALESCE(
+                ${observation.structuredLocations ? transaction.json(observation.structuredLocations as unknown as postgres.JSONValue) : null}::jsonb,
+                structured_locations)) AS "observationMatches",
             consecutive_verification_failures AS "consecutiveVerificationFailures"
           FROM jobs.canonical_jobs
           WHERE id = ${matchedJobId}
@@ -719,8 +761,60 @@ export class PostgresJobCatalog {
         if (!existing) {
           throw new Error("Exact source identity points to a missing canonical job");
         }
-        const nextStatus =
-          existing.status === "withdrawn" && existing.statusReason === "positive_source_withdrawal"
+        sourceId = exactMatches[0]?.sourceId ?? "";
+        const [source] = await transaction<ObservationSourceRow[]>`
+          SELECT id, last_observed_at AS "lastObservedAt",
+            last_verified_at AS "lastVerifiedAt",
+            withdrawn_at AS "withdrawnAt",
+            (provider = ${observation.provider} AND provenance = ${observation.provenance}
+              AND ats_tenant IS NOT DISTINCT FROM ${observation.atsTenant ?? null}
+              AND external_job_id IS NOT DISTINCT FROM ${observation.externalJobId ?? null}
+              AND employer_requisition_id IS NOT DISTINCT FROM ${observation.employerRequisitionId ?? null}
+              AND verified_company_domain IS NOT DISTINCT FROM ${observation.verifiedCompanyDomain ?? null}
+              AND canonical_url_hash = ${observation.canonicalUrlHash}
+              AND content_hash = ${observation.contentHash}
+              AND adapter_version IS NOT DISTINCT FROM ${observation.adapterVersion ?? null}
+              AND valid_through IS NOT DISTINCT FROM ${observation.validThrough ?? null}
+              AND date_posted IS NOT DISTINCT FROM ${observation.datePosted ?? null}
+              AND application_url IS NOT DISTINCT FROM ${observation.applicationUrl ?? null}
+              AND structured_locations IS NOT DISTINCT FROM
+                ${observation.structuredLocations ? transaction.json(observation.structuredLocations as unknown as postgres.JSONValue) : null}::jsonb
+            ) AS "observationMatches"
+          FROM jobs.job_sources
+          WHERE id = ${sourceId}
+          FOR UPDATE
+        `;
+        if (!source) {
+          throw new Error("Exact source identity points to a missing source");
+        }
+        // Arrival order is not provider chronology. Publication still appends its independently
+        // verified evidence after this call, even when the materialized source cannot advance.
+        const sourceNotStale =
+          observation.observedAt >= source.lastObservedAt &&
+          observation.observedAt >= source.lastVerifiedAt &&
+          (!source.withdrawnAt || observation.observedAt > source.withdrawnAt);
+        const lifecycleAllowsObservation =
+          existing.status === "active" ||
+          (existing.statusChangedAt !== null && observation.observedAt > existing.statusChangedAt);
+        if (
+          sourceNotStale &&
+          ((observation.observedAt.getTime() === source.lastVerifiedAt.getTime() &&
+            !source.observationMatches) ||
+            (lifecycleAllowsObservation &&
+              observation.observedAt.getTime() === existing.lastVerifiedAt.getTime() &&
+              !existing.observationMatches))
+        ) {
+          throw new ConflictingObservationError();
+        }
+        updateSource = sourceNotStale && observation.observedAt > source.lastVerifiedAt;
+        const updateCanonical =
+          updateSource &&
+          observation.observedAt > existing.lastVerifiedAt &&
+          lifecycleAllowsObservation;
+        const nextStatus = !updateCanonical
+          ? existing.status
+          : existing.status === "withdrawn" &&
+              existing.statusReason === "positive_source_withdrawal"
             ? "active"
             : evaluateLifecycle({
                 currentStatus: existing.status,
@@ -732,7 +826,8 @@ export class PostgresJobCatalog {
           nextStatus === existing.status && ["withdrawn", "blocked"].includes(nextStatus)
             ? existing.statusReason
             : "positive_verification";
-        await transaction`
+        if (updateCanonical) {
+          await transaction`
           UPDATE jobs.canonical_jobs
           SET title = ${observation.title},
               normalized_title = ${observation.normalizedTitle},
@@ -769,9 +864,10 @@ export class PostgresJobCatalog {
                 structured_locations
               ),
               consecutive_verification_failures = 0,
-              updated_at = ${observation.observedAt}
+              updated_at = GREATEST(updated_at, ${observation.observedAt})
           WHERE id = ${existing.id}
-        `;
+          `;
+        }
         if (nextStatus !== existing.status) {
           await transaction`
             INSERT INTO jobs.status_events (
@@ -783,7 +879,6 @@ export class PostgresJobCatalog {
           `;
         }
         jobId = existing.id;
-        sourceId = exactMatches[0]?.sourceId ?? uuidv7();
         outcome = "exact_match_updated";
         resolvedStatus = nextStatus;
       } else {
@@ -868,7 +963,7 @@ export class PostgresJobCatalog {
         }
       }
 
-      if (exactMatches.length > 0) {
+      if (exactMatches.length > 0 && updateSource) {
         await transaction`
           UPDATE jobs.job_sources
           SET provider = ${observation.provider},
@@ -882,7 +977,7 @@ export class PostgresJobCatalog {
               canonical_url_hash = ${observation.canonicalUrlHash},
               content_hash = ${observation.contentHash},
               adapter_version = ${observation.adapterVersion ?? null},
-              raw_snapshot = CASE WHEN ${resolvedStatus} IN ('withdrawn', 'blocked')
+              raw_snapshot = CASE WHEN ${resolvedStatus} IN ('expired', 'withdrawn', 'blocked')
                 THEN NULL ELSE ${rawSnapshot ? transaction.json(rawSnapshot) : null}::jsonb END,
               withdrawn_at = NULL,
               last_observed_at = ${observation.observedAt},
@@ -897,10 +992,10 @@ export class PostgresJobCatalog {
                     )
                   : null
               }::jsonb,
-              updated_at = ${observation.observedAt}
+              updated_at = GREATEST(updated_at, ${observation.observedAt})
           WHERE id = ${sourceId}
         `;
-      } else {
+      } else if (exactMatches.length === 0) {
         await transaction`
           INSERT INTO jobs.job_sources (
             id, job_id, provider, provenance, ats_tenant, external_job_id,

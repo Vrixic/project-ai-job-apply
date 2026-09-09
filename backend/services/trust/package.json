@@ -21,5 +21,8 @@
     "@ai-job-apply/event-contracts": "workspace:*",
     "postgres": "3.4.9",
     "uuid": "14.0.1"
+  },
+  "devDependencies": {
+    "@ai-job-apply/domain": "workspace:*"
   }
 }

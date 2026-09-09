@@ -51,7 +51,12 @@
       "required": ["preferences", "facts"],
       "properties": {
         "preferences": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/preferences" }] },
-        "facts": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/profileFact" } }
+        "facts": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/profileFact" } },
+        "contributionConsents": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/contributionConsent" }
+        }
       },
       "additionalProperties": false
     },
@@ -67,7 +72,12 @@
       "type": "object",
       "required": ["reports"],
       "properties": {
-        "reports": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/jobReport" } }
+        "reports": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/jobReport" } },
+        "contributions": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/jobContribution" }
+        }
       },
       "additionalProperties": false
     },
@@ -75,7 +85,16 @@
       "type": "object",
       "required": ["savedJobs"],
       "properties": {
-        "savedJobs": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/savedJob" } }
+        "savedJobs": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/savedJob" }
+        },
+        "privateSavedPageCaptures": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/privateSavedPageCapture" }
+        }
       },
       "additionalProperties": false
     },
@@ -119,6 +138,612 @@
   },
   "additionalProperties": false,
   "$defs": {
+    "d2PolicyVersion": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 100,
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,99}$"
+    },
+    "contributionConsent": {
+      "type": "object",
+      "required": [
+        "consentId",
+        "purpose",
+        "client",
+        "documentVersion",
+        "policyVersion",
+        "state",
+        "grantedAt",
+        "recordedAt"
+      ],
+      "properties": {
+        "consentId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "purpose": {
+          "const": "ugc_contribution"
+        },
+        "client": {
+          "const": "extension"
+        },
+        "documentVersion": {
+          "$ref": "#/$defs/d2PolicyVersion"
+        },
+        "policyVersion": {
+          "$ref": "#/$defs/d2PolicyVersion"
+        },
+        "state": {
+          "enum": ["granted", "revoked", "superseded"]
+        },
+        "grantedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "recordedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "replacementConsentId": {
+          "$ref": "#/$defs/uuid"
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "superseded"
+              }
+            },
+            "required": ["state"]
+          },
+          "then": {
+            "properties": { "replacementConsentId": { "$ref": "#/$defs/uuid" } },
+            "required": ["replacementConsentId"]
+          },
+          "else": {
+            "properties": {
+              "replacementConsentId": false
+            }
+          }
+        }
+      ]
+    },
+    "contributionSource": {
+      "type": "object",
+      "required": ["provider", "pageVariant", "sourceUrl", "adapterVersion"],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["greenhouse", "lever", "ashby"]
+        },
+        "pageVariant": {
+          "type": "string",
+          "enum": ["greenhouse-board-v1", "lever-posting-v1", "ashby-job-board-v1"]
+        },
+        "sourceUrl": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 4096,
+          "pattern": "^https://[^#]+$"
+        },
+        "externalJobId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^\\S(?:.*\\S)?$"
+        },
+        "adapterVersion": {
+          "type": "string",
+          "const": "d2-job-page-v1"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "provider": {
+                "const": "greenhouse"
+              }
+            },
+            "required": ["provider"]
+          },
+          "then": {
+            "properties": {
+              "pageVariant": {
+                "type": "string",
+                "const": "greenhouse-board-v1"
+              },
+              "sourceUrl": {
+                "type": "string",
+                "pattern": "^https://(?:boards\\.greenhouse\\.io|job-boards\\.greenhouse\\.io)/[A-Za-z0-9._~-]+/jobs/[A-Za-z0-9._~-]+/?$"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "provider": {
+                "const": "lever"
+              }
+            },
+            "required": ["provider"]
+          },
+          "then": {
+            "properties": {
+              "pageVariant": {
+                "type": "string",
+                "const": "lever-posting-v1"
+              },
+              "sourceUrl": {
+                "type": "string",
+                "pattern": "^https://(?:jobs\\.lever\\.co|jobs\\.eu\\.lever\\.co)/[A-Za-z0-9._~-]+/[A-Za-z0-9._~-]+/?$"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "provider": {
+                "const": "ashby"
+              }
+            },
+            "required": ["provider"]
+          },
+          "then": {
+            "properties": {
+              "pageVariant": {
+                "type": "string",
+                "const": "ashby-job-board-v1"
+              },
+              "sourceUrl": {
+                "type": "string",
+                "pattern": "^https://jobs\\.ashbyhq\\.com/[A-Za-z0-9._~-]+/[A-Za-z0-9._~-]+/?$"
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "contributionState": {
+      "enum": [
+        "queued",
+        "normalized",
+        "awaiting_independent_verification",
+        "independently_verified",
+        "awaiting_trust",
+        "rejected",
+        "ready_for_publication",
+        "published",
+        "consent_invalid",
+        "withdrawn",
+        "taken_down",
+        "removed"
+      ]
+    },
+    "jobContribution": {
+      "type": "object",
+      "required": [
+        "id",
+        "state",
+        "source",
+        "posting",
+        "observation",
+        "approval",
+        "processingHistory",
+        "trustHistory",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "state": {
+          "$ref": "#/$defs/contributionState"
+        },
+        "client": {
+          "type": "object",
+          "required": ["surface", "version"],
+          "properties": {
+            "surface": {
+              "const": "browser_extension"
+            },
+            "version": {
+              "type": "string",
+              "minLength": 5,
+              "maxLength": 32,
+              "pattern": "^(?:0|[1-9][0-9]{0,5})\\.(?:0|[1-9][0-9]{0,5})\\.(?:0|[1-9][0-9]{0,5})(?:-[0-9A-Za-z][0-9A-Za-z.-]{0,15})?$"
+            }
+          },
+          "additionalProperties": false
+        },
+        "source": {
+          "$ref": "#/$defs/contributionSource"
+        },
+        "posting": {
+          "type": "object",
+          "required": ["title"],
+          "properties": {
+            "companyName": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "\\S"
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240,
+              "pattern": "\\S"
+            },
+            "locations": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 20,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 240,
+                "pattern": "\\S"
+              }
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 50000,
+              "pattern": "\\S"
+            },
+            "department": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "\\S"
+            },
+            "applicationUrl": {
+              "type": "string",
+              "format": "uri",
+              "maxLength": 4096,
+              "pattern": "^https://[^#]+$"
+            },
+            "employmentType": {
+              "type": "string",
+              "enum": ["full_time", "part_time", "contract", "internship", "unknown"]
+            },
+            "workMode": {
+              "type": "string",
+              "enum": ["remote", "hybrid", "on_site", "unknown"]
+            }
+          },
+          "additionalProperties": false
+        },
+        "observation": {
+          "type": "object",
+          "required": ["observedAt"],
+          "properties": {
+            "observedAt": {
+              "$ref": "#/$defs/dateTime"
+            }
+          },
+          "additionalProperties": false
+        },
+        "approval": {
+          "type": "object",
+          "required": ["consentId", "consentVersion", "policyVersion", "approvedAt"],
+          "properties": {
+            "consentId": {
+              "$ref": "#/$defs/uuid"
+            },
+            "consentVersion": {
+              "const": "ugc-contribution-preview.v1"
+            },
+            "policyVersion": {
+              "$ref": "#/$defs/d2PolicyVersion"
+            },
+            "approvedAt": {
+              "$ref": "#/$defs/dateTime"
+            }
+          },
+          "additionalProperties": false
+        },
+        "processingHistory": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {
+            "type": "object",
+            "required": ["state", "reasonCode", "policyVersion", "occurredAt"],
+            "properties": {
+              "state": {
+                "$ref": "#/$defs/contributionState"
+              },
+              "reasonCode": {
+                "enum": [
+                  "normalization_complete",
+                  "consent_not_current",
+                  "provider_temporarily_unavailable",
+                  "provider_observation_mismatch",
+                  "provider_posting_closed",
+                  "provider_probable_duplicate",
+                  "independent_verification_complete",
+                  "trust_review_required",
+                  "trust_policy_rejected",
+                  "trust_withdrawal",
+                  "trust_takedown",
+                  "publication_gates_complete",
+                  "publication_complete",
+                  "terminal_reconciliation_complete"
+                ]
+              },
+              "policyVersion": {
+                "$ref": "#/$defs/d2PolicyVersion"
+              },
+              "occurredAt": {
+                "$ref": "#/$defs/dateTime"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "trustHistory": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {
+            "type": "object",
+            "required": ["status", "policyVersion", "decidedAt"],
+            "properties": {
+              "status": {
+                "enum": ["accepted", "rejected", "withdrawn", "taken_down"]
+              },
+              "policyVersion": {
+                "$ref": "#/$defs/d2PolicyVersion"
+              },
+              "decidedAt": {
+                "$ref": "#/$defs/dateTime"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "publication": {
+          "type": "object",
+          "required": ["state", "createdAt", "updatedAt"],
+          "properties": {
+            "jobId": {
+              "$ref": "#/$defs/uuid"
+            },
+            "state": {
+              "enum": ["prepared", "applied"]
+            },
+            "createdAt": {
+              "$ref": "#/$defs/dateTime"
+            },
+            "updatedAt": {
+              "$ref": "#/$defs/dateTime"
+            }
+          },
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": { "properties": { "state": { "const": "applied" } }, "required": ["state"] },
+              "then": {
+                "properties": { "jobId": { "$ref": "#/$defs/uuid" } },
+                "required": ["jobId"]
+              }
+            }
+          ]
+        },
+        "createdAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/dateTime"
+        }
+      },
+      "additionalProperties": false
+    },
+    "privateSavedPageCapture": {
+      "type": "object",
+      "required": [
+        "id",
+        "provider",
+        "pageVariant",
+        "sourceUrl",
+        "adapterVersion",
+        "title",
+        "company",
+        "location",
+        "description",
+        "externalJobId",
+        "capturedAt",
+        "savedAt",
+        "resolution"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "provider": {
+          "type": "string",
+          "enum": ["greenhouse", "lever", "ashby"]
+        },
+        "pageVariant": {
+          "type": "string",
+          "enum": ["greenhouse-board-v1", "lever-posting-v1", "ashby-job-board-v1"]
+        },
+        "sourceUrl": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048,
+          "pattern": "^https://[^#]+$"
+        },
+        "adapterVersion": {
+          "type": "string",
+          "const": "d2-job-page-v1"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240,
+          "pattern": "\\S"
+        },
+        "company": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240,
+              "pattern": "\\S"
+            }
+          ]
+        },
+        "location": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500,
+              "pattern": "\\S"
+            }
+          ]
+        },
+        "description": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 12000,
+              "pattern": "\\S"
+            }
+          ]
+        },
+        "externalJobId": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "\\S"
+            }
+          ]
+        },
+        "capturedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "savedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "resolution": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "required": ["canonicalJobId", "verificationEvidenceId", "resolvedAt"],
+              "properties": {
+                "canonicalJobId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "verificationEvidenceId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "resolvedAt": {
+                  "$ref": "#/$defs/dateTime"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "provider": {
+                "const": "greenhouse"
+              }
+            },
+            "required": ["provider"]
+          },
+          "then": {
+            "properties": {
+              "pageVariant": {
+                "type": "string",
+                "const": "greenhouse-board-v1"
+              },
+              "sourceUrl": {
+                "type": "string",
+                "pattern": "^https://(?:boards\\.greenhouse\\.io|job-boards\\.greenhouse\\.io)/[A-Za-z0-9._~-]+/jobs/[A-Za-z0-9._~-]+/?$"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "provider": {
+                "const": "lever"
+              }
+            },
+            "required": ["provider"]
+          },
+          "then": {
+            "properties": {
+              "pageVariant": {
+                "type": "string",
+                "const": "lever-posting-v1"
+              },
+              "sourceUrl": {
+                "type": "string",
+                "pattern": "^https://(?:jobs\\.lever\\.co|jobs\\.eu\\.lever\\.co)/[A-Za-z0-9._~-]+/[A-Za-z0-9._~-]+/?$"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "provider": {
+                "const": "ashby"
+              }
+            },
+            "required": ["provider"]
+          },
+          "then": {
+            "properties": {
+              "pageVariant": {
+                "type": "string",
+                "const": "ashby-job-board-v1"
+              },
+              "sourceUrl": {
+                "type": "string",
+                "pattern": "^https://jobs\\.ashbyhq\\.com/[A-Za-z0-9._~-]+/[A-Za-z0-9._~-]+/?$"
+              }
+            }
+          }
+        }
+      ]
+    },
     "uuid": { "type": "string", "format": "uuid" },
     "dateTime": { "type": "string", "format": "date-time" },
     "preferences": {
@@ -337,6 +962,7 @@
           "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/dateTime" }]
         },
         "pendingAppealEvidenceDigestSha256": { "$ref": "#/$defs/nullableSha256" },
+        "independentEvidenceDigestSha256": { "$ref": "#/$defs/nullableSha256" },
         "lastAction": { "$ref": "#/$defs/trustAction" },
         "lastActorKind": { "$ref": "#/$defs/trustActorKind" },
         "lastReasonCode": { "$ref": "#/$defs/trustReasonCode" },
@@ -362,6 +988,7 @@
         "occurredAt"
       ],
       "properties": {
+        "eventId": { "$ref": "#/$defs/uuid" },
         "caseId": { "$ref": "#/$defs/uuid" },
         "caseVersion": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
         "contributionId": { "$ref": "#/$defs/uuid" },
@@ -374,6 +1001,7 @@
         "actorKind": { "$ref": "#/$defs/trustActorKind" },
         "reasonCode": { "$ref": "#/$defs/trustReasonCode" },
         "evidenceDigestSha256": { "$ref": "#/$defs/nullableSha256" },
+        "independentEvidenceDigestSha256": { "$ref": "#/$defs/nullableSha256" },
         "occurredAt": { "$ref": "#/$defs/dateTime" }
       },
       "additionalProperties": false

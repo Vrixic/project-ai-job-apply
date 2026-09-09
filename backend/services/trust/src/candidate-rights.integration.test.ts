@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { validateCandidateDataExportV1 } from "@ai-job-apply/domain";
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -41,7 +42,7 @@ describeWithDatabase("Trust candidate rights ownership", () => {
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });
     expect(first.stdout.trim()).toBe(
-      "Trust migrations through 0003_decision_signals applied and verified.",
+      "Trust migrations through 0004_accepted_independent_evidence applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(first.stdout.trim());
   });
@@ -155,6 +156,7 @@ describeWithDatabase("Trust candidate rights ownership", () => {
       outcome: "accepted",
       reasonCode: "independently_verified",
       evidenceDigestSha256: otherDecisionDigest,
+      independentEvidenceDigestSha256: otherDecisionDigest,
       occurredAt: new Date(base + 4_000),
     });
     await store.recordReputationEvidence({
@@ -372,6 +374,140 @@ describeWithDatabase("Trust candidate rights ownership", () => {
       `;
       await removeAuthorization(owner, ownerAuthorization);
       await removeAuthorization(otherOwner, otherAuthorization);
+    }
+  });
+
+  it("validates actual accepted/reversed SQL exports against the shared portable export schema", async () => {
+    const owner = uuidv7();
+    const caseId = uuidv7();
+    const contributionId = uuidv7();
+    const reviewer = uuidv7();
+    const base = Date.now() - 30_000;
+    await store.open({
+      caseId,
+      contributionId,
+      contributorUserId: owner,
+      systemActorId: uuidv7(),
+      policy: { version: "synthetic-export-basis-v1", appealWindowMilliseconds: 86_400_000 },
+      occurredAt: new Date(base),
+    });
+    await store.review(caseId, 1, {
+      reviewerId: reviewer,
+      outcome: "accepted",
+      reasonCode: "independently_verified",
+      evidenceDigestSha256: "a".repeat(64),
+      independentEvidenceDigestSha256: "a".repeat(64),
+      occurredAt: new Date(base + 1_000),
+    });
+    await store.takeDown(caseId, 2, {
+      reviewerId: reviewer,
+      reasonCode: "credible_safety_risk",
+      evidenceDigestSha256: "b".repeat(64),
+      occurredAt: new Date(base + 2_000),
+    });
+    await store.appeal(caseId, 3, {
+      contributorUserId: owner,
+      evidenceDigestSha256: "c".repeat(64),
+      occurredAt: new Date(base + 3_000),
+    });
+    await store.resolveAppeal(caseId, 4, {
+      reviewerId: uuidv7(),
+      outcome: "reversed",
+      evidenceDigestSha256: "d".repeat(64),
+      independentEvidenceDigestSha256: "e".repeat(64),
+      occurredAt: new Date(base + 4_000),
+    });
+    const [result] = await client<
+      {
+        data: {
+          trust: {
+            cases: Record<string, unknown>[];
+            caseEvents: Record<string, unknown>[];
+            contributorReputationEvidence: Record<string, unknown>[];
+          };
+        };
+      }[]
+    >`
+      SELECT trust.export_candidate_data(${owner}::uuid) AS data
+    `;
+    if (!result) throw new Error("Expected synthetic SQL export");
+    const trust = result.data.trust;
+    const generatedAt = new Date().toISOString();
+    const exported = {
+      schemaVersion: 1,
+      format: "candidate-data-export-v1",
+      exportId: uuidv7(),
+      policyVersion: "synthetic-export-v1",
+      generatedAt,
+      candidate: { email: "synthetic@example.test", createdAt: generatedAt, connectedAccounts: [] },
+      profile: { preferences: null, facts: [] },
+      documents: { resumes: [] },
+      jobs: { reports: [] },
+      matching: { savedJobs: [] },
+      billing: { entitlement: { plan: "free", version: 0, effectiveAt: generatedAt } },
+      trust,
+      audit: { events: [] },
+    };
+    expect(validateCandidateDataExportV1(exported)).toBe(true);
+    expect(trust.cases).toEqual([
+      expect.objectContaining({
+        lastEvidenceDigestSha256: "d".repeat(64),
+        independentEvidenceDigestSha256: "e".repeat(64),
+      }),
+    ]);
+    expect(
+      trust.caseEvents.map((event) => ({
+        basis: event.independentEvidenceDigestSha256,
+        evidence: event.evidenceDigestSha256,
+      })),
+    ).toEqual([
+      { basis: null, evidence: null },
+      { basis: "a".repeat(64), evidence: "a".repeat(64) },
+      { basis: "a".repeat(64), evidence: "b".repeat(64) },
+      { basis: "a".repeat(64), evidence: "c".repeat(64) },
+      { basis: "e".repeat(64), evidence: "d".repeat(64) },
+    ]);
+    for (const row of trust.caseEvents) expect(row.eventId).toMatch(/^[a-f0-9-]{36}$/);
+    const removeAdditive = (row: Record<string, unknown>) => {
+      const { independentEvidenceDigestSha256: _basis, eventId: _event, ...old } = row;
+      return old;
+    };
+    expect(
+      validateCandidateDataExportV1({
+        ...exported,
+        trust: {
+          ...trust,
+          cases: trust.cases.map(removeAdditive),
+          caseEvents: trust.caseEvents.map(removeAdditive),
+        },
+      }),
+    ).toBe(true);
+    for (const extra of [
+      { reviewerId: reviewer },
+      { unexpected: true },
+      { independentEvidenceDigestSha256: "invalid" },
+    ]) {
+      expect(
+        validateCandidateDataExportV1({
+          ...exported,
+          trust: { ...trust, cases: trust.cases.map((row) => ({ ...row, ...extra })) },
+        }),
+      ).toBe(false);
+      expect(
+        validateCandidateDataExportV1({
+          ...exported,
+          trust: { ...trust, caseEvents: trust.caseEvents.map((row) => ({ ...row, ...extra })) },
+        }),
+      ).toBe(false);
+    }
+    const authorization = await authorizeDeletion(owner);
+    try {
+      await client`SELECT trust.delete_candidate_data(${owner}, ${authorization.requestId})`;
+      const [absent] = await client<{ count: number }[]>`SELECT count(*)::int AS count
+        FROM trust.case_events WHERE case_id=${caseId}`;
+      expect(absent?.count).toBe(0);
+    } finally {
+      await removeAuthorization(owner, authorization);
     }
   });
 });
